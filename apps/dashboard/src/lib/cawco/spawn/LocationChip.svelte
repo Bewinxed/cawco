@@ -77,7 +77,7 @@
 >
   {#snippet trigger()}
     {#if mode === "repo"}
-      <FolderGit style="color:var(--hue-amber-500)" />
+      <FolderGit class="text-hue-amber-500" />
     {:else}
       <FolderOpen class="text-hue-amber-500" />
     {/if}

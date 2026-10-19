@@ -55,11 +55,9 @@
   {#snippet trigger()}
     {@const Icon = current.icon}
     {#key current.name}
-      <!-- literal: 6px -->
       <span
         data-slot="swap"
-        class="swap inline-flex items-center gap-(--gap)"
-        style:--gap="6px"
+        class="ns-in inline-flex items-center gap-space-2"
       >
         <Icon class="size-icon-md flex-none" style={`color:${current.hue}`} />
         <span data-slot="chip-label">{current.name}</span>
@@ -70,27 +68,21 @@
   {#each OPTIONS as option, index (option.name)}
     {@const Icon = option.icon}
     {@const on = option.ephemeral === ephemeral}
-    <!-- literal: 10px gap, 48px height, 6px 8px padding, 26px tile -->
     <button
       data-slot="row"
       aria-pressed={on}
-      class="ns-in press-tint relative flex min-h-(--min-h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
+      class="ns-in press-tint relative flex min-h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
       data-fh="1"
       onclick={() => {
         onlifetime(option.ephemeral);
         onchange(false);
       }}
       style={`--delay:${index * 35}ms`}
-      style:--gap="10px"
-      style:--min-h="48px"
-      style:--pad-x="8px"
-      style:--pad-y="6px"
       type="button"
     >
       <span
         data-slot="tile"
-        class="ns-tile size-(--tile)"
-        style:--tile="26px"
+        class="ns-tile size-c-mark"
         style:color={option.hue}><Icon class="size-icon-md" /></span
       >
       <span data-slot="text" class="min-w-0 flex-1">
@@ -107,12 +99,3 @@
     </button>
   {/each}
 </NsPopover>
-
-<style>
-  /* residual: keyframes */
-  .swap {
-    @media (prefers-reduced-motion: no-preference) {
-      animation: ns-in var(--ns-row-ms) var(--ease-out) both;
-    }
-  }
-</style>

@@ -82,8 +82,7 @@
     <Down data-slot="chevron" />
   {/snippet}
   {#if pairing}
-    <!-- literal: 10px gap -->
-    <div class="ns-panel grid gap-(--gap) p-space-1" style:--gap="10px">
+    <div class="ns-panel grid gap-space-3 p-space-1">
       <p class="type-meta text-ink-muted">
         Run this on the machine. It appears here as soon as the agent checks in.
       </p>
@@ -114,19 +113,14 @@
   {:else}
     {#each machines as row, index (row.id)}
       {@const on = selected.includes(row.id)}
-      <!-- literal: 10px gap, 44px height, 6px 8px padding -->
       <button
         data-slot="row"
         aria-pressed={on}
-        class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong transition-[background-color,border-radius] dur-toggle ease-out aria-pressed:bg-selected-bg aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-selected-ink disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
+        class="ns-in press-tint relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color,border-radius] dur-toggle ease-out aria-pressed:bg-selected-bg aria-pressed:[&_:is([data-slot=name],[data-slot=meta])]:text-selected-ink disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
         data-fh="1"
         disabled={!row.online}
         onclick={() => ontoggle(row.id)}
         style={`--delay:${80 + index * 45}ms`}
-        style:--gap="10px"
-        style:--h="44px"
-        style:--pad-x="8px"
-        style:--pad-y="6px"
         style:border-radius={radius(index, on)}
         type="button"
       >
@@ -145,40 +139,27 @@
       </button>
     {/each}
     {#if machines.length === 0}
-      <!-- literal: 8px inline padding -->
-      <div
-        class="ns-in px-(--pad-x) py-space-4 text-center type-meta text-ink-subtle"
-        style:--pad-x="8px"
-      >
+      <div class="ns-in px-space-2 py-space-4 text-center type-meta text-ink-subtle">
         No machines have checked in.
       </div>
     {/if}
-    <!-- literal: 1px rule -->
     <div
       data-slot="divider"
-      class="mx-space-row my-space-1 h-(--h) bg-border-hairline"
-      style:--h="1px"
+      class="mx-space-row my-space-1 border-t border-border-hairline"
     ></div>
-    <!-- literal: 10px gap, 40px height, 6px 8px padding, 26px tile, 14px icon -->
     <button
       data-slot="row"
       data-add
-      class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-muted transition-[background-color,border-radius] dur-toggle ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
+      class="ns-in press-tint relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color,border-radius] dur-toggle ease-out hover:text-ink-strong disabled:cursor-not-allowed disabled:opacity-55 motion-safe:transition-[background-color,border-radius,transform]"
       data-fh="1"
       onclick={startPairing}
       style="--delay:140ms"
-      style:--gap="10px"
-      style:--h="40px"
-      style:--pad-x="8px"
-      style:--pad-y="6px"
       type="button"
     >
       <span
         data-slot="tile"
-        class="ns-tile size-(--tile)"
-        data-variant="dashed"
-        style:--icon="14px"
-        style:--tile="26px"><Add class="size-(--icon)" /></span
+        class="ns-tile size-c-mark"
+        data-variant="dashed"><Add class="size-icon-md" /></span
       >
       <span class="type-label">Connect a machine…</span>
     </button>

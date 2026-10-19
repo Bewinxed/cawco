@@ -162,14 +162,9 @@
   }
 </script>
 
-<!-- literal: 56px / 64px height, 10px 12px padding, 30px / 38px track -->
 <div
-  class="relative grid h-(--h) max-phone:h-(--h-phone) overflow-hidden rounded-md border border-border-hairline bg-surface-recess px-(--pad-x) py-(--pad-y) data-embedded:h-auto data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0"
+  class="relative grid overflow-hidden rounded-md border border-border-hairline bg-surface-recess p-space-3 data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0"
   data-embedded={embedded || undefined}
-  style:--h="56px"
-  style:--h-phone="64px"
-  style:--pad-x="12px"
-  style:--pad-y="10px"
 >
   <div
     class="col-start-1 row-start-1 grid content-box-start transition-[opacity] dur-pop ease-out"
@@ -180,7 +175,7 @@
       data-slot="track"
       data-focus={focused || undefined}
       data-ready={ready || undefined}
-      class="relative h-(--track-h) max-phone:h-(--track-h-phone) cursor-ew-resize touch-none overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-none transition-control-ring select-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
+      class="group relative h-c-btn-h-sm max-phone:h-(--c-effort-track-h-phone) cursor-ew-resize touch-none overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-none transition-control-ring select-none not-data-ready:transition-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
       onpointercancel={() => {
         draft = null;
         drag = false;
@@ -192,45 +187,37 @@
       onpointerup={up}
       role="presentation"
       style:--kw={`${kw}px`}
-      style:--track-h="30px"
-      style:--track-h-phone="38px"
       bind:clientWidth={trackWidth}
     >
       <div
         data-slot="fill"
-        class="pointer-events-none absolute top-0 bottom-0 left-0 flex items-center justify-end rounded-(--r) bg-surface-recess-deep p-space-row motion-safe:transition-[width] motion-safe:duration-(--ns-fill-ms) motion-safe:ease-in-out"
-        style:--r="calc(var(--radius-md) - 1px)"
+        class="pointer-events-none absolute top-0 bottom-0 left-0 flex items-center justify-end rounded-md bg-surface-recess-deep p-space-row motion-safe:transition-[width] motion-safe:duration-(--ns-fill-ms) motion-safe:ease-in-out group-not-data-ready:transition-none"
         style:width={`calc(var(--kw) + ${p} * (100% - var(--kw)))`}
       >
-        <!-- literal: 8px inline padding -->
         <div
           data-slot="knob"
-          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-(--pad-x) font-body text-size-label leading-none font-medium text-ink-muted capitalize num shadow-(--knob-shadow) transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap data-active:text-ink-strong"
+          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-space-2 font-body text-size-label leading-none font-medium text-ink-muted capitalize num shadow-(--knob-shadow) transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
           data-active={active || undefined}
           style:--bars={n}
           style:--knob-shadow={"inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)"}
           style:opacity={n ? 1 : 0.7}
-          style:--pad-x="8px"
           bind:offsetWidth={knobWidth}
         >
           <!-- The chip is as wide as its longest label so the rail never moves.
                The ghost holds that width; the icon and the label sit together,
                centred in it, so a short label leaves no gap beside it. -->
-          <!-- literal: 4px / 2px / 5px bar pitch in the padding -->
           <span
             data-slot="ghost"
             aria-hidden="true"
             class="invisible col-start-1 row-start-1 grid justify-items-start ps-(--ps)"
-            style:--ps="calc(var(--bars) * 4px - 2px + 5px)"
+            style:--ps="calc(var(--bars) * var(--space-1) - var(--space-row) + var(--space-1))"
           >
             {#each efforts as level, i (level)}
               <span class="col-start-1 row-start-1">{level}</span>
             {/each}
           </span>
-          <!-- literal: 5px gap -->
           <span
-            class="mark-line col-start-1 row-start-1 flex items-center gap-(--gap)"
-            style:--gap="5px"
+            class="mark-line col-start-1 row-start-1 flex items-center gap-space-1"
           >
             {#if n}
               <!-- One bar per level, all the same size on whole pixels; the lit
@@ -252,7 +239,7 @@
                   />
                   <rect
                     data-slot="bar-fill"
-                    class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:dur-morph motion-safe:ease-out"
+                    class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:dur-morph motion-safe:ease-out group-not-data-ready:transition-none"
                     height="10"
                     rx="1"
                     style={`--delay:${barDelay(i)}ms`}
@@ -276,15 +263,12 @@
         </div>
       </div>
       {#each pips as pip, i (i)}
-        <!-- literal: 5px dot, -2.5px offset -->
         <span
           data-slot="pip"
-          class="pointer-events-none absolute top-1/2 mt-(--mt) size-(--dot) rounded-pill bg-ink-strong transition-[opacity] dur-control ease-out motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
-          style:--dot="5px"
+          class="pointer-events-none absolute top-1/2 size-space-1 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-ink-strong transition-[opacity] dur-control ease-out group-not-data-ready:transition-none motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
           style:--pip-durs="var(--ns-fill-ms), var(--dur-control)"
           style:--pip-eases="var(--ease-in-out), var(--ease-out)"
-          style:--mt="-2.5px"
-          style:left={`calc(var(--kw) / 2 - 2.5px + ${pip.frac} * (100% - var(--kw)))`}
+          style:left={`calc(var(--kw) / 2 + ${pip.frac} * (100% - var(--kw)))`}
           style:opacity={pip.on ? 0.3 : 0}
         ></span>
       {/each}
@@ -310,12 +294,3 @@
     </div>
   </div>
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  /* Until the chip is measured nothing in the track moves. */
-  [data-slot="track"]:not([data-ready]),
-  [data-slot="track"]:not([data-ready]) :global(*) {
-    transition: none;
-  }
-</style>

@@ -1826,7 +1826,7 @@
         event.preventDefault();
         card?.focus({ preventScroll: true });
       }}
-      style="--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), 24px))"
+      style={`--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--space-7)))${open ? "" : "; animation-duration: var(--dur-exit); animation-timing-function: var(--ease-out)"}`}
       bind:ref={card}
     >
       <DrawerTitle class="sr-only">New session</DrawerTitle>
@@ -1848,7 +1848,7 @@
            presses through (floating-presence). -->
       <DialogPrimitive.Overlay
         data-slot="session-scrim"
-        class="ns-theme fixed inset-0 z-80 bg-scrim backdrop-blur-(--scrim-blur) motion-reduce:animate-none! motion-reduce:transition-off!"
+        class="ns-theme fixed inset-0 z-80 bg-scrim backdrop-blur-(--scrim-blur) motion-safe:data-open:animate-ns-scrim-in motion-safe:data-closed:animate-ns-scrim-out"
       >
         {#snippet child({ props, open: shown })}
           <div {...props} style:pointer-events={pressable(shown)}></div>
@@ -1857,7 +1857,7 @@
       <DialogPrimitive.Content
         data-session-card
         aria-label="New Session"
-        class="ns-theme fixed z-81 flex origin-center flex-col outline-off inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-reduce:animate-none! motion-reduce:transition-off!"
+        class="ns-theme fixed z-81 flex origin-center flex-col outline-off inset-0 m-auto h-fit max-h-(--card-max-h) w-(--card-w) rounded-lg bg-surface-recess p-space-2 shadow-modal motion-safe:data-open:animate-ns-card-in motion-safe:data-closed:animate-ns-card-out"
         data-ns-dialog
         onCloseAutoFocus={(event) => {
           event.preventDefault();
@@ -1869,7 +1869,7 @@
           card?.focus({ preventScroll: true });
         }}
         restoreScrollDelay={0}
-        style="--card-max-h: calc(100dvh - 48px); --card-rise: 6px; --card-w: min(980px, 100vw - 48px)"
+        style="--card-max-h: calc(100dvh - var(--space-8) * 1.5); --card-w: min(var(--c-new-session-w), 100vw - var(--space-8) * 1.5)"
         bind:ref={card}
       >
         {#snippet child({ props, open: shown })}
@@ -1887,19 +1887,15 @@
   <!-- While a start runs the form takes no input; the footer stays live so
        the pending Start keeps its focus (a focused element in an inert
        subtree drops focus to the body). -->
-  <!-- literal: 10px gap, 3px 8px padding, 22px bolt -->
   <div
     data-slot="head"
-    class="kit-sheet-head gap-(--gap) px-space-1 pt-(--pad-t) pb-(--pad-b) max-phone:touch-none max-phone:px-0 max-phone:pt-0 max-phone:pb-space-3"
+    class="kit-sheet-head gap-space-3 px-space-1 pt-space-1 pb-space-2 max-phone:touch-none max-phone:px-0 max-phone:pt-0 max-phone:pb-space-3"
     inert={busy}
-    style:--gap="10px"
-    style:--pad-b="8px"
-    style:--pad-t="3px"
   >
-    <div class="flex min-w-0 items-center gap-(--gap)" style:--gap="10px">
+    <div class="flex min-w-0 items-center gap-space-3">
       <span
-        class="inline-flex size-(--box) flex-none items-center justify-center rounded-xs bg-ink-solid text-on-ink max-phone:hidden"
-        style:--box="22px"><Bolt class="size-icon-sm" /></span
+        class="inline-flex size-space-6 flex-none items-center justify-center rounded-xs bg-ink-solid text-on-ink max-phone:hidden"
+        ><Bolt class="size-icon-sm" /></span
       >
       <h2
         data-slot="title"
@@ -1944,15 +1940,13 @@
   <!-- A capped body fades the edge it has more to scroll to (the house edge
        fade): where the system hides its scrollbar (macOS), that edge is
        what says the form runs on past it. -->
-  <!-- literal: 20px bottom padding -->
   <div
     data-slot="body"
-    class="fai-scroll kit-sheet-scroll kit-edge-fade-block group min-h-0 flex-initial overflow-auto rounded-lg bg-surface-raised px-space-5 pt-space-5 pb-(--pad-b) max-phone:-mx-space-1 max-phone:touch-pan-y max-phone:overscroll-contain max-phone:rounded-none max-phone:bg-transparent max-phone:px-space-1 max-phone:pt-space-3 max-phone:pb-space-4"
+    class="fai-scroll kit-sheet-scroll kit-edge-fade-block group min-h-0 flex-initial overflow-auto rounded-lg bg-surface-raised px-space-5 pt-space-5 pb-space-6 max-phone:-mx-space-1 max-phone:touch-pan-y max-phone:overscroll-contain max-phone:rounded-none max-phone:bg-transparent max-phone:px-space-1 max-phone:pt-space-3 max-phone:pb-space-4"
     data-stepped={moveStep || undefined}
     data-vaul-no-drag
     inert={busy}
     onscroll={bodyScroll}
-    style:--pad-b="20px"
   >
     <!-- One popover surface for every chip in the form: the composer's and
          the chosen model's effort and permission chips glide between each
@@ -1960,9 +1954,8 @@
     <NsPopoverGroup>
       <section
         data-slot="prompt-sec"
-        class="sec relative z-30 grid gap-(--gap)"
+        class="relative z-30 grid gap-space-2 motion-safe:animate-ns-sec"
         style="--delay:0ms"
-        style:--gap="8px"
       >
         <div class="group-data-stepped:hidden">
           <SectionHeader
@@ -1986,27 +1979,14 @@
               bind:element={editor}
               bind:value={firstMessage.text}
             />
-            <!-- literal: 10px inline inset -->
-            <div
-              class="px-(--pad-x) not-empty:pb-space-2"
-              style:--pad-x="calc(10px - var(--space-1))"
-            >
+            <div class="px-space-2 not-empty:pb-space-2">
               <AttachmentChips draft={firstMessage} />
             </div>
           </div>
-          <!-- literal: 6px gap, 14px row gap on a coarse pointer, 8px 10px 10px padding -->
           <div
             data-slot="chips"
-            class="flex flex-wrap items-center gap-(--gap) px-(--pad-x) pt-(--pad-t) pb-(--pad-b) hit-gap-y-(--hit-gap-y-fine) coarse:gap-y-(--gap-y-coarse) coarse:hit-gap-y-(--hit-gap-y-coarse)"
+            class="flex flex-wrap items-center gap-space-2 px-space-3 pt-space-2 pb-space-3 hit-gap-x-space-2 hit-gap-y-(--space-2) coarse:gap-y-space-4 coarse:hit-gap-y-(--space-4)"
             inert={moveStep}
-            style:--gap="6px"
-            style:--gap-y-coarse="14px"
-            style:--hit-gap-x="6px"
-            style:--hit-gap-y-coarse="14px"
-            style:--hit-gap-y-fine="6px"
-            style:--pad-b="10px"
-            style:--pad-t="8px"
-            style:--pad-x="10px"
           >
             <MachinesChip
               machines={machineItems}
@@ -2106,14 +2086,12 @@
           </div>
         </div>
         <!-- A move's line may take two lines; its height follows (morph). -->
-        <!-- literal: 16px minimum height -->
         <p
           data-why={readingSaysWhy || undefined}
           aria-live="polite"
-          class="type-meta m-0 min-h-(--min-h) truncate text-status-fail-ink group-data-stepped:not-data-why:hidden data-informational:text-ink-muted data-two:line-clamp-2 data-two:text-pretty data-two:whitespace-normal"
+          class="type-meta m-0 truncate text-status-fail-ink group-data-stepped:not-data-why:hidden data-informational:text-ink-muted data-two:line-clamp-2 data-two:text-pretty data-two:whitespace-normal"
           data-informational={locationInformational || undefined}
           data-two={moveTo !== null || undefined}
-          style:--min-h="16px"
           title={reading}
           {@attach readingMorph}
         >
@@ -2131,10 +2109,8 @@
         class="mt-space-5 grid gap-space-5 group-data-stepped:hidden"
       >
         {#if continueFrom}
-          <!-- literal: 8px row gap -->
           <div
-            class="flex flex-wrap items-center gap-x-space-4 gap-y-(--gap-y)"
-            style:--gap-y="8px"
+            class="flex flex-wrap items-center gap-x-space-4 gap-y-space-2"
             in:unfold|global
             out:unfold
           >
@@ -2152,19 +2128,15 @@
             </p>
           </div>
         {/if}
-        <!-- literal: two equal columns -->
         <div
-          class="data-pair:grid data-pair:grid-cols-(--cols) data-pair:gap-space-4 max-phone:data-pair:grid-cols-(--cols-phone)"
+          class="data-pair:grid data-pair:grid-cols-2 data-pair:gap-space-4 max-phone:data-pair:grid-cols-1"
           data-pair={(Boolean(continueFrom) && carry === "summary") ||
             undefined}
-          style:--cols="repeat(2, minmax(0, 1fr))"
-          style:--cols-phone="minmax(0, 1fr)"
         >
           {#if continueFrom && carry === "summary"}
             <div
-              class="sec grid gap-(--gap)"
+              class="grid gap-space-2 motion-safe:animate-ns-sec"
               style="--delay:60ms"
-              style:--gap="8px"
             >
               <ModelSection
                 harness={summarizerHarness}
@@ -2185,9 +2157,8 @@
             </div>
           {/if}
           <div
-            class="sec grid gap-(--gap)"
+            class="grid gap-space-2 motion-safe:animate-ns-sec"
             style="--delay:80ms"
-            style:--gap="8px"
           >
             <ModelSection
               account={accountTool}
@@ -2296,68 +2267,3 @@
     />
   </div>
 {/snippet}
-
-<style>
-  /* residual: keyframes */
-  /* An entrance ends on the element's own style: it holds its start through
-     a delay (`backwards`) and nothing once it has landed. Held with `both`,
-     a finished entrance kept its last keyframe over the element's own style
-     and kept the card on a compositor layer rastered at a mid-entrance
-     frame, so its text landed 1px off by which frame that was. An exit
-     holds its end until it is gone. */
-  .sec {
-    @media (prefers-reduced-motion: no-preference) {
-      animation: ns-in var(--dur-pop) var(--ease-out) backwards;
-      animation-delay: var(--delay, 0ms);
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    :global([data-session-card]:not([data-vaul-drawer])[data-state="open"]) {
-      animation: ns-panel var(--dur-panel) var(--ease-out) backwards;
-    }
-    :global([data-session-card]:not([data-vaul-drawer])[data-state="closed"]) {
-      animation: ns-panel-out var(--dur-exit) var(--ease-out) both;
-    }
-    /* css-scope: this dialog's own scrim, the overlay primitive it renders, which takes no scoped class */
-    :global(
-      [data-slot="session-scrim"]:not([data-vaul-overlay])[data-state="open"]
-    ) {
-      animation: ns-scrim var(--dur-panel) var(--ease-out) backwards;
-    }
-    /* css-scope: the same scrim, leaving */
-    :global(
-      [data-slot="session-scrim"]:not([data-vaul-overlay])[data-state="closed"]
-    ) {
-      animation: ns-scrim-out var(--dur-exit) var(--ease-out) both;
-    }
-  }
-  @media (max-width: 640px) {
-    /* The sheet leaves as the dialog does: --dur-exit on --ease-out, with
-       its scrim, instead of vaul's 500ms slide. */
-    :global([data-session-card][data-vaul-drawer][data-state="closed"]),
-    /* The sheet says it is up on the body (`data-session-sheet`, page-marks). */
-    :global(body[data-session-sheet] [data-vaul-overlay][data-state="closed"]) {
-      animation-duration: var(--dur-exit);
-      animation-timing-function: var(--ease-out);
-    }
-  }
-  @keyframes ns-panel-out {
-    to {
-      transform: translateY(var(--card-rise)) scale(var(--press-scale));
-      opacity: 0;
-    }
-  }
-  @keyframes ns-scrim {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-  @keyframes ns-scrim-out {
-    to {
-      opacity: 0;
-    }
-  }
-</style>
