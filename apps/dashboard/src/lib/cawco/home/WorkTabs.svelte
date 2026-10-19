@@ -637,7 +637,7 @@
     style:animation={anim}
     style:opacity={unseen ? "0" : undefined}
   >
-    <OsMark class="size-space-4" os={group.os} />
+    <OsMark class="size-icon-md" os={group.os} />
     <span>{group.name}</span>
     {#if finished.length > 0}
       <!-- Everything this machine has finished, failures too, off the list
@@ -649,7 +649,7 @@
         onclick={() => archive(finished)}
         type="button"
       >
-        <IconArchive aria-hidden="true" class="size-space-4" /><span
+        <IconArchive aria-hidden="true" class="size-icon-md" /><span
           >Archive all</span
         >
       </button>

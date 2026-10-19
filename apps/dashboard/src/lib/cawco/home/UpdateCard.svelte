@@ -228,7 +228,7 @@
     {#each n.lines as line, i (i)}
       {#if line.state === "busy" && i === spinnerAt}
         <div class="mark-line flex items-center gap-space-2 text-ink-strong">
-          <Spinner class="size-space-4 shrink-0" tone="muted" />
+          <Spinner class="size-icon-md shrink-0" tone="muted" />
           <span>{line.text}</span>
         </div>
       {:else}

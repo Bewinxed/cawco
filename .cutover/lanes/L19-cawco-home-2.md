@@ -88,9 +88,9 @@ removed: WorkTabs.svelte `[data-slot="head"] :global([data-slot="count"])` comme
 fixed: UpdateCard.svelte:312 the fold's open/shut offset is one token margin, not a literal pair — DESIGN.md Layout (the ladder; no hand-kept magic numbers)
 fixed: NoticeRow.svelte the ✕'s 24px box, its 44px touch area, the glyph and the lead column are `c-btn-h-xs`, `c-btn-h-lg`, `icon-sm`, `c-row-lead`, `c-row-h` — DESIGN.md Layout (one 28px lead column, 44px rows)
 fixed: WorkTabs.svelte machine header 22px → `space-6` (21px), tab padding 6px → `space-2` (7px), the "N more" gap 0.3em → `space-1` — DESIGN.md Layout (nearest ladder step)
+fixed: UpdateCard.svelte:231 Spinner, WorkTabs.svelte:640 OsMark, :652 IconArchive were `size-space-4` (14px) → `size-icon-md` — DESIGN.md Icons (12/16/20)
 
 ## Gaps
 
 gap: WorkTabs.svelte:647 "Archive all", the Delegates switch (:831) and the "N more" button (:945) are hand-rolled ghost controls (focus-inset, touch-hit, press-tint, own radius and hover) — the kit has no row-inline ghost variant for them (DESIGN.md Components, Buttons; the Press Rule)
 gap: UpdateCard.svelte:406 `--toggle-start` adds `space-2` (7px) for the sm button's inline-end pad; the kit still writes it `pr-2` (8px), so the "Show changes" box is 1px narrower at its start until the kit lane moves that pad onto the ladder — DESIGN.md Layout
-gap: UpdateCard.svelte:235 the Spinner is `size-space-4` (14px), not an icon step (12/16/20) — DESIGN.md Icons
