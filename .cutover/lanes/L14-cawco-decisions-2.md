@@ -1,5 +1,7 @@
 # Lane L14-cawco-decisions-2 (7 files)
 
+Skills loaded (in order): defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, interface-craft, ui-observer.
+
 Residual kinds are 1/2/3/4/5 (keyframes / foreign-dom / pseudo / svg-paint / unmapped).
 
 | file | rules moved | residual 1/2/3/4/5 | literals preserved | breakpoint edges | STOPs |
