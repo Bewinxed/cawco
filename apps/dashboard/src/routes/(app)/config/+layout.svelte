@@ -78,11 +78,9 @@
          it holds still and its pill glides to the new section. -->
     <!-- The two pages of a swap stand in one cell; a phone's push slides the
          new one in from off the pane's edge, so the pane clips it. -->
-    <!-- literal: minmax(0, 1fr) (the one cell's track) -->
     <div
       data-slot="pane"
-      class="grid min-h-0 min-w-0 flex-auto grid-cols-(--pane-track) grid-rows-(--pane-track) overflow-hidden"
-      style:--pane-track="minmax(0, 1fr)"
+      class="grid min-h-0 min-w-0 flex-auto grid-cols-1 grid-rows-1 overflow-hidden"
     >
       {#key page.url.pathname}
         <div

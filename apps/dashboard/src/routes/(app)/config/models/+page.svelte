@@ -305,14 +305,7 @@
   {ready}
   title={section.label}
 >
-  <!-- literal: 72ch -->
-  <!-- literal: 8px -->
-  <div
-    data-slot="group"
-    class="flex flex-col gap-(--gap)"
-    style:--gap="8px"
-    style:--note-measure="72ch"
-  >
+  <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconGlobe} label="OpenRouter">
       {#snippet right()}
         {#if openrouter?.connected}
@@ -338,7 +331,7 @@
         {/if}
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       One way to reach Jev. A TypeSafe key held in Jev below takes over from it.
     </p>
     <div
@@ -351,7 +344,7 @@
           <p
             data-slot="num"
             aria-live="polite"
-            class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong"
+            class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
             data-tone={phase === "connected" ? "ok" : "off"}
             in:blur={{
               duration: dur("--dur-panel"),
@@ -365,12 +358,10 @@
             }}
           >
             {#if phase === "exchanging"}
-              <!-- literal: 50% -->
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                style:--dot-r="50%"
-                class="size-space-2 flex-none rounded-(--dot-r) bg-ink-muted opacity-60 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-60 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100 motion-safe:animate-breath"
                 data-box
                 data-pulse
               ></span>
@@ -390,7 +381,11 @@
                 ></circle>
                 <path
                   d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                  class="stroke-status-live-glyph"
+                  class="stroke-status-live-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
+                  pathLength="1"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.8"
                 ></path>
               </svg>
               <span
@@ -399,12 +394,10 @@
                 )}</span
               >
             {:else}
-              <!-- literal: 50% -->
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                style:--dot-r="50%"
-                class="size-space-2 flex-none rounded-(--dot-r) bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
                 data-box
               ></span>
               <span>Not connected</span>
@@ -424,19 +417,15 @@
     {/if}
   </div>
 
-  <!-- literal: 72ch -->
-  <!-- literal: 8px -->
   <form
     data-slot="group"
-    class="flex flex-col gap-(--gap) border-t border-t-border-hairline pt-space-5"
+    class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-5"
     data-group="jev"
-    style:--gap="8px"
-    style:--note-measure="72ch"
     onsubmit={saveKey}
   >
     <SectionHeader hue={HUE} icon={IconJev} label="Jev">
       {#snippet right()}
-        <div data-slot="actions" class="flex gap-(--gap)">
+        <div data-slot="actions" class="flex gap-space-2">
           {#if jev?.typesafe}
             <Button
               disabled={savingKey}
@@ -460,23 +449,21 @@
         </div>
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       Answers the hub's yes/no questions: meaning rules, fleet watch,
       suggestions and its own judgments. It goes straight to TypeSafe while a
       key is held here, otherwise through OpenRouter.
     </p>
     <p
       aria-live="polite"
-      class="mark-line group type-body flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong"
+      class="mark-line group type-body flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
       data-testid="jev-route"
       data-tone={jev?.route ? "ok" : "off"}
     >
-      <!-- literal: 50% -->
       <span
         data-slot="dot"
         aria-hidden="true"
-        style:--dot-r="50%"
-        class="size-space-2 flex-none rounded-(--dot-r) bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+        class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
         data-box
       ></span>
       <span>{routeLine}</span>
@@ -501,7 +488,7 @@
           <p
             data-slot="num"
             aria-live="polite"
-            class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-(--gap) text-ink-muted tone-ok:text-ink-strong"
+            class="num mark-line group type-body col-start-1 row-start-1 flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
             data-testid="typesafe-key-state"
             data-tone={keyPhase === "held" ? "ok" : "off"}
             in:blur={{
@@ -530,17 +517,19 @@
                 ></circle>
                 <path
                   d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                  class="stroke-status-live-glyph"
+                  class="stroke-status-live-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
+                  pathLength="1"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  stroke-width="1.8"
                 ></path>
               </svg>
               <span>Held, ends …{jev.typesafe.ends}</span>
             {:else}
-              <!-- literal: 50% -->
               <span
                 data-slot="dot"
                 aria-hidden="true"
-                style:--dot-r="50%"
-                class="size-space-2 flex-none rounded-(--dot-r) bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+                class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
                 data-box
               ></span>
               <span>Not set</span>
@@ -570,16 +559,12 @@
     {/if}
   </form>
 
-  <!-- literal: 72ch -->
-  <!-- literal: 8px -->
   <div
     data-slot="group"
-    class="flex flex-col gap-(--gap) border-t border-t-border-hairline pt-space-5"
-    style:--gap="8px"
-    style:--note-measure="72ch"
+    class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-5"
   >
     <SectionHeader hue={HUE} icon={IconRules} label="Fleet watch" />
-    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       Reads every session's stream for a loop or a stall. A yes from Jev, or a
       second signal while Jev is off, starts one triage that tells the session's
       lead. In a project whose Caw is off, it tells you instead.
@@ -597,7 +582,7 @@
     {#if watch}
       <ul
         data-slot="num"
-        class="num type-meta m-0 flex list-none flex-col gap-space-1 p-0 text-ink-muted"
+        class="num type-meta flex flex-col gap-space-1 text-ink-muted"
       >
         <li>
           Same error {watch.limits.sameError} times in
@@ -625,35 +610,3 @@
     {/if}
   </div>
 </SectionFrame>
-
-<style>
-  /* Connected: the tick draws itself in. */
-  /* residual: svg-paint */
-  [data-slot="check"] {
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  /* residual: svg-paint */
-  [data-slot="check"] path {
-    stroke-width: 1.8;
-    stroke-dasharray: 12;
-    stroke-dashoffset: 0;
-  }
-  /* residual: keyframes */
-  [data-slot="check"] path {
-    @media (prefers-reduced-motion: no-preference) {
-      animation: draw var(--dur-toggle) var(--ease-out) var(--dur-ghost) both;
-    }
-  }
-  @keyframes draw {
-    from {
-      stroke-dashoffset: 12;
-    }
-  }
-  /* Finishing the connection: the dot breathes while the hub works. */
-  .pulse {
-    @media (prefers-reduced-motion: no-preference) {
-      animation: breath var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-</style>

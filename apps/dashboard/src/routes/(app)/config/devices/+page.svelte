@@ -124,14 +124,7 @@
   ready={loaded}
   title={section.label}
 >
-  <!-- literal: 72ch -->
-  <!-- literal: 8px -->
-  <div
-    data-slot="group"
-    class="flex flex-col gap-(--group-gap)"
-    style:--group-gap="8px"
-    style:--note-measure="72ch"
-  >
+  <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconLock} label="Pairing" />
     <!-- The switch shows the change while it is confirmed, and goes back on Cancel. -->
     <SwitchField
@@ -148,14 +141,14 @@
     />
     {#if confirming === "on"}
       <div
-        class="flex max-w-(--note-measure) flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
+        class="flex max-w-c-measure flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
         transition:unfold
       >
         <p data-slot="lead" class="type-body text-ink-strong">
           Require paired devices? From the moment you confirm:
         </p>
         <ul
-          class="type-body m-0 flex list-disc flex-col gap-space-1 ps-space-5 text-ink-muted"
+          class="type-body flex list-disc flex-col gap-space-1 ps-space-5 text-ink-muted"
         >
           <li>This browser is the first paired device.</li>
           <li>
@@ -201,7 +194,7 @@
       </div>
     {:else if confirming === "off"}
       <div
-        class="flex max-w-(--note-measure) flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
+        class="flex max-w-c-measure flex-col gap-space-3 rounded-md bg-surface-recess p-space-4"
         transition:unfold
       >
         <p data-slot="lead" class="type-body text-ink-strong">
@@ -233,25 +226,19 @@
   </div>
 
   {#if required && (hubAuth.requests.length > 0 || hubAuth.waiting.length > 0)}
-    <!-- literal: 8px -->
     <div
       data-slot="group"
-      class="mt-space-6 flex flex-col gap-(--group-gap)"
-      style:--group-gap="8px"
+      class="mt-space-6 flex flex-col gap-space-2"
       transition:unfold
     >
       <SectionHeader hue={HUE} icon={IconClock} label="Waiting for you" />
       <ul class="flex flex-col">
         {#each hubAuth.requests as request (request.userCode)}
-          <!-- literal: 12px, 10px; minmax(0, 1fr) auto auto (the row's tracks) -->
           <li
             data-slot="row"
-            class="grid grid-cols-(--row-cols) items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
-            style:--row-cols="minmax(0, 1fr) auto auto"
-            style:--row-gap="12px"
-            style:--row-pad-y="10px"
+            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-border-hairline"
           >
-            <div data-slot="who" class="flex min-w-0 flex-col">
+            <div data-slot="who" class="flex min-w-0 flex-1 flex-col">
               <span data-slot="name" class="type-body text-ink-strong"
                 >{request.name}</span
               >
@@ -299,15 +286,11 @@
           </li>
         {/each}
         {#each hubAuth.waiting as machine (machine.machineId)}
-          <!-- literal: 12px, 10px; minmax(0, 1fr) auto auto (the row's tracks) -->
           <li
             data-slot="row"
-            class="grid grid-cols-(--row-cols) items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
-            style:--row-cols="minmax(0, 1fr) auto auto"
-            style:--row-gap="12px"
-            style:--row-pad-y="10px"
+            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-border-hairline"
           >
-            <div data-slot="who" class="flex min-w-0 flex-col">
+            <div data-slot="who" class="flex min-w-0 flex-1 flex-col">
               <span data-slot="name" class="type-body text-ink-strong"
                 >{machine.hostname ?? machine.machineId}</span
               >
@@ -352,28 +335,20 @@
   {/if}
 
   {#if required}
-    <!-- literal: 72ch -->
-    <!-- literal: 8px -->
     <div
       data-slot="group"
-      class="mt-space-6 flex flex-col gap-(--group-gap)"
-      style:--group-gap="8px"
-      style:--note-measure="72ch"
+      class="mt-space-6 flex flex-col gap-space-2"
       transition:unfold
     >
       <SectionHeader hue={HUE} icon={IconLaptop} label="Paired devices" />
       <ul class="flex flex-col">
         {#each devices as device (device.id)}
-          <!-- literal: 12px, 10px; minmax(0, 1fr) auto (the row's tracks) -->
           <li
             data-slot="row"
             data-devices
-            class="grid grid-cols-(--row-cols) items-center gap-(--row-gap) not-first:border-t not-first:border-t-border-hairline py-(--row-pad-y)"
-            style:--row-cols="minmax(0, 1fr) auto"
-            style:--row-gap="12px"
-            style:--row-pad-y="10px"
+            class="flex items-center gap-space-3 py-space-3 not-first:border-t not-first:border-border-hairline"
           >
-            <div data-slot="who" class="flex min-w-0 flex-col">
+            <div data-slot="who" class="flex min-w-0 flex-1 flex-col">
               <span data-slot="name" class="type-body text-ink-strong"
                 >{device.name}{device.id === current
                   ? " · this browser"
@@ -406,7 +381,7 @@
       {#if devices.length === 1}
         <p
           data-slot="note"
-          class="type-meta max-w-(--note-measure) wrap-anywhere text-ink-muted"
+          class="type-meta max-w-c-measure wrap-anywhere text-ink-muted"
         >
           The only paired device stays until you pair another or turn pairing
           off, so the fleet always has someone who can approve.
