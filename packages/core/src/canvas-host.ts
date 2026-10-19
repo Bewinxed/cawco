@@ -18,6 +18,7 @@ import { mkdir, rm } from "node:fs/promises";
 import { dirname, join, normalize } from "node:path";
 import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
+import { bundled } from "./bundled";
 import { HOST_PLUGINS } from "./canvas-host-plugins";
 import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
@@ -98,7 +99,7 @@ export async function buildCanvasHost(): Promise<Map<string, Blob>> {
 }
 
 async function bundleJs() {
-  const result = await Bun.build({
+  const result = await bundled("The canvas host", {
     entrypoints: [join(HOST_DIR, "host.tsx")],
     target: "browser",
     format: "esm",
@@ -115,9 +116,6 @@ async function bundleJs() {
       asset: "asset-[hash].[ext]",
     },
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "Canvas host build failed");
-  }
   await refuseSchemeLowering("The canvas host", result.outputs);
   return result.outputs;
 }

@@ -2,6 +2,7 @@ import { readdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Server, WebSocketHandler } from "bun";
 import { refuseSchemeLowering } from "./bundle-css-guard";
+import { bundled } from "./bundled";
 import { dataUrlBytes, deskCaptures } from "./captures";
 import {
   PREVIEW_DOWN_META,
@@ -38,7 +39,7 @@ function buildOverlay(): Promise<string> {
  * ({@link buildOverlay}); `build-binary.ts` writes it out to embed.
  */
 export async function bundleOverlay(): Promise<string> {
-  const result = await Bun.build({
+  const result = await bundled("The preview overlay", {
     entrypoints: [
       new URL("../../agent/src/preview-overlay/overlay.ts", import.meta.url)
         .pathname,
@@ -47,17 +48,13 @@ export async function bundleOverlay(): Promise<string> {
     minify: true,
     format: "iife",
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "Preview overlay build failed");
-  }
   await refuseSchemeLowering("The preview overlay", result.outputs);
   return result.outputs[0].text();
 }
 
 /**
- * Built once per process and kept, unless the build fails — a missing source
- * file makes `Bun.build` throw rather than answer `success: false`, and a
- * rejected promise left in the cache would turn one bad request into every
+ * Built once per process and kept, unless the build fails — a failed build
+ * throws (bundled.ts), and a rejected promise left in the cache would turn one bad request into every
  * request until restart. A failure clears the slot so the next one retries.
  */
 export function loadOverlay(): Promise<string> {
@@ -118,7 +115,6 @@ export async function keyOverlay(
   parents: readonly string[]
 ): Promise<Response> {
   const at = `${OVERLAY_PATH}?${OVERLAY_KEY}=${await overlayKey(parents)}`;
-  // biome-ignore lint/correctness/noUndeclaredVariables: HTMLRewriter is Bun's own global (bun-types)
   const rewritten = new HTMLRewriter()
     .on(`script[src="${OVERLAY_PATH}"]`, {
       element(element) {
@@ -699,7 +695,6 @@ export function versionAssets(
     }
     return `${mount}__cawco/v/${key}${inside}${url.search}${url.hash}`;
   };
-  // biome-ignore lint/correctness/noUndeclaredVariables: HTMLRewriter is Bun's own global (bun-types)
   let rewriter = new HTMLRewriter();
   for (const [selector, attribute] of FILE_ATTRIBUTES) {
     rewriter = rewriter.on(selector, {

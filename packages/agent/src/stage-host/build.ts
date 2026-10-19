@@ -9,6 +9,7 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { refuseSchemeLowering } from "@cawco/core/bundle-css-guard";
+import { bundled } from "@cawco/core/bundled";
 import { embeddedFile, standalone } from "@cawco/core/runtime";
 
 const HOST = new URL("./host.ts", import.meta.url).pathname;
@@ -173,35 +174,6 @@ async function canvasFaces(): Promise<{
     );
   }
   return { css: rules.join("\n"), files };
-}
-
-/** One bundler message in words, with its place in the source when it has one. */
-const logSaid = (log: unknown): string => {
-  const one = log as Partial<BuildMessage>;
-  const at = one.position
-    ? `${one.position.file}:${one.position.line}:${one.position.column}: `
-    : "";
-  return `${at}${one.message ?? String(log)}`;
-};
-
-/**
- * `Bun.build` for one bundle. A failed build throws an AggregateError whose
- * whole message is "Bundle failed" (no stack; the bundler's messages are on
- * its `errors` alone): it is said again naming the bundle and each message
- * with its file, line and column.
- */
-async function bundled(
-  what: string,
-  config: Bun.BuildConfig
-): Promise<Bun.BuildOutput> {
-  try {
-    return await Bun.build(config);
-  } catch (error) {
-    const logs = error instanceof AggregateError ? error.errors : [error];
-    throw new Error(`${what}'s build failed: ${logs.map(logSaid).join("; ")}`, {
-      cause: error,
-    });
-  }
 }
 
 /** The canvas's browser runtime (canvas/runtime.ts), bundled: an ES module the stage serves as `cawco:stage/runtime.js`. */

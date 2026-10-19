@@ -7,6 +7,7 @@
     "./runtime": "./src/runtime.ts",
     "./find-match": "./src/find-match.ts",
     "./bundle-css-guard": "./src/bundle-css-guard.ts",
+    "./bundled": "./src/bundled.ts",
     "./css-target": "./src/css-target.ts",
     "./at-most": "./src/at-most.ts",
     "./bounded": "./src/bounded.ts",

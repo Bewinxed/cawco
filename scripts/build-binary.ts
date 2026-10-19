@@ -6,6 +6,7 @@ import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
 import { agentReact } from "../packages/core/src/agent-react";
+import { bundled } from "../packages/core/src/bundled";
 import { canvasHostAssets } from "../packages/core/src/canvas-host";
 import { decisionHostAssets } from "../packages/core/src/decision-host";
 import { bundleOverlay } from "../packages/core/src/preview-proxy";
@@ -110,15 +111,12 @@ export async function buildBinary(options: {
   const photon = packageDir("@silvia-odwyer/photon-node", requirePi);
   const zod = packageDir("zod", requireCore);
   const typescript = packageDir("typescript", requireCore);
-  const zodBundle = await Bun.build({
+  const zodBundle = await bundled("Workflow zod", {
     entrypoints: [join(zod, "index.js")],
     target: "bun",
     format: "esm",
     minify: true,
   });
-  if (!zodBundle.success) {
-    throw new AggregateError(zodBundle.logs, "Workflow zod build failed");
-  }
   await writeFile(
     join(work, "zod-runtime.js"),
     await zodBundle.outputs[0].text()
@@ -164,15 +162,12 @@ export async function buildBinary(options: {
   // none (REPORT.md §1). macOS boundaries run on Seatbelt and need neither.
   const linuxTarget = options.target.startsWith("linux-");
   if (linuxTarget) {
-    const host = await Bun.build({
+    const host = await bundled("The boundary host", {
       entrypoints: [join(ROOT, "packages/agent/src/boundary-host.ts")],
       target: "bun",
       format: "esm",
       minify: true,
     });
-    if (!host.success) {
-      throw new AggregateError(host.logs, "Boundary host build failed");
-    }
     await writeFile(join(work, "srt-host.js"), await host.outputs[0].text());
   }
   // A workspace's stage (live components): run by the project's own node or
@@ -260,7 +255,7 @@ export async function buildBinary(options: {
     tui,
     `native/${platform}/prebuilds/${platform}-${arch}/${platform}-platform${platform === "linux" ? "-x11" : ""}.node`
   );
-  const result = await Bun.build({
+  await bundled("The standalone binary", {
     entrypoints: [
       join(
         ROOT,
@@ -461,9 +456,6 @@ export async function buildBinary(options: {
       },
     ],
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "Standalone compile failed");
-  }
   console.log(
     `${options.target}: ${options.outfile} (${(await stat(options.outfile)).size} bytes)`
   );

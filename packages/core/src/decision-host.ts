@@ -22,6 +22,7 @@ import { join, normalize } from "node:path";
 import { SveltePlugin } from "bun-plugin-svelte";
 import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
+import { bundled } from "./bundled";
 import { compileSheets, pageFiles } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
 
@@ -145,7 +146,7 @@ function stylesInImportOrder(
  */
 export async function buildDecisionHost(): Promise<Map<string, Blob>> {
   const styles = new Map<string, string>();
-  const result = await Bun.build({
+  const result = await bundled("The decision host", {
     entrypoints: [join(HOST_DIR, "host.ts")],
     target: "browser",
     format: "esm",
@@ -165,9 +166,6 @@ export async function buildDecisionHost(): Promise<Map<string, Blob>> {
       asset: "asset-[hash].[ext]",
     },
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "Decision host build failed");
-  }
   await refuseSchemeLowering("The decision host", result.outputs);
   if (!result.metafile) {
     throw new Error("The decision host's build gave no metafile");
