@@ -152,8 +152,7 @@
            pick i), on the home's own ground, while a machine is online
            (home `limitsShown`). -->
       <!-- The strip's card lines up with the status line's text. -->
-      <!-- literal: -8px -->
-      <div class="mx-(--usage-pull)" style:--usage-pull="-8px">
+      <div class="-mx-space-2">
         <UsageMeter variant="home" />
       </div>
     {/if}
