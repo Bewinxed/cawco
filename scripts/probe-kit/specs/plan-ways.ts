@@ -2311,8 +2311,10 @@ async function leg(
  * What the edge fades' caps cost a scroll (DESIGN.md, Edge fade): the desk
  * card's list scrolled down its length and back, 6px a frame, at a 4×
  * CPU throttle. Says the longest task (the Long Tasks API reports 50ms and
- * up), the longest frame, and the page's scripting per frame (the
- * protocol's ScriptDuration over the run). A note, not a check: the canvas
+ * up), the longest frame, the page's scripting per frame (the protocol's
+ * ScriptDuration over the run) and the caps' own share of it (the
+ * sampling profiler's stacks through edge-fade-caps.ts, every list on the
+ * page, the Live story's beats among them). A note, not a check: the canvas
  * page runs tasks past 50ms under the throttle with no caps at all (round
  * 4's list, 204-229ms), so it is read against the tree before the caps.
  */
@@ -2327,9 +2329,12 @@ async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
       ).metrics.map((one) => [one.name, one.value])
     );
   await cdp.send("Performance.enable");
+  await cdp.send("Profiler.enable");
+  await cdp.send("Profiler.setSamplingInterval", { interval: 100 });
   await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
   try {
     const before = await metric();
+    await cdp.send("Profiler.start");
     const run = await page.evaluate(async (selector) => {
       const scroller = document.querySelector<HTMLElement>(
         `${selector} [data-slot="side-card"] .body`
@@ -2372,6 +2377,41 @@ async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
       };
     }, FRAME("Plan"));
     const after = await metric();
+    // The caps' own share: every sample with a frame of edge-fade-caps.ts
+    // on its stack, the native calls it makes included.
+    const { profile } = (await cdp.send("Profiler.stop")) as {
+      profile: {
+        nodes: {
+          callFrame: { url: string };
+          children?: number[];
+          id: number;
+        }[];
+        samples: number[];
+        timeDeltas: number[];
+      };
+    };
+    const parent = new Map<number, number>();
+    for (const node of profile.nodes) {
+      for (const child of node.children ?? []) {
+        parent.set(child, node.id);
+      }
+    }
+    const url = new Map(
+      profile.nodes.map((node) => [node.id, node.callFrame.url])
+    );
+    let capsUs = 0;
+    profile.samples.forEach((id, i) => {
+      for (
+        let at: number | undefined = id;
+        at !== undefined;
+        at = parent.get(at)
+      ) {
+        if (url.get(at)?.includes("edge-fade-caps")) {
+          capsUs += profile.timeDeltas[i] ?? 0;
+          return;
+        }
+      }
+    });
     const script =
       run && run.frames > 0
         ? Math.round(
@@ -2381,8 +2421,10 @@ async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
               run.frames
           ) / 100
         : 0;
+    const caps =
+      run && run.frames > 0 ? Math.round(capsUs / 10 / run.frames) / 100 : 0;
     kit.note(
-      `${name}: the desk card's list scrolled ${run?.range ?? 0}px down and back at 4× CPU throttle: ${run?.frames ?? 0} frames, scripting ${script} ms a frame, longest frame ${run?.worstFrame ?? 0} ms, longest task ${run?.longest ? `${run.longest} ms` : "none of 50 ms or more"}`
+      `${name}: the desk card's list scrolled ${run?.range ?? 0}px down and back at 4× CPU throttle: ${run?.frames ?? 0} frames, scripting ${script} ms a frame (the caps' own ${caps} ms), longest frame ${run?.worstFrame ?? 0} ms, longest task ${run?.longest ? `${run.longest} ms` : "none of 50 ms or more"}`
     );
   } finally {
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
