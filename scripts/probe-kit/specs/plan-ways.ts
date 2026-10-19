@@ -59,7 +59,12 @@ const freePort = async (): Promise<number> => {
 };
 
 /** The dashboard's stage, as the agent starts one for a SvelteKit project. */
-async function stageOn(): Promise<{ base: string; stop: () => void }> {
+async function stageOn(): Promise<{
+  base: string;
+  ms: number;
+  stop: () => void;
+}> {
+  const started = performance.now();
   const host = await buildStageHost();
   mkdirSync(join(DASHBOARD, ".cawco/stage"), { recursive: true });
   writeFileSync(join(DASHBOARD, ".cawco/stage/host.mjs"), host);
@@ -96,6 +101,7 @@ async function stageOn(): Promise<{ base: string; stop: () => void }> {
   });
   return {
     base: `http://127.0.0.1:${port}`,
+    ms: Math.round(performance.now() - started),
     stop: () => child.kill("SIGTERM"),
   };
 }
@@ -207,10 +213,125 @@ const readSweeps = (page: Page) =>
     };
   }, FRAME("Live"));
 
-async function capture(page: Page, name: string): Promise<void> {
+/**
+ * What each story's rest frame lays out, in layout pixels (offsetWidth:
+ * the canvas's zoom aside): the plan card's width, whether the head's
+ * words overlap, the opened date picker's description, the dependency
+ * lines' drawn lengths, and the sweeps running in it.
+ */
+const readGeometry = (page: Page) =>
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one read of every frame, run in the page's own scope, so it cannot call helpers of the spec's
+  page.evaluate(() => {
+    const out: Record<
+      string,
+      {
+        shown: boolean;
+        card: { kind: string; width: number };
+        description: { height: number; width: number };
+        overlaps: string[];
+        sweeps: number;
+        wires: number[];
+      }
+    > = {};
+    const boxes = (el: Element | null | undefined) =>
+      el ? el.getBoundingClientRect() : null;
+    for (const body of document.querySelectorAll<HTMLElement>(
+      '.cawco-frame[data-cawco-interaction="rest"] .cawco-frame-body'
+    )) {
+      const story =
+        body.closest(".cawco-frame")?.getAttribute("data-cawco-story") ?? "";
+      if (out[story]) {
+        continue;
+      }
+      const card = body.querySelector<HTMLElement>(
+        '[data-slot="side-card"], [data-slot="phone-screen"]'
+      );
+      // The head's words: "Plan", its figure, the task's title and stage.
+      const words = [
+        ...body.querySelectorAll(
+          '[data-slot="side-card"] :is(.title, .figure, .task-title, .stage), [data-slot="phone-screen"] :is(.sheet-title > span, .figure, .task-title, .stage)'
+        ),
+      ];
+      const overlaps: string[] = [];
+      for (const [i, a] of words.entries()) {
+        for (const b of words.slice(i + 1)) {
+          if (a.contains(b) || b.contains(a)) {
+            continue;
+          }
+          const x = boxes(a);
+          const y = boxes(b);
+          if (
+            x &&
+            y &&
+            x.width > 0 &&
+            y.width > 0 &&
+            x.left < y.right - 0.5 &&
+            y.left < x.right - 0.5 &&
+            x.top < y.bottom - 0.5 &&
+            y.top < x.bottom - 0.5
+          ) {
+            overlaps.push(
+              `"${a.textContent?.trim()}" over "${b.textContent?.trim()}"`
+            );
+          }
+        }
+      }
+      const description = body.querySelector<HTMLElement>(
+        '[data-row="a2"] [data-slot="fold-body"][data-open] [data-slot="description"]'
+      );
+      const frame = body.closest<HTMLElement>(".cawco-frame");
+      out[story] = {
+        // A phone's canvas stands one frame at a time; the rest are not drawn.
+        shown: !!frame && getComputedStyle(frame).display !== "none",
+        card: {
+          kind: card?.getAttribute("data-slot") ?? "none",
+          width: card?.offsetWidth ?? 0,
+        },
+        description: {
+          height: description?.offsetHeight ?? 0,
+          width: description?.offsetWidth ?? 0,
+        },
+        overlaps,
+        sweeps: document.getAnimations().filter((run) => {
+          const target = (run.effect as KeyframeEffect | null)?.target;
+          return (
+            run instanceof CSSAnimation &&
+            run.animationName === "kit-skeleton-sweep" &&
+            target instanceof Element &&
+            body.contains(target)
+          );
+        }).length,
+        wires: [
+          ...body.querySelectorAll<SVGPathElement>(
+            'svg[data-slot="connectors"] path.wire'
+          ),
+        ].map((path) => Math.round(path.getTotalLength())),
+      };
+    }
+    return out;
+  });
+
+/** The frames alone: the canvas's own chrome and the Dials panel hidden for the picture. */
+async function capture(page: Page, name: string, story: string): Promise<void> {
+  await page.addStyleTag({
+    content: "#cawco-chrome, .dialkit-root { display: none !important; }",
+  });
+  // The canvas pans its world itself (`cawco:canvas-go` to the frame's
+  // key): a scroll of its own box would carry the section past the far
+  // margin, and the canvas would put it to sleep.
+  const selector = `.cawco-frame[data-cawco-story="${story}"][data-cawco-interaction="rest"]`;
+  await page.waitForSelector(selector, { state: "attached", timeout: 20_000 });
+  await page.evaluate((one) => {
+    const key = document.querySelector(one)?.getAttribute("data-cawco-key");
+    if (key) {
+      dispatchEvent(new CustomEvent("cawco:canvas-go", { detail: { key } }));
+    }
+  }, selector);
+  await page.waitForTimeout(900);
+  const frame = page.locator(selector).first();
   for (const dir of CAPS) {
     mkdirSync(dir, { recursive: true });
-    await page.screenshot({ path: join(dir, `${name}.png`) });
+    await frame.screenshot({ path: join(dir, `${name}.png`) });
   }
 }
 
@@ -223,8 +344,9 @@ async function commentLive(page: Page): Promise<{
   const words = frame
     .locator('[data-row="a2"] > [data-slot="plan-row"] [data-slot="words"]')
     .first();
-  await words.scrollIntoViewIfNeeded();
-  await words.click();
+  // The canvas moves its world by transform, so a row can lie outside the
+  // viewport where no scroll reaches: the keyboard opens it, as a person can.
+  await words.press("Enter");
   await page.waitForTimeout(500);
   const opened = await frame
     .locator(
@@ -367,6 +489,60 @@ async function checkComment(kit: Kit, name: string, page: Page): Promise<void> {
   );
 }
 
+/**
+ * What is laid out, not only named: each card at its width (the side card
+ * 340 or more, the phone's screen 370 or more), the head's words apart, and
+ * in the commented and answered stories the date picker's description
+ * open, a dependency line drawn (Lanes and Crew first) and the working
+ * delegate's sweep running.
+ */
+function checkGeometry(
+  kit: Kit,
+  name: string,
+  way: Way,
+  geometry: Awaited<ReturnType<typeof readGeometry>>,
+  desk: boolean
+): void {
+  const shown = Object.entries(geometry).filter(
+    ([, one]) => one.shown && one.card.kind !== "none"
+  );
+  const narrow = shown.filter(([, one]) =>
+    one.card.kind === "phone-screen"
+      ? one.card.width < 370
+      : one.card.width < 340
+  );
+  kit.check(
+    `${name}: every card stands at its width (side card ≥ 340, phone ≥ 370): ${shown.map(([story, one]) => `${story} ${one.card.width}`).join(", ")}`,
+    shown.length > 0 && narrow.length === 0,
+    JSON.stringify(narrow.map(([story, one]) => [story, one.card]))
+  );
+  const overlaps = shown.flatMap(([story, one]) =>
+    one.overlaps.map((what) => `${story}: ${what}`)
+  );
+  kit.check(
+    `${name}: the head's title and its other words never overlap`,
+    shown.length > 0 && overlaps.length === 0,
+    overlaps.slice(0, 4).join(" | ")
+  );
+  // The opened step's stories, at the desk where every frame stands.
+  for (const story of desk ? ["Commented", "Acknowledged"] : []) {
+    const one = geometry[story];
+    if (!one) {
+      continue;
+    }
+    const lined =
+      way.variation === "a" || one.wires.some((length) => length > 0);
+    kit.check(
+      `${name}: ${story} opens the date picker's description (${one.description.width}×${one.description.height}), draws its dependency lines (${one.wires.join(",") || "none"}) and sweeps its working delegate (${one.sweeps})`,
+      one.description.height > 20 &&
+        one.description.width > 200 &&
+        lined &&
+        one.sweeps > 0,
+      JSON.stringify(one)
+    );
+  }
+}
+
 /** One way's canvas at one width and scheme. */
 async function leg(
   kit: Kit,
@@ -393,16 +569,31 @@ async function leg(
   );
   const report = await reportOn(page);
   const stories = await readStories(page);
+  kit.check(
+    `${name}: the canvas reports no page errors`,
+    report.page.errors.length === 0,
+    JSON.stringify(report.page.errors).slice(0, 600)
+  );
+  checkGeometry(kit, name, way, await readGeometry(page), view === "desk");
   if (view === "phone") {
     checkPhone(kit, name, way, report, stories);
   } else {
     checkDesk(kit, name, way, report, stories);
     await checkSweeps(kit, name, page);
   }
-  await capture(page, `plan-ways-${way.file}-${view}-${theme}`);
+  if (view === "desk") {
+    // The frames alone: the desk card, the phone sheet, and a step opened
+    // with its comment answered.
+    await capture(page, `plan-ways-${way.file}-desk-${theme}`, "Plan");
+    await capture(page, `plan-ways-${way.file}-phone-${theme}`, "OnPhone");
+    await capture(
+      page,
+      `plan-ways-${way.file}-answered-${theme}`,
+      "Acknowledged"
+    );
+  }
   if (view === "desk" && theme === "light") {
     await checkComment(kit, name, page);
-    await capture(page, `plan-ways-${way.file}-commented-live`);
   }
   kit.check(
     `${name}: no console errors`,
@@ -416,6 +607,7 @@ const spec: Spec = {
   name: "plan-ways",
   run: async (kit: Kit) => {
     const stage = await stageOn();
+    kit.note(`the dashboard's stage served in ${stage.ms} ms`);
     try {
       for (const view of ["desk", "phone"] as const) {
         for (const theme of ["light", "dark"] as const) {
