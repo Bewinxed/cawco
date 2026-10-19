@@ -10,17 +10,15 @@
   const group = $derived(data as { name: string });
 </script>
 
-<!-- literal: inset 0 0 0 1px (frame ring) -->
 <div
   data-slot="decision-group"
-  class="pointer-events-none relative rounded-lg shadow-(--group-ring)"
-  style:--group-ring="inset 0 0 0 1px var(--border-control)"
+  class="pointer-events-none relative rounded-lg inset-ring inset-ring-border-control"
   style:block-size="{height}px"
   style:inline-size="{width}px"
 >
   <span
     data-slot="decision-group-label"
-    class="type-label absolute start-space-1 bottom-(--label-off) whitespace-nowrap text-ink-muted"
-    style:--label-off="calc(100% + var(--space-1))">{group.name}</span
+    class="type-label absolute start-space-1 bottom-full mb-space-1 whitespace-nowrap text-ink-muted"
+    >{group.name}</span
   >
 </div>

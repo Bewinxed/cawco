@@ -14,6 +14,7 @@
 <span class="badge" data-tone={tone}>{String(props.text ?? "")}</span>
 
 <style>
+  /* tailwind: this file is bundled by Bun for the decision host page, which loads only the kit's page.css and tokens.css and has no Tailwind compiler, so a utility class here would have no CSS behind it — https://tailwindcss.com/docs/installation */
   /* DESIGN.md, Badges: 20px (--c-badge-h), label role, recess surface, no border, 5px radius;
      the live, attn, done and fail variants take their status pairs. */
   .badge {
