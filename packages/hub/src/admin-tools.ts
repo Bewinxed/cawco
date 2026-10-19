@@ -628,9 +628,7 @@ export function adminTools() {
         shared: z
           .boolean()
           .optional()
-          .describe(
-            "One per machine, started at first call; a stdio server with no per-session state."
-          ),
+          .describe("One process per machine; stdio, no per-session state."),
       },
       async ({
         action,
