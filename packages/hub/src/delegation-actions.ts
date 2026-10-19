@@ -1185,10 +1185,11 @@ function resolveDelegate(
 }
 
 /**
- * A handoff's inputs, through the hub (work-items.ts `handInputs`): read on
- * `from`'s machine, copied into the `$TMPDIR/inputs/` of `target`'s work
- * item. Answers each one's name and where it was read; the hub's refusal is
- * thrown in its words.
+ * A handoff's inputs, through the hub (work-items.ts `handInputs`): admitted
+ * on `from`'s machine, copied into the `$TMPDIR/inputs/` of `target`'s work
+ * item (by that machine itself when the item's workspace is on it too).
+ * Answers each one's name and where it was read; the hub's refusal is thrown
+ * in its words.
  */
 async function handInputs(
   authorization: string | undefined,
@@ -1203,7 +1204,7 @@ async function handInputs(
       ...(authorization ? { Authorization: authorization } : {}),
     },
     body: JSON.stringify({ from, instanceId: target, inputs }),
-    // Up to 64 MiB read on one machine and written on another.
+    // Up to 64 MiB copied on one machine, or read on one and written on another.
     timeout: false,
   });
   if (!response.ok) {

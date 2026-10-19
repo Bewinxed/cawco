@@ -15,8 +15,9 @@
  * deflates synchronously at ~15 ms per MB, so a 64 MB message held the
  * agent's loop for 937 ms and a 1 MiB part holds it for ~17 ms.
  *
- * OUTBOX. Every frame to a socket leaves through one ordered queue per socket
- * ({@link Outbox}). A frame goes straight out while nothing waits and the
+ * OUTBOX. Every frame to a socket leaves through its socket's outbox
+ * ({@link Outbox}), in two ordered lanes: control requests, their answers and
+ * heartbeats ahead of everything else ({@link laneOf}). A frame goes straight out while nothing waits and the
  * socket takes it; once it does not, this frame and all later ones wait for
  * the socket to drain. Nothing is dropped: Bun's server `send()` drops a frame
  * outright (returns 0) once its socket has 16 MB buffered
@@ -118,6 +119,50 @@ interface Cut {
   rest: string;
 }
 
+/** Which of an outbox's two lanes a message leaves in, and the session it is about. */
+interface Lane {
+  session: string | undefined;
+  urgent: boolean;
+}
+
+/** A message with nothing to say about its lane: bulk, of no session. */
+const BULK: Lane = { urgent: false, session: undefined };
+
+/**
+ * A message's lane. URGENT: a control request (`control`), a control's answer
+ * (`frames` of kind `control_result`), the machine's report and its answer
+ * (`heartbeat`), and a dashboard's heartbeat and its answer (`type:
+ * "heartbeat"`), each in either direction, when it fits one frame. Every
+ * other message, and any of those longer than a part (a transcript read's
+ * answer, an input's bytes), is BULK: an urgent lane that carried tens of MB
+ * would hold a heartbeat behind it as the one queue did.
+ *
+ * Why: a socket's frames left in one queue, so every answer waited behind
+ * whatever was queued before it. While obelisk made and landed workspaces
+ * (2026-10-19), the hub's custody refresh, stops and find's reads to it
+ * timed out at 10–15 s behind its traffic ("custody refresh: obelisk-of-light
+ * did not answer within 10 s").
+ */
+const laneOf = (message: unknown, chars: number): Lane => {
+  if (typeof message !== "object" || message === null) {
+    return BULK;
+  }
+  const { instanceId, payload, type, verb } = message as {
+    instanceId?: unknown;
+    payload?: { kind?: unknown } | null;
+    type?: unknown;
+    verb?: unknown;
+  };
+  const session = typeof instanceId === "string" ? instanceId : undefined;
+  const urgent =
+    chars < WIRE_PART_CHARS &&
+    (type === "heartbeat" ||
+      verb === "control" ||
+      verb === "heartbeat" ||
+      (verb === "frames" && payload?.kind === "control_result"));
+  return { urgent, session };
+};
+
 /**
  * One queued message: its JSON is written ({@link encodeJson}) and cut into
  * frames only as they are sent. Writing a long message whole, or cutting all
@@ -125,6 +170,10 @@ interface Cut {
  * it (612 ms for 300 MB on the hub, measured).
  */
 class Outgoing {
+  /** Its lane ({@link laneOf}): leaves ahead of every bulk message. */
+  readonly urgent: boolean;
+  /** The session it is about, when it names one: what keeps a session's order. */
+  readonly session: string | undefined;
   readonly #source: JsonPieces;
   /**
    * Sent as one frame, whatever its length: a frame being relayed (never cut
@@ -144,13 +193,15 @@ class Outgoing {
   };
   /** The next frame, cut and not yet taken by the socket. */
   #cut: Cut | undefined;
-  /** What this message still counts against its outbox's bound. */
+  /** What of this message is still owed to the socket. */
   owed: number;
 
-  constructor(source: JsonPieces, owed: number, relay: boolean) {
+  constructor(source: JsonPieces, owed: number, relay: boolean, lane: Lane) {
     this.#source = source;
     this.owed = owed;
     this.#relay = relay;
+    this.urgent = lane.urgent;
+    this.session = lane.session;
   }
 
   /** The next frame to send; the same one again until it is {@link taken}. */
@@ -446,10 +497,13 @@ export interface ClientLine {
    * closes the socket (4002); the client's reconnect reads its state afresh.
    */
   receive: (data: string) => void;
-  /** Queues one message, behind everything sent before it. */
+  /** Queues one message, behind everything sent before it in its lane ({@link Outbox.send}). */
   send: (value: unknown) => void;
-  /** Queues one message already being written as JSON pieces, about `chars` long. */
-  sendPieces: (pieces: JsonPieces, chars: number) => void;
+  /**
+   * Queues one message already being written as JSON pieces, about `chars`
+   * long; `about` is the message itself, which its lane is read from.
+   */
+  sendPieces: (pieces: JsonPieces, chars: number, about: unknown) => void;
 }
 
 const clientLines = new WeakMap<WebSocket, ClientLine>();
@@ -466,7 +520,8 @@ export const clientLine = (socket: WebSocket): ClientLine => {
   let deliver: (message: unknown) => void = () => undefined;
   const line: ClientLine = {
     send: (value) => outbox.send(value),
-    sendPieces: (pieces, chars) => outbox.sendPieces(pieces, chars),
+    sendPieces: (pieces, chars, about) =>
+      outbox.sendPieces(pieces, chars, about),
     listen: (handler) => {
       deliver = handler;
     },
@@ -503,11 +558,28 @@ const OUTBOX_HIGH_WATER = 2 * WIRE_PART_CHARS;
 /** Characters an outbox hands over per turn of the loop before it yields. */
 const OUTBOX_TURN_CHARS = WIRE_PART_CHARS;
 
-/** One socket's frames, in order, never dropped, never more than a part per turn. */
+/** One lane's messages, in order: the queue and the first not yet all sent. */
+interface Queue {
+  head: number;
+  items: Outgoing[];
+}
+
+/**
+ * One socket's frames, never dropped, never more than a part per turn, in two
+ * lanes ({@link laneOf}). An urgent message leaves before any bulk frame not
+ * yet handed to the socket: between two parts of a long message when one is
+ * going out (each part is whole, and every end joins parts by their id, so
+ * the long message is not cut), and in order within its lane. One about a
+ * session that has bulk queued goes behind it, so no session's order moves:
+ * a control's answer never overtakes that session's frames, nor a withdrawn
+ * send the send it withdraws.
+ */
 export class Outbox {
   readonly #to: OutboxTransport;
-  #queue: Outgoing[] = [];
-  #head = 0;
+  readonly #lanes: { bulk: Queue; urgent: Queue } = {
+    urgent: { items: [], head: 0 },
+    bulk: { items: [], head: 0 },
+  };
   #owed = 0;
   /**
    * The stall clock ({@link WIRE_STALL_MS}): when the socket last took
@@ -544,33 +616,50 @@ export class Outbox {
    * flight is counted as a part, its text written only as the socket takes it.
    */
   send(value: unknown): void {
+    const chars = jsonSizeEstimate(value, WIRE_PART_CHARS);
     this.#enqueue(
-      new Outgoing(
-        encodeJson(value),
-        jsonSizeEstimate(value, WIRE_PART_CHARS),
-        !this.#parts
-      )
+      new Outgoing(encodeJson(value), chars, !this.#parts, laneOf(value, chars))
     );
   }
 
-  /** Queues a message already being written as JSON pieces, about `chars` long. */
-  sendPieces(pieces: JsonPieces, chars: number): void {
-    this.#enqueue(new Outgoing(pieces, chars, !this.#parts));
+  /**
+   * Queues a message already being written as JSON pieces, about `chars`
+   * long; `about` is the message, which its lane is read from.
+   */
+  sendPieces(pieces: JsonPieces, chars: number, about: unknown): void {
+    this.#enqueue(
+      new Outgoing(pieces, chars, !this.#parts, laneOf(about, chars))
+    );
   }
 
   /**
    * Queues a frame that is already on the wire, as it is: a relay passes the
-   * other side's frames (parts included) through without cutting them again.
+   * other side's frames (parts included) through without cutting them again,
+   * in the bulk lane, as they came.
    */
   forward(frame: string): void {
-    this.#enqueue(new Outgoing(textPieces(frame), frame.length, true));
+    this.#enqueue(new Outgoing(textPieces(frame), frame.length, true, BULK));
+  }
+
+  /** Whether bulk queued and not all sent is about `session`. */
+  #bulkHolds(session: string): boolean {
+    const { items, head } = this.#lanes.bulk;
+    for (let at = head; at < items.length; at += 1) {
+      if (items[at]?.session === session) {
+        return true;
+      }
+    }
+    return false;
   }
 
   #enqueue(outgoing: Outgoing): void {
     if (this.#flags.closed) {
       return;
     }
-    this.#queue.push(outgoing);
+    const urgent =
+      outgoing.urgent &&
+      !(outgoing.session !== undefined && this.#bulkHolds(outgoing.session));
+    this.#lanes[urgent ? "urgent" : "bulk"].items.push(outgoing);
     this.#owed += outgoing.owed;
     if (!(this.#flags.waiting || this.#flags.scheduled)) {
       this.#pump();
@@ -594,8 +683,8 @@ export class Outbox {
   /** The socket is gone: nothing more is sent. */
   close(): void {
     this.#flags.closed = true;
-    this.#queue = [];
-    this.#head = 0;
+    this.#lanes.urgent = { items: [], head: 0 };
+    this.#lanes.bulk = { items: [], head: 0 };
     this.#owed = 0;
     clearTimeout(this.#stall.look);
     this.#stall.look = undefined;
@@ -645,9 +734,22 @@ export class Outbox {
     }
   }
 
+  /** The lane the next frame comes from: urgent while it holds anything. */
+  #next(): Queue | undefined {
+    const { urgent, bulk } = this.#lanes;
+    if (urgent.head < urgent.items.length) {
+      return urgent;
+    }
+    return bulk.head < bulk.items.length ? bulk : undefined;
+  }
+
   #pump(): void {
     let turn = 0;
-    while (!this.#flags.closed && this.#head < this.#queue.length) {
+    for (
+      let lane = this.#next();
+      lane !== undefined && !this.#flags.closed;
+      lane = this.#next()
+    ) {
       if (turn >= OUTBOX_TURN_CHARS) {
         // Yield the loop; the rest goes on in the next turn.
         this.#flags.scheduled = true;
@@ -663,7 +765,7 @@ export class Outbox {
         this.#wait();
         return;
       }
-      const outgoing = this.#queue[this.#head] as Outgoing;
+      const outgoing = lane.items[lane.head] as Outgoing;
       const frame = outgoing.next();
       const outcome = this.#to.write(frame);
       if (outcome === "dropped") {
@@ -676,14 +778,14 @@ export class Outbox {
       this.#owed -= before - outgoing.owed;
       turn += frame.length;
       if (done) {
-        this.#head += 1;
+        lane.head += 1;
       }
-      if (this.#head === this.#queue.length) {
-        this.#queue = [];
-        this.#head = 0;
-      } else if (this.#head > 1024) {
-        this.#queue = this.#queue.slice(this.#head);
-        this.#head = 0;
+      if (lane.head === lane.items.length) {
+        lane.items = [];
+        lane.head = 0;
+      } else if (lane.head > 1024) {
+        lane.items = lane.items.slice(lane.head);
+        lane.head = 0;
       }
       if (outcome === "buffered") {
         this.#wait();

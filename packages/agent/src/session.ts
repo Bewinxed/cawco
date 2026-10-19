@@ -15,6 +15,7 @@ import type {
   CarrySessionOutcome,
   CarrySessionRequest,
   ControlPayload,
+  ControlResultFrame,
   DaemonPermissionRequestFrame,
   Envelope,
   FleetHoldings,
@@ -180,6 +181,7 @@ import {
 } from "./preview";
 import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
 import { rememberCredential } from "./redaction";
+import { arrive, keepAnswer } from "./request-record";
 import { fenced } from "./restart";
 import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
 import { stopStages } from "./stage";
@@ -1045,8 +1047,22 @@ export class SessionSupervisor {
    * produced while the hub is away are dropped; the hub replays what a session
    * is still blocked on by calling `control reinitialize` after it reconnects,
    * and a spawn's failure is replayed from here ({@link replaySpawnFailures}).
+   * Every request's answer is kept as it goes, sent or not (request-record.ts),
+   * for the hub that sends the request again once it is back.
    */
-  sink: FrameSink = () => false;
+  get sink(): FrameSink {
+    return this.#answering;
+  }
+  set sink(to: FrameSink) {
+    this.#sinkTo = to;
+  }
+  #sinkTo: FrameSink = () => false;
+  readonly #answering: FrameSink = (frame) => {
+    if (frame.kind === "control_result") {
+      keepAnswer(frame as ControlResultFrame);
+    }
+    return this.#sinkTo(frame);
+  };
   /** Puts an arbitrary envelope on the daemon's hub socket (hand-offs). */
   emit: (envelope: Envelope) => void = () => {
     // replaced once the daemon has a hub connection to emit onto
@@ -1167,6 +1183,24 @@ export class SessionSupervisor {
         }
       }
       return Promise.resolve();
+    }
+    // A request the hub sent again, under the id it went under before
+    // (request-record.ts): never run twice.
+    const requestId = (envelope.payload as { requestId?: unknown } | undefined)
+      ?.requestId;
+    if (
+      typeof requestId === "string" &&
+      (envelope.verb === "control" ||
+        envelope.verb === "spawn" ||
+        envelope.verb === "fs")
+    ) {
+      const seen = arrive(requestId);
+      if (seen !== "run") {
+        if (seen !== "running") {
+          this.sink(seen);
+        }
+        return Promise.resolve();
+      }
     }
     if (control?.method === FLEET_SYNC && control.requestId) {
       this.#fleetSyncsAsked += 1;

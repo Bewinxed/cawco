@@ -2,10 +2,12 @@
  * The kit's relay between an app and its hub, with the network fault switch.
  *
  * It answers on a port of its own and passes everything both ways: every
- * request to the hub's routes, and the dashboard socket message by message
- * (what the app sends before the hub's socket opens is held, then sent in
- * order). A spec reads or changes what passes (`toApp`, `toHub`), and turns
- * the fault switch:
+ * request to the hub's routes, and every socket (a dashboard's, an agent's
+ * `/ws`) message by message (what the app sends before the hub's socket
+ * opens is held, then sent in order). What goes to the app leaves through
+ * the wire's outbox (`@cawco/core/wire`), so none is dropped however much the
+ * hub sends at once. A spec reads or changes what passes (`toApp`, `toHub`),
+ * and turns the fault switch:
  *
  * - `cutAfter(bytes)`: the app's socket is cut the moment what the app sent
  *   on it since now passes `bytes`. The message that crosses it never
@@ -20,6 +22,7 @@
  *   socket opens to nothing, as a hub gone from the network is to the app.
  */
 import type { ServerWebSocket } from "bun";
+import { Outbox, serverTransport } from "../../packages/core/src/wire";
 
 const HTTP = /^http/;
 
@@ -28,6 +31,10 @@ export interface Pipe {
   held: string[];
   /** The hub's socket, once open; what the app sent before is held. */
   hub?: WebSocket;
+  /** What goes to the app, in order, never dropped. */
+  out?: Outbox;
+  /** The socket's path on the hub: `/ws/dashboard`, an agent's `/ws`. */
+  path: string;
   search: string;
 }
 
@@ -83,8 +90,10 @@ export function relay(hubBase: string, options: RelayOptions = {}): Relay {
       }
       const url = new URL(request.url);
       if (
-        url.pathname === "/ws/dashboard" &&
-        served.upgrade(request, { data: { held: [], search: url.search } })
+        url.pathname.startsWith("/ws") &&
+        served.upgrade(request, {
+          data: { held: [], path: url.pathname, search: url.search },
+        })
       ) {
         return;
       }
@@ -108,8 +117,10 @@ export function relay(hubBase: string, options: RelayOptions = {}): Relay {
     websocket: {
       open(app: ServerWebSocket<Pipe>) {
         apps.add(app);
+        // Each frame passed on as it came: parts stay parts, cut by the hub.
+        app.data.out = new Outbox(serverTransport(app, false), false);
         const hub = new WebSocket(
-          `${hubSocket}/ws/dashboard${app.data.search}`
+          `${hubSocket}${app.data.path}${app.data.search}`
         );
         hub.onopen = () => {
           app.data.hub = hub;
@@ -125,10 +136,11 @@ export function relay(hubBase: string, options: RelayOptions = {}): Relay {
             typeof event.data === "string"
               ? event.data
               : new TextDecoder().decode(event.data as ArrayBuffer);
+          const out = app.data.out as Outbox;
           const said = options.toApp
-            ? options.toApp(text, (more) => app.send(more), app)
+            ? options.toApp(text, (more) => out.forward(more), app)
             : text;
-          app.send(said);
+          out.forward(said);
         };
         hub.onclose = () => app.close();
       },
@@ -153,8 +165,12 @@ export function relay(hubBase: string, options: RelayOptions = {}): Relay {
           app.data.held.push(text);
         }
       },
+      drain(app) {
+        app.data.out?.drained();
+      },
       close(app) {
         apps.delete(app);
+        app.data.out?.close();
         app.data.hub?.close();
       },
     },

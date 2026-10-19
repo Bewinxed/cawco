@@ -30,7 +30,7 @@ const KILL_GRACE_MS = 5000;
 const EARLY_CANCEL_KEPT_MS = 24 * 60 * 60 * 1000;
 
 /** Why the runner ended a command itself. */
-type Stop = "expired" | "overflowed" | "cancelled" | "abandoned";
+type Stop = "expired" | "overflowed" | "cancelled";
 
 /** A command still running: the run the hub named it, and how it is ended. */
 interface Running {
@@ -54,23 +54,6 @@ export const setCommandQueue = (
 ): void => {
   sendQueue = send;
 };
-
-/**
- * The hub connection ended: nobody is left to receive what the running
- * commands answer, and the hub runs a check again from the first when it is
- * back. Every live command is stopped with its process group; each resolves
- * through its own `close`, as a timed-out one does.
- */
-export function abandonCommands(): void {
-  if (live.size === 0) {
-    return;
-  }
-  const count = live.size;
-  for (const running of live) {
-    running.stop("abandoned");
-  }
-  console.log(`abandoned ${count} command(s): hub connection ended`);
-}
 
 /**
  * `CONTROL_CANCEL_COMMAND`: stops the run the hub named `runId`, which then

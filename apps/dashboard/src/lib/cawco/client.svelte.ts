@@ -5147,8 +5147,10 @@ function stopHeartbeat(): void {
  * {@link HEARTBEAT_DEADLINE_MS} after asking, the socket is dropped as dead:
  * the reconnect and its reads follow as for any close. Any message is proof
  * of life, so a large board still arriving in parts is never mistaken for
- * silence. Application messages, not WebSocket pings: no client sends those
- * (`StreamHeartbeat`).
+ * silence. Application messages, not WebSocket pings: no browser sends those
+ * (`StreamHeartbeat`). Both the ask and the hub's answer leave in their
+ * outbox's urgent lane (core wire.ts `laneOf`), so neither waits behind the
+ * board, transcripts or deltas queued on this socket.
  */
 function startHeartbeat(socket: WebSocket): void {
   stopHeartbeat();

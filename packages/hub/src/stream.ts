@@ -749,8 +749,10 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       return false;
     }
 
-    // Answered at once, through the socket's outbox like every frame: a
-    // client that hears nothing within its deadline calls the socket dead.
+    // Answered at once, through the socket's outbox like every frame, in its
+    // urgent lane (core wire.ts `laneOf`): ahead of the board, transcripts and
+    // deltas queued for this tab, which a tab that hears nothing within its
+    // deadline otherwise took for a dead socket while they arrived.
     if (raw.type === "heartbeat") {
       deliver(socket, { type: "heartbeat" } satisfies StreamHeartbeat);
       return true;

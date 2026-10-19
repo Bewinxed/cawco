@@ -159,6 +159,8 @@ import {
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
   CONTROL_GIT_CHANGES,
+  CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_INTERRUPT,
@@ -1189,6 +1191,8 @@ const strategyChoice = t.Object({
 const UNROUTED_REPLY_LIMIT = 4096;
 /** Workspace controls only the hub sends: a dashboard's control naming one is refused at the relay. */
 const HUB_WORKSPACE_CONTROLS: ReadonlySet<string> = new Set([
+  CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_WORKSPACE_ARCHIVE,
@@ -1248,8 +1252,14 @@ const UNDELIVERED_ORIGIN = "undelivered";
 /** The words a continuation stopped by its Cancel ends with. */
 const CONTINUATION_CANCELLED = "the continuation was cancelled";
 /** What a request a machine was answering gets when its socket closes. */
+/**
+ * What a request to a machine gets when its own deadline passes with the
+ * machine away: held for it all that time, and sent again each time it came
+ * back (server.ts `resendHeld`), it never answered. A machine that is there
+ * at the deadline and silent is unanswered instead.
+ */
 const MACHINE_DISCONNECTED =
-  "The machine disconnected during this request. Completion is unknown; check the output before retrying. No automatic retry was submitted.";
+  "The machine was away when this request's deadline passed: the hub held the request and sent it again each time the machine came back, and no answer came in time, so whether it ran is not known. Check what it does before asking again.";
 
 /**
  * A step that could not finish because its machine went away. Not a failure:
@@ -3529,16 +3539,18 @@ export const createServer = (
     agent: NonNullable<ReturnType<typeof registry.agent>>,
     machineId: string,
     envelope: Envelope<SpawnPayload>
-  ): void => {
+  ): Envelope | undefined => {
     if (holdingStarts(machineId) && envelope.instanceId) {
       db.oweSpawn(envelope.instanceId, JSON.stringify(envelope), Date.now());
       return;
     }
-    sendFrame(agent, { ...envelope, payload: bounded(envelope.payload) });
+    const frame = { ...envelope, payload: bounded(envelope.payload) };
+    sendFrame(agent, frame);
     // What waited for this start goes right behind it, in the order taken.
     if (envelope.instanceId) {
       releaseOwed({ instanceId: envelope.instanceId });
     }
+    return frame;
   };
 
   /**
@@ -8596,43 +8608,78 @@ export const createServer = (
    */
   const waiting = new Map<string, (frame: ControlResult) => void>();
   /**
-   * Each call to a machine that waits in {@link waiting}: its machine, and the
-   * socket it went out on (none when the machine had none: it goes on the
-   * next one to register, as an owed start does).
+   * Each call to a machine that waits in {@link waiting}: its machine, the
+   * socket it went out on (none while the machine is away: it is held), and
+   * the frame it went out as, sent again under the same id when the machine
+   * is back ({@link resendHeld}).
    */
   const waitingMachines = new Map<
     string,
-    { machineId: string; socketId: string | undefined }
+    {
+      again: Envelope | undefined;
+      machineId: string;
+      socketId: string | undefined;
+    }
   >();
   /** A call to `machineId` now waits on the socket the machine has now. */
   const waitOn = (requestId: string, machineId: string): void => {
     waitingMachines.set(requestId, {
       machineId,
       socketId: registry.agent(machineId)?.id,
+      again: undefined,
     });
   };
   /**
    * A socket stopped being its machine's (registry `onAgentLeft`: a newer
-   * register replaced it, or it closed): every call waiting on it fails now
-   * with MACHINE_DISCONNECTED, so its caller can ask again on the socket the
-   * machine has now, instead of waiting out its timeout. A reply that comes
-   * on the old socket later is refused, as any frame from it is.
+   * register replaced it, or it closed): every call waiting on it is held,
+   * not failed. It is sent again, under the same id, on the machine's next
+   * register ({@link resendHeld}), and the machine runs an id once however
+   * often it comes (agent request-record.ts), so a create, an archive, an
+   * inputs write or a landing gate's step that ran answers with what it did.
+   * Only a call whose own deadline passes with its machine still away fails,
+   * with MACHINE_DISCONNECTED ({@link awaitReply}). A reply that comes on the
+   * old socket later is refused, as any frame from it is.
+   *
+   * Why: every call on a link that dropped failed at once as "Completion is
+   * unknown", whatever had ended the link (a network blip, an agent or hub
+   * restart), and its caller (a delegate's create, a finish_item's landing)
+   * failed with it (2026-10-19).
    */
   registry.onAgentLeft((machineId, socketId) => {
-    for (const [requestId, call] of waitingMachines) {
-      if (
-        call.socketId === socketId ||
-        (call.socketId === undefined && call.machineId === machineId)
-      ) {
-        waiting.get(requestId)?.({
-          kind: "control_result",
-          requestId,
-          ok: false,
-          error: MACHINE_DISCONNECTED,
-        });
+    for (const call of waitingMachines.values()) {
+      if (call.socketId === socketId && call.machineId === machineId) {
+        call.socketId = undefined;
       }
     }
   });
+  /**
+   * The machine registered again: every call held for it goes again, under
+   * its own id, on the socket it has now. Sent once its register is
+   * acknowledged, when it takes requests.
+   */
+  const resendHeld = (machineId: string): void => {
+    const agent = registry.agent(machineId);
+    if (!agent) {
+      return;
+    }
+    let again = 0;
+    for (const call of waitingMachines.values()) {
+      if (
+        call.machineId === machineId &&
+        call.socketId !== agent.id &&
+        call.again
+      ) {
+        call.socketId = agent.id;
+        sendFrame(agent, call.again);
+        again += 1;
+      }
+    }
+    if (again > 0) {
+      console.info(
+        `[hub] ${machineName(machineId)} is back: ${again} request(s) held for it sent again under their own ids`
+      );
+    }
+  };
   /** Who hears a running command's slot waits, by the run id it was sent with. */
   const commandQueues = new Map<string, (queue: CommandQueue | null) => void>();
   const unroutedReplies = new Set<string>();
@@ -8668,6 +8715,15 @@ export const createServer = (
    */
   const locations = new Map<string, SessionLocation | null>();
 
+  /** Sends `frame` on `socket` and gives it back: what {@link awaitReply} sends again. */
+  const sendAnswerable = <T extends Envelope>(
+    socket: HubSocket,
+    frame: T
+  ): T => {
+    sendFrame(socket, frame);
+    return frame;
+  };
+
   /**
    * Asks a machine something and waits for the frame that answers it. A machine
    * that is not connected and one that will not answer are told apart on
@@ -8697,24 +8753,34 @@ export const createServer = (
       ...(harness && { harness }),
       ...(instanceId && { instanceId }),
     };
-    return awaitReply(machineId, requestId, timeoutMs, () =>
-      sendFrame(agent, {
+    return awaitReply(machineId, requestId, timeoutMs, () => {
+      const frame = {
         verb: "control",
         machineId,
         ...(instanceId && { instanceId }),
         payload,
-      } satisfies Envelope<ControlPayload>)
-    );
+      } satisfies Envelope<ControlPayload>;
+      sendFrame(agent, frame);
+      return frame;
+    });
   };
 
-  /** Sends something a machine answers under `requestId`, and waits for that answer. */
-  const awaitReply = (
+  /**
+   * Sends something a machine answers under `requestId`, and waits for that
+   * answer, until `timeoutMs`. `send` sends it and gives the frame it sent:
+   * the one sent again, under the same id, if the link drops before the
+   * answer ({@link resendHeld}). A deadline that passes with the machine
+   * away answers MACHINE_DISCONNECTED; one that passes with it there is
+   * unanswered, a machine that did not answer.
+   */
+  const awaitReply = async (
     machineId: string,
     requestId: string,
     timeoutMs: number,
-    send: () => void
-  ): Promise<Bounded<ControlResult>> =>
-    readWithin(
+    send: () => Envelope | undefined
+  ): Promise<Bounded<ControlResult>> => {
+    let awayAtDeadline = false;
+    const reply = await readWithin(
       timeoutMs,
       (signal) =>
         new Promise<ControlResult>((resolve) => {
@@ -8722,14 +8788,26 @@ export const createServer = (
             waiting.delete(requestId);
             waitingMachines.delete(requestId);
           };
-          signal.addEventListener("abort", forget, { once: true });
+          signal.addEventListener(
+            "abort",
+            () => {
+              awayAtDeadline =
+                waitingMachines.get(requestId)?.socketId === undefined;
+              forget();
+            },
+            { once: true }
+          );
           waitOn(requestId, machineId);
           waiting.set(requestId, (frame) => {
             forget();
             resolve(frame);
           });
           try {
-            send();
+            const sent = send();
+            const call = waitingMachines.get(requestId);
+            if (call && sent) {
+              call.again = sent;
+            }
           } catch (error) {
             // Refused before it went: nothing will answer, so nothing waits.
             forget();
@@ -8737,6 +8815,20 @@ export const createServer = (
           }
         })
     );
+    return reply.kind === "unanswered" &&
+      reply.reason === "timeout" &&
+      awayAtDeadline
+      ? {
+          kind: "answered",
+          value: {
+            kind: "control_result",
+            requestId,
+            ok: false,
+            error: MACHINE_DISCONNECTED,
+          },
+        }
+      : reply;
+  };
 
   /**
    * A session's start, waited on as {@link awaitReply} does, and on past
@@ -8749,14 +8841,18 @@ export const createServer = (
     machineId: string,
     instanceId: string,
     requestId: string,
-    send: () => void
+    send: () => Envelope | undefined
   ): Promise<Bounded<ControlResult>> => {
     const sentAt = Date.now();
+    let sent: Envelope | undefined;
     let reply = await awaitReply(
       machineId,
       requestId,
       SPAWN_START_TIMEOUT_MS,
-      send
+      () => {
+        sent = send();
+        return sent;
+      }
     );
     while (
       reply.kind === "unanswered" &&
@@ -8769,7 +8865,7 @@ export const createServer = (
         machineId,
         requestId,
         SPAWN_START_TIMEOUT_MS,
-        () => undefined
+        () => sent
       );
     }
     return reply;
@@ -12776,7 +12872,7 @@ export const createServer = (
     workItemId?: string,
     fallbackMode?: string | null,
     placedAhead?: { accountId?: string }
-  ): void => {
+  ): Envelope | undefined => {
     const agent = registry.agent(machineId);
     if (!agent) {
       throw new Error(machineFault(machineId, "offline"));
@@ -12817,7 +12913,7 @@ export const createServer = (
       ...openedAccount(payload, placed),
       ...forkedFromOf(payload),
     });
-    sendSpawn(agent, machineId, {
+    const sent = sendSpawn(agent, machineId, {
       verb: "spawn",
       machineId,
       instanceId: payload.instanceId,
@@ -12833,6 +12929,7 @@ export const createServer = (
         heard(spawnedBy);
       }
     }
+    return sent;
   };
 
   /**
@@ -12979,7 +13076,7 @@ export const createServer = (
       payload.instanceId,
       requestId,
       () =>
-        sendFrame(agent, {
+        sendAnswerable(agent, {
           verb: "spawn",
           machineId,
           instanceId: payload.instanceId,
@@ -13922,20 +14019,20 @@ export const createServer = (
       READ_TIMEOUT_MS,
       () => {
         const agent = registry.agent(row.machineId);
-        if (agent) {
-          sendFrame(agent, {
-            verb: "control",
-            machineId: row.machineId,
-            instanceId: row.id,
-            requestId,
-            payload: {
+        return agent
+          ? sendAnswerable(agent, {
+              verb: "control",
+              machineId: row.machineId,
               instanceId: row.id,
               requestId,
-              method: CONTROL_CONTEXT_USAGE,
-              args: [],
-            },
-          } satisfies Envelope<ControlPayload>);
-        }
+              payload: {
+                instanceId: row.id,
+                requestId,
+                method: CONTROL_CONTEXT_USAGE,
+                args: [],
+              },
+            } satisfies Envelope<ControlPayload>)
+          : undefined;
       }
     );
     switch (answer.kind) {
@@ -17056,7 +17153,7 @@ export const createServer = (
     const requestId = crypto.randomUUID();
     const payload: FsPayload = { requestId, ...op };
     return awaitReply(machineId, requestId, READ_TIMEOUT_MS, () =>
-      sendFrame(agent, {
+      sendAnswerable(agent, {
         verb: "fs",
         machineId,
         requestId,
@@ -19747,6 +19844,8 @@ export const createServer = (
       method === CONTROL_WORKSPACE_DISCARD ||
       method === CONTROL_WORKSPACE_BUNDLE ||
       method === CONTROL_WORKSPACE_AT ||
+      method === CONTROL_INPUTS_ADMIT ||
+      method === CONTROL_INPUTS_COPY ||
       method === CONTROL_INPUTS_READ ||
       method === CONTROL_INPUTS_WRITE ||
       method === CONTROL_PLACE_REPO ||
@@ -21571,7 +21670,7 @@ export const createServer = (
       // The host's refresh is the session's; the hub only logs how it went.
       detach(
         awaitReply(row.machineId, requestId, 60_000, () =>
-          sendFrame(agent, {
+          sendAnswerable(agent, {
             verb: "control",
             machineId: row.machineId,
             instanceId: row.id,
@@ -21828,7 +21927,7 @@ export const createServer = (
       const credential = identities.mint(instanceId);
       const requestId = crypto.randomUUID();
       const reply = await awaitReply(row.machineId, requestId, 120_000, () =>
-        sendFrame(agent, {
+        sendAnswerable(agent, {
           verb: "control",
           machineId: row.machineId,
           instanceId,
@@ -28798,6 +28897,9 @@ export const createServer = (
                   await isHubMachine(message.machineId)
                 )
               );
+              // Behind its ack, which it waits for to take requests: what
+              // was held for it while it was away goes again.
+              resendHeld(message.machineId);
               for (const row of toEnd) {
                 endSession(row.id, "stop", {
                   kind: "hub",
@@ -30776,8 +30878,9 @@ export const createServer = (
           if (claimed) {
             hubAuth.released(claimed, ws.id);
           }
-          // Calls waiting on it fail as it leaves (registry `onAgentLeft`),
-          // here or at the register that replaced it, whichever came first.
+          // Calls waiting on it are held as it leaves (registry
+          // `onAgentLeft`), here or at the register that replaced it,
+          // whichever came first, and go again on its next register.
           const machineId = registry.dropAgent(ws.id);
           if (!machineId) {
             return;

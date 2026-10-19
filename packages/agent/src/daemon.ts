@@ -31,6 +31,8 @@ import {
   CONTROL_CANCEL_COMMAND,
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
+  CONTROL_INPUTS_ADMIT,
+  CONTROL_INPUTS_COPY,
   CONTROL_INPUTS_READ,
   CONTROL_INPUTS_WRITE,
   CONTROL_JOIN_PROVIDER_ACCOUNT,
@@ -208,7 +210,7 @@ import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { serveHubCredential } from "./hub-git";
 import { carryHub, stopCarrying } from "./hub-loopback";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
-import { readInputs, writeInputs } from "./inputs";
+import { admitInputs, copyInputs, readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
 import { type HeldProc, type KeeperReading, withKeepers } from "./keepers";
 import { endOrphanedSignIns, endSignIns } from "./login";
@@ -374,7 +376,6 @@ import { damagedRecords, sweepRecords } from "./damaged-records";
 import { onToolsMoved, probeTools } from "./tools";
 import { UsageScanner } from "./usage/scanner";
 import {
-  abandonCommands,
   cancelCommand,
   runWorkflowCommand,
   setCommandQueue,
@@ -1075,7 +1076,7 @@ const closeReason = (event: CloseEvent): string =>
 const send = (socket: WebSocket, envelope: Envelope): void => {
   const line = clientLine(socket);
   for (const message of outbound(envelope)) {
-    line.sendPieces(message.pieces, message.chars);
+    line.sendPieces(message.pieces, message.chars, envelope);
   }
 };
 
@@ -2727,9 +2728,11 @@ const attach = (
     // it is dropped as dead, the reconnect below runs, and the outbox sends
     // again what the hub did not take.
     //
-    // A ping, not the heartbeat: the beat is a message, queued in this
-    // socket's outbox behind everything sent before it, and its answer in the
-    // hub's behind everything sent to this machine. While workspaces were
+    // A ping, not the heartbeat: the beat is a message, and it was queued in
+    // this socket's outbox behind everything sent before it, and its answer
+    // in the hub's behind everything sent to this machine (the beat now goes
+    // in the outbox's urgent lane, wire.ts `laneOf`, still behind the other
+    // urgent messages and the hub's read of them). While workspaces were
     // made and landed the queues held more than 15 s of sending, and a live
     // link was dropped as dead every minute or two (2026-10-19: "hub link
     // silent 15100 ms after a heartbeat", each request on it failing as
@@ -2855,13 +2858,10 @@ const attach = (
     // probe anyway: a session that cannot answer says so in its own turn,
     // where it is unambiguous and costs nothing to learn.
 
-    // A command the hub ran over this connection answers nobody once it ends,
-    // and the hub runs its landing gate again from the first when it is
-    // back: the commands go with the connection. Sessions are not commands
-    // and stay.
-    return yield* closed(socket, url).pipe(
-      Effect.tapError(() => Effect.sync(abandonCommands))
-    );
+    // A command the hub ran over this connection runs on when it ends: the
+    // hub holds the request and sends it again on the next register, and
+    // its answer, kept as it goes (request-record.ts), answers it then.
+    return yield* closed(socket, url);
   });
 
 /**
@@ -3366,6 +3366,8 @@ export const startDaemon = (rediscover = false) =>
       )
     );
     // A delegate's inputs: read here for a parent here, written here into a workspace here.
+    supervisor.registerDaemonFunction(CONTROL_INPUTS_ADMIT, admitInputs);
+    supervisor.registerDaemonFunction(CONTROL_INPUTS_COPY, copyInputs);
     supervisor.registerDaemonFunction(CONTROL_INPUTS_READ, readInputs);
     supervisor.registerDaemonFunction(CONTROL_INPUTS_WRITE, writeInputs);
     supervisor.registerDaemonFunction(

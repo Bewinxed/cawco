@@ -2197,21 +2197,42 @@ export interface WorkspaceCommit {
 export const CONTROL_WORKSPACE_AT = "workspaceAt";
 
 /**
- * A delegate's inputs read on its parent's machine: each an absolute path
- * to a file, refused in words when one may not leave it
- * (workspace-policy.ts `inputDenial`), lies outside the parent's own clone
- * and scratch dir when the parent runs in a workspace (`bound`), or the
- * whole passes {@link INPUTS_LIMIT_BYTES}. Args `[paths, bound?:
- * WorkspaceRef]`; answers {@link InputsRead}. Machine-scoped.
+ * A delegate's inputs admitted on its parent's machine, before anything is
+ * cut for it: each an absolute path to a file, refused in words when one may
+ * not leave it (workspace-policy.ts `inputDenial`), lies outside the parent's
+ * own clone and scratch dir when the parent runs in a workspace (`bound`), or
+ * the whole passes {@link INPUTS_LIMIT_BYTES}. Args `[paths, bound?:
+ * WorkspaceRef]`; answers {@link InputsAdmitted}, no bytes. Machine-scoped.
+ */
+export const CONTROL_INPUTS_ADMIT = "inputsAdmit";
+
+/**
+ * A delegate's inputs read on its parent's machine for a workspace on
+ * another, admitted again as {@link CONTROL_INPUTS_ADMIT} admits them. Args
+ * `[paths, bound?: WorkspaceRef]`; answers {@link InputsRead}. Machine-scoped.
  */
 export const CONTROL_INPUTS_READ = "inputsRead";
 
 /**
  * A delegate's inputs written into its workspace's scratch dir, under
- * {@link INPUTS_DIR}, each replacing one of its name. Args
+ * {@link INPUTS_DIR}, each replacing one of its name: the bytes
+ * {@link CONTROL_INPUTS_READ} read on another machine. Args
  * `[WorkspaceRef, InputFile[]]`. Machine-scoped.
  */
 export const CONTROL_INPUTS_WRITE = "inputsWrite";
+
+/**
+ * A delegate's inputs copied on the machine that holds both its parent and
+ * its workspace, from where they are into the workspace's scratch dir, as
+ * {@link CONTROL_INPUTS_WRITE} writes them, admitted again first as
+ * {@link CONTROL_INPUTS_ADMIT} admits them. No byte of them crosses the link
+ * to the hub: read and written back down to the same machine, each input
+ * crossed it twice, up to 86 MiB of base64 a delegation each way, and a
+ * conductor's lanes queued it ahead of every heartbeat (2026-10-19). Args
+ * `[paths, bound: WorkspaceRef | null, WorkspaceRef]`; answers
+ * {@link InputsAdmitted}. Machine-scoped.
+ */
+export const CONTROL_INPUTS_COPY = "inputsCopy";
 
 /** The folder in a workspace's scratch dir (its `$TMPDIR`) a delegate's inputs land in. */
 export const INPUTS_DIR = "inputs";
@@ -2219,24 +2240,32 @@ export const INPUTS_DIR = "inputs";
 /**
  * The most one delegation's inputs come to, together. A long session's
  * transcript, the largest input the fleet hands on, runs to tens of MB
- * (wire.ts); this holds one with room. Each input crosses the wire twice as
- * base64 (4/3 its size, ~86 MiB here), far inside the wire's 512 MiB and the
+ * (wire.ts); this holds one with room. To a workspace on another machine
+ * each input crosses the wire twice as base64 (4/3 its size, ~86 MiB here;
+ * on the parent's own machine, never: {@link CONTROL_INPUTS_COPY}), far inside the wire's 512 MiB and the
  * 256 MiB a workspace's commits may bundle. Past it, data goes in git, not
  * a brief. Our call.
  */
 export const INPUTS_LIMIT_BYTES = 64 * 1024 * 1024;
 
-/** One input as it crosses the wire: its name in `inputs/`, where it was read, its bytes. */
-export interface InputFile {
-  /** Base64 of its bytes. */
-  content: string;
-  /** The absolute path it was read from on the parent's machine. */
+/** One input, admitted: its name in `inputs/`, where it is read, its permission bits. */
+export interface InputNamed {
+  /** The absolute path it is read from on the parent's machine. */
   from: string;
   /** Its permission bits. */
   mode: number;
   /** Its file name, as it lands in `$TMPDIR/inputs/`. */
   name: string;
 }
+
+/** One input as it crosses the wire to another machine: admitted, with its bytes. */
+export interface InputFile extends InputNamed {
+  /** Base64 of its bytes. */
+  content: string;
+}
+
+/** What {@link CONTROL_INPUTS_ADMIT} and {@link CONTROL_INPUTS_COPY} answer: the inputs, or why they may not go. */
+export type InputsAdmitted = { files: InputNamed[] } | { refused: string };
 
 /** What {@link CONTROL_INPUTS_READ} answers: the files, or why they may not go. */
 export type InputsRead = { files: InputFile[] } | { refused: string };
