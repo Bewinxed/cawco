@@ -167,13 +167,22 @@ const frontPage = async (
   return pages[0];
 };
 
-/** Calls neko's REST as the daemon's admin. */
-const neko = async (
+/**
+ * The daemon's one admin session in each browser's neko, by its container:
+ * every login in neko's multiuser provider is a session of its own
+ * (`id := fmt.Sprintf("%s-%s", username, token)`), and neko judges a call by
+ * the session it comes as (`HostsOnly`: `session.IsHost()`), so the control
+ * the admin takes and the clipboard it empties must be one session's.
+ */
+const admins = new Map<string, string>();
+
+/** One POST to neko's REST as `token`'s session. */
+const nekoPost = async (
   record: BrowserRecord,
+  token: string,
   path: string,
-  body?: unknown
-): Promise<void> => {
-  const token = await nekoLogin(record, "admin");
+  body: unknown
+): Promise<Response> => {
   const read = await readWithin(NEKO_MS, (signal) =>
     fetch(`http://127.0.0.1:${portsOf(record).http}/api${path}`, {
       method: "POST",
@@ -188,7 +197,28 @@ const neko = async (
   if (read.kind === "unanswered") {
     throw new Error(`neko did not answer ${path} within ${NEKO_MS / 1000} s.`);
   }
-  const response = read.value;
+  return read.value;
+};
+
+/** Calls neko's REST as the daemon's admin session, logged in again only when neko no longer knows it (a new container). */
+const neko = async (
+  record: BrowserRecord,
+  path: string,
+  body?: unknown
+): Promise<void> => {
+  const container = record.container?.id ?? record.key;
+  let token = admins.get(container);
+  if (!token) {
+    token = await nekoLogin(record, "admin");
+    admins.set(container, token);
+  }
+  let response = await nekoPost(record, token, path, body);
+  if (response.status === 401) {
+    await response.body?.cancel();
+    token = await nekoLogin(record, "admin");
+    admins.set(container, token);
+    response = await nekoPost(record, token, path, body);
+  }
   if (!response.ok) {
     throw new Error(
       `neko refused ${path} (HTTP ${response.status}): ${(await response.text()).trim()}`
@@ -239,7 +269,13 @@ export const shieldBrowser = async (
   }
   // Closed before anything else: no agent reads the page from here on.
   gateOf(key)?.closeAll(SHIELD_WORDS);
-  await startBrowser({ key });
+  const before = held.get(key);
+  // A take-over this daemon holds already (sent again with a viewer, or as
+  // the machine registered after a restart) keeps its browser as it runs:
+  // it is never started again, or moved, under the person.
+  if (!before) {
+    await startBrowser({ key });
+  }
   const gate = gateOf(key);
   if (!gate) {
     throw new Error(
@@ -251,7 +287,6 @@ export const shieldBrowser = async (
   if (!record) {
     throw new Error(`${key} has no record on this machine.`);
   }
-  const before = held.get(key);
   const take: Held = before ?? {
     since: Date.now(),
     hubViewers: 0,
@@ -297,7 +332,20 @@ export const shieldBrowser = async (
   return rowOf(key);
 };
 
-/** The front page loaded again by GET; its origin. */
+/**
+ * The front page made new: what the person typed is gone, and the page is
+ * asked for again by GET; answers its origin.
+ *
+ * The page is cleared first with `about:blank`, which commits inside the
+ * browser, no site involved, so nothing typed survives in any field however
+ * the site answers (or whether it does): `Page.navigate` answers only once a
+ * navigation commits, which for a site's URL waits on its response. The
+ * page's own URL is then asked for by GET (never a reload, so a page a form
+ * posted to is not posted again), and its answer is the site's to give: the
+ * hand-back does not wait on it, and the agent's tool sees it load. A clear
+ * that does not commit means the page itself is stuck, and the hand-back
+ * fails with what the page was.
+ */
 const reloadFront = async (
   record: BrowserRecord,
   targetId: string | undefined
@@ -319,11 +367,18 @@ const reloadFront = async (
     const index =
       typeof history.currentIndex === "number" ? history.currentIndex : -1;
     const url = entries[index]?.url ?? page.url;
-    // A navigation, not a reload: a page a form posted to is asked for again
-    // by GET, so nothing the person typed is sent or survives in a field.
-    if (url && url !== "about:blank") {
-      await link.call("Page.navigate", { url }, session);
+    if (!url || url === "about:blank") {
+      return null;
     }
+    await link
+      .call("Page.navigate", { url: "about:blank" }, session)
+      .catch((error: unknown) => {
+        throw new Error(
+          `the page at ${originOf(url) ?? url} did not clear (${why(error)})`,
+          { cause: error }
+        );
+      });
+    link.post("Page.navigate", { url }, session);
     return originOf(url) ?? null;
   } finally {
     link.close();
@@ -518,7 +573,8 @@ const tellHub = (
 /**
  * The daemon starting: every browser its records say is taken over is held
  * again (its `shield.json`, else what its record's `takeover` says), until
- * the hub sends the shield again or the person hands back. Its gate starts
+ * the hub sends the shield again (which starts a local host's view of
+ * its page again, `shieldBrowser`) or the person hands back. Its gate starts
  * closed: the registry closes a gate it makes for a record that holds a
  * take-over (browsers.ts `gateFor`). A browser that stopped meanwhile has
  * its take-over forgotten.
@@ -550,23 +606,6 @@ export const restoreShields = async (): Promise<void> => {
   }
   console.info(
     `[browser] held privately across the restart: ${keys.join(", ")}`
-  );
-  // The local host's view of each, at its front page again.
-  await Promise.all(
-    keys.map(async (key) => {
-      const take = held.get(key);
-      const record = await readBrowser(key);
-      if (take && record?.host === "local" && take.targetId) {
-        take.cdp = await CdpTakeover.start(
-          `http://127.0.0.1:${portsOf(record).devtools}`,
-          take.targetId
-        ).catch((error: unknown): undefined => {
-          console.warn(
-            `[browser] ${key}'s take-over view did not resume: ${why(error)}`
-          );
-        });
-      }
-    })
   );
   watch();
 };

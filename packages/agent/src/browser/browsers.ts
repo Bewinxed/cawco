@@ -380,6 +380,13 @@ export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
   return withBrowser(key, async () => {
     const host = await hostFor();
     let record = await recordFor(key, key, host.kind);
+    // A browser the person holds privately stays where it runs, as it is,
+    // until the hand-back: never moved or started again under them.
+    if (record.host !== host.kind && record.takeover) {
+      throw new Error(
+        `${key} is held privately on the ${record.host} host, so it stays there until the person hands it back; this machine's browsers start on the ${host.kind} host now.`
+      );
+    }
     if (record.host !== host.kind) {
       console.info(
         `[browser] ${key} moves from the ${record.host} host to the ${host.kind} host; its sign-ins start over there`
@@ -568,6 +575,11 @@ const readBack = async (): Promise<void> => {
         return;
       }
       const host = await hostOf(now);
+      // A browser held privately whose host cannot be asked now (its
+      // runtime does not answer) is not known to have stopped: it stays held.
+      if (!host && now.takeover) {
+        return;
+      }
       const running = host ? await host.running(now) : false;
       if (!running) {
         await writeBrowser({ ...now, state: "asleep", takeover: null });

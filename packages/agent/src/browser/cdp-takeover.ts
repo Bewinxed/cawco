@@ -158,6 +158,24 @@ export class CdpLink {
     return read.value;
   }
 
+  /**
+   * Sends one call and waits for no answer: for a command whose answer is
+   * another party's to give (a navigation's, which comes with the site's
+   * response), where the caller must not wait on it.
+   */
+  post(method: string, params: Json = {}, sessionId?: string): void {
+    const id = this.#next;
+    this.#next += 1;
+    this.#socket.send(
+      JSON.stringify({
+        id,
+        method,
+        params,
+        ...(sessionId ? { sessionId } : {}),
+      })
+    );
+  }
+
   /** A flat session on `targetId`. */
   async attach(targetId: string): Promise<string> {
     const { sessionId } = await this.call("Target.attachToTarget", {
