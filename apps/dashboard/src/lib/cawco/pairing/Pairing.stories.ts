@@ -15,6 +15,9 @@ export default {
   title: "Pairing",
   component: PairingStop,
   args: { stop: "asking" },
+  // The pairing screen's column (PairingStop, 34rem), held to the page's
+  // width where a decision page embeds it on a phone.
+  parameters: { viewport: 544 },
 };
 
 /** Asking the hub for a code: the card and the six boxes stand as skeletons. */
@@ -55,16 +58,19 @@ export const Failed = { args: { stop: "failed" } };
 
 /** The phone's scanner, looking. */
 export const Scanner = {
+  parameters: { viewport: "phone" },
   render: () => ({ Component: ScanStop, props: { stop: "idle" } }),
 };
 
 /** A scan that matched approves at once: the brackets snap on, the boxes fill. */
 export const ScanMatched = {
+  parameters: { viewport: "phone" },
   render: () => ({ Component: ScanStop, props: { stop: "matched" } }),
 };
 
 /** A scan that matched, the other take: the code shows, then Deny or Approve. */
 export const ScanMatchedAsk = {
+  parameters: { viewport: "phone" },
   render: () => ({
     Component: ScanStop,
     props: { stop: "matched", scan: "ask" },
@@ -73,10 +79,12 @@ export const ScanMatchedAsk = {
 
 /** A scan of a code nothing on this hub waits for: it bursts, as Denied does. */
 export const ScanNoMatch = {
+  parameters: { viewport: "phone" },
   render: () => ({ Component: ScanStop, props: { stop: "nomatch" } }),
 };
 
 /** Needs you's head with Scan code, over the pairing row. */
 export const NeedsYou = {
+  parameters: { viewport: "phone" },
   render: () => ({ Component: NeedsStop, props: {} }),
 };
