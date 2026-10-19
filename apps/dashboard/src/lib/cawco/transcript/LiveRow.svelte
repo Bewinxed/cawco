@@ -228,6 +228,7 @@
          settled row it becomes. A leaving face keeps the rail it was drawn
          with (railNow): its --rail-gap and --rail-head. -->
     <div
+      data-slot="face"
       aria-hidden={face.leaving ? true : undefined}
       class="flow-root min-w-0 data-leaving:absolute data-leaving:top-0 data-leaving:inset-x-0 data-leaving:pointer-events-none"
       data-entering={face.entering || undefined}

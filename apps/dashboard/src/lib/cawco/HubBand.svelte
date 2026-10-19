@@ -278,6 +278,7 @@
      every phone screen. -->
 <!-- literal: 0fr, 1fr (the row shut and open); inset(0 -100vw -100vw) (the bar's foot) -->
 <div
+  data-slot="hub-band-slot"
   class="pointer-events-none relative z-10 grid flex-none grid-rows-(--row-shut) clip-path-(--slot-clip) @container/hub-band has-[>*>[data-open]]:grid-rows-(--row-open) max-desk:-order-1 motion-safe:not-has-[>*>[data-open]]:transition-band-row-shut motion-safe:has-[>*>[data-open]]:transition-band-row-open"
   style:--row-open="1fr"
   style:--row-shut="0fr"
@@ -295,7 +296,7 @@
   {#if browser}
     <!-- The row's one item: it shuts to nothing, the band drawn whole inside
          it, held up under the bar. -->
-    <div class="min-h-0">
+    <div data-slot="hub-band-row" class="min-h-0">
       <!-- The sentence and its button on one row, the row at least the
            button's height whether a state has one or not, and two lines tall
            where a phone wraps the sentence: every state is one height at a
@@ -322,6 +323,7 @@
              wraps balanced, never leaving a word or two on a line of their
              own, and a long address breaks rather than spilling. -->
         <p
+          data-slot="sentence"
           class="m-0 min-w-0 wrap-anywhere text-balance last:col-span-full"
           aria-hidden="true"
         >

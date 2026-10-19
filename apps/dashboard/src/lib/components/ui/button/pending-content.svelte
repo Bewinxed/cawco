@@ -237,6 +237,7 @@
   <span
     class="has-data-reason:inline-flex has-data-reason:flex-col has-data-reason:items-box-start"
     ><span
+      data-slot="label-text"
       class="transition-[opacity] dur-morph ease-out covered-true:opacity-0"
       data-covered={covered}
       >{#if swapsLabel && Icon === undefined}

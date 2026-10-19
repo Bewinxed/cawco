@@ -744,11 +744,13 @@
     </div>
   {:else if item.t === "rule"}
     <hr
+      data-slot="rule"
       class="flex-none my-space-1 mx-(--rule-mx) border-t border-t-border-hairline border-r-none border-b-none border-l-none"
       data-flip
     />
   {:else if item.t === "skeleton"}
     <div
+      data-slot="skeleton-slot"
       class="flex-none px-space-3 py-(--sk-pad)"
       aria-hidden="true"
       data-flip
@@ -848,6 +850,7 @@
       </div>
     {:else if finder.waiting.state === "asking" || finder.waiting.state === "idle"}
       <div
+        data-slot="skeleton-slot"
         class="flex-none px-space-3 py-(--sk-pad)"
         aria-hidden="true"
         data-flip
@@ -855,6 +858,7 @@
         <Skeleton class="h-(--sk-row)" />
       </div>
       <div
+        data-slot="skeleton-slot"
         class="flex-none px-space-3 py-(--sk-pad)"
         aria-hidden="true"
         data-flip

@@ -395,7 +395,7 @@ const layoutOf = (page: Page, id: string) =>
       layout = "both";
     }
     const box = pane?.getBoundingClientRect();
-    const column = pane?.querySelector<HTMLElement>(".main-pane");
+    const column = pane?.querySelector<HTMLElement>("[data-main-pane]");
     // The group's composer: the visible one standing over this pane.
     const composer = [
       ...document.querySelectorAll<HTMLElement>('form[data-slot="cin"]'),

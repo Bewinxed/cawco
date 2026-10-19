@@ -49,7 +49,7 @@ const readFile = (page: Page, path: string) =>
       drawn:
         body?.querySelector('[data-slot="text"], [data-slot="md"]') !== null &&
         body !== null,
-      page: document.querySelector(".file-page") !== null,
+      page: document.querySelector("[data-file-page]") !== null,
       card: document.querySelector('[data-side-surface-class~="folder-file"]')
         ?.isConnected,
       file: new URL(location.href).searchParams.get("file"),
@@ -222,7 +222,7 @@ const run = async (kit: Kit) => {
     JSON.stringify(ownAgain)
   );
   await phone
-    .locator('.file-page [data-slot="page-head"] button', {
+    .locator('[data-file-page] [data-slot="page-head"] button', {
       hasText: project.name,
     })
     .click();

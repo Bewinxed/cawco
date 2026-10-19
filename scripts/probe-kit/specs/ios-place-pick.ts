@@ -246,7 +246,9 @@ const run = async (kit: Kit) => {
         await page.goto(`${dashboard}/session/${session}`, {
           waitUntil: "domcontentloaded",
         });
-        await page.locator("form.place-pick").waitFor({ timeout: 60_000 });
+        await page
+          .locator('form[data-slot="place-pick"]')
+          .waitFor({ timeout: 60_000 });
         await pause(800);
         await page.screenshot({
           path: join(keep, `web-place-pick-${theme}.png`),

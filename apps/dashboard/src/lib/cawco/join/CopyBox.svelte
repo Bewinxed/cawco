@@ -55,6 +55,7 @@
       style:--lh="1.4"
       title={text}
       >{#each words as word, index (index)}{#if index > 0}{" "}{/if}<span
+          data-slot="word"
           class="inline-block max-w-full wrap-anywhere">{word}</span
         >{/each}</code
     >

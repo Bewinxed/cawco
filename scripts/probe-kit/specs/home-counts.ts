@@ -443,7 +443,7 @@ const spec: Spec = {
         ].map((head) => {
           const labels = [
             ...head.querySelectorAll(
-              '[data-slot="tab-item-label"] > [data-slot="text"]:not(.strong)'
+              '[data-slot="tab-item-label"] > [data-slot="text"]:not([data-text])'
             ),
           ].map((el) => ({
             text: el.textContent ?? "",

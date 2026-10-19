@@ -548,6 +548,7 @@
             <button
               aria-controls={opened.has(callId(m)) ? body : undefined}
               aria-expanded={disclosed.get()}
+              data-slot="trow"
               class="group/trow rail-line press-tint w-full min-h-(--trow-min) coarse:min-h-(--trow-min-coarse) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start cursor-pointer"
               data-state={disclosed.get() ? "open" : "closed"}
               onclick={() => disclosed.set(!disclosed.get())}
@@ -702,6 +703,7 @@
             <!-- literal: 26px -->
             <!-- literal: 44px -->
             <div
+              data-slot="trow"
               class="rail-line w-full min-h-(--trow-min) coarse:min-h-(--trow-min-coarse) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
               style:--trow-min="26px"
               style:--trow-min-coarse="44px"

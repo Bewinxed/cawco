@@ -22,10 +22,14 @@ const CYCLE = '[data-case="label-cycle"]';
 const readCycle = (page: Page) =>
   page.evaluate((selector) => {
     const press = document.querySelector<HTMLElement>(selector) as HTMLElement;
-    const text = press.querySelector<HTMLElement>(".kit-text") as HTMLElement;
+    const text = press.querySelector<HTMLElement>(
+      '[data-slot="label-text"]'
+    ) as HTMLElement;
     // The drawn label: its rest words' own box (the first MorphText), not
     // the cell they share with anything else.
-    const label = text.querySelector<HTMLElement>(".morph-text") as HTMLElement;
+    const label = text.querySelector<HTMLElement>(
+      '[data-slot="morph-text"]'
+    ) as HTMLElement;
     const slot = press.querySelector<HTMLElement>(".kit-slot") as HTMLElement;
     // The cell the slot draws in, not its glyph: the spinner turns, and a
     // turned box reaches past its own corners.
@@ -78,7 +82,9 @@ async function scrubFade(page: Page) {
     await page.waitForFunction(
       (selector) =>
         (
-          document.querySelector(`${selector} .kit-text`)?.getAnimations() ?? []
+          document
+            .querySelector(`${selector} [data-slot="label-text"]`)
+            ?.getAnimations() ?? []
         ).some(
           (run) =>
             run instanceof CSSTransition &&
@@ -90,7 +96,7 @@ async function scrubFade(page: Page) {
     );
     return await page.evaluate((selector) => {
       const text = document.querySelector<HTMLElement>(
-        `${selector} .kit-text`
+        `${selector} [data-slot="label-text"]`
       ) as HTMLElement;
       const run = text
         .getAnimations()
@@ -207,11 +213,11 @@ async function iconCases(kit: Kit, page: Page) {
         `[data-case="${at}"]`
       ) as HTMLElement;
       const words = press.querySelector<HTMLElement>(
-        '.kit-words > [data-active="true"]'
+        '[data-slot="words"] > [data-active="true"]'
       ) as HTMLElement;
       const slot = press.querySelector<HTMLElement>(".kit-slot") as HTMLElement;
       const cell = press.querySelector<HTMLElement>(
-        ".kit-words"
+        '[data-slot="words"]'
       ) as HTMLElement;
       const outer = press.getBoundingClientRect();
       return {

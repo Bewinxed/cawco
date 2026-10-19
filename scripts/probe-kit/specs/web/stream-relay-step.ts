@@ -334,7 +334,7 @@ const single = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
     const li = document.querySelector<HTMLElement>(selector);
     const field = li?.querySelector<HTMLElement>("[data-relay-hostname]");
     const address = li?.querySelector<HTMLElement>("[data-relay-address]");
-    const hint = li?.querySelector<HTMLElement>(".hint");
+    const hint = li?.querySelector<HTMLElement>('[data-slot="hint"]');
     return {
       text: li?.textContent ?? "",
       picks: li?.querySelectorAll("[data-relay-pick]").length ?? null,
@@ -651,23 +651,25 @@ const previews = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
       }),
     })
   );
-  await open(page, `${base}/config/previews`, ".hint");
+  await open(page, `${base}/config/previews`, '[data-slot="hint"]');
   await settle(page, 400);
   const read = await page.evaluate(() =>
-    [...document.querySelectorAll<HTMLElement>(".hint")].map((hint) => {
-      const range = document.createRange();
-      range.selectNodeContents(hint);
-      const lines = new Set(
-        [...range.getClientRects()]
-          .filter((rect) => rect.width > 0)
-          .map((rect) => Math.round(rect.top))
-      ).size;
-      return {
-        wrap: getComputedStyle(hint).textWrapStyle,
-        lines,
-        inside: hint.scrollWidth <= hint.clientWidth,
-      };
-    })
+    [...document.querySelectorAll<HTMLElement>('[data-slot="hint"]')].map(
+      (hint) => {
+        const range = document.createRange();
+        range.selectNodeContents(hint);
+        const lines = new Set(
+          [...range.getClientRects()]
+            .filter((rect) => rect.width > 0)
+            .map((rect) => Math.round(rect.top))
+        ).size;
+        return {
+          wrap: getComputedStyle(hint).textWrapStyle,
+          lines,
+          inside: hint.scrollWidth <= hint.clientWidth,
+        };
+      }
+    )
   );
   const scroll = await sideways(page);
   kit.check(

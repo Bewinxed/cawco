@@ -773,7 +773,9 @@
             {#each gateRead.gate.steps as each, at (at)}
               {@const facts = stepFacts(each)}
               <li class="flex min-w-0 flex-col" data-gate-step>
-                <span class="min-w-0 type-label wrap-anywhere text-ink-strong"
+                <span
+                  data-slot="gate-name"
+                  class="min-w-0 type-label wrap-anywhere text-ink-strong"
                   >{each.name}</span
                 >
                 {#if each.command !== each.name}
@@ -783,7 +785,9 @@
                   >
                 {/if}
                 {#if facts}
-                  <span class="min-w-0 type-meta wrap-anywhere text-ink-muted"
+                  <span
+                    data-slot="gate-facts"
+                    class="min-w-0 type-meta wrap-anywhere text-ink-muted"
                     >{facts}</span
                   >
                 {/if}
@@ -888,6 +892,7 @@
               <NativeSelect.Root
                 aria-label="Connection"
                 class="w-full"
+                data-bind-connection
                 size="sm"
                 bind:value={
                   () => pickConnection,
@@ -907,6 +912,7 @@
                 <NativeSelect.Root
                   aria-label={picking === "github" ? "Repository" : "Team"}
                   class="w-full"
+                  data-bind-target
                   size="sm"
                   bind:value={pickTarget}
                 >
@@ -971,6 +977,7 @@
                 /></span
               >
               <a
+                data-slot="bound-target"
                 class="min-w-0 text-link-ink no-underline wrap-anywhere hover-hover:[&:hover]:underline hover-hover:[&:hover]:underline-offset-4"
                 href={bound.targetUrl}
                 rel="noreferrer"

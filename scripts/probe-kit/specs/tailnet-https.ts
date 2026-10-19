@@ -180,7 +180,7 @@ const readRow = (page: Page) =>
 
     /** The number a standing step draws (its attribute, through `::before`), and whether it is hidden from a screen reader. */
     const numberOf = (step: Element) => {
-      const shown = step.querySelector(".step-number");
+      const shown = step.querySelector('[data-slot="step-number"]');
       return {
         number:
           shown && getComputedStyle(shown, "::before").content !== "none"
@@ -224,7 +224,7 @@ const readRow = (page: Page) =>
         command: code.textContent,
         commandWhole: code.scrollWidth <= code.clientWidth,
         // Each word on one line: broken between words, never inside one.
-        wordsWhole: [...code.querySelectorAll(".word")].every(
+        wordsWhole: [...code.querySelectorAll('[data-slot="word"]')].every(
           (word) => word.getBoundingClientRect().height <= line + 0.5
         ),
         selected: selectionOf(code),

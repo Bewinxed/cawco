@@ -244,7 +244,7 @@ async function scrubBand(
         ) as HTMLElement;
         // The band's own, and its row's opening or shutting in the slot
         // that holds it.
-        const slot = band.closest<HTMLElement>(".band-slot");
+        const slot = band.closest<HTMLElement>('[data-slot="hub-band-slot"]');
         const runs = [
           ...band.getAnimations(),
           ...(slot?.getAnimations() ?? []),
@@ -258,7 +258,7 @@ async function scrubBand(
         // What stands under the band's foot: the bar, where the band is
         // over it (under the drawer's line), else the page.
         const next = window.matchMedia("(max-width: 899px)").matches
-          ? document.querySelector("header.top")
+          ? document.querySelector('header[data-slot="top"]')
           : document.querySelector("#main-content");
         for (const run of runs) {
           run.pause();
@@ -470,7 +470,7 @@ const bandCover = (page: Page) =>
 /** The band's line boxes: each drawn line's width, for its wrap. */
 const bandLines = (page: Page) =>
   page.evaluate((selector) => {
-    const words = document.querySelector(`${selector} .words`);
+    const words = document.querySelector(`${selector} [data-slot="sentence"]`);
     if (!words) {
       return [];
     }
@@ -501,7 +501,7 @@ const bandLines = (page: Page) =>
 /** The top bar's foot: its own bottom edge's paint, read off its style. */
 const barFoot = (page: Page) =>
   page.evaluate(() => {
-    const bar = document.querySelector<HTMLElement>("header.top");
+    const bar = document.querySelector<HTMLElement>('header[data-slot="top"]');
     if (!bar) {
       return "no bar";
     }
@@ -665,7 +665,7 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
   // The coral hairline under the bar here is its `--seam` divider, drawn
   // whatever the hub does, not a hub state's.
   const seam = await page.evaluate(() => {
-    const bar = document.querySelector<HTMLElement>("header.top");
+    const bar = document.querySelector<HTMLElement>('header[data-slot="top"]');
     if (!bar) {
       return null;
     }
@@ -707,7 +707,7 @@ async function boardRead(kit: Kit, page: Page, name: string, project: string) {
   );
   if (name.startsWith("desk")) {
     const listed = await page
-      .locator(".rail")
+      .locator('aside[data-slot="rail"]')
       .getByText("Probe", { exact: true })
       .filter({ visible: true })
       .count();
@@ -768,7 +768,7 @@ const recordCard = (page: Page) =>
           // which lags on a throttled frame.
           at: performance.now(),
           h: frame.getBoundingClientRect().height,
-          held: frame.querySelectorAll(".skeleton-slot").length,
+          held: frame.querySelectorAll('[data-slot="skeleton-slot"]').length,
           tweening: frame
             .getAnimations()
             .some((each) =>
@@ -953,7 +953,9 @@ async function search(kit: Kit, page: Page, name: string, view: View) {
 async function bandPlace(kit: Kit, page: Page, name: string, view: View) {
   const at = await page.evaluate((selector) => {
     const band = document.querySelector(selector)?.getBoundingClientRect();
-    const bar = document.querySelector("header.top")?.getBoundingClientRect();
+    const bar = document
+      .querySelector('header[data-slot="top"]')
+      ?.getBoundingClientRect();
     return band && bar
       ? { band: [band.top, band.bottom], bar: [bar.top, bar.bottom] }
       : null;
@@ -979,7 +981,9 @@ async function countdownSteady(kit: Kit, page: Page, name: string) {
       new Promise<{ band: number[]; words: number[]; drawn: number }>(
         (done) => {
           const band = document.querySelector<HTMLElement>(selector);
-          const words = band?.querySelector<HTMLElement>(".words");
+          const words = band?.querySelector<HTMLElement>(
+            '[data-slot="sentence"]'
+          );
           const heights = { band: new Set<number>(), words: new Set<number>() };
           let drawn = 0;
           const end = performance.now() + 2600;
@@ -1016,7 +1020,7 @@ async function countdownSteady(kit: Kit, page: Page, name: string) {
 /** The build's name on one line, wherever the sentence wraps. */
 async function versionWhole(kit: Kit, page: Page, name: string) {
   const rows = await page.evaluate((selector) => {
-    const words = document.querySelector(`${selector} .words`);
+    const words = document.querySelector(`${selector} [data-slot="sentence"]`);
     if (!words) {
       return null;
     }
@@ -1128,7 +1132,7 @@ async function runLeg(
   const clip = await page.evaluate((selector) => {
     const band = document.querySelector<HTMLElement>(selector);
     // The slot that clips it: the row it stands in is the slot's one item.
-    const slot = band?.closest<HTMLElement>(".band-slot");
+    const slot = band?.closest<HTMLElement>('[data-slot="hub-band-slot"]');
     if (!(band && slot)) {
       return null;
     }
@@ -1182,8 +1186,9 @@ async function runLeg(
       `${selector} button[data-slot="button"]`
     );
     const words =
-      press?.querySelector<HTMLElement>('.kit-words > [data-active="true"]') ??
-      press?.querySelector<HTMLElement>(".kit-text");
+      press?.querySelector<HTMLElement>(
+        '[data-slot="words"] > [data-active="true"]'
+      ) ?? press?.querySelector<HTMLElement>('[data-slot="label-text"]');
     if (!(press && words)) {
       return null;
     }
@@ -1353,10 +1358,10 @@ const listKinds = (page: Page) =>
     // What each child is, first match wins: a placeholder is the row it
     // holds a place for.
     const named: [string, string][] = [
-      [".skeleton-slot, [data-find-row]", "row"],
+      ['[data-slot="skeleton-slot"], [data-find-row]', "row"],
       ['[data-slot="chips"]', "chips"],
-      [".head", "head"],
-      [".rule", "rule"],
+      ['[data-slot="head"]', "head"],
+      ['[data-slot="rule"]', "rule"],
       ['[data-slot="nothing"]', "nothing"],
     ];
     const kinds: string[] = [];
@@ -1433,8 +1438,8 @@ const restBoxes = (page: Page) =>
     };
     return {
       floating: document.documentElement.dataset.bar ?? "",
-      bar: box("header.top"),
-      slot: box(".band-slot"),
+      bar: box('header[data-slot="top"]'),
+      slot: box('[data-slot="hub-band-slot"]'),
       page: box("#main-content"),
       tabs: box("[data-session-tab]"),
     };
@@ -1452,7 +1457,7 @@ async function lessMotion(kit: Kit, page: Page, name: string, socket: Socket) {
   );
   const landed = await page.evaluate((selector) => {
     const band = document.querySelector<HTMLElement>(selector) as HTMLElement;
-    const slot = band.closest<HTMLElement>(".band-slot");
+    const slot = band.closest<HTMLElement>('[data-slot="hub-band-slot"]');
     return {
       rows: (slot?.getAnimations() ?? []).map((run) =>
         run instanceof CSSTransition ? run.transitionProperty : "animation"
@@ -1573,7 +1578,10 @@ async function conversationLeg(
   await settle(page, 600);
   const cover = await bandCover(page);
   const bar = await page.evaluate(() =>
-    document.querySelector("header.top")?.getBoundingClientRect().toJSON()
+    document
+      .querySelector('header[data-slot="top"]')
+      ?.getBoundingClientRect()
+      .toJSON()
   );
   kit.check(
     `${name}: the band covers none of the page's words`,

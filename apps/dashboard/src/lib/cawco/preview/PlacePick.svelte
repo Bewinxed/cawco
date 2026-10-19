@@ -85,6 +85,7 @@
 />
 
 <form
+  data-slot="place-pick"
   aria-label={words.title}
   class="absolute inset-0 z-1 flex flex-col gap-space-3 overflow-y-auto p-space-5 bg-surface-raised"
   onsubmit={use}

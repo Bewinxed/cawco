@@ -34,7 +34,7 @@ const STEPS = [
 ];
 const PEEK_PLAN = '[data-peek-sheet] [data-slot="peek-plan"]';
 /** The plan panel's column, beside the conversation or in its sheet: its parts, the steps' tree first. */
-const PANE_PLAN = '[data-slot="body"]:has(> ul.rows)';
+const PANE_PLAN = '[data-slot="body"]:has(> ul[data-slot="rows"])';
 
 const asks = new Map<string, { input: object; name: string }>();
 const issued = new Set<string>();
@@ -101,7 +101,9 @@ const drawn = (page: Page, root: string): Promise<string> =>
         ) {
           depth += 1;
         }
-        const words = li.querySelector(':scope > [data-slot="row"] .text');
+        const words = li.querySelector(
+          ':scope > [data-slot="row"] [data-slot="text"]'
+        );
         return `${words?.textContent?.trim()}:${depth}:${li.getAttribute("data-status")}`;
       })
       .join(",");

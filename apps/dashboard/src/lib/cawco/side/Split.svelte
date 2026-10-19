@@ -360,6 +360,7 @@
          narrowest, then follows the pointer. Collapsed, it is put away:
          nothing in it takes a press or the keyboard. -->
     <Resizable.Pane
+      data-main-pane
       class="flex min-h-0 min-w-0 motion-safe:group-data-split-sliding/split:transition-[flex-grow] motion-safe:group-data-split-sliding/split:dur-panel motion-safe:group-data-split-sliding/split:ease-in-out motion-safe:group-data-split-sliding/split:group-data-split-opening/split:ease-drawer"
       collapsedSize={0}
       collapsible

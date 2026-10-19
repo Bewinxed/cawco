@@ -530,7 +530,7 @@
               /></span
             >
             {#if issue.url}
-              <span class="min-w-0 wrap-anywhere"
+              <span data-slot="issue-words" class="min-w-0 wrap-anywhere"
                 ><a
                   class="text-link-ink"
                   href={issue.url}
@@ -540,7 +540,7 @@
                 on {TRACKER_NAMES[issue.provider]}</span
               >
             {:else}
-              <span class="min-w-0 wrap-anywhere"
+              <span data-slot="issue-words" class="min-w-0 wrap-anywhere"
                 >Not on {TRACKER_NAMES[issue.provider]} yet</span
               >
             {/if}

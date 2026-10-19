@@ -14,7 +14,7 @@
  *    opens (CompactionDivider, traffic bench);
  *  - the send and stop glyphs' swap, a turn starting and ending (Composer
  *    `glyphOut`, `icon-swap`);
- *  - the queued edit's row, rising out of a 4px blur (Composer `.edit-row`);
+ *  - the queued edit's row, rising out of a 4px blur (Composer `[data-slot="edit-row"]`);
  *  - a minimized question's bar, coming up out of a 4px blur, and the card
  *    again (Composer `askedIn`);
  *  - a tree mark's face and chevron swapping as its rows open and fold
@@ -23,7 +23,7 @@
  *  - the keychain unlock's result mark (MachineAuthStatus `mark-in`);
  *  - a decision record's fold (RecordCard).
  *
- * The queued edit's row hung it (its blur is gone, Composer `.edit-row`);
+ * The queued edit's row hung it (its blur is gone, Composer `[data-slot="edit-row"]`);
  * every other one draws.
  *
  * Each case on a page of its own: its motion happened (read from the DOM),

@@ -497,6 +497,7 @@
         {:else if noResults}
           <!-- literal: 6px gap, 22px 12px padding -->
           <div
+            data-slot="none"
             class="type-meta grid place-items-center gap-(--gap) px-(--pad-x) py-(--pad-y) text-center text-pretty text-ink-subtle"
             style:--gap="6px"
             style:--pad-x="12px"

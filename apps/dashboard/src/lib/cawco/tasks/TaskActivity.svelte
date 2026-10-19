@@ -239,7 +239,10 @@
           title={new Date(each.at).toLocaleString()}>{ago(each.at)}</time
         ></span
       >
-      <div class="min-w-0 type-body wrap-anywhere text-ink-strong">
+      <div
+        data-slot="comment-text"
+        class="min-w-0 type-body wrap-anywhere text-ink-strong"
+      >
         <MessageBody source={each.text} />
       </div>
     </li>

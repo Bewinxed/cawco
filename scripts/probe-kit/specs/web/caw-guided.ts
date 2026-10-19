@@ -1076,7 +1076,7 @@ const filedTasks = async (kit: Kit, setup: Setup, threadId: string) => {
         .getAnimations()
         .filter((anim) =>
           (anim.effect as KeyframeEffect | null)?.target?.closest?.(
-            ".arrive, [data-tasks-head]"
+            "[data-arrive], [data-tasks-head]"
           )
         ).length,
     };

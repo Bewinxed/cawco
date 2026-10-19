@@ -174,7 +174,11 @@
 </script>
 
 <!-- literal: -100vw (how far a rolling digit's clip reaches past its slot), inset(50%) (the words said once, clipped away) -->
-<span class="data-wrap:block" data-wrap={wrap || undefined} bind:this={host}
+<span
+  data-slot="morph-text"
+  class="data-wrap:block"
+  data-wrap={wrap || undefined}
+  bind:this={host}
   >{#if morphing}<span
       class="relative inline-block overflow-x-clip whitespace-nowrap"
       aria-hidden="true"

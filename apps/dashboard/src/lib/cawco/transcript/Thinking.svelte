@@ -182,6 +182,7 @@
 <!-- literal: 70ch -->
 <div
   data-slot="rail-row"
+  data-think
   class="rail-row max-w-(--measure)"
   style:--measure="70ch"
 >

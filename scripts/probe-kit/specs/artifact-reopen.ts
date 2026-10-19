@@ -169,7 +169,7 @@ const leg = async (
   await settle(page);
   // A closed artifact's card reads as pressable: drawn whole, never faded as a disabled control is.
   const cards = await page
-    .locator(".preview-tool")
+    .locator('[data-slot="preview-tool"]')
     .evaluateAll((nodes) =>
       nodes.map((node) => getComputedStyle(node).opacity)
     );
@@ -182,7 +182,7 @@ const leg = async (
   /** Presses `id`'s tool row; what the panel and the hub show after. */
   const press = async (id: string, heading: string) => {
     const row = page.locator(
-      `.preview-tool[data-artifact="${id}"] button.artifact-open`
+      `[data-slot="preview-tool"][data-artifact="${id}"] button[data-slot="artifact-open"]`
     );
     const rows = await row.count();
     if (rows !== 1) {

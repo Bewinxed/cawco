@@ -86,11 +86,12 @@ const CONTROLS: Control[] = [
     control: "lifetime",
     hover: "ghost",
     recipe: WASH,
-    chosen: ".ns-pop .row.on",
-    other: ".ns-pop .row[aria-pressed='false']",
+    chosen: '.ns-pop [data-slot="row"][aria-pressed="true"]',
+    other: ".ns-pop [data-slot='row'][aria-pressed='false']",
     onWash: {
-      row: ".ns-pop .row.on",
-      label: ".ns-pop .row.on .name",
+      row: '.ns-pop [data-slot="row"][aria-pressed="true"]',
+      label:
+        '.ns-pop [data-slot="row"][aria-pressed="true"] [data-slot="name"]',
     },
   },
   {
@@ -98,11 +99,12 @@ const CONTROLS: Control[] = [
     control: "project",
     hover: "ghost",
     recipe: WASH,
-    chosen: ".ns-pop .row.on",
-    other: ".ns-pop .row[aria-pressed='false']",
+    chosen: '.ns-pop [data-slot="row"][aria-pressed="true"]',
+    other: ".ns-pop [data-slot='row'][aria-pressed='false']",
     onWash: {
-      row: ".ns-pop .row.on",
-      label: ".ns-pop .row.on .name",
+      row: '.ns-pop [data-slot="row"][aria-pressed="true"]',
+      label:
+        '.ns-pop [data-slot="row"][aria-pressed="true"] [data-slot="name"]',
     },
   },
   {
@@ -110,11 +112,12 @@ const CONTROLS: Control[] = [
     control: "machines",
     hover: "ghost",
     recipe: WASH,
-    chosen: ".ns-pop .row.on",
-    other: ".ns-pop .row[aria-pressed='false']",
+    chosen: '.ns-pop [data-slot="row"][aria-pressed="true"]',
+    other: ".ns-pop [data-slot='row'][aria-pressed='false']",
     onWash: {
-      row: ".ns-pop .row.on",
-      label: '.ns-pop .row.on [data-slot="name"]',
+      row: '.ns-pop [data-slot="row"][aria-pressed="true"]',
+      label:
+        '.ns-pop [data-slot="row"][aria-pressed="true"] [data-slot="name"]',
     },
   },
   {
@@ -126,7 +129,7 @@ const CONTROLS: Control[] = [
     onWash: {
       row: '[data-probe="permission"] [role="radio"][aria-checked="true"]',
       label:
-        '[data-probe="permission"] [role="radio"][aria-checked="true"] .name',
+        '[data-probe="permission"] [role="radio"][aria-checked="true"] [data-slot="name"]',
     },
   },
   {
@@ -148,11 +151,12 @@ const CONTROLS: Control[] = [
     name: "Comments list's current pin",
     hover: "force",
     recipe: WASH,
-    chosen: '[data-probe="pins"] .pin-row[aria-current="true"]',
-    other: '[data-probe="pins"] .pin-row:not([aria-current])',
+    chosen: '[data-probe="pins"] [data-slot="pin-row"][aria-current="true"]',
+    other: '[data-probe="pins"] [data-slot="pin-row"]:not([aria-current])',
     onWash: {
-      row: '[data-probe="pins"] .pin-row[aria-current="true"]',
-      label: '[data-probe="pins"] .pin-row[aria-current="true"] .name',
+      row: '[data-probe="pins"] [data-slot="pin-row"][aria-current="true"]',
+      label:
+        '[data-probe="pins"] [data-slot="pin-row"][aria-current="true"] [data-slot="name"]',
     },
   },
   {
@@ -164,7 +168,8 @@ const CONTROLS: Control[] = [
     ready: '[data-probe="model"] [role="option"][aria-selected="true"]',
     onWash: {
       row: '[data-probe="model"] [role="option"][aria-selected="true"]',
-      label: '[data-probe="model"] [role="option"][aria-selected="true"] .name',
+      label:
+        '[data-probe="model"] [role="option"][aria-selected="true"] [data-slot="name"]',
     },
   },
   {
@@ -191,39 +196,17 @@ const CONTROLS: Control[] = [
     control: "files",
     hover: "force",
     recipe: WASH,
-    ready: '[data-probe="files"] .file[aria-current="page"]',
-    chosen: '[data-probe="files"] .file[aria-current="page"]',
-    other: '[data-probe="files"] .file:not([aria-current])',
+    ready: '[data-probe="files"] [data-folder-chip][aria-current="page"]',
+    chosen: '[data-probe="files"] [data-folder-chip][aria-current="page"]',
+    other: '[data-probe="files"] [data-folder-chip]:not([aria-current])',
     onWash: {
-      row: '[data-probe="files"] .file[aria-current="page"]',
-      label: '[data-probe="files"] .file[aria-current="page"] .path',
-      icon: '[data-probe="files"] .file[aria-current="page"] .icon',
+      row: '[data-probe="files"] [data-folder-chip][aria-current="page"]',
+      label:
+        '[data-probe="files"] [data-folder-chip][aria-current="page"] [data-slot="path"]',
+      icon: '[data-probe="files"] [data-folder-chip][aria-current="page"] [data-slot="file-icon"]',
     },
   },
 ];
-
-/**
- * The model list's catalogue: what the browser kept from the last visit
- * (models.svelte `cawco-models:by-harness`), read as the app loads, so it is
- * written before the page's own scripts. Two Claude models, the first chosen.
- */
-const seedModels = () => {
-  localStorage.setItem(
-    "cawco-models:by-harness",
-    JSON.stringify([
-      {
-        displayName: "Opus 4.5",
-        harness: "claude",
-        value: "claude-opus-4-5",
-      },
-      {
-        displayName: "Sonnet 4.5",
-        harness: "claude",
-        value: "claude-sonnet-4-5",
-      },
-    ])
-  );
-};
 
 interface Read {
   color: string;
@@ -651,7 +634,7 @@ async function checkCawRule(
   bench: string
 ): Promise<void> {
   const rule =
-    ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"]) .section + .section';
+    ':is([data-caw-pop], [data-glass-card-frame~="caw-pop"]) [data-slot="section"] + [data-slot="section"]';
   await open(page, `${bench}/motion/caw-notices?fixture=full`, rule);
   await settle(page, 400);
   const read = await page.evaluate((sel) => {
@@ -701,7 +684,7 @@ const spec: Spec = {
     const bench = await kit.bench();
     for (const theme of THEMES) {
       // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time, each on its own page
-      const page = await kit.page("desk", { theme, init: [seedModels] });
+      const page = await kit.page("desk", { theme });
       const cdp = await page.context().newCDPSession(page);
       await cdp.send("DOM.enable");
       await cdp.send("CSS.enable");
@@ -711,7 +694,7 @@ const spec: Spec = {
         await open(
           page,
           `${bench}/motion/chosen-hover${query}`,
-          c.ready ?? (c.control ? `${POP} .row` : c.chosen)
+          c.ready ?? (c.control ? `${POP} [data-slot="row"]` : c.chosen)
         );
         await page.mouse.move(1, 1);
         await c.prepare?.(page);

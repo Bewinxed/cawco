@@ -101,6 +101,7 @@
     </span>
   {/if}
   <span
+    data-slot="labels"
     aria-hidden="true"
     class="inline-grid overflow-hidden text-size-label leading-body font-medium data-compact:text-size-meta data-compact:font-normal"
     data-compact={compact || undefined}

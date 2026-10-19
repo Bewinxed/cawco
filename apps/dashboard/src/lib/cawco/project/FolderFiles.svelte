@@ -39,6 +39,7 @@
         href={folderFileHref(projectId, path)}
       >
         <IconDocument
+          data-slot="file-icon"
           class="size-icon-md flex-none text-ink-muted group-aria-current-page/file:text-selected-icon"
         />
         <bdi

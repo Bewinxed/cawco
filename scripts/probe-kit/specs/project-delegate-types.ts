@@ -164,7 +164,9 @@ async function probe(kit: Kit) {
                 badgeFace: faceOf(badge),
                 face:
                   faceOf(
-                    row.querySelector('[data-slot="name"] > :is(.link, .label)')
+                    row.querySelector(
+                      '[data-slot="name"] > :is([data-link], [data-slot="section-row-label"])'
+                    )
                   ) ?? "",
               };
             }

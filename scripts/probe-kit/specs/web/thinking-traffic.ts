@@ -39,7 +39,7 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
     b.__thinkingFrames = [];
     b.__recordThinking = true;
     const frame = () => {
-      const tr = document.querySelector(".tr") as HTMLElement;
+      const tr = document.querySelector('[data-slot="tr"]') as HTMLElement;
       // The live tail (LiveRow) and the row its place is (Row): the last
       // one, since a streamed answer that settled goes on drawing as one.
       const live = [...tr.querySelectorAll('[data-slot="live"]')].at(-1);
@@ -61,7 +61,8 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
         reserved: row?.getBoundingClientRect().height ?? 0,
         indicator: !!tr.querySelector('[data-slot="thinking-indicator"]'),
         // The row's own faces, not the label faces inside its reasoning block.
-        faces: live?.querySelectorAll(":scope > .face").length ?? 0,
+        faces:
+          live?.querySelectorAll(':scope > [data-slot="face"]').length ?? 0,
         tweening: tweens(live) || tweens(row),
         growing,
       });
@@ -88,7 +89,7 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
   );
 
   const type = await page.evaluate(() => {
-    const tr = document.querySelector(".tr") as HTMLElement;
+    const tr = document.querySelector('[data-slot="tr"]') as HTMLElement;
     const measure = (el: Element | null | undefined) => {
       if (!el) {
         return null;
@@ -106,11 +107,11 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
     };
     return {
       indicator: measure(tr.querySelector('[data-slot="thinking-indicator"]')),
-      label: measure(tr.querySelector(".labels")),
+      label: measure(tr.querySelector('[data-slot="labels"]')),
       header: measure(tr.querySelector('[data-slot="thinking-steps-header"]')),
-      tool: measure([...tr.querySelectorAll(".trow")].at(-1)),
-      rail: measure(tr.querySelector(".think")),
-      toolRail: measure([...tr.querySelectorAll(".tools")].at(-1)),
+      tool: measure([...tr.querySelectorAll('[data-slot="trow"]')].at(-1)),
+      rail: measure(tr.querySelector("[data-think]")),
+      toolRail: measure([...tr.querySelectorAll('[data-slot="tools"]')].at(-1)),
     };
   });
   const { indicator, label, header, tool, rail, toolRail } = type;
@@ -182,7 +183,7 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
 
   await page.addScriptTag({ content: observer });
   const observed = await page.evaluate(() =>
-    window.__uiObserver({ scopeSel: ".think", maxDepth: 5 })
+    window.__uiObserver({ scopeSel: "[data-think]", maxDepth: 5 })
   );
   const clipped = observed.observations.filter(
     (item) =>
@@ -190,7 +191,7 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
       !item.selector?.includes("sr-only")
   );
   const overflow = await page
-    .locator(".think")
+    .locator("[data-think]")
     .evaluate((el) => el.scrollWidth - el.clientWidth);
   check(
     "nothing visible in the thinking is clipped, and it has no sideways overflow",
@@ -240,7 +241,7 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
   });
   await page.waitForTimeout(700);
   const bottom = await page
-    .locator(".tr")
+    .locator('[data-slot="tr"]')
     .evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
   check(
     "the answer lands still pinned to the bottom",
@@ -267,7 +268,7 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
   const faces = await page
     .locator('[data-slot="live"]')
     .last()
-    .locator(":scope > .face")
+    .locator(':scope > [data-slot="face"]')
     .count();
   check(
     "a direct answer enters over the reasoning in one container, then stands alone",
@@ -311,7 +312,7 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
     (await page
       .locator('[data-slot="live"]')
       .last()
-      .locator(":scope > .face")
+      .locator(':scope > [data-slot="face"]')
       .count()) === 1 &&
       swapText.includes("The latest reasoning") &&
       !swapText.includes("An interrupted answer"),
@@ -344,15 +345,20 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
   await page.waitForTimeout(350);
 
   await page.evaluate(() => {
-    (document.querySelector(".tr") as HTMLElement).scrollTop -= 450;
+    (document.querySelector('[data-slot="tr"]') as HTMLElement).scrollTop -=
+      450;
   });
   await page.waitForTimeout(100);
-  const before = await page.locator(".tr").evaluate((el) => el.scrollTop);
+  const before = await page
+    .locator('[data-slot="tr"]')
+    .evaluate((el) => el.scrollTop);
   await page.evaluate(() =>
     window.__traffic.thinking("Reasoning while the user reads history.")
   );
   await page.waitForTimeout(450);
-  const after = await page.locator(".tr").evaluate((el) => el.scrollTop);
+  const after = await page
+    .locator('[data-slot="tr"]')
+    .evaluate((el) => el.scrollTop);
   check(
     "a reader scrolled up stays where they are as reasoning arrives",
     Math.abs(after - before) <= 2,
@@ -361,7 +367,7 @@ async function lifecycle(kit: Kit, view: View, observer: string) {
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.evaluate(() => {
-    (document.querySelector(".tr") as HTMLElement).scrollTop = 1e7;
+    (document.querySelector('[data-slot="tr"]') as HTMLElement).scrollTop = 1e7;
   });
   await page.waitForTimeout(150);
   await page.evaluate(() => window.__traffic.thinking(null));

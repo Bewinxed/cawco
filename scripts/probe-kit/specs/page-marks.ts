@@ -48,14 +48,14 @@ const PAIRS: Pair[] = [
   {
     name: "bar floating",
     on: "root",
-    old: ":root:has(> body > div > .shell > .main > .top.floating)",
+    old: ':root:has(> body > div > [data-slot="shell"] > [data-slot="shell-main"] > [data-slot="top"][data-floating])',
     now: ':root[data-bar~="floating"]',
     made: true,
   },
   {
     name: "bar hosting",
     on: "root",
-    old: ":root:has(> body > div > .shell > .main > .top.hosting)",
+    old: ':root:has(> body > div > [data-slot="shell"] > [data-slot="shell-main"] > [data-slot="top"][data-hosting])',
     now: ':root[data-bar~="hosting"]',
     made: true,
   },
@@ -97,7 +97,7 @@ const PAIRS: Pair[] = [
   {
     name: "sidebar sheet",
     on: "root",
-    old: ':root:has(> body > [data-slot="sheet-content"].rail-sheet[data-state="open"])',
+    old: ':root:has(> body > [data-slot="sheet-content"][data-rail-sheet][data-state="open"])',
     now: ':root[data-kit-sheet~="rail"]',
     made: true,
   },
@@ -111,7 +111,7 @@ const PAIRS: Pair[] = [
   {
     name: "session sheet",
     on: "body",
-    old: "body:has(> .session-card[data-vaul-drawer])",
+    old: "body:has(> [data-session-card][data-vaul-drawer])",
     now: "body[data-session-sheet]",
     made: true,
   },
@@ -125,14 +125,14 @@ const PAIRS: Pair[] = [
   {
     name: "session card",
     on: "wrapper",
-    old: `${WRAPPER}:has(> .session-details-popover)`,
+    old: `${WRAPPER}:has(> [data-session-details-popover])`,
     now: `${WRAPPER}[data-session-details]`,
     made: true,
   },
   {
     name: "session card glide",
     on: "wrapper",
-    old: `${WRAPPER}:has(> .session-details-popover[data-morph])`,
+    old: `${WRAPPER}:has(> [data-session-details-popover][data-morph])`,
     now: `${WRAPPER}[data-details-morph]`,
     made: true,
   },
@@ -336,7 +336,9 @@ const run = async (kit: Kit) => {
       .first();
   await at(desk, "desk card");
   await tab(desk, beta).hover();
-  await desk.waitForSelector(".session-details-popover", { timeout: 10_000 });
+  await desk.waitForSelector("[data-session-details-popover]", {
+    timeout: 10_000,
+  });
   await keep(desk, "desk card");
   await at(desk, "desk card glide");
   await tab(desk, alpha).hover();
@@ -357,7 +359,7 @@ const run = async (kit: Kit) => {
   await keep(phone, "phone session");
   await at(phone, "phone sidebar");
   await phone.getByRole("button", { name: "Open navigation" }).click();
-  await phone.waitForSelector('.rail-sheet[data-state="open"]');
+  await phone.waitForSelector('[data-rail-sheet][data-state="open"]');
   await keep(phone, "phone sidebar");
   await at(phone, "phone sidebar leaving");
   await phone.keyboard.press("Escape");
