@@ -104,6 +104,22 @@ export class KeeperPool {
     return this.#client(await currentEndpoint(machine));
   }
 
+  /**
+   * The connection to keeper `keeper` at its own endpoint while it answers
+   * there, current or not: an update's helper starts a build's keeper there
+   * before the machine's endpoint names it. None before it starts, or once
+   * it is gone.
+   */
+  async of(keeper: KeeperName): Promise<SessiondClient | undefined> {
+    const found = (await keeperEndpoints()).find(
+      (one) =>
+        one.keeper.kind === keeper.kind && one.keeper.version === keeper.version
+    );
+    return found
+      ? await this.#client(found.endpoint).catch(() => undefined)
+      : undefined;
+  }
+
   /** Connections to every keeper there, the current one first; one that is gone is left out, and one that could not be reached is unknown ({@link notKnown}). */
   async all(): Promise<SessiondClient[]> {
     const found = await keeperEndpoints();

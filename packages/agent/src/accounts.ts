@@ -247,6 +247,15 @@ export const kindOf = (
 const signinChanges = new Set<Promise<unknown>>();
 let signinChanged = 0;
 
+/** What hears each change to this machine's account dirs end ({@link onSigninsChanged}). */
+const signinListeners = new Set<() => void>();
+
+/** Listens for the end of each change to this machine's account dirs ({@link changingSignins}); answers the way to stop. */
+export const onSigninsChanged = (listener: () => void): (() => void) => {
+  signinListeners.add(listener);
+  return () => signinListeners.delete(listener);
+};
+
 /** Runs a change to this machine's account dirs as one {@link accountReports} waits out. */
 export const changingSignins = <T>(change: Promise<T>): Promise<T> => {
   signinChanges.add(change);
@@ -254,6 +263,9 @@ export const changingSignins = <T>(change: Promise<T>): Promise<T> => {
   const over = () => {
     signinChanges.delete(change);
     signinChanged += 1;
+    for (const listener of signinListeners) {
+      listener();
+    }
   };
   change.then(over, over);
   return change;

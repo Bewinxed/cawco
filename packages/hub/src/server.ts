@@ -16592,6 +16592,22 @@ export const createServer = (
     publishInstances(machineId);
   });
 
+  /**
+   * A project's folder was moved away (its delete, a merge): every machine is
+   * sent its fleet config again, and its agent checks each workspace
+   * boundary there for an access its policy no longer grants (agent
+   * boundary.ts `recheckNarrowed`): a workspace of that project read the
+   * folder, and its boundary must not go on reading it.
+   */
+  const projectFolderMoved = (): void => {
+    for (const { machineId } of db.listAgents()) {
+      const agent = registry.agent(machineId);
+      if (agent) {
+        sendFleetSync(machineId, agent);
+      }
+    }
+  };
+
   const mcpChanges = new FleetMcpChanges(db.fleetConfig().mcp);
   /**
    * Every change of the fleet's MCP servers passes here: a write, a removal, a
@@ -18941,6 +18957,7 @@ export const createServer = (
     },
     placesChanged,
     projectsChanged,
+    folderMoved: () => projectFolderMoved(),
   };
   /** Set once approved actions exist (below): until then no `action` move goes. */
   let actionMoves: NonNullable<TaskStore["actionMove"]> = () => false;
@@ -25724,10 +25741,12 @@ export const createServer = (
         }
         // The project is gone either way; a folder that could not be moved
         // stays where it was, and the hub says so in its log.
-        await trashProjectFolder(params.id).catch((error: unknown) =>
-          console.warn(
-            `[hub] project ${params.id}'s folder was not moved to the trash: ${error instanceof Error ? error.message : String(error)}`
-          )
+        await trashProjectFolder(params.id).then(
+          projectFolderMoved,
+          (error: unknown) =>
+            console.warn(
+              `[hub] project ${params.id}'s folder was not moved to the trash: ${error instanceof Error ? error.message : String(error)}`
+            )
         );
         return { ok: true };
       })

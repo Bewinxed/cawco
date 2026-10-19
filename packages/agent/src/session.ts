@@ -117,7 +117,13 @@ import {
 import { isDamagedRecord } from "@cawco/core/state-file";
 import { Effect } from "effect";
 import { withFiles } from "./attachments";
-import { type Boundary, boundaryFor, hookArmed, shellQuote } from "./boundary";
+import {
+  type Boundary,
+  boundaryFor,
+  hookArmed,
+  recheckNarrowed,
+  shellQuote,
+} from "./boundary";
 import {
   type BrowserDoor,
   browserDoor,
@@ -5098,6 +5104,10 @@ export class SessionSupervisor {
           "syncFleet"
         );
         this.#healFleetMcp([...this.#sessions.keys()]);
+        // What a workspace's policy reads may have moved with it (the
+        // synced paths, a project's folder the hub moved away): every
+        // boundary is checked for a narrowed access at once.
+        recheckNarrowed("the fleet's config was synced").catch(() => undefined);
         return report;
       }
       if (method === FLEET_STATUS) {

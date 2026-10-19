@@ -1752,6 +1752,10 @@ export const setProject = async (
   }
   await mkdir(stateDir(id), { recursive: true });
   await writeWhole(file, `${JSON.stringify(project)}\n`, 0o644);
+  // Another project's folder: the one before is no longer read, now.
+  if (kept !== undefined) {
+    recheckNarrowed("its project changed", [id]).catch(() => undefined);
+  }
 };
 
 /**
@@ -2045,6 +2049,17 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
     await stopUnvouched(ref.id, held);
     return start(client, ref);
   }
+  // Access is never kept past its removal: a generation that grants what the
+  // workspace's policy no longer does is stopped now with what runs in it,
+  // said to the delegate, whatever runs there or whichever keeper is owed
+  // the endpoint ({@link replaceNarrowed}).
+  const narrowed = await narrowedGenerations(ref, held);
+  if (narrowed) {
+    const runs = await replaceNarrowed(client, ref, held, narrowed, owed);
+    if (narrowed.current.length > 0) {
+      return runs;
+    }
+  }
   // One of an older form, or one a retiring keeper holds, is handed over to
   // one of this build's form on the current keeper.
   if (held.form !== (await formOf(ref)) || holder.epoch !== client.epoch) {
@@ -2067,14 +2082,6 @@ const replaceOlder = async (
   held: Held,
   owed: boolean
 ): Promise<Boundary> => {
-  // Access is never kept past its removal: a boundary that grants what the
-  // workspace's policy no longer does is replaced now, whatever runs in it
-  // or whichever keeper is owed the endpoint, and what ran in it is stopped,
-  // said to the delegate ({@link replaceNarrowed}).
-  const narrowed = await narrowedSince(ref, held);
-  if (narrowed.length > 0) {
-    return replaceNarrowed(client, ref, held, narrowed);
-  }
   if (owed) {
     // The keeper the endpoint names now retires as soon as this build's
     // takes the endpoint: the boundary runs on as it is, armed, and is
@@ -3079,13 +3086,55 @@ const workLeft = async (
  */
 const keptRunning = new Map<string, string>();
 
+/** Whether `path` is `dir` or lies under it. */
+const lies = (path: string, dir: string): boolean =>
+  path === dir || path.startsWith(`${dir}/`);
+
+/**
+ * Whether one pair of a policy's lists (`allowRead` and `denyRead`, …) lets
+ * `path` through: the deepest entry that holds it decides, a tie denying, as
+ * srt and the judge decide (core workspace-policy.ts: "the deeper entry
+ * deciding"). A path no entry holds is `unheld`: what the pair grants there
+ * is its kind's default (read: yes; write: no), which no name says, so an old
+ * policy reads it as let through and a new one as not, and a narrowing is
+ * never missed.
+ */
+const letThrough = (
+  path: string,
+  allow: readonly string[],
+  deny: readonly string[],
+  unheld: boolean
+): boolean => {
+  const deepest = (list: readonly string[]) =>
+    Math.max(
+      -1,
+      ...list
+        .filter((entry) => lies(path, entry))
+        .map((entry) => entry.split("/").length)
+    );
+  const allowed = deepest(allow);
+  const denied = deepest(deny);
+  return allowed < 0 && denied < 0 ? unheld : allowed > denied;
+};
+
+/** A policy field's `allow` or `deny` head, before what it is for (`Read`, `Write`). */
+const ALLOW_OR_DENY = /^(allow|deny)/;
+
+/** A list of a policy's as paths; undefined when it is no list of strings. */
+const pathsOf = (value: unknown): string[] | undefined =>
+  Array.isArray(value) && value.every((entry) => typeof entry === "string")
+    ? value
+    : undefined;
+
 /**
  * How policy `now` narrows `was`, the policy a boundary started with
  * ({@link grantedOf}), each in words; none when it widens it or leaves it as
- * it was. Read off the policy's own fields, whatever they are: an entry gone
- * from an `allow…` list or new in a `deny…` list narrows, and so does any
- * other field that changed (a flag, a path), whose direction no name says.
- * With no record, what the boundary grants is not known, so it narrows.
+ * it was. Read off the policy's own fields, whatever they are: each pair of
+ * lists named `allow<X>` and `deny<X>` narrows when a path one of its lists
+ * names was let through before and is not now ({@link letThrough}); any
+ * other field narrows when it changed at all (a flag, a path), as no name
+ * says which way. With no record, what the boundary grants is not known, so
+ * it narrows.
  */
 const narrowing = (was: Policy | undefined, now: Policy): string[] => {
   if (!was) {
@@ -3096,33 +3145,43 @@ const narrowing = (was: Policy | undefined, now: Policy): string[] => {
   const fields = [
     ...new Set([...Object.keys(before), ...Object.keys(after)]),
   ].sort();
+  const paired = (field: string): string | undefined => {
+    const rest = field.replace(ALLOW_OR_DENY, "");
+    return rest !== field &&
+      [`allow${rest}`, `deny${rest}`].every(
+        (name) => pathsOf(before[name]) && pathsOf(after[name])
+      )
+      ? rest
+      : undefined;
+  };
   return fields.flatMap((field) => {
-    const old = before[field];
-    const fresh = after[field];
-    if (Array.isArray(old) && Array.isArray(fresh)) {
-      if (field.startsWith("allow")) {
-        return old
-          .filter((entry) => !fresh.includes(entry))
-          .map((entry) => `${String(entry)} left ${field}`);
-      }
-      if (field.startsWith("deny")) {
-        return fresh
-          .filter((entry) => !old.includes(entry))
-          .map((entry) => `${String(entry)} joined ${field}`);
-      }
+    const rest = paired(field);
+    if (rest === undefined) {
+      return JSON.stringify(before[field]) === JSON.stringify(after[field])
+        ? []
+        : [`${field} changed`];
     }
-    return JSON.stringify(old) === JSON.stringify(fresh)
-      ? []
-      : [`${field} changed`];
+    if (field.startsWith("deny")) {
+      return [];
+    }
+    const lists = (policy: Record<string, unknown>) =>
+      [
+        pathsOf(policy[`allow${rest}`]) ?? [],
+        pathsOf(policy[`deny${rest}`]) ?? [],
+      ] as const;
+    const [allowBefore, denyBefore] = lists(before);
+    const [allowNow, denyNow] = lists(after);
+    return [
+      ...new Set([...allowBefore, ...denyBefore, ...allowNow, ...denyNow]),
+    ]
+      .filter(
+        (path) =>
+          letThrough(path, allowBefore, denyBefore, true) &&
+          !letThrough(path, allowNow, denyNow, false)
+      )
+      .map((path) => `${path} is no longer let through by allow${rest}`);
   });
 };
-
-/** How the workspace's policy as it stands narrows what its boundary `held` started with ({@link narrowing}). */
-const narrowedSince = async (
-  ref: WorkspaceRef,
-  held: Pick<Held, "gen">
-): Promise<string[]> =>
-  narrowing(await grantedPolicy(ref.id, held.gen), await workspacePolicy(ref));
 
 /** One process a boundary's work runs, as the delegate's own commands saw it: its pid there and its command line. */
 interface WorkProcess {
@@ -3212,36 +3271,88 @@ const narrowedLine = (
   return `cawco: this workspace's access was narrowed (${why}), so its boundary was replaced and what still ran in it was stopped: ${each}. Start ${one ? "it" : "them"} again if you still need ${one ? "it" : "them"}.`;
 };
 
+/** The generations of a workspace whose access narrowed ({@link narrowedGenerations}): the current one's reasons (none when it did not), and each older one still beside it that did. */
+interface Narrowed {
+  readonly current: readonly string[];
+  readonly older: readonly { boundary: Retiring; why: readonly string[] }[];
+}
+
 /**
- * Replaces workspace `ref`'s boundary `held`, whose access the workspace's
+ * Which generations of workspace `ref`, its current boundary `held` and each
+ * older one still beside it ({@link Retiring}), grant what the workspace's
+ * policy as it stands no longer does ({@link narrowing}); undefined when none
+ * does.
+ */
+const narrowedGenerations = async (
+  ref: WorkspaceRef,
+  held: Pick<Held, "gen">
+): Promise<Narrowed | undefined> => {
+  const now = await workspacePolicy(ref);
+  const current = narrowing(await grantedPolicy(ref.id, held.gen), now);
+  const older: { boundary: Retiring; why: string[] }[] = [];
+  for (const boundary of await readRetiring(ref.id)) {
+    // biome-ignore lint/performance/noAwaitInLoops: one small record read per older generation
+    const why = narrowing(await grantedPolicy(ref.id, boundary.gen), now);
+    if (why.length > 0) {
+      older.push({ boundary, why });
+    }
+  }
+  return current.length > 0 || older.length > 0
+    ? { current, older }
+    : undefined;
+};
+
+/**
+ * The keeper a boundary replaced while this build's keeper is owed the
+ * machine's endpoint ({@link ownKeeperOwed}) starts on: this build's own
+ * keeper, which an update's helper starts at its own endpoint before the
+ * machine's names it, once it answers there. Until then there is none to
+ * start on but the current one (`client`), and the boundary started there is
+ * handed over to this build's keeper once that is the machine's, as every
+ * boundary on a retiring keeper is ({@link leaveRetiringKeepers}).
+ */
+const keeperTakingOver = async (
+  client: SessiondClient,
+  owed: boolean
+): Promise<SessiondClient> =>
+  owed
+    ? ((await keepers.of({ kind: "build", version: runtimeVersion })) ?? client)
+    : client;
+
+/**
+ * Stops every generation of workspace `ref` whose access the workspace's
  * policy has narrowed since it started (`narrowed`, {@link narrowing}), now,
- * as {@link restartIfIdle} does: the gate goes up, `held` and every older
- * generation still beside it whose access narrowed too are stopped with
- * everything in them, and a boundary of the policy as it stands starts. What
- * their work still ran is said, each process by its command and the pid its
- * commands saw: in the agent's log, and as a line the delegate's next command
- * shows ({@link noticeOf}), so it can start it again. Nothing it ran is lost
- * silently, and no access outlives its removal.
+ * as {@link restartIfIdle} stops one: the gate goes up, each is stopped with
+ * everything in it, and, when the current one `held` was, a boundary of the
+ * policy as it stands starts, on the keeper taking over when one is owed the
+ * endpoint ({@link keeperTakingOver}). What their work still ran is said,
+ * each process by its command and the pid its commands saw: in the agent's
+ * log, and as a line the delegate's next command shows ({@link noticeOf}),
+ * so it can start it again. Nothing it ran is lost silently, and no access
+ * outlives its removal. Answers the boundary that runs.
  */
 const replaceNarrowed = async (
   client: SessiondClient,
   ref: WorkspaceRef,
   held: Held,
-  narrowed: readonly string[]
+  narrowed: Narrowed,
+  owed: boolean
 ): Promise<Boundary> => {
   const gate = gateOf(ref.id);
   await writeStateFile(gate, String(process.pid));
   try {
-    const now = await workspacePolicy(ref);
-    const older: Retiring[] = [];
-    for (const old of await readRetiring(ref.id)) {
-      // biome-ignore lint/performance/noAwaitInLoops: one small record read per older generation
-      if (narrowing(await grantedPolicy(ref.id, old.gen), now).length > 0) {
-        older.push(old);
-      }
-    }
+    const stopping: Held[] = [
+      ...(narrowed.current.length > 0 ? [held] : []),
+      ...narrowed.older.map((one) => one.boundary),
+    ];
+    const why = [
+      ...new Set([
+        ...narrowed.current,
+        ...narrowed.older.flatMap((one) => one.why),
+      ]),
+    ];
     const stopped: WorkProcess[] = [];
-    for (const boundary of [held, ...older]) {
+    for (const boundary of stopping) {
       // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, each gone before the next
       const work = await workIn(ref.id, boundary);
       stopped.push(...work.roots);
@@ -3260,19 +3371,209 @@ const replaceNarrowed = async (
       await cleanGeneration(ref.id, boundary);
       await rm(retiringFileOf(ref.id, boundary), { force: true });
     }
-    forgetStale(ref.id);
-    const fresh = await start(client, ref);
-    const line = narrowedLine(narrowed, stopped);
+    const runs =
+      narrowed.current.length > 0
+        ? await (async () => {
+            forgetStale(ref.id);
+            return start(await keeperTakingOver(client, owed), ref);
+          })()
+        : await armHook(ref.id, held);
+    const line = narrowedLine(why, stopped);
     if (stopped.length > 0) {
       await appendFile(noticeOf(ref.id), `${line}\n`, { mode: 0o600 });
     }
     console.info(
-      `[workspace] ${ref.id}: its boundary ${[held, ...older].map((one) => one.pid).join(", ")} (form ${held.form ?? "none"}) is replaced by ${fresh.pid} now, as its access narrowed: ${stopped.length > 0 ? line : `nothing ran in it (${narrowed.slice(0, REASONS_SAID).join("; ")})`}`
+      `[workspace] ${ref.id}: its boundary ${stopping.map((one) => one.pid).join(", ")} (form ${held.form ?? "none"}) is stopped now, as its access narrowed, and ${runs.pid} runs: ${stopped.length > 0 ? line : `nothing ran in it (${why.slice(0, REASONS_SAID).join("; ")})`}`
     );
-    return fresh;
+    return runs;
   } finally {
     await rm(gate, { force: true });
   }
+};
+
+/** How often the boundaries in use are looked at for a narrowing no event says ({@link lookForNarrowing}). */
+const NARROW_LOOK_MS = 5000;
+
+/** Each workspace's narrowing check under way, and whether another was asked meanwhile ({@link recheckNarrowed}). */
+let narrowLook: Promise<void> | undefined;
+let narrowAgain: { readonly why: string } | undefined;
+
+/**
+ * Checks the running boundaries for a narrowed access now ({@link narrowing}),
+ * and stops each generation whose access narrowed, its current boundary
+ * replaced ({@link replaceNarrowed}), as a start of its own (an ensure under
+ * way checks for itself, and a close under way ends it): every workspace with
+ * a boundary running on any keeper, or only `ids`. One check at a time; one
+ * asked meanwhile runs once it ends. Never rejects.
+ *
+ * THE LIST of what a workspace's policy reads (core workspace-policy.ts
+ * `workspacePolicy`) and what says each changed, so its boundaries are
+ * checked for a narrowed access ({@link recheckNarrowed}) at once:
+ *
+ * - its accounts (`accounts.json`) and its sessions' spill folders
+ *   (`spills.json`), which only grow: written by {@link boundaryFor} and the
+ *   workspace's create, each followed by an ensure, which checks
+ *   ({@link ensure});
+ * - its project (`project.json`): a change of it checks at once
+ *   ({@link setProject}, written by those and a browser door's);
+ * - its project's folder on the hub (`projectFolder`): moved away only by
+ *   the hub (a project's delete or merge), which then syncs every machine's
+ *   fleet config; the sync checks (session.ts `FLEET_SYNC`);
+ * - what the fleet sync writes (`fleetSyncedPaths`, the user layer under
+ *   Claude Code's home): the sync checks;
+ * - this machine's accounts and the credential stores they make
+ *   (`accountLayers`' config dirs, `credentialStores`): an account's sign-in
+ *   or removal checks ({@link accountsChangedHere});
+ * - this build (`binaryRoot`, the form): the agent's start re-arms every
+ *   boundary in use, through an ensure ({@link rearmHooks});
+ * - the clone's alternates, the toolchains under home (`homeToolchains`),
+ *   Xcode's developer dir, a place's own files (`ownerOnlyIn`, `linkedIn`,
+ *   `protectedIn`) and every link a path resolves through: no event says
+ *   these, and no file watch is kept for them (a watch per workspace is what
+ *   fseventsd's memory went to); the boundaries in use are looked at for
+ *   them each {@link NARROW_LOOK_MS} ({@link lookForNarrowing}).
+ *
+ * What is fixed for a workspace's life (its clone, state and scratch dirs,
+ * doors, caches, the gitconfig, the host's tool caches, Linux's host-private
+ * paths) needs none.
+ */
+export const recheckNarrowed = (
+  why: string,
+  ids?: readonly string[]
+): Promise<void> => {
+  if (narrowLook) {
+    narrowAgain = { why };
+    return narrowLook;
+  }
+  narrowLook = recheckNow(why, ids)
+    .catch((error: unknown) => {
+      console.warn(
+        `[workspace] the boundaries could not be checked for a narrowed access (${why}): ${error instanceof Error ? error.message : String(error)}`
+      );
+    })
+    .finally(() => {
+      narrowLook = undefined;
+      const again = narrowAgain;
+      narrowAgain = undefined;
+      if (again) {
+        recheckNarrowed(again.why).catch(() => undefined);
+      }
+    });
+  return narrowLook;
+};
+
+/** {@link recheckNarrowed}'s check itself. */
+const recheckNow = async (
+  why: string,
+  ids?: readonly string[]
+): Promise<void> => {
+  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const runningIds = (
+    ids ?? (await readdir(workspacesDir()).catch(() => [] as string[]))
+  ).filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)));
+  for (const id of runningIds) {
+    if (starting.has(id) || closing.has(id)) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one workspace at a time, as each start is
+    const held = await readHeld(id).catch(() => undefined);
+    if (!held) {
+      continue;
+    }
+    const ref = { id, path: held.path };
+    const narrowed = await narrowedGenerations(ref, held).catch(
+      () => undefined
+    );
+    if (!narrowed || starting.has(id) || closing.has(id)) {
+      continue;
+    }
+    console.info(
+      `[workspace] ${id}: its access narrowed (${why}), so its narrowed boundaries are stopped now`
+    );
+    const replaced = (async () =>
+      replaceNarrowed(
+        await sessiond(),
+        ref,
+        held,
+        narrowed,
+        await ownKeeperOwed()
+      ))();
+    starting.set(id, replaced);
+    await replaced
+      .catch((error: unknown) => {
+        console.warn(
+          `[workspace] ${id}: its narrowed boundary could not be replaced: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+      .finally(() => starting.delete(id));
+  }
+};
+
+/**
+ * The workspaces whose boundary is in use: a session attached, a live work
+ * item, a preview, a command, or work running in it ({@link liveWhy},
+ * {@link workLeft}); every running one while the hub has not said which
+ * items are live.
+ */
+const inUseNow = async (): Promise<string[]> => {
+  const procs = (await keepers.held()).filter((proc) => proc.alive);
+  const ids = (await readdir(workspacesDir()).catch(() => [] as string[]))
+    .filter((id) => procs.some((proc) => isBoundaryOf(proc.procId, id)))
+    .filter((id) => !(starting.has(id) || closing.has(id)));
+  const facts = await liveFacts(procs);
+  if (!facts) {
+    return ids;
+  }
+  // The process table, read once and only for a boundary nothing holds.
+  let seen: Seen[] | undefined;
+  const used: string[] = [];
+  for (const id of ids) {
+    // biome-ignore lint/performance/noAwaitInLoops: one small record read per running boundary
+    const held = await readHeld(id).catch(() => undefined);
+    if (!held) {
+      continue;
+    }
+    if (liveWhy(id, held.path, facts)) {
+      used.push(id);
+      continue;
+    }
+    seen ??= await snapshot();
+    if (await busyOld(seen, id, { ...held, executors: [] }, undefined)) {
+      used.push(id);
+    }
+  }
+  return used;
+};
+
+/** A machine's accounts changed (a sign-in, an account removed): every running boundary is checked for a narrowed access. */
+export const accountsChangedHere = (): void => {
+  recheckNarrowed("this machine's accounts changed").catch(() => undefined);
+};
+
+let narrowTimer: ReturnType<typeof setInterval> | undefined;
+
+/** Looks at the boundaries in use for a narrowed access each {@link NARROW_LOOK_MS} ({@link recheckNarrowed}'s list, its last item). */
+const lookForNarrowing = (): void => {
+  if (narrowTimer) {
+    return;
+  }
+  narrowTimer = setInterval(() => {
+    if (narrowLook) {
+      return;
+    }
+    inUseNow()
+      .then((ids) =>
+        ids.length > 0
+          ? recheckNarrowed("a look at the boundaries in use", ids)
+          : undefined
+      )
+      .catch((error: unknown) => {
+        console.warn(
+          `[workspace] the boundaries in use could not be looked at for a narrowed access: ${error instanceof Error ? error.message : String(error)}`
+        );
+      });
+  }, NARROW_LOOK_MS);
+  narrowTimer.unref();
 };
 
 /** The socket inodes process `pid` has open, as its `/proc/<pid>/fd` links name them (`socket:[INODE]`); none once it is gone. */
@@ -3549,12 +3850,8 @@ const handOverStale = async (): Promise<void> => {
       }
       // One kept while its work runs ({@link replaceOlder}) is only looked
       // at, not ensured: an ensure is a use, and its quiet time must run.
-      // Unless its access narrowed meanwhile: then it is replaced now.
-      if (
-        keptRunning.has(ref.id) &&
-        (await workLeft(ref.id, held)) &&
-        (await narrowedSince(ref, held)).length === 0
-      ) {
+      // A narrowing meanwhile is the narrowing look's ({@link recheckNarrowed}).
+      if (keptRunning.has(ref.id) && (await workLeft(ref.id, held))) {
         continue;
       }
       await ensureBoundary(ref);
@@ -4290,6 +4587,7 @@ let quietTimer: ReturnType<typeof setInterval> | undefined;
  */
 export const watchQuietBoundaries = (given: BoundaryHolders): void => {
   holders = given;
+  lookForNarrowing();
   if (quietTimer) {
     return;
   }

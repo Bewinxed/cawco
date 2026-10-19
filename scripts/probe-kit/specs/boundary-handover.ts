@@ -25,12 +25,14 @@
  * 3. H's live boundary is the one it had: kept as it is while its work runs,
  *    said in the agent's log, never handed over. An older generation beside
  *    it closes only as `closeIdle` closes one, with nothing running in it.
- * 4. The policy then narrows (the project's folder on the hub, which it read,
- *    is gone) and a message gives H a third turn: its boundary is replaced
- *    at once and the loop stopped with it (agent boundary.ts
- *    `replaceNarrowed`); H's command shows the line naming the loop by its
- *    command and pid, saying it can be started again; the heartbeat stops;
+ * 4. The policy then narrows with no word to H (the project's folder on the
+ *    hub, which it read, is renamed aside by hand, which no event says):
+ *    within 10 s the boundary is replaced by the agent's look at the
+ *    boundaries in use (agent boundary.ts `recheckNarrowed`,
+ *    `replaceNarrowed`), the loop stopped with it, the heartbeat stopped,
  *    the new boundary started without the folder.
+ * 5. A message gives H a third turn: its command shows the line naming the
+ *    loop by its command and pid, saying it can be started again.
  *
  *   bun scripts/probe-kit/run.ts boundary-handover
  */
@@ -327,13 +329,18 @@ const run = async (kit: Kit) => {
   });
 };
 
+/** How soon after a narrowing no event says the look replaces a boundary in use: its {@link NARROW_LOOK_MS}, a stop and a start. */
+const LOOK_BOUND_MS = 10_000;
+
 /**
- * 4: the workspace's policy narrows while H's loop runs (its project's
- * folder on the hub is gone, so the policy no longer reads it), and a message
- * gives H a third turn: its boundary is replaced at once, the loop stopped
- * with it, the heartbeat stops, H's command shows the line naming the loop
- * by its command and pid and saying it can be started again, and the new
- * boundary was started without the folder.
+ * 4 and 5: the workspace's policy narrows while H's loop runs, with no word
+ * to H: its project's folder on the hub is renamed aside, which no event
+ * says (a rename by hand; the hub's own moves sync every machine), so the
+ * policy no longer reads it. 4: within {@link LOOK_BOUND_MS} of the rename
+ * its boundary is replaced, the loop stopped with it and the heartbeat
+ * stopped, and the new boundary started without the folder. 5: a message
+ * gives H a third turn, whose command shows the line naming the loop by its
+ * command and pid and saying it can be started again.
  */
 const narrowedStops = async (
   kit: Kit,
@@ -348,40 +355,54 @@ const narrowedStops = async (
   }
 ): Promise<void> => {
   const folder = await realpath(projectFolderOf(fleet, h.project));
-  const policy = JSON.parse(
-    await readFile(
-      join(home, ".cawco", "workspaces", h.id, "policy.json"),
-      "utf8"
-    ).catch(() => "{}")
-  ) as { allowRead?: string[] };
+  const had = await grantedNow(home, h.id);
   kit.check(
-    "4: before the narrowing, H's policy reads its project's folder",
-    policy.allowRead?.includes(folder) === true,
-    `${folder} in allowRead: ${policy.allowRead?.includes(folder) ?? "no policy"}`
+    "4: before the narrowing, H's boundary was started reading its project's folder",
+    had?.allowRead?.includes(folder) === true,
+    `${folder} in its allowRead: ${had?.allowRead ? had.allowRead.includes(folder) : "not on record"}`
   );
   const before = await boundariesOf(fleet, h.id);
+  const renamed = Date.now();
   await rename(folder, `${folder}.aside`);
-  const from = fleet.seen.length;
-  await fleet.send(
-    h.instanceId,
-    "PROBE-BEAT-NARROW-H: the project folder is gone; check the heartbeat."
+  const after = await until(
+    "H's boundary replaced",
+    () => boundariesOf(fleet, h.id),
+    (now) => now.length === 1 && !before.includes(now[0] as string),
+    30_000
+  ).catch(() => boundariesOf(fleet, h.id));
+  const took = Date.now() - renamed;
+  const beatsThen = await beats(h.clone);
+  await Bun.sleep(6000);
+  const beatsLater = await beats(h.clone);
+  const granted = await grantedNow(home, h.id);
+  kit.check(
+    `4: with no word to H, its boundary is replaced within ${LOOK_BOUND_MS / 1000} s of the rename, the new one started without the project's folder`,
+    after.length === 1 &&
+      !before.includes(after[0] as string) &&
+      took <= LOOK_BOUND_MS &&
+      granted?.allowRead !== undefined &&
+      !granted.allowRead.includes(folder),
+    `before: ${before.join(",") || "none"}; after: ${after.join(",") || "none"}, ${took} ms after the rename; the new boundary's policy ${granted?.allowRead ? `reads the folder: ${granted.allowRead.includes(folder)}` : "is not on record"}`
   );
+  kit.check(
+    "4: the loop is stopped with it: the heartbeat no longer grows",
+    beatsLater === beatsThen,
+    `${beatsThen} lines, then ${beatsLater} six seconds on`
+  );
+
+  const from = fleet.seen.length;
+  await fleet.send(h.instanceId, "PROBE-BEAT-NARROW-H: check the heartbeat.");
   const third = await until(
     "H's third turn's check",
     () => fleet.seen.slice(from).find((one) => BEATS.test(one.last)),
     Boolean,
     240_000
   ).catch(() => undefined);
+  await rename(`${folder}.aside`, folder);
   const said = third?.last ?? "";
   const line = said.split("\n").find((one) => NARROWED_LINE.test(one)) ?? "";
-  const beatsThen = await beats(h.clone);
-  await Bun.sleep(6000);
-  const beatsLater = await beats(h.clone);
-  const after = await boundariesOf(fleet, h.id);
-  const granted = await grantedNow(home, h.id);
-  await rename(`${folder}.aside`, folder);
   kit.check(
-    "4: H's third turn shows the line: its access narrowed, the loop stopped by its command and pid, to be started again",
+    "5: H's next turn shows the line: its access narrowed, the loop stopped, named by its command and pid, to be started again",
     line.includes("date +%s >> beat") &&
       line.includes(`(pid ${h.loopPid})`) &&
       line.includes(folder) &&
@@ -389,17 +410,9 @@ const narrowedStops = async (
     line || `no line in: ${said.slice(0, 400)}`
   );
   kit.check(
-    "4: the loop is stopped: not alive in H's third turn, and the heartbeat no longer grows",
-    Boolean(third) && !ALIVE.test(said) && beatsLater === beatsThen,
-    `alive: ${ALIVE.exec(said)?.[1] ?? "no"}; ${beatsThen} lines, then ${beatsLater} six seconds on`
-  );
-  kit.check(
-    "4: H's boundary was replaced at once, the new one started without the project's folder",
-    after.length === 1 &&
-      !before.includes(after[0] as string) &&
-      granted?.allowRead !== undefined &&
-      !granted.allowRead.includes(folder),
-    `before: ${before.join(",") || "none"}; after: ${after.join(",") || "none"}; the new boundary's policy ${granted?.allowRead ? `reads the folder: ${granted.allowRead.includes(folder)}` : "is not on record"}`
+    "5: the loop is not alive in H's next turn",
+    Boolean(third) && !ALIVE.test(said),
+    `turn ran: ${Boolean(third)}; alive: ${ALIVE.exec(said)?.[1] ?? "no"}`
   );
 };
 

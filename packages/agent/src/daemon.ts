@@ -127,7 +127,12 @@ import { announcingParts, clientLine } from "@cawco/core/wire";
 import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
-import { accountReports, claudeAuthNote, claudeSignins } from "./accounts";
+import {
+  accountReports,
+  claudeAuthNote,
+  claudeSignins,
+  onSigninsChanged,
+} from "./accounts";
 import { resolveClaudeExecutable, unlockKeychain } from "./auth";
 import {
   BinaryUpdater,
@@ -135,6 +140,7 @@ import {
   reportBinaryUpdate,
 } from "./binary-update";
 import {
+  accountsChangedHere,
   checkBoundaryHost,
   liveWorkItems,
   rearmHooks,
@@ -2859,6 +2865,9 @@ export const startDaemon = (rediscover = false) =>
           return network ? [network] : [];
         }),
     });
+    // A sign-in moves what a workspace's policy denies: every boundary is
+    // checked for a narrowed access at once (boundary.ts `recheckNarrowed`).
+    onSigninsChanged(accountsChangedHere);
 
     // The usage scanner outlives connections too: its store (usage.db) is the
     // machine's, so a reconnect picks up where the last scan stopped.
