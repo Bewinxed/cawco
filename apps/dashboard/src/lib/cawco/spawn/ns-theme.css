@@ -134,9 +134,12 @@
     transform: none;
   }
 }
+/* A row's entrance holds its start through its delay and hands back to the
+   row's own style once landed: held with `both`, it kept a disabled row (a
+   harness tab not installed, Rail's 0.45) at full opacity. */
 .ns-theme .ns-in {
   @media (prefers-reduced-motion: no-preference) {
-    animation: ns-in var(--ns-row-ms) var(--ease-out) both;
+    animation: ns-in var(--ns-row-ms) var(--ease-out) backwards;
     animation-delay: var(--delay, 0ms);
   }
 }
