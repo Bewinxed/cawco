@@ -9172,7 +9172,7 @@ export const createServer = (
     }
     if (outcome.state === "live" && outcome.later) {
       return {
-        later: true,
+        later: outcome.why,
         running: true,
         why: `${outcome.why}, and Claude Code doesn't bring that back when it resumes a session on another account`,
       };

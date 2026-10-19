@@ -82,7 +82,8 @@ export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
  * A session stopped at its account's limit, as its tray chip and
  * `delegate_list` say it (core `accountsWords.stalled`): the words, and
  * when it carries on (epoch ms): the reset it waits for, or, while its move
- * waits on work in flight, the latest moment that move goes.
+ * waits on work in flight, the first moment the hub acts without that work
+ * ending (`carryStall`).
  */
 export interface Stall {
   until?: number;
@@ -102,10 +103,12 @@ export interface Handed {
  * failing. `later`: what it keeps is only work it holds for later (a
  * background task, a one-time wake-up), which the hub waits for up to
  * `RESTART_WAIT_CAP_MS` and then ends with the move (server.ts
- * `moveRowsToAccount`).
+ * `moveRowsToAccount`); that work, in its machine's words ("waiting for
+ * work in flight to end: 1 command running"), where `why` is the line's
+ * whole reason.
  */
 export interface Kept {
-  later?: true;
+  later?: string;
   running: boolean;
   /**
    * The target account's part failed (its conversation couldn't be put in
@@ -756,8 +759,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     how: {
       held: boolean;
       refused: boolean;
-      /** Only work its process holds for later kept it ({@link Kept.later}): the hub moves it once that ends, or past its bound. */
-      waits: boolean;
+      /** Only work its process holds for later kept it ({@link Kept.later}), that work: the hub moves it once that ends, or past its bound. */
+      waits: string | undefined;
     }
   ): void => {
     const last = db.atLimit.events([row.id]).at(-1)?.move;
@@ -784,16 +787,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (!how.held) {
       return;
     }
-    // Waiting on work in flight: what it waits for and since when, so its
-    // stalled words say what this line says ({@link stall}).
+    // Waiting on work in flight: what that work is and since when, so its
+    // stalled words name it ({@link stall}); the line says why it waits.
     const since = how.waits ? ports.laterSince(row.id) : undefined;
     db.atLimit.putHold({
       instanceId: row.id,
       accountId: current.id,
       until: how.refused ? null : holdUntil(row, current, Date.now()),
-      ...(since === undefined
+      ...(since === undefined || how.waits === undefined
         ? {}
-        : { carry: { to: target.id, why: reason, since } }),
+        : { carry: { to: target.id, why: how.waits, since } }),
     });
     ports.changed();
     plan();
@@ -1041,7 +1044,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     unmoved(row, current, target, kept.why, {
       held: !kept.target,
       refused: cause === "refused",
-      waits: kept.later === true,
+      waits: kept.later,
     });
     return kept.target ? { target, why: kept.why } : undefined;
   };
@@ -1188,26 +1191,39 @@ export const createAtLimit = (ports: AtLimitPorts) => {
 
   /**
    * A hold whose move waits on work in flight, as its stalled words say it:
-   * where it moves, what it waits for, and by when at the latest (the
-   * restart bound from when it began to wait, core `RESTART_WAIT_CAP_MS`),
-   * never the reset the move beats; `until` that latest moment.
+   * where it moves, what it waits for, and the first moment the hub acts
+   * without it, `until`. That is the restart bound from when it began to
+   * wait (core `RESTART_WAIT_CAP_MS`), when the move goes and ends that work
+   * (server.ts `waitForLater`), never the reset the move beats; or the
+   * hold's own `until` when that comes first, when it carries on where it
+   * is ({@link lookAt}).
    */
   const carryStall = (
     from: string,
-    carry: NonNullable<LimitHold["carry"]>
+    carry: NonNullable<LimitHold["carry"]>,
+    resets: number | null
   ): Stall => {
     const to = db.accounts.get(carry.to);
+    const toName = to
+      ? accountNameAmong(to, db.accounts.list())
+      : "another account";
     const by = carry.since + RESTART_WAIT_CAP_MS;
     const work = carry.why.startsWith(WORK_IN_FLIGHT)
       ? carry.why.slice(WORK_IN_FLIGHT.length)
       : carry.why;
+    if (resets !== null && resets <= by) {
+      return {
+        words: accountsWords.stalled.carryingUntilReset(
+          from,
+          toName,
+          work,
+          clockWords(resets)
+        ),
+        until: resets,
+      };
+    }
     return {
-      words: accountsWords.stalled.carrying(
-        from,
-        to ? accountNameAmong(to, db.accounts.list()) : "another account",
-        work,
-        clockWords(by)
-      ),
+      words: accountsWords.stalled.carrying(from, toName, work, clockWords(by)),
       until: by,
     };
   };
@@ -1258,7 +1274,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
           ? accountNameAmong(from, db.accounts.list())
           : "its account";
         if (held.carry) {
-          return carryStall(name, held.carry);
+          return carryStall(name, held.carry, held.until);
         }
         if (held.until === null) {
           return { words: words.signedOut(name) };
