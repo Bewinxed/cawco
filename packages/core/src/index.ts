@@ -1290,6 +1290,8 @@ export interface InstanceRow {
    * chose, and the harness runs its model's default.
    */
   chosenEffort?: import("./harness").EffortLevel | null;
+  /** When the hub first opened its row: when it was started. */
+  createdAt?: string | number | Date | null;
   /** The directory the session was launched in; see `launchDir`. */
   cwd: string;
   /**

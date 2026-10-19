@@ -54345,6 +54345,24 @@
             "$ref": "#/components/schemas/EffortLevel",
             "description": "The effort the operator chose for the session: its spawn's level, or the\nlast `setEffort` sent it. The hub starts every process of the session at\nit, whatever brings it back; a reading never moves it. Null: nobody\nchose, and the harness runs its model's default."
           },
+          "createdAt": {
+            "description": "When the hub first opened its row: when it was started.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              {
+                "type": "number"
+              }
+            ]
+          },
           "cwd": {
             "description": "The directory the session was launched in; see `launchDir`.",
             "type": "string"

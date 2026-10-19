@@ -40,7 +40,7 @@ public final class DelegateTrayState {
 
     /// Chips that have entered the tray, by delegate instance id.
     public private(set) var entered: [String: Entry] = [:]
-    /// Work items whose chip has had its time on screen as done or cancelled, and left.
+    /// Chips (by TrayChild id) that have had their time on screen as done or cancelled, and left.
     public private(set) var left: Set<String> = []
     /// A report the tray asks its parent's transcript to bring into view: block id, by parent.
     public var reveal: [String: String] = [:]
@@ -99,6 +99,11 @@ public final class DelegateTrayState {
         left.insert(itemId)
     }
 
+    /// A started session at work again after its chip had its hold: the chip comes back.
+    public func back(_ itemId: String) {
+        left.remove(itemId)
+    }
+
     /// Whether a delegate's card is on screen right now.
     public func cardVisible(_ instanceId: String) -> Bool {
         cards[instanceId] == true
@@ -109,10 +114,12 @@ public final class DelegateTrayState {
         departures.removeValue(forKey: instanceId)
     }
 
-    /// Whether a delegate may enter the tray now: live work, or a failure not yet dismissed.
+    /// Whether a child (a delegate, or a session started with `start_session`)
+    /// may enter the tray now: live work, or a work item's failure not yet dismissed.
     private func admissible(_ instanceId: String, hub: HubConnection) -> Bool {
-        guard let item = hub.workItems.item(for: instanceId) else { return false }
-        return item.state == .starting || item.state == .running || (item.state == .failed && item.dismissedAt == nil)
+        guard let child = hub.workItems.child(for: instanceId) else { return false }
+        return child.state == .starting || child.state == .running
+            || (child.state == .failed && child.work != nil && child.dismissedAt == nil)
     }
 
     /// A delegate's card says whether it is in view (tray.svelte.ts

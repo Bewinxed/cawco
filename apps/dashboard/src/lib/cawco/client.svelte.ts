@@ -756,6 +756,119 @@ const instances = $derived(
     )
   )
 );
+
+/**
+ * One child a session's tray lists (DelegateTray): a delegate, by its work
+ * item, or a session it started with `start_session`, which runs none. The
+ * chip and its panel read only this; the acts on a failure (retry, replaced
+ * by, dismiss) are a work item's, and only a chip with `work` offers them.
+ */
+export interface TrayChild {
+  /** The work item's landing wait (WorkItemSummary `checkQueue`); null on a started session. */
+  checkQueue: WorkItemSummary["checkQueue"];
+  createdAt: number;
+  dismissedAt: number | null;
+  endedAt: number | null;
+  /** Why it failed, first lines; "" when it has not, or said nothing. */
+  error: string;
+  /** Its chip's key: the work item's id, or the started session's own. */
+  id: string;
+  instanceId: string;
+  /** Its machine's pause, while it holds the work item's session; null on a started session. */
+  machinePaused: string | null;
+  /** What the work item waits for to start; null on a started session. */
+  queued: WorkItemSummary["queued"];
+  state: WorkItemSummary["state"];
+  title: string;
+  /** The delegate's work item; null on a started session. */
+  work: WorkItemSummary | null;
+}
+
+/**
+ * A session another one started with `start_session` (or a continuation
+ * of one): it names its starter and runs no work item, the one thing that
+ * tells it from a delegate (core `InstanceRow.workItemId`). A workflow's
+ * step names its supervisor too, and lists under its run.
+ */
+const isStarted = (row: InstanceRow): boolean =>
+  !!row.parentInstanceId && !row.workItemId && !row.workflowRunId;
+
+/** The sessions each session started that run no work item, by their starter. */
+const startedBy = $derived.by(() => {
+  const by = new Map<string, InstanceRow[]>();
+  for (const row of instances) {
+    if (isStarted(row)) {
+      const parent = row.parentInstanceId as string;
+      by.set(parent, [...(by.get(parent) ?? []), row]);
+    }
+  }
+  return by;
+});
+
+const epochMs = (at: string | number | Date | null | undefined): number =>
+  at === null || at === undefined ? 0 : new Date(at).getTime() || 0;
+
+const itemChild = (item: WorkItemSummary): TrayChild => ({
+  id: item.id,
+  instanceId: item.instanceId,
+  title: item.title,
+  state: item.state,
+  createdAt: item.createdAt,
+  endedAt: item.endedAt,
+  dismissedAt: item.dismissedAt,
+  error: item.firstLines.error,
+  queued: item.queued,
+  checkQueue: item.checkQueue,
+  machinePaused: item.machinePaused,
+  work: item,
+});
+
+/**
+ * A started session as its tray says it: what its turn is doing. It is
+ * persistent, so its "done" is a turn that ended (and a later turn takes
+ * the chip back, DelegateTray `admitWaiting`); stopped is "cancelled", and
+ * a session that errored "failed", with no work item to retry or dismiss.
+ */
+const sessionChild = (row: InstanceRow): TrayChild => {
+  const state = ((): TrayChild["state"] => {
+    switch (row.status) {
+      case "starting":
+        return "starting";
+      case "error":
+        return "failed";
+      case "stopping":
+      case "stopped":
+      case "discarded":
+        return "cancelled";
+      default:
+        return cawco.activityOf(row.id) === "idle" ? "done" : "running";
+    }
+  })();
+  return {
+    id: row.id,
+    instanceId: row.id,
+    title: resolveSessionTitle({
+      title: row.title ?? row.derivedTitle,
+      cwd: row.cwd,
+      id: row.id,
+    }),
+    state,
+    createdAt: epochMs(row.createdAt),
+    // A turn ends at its own time; a stop or a failure when the row last moved.
+    endedAt:
+      state === "starting" || state === "running"
+        ? null
+        : (state === "done" && epochMs(row.turnEndedAt)) ||
+          epochMs(row.updatedAt),
+    dismissedAt: null,
+    error: state === "failed" ? (row.lastError ?? "") : "",
+    queued: null,
+    checkQueue: null,
+    machinePaused: null,
+    work: null,
+  };
+};
+
 /**
  * Every workflow run as a session row (workflow-runs.ts): what the lists
  * nest, fold and archive it by, and what its tab is named and marked from.
@@ -8593,17 +8706,32 @@ export const cawco = {
   delegateEventsOf: (instanceId: string): DelegateEvent[] =>
     state.delegateEvents[instanceId] ?? [],
   /**
-   * The work items a session's tray knows of, oldest first: the ones it
-   * delegated, and as its project's lead the ones it co-parents.
+   * What a session's tray lists, oldest first: the work items it delegated
+   * (and as its project's lead the ones it co-parents), and the sessions it
+   * started that run none ({@link startedBy}).
    */
-  workItemsOf: (instanceId: string): WorkItemSummary[] =>
-    Object.values(state.workItems)
-      .filter(
-        (item) =>
-          item.parentInstanceId === instanceId ||
-          item.leadInstanceId === instanceId
-      )
-      .sort((a, b) => a.createdAt - b.createdAt),
+  trayOf: (instanceId: string): TrayChild[] =>
+    [
+      ...Object.values(state.workItems)
+        .filter(
+          (item) =>
+            item.parentInstanceId === instanceId ||
+            item.leadInstanceId === instanceId
+        )
+        .map(itemChild),
+      ...(startedBy.get(instanceId) ?? []).map(sessionChild),
+    ].sort((a, b) => a.createdAt - b.createdAt),
+  /** A delegate's or a started session's tray entry, by its instance id. */
+  trayChildFor: (instanceId: string): TrayChild | undefined => {
+    const item = Object.values(state.workItems).find(
+      (each) => each.instanceId === instanceId
+    );
+    if (item) {
+      return itemChild(item);
+    }
+    const row = instances.find((each) => each.id === instanceId);
+    return row && isStarted(row) ? sessionChild(row) : undefined;
+  },
   /** A followed session's plan, live: its steps, its spec, an attempt's to-dos. */
   planOf: (instanceId: string): SessionPlan | undefined =>
     state.plans[instanceId]?.plan,

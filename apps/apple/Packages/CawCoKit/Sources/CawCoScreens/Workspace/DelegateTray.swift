@@ -6,14 +6,17 @@ import Observation
 import OSLog
 import UIKit
 
-/// The delegate tray (DelegateTray.svelte): one compact chip per delegate
-/// this session has working, in a row standing on the composer, so the reader
-/// scrolled far from a delegate's card still sees what it is doing. A chip
-/// enters the first time its card leaves the view (DelegateTrayState), shows
-/// what the delegate is doing in words and one mark, opens the house hover
-/// panel with the detail on hover or press, and leaves on its own once the
-/// work is done. Failed work stays until it is dismissed, on every screen at
-/// once.
+/// The delegate tray (DelegateTray.svelte): one compact chip per child this
+/// session has working (its delegates, and the sessions it started with
+/// `start_session`, `WorkItemsStore.tray`), in a row standing on the composer,
+/// so the reader scrolled far from a child's card still sees what it is
+/// doing. A chip enters the first time its card leaves the view
+/// (DelegateTrayState), shows what the child is doing in words and one mark,
+/// opens the house hover panel with the detail on hover or press, and leaves
+/// on its own once the work is done: a delegate's work item, a started
+/// session's turn, whose next turn brings it back. A failed work item stays
+/// until it is dismissed, on every screen at once; a started session runs
+/// none, so its failure leaves as a finish does.
 ///
 /// It keeps the tray's one row (`cTrayRow`) from its first layout, chips or
 /// none, with the chips standing on its foot: a chip arriving late fills room
@@ -38,7 +41,7 @@ final class DelegateTrayView: UIView {
     enum Tone: String { case starting, running, asked, needs, done, cancelled, failed }
 
     struct Chip: Equatable {
-        var item: WorkItem
+        var item: TrayChild
         var tone: Tone
         var entry: DelegateTrayState.Entry
         /// The pending question: the delegate's own (needs you), or the one it put to this session.
@@ -225,9 +228,9 @@ final class DelegateTrayView: UIView {
         take()
     }
 
-    private var items: [WorkItem] { parentId.map { hub.workItems.of(parent: $0) } ?? [] }
+    private var items: [TrayChild] { parentId.map { hub.workItems.tray(of: $0) } ?? [] }
 
-    private func chip(_ item: WorkItem) -> Chip {
+    private func chip(_ item: TrayChild) -> Chip {
         let pending = hub.needs.parked[item.instanceId] ?? []
         let own = pending.filter { $0.routedTo == nil }
         let routed = pending.filter { $0.routedTo == "parent" }
@@ -258,9 +261,9 @@ final class DelegateTrayView: UIView {
         setNeedsLayout()
     }
 
-    private func candidate(_ item: WorkItem, _ now: Double) -> Bool {
+    private func candidate(_ item: TrayChild, _ now: Double) -> Bool {
         guard item.dismissedAt == nil else { return false }
-        if item.state == .starting || item.state == .running || item.state == .failed { return true }
+        if item.state == .starting || item.state == .running || (item.state == .failed && item.work != nil) { return true }
         return item.endedAt.map { now - $0 < Self.hold * 1000 } ?? false
     }
 
@@ -277,6 +280,12 @@ final class DelegateTrayView: UIView {
     private func admitWaiting(_ now: Double) {
         for item in items {
             known[item.id] = known[item.id] ?? now
+            // A started session at work again after its chip had its hold:
+            // the chip comes back, its hold counted afresh when this turn ends.
+            if item.work == nil, state.left.contains(item.id), item.state == .starting || item.state == .running {
+                state.back(item.id)
+                shownFor[item.id] = nil
+            }
             let waiting = state.entered[item.instanceId] == nil && !state.left.contains(item.id) && candidate(item, now)
                 && now - (known[item.id] ?? now) >= Self.settle * 1000
             if waiting, !state.cardVisible(item.instanceId) {
@@ -291,7 +300,8 @@ final class DelegateTrayView: UIView {
     /// view; otherwise it stays out its hold and goes.
     private func holdFinished(_ now: Double) {
         let paused = UIApplication.shared.applicationState != .active || hovering || openKey != nil || fanOpen
-        for chip in chips where chip.tone == .done || chip.tone == .cancelled {
+        // A started session's failure owes no dismissal: it holds as a finish does.
+        for chip in chips where chip.tone == .done || chip.tone == .cancelled || (chip.tone == .failed && chip.item.work == nil) {
             let item = chip.item
             // At load, one that finished moments ago shows for what is left.
             let start = chip.entry == .none ? item.endedAt.map { max(0, now - $0) } ?? 0 : 0
@@ -310,13 +320,13 @@ final class DelegateTrayView: UIView {
     // MARK: The flight home
 
     /// The delegate's newest report in this session's transcript.
-    private func report(of item: WorkItem) -> String? {
+    private func report(of item: TrayChild) -> String? {
         guard let parentId, let transcript = hub.sessions.transcripts[parentId] else { return nil }
         return DelegateTrayState.report(of: item.instanceId, in: transcript.blocks)
     }
 
     /// The report's row, when it is drawn inside its transcript's view, above the composer.
-    private func reportInView(_ item: WorkItem) -> UIView? {
+    private func reportInView(_ item: TrayChild) -> UIView? {
         guard let parentId, let id = report(of: item), let target = state.reportRow[parentId]?(id),
               let window, target.window === window else { return nil }
         let box = target.convert(target.bounds, to: window)
@@ -327,7 +337,7 @@ final class DelegateTrayView: UIView {
     /// The chip lifts off and lands on its report's label line: a copy flies
     /// (translate and scale on one clock) while the chip's slot closes, then
     /// fades as the row, held clear while it flew, fades in.
-    private func fly(_ item: WorkItem, to target: UIView) {
+    private func fly(_ item: TrayChild, to target: UIView) {
         guard let chip = chipViews[item.id], let window, !UIAccessibility.isReduceMotionEnabled,
               let copy = chip.snapshotView(afterScreenUpdates: false) else {
             state.leave(item.id)
@@ -961,7 +971,7 @@ final class DelegateTrayView: UIView {
         switch chip.tone {
         case .needs: TailNote(key: "needs:\(chip.question)", kind: .ask, text: chip.question)
         case .asked: TailNote(key: "asked:\(chip.question)", kind: .asked, text: chip.question)
-        case .failed: TailNote(key: "fail", kind: .fail, text: chip.item.firstLines.error.isEmpty ? "It failed without saying why." : chip.item.firstLines.error)
+        case .failed: TailNote(key: "fail", kind: .fail, text: chip.item.error.isEmpty ? "It failed without saying why." : chip.item.error)
         default: nil
         }
     }

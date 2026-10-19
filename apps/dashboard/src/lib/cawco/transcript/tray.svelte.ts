@@ -27,20 +27,26 @@ export const flightKey = (instanceId: string) => `tray:${instanceId}`;
 /** Chips that have entered the tray, by delegate instance id. */
 export const entered = new SvelteMap<string, Entry>();
 
-/** Work items whose chip has had its time on screen as done or cancelled, and left. */
+/** Chips (by TrayChild id) that have had their time on screen as done or cancelled, and left. */
 export const left = new SvelteSet<string>();
 
 /** Each registered card's visibility, by delegate instance id. */
 const cards = new SvelteMap<string, "visible" | "hidden">();
 
-/** Whether a delegate may enter the tray now: live work, or a failure not yet dismissed. */
+/**
+ * Whether a child (a delegate, or a session started with `start_session`)
+ * may enter the tray now: live work, or a work item's failure not yet
+ * dismissed.
+ */
 function admissible(instanceId: string): boolean {
-  const item = cawco.workItemFor(instanceId);
+  const child = cawco.trayChildFor(instanceId);
   return (
-    !!item &&
-    (item.state === "starting" ||
-      item.state === "running" ||
-      (item.state === "failed" && item.dismissedAt === null))
+    !!child &&
+    (child.state === "starting" ||
+      child.state === "running" ||
+      (child.state === "failed" &&
+        child.work !== null &&
+        child.dismissedAt === null))
   );
 }
 

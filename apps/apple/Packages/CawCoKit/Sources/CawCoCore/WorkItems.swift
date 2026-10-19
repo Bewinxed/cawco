@@ -6,6 +6,85 @@ import OpenAPIRuntime
 /// One delegate's work item as its parent's delegate tray reads it.
 public typealias WorkItem = Components.Schemas.WorkItemSummary
 
+/// One child a session's tray lists (client.svelte.ts `TrayChild`): a
+/// delegate, by its work item, or a session it started with `start_session`,
+/// which runs none. The chip and its panel read only this.
+public struct TrayChild: Equatable, Sendable {
+    public enum State: Sendable { case starting, running, done, failed, cancelled }
+
+    /// Its chip's key: the work item's id, or the started session's own.
+    public let id: String
+    public let instanceId: String
+    public let title: String
+    public let state: State
+    /// ms epoch.
+    public let createdAt: Double
+    public let endedAt: Double?
+    public let dismissedAt: Double?
+    /// Why it failed, first lines; "" when it has not, or said nothing.
+    public let error: String
+    /// The delegate's work item; nil on a started session.
+    public let work: WorkItem?
+
+    /// A session another one started with `start_session` (or a continuation
+    /// of one): it names its starter and runs no work item, the one thing
+    /// that tells it from a delegate. A workflow's step names its supervisor
+    /// too, and lists under its run.
+    static func isStarted(_ row: InstanceRow) -> Bool {
+        row.parentInstanceId != nil && row.workItemId == nil && row.workflowRunId == nil
+    }
+
+    init(item: WorkItem) {
+        id = item.id
+        instanceId = item.instanceId
+        title = item.title
+        state = switch item.state {
+        case .starting: .starting
+        case .done: .done
+        case .failed: .failed
+        case .cancelled: .cancelled
+        default: .running
+        }
+        createdAt = item.createdAt
+        endedAt = item.endedAt
+        dismissedAt = item.dismissedAt
+        error = item.firstLines.error
+        work = item
+    }
+
+    /// A started session as its tray says it: what its turn is doing. It is
+    /// persistent, so its "done" is a turn that ended (a later turn takes the
+    /// chip back); stopped is "cancelled", and one that errored "failed",
+    /// with no work item to dismiss.
+    @MainActor
+    init(session row: InstanceRow, hub: HubConnection) {
+        let working = hub.needs.blocked(row.id) || row.status == .moving
+            || hub.fleet.activityPulse(row.id).map { $0.activity == .working || $0.activity == .blocked } ?? false
+        let state: State = switch row.status {
+        case .starting: .starting
+        case .error: .failed
+        case .stopping, .stopped, .discarded: .cancelled
+        default: working ? .running : .done
+        }
+        id = row.id
+        instanceId = row.id
+        title = hub.fleet.title(row)
+        self.state = state
+        createdAt = row.createdMs
+        // A turn ends at its own time; a stop or a failure when the row last moved.
+        let ended = state == .done && row.turnEndedMs > 0 ? row.turnEndedMs : row.updatedMs
+        endedAt = state == .starting || state == .running ? nil : ended
+        dismissedAt = nil
+        error = state == .failed ? row.lastError ?? "" : ""
+        work = nil
+    }
+
+    public static func == (a: TrayChild, b: TrayChild) -> Bool {
+        a.id == b.id && a.title == b.title && a.state == b.state && a.endedAt == b.endedAt
+            && a.dismissedAt == b.dismissedAt && a.error == b.error && a.work == b.work
+    }
+}
+
 extension ParkedAsk {
     /// A string field of the tool input, as it came.
     private func text(_ key: String) -> String? {
@@ -50,14 +129,20 @@ public final class WorkItemsStore {
 
     init(hub: HubConnection) { self.hub = hub }
 
-    /// The work items a session delegated that its tray knows of, oldest first.
-    public func of(parent instanceId: String) -> [WorkItem] {
-        items.values.filter { $0.parentInstanceId == instanceId }.sorted { $0.createdAt < $1.createdAt }
+    /// What a session's tray lists, oldest first (client.svelte.ts `trayOf`):
+    /// the work items it delegated that its tray knows of, and the sessions
+    /// it started that run none (`TrayChild.isStarted`).
+    public func tray(of instanceId: String) -> [TrayChild] {
+        let delegated = items.values.filter { $0.parentInstanceId == instanceId }.map(TrayChild.init(item:))
+        let started = hub.fleet.rows.filter { $0.parentInstanceId == instanceId && TrayChild.isStarted($0) }
+            .map { TrayChild(session: $0, hub: hub) }
+        return (delegated + started).sorted { $0.createdAt < $1.createdAt }
     }
 
-    /// The work item a delegate session runs, when its parent's tray was told of it.
-    public func item(for instanceId: String) -> WorkItem? {
-        items.values.first { $0.instanceId == instanceId }
+    /// A delegate's or a started session's tray entry, by its instance id.
+    public func child(for instanceId: String) -> TrayChild? {
+        if let item = items.values.first(where: { $0.instanceId == instanceId }) { return TrayChild(item: item) }
+        return hub.fleet.rows.first { $0.id == instanceId && TrayChild.isStarted($0) }.map { TrayChild(session: $0, hub: hub) }
     }
 
     /// The work items a view's delegate tray opens with. A failed read is asked again.
