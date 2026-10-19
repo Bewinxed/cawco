@@ -8,9 +8,10 @@
  *     directly, as the person's commit, waking no model.
  * (b) A note from a routine run is tainted: Caw woken by a lead routine, and
  *     a delegate routine's run. The curator never proposes either.
- * (c) Proposals are the person's asks with their diff: Caw's (Approve
- *     commits AGENTS.md as the person, Deny archives the cited note), then
- *     the curator run's, citing the notes it read.
+ * (c) Proposals are the person's asks with their diff: Caw's, made with
+ *     `ask` in a thread after the Setup one (Approve commits AGENTS.md as
+ *     the person, Deny archives the cited note), then the curator run's,
+ *     citing the notes it read.
  * (a) A delegate's memory_note lands in memory/inbox as a commit by it.
  * (e) An attempt's brief carries the knowledge file its task names.
  * Besides: a note written in a turn that reached an outside URL is tainted
@@ -231,8 +232,16 @@ const finished = (request: Seen): boolean =>
 /** The text between two markers of a message, trimmed. */
 const between = (all: string, from: string, to: string): string =>
   all.split(from)[1]?.split(to)[0]?.trim() ?? "";
+/**
+ * Whether the session already called memory_propose on `path`: its own call
+ * in the conversation (the request's whole body), answered or refused. A
+ * refusal ends the attempt; the leg then fails with the hub's words instead
+ * of the mock asking again.
+ */
+const proposedOn = (request: Seen, path: string): boolean =>
+  request.body.includes(`"path":"${path}"`);
 
-/** Caw: a note and a delegate when a routine wakes him; two proposals when the person asks. */
+/** Caw: a note and a delegate when a routine wakes him; two proposals, each asking the person (`ask`), when the person asks. */
 const caw = (request: Seen): Reply => {
   const { all } = request;
   if (all.includes("PROBE-MEMORY-LEAD") && !noted(all)) {
@@ -247,7 +256,7 @@ const caw = (request: Seen): Reply => {
     });
   }
   const asked = CAW_ASK.exec(all);
-  if (asked && !all.includes('"path":"AGENTS.md"')) {
+  if (asked && !proposedOn(request, "AGENTS.md")) {
     const agents = between(all, "---AGENTS---", "---END---");
     return call(request, PROPOSE, {
       files: [
@@ -257,9 +266,10 @@ const caw = (request: Seen): Reply => {
         },
       ],
       why: "What the project is",
+      ask: true,
     });
   }
-  if (asked && !all.includes('"path":"knowledge/caw.md"')) {
+  if (asked && !proposedOn(request, "knowledge/caw.md")) {
     return call(request, PROPOSE, {
       files: [
         {
@@ -269,6 +279,7 @@ const caw = (request: Seen): Reply => {
       ],
       notes: [asked[1]],
       why: "The commit convention",
+      ask: true,
     });
   }
   return text("ok");
@@ -286,7 +297,7 @@ const curator = (request: Seen): Reply => {
       ids.set("second", id);
     }
   }
-  if (!all.includes('"path":"AGENTS.md"')) {
+  if (!proposedOn(request, "AGENTS.md")) {
     const agents = between(
       all,
       "## AGENTS.md as it stands",
@@ -303,7 +314,7 @@ const curator = (request: Seen): Reply => {
       why: "How deploys go out",
     });
   }
-  if (!all.includes('"path":"knowledge/time.md"')) {
+  if (!proposedOn(request, "knowledge/time.md")) {
     const second = ids.get("second") ?? "missing";
     return call(request, PROPOSE, {
       files: [
@@ -927,6 +938,23 @@ try {
 
   // ── (c) Caw's proposals: Approve commits as the person, Deny archives ──
   await section("c: Caw's proposals", async () => {
+    // The project was made from a folder, so nothing opened its Setup
+    // thread; (d)'s notes live in the notes thread, which is no conversation:
+    // the person's first words to Caw open Setup, and the next a thread of
+    // their own.
+    const setup = await http("POST", `/api/projects/${projectId}/threads`, {
+      body: "PROBE-MEMORY-SETUP: set the project up.",
+    });
+    const opened = JSON.parse(setup.text) as {
+      thread?: { notes: boolean; setup: boolean; title: string };
+    };
+    check(
+      "c: after notes alone, the person's first words to Caw open the project's Setup thread",
+      setup.status === 200 &&
+        opened.thread?.setup === true &&
+        opened.thread.notes === false,
+      `${setup.status} ${JSON.stringify(opened.thread ?? setup.text)}`
+    );
     const agentsNow = await wordsOf(projectId, "AGENTS.md");
     await http("POST", `/api/projects/${projectId}/threads`, {
       body: `PROBE-MEMORY-CAW-PROPOSE ${idOf(workerNote)}\n---AGENTS---\n${agentsNow}\n---END---`,
