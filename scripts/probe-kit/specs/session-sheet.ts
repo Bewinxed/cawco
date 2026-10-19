@@ -98,6 +98,9 @@
  *     the press and stays open.
  * 21. The panel, its head included, at the desk and at 390 in light and
  *     dark, captured to `$TMPDIR/caps/` for a reviewer; the spec reads none.
+ * 22. Once the panel has opened (its page resized a frame at a time), the
+ *     first frame stands in the middle of the canvas, at the desk and at 390:
+ *     each centring measured where the world stands, never mid-move.
  *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
@@ -774,6 +777,53 @@ async function panelLegs(
   );
 }
 
+/** Leg 22: the first frame stands in the middle of the canvas once the panel has opened, at the desk and at 390. */
+async function centredLegs(
+  kit: Kit,
+  base: string,
+  session: string
+): Promise<void> {
+  for (const view of ["desk", "phone"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    const page = await panelPage(kit, base, session, view, "light");
+    await drawn(page);
+    const frame = await (
+      await page.locator(FRAME).first().elementHandle()
+    )?.contentFrame();
+    const said = frame
+      ? await frame.evaluate(async () => {
+          const world = document.querySelector(".cawco-world") as HTMLElement;
+          // The panel's opening resizes the page a frame at a time: read once it and its moves have settled.
+          let width = 0;
+          while (width !== innerWidth) {
+            width = innerWidth;
+            // biome-ignore lint/performance/noAwaitInLoops: one width after the last, until it holds
+            await new Promise((done) => setTimeout(done, 300));
+          }
+          await Promise.all(world.getAnimations().map((one) => one.finished));
+          const canvas = document
+            .querySelector(".cawco-canvas")
+            ?.getBoundingClientRect();
+          const first = document
+            .querySelector(".cawco-frame")
+            ?.getBoundingClientRect();
+          return canvas && first
+            ? {
+                canvas: canvas.x + canvas.width / 2,
+                frame: first.x + first.width / 2,
+                width: canvas.width,
+              }
+            : null;
+        })
+      : null;
+    kit.check(
+      `22: at ${view === "desk" ? "the desk" : "390"} the first frame stands in the middle of the canvas once the panel has opened`,
+      !!said && Math.abs(said.frame - said.canvas) <= 0.5,
+      JSON.stringify(said)
+    );
+  }
+}
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   await writeProject(fleet.repo);
@@ -986,6 +1036,7 @@ const run = async (kit: Kit) => {
   await scopedAndStyled(kitCreated.match(ID)?.[1]);
   await builtStories(kit, call, fleet.repo);
   await panelLegs(kit, call, await fleet.dashboard(), session);
+  await centredLegs(kit, await fleet.dashboard(), session);
 
   /** Legs 13 to 15, in the SvelteKit checkout of legs 6 to 8 (its session `kitSession`), on the sheet leg 7 made (`kitId`). */
   async function scopedAndStyled(kitId: string | undefined): Promise<void> {
