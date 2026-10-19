@@ -29,7 +29,8 @@
  *    Variable"')` and JetBrains Mono's.
  *
  * The panel (the bench) at 390, 523 and 720, light and dark:
- * 8. (330 too, where the mode stands as one button before it would go.)
+ * 8. (330 too, where the mode stands as one button; and 8h, at 330 with
+ *    Send picks standing, Comments in More at 0 and 2 open pins.)
  *    The name is whole or ellipsed, never under another control; every
  *    head control is 44px tall or reaches 44px through its ::after under a
  *    finger; the controls past the head's room stand in More, in head
@@ -48,6 +49,8 @@ import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const DASHBOARD = join(ROOT, "apps/dashboard");
+/** The artifact's live doc on the dashboard's own origin (artifact-doc.ts `joinArtifact`). */
+const ARTIFACT_SOCKET = /\/ws\/artifact\//;
 /** More's name while it holds Comments: native's words (PreviewController.swift). */
 const MORE_COUNT = /^More, Comments \d+ open$/;
 const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
@@ -713,9 +716,10 @@ async function headLeg(
       commentsInMore
         ? MORE_COUNT.test(read.moreLabel)
         : read.moreLabel === "More",
-      read.moreLabel
+      `${read.moreLabel}; More ${read.more.join(" | ")}`
     );
   }
+
   if (width < 390) {
     await page.close();
     return standing;
@@ -728,6 +732,176 @@ async function headLeg(
   kit.note(`capture: ${join(CAPS, `canvas-${name}-${theme}.png`)}`);
   await page.close();
   return standing;
+}
+
+/** A pin as the overlay writes one: open, on the page's body. */
+const pinOf = (number: number, at: string) => ({
+  id: `00000000-0000-4000-8000-00000000000${number}`,
+  number,
+  kind: "comment",
+  by: "person",
+  at,
+  anchor: { selector: "body", source: null, text: "" },
+  elements: [],
+  thread: [
+    {
+      id: `00000000-0000-4000-8000-00000000010${number}`,
+      by: "person",
+      text: `Pin ${number}`,
+      at,
+    },
+  ],
+});
+
+/**
+ * The artifact's live doc as the hub's `/ws/artifact/<session>/<artifact>`
+ * serves it (y-websocket's sync protocol), answered in the page's own
+ * network: a pick the session has not heard, and the pins `pins()` holds
+ * as it changes.
+ */
+async function serveDoc(page: Page) {
+  const yws = Bun.resolveSync("y-websocket", DASHBOARD);
+  // The dashboard's own yjs (the probe kit depends on none): the part of it this serves with.
+  const Y = (await import(Bun.resolveSync("yjs", DASHBOARD))) as {
+    Doc: new () => {
+      getMap: (name: string) => { set: (key: string, value: unknown) => void };
+      on: (event: "update", run: (update: Uint8Array) => void) => void;
+      transact: (run: () => void) => void;
+    };
+  };
+  const sync = await import(Bun.resolveSync("y-protocols/sync", yws));
+  const encoding = await import(Bun.resolveSync("lib0/encoding", yws));
+  const decoding = await import(Bun.resolveSync("lib0/decoding", yws));
+  const doc = new Y.Doc();
+  const at = new Date().toISOString();
+  doc.getMap("state").set("pick", {
+    at,
+    note: null,
+    options: ["one"],
+    pageHash: "bench",
+    value: null,
+  });
+  const sockets: { send: (data: Buffer) => void }[] = [];
+  const say = (write: (encoder: unknown) => void) => {
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, 0);
+    write(encoder);
+    return Buffer.from(encoding.toUint8Array(encoder));
+  };
+  doc.on("update", (update: Uint8Array) => {
+    for (const ws of sockets) {
+      ws.send(say((encoder) => sync.writeUpdate(encoder, update)));
+    }
+  });
+  await page.routeWebSocket(ARTIFACT_SOCKET, (ws) => {
+    sockets.push(ws);
+    ws.send(say((encoder) => sync.writeSyncStep1(encoder, doc)));
+    ws.onMessage((message) => {
+      if (typeof message === "string") {
+        return;
+      }
+      const decoder = decoding.createDecoder(new Uint8Array(message));
+      if (decoding.readVarUint(decoder) !== 0) {
+        return;
+      }
+      const encoder = encoding.createEncoder();
+      encoding.writeVarUint(encoder, 0);
+      sync.readSyncMessage(decoder, encoder, doc, null);
+      if (encoding.length(encoder) > 1) {
+        ws.send(Buffer.from(encoding.toUint8Array(encoder)));
+      }
+    });
+  });
+  return {
+    pins: (count: number) =>
+      doc.transact(() => {
+        for (let number = 1; number <= count; number += 1) {
+          doc.getMap("pins").set(pinOf(number, at).id, pinOf(number, at));
+        }
+      }),
+  };
+}
+
+/** More, read while it holds Comments: its count, its name, the Comments entry, and the panel that entry opens. */
+async function readMore(page: Page) {
+  const head = "[data-bench-pane] [data-slot=side-head]";
+  const trigger = page.locator(`${head} [data-slot=more]`);
+  const said = {
+    standing: await page.evaluate(
+      (sel) =>
+        [...(document.querySelector(sel) as HTMLElement).children]
+          .filter((one) => !(one as HTMLElement).hidden)
+          .map((one) => {
+            const el = one as HTMLElement;
+            const box = one.getBoundingClientRect();
+            return `${el.dataset.headItem ?? el.dataset.slot ?? el.className.split(" ")[0]}${el.dataset.form === "compact" ? "(one button)" : ""} x${Math.round(box.x)} w${Math.round(box.width)}`;
+          })
+          .join(", "),
+      head
+    ),
+    count: (await trigger.locator(".more-count").textContent()) ?? "none",
+    label: (await trigger.getAttribute("aria-label")) ?? "",
+    entry: "",
+    opened: false,
+  };
+  await trigger.click();
+  const entry = page
+    .locator("[data-slot=dropdown-menu-content] [role=menuitem]")
+    .filter({ hasText: "Comments" });
+  said.entry = `${(await entry.textContent())?.trim()} (menu-count ${await entry.locator(".menu-count").textContent()})`;
+  await entry.click();
+  said.opened = await page
+    .locator("[data-pin-list-pop]")
+    .waitFor({ state: "visible", timeout: 5000 })
+    .then(() => true)
+    .catch(() => false);
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  return said;
+}
+
+/** 8h: Comments in More, at 330 with Send picks standing, at 0 open pins and at 2, under a finger. */
+async function moreHoldsComments(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  theme: "light" | "dark"
+): Promise<void> {
+  const page = await kit.page("phone", { theme, scale: 2 });
+  await page.setViewportSize({ width: 370, height: 844 });
+  await page.route(`${stage.base}/__cawco/ping`, (route) =>
+    route.fulfill({
+      status: 204,
+      headers: { "access-control-allow-origin": "*" },
+    })
+  );
+  const doc = await serveDoc(page);
+  await page.goto(
+    `${bench}/motion/artifact-head?w=330&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+  );
+  await page.waitForSelector("[data-bench-pane] [data-slot=send]", {
+    timeout: 60_000,
+  });
+  await page.waitForTimeout(2500);
+  for (const open of [0, 2]) {
+    if (open > 0) {
+      doc.pins(open);
+      // biome-ignore lint/performance/noAwaitInLoops: the pins land, then the head is read
+      await page.waitForTimeout(1200);
+    }
+    const said = await readMore(page);
+    kit.check(
+      `8h: 330 ${theme}, Send picks standing, ${open} open: Comments goes to More, which says "${open}" and "More, Comments ${open} open", its entry says ${open}, and choosing it opens the Comments panel`,
+      said.standing.includes("send") &&
+        !said.standing.includes("comments") &&
+        said.count === String(open) &&
+        said.label === `More, Comments ${open} open` &&
+        said.entry.endsWith(`(menu-count ${open})`) &&
+        said.opened,
+      JSON.stringify(said)
+    );
+  }
+  await page.close();
 }
 
 const spec: Spec = {
@@ -767,6 +941,7 @@ const spec: Spec = {
             )
             .join("; ")
         );
+        await moreHoldsComments(kit, bench, stage, theme);
       }
     } finally {
       stage.stop();
