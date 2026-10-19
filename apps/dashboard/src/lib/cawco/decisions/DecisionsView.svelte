@@ -29,7 +29,6 @@
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import type { ProjectStarter, StageKind } from "#lib/cawco/project-tasks.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
-  import { readJson, writeJson } from "#lib/cawco/storage.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -107,27 +106,17 @@
   const empty = $derived(list !== null && pages.length === 0);
 
   /**
-   * Whether the decisions formed a graph when last read here: while the list
-   * is read again its tiles stand under the List | Graph segment's room, as
-   * they will (The Claim Of Nothing Rule: the box it last drew in, else the
-   * box it draws in). Kept in localStorage through storage.ts.
+   * The List | Graph segment's room above the list, while the decisions
+   * form a graph: the list's word once read, the project's row before
+   * (`decisionsGraphed`), so the tiles' skeleton stands where the tiles
+   * will (The Claim Of Nothing Rule).
    */
-  const GRAPHED = "cawco-decisions-graphed";
-  const wasGraphed = $derived(
-    readJson<Record<string, boolean>>(GRAPHED, {})[projectId] === true
-  );
-  $effect(() => {
-    if (!list) {
-      return;
-    }
-    const kept = readJson<Record<string, boolean>>(GRAPHED, {});
-    if ((kept[projectId] === true) !== graphed) {
-      writeJson(GRAPHED, { ...kept, [projectId]: graphed });
-    }
-  });
-  /** The segment's room above the list: the decisions form a graph, or did when last read. */
   const underSeg = $derived(
-    !page && (graphed || (list === null && wasGraphed))
+    !page &&
+      (list
+        ? list.graph
+        : (cawco.projects.find((one) => one.id === projectId)
+            ?.decisionsGraphed ?? false))
   );
 
   // --- the swap ------------------------------------------------------------------------
@@ -396,8 +385,8 @@
   .decisions:is([data-mode="graph"], [data-mode="page"]) .dview {
     flex: 1 1 auto;
   }
-  /* The segment stands over the list's top-right: the grid keeps its place
-     whether or not the decisions form a graph. */
+  /* The segment stands at the list's top-right; while the decisions form a
+     graph the list stands under its room (`under-seg`), skeleton or tiles. */
   .seg-row {
     position: absolute;
     inset-block-start: 0;

@@ -29453,6 +29453,9 @@
             "cap": {
               "$ref": "#/components/schemas/ProjectCap"
             },
+            "decisionsGraphed": {
+              "type": "boolean"
+            },
             "places": {
               "type": "array",
               "items": {
@@ -29617,6 +29620,7 @@
             "cawHarness",
             "cawModel",
             "createdAt",
+            "decisionsGraphed",
             "dispatch",
             "id",
             "lands",

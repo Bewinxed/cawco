@@ -558,7 +558,23 @@ const keptIn = async (
   (await folderText(projectId, programPath(name))) ??
   (await folderText(projectId, builtPath(name)));
 
+/**
+ * A page's decisions form a graph: one names another in `after`, or stands
+ * in a Section. The one rule for the list's `graph` and the project row's
+ * `decisionsGraphed`.
+ */
+const formsGraph = (
+  cards: readonly { after: string[]; section: string | null }[]
+) => cards.some((card) => card.after.length > 0 || card.section !== null);
+
 export const createDecisions = (deps: DecisionsDeps) => {
+  /**
+   * Whether each project's decisions formed a graph when last listed: what
+   * its row says before the Decisions tab reads them (`decisionsGraphed`),
+   * so the tab's skeleton stands where its list will.
+   */
+  const graphedBy = new Map<string, boolean>();
+
   const known = (projectId: string) => {
     if (!deps.projectExists(projectId)) {
       throw new DecisionRefusal(404, `The hub keeps no project ${projectId}.`);
@@ -827,9 +843,7 @@ export const createDecisions = (deps: DecisionsDeps) => {
           if (!decisionPage(read, page)) {
             continue;
           }
-          graph ||= page.cards.some(
-            (card) => card.after.length > 0 || card.section !== null
-          );
+          graph ||= formsGraph(page.cards);
           const { record: _record, sentAt: _sentAt, ...summary } = read;
           pages.push(summary);
         } catch (error) {
@@ -839,7 +853,43 @@ export const createDecisions = (deps: DecisionsDeps) => {
         }
       }
       pages.sort((a, b) => b.updatedAt - a.updatedAt);
+      graphedBy.set(projectId, graph);
       return { pages, graph, problems };
+    },
+
+    /**
+     * Whether the project's decisions form a graph, as its last list said;
+     * else read now from its pages' cards alone (no tasks, no records), by
+     * the list's own rule. A page that does not read counts for nothing, as
+     * in the list.
+     */
+    async graphed(projectId: string): Promise<boolean> {
+      const kept = graphedBy.get(projectId);
+      if (kept !== undefined) {
+        return kept;
+      }
+      if (!deps.projectExists(projectId)) {
+        return false;
+      }
+      let graph = false;
+      for (const { name, artifact } of await pageNames(projectId)) {
+        try {
+          // biome-ignore lint/performance/noAwaitInLoops: one page's program at a time, and the first graph ends it
+          graph = formsGraph((await pageOf(projectId, name, artifact)).cards);
+        } catch {
+          continue;
+        }
+        if (graph) {
+          break;
+        }
+      }
+      graphedBy.set(projectId, graph);
+      return graph;
+    },
+
+    /** Its decisions changed: the next row reads them again. */
+    forget(projectId: string): void {
+      graphedBy.delete(projectId);
     },
 
     /** One page: its summary, its record (each card's tasks as filed now) and its last send. */

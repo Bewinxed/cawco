@@ -286,6 +286,13 @@ export interface ProjectRow {
   /** Made with Caw: its Caw is on. */
   caw: boolean;
   createdAt: string;
+  /**
+   * Its decisions form a graph (hub decisions.ts `graphed`): the Decisions
+   * tab's list stands under the List | Graph segment's room, its skeleton
+   * too, before the tab reads them. A list read answers it anew
+   * (ProjectDecisions).
+   */
+  decisionsGraphed: boolean;
   id: string;
   /** Where its attempts land when their task says nothing. */
   lands: LandsMode;

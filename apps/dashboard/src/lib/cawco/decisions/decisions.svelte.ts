@@ -6,6 +6,7 @@
  * comes back. Only the newest read's answer is kept.
  */
 import type { DecisionsList } from "@cawco/core/decisions";
+import { cawco } from "#lib/cawco/client.svelte.js";
 import { failureWords } from "#lib/cawco/hub-read.js";
 import { listDecisions } from "./decisions-api";
 
@@ -43,6 +44,11 @@ export class ProjectDecisions {
       if (ticket === this.#reads && projectId === this.#project()) {
         this.list = list;
         this.problem = null;
+        // The hub's newest word on its graph: the project's row says it on.
+        const row = cawco.projects.find((one) => one.id === projectId);
+        if (row && row.decisionsGraphed !== list.graph) {
+          row.decisionsGraphed = list.graph;
+        }
       }
     } catch (error) {
       if (ticket === this.#reads && projectId === this.#project()) {

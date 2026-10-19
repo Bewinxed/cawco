@@ -11284,6 +11284,8 @@ export const createServer = (
       projectId,
       lifetime.after(DECISIONS_TOLD_MS, () => {
         decisionsTelling.delete(projectId);
+        // Its row's `decisionsGraphed` is listed again on its next read.
+        decisions.forget(projectId);
         registry.broadcast({
           verb: "frames",
           machineId: "hub",
@@ -26456,11 +26458,17 @@ export const createServer = (
       // Each row spread into a fresh object, not the named `ProjectRow`: the
       // native app's client types a project by this route's own schema
       // (`GetApiProjects200Payload`), which a named row would rename.
+      // `decisionsGraphed`: its decisions form a graph (decisions.ts
+      // `graphed`), so the Decisions tab's skeleton stands under the List |
+      // Graph segment's room before the tab reads them.
       .get("/api/projects", () =>
-        db.listProjects().map((project) => ({
-          ...projectOut(project),
-          cap: caps.capOf(project),
-        }))
+        Promise.all(
+          db.listProjects().map(async (project) => ({
+            ...projectOut(project),
+            cap: caps.capOf(project),
+            decisionsGraphed: await decisions.graphed(project.id),
+          }))
+        )
       )
       // One repository is one project: a folder whose remote a project
       // already has joins it as a checkout place (`placeAdded`), and the

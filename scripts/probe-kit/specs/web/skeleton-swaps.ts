@@ -19,10 +19,13 @@
  *  1. Routines (ViewRoutines): the page's blocks stand as they will, the
  *     Routines block's body three skeleton rows at the ledger's pitch,
  *     against the three routines read.
- *  2. Decisions, the list (DecisionsView), read before in this browser:
- *     tiles at a tile's size in the grid's columns, under the List | Graph
- *     segment's room since the pages formed a graph when last read
- *     (`wasGraphed`), against the three pages.
+ *  2. Decisions, the list (DecisionsView): tiles at a tile's size in the
+ *     grid's columns, against the pages read, on a cold first visit and on a
+ *     second one:
+ *     a. the graphed project, cold: under the List | Graph segment's room,
+ *        from the project's row (`decisionsGraphed`, hub decisions.ts);
+ *     b. a project whose one page forms no graph, cold: at the list's top;
+ *     c. the graphed project read a second time in one browser.
  *  3. Decisions, the graph: the graph's own box.
  *  4. A decision page opened (DecisionPage): its opening line, the page's
  *     box, against what its read brings (its frame).
@@ -38,9 +41,13 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, in order
 import type { Page } from "playwright-core";
-import { seedDecisions } from "../../../decisions-preview/seed";
+import {
+  PRICING,
+  pageProgram,
+  seedDecisions,
+} from "../../../decisions-preview/seed";
 import { MACHINE, type Reply } from "../../../scratch-fleet";
-import type { Kit, Spec } from "../../kit";
+import type { Kit, KitFleet, Spec } from "../../kit";
 import {
   type HeldRead,
   holdRead,
@@ -149,14 +156,33 @@ const run = async (kit: Kit) => {
     empty: '[data-routines-read] [data-slot="empty"]',
   });
 
-  // 2. Decisions, the list, as read before here: the decisions form a
-  // graph, so the tiles stand under the List | Graph segment's room.
-  await revisit(kit, at("view=decisions"), DECISIONS_READ, {
-    name: "2 decisions list",
+  // 2. Decisions, the list: cold on the graphed project and on one with no
+  // graph, then the graphed one read a second time.
+  const listSite = (name: string): SwapSite => ({
+    name,
     skeleton: '[data-decisions-reading="list"]',
     content: '[data-slot="decisions"] [data-slot="grid"]',
     empty: '[data-slot="decisions"] [data-slot="empty"]',
   });
+  await leg(
+    kit,
+    at("view=decisions"),
+    DECISIONS_READ,
+    listSite("2a decisions list, graphed, cold")
+  );
+  const flat = await flatProject(fleet);
+  await leg(
+    kit,
+    `${base}/project/${flat}?view=decisions`,
+    DECISIONS_READ,
+    listSite("2b decisions list, no graph, cold")
+  );
+  await revisit(
+    kit,
+    at("view=decisions"),
+    DECISIONS_READ,
+    listSite("2c decisions list, graphed, again")
+  );
 
   // 3. Decisions, the graph.
   await leg(kit, at("view=decisions&mode=graph"), GRAPH_READ, {
@@ -210,6 +236,27 @@ const run = async (kit: Kit) => {
   await page.goto(at(`task=${task.id}`), { waitUntil: "domcontentloaded" });
   await proveSwap(kit, page, stageSite, held);
   await page.close();
+};
+
+/**
+ * A second project, Caw off, whose one decision page forms no graph (the
+ * pricing page: no card names another in `after`, none in a Section),
+ * published by a session of its own: its id.
+ */
+const flatProject = async (fleet: KitFleet): Promise<string> => {
+  const { id } = await fleet.api<{ id: string }>("/api/projects", {
+    name: "skeleton-swaps-flat",
+    caw: false,
+  });
+  const writer = await fleet.spawn("claude", PRICING.writer, fleet.repo, {
+    projectId: id,
+  });
+  await fleet.api(`/api/instances/${writer}/artifacts`, {
+    kind: "page",
+    name: PRICING.name,
+    program: pageProgram(PRICING),
+  });
+  return id;
 };
 
 /**
