@@ -49,7 +49,8 @@
  *    its story, width and scheme read off the DOM before it is shot,
  *    settled, never one colour, its pixels its DOM's paint; no light file
  *    the same bytes as its dark twin, no two files the same bytes; an
- *    approved removal's frame showing its Undo.
+ *    approved removal's frame showing its Undo. Opened in a phone's
+ *    window, each picture is still the frame's own size.
  *
  *   bun scripts/probe-kit/run.ts approval-card
  */
@@ -640,44 +641,71 @@ async function captureLeg(kit: Kit, base: string): Promise<void> {
   const counts: string[] = [];
   for (const file of PANEL_FILES) {
     // biome-ignore lint/performance/noAwaitInLoops: one states file a page, its minute its own
-    const page = await kit.page("desk");
-    await page.goto(
-      `${base}/@cawco/canvas?file=${encodeURIComponent(file)}&width=390,1440&scheme=both`,
-      { waitUntil: "load" }
-    );
-    const report = await reportOn(page);
-    const stories = [
-      ...new Set(
-        report.sections.flatMap((one) => one.frames.map((frame) => frame.story))
-      ),
-    ].sort((a, b) => Number(UNDOING.includes(b)) - Number(UNDOING.includes(a)));
-    const stem = file
-      .replace("src/lib/cawco/transcript/", "")
-      .replace(".stories.ts", "")
-      .replaceAll("/", "-");
-    const shots: Shot[] = stories.flatMap((story) =>
-      SHOT_WIDTHS.flatMap((width) =>
-        SCHEMES.map((scheme) => ({
-          file,
-          story,
-          width,
-          scheme,
-          path: join(CAPS, `${stem}-${story}-${width}-${scheme}.png`),
-          ...(UNDOING.includes(story) && !file.includes("/today/")
-            ? { holds: '[data-slot="undo"]' }
-            : {}),
-        }))
-      )
-    );
-    reads.push(...(await shootFrames(page, shots)));
-    counts.push(`${stem} ${shots.length}`);
-    await page.close();
+    const shot = await shootFile(kit, base, file, "desk", CAPS);
+    reads.push(...shot.reads);
+    counts.push(shot.count);
   }
   checkShots(
     kit,
     `11: each story of the ${PANEL_FILES.length} states files the decision page embeds, at 390 and 1440 light and dark, is captured as its own frame, settled, in its scheme (${counts.join(", ")})`,
     reads
   );
+  // A phone's window: the canvas shows a frame there zoomed to fit, and a
+  // picture taken through that came out scaled (272 px for a 390 frame).
+  const phone = await shootFile(
+    kit,
+    base,
+    "src/lib/cawco/transcript/PromptRemoval.stories.ts",
+    "phone",
+    join(kit.out, "phone")
+  );
+  checkShots(
+    kit,
+    `11b: opened in a phone's 390-wide window, each frame's picture is still its own size times the device's scale (${phone.count})`,
+    phone.reads
+  );
+}
+
+/** Every story of states file `file`, at 390 and 1440 light and dark, shot on a fresh page in `view`'s window into `dir`. */
+async function shootFile(
+  kit: Kit,
+  base: string,
+  file: string,
+  view: "desk" | "phone",
+  dir: string
+): Promise<{ count: string; reads: ShotRead[] }> {
+  const page = await kit.page(view);
+  await page.goto(
+    `${base}/@cawco/canvas?file=${encodeURIComponent(file)}&width=390,1440&scheme=both`,
+    { waitUntil: "load" }
+  );
+  const report = await reportOn(page);
+  const stories = [
+    ...new Set(
+      report.sections.flatMap((one) => one.frames.map((frame) => frame.story))
+    ),
+  ].sort((a, b) => Number(UNDOING.includes(b)) - Number(UNDOING.includes(a)));
+  const stem = file
+    .replace("src/lib/cawco/transcript/", "")
+    .replace(".stories.ts", "")
+    .replaceAll("/", "-");
+  const shots: Shot[] = stories.flatMap((story) =>
+    SHOT_WIDTHS.flatMap((width) =>
+      SCHEMES.map((scheme) => ({
+        file,
+        story,
+        width,
+        scheme,
+        path: join(dir, `${stem}-${story}-${width}-${scheme}.png`),
+        ...(UNDOING.includes(story) && !file.includes("/today/")
+          ? { holds: '[data-slot="undo"]' }
+          : {}),
+      }))
+    )
+  );
+  const reads = await shootFrames(page, shots);
+  await page.close();
+  return { count: `${stem} ${shots.length}`, reads };
 }
 
 /** Legs 1–9, on the dashboard's stage. */
