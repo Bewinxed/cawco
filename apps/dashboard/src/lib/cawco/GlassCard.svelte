@@ -390,9 +390,56 @@
       node.removeEventListener(FOLDED, endRehearsal);
     };
   });
+  /**
+   * The card opened with something asked: what had the focus is kept to give
+   * it back, and the focus goes where the new contents put it.
+   */
+  function takeFocus() {
+    // Rehearsed (opened with nothing asked), the focus stays where it is.
+    if (asked === null) {
+      return;
+    }
+    // What invoked it, or what invoked the opener that has gone (the
+    // phone's sheet hands over its burger, bar-glass `invoker`).
+    returnTo =
+      barGlass.invoker ??
+      (document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null);
+    barGlass.invoker = null;
+    const card = asked;
+    const node = content?.querySelector<HTMLElement>(`[data-face="${card}"]`);
+    if (!node) {
+      return;
+    }
+    if (card === "caw" && barGlass.byPointer) {
+      // Once it stands open, and in a task after the frame it landed in:
+      // taken in the press's own task, the style and layout it forced
+      // held back the open's first frame, and taken in the landing's, its
+      // last.
+      content?.addEventListener(
+        GROWN,
+        () => {
+          setTimeout(() => {
+            if (asked === "caw") {
+              focusIn(card, node);
+            }
+          });
+        },
+        { once: true }
+      );
+      return;
+    }
+    focusIn(card, node);
+  }
+
+  // A real open while the rehearsal stands ends it there; the popover was
+  // already open, so its open-focus never runs: the focus is taken here,
+  // once the face asked for has mounted.
   $effect.pre(() => {
     if (asked !== null && untrack(() => rehearsing)) {
       endRehearsal();
+      requestAnimationFrame(() => takeFocus());
     }
   });
 
@@ -493,42 +540,7 @@
     }}
     onOpenAutoFocus={(event) => {
       event.preventDefault();
-      // Rehearsed (opened with nothing asked), the focus stays where it is.
-      if (asked === null) {
-        return;
-      }
-      // What invoked it, or what invoked the opener that has gone (the
-      // phone's sheet hands over its burger, bar-glass `invoker`).
-      returnTo =
-        barGlass.invoker ??
-        (document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null);
-      barGlass.invoker = null;
-      const card = asked;
-      const node = content?.querySelector<HTMLElement>(`[data-face="${card}"]`);
-      if (!node) {
-        return;
-      }
-      if (card === "caw" && barGlass.byPointer) {
-        // Once it stands open, and in a task after the frame it landed in:
-        // taken in the press's own task, the style and layout it forced
-        // held back the open's first frame, and taken in the landing's, its
-        // last.
-        content?.addEventListener(
-          GROWN,
-          () => {
-            setTimeout(() => {
-              if (asked === "caw") {
-                focusIn(card, node);
-              }
-            });
-          },
-          { once: true }
-        );
-        return;
-      }
-      focusIn(card, node);
+      takeFocus();
     }}
     side="bottom"
     sideOffset={placement.sideOffset}

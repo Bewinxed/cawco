@@ -808,9 +808,8 @@ const reviewLegs = async (
 
   // 15. The masonry in list order; 16. the rings; 17. the focus moves.
   const page = await openSession(kit, base, "desk", "light", ids.many);
-  // The glass's card rehearses its open once, unseen, just after load
-  // (GlassCard): a keyboard open lands after it, as a person's does.
-  await page.waitForTimeout(2000);
+  // Opened from the keyboard at once, while the glass's card may still be
+  // rehearsing its open (GlassCard): the focus still goes into Files.
   await page.locator("[data-files-control]").focus();
   await page.keyboard.press("Enter");
   await page.locator("[data-files-card]").first().waitFor();
@@ -1156,7 +1155,6 @@ const ASK_WORDS = "Make a page that shows what we've done so far";
  */
 const askLegs = async (kit: Kit, base: string, none: string) => {
   const onDesk = await openSession(kit, base, "desk", "light", none);
-  await onDesk.waitForTimeout(2000);
   await onDesk.locator("[data-files-control]").click();
   await onDesk.locator(".kit-pop.files-pop").waitFor();
   const before = await onDesk.evaluate(() => ({
@@ -1178,7 +1176,7 @@ const askLegs = async (kit: Kit, base: string, none: string) => {
   await onDesk.waitForTimeout(1500);
   const deskSent = await sentAnywhere(onDesk, ASK_WORDS);
   kit.check(
-    '23a (onDesk): Files with nothing in it offers "Ask Claude Code for a page" once the read answered; pressed, Files goes, the words stand in the session\'s composer with the focus and the caret after them, and nothing is sent',
+    '23a (desk): Files with nothing in it offers "Ask Claude Code for a page" once the read answered; pressed, Files goes, the words stand in the session\'s composer with the focus and the caret after them, and nothing is sent',
     label === "Ask Claude Code for a page" &&
       deskSaid.text === ASK_WORDS &&
       deskSaid.focused &&
