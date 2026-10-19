@@ -82,6 +82,23 @@
  *     readable here", with its export name and the reason, and one of the
  *     spread's as shared code, the file unchanged by either.
  *
+ * Then the first session's card in its panel on the dashboard, a page open
+ * on the session as the person has it, the browser's colour-scheme
+ * emulation off so a frame hears its element's `color-scheme`:
+ *
+ * 18. The panel head (side/head.ts `standing`, DESIGN.md Artifact panel):
+ *     at the desk every control stands whole, in head order, with no More;
+ *     at 390 the mode stands as its one button, More stands before Close,
+ *     and More's menu holds the controls that went to it, in head order.
+ * 19. The sidebar's theme switch, with no reload, turns the canvas frame's
+ *     `color-scheme` from light to dark, and the frame's own
+ *     `prefers-color-scheme: dark` from false to true.
+ * 20. A real held press on the canvas view stands it `data-pressed` at
+ *     scale 0.97 while held and lets both go on release; its menu opens on
+ *     the press and stays open.
+ * 21. The panel, its head included, at the desk and at 390 in light and
+ *     dark, captured to `$TMPDIR/caps/` for a reviewer; the spec reads none.
+ *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
  * delegates runs on the host").
@@ -97,10 +114,11 @@ import {
   writeFile,
 } from "node:fs/promises";
 import { dirname, join, relative } from "node:path";
+import type { Page } from "playwright-core";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
 import { STAGE_ENSURE } from "../../../packages/core/src/stage";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, ROOT, type Spec } from "../kit";
+import { type Kit, open, ROOT, type Spec } from "../kit";
 
 const STORY = "src/Card.stories.js";
 /** A story file whose stories are built four ways (legs 16 and 17). */
@@ -485,6 +503,277 @@ async function builtStories(
   );
 }
 
+/** The artifact panel, as the session page holds it. */
+const PANE =
+  ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])';
+/** The canvas page's frame, which the panel themes (PreviewPane `data-scheme`). */
+const FRAME = `${PANE} iframe[data-scheme]`;
+/** DESIGN.md's head order, Send picks to Expand; Close stands after them all. */
+const HEAD_ORDER = [
+  "send",
+  "create",
+  "undock",
+  "open",
+  "view",
+  "inspect",
+  "mode",
+  "comments",
+  "reload",
+  "expand",
+];
+/** Where the panel's pictures go for a reviewer, as component-canvas's do. */
+const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
+const SCALE = /^matrix\(([\d.]+), 0, 0, ([\d.]+),/;
+
+/** The head as drawn: each control's key, whether it stands, its form, its name; then whether More and Close stand, More before Close. */
+const headOf = (page: Page) =>
+  page.evaluate((pane) => {
+    const head = document.querySelector(`${pane} [data-slot="side-head"]`);
+    const items = [
+      ...(head?.querySelectorAll<HTMLElement>(":scope > [data-head-item]") ??
+        []),
+    ].map((one) => {
+      const control = one.querySelector("[aria-label], button");
+      return {
+        key: one.dataset.headItem ?? "",
+        stands: !one.hidden,
+        form: one.dataset.form ?? null,
+        name:
+          control?.getAttribute("aria-label") ??
+          control?.textContent?.trim() ??
+          "",
+      };
+    });
+    const more = head?.querySelector<HTMLElement>(
+      ':scope > [data-slot="more"]'
+    );
+    const close = head?.querySelector<HTMLElement>(
+      ':scope > [data-slot="close"]'
+    );
+    return {
+      items,
+      more: !!more,
+      moreBeforeClose:
+        !!(more && close) &&
+        more.getBoundingClientRect().right <=
+          close.getBoundingClientRect().left + 0.5,
+      closeLast: head?.lastElementChild === close,
+    };
+  }, PANE);
+
+/** The page of session `session` with its panel standing on the canvas `name` made, the colour-scheme emulation off. */
+const panelPage = async (
+  kit: Kit,
+  base: string,
+  session: string,
+  view: "desk" | "phone",
+  theme: "light" | "dark"
+) => {
+  const page = await kit.page(view, { theme });
+  await page.emulateMedia({ colorScheme: null });
+  await open(page, `${base}/session/${session}`, '[data-slot="pane"]');
+  return page;
+};
+
+/** The canvas drawn in the panel's frame: its card's heading stands. */
+const drawn = (page: Page) =>
+  page
+    .frameLocator(FRAME)
+    .first()
+    .locator('[data-probe="title"]')
+    .first()
+    .waitFor({ state: "visible", timeout: 60_000 });
+
+/** The panel, its head included, as a reviewer sees it. */
+const capture = async (page: Page, name: string) => {
+  await mkdir(CAPS, { recursive: true });
+  await page
+    .locator(PANE)
+    .first()
+    .screenshot({ path: join(CAPS, `${name}.png`), animations: "disabled" });
+};
+
+/** The frame's element's `color-scheme`, and `prefers-color-scheme: dark` as the frame's own document hears it. */
+const schemeOf = async (page: Page) => {
+  const element = page.locator(FRAME).first();
+  const frame = await (await element.elementHandle())?.contentFrame();
+  return {
+    colorScheme: await element.evaluate(
+      (el) => getComputedStyle(el).colorScheme
+    ),
+    prefersDark: frame
+      ? await frame.evaluate(
+          () => matchMedia("(prefers-color-scheme: dark)").matches
+        )
+      : null,
+  };
+};
+
+/** The canvas view's trigger as a held press leaves it. */
+const pressOf = (page: Page, selector: string) =>
+  page.locator(selector).evaluate((el) => ({
+    pressed: el.getAttribute("data-pressed"),
+    transform: getComputedStyle(el).transform,
+    expanded: el.getAttribute("aria-expanded"),
+    menu: !!document.querySelector('[role="menu"]'),
+  }));
+
+/** Whether a computed transform is a scale of `to` (to the third place), or none at all for 1. */
+const scaled = (transform: string, to: number) => {
+  if (to === 1) {
+    return transform === "none";
+  }
+  const [, x, y] = transform.match(SCALE) ?? [];
+  return Math.abs(Number(x) - to) < 0.001 && Math.abs(Number(y) - to) < 0.001;
+};
+
+/** Legs 18 to 21: the first session's card in its panel on the dashboard. */
+async function panelLegs(
+  kit: Kit,
+  call: (n: string, name: string, input: object) => Promise<string>,
+  base: string,
+  session: string
+): Promise<void> {
+  // The page open first, so the canvas the session makes stands in its panel.
+  const desk = await panelPage(kit, base, session, "desk", "light");
+  await call("18", "mcp__cawco__artifact_create", {
+    kind: "component",
+    name: "panel",
+    file: STORY,
+    about: "The card in its panel",
+  });
+  await desk
+    .locator(`${FRAME}[data-ready]`)
+    .first()
+    .waitFor({ timeout: 120_000 });
+  await drawn(desk);
+
+  // 18. The head at the desk: every control whole, in head order, no More.
+  const wide = await headOf(desk);
+  const keys = wide.items.map((one) => one.key);
+  kit.check(
+    "18: at the desk every head control stands whole, in head order, with no More, Close last",
+    wide.items.length > 0 &&
+      wide.items.every((one) => one.stands && one.form === "whole") &&
+      keys.every((key) => HEAD_ORDER.includes(key)) &&
+      keys.every(
+        (key, at) =>
+          at === 0 ||
+          HEAD_ORDER.indexOf(key) > HEAD_ORDER.indexOf(keys[at - 1] ?? "")
+      ) &&
+      !wide.more &&
+      wide.closeLast,
+    JSON.stringify(wide)
+  );
+
+  // 19. The theme switched in the sidebar, no reload: the frame's scheme follows.
+  const light = await schemeOf(desk);
+  await capture(desk, "panel-desk-light");
+  await desk.evaluate(() => {
+    (window as unknown as { __stayed: boolean }).__stayed = true;
+  });
+  await desk.getByRole("button", { name: "Light mode" }).first().click();
+  await desk.waitForFunction(() =>
+    document.documentElement.classList.contains("dark")
+  );
+  const dark = await until(
+    "the frame's scheme dark",
+    () => schemeOf(desk),
+    (now) => now.colorScheme === "dark" && now.prefersDark === true,
+    10_000
+  ).catch(() => schemeOf(desk));
+  const stayed = await desk.evaluate(
+    () => (window as unknown as { __stayed?: boolean }).__stayed === true
+  );
+  kit.check(
+    "19: the sidebar's theme switch, with no reload, turns the frame's color-scheme light to dark and its prefers-color-scheme dark false to true",
+    light.colorScheme === "light" &&
+      light.prefersDark === false &&
+      dark.colorScheme === "dark" &&
+      dark.prefersDark === true &&
+      stayed,
+    `light ${JSON.stringify(light)}; dark ${JSON.stringify(dark)}; ${stayed ? "no reload" : "reloaded"}`
+  );
+  await capture(desk, "panel-desk-dark");
+
+  // 20. A real held press on the canvas view.
+  const trigger = `${PANE} [data-head-item="view"] [aria-label="Canvas view"]`;
+  const box = await desk.locator(trigger).boundingBox();
+  const before = await pressOf(desk, trigger);
+  let held = before;
+  let settled = before;
+  if (box) {
+    await desk.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await desk.mouse.down();
+    await desk.waitForTimeout(60);
+    held = await pressOf(desk, trigger);
+    await desk.waitForTimeout(400);
+    settled = await pressOf(desk, trigger);
+    await desk.mouse.up();
+  }
+  await desk.waitForTimeout(300);
+  const released = await pressOf(desk, trigger);
+  kit.check(
+    "20: a held press on the canvas view stands it data-pressed at scale 0.97, lets both go on release, and its menu opens on the press and stays open",
+    before.pressed === null &&
+      held.pressed === "true" &&
+      held.expanded === "true" &&
+      held.menu &&
+      settled.pressed === "true" &&
+      scaled(settled.transform, 0.97) &&
+      released.pressed === null &&
+      scaled(released.transform, 1) &&
+      released.expanded === "true" &&
+      released.menu,
+    `before ${JSON.stringify(before)}; 60ms ${JSON.stringify(held)}; 460ms ${JSON.stringify(settled)}; released ${JSON.stringify(released)}`
+  );
+  await desk.keyboard.press("Escape");
+
+  // 18 and 21 at 390, light and dark: the mode as one button, More before Close holding the rest.
+  for (const theme of ["light", "dark"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one phone page at a time
+    const phone = await panelPage(kit, base, session, "phone", theme);
+    await drawn(phone);
+    const narrow = await headOf(phone);
+    const gone = narrow.items.filter((one) => !one.stands);
+    const mode = narrow.items.find((one) => one.key === "mode");
+    await phone.locator(`${PANE} [data-slot="more"]`).click();
+    const entries = await phone
+      .locator(
+        '[role="menu"] :is([role="menuitem"], [role="menuitemradio"], [role="menuitemcheckbox"])'
+      )
+      .allTextContents();
+    const at = gone.map((one) =>
+      entries.findIndex((entry) => entry.trim() === one.name)
+    );
+    kit.check(
+      `18: at 390 (${theme}) the mode stands as its one button, More before Close, and More's menu holds what went to it in head order`,
+      mode?.stands === true &&
+        mode.form === "compact" &&
+        narrow.more &&
+        narrow.moreBeforeClose &&
+        narrow.closeLast &&
+        gone.length > 0 &&
+        at.every((one, n) => one >= 0 && (n === 0 || one > (at[n - 1] ?? -1))),
+      `head ${JSON.stringify(narrow)}; More's entries ${JSON.stringify(entries)}`
+    );
+    await phone.keyboard.press("Escape");
+    await capture(phone, `panel-phone-${theme}`);
+  }
+  const pictures = [
+    "panel-desk-light",
+    "panel-desk-dark",
+    "panel-phone-light",
+    "panel-phone-dark",
+  ].map((name) => join(CAPS, `${name}.png`));
+  const sizes = await Promise.all(pictures.map((path) => Bun.file(path).size));
+  kit.check(
+    "21: the panel, its head included, is captured at the desk and at 390 in light and dark, for a reviewer",
+    sizes.every((size) => size > 0),
+    pictures.map((path, n) => `${path} ${sizes[n]} bytes`).join("; ")
+  );
+}
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   await writeProject(fleet.repo);
@@ -696,6 +985,7 @@ const run = async (kit: Kit) => {
 
   await scopedAndStyled(kitCreated.match(ID)?.[1]);
   await builtStories(kit, call, fleet.repo);
+  await panelLegs(kit, call, await fleet.dashboard(), session);
 
   /** Legs 13 to 15, in the SvelteKit checkout of legs 6 to 8 (its session `kitSession`), on the sheet leg 7 made (`kitId`). */
   async function scopedAndStyled(kitId: string | undefined): Promise<void> {
