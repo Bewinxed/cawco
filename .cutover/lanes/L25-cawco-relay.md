@@ -15,6 +15,7 @@ better-layout rules followed: logical properties (ps-/pe-/ms-/me-), min-w-0 on f
 ## Removed
 removed: relay/RelayJourney.svelte:469 `[&+&]` sibling border rule — replaced by not-first:
 removed: side/Split.svelte `[data-split-resizing] :global(iframe)` — moved to theme component
+removed: side/SideSurface head controls `var(--head-control)` (defined nowhere) — now `--c-btn-h-sm`, the 30px head control DESIGN.md names
 removed: routines/RoutineDetail.svelte literal markers and `--when-w`/`--outcome-w`/`--took-w` literals — ladder/tokens
 
 ## Tokens
@@ -50,7 +51,7 @@ theme: component side-head-controls
 @layer components {
   [data-slot="side-head"] :is(button, a):not([role="tab"]) {
     display: inline-flex; align-items: center; justify-content: center; gap: var(--space-1);
-    min-width: var(--head-control); height: var(--head-control); padding: 0 var(--space-2);
+    min-width: var(--c-btn-h-sm); height: var(--c-btn-h-sm); padding: 0 var(--space-2);
     border: 0; border-radius: var(--radius-sm); color: var(--ink-muted); background: transparent;
     cursor: pointer; text-decoration: none; font-family: inherit; font-style: inherit;
     line-height: inherit; font-size: var(--text-label); font-weight: var(--weight-strong);
@@ -74,7 +75,7 @@ theme: component side-head-controls
 ```
 theme: component preview-sheet-drawer
 ```css
-@layer components {
+/* unlayered on purpose: vaul's own sheet styles are unlayered and these must outrank them */
   [data-preview-sheet][data-slot="drawer-content"] {
     position: absolute; inset: 0; z-index: 40; display: flex; flex-direction: column;
     width: 100%; height: 100%; max-height: none; margin: 0; padding: 0; outline: none;
@@ -87,7 +88,6 @@ theme: component preview-sheet-drawer
     width: 100px; height: 6px; border-radius: var(--radius-pill); background: var(--border-control); margin: 0; opacity: 1;
   }
   [data-preview-sheet] [data-vaul-handle-hitarea] { height: var(--c-sheet-inspector-head-h); }
-}
 ```
 theme: component split-resizing-frames
 ```css
@@ -109,6 +109,4 @@ kit-swap: side/SideSurface.svelte:427 DropdownMenu.Content `w-56` — a menu wid
 (none)
 
 ## Gaps
-gap: side/SideSurface.svelte `--head-control` is read by the head-controls component but defined nowhere in the tree — DESIGN.md Focus and hit areas (30px control)
-gap: side/SideSheet.svelte vaul handle rules sit in @layer components but vaul's own sheet is unlayered, so they will lose — needs the kit lane to place them unlayered (DESIGN.md Dialog, sheet and drawer)
 gap: interface-craft / ui-observer critique not run: no bench renders these in this workspace
