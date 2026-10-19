@@ -32,6 +32,7 @@
 import { copyFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import type { Frame, Page } from "playwright-core";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, ROOT, type Spec, settle } from "../kit";
 
@@ -41,6 +42,8 @@ const FRAME = `${PANE} iframe[title="Preview"]`;
 const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
 const CLONE_CAPS = join(ROOT, "caps");
 const STORIES = "apps/dashboard/src/lib/cawco/plan/proposal";
+/** How long a component canvas's first stage start may take: session-sheet's budget for the same call. */
+const STAGE_START_MS = 240_000;
 
 /** Each way: its option id, its name on the card, its states file, its variation. */
 const WAYS = [
@@ -247,11 +250,42 @@ const spec: Spec = {
     const writer = await fleet.spawn("claude", "Plan view", ROOT);
     const make = <T>(body: object) =>
       fleet.api<T>(`/api/instances/${writer}/artifacts`, body);
+    /**
+     * A component canvas answers once its stage serves: on a first ask the
+     * agent clones the checkout, installs it and starts the project's dev
+     * toolchain, longer than `fleet.api`'s 30s (session-sheet allows the
+     * same call 240s). Each create's time is noted.
+     */
+    const makeCanvas = async <T>(body: object): Promise<T> => {
+      const read = await readWithin(STAGE_START_MS, async (signal) => {
+        const response = await fetch(
+          `${fleet.base}/api/instances/${writer}/artifacts`,
+          {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify(body),
+            signal,
+          }
+        );
+        const text = await response.text();
+        if (!response.ok) {
+          throw new Error(`a component canvas: ${response.status} ${text}`);
+        }
+        return JSON.parse(text) as T;
+      });
+      if (read.kind !== "answered") {
+        throw new Error(
+          `a component canvas: the hub did not answer within ${read.after} ms (${read.reason})`
+        );
+      }
+      return read.value;
+    };
 
     // Each way's canvas, with its dials.
     const ids = {} as Record<(typeof WAYS)[number]["id"], string>;
     for (const way of WAYS) {
-      const made = await make<{
+      const asked = performance.now();
+      const made = await makeCanvas<{
         id: string;
         render?: {
           frames?: string[];
@@ -266,6 +300,9 @@ const spec: Spec = {
         dials: DIALS,
       });
       ids[way.id] = made.id;
+      kit.note(
+        `${way.label}: its canvas answered in ${Math.round(performance.now() - asked)} ms`
+      );
       const frames = made.render?.frames ?? [];
       kit.check(
         `${way.label}: its canvas is made with its dials, and all ${frames.length} frames are drawn, none unnamed`,
