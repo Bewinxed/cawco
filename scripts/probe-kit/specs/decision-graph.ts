@@ -22,7 +22,9 @@
  * (c) The graph keeps the picks: the card whose option went is not drawn
  *     picked and names the option gone; its state still holds both picks;
  *     its problems say the broken `after`s with their page and card, and
- *     both orphaned picks.
+ *     both orphaned picks. The Decisions tab's graph draws that card
+ *     flagged ("Picked option gone" in the attention ink, its ring in the
+ *     attention glyph), not picked, and its problems above the graph.
  * (g) The page drawn on its session's origin: the card whose picked option
  *     went stands open, "Not picked", never folded to an empty "Decided:";
  *     a pick on an option it offers folds it to "Decided: Per machine".
@@ -35,7 +37,7 @@
  */
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import { type Kit, open, type Spec } from "../kit";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -107,6 +109,71 @@ interface Read {
   program?: string;
   state: Record<string, { options: string[] }>;
 }
+
+/** (c) on the Decisions tab's graph: the card whose option went drawn flagged, not picked, its problems above it. */
+const graphTab = async (
+  kit: Kit,
+  fleet: Awaited<ReturnType<Kit["fleet"]>>,
+  projectId: string
+) => {
+  const base = await fleet.dashboard();
+  const board = await kit.page("desk", { theme: "light" });
+  await open(
+    board,
+    `${base}/project/${projectId}?view=decisions`,
+    '[data-slot="decisions"]'
+  );
+  await board.getByRole("radio", { name: "Graph" }).click();
+  const drawn = await until(
+    "the tab's graph with its cards",
+    () =>
+      board.evaluate(() => {
+        const nodes = [
+          ...document.querySelectorAll<HTMLElement>(
+            '[data-slot="decision-node"]'
+          ),
+        ];
+        const flagged = nodes.filter((node) => node.dataset.gone !== undefined);
+        const dot = flagged[0]?.querySelector(".node-dot");
+        const tokenColor = (token: string) => {
+          const probe = document.createElement("span");
+          probe.style.color = `var(${token})`;
+          document.body.append(probe);
+          const { color } = getComputedStyle(probe);
+          probe.remove();
+          return color;
+        };
+        const line = flagged[0]?.querySelector('[data-slot="gone"]');
+        return {
+          nodes: nodes.length,
+          flagged: flagged.map((node) => ({
+            name: node.querySelector('[data-slot="name"]')?.textContent,
+            line: node.querySelector('[data-slot="gone"]')?.textContent,
+            picked: node.dataset.picked !== undefined,
+            ring: dot ? getComputedStyle(dot).borderTopColor : null,
+            ink: line ? getComputedStyle(line).color : null,
+          })),
+          glyph: tokenColor("--status-attn-glyph"),
+          attnInk: tokenColor("--status-attn-ink"),
+          problem: document.querySelector(".problem")?.textContent ?? "",
+        };
+      }),
+    (read) => read.nodes === 3,
+    20_000
+  ).catch(() => null);
+  kit.check(
+    "(c) the tab's graph draws the card whose option went flagged, not picked, with its problems above it",
+    drawn?.flagged.length === 1 &&
+      drawn.flagged[0]?.name === "What does a customer pay for?" &&
+      drawn.flagged[0]?.line === "Picked option gone" &&
+      drawn.flagged[0]?.picked === false &&
+      drawn.flagged[0]?.ring === drawn.glyph &&
+      drawn.flagged[0]?.ink === drawn.attnInk &&
+      drawn.problem.includes("pricing has no decision trial"),
+    JSON.stringify(drawn)
+  );
+  await board.close();
+};
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
@@ -249,6 +316,8 @@ const run = async (kit: Kit) => {
       graph.edges.length === 0,
     JSON.stringify(graph.problems)
   );
+
+  await graphTab(kit, fleet, projectId);
 
   // (g) The page itself, on its session's origin, as the panel loads it.
   const { port } = await fleet.api<{ port: number }>(

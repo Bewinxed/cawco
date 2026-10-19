@@ -112,6 +112,7 @@
         data: {
           name: card.name,
           picked: card.picked,
+          gone: card.gone,
           page: card.page,
           card: card.card,
         },

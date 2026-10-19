@@ -2,18 +2,24 @@
   /**
    * One card of the decisions graph: a raised 12px card with its name (two
    * lines at most, never cut mid-letter) and its ring, filled in the done
-   * glyph once picked. A press opens its page scrolled to it; a drag moves
-   * it, and its place is saved to its page's artifact on release.
+   * glyph once picked. A pick whose option a revision took out is kept and
+   * flagged: the ring in the attention glyph, and a line under the name in
+   * the attention ink saying the option is gone. A press opens its page scrolled to it; a
+   * drag moves it, and its place is saved to its page's artifact on release.
    */
   import { Handle, type NodeProps, Position } from "@xyflow/svelte";
 
   let { data }: NodeProps = $props();
-  const node = $derived(data as { name: string; picked: boolean });
+  const node = $derived(
+    data as { gone: string[]; name: string; picked: boolean }
+  );
+  const flagged = $derived(node.gone.length > 0);
 </script>
 
 <div
   data-slot="decision-node"
   class="decision-node"
+  data-gone={flagged || undefined}
   data-picked={node.picked || undefined}
 >
   <Handle
@@ -28,9 +34,16 @@
     position={Position.Top}
     type="target"
   />
-  <span data-slot="name" class="name">{node.name}</span>
+  <span class="words">
+    <span data-slot="name" class="name">{node.name}</span>
+    {#if flagged}
+      <span data-slot="gone" class="gone">Picked option gone</span>
+    {/if}
+  </span>
   <span aria-hidden="true" class="node-dot"></span>
-  <span class="sr-only">{node.picked ? "Picked" : "Not picked"}</span>
+  {#if !flagged}
+    <span class="sr-only">{node.picked ? "Picked" : "Not picked"}</span>
+  {/if}
   <Handle
     id="out-right"
     isConnectable={false}
@@ -58,16 +71,25 @@
     box-shadow: var(--shadow-tile);
     cursor: grab;
   }
+  .words {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-inline-size: 0;
+  }
   .name {
     display: -webkit-box;
-    flex: 1 1 auto;
-    min-inline-size: 0;
     overflow: hidden;
     -webkit-box-orient: vertical;
     -webkit-line-clamp: 2;
     line-clamp: 2;
     font: var(--type-label);
     color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
+  .gone {
+    font: var(--type-meta);
+    color: var(--status-attn-ink);
     overflow-wrap: anywhere;
   }
   .node-dot {
@@ -80,6 +102,9 @@
   .decision-node[data-picked] .node-dot {
     border-color: var(--status-done-glyph);
     background: var(--status-done-glyph);
+  }
+  .decision-node[data-gone] .node-dot {
+    border-color: var(--status-attn-glyph);
   }
   .decision-node :global(.svelte-flow__handle) {
     inline-size: 1px;
