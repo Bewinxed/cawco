@@ -167,7 +167,7 @@
             class="grid size-icon-md flex-none place-items-center rounded-pill border-2 border-neutral-8 transition-[border-color] dur-fade ease-out group-aria-checked:border-selected-icon"
           >
             <span
-              class="size-space-2 scale-0 rounded-pill bg-selected-icon transition-[scale] dur-toggle ease-out group-aria-checked:scale-100"
+              class="size-space-2 scale-50 rounded-pill bg-selected-icon opacity-0 transition-[scale,opacity] dur-toggle ease-out group-aria-checked:scale-100 group-aria-checked:opacity-100"
             ></span>
           </span>
           <span

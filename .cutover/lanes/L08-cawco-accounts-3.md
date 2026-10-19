@@ -94,7 +94,8 @@ removed: StrategyFigure.svelte `--fig-tag-fs` 11px override — type-caps alread
 removed: StrategyFigure.svelte `--fig-lbl-gap`, `--fig-dot`, `--fig-clk-pad`, `--fig-chip-r`, `--fig-ring`, `--fig-cap-inset`, `--fig-cap-bottom`, `--fig-cap-lh` — style-only values now on the ladder or the figure.ts tokens above
 
 ## Gaps
-gap: StrategyPicker.svelte:141 card press was scale(0.995), now --press-scale (0.97) — a card press token on `--transition-pick-card` (transform) would keep the card's small press; DESIGN.md names one press scale
+fixed: StrategyPicker.svelte:141 card press was scale(0.995), now the design system's --press-scale — DESIGN.md names one press scale (delta S2: no hand-kept number)
+fixed: StrategyPicker.svelte radio dot grew from scale(0); now scale-50 + opacity, so nothing appears from nothing (emil-design-eng)
 gap: Swatches.svelte `--swatch-on` is still a style string of tokens, since a two-ring shadow has no utility; `--swatch-ground` is set by AccountSetup.svelte:504
 
 ## Contracts
