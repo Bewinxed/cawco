@@ -143,6 +143,17 @@
   /** The Session tab's composer: its draft, and the room its foot stands in. */
   const sayDraft = new ComposerDraft();
   let sayFoot = $state(0);
+  /**
+   * The session's state word, unless it is the stage's own name (a live
+   * session in Working, a finished one in Done): the pane says its stage
+   * once, on its chip.
+   */
+  const rowWord = $derived(
+    sessionState &&
+      sessionState.word.toLowerCase() !== stageLabel(task.stage).toLowerCase()
+      ? sessionState.word
+      : null
+  );
   const shownName = $derived(newest ? nameOf(newest.instanceId) : "");
   const age = $derived(
     newest
@@ -305,7 +316,13 @@
             status={sessionState.status}
           />
           <span class="session-name">{shownName}</span>
-          <span class="session-word">{sessionState.word}</span>
+          {#if rowWord}
+            <span class="session-word">{rowWord}</span>
+          {:else}
+            <!-- The stage's chip already says it; the row reads it out, its
+                 mark echoes while it works. -->
+            <span class="sr-only">{sessionState.word}</span>
+          {/if}
           <span data-slot="num" class="session-age num">{age}</span>
         </div>
         {#if failed && newest.endedHow}
