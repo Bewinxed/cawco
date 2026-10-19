@@ -31,14 +31,11 @@
 
 <span
   data-slot="head"
-  class="relative z-2 mb-space-2 flex min-h-(--tile) items-center gap-space-2"
-  style:--tile="26px"
+  class="relative z-2 mb-space-2 flex min-h-c-mark items-center gap-space-2"
 >
-  <!-- literal: 26px -->
   <span
     data-slot="tile"
-    class="inline-grid size-(--tile) flex-none place-items-center rounded-sm bg-surface-tile shadow-tile"
-    style:--tile="26px"
+    class="inline-grid size-c-mark flex-none place-items-center rounded-sm bg-surface-tile shadow-tile"
     style:color={hue}><Icon /></span
   >
   {@render aside?.()}
@@ -51,11 +48,3 @@
   class="type-label relative z-2 font-medium text-ink-strong">{name}</span
 >
 <span data-slot="meta" class="relative z-2 text-ink-muted">{meta}</span>
-
-<style>
-  /* residual: foreign-dom */
-  [data-slot="tile"] :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-</style>

@@ -31,11 +31,10 @@
   });
 </script>
 
-<!-- literal: 22rem -->
 <div
   data-slot="caw-panel"
   class="type-label flex w-(--panel-w) flex-col gap-space-2 pt-space-3 pr-space-4 pb-space-4 pl-space-4 text-ink-strong"
-  style:--panel-w="min(22rem, calc(100vw - 2 * var(--space-5)))"
+  style:--panel-w="min(var(--c-panel-w), calc(100vw - 2 * var(--space-5)))"
 >
   <p data-slot="head" class="type-label font-medium">
     Caw · lead of {projectName}
