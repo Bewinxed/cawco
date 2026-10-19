@@ -67,7 +67,11 @@
  *     (`container-type: inline-size`) with no width of its own is reported
  *     failed, "drawn 24px wide: the story has no width of its own; give it a
  *     viewport or a width"; the same card with a phone viewport is drawn.
+ * 17. The stage's sweep ends on a story whose animation loops forever
+ *     (`infinite`, a working mark's breath): the probe cancels it rather
+ *     than finishing it, so the hover frame is drawn with its delta.
  *
+
  * Captures of the canvas (desk and phone, light and dark, its move's
  * timeline and its dials open) go to `$TMPDIR/caps/` and the clone's
  * `caps/` for a reviewer; this spec never reads them.
@@ -1301,6 +1305,34 @@ async function daemonRender(kit: Kit, stage: Stage): Promise<void> {
   }
 }
 
+/** Leg 17: the stage's sweep ends on a story with an `infinite` animation, its hover probed. */
+async function endless(kit: Kit, stage: Stage): Promise<void> {
+  const port = Number(new URL(stage.base).port);
+  const started = performance.now();
+  const rendered = await renderCanvas("host", port, {
+    files: ["src/Breath.stories.js"],
+    spec: { name: "Breath" },
+  }).catch((error: Error) => error);
+  const ms = Math.round(performance.now() - started);
+  const hover =
+    rendered instanceof Error
+      ? undefined
+      : framesOf(rendered.report).find((one) => one.interaction === "hover");
+  kit.check(
+    "17: the stage's sweep ends on a story whose breath loops forever, within 30 s, and its hover frame says its delta",
+    ms < 30_000 &&
+      hover?.state === "drawn" &&
+      !!hover.delta?.changed.some(
+        (one) =>
+          one.selector.startsWith("span.breath") &&
+          one.changed["background-color"]
+      ),
+    rendered instanceof Error
+      ? `${ms} ms: ${rendered.message.split("\n")[0]}`
+      : `${ms} ms; hover ${JSON.stringify({ state: hover?.state, delta: hover?.delta })}`
+  );
+}
+
 /** Leg 16: a size container with no width of its own fails at the frame's floor, in words; with a viewport it draws. */
 async function floor(kit: Kit, stage: Stage): Promise<void> {
   const page = await kit.page("desk", { init: [BRIDGE] });
@@ -1339,6 +1371,7 @@ const spec: Spec = {
       await waiting(kit, svelte);
       await floor(kit, svelte);
       await daemonRender(kit, svelte);
+      await endless(kit, svelte);
     } finally {
       svelte.stop();
     }
