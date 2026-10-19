@@ -324,6 +324,7 @@ export type TokenSize =
   | "size.c-composer-panel"
   | "size.c-new-project-field-w"
   | "size.c-composer-w"
+  | "size.c-work-column-w"
   | "size.c-suggest-chip"
   | "size.c-suggest-row"
   | "size.c-suggest-room"
