@@ -587,17 +587,21 @@ async function breakUp(
   );
 }
 
-/** The sheet at the spec's width in `theme`, every stop laid out. */
+/**
+ * The sheet at the spec's width in `theme`, every stop laid out as a
+ * decision page's Preview draws it: the component canvas `by=embed`, each
+ * story at rest in the page's flow, every frame under `scheme`.
+ */
 async function sheet(
   kit: Kit,
-  url: string,
+  stage: string,
   theme: "light" | "dark"
 ): Promise<Page> {
   const page = await kit.page("desk", { theme, init: [slowTimers] });
-  await open(page, url, READY);
-  await page.evaluate(
-    (dark) => document.documentElement.classList.toggle("dark", dark),
-    theme === "dark"
+  await open(
+    page,
+    `${stage}/@cawco/canvas?file=${encodeURIComponent(STORIES)}&by=embed&scheme=${theme}`,
+    READY
   );
   await page.setViewportSize({ width: WIDTH, height: 900 });
   const tall = await page.evaluate(() => document.documentElement.scrollHeight);
@@ -620,9 +624,8 @@ const spec: Spec = {
       kit.check("PROBE_STAGE names the workspace's stage", false);
       return;
     }
-    const url = `${stage}/@cawco/sheet?file=${encodeURIComponent(STORIES)}`;
-    await (await sheet(kit, url, "dark")).close();
-    const page = await sheet(kit, url, "light");
+    await (await sheet(kit, stage, "dark")).close();
+    const page = await sheet(kit, stage, "light");
     await still(kit, page);
     // A fresh clock (its own DevTools session) a moment: after a moment
     // that held over a thousand runs, a session kept reporting none.
