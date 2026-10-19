@@ -9,6 +9,7 @@ import { agentReact } from "../packages/core/src/agent-react";
 import { canvasHostAssets } from "../packages/core/src/canvas-host";
 import { decisionHostAssets } from "../packages/core/src/decision-host";
 import { bundleOverlay } from "../packages/core/src/preview-proxy";
+import { publishedFile } from "../packages/core/src/runtime";
 
 export const PINNED_BUN = "1.4.3";
 export const TARGETS = [
@@ -254,7 +255,17 @@ export async function buildBinary(options: {
       "playwright-core/lib/server"
     )),
   ] as [string, string][];
-  const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};`;
+  // Each published file's content hash, the manifest a start compares with
+  // its runtime folder's marker instead of reading the files (core runtime.ts).
+  const publishedHashes: Record<string, string> = {};
+  for (const [key, path] of assets) {
+    if (publishedFile(key)) {
+      publishedHashes[key] = Bun.hash(await Bun.file(path).bytes()).toString(
+        36
+      );
+    }
+  }
+  const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};\nexport const publishedHashes = ${JSON.stringify(publishedHashes)};`;
   const [platform, arch] = options.target.split("-");
   const tui = packageDir("@earendil-works/pi-tui", requirePi);
   const clipboard = join(
