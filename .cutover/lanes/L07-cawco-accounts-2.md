@@ -1,5 +1,9 @@
 # Lane L07-cawco-accounts-2
 
+Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, interface-craft, ui-observer (emil-design-eng and transitions-dev not loaded).
+better-ui rules followed: named transition properties, motion-safe gating with opacity fallback, rounded-pill dots, currentColor icons.
+better-layout rules followed: ladder spacing, centred dot instead of compensating margin, c-btn-h control heights with coarse step, minmax(0,1fr) columns, min-heights.
+
 ## Files
 | file | what moved |
 |---|---|
