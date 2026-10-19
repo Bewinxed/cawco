@@ -149,64 +149,68 @@
     {#if meta && !reading}
       <span data-slot="meta" class="meta" data-box>{@render meta()}</span>
     {/if}
-    {#if !reading}
-      <span data-slot="tools" class="tools" data-block-tools data-box>
-        {@render action?.()}
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger
-            aria-label={words.more(title)}
-            class="{buttonVariants({
-              variant: 'ghost',
-              size: 'icon-sm',
-            })} touch-hit"
-          >
-            <IconMore />
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Content align="end" class="w-auto min-w-48">
-            <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
-              <IconArrowUp />
-              <span>{words.moveUp}</span>
-            </DropdownMenu.Item>
-            <DropdownMenu.Item disabled={last} onSelect={() => onmove(1)}>
-              <IconArrowDown />
-              <span>{words.moveDown}</span>
-            </DropdownMenu.Item>
-            {#if !wideOnly}
-              <DropdownMenu.Separator />
-              <DropdownMenu.RadioGroup
-                onValueChange={(next) => onwidth(next as BlockWidth)}
-                value={width}
+    <span
+      data-slot="tools"
+      class="tools"
+      data-block-tools
+      data-box
+      hidden={reading}
+    >
+      {@render action?.()}
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger
+          aria-label={words.more(title)}
+          class="{buttonVariants({
+            variant: 'ghost',
+            size: 'icon-sm',
+          })} touch-hit"
+        >
+          <IconMore />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="end" class="w-auto min-w-48">
+          <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
+            <IconArrowUp />
+            <span>{words.moveUp}</span>
+          </DropdownMenu.Item>
+          <DropdownMenu.Item disabled={last} onSelect={() => onmove(1)}>
+            <IconArrowDown />
+            <span>{words.moveDown}</span>
+          </DropdownMenu.Item>
+          {#if !wideOnly}
+            <DropdownMenu.Separator />
+            <DropdownMenu.RadioGroup
+              onValueChange={(next) => onwidth(next as BlockWidth)}
+              value={width}
+            >
+              <DropdownMenu.RadioItem value="narrow"
+                >{words.narrow}</DropdownMenu.RadioItem
               >
-                <DropdownMenu.RadioItem value="narrow"
-                  >{words.narrow}</DropdownMenu.RadioItem
-                >
-                <DropdownMenu.RadioItem value="wide"
-                  >{words.wide}</DropdownMenu.RadioItem
-                >
-              </DropdownMenu.RadioGroup>
-              {#if columns === 1}
-                <p class="aside">{words.widerScreens}</p>
-              {/if}
+              <DropdownMenu.RadioItem value="wide"
+                >{words.wide}</DropdownMenu.RadioItem
+              >
+            </DropdownMenu.RadioGroup>
+            {#if columns === 1}
+              <p class="aside">{words.widerScreens}</p>
             {/if}
-            {#if hideable || view}
-              <DropdownMenu.Separator />
-            {/if}
-            {#if hideable}
-              <DropdownMenu.Item onSelect={onhide}>
-                <IconEyeClosed />
-                <span>{words.hide}</span>
-              </DropdownMenu.Item>
-            {/if}
-            {#if view}
-              <DropdownMenu.Item onSelect={ontab}>
-                <IconWindow />
-                <span>{words.showAsTab}</span>
-              </DropdownMenu.Item>
-            {/if}
-          </DropdownMenu.Content>
-        </DropdownMenu.Root>
-      </span>
-    {/if}
+          {/if}
+          {#if hideable || view}
+            <DropdownMenu.Separator />
+          {/if}
+          {#if hideable}
+            <DropdownMenu.Item onSelect={onhide}>
+              <IconEyeClosed />
+              <span>{words.hide}</span>
+            </DropdownMenu.Item>
+          {/if}
+          {#if view}
+            <DropdownMenu.Item onSelect={ontab}>
+              <IconWindow />
+              <span>{words.showAsTab}</span>
+            </DropdownMenu.Item>
+          {/if}
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
+    </span>
   </header>
   <div
     data-card={card || undefined}
