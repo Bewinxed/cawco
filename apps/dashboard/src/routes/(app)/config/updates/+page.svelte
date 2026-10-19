@@ -202,7 +202,7 @@
           {#if pendingText}
             <p
               aria-live="polite"
-              class="type-meta max-w-(--c-measure) text-ink-muted"
+              class="type-meta max-w-c-measure text-ink-muted"
               in:blur={{
                 duration: dur("--dur-panel"),
                 easing: easeOut,

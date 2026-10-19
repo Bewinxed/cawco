@@ -8,13 +8,13 @@ No `<style>` remains in any of the seven files.
 
 | File | Moved | Literals → target | Breakpoint edges |
 | --- | --- | --- | --- |
-| config/phone | group, status line, device row; `<style>` (foreign-dom nth-child rule) removed | 72ch → `--c-measure`; 8px → space-2; 10px → space-3; 12px → space-3; 50% → rounded-pill | `max-phone:` (639 → 640 edge) |
-| config/previews | group, 6 notes | 72ch → `--c-measure`; 8px → space-2 | none |
+| config/phone | group, status line, device row; `<style>` (foreign-dom nth-child rule) removed | 72ch → `c-measure`; 8px → space-2; 10px → space-3; 12px → space-3; 50% → rounded-pill | `max-phone:` (639 → 640 edge) |
+| config/previews | group, 6 notes | 72ch → `c-measure`; 8px → space-2 | none |
 | config/rules | waiting badge | 1px 6px → space-row, space-2 | none |
-| config/skills | `.group`, `.note`, `.listing` classes (their `<style>` was lost in the merge), offer row | 8px → space-2; 18px → space-5; 72ch → `--c-measure`; 10px → space-3; 240px → `--c-offer-text-basis` | none |
-| config/spend | `.group`, `.note` classes | 8px → space-2; 72ch → `--c-measure` | none |
-| config/subagents | group, 6 notes, status line | 72ch → `--c-measure`; 8px → space-2 | none |
-| config/updates | 2 groups, pending note, fold body | 8px → space-2; 72ch → `--c-measure`; 6px → space-2 | none |
+| config/skills | `.group`, `.note`, `.listing` classes (their `<style>` was lost in the merge), offer row | 8px → space-2; 18px → space-5; 72ch → `c-measure`; 10px → space-3; 240px → `c-offer-text-basis` | none |
+| config/spend | `.group`, `.note` classes | 8px → space-2; 72ch → `c-measure` | none |
+| config/subagents | group, 6 notes, status line | 72ch → `c-measure`; 8px → space-2 | none |
+| config/updates | 2 groups, pending note, fold body | 8px → space-2; 72ch → `c-measure`; 6px → space-2 | none |
 
 ## Theme additions
 

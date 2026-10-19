@@ -227,7 +227,7 @@
   {/if}
   {#each Object.entries(unpushable) as [machineId, why] (machineId)}
     {@const machine = machines.find((row) => row.machineId === machineId)}
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       {machine ? machineLabel(machine.hostname) : machineId}
       — {why}.
     </p>
@@ -238,7 +238,7 @@
     class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
   >
     <SectionHeader hue={HUE} icon={IconLaptop} label="On machines" />
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       The definition files each machine really has, read live off its disk. One
       the fleet does not keep can be adopted into it, and every other machine
       gets it.
@@ -247,20 +247,20 @@
          in any order, and one listed above another would push the rows
          already drawn down the page. -->
     {#if online.length === 0}
-      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
         No machine is online to ask.
       </p>
     {:else if Object.keys(reading).length > 0}
       <p
         data-slot="note"
-        class="mark-line type-meta flex max-w-(--c-measure) items-center gap-space-2 text-ink-muted"
+        class="mark-line type-meta flex max-w-c-measure items-center gap-space-2 text-ink-muted"
         role="status"
       >
         <Spinner class="shrink-0" />
         <span>Asking the machines…</span>
       </p>
     {:else if discovered.length === 0}
-      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
         No machine has any subagent files yet.
       </p>
     {:else}

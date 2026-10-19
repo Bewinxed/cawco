@@ -381,7 +381,9 @@
   <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconBolt} label={words.skills} />
     {#if skills.length === 0}
-      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.noSkills}</p>
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        {words.noSkills}
+      </p>
     {:else}
       <RowList label={words.skills}>
         {#each skills as row (row.name)}
@@ -472,7 +474,9 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.degraded}</p>
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      {words.degraded}
+    </p>
   </div>
 
   <div
@@ -481,7 +485,9 @@
   >
     <SectionHeader hue={HUE} icon={IconShop} label={words.marketplaces} />
     {#if marketplaces.length === 0}
-      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.noMarketplaces}</p>
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        {words.noMarketplaces}
+      </p>
     {:else}
       <RowList label={words.marketplaces}>
         {#each marketplaces as row (row.name)}
@@ -548,12 +554,14 @@
                     {unread[row.name]}
                   </p>
                 {:else if (listings[row.name] ?? []).length === 0}
-                  <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.listsNothing}</p>
-                {:else}
-                  <ul
-                    data-slot="listing"
-                    class="flex flex-col gap-space-row"
+                  <p
+                    data-slot="note"
+                    class="type-meta max-w-c-measure text-ink-muted"
                   >
+                    {words.listsNothing}
+                  </p>
+                {:else}
+                  <ul data-slot="listing" class="flex flex-col gap-space-row">
                     {#each listings[row.name] as plugin (plugin.name)}
                       {@const id = `${plugin.name}@${row.name}`}
                       <li
@@ -561,7 +569,7 @@
                       >
                         <span
                           data-slot="text"
-                          class="flex min-w-0 shrink grow basis-(--c-offer-text-basis) flex-col gap-space-row"
+                          class="flex min-w-0 shrink grow basis-c-offer-text-basis flex-col gap-space-row"
                         >
                           <span
                             class="flex flex-wrap items-baseline gap-space-2"
@@ -572,14 +580,14 @@
                             {#if plugin.version}
                               <span
                                 data-slot="note"
-                                class="type-meta max-w-(--c-measure) text-ink-muted"
+                                class="type-meta max-w-c-measure text-ink-muted"
                                 >{plugin.version}</span
                               >
                             {/if}
                             {#if plugin.category}
                               <span
                                 data-slot="note"
-                                class="type-meta max-w-(--c-measure) text-ink-muted"
+                                class="type-meta max-w-c-measure text-ink-muted"
                                 >{plugin.category}</span
                               >
                             {/if}
@@ -587,13 +595,15 @@
                           {#if plugin.description}
                             <span
                               data-slot="note"
-                              class="type-meta max-w-(--c-measure) text-ink-muted"
+                              class="type-meta max-w-c-measure text-ink-muted"
                               >{plugin.description}</span
                             >
                           {/if}
                         </span>
                         {#if installed(id)}
-                          <span data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted"
+                          <span
+                            data-slot="note"
+                            class="type-meta max-w-c-measure text-ink-muted"
                             >{words.added}</span
                           >
                         {:else}
@@ -626,7 +636,9 @@
   >
     <SectionHeader hue={HUE} icon={IconLayers} label={words.plugins} />
     {#if plugins.length === 0}
-      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.noPlugins}</p>
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+        {words.noPlugins}
+      </p>
     {:else}
       <RowList label={words.plugins}>
         {#each plugins as row (row.id)}
@@ -685,7 +697,9 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.pluginOff}</p>
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
+      {words.pluginOff}
+    </p>
   </div>
 
   <MachineInventory

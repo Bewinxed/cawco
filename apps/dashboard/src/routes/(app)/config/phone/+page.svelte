@@ -145,7 +145,7 @@
         />
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       A push names the session or task and nothing else; the app reads the rest
       over your tailnet.
     </p>
@@ -166,10 +166,7 @@
       </p>
     {/each}
     {#if devices.length === 0}
-      <p
-        data-slot="note"
-        class="type-meta max-w-(--c-measure) text-ink-muted"
-      >
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
         Your devices will appear here. Open the CawCo app on your phone and
         allow notifications to register it.
       </p>
