@@ -36004,6 +36004,10 @@
       "Created": {
         "type": "object",
         "properties": {
+          "broken": {
+            "$ref": "#/components/schemas/GraphBroken",
+            "description": "What a decision page's program left broken on the picks and the graph; absent when nothing."
+          },
           "decisions": {
             "description": "A decision page's decisions, by id, in page order.",
             "type": "array",
@@ -36343,6 +36347,34 @@
           "opened",
           "route"
         ]
+      },
+      "GraphBroken": {
+        "description": "What a decision page's program leaves broken on the person's picks and\nthe project's graph, for its writer to put back or tell the person.\nEach list only when it has something.",
+        "type": "object",
+        "properties": {
+          "after": {
+            "type": "object",
+            "description": "Decisions it lacks (taken out, or never written) that another page comes after, with the `page#card`s that do: no edge is drawn for them."
+          },
+          "options": {
+            "type": "object",
+            "description": "Options taken out that the person picked, by decision: the pick is kept, and its card says the option is gone."
+          },
+          "picked": {
+            "description": "Decisions taken out that the person picked: the pick is kept, on no card.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "unlinked": {
+            "description": "Its `after`s naming no decision of the project's: no edge is drawn for them.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
       },
       "PageError": {
         "description": "Where a page's code threw, 1-based, the file from the toolchain root when it is the project's.",
@@ -37060,6 +37092,10 @@
               "string"
             ]
           },
+          "program": {
+            "description": "A decision page's program as the hub keeps it, on a read without `since`: re-emit a statement from it to revise one.",
+            "type": "string"
+          },
           "removed": {
             "description": "Keys that changed since `since` and are no longer there.",
             "type": "array",
@@ -37295,6 +37331,10 @@
         "description": "What a decision page's revision (`statements`) answers: what it changed,\nnot the page. The person's picks are read with `artifact_read`.",
         "type": "object",
         "properties": {
+          "broken": {
+            "$ref": "#/components/schemas/GraphBroken",
+            "description": "What it left broken on the picks and the graph; absent when nothing."
+          },
           "decisions": {
             "description": "Its decisions now, by id, in page order.",
             "type": "array",
@@ -38634,7 +38674,7 @@
             }
           },
           "problems": {
-            "description": "What could not be drawn, one sentence each: an `after` naming no decision.",
+            "description": "What the graph cannot draw as written, one sentence each: an `after`\nnaming no decision, a pick on a decision or option a revision took out,\na page whose artifact (and so its picks) the hub no longer holds.",
             "type": "array",
             "items": {
               "type": "string"
@@ -38656,6 +38696,13 @@
             "description": "Its decision's id on its page.",
             "type": "string"
           },
+          "gone": {
+            "description": "Options of its pick that a revision took out, by id: the pick is kept, and the card says they are gone.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
           "id": {
             "description": "`page#card`: one id across the project's pages.",
             "type": "string"
@@ -38669,7 +38716,7 @@
             "type": "string"
           },
           "picked": {
-            "description": "Picked on its page.",
+            "description": "Picked on its page, every option picked one it still offers.",
             "type": "boolean"
           },
           "x": {
@@ -38681,6 +38728,7 @@
         },
         "required": [
           "card",
+          "gone",
           "id",
           "name",
           "page",

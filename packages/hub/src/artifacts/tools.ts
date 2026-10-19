@@ -227,13 +227,14 @@ export const artifactCreateToParent = {
 export const artifactUpdate = {
   name: "artifact_update",
   description:
-    "Change one of your artifacts in place. `statements` revises a decision page's program: only the statements " +
-    "that change, merged by name. `html` replaces a page without a reload; picks, fields, focus and scroll stay. " +
+    "Change an artifact of yours. `statements` revises a decision page's program (any of your " +
+    "project's): only the statements that change, merged by name; `broken` names the picks and `after`s " +
+    "it orphaned. `html` replaces a page, its picks, fields, focus and scroll kept. " +
     "`patch` is a " +
     'JSON Patch (RFC 6902) over its state, keyed by choice id or field name, like [{"op":"replace","path":"/hero/options","value":["b"]}]; ' +
-    "all of it applies or none. Answers the state after the change. A canvas takes `elements` (added, or replacing " +
+    "all or none applies. Answers the state after. A canvas takes `elements` (added, or replacing " +
     'the one of the id given), `delete` (ids) or `mermaid` (added below); it answers its outline and "<id> changed ' +
-    "under you\" for what you replaced that the person changed since your last read. A component's `args` sets a " +
+    "under you\" for what you replaced that the person had changed. A component's `args` sets a " +
     "story's values, `story` adds, duplicates, removes or moves one; each answers the lines and the story's frames. " +
     "`ask` changes the head's line for any kind; `edges`, `group`, `dials` change a component canvas.",
   input: {
@@ -286,9 +287,9 @@ export const artifactUpdate = {
 export const artifactRead = {
   name: "artifact_read",
   description:
-    "Read the person's picks, notes and values on one of your artifacts, each with the page hash it was made on. " +
-    "`since` (the `seq` of your last read) returns only what changed after it. No id: your newest. " +
-    "When the person sends picks, you are told the `since` to read from. A canvas answers " +
+    "Read the person's picks, notes and values on one of your artifacts (or your project's pages), each " +
+    "with the page hash it was made on; a decision page adds its `program`. " +
+    "`since` (the `seq` of your last read) returns only what changed after it. No id: your newest. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
     "the person changed since `since` or your last read; `png: true` adds its picture. A component answers its " +
     "frames as drawn, moves, stories, the person's `dials` and `tuned`; `state` adds a frame's style delta, " +

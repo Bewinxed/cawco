@@ -11669,6 +11669,8 @@ export const createServer = (
     },
     personShown: (instanceId) => personShown.get(instanceId),
     page: keptArtifactPage,
+    graphLinks: (projectId, name, cards) =>
+      decisions.linksOf(projectId, name, cards),
     keepPage: async (instance, name, page) => {
       const refused = await keepPage(instance, name, page);
       return refused && { status: refused.code, refused: refused.refused };
@@ -20788,11 +20790,6 @@ export const createServer = (
         .ofProject(projectId)
         .filter((row) => row.kind === "page")
         .toSorted((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime()),
-    builtPage: async (artifactId) => {
-      const file = Bun.file(join(ARTIFACTS_ROOT, artifactId, "index.html"));
-      return (await file.exists()) ? await file.text() : undefined;
-    },
-    program: (artifactId) => artifacts.program(artifactId),
     place: (artifactId, places) => {
       try {
         artifacts.keepPlaces(artifactId, places);
