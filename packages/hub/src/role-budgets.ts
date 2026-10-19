@@ -513,7 +513,6 @@ export const measureRoles = (): RoleSize[] => {
         },
         park: () => undefined,
         settle: () => undefined,
-        takeOver: () => Promise.reject(new Error("measuring")),
       }).tools(actor),
   });
   try {

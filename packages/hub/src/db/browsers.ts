@@ -32,6 +32,8 @@ export interface BrowsersDb {
     machineId: string,
     row: Omit<StoredBrowser, "machineId">
   ) => void;
+  /** One browser of a machine gone: removed there (its profile deleted). */
+  readonly remove: (machineId: string, key: BrowserKey) => void;
   /** A machine's browsers, whole: the rows it no longer names go. */
   readonly replace: (
     machineId: string,
@@ -97,6 +99,11 @@ export const browsersDb = (db: BunSQLiteDatabase): BrowsersDb => ({
   },
   list: () => db.select().from(browsers).all().map(stored),
   put: (machineId, row) => upsert(db, machineId, row),
+  remove: (machineId, key) => {
+    db.delete(browsers)
+      .where(and(eq(browsers.machineId, machineId), eq(browsers.key, key)))
+      .run();
+  },
   replace: (machineId, rows) => {
     db.transaction((tx) => {
       const keys = rows.map((row) => row.key);

@@ -2092,7 +2092,8 @@ const attach = (
       // Usage and workflow-run transitions originate at the hub, never at a
       // daemon; machine-scoped control replies do travel through this sink,
       // without an instanceId. A move's progress, a command's slot wait, a
-      // stage's and the browsers' frames go out on `emit`.
+      // stage's and the browsers' frames go out on `emit`; the hub's
+      // browser list goes hub → screens only.
       if (
         frame.kind === "usage" ||
         frame.kind === "workflow" ||
@@ -2103,6 +2104,7 @@ const attach = (
         frame.kind === "stage" ||
         frame.kind === "browsers" ||
         frame.kind === "browser_handback" ||
+        frame.kind === "browser_list" ||
         frame.kind === "stream_relay" ||
         frame.kind === "stage-clone"
       ) {

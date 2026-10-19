@@ -68,6 +68,7 @@
     refreshContext,
     setPeeked,
     submitCommand,
+    takeOverBrowser,
   } from "./client.svelte";
   import { identityVar } from "./folder-prefs.svelte";
   import { conversationHref } from "./links";
@@ -80,6 +81,7 @@
   import SessionMark from "./SessionMark.svelte";
   import { sessionAct, stopOnRow } from "./session-acts.svelte";
   import { cawOf, sessionStatus } from "./session-status";
+  import { toast } from "./toasts";
   import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
 
@@ -267,6 +269,25 @@
       result: permissionAnswer(request, kind),
     });
   }
+
+  /**
+   * The answer that is not Deny: a browser ask is taken over (the hub
+   * refuses an Approve on one), anything else approved. A refused take-over
+   * reads in the hub's words.
+   */
+  async function accept(request: PendingPermission): Promise<void> {
+    if (!request.browserAsk) {
+      answer(request, "allow");
+      return;
+    }
+    const refused = await takeOverBrowser(
+      request.requestId,
+      request.browserAsk
+    );
+    if (refused) {
+      toast.error(refused);
+    }
+  }
 </script>
 
 <div data-slot="peek" class="peek flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -443,14 +464,16 @@
           </Button>
           <Button
             data-approve
-            aria-label="Approve {summary}"
+            aria-label="{request.browserAsk
+              ? 'Take over'
+              : 'Approve'} {summary}"
             class="peer approve"
-            onclick={() => answer(request, "allow")}
+            onclick={() => accept(request)}
             size="sm"
             variant="secondary"
           >
             <IconTick />
-            <span>Approve</span>
+            <span>{request.browserAsk ? "Take over" : "Approve"}</span>
           </Button>
         </div>
       {/if}

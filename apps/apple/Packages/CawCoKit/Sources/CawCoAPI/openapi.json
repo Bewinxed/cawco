@@ -1190,6 +1190,59 @@
         }
       }
     },
+    "/api/browsers/{key}/remove": {
+      "post": {
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiBrowsersByKeyRemove",
+        "responses": {
+          "200": {
+            "description": "postApiBrowsersByKeyRemove 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyRemove200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiBrowsersByKeyRemove 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/stream-relay": {
       "get": {
         "operationId": "getApiStreamRelay",
@@ -26274,22 +26327,7 @@
       "getApiBrowsers200": {
         "type": "array",
         "items": {
-          "allOf": [
-            {
-              "$ref": "#/components/schemas/StoredBrowser"
-            },
-            {
-              "type": "object",
-              "properties": {
-                "machineName": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "machineName"
-              ]
-            }
-          ]
+          "$ref": "#/components/schemas/ListedBrowser"
         }
       },
       "postApiBrowsersByKeyTakeover200": {
@@ -26308,6 +26346,20 @@
         "required": [
           "artifactId",
           "row"
+        ]
+      },
+      "postApiBrowsersByKeyRemove200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          }
+        },
+        "required": [
+          "ok"
         ]
       },
       "getApiProjectsByIdGate200": {
@@ -31986,6 +32038,9 @@
             "$ref": "#/components/schemas/AccountBorrowFrame"
           },
           {
+            "$ref": "#/components/schemas/BrowserListFrame"
+          },
+          {
             "$ref": "#/components/schemas/RelayFrame"
           },
           {
@@ -32047,6 +32102,7 @@
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "command_queue": "#/components/schemas/CommandQueueFrame",
             "account_borrow": "#/components/schemas/AccountBorrowFrame",
+            "browser_list": "#/components/schemas/BrowserListFrame",
             "stream_relay": "#/components/schemas/RelayFrame",
             "stream_relay.journey": "#/components/schemas/RelayJourneyFrame",
             "workflow": "#/components/schemas/WorkflowFrame"
@@ -33449,8 +33505,8 @@
           "tools"
         ]
       },
-      "StoredBrowser": {
-        "description": "One browser as the hub keeps it.",
+      "ListedBrowser": {
+        "description": "One browser of the fleet as the hub lists it (`GET /api/browsers`, and\n{@link BrowserListFrame}): the row its machine last reported, kept by the\nhub, with the machine's name and what the machine says of it now (`why`,\n`progress`, `origin`, from its latest frame).",
         "type": "object",
         "properties": {
           "host": {
@@ -33460,15 +33516,47 @@
             "$ref": "#/components/schemas/BrowserKey"
           },
           "lastUsedAt": {
+            "description": "ms epoch of the last agent connection or viewer.",
             "type": "number"
           },
           "machineId": {
             "type": "string"
           },
+          "machineName": {
+            "type": "string"
+          },
           "name": {
             "type": "string"
           },
+          "origin": {
+            "description": "The origin of the page the person's view shows; absent while it shows none.",
+            "type": "string"
+          },
+          "progress": {
+            "description": "How far an image build is, while `state` is `pulling` or `building`.",
+            "type": "object",
+            "properties": {
+              "done": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              },
+              "what": {
+                "type": "string",
+                "enum": [
+                  "image"
+                ]
+              }
+            },
+            "required": [
+              "done",
+              "total",
+              "what"
+            ]
+          },
           "projectId": {
+            "description": "The project of a `project:` key; null for a machine's own browser.",
             "type": [
               "null",
               "string"
@@ -33499,6 +33587,10 @@
               "requestId",
               "since"
             ]
+          },
+          "why": {
+            "description": "Why it is `failed`, one sentence.",
+            "type": "string"
           }
         },
         "required": [
@@ -33506,6 +33598,7 @@
           "key",
           "lastUsedAt",
           "machineId",
+          "machineName",
           "name",
           "projectId",
           "state"
@@ -33559,6 +33652,10 @@
             "type": "number"
           },
           "name": {
+            "type": "string"
+          },
+          "origin": {
+            "description": "The origin of the page the person's view shows (neko's front window on\nthe container host, the screencast's page on the local host), as the\nmachine reads it through its own DevTools link; absent while that page\nis none (`about:blank`, no page). For the person's band alone: the gate\nnever sends it to an agent.",
             "type": "string"
           },
           "ports": {
@@ -57091,6 +57188,28 @@
           "kind",
           "lender",
           "requestId"
+        ]
+      },
+      "BrowserListFrame": {
+        "description": "Hub-originated, to every dashboard socket (the app's included): every\nbrowser of the fleet, whole, as the socket opens and on each change of\nany (a machine's frame, a start, stop, take-over, hand-back or removal).\nA view paints from it and follows it, and never polls.",
+        "type": "object",
+        "properties": {
+          "browsers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ListedBrowser"
+            }
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "browser_list"
+            ]
+          }
+        },
+        "required": [
+          "browsers",
+          "kind"
         ]
       },
       "RelayFrame": {
