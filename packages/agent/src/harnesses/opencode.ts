@@ -674,10 +674,11 @@ const recordOf = (value: unknown): Record<string, unknown> =>
  * own start. A launch config is read once, as its server starts: a changed
  * set starts a new generation ({@link OpencodeHarness.#hashConfig}), and
  * that generation alone runs it, each session taking it as it moves there
- * at rest. A name CawCo manages goes from `opencode.json`, from its
- * `mcp.servers` and 1.x's flat `mcp.<name>` alike, which is written only
- * when it held one (or does not exist yet); CawCo's own server is every
- * server's by its launch config.
+ * at rest. The person's `opencode.json` is his: CawCo never makes one, and
+ * writes his only to take back out a name it once put there, from its
+ * `mcp.servers` and 1.x's flat `mcp.<name>` alike, so his own `opencode`
+ * loads only what he configured; CawCo's own server is every server's by
+ * its launch config.
  */
 const syncOpencodeMcp = async (
   desired: { name: string; config: FleetMcpConfig; enabled: boolean }[],
@@ -695,7 +696,7 @@ const syncOpencodeMcp = async (
   const mcp = recordOf(stored?.mcp);
   const servers = recordOf(mcp.servers);
   const ours = ["cawco", ...managed, ...names];
-  if (!stored || ours.some((name) => name in mcp || name in servers)) {
+  if (stored && ours.some((name) => name in mcp || name in servers)) {
     for (const name of ours) {
       delete mcp[name];
       delete servers[name];

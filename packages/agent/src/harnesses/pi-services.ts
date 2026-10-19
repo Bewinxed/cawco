@@ -5,6 +5,7 @@ import type {
   AuthState,
   FleetHoldings,
   FleetItemState,
+  FleetMcpConfig,
   FleetSyncReport,
   HarnessCapabilities,
   HarnessReport,
@@ -27,12 +28,14 @@ import {
   type AgentSessionServices,
   createAgentSessionServices,
   getAgentDir,
+  type McpServerConfig,
   type ModelRuntime,
   resolveCliModel,
   SessionManager,
   SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { heldSkills, skillDrift, skillRecords } from "../fleet";
+import { readFleetMcpSet } from "../fleet-mcp-set";
 import { probeStarted } from "../probe-count";
 import { resolveBin } from "../tools";
 import {
@@ -44,6 +47,7 @@ import {
 } from "./fleet-common";
 import { machineWithAccountsRuntime } from "./pi-accounts";
 import { checkPiCredential, type PiCredentialState } from "./pi-auth";
+import { piMcpEntry, piMcpList } from "./pi-mcp";
 import { piOpenTurns } from "./pi-sessiond";
 
 const PI_SKILLS = piSkillsDir();
@@ -162,7 +166,7 @@ export const PI_CAPABILITIES: HarnessCapabilities = {
   supportedModels: true,
   supportedCommands: true,
   reloadSkills: false,
-  mcpStatus: false,
+  mcpStatus: true,
   mcpControl: false,
   listSessions: true,
   getSessionMessages: true,
@@ -443,6 +447,32 @@ const PI_AUTH_STATE: Record<PiCredentialState["state"], AuthState> = {
   "signed-in": "authenticated",
   "signed-out": "unauthenticated",
   unknown: "unreadable-credentials",
+};
+
+/**
+ * The fleet's MCP servers as pi's own client finds them ({@link piMcpList}),
+ * each as every CawCo pi session takes it (pi-runtime.ts): one pi cannot take
+ * says why. A project's placed copies (`placed`) are applied once in the set,
+ * as on Claude Code.
+ */
+const piFleetMcp = async (
+  servers: Record<string, FleetMcpConfig>,
+  placed: readonly string[]
+): Promise<Record<string, FleetItemState>> => {
+  const report: Record<string, FleetItemState> = {};
+  const taken: Record<string, McpServerConfig> = {};
+  for (const [name, config] of Object.entries(servers)) {
+    const entry = piMcpEntry(config);
+    if ("skipped" in entry) {
+      report[name] = { state: "unsupported", detail: entry.skipped };
+    } else {
+      taken[name] = entry;
+    }
+  }
+  for (const key of placed) {
+    report[key] = { state: "applied" };
+  }
+  return { ...report, ...(await piMcpList(taken)) };
 };
 
 /** Read-only SDK metadata plus the machine's pi profile; both processes use it. */
@@ -731,15 +761,26 @@ export class PiProfile {
       skills: {},
       at: Date.now(),
     };
+    const enabled = config.mcp.filter((row) => row.enabled);
     for (const row of config.mcp) {
-      report.mcp[row.name] = row.enabled
-        ? {
-            state: "unsupported",
-            detail:
-              "pi has no MCP support. Use Claude Code or OpenCode to call this server.",
-          }
-        : { state: "disabled" };
+      if (!row.enabled) {
+        report.mcp[row.name] = { state: "disabled" };
+      }
     }
+    for (const name of sidecar.mcp ?? []) {
+      if (!enabled.some((row) => row.name === name)) {
+        report.mcp[name] = { state: "removed" };
+      }
+    }
+    Object.assign(
+      report.mcp,
+      await piFleetMcp(
+        Object.fromEntries(enabled.map((row) => [row.name, row.config])),
+        config.placedMcp
+          .filter((row) => row.enabled && row.cwd && row.placeId)
+          .map((row) => `${row.name}@${row.placeId}`)
+      )
+    );
     const skills = await syncSkillFiles(
       PI_SKILLS,
       config.skills,
@@ -777,13 +818,8 @@ export class PiProfile {
       skills: {},
       at: Date.now(),
     };
-    for (const name of sidecar.mcp ?? []) {
-      report.mcp[name] = {
-        state: "unsupported",
-        detail:
-          "pi has no MCP support. Use Claude Code or OpenCode to call this server.",
-      };
-    }
+    const set = await readFleetMcpSet();
+    report.mcp = await piFleetMcp(set.servers, Object.keys(set.placed));
     const held = await heldSkills(PI_SKILLS, Object.keys(sidecar.skills));
     const records = await skillRecords(PI_SKILLS, sidecar.skills, held);
     for (const [name, recorded] of Object.entries(records)) {

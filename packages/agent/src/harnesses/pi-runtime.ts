@@ -1,5 +1,6 @@
 /** Host-only pi turns. This module is absent from the agent process graph. */
 import type {
+  FleetMcpChange,
   ModelTurnUsage,
   PermissionResult,
   SentMessage,
@@ -11,6 +12,7 @@ import {
   CAWCO_ENV,
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
+  CONTROL_MCP_FLEET_CHANGED,
   CONTROL_REFRESH_CAWCO_TOOLS,
   CONTROL_SET_MODEL,
   CONTROL_SUPPORTED_COMMANDS,
@@ -39,24 +41,30 @@ import {
   createGrepToolDefinition,
   createLocalBashOperations,
   createLsToolDefinition,
+  createMcpExtension,
   createReadToolDefinition,
+  createToolSearchExtension,
   createWriteToolDefinition,
   DefaultResourceLoader,
   defineTool,
   type ExtensionAPI,
   type ExtensionFactory,
   getAgentDir,
+  type McpServerConfig,
   ModelRuntime,
   SessionManager,
   SettingsManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
 import { type Boundary, boundaryCommand } from "../boundary";
+import type { BrowserDoor } from "../browser/door";
 import { callDelegationTool, delegationTools } from "../delegation";
+import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
 import type { HarnessContext, HarnessSession, TurnExtras } from "../harness";
 import { placedMemoryIn } from "../placed-memory";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { accountRuntime } from "./pi-accounts";
+import { piMcpServers } from "./pi-mcp";
 import {
   BACKGROUND_SHELL,
   type BackgroundShellEnd,
@@ -355,6 +363,115 @@ class CawcoTools {
 }
 
 /**
+ * The fleet's MCP servers for one session, registered through pi's own
+ * extension API (`pi.registerMcpServer`, pi.dev/docs/latest/extensions:
+ * "Servers registered while the extension loads connect when the session
+ * starts, together with the `mcp.json` servers; servers registered later
+ * connect right away, and `pi.unregisterMcpServer()` closes the connection
+ * and makes the server's tools unreachable. Registrations are not saved").
+ * pi's MCP extension connects them beside the person's own `mcp.json`
+ * servers; a server of his under the same name takes precedence.
+ */
+class FleetMcp {
+  #api: ExtensionAPI | undefined;
+  /** Each registered server's entry, as registered. */
+  readonly #held = new Map<string, string>();
+  readonly #cwd: string;
+
+  constructor(cwd: string) {
+    this.#cwd = cwd;
+  }
+
+  /** The inline extension: holds pi's API and registers the session's first set. */
+  extension(first: Record<string, McpServerConfig>): ExtensionFactory {
+    return (pi) => {
+      this.#api = pi;
+      this.#apply(first, new Set());
+    };
+  }
+
+  /**
+   * The fleet's servers for this session's folder now ({@link piMcpServers}),
+   * the gated chrome-devtools through `door`, and why any is not taken.
+   */
+  async read(door: BrowserDoor | undefined): Promise<{
+    servers: Record<string, McpServerConfig>;
+    skipped: Record<string, string>;
+  }> {
+    return piMcpServers(fleetMcpAt(await readFleetMcpSet(), this.#cwd), door);
+  }
+
+  /**
+   * `servers` registered: a server the set no longer names unregistered, and
+   * one new, changed, or in `again` (a sign-in or sign-out at the hub)
+   * unregistered when held and registered anew, so pi dials it on the config
+   * it has now. Answers what became of each name it touched.
+   */
+  #apply(
+    servers: Record<string, McpServerConfig>,
+    again: ReadonlySet<string>
+  ): Record<string, string> {
+    const api = this.#api;
+    if (!api) {
+      throw new Error("pi has not loaded the CawCo fleet MCP extension.");
+    }
+    const done: Record<string, string> = {};
+    for (const name of this.#held.keys()) {
+      if (!(name in servers)) {
+        api.unregisterMcpServer(name);
+        this.#held.delete(name);
+        done[name] = "gone";
+      }
+    }
+    for (const [name, config] of Object.entries(servers)) {
+      const entry = JSON.stringify(config);
+      if (this.#held.get(name) === entry && !again.has(name)) {
+        continue;
+      }
+      try {
+        // Its connection closed first: registering the name again replaces
+        // the registration, and a server on a new config or after a sign-in
+        // is dialled anew only once its old connection is gone.
+        if (this.#held.has(name)) {
+          api.unregisterMcpServer(name);
+        }
+        api.registerMcpServer(name, config);
+        this.#held.set(name, entry);
+        done[name] = "registered";
+      } catch (error) {
+        done[name] =
+          `refused: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    }
+    return done;
+  }
+
+  /** A fleet change taken in place: the set read again and applied ({@link #apply}). */
+  async take(
+    changes: readonly FleetMcpChange[],
+    door: BrowserDoor | undefined
+  ): Promise<{ servers: { name: string; kind: string; status: string }[] }> {
+    const again = new Set(
+      changes
+        .filter(({ kind }) => kind === "signed-in" || kind === "signed-out")
+        .map(({ name }) => name)
+    );
+    const { servers, skipped } = await this.read(door);
+    const done = this.#apply(servers, again);
+    return {
+      servers: changes.map(({ name, kind }) => ({
+        name,
+        kind,
+        status:
+          done[name] ??
+          (skipped[name] ? `not taken: ${skipped[name]}` : undefined) ??
+          (this.#held.has(name) ? "kept" : "not taken"),
+      })),
+    };
+  }
+}
+
+/**
  * The HTTP status of the provider's last answer to a session, read off the
  * response itself: {@link fetch} is the fetch every request the session's
  * agent streams is made with (pi-ai `StreamOptions.fetch`, "Defaults to
@@ -407,6 +524,8 @@ class PiSession implements HarnessSession {
   readonly #session: AgentSession;
   readonly #credential: { value?: string };
   readonly #tools: CawcoTools;
+  /** The fleet's MCP servers it holds, taken again at each fleet change. */
+  readonly #fleetMcp: FleetMcp;
   /** The status of each answer its provider gave. */
   readonly #answers = new ProviderAnswers();
   /** The runtime the session runs on: its account's, or the machine's own. */
@@ -484,12 +603,14 @@ class PiSession implements HarnessSession {
     credential: { value?: string },
     tools: CawcoTools,
     runtime: ModelRuntime,
-    shells: PiShells
+    shells: PiShells,
+    fleetMcp: FleetMcp
   ) {
     this.#ctx = ctx;
     this.#session = session;
     this.#credential = credential;
     this.#tools = tools;
+    this.#fleetMcp = fleetMcp;
     this.#runtime = runtime;
     this.#shells = shells;
     shells.report = {
@@ -883,6 +1004,12 @@ class PiSession implements HarnessSession {
         console.error(`[pi] cawco tools refreshed: ${count} listed`);
         return { listed: count };
       }
+      // The agent sends the session's door with the changes (pi-sessiond.ts).
+      case CONTROL_MCP_FLEET_CHANGED:
+        return await this.#fleetMcp.take(
+          args[0] as FleetMcpChange[],
+          args[1] as BrowserDoor | undefined
+        );
       case CONTROL_INTERRUPT:
         await this.#session.abort();
         return undefined;
@@ -1023,12 +1150,23 @@ export async function startPiHost(
       content,
     })),
   ];
+  // The fleet's MCP servers, registered for this session alone (`FleetMcp`),
+  // and pi's own MCP and tool-search extensions, which the SDK does not load
+  // ("SDK sessions do not; add `createCodemodeExtension()`,
+  // `createToolSearchExtension()`, and `createMcpExtension()`",
+  // pi.dev/docs/latest/sdk): they connect the fleet's beside the person's own
+  // `mcp.json` servers, and find the fleet's `deferred` tools when asked.
+  const fleetMcp = new FleetMcp(ctx.cwd);
+  const door = await ctx.browserDoor?.();
   const resourceLoader = new DefaultResourceLoader({
     cwd: ctx.cwd,
     agentDir,
     settingsManager,
     extensionFactories: [
       tools.extension(await piHandoffTools(ctx.instanceId, credential)),
+      createToolSearchExtension(),
+      createMcpExtension(),
+      fleetMcp.extension((await fleetMcp.read(door)).servers),
     ],
     agentsFilesOverride: (base) => ({
       agentsFiles: [...base.agentsFiles, ...memory],
@@ -1071,5 +1209,17 @@ export async function startPiHost(
       ...(ctx.boundary ? boundedFileTools(ctx.cwd, ctx.boundary) : []),
     ],
   });
-  return new PiSession(ctx, session, credential, tools, runtime, shells);
+  // `session_start` reaches the extensions, on which the MCP extension
+  // connects its servers ("The MCP extension connects its servers on
+  // `session_start`, so call `session.bindExtensions()`", pi.dev/docs/latest/sdk).
+  await session.bindExtensions({});
+  return new PiSession(
+    ctx,
+    session,
+    credential,
+    tools,
+    runtime,
+    shells,
+    fleetMcp
+  );
 }

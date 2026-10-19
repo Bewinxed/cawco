@@ -2,6 +2,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { type McpServerStatus, query } from "@anthropic-ai/claude-agent-sdk";
 import {
   type FleetItemState,
+  type FleetMcpConfig,
   type FleetSyncReport,
   mcpFleetState,
 } from "@cawco/core";
@@ -74,11 +75,14 @@ const VERDICT_MARGIN_MS = 5000;
  * CLI answered, so one that takes 25 s of a 30 s window reads connected, and
  * one that never answers reads as Claude Code's own failure. Only a CLI that
  * never starts, or never settles a server past its own timeout, is CawCo's
- * failure to report, and says so.
+ * failure to report, and says so. The CLI is handed `servers` as a session
+ * is (`mcpServers`), and loads no other (`strictMcpConfig`): the fleet's
+ * servers are in no file it reads (fleet-mcp-set.ts).
  */
 export const readMcpRuntime = async (
-  names: string[]
+  servers: Record<string, FleetMcpConfig>
 ): Promise<FleetSyncReport["mcp"]> => {
+  const names = Object.keys(servers);
   if (names.length === 0) {
     return {};
   }
@@ -105,6 +109,8 @@ export const readMcpRuntime = async (
       persistSession: false,
       env,
       pathToClaudeCodeExecutable: executable,
+      mcpServers: servers,
+      strictMcpConfig: true,
     },
   });
   let statuses: McpServerStatus[] | undefined;

@@ -780,6 +780,22 @@ const runHeavy = async (argv: string[]): Promise<number> => {
   return heavyRun(command);
 };
 
+/**
+ * A pi process the agent starts from this build: a session's host
+ * (pi-host.ts), or pi's own `mcp list` (pi-mcp-list.ts), which says how it
+ * went in its exit code.
+ */
+const runPiEntry = async (
+  command: "pi-host" | "pi-mcp-list"
+): Promise<number> => {
+  if (command === "pi-host") {
+    await import("@cawco/agent/pi-host");
+    return 0;
+  }
+  await import("@cawco/agent/pi-mcp-list");
+  return Number(process.exitCode ?? 0);
+};
+
 const run = async (argv: string[]): Promise<number> => {
   const args = parseArgs(argv);
   if (args.help || !(args.command || args.version)) {
@@ -857,8 +873,8 @@ const run = async (argv: string[]): Promise<number> => {
       await import("../../../apps/dashboard/serve.js");
       return 0;
     case "pi-host":
-      await import("@cawco/agent/pi-host");
-      return 0;
+    case "pi-mcp-list":
+      return runPiEntry(args.command);
     case "capabilities": {
       const { probeCapabilities } = await import("@cawco/agent/capabilities");
       console.log(JSON.stringify(await probeCapabilities(), null, 2));
