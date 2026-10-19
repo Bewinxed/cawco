@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, realpathSync } from "node:fs";
 import type http from "node:http";
-import { join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import {
   BROWSER_HEADERS,
   crossSiteRefusal,
@@ -17,6 +17,7 @@ import {
   defineConfig,
   type Plugin,
   type PreviewServer,
+  searchForWorkspaceRoot,
   type ViteDevServer,
 } from "vite";
 import { publicOrigin } from "./public-origin.js";
@@ -68,6 +69,30 @@ const devHub = (): URL => {
  */
 export const INLINE_FACES =
   /\/(?:figtree-latin-wght-normal|jetbrains-mono-latin-wght-normal)\.woff2$/;
+
+/**
+ * The folders `vite dev` serves files from: the workspace root Vite finds by
+ * itself, and the package store the dependencies really live in when that is
+ * outside it. Vite serves `/@fs/` only from `server.fs.allow` ("accessing
+ * files outside this directory list that aren't imported from an allowed file
+ * will result in a 403", vite.dev/config/server-options#server-fs-allow), and
+ * a stylesheet's `url()` is not an import. In a CawCo workspace bun links every
+ * package from one shared store (`…/links/<pkg>@<version>-<hash>/node_modules/
+ * <pkg>`), outside the clone, so the faces app.css names answered 403 and the
+ * page drew in the fallback face. The store is read off where the dashboard's
+ * own face package resolves; in a normal checkout that is `node_modules/.bun`
+ * under the workspace root, already allowed, and nothing is added.
+ */
+const SERVED_DIRS = (() => {
+  const workspaceRoot = searchForWorkspaceRoot(process.cwd());
+  const face = realpathSync(
+    join(import.meta.dirname, "node_modules/@fontsource-variable/figtree")
+  );
+  const linkDir = face.slice(0, face.lastIndexOf("/node_modules/"));
+  const store = dirname(linkDir);
+  const inside = !relative(workspaceRoot, store).startsWith("..");
+  return inside ? [workspaceRoot] : [workspaceRoot, store];
+})();
 
 /**
  * The vite servers' (`vite dev`, and `vite preview`, the built dashboard the
@@ -339,6 +364,7 @@ export default defineConfig(({ command }) => {
       // named here; `.ts.net` covers this tailnet's MagicDNS names without
       // pinning the machine's own hostname into the repo.
       allowedHosts: [".ts.net", "localhost"],
+      fs: { allow: SERVED_DIRS },
       // The hub's live socket. REST /api is handled by SvelteKit's own route
       // (routes/api/[...path]).
       proxy: DEV_HUB
