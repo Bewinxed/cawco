@@ -241,13 +241,14 @@ export async function recordInstall(
 /**
  * The hub's cache of the release archives it serves its machines
  * (`binary-releases/<version>/<archive>`, hub binary-updates.ts), beside the
- * hub's database; its update policy (`policy.json`) lives there too. Only on
- * the hub's machine does it exist.
+ * hub's database. It holds archives only: everything in it is a build's, and
+ * {@link prune} trims it. The update policy is not here
+ * (paths.ts `hubUpdatePolicyPath`). Only on the hub's machine does it exist.
  */
 export const hubReleasesDir = (): string =>
   join(dirname(hubDbPath()), "binary-releases");
 
-/** Removes every folder in `dir` not named in `keep`; files (the hub's policy) and unfinished folders stay. */
+/** Removes every folder in `dir` not named in `keep`; unfinished folders (`.partial`) stay. */
 async function removeFoldersBut(
   dir: string,
   keep: ReadonlySet<string>

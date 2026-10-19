@@ -7,7 +7,7 @@
  */
 import { Database } from "bun:sqlite";
 import { mkdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { type DamagedHubRecord, damagedHubRecordWords } from "@cawco/core";
 import {
   assetBase,
@@ -29,6 +29,7 @@ import type {
   BinaryUpdateState,
   ChannelRelease,
 } from "@cawco/core/binary-updates";
+import { hubUpdatePolicyPath } from "@cawco/core/paths";
 import {
   DamagedRecord,
   isDamagedRecord,
@@ -114,6 +115,11 @@ const loadPolicy = (
   try {
     const kept = readRecordSync<unknown>(path);
     if (kept === undefined) {
+      // Said at every start without one: a lost record shows in the journal
+      // the moment the hub runs on the first policy in its place.
+      console.info(
+        `[updates] no update policy at ${path}: running the first policy (${FIRST_POLICY.channel}, auto-update off) until one is saved`
+      );
       return { policy: FIRST_POLICY };
     }
     if (!isPolicy(kept)) {
@@ -133,10 +139,11 @@ const loadPolicy = (
 };
 
 export function createBinaryUpdates(options: Options) {
-  // The one derivation of it (core binary-installation.ts), which the update
-  // helper's prune trims to the builds this machine keeps.
+  // The archive cache: the one derivation of it (core binary-installation.ts),
+  // which the update helper's prune trims to the builds this machine keeps.
   const root = hubReleasesDir();
-  const policyPath = join(root, "policy.json");
+  // The policy beside the database, apart from the cache, which holds builds alone.
+  const policyPath = hubUpdatePolicyPath();
   let held = loadPolicy(policyPath);
   let current: { at: number; release: LocatedRelease } | undefined;
   let checking: Promise<LocatedRelease> | undefined;
@@ -154,7 +161,7 @@ export function createBinaryUpdates(options: Options) {
     return held.policy;
   };
   const savePolicy = (policy: BinaryUpdatePolicy) => {
-    mkdirSync(root, { recursive: true, mode: 0o700 });
+    mkdirSync(dirname(policyPath), { recursive: true, mode: 0o700 });
     writeStateFileSync(policyPath, `${JSON.stringify(policy)}\n`, {
       mode: 0o600,
     });

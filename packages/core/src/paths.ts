@@ -866,6 +866,14 @@ export const hubProjectsDir = (): string =>
   join(dirname(hubDbPath()), "projects");
 
 /**
+ * The fleet's update policy (hub binary-updates.ts): `update-policy.json`
+ * beside the hub's database ({@link hubDbPath}), a file of its own, never
+ * inside a cache anything trims. Only on the hub's machine does it exist.
+ */
+export const hubUpdatePolicyPath = (): string =>
+  join(dirname(hubDbPath()), "update-policy.json");
+
+/**
  * The caches a workspace writes besides its clone and scratch dir: the
  * workspaces' own cache, and on macOS the provisioning profile folders
  * automatic signing fills. Every host cache is read-only to a workspace: a
