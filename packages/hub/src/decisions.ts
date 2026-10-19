@@ -158,7 +158,6 @@ export const readPage = async (html: string): Promise<ReadPage> => {
     }
     option = null;
   };
-  // biome-ignore lint/correctness/noUndeclaredVariables: HTMLRewriter is Bun's own global (bun-types)
   await new HTMLRewriter()
     .on("title", {
       text(chunk) {
