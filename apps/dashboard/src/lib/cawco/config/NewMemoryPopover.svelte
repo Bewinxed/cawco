@@ -100,17 +100,12 @@
   </Popover.Trigger>
   <Popover.Content
     align="end"
-    class="w-(--pop-w) max-w-(--pop-max)"
+    class="max-w-(--bits-popover-content-available-width)"
     gap="form"
     pad="form"
-    style="--pop-w: 360px; --pop-max: calc(100vw - 2rem)"
+    width="widest"
   >
-    <!-- literal: 12px -->
-    <form
-      class="flex flex-col gap-(--form-gap)"
-      onsubmit={create}
-      style:--form-gap="12px"
-    >
+    <form class="flex flex-col gap-space-3" onsubmit={create}>
       <Field
         id="memory-path"
         label={words.pathUnder(userLayerLabel("memories"))}

@@ -113,24 +113,20 @@
 </script>
 
 <Popover.Root>
-  <!-- literal: 5px, 26px, 8px -->
   <Popover.Trigger
     aria-label="{what}: on {applied} of {machines.length} machines{failed > 0
       ? `, ${failed} refused`
       : ''}"
-    class="mark-line inline-flex h-(--chip-h) flex-none items-center gap-(--chip-gap) rounded-sm bg-surface-recess px-(--chip-px) type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out not-data-fail:[&:hover]:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:active:transform-(--tpress)"
+    class="mark-line inline-flex h-c-btn-h-xs flex-none items-center gap-space-1 rounded-sm bg-surface-recess px-space-2 type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:active:scale-(--press-scale)"
     data-fail={failed > 0 ? "" : undefined}
     motion="settle"
-    style="--chip-gap: 5px; --chip-h: 26px; --chip-px: 8px; --tpress: scale(var(--press-scale))"
   >
-    <!-- literal: 5px -->
     <span
       data-slot="glyph"
       aria-hidden="true"
-      class="group inline-grid w-icon-sm flex-none glyph-none:w-0 glyph-none:-me-(--glyph-pull) motion-safe:transition-[width,margin] motion-safe:dur-control motion-safe:ease-out"
+      class="group inline-grid w-icon-sm flex-none glyph-none:w-0 glyph-none:-me-space-1 motion-safe:transition-[width,margin] motion-safe:dur-control motion-safe:ease-out"
       data-box
       data-glyph={glyph}
-      style:--glyph-pull="5px"
     >
       <IconWarningTriangle
         class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-fail:opacity-100 motion-safe:transition-opacity motion-safe:dur-control motion-safe:ease-out"
@@ -154,20 +150,14 @@
     >
     <span>machines</span>
   </Popover.Trigger>
-  <!-- literal: 360px, calc(100vw - 2rem) -->
   <Popover.Content
     align="end"
-    class="w-(--pop-w) max-w-(--pop-max)"
+    class="max-w-(--bits-popover-content-available-width)"
     gap="tight"
-    style="--pop-w: 360px; --pop-max: calc(100vw - 2rem)"
+    width="widest"
   >
     {#if machines.length === 0}
-      <!-- literal: 10px, 8px -->
-      <p
-        class="type-meta py-(--none-py) px-(--gutter) text-ink-muted"
-        style:--gutter="8px"
-        style:--none-py="10px"
-      >
+      <p class="type-meta py-space-3 px-space-2 text-ink-muted">
         <AddMachineLink>No machines yet</AddMachineLink>
         — this lands on the first one that registers.
       </p>
@@ -175,19 +165,9 @@
     {#each machines as machine, index (machine.machineId)}
       {@const item = stateOf(machine)}
       {@const online = machine.status === "online"}
-      <!-- literal: 6px -->
-      <div
-        data-slot="machine"
-        class="flex flex-col gap-(--stack-gap)"
-        style:--stack-gap="6px"
-      >
-        <!-- literal: 10px, 44px, 6px, 8px -->
+      <div data-slot="machine" class="flex flex-col gap-space-2">
         <div
-          class="flex min-h-(--line-h) items-center gap-(--line-gap) rounded-sm px-(--gutter) py-(--stack-gap)"
-          style:--gutter="8px"
-          style:--line-gap="10px"
-          style:--line-h="44px"
-          style:--stack-gap="6px"
+          class="flex min-h-c-row-h items-center gap-space-3 rounded-sm px-space-2 py-space-2"
         >
           <MachineRow
             hue={machineHue(index, online)}
@@ -209,23 +189,18 @@
                 >
               {:else}
                 {@const syncing = asked[machine.machineId] === true}
-                <!-- literal: 4px, 12px, 26px, 8px -->
                 <button
                   aria-busy={syncing || undefined}
                   aria-disabled={syncing || undefined}
                   aria-label="Sync {machineLabel(machine.hostname)}"
                   data-slot="sync"
-                  class="inline-flex h-(--sync-h) items-center gap-space-1 rounded-sm px-(--gutter) type-label text-ink-strong transition-control [&:hover]:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:transform-(--tpress)"
+                  class="inline-flex h-c-btn-h-xs items-center gap-space-1 rounded-sm px-space-2 type-label text-ink-strong transition-control hover:enabled:bg-surface-hover disabled:opacity-50 motion-safe:transition-control-press motion-safe:active:enabled:not-aria-busy:scale-(--press-scale)"
                   disabled={!online}
                   onclick={whileIdle(
                     () => syncing,
                     () => resync(machine)
                   )}
-                  style:--btn-gap="4px"
-                  style:--btn-icon="12px"
-                  style:--gutter="8px"
-                  style:--sync-h="26px"
-                  style:--tpress="scale(var(--press-scale))"
+                  style:--btn-icon="var(--icon-sm)"
                   type="button"
                 >
                   <PendingContent
@@ -244,12 +219,9 @@
           {#each Object.entries(machine.fleet?.mcpByHarness ?? {}) as [harness, rows] (harness)}
             {@const runtime = rows?.[name]}
             {#if runtime}
-              <!-- literal: 6px, 8px -->
               <p
                 data-slot="note"
-                class="flex items-start gap-(--stack-gap) px-(--gutter) pt-0 pb-(--stack-gap) type-meta wrap-anywhere text-ink-muted"
-                style:--gutter="8px"
-                style:--stack-gap="6px"
+                class="flex items-start gap-space-2 px-space-2 pt-0 pb-space-2 type-meta wrap-anywhere text-ink-muted"
               >
                 <span
                   >{harness}: {SAID[runtime.state]}
@@ -260,14 +232,11 @@
           {/each}
         {/if}
         {#if refused[machine.machineId]}
-          <!-- literal: 6px, 8px -->
           <p
             data-rollout-chip-refused
             data-slot="note"
-            class="mark-line flex items-start gap-(--stack-gap) px-(--gutter) pt-0 pb-(--stack-gap) type-meta wrap-anywhere text-status-fail-ink"
+            class="mark-line flex items-start gap-space-2 px-space-2 pt-0 pb-space-2 type-meta wrap-anywhere text-status-fail-ink"
             role="alert"
-            style:--gutter="8px"
-            style:--stack-gap="6px"
             in:appear
           >
             <span class="mark-cell"
@@ -298,12 +267,9 @@
           />
         {:else if item?.detail}
           <!-- A detail on a row that did not fail is a note, not an error. -->
-          <!-- literal: 6px, 8px -->
           <p
             data-slot="note"
-            class="mark-line flex items-start gap-(--stack-gap) px-(--gutter) pt-0 pb-(--stack-gap) type-meta wrap-anywhere text-ink-muted"
-            style:--gutter="8px"
-            style:--stack-gap="6px"
+            class="mark-line flex items-start gap-space-2 px-space-2 pt-0 pb-space-2 type-meta wrap-anywhere text-ink-muted"
           >
             <span class="mark-cell"
               ><IconInfo class="size-icon-sm flex-none" /></span
@@ -315,13 +281,3 @@
     {/each}
   </Popover.Content>
 </Popover.Root>
-
-<style>
-  /* residual: foreign-dom */
-  /* PendingContent draws the sync icon and takes no class. */
-  [data-slot="sync"] :global(svg) {
-    width: var(--icon-sm);
-    height: var(--icon-sm);
-    flex: none;
-  }
-</style>
