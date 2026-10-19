@@ -108,11 +108,9 @@
     transition:unfold
     {@attach arrive}
   >
-    <!-- literal: minmax(0, 1fr) -->
     <div
       data-slot="tile"
-      class="grid grid-cols-(--tile-cols) gap-space-2 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
-      style:--tile-cols="minmax(0, 1fr)"
+      class="grid grid-cols-1 gap-space-2 rounded-md border border-border-hairline bg-surface-raised p-space-3 shadow-raised"
     >
       <p
         data-slot="title"

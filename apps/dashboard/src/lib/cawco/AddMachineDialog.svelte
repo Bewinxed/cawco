@@ -281,11 +281,9 @@
      by hand: the script is downloaded from it and `join` saves it. An SSH add
      needs none, the hub's own connection carries the machine to it. -->
 {#snippet addressField(id: string)}
-  <!-- literal: 6px -->
   <div
     data-slot="add-machine-dialog-field"
-    class="flex min-w-0 flex-col gap-(--field-gap) text-ink-strong"
-    style:--field-gap="6px"
+    class="flex min-w-0 flex-col gap-space-2 text-ink-strong"
   >
     <Label for={id}>Hub address this machine should use</Label>
     <NativeSelect.Root
@@ -386,21 +384,17 @@
               Signing in to {job.target} over SSH.
             {/if}
           </p>
-          <!-- literal: 8px -->
           <ol
             aria-live="polite"
-            class="m-0 flex list-none flex-col gap-(--steps-gap) p-0"
-            style:--steps-gap="8px"
+            class="m-0 flex list-none flex-col gap-space-2 p-0"
           >
             {#each steps as step, index (index)}
-              <!-- literal: 10px -->
               <li
-                class="mark-line flex min-w-0 items-center gap-(--step-gap) type-body text-ink-muted data-current:text-ink-strong"
+                class="mark-line flex min-w-0 items-center gap-space-3 type-body text-ink-muted data-current:text-ink-strong"
                 data-current={index === steps.length - 1 || undefined}
-                style:--step-gap="10px"
               >
                 {#if index === steps.length - 1}
-                  <Spinner class="size-icon-md" />
+                  <Spinner />
                 {:else}
                   <IconSuccess
                     data-add-machine-dialog-done
@@ -414,39 +408,29 @@
                 >
               </li>
             {:else}
-              <!-- literal: 10px -->
               <li
-                class="mark-line flex min-w-0 items-center gap-(--step-gap) type-body text-ink-muted data-current:text-ink-strong"
+                class="mark-line flex min-w-0 items-center gap-space-3 type-body text-ink-muted data-current:text-ink-strong"
                 data-current
-                style:--step-gap="10px"
               >
-                <Spinner class="size-icon-md" /><span
+                <Spinner /><span
                   class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
                   >Connecting over SSH</span
                 >
               </li>
             {/each}
           </ol>
-          <!-- literal: rotate(90deg) -->
-          <details class="group" style:--chev-turn="rotate(90deg)">
-            <!-- literal: 6px -->
+          <details class="group">
             <summary
-              class="mark-line inline-flex cursor-pointer list-none items-center gap-(--summary-gap) rounded-xs type-label text-ink-muted hover:text-ink-strong"
-              style:--summary-gap="6px"
+              class="mark-line inline-flex cursor-pointer list-none items-center gap-space-2 rounded-xs type-label text-ink-muted details-marker:hidden hover:text-ink-strong"
             >
               <IconChevronRight
                 data-chev
                 aria-hidden="true"
-                class="size-icon-md flex-none transition-[transform] dur-control ease-out group-open:transform-(--chev-turn)"
+                class="size-icon-md flex-none motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-open:rotate-90"
               /><span>Output</span>
             </summary>
-            <!-- literal: 10px, 12px, 14rem, 8px -->
             <pre
-              class="mx-0 mb-0 mt-(--pre-top) max-h-(--pre-max) overflow-auto border border-border-control rounded-md bg-surface-hover px-(--pre-x) py-(--pre-y) text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
-              style:--pre-max="14rem"
-              style:--pre-top="8px"
-              style:--pre-x="12px"
-              style:--pre-y="10px"
+              class="mx-0 mb-0 mt-space-2 max-h-(--c-output-max) overflow-auto border border-border-control rounded-md bg-surface-hover p-space-3 text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
               {@attach followTail()}>{job.lines.join("\n")}</pre>
           </details>
           {#if sshJoin.refused}
@@ -458,17 +442,14 @@
         </div>
       {:else}
         <form class="flex flex-col gap-space-4" id="ssh-join" onsubmit={start}>
-          <!-- literal: minmax(0, 1fr) 6rem -->
           <div
             data-slot="grid"
             class="grid grid-cols-(--grid-cols) gap-space-3"
-            style:--grid-cols="minmax(0, 1fr) 6rem"
+            style:--grid-cols="minmax(0, 1fr) var(--c-port-field-w)"
           >
-            <!-- literal: 6px -->
             <div
               data-slot="add-machine-dialog-field"
-              class="flex min-w-0 flex-col gap-(--field-gap) text-ink-strong"
-              style:--field-gap="6px"
+              class="flex min-w-0 flex-col gap-space-2 text-ink-strong"
             >
               <Label for="join-target">SSH target</Label>
               <Input
@@ -480,11 +461,9 @@
                 bind:value={target}
               />
             </div>
-            <!-- literal: 6px -->
             <div
               data-slot="add-machine-dialog-field"
-              class="flex min-w-0 flex-col gap-(--field-gap) text-ink-strong"
-              style:--field-gap="6px"
+              class="flex min-w-0 flex-col gap-space-2 text-ink-strong"
             >
               <Label for="join-port">Port</Label>
               <Input
@@ -497,7 +476,7 @@
             </div>
             <div
               data-slot="add-machine-dialog-field"
-              class="col-span-full flex min-w-0 flex-col gap-(--field-gap) text-ink-strong"
+              class="col-span-full flex min-w-0 flex-col gap-space-2 text-ink-strong"
             >
               <Label for="join-password">Password (optional)</Label>
               <InputGroup.Root>
@@ -544,12 +523,8 @@
                 <Alert.Description>{failure.text}</Alert.Description>
               </Alert.Root>
               {#if failure.tail.length > 0}
-                <!-- literal: 10px, 12px, 12rem -->
                 <pre
-                  class="m-0 max-h-(--pre-max) overflow-auto border border-border-control rounded-md bg-surface-hover px-(--pre-x) py-(--pre-y) text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
-                  style:--pre-max="12rem"
-                  style:--pre-x="12px"
-                  style:--pre-y="10px">{failure.tail.join("\n")}</pre>
+                  class="m-0 max-h-(--c-output-max) overflow-auto border border-border-control rounded-md bg-surface-hover p-space-3 text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong">{failure.tail.join("\n")}</pre>
               {/if}
             </div>
           {:else if sshJoin.refused}
@@ -563,21 +538,14 @@
             </Alert.Root>
           {/if}
 
-          <!-- literal: rotate(90deg) -->
-          <details
-            class="group"
-            style:--chev-turn="rotate(90deg)"
-            bind:open={keyOpen}
-          >
-            <!-- literal: 6px -->
+          <details class="group" bind:open={keyOpen}>
             <summary
-              class="mark-line inline-flex cursor-pointer list-none items-center gap-(--summary-gap) rounded-xs type-label text-ink-muted hover:text-ink-strong"
-              style:--summary-gap="6px"
+              class="mark-line inline-flex cursor-pointer list-none items-center gap-space-2 rounded-xs type-label text-ink-muted details-marker:hidden hover:text-ink-strong"
             >
               <IconChevronRight
                 data-chev
                 aria-hidden="true"
-                class="size-icon-md flex-none transition-[transform] dur-control ease-out group-open:transform-(--chev-turn)"
+                class="size-icon-md flex-none motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-open:rotate-90"
               />
               <span>This hub's SSH key</span>
             </summary>
@@ -624,7 +592,7 @@
     <Button onclick={close} variant="outline">Cancel</Button>
     <Button disabled={!canStart} form="ssh-join" type="submit">
       {#if starting}
-        <Spinner class="size-icon-md" />
+        <Spinner />
       {/if}
       <span
         >{job?.state === "failed" || job?.state === "stopped"
@@ -665,8 +633,7 @@
         <Drawer.Title>Connect a machine</Drawer.Title>
       </Drawer.Header>
       <div
-        class="kit-sheet-scroll flex min-h-0 flex-col gap-(--sheet-gap) overflow-y-auto overscroll-contain"
-        style:--sheet-gap="calc(var(--spacing) * 6)"
+        class="kit-sheet-scroll flex min-h-0 flex-col gap-space-7 overflow-y-auto overscroll-contain"
       >
         {#if !joined}
           <Drawer.Description text="body">
@@ -708,10 +675,3 @@
     </Dialog.Content>
   </Dialog.Root>
 {/if}
-
-<style>
-  /* residual: pseudo */
-  summary::-webkit-details-marker {
-    display: none;
-  }
-</style>
