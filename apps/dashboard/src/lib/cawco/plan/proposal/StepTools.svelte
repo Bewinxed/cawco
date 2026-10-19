@@ -7,6 +7,7 @@
    * the row's acknowledgement line follows it.
    */
   import { Button } from "#lib/components/ui/button/index.js";
+  import { IconArrowDown, IconArrowUp } from "#lib/icons.js";
   import type { PlanFixture, Step } from "./fixtures";
   import { receiverOf, useView } from "./view.svelte";
 
@@ -67,29 +68,33 @@
 </script>
 
 <div class="tools" data-slot="step-tools">
-  <div class="acts">
-    <Button onclick={() => start("reword")} size="xs" variant="ghost"
+  <!-- The house ghost buttons at the 30px size, one group that fits one
+       line: moving is two icon buttons, named for assistive tech. -->
+  <div aria-label="Change this step" class="acts" role="toolbar">
+    <Button onclick={() => start("reword")} size="sm" variant="ghost"
       >Reword</Button
     >
     <Button
+      aria-label="Move up"
       disabled={at <= 0}
       onclick={() => {
         view.move(steps, step.id, -1);
         view.tell(step, "moved");
       }}
-      size="xs"
-      variant="ghost">Move up</Button
+      size="icon-sm"
+      variant="ghost"><IconArrowUp aria-hidden="true" /></Button
     >
     <Button
+      aria-label="Move down"
       disabled={at < 0 || at >= steps.length - 1}
       onclick={() => {
         view.move(steps, step.id, 1);
         view.tell(step, "moved");
       }}
-      size="xs"
-      variant="ghost">Move down</Button
+      size="icon-sm"
+      variant="ghost"><IconArrowDown aria-hidden="true" /></Button
     >
-    <Button onclick={() => start("add")} size="xs" variant="ghost"
+    <Button onclick={() => start("add")} size="sm" variant="ghost"
       >Add a step</Button
     >
     <Button
@@ -97,7 +102,7 @@
         view.removed.add(step.id);
         view.tell(step, "removed");
       }}
-      size="xs"
+      size="sm"
       variant="ghost">Remove</Button
     >
   </div>
@@ -123,12 +128,12 @@
         }}
         placeholder={editing === "reword" ? "" : "What to do"}
       />
-      <Button size="xs" type="submit">Save</Button>
+      <Button size="sm" type="submit" variant="outline">Save</Button>
       <Button
         onclick={() => {
           editing = null;
         }}
-        size="xs"
+        size="sm"
         variant="ghost">Cancel</Button
       >
     </form>
@@ -160,7 +165,13 @@
         }}
         placeholder="Comment for {who.to}"
         rows="1"></textarea>
-      <Button disabled={!comment.trim()} size="xs" type="submit">Comment</Button
+      <!-- Outline, not the coral primary: disabled, the recipe's 50% keeps
+           ink on paper rather than white on a pale coral. -->
+      <Button
+        disabled={!comment.trim()}
+        size="sm"
+        type="submit"
+        variant="outline">Comment</Button
       >
     </form>
   </div>
@@ -176,11 +187,15 @@
       var(--lead-w, var(--pv-tile, 18px)) + var(--space-2)
     );
   }
+  /* One group: it moves to a line of its own as a whole rather than
+     leaving a button orphaned on the next. */
   .acts {
     display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-1);
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 2px;
     margin-inline-start: calc(-1 * var(--space-2));
+    min-inline-size: 0;
   }
   .edit,
   .say {
@@ -192,7 +207,7 @@
   .field {
     flex: 1 1 auto;
     min-inline-size: 0;
-    min-block-size: 28px;
+    min-block-size: 30px;
     padding: var(--space-1) var(--space-2);
     border: 1px solid var(--border-control);
     border-radius: var(--radius-sm);

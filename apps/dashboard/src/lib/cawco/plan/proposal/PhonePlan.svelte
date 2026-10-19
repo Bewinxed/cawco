@@ -13,8 +13,18 @@
   // Page-local Solar glyph the proposal adds (not in $lib/icons.ts yet).
   import GlyphTask from "~icons/solar/clipboard-check-bold-duotone";
   import { type PlanFixture, progress } from "./fixtures";
+  import { holdOn } from "./focus";
 
-  let { plan, children }: { plan: PlanFixture; children: Snippet } = $props();
+  let {
+    plan,
+    focus,
+    children,
+  }: {
+    plan: PlanFixture;
+    /** The row the sheet stands scrolled to (a step a story opens). */
+    focus?: string;
+    children: Snippet;
+  } = $props();
 
   let host = $state<HTMLElement>();
   const got = $derived(progress(plan));
@@ -63,7 +73,12 @@
           <span class="stage">· {plan.task.stage}</span>
           <IconChevronRight aria-hidden="true" />
         </button>
-        <div class="scroll kit-sheet-scroll">
+        <!-- Where the list runs on past the sheet's foot, it fades there
+             (the house edge fade) rather than cutting a line in half. -->
+        <div
+          class="scroll kit-sheet-scroll kit-edge-fade-block"
+          {@attach holdOn(focus)}
+        >
           {@render children()}
         </div>
       </Drawer.Content>

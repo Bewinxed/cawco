@@ -171,9 +171,12 @@
   .tile[data-state="failed"] .glyph {
     color: var(--status-fail-glyph);
   }
+  /* The breath's lowest point keeps a status glyph's 3:1 on the tile: at
+     45% (the Working glyph's own breath on a session row) the pale blue
+     glyph fell to about 2:1 here and read as disabled. */
   @keyframes pv-breath {
     50% {
-      opacity: 0.45;
+      opacity: 0.72;
     }
   }
 </style>
