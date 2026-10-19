@@ -67,11 +67,9 @@
 
 <svelte:head><title>Session limit | CawCo</title></svelte:head>
 
-<!-- literal: 36rem -->
 <main
-  class="mx-auto flex max-w-(--measure) flex-col gap-space-4 px-space-4 py-space-6"
+  class="mx-auto flex max-w-leaf flex-col gap-space-4 px-space-4 py-space-6"
   data-session-limit-bench
-  style:--measure="36rem"
 >
   {#each rows as row (row.id)}
     <section data-case={row.id}>
@@ -85,12 +83,7 @@
           style:--row-paint="var(--surface-raised)"
         >
           <span class="text-ink-muted">Context</span>
-          <!-- literal: 48px, 96px -->
-          <span
-            class="max-w-(--bar-max) min-w-(--bar-min) flex-1"
-            style:--bar-max="96px"
-            style:--bar-min="48px"
-          >
+          <span class="max-w-c-context-bar-max min-w-c-context-bar-min flex-1">
             <LimitBar
               elapsed={null}
               label="Context"
