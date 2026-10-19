@@ -78,6 +78,8 @@ const GRAPH_READ = /\/api\/projects\/[^/]+\/decisions\/graph$/;
 const PAGE_READ = /\/api\/projects\/[^/]+\/decisions\/landing$/;
 const ADDRESS_READ = /\/api\/instances\/[^/]+\/preview-(address|ticket)/;
 const ARTIFACT_READ = /\/api\/artifacts\/[^/?]+$/;
+/** The Decisions tab itself: its opening is when its wait began. */
+const DECISIONS_TAB = '[data-slot="decisions"]';
 /** Jump's names ask (find-client `findNames`: no transcripts). */
 const NAMES_READ = /\/api\/find\?.*transcripts=0/;
 /** A project's tasks, and one task, as the board and the pane read them. */
@@ -186,12 +188,14 @@ const run = async (kit: Kit) => {
   await measured(project, 3);
 
   // 2. Decisions, the list: cold on the graphed project and on one with no
-  // graph, then the graphed one read a second time.
+  // graph, then the graphed one read a second time. Its skeleton stands once
+  // the shapes are read, carrying on the tab's wait from its opening.
   const listSite = (name: string): SwapSite => ({
     name,
     skeleton: '[data-decisions-reading="list"]',
     content: '[data-slot="decisions"] [data-slot="grid"]',
     empty: '[data-slot="decisions"] [data-slot="empty"]',
+    waitFrom: DECISIONS_TAB,
   });
   await leg(
     kit,
@@ -220,6 +224,7 @@ const run = async (kit: Kit) => {
     skeleton: '[data-decisions-reading="graph"]',
     content: "[data-decisions-graph-read]",
     empty: '[data-slot="decisions"] [data-slot="empty"]',
+    waitFrom: DECISIONS_TAB,
   });
 
   // 3b. The graph asked for cold, the list's read held too: the hub's shape
@@ -230,6 +235,7 @@ const run = async (kit: Kit) => {
       name: "3b decisions graph, cold, the list held",
       skeleton: '[data-decisions-reading="graph"]',
       content: "[data-decisions-graph-read]",
+      waitFrom: DECISIONS_TAB,
     };
     const shown = await kit.page("desk", { theme: "light" });
     shown.setDefaultTimeout(60_000);

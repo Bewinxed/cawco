@@ -5,7 +5,8 @@
  * the four things the rules ask of it from the engine.
  *
  *  1. Inside `--dur-wait-grace` nothing skeleton-like is seen: at grace −
- *     100 ms (from the skeleton's own birth) every kit skeleton in it has a
+ *     100 ms (from the skeleton's own birth, or the birth of the host whose
+ *     wait it carries on, `waitFrom`) every kit skeleton in it has a
  *     computed opacity of 0; past grace + `--dur-fade` + 50 ms every one
  *     stands seen (`checkVisibility({ opacityProperty: true })`), and by
  *     +400 ms every one is whole.
@@ -58,6 +59,12 @@ export interface SwapSite {
   pitch?: number;
   /** The skeleton's outer element: the node `crossOut` leaves. */
   skeleton: string;
+  /**
+   * The host whose wait the skeleton carries on (`carriesWait`) when it is
+   * drawn after that wait began: the grace is timed from this node's birth,
+   * not the skeleton's. Absent, from the skeleton's own.
+   */
+  waitFrom?: string;
 }
 
 interface Arrival {
@@ -93,6 +100,14 @@ export const watchSwaps = (page: Page, sites: SwapSite[]) =>
         const skeleton = document.querySelector(site.skeleton);
         if (skeleton && !(site.name in state.born)) {
           state.born[site.name] = performance.now();
+        }
+        const waitKey = `${site.name}:wait`;
+        if (
+          site.waitFrom &&
+          !(waitKey in state.born) &&
+          document.querySelector(site.waitFrom)
+        ) {
+          state.born[waitKey] = performance.now();
         }
         const content = document.querySelector(site.content);
         if (!content || site.name in state.arrivals) {
@@ -174,11 +189,14 @@ export const tokenMs = async (page: Page, token: string): Promise<number> => {
     : Number.parseFloat(said) * 1000;
 };
 
-/** At `at` ms after the skeleton's birth (page clock): its kit skeletons' opacities and seen-ness, its box, and the empty states. */
+/** At `at` ms after the wait began (page clock: the `waitFrom` host's birth, else the skeleton's): its kit skeletons' opacities and seen-ness, its box, and the empty states. */
 const sample = (page: Page, site: SwapSite, at: number) =>
   page.evaluate(
     async ({ site: s, at: when }) => {
-      const born = window.probeSwap?.born[s.name] ?? performance.now();
+      const born =
+        window.probeSwap?.born[`${s.name}:wait`] ??
+        window.probeSwap?.born[s.name] ??
+        performance.now();
       const wait = born + when - performance.now();
       if (wait > 0) {
         await new Promise((done) => setTimeout(done, wait));
