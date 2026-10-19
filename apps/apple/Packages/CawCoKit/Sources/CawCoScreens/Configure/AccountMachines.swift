@@ -587,7 +587,7 @@ final class AccountMachinesView: UIStackView {
             let state = FleetAccounts.state(view.signins, account: account.id, machine: id)
             let key = account.kind == "api_key"
             let landed = key ? keySent.contains(id) : (paste[id]?.phase == .signedIn || device[id]?.phase == .signedIn)
-            row.draw(name: machine.name, account: FleetAccounts.name(account), online: online, state: state, key: key,
+            row.draw(name: machine.name, account: FleetAccounts.name(account, among: view.accounts), online: online, state: state, key: key,
                      open: open == id, signingOut: signingOut.contains(id), refused: refusals[id], first: index == 0)
             if open == id {
                 row.panel(make: { self.panel(for: account, machine: machine) })

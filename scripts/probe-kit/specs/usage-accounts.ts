@@ -98,6 +98,12 @@ const NAMED: Record<Id, string> = {
   [TEAM]: "probe@scratch-fleet.test (Scratch Team)",
   [OTHER]: "other@scratch-fleet.test",
 };
+/** What the usage popover's cells call each account, by its email's first part. */
+const SHORT: Record<Id, string> = {
+  [PERSONAL]: "probe (Scratch Fleet)",
+  [TEAM]: "probe (Scratch Team)",
+  [OTHER]: "other",
+};
 /** How long a reading goes unrefreshed in the stale leg. */
 const AGED_MS = 2 * HOUR_MS;
 /** The accounts the mock refuses as at their usage limit, until {@link LIMITED_UNTIL}. */
@@ -338,6 +344,65 @@ const run = async (kit: Kit) => {
       JSON.stringify({ want: { name: NAMED[id], left: LEFT[id] }, got: tile })
     );
   }
+
+  // 3a. Configure → Accounts names each account beside the others
+  // (dashboard accounts/model `nameOf`): the two on one email with their
+  // organizations.
+  await page.goto(`${base}/config/accounts`, { waitUntil: "domcontentloaded" });
+  const listed = await until(
+    "every account's row on Configure → Accounts",
+    () =>
+      page.evaluate(
+        (ids) =>
+          Object.fromEntries(
+            ids.map((id) => [
+              id,
+              document
+                .querySelector(
+                  `a[href="/config/accounts/${id}"] [data-slot="words"]`
+                )
+                ?.textContent?.trim() ?? null,
+            ])
+          ),
+        [...ACCOUNTS]
+      ),
+    (names) => ACCOUNTS.every((id) => names[id] !== null),
+    60_000
+  ).catch((error: unknown) => ({ error: String(error) }));
+  kit.check(
+    "Configure → Accounts names the accounts on a shared email with their organizations",
+    JSON.stringify(listed) === JSON.stringify(NAMED),
+    JSON.stringify({ want: NAMED, got: listed })
+  );
+
+  // 3a'. The usage popover's short names (rings `shownNames`): the two on
+  // one email by their organizations, not by the domain they share.
+  await page.locator('[data-slot="strip"] .strip-hit').first().click();
+  const short = await until(
+    "every account's cell in the usage popover",
+    () =>
+      page.evaluate(
+        (ids) =>
+          Object.fromEntries(
+            ids.map((id) => [
+              id,
+              document
+                .querySelector(`.cell-d[data-account="${id}"] [data-name]`)
+                ?.textContent?.replace(/\s+/g, " ")
+                .trim() ?? null,
+            ])
+          ),
+        [...ACCOUNTS]
+      ),
+    (names) => ACCOUNTS.every((id) => names[id] !== null),
+    60_000
+  ).catch((error: unknown) => ({ error: String(error) }));
+  await page.keyboard.press("Escape");
+  kit.check(
+    "the usage popover tells the accounts on a shared email apart by organization",
+    JSON.stringify(short) === JSON.stringify(SHORT),
+    JSON.stringify({ want: SHORT, got: short })
+  );
 
   // 3b. The other email's session details: its own account's limit (the
   // fullest of its windows, 75% used), not the first account signed in on

@@ -12,7 +12,7 @@ import {
   type AccountHue,
   type AccountProvider,
   type AccountSignin,
-  accountName,
+  accountNameAmong,
   CLAUDE_PROVIDER,
   type HarnessKind,
   type HomeStore,
@@ -43,17 +43,20 @@ export const nextHue = (accounts: Account[]): AccountHue =>
 const ELLIPSIS = /^…/;
 
 /**
- * The name it goes by: its nickname, else its email; a key with no nickname
- * goes by its last four characters (its identity's email is `…a1b2`).
+ * The name it goes by beside the fleet's other accounts (core
+ * `accountNameAmong`): its nickname, else its email, with its organization
+ * after it when another account of its provider signs in as that email; a
+ * key with no nickname goes by its last four characters (its identity's
+ * email is `…a1b2`).
  */
 export const nameOf = (
-  account: Pick<Account, "email" | "id" | "label"> &
+  account: Pick<Account, "email" | "id" | "identity" | "label" | "provider"> &
     Partial<Pick<Account, "kind">>
 ): string => {
   if (account.kind === "api_key" && !account.label && account.email) {
     return words.keyTail(account.email.replace(ELLIPSIS, "").slice(-4));
   }
-  return accountName(account);
+  return accountNameAmong(account, cawco.accounts?.accounts ?? []);
 };
 
 // ── Providers ───────────────────────────────────────────────────────────

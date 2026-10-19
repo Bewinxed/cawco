@@ -40,7 +40,7 @@ final class AccountsSectionController: ConfigSectionController {
         let groupsNow = FleetAccounts.groups(view, hub: hub)
         let lines = groupsNow.flatMap { group in
             ["group \(group.provider) \(group.name)"] + group.accounts.map { account in
-                "\(account.id) \(account.hue) \(rowName(account)) \(FleetAccounts.problem(account, view: view, hub: hub) ?? "")"
+                "\(account.id) \(account.hue) \(rowName(account, view)) \(FleetAccounts.problem(account, view: view, hub: hub) ?? "")"
             }
         }
         guard lines != drawn else { return }
@@ -48,8 +48,8 @@ final class AccountsSectionController: ConfigSectionController {
         draw(groupsNow, view: view)
     }
 
-    private func rowName(_ account: FleetAccounts.Account) -> String {
-        account.label != nil || account.email != nil ? FleetAccounts.name(account) : Words.Accounts.notSignedInYet
+    private func rowName(_ account: FleetAccounts.Account, _ view: FleetAccounts.View) -> String {
+        account.label != nil || account.email != nil ? FleetAccounts.name(account, among: view.accounts) : Words.Accounts.notSignedInYet
     }
 
     private func draw(_ list: [FleetAccounts.Group], view: FleetAccounts.View) {
@@ -90,7 +90,7 @@ final class AccountsSectionController: ConfigSectionController {
             rows.accessibilityLabel = group.name
             rows.accessibilityContainerType = .list
             for account in group.accounts {
-                let row = AccountRow(name: rowName(account), hue: account.hue, problem: FleetAccounts.problem(account, view: view, hub: hub))
+                let row = AccountRow(name: rowName(account, view), hue: account.hue, problem: FleetAccounts.problem(account, view: view, hub: hub))
                 row.accessibilityIdentifier = "accounts.row.\(account.id)"
                 let id = account.id
                 row.addAction(UIAction { [weak self] _ in self?.openAccount(id) }, for: .primaryActionTriggered)
@@ -366,8 +366,9 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
             fields = saved
         }
         base = saved
-        navigationItem.title = FleetAccounts.name(now)
-        nickname.attributedPlaceholder = NSAttributedString(string: now.label != nil ? Words.Accounts.Editor.nickname : FleetAccounts.name(now),
+        let named = FleetAccounts.name(now, among: view.accounts)
+        navigationItem.title = named
+        nickname.attributedPlaceholder = NSAttributedString(string: now.label != nil ? Words.Accounts.Editor.nickname : named,
                                                             attributes: [.foregroundColor: Palette.inkSubtle, .font: nickname.font as Any])
         limitsPart.isHidden = !FleetAccounts.limits(now.provider)
         machines.draw(now, view: view)
@@ -434,7 +435,7 @@ final class AccountEditorController: ConfigEditorController, UITextFieldDelegate
         let on = FleetAccounts.machines(for: account.provider, hub: hub)
             .filter { FleetAccounts.state(view.signins, account: account.id, machine: $0.machineId) == "signed-in" }
             .map(\.name)
-        return Question(title: Words.Accounts.Editor.removeTitle(name: FleetAccounts.name(account)),
+        return Question(title: Words.Accounts.Editor.removeTitle(name: FleetAccounts.name(account, among: view.accounts)),
                         body: Words.Accounts.Editor.removeBody(machines: on, harnesses: FleetAccounts.harnessWords(account.provider, hub: hub)),
                         confirm: Words.Accounts.Editor.remove, pending: Words.Accounts.Editor.removing)
     }

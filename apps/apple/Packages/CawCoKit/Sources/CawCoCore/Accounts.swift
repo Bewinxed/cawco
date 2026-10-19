@@ -36,6 +36,13 @@ public enum FleetAccounts {
         public let order: Double
         public let neverBackup: Bool
         public let reservePct: Double?
+        /// Who it is signed in as; nil until its first sign-in.
+        public let identity: Identity?
+    }
+
+    /// Whom an account is signed in as (core `AccountIdentity`), the part its name reads.
+    public struct Identity: Codable, Equatable, Sendable {
+        public let organization: String?
     }
 
     /// One account signed in (or not) on one machine (core `AccountSignin`).
@@ -138,19 +145,36 @@ public enum FleetAccounts {
         swatches.first { hue in !accounts.contains { $0.hue == hue } } ?? swatches[accounts.count % swatches.count]
     }
 
-    /// The name it goes by: its nickname, else its email; a key with no
-    /// nickname goes by its last four characters (its identity's email is `…a1b2`).
-    public static func name(label: String?, email: String?, kind: String?) -> String {
+    /// The name it goes by: its nickname, else its email, with `organization`
+    /// after it when another account of its provider signs in as that email
+    /// (`sharedOrganization`); a key with no nickname goes by its last
+    /// four characters (its identity's email is `…a1b2`).
+    public static func name(label: String?, email: String?, kind: String?, organization: String?) -> String {
         if kind == "api_key", label == nil, let email {
             // Its identity's email is `…a1b2`: the ellipsis is not one of the four.
             let tail = email.drop { $0 == "\u{2026}" }
             return Words.Accounts.keyTail(tail: String(tail.suffix(4)))
         }
+        if label == nil, let email, let organization {
+            return "\(email) (\(organization))"
+        }
         return label ?? email ?? Words.Accounts.unnamed
     }
 
-    public static func name(_ account: Account) -> String {
-        name(label: account.label, email: account.email, kind: account.kind)
+    /// The name it goes by beside `accounts` (core `accountNameAmong`,
+    /// model.svelte.ts `nameOf`).
+    public static func name(_ account: Account, among accounts: [Account]) -> String {
+        name(label: account.label, email: account.email, kind: account.kind,
+             organization: sharedOrganization(account, among: accounts))
+    }
+
+    /// Its organization, where another of `accounts` of its provider signs in
+    /// as its email (a personal plan and a Team seat on one email); nil else.
+    public static func sharedOrganization(_ account: Account, among accounts: [Account]) -> String? {
+        guard let email = account.email, let organization = account.identity?.organization, !organization.isEmpty,
+              accounts.contains(where: { $0.id != account.id && $0.provider == account.provider && $0.email?.lowercased() == email.lowercased() })
+        else { return nil }
+        return organization
     }
 
     /// A provider row as the picker names it: "OpenRouter API key", "Anthropic Console".

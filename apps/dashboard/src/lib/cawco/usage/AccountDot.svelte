@@ -7,8 +7,8 @@
    * dot is already the account it moves to, its colour turning as the board
    * state pill's tint does.
    */
-  import { accountName } from "@cawco/core";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { nameOf } from "../accounts/model.svelte";
   import { cawco } from "../client.svelte";
 
   let {
@@ -34,7 +34,7 @@
 </script>
 
 {#if account}
-  {@const name = accountName(account)}
+  {@const name = nameOf(account)}
   <Tip label={name}>
     {#snippet children(tip)}
       <span
