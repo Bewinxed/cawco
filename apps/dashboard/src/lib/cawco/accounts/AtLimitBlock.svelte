@@ -61,16 +61,15 @@
     <Switch id="{id}-move" bind:checked={atLimit.move} />
   </div>
   {#if atLimit.move}
-    <!-- literal: 64px -->
-    <div class="flex flex-col" in:unfold out:unfold style:--field-w="64px">
+    <div class="flex flex-col" in:unfold out:unfold>
       <p
-        class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row"
+        class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-row"
       >
         <label for="{id}-wait">{words.wait}</label>
         <Input
           data-num
           data-field
-          class="num h-c-btn-h-sm w-(--field-w) flex-none text-center"
+          class="num h-c-btn-h-sm w-(--c-limit-field-w) flex-none text-center"
           pad="tight"
           id="{id}-wait"
           inputmode="numeric"
@@ -84,13 +83,13 @@
         <span>{words.minutes}</span>
       </p>
       <p
-        class="flex flex-wrap items-center gap-space-3 px-0 py-space-2 text-pretty text-ink-row"
+        class="flex flex-wrap items-center gap-space-3 py-space-2 text-pretty text-ink-row"
       >
         <label for="{id}-over">{words.over}</label>
         <Input
           data-num
           data-field
-          class="num h-c-btn-h-sm w-(--field-w) flex-none text-center"
+          class="num h-c-btn-h-sm w-(--c-limit-field-w) flex-none text-center"
           pad="tight"
           id="{id}-over"
           inputmode="numeric"
@@ -122,76 +121,3 @@
   {/if}
 </div>
 
-<style>
-  .lim {
-    display: flex;
-    flex-direction: column;
-    container-type: inline-size;
-  }
-  .head {
-    margin-block-end: var(--space-3);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-wrap: balance;
-  }
-  .switch-line {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-4);
-    padding-block: var(--space-2) var(--space-3);
-    color: var(--ink-row);
-  }
-  .switch-line label {
-    cursor: pointer;
-  }
-  .rows {
-    display: flex;
-    flex-direction: column;
-  }
-  .pr {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-3);
-    padding: var(--space-2) 0;
-    color: var(--ink-row);
-    text-wrap: pretty;
-  }
-  .pr :global(.field) {
-    flex: none;
-    width: 64px;
-    height: var(--c-btn-h-sm);
-    padding-inline: var(--space-2);
-    text-align: center;
-    font-variant-numeric: tabular-nums;
-  }
-  .aside {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .figure {
-    margin-block: var(--space-3);
-  }
-  .terms {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    align-self: flex-start;
-    border-radius: var(--radius-xs);
-    font: var(--type-label);
-    color: var(--link-ink);
-    text-decoration: none;
-    text-wrap: pretty;
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .terms:hover {
-      color: var(--link-hover);
-    }
-  }
-  .terms :global(svg) {
-    flex: none;
-    width: 12px;
-    height: 12px;
-  }
-</style>

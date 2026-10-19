@@ -45,14 +45,11 @@
 </script>
 
 {#snippet face()}
-  <!-- literal: 8px, 50% -->
   <span
     data-slot="dot"
     aria-hidden="true"
-    class="size-(--dot) flex-none rounded-(--dot-r) bg-(--c)"
+    class="size-space-2 flex-none rounded-pill bg-(--c)"
     style:--c={hueVar(shown?.hue ?? "amber")}
-    style:--dot="8px"
-    style:--dot-r="50%"
   ></span>
   <span data-slot="chip-label" data-account-chip>{name}</span>
 {/snippet}
@@ -85,29 +82,24 @@
         {#each accounts as account (account.id)}
           {@const current = account.id === instance.accountId}
           {@const going = account.id === target}
-          <!-- literal: 16px minmax(0, 1fr) 16px, 40px, 44px, 8px, 50% -->
           <button
             data-slot="option"
             aria-selected={current}
-            class="group mark-line grid min-h-(--option-min) w-full cursor-pointer grid-cols-(--option-cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong coarse:min-h-(--option-min-coarse) disabled:cursor-default"
+            class="group mark-line grid min-h-c-btn-h w-full cursor-pointer grid-cols-(--option-cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong coarse:min-h-c-btn-h-lg disabled:cursor-default"
             data-account-option={account.id}
             disabled={going}
             onclick={() => pick(account.id)}
             role="option"
-            style:--option-cols="16px minmax(0, 1fr) 16px"
-            style:--option-min="40px"
-            style:--option-min-coarse="44px"
+            style:--option-cols="var(--icon-md) minmax(0, 1fr) var(--icon-md)"
             type="button"
           >
             <span
               data-account-switch-lead
               data-slot="dot"
               aria-hidden="true"
-              class="mx-space-1 size-(--dot) flex-none rounded-(--dot-r) bg-(--c)"
+              class="size-space-2 flex-none justify-self-center rounded-pill bg-(--c)"
               data-box
               style:--c={hueVar(account.hue)}
-              style:--dot="8px"
-              style:--dot-r="50%"
             ></span>
             {#if going}
               <span
