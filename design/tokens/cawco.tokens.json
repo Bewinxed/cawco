@@ -594,7 +594,8 @@
     },
     "account-rose": {
       "$type": "color",
-      "$value": "{color.mark-8}"
+      "$value": "{color.mark-8}",
+      "$description": "Rose is mark-8 by day; at night half a step lighter than mark-8 (70.5%, not 70%), so its disc holds the dial's 3.9:1 on the border-control track (mark-8 measured 3.86:1)."
     },
     "account-violet": {
       "$type": "color",
@@ -610,8 +611,11 @@
     },
     "ring-track-spent": {
       "$type": "color",
-      "$value": "{color.neutral-7}",
-      "$description": "The track of a ring's spent window, at its limit, on the meter-wash-over cell: 1.6:1 against that wash by day, 2:1 at night, so the empty dial still reads as a dial."
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.805, 0.016, 80]
+      },
+      "$description": "The track of a ring's spent window, at its limit, on the meter-wash-over cell: 1.6:1 against that wash by day, 2:1 at night, so the empty dial still reads as a dial. By day half a step under neutral-7 (80.5%), which measured 1.59:1."
     },
     "account-reserved": {
       "$type": "color",

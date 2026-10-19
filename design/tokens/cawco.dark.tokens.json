@@ -330,6 +330,13 @@
         "components": [0.7, 0.17, 349.8]
       }
     },
+    "account-rose": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.705, 0.17, 349.8]
+      }
+    },
     "account-week-toward": {
       "$type": "color",
       "$value": {

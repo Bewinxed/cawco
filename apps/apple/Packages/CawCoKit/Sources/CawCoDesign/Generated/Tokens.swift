@@ -54,11 +54,12 @@ public enum Palette {
     public static let accountGreen = Palette.named("account-green")
     public static let accountCyan = Palette.named("account-cyan")
     public static let accountBlue = Palette.named("account-blue")
+    /// Rose is mark-8 by day; at night half a step lighter than mark-8 (70.5%, not 70%), so its disc holds the dial's 3.9:1 on the border-control track (mark-8 measured 3.86:1).
     public static let accountRose = Palette.named("account-rose")
     public static let accountViolet = Palette.named("account-violet")
     /// What an account's week rim is mixed toward from its hue (account-week-mix, in oklch, so the hue holds): black by day, a deeper shade on paper; white at night, a lighter one. The disc keeps the hue itself, so the 5-hour and the week read apart at a glance.
     public static let accountWeekToward = Palette.named("account-week-toward")
-    /// The track of a ring's spent window, at its limit, on the meter-wash-over cell: 1.6:1 against that wash by day, 2:1 at night, so the empty dial still reads as a dial.
+    /// The track of a ring's spent window, at its limit, on the meter-wash-over cell: 1.6:1 against that wash by day, 2:1 at night, so the empty dial still reads as a dial. By day half a step under neutral-7 (80.5%), which measured 1.59:1.
     public static let ringTrackSpent = Palette.named("ring-track-spent")
     /// The part of an account's week rim that sits under its reserve, once the reserve is reached: a mid neutral that reads on paper and at night.
     public static let accountReserved = Palette.named("account-reserved")

@@ -397,8 +397,6 @@ const PAIRS: Pair[] = [
       fg: `account-${hue}`,
       bg: ["border-control"],
       floor: 3.9,
-      // Rose at night is mark-8's oklch(70% 0.17 350); its own 70.5% holds 3.94.
-      ...(hue === "rose" ? { known: { dark: 3.86 } } : {}),
       source: S.dial,
     },
     {
@@ -429,8 +427,6 @@ const PAIRS: Pair[] = [
     fg: "ring-track-spent",
     bg: ["surface-raised", "meter-wash-over"],
     floor: { light: 1.6, dark: 2 },
-    // By day it is neutral-7, oklch(81% 0.016 80); its own 80.5% holds 1.62.
-    known: { light: 1.59 },
     source: S.spent,
   },
   ...["sidebar", "surface-page"].map((bg) => ({
