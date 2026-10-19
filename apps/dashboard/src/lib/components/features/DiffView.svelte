@@ -81,7 +81,7 @@
 
   /** Draws the diff into the box; `drawn` once it has a height. */
   const draw = (_attempt: number) => (box: HTMLElement) => {
-    const diff = houseDiff({ disableFileHeader: true });
+    const diff = houseDiff({ disableFileHeader: true }, box);
     const sizes = new ResizeObserver(() => {
       if (box.offsetHeight > 0) {
         drawn = true;
