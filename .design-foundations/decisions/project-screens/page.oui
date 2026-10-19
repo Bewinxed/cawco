@@ -1,18 +1,18 @@
 root = Decisions("The project page, fixed from your pins", [pane, card, empty, head, pipeline])
 
 pane = Decision("pins-pane", "Fixed from your pin: does the task pane look right now?", [paneok, panenot], "You wanted the task pane to read as one piece, with its session a tab away and more on offer than yes or no.", [paneview])
-paneview = Preview("@pane")
-paneok = Option("looks-right", "Looks right", "It's one pane now: the title, one row of chips, then Review, Session, Details and Activity as tabs, with More beside Approve.", true, [], "The build follows this drawing; a change later reopens it.")
+paneview = Preview("@pane", null, ["ReviewAsks"])
+paneok = Option("looks-right", "Looks right", "It's one pane now: the title, one row of chips, then Review, Session, Details and Activity as tabs, each with its glyph. When the agent has more to offer than yes or no, it asks you a decision, and its own options stand over Approve and Send back.", true, [], "The build follows this drawing; a change later reopens it.")
 panenot = Option("not-yet", "Not yet", "Say what's still off in the note.", false, [], "The task pane's build waits for the next round.")
 
 card = Decision("pins-card", "Fixed from your pin: does the board card look right now?", [cardok, cardnot], "You wanted a calmer way to show a card's status, and the x in a circle was too small to read.", [cardview])
-cardview = Preview("@card")
-cardok = Option("looks-right", "Looks right", "Status is one line under the title, led by the session's mark, with no badges and every mark at full size.", true, [], "The build follows this drawing; a change later reopens it.")
+cardview = Preview("@card", null, ["Phone"])
+cardok = Option("looks-right", "Looks right", "Status is one line under the title, with no badges. A failure is an exclamation in a solid circle and a stuck task a crossed-out solid circle, here and everywhere else in the app, so the x in a circle is gone.", true, [], "The build follows this drawing; a change later reopens it.")
 cardnot = Option("not-yet", "Not yet", "Say what's still off in the note.", false, [], "The board card's build waits for the next round.")
 
 empty = Decision("pins-empty", "Fixed from your pin: do the empty views look right now?", [emptyok, emptynot], "You asked why an empty view sat off to the left and why its starter cards weren't one size.", [emptyview])
-emptyview = Preview("@empty")
-emptyok = Option("looks-right", "Looks right", "Each empty view is centred on the page, its lines start on one edge, and its starter cards are one size. Routines says its name once and has no composer of its own.", true, [], "The build follows this drawing; a change later reopens it.")
+emptyview = Preview("@empty", null, ["BoardPhone", "RoutinesPhone"])
+emptyok = Option("looks-right", "Looks right", "Each empty view is centred on the page, its lines start on one edge, and its starter cards are one size. Routines says its name once, has no composer of its own, and ends with Ask Caw for a routine, which opens Caw with it.", true, [], "The build follows this drawing; a change later reopens it.")
 emptynot = Option("not-yet", "Not yet", "Say what's still off in the note.", false, [], "The empty views' build waits for the next round.")
 
 head = Decision("pins-head", "Fixed from your pin: does the project head look right now?", [headok, headnot], "You couldn't tell what the Spin off button was for, and New session was a bare command.", [headview])
@@ -22,5 +22,5 @@ headnot = Option("not-yet", "Not yet", "Say what's still off in the note.", fals
 
 pipeline = Decision("pipeline", "What is the Pipeline tab for?", [runorder, removed], "You said Pipeline isn't a pipeline and isn't useful as it stands. Today nothing on the project page shows the order work will run in.")
 runorder = Option("run-order", "The run order", "It shows what no other view does: what runs now, what waits on you, what's stuck and what comes next.", true, [runorderview], "One more view to keep true as tasks gain and lose what they wait on.")
-runorderview = Preview("@run-order")
+runorderview = Preview("@run-order", null, ["Phone"])
 removed = Option("remove", "Remove the tab", "The views row reads Board, Table, Routines, Decisions; the board's column heads already count each stage.", false, [], "Nowhere shows the order tasks will run in, or what holds each one up.")
