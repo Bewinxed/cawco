@@ -41,6 +41,7 @@ import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import { type BrowserKey, browserGatePort } from "@cawco/core/browser";
+import { machineId } from "@cawco/core/machine-id";
 import { workspaceProjectFile, workspaceStateDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { Server, ServerWebSocket } from "bun";
@@ -241,14 +242,14 @@ const tokenOf = async (id: string, given: string): Promise<boolean> => {
 /** The browser gate id `id`'s sessions use: its project's, else its machine's. */
 export const keyOfWorkspace = async (
   id: string,
-  machineId: string
+  machine: string
 ): Promise<BrowserKey> => {
   const project = await readRecord<unknown>(workspaceProjectFile(id)).catch(
     () => undefined
   );
   return typeof project === "string" && project
     ? `project:${project}`
-    : `machine:${machineId}`;
+    : `machine:${machine}`;
 };
 
 const WORKSPACE_ID = /^[A-Za-z0-9][A-Za-z0-9_-]*$/;
@@ -1347,8 +1348,7 @@ export const serveGate = (deps: GateDeps): Gate => {
 /** The machine's gate port's upgrade: the path's gate id, its token, and the gate of its browser. */
 const upgrade = async (
   request: Request,
-  server: Server<LinkData>,
-  machineId: () => string
+  server: Server<LinkData>
 ): Promise<Response | undefined> => {
   const id = new URL(request.url).pathname.slice(1);
   if (
@@ -1361,7 +1361,8 @@ const upgrade = async (
   if (!(bearer && (await tokenOf(id, bearer)))) {
     return new Response(GATE_WORDS.token, { status: 401 });
   }
-  const gate = gates.get(await keyOfWorkspace(id, machineId()));
+  // The machine's id as every door reads it (door.ts): one key for a gate id.
+  const gate = gates.get(await keyOfWorkspace(id, await machineId()));
   if (!gate) {
     return new Response(GATE_WORDS.none, { status: 404 });
   }
@@ -1382,7 +1383,7 @@ let listening: Server<LinkData> | undefined;
  * is said in the log, and every session's browser tool answers that it
  * cannot connect until the agent starts again with it free.
  */
-export const listenGates = (machineId: () => string): void => {
+export const listenGates = (): void => {
   if (listening) {
     return;
   }
@@ -1391,7 +1392,7 @@ export const listenGates = (machineId: () => string): void => {
     listening = Bun.serve<LinkData>({
       hostname: "127.0.0.1",
       port,
-      fetch: (request, server) => upgrade(request, server, machineId),
+      fetch: (request, server) => upgrade(request, server),
       websocket: {
         maxPayloadLength: MAX_MESSAGE,
         sendPings: true,

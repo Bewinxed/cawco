@@ -219,7 +219,8 @@ const answer = (
     headers: { "content-type": "text/event-stream" },
   });
 };
-const PAGE_ID = /(\d+): /;
+/** The page new_page selected, in its answer as JSON (a line ends at a JSON-escaped newline). */
+const SELECTED_PAGE = /(\d+): [^\\"]*\[selected\]/;
 // A tool's path as the description writes its namespace: callable whether or
 // not the bounded catalog shows that tool.
 const SCREENSHOT_PATH = /(tools\["chrome-devtools"\])\./;
@@ -236,6 +237,56 @@ const LONG_COMMAND = "seq 1 5000";
 const BOUNDED = /\bBOUNDED\b/;
 /** What the probe's boundary runner sets; OpenCode's own bash never has it. */
 const BOUNDED_COMMAND = 'echo "boundary=$CAWCO_PROBE_BOUNDARY pwd=$PWD"';
+const PATH_PARAM = /path/i;
+/** A tool's parameter names: required first, then the rest. */
+const paramsOf = (tool: Tool): string[] => {
+  const required = tool.function?.parameters?.required ?? [];
+  const all = Object.keys(tool.function?.parameters?.properties ?? {});
+  return [...required, ...all.filter((name) => !required.includes(name))];
+};
+/** The parameter a file tool takes its path by, as its schema names it (OpenCode's `read` took `filePath`, now `path`). */
+const pathKeyOf = (tool: Tool): string | undefined =>
+  paramsOf(tool).find((name) => PATH_PARAM.test(name));
+/** The tool that runs a shell command, by what it offers: a `command` parameter. */
+const shellOf = (offered: Tool[]): { name: string; tool: Tool } | undefined => {
+  const tool = offered.find((one) => paramsOf(one).includes("command"));
+  const name = tool?.function?.name;
+  return tool && name ? { name, tool } : undefined;
+};
+/** Of `values`, those `tool`'s schema names. */
+const argsFor = (tool: Tool, values: Record<string, string>) =>
+  Object.fromEntries(
+    Object.entries(values).filter(([name]) => paramsOf(tool).includes(name))
+  );
+/** A turn's `BOUNDED`, `LONG` or `READ`, as the tools it offers take it; none for any other. */
+const shellOrReadCall = (
+  text: string,
+  offered: Tool[]
+): Response | undefined => {
+  const names = offered.map((one) => one.function?.name ?? "").join(", ");
+  if (BOUNDED.test(text) || LONG.test(text)) {
+    const command = BOUNDED.test(text) ? BOUNDED_COMMAND : LONG_COMMAND;
+    const shell = shellOf(offered);
+    return shell
+      ? answer("", {
+          name: shell.name,
+          args: argsFor(shell.tool, {
+            command,
+            description: "Run the probe's command",
+          }),
+        })
+      : answer(`no shell tool among: ${names}`);
+  }
+  const read = text.match(READ)?.[1];
+  if (!read) {
+    return;
+  }
+  const tool = offered.find((one) => one.function?.name === "read");
+  const key = tool ? pathKeyOf(tool) : undefined;
+  return key
+    ? answer("", { name: "read", args: { [key]: read } })
+    : answer(`no read tool with a path among: ${names}`);
+};
 const mock = Bun.serve({
   hostname: "127.0.0.1",
   port: 0,
@@ -265,25 +316,9 @@ const mock = Bun.serve({
     if (holding) {
       return answer(`released ${holding}`, undefined, hold(holding));
     }
-    if (BOUNDED.test(text)) {
-      return answer("", {
-        name: "bash",
-        args: { command: BOUNDED_COMMAND, description: "Name the boundary" },
-      });
-    }
-    if (LONG.test(text)) {
-      return answer("", {
-        name: "bash",
-        args: { command: LONG_COMMAND, description: "Count to five thousand" },
-      });
-    }
-    const read = text.match(READ)?.[1];
-    if (read) {
-      const pi = tools.includes("ls");
-      return answer("", {
-        name: "read",
-        args: pi ? { path: read } : { filePath: read },
-      });
+    const shellOrRead = shellOrReadCall(text, body.tools ?? []);
+    if (shellOrRead) {
+      return shellOrRead;
     }
     const shot = text.match(SHOT)?.[1];
     if (shot) {
@@ -299,11 +334,17 @@ const mock = Bun.serve({
       const key =
         execute?.parameters?.required?.[0] ??
         Object.keys(execute?.parameters?.properties ?? {})[0];
+      // Through the gate the workspace sees its own pages alone: it opens
+      // one, and captures it by the id new_page selected.
       return path && key
         ? answer("", {
             name: "execute",
             args: {
-              [key]: `return await ${path}.take_screenshot(${JSON.stringify({ filePath: shot, pageId: 1 })})`,
+              [key]: [
+                `const opened = await ${path}.new_page({ url: "about:blank" });`,
+                String.raw`const pageId = Number(JSON.stringify(opened).match(/(\d+): [^\\"]*\[selected\]/)?.[1]);`,
+                `return await ${path}.take_screenshot({ filePath: ${JSON.stringify(shot)}, pageId });`,
+              ].join("\n"),
             },
           })
         : answer(
@@ -1260,12 +1301,16 @@ async function claudeCaptures(
       clientInfo: { name: "claude-code", version: "probe" },
     });
     send({ method: "notifications/initialized" });
-    // Page-id routing is on (the fleet's launch keeps its default): the
-    // screenshot names the page `list_pages` reports.
-    const pages = JSON.stringify(
-      await call("tools/call", { name: "list_pages", arguments: {} })
+    // Page-id routing is on (the fleet's launch keeps its default), and
+    // through the gate the workspace sees its own pages alone: it opens one,
+    // and the screenshot names the page new_page selected.
+    const opened = JSON.stringify(
+      await call("tools/call", {
+        name: "new_page",
+        arguments: { url: "about:blank" },
+      })
     );
-    const pageId = Number(pages.match(PAGE_ID)?.[1] ?? 1);
+    const pageId = Number(opened.match(SELECTED_PAGE)?.[1]);
     const shoot = (filePath: string) =>
       call("tools/call", {
         name: "take_screenshot",

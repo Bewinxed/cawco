@@ -613,7 +613,7 @@ const tick = async (): Promise<void> => {
  */
 export const watchBrowsers = async (): Promise<void> => {
   servingGates = true;
-  listenGates(() => machineId);
+  listenGates();
   await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
   watch(browsersDir(), { recursive: true }, (_event, name) => {
     if (name?.endsWith("record.json")) {

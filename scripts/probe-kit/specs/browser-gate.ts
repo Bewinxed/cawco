@@ -555,14 +555,28 @@ const run = async (kit: Kit): Promise<void> => {
   });
   const gatePort = probe.port;
   probe.stop(true);
+  // The runtime as this process finds it, with the person's HOME: the
+  // fleet's HOME hides a runtime kept under the home dir (Colima's
+  // `~/.colima/default/docker.sock` on a Mac), so the gate host is handed its
+  // endpoint, as browser-runtime runs it.
+  const { findRuntime } =
+    await import("../../../packages/agent/src/browser/runtime");
+  const runtime = await findRuntime();
+  if ("missing" in runtime) {
+    kit.check(
+      "a container runtime answers on this machine (the container leg needs one)",
+      false,
+      runtime.missing
+    );
+    return;
+  }
   const gateHost = startGateHost({
     ...(process.env as Record<string, string>),
     HOME: home,
     XDG_DATA_HOME: data,
     CAWCO_BROWSER_GATE_PORT: String(gatePort),
+    DOCKER_HOST: `unix://${runtime.endpoint}`,
   });
-  const { findRuntime } =
-    await import("../../../packages/agent/src/browser/runtime");
   try {
     await until(
       "both delegates started",
@@ -600,10 +614,22 @@ const run = async (kit: Kit): Promise<void> => {
         B: { id: who.B.id, token: !!who.B.token, project: who.B.project },
       })
     );
-    const runtime = await findRuntime();
-    const socket =
-      "missing" in runtime ? "/var/run/docker.sock" : runtime.endpoint;
+    const socket = runtime.endpoint;
     await gateHost.call("watch");
+    // The container leg runs on the container host or not at all: a gate
+    // host that finds no runtime fails here, never drifting to the local one.
+    const reached = (await gateHost.call("runtime", { hidden: false })) as {
+      endpoint?: string;
+      missing?: string;
+    };
+    kit.check(
+      `container: the registry reaches the runtime at ${runtime.endpoint}`,
+      reached.endpoint === runtime.endpoint,
+      JSON.stringify(reached)
+    );
+    if (reached.endpoint !== runtime.endpoint) {
+      return;
+    }
 
     // Reserved, as a session's door reserves it: a record, no ports, and its
     // gate answering on the machine's gate port before the browser starts.
