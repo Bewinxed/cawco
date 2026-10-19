@@ -5,7 +5,13 @@
  * from outside it the way a viewer reaches it. The relay listens on one port,
  * 443: plain UDP and TCP always, TLS on the same listener with a name.
  *
- * - coturn pulled, its container `cawco-relay` live on the host network;
+ * - coturn pulled, its container `cawco-relay` live on the host network
+ *   where the runtime's is the machine's own (a native engine on Linux), else
+ *   its ports published through the runtime's VM forwarder (a Mac's runtime,
+ *   Colima or Docker Desktop on Linux) with the forwarder's address let
+ *   through; a runtime short of a setting the relay needs (Colima's ssh
+ *   forwarder, a VM's rootless Podman) refuses the start with the command
+ *   that changes it, and the run stops there;
  * - a STUN binding answered on UDP and TCP 443 (and TLS on 443 with a name)
  *   through the hub's own health check (hub stream-relay.ts `probeRelay`);
  * - a TURN allocation with a credential the hub's `mintCredential` made
@@ -14,8 +20,10 @@
  * - a permission to 10.0.0.5 is refused 403 (`denied-peer-ip`);
  * - with `--hostname`: the certificate issued, and TLS on 443 answering with
  *   the Let's Encrypt chain;
- * - the ports coturn binds beside its listener, read from `ss`, each one in
- *   `STREAM_RELAY_PORTS`; without a name nothing listens on TCP 5349;
+ * - on the host network, the ports coturn binds beside its listener, read
+ *   from `ss`, each one in `STREAM_RELAY_PORTS`; without a name nothing
+ *   listens on TCP 5349 (published, the machine binds only what is
+ *   published);
  * - Stop relay keeps the certificate volume; Remove relay takes the
  *   container and then the volume, so nothing of the relay stays.
  *
@@ -71,6 +79,7 @@ import type {
 } from "../../../packages/core/src/stream-relay";
 import {
   isStreamRelayPort,
+  RELAY_FAILURES,
   STREAM_RELAY_PORT,
   STREAM_RELAY_PORTS,
 } from "../../../packages/core/src/stream-relay";
@@ -81,6 +90,8 @@ type Docker = Runtime["docker"];
 type Container = ReturnType<Docker["getContainer"]>;
 
 const PROBE_CONTAINER = "cawco-relay-probe";
+/** This spec's own coturn runs, on a rootless Linux engine's host network (`refusedLegs`). */
+const HOST = { kind: "host" } as const;
 const TURN_MS = 8000;
 /** How long this spec's own coturn has to bind its listener. */
 const BIND_MS = 10_000;
@@ -537,7 +548,9 @@ const relayLegs = async (
   runtime: Runtime,
   args: RelayStartArgs
 ): Promise<void> => {
-  const before = await listening();
+  // What coturn binds is read with `ss` on the host network alone: published,
+  // its sockets are the VM's, and the machine binds only what is published.
+  const before = runtime.ownNetwork ? await listening() : [];
   // A name's certificate first, its own command (the journey's certificate
   // step), over HTTP on port 80; then the start, on the certificate.
   if (args.hostname) {
@@ -549,15 +562,26 @@ const relayLegs = async (
     );
   }
   const frame = await relay.startRelay(args);
-  const opened = added(before, await listening());
+  const opened = runtime.ownNetwork ? added(before, await listening()) : [];
   const inspected = await runtime.docker
     .getContainer(relay.RELAY_CONTAINER)
     .inspect();
+  const bindings = inspected.HostConfig.PortBindings ?? {};
+  const [first, last] = args.relayRange;
+  const range = Array.from(
+    { length: last - first + 1 },
+    (_, at) => `${first + at}/udp`
+  );
+  const shape = runtime.ownNetwork
+    ? inspected.HostConfig.NetworkMode === "host"
+    : [`${STREAM_RELAY_PORT}/udp`, `${STREAM_RELAY_PORT}/tcp`, ...range].every(
+        (port) => bindings[port]?.[0]?.HostIp === "0.0.0.0"
+      ) && inspected.Config.Cmd.includes("--server-relay");
   kit.check(
-    `${relay.RELAY_IMAGE} pulled; container ${relay.RELAY_CONTAINER} ${frame.state}, network ${inspected.HostConfig.NetworkMode}`,
+    `${relay.RELAY_IMAGE} pulled; container ${relay.RELAY_CONTAINER} ${frame.state}, ${runtime.ownNetwork ? `network ${inspected.HostConfig.NetworkMode}` : `published through ${runtime.endpoint}: ${Object.keys(bindings).length} ports on every address (UDP and TCP ${STREAM_RELAY_PORT}, UDP ${first}–${last}), ${inspected.Config.Cmd.filter((arg) => arg.startsWith("--external-ip") || arg === "--server-relay" || arg.startsWith("--allowed-peer-ip")).join(" ")}`}`,
     frame.state === "live" &&
       inspected.State.Running &&
-      inspected.HostConfig.NetworkMode === "host" &&
+      shape &&
       inspected.Config.Image === relay.RELAY_IMAGE,
     JSON.stringify(frame)
   );
@@ -587,12 +611,14 @@ const relayLegs = async (
       JSON.stringify(frame.ports)
     );
   }
-  bindsCheck(
-    kit,
-    [{ shape: name ? "with a certificate" : "with --no-tls", opened }],
-    STREAM_RELAY_PORT,
-    ""
-  );
+  if (runtime.ownNetwork) {
+    bindsCheck(
+      kit,
+      [{ shape: name ? "with a certificate" : "with --no-tls", opened }],
+      STREAM_RELAY_PORT,
+      ""
+    );
+  }
 };
 
 /** Check 4: what coturn opened beside its listener in each shape, every outside port one `STREAM_RELAY_PORTS` reserves; check 3's 5349 with it. */
@@ -820,7 +846,7 @@ const refusedLegs = async (
     const withCert = await startProbe(
       docker,
       relay.RELAY_IMAGE,
-      relay.coturnArgs(named, true).map(onPort(standIn)),
+      relay.coturnArgs(named, true, HOST).map(onPort(standIn)),
       standIn,
       dir
     );
@@ -854,7 +880,7 @@ const refusedLegs = async (
     const plain = await startProbe(
       docker,
       relay.RELAY_IMAGE,
-      relay.coturnArgs(args, false).map(onPort(standIn)),
+      relay.coturnArgs(args, false, HOST).map(onPort(standIn)),
       standIn
     );
     try {
@@ -908,7 +934,7 @@ const otherShape = async (
     docker,
     relay.RELAY_IMAGE,
     [
-      ...relay.coturnArgs(named, true).map(onPort(standIn)),
+      ...relay.coturnArgs(named, true, HOST).map(onPort(standIn)),
       `--tls-listening-port=${tlsPort}`,
     ],
     standIn,
@@ -1008,7 +1034,7 @@ const relaySpec = async (kit: Kit): Promise<void> => {
     return;
   }
   kit.note(
-    `runtime ${runtime.kind} ${runtime.version} (API ${runtime.api}${runtime.rootless ? ", rootless" : ""}) at ${runtime.endpoint}`
+    `runtime ${runtime.kind} ${runtime.version} (API ${runtime.api}${runtime.rootless ? ", rootless" : ""}${runtime.ownNetwork ? "" : ", in a VM: the relay published"}) at ${runtime.endpoint}`
   );
   const args: RelayStartArgs = {
     secret: randomBytes(32).toString("base64url"),
@@ -1030,9 +1056,28 @@ const relaySpec = async (kit: Kit): Promise<void> => {
   let certified = false;
   try {
     // A name's certificate is issued over HTTP, on port 80.
-    const refusal = await relay.lowPortsRefusal(runtime, name ? 80 : 443);
-    if (refusal) {
-      await refusedLegs(kit, relay, runtime, args, refusal);
+    const lowest = name ? 80 : 443;
+    const { need } = await relay.relayRuntimeRead(lowest);
+    if (need?.kind === "low-ports") {
+      await refusedLegs(
+        kit,
+        relay,
+        runtime,
+        args,
+        RELAY_FAILURES.lowPort(machineHostname(), lowest)
+      );
+    } else if (need) {
+      // A VM runtime short of a setting: the start refuses with its command,
+      // no container made, and the run ends there until it is changed.
+      const thrown = await relay.startRelay(args).then(
+        () => "started",
+        (error: unknown) => said(error)
+      );
+      kit.check(
+        `the runtime needs a setting first (${need.kind}): run \`${need.command}\` on ${machine}, then this spec again ("${thrown}")`,
+        false,
+        need.why
+      );
     } else {
       await relayLegs(kit, relay, runtime, args);
       certified = !!name;

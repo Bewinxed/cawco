@@ -120,11 +120,11 @@ import {
 import { writeStateFile } from "@cawco/core/state-file";
 import {
   RELAY_CERTIFY,
-  RELAY_LOW_PORTS,
   RELAY_MAP,
   RELAY_PROVE,
   RELAY_REMOVE,
   RELAY_RENEW,
+  RELAY_RUNTIME,
   RELAY_START,
   RELAY_STOP,
   type RelayCertifyArgs,
@@ -176,7 +176,7 @@ import {
 import { sweepBrowserDoors } from "./browser/door";
 import {
   certifyRelay,
-  relayLowPorts,
+  relayRuntimeRead,
   removeRelay,
   renewRelay,
   setRelaySink,
@@ -3240,13 +3240,13 @@ export const startDaemon = (rediscover = false) =>
       );
     });
     // The relay's journey (hub relay-journey.ts): its certificate issued, the
-    // low ports read, the router asked, and a binding from here through it.
+    // runtime read, the router asked, and a binding from here through it.
     supervisor.registerDaemonFunction(RELAY_CERTIFY, (args) =>
       certifyRelay(relayCertifyOf(args))
     );
-    supervisor.registerDaemonFunction(RELAY_LOW_PORTS, (args) => {
+    supervisor.registerDaemonFunction(RELAY_RUNTIME, (args) => {
       const lowest = (args as { lowest?: unknown } | null)?.lowest;
-      return relayLowPorts(typeof lowest === "number" ? lowest : 443);
+      return relayRuntimeRead(typeof lowest === "number" ? lowest : 443);
     });
     supervisor.registerDaemonFunction(RELAY_MAP, (args) =>
       mapRelayPorts(relayMapOf(args))

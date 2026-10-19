@@ -134,9 +134,11 @@ typeOverrides:
     RebalanceNoticeHow: OpenEnums.RebalanceNoticeHow
     RelayPortName: OpenEnums.RelayPortName
     RelayProvider: OpenEnums.RelayProvider
+    RelayRuntimeNeedKind: OpenEnums.RelayRuntimeNeedKind
     RelayState: OpenEnums.RelayState
     RelayStepFinding: OpenEnums.RelayStepFinding
     RelayStepHow: OpenEnums.RelayStepHow
+    RelayStepNetwork: OpenEnums.RelayStepNetwork
     RestartHoldReason: OpenEnums.RestartHoldReason
     RoutineMadeEventBy: OpenEnums.RoutineMadeEventBy
     RoutineRunState: OpenEnums.RoutineRunState

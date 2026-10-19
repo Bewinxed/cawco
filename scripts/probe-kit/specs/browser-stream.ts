@@ -39,9 +39,12 @@
  * and the agent by `CAWCO_STUN_SERVER`. No real relay, router, DNS name,
  * STUN server or Cloudflare is touched.
  *
- * The coturn lines run on Linux alone, where the runtime's host network is
- * this machine's (obelisk's Podman); on macOS it is the runtime's VM's, which
- * Colima forwards no UDP from, and the run says so in a note instead.
+ * That coturn runs as the agent runs the relay (agent relay.ts): on the host
+ * network where the runtime's is this machine's own (obelisk's Podman),
+ * else published through the runtime's VM forwarder (a Mac's OrbStack,
+ * Colima or Docker Desktop), the forwarder's address let through once its
+ * first binding shows it. Colima must run its grpc forwarder for UDP
+ * (`colima stop && colima start --port-forwarder grpc`).
  *
  * Run on the host, outside every workspace boundary (a boundary hides the
  * runtime's socket and the browser's ports):
@@ -385,27 +388,8 @@ const run = async (kit: Kit): Promise<void> => {
     return;
   }
   const secret = randomBytes(32).toString("base64url");
-  const where = ` (this spec's coturn on ${address}:${standIn}, a stand-in for 443)`;
-  // Where the runtime's host network is a VM's (Colima, Docker Desktop),
-  // a coturn on it is not this machine's address, and Colima forwards no
-  // UDP: the relay's lines run on Linux alone.
-  if (process.platform !== "linux") {
-    kit.note(
-      `not run on ${process.platform}: the minted credential's allocation and the relay pair need coturn on this machine's own host network, which a ${process.platform} runtime's VM is not`
-    );
-    await legs(kit, {
-      address,
-      docker: runtime.docker,
-      realHome,
-      relayHere: false,
-      runtime: runtime.endpoint,
-      secret,
-      standIn,
-      where,
-    });
-    return;
-  }
-  const coturn = await startCoturn(kit, runtime.docker, {
+  const where = ` (this spec's coturn on ${address}:${standIn}, a stand-in for 443${runtime.ownNetwork ? "" : `, published through ${runtime.endpoint}`})`;
+  const coturn = await startCoturn(kit, runtime, {
     address,
     secret,
     standIn,
@@ -419,7 +403,6 @@ const run = async (kit: Kit): Promise<void> => {
       address,
       docker: runtime.docker,
       realHome,
-      relayHere: true,
       runtime: runtime.endpoint,
       secret,
       standIn,
@@ -430,63 +413,117 @@ const run = async (kit: Kit): Promise<void> => {
   }
 };
 
-/** This spec's coturn, the relay's image and arguments on a stand-in for 443, once it answers a binding. */
+/** A binding's answer, `up (<ip>:<port>)`: the address coturn saw it from. */
+const SEEN_FROM = /^up \((.+):\d+\)$/;
+
+/**
+ * This spec's coturn, the relay's image and arguments on a stand-in for 443,
+ * once it answers a binding: on the host network where the runtime's is the
+ * machine's own, else published through its VM's forwarder as the agent
+ * publishes the relay (agent relay.ts), the forwarder's address let through
+ * once a binding shows it.
+ */
 const startCoturn = async (
   kit: Kit,
-  docker: Runtime["docker"],
+  runtime: Runtime,
   on: { address: string; secret: string; standIn: number; where: string }
 ) => {
   const { address, secret, standIn, where } = on;
+  const { docker } = runtime;
   const relay = await import("../../../packages/agent/src/browser/relay");
   const { STREAM_RELAY_PORTS } =
     await import("../../../packages/core/src/stream-relay");
+  const { isPublicAddress } =
+    await import("../../../packages/core/src/public-address");
   const { pullImage } =
     await import("../../../packages/agent/src/browser/image");
   await pullImage(docker, relay.RELAY_IMAGE, (step) =>
     kit.note(`${relay.RELAY_IMAGE}: ${step.done}/${step.total} layers`)
   );
-  await docker
-    .getContainer(COTURN)
-    .remove({ force: true })
-    .catch(() => undefined);
-  const coturn = await docker.createContainer({
-    name: COTURN,
-    Image: relay.RELAY_IMAGE,
-    Cmd: [
-      ...relay
-        .coturnArgs(
-          { secret, address, relayRange: STREAM_RELAY_PORTS.relayRange },
-          false
-        )
-        .map(onPort(standIn)),
-      `--allowed-peer-ip=${address}`,
-    ],
-    HostConfig: { NetworkMode: "host" },
-  });
-  await coturn.start();
-  const bound = await until(
-    "coturn answers a STUN binding",
-    () => binding(`stun:${address}:${standIn}?transport=udp`),
-    (answer) => answer.startsWith("up"),
-    15_000
-  ).catch((error: unknown) => String(error));
+  const { relayRange } = STREAM_RELAY_PORTS;
+  const [first, last] = relayRange;
+  const ports = runtime.ownNetwork
+    ? []
+    : [
+        `${standIn}/udp`,
+        `${standIn}/tcp`,
+        ...Array.from(
+          { length: last - first + 1 },
+          (_, at) => `${first + at}/udp`
+        ),
+      ];
+  const made = async (forwarder?: string) => {
+    await docker
+      .getContainer(COTURN)
+      .remove({ force: true })
+      .catch(() => undefined);
+    const container = await docker.createContainer({
+      name: COTURN,
+      Image: relay.RELAY_IMAGE,
+      Cmd: [
+        ...relay
+          .coturnArgs(
+            { secret, address, relayRange },
+            false,
+            runtime.ownNetwork
+              ? { kind: "host" }
+              : { kind: "published", forwarder }
+          )
+          .map(onPort(standIn)),
+        `--allowed-peer-ip=${address}`,
+      ],
+      ...(runtime.ownNetwork
+        ? { HostConfig: { NetworkMode: "host" } }
+        : {
+            ExposedPorts: Object.fromEntries(ports.map((port) => [port, {}])),
+            HostConfig: {
+              PortBindings: Object.fromEntries(
+                ports.map((port) => [
+                  port,
+                  [{ HostIp: "0.0.0.0", HostPort: port.split("/")[0] }],
+                ])
+              ),
+            },
+          }),
+    });
+    await container.start();
+    // A VM's forwarder binds a moment after the guest does (Lima: every 3 s).
+    const bound = await until(
+      "coturn answers a STUN binding",
+      () => binding(`stun:${address}:${standIn}?transport=udp`),
+      (answer) => answer.startsWith("up"),
+      30_000
+    ).catch((error: unknown) => String(error));
+    return { container, bound };
+  };
+  let coturn = await made();
+  const seen = SEEN_FROM.exec(coturn.bound)?.[1];
+  if (
+    !runtime.ownNetwork &&
+    seen &&
+    !isPublicAddress(seen) &&
+    seen !== address
+  ) {
+    kit.note(
+      `the forwarder hands coturn every peer as ${seen}: let through its denied ranges, as the agent's relay does`
+    );
+    coturn = await made(seen);
+  }
   if (
     kit.check(
-      `coturn answers on udp ${standIn}: ${bound}${where}`,
-      bound.startsWith("up")
+      `coturn answers on udp ${standIn}: ${coturn.bound}${where}`,
+      coturn.bound.startsWith("up")
     )
   ) {
-    return coturn;
+    return coturn.container;
   }
-  await coturn.remove({ force: true }).catch(() => undefined);
+  await coturn.container.remove({ force: true }).catch(() => undefined);
 };
 
 interface At {
   address: string;
   docker: Runtime["docker"];
   realHome: string;
-  /** Whether this spec's coturn runs here (Linux). */
-  relayHere: boolean;
   runtime: string;
   secret: string;
   standIn: number;
@@ -539,7 +576,6 @@ const legsWith = async (kit: Kit, at: At, stun: string): Promise<void> => {
     ws,
     address,
     docker,
-    relayHere: at.relayHere,
     secret,
     standIn,
     stun,
@@ -621,7 +657,6 @@ const containerLeg = async (
   leg: Leg & {
     address: string;
     docker: Runtime["docker"];
-    relayHere: boolean;
     secret: string;
     standIn: number;
     /** The fleet's STUN server, as the hub and the agent are told it. */
@@ -629,7 +664,7 @@ const containerLeg = async (
     where: string;
   }
 ): Promise<void> => {
-  const { fleet, page, ws, address, relayHere, secret, standIn, stun } = leg;
+  const { fleet, page, ws, address, secret, standIn, stun } = leg;
   // Container host. The browser starts before the relay record is written:
   // neko is given no relay of its own, so nothing of it reaches 443.
   const boxed = await sessionIn(fleet, "stream-container");
@@ -688,9 +723,7 @@ const containerLeg = async (
       server.credential === turnCredential(secret, username),
     JSON.stringify(direct)
   );
-  if (relayHere) {
-    await allocates(kit, leg, username, server?.credential ?? "");
-  }
+  await allocates(kit, leg, username, server?.credential ?? "");
   // Direct on the LAN, no relay: the local candidate carries no
   // `relayProtocol` ("only present for local relay candidates",
   // webrtc-stats; libwebrtc sets it on a prflx made from a relay candidate
@@ -708,9 +741,7 @@ const containerLeg = async (
       direct.pair.remote.address === address,
     JSON.stringify(direct)
   );
-  if (relayHere) {
-    await relayPair(kit, leg, `${ws}${base}/api/ws`);
-  }
+  await relayPair(kit, leg, `${ws}${base}/api/ws`);
 
   await countLeg(kit, leg, boxed.key, `${ws}${base}/api/ws`);
   await post(fleet, `/api/browsers/${encodeURIComponent(boxed.key)}/stop`, {

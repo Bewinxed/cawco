@@ -5484,6 +5484,47 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/RelayRuntimeNeedKind`.
+    public enum RelayRuntimeNeedKind: OpenEnum {
+        case forwarder
+        case lowPorts
+        case rootful
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "forwarder": self = .forwarder
+            case "low-ports": self = .lowPorts
+            case "rootful": self = .rootful
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .forwarder: "forwarder"
+            case .lowPorts: "low-ports"
+            case .rootful: "rootful"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.forwarder, .lowPorts, .rootful]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/RelayState`.
     public enum RelayState: OpenEnum {
         case live
@@ -5597,6 +5638,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.natPmp, .uPnP]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/RelayStepNetwork`.
+    public enum RelayStepNetwork: OpenEnum {
+        case host
+        case published
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "host": self = .host
+            case "published": self = .published
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .host: "host"
+            case .published: "published"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.host, .published]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

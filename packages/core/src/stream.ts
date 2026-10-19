@@ -86,12 +86,18 @@ import type { CarrySessionRequest } from "./harness";
  *    machines that could run it and the relay (`candidates`, `relay`); its
  *    changes are POST `/api/stream-relay/act`. A page built for 16 would draw
  *    Settings › Browsers from fields that are gone, so it reloads first.
+ * 18: the stream relay runs on every platform: the journey's machine step no
+ *    longer names machines that can't run it (`notLinux`), and its runtime
+ *    step carries how the relay meets the network (`network`) and the
+ *    setting to change (`need`: a rootless Linux engine's low ports, a VM's
+ *    forwarder, a VM's rootless Podman). A page built for 17 would read the
+ *    runtime step's words from `lowest` alone, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 17;
+export const WIRE_PROTOCOL = 18;
 
 /**
  * What a session's stream carries: the changes each frame made to its

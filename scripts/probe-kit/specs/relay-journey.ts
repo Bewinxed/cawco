@@ -37,7 +37,7 @@
  *    leases, and an IGD v2 one mapping all, each taking back what the one
  *    before held;
  * 4–6. no container runtime under the scratch agent (its `DOCKER_HOST` names a
- *    socket that isn't there, on every machine): the low ports not drawn,
+ *    socket nothing answers on yet, on every machine): the low ports not drawn,
  *    the certificate failing with that sentence and Retry, the name skipped
  *    and the start failing with it and Start again;
  * 7. the proof: the relay read live, this screen inside (its STUN answer the
@@ -45,8 +45,10 @@
  *    address; the summary;
  * and the Needs you row appearing, leaving on Later, coming back on Set up,
  * ticking once proven, and Remove taking the router's mappings and the
- * journey; then the same machine reporting darwin, offered nowhere, the
- * machine step saying the relay runs only on Linux.
+ * journey; then a runtime in a VM: Colima (runtime-stand-in.ts's engine at
+ * its profile's socket in the sandbox's own Colima home), the relay
+ * published through it, its ssh forwarder asked to be grpc in the runtime
+ * step, and the step ticking by itself once its running settings say grpc.
  *
  * Where this machine has a private interface (the host), the agent's own
  * STUN read makes the machine behind a router; inside a workspace boundary,
@@ -56,8 +58,9 @@
  *   bun scripts/probe-kit/run.ts relay-journey
  */
 import { createSocket, type Socket } from "node:dgram";
+import { mkdir, writeFile } from "node:fs/promises";
 import { networkInterfaces } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Page } from "playwright-core";
 import type { MachineCapabilities } from "../../../packages/core/src/capabilities";
 import {
@@ -74,6 +77,7 @@ import { applySetupPicks } from "../../../packages/hub/src/setup";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 import { natPmpStandIn, upnpGatewayStandIn } from "../router-stand-ins";
+import { engineStandIn } from "../runtime-stand-in";
 
 const DOMAIN = "outpost.cawco-probe.dev";
 const ZONE = "cawco-probe.dev";
@@ -92,6 +96,8 @@ const CLOUDFLARE_ANSWER = "104.16.1.1";
 const ELSEWHERE = "203.0.113.9";
 /** How long a name check has to answer: the hub asks every 30 s. */
 const NAME_MS = 45_000;
+/** Colima's switch to its forwarder that carries UDP, as the agent names it for the default profile (media-forwarding.ts). */
+const COLIMA_GRPC = "colima stop && colima start --port-forwarder grpc";
 /** The lease the agent asks each mapping for, in seconds (relay-router.ts). */
 const LEASE_S = 3600;
 
@@ -546,16 +552,26 @@ const run = async (kit: Kit): Promise<void> => {
       CAWCO_RELAY_DNS: `127.0.0.1:${dns.port}`,
     });
     await fleet.hubUp();
+    // A Colima home of the sandbox's own: its default profile's socket, where
+    // nothing answers until the last leg stands a stand-in engine there, and
+    // its Lima instance's running settings, which that leg writes.
+    const colimaHome = join(fleet.sandbox, "c");
+    const colimaSocket = join(colimaHome, "default", "docker.sock");
+    const colimaState = join(colimaHome, "_lima", "colima", "colima.yaml");
+    await mkdir(dirname(colimaSocket), { recursive: true });
+    await mkdir(dirname(colimaState), { recursive: true });
     fleet.launch("agent", [], {
       CAWCO_STUN_SERVER: `stun:127.0.0.1:${stun.port}`,
       CAWCO_UPNP_GATEWAY: gateway.descriptor,
       CAWCO_NAT_PMP_GATEWAY: "127.0.0.1",
-      // No container runtime on any machine: set, `DOCKER_HOST` is the one
-      // socket the agent tries (runtime.ts `findRuntime`), and none answers
-      // at this path. So no certbot or coturn ever runs here against Let's
-      // Encrypt or Cloudflare, on the host as in a workspace, and legs 4–6
-      // read the same everywhere.
-      DOCKER_HOST: `unix://${join(fleet.sandbox, "no-runtime.sock")}`,
+      // No container runtime on any machine until the last leg: set,
+      // `DOCKER_HOST` is the one socket the agent tries (runtime.ts
+      // `findRuntime`), and nothing answers there before it. So no certbot or
+      // coturn ever runs here against Let's Encrypt or Cloudflare, on the host
+      // as in a workspace, and legs 4–6 read the same everywhere.
+      DOCKER_HOST: `unix://${colimaSocket}`,
+      COLIMA_HOME: colimaHome,
+      LIMA_HOME: dirname(dirname(colimaState)),
     });
     await fleet.agentUp();
 
@@ -1099,44 +1115,59 @@ const run = async (kit: Kit): Promise<void> => {
       JSON.stringify({ table: gateway.table.size, journey: removed.journey })
     );
 
-    // A machine that isn't Linux (its report says darwin) can't run it: offered nowhere, and the machine step says why.
-    const [reportRow] = fleet.query<{ caps: string | null }>(
-      "SELECT machine_capabilities AS caps FROM agents WHERE machine_id = ?",
-      MACHINE
-    );
-    fleet.write(
-      "UPDATE agents SET machine_capabilities = ? WHERE machine_id = ?",
-      JSON.stringify({
-        ...(JSON.parse(reportRow?.caps ?? "{}") as MachineCapabilities),
-        platform: "darwin",
-      }),
-      MACHINE
-    );
-    const noHost = await journeyUntil(
-      fleet,
-      "no machine that can run it",
-      (answer) => answer.journey.candidates === 0
-    );
-    await act(fleet, { act: "set-up" });
-    const onMac = await journeyUntil(
-      fleet,
-      "the machine step with only a Mac",
-      (answer) => stepOf(answer, "machine")?.state === "none"
-    );
-    const macNames = stepOf(onMac, "machine")?.notLinux ?? [];
-    const macWords = await stepSays(
-      page,
-      "machine",
-      words.noneNotLinux([machine?.name ?? ""])
-    );
-    kit.check(
-      `the same machine reporting darwin: ${noHost.journey.candidates} machines can run it, Set up picks none, and the machine step names it: "${words.noneNotLinux(macNames)}"`,
-      noHost.journey.candidates === 0 &&
-        onMac.journey.machine === null &&
-        macNames.join() === machine?.name &&
-        macWords?.includes(words.noneNotLinux([machine?.name ?? ""])) === true,
-      JSON.stringify({ step: stepOf(onMac, "machine"), macWords })
-    );
+    // The relay on a runtime in a VM: Colima, as the agent reads it (an
+    // engine answering at its profile's socket, its instance's running
+    // settings). Its ssh forwarder carries TCP alone, so the runtime step
+    // asks for grpc; once the settings say grpc, it ticks by itself.
+    await writeFile(colimaState, "portForwarder: ssh\n");
+    const engine = engineStandIn(colimaSocket, "Ubuntu 24.04.3 LTS");
+    try {
+      // The name skipped and the ports opened (the IGD v2 stand-in maps
+      // them), so the runtime step is the one standing on the person, its
+      // note and command open on the card.
+      await act(fleet, { act: "set-up" });
+      await act(fleet, { act: "skip-name" });
+      await act(fleet, { act: "open-ports" });
+      const asks = await journeyUntil(
+        fleet,
+        "the runtime step asking for Colima's grpc forwarder",
+        (answer) => stepOf(answer, "runtime")?.state === "needs",
+        60_000
+      );
+      const asked = stepOf(asks, "runtime");
+      const askWords = asked
+        ? await stepSays(page, "runtime", COLIMA_GRPC)
+        : null;
+      kit.check(
+        `Colima (a stand-in engine at its profile's socket, its running settings portForwarder: ssh): the relay is published (${asked?.network}), and the runtime step asks "${asked ? words.runtime(asked) : ""}": "${asked?.need?.why}", the command \`${asked?.need?.command}\``,
+        asked?.network === "published" &&
+          asked.need?.kind === "forwarder" &&
+          asked.need.command === COLIMA_GRPC &&
+          askWords?.includes(words.runtime(asked)) === true &&
+          askWords.includes(asked.need.why) &&
+          askWords.includes(COLIMA_GRPC),
+        JSON.stringify({ asked, askWords, engine: engine.asked.slice(0, 4) })
+      );
+      await writeFile(colimaState, "portForwarder: grpc\n");
+      const forwarding = await journeyUntil(
+        fleet,
+        "the runtime step ticked once Colima runs its grpc forwarder",
+        (answer) => stepOf(answer, "runtime")?.state === "done",
+        30_000
+      );
+      const holds = stepOf(forwarding, "runtime");
+      const holdsWords = holds
+        ? await stepSays(page, "runtime", words.runtimeDone(holds))
+        : null;
+      kit.check(
+        `once Colima's running settings say grpc, the step ticks by itself: "${holdsWords}"`,
+        holds?.network === "published" &&
+          holdsWords?.includes(words.runtimeDone(holds)) === true,
+        JSON.stringify({ holds, holdsWords })
+      );
+    } finally {
+      engine.server.stop(true);
+    }
   } finally {
     stun.socket.close();
     dns.socket.close();

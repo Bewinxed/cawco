@@ -41,7 +41,11 @@ import { browsersDir } from "./state";
 export interface MediaForwarding {
   /** What the browser streams over instead of UDP and TCP, and how to get them: shown to the person. Absent for `udp+tcp`. */
   advice?: string;
+  /** The one terminal line that makes the runtime forward UDP and TCP, where its settings say which (Colima's). */
+  command?: string;
   media: MediaPath;
+  /** The runtime by name, as the person knows it, where its settings were read (`Colima`). */
+  runtime?: string;
 }
 
 /** A measurement kept for a runtime endpoint. */
@@ -116,7 +120,7 @@ interface ColimaProfile {
  * machine's Colima uses, or it holds Colima's `_lima` (a daemon started
  * without the shell's `COLIMA_HOME` still knows the socket it names).
  */
-const colimaProfileOf = async (
+export const colimaProfileOf = async (
   socket: string
 ): Promise<ColimaProfile | undefined> => {
   // A socket that went between the ping and this read is judged by its name.
@@ -165,6 +169,16 @@ const colimaForwarding = async (
   );
   const config = tilde(join(profile.home, profile.name, "colima.yaml"));
   const fix = `set \`portForwarder: grpc\` in ${config}, then run \`colima restart\`.`;
+  // The same switch as one line: `colima start --port-forwarder grpc` saves
+  // the flag to the profile's colima.yaml (`--save-config`, "persist and
+  // overwrite config file with (newly) specified flags", default true), and
+  // a running Colima ignores start ("already running, ignoring"), so it
+  // stops first (abiosoft/colima cmd/start.go).
+  const named = profile.name === "default" ? "" : ` ${profile.name}`;
+  const known = {
+    runtime: "Colima",
+    command: `colima stop${named} && colima start${named} --port-forwarder grpc`,
+  };
   let forwarder: unknown;
   try {
     const settings = parse(await readFile(state, "utf8")) as {
@@ -176,20 +190,23 @@ const colimaForwarding = async (
       (error as NodeJS.ErrnoException).code ??
       (error instanceof Error ? error.message : String(error));
     return {
+      ...known,
       media: "tcp",
       advice: `Colima's running settings at ${tilde(state)} could not be read (${why}), so this machine's browser streams over TCP alone. To stream over UDP, ${fix}`,
     };
   }
   if (forwarder === "grpc") {
-    return { media: "udp+tcp" };
+    return { ...known, media: "udp+tcp" };
   }
   if (forwarder === "none") {
     return {
+      ...known,
       media: "none",
       advice: `Colima forwards no ports (\`portForwarder: none\`), so a screen reaches this machine's browser only through a stream relay. To stream directly, ${fix}`,
     };
   }
   return {
+    ...known,
     media: "tcp",
     advice: `Colima forwards only TCP, so this machine's browser streams over TCP, which stutters on weak networks. To stream over UDP, ${fix}`,
   };
@@ -461,15 +478,19 @@ export interface ForwardingReader {
 
 /**
  * The reader for `runtime` here. Where a host process forwards (a VM's
- * forwarder on a Mac, rootlesskit or pasta on Linux) it holds the port it
- * forwards, so what is bound on every address is read; a rootful engine on
- * Linux is read by {@link natForwards}. Undefined on a platform with neither.
+ * forwarder, on a Mac or Colima's on Linux; rootlesskit or pasta on Linux)
+ * it holds the port it forwards, so what is bound on every address is read;
+ * a rootful engine on Linux's own network is read by {@link natForwards}.
+ * Undefined on a platform with neither.
  */
 export const forwardingReader = (
-  runtime: Runtime
+  runtime: Pick<Runtime, "ownNetwork" | "rootless">
 ): ForwardingReader | undefined => {
   const os = platform();
-  if (os === "darwin" || (os === "linux" && runtime.rootless)) {
+  if (
+    os === "darwin" ||
+    (os === "linux" && (runtime.rootless || !runtime.ownNetwork))
+  ) {
     return { by: "binds", read: hostBinds };
   }
   if (os === "linux") {

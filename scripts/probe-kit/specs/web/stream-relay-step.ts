@@ -729,7 +729,13 @@ const FIX =
 /** Every relay failure, on sample values: what happened first, then the fix; a command it names sits in its sentence; no backtick, no 3478 or 5349. */
 const failures = (kit: Kit): void => {
   const samples = {
-    notLinux: RELAY_FAILURES.notLinux("relay"),
+    runtimeNeed: RELAY_FAILURES.runtimeNeed("relay", {
+      kind: "forwarder",
+      why: "Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 443 and UDP 49152–49400: switch it to its forwarder that carries both.",
+      command: "colima stop && colima start --port-forwarder grpc",
+    }),
+    unforwarded: RELAY_FAILURES.unforwarded("relay", ["UDP 443"], 20),
+    unanswered: RELAY_FAILURES.unanswered("relay", 9),
     noRuntime: RELAY_FAILURES.noRuntime("relay", "sudo apt install podman"),
     notDnsName: RELAY_FAILURES.notDnsName("relay", "relay_example"),
     lowPort: RELAY_FAILURES.lowPort("relay", 443),
@@ -790,8 +796,10 @@ const failures = (kit: Kit): void => {
     `the sysctl fix is one line that sets the value live and keeps it over a reboot ("${sysctl}"), the low-ports step says the same; no failure names 3478 or 5349`,
     sysctl ===
       "sudo sh -c 'sysctl -w net.ipv4.ip_unprivileged_port_start=443 && echo net.ipv4.ip_unprivileged_port_start=443 > /etc/sysctl.d/90-cawco-relay.conf'" &&
-      words.runtimeCommand(443) === sysctl &&
-      words.runtimeCommand(80) === sysctl.replaceAll("=443", "=80") &&
+      words.runtimeCommand({ step: "runtime", state: "needs", lowest: 443 }) ===
+        sysctl &&
+      words.runtimeCommand({ step: "runtime", state: "needs", lowest: 80 }) ===
+        sysctl.replaceAll("=443", "=80") &&
       !(all.includes("3478") || all.includes("5349")),
     JSON.stringify({ sysctl })
   );
