@@ -980,8 +980,38 @@ const run = async (kit: Kit): Promise<void> => {
       `7 · a relay that refused this screen's credential (a 401) is told apart from one that did not answer: "${proveRefusedWords?.slice(0, 100)}…", and Check again`,
       stepOf(refusedProof, "prove")?.refused === true &&
         proveRefusedWords?.includes(words.proveRefused) === true &&
-        proveRefusedWords.includes(words.checkAgain),
+        proveRefusedWords.includes(words.checkAgain) &&
+        !proveRefusedWords.includes(words.forwards(routerLan, false)),
       String(proveRefusedWords)
+    );
+    // Loaded again from outside, and no answer: the router's forwards stand in the failure.
+    await fakeAs(page, { mode: "none", seenAs: null });
+    await page.reload();
+    await open(page, `${base}/config/browsers`, "[data-relay-journey]");
+    const silentOutside = await journeyUntil(
+      fleet,
+      "no answer from outside",
+      (answer) =>
+        stepOf(answer, "prove")?.state === "failed" &&
+        stepOf(answer, "prove")?.outside === true &&
+        stepOf(answer, "prove")?.refused !== true,
+      30_000
+    );
+    const outsideFailWords = await stepSays(
+      page,
+      "prove",
+      words.forwards(routerLan, false)
+    );
+    kit.check(
+      `7 · no answer from outside: "${words.proveFailedOutside(machine?.name ?? "")}", with the forwards to check under it, "${words.forwards(routerLan, false)}", its Copy and Check again; the router step still needs`,
+      stepOf(silentOutside, "router")?.state === "needs" &&
+        outsideFailWords?.includes(
+          words.proveFailedOutside(machine?.name ?? "")
+        ) === true &&
+        outsideFailWords.includes(words.forwards(routerLan, false)) &&
+        outsideFailWords.includes(words.copyForwards) &&
+        outsideFailWords.includes(words.checkAgain),
+      String(outsideFailWords)
     );
     await fakeAs(page, { mode: "answer", seenAs: null });
     client.address = PHONE;

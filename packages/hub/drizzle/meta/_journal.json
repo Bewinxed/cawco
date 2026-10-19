@@ -1863,6 +1863,13 @@
       "when": 1792445069797,
       "tag": "0273_revoke_ended_identities",
       "breakpoints": true
+    },
+    {
+      "idx": 274,
+      "version": "6",
+      "when": 1792449410877,
+      "tag": "0274_relay_journey_drop_router",
+      "breakpoints": true
     }
   ]
 }

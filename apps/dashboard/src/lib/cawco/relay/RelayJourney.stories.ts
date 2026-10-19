@@ -273,6 +273,24 @@ const proveRefused = {
 /** D · The relay refused this screen's credential (a 401): not unreachable, and Check again. */
 export const ProveRefused = { args: proveRefused, parameters: desk };
 
+const proveFailedOutside = {
+  steps: path({
+    ...ticked,
+    router: { step: "router", state: "needs" },
+    prove: { step: "prove", state: "failed", outside: true },
+  }),
+};
+/** D · No answer from outside: the router's forwards to check under the failure, and Check again. */
+export const ProveFailedOutside = {
+  args: proveFailedOutside,
+  parameters: desk,
+};
+/** D · No answer from outside, on a phone. */
+export const ProveFailedOutsidePhone = {
+  args: proveFailedOutside,
+  parameters: phone,
+};
+
 const live = { view: "summary", summary: proven };
 /** D · Proven from outside: the card becomes the live relay's summary. */
 export const Live = { args: live, parameters: desk };

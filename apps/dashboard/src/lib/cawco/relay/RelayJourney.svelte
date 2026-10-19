@@ -219,6 +219,19 @@
   const machineNow = $derived<RelayMachine>(
     machine ?? { name: "", address: "", lan: null }
   );
+  /** The forwards to make on the router, behind one: its step's, and an outside proof's failure's. */
+  const forwardsLine = $derived.by(() => {
+    const router = steps.find(
+      (one): one is Extract<RelayStep, { step: "router" }> =>
+        one.step === "router"
+    );
+    return router
+      ? words.forwards(
+          machineNow.lan ?? machineNow.address,
+          router.http ?? false
+        )
+      : null;
+  });
 
   /** What a ticked step says was done. */
   function doneLabelOf(step: RelayStep): string {
@@ -620,12 +633,14 @@
     {@render nameBody(step)}
   {:else if step.step === "router"}
     <p class={NOTE}>{words.routerNote}</p>
-    {@render copyable(
-      words.forwardsLabel,
-      words.forwards(machineNow.lan ?? machineNow.address, step.http ?? false),
-      words.copyForwards,
-      false
-    )}
+    {#if forwardsLine}
+      {@render copyable(
+        words.forwardsLabel,
+        forwardsLine,
+        words.copyForwards,
+        false
+      )}
+    {/if}
   {:else if step.step === "runtime"}
     <p class={NOTE}>{words.runtimeNote(step, machineNow.name)}</p>
     {@render copyable(
@@ -708,6 +723,14 @@
           {words.proveFailedInside(machineNow.name)}
         {/if}
       </p>
+      {#if step.outside && !step.refused && forwardsLine}
+        {@render copyable(
+          words.forwardsLabel,
+          forwardsLine,
+          words.copyForwards,
+          false
+        )}
+      {/if}
       <div class={CONTROLS}>
         {#if step.refused}
           <!-- Another secret than the hub's: the start gives it the hub's. -->
