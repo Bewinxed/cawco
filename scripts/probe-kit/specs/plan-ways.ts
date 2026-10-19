@@ -367,7 +367,33 @@ async function goTo(page: Page, selector: string) {
       dispatchEvent(new CustomEvent("cawco:canvas-go", { detail: { key } }));
     }
   }, selector);
-  await page.waitForTimeout(900);
+  // The canvas pans to the frame on its own clock: its box is read once the
+  // pan has come to rest, the same box five frames running, not after a
+  // set wait a loaded machine outruns.
+  await page.evaluate(
+    (one) =>
+      new Promise<void>((done) => {
+        const from = performance.now();
+        let last = "";
+        let same = 0;
+        const look = () => {
+          const r = document.querySelector(one)?.getBoundingClientRect();
+          const now = r ? `${r.x},${r.y},${r.width},${r.height}` : "";
+          same = now === last ? same + 1 : 0;
+          last = now;
+          const waited = performance.now() - from;
+          // A pan starts on the canvas's next frames: the box is asked to
+          // hold only after a beat, and never past ten seconds.
+          if ((same >= 5 && waited > 300) || waited > 10_000) {
+            done();
+          } else {
+            requestAnimationFrame(look);
+          }
+        };
+        requestAnimationFrame(look);
+      }),
+    selector
+  );
   return page.evaluate((one) => {
     const el = document.querySelector(one);
     const label = el?.querySelector(".cawco-frame-label");
@@ -2394,32 +2420,45 @@ async function leg(
   await page.close();
 }
 
-/** What one run read: its frames and length, its worst frame and task, its scripting and the caps' share of it, in all. */
+/** What one run read: its frames and length, its worst frame and task, its scripting and the caps' share of it, in all and by where it was spent. */
 interface ScrollRun {
+  by: Map<string, number>;
   caps: number;
   frames: number;
   longest: number;
   ms: number;
   range: number;
   script: number;
+  /** What stirred the page while it ran, most first. */
+  stirs: string;
   worstFrame: number;
 }
 
-/** The share of a profile's samples with a frame of edge-fade-caps.ts on their stack, the native calls it makes included, in milliseconds. */
+/**
+ * The share of a profile's samples with a frame of edge-fade-caps.ts on
+ * their stack, the native calls it makes included, in milliseconds; and
+ * that share by where it was spent: the caps' function nearest the sample,
+ * and the call the sample stood in (its own, or a native one it made).
+ */
 function capsShare(profile: {
-  nodes: { callFrame: { url: string }; children?: number[]; id: number }[];
+  nodes: {
+    callFrame: { functionName: string; url: string };
+    children?: number[];
+    id: number;
+  }[];
   samples: number[];
   timeDeltas: number[];
-}): number {
+}): { by: Map<string, number>; ms: number } {
   const parent = new Map<number, number>();
   for (const node of profile.nodes) {
     for (const child of node.children ?? []) {
       parent.set(child, node.id);
     }
   }
-  const url = new Map(
-    profile.nodes.map((node) => [node.id, node.callFrame.url])
+  const frames = new Map(
+    profile.nodes.map((node) => [node.id, node.callFrame])
   );
+  const by = new Map<string, number>();
   let us = 0;
   profile.samples.forEach((id, i) => {
     for (
@@ -2427,14 +2466,28 @@ function capsShare(profile: {
       at !== undefined;
       at = parent.get(at)
     ) {
-      if (url.get(at)?.includes("edge-fade-caps")) {
-        us += profile.timeDeltas[i] ?? 0;
+      const frame = frames.get(at);
+      if (frame?.url.includes("edge-fade-caps")) {
+        const spent = profile.timeDeltas[i] ?? 0;
+        us += spent;
+        const leaf =
+          at === id ? "" : ` > ${frames.get(id)?.functionName || "(native)"}`;
+        const key = `${frame.functionName || "(anonymous)"}${leaf}`;
+        by.set(key, (by.get(key) ?? 0) + spent / 1000);
         return;
       }
     }
   });
-  return us / 1000;
+  return { by, ms: us / 1000 };
 }
+
+/** The places the caps spent most, largest first, in milliseconds a frame. */
+const spentMost = (by: Map<string, number>, frames: number): string =>
+  [...by]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 6)
+    .map(([where, ms]) => `${where} ${perFrame(ms, frames)}`)
+    .join("; ");
 
 /**
  * The desk card's list scrolled down its length and back, 6px a frame; or,
@@ -2472,6 +2525,55 @@ async function runOnce(
         }
       });
       tasks.observe({ type: "longtask" });
+      // What stirs the page's capped lists while it runs: each run of
+      // motion's events and each change of its nodes, by kind and by what
+      // it ran on (its slot, or its tag and first class).
+      const stirs = new Map<string, number>();
+      const named = (target: EventTarget | Node | null): string => {
+        if (!(target instanceof Node)) {
+          return "?";
+        }
+        const el = target instanceof Element ? target : target.parentElement;
+        if (!el) {
+          return "?";
+        }
+        const slot = el.closest("[data-slot]")?.getAttribute("data-slot");
+        return `${el.tagName.toLowerCase()}.${el.classList[0] ?? ""}${slot ? ` in ${slot}` : ""}`;
+      };
+      const tally = (key: string) => stirs.set(key, (stirs.get(key) ?? 0) + 1);
+      const heard = (event: Event) => {
+        let what = "";
+        if (event instanceof TransitionEvent) {
+          what = `${event.propertyName}${event.pseudoElement}`;
+        } else if (event instanceof AnimationEvent) {
+          what = event.animationName;
+        }
+        tally(`${event.type} ${what} on ${named(event.target)}`);
+      };
+      const kinds = [
+        "transitionrun",
+        "transitionend",
+        "transitioncancel",
+        "animationstart",
+        "animationend",
+        "animationcancel",
+      ];
+      for (const kind of kinds) {
+        document.addEventListener(kind, heard, true);
+      }
+      const changes = new MutationObserver((records) => {
+        for (const record of records) {
+          tally(
+            `${record.type}${record.attributeName ? ` ${record.attributeName}` : ""} on ${named(record.target)}`
+          );
+        }
+      });
+      changes.observe(document.body, {
+        attributes: true,
+        characterData: true,
+        childList: true,
+        subtree: true,
+      });
       const range = scroller.scrollHeight - scroller.clientHeight;
       const gaps: number[] = [];
       const from = performance.now();
@@ -2501,7 +2603,16 @@ async function runOnce(
         requestAnimationFrame(tick);
       });
       tasks.disconnect();
+      changes.disconnect();
+      for (const kind of kinds) {
+        document.removeEventListener(kind, heard, true);
+      }
       return {
+        stirs: [...stirs]
+          .sort((a, b) => b[1] - a[1])
+          .slice(0, 10)
+          .map(([what, count]) => `${what} ×${count}`)
+          .join("; "),
         range: Math.round(range),
         frames: gaps.length,
         ms: performance.now() - from,
@@ -2518,10 +2629,12 @@ async function runOnce(
   if (!run || run.frames === 0) {
     return null;
   }
+  const caps = capsShare(profile);
   return {
     ...run,
     script: ((after.ScriptDuration ?? 0) - (before.ScriptDuration ?? 0)) * 1000,
-    caps: capsShare(profile),
+    caps: caps.ms,
+    by: caps.by,
   };
 }
 
@@ -2557,7 +2670,7 @@ async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
     }
     const own = Math.max(0, run.caps - (still.caps * run.ms) / still.ms);
     kit.note(
-      `${name}: the desk card's list scrolled ${run.range}px down and back at 4× CPU throttle: ${run.frames} frames, scripting ${perFrame(run.script, run.frames)} ms a frame, the caps' ${perFrame(run.caps, run.frames)} ms of it, the scroll's own ${perFrame(own, run.frames)} ms (the page still as long: the caps' ${perFrame(still.caps, still.frames)} ms a frame on its own beats), longest frame ${run.worstFrame} ms, longest task ${run.longest ? `${run.longest} ms` : "none of 50 ms or more"}`
+      `${name}: the desk card's list scrolled ${run.range}px down and back at 4× CPU throttle: ${run.frames} frames, scripting ${perFrame(run.script, run.frames)} ms a frame, the caps' ${perFrame(run.caps, run.frames)} ms of it, the scroll's own ${perFrame(own, run.frames)} ms (the page still as long: the caps' ${perFrame(still.caps, still.frames)} ms a frame on its own beats, ${perFrame(still.caps, still.ms / 1000)} ms a second), longest frame ${run.worstFrame} ms, longest task ${run.longest ? `${run.longest} ms` : "none of 50 ms or more"}; the caps' most, scrolled: ${spentMost(run.by, run.frames)}; still: ${spentMost(still.by, still.frames)}; what stirred the page still: ${still.stirs || "nothing"}`
     );
   } finally {
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
