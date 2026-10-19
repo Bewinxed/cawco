@@ -1,7 +1,7 @@
 /**
  * Git LFS offered for the large files a place's first commit left out
  * (place-repo.ts). The unattended first commit never silently drops a file
- * over 50 MiB (core `PLACE_REPO_FILE_LIMIT_BYTES`) nor silently commits one:
+ * of 50 MiB or more (core `LARGE_FILE_BYTES`) nor silently commits one:
  * it leaves each out, names it in the note, and the note carries this
  * offer, by pattern (git-lfs-faq(7): "we recommend using patterns rather
  * than `--above`"), a row per pattern with its count and size.

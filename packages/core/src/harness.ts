@@ -1839,14 +1839,6 @@ export const CONTROL_REPO_ROOT = "repoRoot";
 /** The most a place's first commit may weigh; a place past it stays a folder. */
 export const PLACE_REPO_LIMIT_BYTES = 500 * 1024 * 1024;
 
-/**
- * The largest file a place's first commit takes; a bigger one is left out,
- * and offered to Git LFS by its pattern ({@link PlaceLfsRow}). GitHub's
- * line: "larger than 50 MiB, you will receive a warning … GitHub blocks
- * files larger than 100 MiB".
- */
-export const PLACE_REPO_FILE_LIMIT_BYTES = 50 * 1024 * 1024;
-
 /** One path a place's first commit leaves out, from the place's root, and why. */
 export interface PlaceLeftOut {
   /** From the place's root; a folder ends with `/`. */
@@ -1891,8 +1883,8 @@ export type PlaceRepo =
       staged: string[];
       leftOut: PlaceLeftOut[];
       /**
-       * What of `leftOut` was left out for its size alone, past
-       * {@link PLACE_REPO_FILE_LIMIT_BYTES}, nothing else keeping it out
+       * What of `leftOut` was left out for its size alone, core
+       * `LARGE_FILE_BYTES` (move.ts) or more, nothing else keeping it out
        * (the folder's own ignore rules): what Git LFS is offered for, by
        * pattern.
        */
