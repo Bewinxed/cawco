@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * The first-prompt editor (§1.4, §2.3): a contenteditable that grows from
-   * 44px to 120px, detects `@` / `/` at the caret and inserts chips. The prompt
+   * `c-row-h` to `c-prompt-grown-h`, detects `@` / `/` at the caret and inserts chips. The prompt
    * that is sent is the editor's text with chips serialised as `@name`/`/name`.
    * A `lead` chip opens the editor and serialises to nothing; deleting it calls
    * `onleadremove`.
@@ -47,11 +47,11 @@
   let menuIdx = $state(0);
   const items = $derived(menu ? menuItems(menu.type, menu.query) : []);
   const promptEmpty = $derived(!(value || lead));
-  const promptH = $derived(promptFocus || value || menu ? 120 : 44);
+  const grown = $derived(Boolean(promptFocus || value || menu));
   /**
    * The menu stands on the caret where the caret is now, measured each time
    * the popover places itself. Measured once, as the trigger was typed, a
-   * `/` typed while the editor was still growing to 120px (the dialog
+   * `/` typed while the editor was still growing to its grown height (the dialog
    * re-centring 38px up as it did) left the menu 38px under the caret for
    * good. The editor is the anchor's `contextElement`: floating-ui's
    * autoUpdate observes it for size and movement, and its scrolling
@@ -336,7 +336,7 @@
     data-slot="editor"
     aria-label="First prompt"
     aria-multiline="true"
-    class="fai-scroll h-(--prompt-height) max-phone:h-(--c-prompt-grown-h) w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong outline-off max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:dur-pop motion-safe:phone:ease-in-out"
+    class="fai-scroll h-c-row-h data-grown:h-(--c-prompt-grown-h) max-phone:h-(--c-prompt-grown-h) w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong outline-off max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:dur-pop motion-safe:phone:ease-in-out"
     contenteditable="true"
     id="session-prompt"
     onblur={() => {
@@ -352,7 +352,7 @@
     onkeyup={caret}
     onpaste={paste}
     role="textbox"
-    style:--prompt-height={`${promptH}px`}
+    data-grown={grown || undefined}
     tabindex="0"
     bind:this={element}
   ></div>

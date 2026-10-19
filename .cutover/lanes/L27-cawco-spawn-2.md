@@ -73,7 +73,7 @@ theme: component prompt-editor-chip
 ## Tokens
 
 token: --c-session-footer-action-w 96px — min width that keeps the footer's primary button one size across "Start" and "Starting…"; no ladder step is that wide (SessionFooter.svelte)
-token: --c-prompt-grown-h 120px — the first-prompt editor's grown height, fixed on a phone; PromptEditor's script holds the same 120 and 44 (PromptEditor.svelte)
+token: --c-prompt-grown-h 120px — the first-prompt editor's grown height, also its fixed height on a phone (PromptEditor.svelte)
 token: --text-field-floor 16px — the 16px Field Rule's floor for the contenteditable prompt, which app.css's input/textarea/select rule does not reach (PromptEditor.svelte)
 
 ## Removed
@@ -90,11 +90,12 @@ fixed: TriggerMenu.svelte tile glyph 12px → `icon-md` in the 26px tile — Ide
 fixed: Segmented.svelte thumb now `motion-safe:` — Segmented controls: motion respects reduced motion
 fixed: ProjectChip.svelte / PermissionSection.svelte / TriggerMenu.svelte `text-left` → `text-start` — logical properties
 
+fixed: PromptEditor.svelte `promptH` (44/120 literals in the script) → `grown` boolean on the editor as `data-grown`; height is `h-c-row-h` at rest, `data-grown:h-(--c-prompt-grown-h)` and the phone rule — a state is an attribute
+
 Own calls (no source): 9px gap → `space-3` (equidistant, matches its sibling rows); 16px editor padding → `space-4` (equidistant to 18); 40px add row → `c-row-h` (44, with its siblings); tab heights 26 → `c-btn-h-xs` (24), 38 → `c-btn-h` (36) on a phone.
 
 ## Gaps
 
-gap: PromptEditor.svelte script `promptH` holds 44 and 120 as literals — they are `c-row-h` and `--c-prompt-grown-h`; the script is not a lane's to change
 gap: ProjectChip.svelte:~100 the two `<label class="field-shell">` fields are a hand-rolled input — the kit's `input-group` is the target (Inputs and fields: field shell), not a straight swap here
 gap: Segmented.svelte is a hand-rolled segmented control (radiogroup with a thumb) — the kit's `toggle-group`/`tabs` (Segmented controls) is the target; ARIA differs, so not straight
 gap: ProjectChip.svelte `-mr-space-row` on the clear mark offsets `ns-chip-btn`'s trailing padding, which lives in ns-theme.css — a cross-file nudge, left
