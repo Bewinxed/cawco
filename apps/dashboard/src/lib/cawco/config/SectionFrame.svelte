@@ -98,41 +98,31 @@
 <div
   class="flex min-h-0 min-w-0 flex-auto flex-col overflow-y-auto bg-surface-recess px-space-5 py-space-2"
 >
-  <!-- literal: 980px -->
   <div
     data-slot="body"
-    class="flex max-w-(--body-max) shrink-0 grow basis-auto flex-col gap-space-6 rounded-lg bg-surface-raised px-space-7 py-space-6"
-    style:--body-max="980px"
-    style:min-height={card === null ? undefined : `${card}px`}
+    class="flex max-w-(--c-section-body-max) min-h-(--card-h) shrink-0 grow basis-auto flex-col gap-space-6 rounded-lg bg-surface-raised px-space-7 py-space-6"
+    style:--card-h={card === null ? undefined : `${card}px`}
     {@attach morph()}
     {@attach settled ? rememberCard(page.url.pathname) : undefined}
   >
-    <!-- literal: 12px -->
     <header
       data-slot="head"
-      class="flex flex-wrap items-start justify-between gap-(--head-gap)"
-      style:--head-gap="12px"
+      class="flex flex-wrap items-start justify-between gap-space-3"
     >
       <div class="flex min-w-0 flex-col gap-space-1">
         <h1 data-slot="title" class="type-title tracking-title text-ink-strong">
           {title}
         </h1>
         {#if purpose}
-          <!-- literal: 8px -->
-          <p
-            class="flex flex-wrap items-center gap-(--line-gap)"
-            style:--line-gap="8px"
-          >
+          <p class="flex flex-wrap items-center gap-space-2">
             {purpose}
           </p>
         {/if}
       </div>
       {#if actions}
-        <!-- literal: 8px -->
         <div
           data-slot="actions"
-          class="flex flex-wrap items-center gap-(--line-gap)"
-          style:--line-gap="8px"
+          class="flex flex-wrap items-center gap-space-2"
         >
           {@render actions(down)}
         </div>
@@ -154,11 +144,7 @@
             {@attach holding && !settling ? settleThen : undefined}
           >
             {#if toolbar}
-              <!-- literal: 8px -->
-              <div
-                class="flex flex-wrap items-center gap-(--line-gap)"
-                style:--line-gap="8px"
-              >
+              <div class="flex flex-wrap items-center gap-space-2">
                 {@render toolbar()}
               </div>
             {/if}

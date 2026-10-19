@@ -49,53 +49,40 @@
   );
 </script>
 
-<!-- literal: 72ch, 8px, 10px -->
-<p
-  data-slot="note"
-  class="max-w-(--measure) type-meta text-ink-muted"
-  style:--measure="72ch"
->
+<p data-slot="note" class="max-w-(--c-reading-measure) type-meta text-ink-muted">
   Every save keeps what it replaced. Restoring writes an old version back as
   this one.
 </p>
 <!-- Rows that come and go (Show all, a restore's new version) go through
      reflow, what follows sliding. -->
-<div
-  class="flex flex-col gap-(--hist-gap)"
-  style:--hist-gap="8px"
-  {@attach reflow()}
->
+<div class="flex flex-col gap-space-2" {@attach reflow()}>
   {#if failed}
     <p class="type-meta text-status-attn-ink" role="alert">{failed}</p>
   {:else if versions.length === 0}
     <p
       data-slot="note"
-      class="max-w-(--measure) type-meta text-ink-muted"
-      style:--measure="72ch"
+      class="max-w-(--c-reading-measure) type-meta text-ink-muted"
     >
       Nothing has been saved over yet.
     </p>
   {:else}
-    <ul
-      class="flex flex-col gap-space-row m-0 p-0 list-none"
-      style:--v-py="8px"
-      style:--v-px="10px"
-    >
+    <ul class="flex flex-col gap-space-row m-0 p-0 list-none">
       {#each visibleVersions as version (version.id)}
         <li
-          class="flex flex-wrap items-center justify-between gap-(--hist-gap) py-(--v-py) px-(--v-px) rounded-sm bg-surface-recess"
+          class="flex flex-wrap items-center justify-between gap-space-2 py-space-2 px-space-3 rounded-sm bg-surface-recess"
           data-flip
         >
           <span class="flex flex-col gap-space-row">
             <span class="type-label text-ink-strong">{version.name}</span>
             <span
               data-slot="note"
-              class="max-w-(--measure) type-meta text-ink-muted"
-              style:--measure="72ch"
+              class="max-w-(--c-reading-measure) type-meta text-ink-muted"
             >
               {new Date(version.createdAt).toLocaleString()}
               · from {sourceLabel(version.source)}
-              · <span class="font-mono">{version.hash.slice(0, 7)}</span>
+              · <span class="font-(family-name:--font-mono)"
+                >{version.hash.slice(0, 7)}</span
+              >
             </span>
           </span>
           <Button
