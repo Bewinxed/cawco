@@ -53,11 +53,18 @@
  *     approval (`makeHeldPush`), its object reaches someone/else.git's
  *     LFS with the host's credential before the commit lands, and the trap
  *     is still never called.
+ * The workspace's gh (workspace-gh.ts, through the workspace's real
+ * executor and runner, on the host):
+ * (k) under "Let agents post upstream" no forge token is in a command's
+ *     environment, the caller's GH_TOKEN included, nor in any file of the
+ *     workspace's, and gh's post is made by the GitHub door with the host's
+ *     token; under "Ask me first" the door holds it for the person.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { serveGitHttp } from "../git-http";
 import type { Spec } from "../kit";
+import { workspaceGhLeg } from "../workspace-gh";
 
 const ORIGIN = "probe/origin.git";
 const ELSE = "someone/else.git";
@@ -558,6 +565,15 @@ const spec: Spec = {
           http.lfsCalls("trap") === 0,
         `held exit ${heldLfs.exitCode}; sent while held ${sentWhileHeld - elseObjects.length}; made ${JSON.stringify(made)}; else LFS ${JSON.stringify(afterApproval)}; trap calls ${http.lfsCalls("trap")}`
       );
+
+      // (k)
+      await workspaceGhLeg(kit, {
+        asks,
+        clone,
+        id,
+        root: scratch,
+        writeRule,
+      });
     } finally {
       await closeGitDoor(id);
       http.stop();

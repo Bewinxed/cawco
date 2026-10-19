@@ -1,9 +1,10 @@
 /**
  * The host's `gh`, and any program the host runs with its own sign-ins, as
- * CawCo runs them outside every workspace's boundary: the executor reads gh's
- * token for an unguarded workspace's commands (boundary.ts `ghToken`), the
- * GitHub door signs gh's requests with it (github-door.ts), and the forge
- * adapters sign in with it, or start gitea-mcp (forges/).
+ * CawCo runs them outside every workspace's boundary: the GitHub door signs
+ * a workspace's gh requests with gh's token (github-door.ts), an approved
+ * held request is made with it (upstream-posts.ts), and the forge adapters
+ * sign in with it, or start gitea-mcp (forges/). No workspace is ever handed
+ * a token.
  */
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -13,6 +14,7 @@ import {
   workspaceScratchRoot,
   workspacesDir,
 } from "@cawco/core/paths";
+import { hostEnvironment } from "@cawco/core/session-env";
 
 /** Where a workspace writes, so nothing run on the host is found there. */
 const writableInside = (): string[] => [
@@ -49,13 +51,18 @@ export const hostProgram = async (
 /** `gh` as the host runs it ({@link hostProgram}). */
 export const hostGh = (): Promise<string | undefined> => hostProgram("gh");
 
-/** The host's GitHub token (`gh auth token`, from its keyring); none when gh has none or is not here. */
+/**
+ * The host's GitHub token (`gh auth token`, from its keyring); none when gh
+ * has none or is not here. gh runs with the host's environment as it is now
+ * (core `hostEnvironment`), as the GitHub adapter runs it (forges/github.ts).
+ */
 export const hostGhToken = async (): Promise<string | undefined> => {
   const gh = await hostGh();
   if (!gh) {
     return;
   }
   const read = Bun.spawnSync([gh, "auth", "token"], {
+    env: hostEnvironment(),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",

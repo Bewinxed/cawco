@@ -15,12 +15,10 @@
  * and hub code (the connector poller) through
  * {@link Connections.callConnection} and {@link Connections.listConnectionTools};
  * an approved action's one call through {@link Connections.callOnce}.
- * The GitHub poller speaks REST, not MCP: it alone opens a `github`
- * connection's token ({@link Connections.githubToken}), in the hub. The
- * tracker sync (tracker.ts) speaks each service's own API through its
- * official SDK, and is handed a client signed in here
- * ({@link Connections.githubClient}, {@link Connections.linearClient}), never
- * the key.
+ * The GitHub poller, the relay's webhooks, `create_repo` and the tracker
+ * sync speak each service's own API through its official SDK, and are
+ * handed a client signed in here ({@link Connections.githubClient},
+ * {@link Connections.linearClient}), never the key.
  *
  * OAuth is the MCP authorization flow the SDK runs (`auth()`: discovery,
  * registration, PKCE, exchange, refresh) over a provider whose storage is the
@@ -92,6 +90,7 @@ import {
 import { createAppAuth } from "@octokit/auth-app";
 import { Octokit } from "@octokit/rest";
 import { Elysia, status, t } from "elysia";
+import { readsOnly } from "./connection-writes";
 import type { ConnectionRow, ConnectionsDb } from "./db/connections";
 import type { ConnectionAppSecret, ConnectionSecret } from "./db/schema";
 import { undoable } from "./db/trash";
@@ -1273,25 +1272,6 @@ export const createConnections = (deps: ConnectionsDeps) => {
     return tools.find((one) => one.name === tool);
   };
 
-  /**
-   * A `github` connection's bearer token, for the hub's own REST poller
-   * (ingress.ts, github.ts) and nothing else: no route, tool or view answers
-   * it, and it is never logged. Refused, in words, for a connection of
-   * another service, another sign-in, or with no key held.
-   */
-  const githubToken = (name: string): string => {
-    const r = row(name);
-    if (r.service.trim().toLowerCase() !== "github") {
-      problem(`${name} is a ${r.service} connection, not a github one.`);
-    }
-    if (r.auth !== "bearer") {
-      problem(
-        `${name} signs in with ${r.auth}; GitHub polling takes a bearer token.`
-      );
-    }
-    return opened(r).key ?? problem(`${name} needs its key: ${NO_SECRET}.`);
-  };
-
   /** Looks at a connection once (its tools), so its state says what is true; a failure is in its state. */
   const probe = (name: string) =>
     listConnectionTools(name).then(
@@ -1327,9 +1307,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       .filter((r) => names === undefined || names.has(r.name))
       .flatMap((r) =>
         (listed.get(r.id) ?? [])
-          .filter(
-            (tool) => !readOnly || tool.annotations?.readOnlyHint === true
-          )
+          .filter((tool) => !readOnly || readsOnly(tool))
           .map((tool) => ({
             name: sessionToolName(r.name, tool.name),
             description:
@@ -1364,10 +1342,7 @@ export const createConnections = (deps: ConnectionsDeps) => {
       problem(
         `${name} is not one of ${parsed.connection}'s tools as the hub last listed them.`
       );
-    if (
-      connectionToolsFor(roleOf(actor)) === "read-only" &&
-      tool.annotations?.readOnlyHint !== true
-    ) {
+    if (connectionToolsFor(roleOf(actor)) === "read-only" && !readsOnly(tool)) {
       problem(
         `${name} isn't available here: this session reads the outside world, so it gets only a connection's read-only tools.`
       );
@@ -1784,7 +1759,8 @@ export const createConnections = (deps: ConnectionsDeps) => {
   };
 
   /**
-   * An Octokit signed in as a `github` connection, for the tracker sync: a
+   * An Octokit signed in as a `github` connection, for the tracker sync, the
+   * GitHub poller, the relay's webhooks and `create_repo`: a
    * fine-grained personal access token's, or a GitHub App installation's,
    * whose tokens it mints and renews itself. Refused in words for any other
    * sign-in: an MCP OAuth token is for GitHub's MCP server.
@@ -1894,7 +1870,6 @@ export const createConnections = (deps: ConnectionsDeps) => {
     proposable,
     toolNamed,
     listConnectionTools,
-    githubToken,
     githubClient,
     linearClient,
     refusedBy,
@@ -2034,7 +2009,7 @@ export const connectionRoutes = (connections: Connections) =>
           tools: tools.map((tool) => ({
             name: tool.name,
             description: tool.description ?? "",
-            readOnly: tool.annotations?.readOnlyHint === true,
+            readOnly: readsOnly(tool),
           })),
         };
       } catch (error) {

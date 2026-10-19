@@ -6,7 +6,7 @@
  * own sign-in, which no guarded workspace ever holds.
  *
  * What is made is exactly what was asked: the held request sent again to
- * GitHub's API with the host's token; the held commits pushed from the
+ * GitHub's API with the host's token, through Octokit's `request`; the held commits pushed from the
  * workspace's clone to the same URL and refs, on any host, with the host's
  * own git credential, their large files first to that repository's own LFS.
  * Nothing is retried.
@@ -27,8 +27,9 @@ import {
   type PostMade,
   type UpstreamPost,
 } from "@cawco/core/upstream-post";
+import { Octokit } from "@octokit/rest";
 import { toHttpBase } from "./discovery";
-import { FORGE_ADAPTERS, forgeLocation, makeForgePost } from "./forges/forge";
+import { forgeLocation, forgeOn, makeForgePost } from "./forges/forge";
 import { hostGhToken } from "./host-gh";
 import { hostGitEnv, isNetworkRemote, pushLfs } from "./hub-git";
 import { provenFetch } from "./hub-proof";
@@ -93,27 +94,24 @@ const madeBy = (read: Bounded<Ran>, what: string): PostMade => {
 /**
  * Who a post to `repo` (`host/owner/repo`) is made as: the login of the
  * host's own sign-in on that host's forge, as its adapter reads it (gh, glab
- * or tea, forges/), or that forge's sign-in in words when the login cannot
- * be read in time; on a host no forge CLI signs in to, this machine's own git
- * sign-in there, which only its credential helper or ssh knows.
+ * or tea, forges/), found as `forge_post` finds it (forges/forge.ts
+ * `forgeOn`: the one forge whose CLI signs in there), or that forge's
+ * sign-in in words when the login cannot be read in time; on a host no
+ * forge CLI alone signs in to, this machine's own git sign-in there, which
+ * only its credential helper or ssh knows.
  */
 export const hostAccount = async (repo: string): Promise<string> => {
   const at = repo.indexOf("/");
-  const host = repo.slice(0, at);
-  for (const adapter of FORGE_ADAPTERS) {
-    // biome-ignore lint/performance/noAwaitInLoops: the first forge that signs in to the host is its forge
-    const signIn = await adapter.signIn(host);
-    if (typeof signIn !== "object") {
-      continue;
-    }
-    const read = await readWithin(ACCOUNT_MS, () =>
-      adapter.client(signIn, repo.slice(at + 1)).account()
-    ).catch(() => undefined);
-    return read?.kind === "answered" && !read.value.includes(" ")
-      ? `@${read.value}`
-      : `this machine's ${FORGE_NAMES[adapter.forge]} sign-in`;
+  const found = await forgeOn(repo.slice(0, at));
+  if (typeof found === "string") {
+    return "this machine's git sign-in";
   }
-  return "this machine's git sign-in";
+  const read = await readWithin(ACCOUNT_MS, () =>
+    found.adapter.client(found.signIn, repo.slice(at + 1)).account()
+  ).catch(() => undefined);
+  return read?.kind === "answered" && !read.value.includes(" ")
+    ? `@${read.value}`
+    : `this machine's ${FORGE_NAMES[found.adapter.forge]} sign-in`;
 };
 
 /**
@@ -159,7 +157,17 @@ const cut = (text: string): string =>
 const WRITE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"]);
 const TRAILING_SLASHES = /\/+$/;
 
-/** A held request, sent again to GitHub's API with the host's token. */
+/** What @octokit/endpoint reads as its URL template's own (`:name`, `{name}`): kept as the URL's escapes, which GitHub reads alike. */
+const TEMPLATE_MARKS = /[:{}]/g;
+
+/**
+ * A held request, sent again to GitHub's API with the host's token through
+ * Octokit's `request` (github.com/octokit/request.js): the method, path,
+ * query, content type and body exactly as the person approved them (a body
+ * given as text is sent as it is, @octokit/endpoint `parse`: "if ("data" in
+ * remainingParameters) body = remainingParameters.data"), no redirect
+ * followed.
+ */
 const makeHttp = async (post: HttpPost): Promise<PostMade> => {
   if (!(GITHUB_API.has(post.host) && WRITE_METHODS.has(post.method))) {
     return {
@@ -171,29 +179,43 @@ const makeHttp = async (post: HttpPost): Promise<PostMade> => {
   if (!token) {
     return { ok: false, said: "This machine's gh is not signed in to GitHub." };
   }
+  const octokit = new Octokit({
+    auth: token,
+    baseUrl: `https://${post.host}`,
+    userAgent: "CawCo",
+  });
   const read = await readWithin(MAKE_MS, async (signal) => {
-    const answer = await fetch(
-      `https://${post.host}${post.path}${post.search}`,
-      {
+    try {
+      const answer = await octokit.request({
         method: post.method,
-        headers: {
-          authorization: `token ${token}`,
-          accept: "application/vnd.github+json",
-          ...(post.contentType ? { "content-type": post.contentType } : {}),
-        },
-        ...(post.body === undefined ? {} : { body: post.body }),
-        redirect: "manual",
-        signal,
+        url: `${post.path}${post.search}`.replace(TEMPLATE_MARKS, (mark) =>
+          encodeURIComponent(mark)
+        ),
+        headers: post.contentType ? { "content-type": post.contentType } : {},
+        ...(post.body === undefined ? {} : { data: post.body }),
+        request: { redirect: "manual", signal },
+      });
+      return { status: answer.status, data: answer.data as unknown };
+    } catch (error) {
+      // Octokit throws GitHub's own answer for any status of 300 or more
+      // (@octokit/request-error `RequestError`: its `status` and `response`).
+      const refused = error as {
+        response?: { data?: unknown };
+        status?: unknown;
+      } | null;
+      if (typeof refused?.status === "number" && refused.response) {
+        return { status: refused.status, data: refused.response.data };
       }
-    );
-    return { answer, text: await answer.text() };
+      throw error;
+    }
   });
   switch (read.kind) {
     case "answered": {
-      const { answer, text } = read.value;
+      const { status, data } = read.value;
+      const text = typeof data === "string" ? data : JSON.stringify(data ?? "");
       return {
-        ok: answer.ok && !graphqlErrors(post, text),
-        said: cut(`${answer.status} ${text}`.trim()),
+        ok: status >= 200 && status < 300 && !graphqlErrors(post, data),
+        said: cut(`${status} ${text}`.trim()),
       };
     }
     case "unanswered":
@@ -209,16 +231,14 @@ const makeHttp = async (post: HttpPost): Promise<PostMade> => {
 };
 
 /** Whether a GraphQL answer carries errors: GitHub answers 200 with them. */
-const graphqlErrors = (post: HttpPost, text: string): boolean => {
+const graphqlErrors = (post: HttpPost, data: unknown): boolean => {
   if (post.path.replace(TRAILING_SLASHES, "") !== "/graphql") {
     return false;
   }
-  try {
-    return Array.isArray((JSON.parse(text) as { errors?: unknown }).errors);
-  } catch {
-    // Not JSON: GitHub answered something no GraphQL call ends in.
-    return true;
-  }
+  // Not an object: GitHub answered something no GraphQL call ends in.
+  return typeof data === "object" && data !== null
+    ? Array.isArray((data as { errors?: unknown }).errors)
+    : true;
 };
 
 const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;

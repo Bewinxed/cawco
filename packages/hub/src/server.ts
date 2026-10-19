@@ -20040,11 +20040,12 @@ export const createServer = (
     // person's repository: decided as every write is (core decideWrite),
     // refused under off, held for the person under ask.
     upstream: (actor, connection, tool, args) => {
-      const write = connectionWrite(connection, tool, args);
+      const rule = upstreamRuleOf(db, actor.projectId);
+      const write = connectionWrite(connection, tool, args, rule.remotes);
       if (!write) {
         return;
       }
-      const decision = decideWrite(upstreamRuleOf(db, actor.projectId), write);
+      const decision = decideWrite(rule, write);
       switch (decision.kind) {
         case "go":
           return;

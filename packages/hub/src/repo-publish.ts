@@ -25,11 +25,9 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
-import { Octokit } from "@octokit/rest";
 import type { Connections } from "./connections";
 import type { ProjectRow } from "./db";
 import type { PlaceRepos } from "./place-repo";
-import { GITHUB_API } from "./upstreams";
 
 /** GitHub's rule for a repository's name. */
 const REPO_NAME = /^[A-Za-z0-9._-]{1,100}$/;
@@ -49,7 +47,7 @@ export interface RepoPublishDeps {
     method: string,
     args: unknown[]
   ) => Promise<unknown>;
-  readonly connections: Pick<Connections, "githubToken" | "list">;
+  readonly connections: Pick<Connections, "githubClient" | "list">;
   readonly places: Pick<PlaceRepos, "ensure">;
 }
 
@@ -92,8 +90,15 @@ export const createRepoPublish = ({
             : `Name the GitHub connection to create it with (connection): ${from.map((one) => one.name).join(", ")}.`
         );
       })();
-    // A connection the hub holds no token for is refused before anyone is asked.
-    connections.githubToken(pick.name);
+    // A connection the hub cannot sign in as is refused before anyone is
+    // asked; so is a GitHub App's, which makes no repository under a person
+    // (`POST /user/repos` takes a user's token).
+    if (pick.auth !== "bearer") {
+      refuse(
+        `${pick.name} signs in with ${pick.auth}; creating a repository takes a GitHub connection with a personal access token.`
+      );
+    }
+    connections.githubClient(pick.name);
     return pick;
   };
 
@@ -215,12 +220,7 @@ export const createRepoPublish = ({
       project.id,
       false,
     ])) as PlacePush;
-    const token = connections.githubToken(change.connection);
-    const octokit = new Octokit({
-      auth: token,
-      baseUrl: GITHUB_API,
-      userAgent: "CawCo-hub",
-    });
+    const octokit = connections.githubClient(change.connection);
     const asked = await readWithin(API_MS, async (signal) => {
       try {
         const { data } = await octokit.rest.repos.createForAuthenticatedUser({
@@ -259,6 +259,9 @@ export const createRepoPublish = ({
     if (!made) {
       throw new Error(`GitHub did not create ${change.name}: ${refused}`);
     }
+    // The token the connection's Octokit signs in with (@octokit/auth-token:
+    // `auth()` answers `{ token }`).
+    const { token } = (await octokit.auth()) as { token: string };
     await pushFromHub(project.id, pushed.branch, made.clone_url, token);
     console.log(
       `[repo-publish] ${project.name}: ${pushed.branch} at ${pushed.commit.slice(0, 9)} published to ${made.full_name}`

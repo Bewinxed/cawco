@@ -73,7 +73,6 @@ import { createFunnel, type Funnel, type FunnelState } from "./funnel";
 import { type GitHubKind, githubRepoOf, normalizeGitHub } from "./github";
 import type { Ingress } from "./ingress";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
-import { GITHUB_API } from "./upstreams";
 
 /** The most a delivery's body holds: 1 MiB. */
 export const RELAY_BODY_MAX = 1024 * 1024;
@@ -151,7 +150,7 @@ export interface RelayDeps {
     name: string,
     input: Record<string, unknown>
   ) => Promise<void>;
-  readonly connections: Pick<Connections, "get" | "githubToken">;
+  readonly connections: Pick<Connections, "get" | "githubClient">;
   readonly db: Pick<DbShape, "ingress" | "project" | "relays" | "routines">;
   /** Tailscale; the real CLI unless a probe names another. */
   readonly funnel?: Funnel;
@@ -545,49 +544,49 @@ export const createRelay = ({
 
   // --- GitHub ----------------------------------------------------------------------
 
-  /** One GitHub request within {@link GITHUB_MS}, its body read inside the same time. */
-  const github = (
-    token: string,
-    method: "POST" | "DELETE",
-    path: string,
-    body?: unknown
-  ): Promise<Bounded<Response>> =>
+  /**
+   * One GitHub call through the connection's Octokit (connections.ts
+   * `githubClient`) within {@link GITHUB_MS}: what GitHub answered, its
+   * status and its data, whether it made the change or refused it, as
+   * Octokit throws a refusal (@octokit/request-error `RequestError`: its
+   * `status` and `response`). A redirect is refused. A failure to reach
+   * GitHub is thrown.
+   */
+  const github = <T>(
+    call: (request: {
+      redirect: "error";
+      signal: AbortSignal;
+    }) => Promise<{ data: T; status: number }>
+  ): Promise<Bounded<{ data: unknown; status: number }>> =>
     readWithin(GITHUB_MS, async (signal) => {
-      const response = await fetch(`${new URL(GITHUB_API).origin}${path}`, {
-        method,
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${token}`,
-          "User-Agent": "CawCo-hub",
-          "X-GitHub-Api-Version": "2022-11-28",
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
-        },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-        redirect: "error",
-        signal,
-      });
-      return new Response(
-        [204, 205, 304].includes(response.status)
-          ? null
-          : await response.arrayBuffer(),
-        {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
+      try {
+        return await call({ redirect: "error", signal });
+      } catch (error) {
+        const refused = error as {
+          response?: { data?: unknown };
+          status?: unknown;
+        } | null;
+        if (typeof refused?.status === "number" && refused.response) {
+          return { status: refused.status, data: refused.response.data };
         }
-      );
+        throw error;
+      }
     });
 
   /** "GitHub did not answer within N s". */
   const githubSilent = (after: number): string =>
     `GitHub did not answer within ${Math.round(after / 1000)} s`;
 
-  const saidBy = async (response: Response): Promise<string> => {
-    const said = await response
-      .json()
-      .then((body: unknown) => (body as { message?: unknown } | null)?.message)
-      .catch(() => undefined);
+  /** What GitHub said with a refusal, ": <message>", or nothing. */
+  const saidBy = (data: unknown): string => {
+    const said = (data as { message?: unknown } | null)?.message;
     return typeof said === "string" ? `: ${said.slice(0, 200)}` : "";
+  };
+
+  /** `owner/repo` as Octokit's two parameters. */
+  const ownerRepo = (repo: string): { owner: string; repo: string } => {
+    const [owner = "", name = ""] = repo.split("/");
+    return { owner, repo: name };
   };
 
   const repoOf = (row: RelayRow): string | undefined =>
@@ -614,9 +613,9 @@ export const createRelay = ({
         ),
       };
     }
-    let token: string;
+    let octokit: ReturnType<Connections["githubClient"]>;
     try {
-      token = connections.githubToken(row.connection);
+      octokit = connections.githubClient(row.connection);
     } catch (error) {
       refusedAt.set(row.id, Date.now());
       return {
@@ -625,17 +624,21 @@ export const createRelay = ({
       };
     }
     try {
-      const asked = await github(token, "POST", `/repos/${repo}/hooks`, {
-        name: "web",
-        active: true,
-        events: GITHUB_EVENTS,
-        config: {
-          url,
-          content_type: "json",
-          secret: row.secret,
-          insecure_ssl: "0",
-        },
-      });
+      const asked = await github((request) =>
+        octokit.rest.repos.createWebhook({
+          ...ownerRepo(repo),
+          name: "web",
+          active: true,
+          events: [...GITHUB_EVENTS],
+          config: {
+            url,
+            content_type: "json",
+            secret: row.secret ?? undefined,
+            insecure_ssl: "0",
+          },
+          request,
+        })
+      );
       switch (asked.kind) {
         case "answered":
           break;
@@ -651,9 +654,9 @@ export const createRelay = ({
           throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
         }
       }
-      const response = asked.value;
-      if (response.ok) {
-        const { id } = (await response.json()) as { id?: unknown };
+      const answer = asked.value;
+      if (answer.status >= 200 && answer.status < 300) {
+        const { id } = (answer.data ?? {}) as { id?: unknown };
         console.log(
           `[relay] ${row.id}: GitHub webhook ${String(id)} registered on ${repo} through ${row.connection}`
         );
@@ -666,7 +669,7 @@ export const createRelay = ({
         reason: pasteStep(
           row,
           url,
-          `GitHub refused to make the webhook through ${row.connection} (${response.status}${await saidBy(response)}).`
+          `GitHub refused to make the webhook through ${row.connection} (${answer.status}${saidBy(answer.data)}).`
         ),
       };
     } catch (error) {
@@ -685,11 +688,14 @@ export const createRelay = ({
       return "no webhook the hub registered";
     }
     try {
-      const token = connections.githubToken(row.connection);
-      const asked = await github(
-        token,
-        "DELETE",
-        `/repos/${repo}/hooks/${row.hookId}`
+      const octokit = connections.githubClient(row.connection);
+      const hookId = Number(row.hookId);
+      const asked = await github((request) =>
+        octokit.rest.repos.deleteWebhook({
+          ...ownerRepo(repo),
+          hook_id: hookId,
+          request,
+        })
       );
       switch (asked.kind) {
         case "answered":
@@ -701,14 +707,17 @@ export const createRelay = ({
           throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
         }
       }
-      const response = asked.value;
-      if (response.ok || response.status === 404) {
+      const answer = asked.value;
+      if (
+        (answer.status >= 200 && answer.status < 300) ||
+        answer.status === 404
+      ) {
         console.log(
           `[relay] ${row.id}: GitHub webhook ${row.hookId} on ${repo} deleted`
         );
         return `GitHub webhook ${row.hookId} deleted`;
       }
-      return `GitHub refused to delete webhook ${row.hookId} (${response.status}${await saidBy(response)}); delete it at https://github.com/${repo}/settings/hooks`;
+      return `GitHub refused to delete webhook ${row.hookId} (${answer.status}${saidBy(answer.data)}); delete it at https://github.com/${repo}/settings/hooks`;
     } catch (error) {
       return `GitHub webhook ${row.hookId} wasn't deleted (${wordsOf(error)}); delete it at https://github.com/${repo}/settings/hooks`;
     }
@@ -943,7 +952,7 @@ export const createRelay = ({
         "Name the GitHub connection to register the webhook through (connection), or name the project's GitHub poller's connection first."
       );
     try {
-      connections.githubToken(connection);
+      connections.githubClient(connection);
     } catch (error) {
       refuse(409, wordsOf(error));
     }

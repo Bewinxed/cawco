@@ -42,6 +42,7 @@ import { Elysia, status, t } from "elysia";
 import { RE2JS } from "re2js";
 import { z } from "zod";
 import { tool } from "./admin-tools";
+import { readsOnly } from "./connection-writes";
 import type { Connections } from "./connections";
 import type { DbShape } from "./db";
 import type {
@@ -57,7 +58,6 @@ import type { JevAccess } from "./jev";
 import { JevFailed, jevRoute, offLine, TO_LEAD } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Routines } from "./routines";
-import { GITHUB_API } from "./upstreams";
 
 /** One event as every path normalises it before the store. */
 export interface InboundEvent {
@@ -386,7 +386,7 @@ export interface IngressView {
 export interface IngressDeps {
   readonly connections: Pick<
     Connections,
-    "callConnection" | "get" | "githubToken" | "listConnectionTools"
+    "callConnection" | "get" | "githubClient" | "listConnectionTools"
   >;
   readonly db: Pick<
     DbShape,
@@ -469,7 +469,6 @@ export const createIngress = ({
   routines,
 }: IngressDeps) => {
   const store = db.ingress;
-  const api = GITHUB_API;
   /** Polls under way, by `github:<project>` or `conn:<poll id>`: one at a time each. */
   const running = new Map<string, Promise<void>>();
   let timer: HubTimer | undefined;
@@ -658,9 +657,9 @@ export const createIngress = ({
       });
       return;
     }
-    let token: string;
+    let octokit: ReturnType<Connections["githubClient"]>;
     try {
-      token = connections.githubToken(poller.connection);
+      octokit = connections.githubClient(poller.connection);
     } catch (error) {
       store.updateGitHubPoller(projectId, {
         reason: wordsOf(error),
@@ -670,12 +669,11 @@ export const createIngress = ({
     }
     const cursors = poller.repo === repo ? poller.cursors : {};
     const polled = await pollRepo({
-      api,
       connection: poller.connection,
       cursors,
       now,
+      octokit,
       repo,
-      token,
     });
     const source = `github:${repo.toLowerCase()}`;
     const landed = polled.events
@@ -1171,7 +1169,7 @@ export const createIngress = ({
     if (!found) {
       refuse(404, `${input.connection} has no tool ${input.tool}.`);
     }
-    if (found?.annotations?.readOnlyHint !== true) {
+    if (!(found && readsOnly(found))) {
       refuse(
         400,
         `${input.connection}/${input.tool} is not marked read-only, and a poll calls it every interval: poll a read tool.`

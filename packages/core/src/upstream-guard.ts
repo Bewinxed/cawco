@@ -64,15 +64,11 @@ export const upstreamPostsWords = (posts: UpstreamPosts): string => {
 
 /** One project's rule, or the fleet's: whether its sessions may post to other repositories, and the repositories that are its own. */
 export interface UpstreamRule {
-  /** `off` and `ask` guard the workspace: no forge's token inside, and a write to a repository not in {@link remotes} does not go out from there. */
+  /** Whether a write to a repository not in {@link remotes} goes (`on`), waits for the person (`ask`) or does not run (`off`), as {@link decideWrite} decides it; whatever it is, no forge's token is inside a workspace. */
   readonly posts: UpstreamPosts;
   /** Its own repositories, each `host/owner/repo` ({@link normaliseRemote}). */
   readonly remotes: readonly string[];
 }
-
-/** Whether a rule guards its workspace: no forge's token inside, its posts judged (`off` and `ask`). */
-export const isGuarded = (rule: Pick<UpstreamRule, "posts">): boolean =>
-  rule.posts !== "on";
 
 /** A rule as a file holds it, read back; undefined when it is none. */
 export const readUpstreamRule = (value: unknown): UpstreamRule | undefined => {

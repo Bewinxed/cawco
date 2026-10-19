@@ -25,21 +25,21 @@
  *   inside the boundary, so all take this one path.
  *
  * A workspace holds no credential of any host (boundary.ts: the home dir's
- * stores are hidden, no key agent is reached, a guarded workspace's
- * commands get no forge's token), so every remote across the network is
+ * stores are hidden, no key agent is reached, no command gets a forge's
+ * token), so every remote across the network is
  * reached the same way, whatever its host or transport: the clone's own
  * origin (`https://`, `ssh://`, scp-like) is rewritten to this helper too
  * ({@link gitDoorEnv}), and the door, which speaks git's helper protocol
  * itself for such a remote, runs the host's own git against it with the
- * host's own credential ({@link hostGitEnv}). In a workspace the upstream
- * guard keeps off other people's repositories or asks first for (core
- * upstream-guard.ts), every push across the network comes here too
- * ({@link guardedPushParameters}): one to the project's own repository goes
- * on; one to anyone else's is refused in the guard's words, or under "Ask me
+ * host's own credential ({@link hostGitEnv}). Every push across the
+ * network comes here too ({@link guardedPushParameters}), whatever the
+ * project's upstream rule (core upstream-guard.ts): one to the project's own
+ * repository goes on; one to anyone else's goes on where agents may post,
+ * is refused in the guard's words under "Keep agents off", or under "Ask me
  * first" held for the person and sent nowhere ({@link holdPush}). The door
  * serves the workspace's own clone alone, by the repository its helper
- * names, and takes no other URL. A guarded workspace's gh reaches GitHub's
- * API through its GitHub door (github-door.ts) the same way: on the host,
+ * names, and takes no other URL. A workspace's gh reaches GitHub's API
+ * through its GitHub door (github-door.ts) the same way: on the host,
  * judged there.
  *
  * A checkout outside any workspace whose `origin` is the hub (one a project
@@ -515,16 +515,16 @@ export const isNetworkRemote = (url: string): boolean => {
 };
 
 /**
- * For a workspace the upstream guard keeps off other people's repositories
- * or asks first for (`off`, `ask`), the git config (as `CAWCO_GIT_PARAMETERS`
- * words) that sends every push across the network, on any host, through the
+ * For every workspace, the git config (as `CAWCO_GIT_PARAMETERS` words)
+ * that sends every push across the network, on any host, through the
  * workspace's git door (`pushInsteadOf`, git-config(1): "Any URL that starts
  * with this value will not be pushed to; instead, it will be rewritten"):
  * `https://`, `http://`, the ssh schemes, and the scp-like form under
  * `git@`, the login every forge's ssh URL carries. The door judges each by
  * the rule ({@link doorTarget}): the project's own repository goes on;
  * another's is refused in the guard's words, or held for the person under
- * `ask` ({@link holdPush}). Fetches still go straight out. A push to an
+ * `ask` ({@link holdPush}), and under `on` pushed with the host's own
+ * credential. Fetches still go straight out. A push to an
  * scp-like URL under any other login reaches git's ssh, which inside the
  * boundary is {@link SSH_REFUSAL}.
  */

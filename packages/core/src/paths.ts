@@ -1190,9 +1190,9 @@ export const credentialStores = (): string[] => {
     join(home, ".codex"),
     join(home, ".gemini"),
     join(xdgConfigHome(), "github-copilot"),
-    // Other tools' tokens. `gh` gets its token from the executor as
-    // `GH_TOKEN`, and an empty config dir of its own (`GH_CONFIG_DIR`), so
-    // `gh auth git-credential` hands git that token inside.
+    // Other tools' tokens. `gh` inside runs with a config dir of its own
+    // (`GH_CONFIG_DIR`) that sends it through the workspace's GitHub door,
+    // which signs in on the host: no token of gh's enters a workspace.
     join(xdgConfigHome(), "gh", "hosts.yml"),
     // uv's plaintext credentials store (`uv auth login`): "$XDG_DATA_HOME/uv/
     // credentials or $HOME/.local/share/uv/credentials on Unix"

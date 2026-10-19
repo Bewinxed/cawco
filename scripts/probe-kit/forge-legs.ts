@@ -28,6 +28,13 @@
  *     approved, then it is made once, and a second answer makes nothing.
  * Without `made` (Gitea where gitea-mcp is not on the host's own PATH), (d)
  * and the making in (e) and (f) are left out.
+ *
+ * And with GitHub and GitLab on one host, each CLI signed in there at its
+ * own port ({@link ambiguousLeg}):
+ * (g) under "Let agents post upstream", forge_post naming no repository, the
+ *     project's remote naming the host and no port, is refused in words that
+ *     ask for the repository's URL; neither forge takes anything. Named by
+ *     its URL, port and all, it is made on that forge.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -552,5 +559,49 @@ export const forgeLegs = async (
     await askLeg(kit, at, made);
   } finally {
     await at.stop();
+  }
+};
+
+/**
+ * (g): GitHub's and GitLab's stand-ins on one host, gh and glab each signed
+ * in at its own port, and the project's remote naming the host alone.
+ */
+export const ambiguousLeg = async (
+  kit: Kit,
+  scratch: ForgeScratch
+): Promise<void> => {
+  const github = await stage(scratch, "github");
+  const gitlab = await stage(scratch, "gitlab");
+  try {
+    await github.setRule("on");
+    const asked = await github.posts.post(github.actor, {
+      write: issue("Ambiguous issue"),
+    });
+    const taken = [...github.stub.writes, ...gitlab.stub.writes].filter(
+      (each) => each.title === "Ambiguous issue"
+    );
+    kit.check(
+      "(g) forge_post with no repository, on a host gh and glab both sign in to, is refused in words that ask for the repository's URL; neither forge takes anything",
+      !asked.ok &&
+        asked.text.includes("more than one forge") &&
+        asked.text.includes("Name the repository by its URL") &&
+        taken.length === 0,
+      `answered: ${asked.text} | taken ${JSON.stringify(taken)}`
+    );
+    const named = await github.posts.post(github.actor, {
+      repo: `${github.web}/github-probe/own`,
+      write: issue("Named issue"),
+    });
+    kit.check(
+      "(g) named by its URL, port and all, the same post is made on that forge alone",
+      named.ok &&
+        github.stub.writes.filter((each) => each.title === "Named issue")
+          .length === 1 &&
+        !gitlab.stub.writes.some((each) => each.title === "Named issue"),
+      `answered: ${named.text} | github ${JSON.stringify(github.stub.writes)} | gitlab ${JSON.stringify(gitlab.stub.writes)}`
+    );
+  } finally {
+    await github.stop();
+    await gitlab.stop();
   }
 };

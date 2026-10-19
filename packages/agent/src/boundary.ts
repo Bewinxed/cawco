@@ -33,12 +33,11 @@
  * plugin's `bash` tool, pi by its bash tool's operations, a workflow's
  * `runCommand`. A workspace holds no credential of any host: its git reaches
  * its clone's origin, on any host and over any transport, through the git
- * door (hub-git.ts), which signs in on the host with the host's own. The
- * GitHub CLI's keyring is the host's, so where the upstream guard lets
- * sessions post, the executor reads gh's token on the host side, from a copy
- * it keeps in the workspace's state dir ({@link ghToken}), and hands it in as
- * `GH_TOKEN`, with an empty config dir of gh's own ({@link ghConfigOf}), so
- * `gh` keeps working inside, on both OSes. The hub lands a workspace's
+ * door (hub-git.ts), which signs in on the host with the host's own. Its
+ * `gh` reaches GitHub's API through the workspace's GitHub door
+ * (github-door.ts), which judges each write by the project's upstream rule
+ * and signs in on the host to what goes, whatever the rule: no forge's token
+ * ever enters a workspace ({@link commandEnv}). The hub lands a workspace's
  * commits through the same door: its `git push` is a command the workspace's
  * agent runs through this executor (`runWorkflowCommand`). `cawco tools` reaches the hub's tools through the
  * workspace's tool door (`tool-door.ts`).
@@ -178,7 +177,6 @@ import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { cawcoCommand } from "./git-credential";
 import { closeGithubDoor, githubDoorOf, openGithubDoor } from "./github-door";
-import { hostGh } from "./host-gh";
 import {
   closeGitDoor,
   gitDoorEnv,
@@ -291,40 +289,22 @@ const fifoOf = (id: string, gen: string): string =>
 const gitTemplateOf = (id: string): string => join(roOf(id), "git-template");
 
 /**
- * `gh`'s config dir inside the boundary (`GH_CONFIG_DIR`): empty and
- * read-only there. gh reads `config.yml` from its config dir as it starts and
- * takes a missing one as nothing set, but quits on any other error ("failed
- * to create root command: failed to read configuration"). The host's
- * `~/.config/gh` is under the home deny: srt shows it as missing, Seatbelt
- * answers EPERM, so on macOS every `gh` inside quit before it read
- * `GH_TOKEN`, git's `gh auth git-credential` helper with it, and a push went
- * out anonymous (Nightly C, 2026-10-10). Here it finds no config on both.
- */
-const ghConfigOf = (id: string): string => join(roOf(id), "gh");
-
-/**
  * The system gitconfig every command's git reads (`GIT_CONFIG_SYSTEM`, git
  * 2.32+), read-only inside, in place of the host's: Apple's git (Command
  * Line Tools) and Homebrew's each ship one naming
- * `credential.helper=osxkeychain`. It names gh's helper, by the host's gh,
- * for GitHub, so git takes the `GH_TOKEN` the executor hands in whatever the
- * user's gitconfig says: `helper =` clears what came before, and git asks its
- * helpers in order, stopping at the first that answers, so an osxkeychain
- * the user's gitconfig adds after it is never asked for a GitHub login (and
- * reaches no keychain service in any case: `KEYCHAIN_MACH_SERVICES`). The
- * user's gitconfig, read after it, still applies. `GIT_CONFIG_COUNT` is left
- * alone: srt and the session hand git their own entries through it.
+ * `credential.helper=osxkeychain`, which reaches no keychain service inside
+ * in any case (`KEYCHAIN_MACH_SERVICES`). It names no helper: a workspace
+ * holds no credential, and every push across the network and its clone's
+ * own origin go through the git door, which signs in on the host
+ * (hub-git.ts). The user's gitconfig, read after it, still applies.
+ * `GIT_CONFIG_COUNT` is left alone: srt and the session hand git their own
+ * entries through it.
  */
 const gitSystemConfigOf = (id: string): string => join(roOf(id), "gitconfig");
 
-/** {@link gitSystemConfigOf}'s text for the host's gh, by its real path; no helper when the host has none. */
-const gitSystemConfig = (id: string, gh: string | undefined): string => {
-  const helper = gh
-    ? `\thelper =\n\thelper = "${`!${shellQuote(gh)} auth git-credential`.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}"\n`
-    : "";
-  return `# CawCo workspace ${id}: the system gitconfig git reads inside the boundary.
-${helper ? ["https://github.com", "https://gist.github.com"].map((url) => `[credential "${url}"]\n${helper}`).join("") : ""}`;
-};
+/** {@link gitSystemConfigOf}'s text. */
+const gitSystemConfig = (id: string): string =>
+  `# CawCo workspace ${id}: the system gitconfig git reads inside the boundary.\n`;
 
 const WHITESPACE = /\s+/;
 
@@ -1056,8 +1036,8 @@ export const takeUpstreamRules = async (
 };
 
 /**
- * The gh config dir a guarded workspace's commands run with
- * (`GH_CONFIG_DIR`, {@link guardedEnv}), read-only inside: `http_unix_socket`
+ * The gh config dir every workspace's commands run with (`GH_CONFIG_DIR`,
+ * {@link commandEnv}), read-only inside: `http_unix_socket`
  * names the workspace's GitHub door, so gh sends every request there in the
  * clear (go-gh pkg/api/client_options.go `resolveOptions`: "if
  * opts.UnixDomainSocket == \"\" … cfg.Get([]string{\"http_unix_socket\"})"),
@@ -1067,7 +1047,7 @@ export const takeUpstreamRules = async (
  */
 const guardedGhConfigOf = (id: string): string => join(roOf(id), "gh-guarded");
 
-/** The placeholder gh signs in with in a guarded workspace: no token at all. */
+/** The placeholder gh signs in with in a workspace: no token at all. */
 const GH_PLACEHOLDER = "cawco-github-door";
 
 const writeGuardedGhConfig = async (id: string): Promise<void> => {
@@ -1130,15 +1110,15 @@ const armHookNow = async (
   }
   await writeGuardedGhConfig(id);
   await writeUpstreamRule(id);
-  // The system gitconfig names the host's gh as it is now.
-  const gh = await hostGh();
-  await mkdir(ghConfigOf(id), { recursive: true });
-  await writeWhole(gitSystemConfigOf(id), gitSystemConfig(id, gh), 0o644);
+  await writeWhole(gitSystemConfigOf(id), gitSystemConfig(id), 0o644);
+  // The copy of gh's token an earlier build's executor kept beside the
+  // workspace: nothing reads it now, and a token is kept nowhere it is not used.
+  await rm(join(stateDir(id), "gh-token"), { force: true });
   // Its host's pid as the keeper listed it at its start, and matched to
   // the keeper's list again before any boundary on record is armed.
   await writeWhole(
     held.exec,
-    execScript(id, { ...held, pid: listedPid(held.pid) }, gh),
+    execScript(id, { ...held, pid: listedPid(held.pid) }),
     0o755
   );
   await openToolDoor(id);
@@ -2230,11 +2210,19 @@ const LAUNCH = [
  * (`profile ssh-keyscan /usr/bin/ssh-keyscan`) took `/usr/bin/ssh-keyscan`'s
  * stdout away in every workspace: it printed nothing, its fd 1 free at its
  * first `openat` (2026-10-18), and the hub's host-key check found no key.
+ *
+ * srt's own environment (its proxies, `GIT_CONFIG_*`) is set again over each
+ * request's (`CAWCO_SANDBOX_ENV`), but for `GIT_SSH_COMMAND`: srt names an
+ * ssh through its proxy there, and CawCo's is the refusal that says a
+ * workspace holds no ssh key (hub-git.ts `SSH_REFUSAL`, in `gitDoorEnv`). Set
+ * again over it, srt's ran instead: a push over ssh to another host failed at
+ * the proxy's CONNECT ("socat … CONNECT other.probe.test:22: Bad Gateway"),
+ * never saying why.
  */
 const RUNNER = `fifo=$1
 [ -n "\${HTTPS_PROXY:-}" ] && export YARN_HTTPS_PROXY=$HTTPS_PROXY
 [ -n "\${HTTP_PROXY:-}" ] && export YARN_HTTP_PROXY=$HTTP_PROXY
-CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|YARN_HTTPS?_PROXY|GIT_SSH_COMMAND|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
+CAWCO_SANDBOX_ENV=$(export -p | grep -E '^declare -x (HTTPS?_PROXY|https?_proxy|ALL_PROXY|all_proxy|NO_PROXY|no_proxy|YARN_HTTPS?_PROXY|SANDBOX_RUNTIME|JAVA_TOOL_OPTIONS|GIT_CONFIG_[A-Z0-9_]+|DOCKER_HTTPS?_PROXY|CLOUDSDK_PROXY_[A-Z_]+|GRPC_PROXY|grpc_proxy|RSYNC_PROXY|FTP_PROXY|ftp_proxy|CLAUDE_CODE_HOST_[A-Z_]+)=')
 export CAWCO_SANDBOX_ENV
 sandbox=$(readlink /proc/self/ns/pid 2>/dev/null)
 launch='${LAUNCH}'
@@ -2457,17 +2445,13 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   const { id } = ref;
   const policy = await workspacePolicy(ref);
   const runtime = await bunRuntime(id);
-  const exec = execScript(
-    id,
-    {
-      exec: join(stateDir(id), "exec"),
-      gen,
-      path: ref.path,
-      pid: undefined,
-      scratch: scratchOf(id),
-    },
-    await hostGh()
-  );
+  const exec = execScript(id, {
+    exec: join(stateDir(id), "exec"),
+    gen,
+    path: ref.path,
+    pid: undefined,
+    scratch: scratchOf(id),
+  });
   const hash = createHash("sha256");
   if (process.platform === "darwin") {
     const profile = seatbeltProfile(policy, {
@@ -4138,42 +4122,6 @@ const ready = (
   });
 
 /**
- * Where the executor keeps `gh`'s token for workspace `id`: its state dir,
- * which no workspace reads (`workspacePolicy` gives back only its `ro`
- * part), and which goes with the workspace ({@link closeBoundary}).
- */
-const ghTokenCacheOf = (id: string): string => join(stateDir(id), "gh-token");
-
-/**
- * The command token for `gh` when its caller has none, read on the host,
- * where the keyring is. `gh auth token` costs a command about 26 ms
- * (artifacts/srt-eval/REPORT.md §9), so the executor keeps its answer in a
- * 0600 file and asks again only when the file is missing or gh's `hosts.yml`
- * is not older than it: `gh auth login`, `logout` and `switch` rewrite
- * `hosts.yml`. The newer answer replaces the file by a rename; no answer
- * removes it, and no token goes in. The fast path forks nothing. A guarded
- * workspace's commands get none ({@link guardedEnv}): the block reads the
- * executor's `guarded` itself, so it is whole or absent, never an `if` left
- * with no body when the machine has no gh.
- */
-const ghToken = (id: string, gh: string | undefined): string =>
-  gh
-    ? `if [ -z "$guarded" ] && [ -z "\${GH_TOKEN:-}" ]; then
-  gh_cache=${shellQuote(ghTokenCacheOf(id))}
-  gh_hosts=\${GH_CONFIG_DIR:-\${XDG_CONFIG_HOME:-$HOME/.config}/gh}/hosts.yml
-  if [ -s "$gh_cache" ] && [ "$gh_cache" -nt "$gh_hosts" ]; then
-    read -r GH_TOKEN < "$gh_cache"
-  elif token=$(${shellQuote(gh)} auth token 2>/dev/null) && [ -n "$token" ]; then
-    (umask 077 && printf '%s\\n' "$token" > "$gh_cache.$$" && mv -f "$gh_cache.$$" "$gh_cache") || rm -f "$gh_cache.$$"
-    GH_TOKEN=$token
-  else
-    rm -f "$gh_cache"
-  fi
-  [ -n "\${GH_TOKEN:-}" ] && export GH_TOKEN
-fi`
-    : "";
-
-/**
  * What every command runs with besides its caller's environment: the
  * workspaces' own cache (`workspaceCacheEnv`), its own XDG config, data and
  * state homes (`workspaceXdgEnv`), Maestro's home and temp dir in the
@@ -4183,14 +4131,24 @@ fi`
  * node's `fetch` and `http`/`https` read `HTTPS_PROXY` and `NO_PROXY` only
  * with it, and a workspace reaches the network through that proxy alone),
  * its scratch dir as `TMPDIR` (by its short name on macOS, `workspaceTmpDir`),
- * the empty git template, gh's empty config dir ({@link ghConfigOf}), git's
- * system config naming gh's helper ({@link gitSystemConfigOf}), the tool and
- * git doors (hub-git.ts `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a
- * script tells that it runs inside one; never a key agent's socket
- * ({@link AGENT_SOCKET_ENV}).
+ * the empty git template, git's own system config
+ * ({@link gitSystemConfigOf}), the tool and git doors (hub-git.ts
+ * `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a script tells that it runs
+ * inside one; never a key agent's socket ({@link AGENT_SOCKET_ENV}).
+ *
+ * And never a forge's token, its caller's included ({@link FORGE_TOKEN_ENV}),
+ * whatever the project's upstream rule: no forge CLI by its path, nor curl,
+ * nor any HTTP client has one to post with, on any host. gh runs with the
+ * door's config dir ({@link guardedGhConfigOf}): its requests go through the
+ * workspace's GitHub door, which decides each write by the rule as every door
+ * does (core `decideWrite`) and signs in on the host to what goes
+ * (github-door.ts). Every push across the network goes through the git door
+ * (hub-git.ts `guardedPushParameters`), which decides it the same way and
+ * pushes what goes with the host's own credential.
  */
 const commandEnv = (id: string, clone: string): string[] => [
   `unset ${AGENT_SOCKET_ENV.join(" ")}`,
+  `for name in $(compgen -e); do case $name in ${FORGE_TOKEN_ENV.join(" | ")}) unset "$name" ;; esac; done`,
   ...Object.entries({
     ...workspaceCacheEnv(),
     ...workspaceXdgEnv(id),
@@ -4202,13 +4160,24 @@ const commandEnv = (id: string, clone: string): string[] => [
     NODE_USE_ENV_PROXY: "1",
     TMPDIR: workspaceTmpDir(id),
     GIT_TEMPLATE_DIR: gitTemplateOf(id),
-    GH_CONFIG_DIR: ghConfigOf(id),
+    GH_CONFIG_DIR: guardedGhConfigOf(id),
     GIT_CONFIG_SYSTEM: gitSystemConfigOf(id),
     CAWCO_TOOL_SOCKET: toolDoorOf(id),
     CAWCO_WORKSPACE: id,
-    ...gitDoorEnv(id, clone),
+    ...doorEnv(id, clone),
   }).map(([name, value]) => `export ${name}=${shellQuote(value)}`),
 ];
+
+/** The git door's variables, its config words joined by those that send every push across the network through it. */
+const doorEnv = (id: string, clone: string): Record<string, string> => {
+  const door = gitDoorEnv(id, clone);
+  return {
+    ...door,
+    CAWCO_GIT_PARAMETERS: [door.CAWCO_GIT_PARAMETERS, guardedPushParameters()]
+      .filter(Boolean)
+      .join(" "),
+  };
+};
 
 /**
  * The variables a forge's credential travels in, whatever the forge, as
@@ -4230,29 +4199,6 @@ const FORGE_TOKEN_ENV = [
   "FORGEJO_*TOKEN",
   "CODEBERG_*TOKEN",
   "BITBUCKET_*",
-];
-
-/**
- * What a command of a workspace the upstream guard keeps off other
- * people's repositories, or asks first for, runs with on top of
- * {@link commandEnv}: no forge's token, its caller's included
- * ({@link FORGE_TOKEN_ENV}), so neither a forge CLI by its path nor curl nor
- * any HTTP client has one to post with, on any host. gh runs with the
- * guarded config dir ({@link guardedGhConfigOf}): its requests go through
- * the workspace's GitHub door, which signs in on the host to what it lets
- * through (github-door.ts). Every push across the network goes through the
- * git door (hub-git.ts `guardedPushParameters`), which signs in on the host
- * to the project's own repository, and refuses a push to another person's,
- * or holds it for the person under `ask`.
- */
-const guardedEnv = (id: string, clone: string): string[] => [
-  `for name in $(compgen -e); do case $name in ${FORGE_TOKEN_ENV.join(" | ")}) unset "$name" ;; esac; done`,
-  `export GH_CONFIG_DIR=${shellQuote(guardedGhConfigOf(id))}`,
-  `export CAWCO_GIT_PARAMETERS=${shellQuote(
-    [gitDoorEnv(id, clone).CAWCO_GIT_PARAMETERS, guardedPushParameters()]
-      .filter(Boolean)
-      .join(" ")
-  )}`,
 ];
 
 const stoppedLine = (id: string): string =>
@@ -4347,8 +4293,7 @@ const execScript = (
   id: string,
   held: Pick<Held, "exec" | "gen" | "path" | "scratch"> & {
     readonly pid: Pid | undefined;
-  },
-  gh: string | undefined
+  }
 ): string => {
   const linux = process.platform === "linux";
   const pid = held.pid === undefined ? "PID" : String(held.pid);
@@ -4376,12 +4321,6 @@ fi
 ${linux ? mountCheck(id, held.gen, pid) : ""}
 cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
-# Kept off other people's repositories, or asking the person first
-# (upstream-guard.ts isGuarded): no forge's token.
-posts=$(sed -n 's/.*"posts":"\\([a-z]*\\)".*/\\1/p' ${shellQuote(upstreamRuleOf(id))} 2>/dev/null)
-guarded=
-case "$posts" in off | ask) guarded=1 ;; esac
-${ghToken(id, gh)}
 req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
 printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
@@ -4390,11 +4329,6 @@ pwd -P > "$req/cwd"
 ${commandEnv(id, held.path)
   .map((line) => `  echo ${shellQuote(line)}`)
   .join("\n")}
-  if [ -n "$guarded" ]; then
-${guardedEnv(id, held.path)
-  .map((line) => `    echo ${shellQuote(line)}`)
-  .join("\n")}
-  fi
   ${path}
 } > "$req/env"
 mkfifo "$req/out" "$req/err"
@@ -4421,6 +4355,47 @@ ${guardAfter(id, held)}if [ -n "$cwd_out" ] && [ -s "$req/cwd-out" ]; then cp "$
 rm -rf "$req"
 exit "$status"
 `;
+};
+
+/**
+ * Workspace `ref`'s executor and runner as this build writes them, for a
+ * proof that runs them on the host with no sandbox around them (the probe
+ * kit's git-door spec): the files the executor's environment names written
+ * as arming writes them (gh's door config, git's system config), then the
+ * executor's text for a runner at `pid` and the runner's own. Every command
+ * still goes in through the same executor, its environment built by
+ * {@link commandEnv}, and runs through the same runner: `bash -c <runner>
+ * cawco <fifo>`, its pid both of the boundary's in `place`, `guarded`
+ * naming no bind.
+ */
+export const executorUnsandboxed = async (
+  ref: WorkspaceRef,
+  gen: string,
+  pid: Pid
+): Promise<{
+  exec: string;
+  fifo: string;
+  guarded: string;
+  place: string;
+  runner: string;
+  scratch: string;
+}> => {
+  await writeGuardedGhConfig(ref.id);
+  await writeWhole(gitSystemConfigOf(ref.id), gitSystemConfig(ref.id), 0o644);
+  return {
+    exec: execScript(ref.id, {
+      exec: join(stateDir(ref.id), "exec"),
+      gen,
+      path: ref.path,
+      pid,
+      scratch: scratchOf(ref.id),
+    }),
+    fifo: fifoOf(ref.id, gen),
+    guarded: guardedOf(ref.id, gen),
+    place: placeOf(ref.id, gen),
+    runner: RUNNER,
+    scratch: scratchOf(ref.id),
+  };
 };
 
 /**
@@ -4458,7 +4433,6 @@ export const makeDirs = async (id: string): Promise<void> => {
       stateDir(id),
       roOf(id),
       gitTemplateOf(id),
-      ghConfigOf(id),
       scratchOf(id),
       ...inScratch.filter((path) => !planted.includes(path)),
       ...workspaceCaches(),

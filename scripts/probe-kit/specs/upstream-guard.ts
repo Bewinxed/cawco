@@ -14,9 +14,12 @@
  * A fake `gh` first on the services' PATH records each call it runs, with
  * the GitHub token it ran with and whether its config sends it through the
  * workspace's GitHub door, in the workspace's TMPDIR. On the host it is the
- * agent's gh too, whose `gh auth token` answers `probe-host-token` and `gh
- * api user` `probe-person`. The host's real gh, by its path, is what posts
- * through the door. The services run with a caller's token for every forge
+ * agent's gh too, whose `gh auth token` answers `probe-host-token` for
+ * github.com and, as the real gh does, nothing for any other host. The
+ * host's gh config names a unix socket (`http_unix_socket`, as go-gh reads
+ * it) where a stand-in of GitHub's API answers `/user` as `probe-person`:
+ * the GitHub adapter reads the login there (agent forges/github.ts). The
+ * host's real gh, by its path, is what posts through the door. The services run with a caller's token for every forge
  * (`GH_TOKEN` `probe-caller-token`, `GITLAB_TOKEN`, `OAUTH_TOKEN`,
  * `CI_JOB_TOKEN`, `GITEA_TOKEN`), as a person's shell may. The project is a
  * checkout with no origin of its own, so the hub is its remote and a
@@ -63,7 +66,8 @@
  * (c) ⋯ › "Let agents post upstream" at the desk: the hub has the project's
  *     own `true` over the fleet's; its rule turns unguarded within a beat,
  *     and E, the real gh's POST to repos/someone/else/issues, is not stopped
- *     by CawCo; U its commands carry the caller's tokens again.
+ *     by CawCo; U its commands still carry no forge token: the GitHub door
+ *     posts for them with the host's.
  * (d) ⋯ › "Same as the fleet" on the phone: the project's own answer goes
  *     (null) and it follows the fleet's, keep off: its rule turns guarded
  *     within a beat, and F, E again, is refused by the door.
@@ -276,11 +280,14 @@ const said = (from: StepId, id: StepId): string => {
 };
 
 const FAKE_GH = `#!/bin/sh
-# The probe's stand-in for gh: the host's token and login, or the call
-# recorded with the token it ran with in the workspace's TMPDIR, where the
-# probe reads it. On the host it answers nothing else.
-if [ "$1 $2" = "auth token" ]; then echo probe-host-token; exit 0; fi
-if [ "$1 $2" = "api user" ]; then echo ${PERSON}; exit 0; fi
+# The probe's stand-in for gh: the host's token for github.com (none for any
+# other --hostname, as the real gh answers), or the call recorded with the
+# token it ran with in the workspace's TMPDIR, where the probe reads it. On
+# the host it answers nothing else.
+if [ "$1 $2" = "auth token" ]; then
+  if [ "$3" = --hostname ] && [ "$4" != github.com ]; then echo "no oauth token found for $4" >&2; exit 1; fi
+  echo probe-host-token; exit 0
+fi
 if [ -z "$CAWCO_WORKSPACE" ]; then exit 1; fi
 case "$(cat "$GH_CONFIG_DIR/config.yml" 2>/dev/null)" in *http_unix_socket*) door=yes ;; *) door=no ;; esac
 printf '%s token=%s door=%s\\n' "$*" "\${GH_TOKEN:-none}" "$door" >> "$TMPDIR/fake-gh.log"
@@ -480,6 +487,26 @@ const run = async (kit: Kit) => {
   await writeFile(join(fakeBin, "gh"), FAKE_GH);
   await chmod(join(fakeBin, "gh"), 0o755);
   fleet.env.PATH = `${fakeBin}:${fleet.env.PATH}`;
+  // GitHub's API for the host's gh sign-in: `/user` names the person, over
+  // the socket the host's gh config names.
+  const githubSocket = join(
+    process.env.TMPDIR ?? "/tmp",
+    `ug-${crypto.randomUUID().slice(0, 8)}.sock`
+  );
+  const githubApi = Bun.serve({
+    unix: githubSocket,
+    fetch: (request) =>
+      new URL(request.url).pathname === "/user"
+        ? Response.json({ login: PERSON })
+        : Response.json({ message: "Not Found" }, { status: 404 }),
+  });
+  const hostGhConfig = join(fleet.sandbox, "host-gh");
+  await mkdir(hostGhConfig, { recursive: true });
+  await writeFile(
+    join(hostGhConfig, "config.yml"),
+    `version: "1"\nhttp_unix_socket: ${JSON.stringify(githubSocket)}\n`
+  );
+  fleet.env.GH_CONFIG_DIR = hostGhConfig;
   Object.assign(fleet.env, {
     GH_TOKEN: "probe-caller-token",
     GITLAB_TOKEN: "probe-gitlab-token",
@@ -816,8 +843,8 @@ const run = async (kit: Kit) => {
   );
   const openCount = TOKEN_COUNT("U").exec(latest())?.[1];
   check(
-    "c: U unguarded, commands carry the caller's five forge tokens as before",
-    openCount === "5",
+    "c: U where agents may post, commands still carry none of the caller's five forge tokens: the GitHub door posts for them",
+    openCount === "0",
     `TOKENVARS-U=${openCount}`
   );
 
@@ -964,11 +991,15 @@ const run = async (kit: Kit) => {
     ),
     JSON.stringify(approvedAsk?.payload)
   );
-  /** A held post's row in Caw's Needs you, its button `name` pressed as `view`'s hand presses it. */
-  const answerRow = async (view: View, title: string, name: string) => {
+  /**
+   * A held post's row in Caw's Needs you, found by what the row draws (the
+   * post's summary, or the first line of its command), its button `name`
+   * pressed as `view`'s hand presses it.
+   */
+  const answerRow = async (view: View, drawn: string, name: string) => {
     const page = pages[view];
     await openNeeds(page, view, base);
-    const row = page.locator(ASK_ROW).filter({ hasText: title });
+    const row = page.locator(ASK_ROW).filter({ hasText: drawn });
     await row.first().waitFor({ timeout: 30_000 });
     await row
       .first()
@@ -977,7 +1008,8 @@ const run = async (kit: Kit) => {
     await press(page, view, "[data-probe-pick]");
     await settle(page, 300);
   };
-  await answerRow("desk", "Probe deny", "Deny");
+  // S1's row: its summary (an http post's command names no title).
+  await answerRow("desk", "Post an issue on github.com/someone/else", "Deny");
   const toldDenied = await until(
     "g: the session hears the denial",
     () => seen,
@@ -1022,6 +1054,7 @@ const run = async (kit: Kit) => {
     `told ${toldApproved}; pushes ${elsewhere.pushes(ELSE_REPO)}; landed ${landed}, held ${heldSha}`
   );
   elsewhere.stop();
+  githubApi.stop(true);
   kit.note(`captures: ${kit.out}`);
 };
 

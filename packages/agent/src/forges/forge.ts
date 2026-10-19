@@ -77,7 +77,7 @@ export interface ForgeAdapter {
   readonly signIn: (host: string) => Promise<ForgeSignIn | string | undefined>;
 }
 
-/** Every forge, in the order a host is looked for: a host one CLI signs in to is that forge's. */
+/** Every forge. A host is the forge whose CLI alone signs in to it ({@link forgeOn}). */
 export const FORGE_ADAPTERS: readonly ForgeAdapter[] = [
   githubForge,
   gitlabForge,
@@ -134,24 +134,55 @@ export const forgeLocation = (
     : undefined;
 };
 
-/** The forge `host` is on, with the host's sign-in there; or why there is none, in words. */
-const signedInOn = async (
+/** Each forge's CLI, as the person signs it in. */
+const CLI_OF: Record<Forge, string> = {
+  github: "gh",
+  gitlab: "glab",
+  gitea: "tea",
+};
+
+/**
+ * The forge `host` is on, with the host's sign-in there; or why there is
+ * none, in words. Every forge's CLI is asked: the host is a forge's when
+ * that CLI alone keeps a login that could be it (a usable sign-in, or one
+ * it names but cannot use). When more than one could be, which forge the
+ * repository is on is not CawCo's to guess, and the session is asked for
+ * the repository's URL, its port and all, which names one login.
+ */
+export const forgeOn = async (
   host: string
 ): Promise<{ adapter: ForgeAdapter; signIn: ForgeSignIn } | string> => {
-  const problems: string[] = [];
-  for (const adapter of FORGE_ADAPTERS) {
-    // biome-ignore lint/performance/noAwaitInLoops: the first forge that signs in to the host is its forge
-    const found = await adapter.signIn(host);
-    if (typeof found === "object") {
-      return { adapter, signIn: found };
-    }
-    if (typeof found === "string") {
-      problems.push(found);
-    }
+  const found = await Promise.all(
+    FORGE_ADAPTERS.map(async (adapter) => ({
+      adapter,
+      signIn: await adapter.signIn(host),
+    }))
+  );
+  const logins = found.filter(
+    (each): each is { adapter: ForgeAdapter; signIn: ForgeSignIn | string } =>
+      each.signIn !== undefined
+  );
+  const [only] = logins;
+  if (logins.length > 1) {
+    const named = logins
+      .map(({ adapter, signIn }) =>
+        typeof signIn === "object"
+          ? `${FORGE_NAMES[adapter.forge]} through ${CLI_OF[adapter.forge]} at ${signIn.host}`
+          : `${FORGE_NAMES[adapter.forge]} through ${CLI_OF[adapter.forge]}`
+      )
+      .join(", ");
+    const example =
+      logins
+        .map(({ signIn }) => (typeof signIn === "object" ? signIn.host : host))
+        .find((each) => each !== host) ?? host;
+    return `this machine signs in to ${host} as more than one forge (${named}), so which one the repository is on is not CawCo's to guess. Name the repository by its URL, its port included when its forge has one, with repo (for example repo: "https://${example}/owner/name"), and post again.`;
   }
-  return problems.length > 0
-    ? problems.join(" ")
-    : `this machine has no sign-in on ${host}: neither gh, glab nor tea is signed in there (gh auth login --hostname ${host}, glab auth login --hostname ${host}, or tea login add --url https://${host}).`;
+  if (!only) {
+    return `this machine has no sign-in on ${host}: neither gh, glab nor tea is signed in there (gh auth login --hostname ${host}, glab auth login --hostname ${host}, or tea login add --url https://${host}).`;
+  }
+  return typeof only.signIn === "object"
+    ? { adapter: only.adapter, signIn: only.signIn }
+    : only.signIn;
 };
 
 /** A call within {@link CALL_MS}: its answer, or its failure in words. */
@@ -263,7 +294,7 @@ export const forgePost = async (
       why: `cawco: ${ask.repo} names no repository on a forge: give its URL or host/owner/repo.`,
     };
   }
-  const found = await signedInOn(at.host);
+  const found = await forgeOn(at.host);
   if (typeof found === "string") {
     return { kind: "refused", why: `cawco: nothing was posted: ${found}` };
   }

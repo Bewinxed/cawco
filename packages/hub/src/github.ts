@@ -25,10 +25,16 @@
  *   the edge of the window, which the store's key makes harmless. Issues
  *   and comments are asked `since` the mark, so the poll after a change asks
  *   a new URL (one 200 with nothing new); unchanged polls after it are 304s.
- * - **The token** goes in one header to the API's own origin: a next-page
- *   link elsewhere is not followed, and a redirect is refused.
+ * - **Octokit reads it** (github.com/octokit/octokit.js), signed in as the
+ *   poller's connection (connections.ts `githubClient`: a fine-grained token
+ *   or a GitHub App installation): each resource's pages through
+ *   `octokit.paginate.iterator`, which follows GitHub's `link` header, one
+ *   page at a time within {@link REQUEST_MS}. The token goes to the API's own
+ *   origin only: a next page anywhere else is not asked for, and a redirect
+ *   is refused.
  */
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { Octokit } from "@octokit/rest";
 import { z } from "zod";
 import type { GitHubCursor, GitHubResource } from "./db/schema";
 import type { InboundEvent } from "./ingress";
@@ -60,7 +66,6 @@ const PER_PAGE = 100;
 const REQUEST_MS = 30_000;
 
 const REPO_PATH = /\/repos\/([^/]+)\/([^/]+?)(?:\/|$)/;
-const NEXT_LINK = /<([^>]+)>;\s*rel="next"/;
 
 const user = z.object({ login: z.string() }).nullish();
 const label = z.union([z.string(), z.object({ name: z.string() })]);
@@ -369,24 +374,36 @@ export interface RepoPoll {
   unanswered: number | null;
 }
 
-/** The path and query a resource is listed at, from its cursor. */
-const pathOf = (
+/** A resource's list as Octokit asks for it, from its cursor: its path and its query. */
+const routeOf = (
   repo: string,
   resource: GitHubResource,
   since: number
-): string => {
+): { query: Record<string, string | number>; url: string } => {
   const after = new Date(Math.max(0, since - OVERLAP_MS)).toISOString();
-  const list = `per_page=${PER_PAGE}&sort=updated&direction=desc`;
+  const list = { per_page: PER_PAGE, sort: "updated", direction: "desc" };
   switch (resource) {
     case "pulls":
-      return `/repos/${repo}/pulls?state=all&${list}`;
+      return {
+        url: `/repos/${repo}/pulls`,
+        query: { state: "all", ...list },
+      };
     case "issues":
-      return `/repos/${repo}/issues?state=all&${list}&since=${after}`;
+      return {
+        url: `/repos/${repo}/issues`,
+        query: { state: "all", ...list, since: after },
+      };
     case "comments":
-      return `/repos/${repo}/issues/comments?${list}&since=${after}`;
+      return {
+        url: `/repos/${repo}/issues/comments`,
+        query: { ...list, since: after },
+      };
     default:
       // Newest first, by when each happened; no `since`, so its URL (and ETag) holds.
-      return `/repos/${repo}/issues/events?per_page=${PER_PAGE}`;
+      return {
+        url: `/repos/${repo}/issues/events`,
+        query: { per_page: PER_PAGE },
+      };
   }
 };
 
@@ -406,14 +423,30 @@ const movedAt = (item: unknown): number => {
   return Date.parse(updated ?? created ?? "");
 };
 
+/** An answer's headers as Octokit hands them over: lower-case names. */
+type Headers = Readonly<Record<string, string | number | undefined>>;
+
+/** GitHub's answer as Octokit throws it for a status of 300 or more (@octokit/request-error `RequestError`). */
+interface Refused {
+  readonly response: { data?: unknown; headers: Headers };
+  readonly status: number;
+}
+
+const refusedOf = (error: unknown): Refused | undefined => {
+  const read = error as Partial<Refused> | null;
+  return typeof read?.status === "number" && read.response
+    ? (read as Refused)
+    : undefined;
+};
+
 /** When GitHub's answer says to wait, ms; null when it does not. */
-const waitOf = (response: Response, now: number): number | null => {
-  const retry = Number(response.headers.get("retry-after"));
+const waitOf = (headers: Headers, now: number): number | null => {
+  const retry = Number(headers["retry-after"]);
   if (Number.isFinite(retry) && retry > 0) {
     return now + retry * 1000;
   }
-  const reset = Number(response.headers.get("x-ratelimit-reset"));
-  return response.headers.get("x-ratelimit-remaining") === "0" &&
+  const reset = Number(headers["x-ratelimit-reset"]);
+  return String(headers["x-ratelimit-remaining"]) === "0" &&
     Number.isFinite(reset)
     ? reset * 1000
     : null;
@@ -428,33 +461,29 @@ class Stop extends Error {
 }
 
 /** Why GitHub refused a request, in words for the project's ingress view. */
-const refusal = async (
-  response: Response,
+const refusal = (
+  refused: Refused,
   path: string,
   connection: string,
   now: number
-): Promise<Stop> => {
-  const wait = waitOf(response, now);
-  if (wait !== null && [403, 429].includes(response.status)) {
+): Stop => {
+  const wait = waitOf(refused.response.headers, now);
+  if (wait !== null && [403, 429].includes(refused.status)) {
     return new Stop(
       `GitHub's rate limit: polls wait until ${new Date(wait).toISOString()}.`,
       wait
     );
   }
-  if (response.status === 401) {
+  if (refused.status === 401) {
     return new Stop(
-      `GitHub refused the token of connection ${connection} (401): set its key again.`
+      `GitHub refused the sign-in of connection ${connection} (401): set its key again.`
     );
   }
-  const said = await response
-    .json()
-    .then((body: unknown) => {
-      const words = (body as { message?: unknown } | null)?.message;
-      return typeof words === "string" ? words.slice(0, 200) : "";
-    })
-    .catch(() => "");
+  const words = (refused.response.data as { message?: unknown } | null)
+    ?.message;
+  const said = typeof words === "string" ? words.slice(0, 200) : "";
   return new Stop(
-    `GitHub answered ${response.status} for ${path.split("?")[0]}${said ? `: ${said}` : ""}.`
+    `GitHub answered ${refused.status} for ${path}${said ? `: ${said}` : ""}.`
   );
 };
 
@@ -496,40 +525,15 @@ const readPage = (
  * only gets one. Never throws: a failure is the answer's `problem`.
  */
 export const pollRepo = async (input: {
-  /** GitHub's API origin, like https://api.github.com. */
-  api: string;
   connection: string;
   cursors: Partial<Record<GitHubResource, GitHubCursor>>;
   now: number;
+  /** Signed in as the poller's connection (connections.ts `githubClient`). */
+  octokit: Octokit;
   repo: string;
-  token: string;
 }): Promise<RepoPoll> => {
-  const { origin } = new URL(input.api);
-  const headers = {
-    Accept: "application/vnd.github+json",
-    Authorization: `Bearer ${input.token}`,
-    "User-Agent": "CawCo-hub",
-    "X-GitHub-Api-Version": "2022-11-28",
-  };
-  /** One request within {@link REQUEST_MS}, its body read inside the same time. */
-  const get = (url: string, etag: string | null): Promise<Bounded<Response>> =>
-    readWithin(REQUEST_MS, async (signal) => {
-      const response = await fetch(url, {
-        headers: etag ? { ...headers, "If-None-Match": etag } : headers,
-        redirect: "error",
-        signal,
-      });
-      return new Response(
-        [204, 205, 304].includes(response.status)
-          ? null
-          : await response.arrayBuffer(),
-        {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-        }
-      );
-    });
+  const { octokit } = input;
+  const { origin } = new URL(octokit.request.endpoint.DEFAULTS.baseUrl);
   const out: RepoPoll = {
     cursors: {},
     events: [],
@@ -538,17 +542,114 @@ export const pollRepo = async (input: {
     unanswered: null,
   };
 
-  /** The page `response` links to next, read; answered none past the window's edge or off GitHub's origin. */
-  const nextPage = async (
-    response: Response,
-    past: boolean
-  ): Promise<Bounded<Response | undefined>> => {
-    const next: string | undefined = NEXT_LINK.exec(
-      response.headers.get("link") ?? ""
-    )?.[1];
-    return !past && next && new URL(next).origin === origin
-      ? await get(next, null)
-      : { kind: "answered", value: undefined };
+  /**
+   * One resource's pages as Octokit's iterator reads them, each asked with
+   * the signal of the read it is in ({@link REQUEST_MS}), no redirect
+   * followed, and only on the API's own origin.
+   */
+  const pagesOf = (
+    path: string,
+    query: Record<string, string | number>,
+    etag: string | null
+  ) => {
+    let signal: AbortSignal | undefined;
+    const request = Object.assign(
+      (options: Readonly<Record<string, unknown>>) => {
+        const url = new URL(String(options.url), origin);
+        if (url.origin !== origin) {
+          throw new Stop(
+            `GitHub named a next page off its API (${url.origin}), so the poll stopped there.`
+          );
+        }
+        return octokit.request({
+          ...options,
+          request: { redirect: "error", signal },
+        } as Parameters<Octokit["request"]>[1] & {
+          method: "GET";
+          url: string;
+        });
+      },
+      { endpoint: octokit.request.endpoint }
+    ) as unknown as Octokit["request"];
+    const pages = octokit.paginate
+      .iterator(request, {
+        method: "GET",
+        url: path,
+        ...query,
+        ...(etag ? { headers: { "if-none-match": etag } } : {}),
+        // `Parameters<R>[0]` reads the route-string overload of a request
+        // function; the iterator takes its endpoint options alike.
+      } as never)
+      [Symbol.asyncIterator]();
+    return () =>
+      readWithin(REQUEST_MS, (each) => {
+        signal = each;
+        return pages.next();
+      });
+  };
+
+  /**
+   * One page off a resource's iterator: its data and headers, none past the
+   * last, `not modified` for GitHub's 304; any other refusal is thrown in
+   * the words the project's ingress view reads.
+   */
+  const pageOf = async (
+    next: ReturnType<typeof pagesOf>,
+    path: string
+  ): Promise<
+    Bounded<{ data: unknown; headers: Headers } | "not modified" | undefined>
+  > => {
+    try {
+      const asked = await next();
+      if (asked.kind === "unanswered") {
+        return asked;
+      }
+      const { done, value } = asked.value;
+      return {
+        kind: "answered",
+        value: done || !value ? undefined : value,
+      };
+    } catch (error) {
+      const refused = refusedOf(error);
+      if (refused?.status === 304) {
+        return { kind: "answered", value: "not modified" };
+      }
+      throw refused
+        ? refusal(refused, path, input.connection, input.now)
+        : error;
+    }
+  };
+
+  /**
+   * A resource's pages from `page` on, their events kept, until the
+   * window's edge, the last page or {@link MAX_PAGES}: answers the newest
+   * time it took in.
+   */
+  const pagesFrom = async (
+    resource: GitHubResource,
+    from: { data: unknown; headers: Headers } | undefined,
+    next: ReturnType<typeof pagesOf>,
+    path: string,
+    edge: number
+  ): Promise<Bounded<number>> => {
+    let newest = edge;
+    let page = from;
+    for (let read = 1; page && read <= MAX_PAGES; read += 1) {
+      const taken = readPage(resource, page.data, edge);
+      out.events.push(...taken.events);
+      newest = Math.max(newest, taken.newest);
+      out.resumeAt = waitOf(page.headers, input.now) ?? out.resumeAt;
+      if (taken.past || read === MAX_PAGES) {
+        break;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: each page names the next, so pages are read in turn
+      const got = await pageOf(next, path);
+      if (got.kind === "unanswered") {
+        return got;
+      }
+      page = got.value === "not modified" ? undefined : got.value;
+    }
+    return { kind: "answered", value: newest };
   };
 
   /**
@@ -565,20 +666,13 @@ export const pollRepo = async (input: {
       since: input.now,
     };
     const edge = cursor.since - OVERLAP_MS;
-    const path = pathOf(input.repo, resource, cursor.since);
-    const asked = await get(`${origin}${path}`, cursor.etag);
-    switch (asked.kind) {
-      case "answered":
-        break;
-      case "unanswered":
-        return asked;
-      default: {
-        const unhandled: never = asked;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
+    const { url, query } = routeOf(input.repo, resource, cursor.since);
+    const next = pagesOf(url, query, cursor.etag);
+    const first = await pageOf(next, url);
+    if (first.kind === "unanswered") {
+      return first;
     }
-    const first = asked.value;
-    if (first.status === 304) {
+    if (first.value === "not modified") {
       out.cursors[resource] = {
         ...cursor,
         polls: cursor.polls + 1,
@@ -586,32 +680,14 @@ export const pollRepo = async (input: {
       };
       return { kind: "answered", value: null };
     }
-    let newest = cursor.since;
-    let response: Response | undefined = first;
-    for (let page = 0; response && page < MAX_PAGES; page += 1) {
-      if (!response.ok) {
-        // biome-ignore lint/performance/noAwaitInLoops: each page names the next, so pages are read in turn
-        throw await refusal(response, path, input.connection, input.now);
-      }
-      const read = readPage(resource, await response.json(), edge);
-      out.events.push(...read.events);
-      newest = Math.max(newest, read.newest);
-      out.resumeAt = waitOf(response, input.now) ?? out.resumeAt;
-      const paged = await nextPage(response, read.past);
-      switch (paged.kind) {
-        case "answered":
-          response = paged.value;
-          break;
-        case "unanswered":
-          return paged;
-        default: {
-          const unhandled: never = paged;
-          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-        }
-      }
+    const tag = first.value?.headers.etag;
+    const read = await pagesFrom(resource, first.value, next, url, edge);
+    if (read.kind === "unanswered") {
+      return read;
     }
+    const newest = Math.max(cursor.since, read.value);
     out.cursors[resource] = {
-      etag: first.headers.get("etag"),
+      etag: typeof tag === "string" ? tag : null,
       notModified: cursor.notModified,
       polls: cursor.polls + 1,
       since: newest,

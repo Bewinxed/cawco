@@ -9,7 +9,9 @@
  */
 import type { FleetMarketplace, SourceFacts } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { Octokit } from "@octokit/rest";
 import { parseSkillSource } from "./skills";
+import { GITHUB_API } from "./upstreams";
 
 /** How long one registry read may take before the card says it did not answer. Our call. */
 const READ_MS = 10_000;
@@ -97,9 +99,15 @@ const githubFacts = async (
 ): Promise<SourceFacts> => {
   const at = `github.com/${owner}/${repo}`;
   try {
-    const asked = await read(
-      `https://api.github.com/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`
-    );
+    // A public repository's facts, read with no sign-in through Octokit
+    // (`GET /repos/{owner}/{repo}`).
+    const asked = await readWithin(READ_MS, async (signal) => {
+      const { data } = await new Octokit({
+        baseUrl: GITHUB_API,
+        userAgent: "cawco-hub",
+      }).rest.repos.get({ owner, repo, request: { signal } });
+      return data;
+    });
     switch (asked.kind) {
       case "answered":
         break;
@@ -110,10 +118,7 @@ const githubFacts = async (
         throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
     }
-    const found = asked.value as {
-      created_at?: string;
-      stargazers_count?: number;
-    };
+    const found = asked.value;
     return {
       at,
       ...(found.created_at ? { since: found.created_at } : {}),

@@ -1,10 +1,10 @@
 /**
- * A guarded workspace's door to GitHub's API (core upstream-guard.ts): the
- * one place its `gh` reaches GitHub through, on the host, so no GitHub token
- * ever enters its boundary.
+ * A workspace's door to GitHub's API (core upstream-guard.ts): the one place
+ * its `gh` reaches GitHub through, on the host, so no GitHub token ever
+ * enters its boundary, whatever the project's upstream rule.
  *
- * A guarded workspace's commands run with a gh config dir of their own
- * (boundary.ts `guardedEnv`), whose `http_unix_socket` names this door and
+ * Every workspace's commands run with a gh config dir of their own
+ * (boundary.ts `commandEnv`), whose `http_unix_socket` names this door and
  * whose login is a placeholder. gh then sends every request over the socket
  * in the clear: go-gh reads `http_unix_socket` from gh's config when no
  * socket is passed (pkg/api/client_options.go `resolveOptions`), and dials
@@ -13,9 +13,11 @@
  * against `/repos/<owner>/<repo>`, or a GraphQL mutation, whose repository it
  * names or whose node ids it resolves here (`nodes(ids:)`), and the project's
  * rule decides it as it decides every write (core `decideWrite`): the
- * project's own goes, another's is held under "Ask me first" or refused. What it
- * lets through goes to GitHub with the host's own token in place of the
- * placeholder; a read too. It forwards to GitHub's hosts alone, never
+ * project's own goes, another's is held under "Ask me first" or refused, and
+ * under "Let agents post upstream" every write goes. What it lets through
+ * goes to GitHub with the host's own token in place of the placeholder; a
+ * read too. It forwards gh's requests as they came (it is gh's transport,
+ * not a client of its own), to GitHub's hosts alone, never
  * following a redirect itself, and signs in only to its API hosts.
  *
  * A process that speaks to the socket by hand is judged the same way: the
@@ -29,13 +31,13 @@ import {
   decideWrite,
   GITHUB_API,
   type HttpWrite,
-  isGuarded,
   owns,
   readUpstreamRule,
   type UpstreamRule,
   upstreamHttpWrite,
 } from "@cawco/core/upstream-guard";
 import type { HttpPost } from "@cawco/core/upstream-post";
+import { Octokit } from "@octokit/rest";
 import { hostGhToken } from "./host-gh";
 import { socketPlace } from "./tool-door";
 import { raiseUpstreamAsk } from "./upstream-posts";
@@ -94,31 +96,38 @@ const ACTORS: ReadonlySet<string> = new Set([
   "EnterpriseUserAccount",
 ]);
 
+/** GitHub's answer to {@link RESOLVE}. */
+interface ResolvedNodes {
+  nodes?: (ResolvedNode | null)[];
+}
+
 interface ResolvedNode {
   __typename?: string;
   nameWithOwner?: string;
   repository?: { nameWithOwner?: string };
 }
 
-/** The repositories `ids` belong to, `host/owner/repo`; `unknown` when the read failed, or a node is neither an actor nor any repository's. */
+/**
+ * The repositories `ids` belong to, `host/owner/repo`, read through
+ * Octokit's GraphQL client (`octokit.graphql`, github.com/octokit/graphql.js:
+ * "GitHub GraphQL API client for browsers and Node"); `unknown` when the read
+ * failed, or a node is neither an actor nor any repository's. GitHub answers
+ * an id it does not resolve as a null node beside an error, which Octokit
+ * throws with the data it came with (`GraphqlResponseError.data`): those
+ * nodes are read as any others.
+ */
 const resolveNodes = async (
   ids: readonly string[],
   token: string
 ): Promise<{ repos: string[]; unknown: boolean }> => {
-  const answer = await fetch("https://api.github.com/graphql", {
-    method: "POST",
-    headers: {
-      authorization: `token ${token}`,
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ query: RESOLVE, variables: { ids } }),
-  });
-  const read = (await answer.json().catch(() => ({}))) as {
-    data?: { nodes?: (ResolvedNode | null)[] };
-    errors?: unknown[];
-  };
-  const nodes = read.data?.nodes;
-  if (!(answer.ok && Array.isArray(nodes)) || nodes.length !== ids.length) {
+  const nodes = await new Octokit({ auth: token, userAgent: "CawCo" })
+    .graphql<ResolvedNodes>(RESOLVE, { ids })
+    .then(
+      (read) => read.nodes,
+      (error: unknown) =>
+        (error as { data?: ResolvedNodes } | null)?.data?.nodes
+    );
+  if (!Array.isArray(nodes) || nodes.length !== ids.length) {
     return { repos: [], unknown: true };
   }
   const repos: string[] = [];
@@ -179,12 +188,12 @@ interface Asked {
 }
 
 /**
- * What a guarded workspace's request writes, for the decision (core
+ * What a workspace's request writes, for the decision (core
  * `decideWrite`): the write and the repository it lands in, or none when the
  * door cannot name it; undefined when it writes nothing, or only to the
  * project's own repository by node ids that all resolve there. `off-api` is
- * a write to a GitHub host that is not its API, which the door never
- * forwards.
+ * a write to a GitHub host that is not its API, which names no repository:
+ * the door forwards it only where agents may post.
  */
 const writeOf = async (
   rule: UpstreamRule,
@@ -309,15 +318,17 @@ const serve = async (id: string, request: Request): Promise<Response> => {
   };
   const token = await hostGhToken();
   const rule = upstreamRule(id);
-  const write =
-    rule && isGuarded(rule)
-      ? await writeOf(rule, request, asked, token)
-      : undefined;
+  // Every request is decided by the project's rule as every door decides
+  // (core decideWrite): under "Let agents post upstream" each write goes.
+  const write = rule ? await writeOf(rule, request, asked, token) : undefined;
+  const what = `${request.method} ${host}${url.pathname}`;
   if (write === "off-api") {
-    return refused(
-      graphql,
-      `cawco: \`${request.method} ${host}${url.pathname}\` did not run: a guarded workspace writes to GitHub through its API alone.`
-    );
+    return decideWrite(rule, { what }).kind === "go"
+      ? forward(request, asked, token)
+      : refused(
+          graphql,
+          `cawco: \`${what}\` did not run: a workspace kept off other people's repositories, or asking first, writes to GitHub through its API alone.`
+        );
   }
   const decision = write ? decideWrite(rule, write) : { kind: "go" as const };
   switch (decision.kind) {

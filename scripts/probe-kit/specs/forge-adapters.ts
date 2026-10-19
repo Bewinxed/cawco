@@ -10,9 +10,13 @@
  * GitHub and GitLab run every leg. Gitea runs its pushes, its refusal and its
  * held card here; its writes are made by gitea-mcp, which the host runs only
  * from where no workspace writes, so the spec forge-adapters-gitea (host)
- * makes them.
+ * makes them. Then, on one host, GitHub and GitLab both signed in: an
+ * ambiguous forge_post is refused, asking for the repository's URL
+ * (forge-legs.ts (g)). And the hub's GitHub poller reads through Octokit
+ * against a stand-in of GitHub's API (github-poll.ts (p)).
  */
-import { forgeLegs, forgeScratch } from "../forge-legs";
+import { ambiguousLeg, forgeLegs, forgeScratch } from "../forge-legs";
+import { githubPollLeg } from "../github-poll";
 import type { Spec } from "../kit";
 
 const spec: Spec = {
@@ -33,6 +37,13 @@ const spec: Spec = {
         scratch.stop();
       }
     }
+    const shared = await forgeScratch();
+    try {
+      await ambiguousLeg(kit, shared);
+    } finally {
+      shared.stop();
+    }
+    await githubPollLeg(kit);
   },
 };
 
