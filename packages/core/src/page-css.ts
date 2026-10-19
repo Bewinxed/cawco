@@ -30,15 +30,33 @@ const ENTRY = "cawco:page.css";
 const nameOf = (sheet: Sheet) =>
   typeof sheet === "string" ? sheet : sheet.name;
 
+/** The media types of the files a sheet may inline (`inline` below). */
+const INLINE_TYPES: Record<string, string> = { woff2: "font/woff2" };
+
+/** `file` as a `data:` URL of its own type. */
+const dataUrl = (file: string): string => {
+  const type = INLINE_TYPES[file.slice(file.lastIndexOf(".") + 1)];
+  if (!type) {
+    throw new Error(`${file}: no media type to inline it as`);
+  }
+  return `data:${type};base64,${readFileSync(file).toString("base64")}`;
+};
+
 /**
  * `sheets` compiled into one stylesheet, minified, in their order: each
  * `@import`ed in turn by Lightning CSS's bundler, so a sheet's own
- * `@import`s are inlined where they stand. Throws on a sheet Lightning CSS
- * can't parse, naming it.
+ * `@import`s are inlined where they stand. Each `url()` written exactly as a
+ * key of `inline` becomes its file (the key's value, an absolute path) as a
+ * `data:` URL; every other `url()` stays as written. Throws on a sheet
+ * Lightning CSS can't parse, and on a key of `inline` no sheet wrote.
  */
-export async function compileSheets(sheets: readonly Sheet[]): Promise<string> {
+export async function compileSheets(
+  sheets: readonly Sheet[],
+  inline: ReadonlyMap<string, string> = new Map()
+): Promise<string> {
   const [{ bundleAsync, browserslistToTargets }, { default: browserslist }] =
     await Promise.all([import("lightningcss"), import("browserslist")]);
+  const inlined = new Set<string>();
   const texts = new Map(
     sheets.flatMap((sheet) =>
       typeof sheet === "string" ? [] : [[sheet.name, sheet.css] as const]
@@ -59,7 +77,23 @@ export async function compileSheets(sheets: readonly Sheet[]): Promise<string> {
       resolve: (specifier, from) =>
         from === ENTRY ? specifier : resolve(dirname(from), specifier),
     },
+    visitor: {
+      Url(url) {
+        const file = inline.get(url.url);
+        if (!file) {
+          return;
+        }
+        inlined.add(url.url);
+        return { ...url, url: dataUrl(file) };
+      },
+    },
   });
+  const unseen = [...inline.keys()].filter((url) => !inlined.has(url));
+  if (unseen.length > 0) {
+    throw new Error(
+      `No sheet writes these url()s to inline, so they would be fetched: ${unseen.join(", ")}`
+    );
+  }
   return new TextDecoder().decode(code);
 }
 

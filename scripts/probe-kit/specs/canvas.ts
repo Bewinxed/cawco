@@ -290,6 +290,19 @@ const runSpec = async (kit: Kit) => {
     previewHost !== null && elsewhere.length === 0,
     `preview origin ${previewHost ?? "none named"}; elsewhere: ${elsewhere.slice(0, 6).join(" | ") || "none"}`
   );
+  // Excalidraw's UI face is in the sheet itself (core canvas-host.ts
+  // `INLINED_FONTS`), so no page fetches it.
+  const assistant = on.offOrigin.filter((url) =>
+    new URL(url).pathname.includes("/canvas/fonts/Assistant/")
+  );
+  const canvasFiles = on.offOrigin.filter((url) =>
+    new URL(url).pathname.includes("/canvas/")
+  );
+  kit.check(
+    "7: no page requested Excalidraw's Assistant face (/canvas/fonts/Assistant/*): the host's sheet carries it inlined",
+    canvasFiles.length > 0 && assistant.length === 0,
+    `${canvasFiles.length} canvas file requests; Assistant: ${assistant.slice(0, 4).join(" | ") || "none"}`
+  );
 };
 
 /**

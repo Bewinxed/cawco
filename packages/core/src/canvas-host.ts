@@ -7,8 +7,8 @@
  * (page-css.ts): the standalone binary carries both prebuilt under
  * `canvas/` (`build-binary.ts`), and a source checkout builds them on first
  * request. Excalidraw's fonts stand beside them at `canvas/fonts/`, so the
- * page asks nothing of any other origin (`window.EXCALIDRAW_ASSET_PATH`,
- * and its sheet's own `./fonts/…`).
+ * page asks nothing of any other origin (`window.EXCALIDRAW_ASSET_PATH`);
+ * its UI face is inlined into the sheet (`INLINED_FONTS`).
  *
  * Paths, under the canvas's root: `/` the page (index.html, which the hub
  * gives the overlay), `/canvas/<file>` the bundle's files (`host.css` the
@@ -55,6 +55,20 @@ const SHEETS = () => [
 ];
 
 /**
+ * Excalidraw's UI face, Assistant, inlined into the sheet as its four
+ * `@font-face`s write it (`url("./fonts/Assistant/…")`, beside its
+ * index.css): there from the first frame, so its `font-display: swap` never
+ * shows the fallback face first. Every other `url()` stays as written.
+ */
+const INLINED_FONTS = () =>
+  new Map(
+    ["Regular", "Medium", "SemiBold", "Bold"].map((weight) => {
+      const file = `fonts/Assistant/Assistant-${weight}.woff2`;
+      return [`./${file}`, join(excalidrawProd(), file)] as const;
+    })
+  );
+
+/**
  * `yjs` in the host bundle is the overlay's (canvas-host/yjs.ts, which reads
  * `window.cawcoArtifact.Y`): the page runs one Yjs, and the doc it binds is
  * the overlay's, of the same classes.
@@ -78,7 +92,7 @@ const overlayYjs: Bun.BunPlugin = {
 export async function buildCanvasHost(): Promise<Map<string, Blob>> {
   const [result, css] = await Promise.all([
     bundleJs(),
-    compileSheets(SHEETS()),
+    compileSheets(SHEETS(), INLINED_FONTS()),
   ]);
   return pageFiles("The canvas host", result, css);
 }
