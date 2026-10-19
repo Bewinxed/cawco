@@ -135,22 +135,18 @@
     {/if}
   </label>
   {#if matches.length}
-    <!-- literal: 240px, 36px, 44px -->
     <div
       aria-label="Template paths"
-      class="kit-pop absolute top-full inset-x-0 max-h-(--completer-max) overflow-y-auto z-30"
+      class="kit-pop absolute top-full inset-x-0 max-h-c-completer-max-h overflow-y-auto z-30"
       data-state="open"
       role="listbox"
       style:transform-origin={origin}
-      style:--completer-max="240px"
-      style:--option-h="36px"
-      style:--option-hit="44px"
       out:popOut
       {@attach highlight({ rows: "button", hovered: '[aria-selected="true"]' })}
     >
       {#each matches as path, index (path)}
         <button
-          class="block w-full text-start p-space-2 wrap-anywhere font-(family-name:--font-mono) text-size-label min-h-(--option-h) max-wide:min-h-(--option-hit)"
+          class="block w-full text-start p-space-2 wrap-anywhere font-(family-name:--font-mono) text-size-label min-h-c-btn-h max-wide:min-h-c-btn-h-lg"
           aria-selected={active === index}
           onclick={() => choose(path)}
           onmousedown={(event) => {

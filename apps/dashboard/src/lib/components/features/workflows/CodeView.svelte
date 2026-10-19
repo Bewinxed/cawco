@@ -253,10 +253,3 @@
   class="h-full min-h-0 bg-surface-recess border border-border-hairline rounded-sm overflow-hidden"
   bind:this={host}
 ></section>
-
-<style>
-  /* residual: foreign-dom — CodeMirror's own editor root */
-  [data-slot="code-view"] :global(.cm-editor) {
-    height: 100%;
-  }
-</style>

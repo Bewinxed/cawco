@@ -91,9 +91,8 @@
         <IconMinus class="size-icon-md" />
       </button>
     {/snippet}
-  </Tip><!-- literal: 40px --><span
-    class="min-w-(--zoom-min) text-center text-size-meta font-normal num"
-    style:--zoom-min="40px">{Math.round(zoom * 100)}%</span
+  </Tip><span class="min-w-space-8 text-center text-meta num"
+    >{Math.round(zoom * 100)}%</span
   ><Tip label="Zoom in">
     {#snippet children(tip)}
       <button

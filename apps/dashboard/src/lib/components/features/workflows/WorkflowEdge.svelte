@@ -33,12 +33,13 @@
   );
 </script>
 
-<!-- The path's paint, inline: it stands over xyflow's sheet, selected or
-     not, and a change restyles the path alone. -->
+<!-- The path's paint goes through xyflow's own custom properties: its sheet
+     reads them at rest, selected and on keyboard focus, so the ring colour
+     needs no override. -->
 <BaseEdge
   {id}
   path={route[0]}
-  style={`stroke: var(--neutral-8); stroke-width: ${selected ? 3 : 1.5}px`}
+  style={`--xy-edge-stroke: var(--neutral-8); --xy-edge-stroke-selected: var(--focus-ring); --xy-edge-stroke-width: calc(var(--c-graph-edge) * ${selected ? 2 : 1})`}
 />
 <EdgeLabel selectEdgeOnClick transparent x={route[1]} y={route[2]}>
   <div
@@ -51,10 +52,9 @@
       >
     {/if}
     {#if data?.remove}
-      <!-- literal: 28px -->
       <button
         aria-label="Delete edge"
-        class="touch-hit grid size-(--hit) place-items-center rounded-sm bg-surface-raised text-ink-muted opacity-0 transition-[opacity] dur-control ease-out group-[:hover]:opacity-100 group-[:hover]:scale-100 focus-visible:opacity-100 focus-visible:scale-100 data-visible:opacity-100 data-visible:scale-100 motion-safe:not-coarse:scale-(--pop-scale) motion-safe:transition-[opacity,scale] motion-safe:pressed:transform-(--tpress) coarse:opacity-100 coarse:scale-100"
+        class="touch-hit grid size-c-btn-h-sm place-items-center rounded-sm bg-surface-raised text-ink-muted opacity-0 transition-[opacity] dur-control ease-out group-hover:opacity-100 group-hover:scale-100 focus-visible:opacity-100 focus-visible:scale-100 data-visible:opacity-100 data-visible:scale-100 motion-safe:not-coarse:scale-(--pop-scale) motion-safe:transition-[opacity,scale] motion-safe:pressed:transform-(--tpress) coarse:opacity-100 coarse:scale-100"
         data-box
         data-visible={selected || undefined}
         onclick={() => {
@@ -62,7 +62,6 @@
             data.remove(id);
           }
         }}
-        style:--hit="28px"
         style:--tpress="scale(var(--press-scale))"
         type="button"
       >
@@ -71,11 +70,3 @@
     {/if}
   </div>
 </EdgeLabel>
-
-<style>
-  /* residual: foreign-dom — the edge's own path is xyflow's. Keyboard focus
-     on an edge turns its line the ring colour, over the inline stroke. */
-  :global(.svelte-flow__edge:focus-visible .svelte-flow__edge-path) {
-    stroke: var(--focus-ring) !important;
-  }
-</style>

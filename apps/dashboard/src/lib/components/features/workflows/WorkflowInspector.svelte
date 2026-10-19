@@ -1072,10 +1072,8 @@
               {/each}
             </section>
             <details>
-              <!-- literal: 36px -->
-              <summary
-                class="min-h-(--summary-min) cursor-pointer"
-                style:--summary-min="36px">Unwired ports</summary
+              <summary class="min-h-c-btn-h cursor-pointer"
+                >Unwired ports</summary
               >
               {#each workflowPorts(node) as port (port)}
                 <label class="wf-check"
@@ -1216,15 +1214,14 @@
       </div>
     {/key}
   </div>
-  <!-- literal: 44px -->
-  <section aria-label="Problems" class="wf-stack" style:--problem-min="44px">
+  <section aria-label="Problems" class="wf-stack">
     <h2 data-slot="num" class="num">Problems · {problems.length}</h2>
     {#if !problems.length}
       <p class="wf-muted">No problems found.</p>
     {/if}
     {#each problems as problem, index (index)}
       <button
-        class="min-h-(--problem-min) rounded-sm bg-surface-recess p-space-3 text-left wrap-anywhere"
+        class="min-h-c-btn-h-lg rounded-sm bg-surface-recess p-space-3 text-start wrap-anywhere"
         onclick={() => onselect(problem.nodeId ?? problem.edgeId)}
         type="button"
       >
