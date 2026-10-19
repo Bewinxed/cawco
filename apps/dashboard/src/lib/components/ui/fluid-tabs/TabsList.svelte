@@ -1101,11 +1101,28 @@
   }
 </script>
 
+<!-- The tabs (TabItem) and a host's boxes round them are the track's
+     children. A track that scrolls keeps every tab at its own width and
+     scrolls past the edge (its fades say there is more), never squeezing a
+     tab toward an ellipsis to fit: a tab's own cap is what ends a long
+     title. In a folder strip each tab, or the host's box round it, steps
+     back over its leading neighbour by the overlap and is one stack at its
+     rank (`--z`, the script; `--z-rest` until the track has ranked it): its
+     sheet, rim and everything written on it rise and fall together. The
+     track's own layers are not tabs: the highlight's ghost and pills
+     (absolutely placed, app.css .kit-highlight). The hover ghost is the
+     kit's, and folder tabs overlap, each in its own stack, so no one layer
+     can glide between a tab's card and its label: in a folder strip the
+     ghost stands down and the tab under the pointer lights its own card
+     (TabItem, `data-ghosted`). -->
 <div
   data-slot="ff-tabs-list"
   class={cn(
     "ff-tabs-list",
-    scrollable && "scrollable kit-edge-fade",
+    "in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:relative in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:isolate in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:z-[var(--z,var(--z-rest,1))] in-variant-folder:[&>:not([data-slot=segment],[data-slot=ring],.kit-ghost,.kit-pill,.kit-pill-trail)]:-ms-(--overlap)",
+    "in-variant-folder:[&>.kit-ghost]:hidden",
+    scrollable &&
+      "scrollable kit-edge-fade [&>[data-slot=ff-tab]]:shrink-0",
     className
   )}
   data-overflows={overflows ? "" : undefined}
@@ -1163,46 +1180,3 @@
   {/if}
   {@render children()}
 </div>
-
-<style>
-  /* residual: foreign-dom — the tabs (TabItem) and a host's boxes round
-     them, which the track's children render. A track that scrolls keeps
-     every tab at its own width and scrolls past the edge (its fades say
-     there is more), never squeezing a tab toward an ellipsis to fit: a
-     tab's own cap is what ends a long title. */
-  .ff-tabs-list.scrollable > :global([data-slot="ff-tab"]) {
-    flex-shrink: 0;
-  }
-  /* Each folder tab, or the host's box round it, steps back over its
-     leading neighbour by the overlap, and is one stack at its rank (`--z`,
-     the script; `--z-rest` until the track has ranked it): its sheet, rim
-     and everything written on it rise and fall together. The track's own
-     layers are not tabs: the highlight's ghost and pills (absolutely
-     placed, app.css .kit-highlight) taken into the flow with the overlap's
-     margin pulled every tab 16px back past the track's leading flare
-     room. */
-  :global([data-variant="folder"])
-    .ff-tabs-list
-    > :global(
-      :not(
-        [data-slot="segment"],
-        [data-slot="ring"],
-        .kit-ghost,
-        .kit-pill,
-        .kit-pill-trail
-      )
-    ) {
-    position: relative;
-    z-index: var(--z, var(--z-rest, 1));
-    isolation: isolate;
-    margin-inline-start: calc(-1 * var(--overlap));
-  }
-  /* The hover ghost is the kit's (app.css .kit-ghost), cut to the tab's
-     own shape and filled as the kit fills it: surface-hover, whole.
-     Folder tabs overlap, each in its own stack, so no one layer can glide
-     between a tab's card and its label: the tab under the pointer lights
-     its own card in the hover tint instead (TabItem, `data-ghosted`). */
-  :global([data-variant="folder"]) .ff-tabs-list > :global(.kit-ghost) {
-    display: none;
-  }
-</style>

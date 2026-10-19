@@ -63,34 +63,41 @@
   type Frame = "caw" | "machines" | "jump" | "files";
   /**
    * Each face's frame, read off what its custom properties hold (on the card,
-   * below): Caw's panel `c-panel-w` wide with its rows 7px in; the machines
-   * 20rem; Jump `c-find-w` wide and its foot clear of the screen's, a full
-   * sheet on a phone; Files as Caw's panel, its rows `--space-2` in, as tall
-   * as what it holds up to his panel's height or the room under the glass. On a phone each keeps the phone's 12px margin on its
+   * below): Caw's panel `c-panel-w` wide with its rows `--space-2` in; the
+   * machines `c-machines-w`; Jump `c-find-w` wide and its foot clear of the
+   * screen's, a full sheet on a phone; Files as Caw's panel, its rows
+   * `--space-2` in, as tall as what it holds up to his panel's height or the
+   * room under the glass. Each stands `c-pop-edge` in from the screen's edge
+   * on either side (DESIGN.md, Breakpoints: popovers widen to the viewport
+   * less 24px); on a phone each keeps the bar's `c-bar-phone-edge` on its
    * leading side (app.css `.glass-card` squares the trailing one).
    */
   const FRAMES: Record<Frame, string> = {
-    caw: "w-(--frame-w) max-[900px]:w-(--frame-w-narrow) gap-0 p-space-2",
+    caw: "w-(--frame-w) max-desk:w-(--frame-w-narrow) gap-0 p-space-2",
     machines: "w-(--frame-w) gap-0",
-    jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 max-[900px]:h-(--frame-h) max-[900px]:w-(--frame-w-narrow)",
+    jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 max-desk:h-(--frame-h) max-desk:w-(--frame-w-narrow)",
     files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
   };
+  /** The viewport less a floating card's edge each side. */
+  const ROOM = "calc(100vw - 2 * var(--c-pop-edge))";
+  /** The viewport less the phone bar's leading edge and the trailing safe area. */
+  const ROOM_NARROW =
+    "calc(100vw - var(--c-bar-phone-edge) - env(safe-area-inset-right, 0px))";
   /** The numbers each face's frame reads (`--frame-w`, `--frame-w-narrow`, `--frame-h`). */
   const FRAME_SIZES: Record<Frame, { w: string; narrow?: string; h?: string }> =
     {
       caw: {
-        w: "min(var(--c-panel-w), calc(100vw - 24px))",
-        narrow:
-          "min(var(--c-panel-w), calc(100vw - 12px - env(safe-area-inset-right, 0px)))",
+        w: `min(var(--c-panel-w), ${ROOM})`,
+        narrow: `min(var(--c-panel-w), ${ROOM_NARROW})`,
       },
-      machines: { w: "min(20rem, calc(100vw - 16px))" },
+      machines: { w: `min(var(--c-machines-w), ${ROOM})` },
       jump: {
-        w: "min(var(--c-find-w), calc(100vw - 24px))",
-        narrow: "calc(100vw - 12px - env(safe-area-inset-right, 0px))",
-        h: "calc(100dvh - var(--c-top-bar-h) - 24px)",
+        w: `min(var(--c-find-w), ${ROOM})`,
+        narrow: ROOM_NARROW,
+        h: "calc(100dvh - var(--c-top-bar-h) - var(--space-7))",
       },
       files: {
-        w: "min(var(--c-panel-w), calc(100vw - 24px))",
+        w: `min(var(--c-panel-w), ${ROOM})`,
         h: "min(var(--c-caw-panel-h), calc(var(--bits-popover-content-available-height, 85dvh) - 2px))",
       },
     };
@@ -438,7 +445,6 @@
   {#snippet child({ props, wrapperProps, open })}
     {#if forceMount || drawn(props)}
       <div {...wrapperProps} data-hang style:pointer-events={pressable(open)}>
-        <!-- literal: 24px, 12px (the screen's margins), 20rem (the machines): FRAME_SIZES -->
         <div
           {...own(props)}
           style:--frame-w={frame ? FRAME_SIZES[frame].w : undefined}

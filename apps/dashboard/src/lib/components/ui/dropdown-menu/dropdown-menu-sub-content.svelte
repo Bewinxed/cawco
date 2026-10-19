@@ -2,10 +2,12 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  /** Its callers' looks: a width of its own, or a least width over the kit's. */
+  /** Its callers' looks: a width of its own (`regular` as the menu's own
+      `regular`, so a submenu and the menu holding the same entries stand
+      equally wide), or a least width over the kit's. */
   export const dropdownMenuSubContentVariants = tv({
     variants: {
-      width: { wide: "w-72" },
+      width: { regular: "w-52", wide: "w-72" },
       min: { compact: "min-w-40" },
     },
   });

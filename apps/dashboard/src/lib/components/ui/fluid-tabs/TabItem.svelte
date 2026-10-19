@@ -279,14 +279,17 @@
      (TabsList) carries `data-ride` inside the folder root, and the variant
      says them in that order, so it holds whether or not a tool lowers the
      nesting (folder-ride spec), and outranks the folder's own transition
-     by its two attributes. -->
-<!-- literal: 6px -->
+     by its two attributes. Every other child of the box (the trailing
+     control a host renders) rises over the overlays at the hit's level;
+     the fold stands behind and the hit is not positioned. The box is
+     `group/ff-tab`, the group its sheet reads its ghost and press from. -->
 <span
   data-tab-item-selected={selected || undefined}
   data-slot="ff-tab"
   data-ff-tab
   class={cn(
-    "relative flex h-(--item) min-w-0 flex-initial items-center rounded-(--shape) text-ink-muted",
+    "group/ff-tab relative flex h-(--item) min-w-0 flex-initial items-center rounded-(--shape) text-ink-muted",
+    "[&>:where(:not([data-slot=fold],[data-slot=hit]))]:relative [&>:where(:not([data-slot=fold],[data-slot=hit]))]:z-3",
     "[&:not(:has([data-slot=hit]:last-child))]:pe-(--end-pad)",
     "in-variant-folder:[&:not(:has([data-slot=hit]:last-child))]:pe-(--fold-end-pad)",
     "data-tab-item-selected:text-ink-strong hover-hover:data-ghosted:not-data-tab-item-selected:text-ink-strong",
@@ -294,7 +297,7 @@
     "motion-safe:dur-ghost motion-safe:transition-[color] motion-safe:ease-out",
     "in-variant-folder:motion-safe:[transition:color_var(--dur-ghost)_var(--ease-out),--pick_var(--choose-dur)_var(--choose-ease)]",
     "[[data-variant=folder]_[data-ride]_&]:transition-off",
-    "hit-pressed:bg-press-fill in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong",
+    "hit-pressed:bg-surface-pressed in-variant-folder:hit-pressed:bg-transparent light:hit-pressed:text-ink-strong",
     className
   )}
   data-flush={flush}
@@ -302,23 +305,22 @@
   bind:this={node}
   style:--pick={pick}
   style:--z-rest={restAt}
-  style:--end-pad="calc(var(--px) - 6px)"
+  style:--end-pad="calc(var(--px) - var(--space-2))"
   style:--fold-end-pad="var(--px-end, var(--px))"
 >
   {#if folder && shape}
     <!-- The tab's shape: one path, its sheet filled and its rim stroked
          inside its edge (clipped to it), the stroke's ink tapering up from
          each foot's tip (the gradient), drawn to the tab's measured box.
-         The rim's glow stops at the shelf's line. -->
-    <!-- literal: -24px, 6px -->
+         The rim's glow stops at the shelf's line, and draws as far as
+         `--tab-rim-glow-room` past the tab's top and sides. -->
     <svg
       data-slot="fold"
       aria-hidden="true"
       class="pick-inherit pointer-events-none absolute inset-y-0 start-(--fold-start) z-1 h-full w-(--fold-w) overflow-visible clip-path-(--fold-clip)"
       style:--fold-start="calc(-1 * var(--flare))"
       style:--fold-w="calc(100% + 2 * var(--flare))"
-      style:--fold-clip="inset(-24px -24px 0)"
-      style:--rim-blur="6px"
+      style:--fold-clip="inset(calc(-1 * var(--tab-rim-glow-room)) calc(-1 * var(--tab-rim-glow-room)) 0)"
       preserveAspectRatio="none"
       viewBox="0 0 {shape.box.width + 2 * shape.box.flare} {shape.box.height}"
     >
@@ -336,15 +338,41 @@
           y2="0"
         >
           {#each stops as stop (stop.offset)}
-            <stop offset={stop.offset} stop-opacity={stop.ink} />
+            <stop
+              class="stop-rim-ink"
+              offset={stop.offset}
+              stop-opacity={stop.ink}
+            />
           {/each}
         </linearGradient>
       </defs>
-      <use data-ff-sheet class="pick-inherit" href="#{uid}-outline" />
+      <!-- The sheet: a host's rim and fill (PaneTabs: `--sheet`, `--tab-fill`)
+           at the strength the tab is chosen at now. Under the pointer an
+           unchosen tab lights its own shape in the hover tint (the track's
+           ghost cannot glide between overlapping tabs); pressed, the press
+           fill. The sheet and the hit are named by their own attributes
+           (`data-ff-sheet`, `data-hit`): Chrome keys an attribute selector's
+           invalidation to the attribute's name alone, so a `data-slot` there
+           restyled every `data-slot` in the tab under each state change. -->
+      <use
+        data-ff-sheet
+        class="pick-inherit paint-tab-sheet hover-hover:group-data-ghosted/ff-tab:not-group-data-tab-item-selected/ff-tab:paint-tab-hover group-hit-pressed/ff-tab:fill-press-fill"
+        href="#{uid}-outline"
+      />
       {#if !hung}
-        <g data-slot="rim" class="pick-inherit">
+        <!-- The rim (PaneTabs: `--rim-ink`, its strength unchosen
+             `--rim-rest` and chosen `--rim-full`), none where the host draws
+             none. The stroke is twice the rim's width, clipped to the shape:
+             the half inside it, at its own width even where a kept shape is
+             stretched to a box that has since moved, until it is measured
+             again. -->
+        <g
+          data-slot="rim"
+          class="pick-inherit rim-strength rim-glow contrast-more:filter-none reduced-transparency:filter-none"
+        >
           <use
             data-slot="stroke"
+            class="fill-none rim-stroke-w vector-non-scaling"
             clip-path="url(#{uid}-inside)"
             href="#{uid}-outline"
             stroke="url(#{uid}-taper)"
@@ -359,13 +387,17 @@
        lifts it over the sheet. A host may set a tab's two ends apart
        (PaneTabs' phone row). Last in the box: the hit's own end padding.
        When a trailing control follows, the box's end padding keeps it off
-       the segment's edge. -->
+       the segment's edge. Its area (`before:`) sits under the hit's
+       content, and a trailing control, later in the box, stands over it and
+       takes its own presses. The chosen folder sheet's flared foot is the
+       tab's too: the area takes the sheet's outline, square-shouldered, so
+       the foot reaches past the box on each side. -->
   <svelte:element
     this={href ? "a" : "button"}
     data-slot="hit"
     data-hit
     aria-selected={selected}
-    class="touch-hit pick-inherit static z-3 flex min-w-0 flex-auto cursor-pointer items-center gap-(--hit-gap) self-stretch rounded-inherit border-none border-current background-transparent py-0 ps-(--hit-ps) text-(length:--text) leading-none whitespace-nowrap text-inherit no-underline outline-off last:pe-(--px)"
+    class="touch-hit pick-inherit static z-3 flex min-w-0 flex-auto cursor-pointer items-center gap-(--hit-gap) self-stretch rounded-inherit border-none border-current background-transparent py-0 ps-(--hit-ps) text-(length:--text) leading-none whitespace-nowrap text-inherit no-underline outline-off last:pe-(--px) before:absolute before:inset-0 before:-z-1 in-variant-folder:aria-selected:before:-inset-x-(--flare) in-variant-folder:aria-selected:before:clip-tab-foot"
     style:--hit-gap="calc(var(--gap) + var(--space-1))"
     style:--hit-ps="var(--px-start, var(--px))"
     draggable={href ? "false" : undefined}
@@ -379,7 +411,7 @@
     {#if lead}
       {@render lead()}
     {:else if Icon}
-      <Icon class="ff-tab-icon" />
+      <Icon class="size-(--icon) flex-none" />
     {/if}
     <!-- The name, and over it the same name in the strong ink: a folder tab
          fades the strong one in as it is chosen (transitions.dev, text swap
@@ -404,7 +436,7 @@
       <span
         data-slot="text"
         aria-hidden="true"
-        class="pick-inherit col-start-1 row-start-1 hidden min-w-0 truncate leading-(--item) font-medium in-variant-folder:block in-variant-folder:text-ink-strong in-variant-folder:opacity-(--pick)"
+        class="pick-inherit col-start-1 row-start-1 hidden min-w-0 truncate leading-(--item) font-medium in-variant-folder:block in-variant-folder:text-ink-strong in-variant-folder:opacity-(--pick) before:content-[attr(data-text)]"
         data-text={label}
       ></span>
     </span>
@@ -413,164 +445,3 @@
     {@render trail()}
   {/if}
 </span>
-
-<style>
-  /* How chosen a folder tab is (`pick`), typed so a choice interpolates the
-     one number and everything drawn from it follows on its clock. Set on
-     the tab and handed down only along the path to the three that read it
-     (the sheet, the rim, the strong ink): inherited by every element under
-     the tab, each frame of a choice restyled all of them, ~50 a tab. */
-  @property --pick {
-    syntax: "<number>";
-    inherits: false;
-    initial-value: 0;
-  }
-  .fold,
-  .sheet,
-  .rim,
-  .hit,
-  .label,
-  .strong {
-    --pick: inherit;
-  }
-  /* The measured box: the hit and whatever trails it. The overlays are
-     aimed at this, so a trailing control sits inside the segment. */
-  /* The tab box makes no stacking context of its own: its contents rise
-     above the overlays (the sheet is z-index 2, a segmented list's hover
-     ghost 1), while anything the box paints behind them stays under both.
-     A folder tab, or the box a host wraps round it, is one stack of its
-     own instead, at its rank (TabsList). */
-  .ff-tab {
-    position: relative;
-    display: flex;
-    align-items: center;
-    flex: 0 1 auto;
-    min-inline-size: 0;
-    block-size: var(--item);
-    border-radius: var(--shape);
-    color: var(--ink-muted);
-
-    /* Only a tab with something after its hit carries end padding. */
-    &:not(:has(.hit:last-child)) {
-      padding-inline-end: calc(var(--px) - 6px);
-    }
-    /* Chosen, or under the list's hover ghost (the kit highlight marks
-       the row it stands under). A tap leaves no ghost behind to ink. */
-    &.selected {
-      color: var(--ink-strong);
-    }
-    @media (hover: hover) {
-      &[data-ghosted] {
-        color: var(--ink-strong);
-      }
-    }
-
-    /* The press tints the whole segment (trailing controls included), not
-       the label's hit alone. A press on a trailing control leaves it be. */
-    &:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
-      --press: var(--surface-pressed);
-      background-color: var(--press);
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: color var(--dur-ghost) var(--ease-out);
-    }
-  }
-  .ff-tab > :global(*) {
-    position: relative;
-    z-index: 3;
-  }
-  /* residual: foreign-dom — the leading icon a caller passes (`icon`). */
-  [data-slot="ff-tab"] :global(.ff-tab-icon) {
-    inline-size: var(--icon);
-    block-size: var(--icon);
-    flex: 0 0 auto;
-  }
-  /* residual: pseudo — the whole segment chooses, not only the label: the
-     hit's area spans the box, end padding included. It sits under the
-     hit's content, and a trailing control, later in the box, stands over
-     it and takes its own presses. The chosen folder sheet's flared foot is
-     the tab's too: the area takes the sheet's outline, square-shouldered,
-     so the foot reaches past the box on each side. The name's strong ink
-     layer draws its words (`data-text`): they are no second copy of the
-     name in the tab's text. */
-  [data-slot="hit"]::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-  }
-  :global([data-variant="folder"])
-    [data-slot="ff-tab"][data-tab-item-selected]
-    [data-hit]::before {
-    inset-inline: calc(-1 * var(--flare));
-    clip-path: shape(
-      from 0 100%,
-      arc to var(--flare) calc(100% - var(--flare)) of var(--flare) ccw,
-      line to var(--flare) 0,
-      line to calc(100% - var(--flare)) 0,
-      line to calc(100% - var(--flare)) calc(100% - var(--flare)),
-      arc to 100% 100% of var(--flare) ccw,
-      close
-    );
-  }
-  [data-text]::before {
-    content: attr(data-text);
-  }
-  /* residual: svg-paint — the folder tab's sheet and rim. A host's rim
-     (PaneTabs: `--rim-ink`, its strength unchosen `--rim-rest` and chosen
-     `--rim-full`) at the strength the tab is chosen at now; none where the
-     host draws none. Under the pointer an unchosen tab lights its own
-     shape in the hover tint (the track's ghost cannot glide between
-     overlapping tabs). The stroke is twice the rim's width, clipped to the
-     shape: the half inside it, at its own width even where a kept shape is
-     stretched to a box that has since moved (its fonts still loading),
-     until it is measured again. The sheet and the hit are named by their own
-     attributes (`data-ff-sheet`, `data-hit`): under a state that changes (the
-     choice, the ghost, a press), Chrome invalidates the elements a selector's
-     subject names, and it keys an attribute selector to the attribute's name
-     alone, so `[data-slot="sheet"]` restyled every `data-slot` in the tab. */
-  [data-slot="fold"] [data-ff-sheet] {
-    fill: color-mix(
-      in oklab,
-      var(--sheet) calc(var(--pick) * 100%),
-      var(--tab-fill, var(--surface-recess-deep))
-    );
-  }
-  @media (hover: hover) {
-    [data-slot="ff-tab"]:global([data-ghosted]):not([data-tab-item-selected])
-      [data-slot="fold"]
-      [data-ff-sheet] {
-      fill: var(--tab-hover, var(--surface-hover));
-    }
-  }
-  [data-slot="ff-tab"]:has(
-      [data-slot="hit"]:active:not(:disabled, [aria-disabled="true"])
-    )
-    [data-slot="fold"]
-    [data-ff-sheet] {
-    fill: var(--press-fill);
-  }
-  [data-slot="fold"] [data-slot="rim"] {
-    opacity: calc(
-      var(--rim-rest, 0) + (var(--rim-full, 0) - var(--rim-rest, 0)) *
-        var(--pick)
-    );
-    filter: drop-shadow(
-      0 0 var(--rim-blur)
-        color-mix(in oklab, var(--rim-ink, transparent) 50%, transparent)
-    );
-
-    @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
-      filter: none;
-    }
-  }
-  [data-slot="fold"] [data-slot="stroke"] {
-    fill: none;
-    stroke-width: calc(var(--rim-w, 1) * 2px);
-    vector-effect: non-scaling-stroke;
-  }
-  [data-slot="fold"] stop {
-    stop-color: var(--rim-ink, transparent);
-  }
-</style>
