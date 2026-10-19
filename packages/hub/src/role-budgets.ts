@@ -245,8 +245,8 @@ import type { Tasks } from "./tasks";
  * `forge_post`). Raised deliberately, by that, for each.
  * 2026-10-19, after it: artifact_read's `verify` (component canvas E1, a
  * design system round asked in a chat), the read's words cut to make room
- * for it: about 5 tokens for each, inside the budgets above (worker 26,818,
- * delegate 9,197, lead 17,774 measured). No raise.
+ * for it: about 5 tokens for each, inside the budgets above (worker 27,178,
+ * delegate 9,557, lead 17,802 measured). No raise.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_180,
