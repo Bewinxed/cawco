@@ -10,9 +10,10 @@
    * whatever fits; until one is tapped the fitting card is the pick.
    *
    * The send makes the project with Caw (its folder on the hub its place until
-   * setup picks the checkout), with the picked template's stages, and opens
-   * its Setup thread with the words as its first message: they fly into
-   * that row, and Caw from where he stands into the thread's seat.
+   * setup picks the checkout), with the picked template's stages, and lands
+   * on the project's page with his panel open on its Setup thread, the words
+   * its first message: they fly into that row, and Caw from where he stands
+   * into the thread's seat.
    */
   import { tick } from "svelte";
   import { barGlass } from "#lib/cawco/bar-glass.svelte.js";
@@ -25,6 +26,7 @@
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { openOnArrival } from "#lib/cawco/project/caw-lead.svelte.js";
   import {
     fitOf,
     nameFrom,
@@ -34,7 +36,6 @@
     type TemplateName,
   } from "#lib/cawco/project/new-project.js";
   import TemplateCards from "#lib/cawco/project/TemplateCards.svelte";
-  import { threadHref } from "#lib/cawco/thread-tabs.js";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
   import { goto } from "$app/navigation";
@@ -149,13 +150,13 @@
       return;
     }
     made = created.id;
+    // It lands on the project's page with his panel open, the Setup thread
+    // in it (its newest and only one): the board and the conversation in
+    // sight together.
+    openOnArrival(created.id);
     // His box carries the project's key before the navigation departs it.
     await tick();
-    await goto(
-      created.setupThread
-        ? threadHref(created.setupThread.id)
-        : `/project/${encodeURIComponent(created.id)}`
-    );
+    await goto(`/project/${encodeURIComponent(created.id)}`);
   }
 </script>
 
@@ -163,7 +164,7 @@
   <title>New project &middot; CawCo</title>
 </svelte:head>
 
-<!-- literal: 72rem, 570px, 40rem, 80px -->
+<!-- literal: 72rem, 80px -->
 <main
   class="mx-auto flex w-full max-w-(--measure) flex-col items-center gap-space-8 px-space-6 pt-(--pad-top) pb-space-8 max-phone:gap-space-6 max-phone:px-space-4 max-phone:pt-space-7 max-phone:pb-space-6"
   style:--measure="72rem"
@@ -191,8 +192,7 @@
     </h1>
     <div
       data-slot="new-page-field"
-      class="relative w-full max-w-(--field-max)"
-      style:--field-max="570px"
+      class="relative w-full max-w-(--c-new-project-field-w)"
       style:block-size="calc({footHeight}px + var(--space-4))"
     >
       <Composer
@@ -213,20 +213,23 @@
         sending={starting}
       />
     </div>
-    <div
-      data-slot="chips"
-      class="kit-chips max-w-(--chips-max) justify-center"
-      style:--chips-max="40rem"
-    >
-      {#each STARTERS as text (text)}
-        <button
-          class="kit-chip touch-hit"
-          onclick={() => starter(text)}
-          type="button"
-        >
-          {text}
-        </button>
-      {/each}
+    <!-- As wide as the field, so the chips stand on its composer's column. -->
+    <div class="relative w-full max-w-(--c-new-project-field-w)">
+      <div
+        data-slot="chips"
+        class="kit-chips px-(--chips-px) max-desk:px-space-3"
+        style:--chips-px="calc((100% - var(--c-composer-w)) / 2)"
+      >
+        {#each STARTERS as text (text)}
+          <button
+            class="kit-chip touch-hit"
+            onclick={() => starter(text)}
+            type="button"
+          >
+            {text}
+          </button>
+        {/each}
+      </div>
     </div>
   </div>
 

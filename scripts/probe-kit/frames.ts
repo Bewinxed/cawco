@@ -520,6 +520,20 @@ export interface MainTask {
 
 /** What a trace says of the page's main thread: its top-level tasks, and the marks made on it. */
 export interface MainThread {
+  /**
+   * What the other renderers' main threads (an out-of-process frame's) ran
+   * between two points of the trace clock (µs): each event's name with its
+   * summed wall time, ms, and its thread time as `<name> (thread)`, and
+   * with `profile` the script functions sampled there as `<fn> (sampled)`,
+   * the most first.
+   */
+  elsewhere: (from: number, to: number) => [string, number][];
+  /**
+   * Each classic script's evaluation (`EvaluateScript`: its compile and its
+   * top-level run), with its address, its span on the trace clock (µs) and
+   * its thread time (`tdur`), ms (`scripts` only; empty otherwise).
+   */
+  evaluated: { at: number; cpu: number; end: number; url: string }[];
   /** Each `performance.mark` made while tracing: its name and when, the trace clock, µs. */
   marks: { at: number; name: string }[];
   /**
@@ -571,6 +585,8 @@ interface TraceEvent {
       stackTrace?: StackFrame[];
       /** An EventDispatch's: the event's type. */
       type?: string;
+      /** An EvaluateScript's: the script's address. */
+      url?: string;
     };
     elementCount?: number;
     /** A Layout's: the box it was laid out from, as four corners (x, y pairs). */
@@ -678,7 +694,8 @@ function samplesOf(
  * timeline's own category. `restyles`: that, and why: every invalidation
  * that asked for them, which the engine does more work to record while it
  * is traced (a timed reading takes `passes` at most). `profile`: V8
- * samples the main thread's script as well (`selfTime`).
+ * samples the main thread's script as well (`selfTime`). `scripts`: each
+ * classic script's evaluation, from the same category (`evaluated`).
  */
 export async function traceMain(
   page: Page,
@@ -687,7 +704,13 @@ export async function traceMain(
     passes = false,
     profile = false,
     restyles = false,
-  }: { passes?: boolean; profile?: boolean; restyles?: boolean } = {}
+    scripts = false,
+  }: {
+    passes?: boolean;
+    profile?: boolean;
+    restyles?: boolean;
+    scripts?: boolean;
+  } = {}
 ): Promise<MainThread> {
   const withPasses = passes || restyles;
   const cdp = await page.context().newCDPSession(page);
@@ -707,6 +730,7 @@ export async function traceMain(
         ...(withPasses
           ? ["devtools.timeline", "disabled-by-default-devtools.timeline.stack"]
           : []),
+        ...(scripts && !withPasses ? ["devtools.timeline"] : []),
         ...(restyles
           ? ["disabled-by-default-devtools.timeline.invalidationTracking"]
           : []),
@@ -729,6 +753,50 @@ export async function traceMain(
     (event) =>
       event.ph === "X" && event.pid === first.pid && event.tid === first.tid
   );
+  /** Every other renderer's main thread, by its `thread_name` metadata. */
+  const otherMains = new Set(
+    events
+      .filter(
+        (event) =>
+          event.ph === "M" &&
+          event.name === "thread_name" &&
+          (event.args as { name?: string } | undefined)?.name ===
+            "CrRendererMain" &&
+          !(event.pid === first.pid && event.tid === first.tid)
+      )
+      .map((event) => `${event.pid}:${event.tid}`)
+  );
+  /** The other renderers' samples (`profile` only), each its time, function and length. */
+  const otherSamples = profile
+    ? [...otherMains].flatMap((key) => {
+        const [pid, tid] = key.split(":").map(Number);
+        return samplesOf(events, pid, tid);
+      })
+    : [];
+  const elsewhere = (from: number, to: number): [string, number][] => {
+    const counted = new Map<string, number>();
+    const add = (name: string, ms: number) =>
+      counted.set(name, (counted.get(name) ?? 0) + ms);
+    for (const one of events) {
+      if (
+        one.ph === "X" &&
+        one.ts >= from &&
+        one.ts < to &&
+        otherMains.has(`${one.pid}:${one.tid}`)
+      ) {
+        add(one.name, (one.dur ?? 0) / 1000);
+        // Its thread's own clock beside its wall time: what it ran, against what it waited.
+        add(`${one.name} (thread)`, (one.tdur ?? 0) / 1000);
+      }
+    }
+    // The script functions they ran too, by sampled self time.
+    for (const { at, fn, us } of otherSamples) {
+      if (at >= from && at < to && fn !== "(idle)") {
+        add(`${fn} (sampled)`, us / 1000);
+      }
+    }
+    return [...counted].filter(([, ms]) => ms >= 1).sort((a, b) => b[1] - a[1]);
+  };
   const recalcs = main.filter((event) => event.name === "UpdateLayoutTree");
   const layouts = main.filter((event) => event.name === "Layout");
   /** The frame's phases besides style and layout (`MainTask.rendering`). */
@@ -946,6 +1014,15 @@ export async function traceMain(
           scheduled: [],
         };
   return {
+    elsewhere,
+    evaluated: main
+      .filter((event) => event.name === "EvaluateScript")
+      .map((event) => ({
+        at: event.ts,
+        end: event.ts + (event.dur ?? 0),
+        cpu: (event.tdur ?? event.dur ?? 0) / 1000,
+        url: event.args?.data?.url ?? "",
+      })),
     marks: marks.map((event) => ({ at: event.ts, name: event.name })),
     selfTime,
     tasks: main

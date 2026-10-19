@@ -47,6 +47,14 @@ const ARIA_STATIC = [
   "required",
   "selected",
 ];
+/**
+ * State pairs a component reads only through a variant's name: written after
+ * the source rule that named the selector was converted away (main's
+ * NeedsCard `.row[data-kind="tailnet"] > .want`, read as `group-kind-tailnet/row:`).
+ */
+const DATA_STATIC: { attr: string; value: string }[] = [
+  { attr: "kind", value: "tailnet" },
+];
 
 const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that hovers.
    Tailwind's own asks (hover: hover) alone. group-hover: and peer-hover:
@@ -277,6 +285,9 @@ const add = (pair: Pair) => {
 };
 for (const attr of ARIA_STATIC) {
   add({ kind: "aria", attr, value: "false" });
+}
+for (const { attr, value } of DATA_STATIC) {
+  add({ kind: "data", attr, value });
 }
 const [written, read] = await Promise.all([writtenPairs(), treePairs()]);
 for (const pair of [...written, ...read]) {

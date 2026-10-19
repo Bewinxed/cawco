@@ -144,13 +144,13 @@
       <!-- literal: 8px -->
       <span
         data-slot="name"
-        class="flex min-w-0 items-center gap-(--name-gap) type-label text-ink-strong data-mono:font-(family-name:--font-mono)"
+        class="flex min-w-0 items-center gap-(--name-gap) type-label text-ink-strong"
         data-mono={mono || undefined}
         style:--name-gap="8px"
       >
         {#if href}
           <a
-            class="truncate text-inherit no-underline outline-off"
+            class="truncate text-inherit no-underline outline-off in-data-mono:font-(family-name:--font-mono)"
             data-link
             data-share="title:{href}"
             {href}
@@ -159,7 +159,7 @@
         {:else}
           <span
             data-slot="section-row-label"
-            class="truncate text-inherit no-underline outline-off"
+            class="truncate text-inherit no-underline outline-off in-data-mono:font-(family-name:--font-mono)"
             {@attach land(() => (share ? `title:${share}` : undefined), {
               uniform: true,
             })}>{name}</span

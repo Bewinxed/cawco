@@ -25,7 +25,7 @@ public final class FleetConfig {
     public private(set) var rulesCount: Int?
     public private(set) var hooksCount: Int?
     public private(set) var typesCount: Int?
-    /// The catalog's tools a person sets a policy for (`!dependencyOnly`).
+    /// The catalog's tools, each a person sets a policy for.
     public private(set) var toolsCount: Int?
     @ObservationIgnored private weak var hub: HubConnection?
 
@@ -43,7 +43,7 @@ public final class FleetConfig {
         async let rules = try? hub.api.rules.list().ok.body.json.rules.count
         async let hooks = try? hub.api.fleet.hooks().ok.body.json.hooks.count
         async let types = try? hub.api.delegates.types().ok.body.json.types.count
-        async let tools = try? hub.api.tools.list().ok.body.json.catalog.filter { $0.dependencyOnly != true }.count
+        async let tools = try? hub.api.tools.list().ok.body.json.catalog.count
         do {
             snapshot = try await hub.api.fleet.read().ok.body.json
             problem = nil

@@ -31,7 +31,7 @@ import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import { bareDrag, internalData } from "../internal-drag";
 import { depart } from "../motion/share.svelte";
 import { workingSet } from "../working-set.svelte";
-import { workspace } from "./workspace.svelte";
+import { type AskedContext, workspace } from "./workspace.svelte";
 
 /** What rides a drag. Never the transcript — only which conversation it is. */
 export interface SessionDrag {
@@ -245,11 +245,7 @@ export function dragSession(
   node: HTMLElement,
   params: {
     sessionId: string;
-    ctx?: () => {
-      machine?: string | null;
-      cwd?: string;
-      harness?: string;
-    } | null;
+    ctx?: () => AskedContext | null;
   }
 ) {
   let current = params;

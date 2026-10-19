@@ -9,15 +9,7 @@
  * outlives every sync this daemon runs.
  */
 
-import {
-  chmod,
-  readdir,
-  realpath,
-  rename,
-  rm,
-  rmdir,
-  stat,
-} from "node:fs/promises";
+import { chmod, readdir, realpath, rm, rmdir, stat } from "node:fs/promises";
 import { basename, delimiter, dirname, isAbsolute, join } from "node:path";
 import type {
   CliInstall,
@@ -25,6 +17,7 @@ import type {
   DiscoveredMcp,
   DiscoveredSkill,
   FleetConfig,
+  FleetFaultCause,
   FleetHoldings,
   FleetHook,
   FleetItemState,
@@ -40,6 +33,7 @@ import type {
   FleetToolchain,
   HookEvent,
   HookHandler,
+  MachineFleetConfig,
   MachineHookScript,
   MachineMemoryDoc,
   MachineMemorySet,
@@ -52,6 +46,7 @@ import {
   accountIds,
   claudeHomeJson,
   claudeSkillsDir,
+  placedMemoryDir,
   placedSkillsDir,
   projectClaudeDir,
   treeStoreOf,
@@ -65,12 +60,12 @@ import { excludeFromCheckout } from "./checkout-exclude";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
 import {
   convergeDeniedTools,
+  fleetDenialsSynced,
   machineDenyList,
-  resolvedFleetDenials,
+  readFleetDenials,
 } from "./denied-tools";
 import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
-import { placedMemoryDir } from "./placed-memory";
 import { noRepositoryAt } from "./stand-ins";
 import { claudeHomeEnv, toolEnv, toolPath } from "./tools";
 import {
@@ -121,14 +116,6 @@ const vendorName = (marketplace: string): string => `cawco-${marketplace}`;
 const vendorDir = (marketplace: string): string =>
   join(VENDOR_ROOT, marketplace);
 
-/**
- * Before one vendored marketplace per fleet marketplace, every vendored
- * plugin went into this one, as `<plugin>@cawco`, a folder per plugin name.
- * A sync moves what it finds there to the new ids ({@link moveLegacyVendored}).
- */
-const LEGACY_VENDOR_DIR = userLayerPath("cawco-marketplace");
-const LEGACY_VENDOR_NAME = "cawco";
-
 /** The user-scope memory every session on this machine reads (NEW.md §11). */
 const MEMORY_PATH = userLayerPath("CLAUDE.md");
 
@@ -174,9 +161,9 @@ interface Sidecar {
   /** The fleet's "CawCo's to-dos" choice, synced from `supervisor_config.cawco_todos`. */
   cawcoTodos?: boolean;
   /**
-   * The fleet's denied-tools list, synced from `supervisor_config.denied_tools`.
-   * Absent from a sidecar written before this field existed, which is what has
-   * {@link resolvedFleetDenials} fall back to compiled constants.
+   * The fleet's denied-tools list, synced from `fleet_denied_tools`. None
+   * before the machine's first sync: the machine has not heard the list,
+   * and {@link readFleetDenials} says so.
    */
   deniedTools?: string[];
   /**
@@ -189,10 +176,10 @@ interface Sidecar {
   hooks: Record<string, ManagedHook>;
   /**
    * The fleet marketplaces this machine was told live on the hub's machine
-   * only ({@link FleetConfig.hubOnlyMarketplaces}). Nothing is linked for
+   * only ({@link MachineFleetConfig.hubOnlyMarketplaces}). Nothing is linked for
    * them, so a status reads their rows off their plugins, as the sync did.
    */
-  hubOnlyMarketplaces?: string[];
+  hubOnlyMarketplaces: string[];
   /**
    * The marketplaces cawco linked, by their one name: the `name` of their
    * own `marketplace.json`, which is the fleet row's (the hub links under it)
@@ -209,11 +196,6 @@ interface Sidecar {
    * holds up itself and leaves the rest of the set converging.
    */
   memoryDocs: Record<string, string>;
-  /**
-   * The model-memory SessionStart command an earlier cawco registered, until
-   * it is taken back ({@link retireMemoryHook}); only this one is removed.
-   */
-  memoryHook?: string;
   /**
    * A project's MCP servers cawco placed here, by `<name>@<place id>`: the
    * folder whose `.claude.json` map it went into, and the name, so a place
@@ -288,54 +270,27 @@ const writeJson = (path: string, value: unknown): Promise<void> =>
   writeAtomic(path, JSON.stringify(value, null, 2));
 
 /**
- * The names cawco linked, out of a sidecar from before a marketplace had one
- * name. That one kept `{ name, linkedAs }`: the hub's name and the CLI's.
- * What cawco linked is the CLI's, and the hub now links under that same name.
+ * What cawco put here last time; unreadable is the same as never written,
+ * and a machine that never synced manages nothing.
  */
-const linkedNames = (
-  stored: (string | { linkedAs: string })[] | undefined
-): string[] =>
-  (stored ?? []).map((one) => (typeof one === "string" ? one : one.linkedAs));
-
-/** What cawco put here last time; unreadable is the same as never written. */
 const readSidecar = async (): Promise<Sidecar> => {
-  // Typed to admit the two-name shape too: a sidecar on disk may predate the
-  // one name.
-  const stored = await readJson<
-    Partial<Omit<Sidecar, "marketplaces">> & {
-      marketplaces?: (string | { linkedAs: string })[];
-    }
-  >(SIDECAR);
+  const stored = await readJson<Partial<Sidecar>>(SIDECAR);
   return {
     mcp: stored?.mcp ?? [],
-    marketplaces: linkedNames(stored?.marketplaces),
+    marketplaces: stored?.marketplaces ?? [],
     hubOnlyMarketplaces: stored?.hubOnlyMarketplaces ?? [],
     plugins: stored?.plugins ?? [],
     // Read back like every other record: without it each sync starts from an
     // empty one, so it reinstalls every vendored plugin and never uninstalls a
     // plugin the fleet dropped.
-    // Keyed by plugin name alone before each marketplace had its own vendored
-    // copy; those records name `<plugin>@cawco` installs, which the next sync
-    // moves (moveLegacyVendored) and records under their fleet ids.
-    vendoredPlugins: Object.fromEntries(
-      Object.entries(stored?.vendoredPlugins ?? {}).filter(([id]) =>
-        id.includes("@")
-      )
-    ),
-    // A sidecar written before skills existed names none, which is the truth.
+    vendoredPlugins: stored?.vendoredPlugins ?? {},
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),
-    // Likewise one written before the memory was a set: no linked document on
-    // this machine is cawco's, so none of them is cawco's to take away.
     memoryDocs: stored?.memoryDocs ?? {},
-    ...(stored?.memoryHook ? { memoryHook: stored.memoryHook } : {}),
-    // A sidecar written before denied-tools syncing names none, which is what
-    // has resolvedFleetDenials fall back to the compiled constants.
+    // None until the first sync: the machine has not heard the list.
     ...(stored?.deniedTools ? { deniedTools: stored.deniedTools } : {}),
     ...(stored?.cawcoTodos ? { cawcoTodos: true } : {}),
-    // A sidecar written before hooks existed manages none, which is the truth.
     hooks: stored?.hooks ?? {},
-    // Likewise one written before a project's rows were placed: none was.
     placedMcp: stored?.placedMcp ?? {},
     placedMemory: stored?.placedMemory ?? {},
     placedSkills: stored?.placedSkills ?? {},
@@ -344,10 +299,22 @@ const readSidecar = async (): Promise<Sidecar> => {
 
 type ClaudeJson = Record<string, unknown>;
 
+/** Why a write did not converge: its cause, named here, and its words. */
+interface Problem {
+  cause: FleetFaultCause;
+  detail: string;
+}
+
+/** A row that failed for `problem`. */
+const failedOf = (problem: Problem): FleetItemState => ({
+  state: "failed",
+  ...problem,
+});
+
 /** The file, or why it could not be read. Missing is a machine with nothing in it. */
 const readClaudeJson = async (
   path = CLAUDE_JSON
-): Promise<{ ok: true; root: ClaudeJson } | { ok: false; detail: string }> => {
+): Promise<{ ok: true; root: ClaudeJson } | ({ ok: false } & Problem)> => {
   const file = Bun.file(path);
   if (!(await file.exists())) {
     return { ok: true, root: {} };
@@ -357,6 +324,7 @@ const readClaudeJson = async (
   } catch (error) {
     return {
       ok: false,
+      cause: "unparsable",
       detail: `could not parse ${path}: ${tail(said(error))}`,
     };
   }
@@ -376,12 +344,12 @@ const mergeFleetMcp = async (
   path: string,
   wanted: FleetMcpServer[],
   managed: string[]
-): Promise<string | undefined> => {
+): Promise<Problem | undefined> => {
   const file = await readClaudeJson(path);
   // Nothing is written over a file that cannot be read: the rest of it is the
   // user's own, and a rewrite from an empty root would take it with them.
   if (!file.ok) {
-    return file.detail;
+    return { cause: file.cause, detail: file.detail };
   }
   const servers = mcpServersOf(file.root);
   for (const server of wanted) {
@@ -397,7 +365,10 @@ const mergeFleetMcp = async (
       await writeJson(path, { ...file.root, mcpServers: servers });
     }
   } catch (error) {
-    return `could not write ${path}: ${tail(said(error))}`;
+    return {
+      cause: "unwritable",
+      detail: `could not write ${path}: ${tail(said(error))}`,
+    };
   }
   return undefined;
 };
@@ -416,7 +387,7 @@ const syncMcp = async (
   const problem = await mergeFleetMcp(CLAUDE_JSON, wanted, managed);
   if (problem) {
     for (const server of wanted) {
-      report[server.name] = { state: "failed", detail: problem };
+      report[server.name] = failedOf(problem);
     }
     return managed;
   }
@@ -424,7 +395,7 @@ const syncMcp = async (
     // biome-ignore lint/performance/noAwaitInLoops: one account's file at a time, each written whole
     const failed = await mergeFleetMcp(path, wanted, managed);
     if (failed) {
-      console.warn(`[fleet] ${failed}`);
+      console.warn(`[fleet] ${failed.detail}`);
     }
   }
 
@@ -452,10 +423,10 @@ const mergePlacedMcp = async (
   path: string,
   wanted: FleetMcpServer[],
   managed: Sidecar["placedMcp"]
-): Promise<string | undefined> => {
+): Promise<Problem | undefined> => {
   const file = await readClaudeJson(path);
   if (!file.ok) {
-    return file.detail;
+    return { cause: file.cause, detail: file.detail };
   }
   const before = JSON.stringify(file.root.projects ?? {});
   const projects = {
@@ -486,7 +457,10 @@ const mergePlacedMcp = async (
   try {
     await writeJson(path, { ...file.root, projects });
   } catch (error) {
-    return `could not write ${path}: ${tail(said(error))}`;
+    return {
+      cause: "unwritable",
+      detail: `could not write ${path}: ${tail(said(error))}`,
+    };
   }
   return undefined;
 };
@@ -508,7 +482,7 @@ const syncPlacedMcp = async (
   const problem = await mergePlacedMcp(CLAUDE_JSON, wanted, managed);
   if (problem) {
     for (const server of wanted) {
-      report[placedKey(server)] = { state: "failed", detail: problem };
+      report[placedKey(server)] = failedOf(problem);
     }
     return managed;
   }
@@ -516,7 +490,7 @@ const syncPlacedMcp = async (
     // biome-ignore lint/performance/noAwaitInLoops: one account's file at a time, each written whole
     const failed = await mergePlacedMcp(path, wanted, managed);
     if (failed) {
-      console.warn(`[fleet] ${failed}`);
+      console.warn(`[fleet] ${failed.detail}`);
     }
   }
   const placed: Sidecar["placedMcp"] = {};
@@ -670,25 +644,32 @@ export const machineToolchain = async (
 };
 
 interface Ran {
+  /** Its exit status; null when a signal ended it or it did not answer in time. */
+  code: number | null;
   /** The tail of what it said, which is what a failure's `detail` carries. */
   output: string;
+  /** It did not answer within {@link CLI_TIMEOUT_MS}, and was killed. */
+  timedOut?: true;
 }
+
+/** A row a `claude plugin …` run did not converge: its cause by how the run ended, and its words. */
+const ranFailed = (ran: Ran): FleetItemState => ({
+  state: "failed",
+  cause: ran.timedOut ? "timed-out" : "unknown",
+  detail: ran.output,
+});
 
 /**
  * One `claude plugin …`, with the daemon's environment and the PATH it can
  * install into. Killed rather than left running if it hangs: a marketplace
  * behind a dead network would otherwise hold the whole sync open forever.
  */
-const runClaude = async (
-  bin: string,
-  args: string[],
-  extraEnv?: Record<string, string>
-): Promise<Ran> => {
+const runClaude = async (bin: string, args: string[]): Promise<Ran> => {
   const ran = await readWithin(CLI_TIMEOUT_MS, async (signal) => {
     const child = Bun.spawn([bin, ...args], {
       // `$HOME/.claude`, the dir every path in this file names, whatever
       // config dir the daemon itself was started in.
-      env: { ...claudeHomeEnv(), ...extraEnv },
+      env: claudeHomeEnv(),
       stdout: "pipe",
       stderr: "pipe",
       signal,
@@ -699,66 +680,24 @@ const runClaude = async (
     ]);
     const code = await child.exited;
     if (child.signalCode) {
-      return { output: `was ended by ${child.signalCode}` };
+      return { code: null, output: `was ended by ${child.signalCode}` };
     }
-    return { output: tail(stderr) || tail(stdout) || `exited ${code}` };
+    return { code, output: tail(stderr) || tail(stdout) || `exited ${code}` };
   });
   switch (ran.kind) {
     case "answered":
       return ran.value;
     case "unanswered":
-      return { output: `did not answer within ${CLI_TIMEOUT_MS / 1000}s` };
+      return {
+        code: null,
+        output: `did not answer within ${CLI_TIMEOUT_MS / 1000}s`,
+        timedOut: true,
+      };
     default: {
       const unhandled: never = ran;
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
   }
-};
-
-/**
- * A clone that fell back to ssh and had nothing to authenticate with.
- *
- * The marketplaces and plugins a fleet carries are public repositories, and a
- * public repository needs no account to clone. But a plugin manifest names its
- * source as `{ "source": "github", "repo": "owner/name" }`, and the CLI turns
- * that into an ssh remote on a machine whose `gh` is not logged in — so a
- * machine with an expired token cannot install a plugin that anyone on the
- * internet can `git clone`. That is the whole failure, and it is not the
- * operator's to fix with a login.
- */
-const SSH_REFUSED =
-  /Permission denied \(publickey\)|Could not read from remote repository|Host key verification failed/i;
-
-/**
- * Git config, passed to the child alone, that sends github over anonymous
- * https. `GIT_CONFIG_COUNT` is git's own environment form (git ≥ 2.31), so it
- * reaches every git the CLI shells out to and NOTHING else: not the machine's
- * `~/.gitconfig`, not this daemon, not the operator's own clones.
- */
-const HTTPS_GITHUB: Record<string, string> = {
-  GIT_CONFIG_COUNT: "2",
-  GIT_CONFIG_KEY_0: "url.https://github.com/.insteadOf",
-  GIT_CONFIG_VALUE_0: "git@github.com:",
-  GIT_CONFIG_KEY_1: "url.https://github.com/.insteadOf",
-  GIT_CONFIG_VALUE_1: "ssh://git@github.com/",
-};
-
-/**
- * A `claude plugin …` that clones, retried over https if ssh refused it.
- *
- * The retry is second, not first, on purpose: a fleet MAY legitimately carry a
- * private marketplace, and on a machine that reaches it with an ssh key the
- * first attempt is the one that works. Rewriting up front would break exactly
- * that machine. So the normal path is unchanged, and the rewrite is reached
- * only by the failure it answers — a public repo refused for want of an
- * account.
- */
-const runClaudeCloning = async (bin: string, args: string[]): Promise<Ran> => {
-  const first = await runClaude(bin, args);
-  if (!SSH_REFUSED.test(first.output)) {
-    return first;
-  }
-  return await runClaude(bin, args, HTTPS_GITHUB);
 };
 
 /**
@@ -858,8 +797,8 @@ const vendoredIdOf = (id: string): string =>
 /**
  * Why a plugin of a hub-only marketplace is not on this machine. The bytes the
  * hub carries are its only way here: the marketplace is a directory on the
- * hub's machine, which no command run here can link. The dashboard names the
- * fault by this sentence's last clause (fleet-faults.ts `HUB_ONLY`).
+ * hub's machine, which no command run here can link. Its row's cause is
+ * `hub-only`.
  */
 const hubOnlyMiss = (marketplace: string, hubError: string | undefined) =>
   `${hubError ? `the hub could not carry it (${hubError})` : "the hub has not resolved it yet"}, and its marketplace ${marketplace} is a directory on the hub's machine`;
@@ -883,6 +822,7 @@ const hubOnlyStates = (
         ? { state: "applied" }
         : {
             state: "failed",
+            cause: "hub-only",
             detail: missing
               .map(([id, item]) => `${id}: ${item.detail ?? "not installed"}`)
               .join("; "),
@@ -919,13 +859,13 @@ type PluginRecords = Pick<
  * idempotent, but neither is free, so what the CLI already lists is left alone.
  */
 const syncPlugins = async (
-  config: FleetConfig,
+  config: MachineFleetConfig,
   managed: Sidecar,
   report: FleetSyncReport
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: links every marketplace and installs every plugin the config wants, reporting each one's outcome
 ): Promise<PluginRecords> => {
   const wantedPlugins = config.plugins.filter((plugin) => plugin.enabled);
-  const hubOnly = config.hubOnlyMarketplaces ?? [];
+  const hubOnly = config.hubOnlyMarketplaces;
   // The Claude Code sessions run: its plugins are the ones they load, and its
   // `claude plugin …` commands start it, so through the version gate.
   let bin: string;
@@ -935,11 +875,16 @@ const syncPlugins = async (
     if (!(error instanceof ClaudeRefused)) {
       throw error;
     }
+    const refused: FleetItemState = {
+      state: "failed",
+      cause: error.reason === "version" ? "cli-too-old" : "cli-missing",
+      detail: error.message,
+    };
     for (const { name } of config.marketplaces) {
-      report.marketplaces[name] = { state: "failed", detail: error.message };
+      report.marketplaces[name] = refused;
     }
     for (const { id } of wantedPlugins) {
-      report.plugins[id] = { state: "failed", detail: error.message };
+      report.plugins[id] = refused;
     }
     return {
       marketplaces: managed.marketplaces,
@@ -968,12 +913,7 @@ const syncPlugins = async (
       report.marketplaces[name] = { state: "applied" };
       continue;
     }
-    const ran = await runClaudeCloning(bin, [
-      "plugin",
-      "marketplace",
-      "add",
-      source,
-    ]);
+    const ran = await runClaude(bin, ["plugin", "marketplace", "add", source]);
     const linked = await linkedMarketplaces();
     if (linked[name]) {
       marketplaces.push(name);
@@ -987,12 +927,13 @@ const syncPlugins = async (
     if (other) {
       registered.add(other);
     }
-    report.marketplaces[name] = {
-      state: "failed",
-      detail: other
-        ? `${source} now calls itself ${other} in its marketplace.json, not ${name}`
-        : ran.output,
-    };
+    report.marketplaces[name] = other
+      ? {
+          state: "failed",
+          cause: "unknown",
+          detail: `${source} now calls itself ${other} in its marketplace.json, not ${name}`,
+        }
+      : ranFailed(ran);
   }
 
   // A hub-only marketplace cawco once linked here is unlinked like a removed
@@ -1006,14 +947,14 @@ const syncPlugins = async (
     // biome-ignore lint/performance/noAwaitInLoops: `claude plugin marketplace remove` mutates the CLI's shared known_marketplaces.json; concurrent runs would race
     const ran = await runClaude(bin, ["plugin", "marketplace", "remove", name]);
     report.marketplaces[name] = (await isLinked(name))
-      ? { state: "failed", detail: ran.output }
+      ? ranFailed(ran)
       : { state: "removed" };
   }
 
   // Whatever the hub resolved for itself is installed from the bytes it sent;
   // only what it could NOT resolve is left for the CLI to go and fetch, which
   // is the path that needs this machine to reach github on its own account.
-  const payloads = config.pluginPayloads ?? [];
+  const payloads = config.pluginPayloads;
   const vendored = await syncVendoredPlugins(
     bin,
     payloads,
@@ -1032,6 +973,7 @@ const syncPlugins = async (
     if (hubOnly.includes(marketplace)) {
       report.plugins[id] = {
         state: "failed",
+        cause: "hub-only",
         detail: hubOnlyMiss(marketplace, error),
       };
       continue;
@@ -1041,6 +983,7 @@ const syncPlugins = async (
     if (!linked[marketplace]) {
       report.plugins[id] = {
         state: "failed",
+        cause: "marketplace-unlinked",
         detail: `marketplace ${marketplace} is not linked`,
       };
       continue;
@@ -1050,7 +993,7 @@ const syncPlugins = async (
       report.plugins[id] = { state: "applied" };
       continue;
     }
-    const ran = await runClaudeCloning(bin, [
+    const ran = await runClaude(bin, [
       "plugin",
       "install",
       id,
@@ -1059,7 +1002,7 @@ const syncPlugins = async (
     ]);
     report.plugins[id] = (await isInstalled(id))
       ? { state: "applied" }
-      : { state: "failed", detail: ran.output };
+      : ranFailed(ran);
   }
 
   const plugins = wantedPlugins.map(({ id }) => id);
@@ -1412,84 +1355,6 @@ const readVendoredPlugins = async (): Promise<Record<string, string>> => {
   return held;
 };
 
-/** `~/.claude/plugins/data/<id>`: the id with every byte outside `a-zA-Z0-9_-` as `-` (plugins-reference). */
-const pluginDataDir = (id: string): string =>
-  join(PLUGINS_DIR, "data", id.replace(/[^a-zA-Z0-9_-]/g, "-"));
-
-/**
- * Moves every `<plugin>@cawco` install, from when all vendored plugins shared
- * one marketplace, to the id it has now, `<plugin>@cawco-<marketplace>`. The
- * old one is uninstalled keeping its data (`--keep-data`), and its data folder
- * moves to the new id's; one the fleet no longer carries is just uninstalled.
- * Then the shared marketplace is unlinked and its folder goes. Answers the new
- * ids whose old one the user had disabled, for the install to leave disabled.
- * A name two fleet marketplaces carry goes to the first; the other installs
- * fresh, as it never could before.
- */
-const moveLegacyVendored = async (
-  bin: string,
-  payloads: readonly FleetPluginPayload[]
-): Promise<Set<string>> => {
-  const disabled = new Set<string>();
-  const installed =
-    (await readJson<InstalledPlugins>(INSTALLED_PLUGINS))?.plugins ?? {};
-  const legacy = Object.entries(installed).flatMap(([id, entries]) =>
-    marketplaceOf(id) === LEGACY_VENDOR_NAME &&
-    entries.some((entry) => entry.scope === "user")
-      ? [id]
-      : []
-  );
-  const enabled =
-    (
-      await readJson<{ enabledPlugins?: Record<string, unknown> }>(
-        SETTINGS_PATH
-      )
-    )?.enabledPlugins ?? {};
-  for (const old of legacy) {
-    const heir = payloads.find(({ name }) => name === pluginNameOf(old));
-    // biome-ignore lint/performance/noAwaitInLoops: `claude plugin uninstall` mutates the CLI's shared installed_plugins.json; concurrent runs would race
-    await runClaude(bin, [
-      "plugin",
-      "uninstall",
-      old,
-      "--scope",
-      "user",
-      "--keep-data",
-      "-y",
-    ]);
-    if (!heir) {
-      await rm(pluginDataDir(old), { recursive: true, force: true });
-      console.log(`[fleet] ${old}: uninstalled, the fleet carries it no more`);
-      continue;
-    }
-    const next = vendoredIdOf(payloadId(heir));
-    const from = pluginDataDir(old);
-    const to = pluginDataDir(next);
-    if ((await dirExists(from)) && !(await dirExists(to))) {
-      await rename(from, to);
-    }
-    if (enabled[old] === false) {
-      disabled.add(next);
-    }
-    console.log(
-      `[fleet] ${old} moved to ${next}${enabled[old] === false ? ", disabled as it was" : ""}`
-    );
-  }
-  if (await linkedEntry(LEGACY_VENDOR_NAME)) {
-    await runClaude(bin, [
-      "plugin",
-      "marketplace",
-      "remove",
-      LEGACY_VENDOR_NAME,
-    ]);
-    console.log(
-      `[fleet] the shared ${LEGACY_VENDOR_NAME} marketplace unlinked`
-    );
-  }
-  await rm(LEGACY_VENDOR_DIR, { recursive: true, force: true });
-  return disabled;
-};
-
 /**
  * What claude's copy of the fleet holds on this disk now: the skills cawco
  * wrote under `~/.claude/skills`, and the plugins in the vendored marketplace.
@@ -1569,8 +1434,6 @@ const syncVendoredPlugins = async (
     }
   }
 
-  const disabled = await moveLegacyVendored(bin, payloads);
-
   for (const { id } of wanted) {
     const plugin = byId.get(id);
     if (!plugin) {
@@ -1583,6 +1446,7 @@ const syncVendoredPlugins = async (
       // next sync's read finds it missing and carries the bytes.
       report[id] = {
         state: "failed",
+        cause: "missing-bytes",
         detail: "the hub sent no files for this hash",
       };
       continue;
@@ -1603,21 +1467,10 @@ const syncVendoredPlugins = async (
 
     if (!(already || (await isInstalled(vendoredId)))) {
       // Left unmanaged so the next sync writes and installs it again.
-      report[id] = {
-        state: "failed",
-        detail: ran?.output ?? "install did not land",
-      };
+      report[id] = ran
+        ? ranFailed(ran)
+        : { state: "failed", cause: "absent", detail: "install did not land" };
       continue;
-    }
-    // Moved from a `<plugin>@cawco` the user had turned off: off it stays.
-    if (ran && disabled.has(vendoredId)) {
-      await runClaude(bin, [
-        "plugin",
-        "disable",
-        vendoredId,
-        "--scope",
-        "user",
-      ]);
     }
 
     // The copy this one replaces. A machine that installed the plugin the old
@@ -1692,11 +1545,19 @@ const syncSkillFiles = async (
       // biome-ignore lint/performance/noAwaitInLoops: ownership is checked before this skill is written or claimed.
       const collision = await workflowSkillCollision(SKILLS_DIR, skill);
       if (collision) {
-        report[skill.name] = { state: "failed", detail: collision };
+        report[skill.name] = {
+          state: "failed",
+          cause: "unknown",
+          detail: collision,
+        };
         continue;
       }
     } catch (error) {
-      report[skill.name] = { state: "failed", detail: said(error) };
+      report[skill.name] = {
+        state: "failed",
+        cause: "unknown",
+        detail: said(error),
+      };
       continue;
     }
     if (
@@ -1717,7 +1578,7 @@ const syncSkillFiles = async (
     const drift = skillDrift(held[skill.name], managed[skill.name], skill.hash);
     if (drift && !skill.force) {
       written[skill.name] = managed[skill.name];
-      report[skill.name] = { state: "failed", detail: drift };
+      report[skill.name] = { state: "failed", cause: "drifted", detail: drift };
       continue;
     }
 
@@ -1731,6 +1592,7 @@ const syncSkillFiles = async (
       }
       report[skill.name] = {
         state: "failed",
+        cause: "missing-bytes",
         detail: "the hub sent no files for this hash",
       };
       continue;
@@ -1744,6 +1606,7 @@ const syncSkillFiles = async (
       }
       report[skill.name] = {
         state: "failed",
+        cause: "unsafe-path",
         detail: `unsafe path ${unsafe.path}`,
       };
       continue;
@@ -1760,7 +1623,11 @@ const syncSkillFiles = async (
       // whole trees), so the name stays managed — under a hash nothing
       // matches, which is what has the next sync write it again.
       written[skill.name] = "";
-      report[skill.name] = { state: "failed", detail: tail(said(error)) };
+      report[skill.name] = {
+        state: "failed",
+        cause: "unwritable",
+        detail: tail(said(error)),
+      };
     }
   }
 
@@ -1789,7 +1656,11 @@ const syncSkillFiles = async (
       report[name] = { state: "removed" };
     } catch (error) {
       written[name] = managed[name];
-      report[name] = { state: "failed", detail: said(error) };
+      report[name] = {
+        state: "failed",
+        cause: "unwritable",
+        detail: said(error),
+      };
     }
   }
   return written;
@@ -1798,7 +1669,7 @@ const syncSkillFiles = async (
 /**
  * Whether `cwd` is a delegate workspace's clone that is no git clone any
  * more (stand-ins.ts `noRepositoryAt`): one deleted by hand, whose
- * workspace's archive takes the folder away. A project lead's place is a
+ * workspace's archive takes the folder away. A place is a
  * plain folder by design and no delegate's (`cloneHolding` passes over it).
  * A folder inside a workspace whose records are damaged is a workspace's too.
  */
@@ -1827,6 +1698,7 @@ const placeSkill = async (
   if (!(await dirExists(cwd))) {
     report[key] = {
       state: "failed",
+      cause: "no-checkout",
       detail: `${cwd} is not on this machine`,
     };
     return recorded;
@@ -1834,6 +1706,7 @@ const placeSkill = async (
   if (await deletedClone(cwd)) {
     report[key] = {
       state: "failed",
+      cause: "no-checkout",
       detail: `${cwd} is a delegate workspace whose clone was deleted, so nothing is placed there; archiving the workspace takes the folder away`,
     };
     return recorded;
@@ -1848,21 +1721,33 @@ const placeSkill = async (
   if (disk !== undefined && !recorded) {
     report[key] = {
       state: "failed",
+      cause: "unknown",
       detail: `${dir} is the folder's own skill; cawco leaves it as it is`,
     };
     return recorded;
   }
   const drift = skillDrift(disk, recorded, skill.hash);
   if (drift && !skill.force) {
-    report[key] = { state: "failed", detail: `${dir}: ${drift}` };
+    report[key] = {
+      state: "failed",
+      cause: "drifted",
+      detail: `${dir}: ${drift}`,
+    };
     return recorded;
   }
   const unsafe = (skill.files ?? []).find(({ path }) => !isSafeSkillPath(path));
   if (!skill.files || unsafe) {
-    report[key] = {
-      state: "failed",
-      detail: unsafe ? `unsafe path ${unsafe.path}` : "the hub sent no files",
-    };
+    report[key] = unsafe
+      ? {
+          state: "failed",
+          cause: "unsafe-path",
+          detail: `unsafe path ${unsafe.path}`,
+        }
+      : {
+          state: "failed",
+          cause: "missing-bytes",
+          detail: "the hub sent no files",
+        };
     return recorded;
   }
   try {
@@ -1873,7 +1758,11 @@ const placeSkill = async (
     report[key] = { state: "applied" };
     return skill.hash;
   } catch (error) {
-    report[key] = { state: "failed", detail: tail(said(error)) };
+    report[key] = {
+      state: "failed",
+      cause: "unwritable",
+      detail: tail(said(error)),
+    };
     return recorded;
   }
 };
@@ -1914,7 +1803,11 @@ const syncPlacedSkills = async (
       report[key] = { state: "removed" };
     } catch (error) {
       placed[key] = record;
-      report[key] = { state: "failed", detail: said(error) };
+      report[key] = {
+        state: "failed",
+        cause: "unwritable",
+        detail: said(error),
+      };
     }
   }
   return placed;
@@ -2010,6 +1903,15 @@ export function memoryPlan(
 /** What a drifted machine reports, and what the dashboard offers to settle. */
 const DRIFTED = "edited on this machine — adopt it or overwrite";
 
+/** A file CawCo wrote that a status read finds gone (`null` hash), or changed. */
+const absentOrDrifted = (
+  fileHash: string | null,
+  gone: string
+): FleetItemState =>
+  fileHash === null
+    ? { state: "failed", cause: "absent", detail: gone }
+    : { state: "failed", cause: "drifted", detail: DRIFTED };
+
 /**
  * Applies the plan and answers with the hash cawco now manages, or nothing
  * when it manages none. The file is only ever deleted when it is still exactly
@@ -2036,7 +1938,7 @@ const syncMemory = async (
   }
 
   if (plan === "drift") {
-    report.memory = { state: "failed", detail: DRIFTED };
+    report.memory = { state: "failed", cause: "drifted", detail: DRIFTED };
     return managed;
   }
   if (plan === "skip") {
@@ -2051,7 +1953,11 @@ const syncMemory = async (
   } catch (error) {
     // The machine keeps the hash it had, so the next sync writes again rather
     // than believing this one landed.
-    report.memory = { state: "failed", detail: tail(said(error)) };
+    report.memory = {
+      state: "failed",
+      cause: "unwritable",
+      detail: tail(said(error)),
+    };
     return managed;
   }
 };
@@ -2130,9 +2036,8 @@ const pruneEmptyDirs = async (): Promise<void> => {
  * is where "cawco overwrote what I wrote" is caught, and a decision that only
  * exists inside a filesystem walk is a decision nothing can ask about.
  *
- * A hub that predates the set sends no documents at all, which arrives here as
- * an empty `desired` — every managed document is then given back, exactly as
- * the fleet keeping no memory gives back the main file.
+ * A fleet that keeps no memory arrives here as an empty `desired`: every
+ * managed document is then given back, as the main file is.
  */
 export function memorySetPlan(
   desired: readonly { path: string; hash: string; force?: boolean }[],
@@ -2182,7 +2087,7 @@ const syncMemoryDocs = async (
     if (managed[doc.path] !== undefined) {
       written[doc.path] = managed[doc.path];
     }
-    report[doc.path] = { state: "failed", detail: problem };
+    report[doc.path] = { state: "failed", cause: "unknown", detail: problem };
   }
 
   const onDisk: Record<string, string | null> = {};
@@ -2219,7 +2124,7 @@ const syncMemoryDocs = async (
     }
 
     if (plan === "drift") {
-      report[path] = { state: "failed", detail: DRIFTED };
+      report[path] = { state: "failed", cause: "drifted", detail: DRIFTED };
       if (managed[path] !== undefined) {
         written[path] = managed[path];
       }
@@ -2241,7 +2146,11 @@ const syncMemoryDocs = async (
       if (managed[path] !== undefined) {
         written[path] = managed[path];
       }
-      report[path] = { state: "failed", detail: tail(said(error)) };
+      report[path] = {
+        state: "failed",
+        cause: "unwritable",
+        detail: tail(said(error)),
+      };
     }
   }
   if (removed) {
@@ -2281,16 +2190,21 @@ const placeMemoryDoc = async (
   const cwd = doc.cwd as string;
   const problem = memoryDocProblem(doc.path);
   if (problem) {
-    report[key] = { state: "failed", detail: problem };
+    report[key] = { state: "failed", cause: "unknown", detail: problem };
     return recorded;
   }
   if (!(await dirExists(cwd))) {
-    report[key] = { state: "failed", detail: `${cwd} is not on this machine` };
+    report[key] = {
+      state: "failed",
+      cause: "no-checkout",
+      detail: `${cwd} is not on this machine`,
+    };
     return recorded;
   }
   if (await deletedClone(cwd)) {
     report[key] = {
       state: "failed",
+      cause: "no-checkout",
       detail: `${cwd} is a delegate workspace whose clone was deleted, so nothing is placed there; archiving the workspace takes the folder away`,
     };
     return recorded;
@@ -2304,12 +2218,17 @@ const placeMemoryDoc = async (
   if (disk !== null && !recorded) {
     report[key] = {
       state: "failed",
+      cause: "unknown",
       detail: `${file} is the folder's own; cawco leaves it as it is`,
     };
     return recorded;
   }
   if (disk !== null && disk !== recorded) {
-    report[key] = { state: "failed", detail: `${file}: ${DRIFTED}` };
+    report[key] = {
+      state: "failed",
+      cause: "drifted",
+      detail: `${file}: ${DRIFTED}`,
+    };
     return recorded;
   }
   try {
@@ -2318,7 +2237,11 @@ const placeMemoryDoc = async (
     report[key] = { state: "applied" };
     return doc.hash;
   } catch (error) {
-    report[key] = { state: "failed", detail: tail(said(error)) };
+    report[key] = {
+      state: "failed",
+      cause: "unwritable",
+      detail: tail(said(error)),
+    };
     return recorded;
   }
 };
@@ -2397,7 +2320,11 @@ const syncPlacedMemory = async (
       report[key] = { state: "removed" };
     } catch (error) {
       placed[key] = record;
-      report[key] = { state: "failed", detail: said(error) };
+      report[key] = {
+        state: "failed",
+        cause: "unwritable",
+        detail: said(error),
+      };
     }
   }
   return placed;
@@ -2442,69 +2369,6 @@ export function withoutHooks(
     return kept.length > 0 ? [{ ...entry, hooks: kept }] : [];
   });
 }
-
-/**
- * Takes back the SessionStart hook earlier versions registered to show a
- * Claude session the `models/` document for its model. A document scoped by
- * model now reaches its sessions in their launch instructions (hub
- * memory-scopes.ts), on every harness and through a compaction; the hook's
- * output was "Context that hooks added earlier | Summarized with the rest of
- * the conversation" (code.claude.com/docs/en/context-window). The command
- * the sidecar names is the only one removed from the user's own
- * `~/.claude/settings.json`, and the file is written only when that changes
- * it. A machine it fails on keeps the name, says so in `memoryHook`, and is
- * tried again on the next sync.
- */
-const retireMemoryHook = async (
-  managed: string | undefined,
-  report: FleetSyncReport
-): Promise<string | undefined> => {
-  if (managed === undefined) {
-    return undefined;
-  }
-
-  const stored = await readJson<Record<string, unknown>>(SETTINGS_PATH);
-  // Nothing is written over a file that cannot be read: the rest of it is the
-  // user's permissions and plugins, and a rewrite would take them with it.
-  if (stored === undefined && (await Bun.file(SETTINGS_PATH).exists())) {
-    report.memoryHook = {
-      state: "failed",
-      detail: `could not parse ${SETTINGS_PATH}`,
-    };
-    return managed;
-  }
-
-  const root = stored ?? {};
-  const hooks = {
-    ...((root.hooks as Record<string, unknown> | undefined) ?? {}),
-  };
-  const starts = (hooks.SessionStart as HookMatcher[] | undefined) ?? [];
-  const next = withoutHooks(starts, [managed]);
-
-  if (next.length > 0) {
-    hooks.SessionStart = next;
-  } else {
-    // biome-ignore lint/performance/noDelete: an undefined-valued key would still count in the Object.keys(hooks) check just below
-    delete hooks.SessionStart;
-  }
-  const settings = { ...root };
-  if (Object.keys(hooks).length > 0) {
-    settings.hooks = hooks;
-  } else {
-    settings.hooks = undefined;
-  }
-
-  try {
-    if (JSON.stringify(settings) !== JSON.stringify(root)) {
-      await writeJson(SETTINGS_PATH, settings);
-    }
-    await rm(managed, { force: true });
-  } catch (error) {
-    report.memoryHook = { state: "failed", detail: tail(said(error)) };
-    return managed;
-  }
-  return undefined;
-};
 
 /** Where a hook's own script lands: `~/.claude/cawco-hooks/<id>.sh`. */
 const hookScriptPath = (id: string): string => join(HOOKS_DIR, `${id}.sh`);
@@ -2649,13 +2513,18 @@ const syncHooks = async (
     const problems = Object.values(hookProblem(hook));
     if (problems.length > 0) {
       keep(hook.id);
-      report[hook.id] = { state: "failed", detail: problems[0] };
+      report[hook.id] = {
+        state: "failed",
+        cause: "unknown",
+        detail: problems[0],
+      };
       continue;
     }
     if (hook.scope && hook.scope !== "user" && !hook.cwd) {
       keep(hook.id);
       report[hook.id] = {
         state: "failed",
+        cause: "no-checkout",
         detail: "bound to a project this machine has no checkout for",
       };
       continue;
@@ -2695,11 +2564,15 @@ const syncHooks = async (
     );
     if (parseError) {
       keep(hook.id);
-      report[hook.id] = { state: "failed", detail: parseError };
+      report[hook.id] = {
+        state: "failed",
+        cause: "unknown",
+        detail: parseError,
+      };
       continue;
     }
     if (plan === "drift") {
-      report[hook.id] = { state: "failed", detail: DRIFTED };
+      report[hook.id] = { state: "failed", cause: "drifted", detail: DRIFTED };
       hashes.set(hook.id, managed[hook.id]?.hash ?? scriptHash);
       scriptPaths.set(hook.id, path);
       settled.push(hook);
@@ -2713,7 +2586,11 @@ const syncHooks = async (
         await chmod(path, 0o755);
       } catch (error) {
         keep(hook.id);
-        report[hook.id] = { state: "failed", detail: tail(said(error)) };
+        report[hook.id] = {
+          state: "failed",
+          cause: "unwritable",
+          detail: tail(said(error)),
+        };
         continue;
       }
     }
@@ -2746,7 +2623,7 @@ const syncHooks = async (
       const detail = `could not parse ${path}`;
       for (const hook of hooks) {
         keep(hook.id);
-        report[hook.id] = { state: "failed", detail };
+        report[hook.id] = { state: "failed", cause: "unparsable", detail };
       }
       continue;
     }
@@ -2809,7 +2686,7 @@ const syncHooks = async (
         const detail = tail(said(error));
         for (const hook of hooks) {
           keep(hook.id);
-          report[hook.id] = { state: "failed", detail };
+          report[hook.id] = { state: "failed", cause: "unwritable", detail };
         }
         continue;
       }
@@ -2845,16 +2722,9 @@ const syncHooks = async (
   return written;
 };
 
-/** What to write into the sidecar's `deniedTools`: the hub's value if it sent one, else what was cached. */
-const deniedToolsForSidecar = (
-  fromHub: string[] | undefined,
-  fromCache: string[] | undefined
-): { deniedTools: string[] } | Record<string, never> => {
-  const list = fromHub ?? fromCache;
-  return list ? { deniedTools: list } : {};
-};
-
-const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
+const converge = async (
+  config: MachineFleetConfig
+): Promise<FleetSyncReport> => {
   const managed = await readSidecar();
   const skillStates: Record<string, FleetItemState> = {};
   const docStates: Record<string, FleetItemState> = {};
@@ -2870,64 +2740,61 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   };
 
   const mcp = await syncMcp(config.mcp, managed.mcp, report.mcp);
-  // A hub that predates placement sends neither list: nothing placed is
-  // touched, as hooks are left alone by a hub that predates them.
-  const placedMcp = config.placedMcp
-    ? await syncPlacedMcp(config.placedMcp, managed.placedMcp, report.mcp)
-    : managed.placedMcp;
+  const placedMcp = await syncPlacedMcp(
+    config.placedMcp,
+    managed.placedMcp,
+    report.mcp
+  );
   const installed = await syncPlugins(config, managed, report);
   const skills = await syncSkillFiles(
-    config.skills ?? [],
+    config.skills,
     managed.skills,
     skillStates
   );
-  const placedSkills = config.placedSkills
-    ? await syncPlacedSkills(
-        config.placedSkills,
-        managed.placedSkills,
-        skillStates
-      )
-    : managed.placedSkills;
+  const placedSkills = await syncPlacedSkills(
+    config.placedSkills,
+    managed.placedSkills,
+    skillStates
+  );
   const memory = await syncMemory(config.memory, managed.memory, report);
-  // A hub that predates the set sends no `docs`, which reads as a fleet that
-  // links none — and the machine gives back the ones cawco wrote it.
-  const docs = config.memory?.docs ?? [];
-  const memoryDocs = await syncMemoryDocs(docs, managed.memoryDocs, docStates);
-  const memoryHook = await retireMemoryHook(managed.memoryHook, report);
+  // A fleet that keeps no memory links no documents either: the machine
+  // gives back the ones cawco wrote it.
+  const memoryDocs = await syncMemoryDocs(
+    config.memory?.docs ?? [],
+    managed.memoryDocs,
+    docStates
+  );
   const placedMemory = await syncPlacedMemory(
-    config.placedMemory ?? [],
+    config.placedMemory,
     managed.placedMemory,
     docStates
   );
-  // A hub that predates hooks sends no `hooks`, which reads the same way: a
-  // fleet that keeps none, and the machine gives back whatever cawco
-  // registered before this daemon knew what that field meant.
-  const hooks = await syncHooks(config.hooks ?? [], managed.hooks, hookStates);
-  // What the machine's own `claude` was denied for the fleet before this sync.
-  const deniedBefore = machineDenyList(await resolvedFleetDenials());
+  const hooks = await syncHooks(config.hooks, managed.hooks, hookStates);
+  // What the machine's own `claude` was denied for the fleet before this sync:
+  // none of it, when the machine had not heard the list (cawco wrote nothing).
+  const before = await readFleetDenials();
+  const deniedBefore =
+    before.kind === "known" ? machineDenyList(before.denials) : [];
   await writeJson(SIDECAR, {
     mcp,
     ...installed,
     skills,
-    // A hub that sends `deniedTools` has the column; one that does not predates
-    // the migration, and the sidecar keeps whatever it already had (or nothing,
-    // which is what has resolvedFleetDenials fall back to compiled constants).
-    ...deniedToolsForSidecar(config.deniedTools, managed.deniedTools),
-    // A hub that predates the flag sends none: the choice is off.
+    deniedTools: config.deniedTools,
     ...(config.cawcoTodos ? { cawcoTodos: true } : {}),
     ...(memory ? { memory } : {}),
     memoryDocs,
-    ...(memoryHook ? { memoryHook } : {}),
     hooks,
     placedMcp,
     placedMemory,
     placedSkills,
   } satisfies Sidecar);
+  // A spawn waiting on the fleet's denials reads them now.
+  fleetDenialsSynced();
   // The machine's own `claude` follows the fleet at once, not at the next
   // daemon start: what the fleet no longer denies comes out of
   // `permissions.deny`, what it now denies goes in.
   const settings = await convergeDeniedTools(deniedBefore);
-  if (settings.state === "failed") {
+  if (settings.state === "failed" || settings.state === "unsynced") {
     console.warn(`[fleet] ${SETTINGS_PATH}: ${settings.detail}`);
   }
   // Every account's Claude Code reads its user layer from its own dir: the
@@ -2973,7 +2840,7 @@ export const inFleetQueue = <T>(work: () => Promise<T>): Promise<T> => {
  * same file and runs no CLI at all.
  */
 export const syncFleetConfig = (
-  config: FleetConfig
+  config: MachineFleetConfig
 ): Promise<FleetSyncReport> => inFleetQueue(() => converge(config));
 
 /**
@@ -3008,7 +2875,11 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   for (const [key, { cwd, name }] of Object.entries(managed.placedMcp)) {
     report.mcp[key] = projects[cwd]?.mcpServers?.[name]
       ? { state: "applied" }
-      : { state: "failed", detail: `not in ${CLAUDE_JSON} for ${cwd}` };
+      : {
+          state: "failed",
+          cause: "absent",
+          detail: `not in ${CLAUDE_JSON} for ${cwd}`,
+        };
   }
   for (const name of managed.marketplaces) {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
@@ -3016,6 +2887,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
       ? { state: "applied" }
       : {
           state: "failed",
+          cause: "absent",
           detail: `${name} is not in known_marketplaces.json`,
         };
   }
@@ -3027,10 +2899,14 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     report.plugins[id] = (await isInstalled(installedAs))
       ? { state: "applied" }
-      : { state: "failed", detail: "not in installed_plugins.json" };
+      : {
+          state: "failed",
+          cause: "absent",
+          detail: "not in installed_plugins.json",
+        };
   }
   hubOnlyStates(
-    managed.hubOnlyMarketplaces ?? [],
+    managed.hubOnlyMarketplaces,
     report.plugins,
     report.marketplaces
   );
@@ -3041,9 +2917,13 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     // edit is told apart from the record alone.
     const drift = skillDrift(heldNow[name], recorded, recorded);
     if (heldNow[name] === undefined) {
-      skills[name] = { state: "failed", detail: "not on disk" };
+      skills[name] = {
+        state: "failed",
+        cause: "absent",
+        detail: "not on disk",
+      };
     } else if (drift) {
-      skills[name] = { state: "failed", detail: drift };
+      skills[name] = { state: "failed", cause: "drifted", detail: drift };
     } else {
       skills[name] = { state: "applied" };
     }
@@ -3053,11 +2933,19 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     const disk = await heldHash(dir);
     if (disk === undefined) {
-      skills[key] = { state: "failed", detail: `${dir} is not on disk` };
+      skills[key] = {
+        state: "failed",
+        cause: "absent",
+        detail: `${dir} is not on disk`,
+      };
     } else if (disk === record.hash) {
       skills[key] = { state: "applied" };
     } else {
-      skills[key] = { state: "failed", detail: `${dir}: ${DRIFTED}` };
+      skills[key] = {
+        state: "failed",
+        cause: "drifted",
+        detail: `${dir}: ${DRIFTED}`,
+      };
     }
   }
   if (managed.memory !== undefined) {
@@ -3065,10 +2953,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     report.memory =
       fileHash === managed.memory
         ? { state: "applied" }
-        : {
-            state: "failed",
-            detail: fileHash === null ? "not on disk" : DRIFTED,
-          };
+        : absentOrDrifted(fileHash, "not on disk");
   }
   for (const [path, hash] of Object.entries(managed.memoryDocs)) {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
@@ -3076,10 +2961,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     memoryDocs[path] =
       fileHash === hash
         ? { state: "applied" }
-        : {
-            state: "failed",
-            detail: fileHash === null ? "not on disk" : DRIFTED,
-          };
+        : absentOrDrifted(fileHash, "not on disk");
   }
   for (const [key, record] of Object.entries(managed.placedMemory)) {
     const file = join(placedMemoryDir(record.cwd), record.name);
@@ -3088,33 +2970,24 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     memoryDocs[key] =
       fileHash === record.hash
         ? { state: "applied" }
-        : {
-            state: "failed",
-            detail: fileHash === null ? `${file} is not on disk` : DRIFTED,
-          };
-  }
-  if (managed.memoryHook !== undefined) {
-    report.memoryHook = {
-      state: "failed",
-      detail: `the retired model-memory hook ${managed.memoryHook} is still registered; the next sync takes it back`,
-    };
+        : absentOrDrifted(fileHash, `${file} is not on disk`);
   }
   for (const [id, record] of Object.entries(managed.hooks)) {
     if (record.command.startsWith(HOOKS_DIR)) {
       const scriptFile = Bun.file(record.command);
       // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
       if (!(await scriptFile.exists())) {
-        hooks[id] = { state: "failed", detail: "not on disk" };
+        hooks[id] = { state: "failed", cause: "absent", detail: "not on disk" };
         continue;
       }
       const script = await scriptFile.text();
       const parseError = await scriptParseError(script);
       if (parseError) {
-        hooks[id] = { state: "failed", detail: parseError };
+        hooks[id] = { state: "failed", cause: "unknown", detail: parseError };
         continue;
       }
       if (hashText(script) !== record.hash) {
-        hooks[id] = { state: "failed", detail: DRIFTED };
+        hooks[id] = { state: "failed", cause: "drifted", detail: DRIFTED };
         continue;
       }
     }
@@ -3136,7 +3009,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     );
     hooks[id] = present
       ? { state: "applied" }
-      : { state: "failed", detail: `not in ${settingsPath}` };
+      : { state: "failed", cause: "absent", detail: `not in ${settingsPath}` };
   }
   // Claimed here too, and for the reason `have` above is: a status overwrites
   // the stored report, so a status that left the toolchain out would retract

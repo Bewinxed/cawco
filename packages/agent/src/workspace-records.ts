@@ -1,9 +1,10 @@
 /**
  * This machine's workspace clones, by the records the agent keeps for each
  * outside its clone (`~/.cawco/workspaces/<id>/`): `create.json`, written
- * before the clone is cut, and the running boundary's `boundary.json`.
+ * before the clone is cut, the running boundary's `boundary.json`, and a
+ * place's `place.json`, written once a stage runs there ({@link keepPlace}).
  */
-import { readdir, realpath } from "node:fs/promises";
+import { mkdir, readdir, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, relative, sep } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
@@ -12,8 +13,9 @@ import {
   type DamagedRecord,
   isDamagedRecord,
   readRecord,
+  writeStateFile,
 } from "@cawco/core/state-file";
-import { isLeadPlace } from "@cawco/core/workspace-policy";
+import { isPlace } from "@cawco/core/workspace-policy";
 import { reportDamaged } from "./damaged-records";
 
 interface Scan {
@@ -23,17 +25,32 @@ interface Scan {
 }
 
 /**
- * One workspace's clone path: the first of its two records that names one.
- * A damaged record is reported ({@link reportDamaged}) and the other one
- * read; with no path from either, the damage is the answer.
+ * Keeps place `ref` (core `isPlace`) as a stage ran there: its boundary's
+ * record goes when it closes once quiet, and a preview's request for its
+ * stage after the daemon restarted finds the folder here (stage.ts
+ * `wakeSource`). A clone has its `create.json`.
+ */
+export const keepPlace = async (ref: WorkspaceRef): Promise<void> => {
+  const dir = join(workspacesDir(), ref.id);
+  await mkdir(dir, { recursive: true });
+  await writeStateFile(
+    join(dir, "place.json"),
+    `${JSON.stringify({ path: ref.path })}\n`
+  );
+};
+
+/**
+ * One workspace's clone path: the first of its records that names one. A
+ * damaged record is reported ({@link reportDamaged}) and the next one read;
+ * with no path from any, the damage is the answer.
  */
 const pathOf = async (
   id: string
 ): Promise<string | DamagedRecord | undefined> => {
   let damage: DamagedRecord | undefined;
-  for (const name of ["create.json", "boundary.json"]) {
+  for (const name of ["create.json", "boundary.json", "place.json"]) {
     try {
-      // biome-ignore lint/performance/noAwaitInLoops: the first of two records that names the clone
+      // biome-ignore lint/performance/noAwaitInLoops: the first of the records that names the clone
       const record = await readRecord<{ path?: unknown }>(
         join(workspacesDir(), id, name)
       );
@@ -113,13 +130,13 @@ export const workspaceHolding = (
 /**
  * The boundary a spawn that names none runs in: a delegation workspace's,
  * when `path` is inside its clone ({@link workspaceHolding}), and never a
- * project lead's place. A lead's place is a person's own folder (core
- * `isLeadPlace`), bounded only for the lead's own row, which the hub names
- * on every spawn of it (hub caw.ts `leadPlaceRef`); a person's session in
- * that folder runs on the host.
+ * place. A place is a person's own folder (core `isPlace`), bounded only
+ * for a spawn that names it, as the hub names Caw's on every spawn of his
+ * (hub caw.ts `leadPlaceRef`); a person's session in that folder runs on
+ * the host.
  */
 export const cloneHolding = (path: string): Promise<WorkspaceRef | undefined> =>
-  holding(path, (ref) => !isLeadPlace(ref.id));
+  holding(path, (ref) => !isPlace(ref.id));
 
 /** {@link workspaceHolding} over the workspaces `take` keeps. */
 const holding = async (

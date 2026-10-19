@@ -1,6 +1,6 @@
 /**
  * A project's starters, in three places (core `StarterPlace`): what its
- * empty board (StarterCards) and Caw's panel hero (CawStarters) offer to say
+ * empty board (StarterCards) and Caw's panel hero (StarterCards' rows) offer to say
  * to him, what its empty Routines page offers as routines, and what its
  * empty Decisions tab offers to lay out as a decision page. Each is written
  * for that project from what it holds now. No list of starters exists; each
@@ -29,8 +29,16 @@
  * - after {@link QUIET_MS} with no other ask for the project, so a burst
  *   of moves asks once;
  * - at most once per {@link GAP_MS} per project: a later ask waits its turn;
- * - asked again on read when the set is older than {@link STALE_MS},
- *   which also writes the first set of a project made before starters were;
+ * - checked again on a read when this hub has not checked the project's
+ *   inputs for {@link GAP_MS} (since it started, so after every upgrade),
+ *   which also writes the first set of a project made before starters were.
+ *   A set never contradicts what the project holds for longer than that:
+ *   inputs no ask follows (AGENTS.md and knowledge/ edited, a draft view
+ *   kept or dropped, a routine removed, days in a stage, commits pushed
+ *   outside CawCo, events and task kinds ageing out, an offer answered
+ *   before its rule existed, the hub's own rules changed) are read again.
+ *   On nightly 3944 ds-probe-design's set, written before Not now counted,
+ *   kept suggesting a design system after it for up to a day;
  * - not asked when the inputs hash as the stored set's did.
  *
  * Jev off: no starters anywhere, and the `[jev off]` line. Jev on but
@@ -39,30 +47,22 @@
  * (`starters.changed`).
  */
 import { createHash } from "node:crypto";
-import { existsSync } from "node:fs";
-import { join } from "node:path";
 import {
-  CAWCO_ENV,
   type CommandResult,
   type ProjectStarter,
-  readEnv,
   STARTER_PLACES,
   type StarterPlace,
   type StartersChangedFrame,
 } from "@cawco/core";
-import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { Elysia, t } from "elysia";
 import type { DbShape, WorkItemRow } from "./db";
 import { designShaped } from "./design-offers";
 import { jevAccess } from "./jev";
 import { JevFailed, jevStarters, startersOff } from "./jev-placement";
-import { AGENTS_FILE, fileOr, KNOWLEDGE_DIR } from "./memory";
-import {
-  FolderRefusal,
-  listFolder,
-  projectRoot,
-  refused,
-} from "./project-folder";
+import { projectDesign } from "./landed";
+import { AGENTS_FILE, fileOr } from "./memory";
+import { KNOWLEDGE_DIR } from "./memory-facts";
+import { FolderRefusal, listFolder, refused } from "./project-folder";
 import {
   boundStarterInputs,
   STARTER_OFTEN,
@@ -71,35 +71,16 @@ import {
   type StarterTask,
 } from "./starter-asks";
 import type { TaskEvent, TaskSummary, Tasks } from "./tasks";
+import { STARTERS_GAP_MS, STARTERS_QUIET_MS } from "./upstreams";
 
-const MINUTE_MS = 60_000;
 const DAY_MS = 86_400_000;
 
-/**
- * `CAWCO_STARTERS_PACE=<quietMs>/<gapMs>` paces a scratch fleet's starters
- * for their live proof, as `CAWCO_TYPESAFE_URL` points Jev at a stand-in;
- * every installed hub runs the defaults.
- */
-const pace = (() => {
-  const [quiet, gap] = (readEnv(CAWCO_ENV.startersPace) ?? "")
-    .split("/")
-    .map(Number);
-  return {
-    quiet: Number.isFinite(quiet) && quiet ? quiet : MINUTE_MS,
-    gap: Number.isFinite(gap) && gap ? gap : 10 * MINUTE_MS,
-  };
-})();
-
 /** Quiet before a project's starters are written: 60 s with no other ask. */
-export const QUIET_MS = pace.quiet;
+export const QUIET_MS = STARTERS_QUIET_MS;
 /** The least time between two of one project's asks of Jev: 10 min. */
-export const GAP_MS = pace.gap;
-/** A set older than this is asked again when it is read: 24 h. */
-export const STALE_MS = DAY_MS;
-/** A read of a checkout's branch, commits and design/; past this the machine is not going to answer. */
-const READ_MS = 10_000;
-/** `origin/main` as the branch it names. */
-const ORIGIN = /^origin\//;
+export const GAP_MS = STARTERS_GAP_MS;
+/** The latest commits of the landed branch Jev reads (landed.ts). */
+const COMMITS_READ = 5;
 /** The newest events read for "an event source with no routine". Our own call: a fortnight's polls of a busy repository. */
 const UNROUTED_READ = 200;
 
@@ -113,7 +94,8 @@ export type StartersTrigger =
   | "routine failed"
   | "routine made"
   | "event received"
-  | "stale";
+  | "design offer declined"
+  | "read";
 
 /** Where a project's views Caw drafted wait (views.ts `DRAFTS`). */
 const DRAFTS_DIR = "views/drafts";
@@ -158,47 +140,6 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
   const checked = new Map<string, number>();
   /** Projects being written now: an ask that lands meanwhile waits for the next turn. */
   const writing = new Set<string>();
-
-  /** The project's repository as one checkout online reads it: its default branch, last commits, and design/. */
-  const repository = async (
-    projectId: string
-  ): Promise<
-    | {
-        branch: string;
-        commits: { sha: string; subject: string }[];
-        design: boolean;
-      }
-    | undefined
-  > => {
-    const place = (db.project(projectId)?.places ?? []).find(
-      (each) => each.kind === "checkout" && deps.online(each.machineId)
-    );
-    if (!place) {
-      return;
-    }
-    const read = await deps
-      .run(
-        place.machineId,
-        place.path,
-        `${SAFE_GIT_SHELL}cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && b=$(git symbolic-ref --quiet --short refs/remotes/origin/HEAD 2>/dev/null || git symbolic-ref --quiet --short HEAD) && printf '%s\\n' "$b" && if [ -d design ]; then echo yes; else echo no; fi && git log -5 --format='%H%x09%s' "$b" --`,
-        READ_MS
-      )
-      .catch(() => undefined);
-    if (read?.exitCode !== 0) {
-      return;
-    }
-    const [branch = "", design = "", ...log] = read.stdout.trim().split("\n");
-    return {
-      branch: branch.replace(ORIGIN, ""),
-      design: design === "yes",
-      commits: log
-        .map((line) => {
-          const tab = line.indexOf("\t");
-          return { sha: line.slice(0, tab), subject: line.slice(tab + 1) };
-        })
-        .filter((commit) => commit.sha.length > 0),
-    };
-  };
 
   /** The files under a folder of the project's, by path; none when it has no such folder. */
   const filesIn = async (
@@ -291,15 +232,15 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
   const gather = async (projectId: string): Promise<StarterInputs> => {
     const project = db.project(projectId);
     const template = project?.template ?? null;
-    const [{ tasks: all }, agents, knowledge, drafts, repo] = await Promise.all(
-      [
+    const [{ tasks: all }, agents, knowledge, drafts, landed] =
+      await Promise.all([
         tasks.list(projectId),
         fileOr(projectId, AGENTS_FILE),
         filesIn(projectId, KNOWLEDGE_DIR, true),
         filesIn(projectId, DRAFTS_DIR, false),
-        repository(projectId),
-      ]
-    );
+        projectDesign(deps, projectId, COMMITS_READ),
+      ]);
+    const { repo } = landed;
     const now = Date.now();
     const open = all
       .filter((task) => task.kind !== null && OPEN_KINDS.has(task.kind))
@@ -353,12 +294,11 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       })),
       branch: repo?.branch ?? null,
       commits: repo?.commits ?? [],
+      designDeclined: db.designOffers.of(projectId)?.answer === "dismissed",
       designWork:
         designShaped(template, { labels: [], outputs: [] }) ||
         starterTasks.some((task) => task.design),
-      hasDesign:
-        existsSync(join(projectRoot(projectId), "design")) ||
-        (repo ? repo.design : null),
+      hasDesign: landed.hasDesign,
       failures: [...routineFailures, ...attemptFailures]
         .sort((a, b) => b.at - a.at)
         .map(({ at: _at, ...failure }) => failure),
@@ -525,28 +465,30 @@ export const createProjectStarters = (deps: ProjectStartersDeps) => {
       touched(projectId, "event received");
     },
 
+    /** The person said Not now to Caw's design-system offer: its starter goes. */
+    designDeclined(projectId: string): void {
+      touched(projectId, "design offer declined");
+    },
+
     /**
      * The project's set for a place, for a read: none while Jev is off;
-     * otherwise the stored one, every place asked again when it is stale or
-     * there is none yet.
+     * otherwise the stored one, its inputs checked again ({@link touched},
+     * so after the quiet and within the gap) when this hub has not checked
+     * them for {@link GAP_MS}: since it started, after an upgrade. A set whose
+     * inputs no longer hash as they did is asked again; one whose do is not.
      */
     read(projectId: string, place: StarterPlace): ProjectStarter[] {
       if (!jevAccess(db)) {
         return [];
       }
-      const stored = db.starters.set(projectId, place);
-      const seen = Math.max(
-        stored?.generatedAt.getTime() ?? 0,
-        checked.get(projectId) ?? 0
-      );
       if (
-        Date.now() - seen > STALE_MS &&
+        Date.now() - (checked.get(projectId) ?? 0) > GAP_MS &&
         !waiting.has(projectId) &&
         !writing.has(projectId)
       ) {
-        touched(projectId, "stale");
+        touched(projectId, "read");
       }
-      return stored?.starters ?? [];
+      return db.starters.set(projectId, place)?.starters ?? [];
     },
 
     /** What the person did with a starter of a place's set: sent as it stood, or changed. */

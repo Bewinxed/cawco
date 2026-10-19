@@ -7,6 +7,7 @@
 import type { ArtifactSummary, ShownFailure } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { SheetRead, StoryOp } from "@cawco/core/stage";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { currentClientId } from "./client-id";
 
 const artifactsPath = (instanceId: string, id?: string) =>
@@ -15,7 +16,7 @@ const artifactsPath = (instanceId: string, id?: string) =>
 /** The hub's refusal, in its own words. */
 async function ok(response: Response): Promise<Response> {
   if (!response.ok) {
-    throw new Error(await response.text());
+    throw await hubRefusal(response);
   }
   return response;
 }

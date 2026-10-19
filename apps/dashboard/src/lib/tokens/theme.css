@@ -7,11 +7,11 @@
   --spacing: 0.25rem;
 
   --breakpoint-phone: 640px;
-  --breakpoint-desk: 901px;
+  --breakpoint-desk: 900px;
   --breakpoint-wide: 1025px;
 
   --container-phone: 640px;
-  --container-desk: 901px;
+  --container-desk: 900px;
   --container-wide: 1025px;
   --container-field-group: 28rem;
   --container-details: 30rem;
@@ -146,6 +146,7 @@
   --color-border-contrast: var(--border-contrast);
   --color-border-card: var(--border-card);
   --color-border-button-outline: var(--border-button-outline);
+  --color-border-row-outline: var(--border-row-outline);
   --color-input: var(--input);
   --color-ink-strong: var(--ink-strong);
   --color-ink-row: var(--ink-row);
@@ -204,10 +205,6 @@
   --color-meter-share: var(--meter-share);
   --color-meter-wash-near: var(--meter-wash-near);
   --color-meter-wash-over: var(--meter-wash-over);
-  --color-count-fill-live: var(--count-fill-live);
-  --color-count-fill-done: var(--count-fill-done);
-  --color-count-fill-fail: var(--count-fill-fail);
-  --color-count-fill-ink: var(--count-fill-ink);
   --color-presence-online: var(--presence-online);
   --color-presence-away: var(--presence-away);
   --color-presence-off: var(--presence-off);
@@ -315,6 +312,7 @@
   --spacing-c-toolbar-ctl: var(--c-toolbar-ctl);
   --spacing-c-find-w: var(--c-find-w);
   --spacing-c-panel-w: var(--c-panel-w);
+  --spacing-c-signin-pop-w: var(--c-signin-pop-w);
   --spacing-c-caw-panel-h: var(--c-caw-panel-h);
   --spacing-c-top-bar-h: var(--c-top-bar-h);
   --spacing-c-bar-toggle-glyph: var(--c-bar-toggle-glyph);
@@ -343,6 +341,7 @@
   --spacing-c-composer-field: var(--c-composer-field);
   --spacing-c-composer-inset: var(--c-composer-inset);
   --spacing-c-composer-panel: var(--c-composer-panel);
+  --spacing-c-new-project-field-w: var(--c-new-project-field-w);
   --spacing-c-composer-w: var(--c-composer-w);
   --spacing-c-suggest-chip: var(--c-suggest-chip);
   --spacing-c-suggest-row: var(--c-suggest-row);
@@ -705,6 +704,30 @@
 
 @utility transition-morph-fade {
   transition: var(--transition-morph-fade);
+}
+
+@utility transition-band-hide {
+  transition: var(--transition-band-hide);
+}
+
+@utility transition-band-show {
+  transition: var(--transition-band-show);
+}
+
+@utility transition-band-slide-hide {
+  transition: var(--transition-band-slide-hide);
+}
+
+@utility transition-band-slide-show {
+  transition: var(--transition-band-slide-show);
+}
+
+@utility transition-band-row-shut {
+  transition: var(--transition-band-row-shut);
+}
+
+@utility transition-band-row-open {
+  transition: var(--transition-band-row-open);
 }
 
 @utility liga-none {

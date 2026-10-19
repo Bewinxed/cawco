@@ -18,6 +18,7 @@ import {
   mkdirSync,
   realpathSync,
   renameSync,
+  rmdirSync,
   rmSync,
   unlinkSync,
 } from "node:fs";
@@ -37,14 +38,20 @@ import { readWithin } from "../packages/core/src/bounded";
 import { CLAUDE_JSON_NAME } from "../packages/core/src/claude-dirs";
 import { openLockFile, tryLock, unlock } from "../packages/core/src/flock";
 import type { FleetFetchFrame } from "../packages/core/src/frames";
+import { darwinUserDirs, socketPathProblem } from "../packages/core/src/paths";
+import { forgetSessiondLink } from "../packages/core/src/sessiond";
 import {
-  socketPathProblem,
-  workspaceFleetDir,
-} from "../packages/core/src/paths";
+  listedPid,
+  type Pid,
+  type Spawned,
+  signal as signalPid,
+  spawnedPid,
+} from "../packages/core/src/signal";
 import { ensureDeps } from "./lib/deps";
 import { type HeavySlot, heavySlot } from "./lib/heavy-run";
 import { welcomed } from "./lib/keeper-dial";
 import { STARTER_ENV, WRAPPED_ENV } from "./scratch-fleet-leash";
+import { STAND_INS_ENV, type StandIns } from "./stand-ins/index";
 
 /**
  * WHERE GIT LOOKS. Git finds its repository from these variables before its
@@ -75,6 +82,12 @@ for (const name of GIT_REPOSITORY_ENV) {
 
 export type Harness = "claude" | "opencode" | "pi";
 export const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
+
+/** A launch's stderr file, whose stdout is the same name in `.log`. */
+const ERR_SUFFIX = /\.err$/;
+/** An agent's line on its sign-in reads and its reports (accounts.ts, daemon.ts `readPart`, auth.ts). */
+const SIGNIN_LINE =
+  /\[accounts\]|\[keychain\]|harness's report|sign-ins|Claude account|could not be read|was not read/;
 
 /**
  * How Claude Code opens the words a person sent while a turn ran, which it
@@ -574,6 +587,33 @@ const chatEvents = (
   ];
 };
 
+/** A workspace's fleet folder's name ({@link workspaceFleetDir}). */
+const FLEET_DIR = /^cawco-[0-9a-f]{8}$/;
+
+/**
+ * macOS: where a scratch fleet that workspace `id` runs keeps its sandbox
+ * and its services' HOMEs, in the user's temp folder, `cawco-<id8>`; none
+ * elsewhere. Not the workspace's scratch dir: OpenCode resolves every folder
+ * above a location (its config discovery, 2.0.29 to 2.0.32), and Bun
+ * resolves a folder on macOS by opening it, which the boundary refuses for
+ * every folder above one under home, where a folder answers a lookup alone
+ * (core boundary-policy.ts `seatbeltProfile`): "EPERM … lstat
+ * '/Users/…/.cawco/tmp'", and every location read answered 500. Nothing
+ * above the user's temp folder is refused. No socket goes here: the boundary
+ * keeps the host's sockets in it out of reach, so the runtime dirs, where
+ * the agent binds its sockets, and sessiond's socket stay on the short link.
+ *
+ * Bun's realpath on macOS opens the folder `O_RDONLY` and asks
+ * `fcntl(F_GETPATH)` (oven-sh/bun#44606, open; fixed by PR #38365, which
+ * calls realpath(3), or #42374, which asks `getattrlist(ATTR_CMN_FULLPATH)`,
+ * neither merged as of Bun 1.4.2). Once OpenCode ships a Bun with that fix,
+ * the fleet goes back to the scratch dir and this folder goes.
+ */
+const workspaceFleetDir = async (id: string): Promise<string | undefined> => {
+  const [temp] = await darwinUserDirs();
+  return temp ? join(temp, `cawco-${id.slice(0, 8)}`) : undefined;
+};
+
 /**
  * Where a fleet's folders stand, all on real disk (not /tmp: a delegate's
  * workspace boundary mounts paths from its home, and a /tmp private to
@@ -586,18 +626,12 @@ const chatEvents = (
  * cache root (`~/.cache`, 22 bytes).
  *
  * On macOS a workspace's fleet keeps its sandbox and its services' HOMEs in
- * the workspace's fleet folder instead (core paths.ts `workspaceFleetDir`,
- * `$(getconf DARWIN_USER_TEMP_DIR)cawco-<id8>`, which its archive removes):
- * OpenCode resolves every folder above a location, Bun's realpath on macOS
- * opens a folder `O_RDONLY` and asks `fcntl(F_GETPATH)` (oven-sh/bun#44606,
- * open; fix PRs #38365 and #42374, unmerged as of Bun 1.4.2), and the
- * boundary lets a folder above one under home answer a lookup alone, never
- * an open: under home, OpenCode answered 500 to every location read ("EPERM
- * … lstat '/Users/…/.cawco/tmp'"). This branch goes once OpenCode ships a Bun
- * with that fix. Its runtime dirs, where the agent binds its sockets, and
- * sessiond's socket stay on the short link (`homes` is where a HOME goes).
+ * the workspace's fleet folder instead ({@link workspaceFleetDir}), which
+ * each fleet removes once it is empty ({@link FleetDirs.clearWhenEmpty}).
  */
 async function fleetRoots(): Promise<{
+  /** The workspace's fleet folder on macOS, which `scratch` and `homes` are. */
+  fleet?: string;
   homes: string;
   scratch: string;
   short: string;
@@ -614,7 +648,7 @@ async function fleetRoots(): Promise<{
   if (fleet) {
     await mkdir(fleet, { recursive: true, mode: 0o700 });
     const real = realpathSync(fleet);
-    return { scratch: real, homes: real, short };
+    return { fleet: real, scratch: real, homes: real, short };
   }
   return {
     scratch: workspaceTmp ? realpathSync(workspaceTmp) : cache,
@@ -667,6 +701,17 @@ class FleetDirs {
   readonly #stops: (() => Promise<void> | void)[] = [];
   /** The held locks of the folders' {@link OWNER_FILE}s, let go once the folders are gone. */
   readonly #locks: number[] = [];
+  /** Folders that hold this fleet's, removed after them if nothing else is left in them. */
+  readonly #holders: string[] = [];
+
+  /**
+   * `dir` goes after this fleet's folders when they leave it empty: the
+   * workspace's fleet folder on macOS, which no other part of CawCo
+   * removes. Another fleet still in it keeps it.
+   */
+  clearWhenEmpty(dir: string): void {
+    this.#holders.push(dir);
+  }
 
   /**
    * `dir`, made (with its parents) and stamped as this process's: its
@@ -743,8 +788,11 @@ class FleetDirs {
     for (const dir of this.dirs.splice(0)) {
       // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
       await rm(dir, { recursive: true, force: true });
+      // A service HOME's short name in the socket root goes with it (macOS).
+      forgetSessiondLink(dir);
     }
     this.#unlockAll();
+    this.#clearHolders();
   }
 
   /** Deletes every folder now, from an exit or a signal, where nothing can wait. */
@@ -752,8 +800,21 @@ class FleetDirs {
     LIVE.delete(this);
     for (const dir of this.dirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
+      forgetSessiondLink(dir);
     }
     this.#unlockAll();
+    this.#clearHolders();
+  }
+
+  /** Each holder this fleet left empty; one that still holds anything stays. */
+  #clearHolders(): void {
+    for (const dir of this.#holders.splice(0)) {
+      try {
+        rmdirSync(dir);
+      } catch {
+        // another fleet's folders are still in it, or it is gone
+      }
+    }
   }
 
   /** Leaves the folders for reading: unstamped, so no sweep takes them. */
@@ -849,11 +910,24 @@ async function heldByLive(dir: string): Promise<boolean> {
  * live process this one can see holds ({@link heldByLive}). The sweep holds
  * the lock while it removes the folder. The probe kit runs it as a run
  * starts. Answers the folders removed.
+ *
+ * On macOS that includes every workspace's fleet folder
+ * ({@link workspaceFleetDir}), each removed once it is empty: a workspace's
+ * archive does not remove one, so a fleet a SIGKILL cut short in a workspace
+ * since archived goes at the next run anywhere ("The Mac filled to 120 MB
+ * free on 2026-10-14 … because nothing removed a workspace once its work was
+ * over", d31b2f5ac).
  */
 export async function sweepDeadFleets(): Promise<string[]> {
   const { homes, scratch, short } = await fleetRoots();
+  const [temp] = await darwinUserDirs();
+  const fleetDirs = temp
+    ? (await readdir(temp).catch(() => [] as string[]))
+        .filter((entry) => FLEET_DIR.test(entry))
+        .map((entry) => join(temp, entry))
+    : [];
   const removed: string[] = [];
-  for (const root of new Set([scratch, homes, short])) {
+  for (const root of new Set([scratch, homes, short, ...fleetDirs])) {
     // biome-ignore lint/performance/noAwaitInLoops: one root at a time
     const entries = await readdir(root).catch(() => [] as string[]);
     for (const entry of entries) {
@@ -873,10 +947,18 @@ export async function sweepDeadFleets(): Promise<string[]> {
           continue;
         }
         await rm(dir, { recursive: true, force: true });
+        forgetSessiondLink(dir);
         removed.push(dir);
       } finally {
         unlock(fd);
       }
+    }
+  }
+  for (const dir of fleetDirs) {
+    try {
+      rmdirSync(dir);
+    } catch {
+      // a live fleet's folders are still in it
     }
   }
   return removed;
@@ -931,6 +1013,8 @@ const serviceSpawn = (
       process.execPath,
       "--preload",
       join(import.meta.dir, "scratch-fleet-leash.ts"),
+      "--preload",
+      join(import.meta.dir, "stand-ins/preload.ts"),
       join(root, ENTRY[role]),
     ],
     {
@@ -987,7 +1071,20 @@ export interface SendSnapshot {
  * or the machine has no room. Under a run that holds one already (the probe
  * kit's), it counts once.
  */
+/**
+ * Where a fleet's hub listens (`bind`, its `HOST`) and the address its
+ * services and the probe reach it at (`at`): 127.0.0.1 for both unless a
+ * spec names others. hub-loopback binds every address (`::`) so an agent
+ * reaches it at each loopback name; hub-loopback-relay puts it on the host's
+ * own interface address, off loopback.
+ */
+export interface HubAddress {
+  at: string;
+  bind: string;
+}
+
 export async function scratchFleet(options: {
+  hub?: HubAddress;
   name: string;
   /** A promise holds the request until it settles: a spec paces a session's turns. */
   respond: (request: Seen) => Reply | Promise<Reply>;
@@ -1005,14 +1102,21 @@ export async function scratchFleet(options: {
 
 async function standUp(
   options: {
+    hub?: HubAddress;
     name: string;
     respond: (request: Seen) => Reply | Promise<Reply>;
   },
   dirs: FleetDirs,
   heavy: HeavySlot
 ) {
+  const hub = options.hub ?? { bind: "127.0.0.1", at: "127.0.0.1" };
+  /** The hub's address as a URL names it: an IPv6 one in brackets. */
+  const hubAt = hub.at.includes(":") ? `[${hub.at}]` : hub.at;
   const root = resolve(import.meta.dir, "..");
-  const { homes, scratch, short: shortRoot } = await fleetRoots();
+  const { fleet, homes, scratch, short: shortRoot } = await fleetRoots();
+  if (fleet) {
+    dirs.clearWhenEmpty(fleet);
+  }
   const sandbox = await dirs.own(
     join(scratch, `${options.name}-${crypto.randomUUID().slice(0, 8)}`)
   );
@@ -1064,7 +1168,12 @@ async function standUp(
   const hubPort = await freePort();
   const previewPorts = await freePortRange(PREVIEW_PORTS);
   const mcpPort = await freePort();
-  const base = `http://127.0.0.1:${hubPort}`;
+  // The hub names it to every agent, which serves it on its loopback (agent
+  // hub-loopback.ts): never the host's own dashboard port.
+  const dashboardPort = await freePort();
+  // The dashboard's loopback port the hub names to every agent (core `localDashboardPort`).
+  const localDashboardPort = await freePort();
+  const base = `http://${hubAt}:${hubPort}`;
 
   // ── The mock model endpoint ───────────────────────────────────────────
   const seen: Seen[] = [];
@@ -1304,8 +1413,10 @@ async function standUp(
     CAWCO_HUB_PORT: String(hubPort),
     CAWCO_PREVIEW_PORTS: previewPorts,
     CAWCO_MCP_PORT: String(mcpPort),
-    HOST: "127.0.0.1",
-    CAWCO_HUB_URL: `ws://127.0.0.1:${hubPort}/ws`,
+    CAWCO_DASHBOARD_PORT: String(dashboardPort),
+    CAWCO_LOCAL_DASHBOARD_PORT: String(localDashboardPort),
+    HOST: hub.bind,
+    CAWCO_HUB_URL: `ws://${hubAt}:${hubPort}/ws`,
     CAWCO_NO_MDNS: "1",
     // The hub's debug lines, for a spec that reads its log (routine-results 4b).
     CAWCO_DEBUG: "1",
@@ -1326,6 +1437,8 @@ async function standUp(
       })
     ),
   };
+  /** What the hub reaches in place of the world (stand-ins/index.ts): set before it launches. */
+  const standIns: StandIns = {};
   const procs: Partial<Record<Role, ReturnType<typeof Bun.spawn>>> = {};
   /** Each role's latest launch's stderr file. */
   const errs: Partial<Record<Role, string>> = {};
@@ -1349,7 +1462,12 @@ async function standUp(
         // writes `.opencode/` in its own directory: in the sandbox, never the
         // clone, whose `.opencode` a workspace boundary holds read-only (EROFS).
         cwd: role === "sessiond" ? sandbox : root,
-        env: { ...env, ...overrides, TMPDIR: tmpFor(role) },
+        env: {
+          ...env,
+          ...overrides,
+          [STAND_INS_ENV]: JSON.stringify(standIns),
+          TMPDIR: tmpFor(role),
+        },
         stdout: Bun.file(join(sandbox, `${role}-${launches}.log`)),
         stderr: Bun.file(err),
       },
@@ -1381,21 +1499,23 @@ async function standUp(
    * Freezes a role's process where it stands (SIGSTOP), or lets it run on
    * (SIGCONT): what reaches it meanwhile waits at its door, read when it runs.
    *
-   * Through `process.kill`, not the subprocess's own `kill`: on macOS, Bun
-   * 1.4.2's `Subprocess.kill("SIGSTOP")` leaves the child running (measured:
-   * a child ticking every 100 ms printed 15 lines through a 1.5 s "stop"),
-   * while `process.kill(pid, "SIGSTOP")` stops it (0 lines). Bun maps a
-   * signal name to the Linux number on every platform, and 19 is SIGCONT on
-   * macOS (oven-sh/bun#35296); `process.kill` maps names per platform. Back to
-   * `child.kill` once the fix (oven-sh/bun#39970, open as of Bun 1.4.3) ships.
+   * Through core's `signal` (node's `process.kill` within), not the
+   * subprocess's own `kill`: on macOS, Bun 1.4.2's `Subprocess.kill("SIGSTOP")`
+   * leaves the child running (measured: a child ticking every 100 ms printed
+   * 15 lines through a 1.5 s "stop"), while SIGSTOP sent to its pid that way
+   * stops it (0 lines). Bun maps a signal name to the Linux number on every
+   * platform, and 19 is SIGCONT on macOS (oven-sh/bun#35296); `process.kill`
+   * maps names per platform. Back to `child.kill` once the fix
+   * (oven-sh/bun#39970, open as of Bun 1.4.3) ships.
    */
   const freeze = (role: Role, frozen: boolean) => {
     const child = procs[role];
-    if (!child || child.exitCode !== null) {
+    const pid = child?.exitCode === null ? spawnedPid(child) : undefined;
+    if (pid === undefined) {
       throw new Error(`${role} is not running`);
     }
-    process.kill(child.pid, frozen ? "SIGSTOP" : "SIGCONT");
-    console.log(`… ${role} (pid ${child.pid}) ${frozen ? "frozen" : "thawed"}`);
+    signalPid(pid, frozen ? "SIGSTOP" : "SIGCONT");
+    console.log(`… ${role} (pid ${pid}) ${frozen ? "frozen" : "thawed"}`);
   };
   /** The log files a role's launches wrote so far, read whole, oldest first. */
   const logs = async (role: Role): Promise<string> => {
@@ -1447,19 +1567,23 @@ async function standUp(
     walk(pid);
     return out;
   };
-  /** Sends `signal` to `pid` and every process under it. */
+  /** Sends `signal` to `pid` and every process under it, as /proc (or `pgrep`) lists them; one gone meanwhile is nothing to signal. */
   const killTree = async (
-    pid: number,
+    pid: Pid,
     signal: "SIGTERM" | "SIGKILL" | "SIGCONT"
   ) => {
-    const tree = [pid, ...(await descendants(pid))];
+    const tree = [pid, ...(await descendants(pid)).map(listedPid)];
     for (const one of tree) {
-      try {
-        process.kill(one, signal);
-      } catch {
-        // gone already
-      }
+      signalPid(one, signal);
     }
+  };
+  /** A process the fleet started, by its pid: one whose spawn made none is a broken fleet. */
+  const pidOf = (child: Spawned): Pid => {
+    const pid = spawnedPid(child);
+    if (pid === undefined) {
+      throw new Error("a fleet process's spawn made no process");
+    }
+    return pid;
   };
   /** sessiond and every process under it, as a control-group stop ends them. */
   const killSessiond = async () => {
@@ -1467,17 +1591,18 @@ async function standUp(
     if (!child) {
       return;
     }
-    const tree = [child.pid, ...(await descendants(child.pid))];
-    await killTree(child.pid, "SIGTERM");
+    const pid = pidOf(child);
+    const tree = [pid, ...(await descendants(pid))];
+    await killTree(pid, "SIGTERM");
     await delay(3000);
-    await killTree(child.pid, "SIGKILL");
+    await killTree(pid, "SIGKILL");
     await child.exited;
     console.log(
       `… sessiond (pid ${child.pid}) and its ${tree.length - 1} children killed`
     );
   };
-  /** What sessiond holds: each live process's proc id and PID. */
-  const heldProcs = async (): Promise<{ procId: string; pid: number }[]> => {
+  /** What sessiond holds: each live process's proc id and PID, as its keeper lists them. */
+  const heldProcs = async (): Promise<{ procId: string; pid: Pid }[]> => {
     const client = welcomed(
       sessiondSocket,
       await SessiondClient.connect(sessiondSocket)
@@ -1485,21 +1610,19 @@ async function standUp(
     try {
       return client.procs
         .filter((proc) => proc.alive)
-        .map(({ procId, pid }) => ({ procId, pid }));
+        .map(({ procId, pid }) => ({ procId, pid: listedPid(pid) }));
     } finally {
       client.close();
     }
   };
   /** The PID sessiond runs a session's own process under (Claude Code, a pi host), by its proc id. */
-  const sessionPid = async (
-    instanceId: string
-  ): Promise<number | undefined> => {
+  const sessionPid = async (instanceId: string): Promise<Pid | undefined> => {
     const client = welcomed(
       sessiondSocket,
       await SessiondClient.connect(sessiondSocket)
     );
     try {
-      return client.procs.find((proc) => {
+      const pid = client.procs.find((proc) => {
         const id = parseProcId(proc.procId);
         return (
           proc.alive &&
@@ -1507,6 +1630,8 @@ async function standUp(
           id.instanceId === instanceId
         );
       })?.pid;
+      // None while sessiond holds no process for it.
+      return pid === undefined ? undefined : listedPid(pid);
     } finally {
       client.close();
     }
@@ -1567,7 +1692,7 @@ async function standUp(
         url: string,
         options?: { headers: Record<string, string> }
       ) => WebSocket
-    )(`ws://127.0.0.1:${hubPort}/ws/dashboard`, {
+    )(`ws://${hubAt}:${hubPort}/ws/dashboard`, {
       headers: ownerHeaders(),
     });
     await new Promise<void>((done, fail) => {
@@ -1579,6 +1704,57 @@ async function standUp(
   };
   const post = async (message: object) =>
     (await dashboard()).send(JSON.stringify(message));
+  /** A machine control asked as a dashboard asks it, on its socket: the `control_result` it answers. */
+  const controlAnswer = async (
+    method: string,
+    args: unknown[],
+    ms = 60_000
+  ): Promise<{ error?: string; ok: boolean; result?: unknown }> => {
+    const ws = await dashboard();
+    const requestId = crypto.randomUUID();
+    const result = Promise.withResolvers<{
+      error?: string;
+      ok: boolean;
+      result?: unknown;
+    }>();
+    const heard = (event: MessageEvent) => {
+      const message = JSON.parse(String(event.data)) as {
+        payload?: { kind?: string; requestId?: string; ok?: boolean };
+      };
+      if (
+        message.payload?.kind === "control_result" &&
+        message.payload.requestId === requestId
+      ) {
+        result.resolve(message.payload as { ok: boolean });
+      }
+    };
+    ws.addEventListener("message", heard);
+    ws.send(
+      JSON.stringify({
+        verb: "control",
+        machineId: MACHINE,
+        requestId,
+        payload: { requestId, method, args },
+      })
+    );
+    try {
+      const read = await readWithin(ms, () => result.promise);
+      switch (read.kind) {
+        case "answered":
+          return read.value;
+        case "unanswered":
+          throw new Error(
+            `${method}: no control_result within ${read.after} ms (${read.reason})`
+          );
+        default: {
+          const unhandled: never = read;
+          throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+        }
+      }
+    } finally {
+      ws.removeEventListener("message", heard);
+    }
+  };
   /**
    * A fetch the hub runs after its request has answered (a skill, a plugin,
    * a marketplace read or link): asked with `ask`, resolved with what `pick`
@@ -1708,40 +1884,116 @@ async function standUp(
     );
     socket = undefined;
   };
+  /** What {@link agentOnline} reads of the hub's row for a machine. */
+  interface AgentRow {
+    auth?: string;
+    custody?: { state: string };
+    harnesses?: { auth?: string; harness: string }[];
+    machineCapabilities?: unknown;
+    machineId: string;
+    status: string;
+  }
   /**
    * The hub's row for `machineId` says its agent is online, with custody, and
    * the reports that follow its register are in: every harness's, and its
    * capabilities. Until a harness has reported, the hub starts nothing on it
    * (hub placement.ts `unreportedHarnessRefusal`).
    */
-  const online = async (machineId: string) =>
-    (
-      await api<
-        {
-          custody?: { state: string };
-          harnesses?: { harness: string }[];
-          machineCapabilities?: unknown;
-          machineId: string;
-          status: string;
-        }[]
-      >("/api/agents")
-    ).some(
-      (row) =>
-        row.machineId === machineId &&
-        row.status === "online" &&
-        row.custody?.state === "available" &&
-        row.machineCapabilities !== undefined &&
-        HARNESSES.every((harness) =>
-          row.harnesses?.some((report) => report.harness === harness)
-        )
+  const online = (row: AgentRow): boolean =>
+    row.status === "online" &&
+    row.custody?.state === "available" &&
+    row.machineCapabilities !== undefined &&
+    HARNESSES.every((harness) =>
+      row.harnesses?.some((report) => report.harness === harness)
     );
+  /**
+   * Why the agent was not {@link online} at the deadline: each condition with
+   * the value the hub's last row had, the machine's word on Claude (what the
+   * agent's `claudeAuth` answered, once a report carrying one was filed), the
+   * agent's lines on its sign-in reads and reports, and the end of its log.
+   */
+  const notOnline = async (
+    machineId: string,
+    row: AgentRow | undefined,
+    err: string | undefined
+  ): Promise<string> => {
+    const rowWords = row
+      ? [
+          `the hub's last row for ${machineId}:`,
+          `  status: ${row.status} (wants online)`,
+          `  custody.state: ${row.custody?.state ?? "(none)"} (wants available)`,
+          `  machineCapabilities: ${row.machineCapabilities === undefined ? "not set" : "set"}`,
+          ...HARNESSES.map((harness) => {
+            const report = row.harnesses?.find(
+              (one) => one.harness === harness
+            );
+            return `  ${harness}: ${report ? `report filed, auth ${report.auth ?? "(none)"}` : "no report filed"}`;
+          }),
+          `  the machine's word on Claude (claudeAuth's answer, kept from the last report that carried one): ${row.auth ?? "(none)"}`,
+        ]
+      : [`the hub had no row for ${machineId}`];
+    const read = (path: string) =>
+      Bun.file(path)
+        .text()
+        .catch(() => "");
+    const log = err?.replace(ERR_SUFFIX, ".log");
+    const [stdout, stderr] = await Promise.all([
+      log ? read(log) : "",
+      err ? read(err) : "",
+    ]);
+    const signins = `${stdout}\n${stderr}`
+      .split("\n")
+      .filter((line) => SIGNIN_LINE.test(line))
+      .slice(-30);
+    return [
+      ...rowWords,
+      `the agent's lines on its sign-ins and reports (${signins.length}):`,
+      ...(signins.length > 0 ? signins : ["(none)"]),
+      `the agent's log (${log ?? "none"}), its last lines:`,
+      stdout.trimEnd().split("\n").slice(-30).join("\n") || "(empty)",
+    ].join("\n");
+  };
+  /**
+   * {@link waitingOn} the hub holding `machineId` {@link online}, 120 s; a
+   * wait that runs out says why ({@link notOnline}).
+   */
+  const agentOnline = async (
+    name: string,
+    child: ReturnType<typeof Bun.spawn> | undefined,
+    err: string | undefined,
+    label: string,
+    machineId: string
+  ): Promise<void> => {
+    let last: AgentRow | undefined;
+    try {
+      await waitingOn(
+        name,
+        child,
+        err,
+        label,
+        async () => {
+          last = (await api<AgentRow[]>("/api/agents")).find(
+            (row) => row.machineId === machineId
+          );
+          return last !== undefined && online(last);
+        },
+        Boolean,
+        120_000
+      );
+    } catch (error) {
+      throw new Error(
+        `${error instanceof Error ? error.message : String(error)}\n${await notOnline(machineId, last, err)}`,
+        { cause: error }
+      );
+    }
+  };
   const agentUp = async () => {
-    await answering(
+    await agentOnline(
       "agent",
+      procs.agent,
+      errs.agent,
       "the agent online with custody and its reports",
-      () => online(MACHINE),
-      Boolean,
-      120_000
+      MACHINE
     );
   };
   /**
@@ -1753,12 +2005,12 @@ async function standUp(
   const rejoinAs = async (machineId: string) => {
     await stop("agent");
     launch("agent", [], { CAWCO_MACHINE_ID: machineId });
-    await answering(
+    await agentOnline(
       "agent",
+      procs.agent,
+      errs.agent,
       `the agent online with custody and its reports as ${machineId}`,
-      () => online(machineId),
-      Boolean,
-      120_000
+      machineId
     );
   };
 
@@ -1775,13 +2027,18 @@ async function standUp(
    * hub holds it online with custody. Every machine runs on this host, so
    * the hub names them all by its hostname. It runs under the fleet's slot.
    */
-  const launchMachine = async (machineId: string): Promise<Machine> => {
+  const launchMachine = async (
+    machineId: string,
+    /** Laid over its environment: a spec's own `CAWCO_HUB_URL`, say. */
+    overrides: Record<string, string> = {}
+  ): Promise<Machine> => {
     const machineHome = await dirs.short(homes);
     const machineRuntime = await dirs.short(shortRoot);
     await furnish(machineHome);
     const socketPath = join(machineRuntime, "sessiond.sock");
     const machineEnv: Record<string, string> = {
       ...env,
+      ...overrides,
       HOME: machineHome,
       XDG_CONFIG_HOME: join(machineHome, ".config"),
       XDG_DATA_HOME: join(machineHome, ".local", "share"),
@@ -1817,14 +2074,12 @@ async function standUp(
     const agent = start("agent");
     // Stopped before its sessiond, as the first machine's is.
     machineProcs.unshift(agent.child);
-    await waitingOn(
+    await agentOnline(
       `${machineId}'s agent`,
       agent.child,
       agent.err,
       `${machineId}'s agent online with custody and its reports`,
-      () => online(machineId),
-      Boolean,
-      120_000
+      machineId
     );
     return {
       machineId,
@@ -2016,11 +2271,12 @@ async function standUp(
       if (child.exitCode !== null) {
         continue;
       }
+      const pid = pidOf(child);
       // biome-ignore lint/performance/noAwaitInLoops: one machine's process at a time, as `stop` does
-      await killTree(child.pid, "SIGCONT");
-      await killTree(child.pid, "SIGTERM");
+      await killTree(pid, "SIGCONT");
+      await killTree(pid, "SIGTERM");
       if (!(await exited(child, 10_000))) {
-        await killTree(child.pid, "SIGKILL");
+        await killTree(pid, "SIGKILL");
         await child.exited;
       }
       console.log(`… pid ${child.pid} of an added machine stopped`);
@@ -2044,13 +2300,20 @@ async function standUp(
   };
 
   return {
-    /** The hub's own address, `http://127.0.0.1:<port>`. */
+    /** The hub's own address, `http://127.0.0.1:<port>` (or where `hub.at` names). */
     base,
+    /** Where the hub listens and is reached at ({@link HubAddress}). */
+    hub,
+    /** The port the hub says its dashboard is on (`CAWCO_DASHBOARD_PORT`): the kit serves the built dashboard there. */
+    dashboardPort,
+    /** The dashboard's loopback port the hub names to every agent (`CAWCO_LOCAL_DASHBOARD_PORT`). */
+    localDashboardPort,
     sandbox,
     home,
     sessiondSocket,
     /** The scratch services' environment: their HOME, hub and machine. */
     env,
+    standIns,
     repo,
     workdir,
     seen,
@@ -2065,6 +2328,7 @@ async function standUp(
     heldProcs,
     api,
     post,
+    controlAnswer,
     fetched,
     query,
     write,

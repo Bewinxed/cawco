@@ -34,6 +34,7 @@ import {
   processTable as readProcessTable,
 } from "@cawco/core/process-identity";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { isAlive, listedPid, type Pid, signal } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { type KeeperJob, keeperJob } from "./keeper-jobs";
 import { dialKeeper } from "./sessiond-client";
@@ -150,15 +151,6 @@ const descendants = (table: readonly Row[], root: number): Row[] => {
   return found;
 };
 
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
-
 const settled = async (
   file: string,
   work: () => Promise<string>
@@ -252,7 +244,7 @@ const brief = (row: Row): string =>
 interface Streak {
   details: string[];
   firstAt: number;
-  pid: number;
+  pid: Pid;
 }
 
 /** The one line a wedged keeper's recovery is said in: what it is, how long it was silent, what goes with it. */
@@ -336,7 +328,7 @@ export class KeeperWatchdog {
     const job = keeperJob(found.keeper);
     const pid = await job?.pid();
     // Not running is the service manager's to start, not a wedge.
-    if (!(job && pid && alive(pid))) {
+    if (!(job && pid && isAlive(pid))) {
       this.#streaks.delete(found.endpoint);
       return;
     }
@@ -407,7 +399,7 @@ export class KeeperWatchdog {
     // (launchd's SIGKILL after its exit timeout) leaves its children under
     // init, each in its own process group, where nobody can reach them.
     const gone = Date.now() + KEEPER_GONE_MS;
-    while (alive(streak.pid) && Date.now() < gone) {
+    while (isAlive(streak.pid) && Date.now() < gone) {
       // biome-ignore lint/performance/noAwaitInLoops: waits for this one process to be gone
       await Bun.sleep(250);
     }
@@ -416,11 +408,8 @@ export class KeeperWatchdog {
       tree.some((was) => was.pid === row.pid && was.started === row.started)
     );
     for (const row of left) {
-      try {
-        process.kill(row.pid, "SIGKILL");
-      } catch {
-        // gone between the reading and the kill
-      }
+      // Gone between the reading and the kill, it is nothing to kill.
+      signal(listedPid(row.pid), "SIGKILL");
     }
     if (!found.current) {
       this.#log(

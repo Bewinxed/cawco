@@ -102,7 +102,7 @@ public final class HomeModel {
         switch hub.state {
         case .connected:
             fleet.fleetRead && fleet.liveRead && fleet.runsRead && fleet.catalogsRead ? "All caught up" : "Reading the fleet"
-        case .connecting:
+        case .connecting, .updating:
             "Connecting…"
         case .unreachable:
             "Hub unreachable"
@@ -209,7 +209,7 @@ public final class HomeModel {
         if fleet.byId[id]?.status == .moving {
             return .working
         }
-        if let count = fleet.byId[id]?.runningDelegates, count > 0 {
+        if let count = fleet.byId[id]?.session?.runningDelegates, count > 0 {
             return .working
         }
         switch fleet.activityPulse(id)?.activity {
@@ -233,6 +233,10 @@ public final class HomeModel {
             /// An onboarding choice nobody answered: the fleet's upstream
             /// choice, its three answers on the row (NeedsCard.svelte `choice`).
             case choice
+            /// HTTPS on the tailnet name: the step that stands, its one
+            /// button on the row; `done` a moment after it is taken
+            /// (NeedsCard.svelte `tailnet`).
+            case tailnet(Components.Schemas.TailnetHttps, done: Bool)
         }
 
         public let id: String
@@ -255,7 +259,7 @@ public final class HomeModel {
             switch kind {
             case let .ask(ask): ask.instanceId
             case let .watch(notice): notice.instanceId
-            case .run, .choice: nil
+            case .run, .choice, .tailnet: nil
             }
         }
     }
@@ -289,7 +293,7 @@ public final class HomeModel {
                     id: "\(ask.instanceId):\(ask.requestId)",
                     kind: .ask(ask),
                     machineId: machineId,
-                    title: thread?.title ?? row.map(fleet.title) ?? Self.asker(ask) ?? fleet.machineName(machineId),
+                    title: thread?.title ?? row.map { fleet.title($0) } ?? Self.asker(ask) ?? fleet.machineName(machineId),
                     place: Naming.unbroken(fleet.placeOf(machineId, row?.cwd)),
                     raisedAt: ask.raisedAt
                 )
@@ -315,7 +319,7 @@ public final class HomeModel {
                 id: "watch:\(notice.instanceId)",
                 kind: .watch(notice),
                 machineId: notice.machineId,
-                title: row.map(fleet.title) ?? notice.title,
+                title: row.map { fleet.title($0) } ?? notice.title,
                 place: Naming.unbroken(fleet.placeOf(notice.machineId, row?.cwd)),
                 raisedAt: notice.at
             )
@@ -333,6 +337,19 @@ public final class HomeModel {
                 raisedAt: nil
             ))
         }
+        // HTTPS on the tailnet name: its step while one stands, its tick a
+        // moment after (home-state.svelte.ts `secured`).
+        if let tailnet = fleet.tailnetHttps,
+           tailnet.state == .needs || (tailnet.state == .serving && fleet.tailnetTicked) {
+            items.append(NeedsItem(
+                id: "tailnet:https",
+                kind: .tailnet(tailnet, done: tailnet.state == .serving),
+                machineId: "",
+                title: Words.Tailnet.title,
+                place: "Onboarding",
+                raisedAt: nil
+            ))
+        }
         return items.sorted { ($0.raisedAt ?? .infinity, $0.id) < ($1.raisedAt ?? .infinity, $1.id) }
     }
 
@@ -344,14 +361,14 @@ public final class HomeModel {
     static let boardWindow = 24.0 * 60 * 60 * 1000
 
     /// The runs the board lists: still going, or ended within the window (`onBoard`).
-    private var boardRuns: [InstanceRow] {
+    private var boardRuns: [BoardRow] {
         fleet.runRows.filter { $0.status == .running || now - $0.updatedMs < Self.boardWindow }
     }
 
     /// Every session and run mid-turn, ordered by when it joined Working, newest first.
-    public var working: [InstanceRow] {
+    public var working: [BoardRow] {
         // A thread Caw is working on is working too (home-state.svelte.ts `runningRows`).
-        let rows = (fleet.rows + boardRuns + fleet.threadRows).filter { $0.isLive && activity($0.id) == .working }
+        let rows = (fleet.rows.map(BoardRow.session) + boardRuns + fleet.threadRows).filter { $0.isLive && activity($0.id) == .working }
         let present = Set(rows.map(\.id))
         for id in enteredWorking.keys where !present.contains(id) {
             enteredWorking[id] = nil
@@ -372,7 +389,7 @@ public final class HomeModel {
     /// begun, or for a failed one the hub's last change to its row. A pulse's
     /// time is its machine's clock, so it is never read here. A run: its own
     /// last move, which the hub stamps, once it has stopped.
-    private func lastEnded(_ row: InstanceRow) -> Double? {
+    private func lastEnded(_ row: BoardRow) -> Double? {
         if fleet.run(row.id) != nil {
             if row.isFailed {
                 return fleet.lastAt(row)
@@ -382,13 +399,14 @@ public final class HomeModel {
         if row.isFailed {
             return row.updatedMs
         }
-        return row.turnEndedMs > 0 ? row.turnEndedMs : nil
+        let turnEnded = row.session?.turnEndedMs ?? 0
+        return turnEnded > 0 ? turnEnded : nil
     }
 
     /// When a session (or run) ended, as Finished counts it
     /// (home-state.svelte.ts `endedAt`): its last end, nil while it works or
     /// waits, delegates running under it included.
-    private func endedAt(_ row: InstanceRow) -> Double? {
+    private func endedAt(_ row: BoardRow) -> Double? {
         if fleet.run(row.id) == nil, !row.isFailed, activity(row.id) != .idle {
             return nil
         }
@@ -397,7 +415,7 @@ public final class HomeModel {
 
     /// It ended after the owner last saw it, on any device, and is not at
     /// work again: what Finished lists. Both times the hub's.
-    private func endedUnseen(_ row: InstanceRow) -> Bool {
+    private func endedUnseen(_ row: BoardRow) -> Bool {
         unseen(row, since: endedAt(row))
     }
 
@@ -406,11 +424,11 @@ public final class HomeModel {
     /// `turnEndedAt` against its `seenAt`), so the look goes the moment the
     /// hub's end reaches this device, whatever its pulse says by then: its
     /// delegates still running, or its next turn already begun.
-    public func turnEndedUnseen(_ row: InstanceRow) -> Bool {
+    public func turnEndedUnseen(_ row: BoardRow) -> Bool {
         unseen(row, since: lastEnded(row))
     }
 
-    private func unseen(_ row: InstanceRow, since ended: Double?) -> Bool {
+    private func unseen(_ row: BoardRow, since ended: Double?) -> Bool {
         guard let ended else {
             return false
         }
@@ -467,7 +485,7 @@ public final class HomeModel {
 
     /// Whether a row may be archived: neither it nor anything under it is
     /// still doing something (core `archiveRefusal`, the rule `/api/seen` holds too).
-    public func archivable(_ row: InstanceRow) -> Bool {
+    public func archivable(_ row: BoardRow) -> Bool {
         let children = children
         var seen = Set<String>()
         func idle(_ id: String) -> Bool {
@@ -608,8 +626,8 @@ public final class HomeModel {
 
     /// Every session and run that ended since it was last opened, the latest
     /// to end first; two that ended together by id, as on the web.
-    public var finished: [InstanceRow] {
-        let rows = (fleet.rows.filter(\.isListed) + boardRuns).filter(endedUnseen).sorted {
+    public var finished: [BoardRow] {
+        let rows = (fleet.rows.filter(\.isListed).map(BoardRow.session) + boardRuns).filter(endedUnseen).sorted {
             let a = fleet.lastAt($0)
             let b = fleet.lastAt($1)
             return a != b ? a > b : $0.id < $1.id
@@ -644,7 +662,7 @@ public final class HomeModel {
     }
 
     /// Everything else that can be opened: idle and sleeping sessions, and the stored transcripts.
-    private func recent(working: [InstanceRow], finished: [InstanceRow]) -> [RecentItem] {
+    private func recent(working: [BoardRow], finished: [BoardRow]) -> [RecentItem] {
         _ = recentRevision
         var shown = Set(working.map(\.id))
         shown.formUnion(finished.map(\.id))
@@ -749,7 +767,15 @@ public final class HomeModel {
         fleet.placeOf(row.machineId, row.cwd)
     }
 
+    public func usagePlace(_ row: BoardRow) -> String {
+        fleet.placeOf(row.machineId, row.cwd)
+    }
+
     public func fleetTitle(_ row: InstanceRow) -> String {
+        fleet.title(row)
+    }
+
+    public func fleetTitle(_ row: BoardRow) -> String {
         fleet.title(row)
     }
 
@@ -760,17 +786,17 @@ public final class HomeModel {
 
     // MARK: A tab's tree
 
-    private func all(_ tab: Tab) -> [InstanceRow] {
+    private func all(_ tab: Tab) -> [BoardRow] {
         tab == .working ? working : finished
     }
 
     /// A tab's own rows: delegates under a listed parent fold into its count;
     /// one whose parent the tab does not list only with the switch on, or when it failed.
-    public func rows(_ tab: Tab) -> [InstanceRow] {
+    public func rows(_ tab: Tab) -> [BoardRow] {
         rows(of: all(tab))
     }
 
-    private func rows(of rows: [InstanceRow]) -> [InstanceRow] {
+    private func rows(of rows: [BoardRow]) -> [BoardRow] {
         if delegates {
             return rows
         }
@@ -780,15 +806,15 @@ public final class HomeModel {
 
     /// Work another session started: its parent is a row the fleet holds
     /// (tree.ts `hasParent`). What the tabs' counts leave out.
-    public func isDelegate(_ row: InstanceRow) -> Bool {
+    public func isDelegate(_ row: BoardRow) -> Bool {
         row.parentInstanceId.map { fleet.byId[$0] != nil } ?? false
     }
 
-    public func lines(_ tab: Tab) -> [TreeLine<InstanceRow>] {
+    public func lines(_ tab: Tab) -> [TreeLine<BoardRow>] {
         lines(tab, rows: rows(tab))
     }
 
-    private func lines(_ tab: Tab, rows: [InstanceRow]) -> [TreeLine<InstanceRow>] {
+    private func lines(_ tab: Tab, rows: [BoardRow]) -> [TreeLine<BoardRow>] {
         tree(rows, anchor: tab == .working ? .last : .first, context: { self.fleet.byId[$0] })
     }
 
@@ -797,8 +823,8 @@ public final class HomeModel {
     /// every pulse, so its lists are not each worked out from the fleet.
     public struct Board {
         /// Each tab's own rows (`rows(_:)`).
-        public let working: [InstanceRow]
-        public let finished: [InstanceRow]
+        public let working: [BoardRow]
+        public let finished: [BoardRow]
         /// Each tab's count: its top-level sessions, never their delegates,
         /// whatever the switch shows; and whether one of Finished's failed.
         public let counts: (working: Int, finished: Int, finishedFailed: Bool)
@@ -824,7 +850,7 @@ public final class HomeModel {
 
     public struct Line: Identifiable {
         public var id: String { line.row.id }
-        public let line: TreeLine<InstanceRow>
+        public let line: TreeLine<BoardRow>
         /// The rows folded under it, when it is a parent.
         public let fold: Fold?
     }
@@ -847,11 +873,11 @@ public final class HomeModel {
 
     /// A tab's lines by machine, each session followed by its delegates under
     /// the machine its top-level session runs on, capped at `moreAt` trees.
-    private func groups(_ tab: Tab, lines: [TreeLine<InstanceRow>]) -> [MachineGroup] {
+    private func groups(_ tab: Tab, lines: [TreeLine<BoardRow>]) -> [MachineGroup] {
         let open = openTrees[tab] ?? []
         let visible = collapse(lines) { open.contains($0) }
         var order: [String] = []
-        var byMachine: [String: [TreeLine<InstanceRow>]] = [:]
+        var byMachine: [String: [TreeLine<BoardRow>]] = [:]
         var top = ""
         for line in visible {
             if line.depth == 0 {
@@ -907,7 +933,7 @@ public final class HomeModel {
     }
 
     /// The row's meta line: its project, then what it is doing, or why it failed.
-    public func meta(_ row: InstanceRow, tab: Tab, group: String) -> String {
+    public func meta(_ row: BoardRow, tab: Tab, group: String) -> String {
         var said = [fleet.projectOf(row.machineId, row.cwd)]
         switch tab {
         case .working:
@@ -924,7 +950,7 @@ public final class HomeModel {
     }
 
     /// The row's age: how long its turn has run, or how long ago it ended.
-    public func age(_ row: InstanceRow, tab: Tab) -> String {
+    public func age(_ row: BoardRow, tab: Tab) -> String {
         switch tab {
         case .working:
             fleet.turn(row.id).map { Naming.span(ms: now - $0) } ?? ""

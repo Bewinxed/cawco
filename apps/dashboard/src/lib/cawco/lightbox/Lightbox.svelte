@@ -34,6 +34,7 @@
   } from "#lib/icons.js";
   import { dur, ease, motionOk } from "../motion/curves.svelte";
   import { closeInto, land } from "../motion/share.svelte";
+  import { hold } from "../page-marks";
   import { extensionOf } from "./extension";
   import {
     type LightboxShot,
@@ -129,7 +130,12 @@
         },
       });
     });
+    // Open from its init, which puts its root into the body, until it takes
+    // the root out on destroy: said on the root for the screen's edges
+    // (ScreenEdges, page-marks).
+    let shown: (() => void) | undefined;
     opened.on("destroy", () => {
+      shown?.();
       gallery = undefined;
       if (lightbox.current === view) {
         lightbox.close();
@@ -137,6 +143,7 @@
     });
     gallery = opened;
     opened.init();
+    shown = hold("root", "data-scrim", "lightbox");
   }
 
   $effect(() => {

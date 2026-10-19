@@ -40,6 +40,7 @@ export {
 } from "./text.ts";
 export type {
   AssistantRecord,
+  AttachmentRecord,
   ContentBlock,
   ImageBlock,
   LocatedRecord,

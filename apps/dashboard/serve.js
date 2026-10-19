@@ -12,13 +12,15 @@
  *
  * The relay is done on the RAW SOCKET rather than through `http.request`: after
  * the handshake a websocket proxy is only bytes in both directions, so the
- * request line and headers are re-issued verbatim over a plain TCP connection
- * and the hub's own 101 passes straight back.
+ * request line and headers are re-issued verbatim over a TCP connection (TLS
+ * to an https hub) and the hub's own 101 passes straight back.
  *
- * It runs under node and serves only on the listening socket its service
+ * It runs under node and serves only on the listening sockets its service
  * manager hands it — `cawco-dashboard.socket` under systemd, the `Sockets`
- * entry of the LaunchAgent under launchd (packages/cli/src/service.ts). The
- * manager holds that socket across a restart of this process, so a page load
+ * entry of the LaunchAgent under launchd (packages/cli/src/service.ts): the
+ * network's address, and this computer's loopback at the dashboard's
+ * loopback port (`http://localhost:3455`). The manager holds those sockets
+ * across a restart of this process, so a page load
  * that lands while a deploy restarts the dashboard waits in the listen backlog
  * for the new process instead of being refused. It never binds the port
  * itself; started any other way, `collect` throws and it exits.
@@ -38,6 +40,7 @@ import {
 import http from "node:http";
 import net from "node:net";
 import { extname, join, resolve, sep } from "node:path";
+import tls from "node:tls";
 import { fileURLToPath } from "node:url";
 import sockets from "socket-activation";
 import { publicOrigin } from "./public-origin.js";
@@ -75,8 +78,54 @@ const runningVersion = readFileSync(
   "utf8"
 );
 
-const target = new URL(process.env.CAWCO_HUB_URL || "http://localhost:3456");
-const targetPort = Number(target.port || 80);
+/**
+ * The hub this dashboard relays to, as its service names it (cli service.ts
+ * sets `CAWCO_HUB_URL` on the unit). Never guessed: a dashboard started
+ * without it would relay to whatever answers on a default port, so it does
+ * not start, as a vite server does not without its own (vite.config.ts).
+ */
+if (!process.env.CAWCO_HUB_URL) {
+  console.error(
+    "[cawco] the dashboard needs CAWCO_HUB_URL, the hub it relays to (e.g. CAWCO_HUB_URL=ws://127.0.0.1:3456/ws); its service sets it, so it was started some other way"
+  );
+  process.exit(1);
+}
+const target = new URL(process.env.CAWCO_HUB_URL);
+const URL_BRACKETS = /^\[|\]$/g;
+/** An `https:` or `wss:` hub is dialled with TLS, on its own port or 443. */
+const SCHEMES = {
+  "http:": { secure: false, port: 80 },
+  "ws:": { secure: false, port: 80 },
+  "https:": { secure: true, port: 443 },
+  "wss:": { secure: true, port: 443 },
+};
+const scheme = SCHEMES[target.protocol];
+if (!scheme) {
+  console.error(
+    `[cawco] CAWCO_HUB_URL is ${target.href}: a hub is reached over http(s) or ws(s), not ${target.protocol}`
+  );
+  process.exit(1);
+}
+const targetPort = Number(target.port || scheme.port);
+/** The hub's host as a socket dials it: an IPv6 address without the URL's brackets. */
+const targetHost = target.hostname.replace(URL_BRACKETS, "");
+
+/**
+ * A connection to the hub, over TLS when its URL says so; `connected` once it
+ * can carry bytes. SNI names a host by its name alone: node refuses an
+ * address as the server name, so a hub dialled by address sends none.
+ */
+const dialHub = (connected) =>
+  scheme.secure
+    ? tls.connect(
+        {
+          host: targetHost,
+          port: targetPort,
+          ...(net.isIP(targetHost) ? {} : { servername: targetHost }),
+        },
+        connected
+      )
+    : net.connect(targetPort, targetHost, connected);
 
 /**
  * Why a socket to the hub is refused, or null: core `browser-gate.ts`
@@ -323,7 +372,7 @@ function serveApp(req, res) {
   handler(req, res);
 }
 
-const server = http.createServer((req, res) => {
+function onRequest(req, res) {
   if (standalone) {
     relayRuntime.applyRelayPeer(req);
   }
@@ -331,12 +380,12 @@ const server = http.createServer((req, res) => {
   req.headers[PROTOCOL_HEADER] = own.protocol;
   req.headers[HOST_HEADER] = own.host;
   serveApp(req, res);
-});
+}
 
 /** Every upgraded socket this process is relaying, so a stop can hang them up. */
 const relayed = new Set();
 
-server.on("upgrade", (req, socket, head) => {
+function onUpgrade(req, socket, head) {
   if (standalone) {
     relayRuntime.applyRelayPeer(req);
   }
@@ -362,7 +411,7 @@ server.on("upgrade", (req, socket, head) => {
     return;
   }
 
-  const upstream = net.connect(targetPort, target.hostname, () => {
+  const upstream = dialHub(() => {
     const lines = [`${req.method} ${req.url} HTTP/1.1`];
     for (let i = 0; i < req.rawHeaders.length; i += 2) {
       // The hub is the one being addressed now, so it gets its own Host, and
@@ -401,18 +450,62 @@ server.on("upgrade", (req, socket, head) => {
   });
   socket.on("close", () => upstream.destroy());
   upstream.on("close", () => socket.destroy());
-});
+}
 
-// One socket: the unit and the plist each name a single address for it.
-const [fd] = sockets.collect("dashboard");
-const ready = () => {
-  console.log(`dashboard on inherited fd ${fd} — /ws -> ${target.origin}`);
+/** A server answering as this dashboard: its pages, and its `/ws` relay. */
+const dashboardServer = () => {
+  const server = http.createServer(onRequest);
+  server.on("upgrade", onUpgrade);
+  return server;
 };
+
+/**
+ * The descriptors handed over under `name`, or none when its socket is not
+ * there: a loopback socket that did not open (its port held by something
+ * else) or an install that names none. Said, and the dashboard answers on
+ * the rest; any other refusal is the service manager's and stops it.
+ */
+function collectWanted(name) {
+  try {
+    return sockets.collect(name);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
+    console.warn(
+      `[cawco] no ${name} socket was handed over: the dashboard answers without it (journalctl --user -u cawco-${name}.socket says why on systemd)`
+    );
+    return [];
+  }
+}
+
+// One descriptor per address the units and the plist name (cli service.ts
+// `dashboardSockets`): where the network reaches it, required, and this
+// computer's loopback at the dashboard's loopback port, wanted.
+const fds = [
+  ...sockets.collect("dashboard"),
+  ...collectWanted("dashboard-local"),
+];
+const ready = () => {
+  console.log(
+    `dashboard on inherited fds ${fds.join(", ")} — /ws -> ${target.origin}`
+  );
+};
+/** Every server this process answers on, closed together when it stops. */
+const servers = standalone ? [dashboardServer()] : fds.map(dashboardServer);
 const relay = standalone
-  ? await relayRuntime.listenInherited(server, fd, ready)
+  ? await relayRuntime.listenInherited(servers[0], fds, ready)
   : undefined;
 if (!standalone) {
-  server.listen({ fd }, ready);
+  let listening = 0;
+  for (const [index, fd] of fds.entries()) {
+    servers[index].listen({ fd }, () => {
+      listening += 1;
+      if (listening === fds.length) {
+        ready();
+      }
+    });
+  }
 }
 
 /**
@@ -435,8 +528,16 @@ const DRAIN_MS = 5000;
  */
 process.once("SIGTERM", () => {
   relay?.stopAccepting();
-  server.close(() => process.exit(0));
-  server.closeIdleConnections();
+  let closed = 0;
+  for (const server of servers) {
+    server.close(() => {
+      closed += 1;
+      if (closed === servers.length) {
+        process.exit(0);
+      }
+    });
+    server.closeIdleConnections();
+  }
   for (const socket of relayed) {
     socket.destroy();
   }

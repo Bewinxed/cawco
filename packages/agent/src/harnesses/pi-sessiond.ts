@@ -144,6 +144,9 @@ export class PiRemoteSession implements HarnessSession {
    */
   readonly #background = new Set<string>();
 
+  /** Its host's pid as its keeper listed it: the process a refusal of its input is about. */
+  readonly #pid: number;
+
   constructor(
     client: SessiondClient,
     ctx: HarnessContext,
@@ -153,6 +156,7 @@ export class PiRemoteSession implements HarnessSession {
   ) {
     this.#client = client;
     this.#ctx = ctx;
+    this.#pid = pid;
     this.#epoch = procEpoch(client.epoch as string, pid);
     this.#seq = afterSeq;
     this.#recoveryHead = recoveryHead;
@@ -319,7 +323,11 @@ export class PiRemoteSession implements HarnessSession {
     } catch (error) {
       // Never silent: the session hears the keeper refused its host its
       // input, and the caller's wait ends with the same refusal.
-      const refusal = new KeeperRefused(procId, refusalReason(error));
+      const refusal = new KeeperRefused(
+        procId,
+        refusalReason(error),
+        this.#pid
+      );
       console.warn(`[sessiond] ${procId}: write refused: ${refusal.reason}`);
       this.#ctx.keeperRefused(refusal);
       throw refusal;

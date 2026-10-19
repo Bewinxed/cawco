@@ -4,7 +4,9 @@
    * past that — an attempt running or failed, what it waits on, its to-dos.
    * A task with nothing to say is two lines (The Idle Has No Fill Rule).
    * Its footer speaks only of live state: an attempt working or trying
-   * again, a wait on you, or the date it is set for.
+   * again, a wait on you, or the date it is set for. Its head says when an
+   * attempt failed, or when the hub could not start one (Can't start, the
+   * hub's reason as its title; the task's pane says it whole).
    *
    * The card is a link to the task (`?task=tsk-12`), so it opens in a new
    * tab and is shared like one; a plain click opens it beside what it was
@@ -132,7 +134,19 @@
         <span class="sr-only">{task.problem}</span>
       </span>
     {/if}
-    {#if flags.failed && !flags.live}
+    {#if flags.startProblem && !flags.live}
+      <!-- Why the hub could not start it, newer than any failure before. -->
+      <Badge
+        class="ml-auto"
+        data-start-problem
+        title={flags.startProblem}
+        variant="fail"
+      >
+        <IconWarningTriangle aria-hidden="true" />
+        <span>Can't start</span>
+        <span class="sr-only">{flags.startProblem}</span>
+      </Badge>
+    {:else if flags.failed && !flags.live}
       <Badge class="ml-auto" variant="fail">
         <IconError aria-hidden="true" />
         <span>Failed</span>

@@ -33,10 +33,8 @@
  *   every task waits for the person before done is the person's choice
  *   either way (on routes work through them, off takes away a look they
  *   chose), so it is always asked, `ask` or not.
- * - `set_apple_gate`: the Apple build gate on or off (apple-gate.ts,
- *   project-edit.ts). Whether work waits for a Mac before it lands guards
- *   the person's app, so it is always asked, `ask` or not.
- * Only Caw's own project: naming another is refused.
+ * Only Caw's own project: naming another is refused. What its work's
+ * landing gate runs is the project's gate.md (gate-file.ts), not a setting.
  */
 import {
   type InstanceRow,
@@ -95,22 +93,6 @@ const reviewSet = (
   return { kind: "set_review", review };
 };
 
-/** The Apple build gate turned on or off, refused when it is that already. */
-const appleGateSet = (
-  project: ProjectRow,
-  asked: { apple_gate?: boolean }
-): ProjectSettingChange => {
-  const appleGate =
-    asked.apple_gate ??
-    refuse("set_apple_gate says apple_gate: on (true) or off (false).");
-  if (appleGate === project.appleGate) {
-    refuse(
-      `The Apple build gate is ${appleGate ? "on" : "off"} for this project already.`
-    );
-  }
-  return { kind: "set_apple_gate", appleGate };
-};
-
 /** What the tool takes: changes, flat, each read by its `kind`. */
 const ASKED_CHANGE = z.object({
   kind: z.enum([
@@ -121,7 +103,6 @@ const ASKED_CHANGE = z.object({
     "create_repo",
     "rename",
     "set_review",
-    "set_apple_gate",
   ]),
   connection: z.string().optional(),
   github: z.string().optional().describe("owner/name"),
@@ -130,7 +111,6 @@ const ASKED_CHANGE = z.object({
   name: z.string().optional(),
   private: z.boolean().optional(),
   review: z.boolean().optional(),
-  apple_gate: z.boolean().optional(),
 });
 type AskedChange = z.infer<typeof ASKED_CHANGE>;
 
@@ -144,7 +124,7 @@ const definition = z.object({
 /** The tool as `tools/list` answers it (the call itself runs through {@link createProjectSettings}). */
 const listing = tool(
   PROJECT_SETTINGS,
-  "Change your project's settings, noted in the thread; ask: true asks the person first (create_repo, set_review, set_apple_gate always do).",
+  "Change your project's settings, noted in the thread; ask: true asks the person first (create_repo and set_review always do).",
   definition.shape,
   () => Promise.reject(new Error("project_settings runs through its own call"))
 );
@@ -283,8 +263,6 @@ export const createProjectSettings = ({
         return renamed(project, asked);
       case "set_review":
         return reviewSet(project, asked);
-      case "set_apple_gate":
-        return appleGateSet(project, asked);
       case "set_lands":
         break;
     }
@@ -335,9 +313,6 @@ export const createProjectSettings = ({
         break;
       case "set_review":
         await edit(project.id, { review: change.review });
-        break;
-      case "set_apple_gate":
-        await edit(project.id, { appleGate: change.appleGate });
         break;
       case "create_repo": {
         // A publish links what it made.
@@ -438,15 +413,11 @@ export const createProjectSettings = ({
       const reason = reasonOf(input.reason);
       const changes = await checkAll(project, input.changes);
       // Creating a remote and pushing reach outside, and whether work waits
-      // for the person's review or for their app's build is theirs to
-      // choose: always the person's.
+      // for the person's review is theirs to choose: always the person's.
       const asking =
         input.ask === true ||
         changes.some(
-          (one) =>
-            one.kind === "create_repo" ||
-            one.kind === "set_review" ||
-            one.kind === "set_apple_gate"
+          (one) => one.kind === "create_repo" || one.kind === "set_review"
         );
       if (!asking) {
         const said = await apply(project, changes);
@@ -481,7 +452,7 @@ export const createProjectSettings = ({
       let text = String(error);
       if (error instanceof z.ZodError) {
         text =
-          "changes is a list of grant_connection, link_repo, set_lands, set_runs_on, create_repo, rename, set_review or set_apple_gate, and reason one sentence.";
+          "changes is a list of grant_connection, link_repo, set_lands, set_runs_on, create_repo, rename or set_review, and reason one sentence.";
       } else if (error instanceof Error) {
         text = error.message;
       }

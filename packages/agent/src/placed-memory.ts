@@ -6,15 +6,7 @@
  */
 import { readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { projectClaudeDir } from "@cawco/core/paths";
-
-/**
- * A folder's `.claude/rules/cawco/`: Claude Code loads every rule file under
- * `.claude/rules/` at a session's launch ("All `.md` files are discovered
- * recursively", code.claude.com/docs/en/memory).
- */
-export const placedMemoryDir = (cwd: string): string =>
-  projectClaudeDir(cwd, "rules", "cawco");
+import { placedMemoryDir } from "@cawco/core/paths";
 
 /** Every markdown file under `root`, by its path there, in path order; none when it is no folder. */
 const markdownUnder = async (root: string, prefix = ""): Promise<string[]> => {

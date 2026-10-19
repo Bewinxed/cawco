@@ -1,16 +1,18 @@
 /**
  * Three decision pages in a scratch fleet's project, as sessions publish
- * them (the decision-page skill's kit markup, built by the hub), for the
+ * them (programs over the decision library, as the decision-page skill
+ * writes them; the hub serves each in its host page), for the
  * Decisions tab's preview (run.ts) and the probes that seed a project with
  * them (probe-kit specs/web/safari-blurs.ts):
  *
  * - **landing** — "Landing page hero", 12 cards, 5 picked and 2 noted: the
  *   tab says `5 of 12 picked · 2 notes`.
  * - **pricing** — "Price the hosted plan", 6 cards, sent and decided: one
- *   left open, notes, a dial, a card with a mockup, a recommendation turned
- *   down, and three tasks filed back onto its cards (`decided`).
- * - **onboarding** — "Shape onboarding", 5 cards, 2 picked, drawn as a
- *   graph by `decisions/decisions.json` with the landing's cards beside it.
+ *   left open, notes, a dial, a card with a diagram, a recommendation
+ *   turned down, and three tasks filed back onto its cards (`decided`).
+ * - **onboarding** — "Shape onboarding", 5 cards, 2 picked, in a Section,
+ *   each after the one before: a graph, with the landing's two hero cards
+ *   after its last (`onboarding#caw-intro`).
  *
  * Card and option ids are dashed, so no word of the page's prose is one:
  * the probe asserts no element's text holds a card id.
@@ -26,11 +28,15 @@ export interface SeedOption {
 }
 
 export interface SeedCard {
+  /** The decisions it depends on: an id on its page, or `page#id`. */
+  after?: string[];
+  /** A Mermaid diagram shown between its why and its options. */
+  diagram?: string;
   id: string;
-  /** A mockup placed in the card (its root `.mk mk-<id>`). */
-  mockup?: string;
   options: SeedOption[];
   question: string;
+  /** The Section it stands in, by title. */
+  section?: string;
   why: string;
 }
 
@@ -59,6 +65,8 @@ export const LANDING: SeedPage = {
   cards: [
     {
       id: "hero-lead",
+      section: "The hero",
+      after: ["onboarding#caw-intro"],
       question: "Which hero leads the landing page?",
       why: "Today the hero is a screenshot of the board.",
       options: [
@@ -96,6 +104,8 @@ export const LANDING: SeedPage = {
     },
     {
       id: "main-act",
+      section: "The hero",
+      after: ["hero-lead"],
       question: "What is the primary action?",
       why: "One coral button under the headline.",
       options: [
@@ -230,7 +240,8 @@ export const PRICING: SeedPage = {
       id: "plan-shape",
       question: "What shape is the plan?",
       why: "Today the hub is self-hosted only.",
-      mockup: "plan-card",
+      diagram:
+        "flowchart LR\nobelisk[obelisk] --> plan[One plan]\nmacbook[macbook] --> plan",
       options: [
         option("shape-seat", "Per seat", "Each person who opens the board."),
         option(
@@ -351,6 +362,7 @@ export const ONBOARDING: SeedPage = {
   cards: [
     {
       id: "first-screen",
+      section: "The first ten minutes",
       question: "What is the first screen?",
       why: "Today it is the empty board.",
       options: [
@@ -365,6 +377,8 @@ export const ONBOARDING: SeedPage = {
     },
     {
       id: "join-second",
+      section: "The first ten minutes",
+      after: ["first-screen"],
       question: "When does the second machine join?",
       why: "One machine is a session, two is a fleet.",
       options: [
@@ -374,6 +388,8 @@ export const ONBOARDING: SeedPage = {
     },
     {
       id: "first-project",
+      section: "The first ten minutes",
+      after: ["first-screen"],
       question: "Is there a first project?",
       why: "A project holds the board.",
       options: [
@@ -388,6 +404,8 @@ export const ONBOARDING: SeedPage = {
     },
     {
       id: "phone-pair",
+      section: "The first ten minutes",
+      after: ["join-second"],
       question: "When is the phone paired?",
       why: "Approvals reach the phone.",
       options: [
@@ -402,6 +420,8 @@ export const ONBOARDING: SeedPage = {
     },
     {
       id: "caw-intro",
+      section: "The first ten minutes",
+      after: ["first-project"],
       question: "How does Caw say hello?",
       why: "He is the project's lead.",
       options: [
@@ -420,121 +440,52 @@ export const ONBOARDING_PICKS: Record<
   "join-second": { options: ["join-now"], note: "the fleet is the point" },
 };
 
-/** `decisions/decisions.json`: the onboarding's cards and two of the landing's, in two groups. */
-export const GRAPH = {
-  cards: [
-    {
-      id: "first-screen",
-      name: "First screen",
-      page: "onboarding",
-      x: 0,
-      y: 0,
-    },
-    {
-      id: "join-second",
-      name: "Second machine",
-      page: "onboarding",
-      x: 200,
-      y: 0,
-    },
-    {
-      id: "first-project",
-      name: "First project",
-      page: "onboarding",
-      x: 0,
-      y: 96,
-    },
-    {
-      id: "phone-pair",
-      name: "Pair the phone",
-      page: "onboarding",
-      x: 200,
-      y: 96,
-    },
-    {
-      id: "caw-intro",
-      name: "Caw says hello",
-      page: "onboarding",
-      x: 100,
-      y: 192,
-    },
-    { id: "hero-lead", name: "Hero", page: "landing", x: 0, y: 352 },
-    { id: "main-act", name: "Primary action", page: "landing", x: 200, y: 352 },
-  ],
-  edges: [
-    ["first-screen", "join-second"],
-    ["first-screen", "first-project"],
-    ["join-second", "phone-pair"],
-    ["first-project", "caw-intro"],
-    ["caw-intro", "hero-lead"],
-    ["hero-lead", "main-act"],
-  ],
-  groups: [
-    {
-      id: "first-ten",
-      name: "The first ten minutes",
-      cards: [
-        "first-screen",
-        "join-second",
-        "first-project",
-        "phone-pair",
-        "caw-intro",
-      ],
-    },
-    { id: "the-hero", name: "The hero", cards: ["hero-lead", "main-act"] },
-  ],
-};
+const say = (text: string): string => JSON.stringify(text);
 
-const htmlText = (text: string): string =>
-  text
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;");
-
-/** A small mockup for a card, to the kit's contract: one root, styles under it, tokens only. */
-const mockupOf = (id: string): string =>
-  `<style>.mk-${id}{display:grid;gap:var(--space-2);padding:var(--space-3);border-radius:var(--radius-lg);background:var(--surface-raised)}.mk-${id} .pc-row{display:flex;justify-content:space-between;font-size:var(--text-label);color:var(--ink-strong)}.mk-${id} .pc-muted{color:var(--ink-muted)}</style><div class="mk mk-${id}" role="img" aria-label="A plan card priced by machine"><div class="pc-row"><span>obelisk</span><span class="pc-muted">1 machine</span></div><div class="pc-row"><span>macbook</span><span class="pc-muted">1 machine</span></div></div>`;
-
-/** The page as a session writes it from the kit's page.html: hero, cards, send. */
-export const pageHtml = (page: SeedPage): string => {
-  const cards = page.cards
-    .map((card) => {
-      const options = card.options
-        .map(
-          (each) =>
-            `<button class="dp-opt" type="button" data-option="${each.id}"><b>${htmlText(each.label)}</b><span>${htmlText(each.line)}</span>${each.recommended ? '<span class="dp-tag">Recommended</span>' : ""}</button>`
-        )
-        .join("");
-      const shown = card.mockup
-        ? `<div class="dp-show solo"><figure class="dp-pane"><figcaption>How it would look</figcaption>${mockupOf(card.mockup)}</figure></div>`
-        : "";
-      return `<article class="dp-card" id="${card.id}"><header><h2>${htmlText(card.question)}</h2><span class="dp-state" data-dp-state="${card.id}">Not picked</span></header><p class="dp-why">${htmlText(card.why)}</p>${shown}<div class="dp-opts" data-cawco-choice="${card.id}" role="group" aria-label="${htmlText(card.question)}">${options}</div><label class="dp-note">Note<textarea data-dp-note="${card.id}" rows="1" placeholder="Anything to add"></textarea></label></article>`;
-    })
-    .join("\n");
-  return `<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>${htmlText(page.title)}</title>
-<style>{{KIT_CSS}}</style>
-</head>
-<body>
-<main class="dp">
-  <header class="dp-hero">
-    <span><img class="caw-l" src="caw/light-ready.webp" alt="Caw" width="72" height="72"><img class="caw-d" src="caw/dark-ready.webp" alt="" width="72" height="72"></span>
-    <div><h1>${htmlText(page.title)}</h1><p>${htmlText(page.lede)}</p></div>
-    <div class="dp-meter" aria-live="polite"><span><b data-dp-count>0</b> of <span data-dp-total>0</span> picked</span><span class="dp-bar"><i data-dp-fill></i></span></div>
-  </header>
-  <p class="dp-offline" data-dp-offline hidden>Picks are kept only when CawCo shows this page: publish it with artifact_create.</p>
-${cards}
-  <footer class="dp-done"><span data-dp-sent></span><button class="dp-send" type="button" data-dp-send>Send picks</button></footer>
-</main>
-<script>{{KIT_JS}}</script>
-</body>
-</html>
-`;
+/**
+ * The page as a session writes it: a program over the decision library,
+ * each card a Decision (its diagram, `after` and Section as written), its
+ * options in order, the recommended one marked.
+ */
+export const pageProgram = (page: SeedPage): string => {
+  const lines: string[] = [];
+  const top: string[] = [];
+  const sections = new Map<string, string[]>();
+  for (const [index, card] of page.cards.entries()) {
+    const name = `card${index + 1}`;
+    const options = card.options.map((each, at) => {
+      const statement = `${name}o${at + 1}`;
+      lines.push(
+        `${statement} = Option(${say(each.id)}, ${say(each.label)}, ${say(each.line)}${each.recommended ? ", true" : ""})`
+      );
+      return statement;
+    });
+    const media = card.diagram
+      ? `[Diagram(${say(card.diagram)}, "How it would look")]`
+      : "null";
+    const after = card.after ? `, ${JSON.stringify(card.after)}` : "";
+    lines.push(
+      `${name} = Decision(${say(card.id)}, ${say(card.question)}, [${options.join(", ")}], ${say(card.why)}${card.diagram || after ? `, ${media}` : ""}${after})`
+    );
+    if (card.section) {
+      if (!sections.has(card.section)) {
+        sections.set(card.section, []);
+        top.push(`section${sections.size}`);
+      }
+      sections.get(card.section)?.push(name);
+    } else {
+      top.push(name);
+    }
+  }
+  for (const [at, [title, members]] of [...sections].entries()) {
+    lines.push(
+      `section${at + 1} = Section(${say(title)}, [${members.join(", ")}])`
+    );
+  }
+  return `${[
+    `root = Decisions(${say(page.title)}, [${top.join(", ")}], ${say(page.lede)})`,
+    ...lines,
+  ].join("\n")}\n`;
 };
 
 /** A JSON request to the fleet's hub; its answer, or its refusal thrown. */
@@ -586,7 +537,7 @@ const publish = async (
     fleet,
     "POST",
     `/api/instances/${writer}/artifacts`,
-    { kind: "page", name: page.name, html: pageHtml(page) }
+    { kind: "page", name: page.name, program: pageProgram(page) }
   );
   await hub(fleet, "PATCH", `/api/instances/${writer}/artifacts/${made.id}`, {
     patch: Object.entries(picks).map(([key, value]) => ({
@@ -609,7 +560,7 @@ export interface Seeded {
 /**
  * The project and its three pages on a fleet whose hub, agent and account
  * are up: its writers spawned in it, each page published and picked, the
- * pricing page sent and decided with its tasks, the graph written.
+ * pricing page sent and decided with its tasks.
  */
 export async function seedDecisions(
   fleet: Fleet,
@@ -638,11 +589,6 @@ export async function seedDecisions(
       ONBOARDING_PICKS
     ),
   };
-  await hub(fleet, "PUT", `/api/projects/${projectId}/folder/file`, {
-    path: "decisions/decisions.json",
-    content: `${JSON.stringify(GRAPH, null, 2)}\n`,
-    message: "decisions: the onboarding graph",
-  });
   // The pricing page: I'm done picking, then Make tasks, then its tasks filed.
   await hub(
     fleet,

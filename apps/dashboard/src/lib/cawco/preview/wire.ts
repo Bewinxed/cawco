@@ -10,12 +10,14 @@ import {
   type ShellShortcut,
   shellShortcutNamed,
 } from "@cawco/core/shell-shortcuts";
-import type {
-  ComponentDoc,
-  PropKind,
-  PropMeta,
-  SheetOnPage,
-  Story,
+import {
+  type ComponentDoc,
+  FORMS,
+  type Form,
+  type PropKind,
+  type PropMeta,
+  type SheetOnPage,
+  type Story,
 } from "@cawco/core/stage";
 
 const ERROR_MAX = 300;
@@ -51,13 +53,48 @@ export function previewUrl(value: unknown, origin: string): string | null {
 }
 
 /** A screenshot as the overlay sends it, or nothing. */
-export function previewPng(value: unknown): string | null {
+function previewPng(value: unknown): string | null {
   return typeof value === "string" &&
     value.length > 0 &&
     value.length <= PNG_MAX &&
     BASE64.test(value)
     ? value
     : null;
+}
+
+/**
+ * A page's thumbnail in each scheme, base64 PNG; null where none was drawn.
+ * `single`: the page looks the same in both (no dark styles of its own, or a
+ * preview keeping its own scheme), so `light` and `dark` are its one picture.
+ */
+export interface PageThumbnail {
+  dark: string | null;
+  light: string | null;
+  single: boolean;
+}
+
+/**
+ * The overlay's `cawco:captured`: `png` drawn in `scheme`, `other` in the
+ * other scheme, or `single` when the page draws the same in both. Null when
+ * it carries no picture.
+ */
+export function previewThumbnail(message: {
+  other?: unknown;
+  png?: unknown;
+  scheme?: unknown;
+  single?: unknown;
+}): PageThumbnail | null {
+  const png = previewPng(message.png);
+  if (!png) {
+    return null;
+  }
+  if (message.single === true) {
+    return { light: png, dark: png, single: true };
+  }
+  const other = previewPng(message.other);
+  return message.scheme === "dark"
+    ? { light: other, dark: png, single: false }
+    : { light: png, dark: other, single: false };
 }
 
 export function previewError(value: unknown): string | null {
@@ -237,7 +274,31 @@ function storyOf(value: unknown): Story | null {
     args: argsOf(raw.args),
     code: codeOf(raw.code),
     component: text(raw.component, SHEET_BOUNDS.text),
+    readOnly: readOnlyOf(raw.readOnly),
+    label: text(raw.label, SHEET_BOUNDS.text),
+    form: formOf(raw.form),
+    from: text(raw.from, SHEET_BOUNDS.name),
+    play: raw.play === true,
   };
+}
+
+/** Why the inspector can't write a story's args, as its page says it; null when it can. */
+function readOnlyOf(value: unknown): Story["readOnly"] {
+  const raw = record(value);
+  const reason = text(raw?.reason, SHEET_BOUNDS.text);
+  return raw && reason ? { read: raw.read === true, reason } : null;
+}
+
+/** A story's form as its page says it: a preset's name or `custom`, and a width. */
+function formOf(value: unknown): Form | null {
+  const raw = record(value);
+  const width = finite(raw?.width);
+  const name = raw?.name;
+  return width !== null &&
+    width > 0 &&
+    (name === "custom" || (typeof name === "string" && name in FORMS))
+    ? { name: name as Form["name"], width }
+    : null;
 }
 
 /** A sheet as its page says it, checked and bounded; null when it is no sheet. */
@@ -257,6 +318,7 @@ export function previewSheet(value: unknown): SheetOnPage | null {
       args: argsOf(meta.args),
       code: codeOf(meta.code),
       component: text(meta.component, SHEET_BOUNDS.text),
+      title: text(meta.title, SHEET_BOUNDS.text),
     },
     components: list(raw.components, SHEET_BOUNDS.components).flatMap(
       (one) => componentOf(one) ?? []

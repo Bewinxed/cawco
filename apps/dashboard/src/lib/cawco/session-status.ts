@@ -6,7 +6,7 @@
  */
 import type { ThreadStatus } from "@cawco/core";
 import { STOPPED_LABEL, STOPPING_LABEL } from "./activity";
-import { cawco, type InstanceRow, isFailed, isStale } from "./client.svelte";
+import { type BoardRow, cawco, isFailed, isStale } from "./client.svelte";
 import type { MarkStatus } from "./TreeMark.svelte";
 import { isThreadTab } from "./thread-tabs";
 
@@ -25,7 +25,7 @@ const STATUS_WORD: Record<MarkStatus, string> = {
  * ended session's (no dot, no echo), so the word is where it differs.
  */
 export function statusWord(
-  instance: InstanceRow | null | undefined,
+  instance: BoardRow | null | undefined,
   status: MarkStatus
 ): string {
   if (instance?.status === "stopping") {
@@ -40,7 +40,7 @@ export function statusWord(
  * than idle.
  */
 export function sessionStatus(
-  instance: InstanceRow | null | undefined,
+  instance: BoardRow | null | undefined,
   done = false
 ): MarkStatus {
   if (!instance) {

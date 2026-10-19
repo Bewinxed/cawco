@@ -341,8 +341,11 @@
     {snapPoints}
     bind:activeSnapPoint={snap}
   >
+    <!-- Kept mounted while closed (bits-ui's `forceMount`), so the page in
+         it stays loaded while its conversation's tab is off screen. -->
     <Drawer.Content
       data-preview-sheet
+      forceMount
       hosted
       modal={false}
       onCloseAutoFocus={(event) => event.preventDefault()}
@@ -412,6 +415,12 @@
     margin: 0;
     padding: 0;
     outline: none;
+  }
+  /* css-scope: the same drawer content, closed: the sheet of a tab off screen, kept, never drawn or pressed */
+  :global(
+    [data-preview-sheet][data-slot="drawer-content"][data-state="closed"]
+  ) {
+    visibility: hidden;
   }
   /* css-scope: the same drawer content's drawn grab bar and inset card, which the sheet replaces */
   :global([data-preview-sheet][data-slot="drawer-content"]::before),

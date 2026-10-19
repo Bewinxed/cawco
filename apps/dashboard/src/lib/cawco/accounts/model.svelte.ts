@@ -243,7 +243,7 @@ export function movedLogins(seen: ReadonlySet<string>): MovedLogin[] {
       const from = cawco.machines.find(
         (one) => one.machineId === signin.machineId
       );
-      if (!(account && signin.movedAt !== null && from)) {
+      if (!(account && signin.movedAt !== null && signin.movedFrom && from)) {
         return [];
       }
       const id = `moved-login:${account.id}:${signin.machineId}:${signin.movedAt}`;
@@ -254,7 +254,7 @@ export function movedLogins(seen: ReadonlySet<string>): MovedLogin[] {
         {
           account,
           at: signin.movedAt,
-          from: `from ${STORE_WORDS[signin.movedFrom ?? "claude"]} on ${machineLabel(from.hostname)}`,
+          from: `from ${STORE_WORDS[signin.movedFrom]} on ${machineLabel(from.hostname)}`,
           id,
           missing: machinesFor(account.provider).filter(
             (machine) =>

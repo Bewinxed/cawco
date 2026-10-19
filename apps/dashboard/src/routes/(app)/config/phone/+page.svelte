@@ -3,7 +3,7 @@
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
-  import { failureClause } from "#lib/cawco/hub-read.js";
+  import { failureClause, hubRefusal } from "#lib/cawco/hub-read.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -63,7 +63,7 @@
       ({ outcomes } = (await response.json()) as { outcomes: Outcome[] });
       await read();
     } else {
-      deviceError = await response.text();
+      deviceError = (await hubRefusal(response)).message;
     }
     testing = false;
   }
@@ -81,7 +81,7 @@
     if (response.ok) {
       device.quiet = quiet;
     } else {
-      deviceError = await response.text();
+      deviceError = (await hubRefusal(response)).message;
     }
   }
 
@@ -94,7 +94,7 @@
     if (response.ok) {
       devices = devices.filter((each) => each.id !== device.id);
     } else {
-      deviceError = await response.text();
+      deviceError = (await hubRefusal(response)).message;
     }
   }
 

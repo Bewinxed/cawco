@@ -59,8 +59,7 @@ import { isLive } from "./work-items";
  * out on its machine): the session moves whole the same way, to an account
  * of the same organization first, and carries on there; with none to take
  * it, it is held, what it is sent waiting at the hub, until its account is
- * signed in again or another comes free. A token refresh another Claude Code
- * process held: the session carries on where it is a minute later, once.
+ * signed in again or another comes free.
  *
  * A turn the hub's own word started is not moved for: it asked nothing worth
  * another account, and a stopped session is woken only by a person or its
@@ -144,13 +143,6 @@ const RECHECK_MS = 5 * MINUTE_MS;
 const SETTLE_MS = 5000;
 /** …for this long: a session busy past it started a turn its account took. */
 const SETTLE_FOR_MS = 2 * MINUTE_MS;
-/**
- * How long a turn a token refresh race cut waits before it goes again:
- * Claude Code's own words for it, "This is usually transient; retry in a
- * minute".
- */
-const RACE_RETRY_MS = MINUTE_MS;
-
 /**
  * Why a session leaves its account: its limit refused a turn, or Claude Code
  * refused the account's credential for good. Either way it carries on where
@@ -427,12 +419,6 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   const acting = new Set<string>();
   /** Refused sessions still mid-turn on their machine, by when they stop being looked at. */
   const settling = new Map<string, { timer: HubTimer; until: number }>();
-  /**
-   * Sessions whose turn a token refresh race cut, from then until a turn of
-   * theirs ends on anything else: the timer that sends it again, gone once
-   * it has gone. A second race meanwhile is the turn's end.
-   */
-  const raced = new Map<string, HubTimer | undefined>();
 
   const readingOf = (accountId: string): AccountReading | undefined =>
     db.accounts.readings().find((one) => one.accountId === accountId);
@@ -1362,39 +1348,6 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         `[at-limit] ${ports.named(row)}'s turn ended because Claude Code refused ${accountName(current)}'s sign-in, so ${accountName(current)} is signed out on its machine. It moves to another account and carries on there; with none free, it waits until ${accountName(current)} is signed in again in Configure → Accounts.`
       );
       await act(row, current, "refused");
-    },
-    /** Whether a turn of `instanceId` a token refresh race cut goes again: not once one has since its last turn that ended otherwise. */
-    retriesRace(instanceId: string): boolean {
-      return !raced.has(instanceId);
-    },
-    /**
-     * A turn of `instanceId` a token refresh another Claude Code process
-     * held has ended: the session carries on where it is
-     * {@link RACE_RETRY_MS} later, once.
-     */
-    turnRaced(instanceId: string): void {
-      if (raced.has(instanceId) || lifetime.closed()) {
-        return;
-      }
-      const retry = lifetime.after(RACE_RETRY_MS, () => {
-        raced.set(instanceId, undefined);
-        const row = rowOf(instanceId);
-        if (over(row) || !row) {
-          raced.delete(instanceId);
-          return;
-        }
-        const current = currentOf(row);
-        console.info(
-          `[accounts] ${ports.named(row)}'s last turn was cut because another Claude Code process was refreshing ${current ? `${accountName(current)}'s` : "its account's"} token at the same moment. It is sent again now, ${RACE_RETRY_MS / 1000} s later, once; a second cut ends the turn as failed.`
-        );
-        ports.resume(row, "signin");
-      });
-      raced.set(instanceId, retry);
-    },
-    /** A turn of `instanceId` ended on anything but a refresh race: one waiting to go again went with it. */
-    turnWent(instanceId: string): void {
-      lifetime.cancel(raced.get(instanceId));
-      raced.delete(instanceId);
     },
     /** A turn of `instanceId` ended as any turn does: the rebalancer may look at it again. */
     turnEnded(instanceId: string): void {

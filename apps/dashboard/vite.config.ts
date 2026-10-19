@@ -397,6 +397,20 @@ export default defineConfig(({ command }) => {
       cssTarget: CSS_TARGET,
       assetsInlineLimit: (file) => INLINE_FACES.test(file) || undefined,
     },
+    /**
+     * vaul-svelte imports bits-ui and never declares it
+     * (huntabyte/vaul-svelte#130). Installed into bun's global store (a
+     * CawCo workspace's bun install, agent boundary.ts `writeBunConfig`), it
+     * resolves from its real path in the cache, which has no node_modules of
+     * ours above it: "Rolldown failed to resolve import "bits-ui" from
+     * "…/links/vaul-svelte@1.0.0-next.7+…/dist/components/drawer/index.js"".
+     * A deduped package resolves from the project root whatever imports it
+     * (vite's `tryNodeResolve`: `if (dedupe.includes(pkgId)) basedir =
+     * root`), where the dashboard declares bits-ui.
+     */
+    resolve: {
+      dedupe: ["bits-ui"],
+    },
     optimizeDeps: {
       // svelte-streamdown is compiled like the app's own components, so its
       // stylesheet passes through streamdownOverlayOwn in dev as in the build:

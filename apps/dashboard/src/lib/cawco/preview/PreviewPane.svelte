@@ -1,5 +1,6 @@
 <script lang="ts">
   import {
+    artifactWords,
     machineLabel,
     PREVIEW_LOCKED_MESSAGE,
     PREVIEW_PING_PATH,
@@ -9,10 +10,16 @@
     previewEnterUrl,
     previewRoute,
     type ShownFailure,
+    sheetWords,
   } from "@cawco/core";
+  import { readWithin } from "@cawco/core/bounded";
   import { type PreviewMode, previewMode } from "@cawco/core/comments";
   import { type Snippet, untrack } from "svelte";
-  import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
+  import {
+    failureClause,
+    failureWords,
+    hubRefusal,
+  } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -61,6 +68,7 @@
   import { sideExpand } from "../side/expand";
   import SideSurface from "../side/SideSurface.svelte";
   import { readJson, store, stored, writeJson } from "../storage";
+  import { afterPaint } from "../workspace/warm.svelte";
   import ArtifactMenu from "./ArtifactMenu.svelte";
   import {
     type ArtifactDoc,
@@ -69,6 +77,8 @@
     joinArtifact,
     sendArtifact,
   } from "./artifact-doc";
+  import CanvasView from "./CanvasView.svelte";
+  import { loadedPanes } from "./loaded.svelte";
   import PinCard from "./PinCard.svelte";
   import PinList from "./PinList.svelte";
   import PlacePick from "./PlacePick.svelte";
@@ -86,9 +96,9 @@
     previewPickPlace,
     previewPinAt,
     previewPinId,
-    previewPng,
     previewSheet,
     previewShortcut,
+    previewThumbnail,
     previewTitle,
     previewUrl,
     SHORTCUT_MESSAGE,
@@ -106,8 +116,8 @@
     instanceId: string;
     /**
      * Its conversation's tab is in view (SideSplit's `visible`). A tab kept
-     * mounted off screen keeps its page loaded for {@link PARK_MS}, then
-     * unloads it, and loads it again once its tab is back.
+     * mounted off screen keeps its page loaded and held, up to the bound of
+     * loaded.svelte.ts, and loads it again once its tab is back past it.
      */
     onScreen?: boolean;
     /**
@@ -163,6 +173,9 @@
   function showList(open: boolean) {
     listOpen = open;
     store("local", listKey, open ? "open" : "shut");
+    if (!open) {
+      listYield = null;
+    }
   }
   /** ⇧C: every pin on the page hidden, or shown (Figma's own key). */
   let pinsShown = $state(true);
@@ -187,7 +200,6 @@
   });
   let connected = $state(false);
   let loaded = $state(false);
-  let captured = false;
   let reload = $state(0);
   /**
    * What last went wrong, and what trying again means: the frame's own
@@ -272,41 +284,132 @@
     "This preview turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then try again.";
   /**
    * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
-   * which answers any page with no credentials): probed once per origin,
-   * before the frame loads. Unreached, the pane says what previews need
-   * and where to switch how they are reached: never a fallback.
+   * which answers any page with no credentials, and answers 502 with the
+   * hub's words when the session's machine listener doesn't answer the hub),
+   * before the frame loads. Unreached, the pane says what failed, what
+   * previews need and where to switch how they are reached, and probes again
+   * by itself (`PROBE_FIRST_MS`, doubling to `PROBE_MOST_MS`, and at once
+   * when its tab is back in view) until one answers: never a fallback. Once
+   * reached, the frame loads, once.
    */
-  let reached = $state<{ origin: string; ok: boolean } | null>(null);
-  let unreachedWhy = $state("");
+  let reached = $state<
+    | { origin: string; ok: true }
+    | { origin: string; ok: false; said: string; hub: boolean; tries: number }
+    | null
+  >(null);
+  /** Each one probes the origin again: Try again's press, the backoff's timer, the tab back in view. */
+  let probe = $state(0);
+  let probing = $state(false);
+  let previewsNeedFor = $state({ origin: "", said: "" });
+  /** Our call: a probe that hasn't answered in 10 s is a failed one, and the next goes on the backoff. */
+  const PROBE_ANSWER_MS = 10_000;
+  /** Our calls: the first probe again 2 s after a failure, doubling to every 30 s. */
+  const PROBE_FIRST_MS = 2000;
+  const PROBE_MOST_MS = 30_000;
   $effect(() => {
     const origin = paneOrigin;
-    if (!origin || reached?.origin === origin) {
+    // biome-ignore lint/complexity/noVoid: read-only dependency — each bump probes again
+    void probe;
+    if (!origin || untrack(() => reached?.origin === origin && reached.ok)) {
       return;
     }
     let live = true;
-    fetch(`${origin}${PREVIEW_PING_PATH}`, {
-      mode: "cors",
-      credentials: "omit",
-      cache: "no-store",
-    })
-      .then((answer) => answer.ok)
-      .catch(() => false)
-      .then(async (ok) => {
+    probing = true;
+    pingOrigin(origin).then(async (failed) => {
+      if (!live) {
+        return;
+      }
+      if (failed && !failed.hub && previewsNeedFor.origin !== origin) {
+        previewsNeedFor = { origin, said: await previewsNeed(origin) };
         if (!live) {
           return;
         }
-        if (!ok) {
-          unreachedWhy = await previewsNeed(origin);
-        }
-        reached = { origin, ok };
-      });
+      }
+      probing = false;
+      const was = untrack(() => reached);
+      reached = failed
+        ? {
+            origin,
+            ok: false,
+            ...failed,
+            tries: was?.origin === origin && !was.ok ? was.tries + 1 : 1,
+          }
+        : { origin, ok: true };
+    });
     return () => {
       live = false;
+      probing = false;
     };
   });
-  const unreached = $derived(
-    !!paneOrigin && reached?.origin === paneOrigin && !reached.ok
+  let seenBefore = true;
+  $effect(() => {
+    const failed = reached;
+    const seen = inView && onScreen;
+    const back = seen && !seenBefore;
+    seenBefore = seen;
+    if (!(seen && failed && !failed.ok && failed.origin === paneOrigin)) {
+      return;
+    }
+    if (back) {
+      untrack(() => {
+        probe += 1;
+      });
+      return;
+    }
+    const timer = setTimeout(
+      () => {
+        probe += 1;
+      },
+      Math.min(PROBE_FIRST_MS * 2 ** (failed.tries - 1), PROBE_MOST_MS)
+    );
+    return () => clearTimeout(timer);
+  });
+  const unreachedBy = $derived(
+    reached && !reached.ok && reached.origin === paneOrigin ? reached : null
   );
+  const unreached = $derived(!!paneOrigin && !!unreachedBy);
+  /**
+   * What `origin`'s probe failed on, after its host: no answer, a status,
+   * or the hub's own words (`hub`, so the origin itself was reached); null
+   * when it answered ok.
+   */
+  async function pingOrigin(
+    origin: string
+  ): Promise<{ said: string; hub: boolean } | null> {
+    const { host } = new URL(origin);
+    const read = await readWithin(PROBE_ANSWER_MS, (signal) =>
+      fetch(`${origin}${PREVIEW_PING_PATH}`, {
+        mode: "cors",
+        credentials: "omit",
+        cache: "no-store",
+        signal,
+      })
+    ).catch(() => null);
+    if (read?.kind !== "answered") {
+      return {
+        said: read
+          ? `${host} didn't answer within ${PROBE_ANSWER_MS / 1000} s`
+          : `${host} didn't answer`,
+        hub: false,
+      };
+    }
+    const answer = read.value;
+    if (answer.ok) {
+      return null;
+    }
+    const why = await answer
+      .json()
+      .then((body: { why?: unknown }) =>
+        typeof body?.why === "string"
+          ? body.why.replace(TRAILING_STOP, "")
+          : null
+      )
+      .catch(() => null);
+    return why
+      ? { said: `${host} answered ${answer.status}: ${why}`, hub: true }
+      : { said: `${host} answered ${answer.status}`, hub: false };
+  }
+  const TRAILING_STOP = /\.$/;
   /** What previews need to be reached from this tab, by the route it took. */
   async function previewsNeed(origin: string): Promise<string> {
     if (byHost) {
@@ -332,33 +435,56 @@
   const frameKey = $derived(`${preview?.revision}:${reload}`);
   // The old paint bridges navigation only until the replacement finishes loading.
   let standing = $state<string | null>(null);
-  /**
-   * How long a page whose conversation's tab is off screen stays loaded. A
-   * preview is the dashboard's own process and thread wherever the browser
-   * keeps a frame of the same site there (every WebKit, and Chromium over
-   * plain http), so a page left running in every tab kept open adds up. Our
-   * call: a glance at another tab and back keeps the page as it was.
+  /*
+   * Off screen, the page is held (the overlay's hold.ts: no frames, timers
+   * or animations run) and kept, up to the owner's bound of panes off
+   * screen (loaded.svelte.ts); past it, the one hidden longest unloads. A
+   * pane that mounts off screen loads nothing until its tab is shown, and
+   * then only once the switch has painted (`afterPaint`).
    */
-  const PARK_MS = 30_000;
-  /** Off screen past {@link PARK_MS}: no frame stands, and the cover waits for the next load. */
-  let parked = $state(false);
+  const paneId = $props.id();
+  /** No page: mounted off screen, or let go past the bound; the cover waits for the next load. */
+  let unloaded = $state(untrack(() => !onScreen));
+  /** The page said it is held (`cawco:held`). */
+  let pageHeld = $state(false);
+  function unload() {
+    unloaded = true;
+    standing = null;
+    loaded = false;
+    connected = false;
+    pageHeld = false;
+    // A ticket is spent by its frame's load: the next load asks again.
+    entries = {};
+  }
   $effect(() => {
-    if (onScreen) {
-      parked = false;
+    if (isCanvas) {
       return;
     }
-    const timer = setTimeout(() => {
-      parked = true;
-      standing = null;
-      loaded = false;
-      connected = false;
-      // A ticket is spent by its frame's load: the next load asks again.
-      entries = {};
-    }, PARK_MS);
-    return () => clearTimeout(timer);
+    const id = paneId;
+    // Entered once per pane, never again as its tab comes and goes: the
+    // registry reads `onScreen` as the bound is applied, not as it was here.
+    untrack(() => loadedPanes.enter({ id, onScreen: () => onScreen, unload }));
+    return () => loadedPanes.leave(id);
+  });
+  $effect(() => {
+    if (isCanvas) {
+      return;
+    }
+    if (!onScreen) {
+      untrack(() => post({ type: "cawco:hold" }));
+      loadedPanes.hidden(paneId);
+      return;
+    }
+    loadedPanes.shown(paneId);
+    untrack(() => post({ type: "cawco:release" }));
+    if (untrack(() => unloaded)) {
+      return afterPaint(() => {
+        unloaded = false;
+      });
+    }
   });
   const frames = $derived.by(() => {
-    if (parked) {
+    if (unloaded) {
       return [];
     }
     return standing === null || standing === frameKey
@@ -383,7 +509,7 @@
     const origin = paneOrigin;
     const at = framePlace;
     if (
-      parked ||
+      unloaded ||
       !(byHost && origin && reached?.origin === origin && reached.ok)
     ) {
       return;
@@ -398,7 +524,7 @@
     })
       .then(async (answer) => {
         if (!answer.ok) {
-          throw new Error((await answer.text()) || `HTTP ${answer.status}`);
+          throw await hubRefusal(answer);
         }
         return (await answer.json()) as PreviewTicket;
       })
@@ -442,8 +568,8 @@
   }
   /**
    * Try again after a frame failure: reload the frame. Pending until the
-   * reloaded page answers with a capture, which either clears the failure or
-   * states the new one.
+   * reloaded page says it is ready, which clears the failure, or states a
+   * new one.
    */
   let retrying = $state(false);
   function retry() {
@@ -521,7 +647,7 @@
     if (frameKey) {
       connected = false;
       loaded = false;
-      captured = false;
+      pageHeld = false;
       // A new load says again whether it is served.
       down = null;
       downWhy = null;
@@ -535,19 +661,6 @@
       iframe?.contentWindow?.postMessage(message, paneOrigin);
     }
   }
-  /*
-   * The page's thumbnail, asked once a load: when its overlay is ready and
-   * its frame stands at the size the split gave it. Asked on the page's
-   * first ready, it drew the page at whatever width the split's slide had
-   * reached (one page, five walks, five pictures from 309x646 to 350x571).
-   */
-  $effect(() => {
-    if (connected && !captured && !expand?.moving) {
-      captured = true;
-      post({ type: "cawco:capture" });
-    }
-  });
-
   /*
    * This view's word to the hub that the artifact is on screen at the open
    * frame's revision, or why it could not be: the agent's artifact_create and
@@ -608,6 +721,54 @@
     });
   });
 
+  /**
+   * How long the page has said ready and its frame's size has stood still
+   * before its thumbnail is taken: its first paints and fonts land, and the
+   * pane opening around it settles its width. Our call.
+   */
+  const CAPTURE_AFTER_MS = 1000;
+  /*
+   * The thumbnail, on demand: taken once per revision, when the transcript
+   * card that shows it is on screen (ToolGroup sets `thumbnailWanted`) and
+   * the page stands in view, loaded and not held. A page nobody's card shows
+   * is never drawn for one; a whole-page capture costs the page 80-150 ms.
+   * The page is drawn at its frame's width, so a frame still resizing (the
+   * pane opening) is waited for: a capture taken mid-open drew the page at
+   * 467, 422 and 479 px on three walks. The split's slide is waited out
+   * too (`expand.moving`): the frame's size can hold still for a second
+   * mid-slide (one page, five walks, five pictures from 309x646 to 350x571).
+   */
+  $effect(() => {
+    const record = preview;
+    const frame = iframe;
+    if (!(
+      frame &&
+      record?.thumbnailWanted &&
+      record.thumbnailRevision !== record.revision &&
+      onScreen &&
+      connected &&
+      !pageHeld &&
+      !ownTab &&
+      !expand?.moving
+    )) {
+      return;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    // Its first report is the frame's size now: every report starts the wait again.
+    const settled = new ResizeObserver(() => {
+      clearTimeout(timer);
+      timer = setTimeout(
+        () => post({ type: "cawco:capture" }),
+        CAPTURE_AFTER_MS
+      );
+    });
+    settled.observe(frame);
+    return () => {
+      clearTimeout(timer);
+      settled.disconnect();
+    };
+  });
+
   /*
    * The page keeps its own state (Projects spec §5.10): the overlay joins
    * the artifact's live document itself, on the path `cawco:hello` names.
@@ -627,7 +788,8 @@
       )
   );
   /*
-   * A sheet's stage (live components): the project's own Vite, which the
+   * A sheet's stage (live components): the project's own dev toolchain
+   * (Vite, Astro or Nuxt), which the
    * daemon runs in its workspace; or a workspace preview's server, the
    * command it names (`serve`), run the same way. Its state is in the doc:
    * starting, waking (from sleep) and a sheet's page compiling stand on the
@@ -638,20 +800,20 @@
     source && "port" in source && source.serve ? source : null
   );
   const staged = $derived(
-    artifact?.kind === "sheet" || served ? (view?.stage ?? null) : null
+    artifact?.kind === "component" || served ? (view?.stage ?? null) : null
   );
   /** What the cover says while the page is on its way; null when nothing is. */
   const stageWaiting = $derived.by(() => {
     switch (staged?.status) {
       case "starting":
         return served
-          ? "Starting the server…"
-          : `Starting the dev server in ${staged.dir}…`;
+          ? sheetWords.serverStarting
+          : sheetWords.starting(staged.dir);
       case "waking":
       case "asleep":
-        return "Waking…";
+        return sheetWords.waking;
       case "live":
-        return connected || served ? null : "Compiling…";
+        return connected || served ? null : sheetWords.compiling;
       case "error":
       case undefined:
         break;
@@ -680,7 +842,13 @@
     inspectOpen = open;
     store("local", inspectKey, open ? "open" : "shut");
   }
-  const isSheet = $derived(artifact?.kind === "sheet");
+  const isSheet = $derived(artifact?.kind === "component");
+  /**
+   * A page or a sheet draws in the dashboard's theme (the overlay's
+   * `themed`): its frame's `color-scheme` is that theme too, so a page that
+   * styles dark by `prefers-color-scheme` hears it. A preview is its own app.
+   */
+  const themedFrame = $derived(artifact?.kind === "page" || isSheet);
   const inspector = $derived.by(() => {
     const id = artifactId;
     const session = instanceId;
@@ -691,7 +859,7 @@
   const inspecting = $derived(!!inspector && inspectOpen);
   /** A right panel beside the page on a desk and a tablet; on a phone, where the pane is the sheet over the conversation, a sheet over the page's foot (the spec's §5). */
   const inspectorLayout = $derived(sheet ? "sheet" : "panel");
-  /** A compile error's place, `file:line:column` as far as Vite's payload names it. */
+  /** A compile error's place, `file:line:column` as far as the toolchain's Vite payload names it (Astro and Nuxt run Vite inside). */
   const errorPlace = (error: {
     column: number | null;
     file: string;
@@ -727,6 +895,15 @@
       const box = well?.getBoundingClientRect();
       return box
         ? new DOMRect(box.right - GUTTER, box.top, 0, 0)
+        : new DOMRect();
+    },
+  };
+  /** The well's foot at its right: where the Comments panel stands when it makes room below a pin (`listYield`). */
+  const wellFoot = {
+    getBoundingClientRect: () => {
+      const box = well?.getBoundingClientRect();
+      return box
+        ? new DOMRect(box.right - GUTTER, box.top + floorIn(box), 0, 0)
         : new DOMRect();
     },
   };
@@ -796,6 +973,7 @@
   let picking = $state<{ id: number | string } | null>(null);
   /** The place picked goes back to the page, which keeps it in its state. */
   function pickedPlace(place: {
+    label: string;
     machineId: string;
     path: string;
   }): Promise<void> {
@@ -875,6 +1053,148 @@
   let roomW = $state(0);
   let roomH = $state(0);
   const cardPin = $derived(pins.find((pin) => pin.id === openPin) ?? null);
+  /**
+   * The room the Comments panel makes for the open card's pin when no scroll
+   * of the page brings the pin out from under it (the overlay's `stuck`: a
+   * pin at the page's top, under the panel): the panel stands above the pin,
+   * or at the well's foot below it, on the side with more room, no taller
+   * than that room. Kept until the card closes, another opens or the panel
+   * shuts; null, it hangs from the top, as tall as the well lets it.
+   */
+  let listYield = $state<{
+    id: string;
+    room: number;
+    side: "top" | "bottom";
+  } | null>(null);
+  /** The card's gap from its pin, px (PinCard's `GAP`). */
+  const PIN_GAP = 12;
+  /** The panel's room beside a stuck pin `at` (the page's viewport px), on the side with more of it. */
+  function yieldFor(
+    id: string,
+    at: { r: number; x: number; y: number },
+    kept?: "top" | "bottom"
+  ): NonNullable<typeof listYield> | null {
+    const frame = iframe?.getBoundingClientRect();
+    const box = well?.getBoundingClientRect();
+    if (!(frame && box && iframe)) {
+      return null;
+    }
+    const y = at.y + frame.top + iframe.clientTop - box.top;
+    const above = y - at.r - PIN_GAP - GUTTER;
+    const below = floorIn(box) - GUTTER - (y + at.r + PIN_GAP);
+    const side = kept ?? (above >= below ? "top" : "bottom");
+    return { id, side, room: Math.max(0, side === "top" ? above : below) };
+  }
+  /**
+   * How far down the well the panel may reach, px from its top: its foot,
+   * or on a phone the top of the open card standing there.
+   */
+  function floorIn(box: DOMRect): number {
+    const room = pinRoom;
+    const card = sheet
+      ? room?.querySelector<HTMLElement>('[data-slot="pin-card"]')
+      : null;
+    // Its laid-out place, not its drawn one: it rises and scales in as it opens.
+    return room && card
+      ? Math.min(
+          box.height,
+          room.getBoundingClientRect().top + card.offsetTop - box.top
+        )
+      : box.height;
+  }
+  /** The open card's height on a phone, where it stands at the well's foot: the panel stands above it. */
+  let cardHeight = $state(0);
+  let pinRoom = $state<HTMLDivElement>();
+  $effect(() => {
+    const room = pinRoom;
+    if (!(sheet && cardPin && room)) {
+      cardHeight = 0;
+      return;
+    }
+    const card = room.querySelector<HTMLElement>('[data-slot="pin-card"]');
+    if (!card) {
+      return;
+    }
+    const watch = new ResizeObserver(() => {
+      cardHeight = card.offsetHeight;
+    });
+    watch.observe(card);
+    return () => watch.disconnect();
+  });
+  /**
+   * The panel's room, as its height reads it (`--pin-list-room`, its
+   * max-block-size that less `--space-4`, two gutters): the well's, a stuck
+   * pin's side of it, or on a phone the well above the open card.
+   */
+  const listRoom = $derived.by(() => {
+    if (listYield) {
+      return listYield.room + 2 * GUTTER;
+    }
+    if (sheet && cardHeight > 0) {
+      return Math.max(0, wellBox.h - cardHeight - GUTTER);
+    }
+    return wellBox.h;
+  });
+  /**
+   * What the host's chrome covers of the page, told to its overlay
+   * (`cawco:covered`, the page's viewport px): the open panel and, on a
+   * phone, the card at the well's foot. A pin the pane opens is brought out
+   * from under them (pins.ts `reveal`). Told again as either resizes or
+   * moves, and as nothing once the panel shuts.
+   */
+  $effect(() => {
+    const frame = iframe;
+    const panel = listPanel;
+    const open = listOpen;
+    const room = pinRoom;
+    const card = sheet && cardPin ? cardHeight : 0;
+    if (!(frame && connected)) {
+      return;
+    }
+    if (!(open && panel)) {
+      post({ type: "cawco:covered", boxes: [] });
+      return;
+    }
+    let raf = 0;
+    const say = () => {
+      cancelAnimationFrame(raf);
+      raf = requestAnimationFrame(() => {
+        const framed = frame.getBoundingClientRect();
+        const left = framed.left + frame.clientLeft;
+        const top = framed.top + frame.clientTop;
+        // The panel's wrapper stands where it is placed, at its laid-out size (its entrance scales the panel inside).
+        const boxes = [
+          panel.parentElement ?? panel,
+          ...(card > 0 && room
+            ? [room.querySelector('[data-slot="pin-card"]')]
+            : []),
+        ]
+          .filter((el): el is Element => !!el)
+          .map((el) => {
+            const r = el.getBoundingClientRect();
+            return {
+              x: r.left - left,
+              y: r.top - top,
+              w: r.width,
+              h: r.height,
+            };
+          });
+        post({ type: "cawco:covered", boxes });
+      });
+    };
+    const sized = new ResizeObserver(say);
+    sized.observe(panel);
+    const moved = new MutationObserver(say);
+    if (panel.parentElement) {
+      moved.observe(panel.parentElement, { attributeFilter: ["style"] });
+    }
+    say();
+    return () => {
+      cancelAnimationFrame(raf);
+      sized.disconnect();
+      moved.disconnect();
+    };
+  });
   /** Pins the agent is working on: the last delivery carried them and its turn runs. */
   const live = $derived.by(() => {
     const stamps = pins.flatMap((pin) => [
@@ -936,6 +1256,7 @@
     const id = openPin;
     openPin = null;
     pinAt = null;
+    listYield = null;
     cardError = null;
     post({ type: "cawco:track-pin", id: null });
     if (id && id === madePin) {
@@ -1157,6 +1478,11 @@
         if (message.type === "cawco:ready") {
           connected = true;
           refusedEntries = 0;
+          // The frame Try again reloaded answered: what it was tried for is over.
+          retrying = false;
+          if (failure?.again === "reload") {
+            failure = null;
+          }
           setMode(mode, placing);
           if (!pinsShown) {
             showPins(false);
@@ -1165,13 +1491,23 @@
           if (openPin) {
             post({ type: "cawco:track-pin", id: openPin });
           }
+          if (!onScreen) {
+            // Loaded while its tab is off screen: held from the start.
+            post({ type: "cawco:hold" });
+          }
         }
         break;
       }
-      case "cawco:capture": {
-        const png = previewPng(message.png);
-        if (png && preview) {
-          preview.thumbnail = png;
+      case "cawco:held":
+        pageHeld = message.held === true;
+        break;
+      case "cawco:captured": {
+        // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
+        const shot = previewThumbnail(message);
+        if (shot && preview) {
+          preview.thumbnail = shot;
+          preview.thumbnailRevision = preview.revision;
+          preview.thumbnailWanted = false;
         }
         failure = frameError(previewError(message.error));
         retrying = false;
@@ -1203,6 +1539,16 @@
       case "cawco:pin-at": {
         if (previewPinId(message.id) === openPin) {
           pinAt = previewPinAt(message);
+          // No scroll brings it out from under the panel: the panel makes room for it.
+          // Its room follows the pin as the page settles (a scroll still
+          // running when it was first told), on the side it first took.
+          if (message.stuck === true && listOpen && openPin && pinAt) {
+            listYield = yieldFor(
+              openPin,
+              pinAt,
+              listYield?.id === openPin ? listYield.side : undefined
+            );
+          }
         }
         break;
       }
@@ -1355,6 +1701,22 @@
       stage = undefined;
     };
   });
+  /*
+   * The canvas, standing in this panel while its conversation's tab is off
+   * screen, is held as a page is (the overlay's hold.ts, in its host page);
+   * it is never let go, as the stage keeps its one iframe wherever it stands.
+   * Anywhere else (the tab in view, the canvas in the composer) it runs, and
+   * a page loaded again while held (`connected` anew) is held again.
+   */
+  $effect(() => {
+    const one = isCanvas ? stage : undefined;
+    if (!one?.connected) {
+      return;
+    }
+    one.post({
+      type: !onScreen && one.at === "panel" ? "cawco:hold" : "cawco:release",
+    });
+  });
   /** Undock (or Done here): the session's composer takes the canvas back, open or as its chip. */
   function giveBack(folded: boolean) {
     if (!(canUndock && artifact)) {
@@ -1463,14 +1825,18 @@
       title="Open in new tab"><IconExternal /></a
     >
   {/if}
+  {#if isSheet}
+    <!-- A component canvas's view: its frames' scheme, widths, motion and zoom. -->
+    <CanvasView {instanceId} {post} ready={connected} />
+  {/if}
   {#if inspector}
     <!-- A sheet's inspector: its stories' props as controls, beside the page or over its foot. -->
     <button
-      aria-label="Inspect"
+      aria-label={artifactWords.inspect}
       aria-pressed={inspectOpen}
-      class="touch-hit aria-pressed:bg-surface-fill"
+      class="touch-hit aria-pressed:bg-press-fill"
       onclick={() => showInspector(!inspectOpen)}
-      title="Inspect: change the story's props, then Save them into its file"
+      title={artifactWords.inspectTitle}
       type="button"
     >
       <IconTuning />
@@ -1517,7 +1883,7 @@
       aria-expanded={listOpen}
       aria-haspopup="dialog"
       aria-label={`Comments, ${openCount} open${pinsShown ? "" : ", pins hidden"}`}
-      class="mark-line touch-hit num aria-expanded:bg-surface-fill"
+      class="mark-line touch-hit num aria-expanded:bg-press-fill"
       onclick={() => showList(!listOpen)}
       style:--count-min="1ch"
       title={pinsShown
@@ -1577,7 +1943,7 @@
       gap="none"
       pad="inset"
       bind:ref={listPanel}
-      customAnchor={wellCorner}
+      customAnchor={listYield?.side === "bottom" ? wellFoot : wellCorner}
       onEscapeKeydown={(event) => {
         // The panel's escape layer takes Esc before the window hears it, so
         // Esc unwinds from the innermost here: the card, then Comment or
@@ -1590,9 +1956,9 @@
       }}
       onInteractOutside={(event) => event.preventDefault()}
       onOpenAutoFocus={(event) => event.preventDefault()}
-      side="bottom"
+      side={listYield?.side === "bottom" ? "top" : "bottom"}
       sideOffset={GUTTER}
-      style={`--pin-list-room: ${wellBox.h}px; --pin-list-pane: ${wellBox.w}px; --pin-list-w: clamp(var(--c-pin-list-min), calc(var(--pin-list-pane) * var(--c-pin-list-share)), min(var(--c-pin-list-max), calc(var(--pin-list-pane) - var(--space-4)))); --pin-list-h: min(calc(var(--pin-list-room) - var(--space-4)), var(--bits-popover-content-available-height, 100dvh))`}
+      style={`--pin-list-room: ${listRoom}px; --pin-list-pane: ${wellBox.w}px; --pin-list-w: clamp(var(--c-pin-list-min), calc(var(--pin-list-pane) * var(--c-pin-list-share)), min(var(--c-pin-list-max), calc(var(--pin-list-pane) - var(--space-4)))); --pin-list-h: min(calc(var(--pin-list-room) - var(--space-4)), var(--bits-popover-content-available-height, 100dvh))`}
       trapFocus={false}
     >
       <PinList
@@ -1656,8 +2022,9 @@
       bind:this={canvasSlot}
     ></div>
   {:else if unreached}
-    <!-- This tab can't reach the preview's own origin: what previews need,
-         and where to switch how they are reached. -->
+    <!-- This tab can't reach the preview's own origin: what failed, what
+         previews need unless the hub itself answered, and where to switch
+         how they are reached. -->
     <div
       data-slot="down"
       class="absolute inset-0 overflow-auto px-space-6 bg-surface-well"
@@ -1666,7 +2033,9 @@
     >
       <EmptyState icon={IconAlert} title="This preview can't be reached">
         {#snippet line()}
-          {unreachedWhy}.
+          {unreachedBy?.said}.
+          {#if !unreachedBy?.hub && previewsNeedFor.origin === paneOrigin}{previewsNeedFor.said}.{/if}
+          Trying again on its own.
         {/snippet}
         {#snippet action()}
           <div class="flex flex-wrap items-center gap-space-2">
@@ -1674,8 +2043,10 @@
               icon={IconRefresh}
               label="Try again"
               onclick={() => {
-                reached = null;
+                probe += 1;
               }}
+              pending={probing}
+              pendingLabel="Trying again…"
               size="sm"
               variant="outline"
             />
@@ -1699,7 +2070,7 @@
         data-ready={!current || loaded || undefined}
         data-panel-inspector={(inspecting && inspectorLayout === "panel") ||
           undefined}
-        class="absolute inset-0 scheme-light bg-(color:--frame-bg) block size-full border-none border-current opacity-0 transition-[opacity] dur-control ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
+        class="absolute inset-0 scheme-light data-[scheme=dark]:scheme-dark bg-(color:--frame-bg) block size-full border-none border-current opacity-0 transition-[opacity] dur-control ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
         style:--frame-bg="Canvas"
         style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
         allow="clipboard-write"
@@ -1724,6 +2095,7 @@
           }
         }}
         src={byHost ? entries[key]?.src : `${paneOrigin}${framePlace}`}
+        data-scheme={themedFrame ? theme.resolved : undefined}
         title="Preview"
         {@attach (node) => {
           if (key === frameKey) {
@@ -1747,7 +2119,7 @@
         style:--sk-w="42%"
       ></span>
       {#if stageWaiting}
-        <!-- A sheet's stage on its way: the project's own Vite, started or woken by the daemon. -->
+        <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
         <p class="mt-space-3 mx-0 mb-0 text-ink-muted type-meta">
           {stageWaiting}
         </p>
@@ -1769,7 +2141,8 @@
         transition:appear
       >
         <p class="m-0 text-data-bad text-size-body font-medium">
-          Doesn't compile: <code class="type-code">{errorPlace(first)}</code>
+          {sheetWords.errorTitle}
+          <code class="type-code">{errorPlace(first)}</code>
         </p>
         <p class="m-0 text-ink-muted type-meta">
           {first.message.split("\n")[0]}
@@ -1779,9 +2152,7 @@
             class="m-0 overflow-x-auto p-space-2 rounded-sm bg-surface-recess text-ink-strong type-code">{first.frame}</pre>
         {/if}
         <p class="m-0 text-ink-muted type-meta">
-          {compileErrors.length > 1
-            ? `${compileErrors.length - 1} more besides. `
-            : ""}The session is told; the sheet redraws once it compiles.
+          {sheetWords.errorNext(compileErrors.length - 1)}
         </p>
       </div>
     {/if}
@@ -1797,22 +2168,24 @@
       <EmptyState
         icon={IconAlert}
         title={served
-          ? `The server on port ${served.port} isn't running`
-          : `The stage for ${staged.dir} didn't start`}
+          ? sheetWords.serverDownTitle(served.port)
+          : sheetWords.downTitle(staged.dir)}
       >
         {#snippet line()}
-          {staged.message ??
-            (served
-              ? "It ended before it answered."
-              : "Vite ended before it served the sheet.")} Try again starts it again.
+          {staged.runs === "sheet"
+            ? sheetWords.downLine(
+                staged.message ?? null,
+                sheetWords.toolchains[staged.toolchain]
+              )
+            : sheetWords.serverDownLine(staged.message ?? null)}
         {/snippet}
         {#snippet action()}
           <Button
             icon={IconRefresh}
-            label="Try again"
+            label={sheetWords.tryAgain}
             onclick={retry}
             pending={retrying}
-            pendingLabel="Starting…"
+            pendingLabel={sheetWords.tryingAgain}
             size="sm"
             variant="outline"
           />
@@ -1898,6 +2271,7 @@
   <div
     data-slot="pin-room"
     class="absolute inset-0 pointer-events-none"
+    bind:this={pinRoom}
     bind:clientHeight={roomH}
     bind:clientWidth={roomW}
   >
@@ -1919,7 +2293,13 @@
         }}
         {sheet}
         bind:draft={
-          () => drafts.text(cardPin.id), (text) => drafts.set(cardPin.id, text)
+          () => (cardPin ? drafts.text(cardPin.id) : ""),
+          (text) => {
+            // Read as the card leaves too, its pin already gone from the pane.
+            if (cardPin) {
+              drafts.set(cardPin.id, text);
+            }
+          }
         }
       />
     {/if}

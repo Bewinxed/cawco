@@ -205,6 +205,7 @@ const noticesPhase = async (
 
 const spec: Spec = {
   name: "state-records",
+  host: "its delegates cut workspaces",
   run: async (kit: Kit) => {
     const fleet = await kit.fleet(respond);
     const { check } = kit;

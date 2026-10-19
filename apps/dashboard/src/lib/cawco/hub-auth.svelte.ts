@@ -22,7 +22,7 @@ import type {
   PairingStart,
   WaitingMachine,
 } from "@cawco/core";
-import { failureWords } from "./hub-read";
+import { failureWords, hubRefusal } from "./hub-read";
 import { leaveThePage } from "./leaving";
 
 /** Where pairing stands for this browser. */
@@ -110,7 +110,7 @@ export async function startPairing(): Promise<void> {
       body: JSON.stringify({ kind: "browser" }),
     });
     if (!response.ok) {
-      throw new Error(await response.text());
+      throw await hubRefusal(response);
     }
     started = (await response.json()) as PairingStart;
   } catch (error) {
@@ -164,9 +164,7 @@ export async function startPairing(): Promise<void> {
 async function said(response: Promise<Response>): Promise<void> {
   const answer = await response;
   if (!answer.ok) {
-    throw new Error(
-      (await answer.text()) || `The hub answered ${answer.status}.`
-    );
+    throw await hubRefusal(answer);
   }
 }
 

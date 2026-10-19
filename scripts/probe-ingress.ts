@@ -5,7 +5,7 @@
  * key), however many paths bring it in; "a GitHub webhook and a poll of the
  * same event land once".
  *
- * A fake GitHub REST API runs in this process (`CAWCO_GITHUB_API` points the
+ * A fake GitHub REST API runs in this process (`fleet.standIns.githubApi` points the
  * hub at it): pulls, issues and issue comments of `probe/app`, each list with
  * an ETag and a 304 for an unchanged one, answering only the probe's token.
  * A tiny MCP server beside it lists items for the connector poller.
@@ -399,7 +399,7 @@ interface IngressView {
 }
 
 const fleet = await scratchFleet({ name: "probe-ingress", respond });
-fleet.env.CAWCO_GITHUB_API = API;
+fleet.standIns.githubApi = API;
 const home = fleet.env.HOME as string;
 
 const events = () =>

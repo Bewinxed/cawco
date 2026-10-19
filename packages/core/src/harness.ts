@@ -60,6 +60,10 @@ export interface SessionCredentialInstall {
 
 export const HARNESSES: readonly HarnessKind[] = ["claude", "opencode", "pi"];
 
+/** The harness a value off the wire, a URL or storage names, when it names one CawCo runs. */
+export const harnessNamed = (value: unknown): HarnessKind | undefined =>
+  HARNESSES.find((harness) => harness === value);
+
 /**
  * How a session answers tool permissions. The union is Claude Code's, plus
  * `fullSend`, CawCo's own: Claude Code's `bypassPermissions` with the host
@@ -554,7 +558,14 @@ export interface NeutralSessionInfo {
   customTitle?: string;
   cwd?: string;
   fileSize?: number;
+  /** The first prompt as its harness listed it, raw: kept for the shipped app; a reader names the session by {@link firstTitle}. */
   firstPrompt?: string;
+  /**
+   * The first prompt as a title, derived once where the listing is answered
+   * (agent session.ts, core `deriveTitleFromFirstMessage`): what a reader
+   * names a session with no given title by, never parsing the prompt itself.
+   */
+  firstTitle?: string;
   gitBranch?: string;
   harness: HarnessKind;
   lastModified: number;
@@ -772,6 +783,24 @@ export interface NeutralAssistantMessage {
  * session — which always carries `origin` and `uuid` ({@link SentMessage}),
  * and nothing else does.
  */
+/**
+ * A notice the harness put in the user's role, as its agent's normaliser
+ * read it (agent claude-transcript.ts `harnessNoteOf`): Claude Code's
+ * `<task-notification>` block (`task-notification`) and its `[SYSTEM
+ * NOTIFICATION …]` line, and a whole `<system-reminder>` block
+ * (`system-reminder`). `title` is what a fold says closed, `status` the
+ * task's (`completed`, `failed`, `stopped`; empty when it said none), `body`
+ * the rest, as markdown. Never the reader's words.
+ */
+export interface HarnessNote {
+  body: string;
+  kind: "task-notification" | "system-reminder";
+  status: string;
+  title: string;
+  /** A task notification's Task call, when it names one. */
+  toolUseId?: string;
+}
+
 export interface NeutralUserMessage {
   /**
    * This message is a compaction's summary, in the harness's own words: pi
@@ -780,7 +809,12 @@ export interface NeutralUserMessage {
    */
   compactSummary?: true;
   keepAlive?: true;
-  message: { role: "user"; content: string | NeutralContentBlock[] };
+  /** `harnessNote`: the message is a notice of the harness's, typed where its normaliser read it ({@link HarnessNote}). */
+  message: {
+    role: "user";
+    content: string | NeutralContentBlock[];
+    harnessNote?: HarnessNote;
+  };
   origin?: NeutralOrigin;
   parent_tool_use_id?: string | null;
   raw?: unknown;
@@ -1072,6 +1106,12 @@ export const usageByModel = (
 };
 
 export interface NeutralResultMessage {
+  /**
+   * pi and OpenCode: the provider refused the turn at its account's limit,
+   * by the structured refusal its harness handed over (core
+   * `atProviderLimit`). Claude's is its assistant frame's `error`.
+   */
+  atLimit?: true;
   /** Prompt-cache tokens the turn read from / wrote to, when the harness reports them. */
   cache?: { read: number; write: number; write5m?: number; write1h?: number };
   /**
@@ -1095,6 +1135,13 @@ export interface NeutralResultMessage {
   /** Read from stored history during recovery, rather than a newly completed turn. */
   recovered?: boolean;
   result?: string;
+  /**
+   * OpenCode: the server the turn ran in stopped before it finished
+   * (`session.execution.interrupted` reason `shutdown`, or a reattach that
+   * finds the turn unfinished): cut, not ended, so the hub hands it back.
+   * `errors` carries the same in words (core `SERVER_STOPPED_MID_TURN`).
+   */
+  serverStopped?: true;
   session_id?: string;
   stop_reason?: string | null;
   subtype: string;
@@ -1135,6 +1182,18 @@ export const cacheHit = ({
   input > 0 && read >= input * 0.9;
 
 /**
+ * How a compaction failed, as its harness typed the error it failed on:
+ * `kind`, the harness's own sort of it (OpenCode's error `type`, as
+ * `provider.timeout`), or `unknown` when it gave none; `status`, the
+ * provider's HTTP status when there was one; `message`, its words as said.
+ */
+export interface CompactionFailure {
+  kind: string;
+  message: string;
+  status?: number;
+}
+
+/**
  * A `system` frame. One loose interface rather than a subtype union: the folding
  * layer switches on `subtype` and reads the fields each subtype carries, and a
  * harness that emits a subtype nothing here names degrades to a generic line.
@@ -1148,7 +1207,10 @@ export interface NeutralSystemMessage {
   account_id?: string | null;
   // commands_changed
   commands?: SlashCommand[];
+  /** A failed compaction's words; {@link compact_failure} is what a reader decides on. */
   compact_error?: string;
+  /** How a compaction failed, typed ({@link CompactionFailure}); with `compact_result: "failed"`. */
+  compact_failure?: CompactionFailure;
   // compact_boundary. `result` and `error`: how it ended, on a boundary read
   // back from a harness that stores that (opencode); live, a `status` frame's
   // `compact_result` says it.
@@ -1157,6 +1219,7 @@ export interface NeutralSystemMessage {
     pre_tokens?: number;
     result?: "success" | "failed";
     error?: string;
+    failure?: CompactionFailure;
   };
   compact_result?: "success" | "failed";
   // model_fallback
@@ -1199,10 +1262,12 @@ export interface NeutralSystemMessage {
    */
   result?: string;
   /**
-   * provider_retry ({@link PROVIDER_RETRY}): the provider's own message, and
-   * when the harness makes its next attempt (ms epoch) if it said.
+   * provider_retry ({@link PROVIDER_RETRY}): the provider's own message,
+   * when the harness makes its next attempt (ms epoch) if it said, and
+   * `atLimit` when the refusal it retries is the account's limit (core
+   * `atProviderLimit`).
    */
-  retry?: { message: string; nextAttemptAt?: number };
+  retry?: { atLimit?: true; message: string; nextAttemptAt?: number };
   session_id?: string;
   skills?: string[];
   slash_commands?: string[];
@@ -1395,11 +1460,19 @@ export interface HarnessReport {
    * running had no catalog at all, so its model picker was empty and no session
    * could be named or shown an effort scale.
    *
-   * Absent (not empty) from a machine whose agent predates the field, and from
-   * a harness that could not be probed; empty means it was asked and offered
-   * nothing.
+   * Absent (not empty) from a harness whose catalog could not be read, which
+   * then says why ({@link modelsUnread}), and from Claude, whose catalog is
+   * each account's (the hub's account catalogs); empty means it was asked and
+   * offered nothing.
    */
   models?: ModelInfo[];
+  /**
+   * Why this harness's catalog could not be read on this read, in the
+   * machine's words: OpenCode's server would not start or answer, pi's
+   * registry failed. Set exactly when an installed harness that reports its
+   * catalog has no {@link models}; a picker says it instead of an empty list.
+   */
+  modelsUnread?: string;
   /**
    * OpenCode only: each of the machine's own OpenCode sign-ins (not a CawCo
    * account) whose provider refused it the last time a session here used
@@ -1742,9 +1815,6 @@ export const CONTROL_PLACE_REPO = "placeRepo";
 /** The most a place's first commit may weigh; a place past it stays a folder. */
 export const PLACE_REPO_LIMIT_BYTES = 500 * 1024 * 1024;
 
-/** The largest file a place's first commit takes; a bigger one is left out. */
-export const PLACE_REPO_FILE_LIMIT_BYTES = 10 * 1024 * 1024;
-
 /** One path a place's first commit leaves out, from the place's root, and why. */
 export interface PlaceLeftOut {
   /** From the place's root; a folder ends with `/`. */
@@ -1788,15 +1858,15 @@ export const CONTROL_PLACE_PUSH = "placePush";
 
 /**
  * What {@link CONTROL_PLACE_PUSH} read, or pushed. Refused, naming them,
- * when the branch's commits hold what the first commit's rules or the
- * credential scan keep out, or a secret's name anywhere in its history.
+ * when any commit the branch reaches holds text that reads as a credential
+ * (core secret-text.ts).
  */
 export interface PlacePush {
   branch: string;
   bytes: number;
   commit: string;
   files: number;
-  /** What stays out: every path in the place the first commit's rules keep out, with why. */
+  /** What stays out: every uncommitted path in the place the first commit's rules keep out, with why. */
   leftOut: PlaceLeftOut[];
   pushed: boolean;
   root: string;
@@ -1807,17 +1877,12 @@ export const WORKSPACE_GIT_TIMEOUT_MS = 300_000;
 /** How long a new boundary may take to announce readiness. */
 export const WORKSPACE_BOUNDARY_START_TIMEOUT_MS = 15_000;
 /**
- * How long each of a cut's two dependency installs may take (agent
- * seed-deps.ts): the one on the host that links from the workspaces' cache,
- * then the one in its boundary that runs the install scripts.
+ * Git and boundary budgets, plus a minute for setup, teardown and control
+ * transport. A cut installs nothing: its delegate runs its project's install
+ * inside the workspace when it needs one.
  */
-export const WORKSPACE_INSTALL_TIMEOUT_MS = 180_000;
-/** Git, boundary and install budgets, plus a minute for setup, teardown and control transport. */
 export const WORKSPACE_CREATE_TIMEOUT_MS =
-  WORKSPACE_GIT_TIMEOUT_MS +
-  WORKSPACE_BOUNDARY_START_TIMEOUT_MS +
-  2 * WORKSPACE_INSTALL_TIMEOUT_MS +
-  60_000;
+  WORKSPACE_GIT_TIMEOUT_MS + WORKSPACE_BOUNDARY_START_TIMEOUT_MS + 60_000;
 
 /** Where {@link CONTROL_WORKSPACE_CREATE} put a workspace. */
 export interface WorkspaceCheckout {
@@ -1857,7 +1922,9 @@ export const CONTROL_WORKSPACE_BOUNDARY = "workspaceBoundary";
  * the host ({@link WorkspaceHolding}), and the clone is deleted with
  * everything else of its own on that machine (its state and scratch dirs,
  * its Apple build root, its DerivedData and SwiftPM build dirs). The files
- * git ignores go with it. Args `[WorkspaceArchive]`; answers
+ * a committed `.gitignore` covers go with it; a file kept out of git only
+ * by the clone's own excludes is work, and keeps it
+ * ({@link WorkspaceHolding} `excluded`). Args `[WorkspaceArchive]`; answers
  * {@link WorkspaceArchived}. Only the hub sends it: a dashboard's control
  * naming it is refused at the relay.
  */
@@ -1867,7 +1934,8 @@ export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";
  * {@link CONTROL_WORKSPACE_ARCHIVE} for a workspace whose unlanded work a
  * person chose to let go: the machine first writes that work to a carry
  * (`~/.cawco/carries/<id>-<time>`: a bundle and patch series of the
- * commits, the uncommitted diff, each stash as a patch; agent carry.ts),
+ * commits, the uncommitted diff, each stash as a patch, the excluded files
+ * as they are; agent carry.ts),
  * which must be whole before anything is deleted. A control of its own, so
  * an agent that cannot write a carry refuses it as a method it does not
  * know, and deletes nothing. Args `[WorkspaceArchive]` (`unlanded` not
@@ -1895,6 +1963,14 @@ export type WorkspaceUnlanded = "keep" | "check" | "unmade";
 export interface WorkspaceArchive {
   base?: string;
   id: string;
+  /**
+   * Commits of the clone whose work is on `base` though no ref of its
+   * `origin` holds them: each the commit a workspace was cut `from` this one
+   * at, once that workspace landed them, rebased onto the branch with every
+   * patch there (hub work-items.ts `vouchLanded`). What they reach is no
+   * work of this clone's own, and a HEAD they reach is cut again nowhere.
+   */
+  landed?: string[];
   path?: string;
   skip?: string[];
   unlanded: WorkspaceUnlanded;
@@ -1922,14 +1998,26 @@ export interface WorkspaceArchived {
  * was pushed, whether onto the base or to a branch of its own, and a cut
  * again fetches it from `origin`), entries of `git status
  * --porcelain` (untracked files included; the paths `skip` names, the outputs
- * its items handed over, left out), and stash entries. Files git ignores are
- * none of it: they go with the clone, and a delegate keeps one by handing it
- * in as an output. `bytes` is the clone's size on disk.
+ * its items handed over, left out), stash entries, and the files kept out of
+ * git only by the clone's own excludes (`excluded`). Files a committed
+ * `.gitignore` covers (dependencies, builds, caches) are none of it: they go
+ * with the clone. `bytes` is the clone's size on disk.
  */
 export interface WorkspaceHolding {
   ahead: number;
   bytes: number;
   dirty: number;
+  /**
+   * The untracked paths git ignores through no `.gitignore` the repository
+   * tracks: by a line of the clone's `.git/info/exclude`, or a `.gitignore`
+   * that is itself untracked, each as `git status --ignored=matching` names
+   * it, relative to the clone (a folder ends in `/`). The paths `skip`
+   * names, and what CawCo writes into a clone and lists there itself (its
+   * deny paths' stand-ins, the placed skills and memory, its stage), are not
+   * among them. On 2026-10-17 a delegate kept a design page's source out of
+   * its landing this way, and retirement deleted it. Absent when none.
+   */
+  excluded?: string[];
   stashes: number;
   /**
    * Set when the clone's folder is there and its `.git` is no repository
@@ -1950,24 +2038,33 @@ export const holdsNothing = (holding: WorkspaceHolding): boolean =>
   holding.ahead === 0 &&
   holding.dirty === 0 &&
   holding.stashes === 0 &&
-  !holding.strays;
+  !holding.strays &&
+  !holding.excluded?.length;
 
 const counted = (count: number, one: string, many: string): string =>
   `${count} ${count === 1 ? one : many}`;
 
-/** What a workspace holds that is nowhere else, in words: "2 commits on no remote, 3 changed files, 1 stash". */
-export const holdingWords = (holding: WorkspaceHolding): string =>
-  [
-    holding.ahead > 0 &&
-      counted(holding.ahead, "commit on no remote", "commits on no remote"),
-    holding.dirty > 0 &&
-      counted(holding.dirty, "changed file", "changed files"),
-    holding.stashes > 0 && counted(holding.stashes, "stash", "stashes"),
-    holding.strays &&
-      `${counted(holding.strays, "entry", "entries")} of its own in a folder that is no git clone`,
-  ]
-    .filter(Boolean)
-    .join(", ") || "nothing unlanded";
+/** What a workspace holds that is nowhere else, in words: "2 commits on no remote, 3 changed files, 1 stash, 2 excluded files". */
+export const holdingWords = (holding: WorkspaceHolding): string => {
+  const excluded = holding.excluded ?? [];
+  const folders = excluded.filter((path) => path.endsWith("/")).length;
+  const files = excluded.length - folders;
+  return (
+    [
+      holding.ahead > 0 &&
+        counted(holding.ahead, "commit on no remote", "commits on no remote"),
+      holding.dirty > 0 &&
+        counted(holding.dirty, "changed file", "changed files"),
+      holding.stashes > 0 && counted(holding.stashes, "stash", "stashes"),
+      files > 0 && counted(files, "excluded file", "excluded files"),
+      folders > 0 && counted(folders, "excluded folder", "excluded folders"),
+      holding.strays &&
+        `${counted(holding.strays, "entry", "entries")} of its own in a folder that is no git clone`,
+    ]
+      .filter(Boolean)
+      .join(", ") || "nothing unlanded"
+  );
+};
 
 /** A size on disk in words: "1.4 GB", "312 MB", "18 KB". */
 export const sizeWords = (bytes: number): string => {
@@ -2132,9 +2229,24 @@ export const QUEUE_WAIT_MAX_MS = 3 * 60 * 60 * 1000;
  * (the hub sends {@link QUEUE_WAIT_MAX_MS}).
  */
 export interface CommandRun {
+  /**
+   * The run is a step of a work item's landing gate, in these words (`the
+   * landing gate of “Fix the tray” (153fd0db): iOS build compiles`): the
+   * machine runs it with {@link HEAVY_GATE_ENV} set to them, so a heavy run
+   * it starts takes the next free slot before any other run there (core
+   * heavy-run.ts).
+   */
+  gate?: string;
   id: string;
   queueMaxMs: number;
 }
+
+/**
+ * Set in a landing gate step's environment by the machine that runs it
+ * ({@link CommandRun.gate}), to the words that name the gate: a heavy run
+ * started under it is a gate's, and goes first (core heavy-run.ts).
+ */
+export const HEAVY_GATE_ENV = "CAWCO_HEAVY_GATE";
 
 /** A command's wait for a slot: which, and who holds it (the marker's words). */
 export interface CommandQueue {

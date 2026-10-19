@@ -16,7 +16,8 @@
    *   a session tab's hover opens (SessionDetails), where his harness and
    *   model are chosen as any session's model is (ModelSection).
    * - Your first words on the hero start the thread, and the panel shows it
-   *   in place, the composer staying where it is.
+   *   in place, the composer staying where it is. Ask Caw (the head's
+   *   button, the views bar's "+") shows a new thread here (`lead.fresh`).
    */
   import {
     CAW_DENIED_TOOLS,
@@ -88,6 +89,21 @@
   const earlier = $derived(
     threads.filter((each) => each.id !== threadId).slice(0, 5)
   );
+  // Ask Caw asked for new work: a thread not yet started, its composer
+  // taking the caret (CawLead.newThread), whether the panel was drawn then
+  // or opens with it.
+  $effect(() => {
+    if (lead.fresh) {
+      untrack(() => {
+        lead.fresh = false;
+        if (threadId !== null) {
+          choose(null);
+        }
+        fresh = true;
+        lead.draft.focusWanted = true;
+      });
+    }
+  });
 
   // --- what his line says -------------------------------------------------------
 
@@ -353,7 +369,7 @@
     <Popover.Content
       data-caw-lead-card
       align="start"
-      aria-label="Caw's session"
+      aria-label="Caw’s session"
       class="z-60 flex max-h-(--lead-max-h) w-(--lead-w) overflow-hidden"
       pad="none"
       style="--lead-w: min(416px, calc(100vw - 24px)); --lead-max-h: min(760px, var(--bits-popover-content-available-height, 85dvh))"

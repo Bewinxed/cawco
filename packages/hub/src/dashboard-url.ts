@@ -11,6 +11,18 @@ import type { RegistryShape } from "./registry";
 const DASHBOARD_URL_OVERRIDE = Bun.env.CAWCO_DASHBOARD_URL;
 
 /**
+ * The dashboard's address on the hub machine's tailnet name while the hub
+ * serves HTTPS there (tailnet-https.ts), else null: what every device on the
+ * tailnet opens in a secure context.
+ */
+let tailnetDashboard: string | null = null;
+
+/** HTTPS on the tailnet name began (its dashboard address) or stopped (null). */
+export const noteTailnetDashboard = (url: string | null): void => {
+  tailnetDashboard = url;
+};
+
+/**
  * Where a link the hub hands out (a session's page, the app's web dashboard)
  * sends the reader.
  *
@@ -23,13 +35,16 @@ const DASHBOARD_URL_OVERRIDE = Bun.env.CAWCO_DASHBOARD_URL;
  * which is by construction a URL that worked for a real client, which is
  * exactly the property a link sent to a phone needs.
  *
- * In precedence order: the operator's override, then the last origin observed
- * (loopback and unparseable ones already discarded by the registry), then a URL
- * composed from this machine's hostname — the best guess available on a hub no
+ * In precedence order: the operator's override, then the tailnet name's https
+ * address while the hub serves it (a link that opens in a secure context on
+ * every device of the tailnet), then the last origin observed (loopback and
+ * unparseable ones already discarded by the registry), then a URL composed
+ * from this machine's hostname — the best guess available on a hub no
  * dashboard has ever connected to, and better than no link at all.
  */
 export const dashboardUrl = (registry: RegistryShape): string =>
   DASHBOARD_URL_OVERRIDE ??
+  tailnetDashboard ??
   registry.dashboardOrigin() ??
   `http://${hostname()}:${DASHBOARD_PORT}`;
 
@@ -37,13 +52,15 @@ export const dashboardUrl = (registry: RegistryShape): string =>
  * The dashboard's https address, or null when none is known: where a sign-in
  * that may only return over https (OpenRouter's OAuth callback, which takes
  * "https URLs and localhost/127.0.0.1 URLs") sends the person back to. The
- * operator's override when it is https, else the last https origin a
- * dashboard connected from. Never composed: an https address the hub only
- * guessed would send the sign-in somewhere nothing answers.
+ * operator's override when it is https, else the tailnet name's while the
+ * hub serves it, else the last https origin a dashboard connected from.
+ * Never composed: an https address the hub only guessed would send the
+ * sign-in somewhere nothing answers.
  */
 export const secureDashboardUrl = (registry: RegistryShape): string | null =>
   (DASHBOARD_URL_OVERRIDE?.startsWith("https://")
     ? DASHBOARD_URL_OVERRIDE
     : undefined) ??
+  tailnetDashboard ??
   registry.secureDashboardOrigin() ??
   null;

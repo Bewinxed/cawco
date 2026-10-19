@@ -232,7 +232,7 @@ const ARTIFACT: Record<ArtifactKind, { glyph: Component; noun: string }> = {
   page: { glyph: Page, noun: "page" },
   canvas: { glyph: Canvas, noun: "canvas" },
   preview: { glyph: Preview, noun: "preview" },
-  sheet: { glyph: Sheet, noun: "sheet" },
+  component: { glyph: Sheet, noun: "component" },
 };
 
 const STAGE_KIND_WORD: Record<string, string> = {

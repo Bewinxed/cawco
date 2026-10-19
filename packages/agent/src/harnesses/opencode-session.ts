@@ -35,6 +35,7 @@ import type {
   ModelTurnUsage,
   NeutralContentBlock,
   PermissionResult,
+  ProviderRefusal,
   SentMessage,
   SessionInstruction,
   SlashCommand,
@@ -43,6 +44,7 @@ import type {
 } from "@cawco/core";
 import {
   ASK_USER_QUESTION,
+  atProviderLimit,
   CODE_MODE_TOOL,
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
@@ -63,7 +65,6 @@ import {
   MESSAGES_READ,
   MESSAGES_STORED,
   mcpNotConnectedLine,
-  PROVIDER_LIMIT,
   PROVIDER_RETRY,
   pricedRequest,
   REPEATED_FAILURE,
@@ -105,6 +106,7 @@ import { OPENCODE_DIR } from "./opencode-plugin";
 import {
   codeModeCalls,
   compactBoundary,
+  compactionFailure,
   summaryId,
   toolInputOf,
   toolNameOf,
@@ -316,6 +318,7 @@ const DELEGATION_TOOLS = [
   "stop_delegate",
   "interrupt_delegate",
   "answer_delegate",
+  "discard_workspace",
   "machine_pause",
   "workflow_run",
   "workflow_steer",
@@ -523,6 +526,18 @@ const missedTurnEnd = (
   }
   return last?.time.completed && last.finish === "stop" ? undefined : "cut";
 };
+
+/**
+ * How a turn closes when not as `success`: its subtype and errors, and
+ * `atLimit` when the provider refused it at the account's limit.
+ */
+interface TurnClosing {
+  atLimit?: true;
+  errors?: string[];
+  is_error: boolean;
+  serverStopped?: true;
+  subtype: string;
+}
 
 /** A message's blocks, by their key (`text:<n>`, `reasoning:<n>`, `tool:<id>`), in the order they began. */
 interface MessageBlocks {
@@ -1305,7 +1320,7 @@ export class OpencodeSession implements HarnessSession {
         break;
       }
       case "session.retry.scheduled":
-        this.#retry(event.data.error.message, event.data.at);
+        this.#retry(event.data.error, event.data.at);
         break;
       case "session.compaction.started": {
         const id = event.data.inputID ?? event.id;
@@ -1354,6 +1369,7 @@ export class OpencodeSession implements HarnessSession {
           status: null,
           compact_result: "failed",
           compact_error: errorText(event.data.error),
+          compact_failure: compactionFailure(event.data.error),
           session_id: this.sessionId ?? undefined,
         });
         break;
@@ -1386,22 +1402,28 @@ export class OpencodeSession implements HarnessSession {
           subtype: "error_during_execution",
           is_error: true,
           errors: [errorText(event.data.error)],
+          ...(atProviderLimit(event.data.error as ProviderRefusal)
+            ? { atLimit: true }
+            : {}),
         });
         break;
       case "session.execution.interrupted":
-        this.#turnEnded(
-          event.data.reason === "user"
-            ? { subtype: "aborted", is_error: false }
-            : {
-                subtype: "error_during_execution",
-                is_error: true,
-                errors: [
-                  event.data.reason === "shutdown"
-                    ? SERVER_STOPPED_MID_TURN
-                    : `OpenCode interrupted the turn (${event.data.reason}).`,
-                ],
-              }
-        );
+        if (event.data.reason === "user") {
+          this.#turnEnded({ subtype: "aborted", is_error: false });
+        } else if (event.data.reason === "shutdown") {
+          this.#turnEnded({
+            subtype: "error_during_execution",
+            is_error: true,
+            errors: [SERVER_STOPPED_MID_TURN],
+            serverStopped: true,
+          });
+        } else {
+          this.#turnEnded({
+            subtype: "error_during_execution",
+            is_error: true,
+            errors: [`OpenCode interrupted the turn (${event.data.reason}).`],
+          });
+        }
         break;
       case "permission.asked":
         this.#asked(event.data);
@@ -1529,11 +1551,7 @@ export class OpencodeSession implements HarnessSession {
       });
   }
 
-  #turnEnded(closing?: {
-    subtype: string;
-    is_error: boolean;
-    errors?: string[];
-  }): void {
+  #turnEnded(closing?: TurnClosing): void {
     this.#turnRevision += 1;
     this.#busy = false;
     this.#running.clear();
@@ -1713,8 +1731,13 @@ export class OpencodeSession implements HarnessSession {
     this.#thinkingFrame({ type: "content_block_stop" });
   }
 
-  /** A provider retry, said once per distinct note; at the account's usage limit, the turn ends on it. */
-  #retry(message: string, next: number): void {
+  /**
+   * A provider retry, said once per distinct note; at the account's limit
+   * (its error's type or status, core `atProviderLimit`), the turn ends on it.
+   */
+  #retry(error: ProviderRefusal & { message: string }, next: number): void {
+    const { message } = error;
+    const atLimit = atProviderLimit(error);
     this.#turnRevision += 1;
     this.#busy = true;
     this.#turnOpen = true;
@@ -1728,10 +1751,14 @@ export class OpencodeSession implements HarnessSession {
         subtype: PROVIDER_RETRY,
         session_id: this.sessionId ?? undefined,
         content: note,
-        retry: { message, nextAttemptAt: next },
+        retry: {
+          message,
+          nextAttemptAt: next,
+          ...(atLimit ? { atLimit: true } : {}),
+        },
       });
     }
-    if (this.account !== undefined && PROVIDER_LIMIT.test(message)) {
+    if (this.account !== undefined && atLimit) {
       this.refuseAtLimit(message).catch((cause: unknown) =>
         console.warn(
           `[opencode] ${this.instanceId}: could not end the turn at its limit: ${errorText(cause)}`
@@ -1745,19 +1772,16 @@ export class OpencodeSession implements HarnessSession {
    * a result. `closing` overrides the default `success` for the failure and
    * stop paths.
    */
-  #flushResult(closing?: {
-    subtype: string;
-    is_error: boolean;
-    errors?: string[];
-  }): void {
+  #flushResult(closing?: TurnClosing): void {
     const refusal = this.#limitRefusal;
     this.#limitRefusal = undefined;
-    const result =
+    const result: TurnClosing | undefined =
       refusal && this.#turnOpen
         ? {
             subtype: "error_during_execution",
             is_error: true,
             errors: [refusal],
+            atLimit: true,
           }
         : closing;
     this.#closeThinking();
@@ -1802,6 +1826,8 @@ export class OpencodeSession implements HarnessSession {
       subtype: result?.subtype ?? "success",
       is_error: result?.is_error ?? false,
       ...(result?.errors ? { errors: result.errors } : {}),
+      ...(result?.atLimit ? { atLimit: true } : {}),
+      ...(result?.serverStopped ? { serverStopped: true } : {}),
       total_cost_usd: this.#costBase + turnCost,
       turnUsage,
       cache: {
@@ -2501,6 +2527,7 @@ export class OpencodeSession implements HarnessSession {
           subtype: "error_during_execution",
           is_error: true,
           errors: [SERVER_STOPPED_MID_TURN],
+          serverStopped: true,
         });
       } else {
         this.#turnEnded(ending);

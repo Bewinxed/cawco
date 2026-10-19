@@ -875,45 +875,48 @@ private final class PinField: UITextView {
 /// points, where a simulator touch lands.
 enum PreviewProbe {
     static let on = ProcessInfo.processInfo.arguments.contains("-preview-probe")
-    /// `-preview-comment`: Comment turns on once the page is ready, for a run that cannot tap.
-    static let commentAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-comment")
-    /// `-preview-comment-tap`: with it, the page's first button takes one click at its centre, as a tap would land.
-    static let tapAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-comment-tap")
     /// `-preview-working`: the session counts as mid-turn, for the live dot (the probe's mock session ends its turns at once).
     static let workingAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-working")
-    /// `-preview-reply`: once the open card's pin has gone with a send, the card's Reply runs once, then Resolve.
-    static let replyAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-reply")
-    /// `-preview-send`: Send picks runs once, the first time a pick is unsent.
-    static let sendAtLaunch = ProcessInfo.processInfo.arguments.contains("-preview-send")
-    /// `-preview-report <base64>`: a probe's own `report()` for a page that
-    /// has none of its own (a sheet's stage page), added at each document's
-    /// end. The heartbeat calls it, and its `cawco:probe` post is logged as
-    /// `preview page …` (scripts/probe-kit/specs/live-sheet.ts).
-    static let report: String? = {
+    /// `-inspect-set <prop>=<value>`: once a sheet's page says its sheet, the
+    /// inspector opens, the chosen story's `prop` takes the option `value`,
+    /// and Save runs, as the person's taps would (scripts/probe-kit/specs/ios-sheet-inspector.ts).
+    static let inspectSet: (prop: String, value: String)? = {
         let arguments = ProcessInfo.processInfo.arguments
-        guard let flag = arguments.firstIndex(of: "-preview-report"), arguments.indices.contains(flag + 1),
-              let data = Data(base64Encoded: arguments[flag + 1]) else { return nil }
-        return String(data: data, encoding: .utf8)
+        guard let flag = arguments.firstIndex(of: "-inspect-set"), arguments.indices.contains(flag + 1) else { return nil }
+        let pair = arguments[flag + 1].split(separator: "=", maxSplits: 1).map(String.init)
+        return pair.count == 2 ? (pair[0], pair[1]) : nil
     }()
-    /// The click, in the page: what the overlay's Comment mode hears from a mouse.
-    static let click = """
-    (() => {
-      const el = document.querySelector("button");
-      if (!el) return "no button";
-      const r = el.getBoundingClientRect();
-      const at = { clientX: r.x + r.width / 2, clientY: r.y + r.height / 2, bubbles: true, cancelable: true, view: window };
-      el.dispatchEvent(new MouseEvent("click", at));
-      return "clicked " + Math.round(at.clientX) + "," + Math.round(at.clientY);
-    })()
-    """
+    /// `-open-plan`: the session's plan opens in its sheet the first time its ring shows (scripts/probe-kit/specs/ios-plan.ts).
+    static let openPlanAtLaunch = ProcessInfo.processInfo.arguments.contains("-open-plan")
+    /// `-side-switch`: the first time the plan and the preview stand beside the conversation together, the switch is pressed to the other.
+    static let sideSwitch = ProcessInfo.processInfo.arguments.contains("-side-switch")
+    /// `-thread-carry <words>`: a thread's composer takes a pasted picture and file, then sends `words` with them.
+    static let threadCarry: String? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let at = arguments.firstIndex(of: "-thread-carry"), arguments.indices.contains(at + 1) else { return nil }
+        return arguments[at + 1]
+    }()
+    /// `-place-pick <machineId> <path>`: a page's `cawco.pickPlace()` picker is given the machine, then the folder `path`, and Use this place, as the person's would.
+    static let placePick: (machineId: String, path: String)? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-place-pick"), arguments.indices.contains(flag + 2) else { return nil }
+        return (arguments[flag + 1], arguments[flag + 2])
+    }()
+    /// `-menu-remove <name>`: once the page is ready, the title menu opens and its row `name` is removed.
+    static let menuRemove: String? = {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let flag = arguments.firstIndex(of: "-menu-remove"), arguments.indices.contains(flag + 1) else { return nil }
+        return arguments[flag + 1]
+    }()
 
     static func say(_ line: String) {
         guard on else { return }
         Logger(subsystem: "dev.cawco.app", category: "Probe").notice("\(line, privacy: .public)")
     }
 
+    /// Where `view` stands in the window; "none" while it or what holds it is hidden (a head control in More).
     static func centre(_ view: UIView) -> String {
-        guard view.window != nil, !view.isHidden else { return "none" }
+        guard view.window != nil, sequence(first: view, next: \.superview).allSatisfy({ !$0.isHidden }) else { return "none" }
         let at = view.convert(CGPoint(x: view.bounds.midX, y: view.bounds.midY), to: nil)
         return "\(Int(at.x.rounded())),\(Int(at.y.rounded()))"
     }

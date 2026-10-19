@@ -866,13 +866,14 @@
           title="No routines yet"
         >
           {#snippet action()}
-            <!-- The starters as the kit's option chips (CawStarters' own),
+            <!-- The starters as the kit's option chips,
                  a press putting its words in the composer under them, unsent. -->
             {#if starters.length > 0}
               <ul
                 data-slot="routine-starters"
                 aria-label="Routines to ask Caw for"
-                class="kit-chips m-0 list-none justify-center p-0"
+                class="kit-chips m-0 list-none p-0 px-(--starters-px) max-desk:px-space-3"
+                style:--starters-px="calc((100% - var(--c-composer-w)) / 2)"
               >
                 {#each starters as starter (starter.text)}
                   {@const Glyph = GLYPHS[starter.glyph]}

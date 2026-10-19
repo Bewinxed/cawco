@@ -5,6 +5,7 @@
 import type { PreviewElement } from "@cawco/core";
 import type { ChoiceChange } from "@cawco/core/choices";
 import {
+  ANCHOR_IDENTITIES,
   type ChainLink,
   COMMENT_LIMITS,
   deletePin,
@@ -25,7 +26,7 @@ import type { InkGroup } from "@cawco/core/ink";
 import { shellShortcutOf } from "@cawco/core/shell-shortcuts";
 import type { Map as YMap } from "yjs";
 import { artifact, type Link, NO_ARTIFACT, type State } from "./artifact";
-import { here, mark } from "./boot";
+import { here, mark, markOf } from "./boot";
 import { fillFields, trackFields } from "./fields";
 import {
   deepElementAt,
@@ -33,18 +34,23 @@ import {
   frameLoading,
   frameOrigin,
   framesOf,
+  frameWindows,
   isFrame,
   rectOf,
   watchFrames,
 } from "./frames";
+import { hold } from "./hold";
 import { heardFromHost, toHost } from "./host-origin";
 import { startInk } from "./ink";
 import { morphPage, watchPointers, whenPointersUp } from "./morph";
 import { cropPicture } from "./picture";
 import { type Box, type Pins, padded, startPins } from "./pins";
 import { inkChrome } from "./radial";
+import { drawInScheme, type Scheme } from "./schemes";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
+/** A page hash: sha256, hex. */
+const PAGE_HASH = /^[0-9a-f]{64}$/;
 /** The page hash on the overlay's tag in a page's HTML (core `injectOverlay`). */
 const SERVED_HASH =
   /<script src="\/__cawco\/overlay\.js(?:\?k=[0-9a-z]+)?" data-page-hash="([0-9a-f]{64})"/;
@@ -214,10 +220,21 @@ function framesChanged() {
 }
 watchFrames(framesChanged);
 // A sheet's stage swapped a component in place (its sheet module says so on
-// each Vite HMR update): every pin's anchor is read again, its source and chain with it.
-addEventListener("cawco:hmr", () => {
+// each Vite HMR update), or a decision page's host drew a revision of its
+// program (decision-host, naming the program's hash): every pin's anchor is
+// read again, its source and chain with it, and every option marked again
+// from the stored picks, which a re-render does not carry over.
+addEventListener("cawco:hmr", (event) => {
+  const hash = (event as CustomEvent<{ pageHash?: unknown } | null>).detail
+    ?.pageHash;
+  if (typeof hash === "string" && PAGE_HASH.test(hash)) {
+    pageHash = hash;
+  }
+  reflect();
+  told();
   pins.draw();
   ink.replace();
+  pins.keepClear();
 });
 addEventListener(
   "scroll",
@@ -388,7 +405,7 @@ artifact.watch({
 });
 
 /** The host's theme, once it said one: "light" or "dark". */
-let hostTheme: "light" | "dark" | null = null;
+let hostTheme: Scheme | null = null;
 
 /**
  * A page artifact (HTML the agent wrote) draws in the host's theme, never the
@@ -399,15 +416,23 @@ let hostTheme: "light" | "dark" | null = null;
  * and Tailwind's dark variant key on.
  */
 function themed() {
-  const kind = artifact.kind();
-  if (!hostTheme || (kind !== "page" && kind !== "sheet")) {
-    return;
+  if (hostTheme && themesWithHost()) {
+    themeRoot(document.documentElement, hostTheme);
   }
-  const root = document.documentElement;
-  root.style.colorScheme = hostTheme;
-  root.dataset.theme = hostTheme;
-  if (kind === "sheet") {
-    root.classList.toggle("dark", hostTheme === "dark");
+}
+
+/** This page draws in the host's theme: a page artifact or a sheet, never a preview. */
+function themesWithHost(): boolean {
+  const kind = artifact.kind();
+  return kind === "page" || kind === "component";
+}
+
+/** `root` (this page's, or its copy's in schemes.ts) set to draw in `scheme`. */
+function themeRoot(root: HTMLElement, scheme: Scheme) {
+  root.style.colorScheme = scheme;
+  root.dataset.theme = scheme;
+  if (artifact.kind() === "component") {
+    root.classList.toggle("dark", scheme === "dark");
   }
 }
 
@@ -472,12 +497,15 @@ if (document.readyState === "loading") {
  * Re-publish (`artifact_update` with new HTML): the doc's `meta` names the
  * page's new hash, and the page morphs to it in place (morph.ts), fetched
  * afresh from its own origin. The overlay's host and its own script are not
- * the page's, and stay as they are.
+ * the page's, and stay as they are; so is what the app's web view put in
+ * the page before it loaded (`data-cawco-host`: its viewport, as the web's
+ * iframe lays a page out).
  */
 const kept = (node: Node): boolean =>
   node === host ||
   node === ink.layer ||
   node === pins.layer ||
+  (node instanceof Element && node.hasAttribute("data-cawco-host")) ||
   (node instanceof HTMLScriptElement &&
     OVERLAY_SRC.test(node.getAttribute("src") ?? ""));
 
@@ -502,6 +530,8 @@ function morphTo(html: string) {
   navigated();
   // The page moved under its ink: each group stands where its element is now.
   ink.replace();
+  // The open card's pin, moved under the host's chrome, is brought out again.
+  pins.keepClear();
   if (held) {
     held.addEventListener(
       "focusout",
@@ -521,6 +551,19 @@ function morphTo(html: string) {
 async function republished() {
   const wanted = artifact.meta().pageHash;
   if (!(keepsFields() && wanted) || wanted === pageHash) {
+    return;
+  }
+  // A page that draws itself (a decision page's host, from its program)
+  // takes the revision: it draws the new program and says so with
+  // `cawco:hmr`, so its DOM is never swapped under it.
+  if (
+    !dispatchEvent(
+      new CustomEvent("cawco:revision", {
+        cancelable: true,
+        detail: { pageHash: wanted },
+      })
+    )
+  ) {
     return;
   }
   if (fetching) {
@@ -606,14 +649,25 @@ function askHost(method: string, params: object): Promise<unknown> {
   return new Promise((resolve) => asking.set(id, resolve));
 }
 
-/** The host's answer to an ask; false when the message is not one. */
+/**
+ * The host's answer to an ask; false when the message is not one. An answer
+ * is a JSON-RPC response: a `result` or an `error`, and no `method`. The ask
+ * itself has a `method` and neither, so a host in this same window (the
+ * app's host script, the page in its own tab) never has the overlay take its
+ * own ask for the answer.
+ */
 function answered(data: unknown): boolean {
   const message = data as {
     jsonrpc?: unknown;
     id?: unknown;
     result?: unknown;
   } | null;
-  if (message?.jsonrpc !== "2.0" || typeof message.id !== "number") {
+  if (
+    message?.jsonrpc !== "2.0" ||
+    typeof message.id !== "number" ||
+    "method" in message ||
+    !("result" in message || "error" in message)
+  ) {
     return false;
   }
   const resolve = asking.get(message.id);
@@ -644,15 +698,25 @@ declare global {
   }
 }
 
-/** A machine and a folder on it, as `cawco.pickPlace` answers. */
+/**
+ * A machine and a folder on it, as `cawco.pickPlace` answers: the machine's
+ * id, its label (the name the dashboard shows it by, core `machineLabel`)
+ * and the folder's full path.
+ */
 interface PlacePick {
+  label: string;
   machineId: string;
   path: string;
 }
 
-const isPlace = (value: unknown): value is PlacePick =>
-  typeof (value as PlacePick | null)?.machineId === "string" &&
-  typeof (value as PlacePick).path === "string";
+const placeOf = (value: unknown): PlacePick | null => {
+  const raw = value as Partial<Record<keyof PlacePick, unknown>> | null;
+  return typeof raw?.machineId === "string" &&
+    typeof raw.label === "string" &&
+    typeof raw.path === "string"
+    ? { label: raw.label, machineId: raw.machineId, path: raw.path }
+    : null;
+};
 
 Object.defineProperty(window, "cawco", {
   value: Object.freeze({
@@ -681,8 +745,8 @@ Object.defineProperty(window, "cawco", {
       return () => listeners.delete(listener);
     },
     pickPlace: async () => {
-      const place = await askHost("cawco/pick-place", { pageHash });
-      if (!isPlace(place)) {
+      const place = placeOf(await askHost("cawco/pick-place", { pageHash }));
+      if (!place) {
         return null;
       }
       await change({ choice: "place", pageHash, value: place });
@@ -775,6 +839,7 @@ const STORY_PLACE = /^(.*):(\d+):(\d+)$/;
  * components; elsewhere, a stamped component root names its call site. Null
  * outside a sheet's frame.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the chain from either framework's marks, then the frame's story and state, in one walk
 function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
   const frame = el.closest<HTMLElement>("[data-cawco-story]");
   const story = frame?.dataset.cawcoStory;
@@ -817,11 +882,38 @@ function sheetChain(el: Element): Pick<PageAnchor, "chain" | "sheet"> | null {
     line: Number(place[2]),
     column: Number(place[3]),
   });
-  const file =
-    el.ownerDocument.querySelector<HTMLElement>("#cawco-sheet")?.dataset
-      .cawcoChoice ?? place[1];
-  return { chain, sheet: { file, story } };
+  const file = frame.dataset.cawcoFile ?? place[1];
+  const interaction = frame.dataset.cawcoInteraction;
+  const scheme = frame.dataset.cawcoScheme;
+  const width = Number(frame.dataset.cawcoWidth);
+  return {
+    chain,
+    sheet: {
+      file,
+      story,
+      ...(interaction && scheme
+        ? {
+            state: {
+              interaction: FRAME_INTERACTIONS.includes(interaction)
+                ? (interaction as "rest")
+                : "rest",
+              scheme: scheme === "light" || scheme === "dark" ? scheme : "page",
+              // A frame at its story's own form is as wide as its body laid out (unscaled by the canvas's zoom).
+              width: Number.isFinite(width)
+                ? width
+                : (frame.querySelector<HTMLElement>(".cawco-frame-body")
+                    ?.offsetWidth ??
+                    0) ||
+                  null,
+            },
+          }
+        : {}),
+    },
+  };
 }
+const FRAME_INTERACTIONS = ["rest", "hover", "focus", "pressed"];
+/** The widest frame a pane may ask a canvas for, px. Ours: past a desk's. */
+const CANVAS_WIDTH_MAX = 3840;
 
 function reactSource(
   el: Element
@@ -915,24 +1007,60 @@ function sourceOf(element: Element): PreviewElement["source"] {
   return fallback;
 }
 
-/** `element`'s selector in its own document (a frame's, for an element inside one). */
+/** Whether `selector` names exactly one element of `doc`. */
+const namesOne = (doc: Document, selector: string): boolean => {
+  try {
+    return doc.querySelectorAll(selector).length === 1;
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * What names `el` alone in its document by what it is (core
+ * `ANCHOR_IDENTITIES`): its id, its test id, its choice, or its option
+ * within the choice that holds it. Null when none does.
+ */
+function identityOf(el: Element): string | null {
+  const doc = el.ownerDocument;
+  if (el.id && namesOne(doc, `#${CSS.escape(el.id)}`)) {
+    return `#${CSS.escape(el.id)}`;
+  }
+  for (const name of ANCHOR_IDENTITIES) {
+    const value = el.getAttribute(name);
+    if (!value) {
+      continue;
+    }
+    const own = `[${name}="${CSS.escape(value)}"]`;
+    if (namesOne(doc, own)) {
+      return own;
+    }
+    // An option's value repeats from one choice to the next: named within its own.
+    const holder = el.parentElement?.closest("[data-cawco-choice]");
+    const choice = name === "data-option" && holder && identityOf(holder);
+    if (choice && namesOne(doc, `${choice} ${own}`)) {
+      return `${choice} ${own}`;
+    }
+  }
+  return null;
+}
+
+/**
+ * `element`'s selector in its own document (a frame's, for an element
+ * inside one): from the nearest of it and its ancestors named by identity
+ * ({@link identityOf}), else from the page's root, its body, down by places.
+ */
 function selectorOf(element: Element): string {
   const doc = element.ownerDocument;
-  if (
-    element.id &&
-    doc.querySelectorAll(`#${CSS.escape(element.id)}`).length === 1
-  ) {
-    return `#${CSS.escape(element.id)}`;
-  }
-  const testId = element.getAttribute("data-testid");
-  const testSelector = `[data-testid="${CSS.escape(testId || "")}"]`;
-  if (testId && doc.querySelectorAll(testSelector).length === 1) {
-    return testSelector;
-  }
   const path: string[] = [];
   for (let el: Element | null = element; el; el = el.parentElement) {
-    if (el.id && doc.querySelectorAll(`#${CSS.escape(el.id)}`).length === 1) {
-      path.unshift(`#${CSS.escape(el.id)}`);
+    const identity = identityOf(el);
+    if (identity) {
+      path.unshift(identity);
+      break;
+    }
+    if (el === doc.body || el === doc.documentElement) {
+      path.unshift(el.localName);
       break;
     }
     let index = 1;
@@ -1043,11 +1171,43 @@ function ownSource(el: Element): Source | null {
 const UNSHOWN = new Set(["script", "style", "template", "noscript"]);
 
 /**
+ * What an element with no words of its own reads as, in this order: the
+ * name it is given (`aria-label`, an image's `alt`, `title`, a field's
+ * `placeholder` and `name`), else where it leads or what it shows (`href`,
+ * `src`). A picture repeated card by card is told apart by these alone.
+ */
+const NAMED_BY = [
+  "aria-label",
+  "alt",
+  "title",
+  "placeholder",
+  "name",
+  "href",
+  "src",
+] as const;
+
+/**
  * The element's text as a pin keeps it: its words in order, white space
- * run together, cut to the anchor's bound. Read from its text nodes until
- * the bound is reached, so a page-sized element costs what a paragraph does.
+ * run together, cut to the anchor's bound; with none, its name
+ * ({@link NAMED_BY}). Read from its text nodes until the bound is reached,
+ * so a page-sized element costs what a paragraph does.
  */
 function textOf(el: Element): string {
+  const words = wordsOf(el);
+  if (words) {
+    return words;
+  }
+  for (const attribute of NAMED_BY) {
+    const name = el.getAttribute(attribute)?.replace(/\s+/g, " ").trim();
+    if (name) {
+      return name.slice(0, COMMENT_LIMITS.anchorText);
+    }
+  }
+  return "";
+}
+
+/** The element's words, as {@link textOf} reads them. */
+function wordsOf(el: Element): string {
   const walker = el.ownerDocument.createTreeWalker(el, NodeFilter.SHOW_TEXT);
   let text = "";
   let parent: Node | null = null;
@@ -1207,17 +1367,55 @@ const THUMB_AREA = 200_000;
  * (picture.ts), so its work is what is on screen, never the whole document
  * (a whole tall page drawn once was 1.8 s of the dashboard's own thread,
  * the frame sharing its process).
+ *
+ * `png` is drawn in `scheme`, the one the page shows. A page that draws in
+ * the host's theme is drawn in the other scheme too, from an unpainted copy
+ * (schemes.ts), as `other`; `single` says the page looks the same in both (a
+ * page with no dark styles, or a preview, which keeps its own scheme), and
+ * its one picture stands for both.
  */
-async function thumbnail(): Promise<{ png: string | null; error?: string }> {
+async function thumbnail(): Promise<{
+  error?: string;
+  other: string | null;
+  png: string | null;
+  scheme: Scheme;
+  single: boolean;
+}> {
+  // A part left undrawn is said only when no picture came at all.
   let error: string | undefined;
+  const heard = (message: string) => {
+    error ??= message;
+  };
   const png = await cropPicture(
     { x: scrollX, y: scrollY, w: innerWidth, h: innerHeight },
-    (message) => {
-      error ??= message;
-    },
+    heard,
     { area: THUMB_AREA, thumbnail: true }
   );
-  return png ? { png } : { png: null, error: error ?? "Nothing was drawn." };
+  const shown = themesWithHost() ? hostTheme : null;
+  if (!(png && shown)) {
+    return {
+      png,
+      scheme:
+        shown ??
+        (matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light"),
+      other: null,
+      single: !!png,
+      ...(png ? {} : { error: error ?? "Nothing was drawn." }),
+    };
+  }
+  // The other scheme undrawn leaves that scheme without a thumbnail, never this one's picture in its place.
+  const drawn = await drawInScheme(shown === "dark" ? "light" : "dark", {
+    area: THUMB_AREA,
+    into: shadow,
+    theme: themeRoot,
+    failed: heard,
+  });
+  return {
+    png,
+    scheme: shown,
+    other: drawn.same ? null : drawn.png,
+    single: drawn.same,
+  };
 }
 
 /** The element Comment mode last outlined under the pointer. */
@@ -1576,6 +1774,24 @@ function picturesLater() {
 
 type HostMessage = Record<string, unknown>;
 
+/** The most boxes a host says it covers the page with. Our call: a list and a card. */
+const COVERED_MOST = 4;
+
+/** The host's covered boxes, the viewport's px; each finite and sized, or left out. */
+function coveredOf(value: unknown): Box[] {
+  return (Array.isArray(value) ? value.slice(0, COVERED_MOST) : []).flatMap(
+    (raw) => {
+      const box = raw as Partial<Record<keyof Box, unknown>> | null;
+      const [x, y, w, h] = [box?.x, box?.y, box?.w, box?.h].map((n) =>
+        typeof n === "number" && Number.isFinite(n) ? n : Number.NaN
+      );
+      return [x, y, w, h].some(Number.isNaN) || w <= 0 || h <= 0
+        ? []
+        : [{ x, y, w, h }];
+    }
+  );
+}
+
 const idOf = (message: HostMessage) =>
   typeof message.id === "string" ? message.id : null;
 
@@ -1648,6 +1864,39 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
         })
       );
     },
+    // A component canvas's view from the pane's head: scheme, widths, motion, every permutation, zoom.
+    "cawco:canvas-view": (message) => {
+      const view = message.view as Record<string, unknown> | undefined;
+      if (!view || typeof view !== "object") {
+        return;
+      }
+      const widths = Array.isArray(view.widths)
+        ? view.widths.filter(
+            (one): one is number =>
+              typeof one === "number" && one > 0 && one <= CANVAS_WIDTH_MAX
+          )
+        : null;
+      dispatchEvent(
+        new CustomEvent("cawco:canvas-view", {
+          detail: {
+            ...(["light", "dark", "both", "page"].includes(String(view.scheme))
+              ? { scheme: view.scheme }
+              : {}),
+            ...("widths" in view
+              ? { widths: widths?.length ? widths : null }
+              : {}),
+            ...(view.motion === "on" || view.motion === "reduce"
+              ? { motion: view.motion }
+              : {}),
+            ...(typeof view.all === "boolean" ? { all: view.all } : {}),
+            ...(view.zoom === "fit" ||
+            (typeof view.zoom === "number" && view.zoom > 0 && view.zoom <= 4)
+              ? { zoom: view.zoom }
+              : {}),
+          },
+        })
+      );
+    },
     "cawco:theme": (message) => takeTheme(message.theme),
     // A host that holds no doc of its own (the app) writes the person's reply,
     // resolve and delete through this page's, by the one write core keeps.
@@ -1686,8 +1935,25 @@ const fromHost: Record<string, (message: HostMessage) => void | Promise<void>> =
     "cawco:focus-pin": (message) =>
       pins.focus(idOf(message), message.scroll === true),
     "cawco:track-pin": (message) => pins.track(idOf(message)),
-    "cawco:capture": async () => post("cawco:capture", await thumbnail()),
+    // What the host's chrome covers of the page (its Comments list, a
+    // phone's card): a pin it opens is brought out from under it.
+    "cawco:covered": (message) => pins.cover(coveredOf(message.boxes)),
+    // Asked as `cawco:capture`, answered as `cawco:captured`: a host in this
+    // same window hears its ask and this answer, and neither is the other.
+    "cawco:capture": async () => post("cawco:captured", await thumbnail()),
+    // Its conversation's tab off screen, and back (hold.ts): this document
+    // and every same-origin frame in it, which the pane hears as `cawco:held`.
+    "cawco:hold": () => holdPage(true),
+    "cawco:release": () => holdPage(false),
   };
+
+function holdPage(on: boolean) {
+  hold(on);
+  for (const view of frameWindows(document)) {
+    markOf(view)?.hold(on);
+  }
+  post("cawco:held", { held: on });
+}
 
 window.addEventListener("message", async (event) => {
   if (!heardFromHost(event)) {

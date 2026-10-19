@@ -33,6 +33,7 @@
  *   dirs, with every daemon's socket, and the journal.
  */
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
 import { open, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import {
@@ -41,6 +42,7 @@ import {
   dirname,
   isAbsolute,
   join,
+  relative,
   resolve,
 } from "node:path";
 import { binaryRoot } from "./binary-installation";
@@ -56,6 +58,7 @@ import {
   hostToolCaches,
   hubProjectsDir,
   isSecretFileName,
+  placedMemoryDir,
   placedSyncedPaths,
   projectClaudeDir,
   USER_LAYER_DIRS,
@@ -71,6 +74,7 @@ import {
   workspaceSpillsFile,
   xdgDataHome,
 } from "./paths";
+import { SAFE_GIT_ENV, safeGitArgv } from "./safe-git";
 import { DamagedRecord, readRecord } from "./state-file";
 import {
   type Policy,
@@ -205,18 +209,107 @@ export const cloneDenies = (clone: string): readonly CloneDeny[] => [
 ];
 
 /**
- * A project lead's place (Caw's): the workspace id the hub gives the
- * boundary of the folder Caw starts in (hub `leadPlaceRef`), never a
- * delegate's. It is a person's own folder, not a disposable clone, so its
+ * What CawCo writes into a clone and keeps out of its status itself, by path
+ * in the clone: its deny paths, which no delegate writes ({@link
+ * cloneDenies}: the stand-ins CawCo made there, the placed skills and their
+ * store), the project's memory documents as the fleet places them (paths.ts
+ * `placedMemoryDir`), and its stage's host (agent stage.ts `writeHost`).
+ */
+export const cloneWritten = (clone: string): string[] =>
+  [
+    ...cloneDenies(clone).map((deny) => deny.path),
+    placedMemoryDir(clone),
+    join(clone, ".cawco"),
+  ].map((path) => relative(clone, path));
+
+/**
+ * The `git status` that names a clone's untracked paths git ignores, a
+ * folder a rule matches whole as one, NUL-ended: what {@link
+ * excludedPaths} reads, its `!! ` entries given to `git check-ignore -v -z
+ * --stdin`.
+ */
+export const IGNORED_STATUS = [
+  "status",
+  "--porcelain=v1",
+  "-z",
+  "--ignored=matching",
+  "--untracked-files=all",
+] as const;
+
+const TRAILING_SLASH = /\/$/;
+
+/**
+ * The paths of `git check-ignore -v -z` output (`rules`: source, line,
+ * pattern and path, each NUL-ended) kept out of git by no `.gitignore` the
+ * repository tracks (`tracked`, `git ls-files -z -- ':(glob)**\/.gitignore'`):
+ * the clone's `.git/info/exclude` or an untracked `.gitignore`, which its
+ * delegate writes. A path a tracked `.gitignore` covers goes with the clone,
+ * as does one the owner's global excludes file covers (an absolute source,
+ * outside every clone: no clone's config may name one, safe-git.ts
+ * `repositoryConfigProblem`). What CawCo wrote there ({@link cloneWritten})
+ * is CawCo's, and goes too. Each is work no remote has: it holds the
+ * workspace (agent workspace.ts `holding`), and finish_item names it (hub
+ * work-items.ts `leftoversIn`).
+ */
+export const excludedPaths = (
+  clone: string,
+  tracked: string,
+  rules: string
+): string[] => {
+  const own = cloneWritten(clone);
+  const committed = new Set(tracked.split("\0").filter(Boolean));
+  const fields = rules.split("\0");
+  const excluded: string[] = [];
+  for (let at = 0; at + 3 < fields.length; at += 4) {
+    const source = fields[at] as string;
+    const path = fields[at + 3] as string;
+    const bare = path.replace(TRAILING_SLASH, "");
+    if (!(
+      committed.has(source) ||
+      isAbsolute(source) ||
+      own.some((one) => bare === one || bare.startsWith(`${one}/`))
+    )) {
+      excluded.push(path);
+    }
+  }
+  return excluded;
+};
+
+/**
+ * A place: the workspace id the hub gives the boundary of a person's own
+ * folder, never a delegate's. A project lead's (Caw's) is the folder he
+ * starts in (hub `leadPlaceRef`); a session with no workspace of its own
+ * has one over the folder it works in, which names its stage (hub
+ * `stagePlaceRef`; the stage itself runs in a clone of that checkout, agent
+ * stage-clone.ts). It is a person's own folder, not a disposable clone, so its
  * boundary never writes into it (no stand-ins, no copied inodes, no exclude
  * lines): its policy denies what is there ({@link workspaceDenies},
  * {@link ownerOnlyIn}, {@link linkedIn}), its judge refuses protected config
  * by name (`protectConfig`), and its guard checks each command
- * (boundary.ts `PLACE_GUARD`).
+ * (boundary.ts `PLACE_GUARD`). Every place's id ends {@link PLACE_SUFFIX},
+ * Caw's and a session's stage place alike. The suffix stays `-caw`, the one
+ * it had when only Caw had a place, so the place records already on disk
+ * still read as places.
  */
-export const LEAD_PLACE_SUFFIX = "-caw";
-export const isLeadPlace = (id: string): boolean =>
-  id.endsWith(LEAD_PLACE_SUFFIX);
+export const PLACE_SUFFIX = "-caw";
+export const isPlace = (id: string): boolean => id.endsWith(PLACE_SUFFIX);
+
+/**
+ * The workspace id of place `placeId`'s stage clone (agent stage-clone.ts),
+ * as its machine and the hub both name it: a workspace id of its own, never
+ * a place's, its first 8 characters its own hash, so its scratch and door
+ * dirs are its own and not the place's.
+ */
+export const stageCloneId = (placeId: string): string => {
+  const hex = createHash("sha256").update(`stage\0${placeId}`).digest("hex");
+  return [
+    hex.slice(0, 8),
+    hex.slice(8, 12),
+    hex.slice(12, 16),
+    hex.slice(16, 20),
+    hex.slice(20, 32),
+  ].join("-");
+};
 
 /** The most `find` writes about a place: every path it names, NUL-separated. */
 const FIND_OUTPUT_MAX = 64 * 1024 * 1024;
@@ -255,12 +348,95 @@ const findIn = (
     );
   });
 
+/** What git exits with, and what it wrote. */
+const gitIn = (
+  root: string,
+  args: readonly string[]
+): Promise<{ code: number; out: string; err: string }> =>
+  new Promise((done) => {
+    execFile(
+      "git",
+      safeGitArgv(["-C", root, ...args]).slice(1),
+      {
+        encoding: "utf8",
+        maxBuffer: FIND_OUTPUT_MAX,
+        env: { ...process.env, ...SAFE_GIT_ENV, LC_ALL: "C" },
+      },
+      (error, out, err) => {
+        if (!error) {
+          done({ code: 0, out, err });
+          return;
+        }
+        done({
+          code: typeof error.code === "number" ? error.code : -1,
+          out,
+          err,
+        });
+      }
+    );
+  });
+
+/**
+ * The dirs under `root` its project ignores, as git states them: each
+ * untracked dir every one of whose entries the project's own ignore rules
+ * (`.gitignore`, `.git/info/exclude`, the user's `core.excludesFile`) leave
+ * out, `git ls-files --others --ignored --exclude-standard --directory`,
+ * never one of {@link PROTECTED_UNDER}'s dirs, whose protected entries lie
+ * below it. None for a folder that is no git work tree: it declares no
+ * ignores. Any other failure refuses the boundary, in git's words.
+ */
+const ignoredDirs = async (root: string): Promise<string[]> => {
+  if ((await gitIn(root, ["rev-parse", "--is-inside-work-tree"])).code !== 0) {
+    return [];
+  }
+  const listed = await gitIn(root, [
+    "ls-files",
+    "--others",
+    "--ignored",
+    "--exclude-standard",
+    "--directory",
+    "-z",
+  ]);
+  if (listed.code !== 0) {
+    throw new Error(
+      `the dirs ${root} ignores could not be read: git ls-files exited ${listed.code}: ${listed.err.trim()}`
+    );
+  }
+  return listed.out
+    .split("\0")
+    .filter(
+      (entry) =>
+        entry.endsWith("/") &&
+        !Object.hasOwn(PROTECTED_UNDER, basename(entry.slice(0, -1)))
+    )
+    .map((entry) => join(root, entry.slice(0, -1)));
+};
+
+/** `find -path`'s pattern for exactly `path`: its glob characters escaped. */
+const FIND_GLOB = /[\\*?[\]]/g;
+
+/** `find`'s test for any of `paths`, exactly; one that is never true for none. */
+const anyPath = (paths: readonly string[]): string[] =>
+  paths.length === 0
+    ? ["-false"]
+    : [
+        "(",
+        ...paths.flatMap((path, at) => [
+          ...(at > 0 ? ["-o"] : []),
+          "-path",
+          path.replace(FIND_GLOB, "\\$&"),
+        ]),
+        ")",
+      ];
+
 /** `find`'s test for an entry that is a dir or a file of its own: never a link. */
 const DIR_OR_FILE = ["(", "-type", "d", "-o", "-type", "f", ")"];
 
 /**
- * The protected config a lead's place has now, anywhere in it but installed
- * dependencies ({@link PROTECTED_NAMES}, {@link PROTECTED_UNDER}): each a dir
+ * The protected config a place has now ({@link PROTECTED_NAMES},
+ * {@link PROTECTED_UNDER}), anywhere in it but below the dirs its project
+ * ignores ({@link ignoredDirs}; an ignored dir that is protected config
+ * itself is found): each a dir
  * or file of its own, which srt binds onto itself and so leaves nothing on
  * the host. One that is absent is never denied to srt, which would make its
  * mount point in the person's folder.
@@ -275,7 +451,7 @@ const protectedIn = async (root: string): Promise<string[]> => {
 
 /**
  * Whether `path` is still exactly a stand-in an earlier build made in a
- * lead's place (an empty dir, or a file holding a stand-in's text): left
+ * place (an empty dir, or a file holding a stand-in's text): left
  * unbound so the agent can take it away (stand-ins.ts `removeStandIns`); the
  * place's guard still sees every change to it.
  */
@@ -295,14 +471,10 @@ const standInAsMade = async (root: string, path: string): Promise<boolean> => {
   );
 };
 
-const foundProtected = (root: string): Promise<string[]> =>
+const foundProtected = async (root: string): Promise<string[]> =>
   findIn(
     root,
     [
-      "-name",
-      "node_modules",
-      "-prune",
-      "-o",
       "(",
       ...PROTECTED_NAMES.flatMap((name, at) => [
         ...(at > 0 ? ["-o"] : []),
@@ -316,13 +488,16 @@ const foundProtected = (root: string): Promise<string[]> =>
       ...DIR_OR_FILE,
       "-print0",
       "-prune",
+      "-o",
+      ...anyPath(await ignoredDirs(root)),
+      "-prune",
     ],
     "the protected config"
   );
 
 /**
  * The clone-side denies a workspace's boundary keeps ({@link cloneDenies}).
- * A lead's place keeps only the protected config it has
+ * A place keeps only the protected config it has
  * ({@link protectedIn}), each with nothing to stand in for it: a person's own
  * folder is never written into.
  */
@@ -330,7 +505,7 @@ export const workspaceDenies = async (
   workspace: WorkspaceRef
 ): Promise<readonly CloneDeny[]> => {
   const clone = resolveReal(workspace.path);
-  if (!isLeadPlace(workspace.id)) {
+  if (!isPlace(workspace.id)) {
     return cloneDenies(clone);
   }
   return (await protectedIn(clone)).map((path) => ({
@@ -349,8 +524,9 @@ const ANY_GROUP_OR_OTHER_BIT = process.platform === "darwin" ? "+077" : "/077";
  * Every entry under `root` (never `root` itself) that only its owner may
  * read: a dir or file whose mode has no group or other bits (a 0700 dir, a
  * 0600 file), as a tool keeps its own data (x-use's accounts and cookies).
- * Not walked into, and nothing under a link; git's own dirs and installed
- * dependencies (`.git`, `node_modules`) are not looked in. A lead's place
+ * Not walked into, and nothing under a link; git's own dirs (`.git`) are not
+ * looked in. Every other dir is, ignored or not: a tool's data dir is one a
+ * project ignores, and what it keeps there is its own. A lead's place
  * hides each from his shell and file tools; an MCP server the owner runs
  * reaches its own data on its own.
  */
@@ -358,13 +534,8 @@ export const ownerOnlyIn = (root: string): Promise<string[]> =>
   findIn(
     root,
     [
-      "(",
       "-name",
       ".git",
-      "-o",
-      "-name",
-      "node_modules",
-      ")",
       "-prune",
       "-o",
       ...DIR_OR_FILE,
@@ -378,38 +549,49 @@ export const ownerOnlyIn = (root: string): Promise<string[]> =>
   );
 
 /**
- * What in a lead's place shares its inodes with files elsewhere: each
- * installed dependencies dir (bun installs by hardlinking from its cache),
- * and every other file with more than one link. A clone's are copied apart
+ * What in a place shares its inodes with files elsewhere: each dir its
+ * project ignores ({@link ignoredDirs}) that holds such a file, whole (an
+ * install that hardlinks from its cache, as bun's and uv's do, fills one with
+ * them), and every other file with more than one link. A clone's are copied apart
  * but those linked to the workspaces' own bun cache (boundary.ts
  * `ownInodes`); a person's own folder is never rewritten, so
  * these are only denied for writing: a write through one would change a file
  * the host runs.
  */
-export const linkedIn = (root: string): Promise<string[]> =>
-  findIn(
-    root,
-    [
-      "-xdev",
-      "(",
-      "-name",
-      "node_modules",
-      "-type",
-      "d",
-      "-print0",
-      "-prune",
-      ")",
-      "-o",
-      "(",
-      "-type",
-      "f",
-      "-links",
-      "+1",
-      "-print0",
-      ")",
-    ],
-    "the files that share their inodes"
-  );
+export const linkedIn = async (root: string): Promise<string[]> => {
+  const ignored = await ignoredDirs(root);
+  const [files, dirs] = await Promise.all([
+    findIn(
+      root,
+      [
+        "-xdev",
+        ...anyPath(ignored),
+        "-prune",
+        "-o",
+        "-type",
+        "f",
+        "-links",
+        "+1",
+        "-print0",
+      ],
+      "the files that share their inodes"
+    ),
+    Promise.all(
+      ignored.map(async (dir) =>
+        (
+          await findIn(
+            dir,
+            ["-xdev", "-type", "f", "-links", "+1", "-print0", "-quit"],
+            "the files that share their inodes"
+          )
+        ).length > 0
+          ? [dir]
+          : []
+      )
+    ),
+  ]);
+  return [...dirs.flat(), ...files];
+};
 
 const unique = (paths: string[]): string[] => [...new Set(paths)];
 
@@ -888,9 +1070,9 @@ export const workspacePolicy = async (
     ...(await projectFolder(workspace.id)),
     ...(await spillDirs(workspace.id)),
   ]);
-  // A lead's place: what only its owner may read in it is hidden from the
-  // lead's shell and file tools, for reading and writing (`ownerOnlyIn`).
-  const lead = isLeadPlace(workspace.id);
+  // A place: what only its owner may read in it is hidden from the
+  // shell and file tools in it, for reading and writing (`ownerOnlyIn`).
+  const lead = isPlace(workspace.id);
   const ownerOnly = lead ? await ownerOnlyIn(clone) : [];
   // What shares an inode with a file elsewhere is only read (`linkedIn`).
   const linked = lead ? await linkedIn(clone) : [];

@@ -14,11 +14,10 @@
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import UsageMeter from "#lib/cawco/UsageMeter.svelte";
-  import { usage } from "#lib/cawco/usage/forecast.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
-  import { stageUsage } from "./stage";
+  import { stageUsage, unstageUsage } from "./stage";
 
   const count = $derived(page.url.searchParams.get("n") === "20" ? 20 : 6);
   const view = $derived(
@@ -84,7 +83,7 @@
     return () => {
       clearTimeout(timer);
       cancelAnimationFrame(frame);
-      usage.stage(null);
+      unstageUsage();
     };
   });
 

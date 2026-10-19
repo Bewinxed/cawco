@@ -91,8 +91,32 @@ public final class SessionComposerBinding {
         composer?.render(self)
     }
 
-    /// Whether this conversation's draft is being typed into now.
-    public var isWriting: Bool { composer?.isWriting ?? false }
+    // MARK: The question card's keys
+
+    /// The first question card standing on the composer.
+    private var questionCard: PromptCardView? {
+        prompts.compactMap { $0 as? PromptCardView }.first { $0.ask.isQuestion }
+    }
+
+    /// A question card stands on the composer: the pane may take the
+    /// keyboard, so the card's keys reach it.
+    public var standsQuestion: Bool { questionCard != nil }
+
+    /// The keys the first question card owns, the digits and Return: the
+    /// same in a session and in a Caw thread, each pane listing them among
+    /// its key commands with its own `action`, which calls `cardKey`, while
+    /// nothing that takes text holds the keyboard (a field, or a preview's
+    /// page). Never Escape: a question is put down only by its own Dismiss button.
+    public func cardKeys(_ action: Selector) -> [UIKeyCommand] {
+        guard questionCard != nil else { return [] }
+        return (1 ... 9).map { UIKeyCommand(input: "\($0)", modifierFlags: [], action: action) }
+            + [UIKeyCommand(input: "\r", modifierFlags: [], action: action)]
+    }
+
+    /// One of `cardKeys`, pressed: the first question card takes it.
+    public func cardKey(_ command: UIKeyCommand) {
+        if let input = command.input { questionCard?.key(input) }
+    }
 
     public func focus() {
         composer?.focus()
@@ -169,6 +193,20 @@ public final class SessionComposerBinding {
     }
 
     /// The draft's canvas as the screen kept it (a restored draft): back as its chip.
+    #if DEBUG
+    /// A probe's send: `words` typed into the field, then Send pressed as a finger presses it. Answers whether it took the press.
+    public func probeSend(_ words: String) -> Bool {
+        guard let composer else { return false }
+        composer.probeType(words)
+        return composer.probePressSend()
+    }
+    #endif
+
+    /// The artifact panel gives the canvas `id` back to this message (ComposerView `takeBack`).
+    public func takeBack(canvas id: String, name: String, folded: Bool, from box: CGRect?) {
+        composer?.takeBack(id: id, name: name, folded: folded, from: box, of: self)
+    }
+
     public func restoreCanvas(id: String, name: String) {
         guard canvas == nil else { return }
         canvas = DraftCanvas(id: id, name: name, folded: true)

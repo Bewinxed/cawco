@@ -52,6 +52,8 @@ export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
 export { default as IconSuccess } from "~icons/solar/check-circle-bold-duotone";
 export { default as IconCheck } from "~icons/solar/check-read-bold-duotone";
 export { default as IconToolTodo } from "~icons/solar/checklist-bold-duotone";
+/** A starter that files tasks: its ticks on a half-ink body, as every starter's glyph is (StarterCards). */
+export { default as IconTaskList } from "~icons/solar/checklist-minimalistic-bold-duotone";
 /** A report; and a project's decision pages (the Decisions tab's tiles and its empty state). */
 export {
   default as IconDecisions,
@@ -177,8 +179,11 @@ export {
 } from "~icons/solar/question-circle-bold-duotone";
 export { default as IconDot } from "~icons/solar/record-circle-bold-duotone";
 export { default as IconRefresh } from "~icons/solar/refresh-bold-duotone";
-/** Working: the session status glyph (DESIGN.md, Session status). */
-export { default as IconWorking } from "~icons/solar/refresh-circle-bold-duotone";
+/** Working: the session status glyph (DESIGN.md, Session status); and a starter that refreshes something, on its half-ink body (StarterCards). */
+export {
+  default as IconRenew,
+  default as IconWorking,
+} from "~icons/solar/refresh-circle-bold-duotone";
 /** Reopen a resolved pin. */
 export { default as IconReopen } from "~icons/solar/restart-bold-duotone";
 /*
@@ -198,6 +203,8 @@ export { default as IconWorkflow } from "~icons/solar/share-circle-bold-duotone"
 export { default as IconShield } from "~icons/solar/shield-bold-duotone";
 /** Rules: a standing guard over what sessions say, distinct from bare `shield`. */
 export { default as IconRules } from "~icons/solar/shield-check-bold-duotone";
+/** HTTPS on the tailnet: the hub's name served over TLS to every device on it. */
+export { default as IconTailnetHttps } from "~icons/solar/shield-network-bold-duotone";
 export { default as IconShop } from "~icons/solar/shop-bold-duotone";
 /** A canvas's Undock, out of the artifact panel back over the field. */
 export { default as IconUndock } from "~icons/solar/sidebar-minimalistic-bold-duotone";

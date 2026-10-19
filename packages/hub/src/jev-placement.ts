@@ -53,9 +53,12 @@ export const ROWS = {
   phone: "Phone requests",
   order: "Dispatch order",
   voice: "Voice check",
-  // Asked in memory.ts: the curator's inbox, and an attempt's brief.
+  // Asked in memory.ts: the curator's inbox, how its lasting notes bear on
+  // the fact lines, and an attempt's brief; in session-prose.ts, recall.
   inbox: "Memory inbox",
+  sorting: "Fact sorting",
   context: "Brief context",
+  recall: "Session search",
   // Asked in project-starters.ts: what a project's board and Caw's panel offer.
   starters: "Starters",
 } as const;
@@ -149,7 +152,9 @@ export const ATTACH_THRESHOLD = 0.5;
 /**
  * Whether a new message continues the session that last worked on it
  * (attach) rather than a fresh one: Jev's yes/no on whether that session's
- * history matters to it.
+ * history matters to it. The caller reads the cache: a yes on a warm one
+ * sends to the session; a yes on a cold one compresses its history into a
+ * new session in the same workspace (§5.3).
  */
 export async function jevAttach(
   access: JevAccess,
@@ -180,9 +185,9 @@ export async function jevAttach(
       attach: {
         type: "noul",
         instructions:
-          "Does `message` build on what `session` already did (`last_work`) so closely that a fresh session, briefed with only the task and this message, would have to redo or re-read that work? `cache` says whether continuing `session` is cheap now (warm) or re-reads its whole transcript (cold).",
+          "Does `message` build on what `session` already did (`last_work`) so closely that a fresh session, briefed with only the task and this message, would have to redo or re-read that work? `cache` says how its history would go on: warm, `session` itself takes `message`, cheaply; cold, its history is compressed into a summary that a new session in the same workspace continues from, so its whole transcript is never re-read.",
         criteria: {
-          true: "Continue `session`: its history is needed to act on `message`.",
+          true: "Continue `session`'s history (itself when warm, compressed when cold): it is needed to act on `message`.",
           false:
             "Start fresh: the task, `last_work` and `message` are enough for a new session.",
         },
@@ -193,12 +198,21 @@ export async function jevAttach(
   return { attach: noul >= ATTACH_THRESHOLD, noul };
 }
 
-/** Attach or fresh with no caller and Jev off: continue only a session that is warm, idle and on the same task. */
+/**
+ * Attach or fresh with no caller and Jev off: a session idle and on the
+ * same task (the rule's stand-in for "its history matters") takes the
+ * message when warm, and goes on compressed when cold; any other, fresh.
+ */
 export const attachByRule = (facts: {
   idle: boolean;
   sameTask: boolean;
   warm: boolean;
-}): boolean => facts.warm && facts.idle && facts.sameTask;
+}): "attach" | "continue" | "fresh" => {
+  if (!(facts.idle && facts.sameTask)) {
+    return "fresh";
+  }
+  return facts.warm ? "attach" : "continue";
+};
 
 // --- Ready to dispatch (score) and Dispatch order (score ×3) --------------------
 

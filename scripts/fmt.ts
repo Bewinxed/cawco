@@ -8,7 +8,8 @@
  *   opencode.json), is never read or written. `bun fmt`'s own discovery reads
  *   only `.gitignore` and `.prettierignore`.
  * - `--changed`: only the files that differ from the merge-base with
- *   origin/main, as `bun run lint:changed` checks.
+ *   origin/main, and the untracked ones git does not ignore, as
+ *   `bun run lint:changed` checks.
  * - `--check`: write nothing; exit 1 when a file is not formatted.
  * - The options are `.prettierrc` (site/.prettierrc under site/), what Biome
  *   formatted with before; `.prettierignore` names what is left as written.
@@ -190,15 +191,21 @@ async function main(): Promise<number> {
     git("ls-files", "-z", "-co", "--exclude-standard", "--", ...paths)
   );
   const files = changed
-    ? git(
-        "diff",
-        "-z",
-        "--name-only",
-        "--diff-filter=ACMR",
-        git("merge-base", "HEAD", "origin/main")[0]?.trim() ?? "",
-        "--",
-        ...paths
-      ).filter((file) => seen.has(file))
+    ? [
+        ...new Set([
+          ...git(
+            "diff",
+            "-z",
+            "--name-only",
+            "--diff-filter=ACMR",
+            git("merge-base", "HEAD", "origin/main")[0]?.trim() ?? "",
+            "--",
+            ...paths
+          ),
+          // New files not added yet differ from the merge-base too.
+          ...git("ls-files", "-z", "-o", "--exclude-standard", "--", ...paths),
+        ]),
+      ].filter((file) => seen.has(file))
     : [...seen];
   // `bun fmt` with no paths formats the whole directory: an empty list is done.
   if (files.length === 0) {

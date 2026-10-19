@@ -18,10 +18,14 @@
         link: "bg-transparent text-link-ink underline-offset-4 hover:underline",
       },
       /* The looks its callers draw over a variant, each as they drew it. */
-      /** A cell's chip: at least 24px tall, wider pads; or with room above and below for a wrapped line. */
+      /**
+       * A cell's chip: at least 24px tall, wider pads; or with room above and
+       * below for a wrapped line. A tab's count: its numeral at meta size.
+       */
       size: {
         cell: "min-h-6 gap-1.5 px-2",
         "cell-tall": "min-h-6 gap-1.5 px-2 py-space-1",
+        count: "text-meta",
       },
       /** Its ink, alone or with its edge in the same ink (an outline badge). */
       tone: {

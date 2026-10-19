@@ -23,6 +23,12 @@ import {
   commandLine,
   processLineage,
 } from "../packages/core/src/process-identity";
+import {
+  isAlive,
+  listedPid,
+  signal,
+  spawnedPid,
+} from "../packages/core/src/signal";
 import { ensureDeps } from "./lib/deps";
 import { treeOf } from "./scratch-fleet-leash";
 
@@ -71,15 +77,14 @@ const starter = async () => {
 };
 
 /**
- * Whether `pid` runs: the kernel has it (a signal 0 reaches it, or is refused
- * it, EPERM), and it is no zombie waiting to be reaped. A command line that
- * cannot be read never makes a running process count as gone.
+ * Whether `pid`, as a reading of the process list named it, runs: the kernel
+ * has it (a signal 0 reaches it, or is refused it, EPERM), and it is no
+ * zombie waiting to be reaped. A command line that cannot be read never
+ * makes a running process count as gone.
  */
 const runs = async (pid: number): Promise<boolean> => {
-  try {
-    process.kill(pid, 0);
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
+  if (!isAlive(listedPid(pid))) {
+    return false;
   }
   const line = await commandLine(pid).catch(() => undefined);
   return !line?.endsWith("<defunct>");
@@ -174,7 +179,11 @@ const main = async () => {
     failure = `the fleet held no ${opencode.length === 0 ? "opencode" : "claude"} process to prove on`;
   }
 
-  process.kill(child.pid, "SIGKILL");
+  const starterPid = spawnedPid(child);
+  if (starterPid === undefined) {
+    throw new Error("the starter's spawn made no process");
+  }
+  signal(starterPid, "SIGKILL");
   const killedAt = Date.now();
   console.log(`… the starter (pid ${child.pid}) killed with SIGKILL`);
   let left = await leftOf(tree, root);
@@ -191,11 +200,8 @@ const main = async () => {
       .map(([pid, line]) => `  ${pid} ${line}`)
       .join("\n")}`;
     for (const pid of left.keys()) {
-      try {
-        process.kill(pid, "SIGKILL");
-      } catch {
-        // gone already
-      }
+      // Gone since the reading, it is nothing to kill.
+      signal(listedPid(pid), "SIGKILL");
     }
   }
   await Promise.all(

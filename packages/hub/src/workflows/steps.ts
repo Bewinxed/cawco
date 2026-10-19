@@ -459,7 +459,7 @@ export function createSteps(ctx: StepContext) {
     spec: StepSpecJson,
     why: string
   ) =>
-    `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} failed`)}${receiptHead(run, step, attempt, spec)} · ${failureText(attempt.failure ?? "no-result")}${why ? ` · ${why}` : ""}`;
+    `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} failed`, run.id)}${receiptHead(run, step, attempt, spec)} · ${failureText(attempt.failure ?? "no-result")}${why ? ` · ${why}` : ""}`;
 
   /**
    * Why a step out of attempts is not held — for the receipt, `""` when there
@@ -506,7 +506,7 @@ export function createSteps(ctx: StepContext) {
     ctx.write(run, step, attempt);
     ctx.notify(
       run,
-      `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} held`)}${receiptHead(run, step, attempt, spec)} · ${failureText(attempt.failure ?? "no-result")} · out of attempts, held for your decision (hold ${hold} of ${MAX_HOLDS}, ${HOLD_DEADLINE_MS / 60_000} min at most). workflow_steer {runId: "${run.id}", action: {type: "retry", stepId: "${step.id}"}} runs another attempt on the same session; {type: "fail", stepId: "${step.id}"} hands the program its StepError now. With no decision the step fails when the hold runs out.`
+      `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} held`, run.id)}${receiptHead(run, step, attempt, spec)} · ${failureText(attempt.failure ?? "no-result")} · out of attempts, held for your decision (hold ${hold} of ${MAX_HOLDS}, ${HOLD_DEADLINE_MS / 60_000} min at most). workflow_steer {runId: "${run.id}", action: {type: "retry", stepId: "${step.id}"}} runs another attempt on the same session; {type: "fail", stepId: "${step.id}"} hands the program its StepError now. With no decision the step fails when the hold runs out.`
     );
     ctx.hold(run, step, hold, HOLD_DEADLINE_MS);
   };
@@ -534,7 +534,7 @@ export function createSteps(ctx: StepContext) {
       ctx.write(run, step, attempt);
       ctx.notify(
         run,
-        `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} passed`)}${receiptHead(run, step, attempt, spec)} · ${receiptOf(step.result, step.seq)}`
+        `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} passed`, run.id)}${receiptHead(run, step, attempt, spec)} · ${receiptOf(step.result, step.seq)}`
       );
       ctx.settled(run, step, { result: attempt.result });
       return;
@@ -585,7 +585,7 @@ export function createSteps(ctx: StepContext) {
       if (tell) {
         ctx.notify(
           run,
-          `${workflowNoticeMarker(ctx.nameOf(run), `step ${specOf(step).title} stop held`)}${receipt}`
+          `${workflowNoticeMarker(ctx.nameOf(run), `step ${specOf(step).title} stop held`, run.id)}${receipt}`
         );
       }
       return;
@@ -825,7 +825,7 @@ export function createSteps(ctx: StepContext) {
       }
       ctx.notify(
         run,
-        `${workflowNoticeMarker(ctx.nameOf(run), `step ${specOf(step).title} stop held`)}Recorded ${action}; no retry starts until session ${step.instanceId} is confirmed ended.`
+        `${workflowNoticeMarker(ctx.nameOf(run), `step ${specOf(step).title} stop held`, run.id)}Recorded ${action}; no retry starts until session ${step.instanceId} is confirmed ended.`
       );
       await haltAttempt(run, step, decision.deadline, decision.failure, action);
       return true;

@@ -25,6 +25,7 @@ import {
   previewRoute,
 } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
 
@@ -263,9 +264,9 @@ export class Stage {
       { method: "POST" }
     ).catch(() => null);
     if (!answer?.ok) {
-      this.unreached =
-        (await answer?.text().catch(() => "")) ||
-        "The hub didn't say where this canvas stands.";
+      this.unreached = answer
+        ? (await hubRefusal(answer)).message
+        : "The hub didn't say where this canvas stands.";
       this.changed();
       return;
     }
@@ -300,9 +301,9 @@ export class Stage {
       { method: "POST" }
     ).catch(() => null);
     if (!answer?.ok) {
-      this.unreached =
-        (await answer?.text().catch(() => "")) ||
-        "The hub didn't give this canvas a pass.";
+      this.unreached = answer
+        ? (await hubRefusal(answer)).message
+        : "The hub didn't give this canvas a pass.";
       return;
     }
     const { ticket } = (await answer.json()) as PreviewTicket;

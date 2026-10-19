@@ -6,7 +6,7 @@
    * attention hue, one sentence naming why, and two answers. Either answer is
    * the last word: a session is never offered again.
    */
-  import type { ProjectOfferSummary } from "@cawco/core";
+  import { offerWords, type ProjectOfferSummary } from "@cawco/core";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconClose, IconFolder } from "#lib/icons.js";
@@ -34,17 +34,9 @@
   let pending = $state<"accept" | "dismiss" | null>(null);
   let refused = $state("");
 
-  const joinedLine = $derived.by(() => {
-    if (!joined) {
-      return "";
-    }
-    const filed = joined.tasks.length;
-    return `Joined ${joined.project.name}${
-      filed
-        ? `, with ${filed} proposed ${filed === 1 ? "task" : "tasks"} from the plan`
-        : ""
-    }.`;
-  });
+  const joinedLine = $derived(
+    joined ? offerWords.joined(joined.project.name, joined.tasks.length) : ""
+  );
 
   async function answer(which: "accept" | "dismiss"): Promise<void> {
     pending = which;
@@ -69,7 +61,7 @@
        and a way to put the card away. -->
   <!-- literal: 8px -->
   <section
-    aria-label="Joined a project"
+    aria-label={offerWords.joinedLabel}
     class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-hairline"
     data-offer={instanceId}
     role="status"
@@ -93,10 +85,10 @@
         fit="prompt"
         style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         href="/project/{encodeURIComponent(joined.project.id)}"
-        variant="outline">Open {joined.project.name}</Button
+        variant="outline">{offerWords.openProject(joined.project.name)}</Button
       >
       <Button
-        aria-label="Put this away"
+        aria-label={offerWords.putAway}
         class="h-space-8 coarse:h-(--btn-h-coarse)"
         fit="prompt"
         style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
@@ -109,7 +101,7 @@
 {:else if offer}
   <!-- literal: 8px -->
   <section
-    aria-label="Make this session a project"
+    aria-label={offerWords.offerLabel}
     class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-hairline"
     data-offer={instanceId}
     style:--settle="8px"
@@ -132,7 +124,7 @@
         fit="prompt"
         style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         disabled={pending !== null}
-        label="Not now"
+        label={offerWords.notNow}
         onclick={() => answer("dismiss")}
         pending={pending === "dismiss"}
         variant="ghost"
@@ -144,10 +136,10 @@
         disabled={pending !== null}
         failed={!!refused}
         icon={IconFolder}
-        label="Create project"
+        label={offerWords.createProject}
         onclick={() => answer("accept")}
         pending={pending === "accept"}
-        pendingLabel="Making project…"
+        pendingLabel={offerWords.makingProject}
       />
     </div>
     <RowFault data-project-offer-refused class="basis-full" reason={refused} />

@@ -105,11 +105,19 @@ export const syncSkillFiles = async (
       // biome-ignore lint/performance/noAwaitInLoops: ownership is checked before this skill is written or claimed.
       const collision = await workflowSkillCollision(dir, skill);
       if (collision) {
-        report[skill.name] = { state: "failed", detail: collision };
+        report[skill.name] = {
+          state: "failed",
+          cause: "unknown",
+          detail: collision,
+        };
         continue;
       }
     } catch (error) {
-      report[skill.name] = { state: "failed", detail: String(error) };
+      report[skill.name] = {
+        state: "failed",
+        cause: "unknown",
+        detail: String(error),
+      };
       continue;
     }
     if (await holdsFleetCopy(join(dir, skill.name), skill, held[skill.name])) {
@@ -122,7 +130,7 @@ export const syncSkillFiles = async (
     const drift = skillDrift(held[skill.name], managed[skill.name], skill.hash);
     if (drift && !skill.force) {
       written[skill.name] = managed[skill.name];
-      report[skill.name] = { state: "failed", detail: drift };
+      report[skill.name] = { state: "failed", cause: "drifted", detail: drift };
       continue;
     }
 
@@ -136,6 +144,7 @@ export const syncSkillFiles = async (
       }
       report[skill.name] = {
         state: "failed",
+        cause: "missing-bytes",
         detail: "the hub sent no files for this hash",
       };
       continue;
@@ -148,6 +157,7 @@ export const syncSkillFiles = async (
       }
       report[skill.name] = {
         state: "failed",
+        cause: "unsafe-path",
         detail: `unsafe path ${unsafe.path}`,
       };
       continue;
@@ -161,6 +171,7 @@ export const syncSkillFiles = async (
       written[skill.name] = "";
       report[skill.name] = {
         state: "failed",
+        cause: "unwritable",
         detail: error instanceof Error ? error.message : String(error),
       };
     }
@@ -190,7 +201,11 @@ export const syncSkillFiles = async (
       report[name] = { state: "removed" };
     } catch (error) {
       written[name] = managed[name];
-      report[name] = { state: "failed", detail: String(error) };
+      report[name] = {
+        state: "failed",
+        cause: "unwritable",
+        detail: String(error),
+      };
     }
   }
   return written;
@@ -231,7 +246,7 @@ export const syncMemory = async (
   }
 
   if (plan === "drift") {
-    report.memory = { state: "failed", detail: DRIFTED };
+    report.memory = { state: "failed", cause: "drifted", detail: DRIFTED };
     return managed;
   }
   if (plan === "skip") {
@@ -246,6 +261,7 @@ export const syncMemory = async (
   } catch (error) {
     report.memory = {
       state: "failed",
+      cause: "unwritable",
       detail: error instanceof Error ? error.message : String(error),
     };
     return managed;

@@ -10,7 +10,11 @@
    * lists the session's artifacts (`held`), and the panel follows that frame
    * when the removed one was shown.
    */
-  import type { ArtifactKind, ArtifactSummary } from "@cawco/core";
+  import {
+    type ArtifactKind,
+    type ArtifactSummary,
+    artifactWords,
+  } from "@cawco/core";
   import type { Component } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
@@ -49,7 +53,7 @@
     page: IconArtifactPage,
     canvas: IconArtifactCanvas,
     preview: IconWindow,
-    sheet: IconArtifactSheet,
+    component: IconArtifactSheet,
   };
 
   let open = $state(false);
@@ -117,7 +121,7 @@
       },
       (error: Error) => {
         removing.delete(artifact.id);
-        toast.error(`${artifact.name} wasn't removed: ${error.message}`);
+        toast.error(artifactWords.notRemoved(artifact.name, error.message));
       }
     );
   }
@@ -243,20 +247,26 @@
           onSelect={() => choose(artifact)}
         >
           <Glyph />
-          <span
-            data-slot="row-name"
-            class="flex-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label"
-            id={part(artifact.id, "name")}>{artifact.name}</span
-          >
-          {#if artifact.promoted}
+          <!-- The name and its promoted tag on one line: the name whole while
+               it fits, the tag giving way first. -->
+          <span class="flex min-w-0 flex-auto gap-inherit" data-box>
             <span
-              data-slot="row-promoted"
-              class="shrink-100 min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta num"
-              id={part(artifact.id, "promoted")}
-              title="Promoted into the project's folder at artifacts/{artifact.name}/"
-              >Promoted {artifact.promoted.commit.slice(0, 7)}</span
+              data-slot="row-name"
+              class="max-w-full flex-none overflow-clip text-ellipsis whitespace-nowrap type-label"
+              id={part(artifact.id, "name")}>{artifact.name}</span
             >
-          {/if}
+            {#if artifact.promoted}
+              <span
+                data-slot="row-promoted"
+                class="min-w-0 flex-initial overflow-clip text-ellipsis whitespace-nowrap text-ink-muted text-size-meta num"
+                id={part(artifact.id, "promoted")}
+                title={artifactWords.promotedTitle(artifact.name)}
+                >{artifactWords.promoted(
+                  artifact.promoted.commit.slice(0, 7)
+                )}</span
+              >
+            {/if}
+          </span>
           {#if artifact.createdAt}
             <span
               data-slot="row-age"
@@ -266,7 +276,7 @@
             >
           {/if}
           <button
-            aria-label="Remove {artifact.name}"
+            aria-label={artifactWords.removeNamed(artifact.name)}
             class="grid place-items-center me-(--remove-me) p-space-1 border-none border-current rounded-sm bg-transparent text-ink-muted opacity-0 transition-[opacity,color] dur-control ease-out hover:text-error-9 coarse:opacity-100 group-data-highlighted/artifact:opacity-100"
             data-box
             style:--remove-me="calc(-1 * var(--space-1))"
@@ -278,7 +288,7 @@
             onpointerdown={own}
             onpointerup={own}
             tabindex={-1}
-            title="Remove"
+            title={artifactWords.remove}
             type="button"
           >
             <IconTrash />

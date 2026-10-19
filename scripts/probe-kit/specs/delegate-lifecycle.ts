@@ -476,11 +476,12 @@ const aheadGoesFrom = async (
 
 const spec: Spec = {
   name: "delegate-lifecycle",
+  host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {
     const jev = jevMock();
     try {
       const fleet = await kit.fleet(respond);
-      fleet.env.CAWCO_TYPESAFE_URL = jev.url;
+      fleet.standIns.typesafeUrl = jev.url;
       const home = fleet.env.HOME as string;
       fleet.launch("sessiond");
       await fleet.sessiondUp();

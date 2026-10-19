@@ -34,6 +34,7 @@ import {
 import { type HeavySlot, heavySlot } from "../lib/heavy-run";
 import {
   type Fleet,
+  type HubAddress,
   type Reply,
   type Seen,
   scratchFleet,
@@ -51,6 +52,8 @@ export const VIEWS = {
   /** An iPad mini's portrait: the journeys' tablet. */
   tabletPortrait: { width: 768, height: 1024, touch: true },
   phone: { width: 390, height: 844, touch: true },
+  /** Past the phone's line and under the drawer's: the rail is a sheet, the bar is the desk's. */
+  narrowDesk: { width: 680, height: 900, touch: false },
   /** The widest phone, a Pro Max's 430pt. */
   phoneWide: { width: 430, height: 932, touch: true },
   /** The simulators the iOS specs pair with: iPhone 16 Pro and iPad Pro 13-inch (M4), portrait. */
@@ -58,6 +61,9 @@ export const VIEWS = {
   /** An iPhone 15 Pro, portrait: the owner's phone. */
   iphone15Pro: { width: 393, height: 852, touch: true },
   ipad: { width: 1032, height: 1376, touch: true },
+  /** The same iPad in landscape. Either way up it is an iPad's regular width, so the web stands
+   *  the side panel beside the conversation (layoutPolicy.sideDrawer) as the app does. */
+  ipadWide: { width: 1376, height: 1032, touch: true },
 } as const;
 export type View = keyof typeof VIEWS;
 
@@ -107,6 +113,12 @@ export interface PageOptions {
   browser?: string;
   /** WebKit for a spec that reads Safari's engine, Firefox for Gecko's; Chromium otherwise. */
   engine?: Engine;
+  /**
+   * Chromium only: its `--host-resolver-rules`, where a spec needs a name to
+   * reach one address alone (`MAP localhost [::1]`: an agent's loopback
+   * beside a scratch hub on 127.0.0.1).
+   */
+  hostRules?: string;
   /** Scripts installed before the page's own, in order. */
   init?: (() => void)[];
   /**
@@ -165,10 +177,26 @@ function pinnedWebkit(revision: string): string {
 
 /** A spec: one surface, a short list of assertions on the kit's helpers. */
 export interface Spec {
+  /**
+   * Why the spec runs on the host, outside every workspace, when it does:
+   * it starts workspace boundaries (a delegate's, a stage's, a place's), and
+   * no boundary starts inside another (README "A spec that delegates runs on
+   * the host"). Inside a workspace such a spec is not run: the run says it
+   * runs on the host, with its command.
+   */
+  host?: string;
   /** The spec's name: its file's, its baselines' folder. */
   name: string;
   run: (kit: Kit) => Promise<void>;
 }
+
+/**
+ * Why a spec cannot start a boundary of its own where this run is: inside a
+ * workspace, on Linux bwrap is refused the namespaces it needs and on macOS
+ * Seatbelt does not nest (core boundary-nesting.ts). The host is not.
+ */
+export const BOUNDARY_INSIDE =
+  "a workspace boundary cannot start inside another (bwrap on Linux is refused its namespaces, macOS's Seatbelt does not nest)";
 
 /**
  * What `--approve` asks of one spec: every baseline it writes
@@ -239,10 +267,13 @@ export interface Kit {
   /**
    * A scratch fleet (scratch-fleet.ts), nothing launched yet, answered once
    * the run's dashboard is built; its `dashboard()` serves that build
-   * against its hub once asked. Both go when the spec ends.
+   * against its hub once asked, where the hub is reached (`hub.at`). Both go
+   * when the spec ends. `hub`: where its hub listens and is reached
+   * (scratch-fleet.ts `HubAddress`), 127.0.0.1 unless named.
    */
   fleet: (
-    respond: (request: Seen) => Reply | Promise<Reply>
+    respond: (request: Seen) => Reply | Promise<Reply>,
+    hub?: HubAddress
   ) => Promise<KitFleet>;
   /** A line that is neither a pass nor a fail (a capture awaiting its baseline). */
   note: (line: string) => void;
@@ -308,12 +339,17 @@ function installRuns(): void {
   };
 }
 
-/** The dashboard built: `vite build`, as the probes' `vite preview` serves it. */
+/**
+ * The dashboard built, as the probes' `vite preview` serves it: the shipped
+ * build's code in the `bench` mode, whose one difference is that the
+ * `/motion/` benches answer (routes/(app)/motion/+layout.ts), so a runtime
+ * spec times one as built.
+ */
 const viteBuild = async (): Promise<void> => {
   // `PROBE_BUILD_LOCK` names a lock file builds on this host share
   // (`flock`): one build at a time across the workspaces that name it.
   const lock = process.env.PROBE_BUILD_LOCK;
-  const build = ["bunx", "vite", "build"];
+  const build = ["bunx", "vite", "build", "--mode", "bench"];
   const child = Bun.spawn(lock ? ["flock", lock, ...build] : build, {
     cwd: DASHBOARD,
     // This process's own, git's repository variables gone (scratch-fleet.ts
@@ -503,16 +539,23 @@ const LOST_LINES = 15;
  * How a server's process ended, a signal by its name: the one it took
  * itself, or the one its server took under it. `bunx` runs vite as a child
  * and exits 128 plus the number of the signal that ended it, and a SIGKILL
- * leaves nothing in the server's own stderr.
+ * leaves nothing in the server's own stderr. Bun names the signal, or
+ * gives its number (`signalCode: NodeJS.Signals | number | null`).
  */
-const endOf = (code: number | null, signal: string | null): string => {
+const signalNamed = (signal: number): string | undefined =>
+  Object.entries(constants.signals).find(([, n]) => n === signal)?.[0];
+const endOf = (
+  code: number | null,
+  signal: Bun.Subprocess["signalCode"]
+): string => {
+  if (typeof signal === "number") {
+    return `signal ${signalNamed(signal) ?? signal}`;
+  }
   if (signal) {
     return `signal ${signal}`;
   }
   const taken =
-    code !== null && code > 128
-      ? Object.entries(constants.signals).find(([, n]) => n === code - 128)?.[0]
-      : undefined;
+    code !== null && code > 128 ? signalNamed(code - 128) : undefined;
   return taken ? `exit ${code}: signal ${taken}` : `exit ${code}`;
 };
 
@@ -529,10 +572,9 @@ const tailOf = async (file: string): Promise<string> => {
 };
 
 /**
- * The dashboard served against `hub`: the dev server (`vite dev`, where the
- * `/motion/` benches live: a built dashboard 404s them), or the built one
- * (`vite preview`, what the runtime specs time: a dev build's own checks
- * would be in every long task). Its address and process.
+ * The dashboard served against `hub`: the dev server (`vite dev`), or the
+ * built one (`vite preview`, what the runtime specs time: a dev build's own
+ * checks would be in every long task). Its address and process.
  *
  * What it prints goes to files of its own beside the run's output
  * (`probe-kit/vite-<how>-<port>.err.log`, `.out.log`), and an end its run did not ask for is
@@ -545,9 +587,13 @@ async function serve(
   how: "dev" | "preview",
   hub: string,
   lost: (why: string) => void,
-  env: Record<string, string> = {}
+  env: Record<string, string> = {},
+  /** The port to serve on: a fleet's `dashboardPort`, the one its hub names; any free one when unset. */
+  at?: number,
+  /** The address to serve on: a fleet's hub's (`hub.at`); 127.0.0.1 when unset. */
+  host = "127.0.0.1"
 ): Promise<Served> {
-  const port = await freePort();
+  const port = at ?? (await freePort());
   const logs = join(process.env.TMPDIR ?? join(ROOT, ".probe"), "probe-kit");
   await mkdir(logs, { recursive: true });
   const log = join(logs, `vite-${how}-${port}`);
@@ -557,7 +603,7 @@ async function serve(
       "vite",
       how,
       "--host",
-      "127.0.0.1",
+      host,
       "--port",
       String(port),
       "--strictPort",
@@ -575,7 +621,7 @@ async function serve(
     }
   );
   let stopping = false;
-  const base = `http://127.0.0.1:${port}`;
+  const base = `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
   const ended = async (code: number): Promise<void> => {
     if (stopping) {
       return;
@@ -602,8 +648,39 @@ async function serve(
     },
   };
 }
-/** No hub answers here: the benches feed the client's own state. */
-const NO_HUB = "http://127.0.0.1:9";
+/**
+ * Where a bench's dashboard reaches its hub: a stand-in that is never one.
+ * The benches feed the client's own state. A read is refused (503). The
+ * socket is taken and answers each message with itself, so the page's
+ * heartbeat hears it and never drops it, and no board ever comes: the page
+ * stays connecting, the state a cold load passes through, and the Shell
+ * raises no hub banner over a bench (f57855286). A hub that refused the
+ * socket raised it 4 s in.
+ */
+let noHub: string | undefined;
+const benchHub = (): string => {
+  if (!noHub) {
+    const hub = Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      // A socket the page holds open for the whole run.
+      idleTimeout: 0,
+      fetch: (request, server) =>
+        server.upgrade(request)
+          ? undefined
+          : new Response("no hub", { status: 503 }),
+      websocket: {
+        idleTimeout: 0,
+        message: (socket, message) => {
+          socket.send(message);
+        },
+      },
+    });
+    hub.unref();
+    noHub = `http://127.0.0.1:${hub.port}`;
+  }
+  return noHub;
+};
 
 /**
  * What one run holds across its specs: the browsers, the build and its
@@ -619,6 +696,8 @@ export class Run {
   /** Each failed assertion's line, said again over the run's last line (a report that quotes the run's tail keeps them). */
   readonly failed: string[] = [];
   notes = 0;
+  /** The specs not run here because they run on the host ({@link Spec.host}). */
+  readonly onHost: string[] = [];
   /** Every capture this run that differs from its baseline, in run order. */
   readonly changed: Changed[] = [];
   private devServer: Promise<Served> | null = null;
@@ -650,15 +729,24 @@ export class Run {
   /** The dashboard served (`serve`), under the run's slot; a server lost before its run is done fails the run. */
   private async startServer(
     how: "dev" | "preview",
-    hub: string
+    hub: string,
+    port?: number,
+    host?: string
   ): Promise<Served> {
     await this.heavy();
-    return serve(how, hub, (why) => {
-      const line = `FAIL the dashboard server: ${why}`;
-      console.log(line);
-      this.failures += 1;
-      this.failed.push(line.slice(0, 1200));
-    });
+    return serve(
+      how,
+      hub,
+      (why) => {
+        const line = `FAIL the dashboard server: ${why}`;
+        console.log(line);
+        this.failures += 1;
+        this.failed.push(line.slice(0, 1200));
+      },
+      {},
+      port,
+      host
+    );
   }
 
   browser(
@@ -666,7 +754,8 @@ export class Run {
     revision?: string,
     oneProcess = false,
     own?: string,
-    wholeRaster = false
+    wholeRaster = false,
+    hostRules?: string
   ): Promise<Browser> {
     const key = [
       engine,
@@ -674,6 +763,7 @@ export class Run {
       oneProcess && "one-process",
       wholeRaster && "whole-raster",
       own,
+      hostRules && `hosts:${hostRules}`,
     ]
       .filter(Boolean)
       .join("-");
@@ -710,6 +800,7 @@ export class Run {
                   "--disable-features=IsolateOrigins,site-per-process,OriginIsolationHeader",
                 ]
               : []),
+            ...(hostRules ? [`--host-resolver-rules=${hostRules}`] : []),
           ],
           env,
         }),
@@ -720,19 +811,26 @@ export class Run {
   }
 
   bench(): Promise<string> {
-    this.devServer ??= this.startServer("dev", NO_HUB);
+    this.devServer ??= this.startServer("dev", benchHub());
     return this.devServer.then((s) => s.base);
   }
 
   builtBench(): Promise<string> {
     this.builtServer ??= this.build().then(() =>
-      this.startServer("preview", NO_HUB)
+      this.startServer("preview", benchHub())
     );
     return this.builtServer.then((s) => s.base);
   }
 
   /** Runs one spec with its own pages and fleets, closed after it however it ends. */
   async spec(spec: Spec, approval: Approval | null): Promise<void> {
+    if (spec.host && process.env.CAWCO_WORKSPACE) {
+      this.onHost.push(spec.name);
+      console.log(
+        `HOST ${spec.name}: runs on the host, not in this workspace: ${spec.host}, and ${BOUNDARY_INSIDE}. Run it from a shell outside every workspace, on a checkout of this commit: bun scripts/probe-kit/run.ts ${spec.name}`
+      );
+      return;
+    }
     const named = approval === null || approval === "all" ? [] : approval;
     const asked = named.map(entrySlug);
     /** Every entry the spec asked `approves` of: what it could write. */
@@ -787,7 +885,7 @@ export class Run {
         });
         return (await served).base;
       },
-      fleet: async (respond) => {
+      fleet: async (respond, hub) => {
         // Under the run's slot, taken by the build: the fleet's own hold
         // (scratch-fleet.ts) counts once in this process.
         // Built before the fleet starts, never between its start and the
@@ -800,6 +898,7 @@ export class Run {
         const fleet = await scratchFleet({
           name: `probe-kit-${spec.name}`,
           respond,
+          ...(hub ? { hub } : {}),
         });
         let served: Promise<Served> | null = null;
         let servedDev: Promise<Served> | null = null;
@@ -824,7 +923,12 @@ export class Run {
         return Object.assign(fleet, {
           dashboard: () => {
             served ??= this.build().then(() =>
-              this.startServer("preview", fleet.base)
+              this.startServer(
+                "preview",
+                fleet.base,
+                fleet.dashboardPort,
+                fleet.hub.at
+              )
             );
             return served.then((s) => s.base);
           },
@@ -841,7 +945,8 @@ export class Run {
           options.engine === "webkit" ? options.webkit : undefined,
           options.oneProcess,
           options.browser,
-          options.wholeRaster
+          options.wholeRaster,
+          options.hostRules
         );
         const phoneAgent = PHONE_AGENT[options.engine ?? "chromium"];
         const context = await browser.newContext({

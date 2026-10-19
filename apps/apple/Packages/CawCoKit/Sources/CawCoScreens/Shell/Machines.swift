@@ -45,7 +45,7 @@ enum MachineHealth {
         let scan = { (record: [String: SyncRows.Item]?) in record?.values.contains { bad.contains($0.state) } ?? false }
         let mcp = rows.mcpByHarness.map { $0.values.contains { scan($0) } } ?? scan(rows.mcp)
         return mcp || scan(rows.marketplaces) || scan(rows.plugins) || scan(rows.skills) || scan(rows.memoryDocs) || scan(rows.hooks)
-            || rows.memory?.state == "failed" || rows.memoryHook?.state == "failed"
+            || rows.memory?.state == "failed"
     }
 
     private struct SyncRows: Decodable {
@@ -58,7 +58,6 @@ enum MachineHealth {
         let memoryDocs: [String: Item]?
         let hooks: [String: Item]?
         let memory: Item?
-        let memoryHook: Item?
     }
 
     /// The bar's glyph: the fail ink while a machine is down, the attention

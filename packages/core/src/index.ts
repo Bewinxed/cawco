@@ -13,6 +13,8 @@ export * from "./archive";
 export * from "./attachments";
 // Pages are blocks: a project page's arrangement, kept by the hub.
 export * from "./blocks";
+// A project's browser: its key, the agent's ports, the daemon's frame and the hub's commands.
+export * from "./browser";
 // An artifact's `state`: one entry per choice or field, and its bounds.
 export * from "./choices";
 // Claude Code's dir names, as a screen, a message or a shell script names them (paths.ts owns the paths).
@@ -24,6 +26,9 @@ export * from "./continuation";
 export * from "./delegate-types";
 // A task's deliverables by kind, and a post task's `*.post.json`.
 export * from "./deliverables";
+// A checkout's JavaScript dependencies from its root lockfile: a workspace's
+// cut and the repository's scripts, never the landing gate.
+export * from "./deps";
 // Finding things across the fleet: what /api/find answers (find.ts).
 export * from "./find";
 // Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).
@@ -61,6 +66,12 @@ export * from "./notifications";
 export * from "./permission-presentation";
 // A session's plan: its steps, its spec, its task's to-dos, and their live frames.
 export * from "./plan";
+// A project's landing gate as its gate.md declares it: the hub reads it, Settings draws it.
+export type {
+  DeclaredStep,
+  ProjectGate,
+  RunsOnCapability,
+} from "./project-gate";
 // Which projects a session lists in: the rail and the hub's forget read one rule.
 export * from "./project-membership";
 // How an `AskUserQuestion` answer is shaped, wherever it is answered from —
@@ -83,10 +94,16 @@ export * from "./secret-text";
 export * from "./starters";
 // The Ledger Protocol: canonical session streams + acknowledged commands.
 export * from "./stream";
+// The fleet's stream relay: its ports, the daemon's frame, the hub's commands and the relay step's words.
+export * from "./stream-relay";
+// HTTPS on the hub machine's tailnet name: its state, and a preview's origin there.
+export * from "./tailnet-https";
 // A project's threads with its Caw: rows, messages and their frames.
 export * from "./threads";
 // The workflow-tool catalog and its status/policy shapes (NEW.md §10).
 export * from "./tools";
+// Where a project's tasks live (Projects spec D2): CawCo's files, GitHub Issues or Linear.
+export * from "./trackers";
 // Transcripts: the hub folds each session's frames into blocks once
 // (TranscriptBuilder) and every client renders what it serves.
 export { TRANSCRIPT_PAGE, TranscriptBuilder } from "./transcript";
@@ -195,8 +212,7 @@ export interface Envelope<T = unknown> {
 }
 
 /**
- * `spawn`: start a session on a harness. `harness` chooses the adapter (absent
- * means `claude`, for every caller written before harnesses existed); `options`
+ * `spawn`: start a session on a harness. `harness` chooses the adapter; `options`
  * rides through to that adapter verbatim — only the callbacks the agent must own
  * itself (`canUseTool`/permission hooks, abort) are filled in on arrival, since
  * functions do not survive the wire. `resume` is the harness-neutral way to
@@ -276,7 +292,13 @@ export interface SpawnPayload {
    * never taken from a caller.
    */
   fence?: true;
-  /** Which harness runs the session. Absent = `claude`. */
+  /**
+   * Which harness runs the session. Every start names it: the hub refuses one
+   * that does not (`enforceRowSessionKey`), and the agent starts none without
+   * it. Optional on the wire only until TestFlight 20261015, 20261015.3,
+   * 20261017 and 20261018 are expired (the app they hold declares it
+   * optional); then it is required here.
+   */
   harness?: import("./harness").HarnessKind;
   /**
    * The machine's own Claude Code login is moving into this account
@@ -641,7 +663,26 @@ export interface SessionLimits {
   memoryPercent?: number;
 }
 
-/** `stop`: interrupt and close a live session. */
+/** A start that names its harness: what the hub builds and sends a machine. */
+export type NamedSpawn = SpawnPayload & {
+  harness: import("./harness").HarnessKind;
+};
+
+/** A stop that names its row's harness: what the hub sends a machine. */
+export type NamedStop = StopPayload & {
+  harness: import("./harness").HarnessKind;
+};
+
+/**
+ * A `stop` a dashboard or a fleet session asks the hub for: the hub sends the
+ * machine the {@link NamedStop} the session's row names.
+ */
+export type StopRequest = Pick<
+  StopPayload,
+  "discard" | "from" | "instanceId" | "requestId"
+>;
+
+/** `stop`: interrupt and close a live session, as the hub sends it to its machine. */
 export interface StopPayload {
   /** Addresses claimed by other rows; only unclaimed server runners make a legacy read ambiguous. */
   claimedSessionIds?: string[];
@@ -650,7 +691,14 @@ export interface StopPayload {
   discard?: boolean;
   /** The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate. */
   from?: string;
-  /** Row-owned coordinates for ending server custody without adoption. */
+  /**
+   * The row's harness, which ends its process and its server custody without
+   * adoption. The hub names it on every stop it sends a machine, and the
+   * agent ends nothing without it; a dashboard's or an app's ask is a
+   * {@link StopRequest}. Optional on the wire only until TestFlight 20261015,
+   * 20261015.3, 20261017 and 20261018 are expired (the app they hold sends
+   * this type); then it is required here.
+   */
   harness?: import("./harness").HarnessKind;
   instanceId: string;
   /** The row's launch identity, including a held process not yet attached. */
@@ -902,71 +950,87 @@ export interface NamedMachine {
   machineId: string;
 }
 
+/** Ordinals a sentence spells out; past them it says "machine number 11". */
+const ORDINALS = [
+  "first",
+  "second",
+  "third",
+  "fourth",
+  "fifth",
+  "sixth",
+  "seventh",
+  "eighth",
+  "ninth",
+  "tenth",
+];
+
 /**
  * A machine as a sentence names it among `fleet`: its {@link machineLabel},
- * never its id. Machines that show the same name (machines on one host do, a
- * scratch fleet's all of them) are told apart by their place in `fleet`,
- * which the hub lists in join order: the first is "obelisk", the next
- * "obelisk · 2", so the sentence never names two machines alike.
- */
-export function namedAmong(
-  machine: NamedMachine,
-  fleet: readonly NamedMachine[]
-): string {
-  const name = machineLabel(machine.hostname);
-  const alike = fleet.filter(
-    (other) => machineLabel(other.hostname).toLowerCase() === name.toLowerCase()
-  );
-  const place = alike.findIndex(
-    (other) => other.machineId === machine.machineId
-  );
-  return place > 0 ? `${name} · ${place + 1}` : name;
-}
-
-/** Machines as a sentence lists them, each by {@link namedAmong} among `fleet`, or `none`. */
-export function namesAmong(
-  machines: readonly NamedMachine[],
-  fleet: readonly NamedMachine[],
-  none = "none"
-): string {
-  return (
-    machines.map((machine) => namedAmong(machine, fleet)).join(", ") || none
-  );
-}
-
-/** A machine's state that keeps a request from it. */
-export type MachineFault = "offline" | "silent" | "unknown";
-
-const MACHINE_FAULT_WORDS: Record<MachineFault, string> = {
-  offline: "isn't connected. Try again once it's back.",
-  silent: "didn't answer in time. Try again in a moment.",
-  unknown: "isn't on this hub any more. Pick another machine.",
-};
-
-/**
- * Why a machine could not take a request, as the person reads it (WORDS.md's
- * error formula): the machine by its name, never its id; what to do. `name`
- * is its {@link namedAmong}, undefined when the hub doesn't know the machine.
- */
-export function machineFaultWords(
-  name: string | undefined,
-  fault: MachineFault
-): string {
-  return `${name ?? "That machine"} ${MACHINE_FAULT_WORDS[fault]}`;
-}
-
-/**
- * A machine as a sentence names it when the hub may not know it: its
- * {@link namedAmong} among `fleet`, else words for a stranger, never its id.
+ * else words for a stranger, never its id. Machines that show the same name
+ * (machines on one host do, a scratch fleet's all of them) are told apart by
+ * their place among those in `fleet`, which the hub lists in join order: the
+ * first is "obelisk-of-light", the next "obelisk-of-light (the second
+ * machine with that name)". Before 2026-10-18 the next was
+ * "obelisk-of-light · 2", which inside a sentence read like a count.
  */
 export function machineCalled(
   machineId: string,
   fleet: readonly NamedMachine[]
 ): string {
   const machine = fleet.find((each) => each.machineId === machineId);
-  return machine
-    ? namedAmong(machine, fleet)
-    : "a machine this hub doesn't know";
+  if (!machine) {
+    return "a machine this hub doesn't know";
+  }
+  const name = machineLabel(machine.hostname);
+  const place = fleet
+    .filter(
+      (other) =>
+        machineLabel(other.hostname).toLowerCase() === name.toLowerCase()
+    )
+    .findIndex((other) => other.machineId === machineId);
+  if (place <= 0) {
+    return name;
+  }
+  const nth = ORDINALS[place];
+  return `${name} (${nth ? `the ${nth} machine` : `machine number ${place + 1}`} with that name)`;
+}
+
+/** Machines as a sentence lists them, each {@link machineCalled} among `fleet`, or `none`. */
+export function machinesCalled(
+  machines: readonly NamedMachine[],
+  fleet: readonly NamedMachine[],
+  none = "none"
+): string {
+  return (
+    machines
+      .map((machine) => machineCalled(machine.machineId, fleet))
+      .join(", ") || none
+  );
+}
+
+/** A machine's state that keeps a request from it. */
+export type MachineFault = "offline" | "silent" | "unknown";
+
+const MACHINE_FAULT_WORDS: Record<MachineFault, [string, string]> = {
+  offline: ["isn't connected.", "Try again once it's back."],
+  silent: ["didn't answer in time.", "Try again in a moment."],
+  unknown: ["isn't on this hub any more.", "Pick another machine."],
+};
+
+/**
+ * Why a machine could not take a request, as the person reads it (WORDS.md's
+ * error formula): the machine by its name, never its id; what to do. `name`
+ * is its {@link machineCalled}, undefined when the hub doesn't know the machine.
+ * `next: false`, the cause alone, for a reader that says its own next step
+ * (a preview pane that tries again by itself).
+ */
+export function machineFaultWords(
+  name: string | undefined,
+  fault: MachineFault,
+  { next = true }: { next?: boolean } = {}
+): string {
+  const [cause, step] = MACHINE_FAULT_WORDS[fault];
+  return `${name ?? "That machine"} ${cause}${next ? ` ${step}` : ""}`;
 }
 
 /** What a daemon reports about the checkout it was started from. */
@@ -1029,10 +1093,8 @@ export const AGENT_BUSY = "agentBusy";
  * - `running` — the owning daemon currently lists the instance.
  * - `sleeping` — no live process, but it runs again: on the session id its
  *   harness picks back up from, or fresh under its id when it never named
- *   one ({@link relaunchOf}). This is what a daemon restart or a quiet drop used
- *   to report as `error` with {@link RESTART_RESUMABLE} in `lastError`; that
- *   encoding conflated "gone but fine" with a real failure, so `sleeping` rows
- *   carry `lastError: null` — nothing went wrong, there's just nothing running.
+ *   one ({@link relaunchOf}). `sleeping` rows carry `lastError: null` — nothing
+ *   went wrong, there's just nothing running.
  * - `stopping` — an end (stop, discard, or a delete that waits on its
  *   process) is recorded and owed to its machine, which has not yet
  *   confirmed the process is gone. It may still be running. Its machine's
@@ -1044,8 +1106,8 @@ export const AGENT_BUSY = "agentBusy";
  * - `stopped` — deliberate: the operator (or a `stop` call) ended it, and its
  *   machine confirmed the process gone.
  * - `error` — an actual failure. `lastError` is required here, and this is
- *   where {@link RESTART_LOST} still lands: a restart with nothing to resume
- *   from is a real loss, not a nap.
+ *   where {@link RESTART_LOST} still lands (`lastErrorKind` `restart-lost`): a
+ *   restart with nothing to resume from is a real loss, not a nap.
  * - `unknown` — the machine that owns this row can't currently be reached, so
  *   the hub can't say which of the above is true.
  * - `discarded` — a spin-off torn down on purpose; gone for good.
@@ -1076,9 +1138,70 @@ export const ENDED_STATUSES: ReadonlySet<InstanceStatus> = new Set([
   "discarded",
 ]);
 
-/** A missing Claude conversation is terminal; restarting cannot recreate its history. */
+/**
+ * A missing Claude conversation is terminal; restarting cannot recreate its
+ * history. The words a person reads; what CawCo decides by is the kind
+ * `conversation-gone` ({@link LastErrorKind}).
+ */
 export const CLAUDE_CONVERSATION_GONE =
   "This Claude Code conversation is gone and cannot be resumed. Start a new session to continue working.";
+
+/**
+ * What a session's failure was, typed where it is found, beside the words
+ * (`lastError`) a person reads. Every decision about a failed row reads this,
+ * never the words:
+ * - `conversation-gone` — the conversation it would resume is gone
+ *   ({@link CLAUDE_CONVERSATION_GONE}): it never runs on it again;
+ * - `restart-lost` — its daemon restarted and it left nothing to resume from
+ *   ({@link RESTART_LOST});
+ * - `start-refused` — the hub would not restore it: its account or its
+ *   settings cannot run on its machine (hub server.ts `restore`). It stays
+ *   so, unrestored, until they can.
+ * A failure no producer typed has none.
+ */
+export type LastErrorKind =
+  "conversation-gone" | "restart-lost" | "start-refused";
+
+/** An error that carries its {@link LastErrorKind} from where it is made to the row it fails. */
+export class KindedError extends Error {
+  readonly lastErrorKind: LastErrorKind;
+  constructor(lastErrorKind: LastErrorKind, message: string) {
+    super(message);
+    this.name = "KindedError";
+    this.lastErrorKind = lastErrorKind;
+  }
+}
+
+/** A Claude conversation that is gone: its words, and its kind. */
+export const conversationGone = (): KindedError =>
+  new KindedError("conversation-gone", CLAUDE_CONVERSATION_GONE);
+
+/**
+ * Whether a row the hub refused to restore still stands refused: filed
+ * `error` with the kind `start-refused`, whatever words its refusal said
+ * then or says now. Its restore fails it once, not on every boot.
+ */
+export const startRefused = (row: {
+  lastErrorKind?: LastErrorKind | null;
+  status: string;
+}): boolean => row.status === "error" && row.lastErrorKind === "start-refused";
+
+/** Every {@link LastErrorKind}, for a reader of one off the wire. */
+const LAST_ERROR_KINDS: ReadonlySet<string> = new Set<LastErrorKind>([
+  "conversation-gone",
+  "restart-lost",
+  "start-refused",
+]);
+
+/** `value` as a {@link LastErrorKind}, when it is one. */
+export const asLastErrorKind = (value: unknown): LastErrorKind | undefined =>
+  typeof value === "string" && LAST_ERROR_KINDS.has(value)
+    ? (value as LastErrorKind)
+    : undefined;
+
+/** The {@link LastErrorKind} an error carries, when its maker typed it. */
+export const lastErrorKindOf = (error: unknown): LastErrorKind | undefined =>
+  error instanceof KindedError ? error.lastErrorKind : undefined;
 
 /**
  * How a session with no process comes back: on its conversation by its key;
@@ -1093,10 +1216,10 @@ export type Relaunch =
   | { kind: "refused"; reason: string };
 
 export const relaunchOf = (row: {
-  lastError?: string | null;
+  lastErrorKind?: LastErrorKind | null;
   sessionId: string | null;
 }): Relaunch => {
-  if (row.lastError === CLAUDE_CONVERSATION_GONE) {
+  if (row.lastErrorKind === "conversation-gone") {
     return { kind: "refused", reason: CLAUDE_CONVERSATION_GONE };
   }
   return row.sessionId
@@ -1188,15 +1311,20 @@ export interface InstanceRow {
    */
   effort?: import("./harness").SessionEffort | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
-  harness?: string | null;
+  harness: import("./harness").HarnessKind;
   /** First-hand custody on the current agent connection, never stored liveness. */
   held?: { since: number; reason: string };
   id: string;
   keepAlive?: KeepAlive;
-  /** `scratch` for a spin-off; absent from a hub that predates the column. */
-  kind?: string;
-  /** What killed the session, on a row the agent reported as `error`. */
+  /** `mainline`, `scratch` for a spin-off, or `summariser`, never on the board. */
+  kind: string;
+  /** What killed the session, on a row the agent reported as `error`: words a person reads. */
   lastError?: string | null;
+  /**
+   * What `lastError` was, typed where it was found; null when no producer
+   * typed it. What every decision about the row reads, `relaunchOf` first.
+   */
+  lastErrorKind?: LastErrorKind | null;
   lastRequestAt?: string | number | Date | null;
   /**
    * Whether `cwd` is the launch directory: `known`; `unread`, still to be read
@@ -1425,13 +1553,7 @@ export interface SessionPulse {
   runningSubagents: number;
 }
 
-/**
- * What the hub records on a session whose daemon restarted out from under it.
- */
-export const RESTART_RESUMABLE =
-  "The agent restarted; this session did not survive it.";
-
-/** And what it records when there is nothing to go back to. */
+/** What the hub records on a session whose daemon restarted out from under it, with nothing to go back to. */
 export const RESTART_LOST =
   "The agent restarted, and this session left nothing to resume from.";
 
@@ -1479,7 +1601,10 @@ export type FramePayload =
   | import("./frames").BlocksChangedFrame
   | import("./starters").StartersChangedFrame
   | import("./frames").ProjectsChangedFrame
+  /** Hub-originated: the hub restarts for an update now, and is back within a deadline. */
+  | import("./frames").HubRestartFrame
   | import("./frames").FleetUpstreamFrame
+  | import("./frames").TailnetHttpsFrame
   | import("./frames").FleetFetchFrame
   | import("./frames").ProjectCapFrame
   | import("./actions").ActionsFrame
@@ -1498,12 +1623,29 @@ export type FramePayload =
   | import("./harness").CommandQueueFrame
   /** Daemon-originated: a workspace's stage changed (live components). */
   | import("./stage").StageFrame
+  /** Daemon-originated: a place's stage clone is cut and in step (live components). */
+  | import("./stage").StageCloneFrame
   /** Daemon-originated: a borrowed sign-in near its expiry, asking for a fresh one. */
   | import("./accounts").AccountBorrowFrame
+  /** Daemon-originated: the machine's runtime and every browser on it, whole, on each change. */
+  | import("./browser").BrowserFrame
+  /** Daemon-originated: the stream relay on the machine, whole, on each change. */
+  | import("./stream-relay").RelayFrame
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;
 
 export const CAWCO_HUB_PORT = 3456;
+
+/**
+ * The dashboard's port on every computer's loopback, beside the hub's
+ * (IANA lists 3455 as `prsvp`, a legacy RSVP encapsulation; no dev server
+ * defaults to it, unlike 3000): `http://localhost:3455` is the dashboard on
+ * the hub's computer, where the dashboard's socket listens on it, and on
+ * every other computer running the agent, which carries it to the hub
+ * (agent hub-loopback.ts). Loopback is a secure context, so its previews run
+ * in a process of their own.
+ */
+export const CAWCO_LOCAL_DASHBOARD_PORT = 3455;
 
 /**
  * A preview's start page: a path on the previewed server, one leading slash
@@ -1545,7 +1687,7 @@ export type PreviewSource =
  * server or folder shown live, and a sheet: a story file's stories, each a
  * real component mounted by the project's own toolchain (core `stage.ts`).
  */
-export type ArtifactKind = "page" | "canvas" | "preview" | "sheet";
+export type ArtifactKind = "page" | "canvas" | "preview" | "component";
 
 /** An artifact's name: lowercase letters, digits and dashes, like `onboarding`. */
 export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
@@ -1706,18 +1848,22 @@ export const CAWCO_ENV = {
    * hub's composed links point at it.
    */
   dashboardPort: "CAWCO_DASHBOARD_PORT",
-  /** GitHub's REST API origin the hub's pollers call, for pointing them at a proxy. */
-  githubApi: "CAWCO_GITHUB_API",
-  /** TypeSafe's System One URL Jev's typesafe route posts to, for pointing it at a local stand-in in its live proof. */
-  typesafeUrl: "CAWCO_TYPESAFE_URL",
-  /**
-   * `<quietMs>/<gapMs>`: how long a project's starters wait for quiet, and
-   * the least time between two of its asks of Jev (hub project-starters.ts),
-   * for pacing a scratch fleet's live proof; unset, 60 s and 10 min.
-   */
-  startersPace: "CAWCO_STARTERS_PACE",
+  /** The dashboard's loopback port on every computer ({@link localDashboardPort}). */
+  localDashboardPort: "CAWCO_LOCAL_DASHBOARD_PORT",
   /** The loopback port the hub's relay receiver listens on (default: one the OS picks free). */
   relayPort: "CAWCO_RELAY_PORT",
+  /**
+   * Days a project's fact line may go unused (no brief admitted it, no note
+   * corroborated it) before the curator's run proposes moving it to
+   * `knowledge/archive/` (hub memory.ts). Default in hub config.ts.
+   */
+  memoryArchiveDays: "CAWCO_MEMORY_ARCHIVE_DAYS",
+  /**
+   * A knowledge file's budget in characters: what one brief carries of it,
+   * and the size at which the curator's run is asked to fold it (hub
+   * memory.ts). Default in hub config.ts.
+   */
+  memoryFileChars: "CAWCO_MEMORY_FILE_CHARS",
   /** Where the hub's SQLite file lives, overriding the default data dir. */
   dbPath: "CAWCO_DB_PATH",
   /**
@@ -1790,18 +1936,43 @@ export const mcpGatewayPort = (): number => {
 };
 
 /**
+ * The dashboard's loopback port: `CAWCO_LOCAL_DASHBOARD_PORT`, else
+ * {@link CAWCO_LOCAL_DASHBOARD_PORT}. The hub names it to every agent in its
+ * register answer, and the installer listens on it with the dashboard's
+ * socket on the hub's computer; both read it here.
+ */
+export const localDashboardPort = (): number => {
+  const named = readEnv(CAWCO_ENV.localDashboardPort);
+  const port = named === undefined ? CAWCO_LOCAL_DASHBOARD_PORT : Number(named);
+  if (!(Number.isInteger(port) && port > 0 && port < 65_536)) {
+    throw new Error(
+      `${CAWCO_ENV.localDashboardPort} must be a port number, not "${named}"`
+    );
+  }
+  return port;
+};
+
+/**
  * The mDNS service the hub advertises and `cawco` browses for.
  */
 export const CAWCO_MDNS_TYPE = "cawco";
 export * from "./image-generation";
 // The words the dashboard and the native app share (Words.generated.swift).
 export * from "./words/accounts";
+export * from "./words/artifacts";
 export * from "./words/catalog";
 export * from "./words/configure";
+export * from "./words/connection";
 export * from "./words/helpers";
+export * from "./words/offers";
 export * from "./words/pairing";
+export * from "./words/place";
+export * from "./words/plan";
 export * from "./words/preview";
+export * from "./words/sheet";
+export * from "./words/side";
 export * from "./words/sidebar";
+export * from "./words/tailnet";
 export * from "./workflow";
 export * from "./workflow-compile";
 

@@ -19,7 +19,11 @@
  * `AskUserQuestion` answers without a second pass.
  */
 
-import type { NeutralSystemMessage } from "@cawco/core";
+import {
+  type HarnessNote,
+  type NeutralSystemMessage,
+  transcriptUserText,
+} from "@cawco/core";
 import type { LocatedRecord } from "@cawco/jsonl-parser";
 import { readTranscriptEnd, typeFilter } from "@cawco/jsonl-parser";
 import { cache } from "./transcript-cache.ts";
@@ -497,6 +501,66 @@ const XML_ENTITIES: Record<string, string> = {
   "&apos;": "'",
 };
 
+/** How Claude Code opens the line it puts before a notice of its own. */
+const SYSTEM_NOTIFICATION = "[SYSTEM NOTIFICATION";
+const REMINDER_OPEN = "<system-reminder>";
+const REMINDER_CLOSE = "</system-reminder>";
+
+/**
+ * A notice Claude Code put in the user's role, typed ({@link HarnessNote}):
+ * a `<task-notification>` block or a `[SYSTEM NOTIFICATION …]` line (its
+ * `<summary>` the title, `<status>`, its `<result>` the body; one that
+ * carries neither is its whole text under "Harness notification"), or a
+ * message that is one whole `<system-reminder>` block. Read here, where
+ * Claude Code's own markup is the harness's to read, for the live stream
+ * (claude.ts `toNeutral`) and a stored read alike, so the hub and every
+ * client get the note typed and never read its markup. Anchored at the
+ * message's start: a person who types the tag mid-sentence keeps their own
+ * voice. Undefined for anything else.
+ */
+export const harnessNoteOf = (text: string): HarnessNote | undefined => {
+  const whole = text.trim();
+  if (whole.startsWith(REMINDER_OPEN) && whole.endsWith(REMINDER_CLOSE)) {
+    return {
+      kind: "system-reminder",
+      title: "System reminder",
+      status: "",
+      body: (notificationField(whole, "system-reminder") ?? "").trim(),
+    };
+  }
+  if (!(whole.startsWith(SYSTEM_NOTIFICATION) || isTaskNotification(whole))) {
+    return;
+  }
+  const title = notificationField(whole, "summary")?.replace(
+    /&(?:amp|lt|gt|quot|apos);/g,
+    (entity) => XML_ENTITIES[entity]
+  );
+  const body = notificationField(whole, "result") ?? "";
+  const toolUseId = notificationField(whole, "tool-use-id");
+  return {
+    kind: "task-notification",
+    title: title || "Harness notification",
+    status: title || body ? (notificationField(whole, "status") ?? "") : "",
+    body: title || body ? body : whole,
+    ...(toolUseId ? { toolUseId } : {}),
+  };
+};
+
+/**
+ * A user message's own content with its notice typed beside it
+ * ({@link harnessNoteOf}), or as it is when it is not one.
+ */
+export const withHarnessNote = <M extends { content?: unknown }>(
+  message: M
+): M => {
+  const text =
+    typeof message.content === "string"
+      ? message.content
+      : transcriptUserText(message);
+  const note = text ? harnessNoteOf(text) : undefined;
+  return note ? { ...message, harnessNote: note } : message;
+};
+
 /**
  * A stored task notification as the frame the live stream carried for it.
  *
@@ -581,7 +645,7 @@ export function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
     return taskNotification(r, command.prompt, command.timestamp);
   }
   return {
-    message: { role: "user", content: command.prompt },
+    message: withHarnessNote({ role: "user", content: command.prompt }),
     parent_agent_id: null,
     parent_tool_use_id: null,
     session_id: r.sessionId ?? "",
@@ -750,7 +814,10 @@ function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
     return taskNotification(r, content, timestamp);
   }
   const msg: SDKSessionMessage = {
-    message: r.message ?? null,
+    message:
+      r.type === "user" && r.message && typeof r.message === "object"
+        ? withHarnessNote(r.message as { content?: unknown })
+        : (r.message ?? null),
     parent_agent_id: null,
     parent_tool_use_id: null,
     session_id: r.sessionId ?? "",

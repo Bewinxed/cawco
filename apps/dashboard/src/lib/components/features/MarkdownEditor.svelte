@@ -289,6 +289,14 @@
       fill: light-dark(var(--ink-strong), var(--ink-muted));
     }
   }
+  /* The slash menu's chosen group tab takes the selected wash, apart from
+     its hover (--crepe-color-hover); --crepe-color-selected is the text
+     selection too, so it stays. */
+  [data-slot="crepe-host"]
+    :global(.milkdown .milkdown-slash-menu .tab-group ul li.selected) {
+    background: var(--selected-bg);
+    color: var(--selected-ink);
+  }
   @media (hover: none) {
     [data-slot="crepe-host"] :global(.milkdown) {
       --crepe-color-hover: transparent;

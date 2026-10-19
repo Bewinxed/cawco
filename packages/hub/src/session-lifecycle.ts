@@ -1,9 +1,9 @@
 /** Stored decisions own lifetime; connection-local work is only delivery. */
 import type {
   InstanceRow,
+  NamedStop,
   SessionCustody,
   SessionEndIntent,
-  StopPayload,
 } from "@cawco/core";
 import type { DbShape } from "./db";
 
@@ -14,11 +14,9 @@ interface Snapshot {
 
 export const createSessionLifecycle = (ports: {
   db: DbShape;
-  send: (machineId: string, payload: StopPayload) => boolean;
+  send: (machineId: string, payload: NamedStop) => boolean;
   restore: (row: InstanceRow) => void;
   deleteTranscript: (row: InstanceRow) => Promise<boolean>;
-  ready: (machineId: string) => boolean;
-  machineName: (machineId: string) => string;
   confirmed: (row: ReturnType<DbShape["sessionOwnership"]>[number]) => void;
   recoverRemoved: (machineId: string) => void;
   changed: (machineId: string, removed?: string) => void;
@@ -79,9 +77,6 @@ export const createSessionLifecycle = (ports: {
     confirmAbsent = true
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: total keep/end decision table reads current durable rows on every run, with positive custody required for absence
   ): void => {
-    if (!ports.ready(machineId)) {
-      return;
-    }
     if (fresh) {
       snapshots.set(machineId, fresh);
     }
@@ -159,9 +154,7 @@ export const createSessionLifecycle = (ports: {
               ? { scratchWorktree: row.scratchWorktree }
               : {}),
             processGeneration: generation(row),
-            ...(row.harness
-              ? { harness: row.harness as StopPayload["harness"] }
-              : {}),
+            harness: row.harness,
             ...(row.sessionId ? { sessionId: row.sessionId } : {}),
             cwd: row.cwd,
             ...(row.harness === "opencode"
@@ -245,11 +238,6 @@ export const createSessionLifecycle = (ports: {
         "This session is no longer recorded. Refresh, then retry."
       );
     }
-    if (owner && !ports.ready(owner.machineId)) {
-      throw new Error(
-        `${ports.machineName(owner.machineId)}'s agent has not restarted onto this build yet. Restart its agent, then retry.`
-      );
-    }
     if (owner && requestId) {
       requests.set(requestId, {
         id: instanceId,
@@ -277,7 +265,7 @@ export const createSessionLifecycle = (ports: {
     const row = ports.db.ownedInstance(id, machineId);
     if (
       !(row?.endIntent && payload.ended?.resourcesClosed) ||
-      payload.ended.harness !== (row.harness ?? "claude") ||
+      payload.ended.harness !== row.harness ||
       payload.processGeneration !== generation(row) ||
       (row.endIntent === "discard" &&
         row.status !== "discarded" &&

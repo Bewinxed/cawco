@@ -43,7 +43,7 @@ export class IsTouchPortrait extends MediaQuery {
  * hide the rail and show the burger at. Width alone: a tablet held upright
  * at 900px or more is on the narrow line below and still has its rail.
  */
-export const DRAWER_QUERY = "(max-width: 899px)";
+export const DRAWER_QUERY = "(width < 900px)";
 
 /**
  * The app's one narrow line: under 900px wide, or a touch device held

@@ -223,7 +223,7 @@
       <button
         data-slot="row"
         aria-pressed={on}
-        class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong transition-[background-color] dur-toggle ease-out aria-pressed:bg-surface-fill motion-safe:transition-[background-color,transform]"
+        class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong transition-[background-color] dur-toggle ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
         data-fh="1"
         onclick={() => onpick(row)}
         style={`--delay:${index * 35}ms`}
@@ -243,11 +243,12 @@
           <span data-slot="name" class="type-label block">{row.name}</span>
           <span
             data-slot="meta"
-            class="type-meta block truncate text-ink-subtle">{row.path}</span
+            class="type-meta block truncate text-ink-subtle in-aria-pressed:text-selected-ink"
+            >{row.path}</span
           >
         </span>
         {#if on}
-          <Check class="ns-check size-icon-md flex-none text-ink-strong" />
+          <Check class="ns-check size-icon-md flex-none text-selected-icon" />
         {/if}
       </button>
     {/each}

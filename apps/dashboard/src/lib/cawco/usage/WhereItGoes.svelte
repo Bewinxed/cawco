@@ -449,8 +449,11 @@
       );
       const spend: SessionSpend = new Map();
       for (const entry of reads) {
-        for (const row of entry?.summary.rows ?? []) {
-          spend.set(String(row.key), { harness: entry?.h ?? "claude", row });
+        if (!entry) {
+          continue;
+        }
+        for (const row of entry.summary.rows) {
+          spend.set(String(row.key), { harness: entry.h, row });
         }
       }
       return { name: "fleet-sessions.csv", body: sessionsCsv(spend) };

@@ -1,30 +1,37 @@
 <script lang="ts">
   /**
-   * A file of the project's folder on the hub, opened from its chip under a
-   * Caw reply (FolderFiles), as it reads there: markdown drawn, anything
-   * else as text. It is the card beside the conversation (SideSurface), so
-   * it opens in the page (The Open Page Rule): beside the thread on a desk
-   * (SideSplit), on the phone's sheet over the composer (SideSheet), or in
-   * the thread's own place where it has no split (ThreadPane).
+   * A file of the project's folder on the hub, at its address on the
+   * project page (`?file=<path>`, folderFileHref), as it reads there:
+   * markdown drawn, anything else as text. A Caw reply's chips, Configure's
+   * project delegate types and a task's attached files link to it. It opens
+   * in the page (The Open Page Rule): the card beside the view on a desk
+   * (SideSurface, in the page's Split), its own page with Back under 900px.
+   * A path the hub refuses (not in the folder, outside it) says so in the
+   * hub's words; only the hub reads the folder.
    */
-  import type { Snippet } from "svelte";
-  import { failureWords } from "#lib/cawco/hub-read.js";
+  import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import Markdown from "#lib/components/ui/markdown/markdown.svelte";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconChevronLeft } from "#lib/icons.js";
   import SideSurface from "../side/SideSurface.svelte";
 
   let {
     projectId,
     path,
     onclose,
-    switcher,
+    page = false,
+    backLabel = "Back",
   }: {
     projectId: string;
     path: string;
+    /** Close on a desk; Back on a phone. */
     onclose: () => void;
-    /** The split's switch, while the plan or the preview is open beside it. */
-    switcher?: Snippet;
+    /** Under 900px: the file is its own page, with Back, not a card beside the view. */
+    page?: boolean;
+    /** What Back says on its own page. */
+    backLabel?: string;
   } = $props();
 
   let content = $state<string | null>(null);
@@ -40,10 +47,7 @@
     )
       .then(async (response) => {
         if (!response.ok) {
-          throw new Error(
-            (await response.text()) ||
-              `The hub answered ${response.status}, so ${at} could not be read.`
-          );
+          throw await hubRefusal(response, `so ${at} could not be read.`);
         }
         return ((await response.json()) as { content: string }).content;
       })
@@ -64,19 +68,15 @@
   const markdown = $derived(path.endsWith(".md"));
 </script>
 
-<SideSurface
-  class="folder-file"
-  label="A file of the project's folder"
-  {onclose}
-  {switcher}
-  title={path}
->
+{#snippet body()}
   <div
-    class="flex min-h-0 flex-1 flex-col gap-space-2 overflow-y-auto p-space-5"
+    class="flex min-h-0 flex-1 flex-col gap-space-2 overflow-y-auto p-space-5 in-data-file-page:border-t in-data-file-page:border-t-border-hairline"
     data-folder-file={path}
   >
     {#if problem}
-      <Alert variant="destructive">
+      <!-- Plain, not alarmed (WORDS.md, no alarm inflation): the path
+           asked for is not there to show, and the hub says why. -->
+      <Alert data-folder-file-refused>
         <AlertDescription>{problem}</AlertDescription>
       </Alert>
     {:else if content === null}
@@ -90,7 +90,42 @@
         class="m-0 font-mono text-size-code wrap-anywhere whitespace-pre-wrap text-ink-strong">{content}</pre>
     {/if}
   </div>
-</SideSurface>
+{/snippet}
+
+{#if page}
+  <!-- Its own page under 900px, headed as a task's (TaskPane's page): Back,
+       then the path at the row's end, cut short where it runs long. -->
+  <section
+    aria-label={path}
+    class="flex min-h-0 flex-1 flex-col"
+    data-file-page
+  >
+    <header
+      data-slot="page-head"
+      class="flex flex-none items-center gap-space-2 pt-0 pr-space-5 pb-space-2 pl-space-3"
+    >
+      <Button onclick={onclose} size="sm" variant="ghost">
+        <IconChevronLeft />
+        <span>{backLabel}</span>
+      </Button>
+      <bdi
+        data-slot="page-path"
+        class="ms-auto min-w-0 overflow-clip type-meta font-mono liga-none text-ellipsis whitespace-nowrap text-ink-subtle"
+        >{path}</bdi
+      >
+    </header>
+    {@render body()}
+  </section>
+{:else}
+  <SideSurface
+    class="folder-file"
+    label="A file of the project's folder"
+    {onclose}
+    title={path}
+  >
+    {@render body()}
+  </SideSurface>
+{/if}
 
 <style>
   /* residual: foreign-dom */

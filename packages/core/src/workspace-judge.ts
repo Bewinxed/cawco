@@ -42,8 +42,8 @@ export interface Policy {
   /** The user's home dir: what `~` names in a path a tool is handed. */
   readonly home: string;
   /**
-   * A project lead's place, a person's own folder (workspace-policy.ts
-   * `isLeadPlace`): every path {@link protectedConfig} names is refused for
+   * A place, a person's own folder (workspace-policy.ts
+   * `isPlace`): every path {@link protectedConfig} names is refused for
    * writing whether it exists or not. Its boundary stands nothing in for one
    * that is absent (never write into a person's own folder), so this judge,
    * and the place's guard after each command, keep it.

@@ -1,18 +1,13 @@
 /**
  * Directory hues remain keyed by cwd, the name `identity.ts` hashes.
  * Project folds are keyed by project id: two projects can share a directory.
- * Both are kept across reloads. Old directory folds are consumed once by
- * migrateProjects, assigned to the oldest project in each directory.
+ * Both are kept across reloads.
  */
 
-import type { ProjectRow } from "./client.svelte";
 import { identityHue } from "./identity";
-import { checkoutOf } from "./projects";
 import { readJson, writeJson } from "./storage";
 
 export interface FolderPref {
-  /** Legacy field consumed and removed by migrateProjects. */
-  collapsed?: true;
   /** A hue chosen by hand; without one, the cwd's hash chooses. */
   hue?: number;
 }
@@ -54,37 +49,6 @@ function edit(cwd: string, patch: FolderPref): void {
 }
 
 export const folderPrefs = {
-  /** Consume old folder folds once, assigning each to its oldest project. */
-  migrateProjects(projects: ProjectRow[]): void {
-    if (projects.length === 0) {
-      return;
-    }
-    let changed = false;
-    for (const [cwd, pref] of Object.entries(prefs)) {
-      if (!pref.collapsed) {
-        continue;
-      }
-      const [owner] = projects
-        .filter((project) => checkoutOf(project)?.path === cwd)
-        .sort(
-          (a, b) =>
-            a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id)
-        );
-      if (owner) {
-        folds[owner.id] = true;
-      }
-      // biome-ignore lint/performance/noDelete: one-time migration must remove the old field from persisted JSON.
-      delete pref.collapsed;
-      if (Object.keys(pref).length === 0) {
-        delete prefs[cwd];
-      }
-      changed = true;
-    }
-    if (changed) {
-      save();
-      writeJson(PROJECT_KEY, folds);
-    }
-  },
   collapsed: (id: string): boolean => folds[id] === true,
   setCollapsed(id: string, collapsed: boolean): void {
     if (collapsed) {

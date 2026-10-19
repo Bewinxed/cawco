@@ -10,7 +10,7 @@ import type {
   BinaryUpdatePolicy,
 } from "@cawco/core/binary-updates";
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
-import { failureClause } from "#lib/cawco/hub-read.js";
+import { failureClause, hubFailure, hubRefusal } from "#lib/cawco/hub-read.js";
 import { newId } from "../id";
 import { toast } from "../toasts";
 import { installable, type UpdateMachine } from "./model";
@@ -45,7 +45,7 @@ class Updates {
       if (response.status === 409) {
         this.policy = null;
         this.damaged = true;
-        this.problem = await response.text();
+        this.problem = `${(await hubFailure(response)).detail}.`;
         return;
       }
       if (!response.ok) {
@@ -68,9 +68,9 @@ class Updates {
       method: "POST",
     });
     if (!response.ok) {
-      throw new Error(
-        (await response.text()) ||
-          `The hub answered ${response.status}, so the update policy was not reset. Try again.`
+      throw await hubRefusal(
+        response,
+        "so the update policy was not reset. Try again."
       );
     }
     this.policy = (await response.json()) as BinaryUpdatePolicy;
@@ -157,7 +157,7 @@ class Updates {
     } else if (response.status === 500) {
       this.commanded.delete(machineId);
       this.refused.set(machineId, {
-        reason: `${name} could not start the update. ${await errorText(response)}`,
+        reason: `${name} could not start the update. ${await errorText(response)}.`,
         again,
       });
     }
@@ -194,14 +194,9 @@ class Updates {
   }
 }
 
+/** The hub's refusal in one sentence without its stop (hub-read `hubFailure`). */
 async function errorText(response: Response): Promise<string> {
-  const text = await response.text();
-  try {
-    const parsed = JSON.parse(text) as { error?: string };
-    return parsed.error ?? text;
-  } catch {
-    return text;
-  }
+  return (await hubFailure(response)).detail;
 }
 
 export const updates = new Updates();

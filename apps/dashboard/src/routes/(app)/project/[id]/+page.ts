@@ -1,6 +1,11 @@
 import { error } from "@sveltejs/kit";
 import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
-import { type HubFailure, type HubRead, readHub } from "#lib/cawco/hub-read.js";
+import {
+  failureSentence,
+  type HubFailure,
+  type HubRead,
+  readHub,
+} from "#lib/cawco/hub-read.js";
 import type { StagesView, TaskList } from "#lib/cawco/project-tasks.js";
 import { checkoutOf } from "#lib/cawco/projects.js";
 import { type FindSeed, wordsOf } from "#lib/cawco/tasks/task-find.svelte.js";
@@ -10,7 +15,7 @@ import type { PageLoad } from "./$types";
 const refused = (what: string, failure: HubFailure): never =>
   error(
     failure.status,
-    `Reading ${what} failed: ${failure.detail} (${failure.status}). Reload the page to try again.`
+    `Reading ${what} failed. ${failureSentence(failure)} Reload the page to try again.`
   );
 
 /** What the hub found for the URL's words, or why it could not say, for TaskFind. */
@@ -23,13 +28,13 @@ function findSeed(
     return { words, found: null, problem: null };
   }
   if (!live.ok) {
-    return { words, found: null, problem: `${live.detail} (${live.status}).` };
+    return { words, found: null, problem: failureSentence(live) };
   }
   if (!archived.ok) {
     return {
       words,
       found: null,
-      problem: `${archived.detail} (${archived.status}).`,
+      problem: failureSentence(archived),
     };
   }
   return {

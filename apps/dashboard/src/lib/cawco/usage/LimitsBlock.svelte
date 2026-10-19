@@ -46,7 +46,7 @@
   const claude = $derived(usage.claude);
   const openCode = $derived(usage.openCode);
   const now = $derived(usage.now);
-  const read = $derived(usage.staged || (usage.read && cawco.usageLimitsRead));
+  const read = $derived(usage.read && cawco.usageLimitsRead);
 
   /** The fleet's real spend, the hub's one figure; null while read or failed. */
   const spend = $derived(cawco.spend);

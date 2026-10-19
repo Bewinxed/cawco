@@ -11,11 +11,13 @@
  * checkout of the project; with none, the start is refused with a sentence
  * saying what it needs, and nothing is placed elsewhere.
  */
-import { namesAmong } from "@cawco/core";
+import { machinesCalled, type RunsOnCapability } from "@cawco/core";
 
-/** Each capability, and the OS prefix (`os`'s part before `-`) whose machines have it. */
-const CAPABILITY_OS = { apple: "darwin", linux: "linux" } as const;
-export type RunsOnCapability = keyof typeof CAPABILITY_OS;
+/** Each capability (core `RunsOnCapability`), and the OS prefix (`os`'s part before `-`) whose machines have it. */
+const CAPABILITY_OS: Record<RunsOnCapability, string> = {
+  apple: "darwin",
+  linux: "linux",
+};
 export const RUNS_ON_CAPABILITIES = Object.keys(
   CAPABILITY_OS
 ) as RunsOnCapability[];
@@ -79,7 +81,7 @@ export const runsOnValue = (
     return { value: trimmed };
   }
   return {
-    problem: `runs_on “${trimmed}” is neither ${RUNS_ON_CAPABILITIES.join(" nor ")} nor a machine this hub knows (${namesAmong(
+    problem: `runs_on “${trimmed}” is neither ${RUNS_ON_CAPABILITIES.join(" nor ")} nor a machine this hub knows (${machinesCalled(
       machines,
       machines,
       "none yet"

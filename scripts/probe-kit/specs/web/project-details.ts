@@ -7,7 +7,8 @@
  * 1. At 1440 and 390, light and dark: the head's place line and ⋯ › Project
  *    details… both unfold the tray under the head, inside the page's width,
  *    indented by the head's own leading padding (--space-7 at the desk,
- *    --space-5 on a phone), its tile the scheme's raised surface, labels
+ *    --space-5 on a phone), its tile the scheme's raised surface, the labels
+ *    of its six rows (Landing checks among them; gate-row reads its states)
  *    beside their values at the desk and over them on a phone; the board
  *    under it still scrolls and takes a press (a card opens its task; on a
  *    phone the task's own page, and Back finds the tray waiting); Escape
@@ -258,7 +259,7 @@ const leg = async (
   kit.check(
     `${tag}: its tile is the scheme's raised surface, labels ${desk ? "beside" : "over"} their values`,
     at.tileBg === at.tokens.raised &&
-      at.stacked.length === 5 &&
+      at.stacked.length === 6 &&
       at.stacked.every((stacked) => stacked === !desk),
     `${at.tileBg} vs ${at.tokens.raised}; stacked ${JSON.stringify(at.stacked)}`
   );

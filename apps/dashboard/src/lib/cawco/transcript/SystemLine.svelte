@@ -142,7 +142,7 @@
     page: IconArtifactPage,
     canvas: IconArtifactCanvas,
     preview: IconWindow,
-    sheet: IconArtifactSheet,
+    component: IconArtifactSheet,
   };
   const ResponseGlyph = $derived(RESPONSE_GLYPHS[responses?.kind ?? "page"]);
   const responsesState = $derived.by(() => {

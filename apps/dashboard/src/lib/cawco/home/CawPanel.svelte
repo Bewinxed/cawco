@@ -153,13 +153,13 @@
      On a phone the composer's row stays reachable under it: the bar, the
      gap, the home indicator and the composer's own row are kept clear.
      Sections part with a vermillion hairline: 1px of the brand's vermillion
-     (`brand-solid`) at `tab-rim-mix` (the strength a status rim holds 3:1
-     at), across the rows' width. Increase Contrast draws it solid. -->
+     (`brand-solid`), solid, across the rows' width, as Files draws it: it
+     holds 3:1 on the raised panel in both schemes. -->
 <!-- literal: 40px; 560px, 120px; 44px, 96px -->
 <div
   data-slot="list"
   class={[
-    "flex max-h-(--list-max) flex-col overflow-y-auto overscroll-contain has-data-stuck:mask-(--stuck-fade) max-phone:max-h-(--list-max-phone) [&>[data-slot=section]+[data-slot=section]]:mt-space-2 [&>[data-slot=section]+[data-slot=section]]:border-t [&>[data-slot=section]+[data-slot=section]]:border-bs-brand-solid/(--tab-rim-mix) [&>[data-slot=section]+[data-slot=section]]:pt-space-2 contrast-more:[&>[data-slot=section]+[data-slot=section]]:border-bs-brand-solid",
+    "flex max-h-(--list-max) flex-col overflow-y-auto overscroll-contain has-data-stuck:mask-(--stuck-fade) max-phone:max-h-(--list-max-phone) [&>[data-slot=section]+[data-slot=section]]:mt-space-2 [&>[data-slot=section]+[data-slot=section]]:border-t [&>[data-slot=section]+[data-slot=section]]:border-bs-brand-solid [&>[data-slot=section]+[data-slot=section]]:pt-space-2",
     overflowing && "kit-edge-fade-block",
   ]}
   data-safe-bottom

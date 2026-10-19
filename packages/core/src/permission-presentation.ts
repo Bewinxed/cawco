@@ -1043,25 +1043,57 @@ function adminGroupWrite(
 export const MEMORY_PROPOSAL_TOOL = "mcp__cawco__memory_propose";
 
 /**
+ * The name Caw's delegate type is parked under as a proposal (hub memory.ts,
+ * from his `folder_write` of a `delegates/` file): no tool's, so his own
+ * `folder_write` call is never drawn as one.
+ */
+export const DELEGATE_TYPE_PROPOSAL_TOOL = "mcp__cawco__delegate_type_proposal";
+
+/**
  * A memory proposal (Projects spec §5.4): a change to the project's AGENTS.md
- * or a knowledge file, as the curator or Caw proposed it, citing the inbox
- * notes it comes from. The hub puts the file as it stood (`before`) beside
- * the proposed text (`content`) as it parks it.
+ * or its knowledge files, as the curator, Jev's sort, the hub's archive or
+ * withdrawal, or Caw proposed it, citing the inbox notes it comes from; and
+ * Caw's delegate type (§5.1, "a file diff you approve"), drawn the same. The
+ * hub puts each file as it stood (`before`) beside its proposed text
+ * (`content`) as it parks it: a fact moving between files is one card.
  */
 function memoryProposal(input: Record<string, unknown>): Presented {
-  const path = text(input.path) ?? "(no path)";
-  const before = typeof input.before === "string" ? input.before : "";
-  const content = typeof input.content === "string" ? input.content : "";
-  const { change: made, stat } = changeOf(path, before, content);
+  const files = Array.isArray(input.files)
+    ? input.files.filter(
+        (file): file is { before: string; content: string; path: string } =>
+          typeof file === "object" &&
+          file !== null &&
+          typeof (file as { path?: unknown }).path === "string" &&
+          typeof (file as { before?: unknown }).before === "string" &&
+          typeof (file as { content?: unknown }).content === "string"
+      )
+    : [];
+  const made = files.map((file) =>
+    changeOf(file.path, file.before, file.content)
+  );
+  const stat = made.reduce(
+    (sum, each) => ({
+      added: sum.added + each.stat.added,
+      removed: sum.removed + each.stat.removed,
+      sections: [],
+    }),
+    { added: 0, removed: 0, sections: [] } as LineStat
+  );
   const notes = Array.isArray(input.notes)
     ? input.notes.filter((note): note is string => typeof note === "string")
     : [];
+  const [first] = files;
+  let summary = `Change ${plural(files.length, "memory file")}`;
+  if (files.length === 1 && first) {
+    summary =
+      first.before === "" ? `Add ${first.path}` : `Change ${first.path}`;
+  }
   return {
-    summary: before === "" ? `Add ${path}` : `Change ${path}`,
+    summary,
     detail: statWords(stat),
-    changes: [made],
+    changes: made.map((each) => each.change),
     fields: [
-      ...fieldsOf(input, ["path", "before", "content", "notes", "project"]),
+      ...fieldsOf(input, ["files", "notes", "project"]),
       ...(notes.length > 0
         ? [{ key: "from notes", value: notes.join(", ") }]
         : []),
@@ -1170,8 +1202,6 @@ export type ProjectSettingChange =
   | { kind: "rename"; name: string }
   /** Review before done: on, only you move a task to done. */
   | { kind: "set_review"; review: boolean }
-  /** The Apple build gate (hub apple-gate.ts): on, work touching the iOS app lands only once it compiles. */
-  | { appleGate: boolean; kind: "set_apple_gate" }
   | {
       /** The account the GitHub connection signs in as: the repository's owner. */
       account?: string;
@@ -1215,10 +1245,6 @@ export const projectSettingWords = (change: ProjectSettingChange): string => {
       return change.review
         ? "Review every task before done: only you close one"
         : "Stop reviewing before done: the lead and sessions close finished tasks";
-    case "set_apple_gate":
-      return change.appleGate
-        ? "Land work that changes the iOS app only once it compiles on a Mac"
-        : "Land work that changes the iOS app without compiling it on a Mac";
     case "set_lands":
       break;
   }
@@ -1254,7 +1280,6 @@ const settingChanges = (input: Record<string, unknown>) =>
         "create_repo",
         "rename",
         "set_review",
-        "set_apple_gate",
       ].includes((one as { kind?: unknown }).kind as string)
   );
 
@@ -1470,7 +1495,10 @@ export function presentPermission(
       fields: [],
     };
   }
-  if (toolName === MEMORY_PROPOSAL_TOOL) {
+  if (
+    toolName === MEMORY_PROPOSAL_TOOL ||
+    toolName === DELEGATE_TYPE_PROPOSAL_TOOL
+  ) {
     return { ...who, ...memoryProposal(input) };
   }
   if (toolName === DESIGN_PROPOSAL_TOOL) {

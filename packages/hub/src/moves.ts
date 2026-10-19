@@ -24,19 +24,16 @@ import {
   CONTROL_MOVE_CANCEL,
   CONTROL_MOVE_CLONE,
   CONTROL_MOVE_INSPECT,
-  CONTROL_MOVE_INSTALL,
   CONTROL_MOVE_LFS,
   CONTROL_MOVE_PREPARE,
   CONTROL_MOVE_REMOTE_CREDENTIAL,
   CONTROL_MOVE_SNAPSHOT,
   deriveTitleFromFirstMessage,
   type Envelope,
-  installFor,
   type MoveAsk,
   type MoveError,
   type MoveEstimate,
   type MoveInspection,
-  type MoveInstall,
   type MoveJob,
   type MoveLargeFile,
   type MoveLfsResult,
@@ -49,6 +46,7 @@ import {
   type MovesFrame,
   moveBranch,
   moveSize,
+  type NamedMoveRequest,
   type PermissionResult,
   type SendPayload,
   type SpawnPayload,
@@ -59,6 +57,7 @@ import {
   MachinePathRefused,
   machinePath,
 } from "@cawco/core/machine-path";
+import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { hubRemoteIdentity, normaliseRemote } from "@cawco/core/upstream-guard";
 import { checkoutOf, type DbShape, type MoveRow, type ProjectRow } from "./db";
 import { bareRepoPath } from "./git-remote";
@@ -98,7 +97,6 @@ export interface MoveState {
   gitInit: boolean;
   ignoredSecrets: string[];
   ignores: boolean;
-  install?: MoveInstall;
   kept?: string;
   lfs?: MoveLfsResult;
   lfsFile?: MoveJob["lfsFile"];
@@ -208,7 +206,6 @@ const WORKING = new Set<MoveStage>([
   "snapshot",
   "clone",
   "lfs",
-  "install",
   "start",
 ]);
 
@@ -273,6 +270,7 @@ const errorOf = (stage: MoveStep, error: unknown): MoveError => {
 
 const runGit = async (args: string[]): Promise<string | null> => {
   const child = Bun.spawn(["git", ...args], {
+    env: { ...process.env, ...GIT_LOCALE },
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",
@@ -302,7 +300,6 @@ export const createMoves = (deps: MovesDeps) => {
 
   /** The words a job carries once it has them, as its record keeps them. */
   const KEPT_AS_IS = [
-    "install",
     "lfs",
     "error",
     "kept",
@@ -825,7 +822,6 @@ export const createMoves = (deps: MovesDeps) => {
       ...(snapshot ? (["snapshot"] as const) : []),
       "clone",
       ...(s.lfs.files > 0 ? (["lfs"] as const) : []),
-      ...(installFor(s.lockfile) ? (["install"] as const) : []),
       "start",
     ];
   };
@@ -860,7 +856,6 @@ export const createMoves = (deps: MovesDeps) => {
     source: string
   ): string[] => {
     const gitInit = !s.isGit;
-    const install = installFor(s.lockfile);
     const origin = s.origin
       ? (normaliseRemote(s.origin) ?? "its remote")
       : "hub";
@@ -877,7 +872,6 @@ export const createMoves = (deps: MovesDeps) => {
         : []),
       `git clone <${origin}> ${shown(t.path, t.home)}`,
       ...(steps.includes("lfs") ? ["git lfs pull"] : []),
-      ...(install ? [install.command] : []),
     ];
   };
 
@@ -949,7 +943,6 @@ export const createMoves = (deps: MovesDeps) => {
   ): MoveState => {
     const { inspection: s, machineId: sourceMachineId } = planned.source;
     const { inspection: t, machineId: targetMachineId } = planned.target;
-    const install = installFor(s.lockfile);
     return {
       sourceMachineId,
       sourcePath: s.path,
@@ -972,7 +965,6 @@ export const createMoves = (deps: MovesDeps) => {
       ...(s.origin && s.originCredential ? { cloneCredential: true } : {}),
       ignoredSecrets: s.ignoredSecrets,
       ignores: s.ignores,
-      ...(install ? { install } : {}),
       ...(s.lfs.files > 0 ? { lfs: s.lfs } : {}),
       ...(steps.includes("approval")
         ? {
@@ -1000,8 +992,21 @@ export const createMoves = (deps: MovesDeps) => {
   /** A move: `POST /api/projects/:id/moves`. Answers the job once it is recorded. */
   const start = async (
     projectId: string,
-    request: MoveRequest
+    asked: MoveRequest
   ): Promise<MoveJob> => {
+    // Its session starts on the harness it names, and nothing stands in for
+    // one it left out.
+    const { harness } = asked.spawn;
+    if (!harness) {
+      throw new MoveRefused(
+        400,
+        "A move names the harness its session starts on. Pick one, then move it again."
+      );
+    }
+    const request: NamedMoveRequest = {
+      ...asked,
+      spawn: { ...asked.spawn, harness },
+    };
     const planned = movable(
       await plan(projectId, request.machineId, request.path),
       request
@@ -1142,18 +1147,6 @@ export const createMoves = (deps: MovesDeps) => {
           STEP_TIMEOUT_MS
         )) as MoveLfsResult;
         return { lfs, progress: undefined, lfsFile: undefined };
-      }
-      case "install": {
-        if (!state.install) {
-          return {};
-        }
-        await deps.call(
-          state.targetMachineId,
-          CONTROL_MOVE_INSTALL,
-          [{ jobId: row.id, path: state.targetPath, argv: state.install.argv }],
-          STEP_TIMEOUT_MS
-        );
-        return {};
       }
       case "start":
         return await startSession(row);
@@ -1361,7 +1354,6 @@ export const createMoves = (deps: MovesDeps) => {
           : `The clone on ${target} is kept.`;
       }
       case "cancelled":
-      case "install":
       case "start":
       case "started":
         break;

@@ -14,12 +14,12 @@
  * and by its own endpoint, is sent nothing new, and is stopped once it holds
  * no live child.
  *
- * A keeper started before keepers ran side by side (a LEGACY keeper) bound
- * `sessiond.sock` itself, in the unit `cawco-sessiond.service` (launchd
- * `dev.cawco.sessiond`). When a keeper of its own build's kind is published
- * over it, its socket moves to `legacy-sessiond-<v>.sock` in the same moment,
- * where it keeps answering: a unix socket is reached through its inode, and a
- * rename keeps the inode.
+ * A source checkout's keeper (a CHECKOUT keeper, cli service.ts
+ * `checkoutLayout`) binds `sessiond.sock` itself, in the unit
+ * `cawco-sessiond.service` (launchd `dev.cawco.sessiond`). When a build's
+ * keeper is published over it, its socket moves to
+ * `checkout-sessiond-<v>.sock` in the same moment, where it keeps answering: a
+ * unix socket is reached through its inode, and a rename keeps the inode.
  *
  * Which build's keeper is current is the `keeper` link's to say
  * ({@link readKeeperVersion}), on disk: it is what a machine's keeper starts
@@ -52,14 +52,14 @@ export const MACHINE_ENDPOINT = "sessiond.sock";
 export const machineEndpoint = (): string =>
   process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
 
-/** A keeper by what it runs: a build's own (`build`), or one that bound the machine's endpoint itself (`legacy`). */
+/** A keeper by what it runs: a build's own (`build`), or a checkout's, which bound the machine's endpoint itself (`checkout`). */
 export interface KeeperName {
-  kind: "build" | "legacy";
+  kind: "build" | "checkout";
   version: string;
 }
 
 const BUILD_ENDPOINT = /^sessiond-(.+)\.sock$/;
-const LEGACY_ENDPOINT = /^legacy-sessiond-(.+)\.sock$/;
+const CHECKOUT_ENDPOINT = /^checkout-sessiond-(.+)\.sock$/;
 /** What a service manager's job name may carry of a build's version. */
 const NOT_IN_A_JOB_NAME = /[^A-Za-z0-9._-]/g;
 
@@ -67,7 +67,7 @@ const NOT_IN_A_JOB_NAME = /[^A-Za-z0-9._-]/g;
 export const endpointName = (keeper: KeeperName): string =>
   keeper.kind === "build"
     ? `sessiond-${keeper.version}.sock`
-    : `legacy-sessiond-${keeper.version}.sock`;
+    : `checkout-sessiond-${keeper.version}.sock`;
 
 /** A keeper's own endpoint, beside the machine's. */
 export const keeperEndpoint = (
@@ -77,9 +77,9 @@ export const keeperEndpoint = (
 
 /** The keeper an endpoint file name belongs to; undefined for any other file, the machine's endpoint among them. */
 export const keeperOf = (name: string): KeeperName | undefined => {
-  const legacy = LEGACY_ENDPOINT.exec(name);
-  if (legacy?.[1]) {
-    return { kind: "legacy", version: legacy[1] };
+  const checkout = CHECKOUT_ENDPOINT.exec(name);
+  if (checkout?.[1]) {
+    return { kind: "checkout", version: checkout[1] };
   }
   const build = BUILD_ENDPOINT.exec(name);
   return build?.[1] ? { kind: "build", version: build[1] } : undefined;
@@ -89,7 +89,7 @@ export const keeperOf = (name: string): KeeperName | undefined => {
  * A keeper's service name, as its unit (`cawco-<name>.service`) and its
  * launchd label (`dev.cawco.<name>`) carry it: `sessiond-<version>` for a
  * build's keeper, with what a job name cannot hold as `_`; `sessiond` for a
- * legacy one.
+ * checkout's.
  */
 export const keeperService = (keeper: KeeperName): string =>
   keeper.kind === "build"
@@ -126,7 +126,7 @@ export const answers = (
 /**
  * The current keeper's own endpoint, as the machine's endpoint names it now:
  * where its symlink leads, beside it, or the machine's endpoint itself when it
- * is a keeper's own socket (a legacy keeper, a checkout's, or none yet).
+ * is a keeper's own socket (a checkout's, or none yet).
  */
 export const currentEndpoint = async (
   machine: string = machineEndpoint()
@@ -146,7 +146,7 @@ export interface CurrentKeeper {
 
 /**
  * The keeper the machine's endpoint names now: the build's keeper its symlink
- * leads to, or the legacy keeper whose own socket it is (its build is the one
+ * leads to, or the checkout's keeper whose own socket it is (its build is the one
  * the `keeper` link names, `unknown` where there is none). Undefined when
  * nothing is there.
  */
@@ -167,7 +167,7 @@ export async function currentKeeper(
   return {
     endpoint: machine,
     keeper: {
-      kind: "legacy",
+      kind: "checkout",
       version: (await readKeeperVersion()) ?? "unknown",
     },
   };
@@ -183,8 +183,8 @@ export interface FoundKeeper {
 
 /**
  * Every keeper endpoint beside the machine's, the current one first: each
- * build's own, each legacy one set aside, and a legacy keeper still holding
- * the machine's endpoint itself. Whether each answers is the caller's to
+ * build's own, each checkout's set aside, and a checkout's keeper still
+ * holding the machine's endpoint itself. Whether each answers is the caller's to
  * find out; a file left by a keeper that is gone answers nothing.
  */
 export async function keeperEndpoints(
@@ -209,16 +209,16 @@ export async function keeperEndpoints(
 /**
  * Makes the keeper at `endpoint` the machine's current one: the machine's
  * endpoint beside it becomes a symlink to it, put in place by one rename, so
- * a dial reaches one keeper or the other and never a missing file. A legacy
- * keeper's own socket there is first moved to its legacy name
- * ({@link endpointName}), its build `legacyVersion`, the instant before; with
+ * a dial reaches one keeper or the other and never a missing file. A
+ * checkout's keeper's own socket there is first moved to its checkout name
+ * ({@link endpointName}), its build `checkoutVersion`, the instant before; with
  * no version given, a live one there is refused rather than cut off from
  * every new dial and every agent that starts. A socket there that answers
  * nothing is what a keeper that is gone left, and is replaced.
  */
 export async function publishKeeper(
   endpoint: string,
-  legacyVersion?: string
+  checkoutVersion?: string
 ): Promise<void> {
   const machine = join(dirname(endpoint), MACHINE_ENDPOINT);
   const target = basename(endpoint);
@@ -226,12 +226,12 @@ export async function publishKeeper(
     return;
   }
   const there = await lstat(machine).catch(() => undefined);
-  let legacy: string | undefined;
+  let checkout: string | undefined;
   if (there?.isSocket()) {
     const live = await answers(machine);
     switch (live.kind) {
       case "answered":
-        legacy = live.value ? machine : undefined;
+        checkout = live.value ? machine : undefined;
         break;
       case "unanswered":
         throw new Error(
@@ -243,18 +243,18 @@ export async function publishKeeper(
       }
     }
   }
-  if (legacy && legacyVersion === undefined) {
+  if (checkout && checkoutVersion === undefined) {
     throw new Error(
-      `${machine} is the socket of a keeper started before keepers ran side by side; it is set aside by the handover that names its build`
+      `${machine} is the socket of a source checkout's keeper; it is set aside by the handover that names its build`
     );
   }
   const next = `${machine}.${process.pid}.next`;
   await rm(next, { force: true });
   await symlink(target, next);
-  if (legacy && legacyVersion !== undefined) {
+  if (checkout && checkoutVersion !== undefined) {
     await rename(
-      legacy,
-      keeperEndpoint({ kind: "legacy", version: legacyVersion }, machine)
+      checkout,
+      keeperEndpoint({ kind: "checkout", version: checkoutVersion }, machine)
     );
   }
   await rename(next, machine);

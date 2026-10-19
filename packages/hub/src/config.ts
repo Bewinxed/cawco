@@ -2,6 +2,8 @@ import { dirname, resolve } from "node:path";
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
+  type CawcoEnvVar,
+  localDashboardPort,
   mcpGatewayPort,
   readEnv,
 } from "@cawco/core";
@@ -67,6 +69,13 @@ export const DASHBOARD_PORT = (() => {
 })();
 
 /**
+ * The dashboard's port on every computer's loopback (core
+ * `localDashboardPort`): the dashboard's socket listens on it on this
+ * computer, and every agent serves it on its own, carried here.
+ */
+export const LOCAL_DASHBOARD_PORT = localDashboardPort();
+
+/**
  * The fleet's own listeners on the hub's machine, each in the words a moved
  * preview's line says it with: no session's preview ever takes one of these
  * ports, even while its listener is down (a restart, a socket being
@@ -76,6 +85,7 @@ export const DASHBOARD_PORT = (() => {
 export const FLEET_PORTS: ReadonlyMap<number, string> = new Map([
   [mcpGatewayPort(), "the MCP gateway's"],
   [DASHBOARD_PORT, "the dashboard's"],
+  [LOCAL_DASHBOARD_PORT, "the dashboard's loopback"],
   [HUB_PORT, "the hub's"],
 ]);
 
@@ -109,3 +119,54 @@ export const ARTIFACTS_ROOT = resolve(dirname(DB_PATH), "artifacts");
  * other route is held to its own, smaller cap first (body-limits.ts).
  */
 export const MAX_REQUEST_BYTES = 64 * 1024 ** 3;
+
+/** A whole number from `name`, at least `least`; unset, `fallback`; anything else stops the hub at start, in so many words. */
+const wholeFrom = (
+  name: CawcoEnvVar,
+  fallback: number,
+  least: number
+): number => {
+  const raw = readEnv(name);
+  if (raw === undefined) {
+    return fallback;
+  }
+  const value = Number(raw.trim());
+  if (!Number.isInteger(value) || value < least) {
+    throw new Error(
+      `${name} is "${raw}": it takes a whole number, ${least} or more.`
+    );
+  }
+  return value;
+};
+
+/**
+ * Days a project's fact line may go unused (no brief carried it, no note
+ * corroborated it) before a curator run proposes moving it to
+ * `knowledge/archive/` (memory.ts). The default is the replay's pick
+ * (scripts/probe-kit/specs/memory-replay.ts, 2026-10-18): over the 974
+ * bullet lines this repository's curated docs held since 2025-12-31, a use
+ * being a commit that shares three words with a line, 30 days archives 54
+ * lines of which 16 were needed again, 45 days 38 (6), 60 days 29 (3), and
+ * 60, 90 and 180 days the same 29 (3): the cost is at its floor from 60 on.
+ * The owner's rule is "fold first; archive a fact only after long disuse",
+ * so the default sits on that floor with room: 90.
+ */
+export const MEMORY_ARCHIVE_DAYS = wholeFrom(
+  CAWCO_ENV.memoryArchiveDays,
+  90,
+  1
+);
+
+/**
+ * A knowledge file's budget, in characters: what one brief carries of it,
+ * and the size past which a curator run is asked to fold it (memory.ts).
+ * The default is the replay's pick (scripts/probe-kit/specs/memory-replay.ts,
+ * 2026-10-18, 24 topic files): 8,000 and 12,000 fold the same 5 files, the
+ * ones past either; 6,000 adds three that sit just over it (6.4k to 6.9k);
+ * 8,000 is also what a brief carried of a file before.
+ */
+export const MEMORY_FILE_CHARS = wholeFrom(
+  CAWCO_ENV.memoryFileChars,
+  8000,
+  500
+);

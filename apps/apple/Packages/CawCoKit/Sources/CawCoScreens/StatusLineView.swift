@@ -15,10 +15,15 @@ import UIKit
 /// cut, and the action wraps under them when the two do not fit on one line
 /// (StatusLine.svelte `.line`: `flex-wrap: wrap`, `gap: space-1 space-2`),
 /// never squeezed: in the rail's width "Open Settings" was drawn 2pt wide.
+/// An update the hub announced (`HubConnection.restart`) is said calmly in
+/// the live ink, with how long until it is back and nothing to press, until
+/// its deadline; only past it is the hub unreachable here. Its return is
+/// said in the done ink while it stands, `durHold` (the window holds it,
+/// RootViewController `holdUpdated`; HubBand.svelte `updating`, `back`).
 /// Each change of phase cross-fades.
 final class StatusLineView: UIView {
     enum Phase: Equatable {
-        case refused, unreachable, connecting, reading, connected
+        case refused, updating, unreachable, updated, connecting, reading, connected
     }
 
     private let glyph = GlyphView(.warning, size: Size.iconSm, tint: Palette.statusFailInk)
@@ -76,11 +81,11 @@ final class StatusLineView: UIView {
     /// refuses this app (a first run's search), beside the hub socket's.
     func configure(hub: HubConnection, ready: Bool, localNetworkDenied: Bool = false) {
         self.hub = hub
-        let next: Phase = if hub.localNetworkDenied || localNetworkDenied { .refused } else {
+        let next: Phase = if hub.localNetworkDenied || localNetworkDenied { .refused } else if hub.restart != nil { .updating } else {
             switch hub.state {
             case .unreachable: .unreachable
-            case .connecting: .connecting
-            case .connected: ready ? .connected : .reading
+            case .connecting, .updating: .connecting
+            case .connected: hub.updated != nil ? .updated : ready ? .connected : .reading
             }
         }
         let changed = phase != nil && phase != next
@@ -95,8 +100,8 @@ final class StatusLineView: UIView {
         }
         clock?.invalidate()
         clock = nil
-        if next == .unreachable {
-            // The retry countdown is a clock: a quarter second is never seen stuck.
+        if next == .unreachable || next == .updating {
+            // The retry countdown and the update's are a clock: a quarter second is never seen stuck.
             clock = Timer.scheduledTimer(withTimeInterval: 0.25, repeats: true) { [weak self] _ in
                 MainActor.assumeIsolated { self?.render() }
             }
@@ -111,11 +116,22 @@ final class StatusLineView: UIView {
         glyph.isHidden = !down
         reconnect.isHidden = !down
         reconnect.isEnabled = phase == .refused || hub.socket != .connecting
-        words.ink = down ? Palette.statusFailInk : Palette.inkMuted
+        words.ink = switch phase {
+        case .refused, .unreachable: Palette.statusFailInk
+        case .updating: Palette.statusLiveInk
+        case .updated: Palette.statusDoneInk
+        case .connecting, .reading, .connected: Palette.inkMuted
+        }
         switch phase {
         case .refused:
             // Not the hub away: this app is not let onto its network. Open Settings is the fix.
             words.text = LocalNetwork.refusal
+        case .updating:
+            let restart = hub.restart
+            let seconds = restart.map { max(0, Int($0.until.timeIntervalSinceNow.rounded(.up))) } ?? 0
+            words.text = Words.Connection.updating(version: restart?.version, seconds: seconds)
+        case .updated:
+            words.text = Words.Connection.updated(version: hub.updated?.version)
         case .unreachable:
             if hub.socket == .connecting {
                 words.text = "Hub unreachable, retrying now"

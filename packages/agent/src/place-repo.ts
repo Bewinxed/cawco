@@ -4,57 +4,38 @@
  * when a place that is a plain folder is first needed (hub place-repo.ts):
  * the person is never asked to run `git init`.
  *
- * What the first commit never takes, each named in the answer with why:
+ * The first commit takes the folder as git reads it: every file its own
+ * ignore rules leave in (each `.gitignore` in it, and the person's global
+ * excludes file), but for any whose text reads as a credential (core
+ * secret-text.ts). A folder that is a git repository of its own is not
+ * taken, as git takes no file of one. Nothing about a file's name decides
+ * it: `Sessions.swift` and `tokens/` are a project's own.
  *
- * - anything in a folder no one but its owner may open (group and others
- *   have no permission bits: mode 0700), and any file no one but its owner
- *   may read (mode 0600);
- * - files named like secrets (`.env*`, `*.pem`, `*key*`, `id_*`, cookies,
- *   tokens, sessions, credentials, `*.sqlite`, `*.db`), folders so named, and
- *   browser profiles (a folder holding a browser's cookie or login store);
- * - any file over {@link PLACE_REPO_FILE_LIMIT_BYTES};
- * - dependency and build trees (`PACKAGE_TREES`: node_modules, .venv, dist,
- *   build, .next, target and the like);
- * - links that lead outside the place, and folders that are git repositories
- *   of their own;
- * - what the folder's own `.gitignore` files ignore;
- * - any staged file whose text reads as a credential (core secret-text.ts).
- *
- * Everything left out is written into the place's `.gitignore` first, so the
- * owner's own `git status` there stays clean. When what is left to commit
- * passes {@link PLACE_REPO_LIMIT_BYTES}, nothing is written and the place
- * stays a folder. The plan is read through a scratch git dir outside the
- * place, so a dry run writes nothing in it; a real run then makes `.git`,
- * stages exactly the plan's files, scans what is staged once more, and
- * commits as CawCo. Nothing is pushed and no remote is added. A run that
- * fails after `git init` takes its `.git` and `.gitignore` change back.
+ * What is left out is written into the place's `.gitignore` first, so the
+ * owner's own `git status` there stays clean and a later `git add` takes no
+ * key. When what is left to commit passes {@link PLACE_REPO_LIMIT_BYTES},
+ * nothing is written and the place stays a folder, its heaviest folders
+ * named. The plan is read through a scratch git dir outside the place, so a
+ * dry run writes nothing in it; a real run then makes `.git`, stages exactly
+ * the plan's files, scans what is staged once more, and commits as CawCo.
+ * Nothing is pushed and no remote is added. A run that fails after
+ * `git init` takes its `.git` and `.gitignore` change back.
  */
-import {
-  lstat,
-  mkdtemp,
-  readdir,
-  readFile,
-  readlink,
-  realpath,
-  rm,
-  stat,
-} from "node:fs/promises";
+import { lstat, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { dirname, join } from "node:path";
 import {
   credentialIn,
-  PLACE_REPO_FILE_LIMIT_BYTES,
   PLACE_REPO_LIMIT_BYTES,
   type PlaceLeftOut,
   type PlaceRepo,
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
-import { isSecretFileName } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
-import { PACKAGE_TREES } from "./workspace";
+import type { Subprocess } from "bun";
 
 /** Who the first commit is by: CawCo, at an address that takes no mail. */
 const AUTHOR = [
@@ -64,19 +45,47 @@ const AUTHOR = [
   "user.email=noreply@cawco.invalid",
 ];
 
-/** git's own words for a folder in no repository (setup.c, every version since 1.x). */
-const NOT_A_REPO = /not a git repository/i;
+/**
+ * git's exit for a folder in no repository: `die()` (usage.c) exits 128, and
+ * `rev-parse --is-inside-work-tree` dies so when discovery finds none
+ * (setup.c). Every other fatal setup error exits the same, so a 128 is read
+ * with the folders above the place ({@link gitAbove}).
+ */
+const NOT_A_REPO_EXIT = 128;
 
-/** Names a browser keeps its cookies and logins under, in a profile folder (Chromium's, Firefox's). */
-const BROWSER_STORES = new Set([
-  "Cookies",
-  "Login Data",
-  "Local State",
-  "Web Data",
-  "cookies.sqlite",
-  "key4.db",
-  "logins.json",
-]);
+/** git that failed: its argv, its exit status, and its stderr as it said it. */
+class GitFailed extends Error {
+  readonly code: number;
+  constructor(args: readonly string[], code: number, stderr: string) {
+    super(`git ${args[0]} failed: ${stderr.trim() || `exit ${code}`}`);
+    this.name = "GitFailed";
+    this.code = code;
+  }
+}
+
+/**
+ * The nearest `.git` at `root` or above it on its filesystem, when one is
+ * there: git's 128 there is a repository it would not read (a damaged one,
+ * someone else's), never a folder in none. Discovery stops where git's does,
+ * at a filesystem boundary (`GIT_DISCOVERY_ACROSS_FILESYSTEM` unset): a
+ * `.git` past it is one git rightly does not look for.
+ */
+const gitAbove = async (root: string): Promise<string | undefined> => {
+  const device = (await stat(root)).dev;
+  for (let at = root; ; at = dirname(at)) {
+    // biome-ignore lint/performance/noAwaitInLoops: nearest first, and each step depends on the last
+    if ((await stat(at).catch(() => undefined))?.dev !== device) {
+      return;
+    }
+    const dotGit = join(at, ".git");
+    if (await lstat(dotGit).then(Boolean, () => false)) {
+      return dotGit;
+    }
+    if (dirname(at) === at) {
+      return;
+    }
+  }
+};
 
 /** How much of a file the credential scan reads for a NUL, to tell text from binary. */
 const BINARY_PROBE = 8000;
@@ -84,180 +93,12 @@ const BINARY_PROBE = 8000;
 const MB = 1024 * 1024;
 const mb = (bytes: number): string => `${(bytes / MB).toFixed(1)} MB`;
 
-/** A database file's name, its journals included. */
-const DATABASE = /\.(sqlite3?|db)(-wal|-shm|-journal)?$/;
 /** What a `.gitignore` pattern reads as a glob or a comment, escaped to name a path exactly. */
 const IGNORE_SPECIAL = /[\\*?[\]!#]/g;
 const TRAILING_SPACE = / $/;
 
-/** Why a file or folder named `name` is left out by its name; undefined when its name is fine. */
-const secretName = (name: string): string | undefined => {
-  const lower = name.toLowerCase();
-  if (isSecretFileName(name)) {
-    return "an environment file, which holds keys";
-  }
-  if (lower.endsWith(".pem")) {
-    return "a certificate or key file";
-  }
-  if (lower.startsWith("id_")) {
-    return "named like an SSH key";
-  }
-  if (DATABASE.test(lower)) {
-    return "a database file";
-  }
-  for (const [word, why] of [
-    ["cookie", "a cookie store"],
-    ["token", "named like a token"],
-    ["session", "a session store"],
-    ["credential", "named like a credential"],
-    ["secret", "named like a secret"],
-    ["passw", "named like a password store"],
-    ["key", "named like a key"],
-  ] as const) {
-    if (lower.includes(word)) {
-      return why;
-    }
-  }
-  return undefined;
-};
-
-/** Whether `path` is `root` or lies inside it. */
-const within = (path: string, root: string): boolean =>
-  path === root || path.startsWith(`${root}${sep}`);
-
-/** What a walk of the place found: the files a commit may take, by path, with their sizes, and what it left out. */
-interface Walked {
-  candidates: Map<string, number>;
-  leftOut: PlaceLeftOut[];
-}
-
-/**
- * What becomes of one entry of the place: a file the commit may take (its
- * size; a link takes none), a folder to read on into, or left out and why.
- */
-type Verdict =
-  | { kind: "take"; bytes: number }
-  | { kind: "enter" }
-  | { kind: "leave"; why: string };
-
-const leave = (why: string): Verdict => ({ kind: "leave", why });
-
-/** Whether a mode lets no one but its owner in: no group or other bits (0700, 0600). */
-const ownerOnly = (mode: number): boolean =>
-  // biome-ignore lint/suspicious/noBitwiseOperators: a mode's group and other bits
-  (mode & 0o077) === 0;
-
-/** A mode as `ls` and `chmod` write it: `0700`. */
-const modeOf = (mode: number): string =>
-  // biome-ignore lint/suspicious/noBitwiseOperators: a mode's permission bits
-  (mode & 0o777).toString(8).padStart(4, "0");
-
-/** A link: taken when it leads inside the place, followed through every link on the way. */
-const linkVerdict = async (
-  full: string,
-  roots: readonly string[]
-): Promise<Verdict> => {
-  const target = await readlink(full);
-  const landing = await realpath(full).catch(() =>
-    resolve(dirname(full), target)
-  );
-  return roots.some((root) => within(landing, root))
-    ? { kind: "take", bytes: 0 }
-    : leave(`a link to ${target}, outside the folder`);
-};
-
-/** A folder: left out whole by its kind, its mode or its name, else read on into. */
-const folderVerdict = async (
-  full: string,
-  name: string,
-  mode: number
-): Promise<Verdict> => {
-  if (PACKAGE_TREES.has(name)) {
-    return leave("dependencies or build output");
-  }
-  if (await lstat(join(full, ".git")).then(Boolean, () => false)) {
-    return leave("a git repository of its own");
-  }
-  if (ownerOnly(mode)) {
-    return leave(
-      `a private folder (mode ${modeOf(mode)}): only its owner may open it`
-    );
-  }
-  const named = secretName(name);
-  if (named) {
-    return leave(named);
-  }
-  const inside = await readdir(full).catch(() => [] as string[]);
-  return inside.some((entry) => BROWSER_STORES.has(entry))
-    ? leave("a browser profile, with its cookies and logins")
-    : { kind: "enter" };
-};
-
-/** A file: left out by its mode, its name or its size, else taken. */
-const fileVerdict = (name: string, mode: number, size: number): Verdict => {
-  if (ownerOnly(mode)) {
-    return leave(
-      `a private file (mode ${modeOf(mode)}): only its owner may read it`
-    );
-  }
-  const named = secretName(name);
-  if (named) {
-    return leave(named);
-  }
-  return size > PLACE_REPO_FILE_LIMIT_BYTES
-    ? leave(
-        `${mb(size)}, past the ${mb(PLACE_REPO_FILE_LIMIT_BYTES)} a file in the first commit may be`
-      )
-    : { kind: "take", bytes: size };
-};
-
-/** One entry's {@link Verdict}, read with `lstat`: a link is never followed into. */
-const verdictOf = async (
-  full: string,
-  name: string,
-  roots: readonly string[]
-): Promise<Verdict> => {
-  const info = await lstat(full);
-  if (info.isSymbolicLink()) {
-    return linkVerdict(full, roots);
-  }
-  if (info.isDirectory()) {
-    return folderVerdict(full, name, info.mode);
-  }
-  return info.isFile()
-    ? fileVerdict(name, info.mode, info.size)
-    : leave("not a regular file");
-};
-
-/** Reads the place, deciding each entry by the rules above; never follows a link. */
-const walk = async (root: string): Promise<Walked> => {
-  const candidates = new Map<string, number>();
-  const leftOut: PlaceLeftOut[] = [];
-  const roots = [root, await realpath(root)];
-  const pending = [root];
-  for (let dir = pending.pop(); dir !== undefined; dir = pending.pop()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one folder at a time keeps the walk's open files to a handful
-    const entries = await readdir(dir, { withFileTypes: true });
-    for (const entry of entries) {
-      if (dir === root && entry.name === ".git") {
-        continue;
-      }
-      const full = join(dir, entry.name);
-      const rel = relative(root, full).split(sep).join("/");
-      // biome-ignore lint/performance/noAwaitInLoops: one entry at a time, in the folder's order
-      const verdict = await verdictOf(full, entry.name, roots);
-      if (verdict.kind === "enter") {
-        pending.push(full);
-      } else if (verdict.kind === "take") {
-        candidates.set(rel, verdict.bytes);
-      } else {
-        const folder = entry.isDirectory() ? "/" : "";
-        leftOut.push({ path: `${rel}${folder}`, why: verdict.why });
-      }
-    }
-  }
-  return { candidates, leftOut };
-};
+/** How many of a place's heaviest folders a refusal names. */
+const HEAVIEST = 3;
 
 /** One `.gitignore` line naming `path` exactly, from the root: git's glob and comment characters escaped. */
 const ignoreLine = (path: string): string =>
@@ -267,189 +108,394 @@ const ignoreLine = (path: string): string =>
 const ignoreBlock = (leftOut: readonly PlaceLeftOut[]): string =>
   leftOut.length === 0
     ? ""
-    : `# CawCo left these out of this folder's first commit: private, secret, large or generated.\n${leftOut
+    : `# CawCo left these out of this folder's first commit: each holds what reads as a credential, or is a git repository of its own.\n${leftOut
         .map((each) => ignoreLine(each.path))
         .join("\n")}\n`;
 
 /**
- * git as `safe-git.ts` says, in `cwd`, its stdout as written (never trimmed:
- * a NUL-separated list's first name may start with a space). Pathspecs are
- * literal, so a file named `*` is that file. git's stderr is the error.
+ * `work` within what is left of `deadline`, named `what` in the error a
+ * late or failed run throws.
+ */
+const within = async <T>(
+  deadline: number,
+  what: string,
+  work: (signal: AbortSignal) => Promise<T>
+): Promise<T> => {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) {
+    throw new Error(`git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`);
+  }
+  const ran = await readWithin(remaining, work);
+  switch (ran.kind) {
+    case "answered":
+      return ran.value;
+    case "unanswered":
+      throw new Error(
+        `${what} did not finish within ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`
+      );
+    default: {
+      const unhandled: never = ran;
+      throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
+/** git as `safe-git.ts` says, in `cwd`, with pathspecs read literally (a file named `*` is that file). */
+const spawnGit = (
+  cwd: string,
+  args: readonly string[],
+  signal: AbortSignal,
+  stdin: "ignore" | Blob = "ignore"
+) =>
+  Bun.spawn(safeGitArgv([...args]), {
+    cwd,
+    env: {
+      ...hostEnvironment(),
+      ...SAFE_GIT_ENV,
+      GIT_LITERAL_PATHSPECS: "1",
+    },
+    stdin,
+    stdout: "pipe",
+    stderr: "pipe",
+    signal,
+    killSignal: "SIGKILL",
+  });
+
+/** Throws git's own words when it did not end well. */
+const failed = (
+  args: readonly string[],
+  child: Pick<Subprocess, "signalCode">,
+  code: number,
+  stderr: string
+): void => {
+  if (child.signalCode) {
+    throw new Error(`git ${args[0]} was ended by ${child.signalCode}`);
+  }
+  if (code !== 0) {
+    throw new GitFailed(args, code, stderr);
+  }
+};
+
+/**
+ * git in `cwd`, its stdout as written (never trimmed: a NUL-separated
+ * list's first name may start with a space). git's stderr is the error.
  */
 const gitIn =
   (deadline: number) =>
-  async (cwd: string, ...args: string[]): Promise<string> => {
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) {
-      throw new Error(`git exceeded ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`);
-    }
-    const ran = await readWithin(remaining, async (signal) => {
-      const child = Bun.spawn(safeGitArgv(args), {
-        cwd,
-        env: {
-          ...hostEnvironment(),
-          ...SAFE_GIT_ENV,
-          GIT_LITERAL_PATHSPECS: "1",
-        },
-        stdin: "ignore",
-        stdout: "pipe",
-        stderr: "pipe",
-        signal,
-        killSignal: "SIGKILL",
-      });
+  (cwd: string, ...args: string[]): Promise<string> =>
+    within(deadline, `git ${args[0]}`, async (signal) => {
+      const child = spawnGit(cwd, args, signal);
       const [stdout, stderr, code] = await Promise.all([
         new Response(child.stdout).text(),
         new Response(child.stderr).text(),
         child.exited,
       ]);
-      if (code !== 0) {
-        throw new Error(
-          child.signalCode
-            ? `git ${args[0]} was ended by ${child.signalCode}`
-            : `git ${args[0]} failed: ${stderr.trim() || `exit ${code}`}`
-        );
-      }
+      failed(args, child, code, stderr);
       return stdout;
     });
-    switch (ran.kind) {
-      case "answered":
-        return ran.value;
-      case "unanswered":
-        throw new Error(
-          `git ${args[0]} did not finish within ${WORKSPACE_GIT_TIMEOUT_MS / 1000}s`
-        );
-      default: {
-        const unhandled: never = ran;
-        throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
-      }
-    }
-  };
 
 type Git = ReturnType<typeof gitIn>;
 
 const nulList = (text: string): string[] => text.split("\0").filter(Boolean);
 
-/** The staged files' paths whose text reads as a credential, each with what it found. */
-const credentialHits = async (
+const utf8 = new TextDecoder();
+
+/** What reads as a credential in `bytes`, when they are text; undefined for binary or for none. */
+const credentialOf = (bytes: Uint8Array): string | undefined =>
+  bytes.subarray(0, BINARY_PROBE).includes(0)
+    ? undefined
+    : credentialIn(utf8.decode(bytes));
+
+/**
+ * The paths git reads as the place's own and has not yet: untracked and
+ * not ignored by any of its ignore rules. A folder listed with a trailing
+ * `/` is a git repository of its own. `gitDir` reads a plain folder through
+ * a scratch git dir, writing nothing in it.
+ */
+const untracked = async (
   root: string,
-  paths: readonly string[]
-): Promise<PlaceLeftOut[]> => {
-  const hits: PlaceLeftOut[] = [];
-  for (const path of paths) {
+  git: Git,
+  gitDir?: string
+): Promise<string[]> =>
+  nulList(
+    await git(
+      root,
+      ...(gitDir
+        ? [
+            `--git-dir=${gitDir}`,
+            `--work-tree=${root}`,
+            "-c",
+            "core.bare=false",
+          ]
+        : []),
+      "ls-files",
+      "-z",
+      "--others",
+      "--exclude-standard"
+    )
+  );
+
+/** What becomes of the paths git listed: the files a commit may take, by path, with their sizes, and what is left out and why. */
+interface Judged {
+  leftOut: PlaceLeftOut[];
+  sizes: Map<string, number>;
+}
+
+/**
+ * The paths git listed, judged: a repository of its own is left out, as git
+ * takes none of its files; so is a file whose text reads as a credential.
+ * A file or link is taken (a link as git takes one: its target's path, never
+ * what it leads to); anything else git would not take either.
+ */
+const judge = async (
+  root: string,
+  listed: readonly string[]
+): Promise<Judged> => {
+  const sizes = new Map<string, number>();
+  const leftOut: PlaceLeftOut[] = [];
+  for (const path of listed) {
+    if (path.endsWith("/")) {
+      leftOut.push({ path, why: "a git repository of its own" });
+      continue;
+    }
     const full = join(root, path);
-    // biome-ignore lint/performance/noAwaitInLoops: one file in memory at a time, each up to the file limit
+    // biome-ignore lint/performance/noAwaitInLoops: one file in memory at a time
     const info = await lstat(full).catch(() => undefined);
-    if (!info?.isFile()) {
-      continue;
-    }
-    const bytes = await readFile(full);
-    if (bytes.subarray(0, BINARY_PROBE).includes(0)) {
-      continue;
-    }
-    const found = credentialIn(bytes.toString("utf8"));
-    if (found) {
-      hits.push({
-        path,
-        why: `its text holds what reads as ${found}`,
-      });
+    if (info?.isSymbolicLink()) {
+      sizes.set(path, 0);
+    } else if (info?.isFile()) {
+      const found = credentialOf(await readFile(full));
+      if (found) {
+        leftOut.push({ path, why: `its text holds what reads as ${found}` });
+      } else {
+        sizes.set(path, info.size);
+      }
     }
   }
-  return hits;
+  return {
+    sizes,
+    leftOut: leftOut.sort((a, b) => a.path.localeCompare(b.path)),
+  };
 };
 
-/** Whether `rule` (a file, or a folder ending in `/`) covers `path`. */
-const covers = (rule: PlaceLeftOut, path: string): boolean =>
-  path === rule.path || (rule.path.endsWith("/") && path.startsWith(rule.path));
+/** A newline, which ends each header `git cat-file --batch` writes. */
+const NEWLINE = 10;
+
+/**
+ * `git cat-file --batch`'s answer, fed as it arrives: `<oid> <type> <size>`,
+ * a newline, the object's bytes and a newline, for each object asked; an
+ * `<oid> missing` line for one there is not. Each blob is handed to `each`
+ * whole, one at a time.
+ */
+class BatchReader {
+  readonly #each: (oid: string, bytes: Uint8Array) => void;
+  readonly #decoder = new TextDecoder();
+  #header = "";
+  #oid = "";
+  #kind = "";
+  #body: Uint8Array | undefined;
+  #filled = 0;
+  /** Bytes to pass over before the next header: the newline after an object. */
+  #skip = 0;
+
+  constructor(each: (oid: string, bytes: Uint8Array) => void) {
+    this.#each = each;
+  }
+
+  feed(chunk: Uint8Array): void {
+    let at = 0;
+    while (at < chunk.length) {
+      if (this.#skip > 0) {
+        this.#skip -= 1;
+        at += 1;
+      } else if (this.#body) {
+        at = this.#fill(chunk, at);
+      } else {
+        at = this.#readHeader(chunk, at);
+      }
+    }
+  }
+
+  /** Copies what of the object's bytes `chunk` holds from `at`; answers where it stopped. */
+  #fill(chunk: Uint8Array, at: number): number {
+    const body = this.#body as Uint8Array;
+    const n = Math.min(body.length - this.#filled, chunk.length - at);
+    body.set(chunk.subarray(at, at + n), this.#filled);
+    this.#filled += n;
+    if (this.#filled === body.length) {
+      this.#done();
+    }
+    return at + n;
+  }
+
+  /** Reads what of a header `chunk` holds from `at`, starting its object at the newline; answers where it stopped. */
+  #readHeader(chunk: Uint8Array, at: number): number {
+    const end = chunk.indexOf(NEWLINE, at);
+    if (end === -1) {
+      this.#header += this.#decoder.decode(chunk.subarray(at));
+      return chunk.length;
+    }
+    this.#header += this.#decoder.decode(chunk.subarray(at, end));
+    const [id = "", type = "", size] = this.#header.split(" ");
+    this.#header = "";
+    if (size !== undefined) {
+      this.#oid = id;
+      this.#kind = type;
+      this.#body = new Uint8Array(Number(size));
+      this.#filled = 0;
+      if (this.#body.length === 0) {
+        this.#done();
+      }
+    }
+    return end + 1;
+  }
+
+  #done(): void {
+    if (this.#body && this.#kind === "blob") {
+      this.#each(this.#oid, this.#body);
+    }
+    this.#body = undefined;
+    this.#skip = 1;
+  }
+}
+
+/**
+ * Hands each blob `oids` name in `root` to `each`, read through one
+ * `git cat-file --batch`, a blob at a time: a history is read whole without
+ * holding more than its largest file.
+ */
+const eachBlob = (
+  root: string,
+  oids: readonly string[],
+  deadline: number,
+  each: (oid: string, bytes: Uint8Array) => void
+): Promise<void> =>
+  within(deadline, "git cat-file", async (signal) => {
+    const args = ["cat-file", "--batch"];
+    const child = spawnGit(
+      root,
+      args,
+      signal,
+      new Blob([oids.map((one) => `${one}\n`).join("")])
+    );
+    const stderr = new Response(child.stderr).text();
+    const reader = new BatchReader(each);
+    for await (const chunk of child.stdout) {
+      reader.feed(chunk);
+    }
+    failed(args, child, await child.exited, await stderr);
+  });
+
+/**
+ * Every path whose text, in any commit HEAD reaches, reads as a credential:
+ * what a publish takes is the whole history, so a key a later commit took
+ * out is still in it.
+ */
+const historyHits = async (
+  root: string,
+  git: Git,
+  deadline: number
+): Promise<PlaceLeftOut[]> => {
+  const [tree, objects] = await Promise.all([
+    git(root, "ls-tree", "-r", "-z", "HEAD"),
+    git(root, "rev-list", "--objects", "HEAD"),
+  ]);
+  const inHead = new Set<string>();
+  for (const entry of nulList(tree)) {
+    // `<mode> <type> <oid>\t<path>`
+    const [, type, oid] = entry.slice(0, entry.indexOf("\t")).split(" ");
+    if (type === "blob" && oid) {
+      inHead.add(oid);
+    }
+  }
+  // `<oid> <path>` for each tree and blob, once, at the first path it is seen at.
+  const pathOf = new Map<string, string>();
+  for (const line of objects.split("\n")) {
+    const space = line.indexOf(" ");
+    if (space > 0) {
+      pathOf.set(line.slice(0, space), line.slice(space + 1));
+    }
+  }
+  const hits = new Map<string, PlaceLeftOut>();
+  await eachBlob(root, [...pathOf.keys()], deadline, (oid, bytes) => {
+    const path = pathOf.get(oid) ?? oid;
+    const found = credentialOf(bytes);
+    if (found && (inHead.has(oid) || !hits.has(path))) {
+      hits.set(path, {
+        path,
+        why: inHead.has(oid)
+          ? `its text holds what reads as ${found}`
+          : `an earlier commit's copy holds what reads as ${found}`,
+      });
+    }
+  });
+  return [...hits.values()].sort((a, b) => a.path.localeCompare(b.path));
+};
 
 /**
  * A place that is already a repository, read for publishing
- * (CONTROL_PLACE_PUSH): `leftOut`, every path the first commit's rules keep
- * out that its commits do not hold, with why; `refused`, every committed
- * path those rules or the credential scan would have kept out, which no
- * publish takes.
+ * (CONTROL_PLACE_PUSH): `leftOut`, what the first commit's rules keep out
+ * of the files it has not committed, with why; `refused`, every path whose
+ * text in any commit HEAD reaches reads as a credential, which no publish
+ * takes.
  */
 export const publishCheck = async (
   root: string,
-  tracked: readonly string[]
+  deadline: number
 ): Promise<{ leftOut: PlaceLeftOut[]; refused: PlaceLeftOut[] }> => {
-  const { leftOut } = await walk(root);
-  const refused = tracked.flatMap((path) => {
-    const rule = leftOut.find((one) => covers(one, path));
-    return rule ? [{ path, why: rule.why }] : [];
-  });
-  const ruled = new Set(refused.map((one) => one.path));
-  const scanned = await credentialHits(
-    root,
-    tracked.filter((path) => !ruled.has(path))
-  );
-  return {
-    leftOut: leftOut
-      .filter((rule) => !tracked.some((path) => covers(rule, path)))
-      .sort((a, b) => a.path.localeCompare(b.path)),
-    refused: [...refused, ...scanned],
-  };
+  const git = gitIn(deadline);
+  const { leftOut } = await judge(root, await untracked(root, git));
+  return { leftOut, refused: await historyHits(root, git, deadline) };
 };
 
 /** What a first commit would take, read without writing in the place. */
 interface Plan {
   bytes: number;
   leftOut: PlaceLeftOut[];
+  /** Each file it takes but its `.gitignore`, with its size. */
+  sizes: Map<string, number>;
   /** Every file it takes but its `.gitignore`. */
   staged: string[];
 }
 
 /**
- * The place's plan: the walk, then git's own reading of what is untracked
- * and not ignored (every `.gitignore` the folder has, and the block for what
- * the walk left out) through a scratch git dir outside the place, then the
- * credential scan of what is left.
+ * The place's plan: git's own reading of what is untracked and not ignored,
+ * through a scratch git dir outside the place, then judged.
  */
 const planOf = async (root: string, git: Git): Promise<Plan> => {
-  const { candidates, leftOut } = await walk(root);
   const scratch = await mkdtemp(join(tmpdir(), "cawco-place-"));
   try {
     const gitDir = join(scratch, "probe.git");
     await git(scratch, "init", "-q", "--bare", gitDir);
-    const exclude = join(scratch, "exclude");
-    await writeStateFile(exclude, ignoreBlock(leftOut));
-    const listed = new Set(
-      nulList(
-        await git(
-          root,
-          `--git-dir=${gitDir}`,
-          `--work-tree=${root}`,
-          "-c",
-          "core.bare=false",
-          "ls-files",
-          "-z",
-          "--others",
-          "--exclude-standard",
-          `--exclude-from=${exclude}`
-        )
-      )
-    );
-    const kept: string[] = [];
-    for (const path of [...candidates.keys()].sort()) {
-      if (listed.has(path)) {
-        kept.push(path);
-      } else if (path !== ".gitignore") {
-        leftOut.push({ path, why: "ignored by the folder's own .gitignore" });
-      }
-    }
-    const hits = await credentialHits(root, kept);
-    const hit = new Set(hits.map((each) => each.path));
-    leftOut.push(...hits);
-    const staged = kept.filter(
-      (path) => !hit.has(path) && path !== ".gitignore"
+    const listed = await untracked(root, git, gitDir);
+    const { sizes, leftOut } = await judge(
+      root,
+      listed.filter((path) => path !== ".gitignore")
     );
     return {
-      staged,
-      leftOut: leftOut.sort((a, b) => a.path.localeCompare(b.path)),
-      bytes: staged.reduce((sum, path) => sum + (candidates.get(path) ?? 0), 0),
+      sizes,
+      leftOut,
+      staged: [...sizes.keys()].sort(),
+      bytes: [...sizes.values()].reduce((sum, size) => sum + size, 0),
     };
   } finally {
     await rm(scratch, { recursive: true, force: true });
   }
+};
+
+/** The place's top-level entries the plan's bytes are most in, heaviest first: `node_modules/ (312.0 MB)`. */
+const heaviest = (plan: Plan): string => {
+  const byTop = new Map<string, number>();
+  for (const [path, bytes] of plan.sizes) {
+    const slash = path.indexOf("/");
+    const top = slash === -1 ? path : path.slice(0, slash + 1);
+    byTop.set(top, (byTop.get(top) ?? 0) + bytes);
+  }
+  return [...byTop]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, HEAVIEST)
+    .map(([top, bytes]) => `${top} (${mb(bytes)})`)
+    .join(", ");
 };
 
 /** The place's `.gitignore` as the first commit has it: the folder's own, then CawCo's block. */
@@ -468,7 +514,7 @@ const gitignoreText = (
 
 /** The first commit's message: what it took and what it left out. */
 const messageOf = (plan: Plan): string =>
-  `CawCo: this folder's first commit\n\n${plan.staged.length + 1} files, ${mb(plan.bytes)}. ${plan.leftOut.length} paths left out and named in .gitignore: private, secret, large or generated. Nothing was pushed.`;
+  `CawCo: this folder's first commit\n\n${plan.staged.length + 1} files, ${mb(plan.bytes)}. ${plan.leftOut.length} paths left out and named in .gitignore: each holds what reads as a credential, or is a git repository of its own. Nothing was pushed.`;
 
 /**
  * Makes `root` a repository with the plan's files in one commit; on any
@@ -507,7 +553,7 @@ const commitPlan = async (
     // The staged set, scanned again as git holds it: a file that changed
     // since the plan read it goes back out.
     const index = nulList(await git(root, "ls-files", "-z", "--cached"));
-    const hits = await credentialHits(
+    const { leftOut: hits } = await judge(
       root,
       index.filter((path) => path !== ".gitignore")
     );
@@ -529,11 +575,13 @@ const commitPlan = async (
       await writeIgnore();
       await git(root, "add", "--", ".gitignore");
     }
+    const taken = new Set(staged);
+    const sizes = new Map([...plan.sizes].filter(([path]) => taken.has(path)));
     const kept: Plan = {
       leftOut,
       staged,
-      bytes:
-        hits.length > 0 ? plan.bytes - (await sizes(root, hits)) : plan.bytes,
+      sizes,
+      bytes: [...sizes.values()].reduce((sum, size) => sum + size, 0),
     };
     await git(
       root,
@@ -556,22 +604,6 @@ const commitPlan = async (
     await rm(scratch, { recursive: true, force: true });
   }
 };
-
-/** The sizes of `hits` added up, for a commit that left them out after its plan. */
-const sizes = async (
-  root: string,
-  hits: readonly PlaceLeftOut[]
-): Promise<number> =>
-  (
-    await Promise.all(
-      hits.map((each) =>
-        lstat(join(root, each.path)).then(
-          (info) => info.size,
-          () => 0
-        )
-      )
-    )
-  ).reduce((sum, size) => sum + size, 0);
 
 /** Each place's run in flight: two starts at once make one repository. */
 const making = new Map<string, Promise<PlaceRepo>>();
@@ -607,26 +639,40 @@ const placeRepoNow = async (root: string, dry: boolean): Promise<PlaceRepo> => {
     );
   }
   const git = gitIn(Date.now() + WORKSPACE_GIT_TIMEOUT_MS);
-  const top = await git(root, "rev-parse", "--show-toplevel").then(
+  const couldNotTell = (error: Error): Error =>
+    new Error(
+      `CawCo couldn't tell whether ${root} is in a git repository: ${error.message}`,
+      { cause: error }
+    );
+  const inside = await git(root, "rev-parse", "--is-inside-work-tree").then(
     (out) => out.trim(),
     (error: Error) => {
-      if (NOT_A_REPO.test(error.message)) {
+      if (error instanceof GitFailed && error.code === NOT_A_REPO_EXIT) {
         return;
       }
-      throw new Error(
-        `CawCo couldn't tell whether ${root} is in a git repository: ${error.message}`,
-        { cause: error }
-      );
+      throw couldNotTell(error);
     }
   );
-  if (top) {
+  if (inside === "true") {
+    const top = await git(root, "rev-parse", "--show-toplevel").then(
+      (out) => out.trim(),
+      (error: Error) => {
+        throw couldNotTell(error);
+      }
+    );
     return { state: "checkout", root: top };
+  }
+  if (inside !== undefined) {
+    throw new Error(
+      `${root} is inside a git repository's own directory, not a checkout of it, so CawCo leaves the folder as it is.`
+    );
   }
   // One git cannot read is someone's, and a failed run would take it back
   // with its own: it is left alone, and so is the place.
-  if (await lstat(join(root, ".git")).then(Boolean, () => false)) {
+  const unread = await gitAbove(root);
+  if (unread) {
     throw new Error(
-      `${root} has a .git that git does not read as a repository, so CawCo leaves the folder as it is. Repair or remove that .git, and start the work again.`
+      `${root} is under ${unread}, which git does not read as a repository, so CawCo leaves the folder as it is. Repair or remove that .git, and start the work again.`
     );
   }
   const plan = await planOf(root, git).catch((error: Error) => {
@@ -639,7 +685,7 @@ const placeRepoNow = async (root: string, dry: boolean): Promise<PlaceRepo> => {
   });
   if (plan.bytes > PLACE_REPO_LIMIT_BYTES) {
     throw new Error(
-      `${root} holds ${mb(plan.bytes)} CawCo would commit, past the ${mb(PLACE_REPO_LIMIT_BYTES)} a place's first commit takes, so it stays a folder and no workspace can be cut from it. Move the large files out of it, or make it a git repository yourself.`
+      `${root} holds ${mb(plan.bytes)} its ignore rules leave in, past the ${mb(PLACE_REPO_LIMIT_BYTES)} a place's first commit takes, so it stays a folder and no workspace can be cut from it. Most of it is in ${heaviest(plan)}: name what is not the project's in its .gitignore, or make it a git repository yourself.`
     );
   }
   if (dry) {

@@ -286,10 +286,12 @@ user_cache=$(getconf DARWIN_USER_CACHE_DIR)mac-check-$short
 var_tmp=/private/var/tmp/mac-check-$short
 # A simulator launchd's own socket dirs, as each boot makes them: iOS 18 under
 # /private/tmp, newer runtimes under /private/var/tmp. Of their sockets only
-# testmanagerd's is reached (boundary.ts TEST_MANAGER_SOCKET).
+# testmanagerd's is reached (boundary.ts TEST_MANAGER_SOCKET), and its remote
+# automation under /private/var/tmp (boundary.ts REMOTE_AUTOMATION_SOCKET).
 sim_tmp=/private/tmp/com.apple.launchd.maccheck$short
 sim_var=/private/var/tmp/com.apple.launchd.maccheck$short
 testmanagerd=com.apple.testmanagerd.unix-domain.socket
+remote_automation=com.apple.testmanagerd.remote-automation.uds
 mkdir -p "$other_tmp" "$other_clone" "$home_daemon" "$user_tmp" "$user_cache" "$var_tmp" "$sim_tmp" "$sim_var"
 # Listens on the host at $1 for 60 s; its pid in $listener, once the socket is there.
 listen() {
@@ -300,7 +302,7 @@ s = socket.socket(socket.AF_UNIX); s.bind(sys.argv[1]); s.listen(1); time.sleep(
   for _ in $(seq 50); do [ -S "$1" ] && break; sleep 0.1; done
   [ -S "$1" ]
 }
-for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock" "another workspace's clone:$other_clone/dev.sock" "a host daemon's dir under home:$home_daemon/daemon.sock" "the per-user temp dir (T):$user_tmp/host.sock" "the per-user cache dir (C):$user_cache/host.sock" "/private/var/tmp (simulators' sockets):$var_tmp/host.sock" "a simulator's webinspectord in /private/var/tmp:$sim_var/com.apple.webinspectord_sim.socket" "testmanagerd's name outside a simulator's dir:$var_tmp/$testmanagerd"; do
+for place in "another workspace's scratch dir:$other_tmp/other.sock" "this workspace's state dir:$state/host.sock" "another workspace's clone:$other_clone/dev.sock" "a host daemon's dir under home:$home_daemon/daemon.sock" "the per-user temp dir (T):$user_tmp/host.sock" "the per-user cache dir (C):$user_cache/host.sock" "/private/var/tmp (simulators' sockets):$var_tmp/host.sock" "a simulator's webinspectord in /private/var/tmp:$sim_var/com.apple.webinspectord_sim.socket" "testmanagerd's name outside a simulator's dir:$var_tmp/$testmanagerd" "remote automation's name in /private/tmp:$sim_tmp/$remote_automation" "remote automation's name outside a simulator's dir:$var_tmp/$remote_automation"; do
   label="connect a socket in ${place%%:*}" sock=${place#*:}
   if ! listen "$sock"; then
     works "$label" "FAIL (the host's listener at $sock did not start)"
@@ -311,9 +313,10 @@ for place in "another workspace's scratch dir:$other_tmp/other.sock" "this works
   rm -f "$sock"
 done
 # Working rows: a simulator's testmanagerd, which xcodebuild's UI test runner
-# (XCUITest, Maestro's driver) dials, in both of its dirs.
-for place in "/private/tmp:$sim_tmp/$testmanagerd" "/private/var/tmp:$sim_var/$testmanagerd"; do
-  label="connect a simulator's testmanagerd in ${place%%:*}" sock=${place#*:}
+# (XCUITest, Maestro's driver) dials, in both of its dirs, and its remote
+# automation, which axe and xcui send iOS 27's input through.
+for place in "testmanagerd in /private/tmp:$sim_tmp/$testmanagerd" "testmanagerd in /private/var/tmp:$sim_var/$testmanagerd" "remote automation in /private/var/tmp:$sim_var/$remote_automation"; do
+  label="connect a simulator's ${place%%:*}" sock=${place#*:}
   if ! listen "$sock"; then
     works "$label" "FAIL (the host's listener at $sock did not start)"
   else

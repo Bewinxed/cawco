@@ -722,6 +722,18 @@
         }
       }
     },
+    "border-row-outline": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.5458, 0.003733, 0.015146]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.neutral-9}, {color.neutral-11} 10%)"
+        }
+      }
+    },
     "input": {
       "$type": "color",
       "$value": {

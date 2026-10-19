@@ -12,7 +12,7 @@
   import { IconChevronRight, IconSearch } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { page } from "$app/state";
-  import { cawco, type InstanceRow } from "../client.svelte";
+  import { type BoardRow, cawco } from "../client.svelte";
   import { conversationHref } from "../links";
   import { echoBeat } from "../motion/echo.svelte";
   import { holdWhileInside } from "../motion/held-order.svelte";
@@ -157,7 +157,7 @@
         <!-- A session, wherever it stands in a tree: Recent's own row, or a
              delegate under one. A context line is the parent of delegates
              held here, not one of Recent's own: its state and name only. -->
-        {#snippet line(row: InstanceRow)}
+        {#snippet line(row: BoardRow)}
           {@const context = view.shapeOf(row.id)?.context ?? false}
           {@const at = lastAt(row)}
           <SessionRow

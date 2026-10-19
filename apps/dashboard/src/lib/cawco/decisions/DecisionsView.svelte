@@ -20,8 +20,8 @@
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
-  import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import type { ProjectStarter, StageKind } from "#lib/cawco/project-tasks.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -161,7 +161,8 @@
       .then((read) => {
         if (live) {
           graph = read;
-          graphProblem = null;
+          graphProblem =
+            read.problems.length > 0 ? read.problems.join(" ") : null;
         }
       })
       .catch((error: unknown) => {
@@ -267,7 +268,7 @@
           <!-- literal: 36rem -->
           <div
             data-slot="caw-empty"
-            class="mx-auto w-full max-w-(--measure)"
+            class="w-full max-w-(--measure)"
             style:--measure="36rem"
           >
             <EmptyState
@@ -277,7 +278,7 @@
               {#snippet mark()}
                 <div
                   data-slot="caw-80"
-                  class="mb-space-3 grid place-items-center"
+                  class="mb-space-3 grid justify-items-start"
                   data-share="caw:{projectId}"
                   out:sitDown|global
                 >
@@ -286,14 +287,11 @@
               {/snippet}
               {#snippet action()}
                 <!-- The ask is a starter: it opens his panel with its words
-                     in his composer, nothing sent. A press on it is no
-                     press outside the panel (CawFloat, data-caw-asks). -->
-                <div class="contents" data-caw-asks>
-                  <CawStarters
-                    onpick={(text) => lead.ask(text, "decisions")}
-                    {starters}
-                  />
-                </div>
+                     in his composer, nothing sent. -->
+                <StarterCards
+                  onpick={(text) => lead.ask(text, "decisions")}
+                  {starters}
+                />
               {/snippet}
             </EmptyState>
           </div>
@@ -357,11 +355,6 @@
   /* residual: foreign-dom */
   [data-slot="cell"] > :global([data-slot="tile"]) {
     flex: 1 1 auto;
-  }
-  /* residual: foreign-dom */
-  [data-slot="caw-empty"] :global(.kit-empty) {
-    align-items: center;
-    text-align: center;
   }
   /* residual: foreign-dom */
   [data-slot="caw-empty"] :global(.kit-empty-action) {

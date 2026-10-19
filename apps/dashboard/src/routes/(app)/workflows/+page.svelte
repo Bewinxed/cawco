@@ -190,10 +190,8 @@
     </table>
   {:else if !rows.length}
     {#if !workflowState.error}
-      <!-- literal: 420px -->
-      <div in:crossIn style:--empty-max="420px">
+      <div in:crossIn>
         <EmptyState
-          class="mx-auto w-full max-w-(--empty-max)"
           icon={IconWorkflow}
           line="A workflow is a graph of steps that run one after another across your fleet."
           title="No workflows yet"

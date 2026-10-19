@@ -23,10 +23,8 @@
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { pageIn, pageOut, route } from "#lib/cawco/motion/route.svelte.js";
-  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { keepPrefs } from "#lib/cawco/prefs.js";
   import { gridView } from "#lib/cawco/workspace/grid-view.svelte.js";
-  import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Sheet from "#lib/components/ui/sheet/index.js";
@@ -42,9 +40,10 @@
   import AddMachineDialog from "./AddMachineDialog.svelte";
   import { barGlass, type GlassCard as GlassFace } from "./bar-glass.svelte";
   import { barStrip } from "./bar-strip.svelte";
-  import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
+  import { cawco } from "./client.svelte";
   import { continuing } from "./continue.svelte";
   import GlassCard from "./GlassCard.svelte";
+  import HubBand from "./HubBand.svelte";
   import { deviceRatio } from "./home/device-ratio.svelte";
   import { sessionName } from "./home/home-state.svelte";
   import { guardDrops } from "./internal-drag";
@@ -52,6 +51,7 @@
   import { hangShadow } from "./motion/hung-shadow";
   import NeedsCaw from "./NeedsCaw.svelte";
   import Overlays from "./Overlays.svelte";
+  import { hold } from "./page-marks";
   import RegionBoundary from "./RegionBoundary.svelte";
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
@@ -777,6 +777,21 @@
   const floating = $derived(
     !railed && onSession && workspace.activeSessionId !== null
   );
+  /* What the bar is, floating or hosting the tabs, said on the root for the
+     screen's top edge (ScreenEdges, page-marks). */
+  $effect(() => {
+    const releases = [
+      floating && hold("root", "data-bar", "floating"),
+      hosting && hold("root", "data-bar", "hosting"),
+    ];
+    return () => {
+      for (const release of releases) {
+        if (release) {
+          release();
+        }
+      }
+    };
+  });
 
   /* The home's Check machines opens the machines where a phone keeps them:
      the sidebar. */
@@ -850,77 +865,6 @@
         return section[0].toUpperCase() + section.slice(1);
     }
   });
-
-  /**
-   * Whether this tab has ever had the hub. A socket that dropped is retrying
-   * and will say so; one that never landed is a wrong address, and the two want
-   * different words.
-   */
-  let everConnected = $state(false);
-  $effect(() => {
-    if (cawco.status === "connected") {
-      everConnected = true;
-    }
-  });
-
-  /**
-   * The first connection is not a fault, and it used to be drawn as one.
-   *
-   * `status` starts at `disconnected` — a socket that has not been made yet
-   * reads exactly like one that failed — so every cold load hydrated with the
-   * red "can't reach the hub" banner up, then tore it down a frame later when
-   * the socket opened. That is a 47px band inserted and removed between the top
-   * bar and the tab strip: two layout shifts, ±47px, on a load where nothing
-   * was ever wrong.
-   *
-   * So the banner waits for evidence, but only for the `connecting` phase —
-   * the grace period before the first attempt completes. Once the status is
-   * `disconnected` or `error`, the hub is known-unreachable and the banner
-   * fires without requiring a prior successful connection: an operator whose
-   * browser loads while the hub is already down sees the full-width banner
-   * immediately (after the grace), not caption-sized text buried in an empty
-   * state.
-   */
-  const CONNECT_GRACE = 4000;
-  let graceOver = $state(false);
-  onMount(() => {
-    const timer = setTimeout(() => {
-      graceOver = true;
-    }, CONNECT_GRACE);
-    return () => clearTimeout(timer);
-  });
-  const showBanner = $derived.by(() => {
-    const s = cawco.status;
-    // A bench (/motion/…) stages its own data and runs with no hub by design.
-    if (s === "connected" || page.url.pathname.startsWith("/motion/")) {
-      return false;
-    }
-    // A socket that errored or was declared disconnected is a known fault —
-    // show the banner once the grace has elapsed or the attempt has failed,
-    // without requiring a prior successful connection.
-    if (s === "disconnected" || s === "error") {
-      return cawco.connectFailed || graceOver;
-    }
-    // `connecting` is the transient every cold load passes through. Show the
-    // banner only when a prior connection has been lost and the grace elapsed.
-    return everConnected && graceOver;
-  });
-
-  // The countdown is a clock, not a frame: 250ms is fast enough that the number
-  // never looks stuck and slow enough to cost nothing.
-  let now = $state(Date.now());
-  $effect(() => {
-    if (cawco.status === "connected") {
-      return;
-    }
-    const timer = setInterval(() => {
-      now = Date.now();
-    }, 250);
-    return () => clearInterval(timer);
-  });
-  const retryIn = $derived(
-    cawco.retryAt ? Math.max(0, Math.ceil((cawco.retryAt - now) / 1000)) : 0
-  );
 </script>
 
 <svelte:window onkeydown={shortcut} />
@@ -1049,7 +993,7 @@
         data-slot="top"
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 pl-0 pr-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:min-[900px]:pl-space-7 max-[900px]:pl-(--top-inset-start) max-[900px]:pr-(--top-inset-end) max-[900px]:data-floating:absolute max-[900px]:data-floating:inset-x-0 max-[900px]:data-floating:top-0 max-[900px]:data-floating:bottom-auto max-[900px]:data-floating:z-20 max-[900px]:data-floating:pointer-events-none min-[900px]:not-coarse:data-hosting:border-b-none min-[900px]:not-coarse:data-hosting:background-(--hosting-bg) min-[900px]:not-portrait:data-hosting:border-b-none min-[900px]:not-portrait:data-hosting:background-(--hosting-bg) max-[900px]:data-floating:border-b-none max-[900px]:data-floating:bg-transparent"
+        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 pl-0 pr-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:min-[900px]:pl-space-7 max-[900px]:pl-(--top-inset-start) max-[900px]:pr-(--top-inset-end) max-[900px]:data-floating:relative max-[900px]:data-floating:-mbe-(--c-top-bar-h) max-[900px]:data-floating:z-20 max-[900px]:data-floating:pointer-events-none min-[900px]:not-coarse:data-hosting:border-b-none min-[900px]:not-coarse:data-hosting:background-(--hosting-bg) min-[900px]:not-portrait:data-hosting:border-b-none min-[900px]:not-portrait:data-hosting:background-(--hosting-bg) max-[900px]:data-floating:border-b-none max-[900px]:data-floating:bg-transparent"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end="env(safe-area-inset-right, 0px)"
@@ -1284,7 +1228,7 @@
             <NeedsCaw />
           </div>
           <!-- No always-on hub dot: a green light that is green 99% of the time
-             says nothing. Connection health folds into the banner below, which
+             says nothing. Connection health is the band below (HubBand), which
              is shown only when the hub is NOT connected. The theme toggle
              lives in the rail's footer with the account row. -->
         </div>
@@ -1299,75 +1243,10 @@
         ></div>
       {/if}
 
-      <!-- Server-side there is no socket to have lost, so the banner would render
-         into every first paint and flash away on hydration. -->
-      <!-- The banner is uncovered from under the bar and closes back into it
-         (motion/rows); its slot floats over the page, under the bar, rather
-         than taking a row of its own: it comes and goes with the socket,
-         often for a second while the hub restarts, and a row pushed the
-         whole page down and back each time (0.52 CLS on the board for one
-         restart). The sentence takes the room, so the countdown ticking in
-         it never moves the button at the end. -->
-      <div class="absolute inset-x-0 top-c-top-bar-h z-10" {@attach reflow()}>
-        {#if browser && cawco.reloadHold}
-          <!-- A page on an older wire than the hub's reads nothing more from
-             it. It reloads by itself, and while that waits the band says what
-             it waits on instead of leaving a board that quietly stopped. -->
-          <div
-            data-slot="shell-banner"
-            class="shadow-tile flex items-center gap-space-3 num py-space-2 pr-space-6 pl-space-7 text-size-body font-normal border-b border-b-border-hairline bg-status-attn-bg text-status-attn-ink"
-            data-flip
-            role="status"
-          >
-            <span class="flex-auto min-w-0">
-              {#if cawco.reloadHold === "busy"}
-                CawCo updated — this page has stopped updating. It reloads once
-                you're not using it.
-              {:else if cawco.reloadHold === "unkept"}
-                CawCo updated — this page has stopped updating. Reload it to
-                catch up.
-              {:else}
-                CawCo updated — this page has stopped updating. It reloads when
-                the dashboard serves the new build.
-              {/if}
-            </span>
-          </div>
-        {:else if browser && showBanner}
-          <div
-            data-slot="shell-banner"
-            class="shadow-tile flex items-center gap-space-3 num py-space-2 pr-space-6 pl-space-7 text-size-body font-normal border-b border-b-border-hairline tone-attn:bg-status-attn-bg tone-attn:text-status-attn-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink"
-            data-flip
-            data-tone={everConnected ? "attn" : "fail"}
-            role="status"
-          >
-            {#if everConnected}
-              <!-- The countdown is a timer (live off): the band is read when
-                   it comes, not again on every second it counts. -->
-              <span class="flex-auto min-w-0"
-                >Hub connection lost — retrying in <span role="timer"
-                  >{retryIn}s</span
-                ></span
-              >
-            {:else}
-              <span class="flex-auto min-w-0"
-                >Can't reach the hub at <code class="font-mono text-size-label"
-                  >{hubSocketUrl()}</code
-                ></span
-              >
-            {/if}
-            <!-- Pending in place while an attempt is out, whoever started it. -->
-            <Button
-              failed={cawco.status !== "connecting"}
-              label={everConnected ? "Reconnect" : "Retry"}
-              onclick={reconnectNow}
-              pending={cawco.status === "connecting"}
-              pendingLabel="Connecting…"
-              size="sm"
-              variant="outline"
-            />
-          </div>
-        {/if}
-      </div>
+      <!-- The one place the hub connection is spoken of (HubBand): a row
+           under the bar (over it under the drawer's line) that moves the
+           page down, never over it. -->
+      <HubBand />
 
       <!-- The old thumb bar is gone, so this region reclaims its height. On a
          session route the composer owns its own bottom inset; everywhere else
@@ -1507,7 +1386,7 @@
       close
     );
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     [data-slot="tools"]::before {
       border-inline-end-width: 0;
     }
@@ -1560,7 +1439,7 @@
       background: var(--surface-hover);
     }
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     /* Jump and the machines live in the phone's sidebar (`{#if railed}`): the
        server draws the wide bar, so its first paint here goes without them,
        as the rail's does, and nothing leaves the bar as it hydrates. */

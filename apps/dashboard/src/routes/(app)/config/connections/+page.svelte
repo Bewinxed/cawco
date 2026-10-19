@@ -2,25 +2,41 @@
   import type { ConnectionAuth } from "@cawco/core";
 
   /**
-   * A service the page can start a connection to: its MCP server and how
-   * the hub signs in there.
-   * - Linear: "The interactive setup flow uses OAuth 2.1 with dynamic client
-   *   registration" (linear.app/docs/mcp), which the hub's sign-in runs.
-   * - GitHub: the remote server takes "a personal access token (PAT)" as
-   *   `Authorization: Bearer` (docs.github.com, set-up-the-github-mcp-server);
-   *   its OAuth needs a pre-registered app, and the hub's GitHub poller takes
-   *   a bearer key (connections.ts `githubToken`).
+   * One way the hub signs in to a service: how (`auth`), what it is called
+   * where it is picked, and what it takes, said under the pick.
+   */
+  export interface Way {
+    auth: Extract<ConnectionAuth, "oauth" | "bearer" | "app">;
+    /** What the key is, said under its field. */
+    key?: string;
+    label: string;
+    /** What the way is for, under the pick. */
+    says: string;
+  }
+
+  /**
+   * A service the page can start a connection to: its MCP server and the
+   * ways the hub signs in there, the first the one offered first.
+   * - GitHub: "To access resources on behalf of an organization, or for
+   *   long-lived integrations, you should use a GitHub App"
+   *   (docs.github.com, managing your personal access tokens); its remote
+   *   MCP server takes the app's `ghs_` token or a token as
+   *   `Authorization: Bearer` (github/github-mcp-server#696). A project's
+   *   tracker needs "Issues" (write) (docs.github.com, create an issue).
+   * - Linear: an app acting as itself ("This option should be used for
+   *   agents and service accounts", linear.app/developers/oauth-2-0-authentication),
+   *   or an API key, both of which its MCP server takes as a bearer
+   *   (linear.app/docs/mcp); or its MCP server's own sign-in, "OAuth 2.1 with
+   *   dynamic client registration", whose token is for its MCP server alone.
    * - Slack: "We do not support SSE-based connections or Dynamic Client
    *   Registration at this time" (docs.slack.dev/ai/slack-mcp-server), so a
    *   user token, as Bearer.
    */
   export interface Service {
-    auth: Extract<ConnectionAuth, "oauth" | "bearer">;
-    /** What the key is, said under its field. */
-    key?: string;
     label: string;
     service: string;
     url: string;
+    ways: Way[];
   }
 
   export const SERVICES: Service[] = [
@@ -28,23 +44,88 @@
       service: "github",
       label: "GitHub",
       url: "https://api.githubcopilot.com/mcp/",
-      auth: "bearer",
-      key: "A personal access token with the scopes the projects need.",
+      ways: [
+        {
+          auth: "app",
+          label: "GitHub App",
+          says: "An app you register and install on the projects' repositories, with Issues: read and write. It acts as itself.",
+        },
+        {
+          auth: "bearer",
+          label: "Token",
+          says: "A fine-grained personal access token limited to the projects' repositories, with Issues: read and write.",
+          key: "It acts as you.",
+        },
+      ],
     },
     {
       service: "linear",
       label: "Linear",
       url: "https://mcp.linear.app/mcp",
-      auth: "oauth",
+      ways: [
+        {
+          auth: "app",
+          label: "Linear app",
+          says: "An OAuth app you create in Linear's settings. It acts as itself, with read and write.",
+        },
+        {
+          auth: "bearer",
+          label: "API key",
+          says: "A personal API key limited to the projects' teams.",
+          key: "It acts as you.",
+        },
+        {
+          auth: "oauth",
+          label: "Sign in",
+          says: "Linear's own sign-in, for agents' Linear tools. A project's tasks need a Linear app or an API key.",
+        },
+      ],
     },
     {
       service: "slack",
       label: "Slack",
       url: "https://mcp.slack.com/mcp",
-      auth: "bearer",
-      key: "A Slack user token (xoxp-…) from your Slack app.",
+      ways: [
+        {
+          auth: "bearer",
+          label: "User token",
+          says: "A Slack user token from your Slack app.",
+          key: "A Slack user token (xoxp-…) from your Slack app.",
+        },
+      ],
     },
   ];
+
+  /** What an app connection is set with, before the hub holds it. */
+  export interface AppDraft {
+    appId: string;
+    clientId: string;
+    clientSecret: string;
+    installationId: string;
+    privateKey: string;
+  }
+
+  export const emptyApp = (): AppDraft => ({
+    appId: "",
+    installationId: "",
+    privateKey: "",
+    clientId: "",
+    clientSecret: "",
+  });
+
+  /** The registration a service's app is set with, from what was typed. */
+  export const appBody = (service: string, draft: AppDraft) =>
+    service === "github"
+      ? {
+          appId: draft.appId,
+          installationId: draft.installationId,
+          privateKey: draft.privateKey,
+        }
+      : { clientId: draft.clientId, clientSecret: draft.clientSecret };
+
+  /** Whether a way signs in through a page of the service's own, in a tab. */
+  export const signsInByPage = (service: string, way: Way): boolean =>
+    way.auth === "oauth" || (way.auth === "app" && service === "linear");
 
   /** Services ProviderLogo draws a mark for. */
   const MARKED = new Set(["github", "linear", "slack", "gmail"]);
@@ -71,10 +152,13 @@
    * holds; connections.ts on the hub): one row each, led by the service's
    * mark, with the account it signs in as and its state, both the hub's
    * word, and which projects may use it. A row that is not signed in carries
-   * its way in: Sign in (OAuth, in a tab of its own, the row turning signed
-   * in when the hub says so) or Set key (a field under the row, emptied the
-   * moment the hub has the key). ⋯ holds Projects… (a checklist) and Remove,
-   * which goes through at once with Undo in its toast (JOURNEY.md Flow 5).
+   * its way in: Sign in (OAuth, or a Linear app, in a tab of its own, the
+   * row turning signed in when the hub says so), Set key (a field under the
+   * row, emptied the moment the hub has the key) or Set app (a GitHub App's
+   * or a Linear app's registration, under the row). Signing in to a service
+   * that has more than one way asks which first. ⋯ holds Projects… (a
+   * checklist) and Remove, which goes through at once with Undo in its toast
+   * (JOURNEY.md Flow 5).
    */
   import type { ConnectionView, Deleted } from "@cawco/core";
   import { onMount } from "svelte";
@@ -98,9 +182,15 @@
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as InputGroup from "#lib/components/ui/input-group/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import {
     IconConnection,
+    IconEye,
+    IconEyeClosed,
     IconPlus,
     IconToolTodo,
     IconTrash,
@@ -133,7 +223,11 @@
     }
   }
 
+  /** Where a Linear app's sign-in comes back: the URL its settings must list. */
+  let callbackUrl = $state("");
+
   onMount(() => {
+    callbackUrl = `${window.location.origin}/api/connections/oauth/callback`;
     // biome-ignore lint/complexity/noVoid: the read reports its own outcome in page state
     void read();
     return () => {
@@ -148,6 +242,16 @@
   const labelOf = (row: ConnectionView) => serviceOf(row)?.label ?? row.service;
   const takesKey = (row: ConnectionView) =>
     row.auth === "bearer" || row.auth === "header";
+  /**
+   * An app connection whose registration is owed: none held yet, or a
+   * GitHub App's that GitHub refused (it signs in with nothing else).
+   */
+  const needsApp = (row: ConnectionView) =>
+    row.auth === "app" && (!row.app || row.app.service === "github");
+  /** A row that signs in through the service's page: OAuth, or a Linear app once set. */
+  const signsIn = (row: ConnectionView) =>
+    row.auth === "oauth" ||
+    (row.auth === "app" && row.app?.service === "linear");
 
   /** The hub's state, as the row's word. */
   const STATE = {
@@ -160,6 +264,7 @@
   const SAID_BY_BUTTON = new Set([
     "Sign in.",
     "Set its key.",
+    "Set its app.",
     "A sign-in is under way.",
   ]);
 
@@ -278,30 +383,112 @@
     await read();
   }
 
-  // --- Sign in to a service: the account's words, then its way in ---
+  // --- Set app: a GitHub App's or a Linear app's registration, under the row ---
+
+  let appFor = $state<string | null>(null);
+  let rowApp = $state<AppDraft>(emptyApp());
+  let appPending = $state(false);
+  /** Each secret field shown in the clear, by its id. */
+  let revealed = $state<Record<string, boolean>>({});
+
+  async function saveApp(row: ConnectionView) {
+    // A Linear app signs in once it is set: its tab opens on the press.
+    const tab =
+      row.service.toLowerCase() === "linear" ? openTab(row.name) : null;
+    if (row.service.toLowerCase() === "linear" && !tab) {
+      return;
+    }
+    appPending = true;
+    delete problems[row.name];
+    try {
+      await send<ConnectionView>(
+        `${path(row.name)}/app`,
+        json("PUT", appBody(row.service.toLowerCase(), rowApp))
+      );
+      rowApp = emptyApp();
+      appFor = null;
+    } catch (error) {
+      tab?.close();
+      problems[row.name] = failureWords(error);
+      appPending = false;
+      return;
+    }
+    appPending = false;
+    await read();
+    if (tab) {
+      await startSignIn(row.name, tab);
+    }
+  }
+
+  /** A tab for a sign-in, opened by the press itself; a blocked one is said on its row. */
+  function openTab(name: string): Window | null {
+    const tab = window.open("", "_blank");
+    if (!tab) {
+      problems[name] = BLOCKED;
+    }
+    return tab;
+  }
+
+  // --- Sign in to a service: the way, the account's words, then its way in ---
 
   let adding = $state<Service | null>(null);
+  let addWay = $state<Way | null>(null);
   let account = $state("");
   let addKey = $state("");
+  let addApp = $state<AppDraft>(emptyApp());
   let addPending = $state(false);
   let addProblem = $state<string | null>(null);
 
   function startAdding(service: Service) {
     adding = service;
+    addWay = service.ways[0] ?? null;
     account = "";
     addKey = "";
+    addApp = emptyApp();
     addProblem = null;
+  }
+
+  function stopAdding() {
+    adding = null;
+    addKey = "";
+    addApp = emptyApp();
+  }
+
+  /** What follows the row's making: its key, or its app, said on the row when refused. */
+  async function setUp(name: string, service: string, way: Way) {
+    const typedKey = addKey;
+    const typedApp = addApp;
+    addKey = "";
+    addApp = emptyApp();
+    if (way.auth === "oauth") {
+      return true;
+    }
+    try {
+      await send<ConnectionView>(
+        way.auth === "app" ? `${path(name)}/app` : `${path(name)}/key`,
+        json(
+          "PUT",
+          way.auth === "app" ? appBody(service, typedApp) : { key: typedKey }
+        )
+      );
+      return true;
+    } catch (error) {
+      problems[name] = failureWords(error);
+      return false;
+    }
   }
 
   async function add(event: SubmitEvent) {
     event.preventDefault();
     const service = adding;
-    if (!service) {
+    const way = addWay;
+    if (!(service && way)) {
       return;
     }
     // The sign-in tab opens on the press, before anything is awaited.
-    const tab = service.auth === "oauth" ? window.open("", "_blank") : null;
-    if (service.auth === "oauth" && !tab) {
+    const byPage = signsInByPage(service.service, way);
+    const tab = byPage ? window.open("", "_blank") : null;
+    if (byPage && !tab) {
       addProblem = BLOCKED;
       return;
     }
@@ -317,7 +504,7 @@
           account: account.trim(),
           transport: "http",
           url: service.url,
-          auth: service.auth,
+          auth: way.auth,
         })
       );
     } catch (error) {
@@ -327,23 +514,19 @@
       return;
     }
     // The row exists now: what follows is said on it.
-    const typed = addKey;
-    addKey = "";
     adding = null;
     addPending = false;
     await read();
-    if (tab) {
+    const ready = await setUp(name, service.service, way);
+    if (!tab) {
+      await read();
+      return;
+    }
+    if (ready) {
       await startSignIn(name, tab);
       return;
     }
-    try {
-      await send<ConnectionView>(
-        `${path(name)}/key`,
-        json("PUT", { key: typed })
-      );
-    } catch (error) {
-      problems[name] = failureWords(error);
-    }
+    tab.close();
     await read();
   }
 
@@ -427,6 +610,120 @@
   </DropdownMenu.Root>
 {/snippet}
 
+<!-- A secret typed in the kit's password field, with show and hide. -->
+{#snippet secret(
+  id: string,
+  label: string,
+  hint: string,
+  draft: AppDraft,
+  key: "clientSecret" | "privateKey"
+)}
+  <Field {hint} {id} {label}>
+    <InputGroup.Root>
+      <InputGroup.Input
+        autocomplete="off"
+        {id}
+        required
+        spellcheck="false"
+        type={revealed[id] ? "text" : "password"}
+        bind:value={draft[key]}
+      />
+      <InputGroup.Addon align="inline-end">
+        <InputGroup.Button
+          aria-label={revealed[id]
+            ? `Hide the ${label.toLowerCase()}`
+            : `Show the ${label.toLowerCase()}`}
+          aria-pressed={revealed[id] ?? false}
+          onclick={() => {
+            revealed[id] = !revealed[id];
+          }}
+          size="icon-xs"
+        >
+          {#if revealed[id]}
+            <IconEyeClosed />
+          {:else}
+            <IconEye />
+          {/if}
+        </InputGroup.Button>
+      </InputGroup.Addon>
+    </InputGroup.Root>
+  </Field>
+{/snippet}
+
+<!-- An app's registration: a GitHub App's ids and private key, or a
+     Linear app's client id and secret with the callback its settings list. -->
+{#snippet appFields(service: string, draft: AppDraft, at: string)}
+  {#if service === "github"}
+    <Field
+      hint="On the GitHub App's settings page: its App ID, or its client ID."
+      id="{at}-app-id"
+      label="App ID"
+    >
+      <Input
+        autocomplete="off"
+        id="{at}-app-id"
+        inputmode="numeric"
+        required
+        spellcheck="false"
+        bind:value={draft.appId}
+      />
+    </Field>
+    <Field
+      hint="The number at the end of the installation's settings URL."
+      id="{at}-installation"
+      label="Installation ID"
+    >
+      <Input
+        autocomplete="off"
+        id="{at}-installation"
+        inputmode="numeric"
+        required
+        spellcheck="false"
+        bind:value={draft.installationId}
+      />
+    </Field>
+    {@render secret(
+      `${at}-private-key`,
+      "Private key",
+      "The .pem file's text, from Generate a private key. The hub keeps it sealed.",
+      draft,
+      "privateKey"
+    )}
+  {:else}
+    <!-- literal: 72ch -->
+    <p
+      data-slot="callback"
+      class="flex min-w-0 max-w-(--app-measure) flex-col gap-space-1 type-meta text-ink-muted"
+      style:--app-measure="72ch"
+    >
+      <span>Add this callback URL to the app in Linear:</span>
+      <code class="min-w-0 font-mono text-ink-strong wrap-anywhere select-all"
+        >{callbackUrl}</code
+      >
+    </p>
+    <Field
+      hint="On the app's page in Linear's settings."
+      id="{at}-client-id"
+      label="Client ID"
+    >
+      <Input
+        autocomplete="off"
+        id="{at}-client-id"
+        required
+        spellcheck="false"
+        bind:value={draft.clientId}
+      />
+    </Field>
+    {@render secret(
+      `${at}-client-secret`,
+      "Client secret",
+      "The hub keeps it sealed.",
+      draft,
+      "clientSecret"
+    )}
+  {/if}
+{/snippet}
+
 <!-- The sign-in form opens where it was asked for: under the empty
      state's cards, or at the head of the list under its menu. -->
 {#snippet addForm(service: Service)}
@@ -445,6 +742,39 @@
       <ProviderLogo class="size-icon-md flex-none" provider={service.service} />
       <span>Sign in to {service.label}</span>
     </p>
+    {#if service.ways.length > 1}
+      <div data-slot="way" class="flex min-w-0 flex-col gap-space-1">
+        <p class="type-meta text-ink-muted" id="connection-way">
+          Signs in with
+        </p>
+        <ToggleGroup.Root
+          aria-labelledby="connection-way"
+          class="max-w-full flex-wrap self-start"
+          type="single"
+          bind:value={
+            () => addWay?.label ?? "",
+            (next) => {
+              addWay =
+                service.ways.find((each) => each.label === next) ?? addWay;
+            }
+          }
+        >
+          {#each service.ways as way (way.label)}
+            <ToggleGroup.Item value={way.label}>{way.label}</ToggleGroup.Item>
+          {/each}
+        </ToggleGroup.Root>
+        {#if addWay}
+          <!-- literal: 72ch -->
+          <p
+            class="max-w-(--app-measure) type-meta text-pretty text-ink-muted"
+            data-way-says
+            style:--app-measure="72ch"
+          >
+            {addWay.says}
+          </p>
+        {/if}
+      </div>
+    {/if}
     <Field
       hint="Two accounts of one service are two connections."
       id="connection-account"
@@ -459,8 +789,8 @@
         bind:value={account}
       />
     </Field>
-    {#if service.auth === "bearer"}
-      <Field hint={service.key} id="connection-key" label="{service.label} key">
+    {#if addWay?.auth === "bearer"}
+      <Field hint={addWay.key} id="connection-key" label="{service.label} key">
         <Input
           autocomplete="off"
           id="connection-key"
@@ -469,6 +799,8 @@
           bind:value={addKey}
         />
       </Field>
+    {:else if addWay?.auth === "app"}
+      {@render appFields(service.service, addApp, "connection")}
     {/if}
     {#if addProblem}
       <p
@@ -483,10 +815,7 @@
       <Button
         disabled={addPending}
         label="Cancel"
-        onclick={() => {
-          adding = null;
-          addKey = "";
-        }}
+        onclick={stopAdding}
         size="sm"
         variant="ghost"
       />
@@ -579,6 +908,18 @@
               icon: IconToolTodo,
               onselect: () => chooseFor(row),
             },
+            ...(row.auth === "app"
+              ? [
+                  {
+                    label: "Set app…",
+                    icon: IconConnection,
+                    onselect: () => {
+                      rowApp = emptyApp();
+                      appFor = row.name;
+                    },
+                  },
+                ]
+              : []),
             {
               label: "Remove",
               icon: IconTrash,
@@ -599,6 +940,47 @@
             {/if}
           {/snippet}
           {#snippet below()}
+            {#if appFor === row.name}
+              <!-- literal: 72ch -->
+              <form
+                data-slot="row-app"
+                aria-label="{labelOf(row)} app"
+                class="m-0 flex min-w-0 max-w-(--app-measure) flex-col gap-space-3 py-space-2"
+                onsubmit={(event) => {
+                  event.preventDefault();
+                  saveApp(row);
+                }}
+                style:--app-measure="72ch"
+                transition:unfold
+              >
+                {@render appFields(
+                  row.service.toLowerCase(),
+                  rowApp,
+                  `app-${row.name}`
+                )}
+                <div class="flex justify-end gap-space-2">
+                  <Button
+                    press="pressable"
+                    disabled={appPending}
+                    label="Cancel"
+                    onclick={() => {
+                      appFor = null;
+                      rowApp = emptyApp();
+                    }}
+                    size="xs"
+                    variant="ghost"
+                  />
+                  <Button
+                    press="pressable"
+                    label="Save app"
+                    pending={appPending}
+                    pendingLabel="Saving…"
+                    size="xs"
+                    type="submit"
+                  />
+                </div>
+              </form>
+            {/if}
             {#if keying === row.name}
               <!-- literal: 14rem, 24rem -->
               <form
@@ -662,7 +1044,18 @@
                 {/if}
               </span>
             {/if}
-            {#if row.state !== "signed-in" && row.auth === "oauth"}
+            {#if row.state !== "signed-in" && needsApp(row) && appFor !== row.name}
+              <Button
+                press="pressable"
+                label="Set app"
+                onclick={() => {
+                  rowApp = emptyApp();
+                  appFor = row.name;
+                }}
+                size="sm"
+                variant="outline"
+              />
+            {:else if row.state !== "signed-in" && signsIn(row)}
               <Button
                 press="pressable"
                 label="Sign in"

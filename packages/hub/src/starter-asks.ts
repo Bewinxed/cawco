@@ -96,6 +96,8 @@ export interface StarterInputs {
   /** Its repository's default branch, when a checkout was read. */
   branch: string | null;
   commits: { sha: string; subject: string }[];
+  /** The person said Not now to Caw's offer of a design system (design-offers.ts): none is suggested again unless they ask. */
+  designDeclined: boolean;
   /** Its work is design work: its template's (design, brand, launch, social), or an open task's labels or outputs (design-offers.ts `designShaped`). */
   designWork: boolean;
   /** Its draft views, by path (`views/drafts/<name>.oui`): views Caw drafted that no one has kept. */
@@ -157,6 +159,7 @@ export const boundStarterInputs = (raw: StarterInputs): StarterInputs => {
       sha: commit.sha,
       subject: within(commit.subject, b.subject),
     })),
+    designDeclined: raw.designDeclined,
     designWork: raw.designWork,
     hasDesign: raw.hasDesign,
     failures: raw.failures.slice(0, b.failures).map((failure) => ({
@@ -412,13 +415,13 @@ const routineSubject = (
   at: `failures (the routine ${failure.id})`,
   asks: {
     fix: {
-      about: "The routine's last run failed: find why, and fix it.",
+      about: "The routine’s last run failed: find why, and fix it.",
       glyph: "bug",
       text: text(
         (name) => `Find out why the “${name}” routine failed and fix it`,
         failure.name
       ),
-      reason: "This routine's last run failed.",
+      reason: "This routine’s last run failed.",
       sources: [{ kind: "routine", ref: failure.id }],
     },
   },
@@ -447,10 +450,16 @@ const commitSubject = (
 
 /**
  * Design work with no design system (no design/, slice 2's signal): build
- * one. The signal only; Jev decides whether it is worth saying now.
+ * one. The signal only; Jev decides whether it is worth saying now. Never
+ * once the person said Not now to Caw's offer (spec §5.7: "Not now is
+ * recorded and he does not ask that project again unless the person does"):
+ * a starter is Caw suggesting, and the person can still ask in a thread.
  */
 const designSubject = (inputs: StarterInputs): Subject | undefined => {
-  if (!(inputs.hasDesign === false && inputs.designWork)) {
+  if (
+    !(inputs.hasDesign === false && inputs.designWork) ||
+    inputs.designDeclined
+  ) {
     return;
   }
   const designTasks = inputs.tasks.filter((task) => task.design);
@@ -514,7 +523,7 @@ const projectSubject = (inputs: StarterInputs): Subject | undefined => {
           "It has no open tasks, and its notes say what it is for: read them and file its first tasks.",
         glyph: "tasks",
         text: text(
-          (name) => `Read ${name}'s notes and file its first tasks`,
+          (name) => `Read ${name}’s notes and file its first tasks`,
           inputs.name
         ),
         reason: "It has no open tasks, and its notes say what it is for.",
@@ -662,7 +671,7 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
             "Tasks of this kind keep being filed: a weekly routine could triage them as they come.",
           glyph: "triage",
           text: text(
-            (name) => `Every Monday, triage the week's new “${name}” tasks`,
+            (name) => `Every Monday, triage the week’s new “${name}” tasks`,
             kind.name
           ),
           reason: `${kind.count} tasks like these were filed in the last ${STARTER_RECENT_DAYS} days.`,
@@ -703,7 +712,7 @@ const routineSubjects = (inputs: StarterInputs): Map<string, Subject> => {
           glyph: "bug",
           text: text(
             (title) =>
-              `Every morning, run “${title}”'s checks and tell me what fails`,
+              `Every morning, run “${title}”’s checks and tell me what fails`,
             failure.name
           ),
           reason:

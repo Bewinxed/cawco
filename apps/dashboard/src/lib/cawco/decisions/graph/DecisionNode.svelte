@@ -3,7 +3,7 @@
    * One card of the decisions graph: a raised 12px card with its name (two
    * lines at most, never cut mid-letter) and its ring, filled in the done
    * glyph once picked. A press opens its page scrolled to it; a drag moves
-   * it, and its place is saved to the graph's file on release.
+   * it, and its place is saved to its page's artifact on release.
    */
   import { Handle, type NodeProps, Position } from "@xyflow/svelte";
 
@@ -39,7 +39,7 @@
   <!-- literal: 12px, 1.5px, 50% -->
   <span
     aria-hidden="true"
-    class="ring size-icon-sm flex-none rounded-(--ring-r) border-(length:--ring-border) border-ink-muted group-data-picked:border-status-done-glyph group-data-picked:bg-status-done-glyph"
+    class="size-icon-sm flex-none rounded-(--ring-r) border-(length:--ring-border) border-ink-muted group-data-picked:border-status-done-glyph group-data-picked:bg-status-done-glyph"
     style:--ring-border="1.5px"
     style:--ring-r="50%"
   ></span>

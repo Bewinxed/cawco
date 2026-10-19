@@ -35,7 +35,6 @@ import { join, resolve } from "node:path";
 import { simulatorApp, staleApp } from "./lib/apple-app";
 import { ensureDeps } from "./lib/deps";
 import { type MacSim, macSim } from "./lib/mac-sim";
-import { axeRefused, refuseInWorkspace } from "./lib/workspace-refusal";
 import type { Reply, Seen } from "./scratch-fleet";
 
 const args = process.argv.slice(2);
@@ -45,11 +44,6 @@ const runtime =
   runtimeAt === -1
     ? "com.apple.CoreSimulator.SimRuntime.iOS-26-0"
     : (args[runtimeAt + 1] ?? "");
-// Not in a CawCo workspace (lib/workspace-refusal.ts) when axe would drive an
-// iOS 27 simulator; iOS 26.0, the default, it reaches.
-if (axeRefused(runtime)) {
-  refuseInWorkspace("probe-ios-follows.ts", ["axe"]);
-}
 // The dependencies first (lib/deps.ts): the fleet loads after them.
 await ensureDeps();
 const { MACHINE, scratchFleet, until } = await import("./scratch-fleet");

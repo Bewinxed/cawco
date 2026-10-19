@@ -174,7 +174,7 @@ const theme = tailwindThemeCss(built.view, {
   // gives, so an off-ladder grid value keeps its utility (`gap-2`); the
   // ratchet (scripts/spacing-ratchet.ts) holds their count from rising.
   spacing: "0.25rem",
-  breakpoints: { phone: "640px", desk: "901px", wide: "1025px" },
+  breakpoints: { phone: "640px", desk: "900px", wide: "1025px" },
   containers: CONTAINERS,
   spacingSizes: /^(c|icon)-/,
   weights: { "weight-body": "normal", "weight-strong": "medium" },

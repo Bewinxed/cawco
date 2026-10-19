@@ -12,7 +12,6 @@ import { Db, DbLayer } from "./db";
 import { DatabaseHeld, lockDatabase } from "./db-lock";
 import { HubLifetime, HubLifetimeLayer } from "./lifetime";
 import { advertise } from "./mdns";
-import { migrateLegacyDb } from "./migrate-db";
 import { Pending, PendingLayer } from "./pending";
 import { Registry, RegistryLayer } from "./registry";
 import { createServer } from "./server";
@@ -46,6 +45,8 @@ const main = Effect.gen(function* () {
     maxRequestBodySize: MAX_REQUEST_BYTES,
   });
   server.previews.start();
+  // HTTPS on the machine's tailnet name, once its preview listeners stand.
+  server.tailnet.start();
   yield* Effect.log(`cawco hub ${HUB_VERSION} listening on :${HUB_PORT}`);
   advertise(HUB_PORT);
   // Off the boot path: a month of transcripts is read once, then never again.
@@ -64,7 +65,6 @@ export const startHub = async (): Promise<void> => {
     }
     throw error;
   }
-  migrateLegacyDb(DB_PATH);
   await Effect.runPromise(
     Effect.provide(
       main,

@@ -6,17 +6,29 @@
  * the hub is a bare sentence, and every call throws it whole, so the caller
  * prints the hub's own words (a refused move names the moves that are open).
  *
- * Not to be confused with `tasks.svelte.ts`, which reads a session's own plan
- * off its machine (WORDS.md: plan).
+ * Not to be confused with a session's own plan (WORDS.md: plan), which is
+ * the hub's too, held in the client by `plan.ts`.
  */
 import {
   type AttemptResult,
+  type IssueTracker,
   outputArtifacts,
+  type ProjectGate,
   type ProjectStarter,
   type StarterGlyph,
   type StarterPlace,
+  type TaskIssueLink,
+  type Tracker,
+  type TrackerTarget,
+  type TrackerView,
 } from "@cawco/core";
-import { HUB_UNREACHABLE, HubUnreachable, unreachedAnswer } from "./hub-read";
+import {
+  HUB_UNREACHABLE,
+  HubUnreachable,
+  hubFailure,
+  noAnswer,
+  unreachedAnswer,
+} from "./hub-read";
 
 /** The fixed kinds a stage belongs to (WORDS.md: kind). */
 export type StageKind =
@@ -67,12 +79,12 @@ export interface StagesView {
   views: { by: string | null; name: string }[];
 }
 
-/** The kind of work a starter names (core starters.ts `STARTER_GLYPHS`); CawStarters draws its glyph. */
+/** The kind of work a starter names (core starters.ts `STARTER_GLYPHS`); StarterCards draws its glyph. */
 export type { ProjectStarter, StarterGlyph, StarterPlace } from "@cawco/core";
 
 /**
  * A sentence to Caw a press puts in the composer, and its glyph: what
- * CawStarters and StarterCards draw. A project's own starters
+ * StarterCards draws. A project's own starters
  * ({@link ProjectStarter}) carry their reason and sources besides.
  */
 export interface Starter {
@@ -262,7 +274,7 @@ export interface TaskList {
   problems: string[];
   stagesProblems: string[];
   tasks: TaskSummary[];
-  tracker: "cawco" | "github" | "linear";
+  tracker: Tracker;
 }
 
 /** One to-do, flat in file order; `depth` nests it. */
@@ -294,6 +306,8 @@ export interface TaskView extends TaskFlags, TaskTimes {
   /** sha256 hex of the file as read. */
   hash: string;
   id: string;
+  /** The GitHub or Linear issue it is one record with (the hub's tracker.ts); null when none. */
+  issue: TaskIssueLink | null;
   kind: StageKind | null;
   labels: string[];
   /** Where an attempt's work lands, as the file says; null: the project's default. */
@@ -382,21 +396,9 @@ export interface TaskPatch {
 export type TaskEdge =
   "after" | "parent" | "related" | "found_in" | "duplicate_of";
 
-/** Elysia refuses with a bare string; JSON only when something else went wrong. */
+/** What the hub said went wrong, in one sentence without its stop (hub-read `hubFailure`). */
 async function said(response: Response): Promise<string> {
-  const body = (await response.text()).trim();
-  try {
-    const parsed: unknown = JSON.parse(body);
-    if (typeof parsed === "string") {
-      return parsed;
-    }
-    if (parsed && typeof parsed === "object" && "message" in parsed) {
-      return String((parsed as { message: unknown }).message);
-    }
-  } catch {
-    // Not JSON, which is the ordinary case: the string is the sentence.
-  }
-  return body || `The hub answered ${response.status}. Try again.`;
+  return (await hubFailure(response)).detail;
 }
 
 /**
@@ -412,12 +414,10 @@ export async function send<T>(url: string, init: RequestInit = {}): Promise<T> {
     throw new HubUnreachable(HUB_UNREACHABLE);
   }
   if (!response.ok) {
-    throw new Error(await said(response));
+    throw new Error(`${await said(response)}.`);
   }
   if (!response.headers.get("content-type")?.includes("application/json")) {
-    throw new Error(
-      `The hub answered ${response.status} without JSON: ${(await response.text()).trim().slice(0, 200)}`
-    );
+    throw new Error(`${noAnswer(response.status)}.`);
   }
   return (await response.json()) as T;
 }
@@ -435,6 +435,29 @@ const one = (projectId: string, taskId: string) =>
 
 export const listTasks = (projectId: string): Promise<TaskList> =>
   send(`${base(projectId)}/tasks`);
+
+/** Where the project's tasks live, and its binding to GitHub Issues or Linear (the hub's tracker.ts). */
+export const readTracker = (projectId: string): Promise<TrackerView> =>
+  send(`${base(projectId)}/tracker`);
+
+/** Binds the project to a connection's repository or team, or `cawco` lets the binding go. */
+export const setTracker = (
+  projectId: string,
+  binding:
+    | { tracker: "cawco" }
+    | { connection: string; target: string; tracker: IssueTracker }
+): Promise<TrackerView> =>
+  send(`${base(projectId)}/tracker`, json("PUT", binding));
+
+/** The project's tasks and their issues synced now; answers where the binding stands after. */
+export const syncTracker = (projectId: string): Promise<TrackerView> =>
+  send(`${base(projectId)}/tracker/sync`, { method: "POST" });
+
+/** The repositories or teams a connection reaches, for a project to be bound to one. */
+export const trackerTargets = (
+  connection: string
+): Promise<{ targets: TrackerTarget[] }> =>
+  send(`/api/connections/${encodeURIComponent(connection)}/targets`);
 
 /** The project's archived tasks, instead of the board's. */
 export const listArchived = (projectId: string): Promise<TaskList> =>
@@ -464,6 +487,12 @@ export const listTasksWaiting = async (
 
 export const readStages = (projectId: string): Promise<StagesView> =>
   send(`${base(projectId)}/stages`);
+
+/** The project's landing gate as the hub reads its gate.md now (hub gate-file.ts `gateRoutes`). */
+export const readGate = (
+  projectId: string
+): Promise<{ file: string; gate: ProjectGate }> =>
+  send(`${base(projectId)}/gate`);
 
 /** What you did with a starter you pressed, as the composer sent: its words as they stood, or changed. */
 export const tellStarterOutcome = (
@@ -570,6 +599,14 @@ export const retryTask = (
 /** A file of the project's folder as its bytes, for an image, video or audio output. */
 export const folderRawHref = (projectId: string, path: string): string =>
   `${base(projectId)}/folder/raw?${new URLSearchParams({ path })}`;
+
+/**
+ * A file of the project's folder as the project page shows it (`?file=`,
+ * FolderFile): its address in the dashboard, which any surface links to and
+ * a reload or a shared link opens. Its folders' slashes stay as they read.
+ */
+export const folderFileHref = (projectId: string, path: string): string =>
+  `/project/${encodeURIComponent(projectId)}?${new URLSearchParams({ file: path }).toString().replaceAll("%2F", "/")}`;
 
 export const readTemplates = (): Promise<StagesTemplateView[]> =>
   send("/api/stage-templates");
@@ -717,7 +754,7 @@ export async function readOutputText(
     throw new HubUnreachable(HUB_UNREACHABLE);
   }
   if (!response.ok) {
-    throw new Error(await said(response));
+    throw new Error(`${await said(response)}.`);
   }
   return response.text();
 }

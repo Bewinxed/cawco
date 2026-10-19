@@ -1,9 +1,10 @@
-import type {
-  HubAuthState,
-  InstanceRow,
-  SessionPulse,
-  WorkflowListing,
-  WorkflowRun,
+import {
+  type HubAuthState,
+  harnessNamed,
+  type InstanceRow,
+  type SessionPulse,
+  type WorkflowListing,
+  type WorkflowRun,
 } from "@cawco/core";
 import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { type Pref, prefCookie } from "#lib/cawco/prefs.js";
@@ -214,12 +215,15 @@ export const load: LayoutServerLoad = async ({
     leaf.active = urlId;
     workspace.focusedLeaf = leaf.id;
     const machine = untrack(() => url.searchParams.get("machine"));
-    if (machine) {
+    const harness = harnessNamed(
+      untrack(() => url.searchParams.get("harness"))
+    );
+    if (machine && harness) {
       workspace.ctx ??= {};
       workspace.ctx[urlId] ??= {
         machine,
         cwd: untrack(() => url.searchParams.get("cwd")) ?? "",
-        harness: untrack(() => url.searchParams.get("harness")) ?? "claude",
+        harness,
       };
     }
   } else if (pathname === "/session" && workspace) {

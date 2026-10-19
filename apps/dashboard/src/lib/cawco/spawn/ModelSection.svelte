@@ -16,12 +16,7 @@
   import Cpu from "~icons/solar/cpu-bolt-bold-duotone";
   import Search from "~icons/solar/magnifer-bold-duotone";
   import HarnessLogo from "../HarnessLogo.svelte";
-  import {
-    ensureModels,
-    models,
-    providerOf,
-    rememberModel,
-  } from "../models.svelte";
+  import { models, providerOf, rememberModel } from "../models.svelte";
   import {
     crossIn,
     crossOut,
@@ -198,7 +193,6 @@
 
   $effect(() => {
     const next = harness;
-    ensureModels(next);
     if (next === untrack(() => listHarness)) {
       return;
     }
@@ -220,12 +214,13 @@
   });
 
   const catalog = $derived(models.forHarness(listHarness, machineIds));
+  const recent = $derived(models.recentFor(listHarness));
   const use = $derived.by<ModelUse>(() => ({
     lastSpawnAt: lastSpawnAt(listHarness),
     lastUsedAt: Object.fromEntries(
       [
         ...catalog.map((row) => row.resolvedModel ?? row.value),
-        ...models.recent,
+        ...recent,
       ].flatMap((id) => {
         const used = lastUsedAt(listHarness, id);
         return used ? [[id, used]] : [];
@@ -235,7 +230,7 @@
   const entries = $derived(deriveModelEntries(catalog, use));
   const q = $derived(query.trim().toLowerCase());
   const rows = $derived(
-    groupModelEntries(entries, use, models.recent).flatMap((group) =>
+    groupModelEntries(entries, use, recent).flatMap((group) =>
       group.entries.filter((entry) => !q || matchesQuery(entry, q))
     )
   );
@@ -247,7 +242,7 @@
       (entry) =>
         entry.id.toLowerCase() === q ||
         entry.aliases.some((alias) => alias.toLowerCase() === q)
-    ) || models.recent.some((id) => id.toLowerCase() === q)
+    ) || recent.some((id) => id.toLowerCase() === q)
   );
   const showCustomRow = $derived(
     q.length > 2 && !exact && isIdShaped(query.trim())
@@ -268,13 +263,13 @@
   );
   function pick(entry: ModelEntry) {
     if (entry.isCustom) {
-      rememberModel(entry.id);
+      rememberModel(entry.id, listHarness);
     }
     onmodel(entry.id);
   }
   function pickCustom() {
     const id = query.trim();
-    rememberModel(id);
+    rememberModel(id, listHarness);
     onmodel(id);
     query = "";
   }
@@ -431,7 +426,7 @@
         <span
           data-slot="fill"
           aria-hidden="true"
-          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 rounded-sm bg-surface-fill transition-[opacity] dur-control ease-out motion-safe:transition-panel-resize"
+          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 rounded-sm bg-selected-bg transition-[opacity] dur-control ease-out motion-safe:transition-panel-resize"
           style:transform={`translateY(calc(${modelIdx} * 46px))`}
           style:height={`${chosenHeight}px`}
           style:opacity={hiOpacity}
@@ -447,7 +442,7 @@
               <!-- literal: 10px gap, 44px height, 6px 8px padding -->
               <div
                 data-slot="row"
-                class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed border border-transparent bg-transparent"
+                class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed border border-transparent bg-transparent"
                 style:animation={swap.leaveAnim(i)}
                 style:--gap="10px"
                 style:--h="44px"
@@ -465,7 +460,7 @@
           <!-- literal: 10px gap, 44px height, 6px 8px padding, 26px tile -->
           <button
             data-slot="row"
-            class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed press-tint border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
+            class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
             data-fh="1"
             onclick={pickCustom}
             style:--gap="10px"
@@ -512,7 +507,8 @@
             {#if q}
               No {harnessName(listHarness)} models match "{query}"
             {:else}
-              No {harnessName(listHarness)} models reported yet
+              {models.unread(listHarness, machineIds) ??
+                `No ${harnessName(listHarness)} models reported yet`}
             {/if}
           </div>
         {/if}
@@ -533,7 +529,7 @@
               data-slot="row"
               aria-disabled={reason ? true : undefined}
               aria-selected={picked}
-              class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed press-tint min-w-0 shrink grow basis-(--basis) border border-transparent bg-transparent"
+              class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint min-w-0 shrink grow basis-(--basis) border border-transparent bg-transparent"
               data-fh="1"
               data-model={entry.id}
               disabled={Boolean(reason)}
@@ -607,7 +603,9 @@
         class="type-meta block truncate text-ink-muted">{reason}</span
       >
     {:else}
-      <span data-slot="meta" class="type-meta block truncate text-ink-subtle"
+      <span
+        data-slot="meta"
+        class="type-meta block truncate text-ink-subtle in-aria-selected:text-selected-ink"
         ><span class="font-(family-name:--font-mono)">{entry.id}</span>
         {vendor(entry.id) ? ` · ${vendor(entry.id)}` : ""}</span
       >

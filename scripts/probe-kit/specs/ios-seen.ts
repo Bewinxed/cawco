@@ -35,11 +35,7 @@ import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const AXE = "/opt/homebrew/bin/axe";
-/**
- * iOS 18.5, the app's oldest target, where axe reaches the simulator from a
- * workspace: on iOS 27 its automation socket is refused there
- * ("testmanagerd.remote-automation.uds: Operation not permitted").
- */
+/** iOS 18.5, the app's oldest target, as the other iOS specs run it. */
 const SIM = {
   runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
   device: "iPhone 16 Pro",

@@ -6,7 +6,12 @@
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
   import SwitchField from "#lib/cawco/config/SwitchField.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
-  import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
+  import {
+    failureClause,
+    failureWords,
+    hubFailure,
+    hubRefusal,
+  } from "#lib/cawco/hub-read.js";
   import { leaveThePage } from "#lib/cawco/leaving.js";
   import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
@@ -100,7 +105,7 @@
       typesafeKey = "";
       takeJev((await response.json()) as JevState);
     } else {
-      jevError = `The hub did not save the key (${response.status}): ${await response.text()}. Jev's route is unchanged.`;
+      jevError = `The key was not saved. ${(await hubFailure(response)).detail}. Jev's route is unchanged.`;
     }
     savingKey = false;
   }
@@ -112,7 +117,7 @@
     if (response.ok) {
       takeJev((await response.json()) as JevState);
     } else {
-      jevError = `The hub did not remove the key (${response.status}): ${await response.text()}. It is still held.`;
+      jevError = `The key was not removed. ${(await hubFailure(response)).detail}. It is still held.`;
     }
     removingKey = false;
   }
@@ -156,7 +161,7 @@
       body: JSON.stringify({ callbackUrl: `${location.origin}/config/models` }),
     });
     if (!response.ok) {
-      openrouterError = `${response.status} ${await response.text()}`;
+      openrouterError = (await hubRefusal(response)).message;
       connecting = false;
       return;
     }
@@ -178,7 +183,7 @@
       // The status line above says so: "Connected just now".
       await readOpenRouter();
     } else {
-      openrouterError = `${response.status} ${await response.text()}`;
+      openrouterError = (await hubRefusal(response)).message;
     }
     exchanging = false;
   }
@@ -190,7 +195,7 @@
     if (response.ok) {
       await readOpenRouter();
     } else {
-      openrouterError = `${response.status} ${await response.text()}`;
+      openrouterError = (await hubRefusal(response)).message;
     }
     disconnecting = false;
   }
@@ -238,7 +243,7 @@
     if (response.ok) {
       watch = (await response.json()) as FleetWatchSettings;
     } else {
-      watchError = `${response.status} ${await response.text()}`;
+      watchError = (await hubRefusal(response)).message;
     }
     savingWatch = false;
   }

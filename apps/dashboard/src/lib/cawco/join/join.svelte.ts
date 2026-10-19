@@ -6,8 +6,10 @@
  */
 import type { JoinInfo, SshJoinJob, SshJoinRequest } from "@cawco/core";
 import type { Component } from "svelte";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { IconServer, IconTerminal } from "#lib/icons.js";
 import { cawco, type Machine } from "../client.svelte";
+import { devDebug } from "../dev-debug";
 
 /** The one-liner a machine runs to join: the hub's install script, piped to sh. */
 export const installCommand = (hubUrl: string): string =>
@@ -133,9 +135,12 @@ export const addMachine = {
 
 const ssh = $state<{
   job: SshJoinJob | null;
-  request: SshJoinRequest | null;
   refused: string | null;
-}>({ job: null, request: null, refused: null });
+}>({ job: null, refused: null });
+// The motion bench shows a finished join with no hub behind it (dev-debug.ts).
+if (import.meta.env.DEV) {
+  devDebug({ sshJoin: ssh });
+}
 
 /**
  * The SSH add in flight, or the last one. Held here rather than in the dialog
@@ -146,15 +151,12 @@ export const sshJoin = {
   get job(): SshJoinJob | null {
     return ssh.job;
   },
-  get request(): SshJoinRequest | null {
-    return ssh.request;
-  },
   /** Why the hub refused to start one (a bad target, an unlisted address). */
   get refused(): string | null {
     return ssh.refused;
   },
+  /** Sent once and kept nowhere: the request carries the password, if one was typed. */
   async start(request: SshJoinRequest): Promise<void> {
-    ssh.request = request;
     ssh.refused = null;
     const response = await fetch("/api/machines/ssh", {
       method: "POST",
@@ -167,11 +169,34 @@ export const sshJoin = {
       return;
     }
     if (!response.ok) {
-      ssh.refused =
-        (await response.text()) || `The hub answered ${response.status}.`;
+      ssh.refused = (await hubRefusal(response)).message;
       return;
     }
     ssh.job = (await response.json()) as SshJoinJob;
+  },
+  /**
+   * Stops the run in flight: the hub ends its `ssh` and answers once the run
+   * reads `stopped`. A refusal (it ended meanwhile) is said like a start's.
+   */
+  async stop(): Promise<void> {
+    const current = ssh.job;
+    if (current?.state !== "running") {
+      return;
+    }
+    const response = await fetch(
+      `/api/machines/ssh/${encodeURIComponent(current.id)}/stop`,
+      { method: "POST" }
+    ).catch(() => undefined);
+    if (ssh.job?.id !== current.id) {
+      return;
+    }
+    if (response?.ok) {
+      ssh.job = (await response.json()) as SshJoinJob;
+      return;
+    }
+    ssh.refused = response
+      ? (await hubRefusal(response)).message
+      : "The hub did not answer, so the add was not stopped. Check that it is running, then Stop again.";
   },
   /** One read of the run in flight; the dialog calls it every second while it is open. */
   async poll(): Promise<void> {
@@ -194,11 +219,6 @@ export const sshJoin = {
       ssh.refused =
         "The hub restarted during the install and lost track of it. If the machine shows up in the fleet, it joined; if not, Retry.";
     }
-  },
-  /** A run shown as given, with no hub behind it: the motion bench's finished join. */
-  stage(job: SshJoinJob): void {
-    ssh.job = job;
-    ssh.refused = null;
   },
   /** Back to the form: a finished run is dropped, a running one cannot be. */
   reset(): void {

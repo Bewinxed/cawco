@@ -16,8 +16,63 @@ public final class PreviewStore {
     public private(set) var opening: Set<String> = []
     /// Why an artifact's last open failed, said under the call that asked (ToolGroup.svelte `openFailed`).
     public private(set) var openFailed: [String: String] = [:]
+    /// What the panel's page said of itself, by session (client.svelte.ts
+    /// `previews[id].title`, `.thumbnail`): its title, and the PNGs the overlay
+    /// captured once it was ready, for the revision on show. The transcript's
+    /// card for that artifact reads them.
+    public private(set) var pages: [String: ShownPage] = [:]
+
+    public struct ShownPage: Equatable, Sendable {
+        public let revision: String
+        public var title: String
+        public var thumbnail: PageThumbnail?
+    }
+
+    /// A page's thumbnail in each scheme (wire.ts `PageThumbnail`): nil where
+    /// none was drawn. `single`: the page looks the same in both (no dark
+    /// styles of its own, or a preview keeping its own), so `light` and
+    /// `dark` are its one picture.
+    public struct PageThumbnail: Equatable, Sendable {
+        public let light: Data?
+        public let dark: Data?
+        public let single: Bool
+
+        public init(light: Data?, dark: Data?, single: Bool) {
+            self.light = light
+            self.dark = dark
+            self.single = single
+        }
+
+        /// The picture for the reader's scheme; nil when that scheme has none, never the other's in its place.
+        public func picture(dark night: Bool) -> Data? {
+            night ? dark : light
+        }
+    }
 
     public init() {}
+
+    /// The page on show said its title (`cawco:ready`, `cawco:navigated`).
+    public func titled(_ instanceId: String, revision: String, title: String) {
+        if pages[instanceId]?.revision == revision {
+            pages[instanceId]?.title = title
+        } else {
+            pages[instanceId] = ShownPage(revision: revision, title: title)
+        }
+    }
+
+    /// The overlay's capture of the page on show (`cawco:captured`, its answer to `cawco:capture`).
+    public func captured(_ instanceId: String, revision: String, thumbnail: PageThumbnail) {
+        if pages[instanceId]?.revision == revision {
+            pages[instanceId]?.thumbnail = thumbnail
+        } else {
+            pages[instanceId] = ShownPage(revision: revision, title: "", thumbnail: thumbnail)
+        }
+    }
+
+    /// What the page on show said, while it is the frame's revision.
+    public func page(_ frame: PreviewFrame) -> ShownPage? {
+        pages[frame.instanceId].flatMap { $0.revision == frame.revision ? $0 : nil }
+    }
 
     func adopt(_ frame: PreviewFrame) {
         byInstance[frame.instanceId] = frame
@@ -54,6 +109,7 @@ public final class PreviewStore {
         byInstance = [:]
         opening = []
         openFailed = [:]
+        pages = [:]
     }
 }
 
@@ -109,13 +165,14 @@ public extension HubConnection {
     }
 
     /// An artifact by id with the session that made it, and whether its panel
-    /// shows it now (artifact-api.ts `findArtifact`): what a task's review stage opens on.
-    func findArtifact(_ id: String) async throws -> (instanceId: String, shown: Bool) {
+    /// shows it now (artifact-api.ts `findArtifact`): what a task's review stage
+    /// opens on, and an artifact's own tab follows.
+    func findArtifact(_ id: String) async throws -> (instanceId: String, shown: Bool, name: String) {
         guard let client else { throw TaskRefusal(message: "No hub is connected.") }
         let output = try await client.getApiArtifactsByArtifact(path: .init(artifact: id))
         guard case let .ok(ok) = output else { throw await TaskRefusal.reading(output) }
-        let found = try ok.body.json.value2
-        return (found.instanceId, found.shown)
+        let read = try ok.body.json
+        return (read.value2.instanceId, read.value2.shown, read.value1.name)
     }
 
     /// An error as the formula's middle sentence: a refusal's words, a lost connection's.
@@ -141,11 +198,16 @@ public extension HubConnection {
     /// a LAN address): the session's preview port on the hub's host, on the
     /// hub's scheme, with no ticket.
     func previewRoute(_ frame: PreviewFrame) -> PreviewRoute? {
-        previewRoute(port: frame.port, origin: frame.origin)
+        previewRoute(port: frame.port, origin: frame.origin, tailnet: frame.tailnet)
     }
 
-    /// A preview route from what the hub named: a port, and in host mode a whole origin too.
-    func previewRoute(port: Double?, origin: String?) -> PreviewRoute? {
+    /// A preview route from what the hub named: a port, in host mode a whole
+    /// origin too, and while the hub serves HTTPS on its tailnet name the
+    /// session's origin there. Reached by one of the tailnet's hosts (its
+    /// address, its short or full name, over plain http to the hub's own
+    /// port), the app loads that origin: on those addresses the preview's
+    /// port answers HTTPS alone (core `previewRoute`).
+    func previewRoute(port: Double?, origin: String?, tailnet: Components.Schemas.TailnetOrigin? = nil) -> PreviewRoute? {
         if let origin, var parts = URLComponents(string: origin), parts.scheme != nil,
            let name = parts.host?.lowercased(), let reached = address?.host()?.lowercased(),
            let dot = name.firstIndex(of: ".") {
@@ -156,6 +218,12 @@ public extension HubConnection {
                 parts.fragment = nil
                 return parts.url.map { PreviewRoute(origin: $0, byHost: true) }
             }
+        }
+        if let tailnet, let reached = address?.host()?.lowercased(),
+           tailnet.hosts.contains(reached.trimmingCharacters(in: CharacterSet(charactersIn: "[]"))),
+           var parts = URLComponents(string: tailnet.origin) {
+            parts.path = "/"
+            return parts.url.map { PreviewRoute(origin: $0, byHost: false) }
         }
         guard let address, var parts = URLComponents(url: address, resolvingAgainstBaseURL: false), let port else { return nil }
         parts.path = "/"

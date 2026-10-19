@@ -88,7 +88,7 @@ export function sessionsCsv(spend: SessionSpend): string {
   const live = cawco.runningInstances.map((row) => {
     const stats = cawco.statsOf(row.id);
     const at = lastAt(row);
-    const harness = row.harness ?? "claude";
+    const { harness } = row;
     if (row.sessionId) {
       seen.add(row.sessionId);
     }

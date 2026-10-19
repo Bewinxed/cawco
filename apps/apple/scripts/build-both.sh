@@ -13,7 +13,8 @@
 # generic iOS Simulator build compiles arm64 alone: the Mac's simulators are
 # Apple silicon, and the x86_64 slice the generic destination adds doubles
 # the compile for code no simulator here runs.
-# `--gate` is the Apple build gate's (packages/hub apple-gate.ts): it
+# `--gate` is the landing gate's iOS build step, as the cockpit project's
+# gate.md declares it (packages/hub gate-file.ts, `needs: apple`): it
 # compiles as `--compile-only` does, in the one build root `gate` every
 # item's gate shares instead of the checkout's own. That root stays warm
 # between items, so Xcode rebuilds only what the item's tree changed against

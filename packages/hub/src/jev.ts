@@ -20,7 +20,6 @@
  * (https://docs.typesafe.ai/patterns/fan-out.md: "All questions are evaluated
  * in parallel"). Plain `fetch`, no SDK.
  */
-import { CAWCO_ENV, readEnv } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type {
   JevAnswer,
@@ -29,6 +28,7 @@ import type {
   JevText,
 } from "@cawco/core/workflow-program";
 import type { DbShape } from "./db";
+import { TYPESAFE_URL } from "./upstreams";
 
 export type JevRoute = "typesafe" | "openrouter";
 
@@ -44,14 +44,9 @@ export const ROUTE_NAME: Record<JevRoute, string> = {
   openrouter: "OpenRouter",
 };
 
-/**
- * Where each route posts. `CAWCO_TYPESAFE_URL` points the typesafe route at
- * a local stand-in for its live proof, as `CAWCO_GITHUB_API` points the
- * pollers at a proxy.
- */
+/** Where each route posts. */
 const ENDPOINT: Record<JevRoute, string> = {
-  typesafe:
-    readEnv(CAWCO_ENV.typesafeUrl) ?? "https://api.typesafe.ai/v1/systemone",
+  typesafe: TYPESAFE_URL,
   openrouter: "https://openrouter.ai/api/v1/systemone",
 };
 

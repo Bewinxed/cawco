@@ -104,7 +104,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         title.accessibilityTraits = .header
         body.text = Self.hint(false)
 
-        field.placeholder = "http://hub:3456"
+        field.placeholder = "http://cawco.local:3456"
         field.text = hub.address?.absoluteString
         field.font = TypeScale.typeBody.font
         field.adjustsFontForContentSizeCategory = true
@@ -156,7 +156,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         // Before a hub answers, the section carries the search instead of rows.
         found.addArrangedSubview(searching)
 
-        noWifi.text = "Hubs are found automatically on the same Wi-Fi. Over Tailscale, enter your hub's Tailscale name."
+        noWifi.text = "On the same Wi-Fi, or a VPN that carries it like ZeroTier, cawco.local reaches your hub and it's found automatically. Tailscale and WireGuard don't carry it: enter your hub's Tailscale name."
         noWifi.isHidden = true
         column.addArrangedSubview(noWifi)
 
@@ -383,7 +383,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     /// there is no local path. The example address is one word: a line breaks
     /// before it, never inside it (word joiners between its characters).
     private static func hint(_ tailnet: Bool) -> String {
-        let example = tailnet ? "http://<machine>.<tailnet>.ts.net:3456" : "http://192.168.3.100:3456"
+        let example = tailnet ? "http://<machine>.<tailnet>.ts.net:3456" : "http://cawco.local:3456"
         let joined = example.map(String.init).joined(separator: "\u{2060}")
         return tailnet ? "The hub's Tailscale address, like \(joined)." : "The hub's address on your network, like \(joined)."
     }
@@ -397,7 +397,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         let noLocalPath = discovery.localNetworkAvailable == false
         noWifi.isHidden = !noLocalPath
         body.text = Self.hint(noLocalPath)
-        field.placeholder = noLocalPath ? "http://<machine>.<tailnet>.ts.net:3456" : "http://hub:3456"
+        field.placeholder = noLocalPath ? "http://<machine>.<tailnet>.ts.net:3456" : "http://cawco.local:3456"
         let hubs = discovery.found
         searching.isHidden = !discovery.browsing || !hubs.isEmpty
         found.isHidden = hubs.isEmpty && searching.isHidden

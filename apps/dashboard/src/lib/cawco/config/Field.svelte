@@ -57,13 +57,13 @@
         >
       {:else if typeof hint === "string"}
         <span
-          class="max-w-(--measure) type-meta text-ink-muted"
+          class="max-w-(--measure) type-meta text-pretty text-ink-muted"
           in:crossIn
           out:crossOut>{hint}</span
         >
       {:else if hint}
         <span
-          class="max-w-(--measure) type-meta text-ink-muted"
+          class="max-w-(--measure) type-meta text-pretty text-ink-muted"
           in:crossIn
           out:crossOut>{@render hint()}</span
         >

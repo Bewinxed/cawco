@@ -1,6 +1,7 @@
 import CawCoCore
 import CawCoScreens
 import CawCoDesign
+import GameController
 #if DEBUG
 import notify
 #endif
@@ -140,6 +141,39 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         #selector(startNewSession): .startSession, #selector(jumpToSession): .jump,
         #selector(splitRight): .splitRight, #selector(splitDown): .splitDown, #selector(openConfigure): .configure,
     ]
+
+    /// Every command `buildMenu` adds.
+    private static let ownCommands: Set<Selector> = Set(shellCommands.keys).union([
+        #selector(approveFirstAsk), #selector(denyFirstAsk), #selector(reconnectHub),
+        #selector(stopSession), #selector(steerSession), #selector(openSessionWindow),
+    ])
+
+    /// The page has the first claim on keys (overlay page.ts `leftToShell`):
+    /// while a preview's page has the keyboard, these commands' keys stand
+    /// down, so the key goes on to the page, which hands back as
+    /// `cawco:shortcut` the shell's combos it leaves alone. A pick from the
+    /// menu bar (the Mac's, iPadOS 26's) is no key: its item acts as ever.
+    /// With no page holding the keyboard, they act as ever.
+    override func canPerformAction(_ action: Selector, withSender sender: Any?) -> Bool {
+        if Self.ownCommands.contains(action), PreviewKeys.pageHolds, Self.byKey {
+            #if DEBUG
+            Logger(subsystem: "dev.cawco.app", category: "Probe").notice("key command \(NSStringFromSelector(action), privacy: .public) left to the page")
+            #endif
+            return false
+        }
+        return super.canPerformAction(action, withSender: sender)
+    }
+
+    /// Whether the command is being asked for by its key rather than picked
+    /// from the menu bar (the Mac's, and iPadOS 26's): every command here
+    /// needs ⌘, so its key equivalent arrives with ⌘ held on the hardware
+    /// keyboard, which a pick with the pointer or a touch is not. Read from
+    /// the keyboard's own state (GameController's `GCKeyboard`, iOS 14 and
+    /// Mac Catalyst 14); with no keyboard attached there is no key press.
+    private static var byKey: Bool {
+        guard let keys = GCKeyboard.coalesced?.keyboardInput else { return false }
+        return [GCKeyCode.leftGUI, .rightGUI].contains { keys.button(forKeyCode: $0)?.isPressed == true }
+    }
 
     override func validate(_ command: UICommand) {
         super.validate(command)

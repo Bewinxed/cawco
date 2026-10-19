@@ -15,7 +15,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Toaster } from "#lib/components/ui/sonner/index.js";
-  import { IconAlert } from "#lib/icons.js";
+  import { IconAlert, IconEyeClosed } from "#lib/icons.js";
   import { page } from "$app/state";
 
   const id = $derived(page.params.id ?? "");
@@ -39,7 +39,7 @@
           await showArtifact(artifact.instanceId, wanted);
         }
         if (live) {
-          session.follow(artifact.instanceId);
+          session.follow(artifact.instanceId, wanted);
           found = { instanceId: artifact.instanceId, name: artifact.name };
         }
       })
@@ -54,9 +54,23 @@
     };
   });
 
-  const open = $derived(
-    !!found && session.preview(found.instanceId)?.state === "open"
+  /** The panel as the hub last said: undefined until its first frame, which the opening block stands for. */
+  const shown = $derived(
+    found ? session.preview(found.instanceId)?.state : undefined
   );
+  let reopening = $state(false);
+
+  /** Shows the artifact in its session's panel again; the hub's next frame opens it here. */
+  async function reopen(instanceId: string) {
+    reopening = true;
+    try {
+      await showArtifact(instanceId, id);
+    } catch (error) {
+      problem = failureWords(error);
+    } finally {
+      reopening = false;
+    }
+  }
 
   /** A phone's toasts drop from the top, as the app's do; a desk keeps the corner. */
   const narrowToasts = new MediaQuery("(max-width: 640px)");
@@ -77,7 +91,16 @@
     class="flex h-(--tab-h) flex-col overflow-hidden bg-surface-page p-space-2"
     style:--tab-h="100dvh"
   >
-    {#if problem}
+    {#if session.refused}
+      <EmptyState icon={IconAlert} title="This artifact didn't open">
+        {#snippet line()}
+          {session.refused}
+        {/snippet}
+        {#snippet action()}
+          <Button href="/session" label="Back to the fleet" variant="outline" />
+        {/snippet}
+      </EmptyState>
+    {:else if problem}
       <EmptyState icon={IconAlert} title="This artifact didn't open">
         {#snippet line()}
           {problem}
@@ -87,8 +110,24 @@
           <Button href="/session" label="Back to the fleet" variant="outline" />
         {/snippet}
       </EmptyState>
-    {:else if found && open}
+    {:else if found && shown === "open"}
       <PreviewPane instanceId={found.instanceId} ownTab />
+    {:else if found && shown === "closed"}
+      {@const instanceId = found.instanceId}
+      <EmptyState icon={IconEyeClosed} title="This artifact's panel is closed">
+        {#snippet line()}
+          {found?.name} is still in its session. Show it again to open it here and
+          in its session's panel.
+        {/snippet}
+        {#snippet action()}
+          <Button
+            label="Show it again"
+            onclick={() => reopen(instanceId)}
+            pending={reopening}
+            pendingLabel="Showing…"
+          />
+        {/snippet}
+      </EmptyState>
     {:else}
       <div
         aria-hidden="true"

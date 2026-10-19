@@ -528,4 +528,8 @@ const run = async (kit: Kit) => {
   );
 };
 
-export default { name: "fork-ownership", run } satisfies Spec;
+export default {
+  name: "fork-ownership",
+  host: "it delegates, so its fleet cuts workspaces",
+  run,
+} satisfies Spec;

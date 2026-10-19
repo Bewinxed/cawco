@@ -285,6 +285,27 @@ const parseTypeFile = (
   };
 };
 
+/** The words naming the fields a type file had no use for. */
+const ignoredWords = (ignored: string[]): string =>
+  `ignored ${ignored.map((key) => `“${key}”`).join(", ")}: a type reads harness, model, effort, skills, mcp, role, budget, lands, deny, can_delegate, cawco_todos, account and description`;
+
+/**
+ * Why `content` written at `path` (`delegates/<name>.md`) would not make a
+ * type whole, or nothing when it would: what Caw's proposed type is checked
+ * against before the person sees it (memory.ts `proposeType`).
+ */
+export const typeFileProblem = (
+  path: string,
+  content: string
+): string | undefined => {
+  const match = TYPE_FILE.exec(path.slice(DELEGATES.length + 1));
+  if (!(path.startsWith(`${DELEGATES}/`) && match)) {
+    return `${path} is not a type file: write delegates/<name>.md.`;
+  }
+  const { problem, ignored } = parseTypeFile(match[1], path, content);
+  return problem ?? (ignored.length > 0 ? ignoredWords(ignored) : undefined);
+};
+
 /**
  * Every type the project's `delegates/` folder holds, in name order, with
  * what kept the others out. A project without a folder, or without that
@@ -334,10 +355,7 @@ export const readProjectTypes = (projectId: string): DelegateCatalog => {
       problems.push({ path, problem });
     }
     if (ignored.length > 0) {
-      problems.push({
-        path,
-        problem: `ignored ${ignored.map((key) => `“${key}”`).join(", ")}: a type reads harness, model, effort, skills, mcp, role, budget, lands, deny, can_delegate, cawco_todos, account and description`,
-      });
+      problems.push({ path, problem: ignoredWords(ignored) });
     }
     if (type) {
       types.push(type);

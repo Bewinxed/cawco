@@ -12,7 +12,7 @@
    * draws (`line`); the nesting, the fold and the older box are here.
    */
   import type { Snippet } from "svelte";
-  import type { InstanceRow } from "../client.svelte";
+  import type { BoardRow } from "../client.svelte";
   import {
     type BranchOptions,
     branch,
@@ -33,11 +33,11 @@
     motionOf,
   }: {
     view: TreeView;
-    row: InstanceRow;
+    row: BoardRow;
     /** The rows the list holds where this one is drawn. */
-    rows: InstanceRow[];
+    rows: BoardRow[];
     /** The row itself, as the list draws its sessions. */
-    line: Snippet<[InstanceRow]>;
+    line: Snippet<[BoardRow]>;
     /** The conversation in front. */
     current?: string | null;
     /** Its box is reflow's to move (motion/rows); not while a list drives it. */

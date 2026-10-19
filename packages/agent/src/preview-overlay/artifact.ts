@@ -31,6 +31,7 @@ import {
   Map as YMap,
   YMapEvent,
 } from "yjs";
+import { here } from "./boot";
 
 /** The hub's close code for an update it would not keep (hub artifacts/sync.ts). */
 const REFUSED = 4400;
@@ -52,7 +53,7 @@ const OPEN_WITHIN_MS = 10_000;
 /** Attempts in a row that never opened, after which the link is said lost. */
 const STALLS_LOST = 2;
 
-const KINDS = new Set(["page", "canvas", "preview", "sheet"]);
+const KINDS = new Set(["page", "canvas", "preview", "component"]);
 
 /** Where an artifact's doc is synced: the listener's path, under the dashboard's preview prefix in its frame. */
 const SYNC_PATH =
@@ -62,7 +63,7 @@ export const NO_ARTIFACT = "This page has no artifact to keep its state in.";
 
 export interface ArtifactRef {
   id: string;
-  kind: "page" | "canvas" | "preview" | "sheet";
+  kind: "page" | "canvas" | "preview" | "component";
   name: string;
 }
 
@@ -326,9 +327,10 @@ const connect = () => {
       disableBc: true,
       resyncInterval: RESYNC_MS,
       WebSocketPolyfill: LiveWebSocket,
-      // A canvas's page is a screen: it converts the agent's writes.
+      // A canvas's page is a screen: it converts the agent's writes. One
+      // embedded in a decision page only shows it.
       params:
-        joined.kind === "canvas"
+        joined.kind === "canvas" && here.tag?.dataset.embed === undefined
           ? { screen: "1" }
           : ({} as Record<string, string>),
     }

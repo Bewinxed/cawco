@@ -74,7 +74,7 @@
     <button
       data-slot="row"
       aria-pressed={on}
-      class="ns-in press-tint relative flex min-h-(--min-h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-pressed:bg-surface-fill"
+      class="ns-in press-tint relative flex min-h-(--min-h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-pressed:bg-selected-bg aria-pressed:text-selected-ink"
       data-fh="1"
       onclick={() => {
         onlifetime(option.ephemeral);
@@ -97,12 +97,12 @@
         <span data-slot="name" class="type-label block">{option.name}</span>
         <span
           data-slot="meta"
-          class="type-meta block text-pretty text-ink-subtle"
+          class="type-meta block text-pretty text-ink-subtle in-aria-pressed:text-selected-ink"
           >{option.desc}</span
         >
       </span>
       {#if on}
-        <Check class="ns-check size-icon-md flex-none text-ink-strong" />
+        <Check class="ns-check size-icon-md flex-none text-selected-icon" />
       {/if}
     </button>
   {/each}

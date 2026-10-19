@@ -284,13 +284,23 @@ function check(path: string): Report {
   return report;
 }
 
+/**
+ * Svelte under the dashboard's source that another bundle builds: a decision
+ * page's host is bundled alone by core's decision-host.ts (Bun with
+ * bun-plugin-svelte, no Tailwind) into the page the hub serves, so no utility
+ * reaches it and its `<style>` is its styling.
+ */
+const OTHER_BUNDLES = new Set([
+  join(SOURCE, "lib", "cawco", "decisions", "host"),
+]);
+
 function svelteFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
-    if (SKIP_DIRS.has(entry)) {
+    const path = join(dir, entry);
+    if (SKIP_DIRS.has(entry) || OTHER_BUNDLES.has(path)) {
       continue;
     }
-    const path = join(dir, entry);
     if (statSync(path).isDirectory()) {
       out.push(...svelteFiles(path));
     } else if (entry.endsWith(".svelte")) {

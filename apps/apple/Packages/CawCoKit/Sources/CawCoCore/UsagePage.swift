@@ -342,7 +342,7 @@ public enum UsageSessionsExport {
         for row in fleet.rows where row.isLive {
             let read = stats(row.id)
             let at = fleet.lastAt(row)
-            let harness = row.harness ?? "claude"
+            let harness = row.harness.rawValue
             if let key = row.sessionId { seen.insert(key) }
             let state: String = if row.isFailed { "Failed" } else {
                 switch home.activity(row.id) {

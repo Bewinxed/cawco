@@ -131,8 +131,13 @@ final class CawPanel: GlassContent {
     func configure(needs: [HomeModel.NeedsItem], answers: Answers, notices: [Notice], quiet: String, now: Double, live: Bool) {
         let needWords = needs.map { item -> String in
             let stage = Self.stageWords(answers.sent[item.id])
-            // A notice the hub replaced on the same session says something new.
-            let watched = if case let .watch(notice) = item.kind { notice.title } else { "" }
+            // A notice the hub replaced on the same session says something
+            // new, as does HTTPS's next step or its tick.
+            let watched = switch item.kind {
+            case let .watch(notice): notice.title
+            case let .tailnet(tailnet, done): "\(tailnet.step?.rawValue ?? "")\u{1f}\(tailnet.command ?? "")\u{1f}\(done)"
+            default: ""
+            }
             return "\(item.id)\u{1f}\(watched)\u{1f}\(item.title)\u{1f}\(item.place)\u{1f}\(item.raisedAt.map { Naming.span(ms: now - $0) } ?? "")\u{1f}\(item.stale)\u{1f}\(stage?.text ?? "")\u{1f}\(answers.sent[item.id].map { $0.stage != .failed } ?? false)"
         }
         let noticeWords = notices.map { notice -> String in
@@ -459,6 +464,27 @@ private final class NeedRow: UIControl {
             column.addArrangedSubview(peers)
             column.addArrangedSubview(refusal)
             column.setCustomSpacing(Space.space2, after: ask)
+        case let .tailnet(tailnet, done):
+            // HTTPS on the tailnet (NeedsCard.svelte `tailnet`): the step
+            // that stands, read whole, and its one button; ticked, the https
+            // dashboard to open.
+            waited.isHidden = true
+            place.text = Words.Tailnet.meta(host: tailnet.host)
+            ask.text = done ? Words.Tailnet.done(dashboard: tailnet.dashboard ?? "") : Self.tailnetStep(tailnet)
+            ask.numberOfLines = 0
+            let action = Self.tailnetAction(tailnet, done: done)
+            let button = KitButton.make(action.label, glyph: action.copy == nil ? .external : .copy, variant: .secondary, height: .sm) {
+                if let copy = action.copy {
+                    UIPasteboard.general.string = copy
+                } else if let url = action.url {
+                    UIApplication.shared.open(url)
+                }
+            }
+            button.accessibilityIdentifier = "caw-need-tailnet"
+            let actions = UIStackView(arrangedSubviews: [UIView(), button])
+            actions.distribution = .equalSpacing
+            column.addArrangedSubview(actions)
+            column.setCustomSpacing(Space.space2, after: ask)
         }
         if let words = CawPanel.stageWords(sent) {
             let stage = KitLabel(TypeScale.typeMeta, ink: words.failed ? Palette.statusFailInk : Palette.inkMuted, lines: 0)
@@ -478,6 +504,10 @@ private final class NeedRow: UIControl {
             mark = GlyphView(.workflow, size: Size.iconMd, tint: Palette.inkMuted)
         case .choice:
             mark = GlyphView(.shield, size: Size.iconMd, tint: Palette.inkMuted)
+        case let .tailnet(_, done):
+            mark = done
+                ? GlyphView(.passed, size: Size.iconMd, tint: Palette.statusDoneInk)
+                : GlyphView(.tailnetHttps, size: Size.iconMd, tint: Palette.inkMuted)
         }
         mark.isUserInteractionEnabled = false
         let lead = UIView()
@@ -525,6 +555,31 @@ private final class NeedRow: UIControl {
         CawPanel.log.notice("panel row chosen: \(self.accessibilityIdentifier ?? "", privacy: .public)")
         #endif
         onChoose()
+    }
+
+    /// The step HTTPS on the tailnet waits on, in its one line (NeedsCard.svelte `tailnetStep`).
+    private static func tailnetStep(_ tailnet: Components.Schemas.TailnetHttps) -> String {
+        let command = tailnet.command ?? ""
+        return switch tailnet.step ?? .enableHttps {
+        case .enableMagicdns: Words.Tailnet.enableMagicDns
+        case ._operator: Words.Tailnet.`operator`(host: tailnet.host, command: command)
+        case .userspace: Words.Tailnet.userspace(host: tailnet.host)
+        case .port: Words.Tailnet.port(host: tailnet.host, port: Int(tailnet.port ?? 0), command: command)
+        default: Words.Tailnet.enableHttps
+        }
+    }
+
+    /// The step's one button (NeedsCard.svelte `tailnetAction`): a page to
+    /// open, or its command to copy; ticked, the https dashboard to open.
+    private static func tailnetAction(_ tailnet: Components.Schemas.TailnetHttps, done: Bool) -> (label: String, url: URL?, copy: String?) {
+        if done {
+            return (Words.Tailnet.openDashboard, tailnet.dashboard.flatMap(URL.init(string:)), nil)
+        }
+        return switch tailnet.step ?? .enableHttps {
+        case ._operator, .port: (Words.Tailnet.copyCommand, nil, tailnet.command)
+        case .userspace: (Words.Tailnet.openDocs, URL(string: Words.Tailnet.userspacePage), nil)
+        default: (Words.Tailnet.openDnsPage, URL(string: Words.Tailnet.dnsPage), nil)
+        }
     }
 
     /// The upstream choice's three answers, by the answer each gives.

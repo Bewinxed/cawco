@@ -16,18 +16,22 @@
     IconMic,
     IconPalette,
     IconPen,
-    IconRefresh,
+    IconRenew,
     IconRocket,
     IconRulerPen,
     IconSearch,
     IconSend,
     IconSort,
     IconStars,
-    IconToolTodo,
+    IconTaskList,
     IconWindow,
   } from "#lib/icons.js";
 
-  /** Each kind of work a starter names (the hub's `STARTER_GLYPHS`), as its Solar duotone glyph. */
+  /**
+   * Each kind of work a starter names (the hub's `STARTER_GLYPHS`), as its
+   * Solar duotone glyph: each one a mark on its half-ink body (The Solar
+   * Duotone Rule), never strokes alone beside a filled one.
+   */
   export const GLYPHS: Record<
     StarterGlyph,
     Component<SVGAttributes<SVGSVGElement>>
@@ -42,7 +46,7 @@
     mail: IconSend,
     palette: IconPalette,
     people: IconAccounts,
-    refresh: IconRefresh,
+    refresh: IconRenew,
     reply: IconChat,
     rocket: IconRocket,
     routine: IconClock,
@@ -51,7 +55,7 @@
     site: IconGlobe,
     stages: IconColumns,
     system: IconRulerPen,
-    tasks: IconToolTodo,
+    tasks: IconTaskList,
     triage: IconSort,
     voice: IconMic,
   };
@@ -72,40 +76,70 @@
    * centred, tinting under a press as wide controls do (The Press Rule). One
    * column in a narrow container; wider, as many columns of at least
    * --c-starter-w as fit (3 + 1, then 4 across at --c-starters-w).
+   *
+   * `rows`: in Caw's panel, the same tiles as suggestion rows, one under the
+   * other, each as wide as its words and no wider (the owner's pin 22), its
+   * reason under its words when the hub wrote one: a smaller caption in the
+   * muted ink, so the words lead and the reason says why (pin 10).
    */
   let {
     starters,
     onpick,
+    rows = false,
   }: {
-    starters: Starter[];
+    starters: (Starter & { reason?: string })[];
     onpick: (text: string) => void;
+    rows?: boolean;
   } = $props();
 </script>
 
-<div data-slot="starter-cards" class="@container w-full">
-  <!-- One column in a narrow container; wider, as many columns as fit. -->
+<div
+  data-slot="starter-cards"
+  class="group/starters @container w-full"
+  data-rows={rows || undefined}
+>
+  <!-- One column in a narrow container; wider, as many columns as fit.
+       Suggestion rows (`rows`): one under the other, each as wide as its
+       words (never past the column), at a row's height rather than a
+       card's. -->
   <ul
     data-slot="cards"
-    aria-label="Starters"
-    class="m-0 grid list-none auto-rows-(--cards-rows) grid-cols-1 gap-space-2 p-0 @details:grid-cols-(--cards-cols)"
+    aria-label={rows ? "Things to ask Caw" : "Starters"}
+    class="m-0 grid list-none auto-rows-(--cards-rows) grid-cols-1 gap-space-2 p-0 @details:grid-cols-(--cards-cols) group-data-rows/starters:flex group-data-rows/starters:flex-col group-data-rows/starters:items-start"
     style:--cards-cols={"repeat(auto-fill, minmax(min(100%, var(--c-starter-w)), 1fr))"}
     style:--cards-rows="1fr"
   >
     {#each starters as starter (starter.text)}
       {@const Glyph = GLYPHS[starter.glyph]}
-      <li>
+      <li class="group-data-rows/starters:max-w-full">
+        <!-- literal: calc(var(--space-2) - 1px), calc(var(--space-3) - 1px) -->
         <button
           data-slot="starter"
-          class="mark-line press-tint type-label flex size-full min-h-c-starter-h cursor-pointer items-center gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-pretty text-ink-strong shadow-tile transition-[background-color] dur-control ease-out hover:bg-surface-hover focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
+          class="mark-line press-tint type-label flex size-full min-h-c-starter-h cursor-pointer items-box-start gap-space-2 rounded-lg border-none border-current bg-surface-raised p-space-3 text-start text-pretty text-ink-strong shadow-tile transition-[background-color] dur-control ease-out hover-hover:[&:hover]:bg-surface-hover group-data-rows/starters:h-auto group-data-rows/starters:min-h-c-btn-h group-data-rows/starters:w-auto group-data-rows/starters:max-w-full group-data-rows/starters:rounded-md group-data-rows/starters:border group-data-rows/starters:border-solid group-data-rows/starters:border-border-row-outline group-data-rows/starters:px-(--row-px) group-data-rows/starters:py-(--row-py) group-data-rows/starters:shadow-none focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset)"
           onclick={() => onpick(starter.text)}
+          style:--row-px="calc(var(--space-3) - 1px)"
+          style:--row-py="calc(var(--space-2) - 1px)"
           type="button"
         >
-          <Glyph
-            data-starter-glyph
-            aria-hidden="true"
-            class="size-icon-md flex-none text-ink-strong"
-          />
-          <span data-slot="starter-text">{starter.text}</span>
+          <span class="mark-cell"
+            ><Glyph
+              data-starter-glyph
+              aria-hidden="true"
+              class="size-icon-md flex-none text-ink-strong"
+            /></span
+          >
+          <span class="flex min-w-0 flex-col gap-space-1" data-box>
+            <span data-slot="starter-text" class="wrap-anywhere"
+              >{starter.text}</span
+            >
+            {#if rows && starter.reason}
+              <span
+                data-slot="starter-reason"
+                class="type-meta text-pretty wrap-anywhere text-ink-muted"
+                >{starter.reason}</span
+              >
+            {/if}
+          </span>
         </button>
       </li>
     {/each}

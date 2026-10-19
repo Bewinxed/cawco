@@ -20,7 +20,8 @@
   import { Dialog as DialogPrimitive } from "bits-ui";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { failureWords } from "#lib/cawco/hub-read.js";
+  import { failureWords, hubRefusal } from "#lib/cawco/hub-read.js";
+  import { mirror } from "#lib/cawco/page-marks.js";
   import {
     Alert,
     AlertDescription,
@@ -90,12 +91,17 @@
   import MoveAskBody from "../move/MoveAsk.svelte";
   import { moveEstimate, startMove } from "../move.svelte";
   import {
-    fallbackMode,
     fullSendCopy,
+    modeRefusal,
     permissionModesFor,
   } from "../permission-modes";
   import { checkoutOf, checkoutOn, placedOn } from "../projects";
-  import { rememberSpawn, spawnPrefs } from "../spawnPrefs.svelte";
+  import {
+    rememberedMachine,
+    rememberMachine,
+    rememberSpawn,
+    spawnPrefs,
+  } from "../spawnPrefs.svelte";
   import { store, stored } from "../storage";
   import AttachButton from "../transcript/AttachButton.svelte";
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
@@ -191,6 +197,23 @@
   });
   const mobile = new MediaQuery("(max-width: 640px)");
   let card = $state<HTMLElement | null>(null);
+  // The phone's sheet (the kit drawer's) says on the body that it is up, for
+  // its scrim's exit (the styles below).
+  $effect(() => {
+    if (card) {
+      return mirror(
+        card,
+        "body",
+        "data-session-sheet",
+        ["data-vaul-drawer", "class"],
+        (sheet) =>
+          sheet.hasAttribute("data-vaul-drawer") &&
+          sheet.classList.contains("session-card")
+            ? ["up"]
+            : []
+      );
+    }
+  });
   /**
    * The card tweens to its new height when its body changes, as every dialog
    * does (DESIGN.md, Dialog; ui/dialog's content): it renders its own
@@ -235,12 +258,15 @@
   let machineIds = $state<string[]>([]);
   /** Set once the operator picks machines themselves; stops the late-arrival adoption below. */
   let machinesTouched = $state(false);
+  /** The machine the form last started a session on, read as it opens (spawnPrefs `rememberedMachine`). */
+  let remembered = $state<string | null>(null);
   let cwd = $state("");
   let repo = $state<string>();
   let harness = $state<HarnessKind>(spawnPrefs.harness);
   let model = $state("");
   let effort = $state<EffortLevel | null>(null);
-  let permissionMode = $state<PermissionMode>(spawnPrefs.permissionMode);
+  /** None until the person picks one, when no start of theirs is remembered: Start waits for it. */
+  let permissionMode = $state<PermissionMode | null>(spawnPrefs.permissionMode);
   /**
    * Full Send came with the form (the last start's mode, or a failed
    * continuation's) rather than from a pick in it: the warning says where
@@ -514,16 +540,36 @@
   const modes = $derived(
     modeless
       ? []
-      : permissionModesFor(harness).map((mode) => ({
-          value: mode.value,
-          disabled: report
-            ? !report.capabilities.permissionModes.includes(mode.value)
-            : false,
-          reason:
-            report && !report.capabilities.permissionModes.includes(mode.value)
-              ? "This agent cannot honor this permission mode."
-              : undefined,
-        }))
+      : permissionModesFor(harness).map((mode) => {
+          const refused = machineId
+            ? modeRefusal(
+                machine?.hostname ?? machineId,
+                harness,
+                mode.value,
+                report
+              )
+            : null;
+          return {
+            value: mode.value,
+            disabled: refused !== null,
+            reason: refused ?? undefined,
+          };
+        })
+  );
+  /**
+   * Why the form's mode can't go out on the chosen machine ({@link
+   * modeRefusal}). The mode is never swapped for another: Start waits until
+   * the machine reports its harness, or the person picks a mode it takes.
+   */
+  const modeRefused = $derived(
+    machineId && !modeless && permissionMode !== null
+      ? modeRefusal(
+          machine?.hostname ?? machineId,
+          harness,
+          permissionMode,
+          report
+        )
+      : null
   );
   const workdir = $derived(
     repo === undefined
@@ -882,6 +928,8 @@
     estimate = null;
     loadEstimate(continueFrom.instanceId, submission);
   }
+  /** A harness with modes and none picked: Start waits for the person's pick. */
+  const modeUnchosen = $derived(!modeless && permissionMode === null);
   /** The last start failed: the footer shows no check. */
   const startFailed = $derived(error !== "");
   /** The line under the chips says why Start can't go: it stays on step 2 too. */
@@ -890,6 +938,8 @@
     firstMessage.uploading ||
       continueBlocked ||
       placementRefusal !== null ||
+      modeRefused !== null ||
+      modeUnchosen ||
       cawco.hub !== "connected" ||
       machineIds.length === 0 ||
       Boolean(offlineMachine) ||
@@ -947,8 +997,9 @@
     }
     lastMachine = id;
     untrack(() => {
-      if (!installed.includes(harness)) {
-        chooseHarness(installed[0] ?? "claude");
+      const [first] = installed;
+      if (first && !installed.includes(harness)) {
+        chooseHarness(first);
       }
     });
   });
@@ -958,15 +1009,6 @@
       !stops.some((stop) => stop.reachable && stop.value === effort)
     ) {
       effort = null;
-    }
-  });
-  $effect(() => {
-    const honoured = modes
-      .filter((mode) => !mode.disabled)
-      .map((mode) => mode.value);
-    const next = fallbackMode(permissionMode, honoured);
-    if (next && !honoured.includes(permissionMode)) {
-      permissionMode = next;
     }
   });
   /**
@@ -994,10 +1036,10 @@
         continueFrom?.machineId ||
         prefill?.machineId ||
         primary?.machineId ||
-        cawco.onlineMachines[0]?.machineId ||
         "";
       machineIds = first ? [first] : [];
       machinesTouched = false;
+      remembered = rememberedMachine();
       cwd = continueFrom?.cwd || prefill?.cwd || primary?.path || "";
       ({ harness, permissionMode } = spawnPrefs);
       fullSendCarried = permissionMode === "fullSend";
@@ -1080,13 +1122,18 @@
       }
     });
   });
-  // The fleet arrives over the websocket, so the dialog can open before any
-  // machine is known. Adopt the first one that shows up until the operator picks.
+  // With nothing else naming one, the form opens on the machine it last
+  // started a session on, once the fleet lists it: the fleet arrives over the
+  // websocket, so the dialog can open before it does. With none remembered,
+  // or one the fleet no longer has, no machine is chosen until the operator
+  // picks one.
   $effect(() => {
-    const fallback = cawco.onlineMachines[0]?.machineId;
-    if (open && !machinesTouched && !machineIds.length && fallback) {
+    const id = remembered;
+    const known =
+      id !== null && cawco.machines.some((row) => row.machineId === id);
+    if (open && !machinesTouched && !machineIds.length && known) {
       untrack(() => {
-        machineIds = [fallback];
+        machineIds = [id];
       });
     }
   });
@@ -1105,7 +1152,7 @@
         loadModelWindows(),
       ]);
       if (!response.ok) {
-        throw new Error(await response.text());
+        throw await hubRefusal(response);
       }
       const sized = (await response.json()) as NonNullable<typeof estimate>;
       if (current()) {
@@ -1448,7 +1495,9 @@
       prompt: draft.prompt,
       extras: draft.extras,
       harness: draft.harness,
-      ...(modeless ? {} : { permissionMode: draft.permissionMode }),
+      ...(modeless || draft.permissionMode === null
+        ? {}
+        : { permissionMode: draft.permissionMode }),
       ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
       ...(draft.effort ? { effort: draft.effort } : {}),
       scratch: draft.scratch,
@@ -1566,6 +1615,7 @@
         permissionMode: draft.permissionMode,
         effort: draft.effort,
       });
+      rememberMachine(draft.machineIds);
       await exitTo(first, current);
     } catch (cause) {
       if (!current()) {
@@ -1596,7 +1646,9 @@
         ...(ask.key ? { approved: ask.key } : {}),
         spawn: {
           harness: draft.harness,
-          ...(modeless ? {} : { permissionMode: draft.permissionMode }),
+          ...(modeless || draft.permissionMode === null
+            ? {}
+            : { permissionMode: draft.permissionMode }),
           ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
           ...(draft.effort ? { effort: draft.effort } : {}),
           ...(draft.account ? { account: draft.account } : {}),
@@ -1620,6 +1672,7 @@
       permissionMode: draft.permissionMode,
       effort: draft.effort,
     });
+    rememberMachine(draft.machineIds);
     await exitTo(started.targetInstanceId, current);
   }
 
@@ -1677,7 +1730,9 @@
         cwd: draft.cwd,
         harness: draft.harness,
         ...(draft.usedModel ? { model: draft.usedModel } : {}),
-        ...(modeless ? {} : { permissionMode: draft.permissionMode }),
+        ...(modeless || draft.permissionMode === null
+          ? {}
+          : { permissionMode: draft.permissionMode }),
         ...(draft.effort ? { effort: draft.effort } : {}),
         ...(draft.scratch ? { scratch: draft.scratch } : {}),
         ...(draft.repo === undefined
@@ -1709,6 +1764,7 @@
       permissionMode: draft.permissionMode,
       effort: draft.effort,
     });
+    rememberMachine(draft.machineIds);
   }
   /**
    * Leave for the new session as the dialog starts to close, not after: the
@@ -2192,6 +2248,21 @@
       </Alert>
     </div>
   {/if}
+  <!-- The chosen permission mode can't go out on this machine: why, beside
+       Start, which waits for a mode the machine takes. -->
+  {#if modeRefused && !placementRefusal}
+    <div
+      class="flex-none pt-space-2"
+      data-vaul-no-drag
+      in:unfold|global
+      out:unfold
+    >
+      <Alert role="status" variant="warning">
+        <IconShield />
+        <AlertTitle>{modeRefused}</AlertTitle>
+      </Alert>
+    </div>
+  {/if}
   <!-- Full Send in the form, however it got there, stands outside the body's
        scroll, beside Start: it is in view whenever the form can start. -->
   {#if fullSendWarning}
@@ -2258,12 +2329,8 @@
     /* The sheet leaves as the dialog does: --dur-exit on --ease-out, with
        its scrim, instead of vaul's 500ms slide. */
     :global([data-session-card][data-vaul-drawer][data-state="closed"]),
-    /* The sheet is portalled straight into <body>: asked of the body's own
-       children, so a change anywhere in the page is not a search of it. */
-    :global(
-      body:has(> [data-session-card][data-vaul-drawer])
-        [data-vaul-overlay][data-state="closed"]
-    ) {
+    /* The sheet says it is up on the body (`data-session-sheet`, page-marks). */
+    :global(body[data-session-sheet] [data-vaul-overlay][data-state="closed"]) {
       animation-duration: var(--dur-exit);
       animation-timing-function: var(--ease-out);
     }

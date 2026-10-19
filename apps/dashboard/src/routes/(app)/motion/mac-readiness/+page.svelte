@@ -5,12 +5,10 @@
    * picker stands above the dialog's scrim, clear of its frame, and stops its
    * pointerdowns so a press on it never reads as a press outside the dialog.
    */
+  import type { SshJoinJob } from "@cawco/core";
   import { onMount } from "svelte";
   import { addMachine, sshJoin } from "#lib/cawco/join/join.svelte.js";
-  import {
-    macReadiness,
-    type Readiness,
-  } from "#lib/cawco/join/readiness.svelte.js";
+  import type { Readiness } from "#lib/cawco/join/readiness.svelte.js";
   import { dur } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { page } from "$app/state";
@@ -65,12 +63,19 @@
     return `?${query}`;
   };
 
+  // The stores' own state, as the dev server hands it out (lib/cawco/dev-debug.ts).
+  const debug = globalThis.__cawcoDebug as {
+    macReadiness: { staged: Readiness };
+    sshJoin: { job: SshJoinJob | null; refused: string | null };
+  };
+
   $effect(() => {
-    macReadiness.stage(readinessOf(picked));
+    debug.macReadiness.staged = readinessOf(picked);
   });
 
   $effect(() => {
-    sshJoin.stage({
+    debug.sshJoin.refused = null;
+    debug.sshJoin.job = {
       id: "bench",
       target: `omar@${name}.local`,
       hubUrl: page.url.origin,
@@ -80,7 +85,7 @@
       machineId: name,
       problem: null,
       state: "done",
-    });
+    };
   });
 
   onMount(() => {
@@ -91,7 +96,7 @@
       cancelAnimationFrame(frame);
       addMachine.open = false;
       sshJoin.reset();
-      macReadiness.stage({ kind: "not-mac" });
+      debug.macReadiness.staged = { kind: "not-mac" };
     };
   });
 </script>

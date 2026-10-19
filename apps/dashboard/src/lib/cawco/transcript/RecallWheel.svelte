@@ -117,8 +117,7 @@
    * A compact window (DESIGN.md: narrower than 640px, or a coarse pointer
    * narrower than the drawer's line): a phone.
    */
-  const COMPACT =
-    "(max-width: 639px), (pointer: coarse) and (max-width: 899px)";
+  const COMPACT = "(max-width: 639px), (pointer: coarse) and (width < 900px)";
   /** How far up the window the shape's top reaches, as a share of its height. */
   const REACH = { compact: 0.5, wide: 0.4 } as const;
   /**

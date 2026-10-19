@@ -10,7 +10,7 @@
    * (`shownAccount`), as the session's row does, and takes no picks.
    */
   import Down from "~icons/solar/alt-arrow-down-linear";
-  import { cawco, type InstanceRow } from "../client.svelte";
+  import { type BoardRow, cawco } from "../client.svelte";
   import NsPopover from "../spawn/NsPopover.svelte";
   import AccountName from "./AccountName.svelte";
   import { hueVar, nameOf } from "./model.svelte";
@@ -20,7 +20,7 @@
     instance,
     readonly,
   }: {
-    instance: InstanceRow;
+    instance: BoardRow;
     /** The session cannot take changes now (ended, or the hub is away). */
     readonly: boolean;
   } = $props();

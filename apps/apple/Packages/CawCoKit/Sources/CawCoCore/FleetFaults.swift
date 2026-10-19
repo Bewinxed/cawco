@@ -11,7 +11,7 @@ import Foundation
 
 /// Which fleet panel a fault belongs to: the key its report is stored under.
 public enum FaultScope: String, CaseIterable, Sendable {
-    case mcp, marketplaces, plugins, skills, memory, memoryDocs, memoryHook, hooks
+    case mcp, marketplaces, plugins, skills, memory, memoryDocs, hooks
 
     /// What the scope is called in a sentence, singular (`SCOPE_NOUN`).
     public var noun: String {
@@ -22,7 +22,6 @@ public enum FaultScope: String, CaseIterable, Sendable {
         case .skills: "skill"
         case .memory: "memory"
         case .memoryDocs: "memory document"
-        case .memoryHook: "model-memory hook"
         case .hooks: "hook"
         }
     }
@@ -32,7 +31,7 @@ public enum FaultScope: String, CaseIterable, Sendable {
         switch self {
         case .mcp: "mcp"
         case .marketplaces, .plugins, .skills: "skills"
-        case .memory, .memoryDocs, .memoryHook: "memory"
+        case .memory, .memoryDocs: "memory"
         case .hooks: "hooks"
         }
     }
@@ -252,7 +251,6 @@ nonisolated struct SyncReport: Decodable {
     let memoryDocs: [String: Item]?
     let hooks: [String: Item]?
     let memory: Item?
-    let memoryHook: Item?
     let toolchain: Toolchain?
 
     func record(_ scope: FaultScope) -> [String: Item]? {
@@ -263,7 +261,7 @@ nonisolated struct SyncReport: Decodable {
         case .skills: skills
         case .memoryDocs: memoryDocs
         case .hooks: hooks
-        case .memory, .memoryHook: nil
+        case .memory: nil
         }
     }
 }
@@ -297,7 +295,7 @@ public enum FleetFaults {
             byHarness.sorted { $0.key < $1.key }.flatMap { scan(.mcp, $0.value, harness: $0.key) }
         } ?? scan(.mcp, report.mcp)
         return mcp + scan(.marketplaces, report.marketplaces) + scan(.plugins, report.plugins) + scan(.skills, report.skills)
-            + scan(.memoryDocs, report.memoryDocs) + scan(.hooks, report.hooks) + single(.memory, report.memory) + single(.memoryHook, report.memoryHook)
+            + scan(.memoryDocs, report.memoryDocs) + scan(.hooks, report.hooks) + single(.memory, report.memory)
     }
 
     private nonisolated struct HubRow: Decodable {

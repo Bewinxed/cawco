@@ -4,7 +4,7 @@
    * phone home's, reading one remembered choice (work-tab). The header is the
    * session tabs' own folder tabs (ui/fluid-tabs, hosted the way PaneTabs
    * hosts them in a bar: no shelf, the chosen sheet the only mark), each a
-   * label and a count, a pill solid in its status hue.
+   * label and a count, the kit's badge in its tab's status pair.
    *
    * The rows under a machine's header change in a relay (motion/list-swap):
    * the old lines leave top down, and each new line arrives the moment the
@@ -49,6 +49,7 @@
    * stands in as a quiet context line, not counted and taking no room.
    */
   import { flushSync, untrack } from "svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import type { FoldMeasure } from "#lib/components/ui/fluid-tabs/fold-memory.js";
   import {
@@ -64,7 +65,7 @@
   import { page } from "$app/state";
   import StructureOn from "~icons/solar/structure-bold";
   import Structure from "~icons/solar/structure-bold-duotone";
-  import { cawco, type InstanceRow, isFailed } from "../client.svelte";
+  import { type BoardRow, cawco, isFailed } from "../client.svelte";
   import { conversationHref } from "../links";
   import { nestFrom } from "../motion/branch.svelte";
   import { crossIn, crossOut, dur, motionOk } from "../motion/curves.svelte";
@@ -159,14 +160,14 @@
   const BOXES = ":scope > .group";
 
   /** Every session a tab could list, delegates included. */
-  const allOf = (tab: WorkTab): InstanceRow[] =>
+  const allOf = (tab: WorkTab): BoardRow[] =>
     tab === "working" ? home.working : home.finished;
   /**
    * A tab's own rows, by the Delegates switch: the home's one rule for it
    * (home-state `workingListed`, `finishedListed`), which Recent reads too,
    * so a session a tab leaves out is one Recent holds.
    */
-  const rowsOf = (tab: WorkTab): InstanceRow[] =>
+  const rowsOf = (tab: WorkTab): BoardRow[] =>
     tab === "working" ? home.workingListed : home.finishedListed;
   /**
    * What a tab with no rows says of the delegates it leaves out: with the
@@ -181,7 +182,7 @@
     return `${count} delegates ${tab === "working" ? "are working" : "have finished"}. Their sessions are not listed here.`;
   };
   /** A session the tab does not list, to stand in for a delegate's parent. */
-  const known = (id: string): InstanceRow | undefined =>
+  const known = (id: string): BoardRow | undefined =>
     cawco.instanceIndex.byId.get(id);
   /**
    * Each tab as its tree (tree.ts): every session followed by its
@@ -211,9 +212,9 @@
   const olderOf = (tab: WorkTab, id: string) => views[tab].olderOf(id);
   const under = (
     tab: WorkTab,
-    rows: InstanceRow[],
+    rows: BoardRow[],
     parent: string | null
-  ): InstanceRow[] => views[tab].under(rows, parent);
+  ): BoardRow[] => views[tab].under(rows, parent);
   /**
    * Takes a finished row off the list, and with a parent its whole tree,
    * the rows the Delegates switch hides too. Offered only on a row
@@ -241,9 +242,9 @@
     return ids;
   }
 
-  type Group = MachineGroup<InstanceRow>;
+  type Group = MachineGroup<BoardRow>;
   /** A line that is leaving: a machine's header, or one of its rows. */
-  interface Line extends RelayLine<InstanceRow> {
+  interface Line extends RelayLine<BoardRow> {
     tab: WorkTab;
   }
   /** One change of the rows in flight: what leaves, what arrives, when. */
@@ -281,7 +282,7 @@
     const at = new Map(
       tops.map((group) => [
         group.machineId,
-        { ...group, rows: [] as InstanceRow[] },
+        { ...group, rows: [] as BoardRow[] },
       ])
     );
     let top = "";
@@ -310,7 +311,7 @@
       return group;
     }
     let room = MORE_AT;
-    const rows: InstanceRow[] = [];
+    const rows: BoardRow[] = [];
     for (const row of group.rows) {
       if (shapeOf(tab, row.id)?.depth === 0) {
         if (room === 0) {
@@ -331,11 +332,11 @@
    * A machine's trees past its first MORE_AT; none when only one is, since
    * a "Show 1 more" line costs the height of the row it hides.
    */
-  function beyondCap(tab: WorkTab, group: Group): TreeLine<InstanceRow>[] {
+  function beyondCap(tab: WorkTab, group: Group): TreeLine<BoardRow>[] {
     const hidden = (
       group.rows
         .map((row) => shapeOf(tab, row.id))
-        .filter((line) => line?.depth === 0) as TreeLine<InstanceRow>[]
+        .filter((line) => line?.depth === 0) as TreeLine<BoardRow>[]
     ).slice(MORE_AT);
     return hidden.length > 1 ? hidden : [];
   }
@@ -384,10 +385,17 @@
    * the Delegates switch shows (owner: "the working count shouldn't count
    * delegates").
    */
-  const topOf = (tab: WorkTab): InstanceRow[] =>
+  const topOf = (tab: WorkTab): BoardRow[] =>
     allOf(tab).filter((row) => !isDelegate(row));
-  /** Whether a top-level session listed as finished failed: its numeral says so. */
+  /** Whether a top-level session listed as finished failed: its count says so. */
   const finishedFailed = $derived(topOf("finished").some(isFailed));
+  /** A tab's count's status pair (DESIGN.md, Badge). */
+  const pairOf = (tab: WorkTab): "live" | "done" | "fail" => {
+    if (tab === "working") {
+      return "live";
+    }
+    return finishedFailed ? "fail" : "done";
+  };
 
   let plan = $state.raw<Plan | null>(null);
   const swap = new ListSwap<Line>();
@@ -591,26 +599,26 @@
   };
 
   /** A working row's line: its project, then what it is doing now. */
-  function workingLine(row: InstanceRow): string {
+  function workingLine(row: BoardRow): string {
     const tool = cawco.currentToolOf(row.id);
     const doing = tool ? `${tool.name} ${tool.glance}`.trim() : "";
     return [projectOfRow(row), doing].filter(Boolean).join(" · ");
   }
   /** A finished row's line: its project, and why, if it failed. */
-  function finishedLine(row: InstanceRow): string {
+  function finishedLine(row: BoardRow): string {
     const why = isFailed(row)
       ? `failed${row.lastError ? `: ${row.lastError}` : ""}`
       : "";
     return [projectOfRow(row), why].filter(Boolean).join(" · ");
   }
   /** The row's meta line, naming its machine when it is not its group's. */
-  function metaLine(row: InstanceRow, tab: WorkTab, group: string): string {
+  function metaLine(row: BoardRow, tab: WorkTab, group: string): string {
     const said = tab === "working" ? workingLine(row) : finishedLine(row);
     return row.machineId === group
       ? said
       : `${machineName(row.machineId)} · ${said}`;
   }
-  function age(row: InstanceRow, tab: WorkTab): string {
+  function age(row: BoardRow, tab: WorkTab): string {
     if (tab === "working") {
       const since = cawco.turnSince(row.id);
       return since ? span(clock.now - since) : "";
@@ -653,7 +661,7 @@
   </h3>
 {/snippet}
 
-{#snippet sessionRow(row: InstanceRow, tab: WorkTab, group: string)}
+{#snippet sessionRow(row: BoardRow, tab: WorkTab, group: string)}
   {@const context = shapeOf(tab, row.id)?.context ?? false}
   <!-- A context line is the parent of delegates listed here, not one of
        the tab's own: its state and name, quietly, and nothing else. -->
@@ -685,7 +693,7 @@
        leaves on the row's exit, in the row's frames (`--leave`). -->
   <li data-tree-node class="relative" style:--leave={leave}>
     <div data-slot="tree-line" class="relative" style:animation={leave}>
-      {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
+      {@render sessionRow(line.row as BoardRow, line.tab, line.machineId)}
     </div>
     {#if kids.length > 0}
       <ul
@@ -789,28 +797,19 @@
                 <!-- No count until it is read: a 0 here would be a claim. -->
                 {#if !waiting}
                   {#key count}
-                    <!-- The count, a pill solid in its tab's status hue
-                         (count-fill-*), chosen or not: it reads as a pill on
-                         whatever sheet it stands on, chosen, recessed,
-                         hovered or pressed, and its numeral (count-fill-ink)
-                         holds on it. A 6% wash of the ink read as a smudge
-                         on the sheet (owner: "the count background is styled
-                         in an unreadable way"). Something listed as finished
-                         failed: the pill says so, chosen or not. A press on
-                         the count is a press on its tab: it reaches the
-                         hit. -->
-                    <!-- literal: 18px; 3px -->
-                    <span
+                    <!-- The count is the kit's badge in its tab's status
+                         pair (DESIGN.md, Badge), its numeral meta in tabular
+                         figures: only its place in the tab is the tab's. A
+                         press on the count is a press on its tab: it reaches
+                         the hit. -->
+                    <Badge
                       data-num
                       data-slot="count"
-                      class="pointer-events-none ms-space-1 me-(--count-end) inline-grid h-(--count-side) min-w-(--count-side) place-items-center rounded-xs bg-count-fill-live px-(--count-pad) type-meta num text-count-fill-ink data-[tab=finished]:not-data-failed:bg-count-fill-done data-failed:bg-count-fill-fail"
-                      data-failed={(tab.id === "finished" && finishedFailed) ||
-                        undefined}
+                      class="num"
                       data-flip="pop"
                       data-tab={tab.id}
-                      style:--count-end="max(0px, 2px - var(--tight) * 0.06)"
-                      style:--count-pad="calc(3px - var(--tight) * 0.03)"
-                      style:--count-side="18px">{count}</span
+                      size="count"
+                      variant={pairOf(tab.id)}><span>{count}</span></Badge
                     >
                   {/key}
                 {/if}
@@ -911,7 +910,7 @@
                 {/if}
                 <!-- Each tree is the shared one (SessionTree), drawing this
                      tab's row; the relay gives each line its motion. -->
-                {#snippet line(row: InstanceRow)}
+                {#snippet line(row: BoardRow)}
                   {@render sessionRow(row, shown, id)}
                 {/snippet}
                 <ul
@@ -1075,6 +1074,13 @@
   /* A label never gives way: the header's spacing does. */
   :global([data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="hit"]) {
     flex-shrink: 0;
+  }
+  /* residual: foreign-dom — the count is the kit's badge (its root takes
+     no class from here): only its place in the tab is the tab's, and a press
+     on it is a press on its tab, reaching the hit. */
+  [data-slot="head"] :global([data-slot="count"]) {
+    margin-inline: var(--space-1) max(0px, 2px - var(--tight) * 0.06);
+    pointer-events: none;
   }
   /* residual: pseudo — a leaving row's nesting line (the list item's
      pseudo-elements, app.css .kit-nest) goes out on the row's own exit

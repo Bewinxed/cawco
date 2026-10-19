@@ -96,6 +96,15 @@ export const sessionConfigDir = ({
 export const projectClaudeDir = (cwd: string, ...parts: string[]): string =>
   join(cwd, CLAUDE_DIR_NAME, ...parts);
 
+/**
+ * Where a project's memory documents are placed in a folder (agent
+ * placed-memory.ts): its `.claude/rules/cawco/`. Claude Code loads every
+ * rule file under `.claude/rules/` at a session's launch ("All `.md` files
+ * are discovered recursively", code.claude.com/docs/en/memory).
+ */
+export const placedMemoryDir = (cwd: string): string =>
+  projectClaudeDir(cwd, "rules", "cawco");
+
 /** The store of the trees the entries of `dir` link to (claude-dirs.ts {@link TREE_STORE_DIR}). */
 export const treeStoreOf = (dir: string): string =>
   join(dirname(dir), TREE_STORE_DIR, basename(dir));
@@ -584,6 +593,26 @@ export const linkWorkspaceTmp = (id: string): string =>
     ? shortLink(scratchLinkName(id), workspaceScratchDir(id))
     : workspaceScratchDir(id);
 
+/**
+ * macOS: removes workspace `id`'s short name ({@link workspaceTmpDir}) as
+ * the workspace goes, when it names that workspace's scratch dir and nothing
+ * else; a name pointed elsewhere is not this workspace's to take. Nothing
+ * elsewhere.
+ */
+export const forgetWorkspaceTmp = (id: string): void => {
+  if (process.platform !== "darwin") {
+    return;
+  }
+  const link = workspaceTmpDir(id);
+  try {
+    if (readlinkSync(link) === workspaceScratchDir(id)) {
+      unlinkSync(link);
+    }
+  } catch {
+    // Not there, or not a link: nothing of this workspace's to remove.
+  }
+};
+
 /** Why a socket in workspace `id`'s `TMPDIR` would not fit, or nothing ({@link socketPathProblem}). */
 export const scratchSocketProblem = (id: string): string | undefined =>
   socketPathProblem(
@@ -895,32 +924,6 @@ export const darwinUserDirs = async (): Promise<string[]> =>
         })
       )
     : [];
-
-/**
- * macOS: where a scratch fleet that workspace `id` runs (scripts/
- * scratch-fleet.ts) keeps its sandbox and its services' HOMEs, in the user's
- * temp folder, `cawco-<id8>`; none elsewhere. Not the workspace's scratch
- * dir: OpenCode resolves every folder above a location (its config
- * discovery, 2.0.29 to 2.0.32), and Bun resolves a folder on macOS by
- * opening it, which the boundary refuses for every folder above one under
- * home, where a folder answers a lookup alone (boundary-policy.ts
- * `seatbeltProfile`): "EPERM … lstat '/Users/…/.cawco/tmp'", and every
- * location read answered 500. Nothing above the user's temp folder is
- * refused. No socket goes here: the boundary keeps the host's sockets in it
- * out of reach. The workspace's archive removes it (agent workspace.ts).
- *
- * Bun's realpath on macOS opens the folder `O_RDONLY` and asks
- * `fcntl(F_GETPATH)` (oven-sh/bun#44606, open; fixed by PR #38365, which
- * calls realpath(3), or #42374, which asks `getattrlist(ATTR_CMN_FULLPATH)`,
- * neither merged as of Bun 1.4.2). Once OpenCode ships a Bun with that fix,
- * the fleet goes back to the scratch dir and this folder goes.
- */
-export const workspaceFleetDir = async (
-  id: string
-): Promise<string | undefined> => {
-  const [temp] = await darwinUserDirs();
-  return temp ? join(temp, `cawco-${id.slice(0, 8)}`) : undefined;
-};
 
 /**
  * Where the impeccable skill's engine is installed on the host, one folder

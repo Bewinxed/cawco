@@ -156,7 +156,8 @@ export interface SeatbeltPlace {
   /**
    * The host sockets a command still connects to, each a Seatbelt regex over
    * the socket's whole path, inside a dir of {@link hostSockets}: each booted
-   * simulator's testmanagerd (boundary.ts `TEST_MANAGER_SOCKET`).
+   * simulator's testmanagerd (boundary.ts `TEST_MANAGER_SOCKET`) and its
+   * remote automation (boundary.ts `REMOTE_AUTOMATION_SOCKET`).
    */
   readonly reachedHostSockets: readonly string[];
 }

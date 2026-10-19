@@ -87,7 +87,7 @@
   <span
     data-slot="fill"
     aria-hidden="true"
-    class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--row-h) rounded-sm bg-surface-fill group-data-embedded:top-0 group-data-embedded:inset-x-0 motion-safe:transition-[transform] motion-safe:dur-toggle motion-safe:ease-in-out"
+    class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--row-h) rounded-sm bg-selected-bg group-data-embedded:top-0 group-data-embedded:inset-x-0 motion-safe:transition-[transform] motion-safe:dur-toggle motion-safe:ease-in-out"
     style:transform={`translateY(calc(${index} * (var(--row-h) + 2px)))`}
     style:opacity={rows.some((row) => row.value === value) ? 1 : 0}
   ></span>
@@ -102,7 +102,7 @@
       aria-describedby={row.reason
         ? `${uid}-perm-${row.value}-reason`
         : undefined}
-      class="ns-in press-tint relative flex h-(--row-h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border border-transparent bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong disabled:cursor-not-allowed disabled:opacity-55"
+      class="ns-in press-tint relative flex h-(--row-h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border border-transparent bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-checked:text-selected-ink disabled:cursor-not-allowed disabled:opacity-55"
       data-fh="1"
       data-perm={row.value}
       disabled={row.disabled}
@@ -122,13 +122,16 @@
       >
       <span data-slot="text" class="min-w-0 flex-1">
         <span data-slot="name" class="type-label block">{row.name}</span>
-        <span class="type-meta block truncate text-ink-subtle">{row.desc}</span>
+        <span
+          class="type-meta block truncate text-ink-subtle in-aria-checked:text-selected-ink"
+          >{row.desc}</span
+        >
       </span>
       <!-- Every row keeps the check's slot, so the rows share one width
            whichever mode is chosen. -->
       <span aria-hidden="true" class="grid size-icon-md flex-none">
         {#if on}
-          <Check class="ns-check size-icon-md text-ink-strong" />
+          <Check class="ns-check size-icon-md text-selected-icon" />
         {/if}
       </span>
       {#if row.reason}

@@ -6,10 +6,12 @@
  *   session in a new workspace cut from one of the project's checkouts on a
  *   machine that is online, briefed from the task file (title, description,
  *   acceptance criteria, open to-dos, checks, and where it sits among its
- *   edges), with `work_items.task_id` naming the task. It runs the delegate
- *   type the stage it enters `runs:`, else the task's `type:`, else the
- *   fleet's default. Starting one moves the task to its active stage (the
- *   stage that runs it, else the first of kind `active`), as `hub`.
+ *   edges), with `work_items.task_id` naming the task. It runs the task's
+ *   own `type:`, else the type the stage it enters `runs:`, else the
+ *   judged one (spec §5.1: "the task names one → that type; else the
+ *   dispatcher asks"; {@link typeOf}). Starting one moves the task to its
+ *   active stage (the stage that runs it, else the first of kind
+ *   `active`), as `hub`.
  * - **Who it reports to.** A work item needs a parent session. `task_start`
  *   from a session you started (or Caw) makes that session the parent; the
  *   project's lead, its Caw (caw.ts), takes the reports of every attempt
@@ -26,9 +28,14 @@
  *   dispatch and Caw on, up to `max_attempts` live attempts, and not while
  *   `review_limit` tasks or more wait in `you` stages.
  * - **Hooks.** A task entering an `active` stage with `runs: <type>`, by
- *   anyone's move but the hub's, or filed straight into one, starts an
- *   attempt of that type, reporting to the session that moved it or else the
- *   lead. A hook obeys `max_attempts`: at the cap its start is queued
+ *   anyone's move but the hub's own (a move the tracker sync brings from
+ *   GitHub or Linear is the person's who made it there: tracker.ts holds
+ *   back the issues of openers the tracker does not vouch for), or filed
+ *   straight into one, starts an
+ *   attempt (of the task's own type when it names one, else that type),
+ *   reporting to the session that moved it or else the lead. A start that
+ *   cannot go, the lead's own start among them, is remembered on the task
+ *   and shown on its card. A hook obeys `max_attempts`: at the cap its start is queued
  *   (`queued_task_starts`) and runs, oldest first and before the frontier,
  *   as a slot frees. A start you or a session ask for is not capped. Only
  *   `runs` runs here.
@@ -78,10 +85,11 @@
  * again as a safety net and starts nothing when nothing is ready.
  */
 import {
+  artifactName,
   deliverableKind,
   type InstanceRow,
   type LandsMode,
-  namesAmong,
+  machinesCalled,
   POST_OUTPUT_RULE,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
@@ -153,7 +161,8 @@ export interface DispatchDeps {
   >;
   /**
    * The brief's `## Design system` section, read from the attempt's clone
-   * (design-system.ts `designSection`): "" when the clone holds no design/.
+   * (design-system.ts `designSection`): "" when the clone's design/ holds
+   * no guide (SKILL.md or DESIGN.md).
    * Asked only for a task that needs the system (design-offers.ts
    * `needsDesignSystem`).
    */
@@ -297,6 +306,38 @@ const refuse = (code: FolderRefusalStatus, message: string): never => {
 
 const short = (id: string): string => id.slice(0, 8);
 
+/**
+ * What an attempt's acceptance criteria are judged over: its finish_item
+ * report with how it landed, then its hand-in on the task (task_result: what
+ * it did, what to check, what it made), last so a report cut to its end
+ * keeps it. Before, Jev read the finish_item report alone and found none of
+ * a design build's four criteria shown (0.07 to 0.32, nightly 3944): the
+ * sourced tokens and DESIGN.md's answers were said only in its task_result.
+ */
+const attemptReport = (item: WorkItemRow): string => {
+  const report = (item.digest ?? item.result ?? "").trim();
+  const handIn = item.taskResult;
+  if (!handIn) {
+    return report;
+  }
+  return [
+    report,
+    `The attempt's hand-in on the task:\n\n${handIn.summary.trim()}`,
+    ...(handIn.check.length > 0
+      ? [
+          `What to check:\n${handIn.check.map((line) => `- ${line}`).join("\n")}`,
+        ]
+      : []),
+    ...(handIn.artifacts.length > 0
+      ? [
+          `What it made:\n${handIn.artifacts.map((each) => `- ${artifactName(each)}`).join("\n")}`,
+        ]
+      : []),
+  ]
+    .filter(Boolean)
+    .join("\n\n");
+};
+
 /** How a session is named in a sentence. */
 const named = (row: InstanceRow): string =>
   `“${row.title?.trim() || row.derivedTitle?.trim() || `session ${short(row.id)}`}”`;
@@ -335,22 +376,11 @@ export const parentProblem = (
 const HOST_CHECK = /^host:\s*/;
 
 /**
- * A unit-test runner: the owner forbids unit tests, so an attempt never runs
- * one a task lists (`bun test`, `vitest`, `jest`, `pytest`, `go test`, …).
- */
-const UNIT_TEST =
-  /\b(bun test|bun run test|npm (run )?test|yarn test|pnpm test|vitest|jest|mocha|pytest|go test|cargo test|swift test|xcodebuild test)\b/;
-
-/**
- * The brief's line for one task check: the command to run and quote, a
- * `host:` one as what the attempt lists under "Not run", a unit-test runner
- * as what it does not run.
+ * The brief's line for one task check: the command to run and quote, or a
+ * `host:` one as what the attempt lists under "Not run".
  */
 const checkLine = (written: string): string => {
   const command = written.replace(HOST_CHECK, "");
-  if (UNIT_TEST.test(command)) {
-    return `- \`${command}\`: a unit-test runner. The owner forbids unit tests, so do not run it; say so in your summary.`;
-  }
   return command === written
     ? `- \`${command}\``
     : `- \`${command}\`: marked host, so it cannot run inside your boundary; list it under "Not run:" for whoever runs it on the host.`;
@@ -375,6 +405,15 @@ const taskLimits = (
   ...(task.owns.length > 0 ? { owns: task.owns } : {}),
   ...(task.budget ? { budget: task.budget } : {}),
 });
+
+/**
+ * The type an attempt runs before any is judged: the task's own `type:`,
+ * else the `runs:` of the active stage it runs in (spec §5.1).
+ */
+const typeOf = (
+  task: Pick<TaskView, "type">,
+  active: Stage | undefined
+): string | undefined => task.type ?? active?.hooks.runs;
 
 /** What the brief says happens at finish_item, by where the attempt lands. */
 const AT_FINISH: Record<LandsMode, string> = {
@@ -706,7 +745,7 @@ export const createDispatcher = ({
     }
     const up = fitting.filter((machine) => online(machine.machineId));
     const fleet = db.listAgents();
-    const hosts = (machines: MachineFacts[]) => namesAmong(machines, fleet);
+    const hosts = (machines: MachineFacts[]) => machinesCalled(machines, fleet);
     if (up.length === 0) {
       return `${needs}, and none is online (${hosts(fitting)} ${fitting.length === 1 ? "is" : "are"} offline), so it starts nowhere else: bring one online.`;
     }
@@ -1015,8 +1054,7 @@ export const createDispatcher = ({
     { origin, previous }: { origin?: Origin; previous?: WorkItemRow }
   ): Promise<WorkItemStart> => {
     const placed = placementOf(project, task, parent, previous);
-    const type =
-      active?.hooks.runs ?? task.type ?? (await chosenType(project, task));
+    const type = typeOf(task, active) ?? (await chosenType(project, task));
     const lands = landsOf(project, task, type);
     const { tasks: all } = await tasks.list(project.id);
     const retry = previous
@@ -1196,12 +1234,8 @@ export const createDispatcher = ({
       task: task.id,
       stage: task.stage,
       queued: true,
-      type: active?.hooks.runs ?? task.type,
-      lands: landsOf(
-        project,
-        task,
-        active?.hooks.runs ?? task.type ?? undefined
-      ),
+      type: typeOf(task, active) ?? null,
+      lands: landsOf(project, task, typeOf(task, active)),
       workItemId: null,
       workspaceId: null,
       instanceId: null,
@@ -1299,11 +1333,28 @@ export const createDispatcher = ({
       return;
     }
     const { project, ready } = look;
-    const reportsTo = await leadOf(project);
+    let slots = project.maxAttempts - look.live;
+    let reportsTo: InstanceRow | undefined;
+    try {
+      reportsTo = await leadOf(project);
+    } catch (error) {
+      // The tasks this look would have started say why they did not.
+      const why = failure(error).message;
+      const waiting = await Promise.all(
+        ready.slice(0, slots).map((id) => tasks.get(projectId, id))
+      );
+      for (const task of waiting) {
+        note(
+          projectId,
+          task,
+          `${task.id} is ready to start, but Caw, who takes the reports of the attempts the hub starts, did not start: ${why}`
+        );
+      }
+      return;
+    }
     if (!reportsTo) {
       return;
     }
-    let slots = project.maxAttempts - look.live;
     for (const id of ready) {
       if (slots <= 0) {
         break;
@@ -1336,16 +1387,40 @@ export const createDispatcher = ({
 
   /**
    * The session a hook's attempt reports to: the one that moved the task in
-   * when it can take reports, else the lead.
+   * when it can take reports, else the lead. With neither, or a lead whose
+   * session did not start (no account signed in, say), the reason is
+   * remembered on the task, so its card says why it did not start; `how`
+   * opens that sentence ("tsk-3 entered extract, which runs brand").
    */
   const hookParent = async (
     project: ProjectRow,
-    moverId: string | null | undefined
+    task: TaskView,
+    moverId: string | null | undefined,
+    how: string
   ): Promise<InstanceRow | undefined> => {
     const mover = moverId ? instance(moverId) : undefined;
-    return mover && !parentProblem(mover, project.id)
-      ? mover
-      : await leadOf(project);
+    if (mover && !parentProblem(mover, project.id)) {
+      return mover;
+    }
+    let caw: InstanceRow | undefined;
+    try {
+      caw = await leadOf(project);
+    } catch (error) {
+      note(
+        project.id,
+        task,
+        `${how}, but Caw, who takes its report, did not start: ${failure(error).message}`
+      );
+      return;
+    }
+    if (!caw) {
+      note(
+        project.id,
+        task,
+        `${how}, but no session can take the attempt's report. ${NO_LEAD}`
+      );
+    }
+    return caw;
   };
 
   /**
@@ -1400,13 +1475,13 @@ export const createDispatcher = ({
       );
       return;
     }
-    const parent = await hookParent(project, queued.parentInstanceId);
+    const parent = await hookParent(
+      project,
+      task,
+      queued.parentInstanceId,
+      `${task.id} waited in ${queued.stage} for ${owns ? "owned files" : "a slot"}`
+    );
     if (!parent) {
-      note(
-        project.id,
-        task,
-        `${task.id} waited in ${queued.stage} for ${owns ? "owned files" : "a slot"}, but no session can take the attempt's report now. ${NO_LEAD}`
-      );
       return;
     }
     await startAttempt(
@@ -1471,14 +1546,13 @@ export const createDispatcher = ({
       return;
     }
     const project = projectOf(projectId);
-    const parent = await hookParent(project, actor.instanceId);
+    const parent = await hookParent(
+      project,
+      await tasks.get(projectId, id),
+      actor.instanceId,
+      `${id} entered ${to}, which runs ${stage.hooks.runs}`
+    );
     if (!parent) {
-      const task = await tasks.get(projectId, id);
-      note(
-        projectId,
-        task,
-        `${id} entered ${to}, which runs ${stage.hooks.runs}, but no session can take the attempt's report. ${NO_LEAD}`
-      );
       return;
     }
     const live = liveIn(projectId);
@@ -1513,14 +1587,15 @@ export const createDispatcher = ({
 
   /**
    * The stage kind an attempt that ended sends its task to: done, or `you`
-   * while the pull request it opened waits for review; back to todo when it
-   * failed or was cancelled.
+   * while the pull request it opened waits for review, or while the
+   * follow-up of its landed work ended without landing (its `error`,
+   * work-items.ts `finish`); back to todo when it failed or was cancelled.
    */
   const kindAfter = (item: WorkItemRow): "done" | "todo" | "you" => {
     if (item.state !== "done") {
       return "todo";
     }
-    return item.lands === "pr" && item.prUrl ? "you" : "done";
+    return item.error || (item.lands === "pr" && item.prUrl) ? "you" : "done";
   };
 
   /**
@@ -1531,6 +1606,26 @@ export const createDispatcher = ({
   const reviewsFirst = (stages: { stages: readonly Stage[] }): boolean =>
     stages.stages.find((each) => each.kind === "done")?.hooks.by === "you" &&
     stages.stages.some((each) => each.kind === "you");
+
+  /**
+   * Landed work whose follow-up ended without landing (a done item's
+   * `error`, work-items.ts `finish`): the reason, noted on its task, which
+   * waits for you with it ({@link kindAfter}).
+   */
+  const noteFollowUp = async (
+    projectId: string,
+    taskId: string,
+    item: WorkItemRow
+  ): Promise<void> => {
+    if (item.state === "done" && item.error) {
+      await tasks.comment(
+        projectId,
+        taskId,
+        `Attempt ${short(item.id)}'s work stays landed. Its follow-up ended without landing:\n\n${item.error}`,
+        hubActor(`attempt ${short(item.id)}'s follow-up ended`)
+      );
+    }
+  };
 
   /**
    * The hub's move of a task after its attempt ended: done to the first done
@@ -1561,6 +1656,7 @@ export const createDispatcher = ({
     if (task.kind === "done" || task.kind === "dropped") {
       return;
     }
+    await noteFollowUp(projectId, taskId, item);
     const criteria = criteriaOf(task.acceptance);
     const judged = await kindAfterJudged(projectId, task, criteria, item);
     // The lead judges: the task stays where it is until he moves it.
@@ -1617,6 +1713,9 @@ export const createDispatcher = ({
     if (judged === "done" && kind === "you") {
       return `attempt ${short(item.id)} ${item.state}; this project reviews before done, so it waits for you`;
     }
+    if (kind === "you" && item.state === "done" && item.error) {
+      return `attempt ${short(item.id)}'s work stays landed; its follow-up ended without landing, so it waits for you`;
+    }
     if (kind === "you" && item.prUrl && item.lands === "pr") {
       return `attempt ${short(item.id)} opened ${item.prUrl}`;
     }
@@ -1643,7 +1742,7 @@ export const createDispatcher = ({
     criteria: string[],
     item: WorkItemRow
   ): Promise<"done" | "lead" | "you"> => {
-    const report = item.digest ?? item.result ?? "";
+    const report = attemptReport(item);
     const access = placement.access();
     const about = hubActor(`attempt ${short(item.id)} judged`);
     if (access) {
@@ -1764,7 +1863,11 @@ export const createDispatcher = ({
     if (event.kind === "moved") {
       db.dropQueuedTaskStart(event.projectId, event.id);
     }
-    if (event.kind !== "changed" && event.actor.mover !== "hub") {
+    // The hub's own moves start nothing; one a tracker brings is a person's.
+    if (
+      event.kind !== "changed" &&
+      (event.actor.mover !== "hub" || event.actor.tracker !== undefined)
+    ) {
       const entered = event.kind === "moved" ? event.to : event.stage;
       hooked({ ...event, to: entered })
         .catch((error: unknown) =>

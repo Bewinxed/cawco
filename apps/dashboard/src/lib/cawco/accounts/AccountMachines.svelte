@@ -155,7 +155,7 @@
                   variant: "outline",
                   size: "sm",
                 })}
-                width={340}
+                width="var(--c-signin-pop-w)"
               >
                 {#snippet trigger()}
                   {verb}

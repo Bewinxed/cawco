@@ -50,6 +50,7 @@ import {
   workspaceReadOnlyDir,
 } from "@cawco/core/paths";
 import {
+  GIT_LOCALE,
   repositoryConfigProblem,
   SAFE_GIT_ENV,
   safeGitArgv,
@@ -65,7 +66,13 @@ import {
 import type { GitPost, PushedRef } from "@cawco/core/upstream-post";
 import { upstreamRule } from "./github-door";
 import { hostGh } from "./host-gh";
-import { hubGitEnv, hubGitLogin, isHubRemote, withoutCredential } from "./move";
+import {
+  hubGitEnv,
+  hubGitLogin,
+  isHubRemote,
+  LFS_FILTERS,
+  withoutCredential,
+} from "./move";
 import { noRepositoryAt } from "./stand-ins";
 import { prepareDoor, socketPlace } from "./tool-door";
 import { raiseUpstreamAsk } from "./upstream-posts";
@@ -125,6 +132,8 @@ const LINE_END = 10;
 
 /** A command after which the helper protocol carries git's own packets, not lines. */
 const CONNECT = /^(stateless-)?connect /;
+/** git's ask for a dry run of the push that follows (gitremote-helpers(7), "option dry-run"). */
+const DRY_RUN = "option dry-run true";
 const FORCED = /^\+/;
 
 /** A push command's refspec (`push [+]<src>:<dst>`), its source and destination. */
@@ -278,10 +287,18 @@ const protocolFeed = (
   let raw = false;
   let pending = Buffer.alloc(0);
   let batch: string[] = [];
+  /** git asked for a dry run (`option dry-run true`): its push sends nothing. */
+  let dryRun = false;
   const endBatch = async (): Promise<void> => {
     const lines = batch;
     batch = [];
     let refused: string | undefined;
+    // A dry run (a landing's push check, hub landing.ts) sends no large file
+    // and lands nothing to hold for the person: the helper answers it alone.
+    if (dryRun) {
+      write(`${lines.join("\n")}\n\n`);
+      return;
+    }
     if (options.hold) {
       refused = await options.hold(lines);
     } else if (options.lfs) {
@@ -315,6 +332,7 @@ const protocolFeed = (
         // biome-ignore lint/performance/noAwaitInLoops: a batch is answered before the next command is read
         await endBatch();
       } else {
+        dryRun ||= line === DRY_RUN;
         write(`${line}\n`);
         raw = CONNECT.test(line);
       }
@@ -408,9 +426,27 @@ const isGithubHttps = (url: string): boolean => {
 };
 
 /**
+ * What git-lfs would otherwise learn from a server and write into the
+ * clone's `.git/config` (`git config --replace-all`, a lock and a rename),
+ * given env-only to every git the door runs for a GitHub origin: whether to
+ * ask the server about locks before a push (`lfs.locksverify`, git-lfs
+ * lockverifier.go `disableFor`), for whatever endpoint the repository names,
+ * through the URL-less key git-lfs falls back to (config/url_config.go
+ * `Get`). A hub origin's git is held to its own LFS ({@link hubGitEnv}). The
+ * rename drops the read-only bind the workspace's sandbox holds on that
+ * file, so the sandbox is stopped with everything in it (boundary-host.ts
+ * `guard`): on 2026-10-17 a landing's push to a guarded GitHub origin set
+ * this off (a 401 on `locks/verify`, then `lfs.<url>.access` written), and
+ * cut off every command the workspace was running.
+ */
+const DOOR_LFS: [string, string][] = [["lfs.locksverify", "false"]];
+
+/**
  * git's environment for a guarded workspace's GitHub origin, on the host:
  * the host's own gh as GitHub's only credential helper (`helper =` clears
- * what came before, git-config(1) `credential.helper`), env-only as
+ * what came before, git-config(1) `credential.helper`), and GitHub's LFS
+ * access as that credential makes it (`basic`: sent up front, so no 401 has
+ * git-lfs write it into the clone's config, {@link DOOR_LFS}), env-only as
  * {@link hubGitEnv} is.
  */
 export const hostGithubGitEnv = async (): Promise<Record<string, string>> => {
@@ -422,14 +458,23 @@ export const hostGithubGitEnv = async (): Promise<Record<string, string>> => {
   }
   const first = Number.parseInt(process.env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
   const key = "credential.https://github.com.helper";
+  const pairs: [string, string][] = [
+    [key, ""],
+    [key, `!${shellWord(gh)} auth git-credential`],
+    ["lfs.https://github.com/.access", "basic"],
+    ...DOOR_LFS,
+  ];
   return {
     ...(hostEnvironment() as Record<string, string>),
+    ...GIT_LOCALE,
     GIT_TERMINAL_PROMPT: "0",
-    GIT_CONFIG_COUNT: String(first + 2),
-    [`GIT_CONFIG_KEY_${first}`]: key,
-    [`GIT_CONFIG_VALUE_${first}`]: "",
-    [`GIT_CONFIG_KEY_${first + 1}`]: key,
-    [`GIT_CONFIG_VALUE_${first + 1}`]: `!${shellWord(gh)} auth git-credential`,
+    GIT_CONFIG_COUNT: String(first + pairs.length),
+    ...Object.fromEntries(
+      pairs.flatMap(([name, value], index) => [
+        [`GIT_CONFIG_KEY_${first + index}`, name],
+        [`GIT_CONFIG_VALUE_${first + index}`, value],
+      ])
+    ),
   };
 };
 
@@ -503,8 +548,10 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
       throw new Error(`git did not run in ${ref.path}: ${problem}`);
     }
     const { asked, github, held } = doorTarget(ref, url);
+    // Not GitHub's, the door's url is the clone's own origin on the hub
+    // (doorTarget): its credential and its LFS alone.
     const env =
-      github || asked !== null ? await hostGithubGitEnv() : hubGitEnv();
+      github || asked !== null ? await hostGithubGitEnv() : hubGitEnv(url);
     const scheme = new URL(url).protocol === "https:" ? "https" : "http";
     const child = spawn(
       "git",
@@ -672,6 +719,7 @@ export const guardedGitParameters = (clone: string): string | undefined => {
  * srt's own over the request, which carries a `GIT_CONFIG_PARAMETERS` of its
  * own: the hub's `/git/` URLs rewritten to the `cawco::` helper, and that
  * transport allowed. When the clone at `clone`'s origin is the hub, also
+ * git-lfs's filters ({@link LFS_FILTERS}), and
  * `GIT_LFS_SKIP_PUSH=1` (git-lfs: "Do nothing on pre-push"): any git-lfs
  * command installs a pre-push hook, which inside the boundary reaches no
  * hub; the door sends a push's large files from the host ({@link pushLfs}).
@@ -688,16 +736,21 @@ export const gitDoorEnv = (
   const url = new URL(hub);
   url.protocol = url.protocol === "wss:" ? "https:" : "http:";
   const prefix = `${url.origin}/git/`;
-  const origin = originOf(clone);
+  const hubOrigin = originOf(clone).startsWith(prefix);
   return {
     CAWCO_GIT_SOCKET: gitDoorOf(id),
     CAWCO_GIT_PARAMETERS: [
       [`url.cawco::${prefix}.insteadOf`, prefix],
       ["protocol.cawco.allow", "always"],
+      // The filters the hub branch's checkout ran with (workspace.ts
+      // `createWorkspace`): without the clean one, git inside reads every
+      // large file it smudged as changed, and a landing hands the item back
+      // as uncommitted work.
+      ...(hubOrigin ? LFS_FILTERS : []),
     ]
       .map(([key, value]) => `${shellWord(key)}=${shellWord(value)}`)
       .join(" "),
-    ...(origin.startsWith(prefix) ? { GIT_LFS_SKIP_PUSH: "1" } : {}),
+    ...(hubOrigin ? { GIT_LFS_SKIP_PUSH: "1" } : {}),
   };
 };
 

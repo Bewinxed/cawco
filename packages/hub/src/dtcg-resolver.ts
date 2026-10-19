@@ -70,6 +70,8 @@ export interface TokenSystem {
   contexts: TokenContext[];
   /** Every file read, by path relative to the resolver, as parsed (settle writes into these). */
   files: Map<string, unknown>;
+  /** The token trees the resolver holds inline as sources, in the order read. */
+  inline: Json[];
   /** The resolver document's own path. */
   resolver: string;
 }
@@ -148,13 +150,103 @@ const errorsOf = (validate: ValidateFunction, where: string): string[] =>
       (e) => `${where}${e.instancePath || "/"} ${e.message ?? "is invalid"}`
     );
 
-/** What the DTCG schemas say is wrong with a system's files; none when every file conforms. */
+/** Each token's resolved `$type` in a tree, by path: its own, else its nearest group's. */
+function typesIn(
+  tree: unknown,
+  at: string[] = [],
+  inherited?: string,
+  into = new Map<string, string>()
+): Map<string, string> {
+  if (!isObject(tree)) {
+    return into;
+  }
+  const type = typeof tree.$type === "string" ? tree.$type : inherited;
+  if (isToken(tree)) {
+    if (type) {
+      into.set(at.join("."), type);
+    }
+    return into;
+  }
+  for (const [key, value] of Object.entries(tree)) {
+    if (!key.startsWith("$") || key === "$root") {
+      typesIn(value, [...at, key], type, into);
+    }
+  }
+  return into;
+}
+
+/**
+ * A copy of a token file with every token's resolved `$type` written on it,
+ * as DTCG 2025.10 resolves one (Format Module §6.7.3, "Type Inheritance":
+ * "1. Token's explicit $type property (highest precedence) 2. Resolved
+ * group's $type property … 3. Parent group's $type property (walking up the
+ * hierarchy) 4. Token is invalid if no type can be determined",
+ * https://www.designtokens.org/tr/2025.10/format/). The published schema
+ * checks a `$value` against its type only where the token itself says it,
+ * so a file is checked in this form. A group is read in the merged base, so
+ * a context's override, or a set's token whose group another set types,
+ * takes the type the base resolves for its path. Tokens no rule types are
+ * named in `untyped`.
+ */
+function typedCopy(
+  tree: unknown,
+  base: Map<string, string>,
+  untyped: string[],
+  at: string[] = [],
+  inherited?: string
+): unknown {
+  if (!isObject(tree)) {
+    return tree;
+  }
+  const type = typeof tree.$type === "string" ? tree.$type : inherited;
+  if (isToken(tree)) {
+    const tokenPath = at.join(".");
+    const tokenType = type ?? base.get(tokenPath);
+    if (!tokenType) {
+      untyped.push(tokenPath);
+    }
+    return tokenType ? { ...tree, $type: tokenType } : tree;
+  }
+  return Object.fromEntries(
+    Object.entries(tree).map(([key, value]) => [
+      key,
+      key.startsWith("$") && key !== "$root"
+        ? value
+        : typedCopy(value, base, untyped, [...at, key], type),
+    ])
+  );
+}
+
+/**
+ * What the DTCG schemas say is wrong with a system's files, and its inline
+ * sets, each token checked as its resolved type ({@link typedCopy}); none
+ * when every one conforms.
+ */
 export function schemaProblems(system: TokenSystem): string[] {
   const { format, resolver } = validatorsOf();
-  return [...system.files].flatMap(([path, json]) => {
-    const validate = path === system.resolver ? resolver : format;
-    return validate(json) ? [] : errorsOf(validate, path);
-  });
+  const base = typesIn(system.base);
+  const tokenFile = (where: string, json: unknown): string[] => {
+    const untyped: string[] = [];
+    const typed = typedCopy(json, base, untyped);
+    return [
+      ...(format(typed) ? [] : errorsOf(format, where)),
+      ...untyped.map(
+        (path) =>
+          `${where} ${path} has no $type, on it or on any group above it (Format Module §6.7.3: "Token is invalid if no type can be determined")`
+      ),
+    ];
+  };
+  return [
+    ...[...system.files].flatMap(([path, json]) => {
+      if (path !== system.resolver) {
+        return tokenFile(path, json);
+      }
+      return resolver(json) ? [] : errorsOf(resolver, path);
+    }),
+    ...system.inline.flatMap((tree, index) =>
+      tokenFile(`${system.resolver} (inline source ${index + 1})`, tree)
+    ),
+  ];
 }
 
 interface Source {
@@ -212,6 +304,7 @@ export async function loadTokenSystem(
     contexts: loader.contexts,
     contextOwners: loader.contextOwners,
     files,
+    inline: loader.inline,
     resolver: resolverPath,
   };
 }
@@ -254,6 +347,7 @@ class Loader {
   readonly baseOwners = new Map<string, Owned>();
   readonly contexts: TokenContext[] = [];
   readonly contextOwners = new Map<string, Map<string, Owned>>();
+  readonly inline: Json[] = [];
   private readonly doc: Json;
   private readonly files: Map<string, unknown>;
   private readonly folder: string;
@@ -347,6 +441,7 @@ class Loader {
       return [{ file: path, tree: json as Json }];
     }
     if (isObject(entry)) {
+      this.inline.push(entry);
       return [{ file: undefined, tree: entry }];
     }
     throw new Error(`${where}: a source is a $ref or inline tokens`);

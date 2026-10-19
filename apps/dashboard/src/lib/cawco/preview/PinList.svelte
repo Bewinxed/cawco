@@ -73,17 +73,20 @@
     <button
       data-slot="pin-row"
       aria-current={pin.id === focused || undefined}
-      class="flex items-center gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-0 border-none border-current rounded-sm bg-transparent text-ink-row text-start transition-[background-color] dur-control ease-out cursor-pointer not-active:not-aria-current:hover:bg-surface-hover active:bg-surface-fill aria-current:bg-surface-fill focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
+      class="flex items-center gap-space-2 w-full min-h-c-artifact-row-h px-space-2 py-0 border-none border-current rounded-sm bg-transparent text-ink-row text-start transition-[background-color] dur-control ease-out cursor-pointer not-active:not-aria-current:hover:bg-surface-hover active:not-aria-current:bg-surface-fill aria-current:bg-selected-bg focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset)"
       data-pin-row={pin.number}
       onclick={() => onopen(pin.id)}
       type="button"
     >
       <PinDisc number={pin.number} resolved={!!pin.resolvedAt} />
       <span data-slot="words" class="flex flex-1 min-w-0 flex-col">
-        <span data-slot="name" class="truncate text-ink-strong type-label"
+        <span
+          data-slot="name"
+          class="truncate text-ink-strong type-label in-aria-current:text-selected-ink"
           >{pinName(pin)}</span
         >
-        <span class="truncate text-ink-muted text-size-meta"
+        <span
+          class="truncate text-ink-muted text-size-meta in-aria-current:text-selected-ink"
           >{lastLine(pin)}</span
         >
       </span>

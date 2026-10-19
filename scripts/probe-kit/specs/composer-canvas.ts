@@ -29,13 +29,17 @@
  * 11. Send/Stop's glyph swap: with prefers-reduced-motion: reduce, pressing
  *    Send runs opacity-only keyframes over --dur-control, scrubbed 0 → ½ → 1;
  *    without, the incoming glyph's keys are opacity, transform and filter.
+ *    (clock) The clock's guard, run on purpose: a run the page cancels and
+ *    starts again on its element, and one whose element it takes away,
+ *    leave the clock; the restarted run alone stays.
  * 12. A top corner's handle resizes it symmetrically: the top-right corner
  *    dragged by (+60, −80) widens it by 120 with its centre unmoved and
  *    raises its top by 80; past both bounds it settles on one spring
  *    animation of the slot's height, left and right at the column less
  *    --space-3 and the column less the field, dragged in at the pill's
  *    width and 40% of the column; the field keeps its width; the size
- *    survives Done and reopen; with reduced motion it lands at once.
+ *    survives Done and reopen (its own box and its foot on the composer's
+ *    top, which follows the field); with reduced motion it lands at once.
  * 13. The rail's Remove: a drawn canvas folds as Done's does (on
  *    --dur-grow-exit), no chip is left, the message carries no canvas, and
  *    the session still lists the artifact.
@@ -70,6 +74,9 @@
  * 19. A PNG pasted into the canvas, then SVG markup pasted as text: two
  *    image elements, each with its file, and in no state of the doc from
  *    the first paste on does an image element stand without its file.
+ * 20. The field emptied as a person empties it (typed, select all, delete)
+ *    reads empty to every reader of the draft: one line tall with its
+ *    placeholder, Send off, no draft kept for a reload, ↑ starts recall.
  *
  * (9: `canvas` and `artifacts` are their own specs, run beside this one.)
  */
@@ -560,6 +567,8 @@ const probe = async (kit: Kit) => {
   await touchCheck(on);
   const clock = await Clock.on(on.page);
   await swapCheck(on, clock);
+  await guardCheck(on, clock);
+  await emptiedCheck(on);
   const cdp = await on.page.context().newCDPSession(on.page);
   const pen = penOf(cdp);
   await openCheck(on, clock, pen);
@@ -896,6 +905,185 @@ const swapCheck = async (on: On, clock: Clock) => {
   );
 };
 
+/**
+ * 20. The field emptied as a person empties it (words typed, select all,
+ * delete): the browser keeps a `<br>` in the line it emptied, which is no
+ * newline of the draft (MentionField `breaks`). Every reader of the draft
+ * reads it empty: the field stands one line tall with its placeholder,
+ * Send is off, no draft is kept for a reload (draft-store `saveDraft`
+ * drops an empty one), and ↑ starts recall (`startsRecall`: an empty draft,
+ * the caret read through `selection()`'s offsets).
+ */
+const emptiedCheck = async (on: On) => {
+  const { kit, page, session } = on;
+  await page.focus(FIELD);
+  await page.keyboard.type("Gone");
+  await page.keyboard.press("Control+KeyA");
+  await page.keyboard.press("Backspace");
+  // The kept draft is written 250 ms after its last change (keep-draft).
+  await settle(page, 700);
+  const seen = await page.evaluate(
+    async ([field, send, id]) => {
+      const el = document.querySelector(field as string);
+      const button = document.querySelector<HTMLButtonElement>(send as string);
+      const kept = await new Promise<unknown>((done) => {
+        const request = indexedDB.open("cawco");
+        request.onerror = () => done("unreadable");
+        request.onsuccess = () => {
+          const db = request.result;
+          const read = db
+            .transaction("drafts")
+            .objectStore("drafts")
+            .get(id as string);
+          read.onsuccess = () => {
+            const record = read.result as { text?: string } | undefined;
+            done(record ? { text: record.text } : null);
+            db.close();
+          };
+          read.onerror = () => done("unreadable");
+        };
+      });
+      return el
+        ? {
+            html: el.innerHTML.slice(0, 120),
+            height: el.getBoundingClientRect().height,
+            floor: Number.parseFloat(getComputedStyle(el).minHeight),
+            placeholder: el.hasAttribute("data-mention-field-empty"),
+            sendOff: !!button?.disabled,
+            kept,
+          }
+        : null;
+    },
+    [FIELD, SEND, session] as const
+  );
+  await page.keyboard.press("ArrowUp");
+  const recalled = await until(
+    "the wheel up",
+    () =>
+      page.evaluate(
+        () => !!document.querySelector('[data-slot="shell"][data-rolling]')
+      ),
+    Boolean,
+    3000
+  ).catch(() => false);
+  await page.keyboard.press("Escape");
+  const closed = await until(
+    "the wheel away",
+    () =>
+      page.evaluate(
+        () => !document.querySelector('[data-slot="shell"][data-rolling]')
+      ),
+    Boolean,
+    5000
+  ).catch(() => false);
+  await settle(page);
+  const after = (await page.textContent(FIELD)) ?? "";
+  await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+  kit.check(
+    "20: the field emptied (typed, select all, delete) reads empty everywhere: one line tall with its placeholder, Send off, no draft kept, and ↑ starts recall (Escape puts it away, the field still empty)",
+    !!seen &&
+      near(seen.height, seen.floor, 0.5) &&
+      seen.placeholder &&
+      seen.sendOff &&
+      seen.kept === null &&
+      recalled &&
+      closed &&
+      after === "",
+    `${JSON.stringify(seen)}; recall ${recalled}, closed ${closed}; field after ${JSON.stringify(after)}`
+  );
+};
+
+/**
+ * 11 (clock): the clock's guard on runs the page no longer holds
+ * (anim.ts `liveOf`), run on purpose. In one catch the page starts three
+ * runs inside a box: one it then cancels and starts again on the same
+ * element (as Svelte turns a transition back), and one whose element it
+ * takes away mid-run (an outro outliving its node). The clock keeps the
+ * restarted run alone, and the catch does not throw.
+ */
+const guardCheck = async (on: On, clock: Clock) => {
+  const { kit, page } = on;
+  const BOX = '[data-slot="kit-guard"]';
+  await page.evaluate(() => {
+    const holder = document.createElement("div");
+    holder.dataset.slot = "kit-guard";
+    holder.style.cssText = "position:fixed;left:0;top:0;width:8px;height:8px";
+    const kept = document.createElement("i");
+    const gone = document.createElement("i");
+    gone.dataset.gone = "";
+    holder.append(kept, gone);
+    document.body.append(holder);
+  });
+  const fade = [{ opacity: 0 }, { opacity: 1 }];
+  let caught: Awaited<ReturnType<Clock["catchRuns"]>> = [];
+  let error = "";
+  try {
+    caught = await clock.catchRuns(
+      async () => {
+        await page.evaluate(
+          ([sel, keys]) => {
+            const holder = document.querySelector(sel as string);
+            const [kept, gone] = [...(holder?.children ?? [])];
+            if (kept && gone) {
+              kept.animate(keys as Keyframe[], { duration: 1000 }).id =
+                "kit-guard-turned";
+              gone.animate(keys as Keyframe[], { duration: 1000 }).id =
+                "kit-guard-gone";
+            }
+          },
+          [BOX, fade] as const
+        );
+        // Both held by the clock (paused) and placed, before the page acts on them.
+        await until(
+          "the clock holding both runs",
+          () =>
+            page.evaluate(
+              () =>
+                document
+                  .getAnimations()
+                  .filter(
+                    (run) =>
+                      run.id.startsWith("kit-guard") &&
+                      run.playState === "paused"
+                  ).length
+            ),
+          (held) => held === 2,
+          3000
+        );
+        await page.waitForTimeout(200);
+        await page.evaluate(
+          ([sel, keys]) => {
+            const holder = document.querySelector(sel as string);
+            const [kept, gone] = [...(holder?.children ?? [])];
+            if (kept && gone) {
+              for (const run of kept.getAnimations()) {
+                run.cancel();
+              }
+              kept.animate(keys as Keyframe[], { duration: 1000 }).id =
+                "kit-guard-again";
+              gone.remove();
+            }
+          },
+          [BOX, fade] as const
+        );
+      },
+      BOX,
+      5000
+    );
+  } catch (thrown) {
+    error = String(thrown);
+  }
+  await clock.release();
+  await page.evaluate((sel) => document.querySelector(sel)?.remove(), BOX);
+  kit.check(
+    "11 (clock): a run the page cancelled and started again on its element, and one whose element it took away, leave the clock; the restarted run alone stays, and the catch holds",
+    error === "" &&
+      caught.length === 1 &&
+      caught[0]?.name === "kit-guard-again",
+    error || caught.map((run) => `${run.type} ${run.name}`).join(", ")
+  );
+};
+
 /** 2. A finger's swipe up on the pill brings the wheel, never the canvas. */
 const touchCheck = async (on: On) => {
   const page = await on.kit.page("tablet");
@@ -1033,7 +1221,26 @@ const openCheck = async (
     typed.includes("Over the canvas"),
     JSON.stringify(typed)
   );
+  // Emptied as a person empties it (select all, delete): the browser keeps a
+  // `<br>` in the line it emptied, which is no newline of the draft.
   await page.fill(FIELD, "");
+  await page.focus(FIELD);
+  await settle(page, 300);
+  const emptied = await page.evaluate((sel) => {
+    const field = document.querySelector(sel);
+    return field
+      ? {
+          height: field.getBoundingClientRect().height,
+          floor: Number.parseFloat(getComputedStyle(field).minHeight),
+          html: field.innerHTML.slice(0, 120),
+        }
+      : null;
+  }, FIELD);
+  kit.check(
+    "1: the field emptied (select all, delete) and focused stands one line tall: the browser's `<br>` is no newline",
+    !!emptied && near(emptied.height, emptied.floor, 0.5),
+    JSON.stringify(emptied)
+  );
 };
 
 /** Two pen strokes on the canvas: what Send carries. */
@@ -1161,6 +1368,32 @@ const canvasBox = async (page: Page) => {
     : null;
 };
 
+/**
+ * The canvas's place on the composer (canvas-room `#measure`): the
+ * composer's top, the slot's height, and the field under it, whose height
+ * follows its draft and its focus.
+ */
+const roomNow = async (page: Page) => {
+  const span = await column(page);
+  return page.evaluate(
+    ([slot, read, field]) => ({
+      composerTop: (read as { foot: number } | null)?.foot ?? null,
+      slotHeight:
+        document.querySelector(slot as string)?.getBoundingClientRect()
+          .height ?? null,
+      fieldHeight:
+        document.querySelector(field as string)?.getBoundingClientRect()
+          .height ?? null,
+      focus:
+        document.activeElement?.getAttribute("data-slot") ??
+        document.activeElement?.getAttribute("data-canvas-stages-grab") ??
+        document.activeElement?.tagName ??
+        null,
+    }),
+    [SLOT, span, FIELD] as const
+  );
+};
+
 /** A handle's centre, once it stands. */
 const gripAt = async (page: Page, selector: string) => {
   await page.waitForSelector(selector, { timeout: 5000 });
@@ -1268,6 +1501,7 @@ const cornerCheck = async (on: On, clock: Clock) => {
   await dragBy(page, grip, -50, -60);
   await settle(page);
   const chosen = await canvasBox(page);
+  const chosenRoom = await roomNow(page);
   await page.focus(FIELD);
   await page.keyboard.press("Control+Shift+KeyD");
   await settle(page, 300);
@@ -1275,15 +1509,32 @@ const cornerCheck = async (on: On, clock: Clock) => {
   await page.keyboard.press("Control+Shift+KeyD");
   await settle(page, 300);
   const reopened = await canvasBox(page);
+  const reopenedRoom = await roomNow(page);
+  // The size is the canvas's own box and its place on the composer: the
+  // composer's own height follows its draft (a draft of more lines opens
+  // when the field takes focus), so its top is read, never assumed still.
+  const standsOn = (
+    at: typeof chosen,
+    under: Awaited<ReturnType<typeof roomNow>>
+  ) =>
+    !!at &&
+    under.slotHeight !== null &&
+    under.composerTop !== null &&
+    near(at.top + under.slotHeight, under.composerTop, 0.5);
   kit.check(
-    "12: the size chosen by the top-left corner (wider by 100, taller by 60) survives Done and reopen",
+    "12: the size chosen by the top-left corner (wider by 100, taller by 60) survives Done and reopen: the same width, height, left and right, its foot on the composer's top",
     !!(reopened && chosen && narrowest) &&
       near(chosen.width, narrowest.width + 100, 2) &&
       near(chosen.top, narrowest.top - 60, 1.5) &&
       near(reopened.left, chosen.left, 1) &&
       near(reopened.right, chosen.right, 1) &&
-      near(reopened.top, chosen.top, 1),
-    `${JSON.stringify(reopened)} (was ${JSON.stringify(chosen)})`
+      near(reopened.width, chosen.width, 1) &&
+      reopenedRoom.slotHeight !== null &&
+      chosenRoom.slotHeight !== null &&
+      near(reopenedRoom.slotHeight, chosenRoom.slotHeight, 1) &&
+      standsOn(chosen, chosenRoom) &&
+      standsOn(reopened, reopenedRoom),
+    `${JSON.stringify(reopened)} (was ${JSON.stringify(chosen)}); room ${JSON.stringify(reopenedRoom)} (was ${JSON.stringify(chosenRoom)})`
   );
   // Reduced motion: the corner's drag lands where it is let go, no settle run.
   await emulateMotion(page, "reduce");
@@ -2011,7 +2262,8 @@ const dockCheck = async (on: On, clock: Clock) => {
   if (!frame) {
     throw new Error("the canvas's iframe has no document");
   }
-  await clock.catchRuns(
+  const fromBox = await box(page, FRAME);
+  const dockCaught = await clock.catchRuns(
     () => frame.click('.rail-box[aria-label="Dock"]'),
     MOTION,
     8000
@@ -2025,6 +2277,25 @@ const dockCheck = async (on: On, clock: Clock) => {
       runs.some((one) => one.id === "canvas-room"),
     8000
   ).catch(() => runsOn(page));
+  // The flight scrubbed through its own length, held: where the iframe is drawn at each fraction.
+  const scrub: { at: number; box: Box | null }[] = [];
+  for (const at of [0, 0.25, 0.5, 0.75, 1]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one fraction at a time, each read where it lands
+    await page.evaluate((f) => {
+      for (const run of window.kitRuns()) {
+        if (run.id === "canvas-flight") {
+          run.currentTime = Number(run.effect?.getComputedTiming().endTime) * f;
+        }
+      }
+    }, at);
+    await page.evaluate(
+      () =>
+        new Promise<void>((done) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => done()))
+        )
+    );
+    scrub.push({ at, box: await box(page, FRAME) });
+  }
   await clock.seek(1);
   await seekCanvas(page, 1);
   // Where the flight lands, while the split is still held at its start.
@@ -2073,10 +2344,50 @@ const dockCheck = async (on: On, clock: Clock) => {
     docking.filter((one) => one.id === "canvas-flight").length === 1 &&
       flight?.duration === panel &&
       flight.easing === DRAWER &&
-      flight.props.join() === "transformOrigin,transform" &&
+      // getKeyframes() names a frame's properties in the engine's own order.
+      [...flight.props].sort().join() === "transform,transformOrigin" &&
       room?.duration === control &&
       room.easing === EASE_OUT,
-    `${panel}/${control}; ${JSON.stringify(docking)}`
+    `${panel}/${control}; ${JSON.stringify(docking)}; caught ${dockCaught.map((one) => `${one.type} ${one.name} @${one.start}+${one.end} ${one.easing}`).join(", ")}`
+  );
+  // Each side's share of the way from the box over the field to the well's, at each fraction.
+  const sideKeys = ["left", "top", "width", "height"] as const;
+  const shares = scrub.map(({ at, box: drawn }) => ({
+    at,
+    share:
+      drawn && fromBox && landed
+        ? sideKeys.map((key) =>
+            landed[key] === fromBox[key]
+              ? 1
+              : (drawn[key] - fromBox[key]) / (landed[key] - fromBox[key])
+          )
+        : null,
+  }));
+  const startOf = (name: string) =>
+    dockCaught.find((one) => one.name === name)?.start ?? null;
+  const flightStart = startOf("canvas-flight");
+  const roomStart = startOf("canvas-room");
+  kit.check(
+    "5: the flight scrubbed at 0, ¼, ½, ¾ and 1 of its length: it leaves the box over the field and lands on the well's, every side moving one way, on the clock the room's fold starts on",
+    shares.every((one) => one.share !== null) &&
+      (shares[0]?.share ?? []).every((share, i) =>
+        sideKeys[i] && landed?.[sideKeys[i]] === fromBox?.[sideKeys[i]]
+          ? true
+          : near(share, 0, 0.01)
+      ) &&
+      (shares.at(-1)?.share ?? []).every((share) => near(share, 1, 0.01)) &&
+      shares.every(
+        (one, i) =>
+          i === 0 ||
+          (one.share ?? []).every(
+            (share, side) =>
+              share >= (shares[i - 1]?.share?.[side] ?? 0) - 0.001
+          )
+      ) &&
+      flightStart !== null &&
+      roomStart !== null &&
+      near(flightStart, roomStart, 0.5),
+    `from ${JSON.stringify(fromBox)}; to ${JSON.stringify(landed)}; ${shares.map((one) => `${one.at}: ${(one.share ?? []).map((share) => share.toFixed(3)).join("/")}`).join("; ")}; started flight ${flightStart}, room ${roomStart}`
   );
 
   // Undock from the panel's head.

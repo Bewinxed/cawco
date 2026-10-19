@@ -20,6 +20,7 @@
   import {
     type PopoverMember,
     popoverGroup,
+    popoverWidth,
     providePopoverGroup,
   } from "./popover-group.svelte";
 
@@ -131,12 +132,17 @@
           }}
           side="bottom"
           sideOffset={6}
-          style={`--ns-pop-width:${shown.width}px`}
+          style={`--ns-pop-width:${popoverWidth(shown.width)}`}
           trapFocus={shown.trapFocus}
         >
           {#snippet child({ props, wrapperProps, open })}
-            <!-- Closing, it lets presses through to the page (floating-presence). -->
-            <div {...wrapperProps} style:pointer-events={pressable(open)}>
+            <!-- Closing, it lets presses through to the page (floating-presence).
+                 It moves with the surface's glide while the surface morphs. -->
+            <div
+              {...wrapperProps}
+              data-ns-morph={morphing ? "" : undefined}
+              style:pointer-events={pressable(open)}
+            >
               <!-- The label names what the trigger holds, so it changes as the
                  reader types or picks inside the surface, and the morph mark
                  changes as the surface retargets. Both are set here, on the

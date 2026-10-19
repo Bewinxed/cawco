@@ -314,7 +314,7 @@
     <svg
       data-slot="fold"
       aria-hidden="true"
-      class="pointer-events-none absolute inset-y-0 start-(--fold-start) z-1 h-full w-(--fold-w) overflow-visible clip-path-(--fold-clip)"
+      class="pick-inherit pointer-events-none absolute inset-y-0 start-(--fold-start) z-1 h-full w-(--fold-w) overflow-visible clip-path-(--fold-clip)"
       style:--fold-start="calc(-1 * var(--flare))"
       style:--fold-w="calc(100% + 2 * var(--flare))"
       style:--fold-clip="inset(-24px -24px 0)"
@@ -340,9 +340,9 @@
           {/each}
         </linearGradient>
       </defs>
-      <use data-ff-sheet href="#{uid}-outline" />
+      <use data-ff-sheet class="pick-inherit" href="#{uid}-outline" />
       {#if !hung}
-        <g data-slot="rim">
+        <g data-slot="rim" class="pick-inherit">
           <use
             data-slot="stroke"
             clip-path="url(#{uid}-inside)"
@@ -365,7 +365,7 @@
     data-slot="hit"
     data-hit
     aria-selected={selected}
-    class="touch-hit static z-3 flex min-w-0 flex-auto cursor-pointer items-center gap-(--hit-gap) self-stretch rounded-inherit border-none border-current background-transparent py-0 ps-(--hit-ps) text-(length:--text) leading-none whitespace-nowrap text-inherit no-underline outline-off last:pe-(--px)"
+    class="touch-hit pick-inherit static z-3 flex min-w-0 flex-auto cursor-pointer items-center gap-(--hit-gap) self-stretch rounded-inherit border-none border-current background-transparent py-0 ps-(--hit-ps) text-(length:--text) leading-none whitespace-nowrap text-inherit no-underline outline-off last:pe-(--px)"
     style:--hit-gap="calc(var(--gap) + var(--space-1))"
     style:--hit-ps="var(--px-start, var(--px))"
     draggable={href ? "false" : undefined}
@@ -388,7 +388,7 @@
          the sheet say which one is chosen. Each layer is clipped for the
          ellipsis, so the line box is left whole — a trimmed one would lose
          its descenders to the clip. -->
-    <span data-slot="tab-item-label" class="grid min-w-0">
+    <span data-slot="tab-item-label" class="pick-inherit grid min-w-0">
       <span
         data-slot="text"
         class="col-start-1 row-start-1 min-w-0 truncate leading-(--item) font-medium"
@@ -404,7 +404,7 @@
       <span
         data-slot="text"
         aria-hidden="true"
-        class="col-start-1 row-start-1 hidden min-w-0 truncate leading-(--item) font-medium in-variant-folder:block in-variant-folder:text-ink-strong in-variant-folder:opacity-(--pick)"
+        class="pick-inherit col-start-1 row-start-1 hidden min-w-0 truncate leading-(--item) font-medium in-variant-folder:block in-variant-folder:text-ink-strong in-variant-folder:opacity-(--pick)"
         data-text={label}
       ></span>
     </span>

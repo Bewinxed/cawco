@@ -26,9 +26,9 @@ import {
   delegateTypeProblem,
   handoffMarker,
   IMAGE_GENERATION_TIMEOUT_MS,
+  machineCalled,
   machineLabel,
-  namedAmong,
-  namesAmong,
+  machinesCalled,
   pauseClock,
   QUESTION_DISMISSED,
   relaunchOf,
@@ -192,7 +192,7 @@ export interface Fleet {
 
 /** The machines work can start on now, by the names delegate and start_session take. */
 const onlineNames = (machines: Machine[]): string =>
-  namesAmong(
+  machinesCalled(
     machines.filter((machine) => machine.status === "online"),
     machines
   );
@@ -228,7 +228,7 @@ function resolveMachine(
   const [found] = matches;
   if (!offline && found.status !== "online") {
     throw new Error(
-      `${namedAmong(found, machines)} is offline. Online now: ${onlineNames(machines)}.`
+      `${machineCalled(found.machineId, machines)} is offline. Online now: ${onlineNames(machines)}.`
     );
   }
   return found;
@@ -601,6 +601,7 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
   "stop_delegate",
   "interrupt_delegate",
   "answer_delegate",
+  "discard_workspace",
   // It stops every turn on a machine: an orchestrator's, never a leaf's.
   "machine_pause",
 ]);
@@ -828,6 +829,7 @@ export interface HandoffActions {
     summarizer_model?: string;
     target_harness: "claude" | "opencode" | "pi";
     target_model: string;
+    target_permission_mode?: Exclude<PermissionMode, "fullSend">;
     note?: string;
   }) => Promise<{
     summariserInstanceId: string | null;
@@ -896,6 +898,12 @@ export interface HandoffActions {
     held: HeldWork[];
     queued: QueuedDelegate[];
   }>;
+  /**
+   * Lets go of a workspace one of this session's delegates worked in: what
+   * it holds that is nowhere else goes to a carry on its machine, then its
+   * clone goes (hub work-items.ts `discardFor`). Answers what the hub did.
+   */
+  readonly discardWorkspace: (workspace: string) => Promise<string>;
   /**
    * Finishes this session's work item: the hub runs its landing gate and
    * lands it, or fails it as blocked. Answers what the hub says of it.
@@ -1534,6 +1542,9 @@ export const handoffActions = ({
           target: {
             harness: input.target_harness,
             model: input.target_model,
+            ...(input.target_permission_mode
+              ? { permissionMode: input.target_permission_mode }
+              : {}),
             ...(fallbackPermissionMode ? { fallbackPermissionMode } : {}),
           },
           askedBy: instanceId,
@@ -1751,7 +1762,7 @@ export const handoffActions = ({
       .filter((machine) => pauses.has(machine.machineId))
       .map(
         (machine) =>
-          `${namedAmong(machine, machines)} is ${pauses.get(machine.machineId)}: nothing starts there until then, and work for it waits.`
+          `${machineCalled(machine.machineId, machines)} is ${pauses.get(machine.machineId)}: nothing starts there until then, and work for it waits.`
       );
     const where = [
       `Machines online (\`machine\` on delegate and start_session): ${onlineNames(machines)}.`,
@@ -1952,7 +1963,9 @@ export const handoffActions = ({
       },
     };
     emit({ verb: "send", machineId, instanceId: id, payload: opening });
-    const on = target ? ` on ${namedAmong(target, fleet.machines())}` : "";
+    const on = target
+      ? ` on ${machineCalled(target.machineId, fleet.machines())}`
+      : "";
     return {
       id,
       title,
@@ -2005,7 +2018,7 @@ export const handoffActions = ({
       queued: started.queued,
       title: started.title,
       text: target
-        ? `${started.text} It runs on ${namedAmong(target, fleet.machines())}.`
+        ? `${started.text} It runs on ${machineCalled(target.machineId, fleet.machines())}.`
         : started.text,
       workItemId: started.workItemId,
       workspaceId: started.workspaceId,
@@ -2040,6 +2053,24 @@ export const handoffActions = ({
       },
       body: JSON.stringify({ instanceId, minutes, reason }),
     });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return ((await response.json()) as { text: string }).text;
+  },
+
+  async discardWorkspace(workspace: string): Promise<string> {
+    const response = await fetch(
+      `${hubHttpUrl()}/api/workspaces/${encodeURIComponent(workspace.trim())}/discard`,
+      {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          ...(authorization ? { Authorization: authorization } : {}),
+        },
+        body: JSON.stringify({ from: instanceId }),
+      }
+    );
     if (!response.ok) {
       throw new Error(await response.text());
     }
@@ -2142,7 +2173,7 @@ export const handoffActions = ({
   async machinePause(machine, minutes, resume = false) {
     const machines = fleet.machines();
     const found = resolveMachine(machines, machine, true);
-    const name = namedAmong(found, machines);
+    const name = machineCalled(found.machineId, machines);
     if (resume === (minutes !== undefined)) {
       throw new Error(
         "Pass minutes to pause the machine, or resume: true to end its pause."

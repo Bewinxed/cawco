@@ -905,6 +905,21 @@ export function highlight(options: HighlightOptions) {
       }
     };
     sizes.observe(container);
+    // A popover scales in: `frameOf` corrects for the scale it is measured
+    // at and leaves a residue, and a transform change is no resize. Once its
+    // open transition has settled, the layers are placed once more at the
+    // real size.
+    const pop = container.closest<HTMLElement>(".kit-pop");
+    const onSettled = (event: TransitionEvent) => {
+      if (
+        event.target === pop &&
+        (event.propertyName === "scale" || event.propertyName === "transform")
+      ) {
+        onResize();
+      }
+    };
+    pop?.addEventListener("transitionend", onSettled);
+    pop?.addEventListener("transitioncancel", onSettled);
     // A list an ancestor skips (the home board put away under a
     // conversation) has no layout to measure, and measuring it would lay it
     // out: the layers wait, and are placed afresh, without a glide, the
@@ -948,6 +963,8 @@ export function highlight(options: HighlightOptions) {
       container.removeEventListener("touchmove", onInput, { capture: true });
       container.removeEventListener("keydown", onInput, { capture: true });
       container.removeEventListener("scroll", onScroll, { capture: true });
+      pop?.removeEventListener("transitionend", onSettled);
+      pop?.removeEventListener("transitioncancel", onSettled);
       watch.disconnect();
       sizes.disconnect();
       watching.stop();

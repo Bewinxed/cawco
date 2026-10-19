@@ -4,8 +4,9 @@
  * holds it (a session of its items attached, an artifact showing what it
  * serves), its machine closes its boundary, reads on the host what its clone
  * holds that is nowhere else, and either deletes it all (retired: its work
- * landed, or there was none) or keeps it (held: the person continues it or
- * discards it, and nothing else ends it). A machine's disk filled on
+ * landed, itself or through a workspace cut from it, or there was none) or
+ * keeps it (held: the session that started its work is told, and continues
+ * it or discards it). A machine's disk filled on
  * 2026-10-14 because nothing removed a workspace once its work was over; on
  * 2026-10-16 the owner called keeping every finished workspace until someone
  * archived it "a terrible working model".

@@ -160,13 +160,13 @@ try {
   const { prepareClone } = await import("../packages/agent/src/clone");
   const { land, landingQueue } = await import("../packages/hub/src/landing");
 
-  /** git with the hub's credential, env-only, as `createWorkspace` runs it. */
+  /** git with the hub's credential for repository `repo`, env-only, as `createWorkspace` runs it. */
   const hubGit =
-    (extra: [string, string][] = []) =>
+    (repo: string, extra: [string, string][] = []) =>
     async (dir: string, ...args: string[]): Promise<string> => {
       const ran = Bun.spawn(safeGitArgv(args), {
         cwd: dir,
-        env: { ...move.hubGitEnv(extra), ...SAFE_GIT_ENV },
+        env: { ...move.hubGitEnv(repo, extra), ...SAFE_GIT_ENV },
         stdout: "pipe",
         stderr: "pipe",
       });
@@ -211,8 +211,11 @@ try {
   const workspace = async (source: string, base: string, tag: string) => {
     const id = crypto.randomUUID();
     const path = join(fleet.sandbox, `ws-${tag}`);
-    await prepareClone(source, path, hubGit(), base);
-    await hubGit(move.LFS_FILTERS)(
+    const origin = (
+      await Bun.$`git -C ${source} remote get-url origin`.quiet().text()
+    ).trim();
+    await prepareClone(source, path, hubGit(origin), base);
+    await hubGit(origin, move.LFS_FILTERS)(
       path,
       "checkout",
       "--quiet",

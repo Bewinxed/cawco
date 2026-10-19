@@ -6,13 +6,13 @@
  * under its "N older" row (older.ts), and which lines are out.
  */
 import type { Attachment } from "svelte/attachments";
-import type { InstanceRow } from "../client.svelte";
+import type { BoardRow } from "../client.svelte";
 import { DELEGATE_WINDOW, failedIn, listedOf, runningIds } from "../older";
 import { openTrees, type TreeList } from "../open-trees.svelte";
 import { collapse, type TreeLine } from "../tree";
 import { clock, lastAt } from "./home-state.svelte";
 
-type Line = TreeLine<InstanceRow>;
+type Line = TreeLine<BoardRow>;
 
 /** What a parent folds under its "N older" row (older.ts, OlderRows). */
 export interface Older {
@@ -128,7 +128,7 @@ export class TreeView {
   olderOf = (id: string): Older | undefined => this.#olders.get(id);
 
   /** The rows of `rows` that hang directly under `parent` (null: the tops). */
-  under = (rows: InstanceRow[], parent: string | null): InstanceRow[] =>
+  under = (rows: BoardRow[], parent: string | null): BoardRow[] =>
     rows.filter((row) => (this.shapeOf(row.id)?.parent ?? null) === parent);
 
   /**

@@ -20,13 +20,16 @@ import type {
   FleetSkillMeta,
   FleetSyncReport,
   FleetWatchNotice,
+  HarnessKind,
   HarnessReport,
   HookEvent,
   HookHandler,
   McpPlatform,
   MemoryScope,
+  NeutralUserMessage,
   OnCap,
   OpenCodeGoLimits,
+  PermissionMode,
   PlanStep,
   Rule,
   RuleState,
@@ -50,6 +53,7 @@ import type {
 import {
   CLAUDE_CONVERSATION_GONE,
   CONTINUATION_ORIGIN,
+  type LastErrorKind,
   placedOnly,
   REMOVED_MACHINE,
   RESTART_LOST,
@@ -78,7 +82,6 @@ import {
   inArray,
   isNotNull,
   isNull,
-  like,
   lt,
   lte,
   ne,
@@ -109,6 +112,7 @@ import { type DesignOffersDb, designOffersDb } from "./design-offers";
 import { type FindDb, findDb } from "./find";
 import { type HubAuthDb, hubAuthDb } from "./hub-auth";
 import { type IngressDb, ingressDb } from "./ingress";
+import { type MemoryFactsDb, memoryFactsDb } from "./memory-facts";
 import { type PreviewsDb, previewsDb } from "./previews";
 import { type RelaysDb, relaysDb } from "./relays";
 import { type RoutinesDb, routinesDb } from "./routines";
@@ -122,11 +126,13 @@ import {
   artifacts,
   capabilityUsageDaily,
   cawTurns,
+  chosenModes,
   claudeContextWindows,
   completedTurns,
   connectionProjects,
   connectorPolls,
   continuations,
+  dataMigrations,
   delegateEvents,
   eventRoutes,
   fleetAgents,
@@ -201,7 +207,6 @@ import {
   skills,
   spendSettings,
   supervisorConfig,
-  type Tracker,
   taskCommentIds,
   threadMessages,
   threadMessageTasks,
@@ -225,7 +230,10 @@ import {
   workspaces,
 } from "./schema";
 import { sealAtRest } from "./seal-at-rest";
+import { type SshMachinesDb, sshMachinesDb } from "./ssh-machines";
 import { type StartersDb, startersDb } from "./starters";
+import { type StreamRelayDb, streamRelayDb } from "./stream-relay";
+import { type TrackersDb, trackersDb } from "./trackers";
 import { type TrashDb, trashDb } from "./trash";
 import { type TurnUsageDb, turnUsageDb } from "./turn-usage";
 
@@ -274,9 +282,7 @@ export type PublicInstanceRow = Omit<
   | "tooling"
   | "endIntent"
   | "endConfirmedAt"
-  | "addressProtocol"
   | "endReason"
-  | "addressRequired"
   | "machineRemoved"
   | "scratchWorktree"
   | "endRetryAt"
@@ -541,7 +547,6 @@ export type UsageLimitRow = typeof usageLimits.$inferSelect;
 export interface DbShape {
   /** Accounts, where they are signed in, how they route, and their limits. */
   readonly accounts: AccountsDb;
-  readonly acknowledgeAddress: (id: string) => void;
   readonly acknowledgeSessionIdentity: (
     instanceId: string,
     hash: string
@@ -614,9 +619,8 @@ export interface DbShape {
    * waiting on an answer. What `from` delegated and is over stays its own.
    */
   readonly adoptChildren: (from: string, to: string) => AdoptedChildren;
-  /** A machine's last-known tool status by id; empty for one that never reported. */
-  readonly agentAddressContract: (machineId: string) => boolean;
   readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
+  /** A machine's last-known tool status by id; empty for one that never reported. */
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
   /** Every project's threads, newest first. */
   readonly allThreads: () => ThreadRow[];
@@ -649,6 +653,12 @@ export interface DbShape {
   readonly capabilityUsageSince: (
     day: string
   ) => (typeof capabilityUsageDaily.$inferSelect)[];
+  /**
+   * Work item `itemId` moves from session `from` to session `to`, a
+   * continuation of it: the item and `to`'s row name each other, and
+   * `from`'s row no longer names it.
+   */
+  readonly carryWorkItem: (itemId: string, from: string, to: string) => void;
   /** Dollars a project's Caw sessions have spent, from the usage their machines report. */
   /** Dollars the project's Caw turns have cost since `since` (ms epoch). */
   readonly cawSpentSince: (projectId: string, since: number) => number;
@@ -660,6 +670,17 @@ export interface DbShape {
    * reading ({@link DbShape.noteInstanceEffort}).
    */
   readonly chooseEffort: (id: string, effort: EffortLevel) => void;
+  /** Files `mode` as the one the person last chose for `harness` on `machineId`. */
+  readonly chooseMode: (
+    machineId: string,
+    harness: HarnessKind,
+    mode: PermissionMode
+  ) => void;
+  /** The permission mode the person last chose for `harness` on `machineId` (schema `chosenModes`); none when never. */
+  readonly chosenMode: (
+    machineId: string,
+    harness: string
+  ) => PermissionMode | undefined;
   /** Claims one harness completion before any turn-end side effect. */
   readonly claimCompletedTurn: (
     instanceId: string,
@@ -784,8 +805,15 @@ export interface DbShape {
     id: string,
     intent: SessionEndIntent
   ) => typeof instances.$inferSelect | undefined;
-  /** The agent reported the session dead: what killed it, kept for late readers. */
-  readonly failInstance: (id: string, error: string) => void;
+  /**
+   * The agent reported the session dead: what killed it, kept for late
+   * readers, and its kind when what failed typed it (core `LastErrorKind`).
+   */
+  readonly failInstance: (
+    id: string,
+    error: string,
+    kind?: LastErrorKind
+  ) => void;
   /** What the find engine reads (find.ts), and when the person last looked at each session. */
   readonly find: FindDb;
   /** Transcript deletion follows confirmed process exit, never precedes it. */
@@ -886,15 +914,13 @@ export interface DbShape {
     { apiKey: string; connectedAt: Date } | undefined;
   /** One rule, or nothing when it has been deleted out from under a caller. */
   readonly getRule: (id: string) => Rule | undefined;
-  /** The fleet's choices row (`supervisor_config`), or undefined while none is stored. */
-  readonly getSupervisorConfig: () =>
-    | {
-        deniedTools: string[] | null;
-        cawcoTodos: boolean;
-        choicesSetAt: Date | null;
-        updatedAt: Date;
-      }
-    | undefined;
+  /** The fleet's choices row (`supervisor_config`) and its tool denials. */
+  readonly getSupervisorConfig: () => {
+    deniedTools: string[];
+    cawcoTodos: boolean;
+    choicesSetAt: Date | null;
+    updatedAt: Date;
+  };
   readonly getWorkflow: (id: string) => WorkflowRow | undefined;
   /** One call's row in a run's log, by its effect sequence. */
   readonly getWorkflowLog: (
@@ -933,7 +959,7 @@ export interface DbShape {
     machineId: string;
     cwd: MachinePath;
     projectId: string;
-    harness?: string;
+    harness: HarnessKind;
     model?: string;
     permissionMode?: string;
     title?: string;
@@ -1178,6 +1204,8 @@ export interface DbShape {
     instances: (typeof instances.$inferSelect)[];
     runs: WorkflowRunRow[];
   };
+  /** A project's fact uses and its sessions' prose cut (memory.ts, session-prose.ts). */
+  readonly memoryFacts: MemoryFactsDb;
   /**
    * What each harness on the machine can do, as its daemon's report beat
    * said: every harness the beat names is replaced, and one it leaves out
@@ -1189,6 +1217,16 @@ export interface DbShape {
   ) => void;
   /** A whole report: every id it names is replaced, every other cell survives. */
   readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
+  /**
+   * Runs the one-time migration `name` over every stored send, in one
+   * transaction, unless it has run (`data_migrations`): `rewrite` answers a
+   * send's message as it is to be kept, or null to leave it as it is. How
+   * many sends it changed; null when it had run already.
+   */
+  readonly migrateSendsOnce: (
+    name: string,
+    rewrite: (body: NeutralUserMessage) => NeutralUserMessage | null
+  ) => number | null;
   /** The move a session started from, as {@link noteMovedHere} kept it; null when none. */
   readonly movedHereOf: (id: string) => MovedHere | null;
   /** One project move's record (moves.ts). */
@@ -1219,10 +1257,6 @@ export interface DbShape {
    */
   readonly newestConversation: (projectId: string) => ThreadRow | undefined;
   /** Records the window a claude turn reported for its model. */
-  readonly noteAgentAddressContract: (
-    machineId: string,
-    supported: boolean
-  ) => void;
   readonly noteClaudeContextWindow: (
     model: string,
     contextWindow: number
@@ -1249,13 +1283,12 @@ export interface DbShape {
    * The SDK session an `init` frame named, so the row can be read back from —
    * with the directory it really opened in, which is the agent's word on where
    * the spawn's `cwd` resolved to, and the MCP servers and tools it announced
-   * when it announced any.
+   * when it announced any. Its harness is its spawn's ({@link openInstance}).
    */
   readonly noteInstanceSession: (
     id: string,
     sessionId: string,
     cwd?: MachinePath,
-    harness?: string,
     tooling?: SessionTooling
   ) => void;
   /** Keeps a line its machine said on the session's row, the last {@link LIMIT_NOTES_KEPT} of its kind; false when one under its id is already kept. */
@@ -1312,12 +1345,11 @@ export interface DbShape {
     line: string;
   }) => boolean;
   readonly openInstance: (instance: {
-    addressProtocol?: boolean;
     id: string;
     machineId: string;
     cwd: MachinePath;
     sessionId?: string;
-    harness?: string;
+    harness: HarnessKind;
     projectId?: string;
     parentInstanceId?: string;
     parentToolUseId?: string;
@@ -1621,13 +1653,12 @@ export interface DbShape {
     files?: SkillFile[];
   }) => FleetSkillMeta;
   /**
-   * Upserts the fleet's choices row (single-row table) and, with `denied`,
-   * changes its tool denials in the same transaction: `seed` first when they
-   * were never set, then `remove` and `add`, every other name where it was.
+   * Updates the fleet's choices row (single-row table) and, with `denied`,
+   * changes its tool denials in the same transaction: `remove`, then `add`,
+   * every other name where it was.
    */
   readonly putSupervisorConfig: (config: {
     denied?: {
-      seed: readonly string[];
       add: readonly string[];
       remove: readonly string[];
     };
@@ -1839,15 +1870,6 @@ export interface DbShape {
    * stays and the old one goes. Answers the plugin ids that moved, old → new.
    */
   readonly renameMarketplace: (from: string, to: string) => [string, string][];
-  /**
-   * Paths on `machineId` stored under `~` before every path on a machine was
-   * a {@link MachinePath} (a restored database, rows from older hubs):
-   * places, session directories, workspaces and repositories, resolved
-   * against the home it reported. A place that lands on one the project
-   * already has there is folded into it. Answers the projects whose places
-   * changed. Nothing while the machine's home is unknown.
-   */
-  readonly resolveHomePaths: (machineId: string) => string[];
   readonly restoreRemovedSessions: (
     machineId: string,
     held: string[],
@@ -1880,7 +1902,7 @@ export interface DbShape {
   }[];
   readonly runningDelegateCounts: () => Map<string, number>;
   /** The listed sessions of one harness that are running. */
-  readonly runningInstancesOf: (harness: string) => PublicInstanceRow[];
+  readonly runningInstancesOf: (harness: HarnessKind) => PublicInstanceRow[];
   /** One send's record, by its uuid. */
   readonly sendRecord: (uuid: string) => SentMessageRow | undefined;
   /**
@@ -1971,12 +1993,10 @@ export interface DbShape {
       >
     >
   ) => void;
-  /** The project's name, its Review before done, its Apple build gate and its upstream choice, as project-edit.ts checked them. */
+  /** The project's name, its Review before done and its upstream choice, as project-edit.ts checked them. */
   readonly setProjectDetails: (
     id: string,
-    change: Partial<
-      Pick<ProjectRow, "appleGate" | "name" | "review" | "upstreamPosts">
-    >
+    change: Partial<Pick<ProjectRow, "name" | "review" | "upstreamPosts">>
   ) => void;
   /** The project's dispatch settings: whether it dispatches, its caps, its default budget and landing. */
   readonly setProjectDispatch: (
@@ -1999,8 +2019,6 @@ export interface DbShape {
   readonly setProjectRemote: (id: string, remote: string) => void;
   /** The stage template a project last had applied: its starter skills follow it. */
   readonly setProjectTemplate: (id: string, template: StagesTemplate) => void;
-  /** Where the project's tasks live; tasks.ts refuses a tracker not built yet. */
-  readonly setProjectTracker: (id: string, tracker: Tracker) => void;
   /** The fleet's session limits, whole: a field absent is no limit. */
   readonly setSessionLimits: (limits: SessionLimits) => void;
   /**
@@ -2069,6 +2087,8 @@ export interface DbShape {
   readonly sleepInstance: (id: string) => boolean;
   /** What reaching a cap does where a project sets nothing; its default before any is set. */
   readonly spendOnCap: () => OnCap;
+  /** The machines the hub added over SSH, and the connection it holds to each (ssh-tunnels.ts). */
+  readonly sshMachines: SshMachinesDb;
   readonly stageSessionIdentity: (instanceId: string, hash: string) => void;
   /**
    * The row a fetch is about to resolve: a new one is stored with no files
@@ -2083,30 +2103,16 @@ export interface DbShape {
   }) => FleetSkillMeta;
   /** A project's starters as last written, and what was done with them (project-starters.ts). */
   readonly starters: StartersDb;
+  /** The fleet's stream relay (stream-relay.ts). */
+  readonly streamRelay: StreamRelayDb;
   /**
-   * The one-time reclassification a taxonomy change needs when the column is
-   * plain text and there is no SQL migration to hang it on. Idempotent by
-   * construction — both halves select on states they then leave — so running it
-   * on every boot costs one no-op statement pair.
-   *
-   * - `running`/`starting` → `unknown`: this process holds no sockets on its
-   *   first line, so it cannot vouch for any of it. Same argument as
-   *   {@link markAllAgentsOffline}, and for the same reason: the read overlay
-   *   would already answer `unknown`, but a column nobody has to remember to
-   *   distrust is worth one write at startup.
-   * - `error` whose `lastError` is the legacy resumable marker → `sleeping`,
-   *   `lastError` cleared. Those rows never described a failure; they were a
-   *   restart, filed under `error` because the taxonomy had nowhere else to put
-   *   "no process, but resumable". `sleeping` is that place.
-   *
-   * The marker string is a parameter rather than an import so this file holds
-   * no opinion about what a legacy error *said* — the caller passes core's
-   * constant.
+   * `running`/`starting` → `unknown` at the hub's start, answering how many
+   * rows moved: this process holds no sockets on its first line, so it cannot
+   * vouch for any of it. Same argument as {@link markAllAgentsOffline}, and for
+   * the same reason: the read overlay would already answer `unknown`, but a
+   * column nobody has to remember to distrust is worth one write at startup.
    */
-  readonly sweepBootStatuses: (legacyResumableError: string) => {
-    toUnknown: number;
-    toSleeping: number;
-  };
+  readonly sweepBootStatuses: () => number;
   /**
    * The ids of the `instances` rows written since the last call (the
    * connection's change log), and the log emptied: what the board reads again.
@@ -2156,6 +2162,8 @@ export interface DbShape {
   readonly touchInstanceActivity: (id: string) => void;
   /** A fleet MCP relay session was used now. */
   readonly touchMcpSession: (id: string) => void;
+  /** Trackers: a project's binding to GitHub Issues or Linear, and its tasks' links (tracker.ts). */
+  readonly trackers: TrackersDb;
   /** Deleted config items, kept whole for their Undo (trash.ts). */
   readonly trash: TrashDb;
   /**
@@ -2187,7 +2195,7 @@ export interface DbShape {
   /** A machine's rows from before `cwd` was pinned whose launch directory is still to be read. */
   readonly unreadLaunchDirs: (
     machineId: string
-  ) => { id: string; sessionId: string; harness: string | null }[];
+  ) => { id: string; sessionId: string; harness: HarnessKind }[];
   /**
    * Enabled plugins with no resolved files, whether never tried or failed —
    * what a resolve at boot is for. A failed one is tried again so its sentence
@@ -2295,6 +2303,7 @@ export interface DbShape {
         | "boundaryPid"
         | "branch"
         | "carry"
+        | "cutFrom"
         | "head"
         | "heldAt"
         | "holding"
@@ -2386,6 +2395,8 @@ export interface DbShape {
   readonly workspaceCreatesOn: (
     machineId: string
   ) => (typeof workspaceCreates.$inferSelect)[];
+  /** The workspaces cut `from` workspace `workspaceId` (schema.ts `workspaces.cutFrom`), in any state. */
+  readonly workspacesCutFrom: (workspaceId: string) => WorkspaceRow[];
   /** The workspaces an id names: itself exactly, else every one it prefixes. */
   readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
@@ -2701,10 +2712,8 @@ const make = async (path: string): Promise<DbShape> => {
   const {
     endRetryAt: _endRetryAt,
     endAttempts: _endAttempts,
-    addressRequired: _addressRequired,
     machineRemoved: _machineRemoved,
     scratchWorktree: _scratchWorktree,
-    addressProtocol: _addressProtocol,
     endReason: _endReason,
     endIntent: _endIntent,
     endConfirmedAt: _endConfirmedAt,
@@ -2753,6 +2762,20 @@ const make = async (path: string): Promise<DbShape> => {
       .orderBy(sql`rowid`)
       .all()
       .map(({ tool }) => tool);
+  /** The fleet's choices row, which drizzle 0032 writes on every hub. */
+  const supervisorChoices = (): typeof supervisorConfig.$inferSelect => {
+    const row = db
+      .select()
+      .from(supervisorConfig)
+      .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
+      .get();
+    if (!row) {
+      throw new Error(
+        `supervisor_config has no '${SUPERVISOR_CONFIG_ID}' row: drizzle 0032 writes it, so this database did not migrate`
+      );
+    }
+    return row;
+  };
   /** Dollars the project's booked Caw turns cost since `since` (ms epoch). */
   const cawSince = (projectId: string, since: number): number =>
     db
@@ -3039,115 +3062,6 @@ const make = async (path: string): Promise<DbShape> => {
       : undefined;
   };
 
-  /** `~` or `~/…` in a column: what only a row from before every path on a machine was a {@link MachinePath} holds. */
-  const underHome = (column: AnySQLiteColumn) =>
-    or(eq(column, "~"), like(column, "~/%"));
-
-  /** {@link DbShape.resolveHomePaths} for `machineId`'s session directories, workspaces and repositories. */
-  const resolveHomeDirs = (
-    tx: Tx,
-    machineId: string,
-    resolve: (raw: string) => MachinePath
-  ): void => {
-    for (const row of tx
-      .select({ id: instances.id, cwd: instances.cwd })
-      .from(instances)
-      .where(and(eq(instances.machineId, machineId), underHome(instances.cwd)))
-      .all()) {
-      tx.update(instances)
-        .set({ cwd: resolve(row.cwd) })
-        .where(eq(instances.id, row.id))
-        .run();
-    }
-    for (const row of tx
-      .select()
-      .from(workspaces)
-      .where(
-        and(
-          eq(workspaces.machineId, machineId),
-          or(underHome(workspaces.path), underHome(workspaces.repoRoot))
-        )
-      )
-      .all()) {
-      tx.update(workspaces)
-        .set({ path: resolve(row.path), repoRoot: resolve(row.repoRoot) })
-        .where(eq(workspaces.id, row.id))
-        .run();
-    }
-    for (const row of tx
-      .select()
-      .from(projectRepositories)
-      .where(
-        and(
-          eq(projectRepositories.machineId, machineId),
-          underHome(projectRepositories.path)
-        )
-      )
-      .all()) {
-      tx.update(projectRepositories)
-        .set({ path: resolve(row.path) })
-        .where(
-          and(
-            eq(projectRepositories.projectId, row.projectId),
-            eq(projectRepositories.machineId, machineId)
-          )
-        )
-        .run();
-    }
-  };
-
-  /**
-   * {@link DbShape.resolveHomePaths} for `machineId`'s places: one that lands
-   * on a folder its project already has there is folded into it, primary if
-   * either was. Answers the projects whose places changed.
-   */
-  const resolveHomePlaces = (
-    tx: Tx,
-    machineId: string,
-    resolve: (raw: string) => MachinePath
-  ): string[] => {
-    const changed = new Set<string>();
-    for (const place of tx
-      .select()
-      .from(projectPlaces)
-      .where(
-        and(
-          eq(projectPlaces.machineId, machineId),
-          underHome(projectPlaces.path)
-        )
-      )
-      .all()) {
-      const resolved = resolve(place.path);
-      const standing = tx
-        .select()
-        .from(projectPlaces)
-        .where(
-          and(
-            eq(projectPlaces.projectId, place.projectId),
-            eq(projectPlaces.machineId, machineId),
-            eq(projectPlaces.path, resolved)
-          )
-        )
-        .get();
-      if (standing) {
-        tx.delete(projectPlaces).where(eq(projectPlaces.id, place.id)).run();
-        if (place.isPrimary && !standing.isPrimary) {
-          tx.update(projectPlaces)
-            .set({ isPrimary: true })
-            .where(eq(projectPlaces.id, standing.id))
-            .run();
-        }
-      } else {
-        tx.update(projectPlaces)
-          .set({ path: resolved })
-          .where(eq(projectPlaces.id, place.id))
-          .run();
-      }
-      changed.add(place.projectId);
-    }
-    return [...changed];
-  };
-
   /**
    * Deletes session rows and everything keyed to them, inside the caller's
    * transaction — the one way a session leaves the hub, whether its machine
@@ -3255,6 +3169,8 @@ const make = async (path: string): Promise<DbShape> => {
     ["login_moves", "machine_id", "keyed"],
     ["usage_limits", "machine_id", "keyed"],
     ["machine_keys", "machine_id", "keyed"],
+    ["ssh_machines", "machine_id"],
+    ["chosen_modes", "machine_id", "keyed"],
   ];
   /** How many rows moved, by what they are: what a re-key answers. */
   type Moved = (what: string, count: number) => void;
@@ -3385,7 +3301,7 @@ const make = async (path: string): Promise<DbShape> => {
           ? [
               {
                 sessionId: member.sessionId,
-                harness: member.harness ?? "claude",
+                harness: member.harness,
                 model: member.model,
                 accountId: member.accountId,
                 endedAt: member.updatedAt.getTime(),
@@ -3980,18 +3896,6 @@ const make = async (path: string): Promise<DbShape> => {
         .where(and(eq(instances.id, id), isNotNull(instances.endIntent)))
         .run();
     },
-    agentAddressContract: (machineId) =>
-      db
-        .select({ addressContract: agents.addressContract })
-        .from(agents)
-        .where(eq(agents.machineId, machineId))
-        .get()?.addressContract ?? false,
-    noteAgentAddressContract: (machineId, addressContract) => {
-      db.update(agents)
-        .set({ addressContract })
-        .where(eq(agents.machineId, machineId))
-        .run();
-    },
     instanceTooling: (id) =>
       db
         .select({ tooling: instances.tooling })
@@ -4035,12 +3939,6 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .get(),
-    acknowledgeAddress: (id) => {
-      db.update(instances)
-        .set({ addressProtocol: true })
-        .where(eq(instances.id, id))
-        .run();
-    },
     recordScratchWorktree: (id, scratchWorktree, dir) => {
       db.update(instances)
         .set({ scratchWorktree, cwd: dir })
@@ -4055,6 +3953,7 @@ const make = async (path: string): Promise<DbShape> => {
       db.update(instances)
         .set({
           lastError: error,
+          lastErrorKind: null,
           endReason: error,
           endAttempts: row.endAttempts + 1,
           endRetryAt: new Date(
@@ -4136,7 +4035,6 @@ const make = async (path: string): Promise<DbShape> => {
               : intent;
           const neverStarted =
             row.harness === "opencode" &&
-            row.addressRequired &&
             !row.sessionId &&
             !row.scratchWorktree &&
             next !== "discard";
@@ -4235,6 +4133,32 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
     },
     agentHarnesses: (machineId) => harnessesByMachine(machineId).get(machineId),
+    chosenMode: (machineId, harness) =>
+      db
+        .select({ mode: chosenModes.permissionMode })
+        .from(chosenModes)
+        .where(
+          and(
+            eq(chosenModes.machineId, machineId),
+            eq(chosenModes.harness, harness as HarnessKind)
+          )
+        )
+        .get()?.mode,
+    chooseMode: (machineId, harness, mode) => {
+      const row = {
+        machineId,
+        harness,
+        permissionMode: mode,
+        chosenAt: new Date(),
+      };
+      db.insert(chosenModes)
+        .values(row)
+        .onConflictDoUpdate({
+          target: [chosenModes.machineId, chosenModes.harness],
+          set: { permissionMode: mode, chosenAt: row.chosenAt },
+        })
+        .run();
+    },
     listBoardInstances: () =>
       db
         .select(boardColumns)
@@ -4692,22 +4616,6 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(removedMachines.machineId, machineId))
         .run();
     },
-    resolveHomePaths: (machineId) => {
-      const agent = db
-        .select({ home: agents.home, hostname: agents.hostname })
-        .from(agents)
-        .where(eq(agents.machineId, machineId))
-        .get();
-      const home = agent?.home;
-      if (!(agent && home)) {
-        return [];
-      }
-      const resolve = (raw: string) => machinePath(home, raw, agent.hostname);
-      return db.transaction((tx) => {
-        resolveHomeDirs(tx, machineId, resolve);
-        return resolveHomePlaces(tx, machineId, resolve);
-      });
-    },
     setAgentCapabilities: (machineId, machineCapabilities) => {
       db.update(agents)
         .set({ machineCapabilities })
@@ -4739,7 +4647,6 @@ const make = async (path: string): Promise<DbShape> => {
       db.update(agents).set({ status: "offline" }).run();
     },
     openInstance: ({
-      addressProtocol = false,
       id,
       machineId,
       cwd,
@@ -4814,7 +4721,6 @@ const make = async (path: string): Promise<DbShape> => {
       }
       db.insert(instances)
         .values({
-          addressRequired: addressProtocol,
           id,
           machineId,
           cwd,
@@ -4859,10 +4765,6 @@ const make = async (path: string): Promise<DbShape> => {
           // No `cwd`: a row keeps the directory it was launched in, and every
           // spawn of it is sent there (`launchDirOf`).
           set: {
-            // A row a move held (moves.ts) is born at its first spawn.
-            ...(existing?.spawnedAt === null
-              ? { addressRequired: addressProtocol }
-              : {}),
             kind,
             permissionMode,
             ...(model ? { model } : {}),
@@ -4897,10 +4799,11 @@ const make = async (path: string): Promise<DbShape> => {
             endRetryAt: null,
             endAttempts: 0,
             lastError: null,
+            lastErrorKind: null,
             ...(cleanSessionId ? { sessionId: cleanSessionId } : {}),
             // A start with no conversation to resume begins one from nothing.
             ...(cleanSessionId ? {} : { modelUsageSeen: {} }),
-            ...(harness ? { harness } : {}),
+            harness,
             ...(projectId ? { projectId } : {}),
             ...(parentInstanceId ? { parentInstanceId } : {}),
             ...(parentToolUseId ? { parentToolUseId } : {}),
@@ -4951,7 +4854,7 @@ const make = async (path: string): Promise<DbShape> => {
     settleMovingInstance: (id, status, lastError) =>
       db
         .update(instances)
-        .set({ status, lastError: lastError ?? null })
+        .set({ status, lastError: lastError ?? null, lastErrorKind: null })
         .where(
           and(
             eq(instances.id, id),
@@ -5054,7 +4957,7 @@ const make = async (path: string): Promise<DbShape> => {
     sleepInstance: (id) =>
       db
         .update(instances)
-        .set({ status: "sleeping", lastError: null })
+        .set({ status: "sleeping", lastError: null, lastErrorKind: null })
         .where(
           and(
             eq(instances.id, id),
@@ -5070,11 +4973,16 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .run();
     },
-    failInstance: (id, error) => {
+    failInstance: (id, error, kind) => {
       // A spin-off that was thrown away stays thrown away: its teardown can
       // fail long after the session did, and it is not coming back as a row.
       db.update(instances)
-        .set({ status: "error", lastError: error, updatedAt: new Date() })
+        .set({
+          status: "error",
+          lastError: error,
+          lastErrorKind: kind ?? null,
+          updatedAt: new Date(),
+        })
         .where(
           and(
             eq(instances.id, id),
@@ -5110,6 +5018,21 @@ const make = async (path: string): Promise<DbShape> => {
           .map((row) => [row.id, row.now])
       ),
     priorConversations: (instanceId) => conversationsOf(db, instanceId),
+    carryWorkItem: (itemId, from, to) =>
+      db.transaction((tx) => {
+        tx.update(workItems)
+          .set({ instanceId: to })
+          .where(eq(workItems.id, itemId))
+          .run();
+        tx.update(instances)
+          .set({ workItemId: itemId })
+          .where(eq(instances.id, to))
+          .run();
+        tx.update(instances)
+          .set({ workItemId: null })
+          .where(and(eq(instances.id, from), eq(instances.workItemId, itemId)))
+          .run();
+      }),
     adoptChildren: (from, to) =>
       db.transaction((tx) => {
         const items = tx
@@ -5223,6 +5146,34 @@ const make = async (path: string): Promise<DbShape> => {
           asks,
         };
       }),
+    migrateSendsOnce: (name, rewrite) =>
+      db.transaction((tx) => {
+        if (
+          tx
+            .select()
+            .from(dataMigrations)
+            .where(eq(dataMigrations.name, name))
+            .get()
+        ) {
+          return null;
+        }
+        let changed = 0;
+        for (const send of tx
+          .select({ uuid: sentMessages.uuid, body: sentMessages.body })
+          .from(sentMessages)
+          .all()) {
+          const body = send.body ? rewrite(send.body) : null;
+          if (body) {
+            tx.update(sentMessages)
+              .set({ body })
+              .where(eq(sentMessages.uuid, send.uuid))
+              .run();
+            changed += 1;
+          }
+        }
+        tx.insert(dataMigrations).values({ name, at: new Date() }).run();
+        return changed;
+      }),
     foldFormerSessions: (owedAgain) => {
       const open = db
         .select()
@@ -5287,7 +5238,7 @@ const make = async (path: string): Promise<DbShape> => {
         .where(eq(instances.id, id))
         .run();
     },
-    noteInstanceSession: (id, sessionId, cwd, harness, tooling) => {
+    noteInstanceSession: (id, sessionId, cwd, tooling) => {
       // A harness key naming the row itself is confusion, never identity: hub
       // ids are hub-minted, harness sids are harness-minted, and the two only
       // meet when a caller echoed the instance id back as the session key
@@ -5314,7 +5265,6 @@ const make = async (path: string): Promise<DbShape> => {
                 cwd: sql`CASE WHEN ${instances.sessionId} IS NULL THEN ${cwd} ELSE ${instances.cwd} END`,
               }
             : {}),
-          ...(harness ? { harness } : {}),
           ...(tooling ? { tooling } : {}),
         })
         .where(eq(instances.id, id))
@@ -5418,12 +5368,16 @@ const make = async (path: string): Promise<DbShape> => {
         // A previously failed resume is checked too, without launching it again.
         // A process still running is not a conversation gone, catalogued or not.
         db.update(instances)
-          .set({ status: "error", lastError: CLAUDE_CONVERSATION_GONE })
+          .set({
+            status: "error",
+            lastError: CLAUDE_CONVERSATION_GONE,
+            lastErrorKind: "conversation-gone",
+          })
           .where(
             and(
               eq(instances.machineId, machineId),
               eq(instances.machineRemoved, false),
-              or(eq(instances.harness, "claude"), isNull(instances.harness)),
+              eq(instances.harness, "claude"),
               isNotNull(instances.sessionId),
               notInArray(instances.status, [
                 "stopping",
@@ -5451,7 +5405,7 @@ const make = async (path: string): Promise<DbShape> => {
         // hub correcting itself, not the session doing anything. Stamping it
         // here dated every live session on the machine to the register.
         db.update(instances)
-          .set({ status: "running", lastError: null })
+          .set({ status: "running", lastError: null, lastErrorKind: null })
           .where(
             and(
               eq(instances.machineId, machineId),
@@ -5496,7 +5450,7 @@ const make = async (path: string): Promise<DbShape> => {
         // at admission, and its CLI waited on a question nobody was shown.
         if (held.has(row.id)) {
           db.update(instances)
-            .set({ status: "starting", lastError: null })
+            .set({ status: "starting", lastError: null, lastErrorKind: null })
             .where(eq(instances.id, row.id))
             .run();
           return { row, resumes: true };
@@ -5521,8 +5475,12 @@ const make = async (path: string): Promise<DbShape> => {
         db.update(instances)
           .set(
             resumes
-              ? { status: "sleeping", lastError: null }
-              : { status: "error", lastError: RESTART_LOST }
+              ? { status: "sleeping", lastError: null, lastErrorKind: null }
+              : {
+                  status: "error",
+                  lastError: RESTART_LOST,
+                  lastErrorKind: "restart-lost",
+                }
           )
           .where(eq(instances.id, row.id))
           .run();
@@ -5550,7 +5508,7 @@ const make = async (path: string): Promise<DbShape> => {
               // below omits `running`: a promotion is the hub agreeing with the
               // beat, not the session moving. It used to be stamped here, which
               // dated every session the beat corrected to the beat itself.
-              .set({ status: "running", lastError: null })
+              .set({ status: "running", lastError: null, lastErrorKind: null })
               .where(
                 and(
                   eq(instances.machineId, machineId),
@@ -5603,7 +5561,7 @@ const make = async (path: string): Promise<DbShape> => {
       // `settleInstances` files it: asleep, nothing lost.
       for (const row of gone) {
         db.update(instances)
-          .set({ status: "sleeping", lastError: null })
+          .set({ status: "sleeping", lastError: null, lastErrorKind: null })
           .where(eq(instances.id, row.id))
           .run();
       }
@@ -5613,7 +5571,7 @@ const make = async (path: string): Promise<DbShape> => {
     markInstanceLive: (id) =>
       db
         .update(instances)
-        .set({ status: "running", lastError: null })
+        .set({ status: "running", lastError: null, lastErrorKind: null })
         .where(
           and(
             eq(instances.id, id),
@@ -5653,7 +5611,7 @@ const make = async (path: string): Promise<DbShape> => {
     markInstanceAttaching: (id) =>
       db
         .update(instances)
-        .set({ status: "starting", lastError: null })
+        .set({ status: "starting", lastError: null, lastErrorKind: null })
         .where(
           and(
             eq(instances.id, id),
@@ -5669,7 +5627,7 @@ const make = async (path: string): Promise<DbShape> => {
       }
       // Resumed on its conversation, or fresh when it never named one.
       db.update(instances)
-        .set({ status: "sleeping", lastError: null })
+        .set({ status: "sleeping", lastError: null, lastErrorKind: null })
         .where(eq(instances.id, id))
         .run();
       return true;
@@ -5679,8 +5637,8 @@ const make = async (path: string): Promise<DbShape> => {
     // anything, and `updatedAt` is what the restore horizon reads to tell a
     // session that stopped a minute ago from one that stopped last Tuesday.
     // Stamping it here would make every row on the machine look freshly alive.
-    sweepBootStatuses: (legacyResumableError) => {
-      const toUnknown = db
+    sweepBootStatuses: () =>
+      db
         .update(instances)
         .set({ status: "unknown" })
         .where(
@@ -5690,20 +5648,7 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .returning({ id: instances.id })
-        .all().length;
-      const toSleeping = db
-        .update(instances)
-        .set({ status: "sleeping", lastError: null })
-        .where(
-          and(
-            eq(instances.status, "error"),
-            eq(instances.lastError, legacyResumableError)
-          )
-        )
-        .returning({ id: instances.id })
-        .all().length;
-      return { toUnknown, toSleeping };
-    },
+        .all().length,
     listToolPolicies: () =>
       db
         .select()
@@ -5737,8 +5682,8 @@ const make = async (path: string): Promise<DbShape> => {
       return policy;
     },
     agentTools: toolsOf,
-    // A report with nothing in it says nothing: a daemon that predates the tool
-    // catalog must not read as a machine that has just lost every tool on it.
+    // The cells reported replace their own; a tool the report did not name
+    // keeps what it had.
     mergeAgentTools: (machineId, statuses) => {
       putToolCells(machineId, statuses);
     },
@@ -5966,34 +5911,17 @@ const make = async (path: string): Promise<DbShape> => {
                 }))
               : []
         ),
-        // Always an array, like `skills` above, never omitted: this hub is not
-        // one that predates hooks, so there is no version-skew reason to leave
-        // the field out the way an old daemon's absence is read. A disabled row
-        // is simply not one of them — the same rule a disabled MCP server or
-        // skill already follows.
+        // A disabled row is not one of them — the same rule a disabled MCP
+        // server or skill follows.
         hooks: db
           .select()
           .from(fleetHooks)
           .where(eq(fleetHooks.enabled, true))
           .all()
           .map(hookOf),
-        // The fleet's denied-tools list, from the supervisor_config single row.
-        // Absent (undefined) when no row exists yet, which is what has a daemon
-        // fall back to compiled constants — the same list the migration seeds.
-        ...(() => {
-          const row = db
-            .select({
-              deniedSeeded: supervisorConfig.deniedSeeded,
-              cawcoTodos: supervisorConfig.cawcoTodos,
-            })
-            .from(supervisorConfig)
-            .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
-            .get();
-          return {
-            deniedTools: row?.deniedSeeded ? deniedToolNames() : undefined,
-            cawcoTodos: row?.cawcoTodos ?? false,
-          };
-        })(),
+        // Always sent: a machine spawns nothing until it has heard it.
+        deniedTools: deniedToolNames(),
+        cawcoTodos: supervisorChoices().cawcoTodos,
       };
     },
     putMcpServer: ({ name, config, enabled, projectId, platforms }) => {
@@ -6628,12 +6556,11 @@ const make = async (path: string): Promise<DbShape> => {
         db
           .select()
           .from(agents)
-          // Join order: core `namedAmong` numbers machines that share a name by it.
+          // Join order: core `machineCalled` numbers machines that share a name by it.
           .orderBy(asc(agents.createdAt), asc(agents.machineId))
           .all()
           .map(
             ({
-              addressContract: _addressContract,
               fleet,
               build,
               home,
@@ -6748,7 +6675,7 @@ const make = async (path: string): Promise<DbShape> => {
           and(
             listedInstances(),
             eq(instances.machineId, machineId),
-            or(isNull(instances.harness), eq(instances.harness, "claude")),
+            eq(instances.harness, "claude"),
             isNotNull(instances.sessionId)
           )
         )
@@ -6965,9 +6892,6 @@ const make = async (path: string): Promise<DbShape> => {
           .where(inArray(instances.id, ids))
           .run();
       }
-    },
-    setProjectTracker: (id, tracker) => {
-      db.update(projects).set({ tracker }).where(eq(projects.id, id)).run();
     },
     setProjectAccounts: (id, list) => {
       db.transaction((tx) => {
@@ -8819,6 +8743,14 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .all(),
+    workspacesCutFrom: (workspaceId) =>
+      db
+        .select()
+        .from(workspaces)
+        .where(
+          sql`json_extract(${workspaces.cutFrom}, '$.workspace') = ${workspaceId}`
+        )
+        .all(),
     updateWorkspace: (id, change) =>
       db
         .update(workspaces)
@@ -9086,10 +9018,14 @@ const make = async (path: string): Promise<DbShape> => {
     connections: connectionsDb(db),
     ingress: ingressDb(db),
     relays: relaysDb(db),
+    sshMachines: sshMachinesDb(db),
+    memoryFacts: memoryFactsDb(db),
+    trackers: trackersDb(db),
     hubAuth: hubAuthDb(db),
     artifacts: artifactsDb(db),
     find: findDb(db),
     previews: previewsDb(db),
+    streamRelay: streamRelayDb(db),
     actions: actionsDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>
@@ -9223,69 +9159,43 @@ const make = async (path: string): Promise<DbShape> => {
     },
 
     getSupervisorConfig: () => {
-      const row = db
-        .select()
-        .from(supervisorConfig)
-        .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
-        .get();
-      return row
-        ? {
-            deniedTools: row.deniedSeeded ? deniedToolNames() : null,
-            cawcoTodos: row.cawcoTodos,
-            choicesSetAt: row.choicesSetAt,
-            updatedAt: row.updatedAt,
-          }
-        : undefined;
+      const row = supervisorChoices();
+      return {
+        deniedTools: deniedToolNames(),
+        cawcoTodos: row.cawcoTodos,
+        choicesSetAt: row.choicesSetAt,
+        updatedAt: row.updatedAt,
+      };
     },
     putSupervisorConfig: ({ denied, ...config }) => {
+      supervisorChoices();
       db.transaction((tx) => {
-        const stored = tx
-          .select()
-          .from(supervisorConfig)
-          .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
-          .get();
-        const values = {
-          id: SUPERVISOR_CONFIG_ID,
-          deniedSeeded: Boolean(denied) || (stored?.deniedSeeded ?? false),
-          cawcoTodos: config.cawcoTodos ?? stored?.cawcoTodos ?? false,
-          choicesSetAt:
-            config.choicesSetAt === undefined
-              ? (stored?.choicesSetAt ?? null)
-              : config.choicesSetAt,
-          updatedAt: new Date(),
-        };
-        tx.insert(supervisorConfig)
-          .values(values)
-          .onConflictDoUpdate({
-            target: supervisorConfig.id,
-            set: {
-              deniedSeeded: values.deniedSeeded,
-              cawcoTodos: values.cawcoTodos,
-              choicesSetAt: values.choicesSetAt,
-              updatedAt: values.updatedAt,
-            },
+        tx.update(supervisorConfig)
+          .set({
+            ...(config.cawcoTodos === undefined
+              ? {}
+              : { cawcoTodos: config.cawcoTodos }),
+            ...(config.choicesSetAt === undefined
+              ? {}
+              : { choicesSetAt: config.choicesSetAt }),
+            updatedAt: new Date(),
           })
+          .where(eq(supervisorConfig.id, SUPERVISOR_CONFIG_ID))
           .run();
         if (!denied) {
           return;
-        }
-        const add = (names: readonly string[]) => {
-          if (names.length > 0) {
-            tx.insert(fleetDeniedTools)
-              .values(names.map((tool) => ({ tool })))
-              .onConflictDoNothing()
-              .run();
-          }
-        };
-        if (!stored?.deniedSeeded) {
-          add(denied.seed);
         }
         if (denied.remove.length > 0) {
           tx.delete(fleetDeniedTools)
             .where(inArray(fleetDeniedTools.tool, [...denied.remove]))
             .run();
         }
-        add(denied.add);
+        if (denied.add.length > 0) {
+          tx.insert(fleetDeniedTools)
+            .values(denied.add.map((tool) => ({ tool })))
+            .onConflictDoNothing()
+            .run();
+        }
       });
     },
     fleetWatchOn: () =>
@@ -9795,12 +9705,6 @@ const make = async (path: string): Promise<DbShape> => {
         .run();
     },
   };
-  // A database from before every path on a machine was a MachinePath (an
-  // older hub's, a restored backup): its `~` rows take each machine's stored
-  // home now; a machine with none yet has them resolved at its register.
-  for (const { machineId } of store.listAgents()) {
-    store.resolveHomePaths(machineId);
-  }
   return store;
 };
 

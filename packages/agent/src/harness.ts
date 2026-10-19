@@ -16,11 +16,11 @@
 import type {
   AuthState,
   Envelope,
-  FleetConfig,
   FleetSyncReport,
   HarnessCapabilities,
   HarnessKind,
   HarnessReport,
+  MachineFleetConfig,
   MachineHarnessReport,
   MoveEnded,
   NeutralMessage,
@@ -59,7 +59,6 @@ export class HarnessRecoveryRefused extends Error {}
 export class ReattachFailed extends Error {}
 /** A refusal is final for its launch attempt, including recovery attempts. */
 export class SessionAddressRefused extends Error {}
-export class HubContractRefused extends SessionAddressRefused {}
 /**
  * A session process that cannot be trusted to run: its CawCo MCP credential
  * did not install (a process this agent launched) or verify (one it attached
@@ -77,14 +76,22 @@ export class HeldProcessRefused extends Error {}
  * keeps what it was sent for its next start.
  */
 export class KeeperRefused extends Error {
+  /**
+   * The pid of the process the input was for, as its keeper listed it when
+   * the session took it, when known: the process the session lets go of,
+   * and ends (session.ts `#refusedInput`). The id alone may name its next
+   * process by then.
+   */
+  readonly pid: number | undefined;
   readonly procId: string;
   readonly reason: string;
-  constructor(procId: string, reason: string) {
+  constructor(procId: string, reason: string, pid?: number) {
     super(
       `This session's process could not be reached: the machine's session keeper refused its input (${reason}).`
     );
     this.procId = procId;
     this.reason = reason;
+    this.pid = pid;
   }
 }
 
@@ -175,8 +182,8 @@ export interface HarnessContext {
   readonly sessionCredential?: string;
   /**
    * The workspace whose {@link boundary} this is, by id: a delegation
-   * workspace's clone, or a project lead's place the spawn named (core
-   * `isLeadPlace`). Absent with the boundary.
+   * workspace's clone, or a place the spawn named (core
+   * `isPlace`). Absent with the boundary.
    */
   readonly workspace?: string;
 }
@@ -425,7 +432,7 @@ export interface Harness {
   ): Promise<{ dir: string; spec: SpawnPayload }>;
   /** Applies the hub's fleet config to this harness's own files; reports per entry. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
-  syncFleet?(config: FleetConfig): Promise<FleetSyncReport>;
+  syncFleet?(config: MachineFleetConfig): Promise<FleetSyncReport>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   tagSession(
     sessionKey: string,

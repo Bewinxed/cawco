@@ -170,10 +170,13 @@
 }
 /* How chosen a folder tab is (components/ui/fluid-tabs TabItem, `--pick`),
    typed so a choice interpolates the one number and everything drawn from
-   it follows on its clock. */
+   it follows on its clock. Set on the tab and handed down only along the
+   path to the three that read it (the sheet, the rim, the strong ink:
+   `pick-inherit`): inherited by every element under the tab, each frame of
+   a choice restyled all of them, ~50 a tab. */
 @property --pick {
   syntax: "<number>";
-  inherits: true;
+  inherits: false;
   initial-value: 0;
 }
 /* The fluid track's come-forward clock (TabsList, `tab-come-forward`): a
@@ -234,7 +237,7 @@
        mark: the same in every tree, whatever inset its rows keep. */
     --tree-step: calc(var(--space-1) + var(--space-2) + var(--space-3));
 
-    @media (width <= 900px) {
+    @media (width < 900px) {
       --seam-inset: var(--space-2);
     }
 
@@ -889,12 +892,20 @@
      element scrolled out of view and an inert surface parked behind the one
      in front all hold every loop they carry still. A list swap's leaving
      layer (`data-leaving`) is inert so nobody clicks a row on its way out,
-     but its rows still play their exit. */
-  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving])) *,
-  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]))
-    *::before,
-  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]))
-    *::after,
+     but its rows still play their exit.
+     Each ancestor is its own one-item :where(), never one list: Blink's
+     ancestor bloom filter reads a one-item :where() as a plain ancestor and
+     rejects every element with no such ancestor before matching it, and
+     reads nothing from a list (selector_filter.cc). */
+  :where(:root[data-at-rest]) *,
+  :where(:root[data-at-rest]) *::before,
+  :where(:root[data-at-rest]) *::after,
+  :where([data-offscreen]) *,
+  :where([data-offscreen]) *::before,
+  :where([data-offscreen]) *::after,
+  :where([inert]:not([data-leaving])) *,
+  :where([inert]:not([data-leaving])) *::before,
+  :where([inert]:not([data-leaving])) *::after,
   :where([data-offscreen]) {
     animation-play-state: paused !important;
   }
@@ -1139,13 +1150,16 @@
   }
 
   /* The one empty state (ui/empty): mark, title, why, one action, set on
-     the column the content would have started on. */
+     the column the content would have started on. One start edge for all
+     of them, its words at the reading measure; never centred line by
+     line. */
   .kit-empty {
     display: flex;
     flex-direction: column;
     align-items: flex-start;
     gap: var(--space-2);
     padding-block: var(--space-6);
+    text-align: start;
 
     & > [data-slot="empty-mark"] {
       inline-size: 20px;
@@ -1155,6 +1169,7 @@
     }
   }
   .kit-empty-title {
+    max-inline-size: 60ch;
     font: var(--type-title);
     letter-spacing: -0.01em;
     color: var(--ink-strong);
@@ -1488,7 +1503,7 @@
   /* On a phone the glass is a tab tucked into the screen's trailing edge,
      and the card hanging from it is too: its trailing side is the screen's
      edge, square and with no edge drawn there, as the glass's. */
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .kit-pop.kit-hang.glass-card {
       border-end-end-radius: 0;
 
@@ -1501,8 +1516,9 @@
      cut at the card's top edge, the anchor's foot, with room for the whole
      overlay shadow past the others. It never moves, so the card's slide is
      all the compositor has to play. In CSS, not the wrapper's own style,
-     which bits-ui writes whole on every placement. */
-  [data-bits-floating-content-wrapper]:has(> .kit-pop.kit-hang) {
+     which bits-ui writes whole on every placement; HangCard marks the
+     wrapper it draws (`data-hang`). */
+  [data-bits-floating-content-wrapper][data-hang] {
     clip-path: inset(0 -120px -120px);
   }
   /* Open and close are the card's own (`hang`): the kit's rise, scale and
@@ -1798,9 +1814,9 @@
      after a drawer closed on a phone, and the next tap was lost. While a
      drawer is closing the body takes presses again. Every other modal
      layer that could be open meanwhile has its own scrim over the page, and
-     a menu still closes on a press outside it. The drawer is portalled
-     straight into <body>, so the test reads only the body's children. */
-  body:has(> [data-slot="drawer-content"][data-state="closed"]) {
+     a menu still closes on a press outside it. The closing drawer says so
+     on the body (ui/drawer/drawer-content, page-marks). */
+  body[data-drawer~="closed"] {
     pointer-events: auto !important;
   }
 
@@ -2073,7 +2089,7 @@
        column): the text column, relative. */
     --x-hang: calc(var(--x-text) - var(--x-glyph));
 
-    @media (width <= 900px) {
+    @media (width < 900px) {
       --x-rail: 0px;
     }
   }
@@ -2333,6 +2349,13 @@
 /* No transition, as `transition: none` writes it: every longhand back to its
    initial value. Tailwind's `transition-none` sets only the property, and
    leaves a duration and curve the element set elsewhere. */
+/* The folder tab's `--pick` taken from the parent: each element on the path
+   from the tab to a reader of it (TabItem; `@property --pick` above does not
+   inherit). */
+@utility pick-inherit {
+  --pick: inherit;
+}
+
 @utility transition-off {
   transition: none;
 }
@@ -2627,7 +2650,7 @@
 @utility turn-pad {
   --pad: var(--space-3);
 
-  @media (width <= 900px) {
+  @media (width < 900px) {
     --pad: var(--space-2);
   }
 }
@@ -2644,6 +2667,19 @@
    (`grid-areas-(--row-areas)`). */
 @utility grid-areas-* {
   grid-template-areas: --value([*]);
+}
+/* A gap taken from the parent, as `gap: inherit` writes it (ArtifactMenu's
+   name and promoted tag keep the kit item's own gap). */
+@utility gap-inherit {
+  gap: inherit;
+}
+/* The project page's grid (project/[id]): the page's area and Caw's dock
+   beside or under it (CawFloat). */
+@utility grid-area-page {
+  grid-area: page;
+}
+@utility grid-area-dock {
+  grid-area: dock;
 }
 /* Right to left as the property alone: the `dir` attribute also sets
    unicode-bidi. */

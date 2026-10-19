@@ -28,10 +28,9 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { cawLoop } from "#lib/cawco/feel.svelte.js";
-  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { crossIn, crossOut, dur } from "#lib/cawco/motion/curves.svelte.js";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { depart, land } from "#lib/cawco/motion/share.svelte.js";
-  import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import {
     Alert,
@@ -67,7 +66,6 @@
   import { failureWords, THREAD_SEND_UNREACHED, unreachable } from "./hub-read";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
-  import FolderFile from "./project/FolderFile.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
   import {
     listTasks,
@@ -107,6 +105,7 @@
     composerBindings,
   } from "./workspace/composer-dock.svelte";
   import { settleWhile } from "./workspace/dock.svelte";
+  import { layoutPolicy } from "./workspace/layout-policy.svelte";
   import { workspace } from "./workspace/workspace.svelte";
 
   let {
@@ -332,7 +331,8 @@
   let side = $state<ReturnType<typeof SideSplit>>();
   /** The side surface's share of the width, in percent. */
   let sideShare = $state(0);
-  const phone = $derived(paneWidth > 0 && paneWidth < 900);
+  /** The side surface is the bottom drawer, a task its own page (layoutPolicy.sideDrawer). */
+  const phone = $derived(layoutPolicy.sideDrawer(paneWidth));
 
   /** What Caw plays on the composer: the thread's status, his loop or its still. */
   const seatStatus = $derived(thread?.status ?? "ready");
@@ -451,6 +451,25 @@
   const taskHref = (id: string) =>
     `/project/${encodeURIComponent(projectId)}?task=${encodeURIComponent(id)}`;
   /**
+   * The messages the first read found: a reply not among them landed while
+   * the thread was open, and its cards are uncovered one by one; read back
+   * from history nothing moves (design f2640f55 §2, Motion).
+   */
+  let readBefore: Set<string> | null = null;
+  $effect.pre(() => {
+    if (readBefore === null && messages !== null) {
+      readBefore = new Set(messages.map((message) => message.id));
+    }
+  });
+  const landedLive = (messageId: string) =>
+    readBefore !== null && !readBefore.has(messageId);
+  /**
+   * The cards' stagger: each starts --dur-stagger after the one before,
+   * the step shortened so the last starts within --dur-cascade.
+   */
+  const staggerStep = (count: number) =>
+    Math.min(dur("--dur-stagger"), dur("--dur-cascade") / Math.max(count, 1));
+  /**
    * A card opens its task beside the conversation on a desk; on a phone the
    * task is its own page, whose Back comes back here. Docked beside the
    * project page, the page stands it beside its board.
@@ -485,6 +504,31 @@
     message?.author === "event" && message.event?.kind === "caw"
       ? message.event.notWoken
       : undefined;
+  /**
+   * A not-woken note's sentence, by why: one plain line the person reads.
+   * The hub's own words for it (a machine's error, its paths and ids) wait
+   * under Show details; the spend cap's line is plain already, and stands
+   * as the hub says it.
+   */
+  const notWokenLine = (
+    why: NonNullable<ReturnType<typeof notWokenOf>>
+  ): string => {
+    switch (why.reason) {
+      case "no-machine":
+        return "No machine was online when you wrote. He reads it when one is back.";
+      case "capped":
+        return why.words;
+      case "could-not-start":
+        return "Caw couldn’t start on his machine.";
+      case "place":
+        return "Caw couldn’t be kept to the project’s folder on his machine.";
+      case "not-taken":
+        return "His session didn’t take your words.";
+      case "failed":
+        break;
+    }
+    return "Caw couldn’t be woken.";
+  };
   /** The note Try again was pressed on and went: its wake is under way, so it is not offered twice. */
   let retried = $state<string | null>(null);
   /**
@@ -518,20 +562,6 @@
   }
 
   setVoice({ event: eventUnder, face, tasks: taskCards, files: folderFiles });
-
-  // --- a file his reply names ------------------------------------------------------
-
-  /**
-   * The project folder's file open from its chip, in the page (The Open
-   * Page Rule): beside the thread in its split (SideSplit, on the phone's
-   * sheet over the composer), or, where the thread has no split (docked),
-   * in the thread's own place over its transcript, which keeps its scroll
-   * under it for Close to come back to.
-   */
-  let openFile = $state<string | null>(null);
-  const closeFile = () => {
-    openFile = null;
-  };
 
   /**
    * The Setup thread's newest reply that names files is where setup ends:
@@ -655,7 +685,7 @@
   const binding: ComposerBinding = {
     draft,
     agentName: "Caw",
-    placeholder: "Message the project…",
+    placeholder: "Message Caw…",
     commands: [],
     mentionsFrom: null,
     suggest: { candidates: [] },
@@ -754,6 +784,19 @@
   const noMachine = $derived(
     !!view?.problem && cawco.onlineMachines.length === 0
   );
+  /**
+   * Docked in Caw's panel, the composer has a place of its own at the foot
+   * and the room ends over it (the owner's pins 17 and 22): nothing scrolls
+   * under the composer or Caw on its pill, or under the line standing in its
+   * place when he can't start.
+   */
+  const reserved = $derived.by(() => {
+    if (!docked) {
+      return null;
+    }
+    const over = writable ? foot.stack + foot.perch : offHeight;
+    return `calc(var(--space-4) + var(--safe-bottom) + ${over}px + var(--space-2))`;
+  });
 </script>
 
 {#snippet face(live: boolean)}
@@ -761,32 +804,37 @@
 {/snippet}
 
 {#snippet eventUnder(id: string)}
-  <!-- A not-woken note: why, and the way on with the words he has not read
-       (only on the note that still stands for them). With no machine
-       online it says what happens next; every other reason is the hub's
-       own words. -->
+  <!-- A not-woken note: why, in one plain sentence, the hub's own words
+       under Show details, and the way on with the words he has not read
+       (only on the note that still stands for them). -->
   {@const why = notWokenOf(
     (messages ?? []).find((message) => message.id === id)
   )}
   {#if why}
+    {@const line = notWokenLine(why)}
     <RowFault
       class="not-woken"
       again={retryable === id ? () => wakeAgain(id) : undefined}
       againPending="Waking Caw…"
       data-not-woken={why.reason}
-      reason={why.reason === "no-machine"
-        ? "No machine was online when you wrote. He reads it when one is back."
+      details={why.words === line || why.reason === "no-machine"
+        ? null
         : why.words}
+      reason={line}
     />
   {/if}
 {/snippet}
 
-{#snippet taskCards(ids: string[])}
+{#snippet taskCards(ids: string[], messageId: string)}
   <!-- What the cards are, the cards at one height (title over id), what
        each waits on you for under it, and the way to the board they are on.
        The box tweens as cards arrive and the head's words change (a stage
        moves under it). -->
   {@const filed = ids.flatMap((id) => tasks.filter((task) => task.id === id))}
+  <!-- Landed while the thread is open, the head and then each card are
+       uncovered in turn; read back from history nothing moves. -->
+  {@const live = landedLive(messageId)}
+  {@const step = staggerStep(filed.length + 1)}
   <div
     class="has-data-tasks-head:pt-space-3"
     data-thread-tasks
@@ -794,7 +842,11 @@
   >
     {#if filed.length > 0}
       <!-- What the cards are, in the kit's meta line over them. -->
-      <p class="mt-0 mx-0 mb-space-2 type-meta text-ink-muted" data-tasks-head>
+      <p
+        class="mt-0 mx-0 mb-space-2 type-meta text-ink-muted"
+        data-arrive={live || undefined}
+        data-tasks-head
+      >
         <MorphText text={filedWords(filed)} />
       </p>
       <!-- Each task is two tracks, its card's and what it needs of you, and
@@ -808,13 +860,15 @@
         style:--task-cols="repeat(auto-fill, minmax(14rem, 1fr))"
         style:--task-rows="1fr auto"
       >
-        {#each filed as task (task.id)}
+        {#each filed as task, at (task.id)}
           <!-- literal: 74ch -->
           <li
-            data-slot="thread-pane-task"
+            data-slot="filed-task"
             class="grid row-start-(--task-span) grid-rows-subgrid min-w-0"
             style:--task-span="span 2"
             style:--needs-w="74ch"
+            data-arrive={live || undefined}
+            style:animation-delay={live ? `${(at + 1) * step}ms` : undefined}
           >
             <TaskCard
               href={taskHref(task.id)}
@@ -851,13 +905,7 @@
 {/snippet}
 
 {#snippet folderFiles(files: string[], messageId: string)}
-  <FolderFiles
-    {files}
-    onopen={(path) => {
-      openFile = path;
-    }}
-    shown={openFile}
-  />
+  <FolderFiles {files} {projectId} />
   {#if messageId === boardAfter}
     <div class="mt-space-3">
       <Button
@@ -904,40 +952,43 @@
 
 {#snippet slide()}
   <div
-    data-slot="thread-pane-slide"
+    data-slot="room"
     class="relative flex flex-col flex-auto min-h-0 overflow-hidden isolate timeline-scope-transcript-head"
   >
     {#if readProblem}
-      <!-- literal: 46ch -->
+      <!-- literal: 60ch -->
       <p
-        class="m-auto max-w-(--problem-w) p-space-6 type-body text-ink-muted"
+        class="m-0 ms-(--problem-ms) max-w-(--problem-w) py-space-6 type-body text-ink-muted max-desk:ms-space-3"
         role="alert"
-        style:--problem-w="46ch"
+        style:--problem-ms="calc((100% - var(--c-composer-w)) / 2)"
+        style:--problem-w="60ch"
         in:crossIn
       >
         The thread could not be read: {readProblem}
       </p>
     {:else if hero}
-      <!-- The hero: the empty board's (project page `.caw-empty`), centred
-           in the room over the composer, which it clears as the transcript
-           does. Its own stacking: what is raised inside it (an Earlier row's
+      <!-- The hero: the empty board's (project page `.caw-empty`), from the
+           room's top, its inline padding the composer's own column, so Caw,
+           the title, the line and the starters share the composer's start
+           edge (--space-3 where the composer goes edge to edge, under 900px).
+           It clears the composer as the transcript does. Its own stacking: what is raised inside it (an Earlier row's
            mark) stays under the foot fade as it scrolls past the composer. -->
       <div
-        class="flex flex-auto flex-col justify-center min-h-0 pt-space-6 px-space-5 pb-(--composer-clearance) overflow-y-auto isolate"
+        class="flex flex-auto flex-col min-h-0 px-(--hero-px) pb-(--composer-clearance) overflow-y-auto isolate max-desk:px-space-3"
         data-thread-hero
+        style:--hero-px="calc((100% - var(--c-composer-w)) / 2)"
         in:crossIn
       >
         <EmptyState
-          class="items-center w-full max-w-c-starters-w mx-auto text-center"
-          line={view && !view.on && !docked
+          line={view && !view.on
             ? "Caw is off, so he acts only when you write to him."
             : undefined}
-          title="What's next for {projectName}?"
+          title="What’s next for {projectName}?"
         >
           {#snippet mark()}
             <div
               data-slot="caw-80"
-              class="grid place-items-center mb-space-3"
+              class="grid justify-items-start mb-space-3"
               data-share={projectId ? `caw:${projectId}` : undefined}
               out:seatHim|global
             >
@@ -945,12 +996,12 @@
             </div>
           {/snippet}
           {#snippet action()}
-            {#if docked}
-              <CawStarters onpick={pick} {starters} />
-              {@render docked.under?.()}
-            {:else if starters.length > 0}
-              <StarterCards onpick={pick} {starters} />
+            {#if starters.length > 0}
+              <!-- In his panel, suggestion rows as wide as their words;
+                   in a tab, the starter cards. -->
+              <StarterCards onpick={pick} rows={!!docked} {starters} />
             {/if}
+            {@render docked?.under?.()}
           {/snippet}
         </EmptyState>
       </div>
@@ -963,7 +1014,7 @@
           agentName="Caw"
           bare
           {focused}
-          latestInset={writable && foot.stack
+          latestInset={writable && foot.stack && !reserved
             ? `calc(${latestFoot} - max(calc(var(--space-8) * 3), var(--composer-clearance)))`
             : undefined}
           onshown={(drawn) => {
@@ -980,7 +1031,7 @@
     <!-- The skeleton stands in for rows still on their way and goes the
          moment they are drawn: its rows are not where the real ones fall, so
          fading it over them reads as a second, stale transcript. -->
-    {#if writable}
+    {#if writable && !docked}
       <FootFade solid={foot.stack ? fadeSolid : undefined} />
     {/if}
     {#if veiled}
@@ -1002,19 +1053,16 @@
   <div
     data-slot="body"
     class="relative flex flex-col flex-auto min-w-0 min-h-0"
-    style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
+    style:--composer-clearance={reserved
+      ? "var(--space-4)"
+      : `calc(${composerRoom} + var(--space-4) + var(--space-4))`}
+    style:padding-block-end={reserved}
   >
     {#if docked}
-      <!-- The transcript under a file in its place: laid out as it was, so
-           its scroll is where Close finds it. -->
-      <div class="contents" inert={openFile !== null}>
-        {@render slide()}
-      </div>
+      {@render slide()}
     {:else}
       <SideSplit
         {active}
-        file={fileSurface}
-        fileOpen={openFile !== null}
         {phone}
         planOf={lead}
         previewOf={lead}
@@ -1061,20 +1109,6 @@
         </RegionBoundary>
       </div>
     {/if}
-    {#if docked && openFile}
-      <!-- No split to stand in: the file takes the thread's place, over
-           its transcript and composer, until Close gives it back. -->
-      <div
-        class="absolute inset-0 z-21 flex bg-surface-raised"
-        data-file-in-place
-        in:crossIn
-        out:crossOut
-      >
-        <RegionBoundary region="file">
-          {@render fileSurface(undefined)}
-        </RegionBoundary>
-      </div>
-    {/if}
     {#if view?.problem}
       <!-- No composer: Caw cannot start to read it. What is true, and the
            one thing that changes it, where the composer stands when there
@@ -1110,14 +1144,6 @@
     {/if}
   </div>
 </div>
-
-{#snippet fileSurface(switcher: Snippet | undefined)}
-  {#if openFile && projectId}
-    {#key openFile}
-      <FolderFile onclose={closeFile} path={openFile} {projectId} {switcher} />
-    {/key}
-  {/if}
-{/snippet}
 
 {#snippet taskSurface(switcher: Snippet | undefined)}
   {#if stages && openTask}
@@ -1155,31 +1181,45 @@
   [data-thread-hero] :global(.kit-empty-action) {
     align-self: stretch;
   }
-  /* A file in the thread's own place, over its transcript and composer.
-     The pane is already a card (the dock's), so the file's card draws no
-     frame of its own inside it: no second shadow, corner or ground. */
-  [data-file-in-place] :global([data-slot="side-card"]) {
-    flex: 1 1 auto;
-    padding-inline: 0;
-    border-radius: 0;
-    box-shadow: none;
-  }
   /* A task's card and what it needs of you, each a step above the next
      (TaskCard and TaskNeedsFor take no class). */
-  [data-slot="thread-pane-task"] > :global([data-task-card]) {
+  [data-slot="filed-task"] > :global([data-task-card]) {
     margin-block-end: var(--space-2);
   }
-  [data-slot="thread-pane-task"]
-    > :global([data-slot="task-needs-for-needs-for"]) {
+  [data-slot="filed-task"] > :global([data-slot="task-needs-for-needs-for"]) {
     margin-block-end: var(--space-2);
   }
   /* A task that needs you takes the row: its card, then what it needs and
      the way to act, collapsed to the deliverable's first lines (TaskNeeds'
      stack, inside TaskNeedsFor). */
-  [data-slot="thread-pane-task"]:has(
-    :global([data-slot="task-needs-needs-stack"])
-  ) {
+  [data-slot="filed-task"]:has(:global([data-slot="task-needs-needs-stack"])) {
     grid-column: 1 / -1;
     max-inline-size: var(--needs-w);
+  }
+  /* A reply's filed tasks, landing while the thread is open: the head line
+     first, then each card, uncovered top to bottom on one clock (design
+     f2640f55 §2): a fade from nothing and, motion allowed, a rise from
+     --pop-rise, over --dur-pop on --ease-out, each card from its own start
+     (its inline animation-delay). Held at its start until then
+     (`backwards`); done, it leaves the card as it is. */
+  /* residual: keyframes */
+  [data-arrive] {
+    animation: filed-fade var(--dur-pop) var(--ease-out) backwards;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-arrive] {
+      animation-name: filed-rise;
+    }
+  }
+  @keyframes filed-fade {
+    from {
+      opacity: 0;
+    }
+  }
+  @keyframes filed-rise {
+    from {
+      opacity: 0;
+      translate: 0 var(--pop-rise);
+    }
   }
 </style>

@@ -7,7 +7,7 @@
 
 import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
-import { arch, platform, tmpdir } from "node:os";
+import { platform } from "node:os";
 import { delimiter, dirname, join, sep } from "node:path";
 import type {
   ToolFootprint,
@@ -18,13 +18,11 @@ import type {
 } from "@cawco/core";
 import { TOOL_CATALOG, toolSpec } from "@cawco/core";
 import { hostEnvironment } from "@cawco/core/session-env";
-import { writeStateFile } from "@cawco/core/state-file";
 import { expandHome } from "./fs";
 import { probeStarted } from "./probe-count";
 
-/** Where {@link NATIVE_ROUTINES} put what they install. */
+/** Where the curl-script installers put their binaries (Claude Code's, Antigravity's). */
 const LOCAL_BIN = expandHome("~/.local/bin");
-const NODE_DIR = expandHome("~/.local/node");
 
 /**
  * bun's global bin dir as bun places it: `BUN_INSTALL_BIN`, else
@@ -36,17 +34,14 @@ const bunGlobalBin = (): string =>
   join(process.env.BUN_INSTALL ?? expandHome("~/.bun"), "bin");
 
 /**
- * The PATH every probe and installer runs with. A daemon that unpacked Node a
- * second ago still has the PATH it started with, so the `needs: 'npm'` method
- * that was waiting for it would find nothing — and asking the user to restart
- * the daemon between two halves of one install is not an install. bun's
- * global bin goes on it for the same reason: a copy bun installed is put on
- * again with bun, which a daemon under systemd would otherwise not find.
+ * The PATH every probe and installer runs with: the daemon's own, then the
+ * dirs installers put binaries in that a service manager's PATH has never
+ * heard of. A tool a curl script put in `~/.local/bin` a second ago is found
+ * without restarting the daemon, and a copy bun installed is put on again with
+ * bun, which a daemon under systemd would otherwise not find.
  */
 export const toolPath = (): string =>
-  [process.env.PATH, LOCAL_BIN, join(NODE_DIR, "bin"), bunGlobalBin()]
-    .filter(Boolean)
-    .join(delimiter);
+  [process.env.PATH, LOCAL_BIN, bunGlobalBin()].filter(Boolean).join(delimiter);
 
 /** A host tool's environment: this daemon's as a host tool gets it (core `hostEnvironment`), on {@link toolPath}. */
 export const toolEnv = (): Record<string, string | undefined> => ({
@@ -322,11 +317,11 @@ const refusal = (
   return undefined;
 };
 
-/** The command a method runs for `version`; none for a native routine. */
+/** The command a method runs for `version`. */
 const commandOf = (
   method: ToolInstallMethod,
   version: string | undefined
-): string | undefined =>
+): string =>
   version && method.pinnedCommand
     ? method.pinnedCommand.replaceAll("{version}", version)
     : method.command;
@@ -360,9 +355,8 @@ export const installAdvice = async (
     spec.install.find((one) =>
       one.platforms.includes(platform() as ToolPlatform)
     );
-  const command = method ? commandOf(method, want) : undefined;
-  return command
-    ? { command }
+  return method
+    ? { command: commandOf(method, want) }
     : { refusal: `${spec.name} has no install command for ${platform()}` };
 };
 
@@ -445,21 +439,6 @@ export const probeTools = async (): Promise<ToolStatus[]> => {
   );
 };
 
-/** Numeric segment by segment: `1.10.0` is above `1.9.9`, which strings get wrong. */
-const below = (found: string, floor: string): boolean => {
-  const parts = (version: string): number[] =>
-    version.split(".").map((segment) => Number.parseInt(segment, 10) || 0);
-  const here = parts(found);
-  const wanted = parts(floor);
-  for (const [index, need] of wanted.entries()) {
-    const has = here[index] ?? 0;
-    if (has !== need) {
-      return has < need;
-    }
-  }
-  return false;
-};
-
 const eligible = (method: ToolInstallMethod): boolean =>
   method.platforms.includes(platform() as ToolPlatform) &&
   (!method.needs || resolveBin(method.needs) !== undefined);
@@ -485,86 +464,13 @@ const noMethod = (spec: ToolSpec): ToolStatus => {
   };
 };
 
-interface NodeRelease {
-  lts: string | false;
-  version: string;
-}
-
-const NODE_INDEX = "https://nodejs.org/dist/index.json";
-
-/**
- * The installs no portable one-liner expresses honestly. Each throws with what
- * went wrong; {@link runMethod} turns that into the failure's `detail`.
- */
-const NATIVE_ROUTINES: Record<string, (spec: ToolSpec) => Promise<void>> = {
-  /**
-   * Node from nodejs.org, for the common Linux daemon with neither brew nor
-   * sudo: the latest LTS for this arch, unpacked into `~/.local/node` and
-   * linked into `~/.local/bin`. It deliberately edits no shell rc file — the
-   * PATH of a terminal the user opens tomorrow is not this routine's business,
-   * and {@link resolveBin} is what makes the new npm reachable here and now.
-   */
-  "node-tarball": async () => {
-    const releases = (await (await fetch(NODE_INDEX)).json()) as NodeRelease[];
-    const lts = releases.find((release) => release.lts);
-    if (!lts) {
-      throw new Error("nodejs.org lists no LTS release");
-    }
-
-    const name = `node-${lts.version}-linux-${arch() === "arm64" ? "arm64" : "x64"}`;
-    const url = `https://nodejs.org/dist/${lts.version}/${name}.tar.xz`;
-    const downloaded = await fetch(url);
-    if (!downloaded.ok) {
-      throw new Error(`${url} answered ${downloaded.status}`);
-    }
-
-    const tarball = join(tmpdir(), `${name}.tar.xz`);
-    await writeStateFile(
-      tarball,
-      new Uint8Array(await downloaded.arrayBuffer())
-    );
-    await Bun.$`mkdir -p ${NODE_DIR} ${LOCAL_BIN}`.quiet();
-    // The tarball carries its own top-level directory; stripping it is what
-    // makes a second install land on top of the first rather than beside it.
-    const unpacked =
-      await Bun.$`tar -xJf ${tarball} -C ${NODE_DIR} --strip-components=1`
-        .quiet()
-        .nothrow();
-    await Bun.$`rm -f ${tarball}`.quiet().nothrow();
-    if (unpacked.exitCode !== 0) {
-      throw new Error(tail(unpacked.stderr.toString()));
-    }
-
-    await Promise.all(
-      ["node", "npm", "npx"].map((bin) =>
-        Bun.$`ln -sf ${join(NODE_DIR, "bin", bin)} ${join(LOCAL_BIN, bin)}`
-          .quiet()
-          .nothrow()
-      )
-    );
-  },
-};
-
 /** What the method said when it did not work — the tail of it, anyway. */
 const runMethod = async (
   spec: ToolSpec,
   method: ToolInstallMethod,
   version?: string
 ): Promise<string | undefined> => {
-  if (method.native) {
-    const routine = NATIVE_ROUTINES[method.native];
-    if (!routine) {
-      return `no native routine named ${method.native}`;
-    }
-    try {
-      await routine(spec);
-      return undefined;
-    } catch (error) {
-      return error instanceof Error ? error.message : String(error);
-    }
-  }
-
-  const command = commandOf(method, version) ?? "";
+  const command = commandOf(method, version);
   console.info(`[tools] ${spec.name}: ${method.label}: ${command}`);
   const ran = await Bun.$`${{ raw: command }}`.quiet().nothrow().env(toolEnv());
   if (ran.exitCode === 0) {
@@ -579,13 +485,13 @@ const runMethod = async (
 
 /**
  * Puts `version` of a tool on: a copy already here goes on again with the
- * method that put it there, or not at all (`refusal`); with none here, its
- * requirements first (when asked), then the first method this machine can run.
+ * method that put it there, or not at all (`refusal`); with none here, the
+ * first method this machine can run. What a method `needs` is never installed
+ * here: a machine without it is told so ({@link noMethod}).
  */
 const install = async (
   spec: ToolSpec,
-  version: string | undefined,
-  requirements: boolean
+  version: string | undefined
 ): Promise<ToolStatus> => {
   const at = tracked(spec) ? await findCopy(spec) : undefined;
   let method = at?.method;
@@ -601,12 +507,6 @@ const install = async (
       });
     }
   } else {
-    if (requirements) {
-      const blocked = await satisfy(spec);
-      if (blocked) {
-        return remember(blocked);
-      }
-    }
     method = spec.install.find(eligible);
   }
   if (!method) {
@@ -626,50 +526,6 @@ const install = async (
     method: method.label,
     at: Date.now(),
   });
-};
-
-/**
- * What `spec` needs first. A missing requirement is installed here — depth 1, so
- * a requirement's own `requires` is not followed — and one that is present but
- * below its floor is reported rather than replaced: silently swapping a
- * machine's Node is ruder than naming the version that is in the way.
- */
-const satisfy = async (spec: ToolSpec): Promise<ToolStatus | undefined> => {
-  for (const requirement of spec.requires ?? []) {
-    const needed = toolSpec(requirement.id);
-    if (!needed) {
-      continue;
-    }
-
-    // biome-ignore lint/performance/noAwaitInLoops: requirements are checked in order and the loop returns on the first unmet one
-    let status = await probeTool(needed);
-    if (status.state === "missing") {
-      status = await install(needed, undefined, false);
-    }
-    if (status.state !== "installed") {
-      return {
-        id: spec.id,
-        state: status.state === "unsupported" ? "unsupported" : "failed",
-        detail: `${needed.name} is needed first: ${status.detail ?? status.state}`,
-        at: Date.now(),
-      };
-    }
-    // A binary that would not say its version is taken at its word rather than
-    // condemned — the same call presence makes everywhere else in here.
-    if (
-      requirement.min &&
-      status.version &&
-      below(status.version, requirement.min)
-    ) {
-      return {
-        id: spec.id,
-        state: "unsupported",
-        detail: `needs ${needed.id} >= ${requirement.min} (found ${status.version})`,
-        at: Date.now(),
-      };
-    }
-  }
-  return undefined;
 };
 
 /**
@@ -695,7 +551,7 @@ export const installTool = async (
   }
   try {
     // A tool CawCo is built against goes on at its one version, whatever is pinned.
-    return await install(spec, spec.exactVersion ?? version, true);
+    return await install(spec, spec.exactVersion ?? version);
   } finally {
     toolsMoved();
   }
@@ -746,7 +602,7 @@ export const putOnPins = async (
     if (before.state === "missing" || before.state === "installed") {
       continue;
     }
-    const after = await install(spec, version, false);
+    const after = await install(spec, version);
     if (after.state !== "installed") {
       throw new Error(
         `${spec.name} ${version}, which ${build} runs, did not go on${after.method ? ` with ${after.method}` : ""}: ${oneLine(after.detail)}`

@@ -6,10 +6,11 @@
  * inside it ({@link cawcoStage}, {@link stamp}) and nothing written into the
  * project. The daemon (agent `stage.ts`) writes this file, bundled, to
  * `<toolchain root>/.cawco/stage/host.mjs` and runs it there inside the
- * workspace's boundary under the runtime the project's lockfile implies, so
- * the project's toolchain never meets CawCo's process (the spike: the
- * compiled binary can't load a project's Vite, `Cannot find module
- * 'rolldown/parseAst'`).
+ * workspace's boundary on the agent's own bun (boundary.ts
+ * `bunScriptRuntime`: a binary install's run as bun with `BUN_BE_BUN=1`), a
+ * process of its own, so the project's toolchain never meets CawCo's process
+ * (the spike: the compiled binary's own module graph can't load a project's
+ * Vite, `Cannot find module 'rolldown/parseAst'`).
  *
  * Its environment: `CAWCO_STAGE=1`, which a config reads to know it runs on
  * a stage (as Storybook's `STORYBOOK`); `CAWCO_STAGE_PORT`, the port it
@@ -20,8 +21,8 @@
  * It speaks to the daemon in JSON lines on stdout, each `{"cawco": <word>}`:
  * `ready` with its port once it serves, `errors` with every compile error
  * standing whenever that changes, `beat` every {@link BEAT_MS}, and `fatal`
- * with why it could not start. Vite's own words go to stderr (`logLevel:
- * "warn"`). Once nothing reads its stdout (the daemon is gone), a beat's
+ * with why it could not start. Vite's own words go to stderr (its logger at
+ * "warn"). Once nothing reads its stdout (the daemon is gone), a beat's
  * write fails and the stage ends. Astro's and Nuxt's own words go to stderr
  * too (their `logLevel` at `warn`).
  *
@@ -32,6 +33,8 @@
  * ({@link WEIGHT_PATH}) and lists the components ({@link COMPONENTS_PATH},
  * spec §6's discovery).
  */
+import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import {
   existsSync,
   readdirSync,
@@ -45,11 +48,22 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
   AS_PAGE,
+  CANVAS_PATH,
+  COMPONENT_BUDGET,
   COMPONENTS_PATH,
   type ComponentDoc,
+  DESIGN_MAP_LIMITS,
+  type DesignCard,
+  type DesignLink,
+  type DesignMap,
+  type DesignQuery,
   type Found,
   HEALTH_PATH,
-  SHEET_PATH,
+  type PageError,
+  RENDERED_PATH,
+  REPORT_PATH,
+  type RenderReport,
+  type SectionRender,
   type SheetImport,
   type SheetOnPage,
   type SheetRead,
@@ -68,6 +82,7 @@ import { propsNames, propsOf } from "./docgen";
 import {
   readStoryFile,
   StoryRefusal,
+  storyStatement,
   writeArgs,
   writeStoryOp,
 } from "./story-file";
@@ -125,11 +140,20 @@ interface DevServer {
   watcher: { emit: (event: "change", file: string) => boolean };
 }
 
+/** What the stage uses of a Vite logger (vite.dev/guide/api-javascript `createLogger`). */
+interface ViteLogger {
+  error: (message: string, options?: object) => void;
+}
+
 /** The project's own Vite, as the stage uses it. */
 interface Vite {
+  createLogger: (level: "warn") => ViteLogger;
   createServer: (config: object) => Promise<DevServer>;
   version: string;
 }
+
+/** What Vite's logger says as a config file fails to load, before it throws the load's own error (Vite 8.3 `loadConfigFromFile`). */
+const CONFIG_UNREAD = "failed to load config from";
 
 /** The project's own Astro, as the stage uses it: its programmatic `dev()` (docs.astro.build/en/reference/programmatic-reference/). */
 interface Astro {
@@ -168,12 +192,37 @@ interface Started {
 
 /** How often the stage tells the daemon it is alive. The daemon's health look is the spec's; this only ends a stage nobody reads. */
 const BEAT_MS = 15_000;
+/** A states file's section module: `cawco:sheet/<file>.js`. */
 const VIRTUAL = "cawco:sheet/";
+/** The canvas's own modules: its entry, runtime, adapter and Svelte props holder. */
+const VIRTUAL_STAGE = "cawco:stage/";
+
+/** Bundled in by build.ts: the canvas's browser runtime (canvas/runtime.ts), CawCo's tokens, and DialKit's vanilla build and stylesheet. */
+declare const __CANVAS_RUNTIME__: string;
+declare const __CANVAS_TOKENS__: string;
+declare const __DIALKIT_JS__: string;
+declare const __DIALKIT_CSS__: string;
+const CANVAS_RUNTIME = __CANVAS_RUNTIME__;
+const CANVAS_TOKENS = __CANVAS_TOKENS__;
+const DIALKIT_JS = __DIALKIT_JS__;
+const DIALKIT_CSS = __DIALKIT_CSS__;
 const root = process.cwd();
 const port = Number(process.env.CAWCO_STAGE_PORT);
 const framework = process.env.CAWCO_STAGE_FRAMEWORK as Framework;
 const kit = process.env.CAWCO_STAGE_KIT === "1";
 const toolchain = process.env.CAWCO_STAGE_TOOLCHAIN as StageToolchain;
+/**
+ * The toolchain's caches, beside this file in the stage's own git-excluded
+ * dir, never in `node_modules`: a place's `node_modules` (a symlink, a
+ * workspace's hoisted to a folder above the place) can be read-only in its
+ * boundary (EROFS). Vite's `cacheDir` "Default: `node_modules/.vite` … an
+ * absolute file system path or a path relative to project root"
+ * (vite.dev/config/shared-options); Astro's own "Default:
+ * `./node_modules/.astro`" (docs.astro.build/en/reference/
+ * configuration-reference/); Nuxt keeps "Explicit `vite.cacheDir` values"
+ * (github.com/nuxt/nuxt/pull/35626). Vite's watcher ignores its `cacheDir`.
+ */
+const CACHE_DIR = resolve(root, ".cawco/stage/cache");
 /** Nuxt's global CSS (`css` in its config) and source dir, once it has loaded. */
 let nuxtOptions: Nuxt["options"] | undefined;
 
@@ -316,9 +365,42 @@ async function sheetRead(file: string, text?: string): Promise<SheetRead> {
       args: read.meta.args,
       code: read.meta.code,
       component: metaFile ? relative(root, metaFile) : null,
+      title: read.meta.title,
     },
     components,
   };
+}
+
+/** The component files a states file mounts (its meta's and its stories' own), absolute: what its frames are drawn from. */
+async function mountedFiles(abs: string, text: string): Promise<string[]> {
+  const read = readStoryFile(abs, text);
+  const names = [
+    read.meta.component,
+    ...read.stories.map((story) => story.component),
+  ].filter((name): name is string => !!name);
+  const files = await Promise.all(
+    [...new Set(names)].map((name) => {
+      const source = read.imports.get(name);
+      return source ? resolved(source, abs) : Promise.resolve(null);
+    })
+  );
+  return files.filter((file): file is string => !!file);
+}
+
+/**
+ * A states file's content hash with the components it mounts: a report is
+ * kept under it, and any edit to either makes its frames `unseen` until a
+ * browser draws them again.
+ */
+async function contentHash(file: string): Promise<string> {
+  const abs = resolve(root, file);
+  const text = readFileSync(abs, "utf8");
+  const hash = createHash("sha256").update(text);
+  const mounted = await mountedFiles(abs, text).catch(() => []);
+  for (const one of mounted.sort()) {
+    hash.update("\0").update(readFileSync(one));
+  }
+  return hash.digest("hex").slice(0, 16);
 }
 
 const ASTRO_FILE = /\.astro$/;
@@ -379,236 +461,338 @@ function globalStyles(): string[] {
 }
 
 /**
- * Each framework's own mount function, as one `mountStory(target, story)`
- * answering how to take it down. A story is mounted from its `render` when
- * it has one (the framework's own idiom), else its component with its args,
- * and wrapped in its decorators, the story's innermost and then the meta's,
- * as Storybook's `decorateStory` does: each is `(Story, context)`.
+ * Each framework's own mount function, as one `mountStory(target, story,
+ * failed)` answering `unmount` and `update(props)`: `update` changes the
+ * live instance's props in place, never a re-mount, so the component's own
+ * motion plays (a flow move's `play`, a dial on an arg). A story is mounted
+ * from its `render` when it has one (the framework's own idiom), else its
+ * component with its args, and wrapped in its decorators, the story's
+ * innermost and then the meta's, as Storybook's `decorateStory` does: each
+ * is `(Story, context)`. Svelte's props are a `$state` object
+ * (`cawco:stage/svelte-props.js`, compiled by the project's own Svelte),
+ * as its docs pass reactive props to `mount`; React's and Preact's render
+ * again on the same root; Vue's and Solid's are their own reactive objects.
  */
 const ADAPTERS: Record<Framework, string> = {
-  svelte: `import { createRawSnippet, mount, unmount } from "svelte";
-function mountStory(target, s) {
-  let result = s.render ? s.render(s.args, s.context) : { Component: s.component, props: s.args };
+  svelte: `import { createRawSnippet, flushSync, mount, unmount } from "svelte";
+import { reactive } from "${VIRTUAL_STAGE}svelte-props.js";
+export function mountStory(target, s) {
+  const inner = () => (s.render ? s.render(s.args, s.context) : { Component: s.component, props: s.args }) ?? {};
+  const props = reactive({ ...(inner().props ?? {}) });
+  let result = { ...inner(), props };
   for (const decorator of s.decorators) {
-    const inner = result;
-    const outer = decorator(() => inner, s.context);
-    result = outer && outer !== inner && outer.Component ? { ...outer, child: inner } : (outer ?? inner);
+    const wrapped = result;
+    const outer = decorator(() => wrapped, s.context);
+    result = outer && outer !== wrapped && outer.Component ? { ...outer, child: wrapped } : (outer ?? wrapped);
   }
-  return mountSvelte(target, result);
+  const undo = mountSvelte(target, result);
+  return {
+    unmount: undo,
+    update(next) {
+      s.args = { ...s.args, ...next };
+      s.context.args = s.args;
+      const fresh = inner().props ?? {};
+      for (const key of Object.keys(props)) if (!(key in fresh) && key !== "children") delete props[key];
+      Object.assign(props, fresh);
+      flushSync();
+    },
+  };
 }
 function mountSvelte(target, { Component, props = {}, child }) {
-  const children = child && createRawSnippet(() => ({
-    render: () => '<div style="display:contents"></div>',
-    setup: (el) => mountSvelte(el, child),
-  }));
-  const instance = mount(Component, { target, props: children ? { ...props, children } : props });
+  if (child) {
+    props.children = createRawSnippet(() => ({
+      render: () => '<div style="display:contents"></div>',
+      setup: (el) => mountSvelte(el, child),
+    }));
+  }
+  const instance = mount(Component, { target, props });
   return () => unmount(instance);
 }`,
-  vue: `import { createApp, h } from "vue";
-function mountStory(target, s) {
-  let story = () => s.render ? s.render(s.args, s.context) : { render: () => h(s.component, s.args) };
+  vue: `import { createApp, h, reactive } from "vue";
+export function mountStory(target, s, failed) {
+  const args = reactive({ ...s.args });
+  s.context.args = args;
+  let story = () => s.render ? s.render(args, s.context) : { render: () => h(s.component, args) };
   for (const decorator of s.decorators) { const inner = story; story = () => decorator(inner, s.context); }
   const app = createApp(story());
+  app.config.errorHandler = (error) => failed(error);
   app.mount(target);
-  return () => app.unmount();
+  return { unmount: () => app.unmount(), update(next) { Object.assign(args, next); } };
 }`,
   react: `import { createElement } from "react";
+import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
-function mountStory(target, s) {
-  let story = () => s.render ? s.render(s.args, s.context) : createElement(s.component, s.args);
-  for (const decorator of s.decorators) { const inner = story; story = () => decorator(inner, s.context); }
-  const root = createRoot(target);
-  root.render(story());
-  return () => root.unmount();
+export function mountStory(target, s, failed) {
+  const draw = () => {
+    let story = () => s.render ? s.render(s.args, s.context) : createElement(s.component, s.args);
+    for (const decorator of s.decorators) { const inner = story; story = () => decorator(inner, s.context); }
+    return story();
+  };
+  const root = createRoot(target, { onUncaughtError: failed, onCaughtError: failed });
+  flushSync(() => root.render(draw()));
+  return {
+    unmount: () => root.unmount(),
+    update(next) {
+      s.args = { ...s.args, ...next };
+      s.context.args = s.args;
+      flushSync(() => root.render(draw()));
+    },
+  };
 }`,
   solid: `import { createComponent } from "solid-js";
+import { createMutable } from "solid-js/store";
 import { render } from "solid-js/web";
-function mountStory(target, s) {
-  let story = () => s.render ? s.render(s.args, s.context) : createComponent(s.component, s.args);
+export function mountStory(target, s) {
+  const args = createMutable({ ...s.args });
+  s.context.args = args;
+  let story = () => s.render ? s.render(args, s.context) : createComponent(s.component, args);
   for (const decorator of s.decorators) { const inner = story; story = () => decorator(inner, s.context); }
-  return render(story, target);
+  const dispose = render(story, target);
+  return { unmount: dispose, update(next) { Object.assign(args, next); } };
 }`,
   preact: `import { h, render } from "preact";
-function mountStory(target, s) {
-  let story = () => s.render ? s.render(s.args, s.context) : h(s.component, s.args);
-  for (const decorator of s.decorators) { const inner = story; story = () => decorator(inner, s.context); }
-  render(story(), target);
-  return () => render(null, target);
+export function mountStory(target, s) {
+  const draw = () => {
+    let story = () => s.render ? s.render(s.args, s.context) : h(s.component, s.args);
+    for (const decorator of s.decorators) { const inner = story; story = () => decorator(inner, s.context); }
+    return story();
+  };
+  render(draw(), target);
+  return {
+    unmount: () => render(null, target),
+    update(next) { s.args = { ...s.args, ...next }; s.context.args = s.args; render(draw(), target); },
+  };
 }`,
 };
 
+/** The Svelte props holder's source: a `$state` object, which `mount` reads as reactive props. Compiled by the project's own Svelte. */
+const SVELTE_PROPS = `export function reactive(value) {
+  const props = $state(value);
+  return props;
+}
+`;
+
+/** The project's Svelte compiling the props holder as a runes module, as vite-plugin-svelte compiles a `.svelte.js` file. */
+async function svelteProps(): Promise<string> {
+  const { href } = projectPackage("svelte", "./compiler");
+  const compiler = (await import(href)) as {
+    compileModule: (
+      source: string,
+      options: { dev: boolean; filename: string; generate: "client" }
+    ) => { js: { code: string } };
+  };
+  return compiler.compileModule(SVELTE_PROPS, {
+    dev: true,
+    filename: "cawco-props.svelte.js",
+    generate: "client",
+  }).js.code;
+}
+
 /**
- * The sheet's module: the app's global styles, the story file, and every
- * story mounted into a frame of its own, `data-cawco-story` its export and
- * `data-cawco-source` the export's place, under a pick button
- * (`data-option`) of the page's one choice, the story file. It accepts
- * itself: a story file's edit (or a story added) runs it again, on fresh
- * places, after its last run took its stories down. A component's edit is
- * the framework's own HMR and never reaches it. Each HMR update says
- * `cawco:hmr` on the window, so the overlay reads its pins' anchors again.
- *
- * The inspector's side (spec §5): each run says the sheet on the window
- * (`cawco:sheet`, its stories, args and props, a token-typed prop's names
- * among them), which the overlay carries to the pane, and again when a
- * component's props change (the stage's `cawco:props`); the pane's live
- * args (`cawco:story-args`) mount a story again over the file's, with no
- * write until Save; the pane's chosen story (`cawco:story-select`) is
- * marked on its frame.
+ * The canvas's entry: the app's global styles, the framework's adapter and
+ * the canvas runtime (canvas/runtime.ts, bundled into this host), which
+ * loads each section's module as it comes into view. Vite's HMR words
+ * reach the runtime as window events: `cawco:after-update` after any
+ * update (a component's own edit redraws through its framework's HMR, and
+ * the canvas reads its frames again).
  */
-async function sheetModule(file: string): Promise<string> {
-  const abs = resolve(root, file);
-  const sheet: SheetOnPage = { ...(await sheetRead(file)), file };
+function entryModule(): string {
   const styles = globalStyles()
     .map((style) => `import ${JSON.stringify(style)};`)
     .join("\n");
   return `${styles}
-${ADAPTERS[framework]}
-import * as sheet from ${JSON.stringify(abs)};
-const FILE = ${JSON.stringify(file)};
-const SHEET = ${JSON.stringify(sheet)};
-const STORIES = SHEET.stories;
-const host = document.getElementById("cawco-sheet");
-const live = new Map();
-/** The pane's args over a story's own, until its Save writes them or it lets them go. */
-const overrides = new Map();
-let chosen = window.__cawcoSheetChosen ?? null;
-function said() {
-  window.__cawcoSheetOnPage = SHEET;
-  dispatchEvent(new CustomEvent("cawco:sheet", { detail: SHEET }));
-}
-function frameOf(story) {
-  let frame = host.querySelector('[data-cawco-story="' + CSS.escape(story.name) + '"]');
-  if (!frame) {
-    frame = document.createElement("section");
-    frame.className = "cawco-frame";
-    frame.dataset.cawcoStory = story.name;
-    const label = document.createElement("button");
-    label.type = "button";
-    label.className = "cawco-frame-label";
-    label.dataset.option = story.name;
-    label.textContent = story.name;
-    const body = document.createElement("div");
-    body.className = "cawco-frame-body";
-    frame.append(label, body);
-  }
-  frame.dataset.cawcoSource = FILE + ":" + story.line + ":" + story.column;
-  host.append(frame);
-  return frame;
-}
-function mountOne(mod, story) {
-  const meta = mod.default ?? {};
-  const value = mod[story.name];
-  if (!value) return;
-  const csf = typeof value === "function" ? { render: value, ...value } : value;
-  const frame = frameOf(story);
-  const body = frame.querySelector(".cawco-frame-body");
-  live.get(story.name)?.();
-  live.delete(story.name);
-  body.replaceChildren();
-  const override = overrides.get(story.name);
-  frame.toggleAttribute("data-cawco-edited", !!override);
-  frame.toggleAttribute("data-cawco-selected", chosen === story.name);
-  const args = { ...(meta.args ?? {}), ...(csf.args ?? {}), ...(override ?? {}) };
-  const context = { args, id: story.name, name: csf.name ?? story.name, title: meta.title ?? FILE, parameters: { ...(meta.parameters ?? {}), ...(csf.parameters ?? {}) }, argTypes: {}, globals: {}, viewMode: "story" };
-  try {
-    live.set(story.name, mountStory(body, {
-      args, context,
-      component: csf.component ?? meta.component,
-      render: csf.render ?? meta.render,
-      decorators: [...(csf.decorators ?? []), ...(meta.decorators ?? [])],
-    }));
-  } catch (error) {
-    console.error("[cawco] story " + story.name + " did not mount:", error);
-  }
-}
-function render(mod) {
-  for (const frame of host.querySelectorAll("[data-cawco-story]")) {
-    if (!STORIES.some((story) => story.name === frame.dataset.cawcoStory)) frame.remove();
-  }
-  for (const story of STORIES) mountOne(mod, story);
-  window.__cawcoSheet = { file: FILE, stories: STORIES.map((story) => story.name), renders: (window.__cawcoSheet?.renders ?? 0) + 1 };
-  said();
-}
-function storyArgs(event) {
-  const { story, args } = event.detail ?? {};
-  const one = STORIES.find((each) => each.name === story);
-  if (!one) return;
-  if (args && typeof args === "object") overrides.set(story, args);
-  else overrides.delete(story);
-  mountOne(sheet, one);
-  dispatchEvent(new CustomEvent("cawco:hmr"));
-}
-function storySelect(event) {
-  chosen = typeof event.detail?.story === "string" ? event.detail.story : null;
-  window.__cawcoSheetChosen = chosen;
-  for (const frame of host.querySelectorAll("[data-cawco-story]")) {
-    frame.toggleAttribute("data-cawco-selected", frame.dataset.cawcoStory === chosen);
-  }
-}
-addEventListener("cawco:story-args", storyArgs);
-addEventListener("cawco:story-select", storySelect);
-render(sheet);
+import { mountStory } from "${VIRTUAL_STAGE}adapter.js";
+import { boot } from "${VIRTUAL_STAGE}runtime.js";
+const BASE = new URL(import.meta.url).pathname.replace(/\\/@id\\/.*$/, "");
+boot({
+  adapter: { mountStory },
+  root: ${JSON.stringify(root)},
+  tokens: ${JSON.stringify(CANVAS_TOKENS)},
+  load: (file) => import(/* @vite-ignore */ BASE + "/@id/__x00__${VIRTUAL}" + encodeURIComponent(file) + ".js"),
+});
 if (import.meta.hot) {
-  import.meta.hot.accept();
-  import.meta.hot.dispose(() => {
-    removeEventListener("cawco:story-args", storyArgs);
-    removeEventListener("cawco:story-select", storySelect);
-    for (const undo of live.values()) undo?.();
-    live.clear();
+  import.meta.hot.on("vite:afterUpdate", () => dispatchEvent(new CustomEvent("cawco:after-update")));
+}
+`;
+}
+
+/**
+ * One section's module: its states file, the sheet as the stage reads it
+ * (stories with their labels, forms and moves; the meta; each component's
+ * props), and the content hash its report is kept under. It accepts itself:
+ * a states file's edit loads it again and the runtime remounts that section
+ * alone (`cawco:section`); a component's changed props reach the inspector
+ * (`cawco:props`).
+ */
+async function sectionModule(file: string): Promise<string> {
+  const abs = resolve(root, file);
+  const sheet: SheetOnPage = { ...(await sheetRead(file)), file };
+  const hash = await contentHash(file);
+  return `import * as module from ${JSON.stringify(abs)};
+export const SHEET = ${JSON.stringify(sheet)};
+export const HASH = ${JSON.stringify(hash)};
+export { module };
+if (import.meta.hot) {
+  import.meta.hot.accept((next) => {
+    if (next) dispatchEvent(new CustomEvent("cawco:section", { detail: next }));
   });
-  import.meta.hot.on("vite:afterUpdate", () => dispatchEvent(new CustomEvent("cawco:hmr")));
   import.meta.hot.on("cawco:props", (doc) => {
     const at = SHEET.components.findIndex((one) => one.file === doc.file && one.name === doc.name);
     if (at === -1) return;
     SHEET.components[at] = doc;
-    said();
+    window.__cawcoSheetOnPage = SHEET;
+    dispatchEvent(new CustomEvent("cawco:sheet", { detail: SHEET }));
   });
 }
 `;
 }
 
-/** The sheet chrome's own look: frames in a wrapping row, each hugging its story, its name over it, the inspector's story outlined and an edited one's name marked. Neutral: the project's CSS is the stories'. */
-const SHEET_STYLE = `<style>
-.cawco-sheet{display:flex;flex-wrap:wrap;gap:24px;padding:24px;align-items:flex-start}
-.cawco-frame{display:flex;flex-direction:column;gap:8px;min-width:0}
-.cawco-frame-label{all:unset;align-self:flex-start;font:12px/1.4 system-ui,sans-serif;opacity:.6;cursor:pointer;border-radius:4px;padding:0 4px}
-.cawco-frame-label[data-cawco-picked]{opacity:1;outline:2px solid Highlight}
-.cawco-frame[data-cawco-selected]>.cawco-frame-label{opacity:1}
-.cawco-frame[data-cawco-selected]>.cawco-frame-body{outline:1px dashed Highlight;outline-offset:8px}
-.cawco-frame[data-cawco-edited]>.cawco-frame-label::after{content:" · edited"}
-</style>`;
+/** What a page collects before its modules run: the errors a module's evaluation throws, which the runtime reports. Ours, our markup. */
+const COLLECTOR = `<script>window.__cawcoErrors=[];addEventListener("error",function(e){window.__cawcoErrors&&window.__cawcoErrors.push({at:Date.now(),error:e.error||e.message})});addEventListener("unhandledrejection",function(e){window.__cawcoErrors&&window.__cawcoErrors.push({at:Date.now(),error:e.reason})});</script>`;
 
 /**
- * The sheet's page: the app's own page (its markup, meta and links) with its
- * placeholders stripped, its inline scripts dropped (they are the app's
+ * The canvas's page: the app's own page (its markup, meta and links) with
+ * its placeholders stripped, its inline scripts dropped (they are the app's
  * contract with its root layout, which never mounts on a stage: the
  * dashboard's holds every tap until its layout releases them) and a Vite
- * app's own entry with them; then the sheet's module, a virtual `.js`
- * (an inline module's id would carry the story's path, and a `.svelte` in it
- * is claimed by vite-plugin-svelte). The project's own HTML transforms run
- * over it, as on any of its pages; Vite's own puts the dev server's base
- * before the entry (Nuxt's is `/_nuxt/`), so it is written without it.
+ * app's own entry with them; then the error collector and the canvas's
+ * entry, a virtual `.js` (a `.svelte` in an id is claimed by
+ * vite-plugin-svelte). The project's own HTML transforms run over it, as on
+ * any of its pages; Vite's own puts the dev server's base before the entry
+ * (Nuxt's is `/_nuxt/`), so it is written without it.
  */
-function sheetPage(file: string): string {
-  const entry = `/@id/__x00__${VIRTUAL}${encodeURIComponent(file)}.js`;
-  const main = `<main id="cawco-sheet" class="cawco-sheet" data-cawco-choice="${file.replaceAll('"', "&quot;")}"></main>`;
+function canvasPage(): string {
+  const entry = `/@id/__x00__${VIRTUAL_STAGE}entry.js`;
+  const main = `<main id="cawco-canvas" class="cawco-canvas"></main>`;
   let html = existsSync(shellFile())
     ? readFileSync(shellFile(), "utf8")
     : "<!doctype html><html><head></head><body></body></html>";
   html = kit
     ? html.replace("%sveltekit.body%", main)
     : html.replace(ENTRY_SCRIPT, "").replace(BODY, `$1${main}$2`);
+  // A phone draws the canvas at its own width, not a desktop's 980px, even where the app's page names no viewport.
+  const viewport = VIEWPORT_META.test(html)
+    ? ""
+    : '<meta name="viewport" content="width=device-width, initial-scale=1" />';
   return html
     .replace(PLACEHOLDER, "")
     .replace(INLINE_SCRIPT, "")
-    .replace("</head>", `${SHEET_STYLE}</head>`)
+    .replace("</head>", `${viewport}${COLLECTOR}</head>`)
     .replace(
       "</body>",
       `<script type="module" src="${entry}"></script></body>`
     );
 }
 
+/**
+ * The newest report of each states file, kept by the stage from whichever
+ * browser drew it (a person's panel or the daemon's), under the content
+ * hash it was drawn from.
+ */
+const reports = new Map<
+  string,
+  {
+    at: string;
+    by: RenderReport["by"];
+    errors: PageError[];
+    section: SectionRender;
+  }
+>();
+
+/** Keeps what a canvas page posted (its body, unchecked until here): each section under its file. */
+function keepReport(body: unknown): void {
+  const report = body as Partial<RenderReport> | null;
+  for (const section of report?.sections ?? []) {
+    if (typeof section?.file === "string" && storyFile(section.file)) {
+      reports.set(section.file, {
+        at:
+          typeof report?.at === "string" ? report.at : new Date().toISOString(),
+        by: report?.by === "stage" ? "stage" : "panel",
+        errors: report?.page?.errors ?? [],
+        section,
+      });
+    }
+  }
+}
+
+/**
+ * The canvas of `files` as the stage knows it: each section's newest
+ * report, its frames `unseen` when the file or a component it mounts
+ * changed since it was drawn (or no browser ever drew it).
+ */
+async function reportOf(files: string[]): Promise<RenderReport> {
+  const sections: SectionRender[] = [];
+  const unnamed: string[] = [];
+  let newest: {
+    at: string;
+    by: RenderReport["by"];
+    errors: PageError[];
+  } | null = null;
+  for (const file of files) {
+    const abs = resolve(root, file);
+    const read = readStoryFile(abs, readFileSync(abs, "utf8"));
+    unnamed.push(
+      ...read.stories
+        .filter((one) => !one.label)
+        .map((one) => `${file}:${one.name}`)
+    );
+    // biome-ignore lint/performance/noAwaitInLoops: each states file hashed in turn, a canvas's few
+    const hash = await contentHash(file);
+    const kept = reports.get(file);
+    if (kept && (!newest || kept.at > newest.at)) {
+      newest = kept;
+    }
+    if (kept && kept.section.hash === hash) {
+      sections.push(kept.section);
+      continue;
+    }
+    const stale = kept?.section.frames ?? [];
+    sections.push({
+      file,
+      title: read.meta.title ?? file,
+      hash,
+      moves: [],
+      notForced: kept?.section.notForced ?? [],
+      frames:
+        stale.length > 0
+          ? stale.map((one) => ({
+              ...one,
+              state: "unseen" as const,
+              delta: undefined,
+            }))
+          : read.stories.map((one) => ({
+              story: one.name,
+              label: one.label,
+              form: one.form
+                ? `${one.form.name === "custom" ? "width" : one.form.name} ${one.form.width}`
+                : "fit",
+              interaction: "rest" as const,
+              scheme: "light" as const,
+              width: one.form?.width ?? 0,
+              state: "unseen" as const,
+              box: { x: 0, y: 0, w: 0, h: 0 },
+              text: "",
+              parts: [],
+            })),
+    });
+  }
+  return {
+    at: newest?.at ?? new Date(0).toISOString(),
+    by: newest?.by ?? "panel",
+    page: { errors: newest?.errors ?? [] },
+    sections,
+    unnamed,
+  };
+}
+
+/** DialKit's vendored vanilla build and stylesheet (decision-page kit, MIT), served beside the canvas for its timeline and dials. */
+const CANVAS_ASSETS: Record<string, { text: string; type: string }> = {
+  "/@cawco/dialkit.js": { text: DIALKIT_JS, type: "text/javascript" },
+  "/@cawco/dialkit.css": { text: DIALKIT_CSS, type: "text/css" },
+};
+
 const BODY = /(<body\b[^>]*>)[\s\S]*(<\/body>)/i;
+const VIEWPORT_META = /<meta\b[^>]*\bname=["']viewport["']/i;
 /** `%sveltekit.head%`, `%sveltekit.assets%` … and a project's own (`%cawco.tab-icon%`). */
 const PLACEHOLDER = /%[\w.-]+%/g;
 const INLINE_SCRIPT = /<script(?![^>]*\bsrc=)[^>]*>[\s\S]*?<\/script>/gi;
@@ -622,18 +806,17 @@ const json = (res: ServerResponse, status: number, body: unknown) => {
   res.end(JSON.stringify(body));
 };
 
-/** The sheet's page, through the project's own HTML transforms. */
-async function serveSheet(
+/** The canvas's page, through the project's own HTML transforms. */
+async function serveCanvas(
   dev: DevServer,
   req: IncomingMessage,
   res: ServerResponse,
-  next: (error?: unknown) => void,
-  file: string
+  next: (error?: unknown) => void
 ): Promise<void> {
   try {
     const html = await dev.transformIndexHtml(
-      req.url ?? SHEET_PATH,
-      sheetPage(file),
+      req.url ?? CANVAS_PATH,
+      canvasPage(),
       (req as IncomingMessage & { originalUrl?: string }).originalUrl
     );
     res.setHeader("content-type", "text/html");
@@ -760,8 +943,140 @@ async function written(write: SheetWrite): Promise<SheetWritten> {
     }
     out = writeStoryOp(file, text, op);
   }
+  const printedInto = printedStory(write);
+  let by: string | null = null;
+  if (printedInto) {
+    ({ by, ...out } = await inProjectStyle(file, abs, out.text, printedInto));
+  }
   writeFileSync(abs, out.text);
-  return { file, lines: out.lines, sheet: await sheetRead(file, out.text) };
+  return {
+    file,
+    lines: out.lines,
+    formatted: by,
+    sheet: await sheetRead(file, out.text),
+  };
+}
+
+/** The story whose statement a write printed values into: an args write's, an added or duplicated one's; none for a removal or a move, which only move text. */
+const printedStory = (write: SheetWrite): string | null => {
+  if ("args" in write) {
+    return write.args.story;
+  }
+  const op = write.story;
+  if ("add" in op) {
+    return op.add;
+  }
+  return "duplicate" in op ? op.as : null;
+};
+
+/**
+ * Story file `file` (`abs`, its absolute path) with story `story`'s
+ * statement formatted by the project's own formatter and spliced back, every
+ * other byte of the file as it was; the statement's lines are what changed.
+ * The formatter is the project's Prettier where one resolves from the
+ * toolchain root (its config and `.editorconfig` for this file,
+ * prettier.io/docs/api: `resolveConfig(fileUrlOrPath [, options])`), else
+ * its Biome where its config and `@biomejs/biome` are there. With neither,
+ * the write is refused: a write in a style the project never chose fails its
+ * own checks (a one-line literal, 330 characters, failed Prettier and Biome).
+ */
+async function inProjectStyle(
+  file: string,
+  abs: string,
+  text: string,
+  story: string
+): Promise<{ by: string; lines: { from: number; to: number }; text: string }> {
+  const { from, to } = storyStatement(file, text, story);
+  const shaped = await formatted(abs, text.slice(from, to));
+  const styled = shaped.code.trimEnd();
+  const out = text.slice(0, from) + styled + text.slice(to);
+  const lineAt = (offset: number) => out.slice(0, offset).split("\n").length;
+  return {
+    by: shaped.by,
+    text: out,
+    lines: { from: lineAt(from), to: lineAt(from + styled.length) },
+  };
+}
+
+/** Whether package `name` is installed from the toolchain root up, where {@link projectPackage} finds it. */
+const projectInstalled = (name: string): boolean => {
+  for (let dir = root; ; dir = dirname(dir)) {
+    if (existsSync(join(dir, "node_modules", name, "package.json"))) {
+      return true;
+    }
+    if (dirname(dir) === dir) {
+      return false;
+    }
+  }
+};
+
+/** The biome binary the project installed, from the toolchain root up; none when it has none. */
+const projectBiome = (): string | null => {
+  for (let dir = root; ; dir = dirname(dir)) {
+    const bin = join(dir, "node_modules", ".bin", "biome");
+    if (existsSync(bin)) {
+      return bin;
+    }
+    if (dirname(dir) === dir) {
+      return null;
+    }
+  }
+};
+
+/** Whether a Biome config (`biome.json`, `biome.jsonc`) stands at the toolchain root or above it. */
+const biomeConfigured = (): boolean => {
+  for (let dir = root; ; dir = dirname(dir)) {
+    if (BIOME_CONFIGS.some((name) => existsSync(join(dir, name)))) {
+      return true;
+    }
+    if (dirname(dir) === dir) {
+      return false;
+    }
+  }
+};
+const BIOME_CONFIGS = ["biome.json", "biome.jsonc"];
+
+/** `code`, as story file `abs` holds it, formatted by the project's Prettier or Biome, with which; refused in words when it has neither. */
+async function formatted(
+  abs: string,
+  code: string
+): Promise<{ by: string; code: string }> {
+  // The project's Prettier, from the toolchain root up; none installed, its Biome or none.
+  const prettier = projectInstalled("prettier")
+    ? projectPackage("prettier")
+    : null;
+  if (prettier) {
+    const api = (await import(prettier.href)) as {
+      version: string;
+      format: (code: string, options: object) => Promise<string>;
+      resolveConfig: (
+        file: string,
+        options: { editorconfig: boolean }
+      ) => Promise<object | null>;
+    };
+    const config = await api.resolveConfig(abs, { editorconfig: true });
+    return {
+      by: `prettier ${api.version}`,
+      code: await api.format(code, { ...config, filepath: abs }),
+    };
+  }
+  const biome = biomeConfigured() ? projectBiome() : null;
+  if (biome) {
+    const ran = spawnSync(biome, ["format", `--stdin-file-path=${abs}`], {
+      cwd: root,
+      input: code,
+      encoding: "utf8",
+    });
+    if (ran.status !== 0) {
+      throw new StoryRefusal(
+        `The project's Biome could not format the story it wrote, so nothing was written: ${(ran.stderr || ran.stdout || `exit ${ran.status}`).trim().split("\n").slice(-3).join(" ")}`
+      );
+    }
+    return { by: "biome", code: ran.stdout };
+  }
+  throw new StoryRefusal(
+    `Neither Prettier nor Biome resolves from ${root}, so the sheet can't write ${relative(root, abs)} in the project's own style, and nothing was written: add the project's formatter, or edit the story file by hand.`
+  );
 }
 
 /** Folders whose components are a framework's routes, never a component a sheet shows (spec §6). */
@@ -835,18 +1150,27 @@ const fileName = (file: string): string =>
   (file.split(sep).at(-1) ?? file).replace(EXTENSION, "");
 const EXTENSION = /\.[^.]+$/;
 
+/** The toolchain root's source folder: Nuxt's own (`app/` from Nuxt 4, where it holds components, not routes), else `src/` when it has one. */
+const sourceTop = (): string =>
+  nuxtOptions?.srcDir ??
+  (existsSync(join(root, "src")) ? join(root, "src") : root);
+
 /**
- * The toolchain root's components (spec §6's discovery): every `.svelte` and
- * `.vue` file under its source folder (`src/` when it has one), and every
- * `.tsx`/`.jsx` exporting a component react-docgen recognises, routes and
- * builds left out; each with the story files whose meta mounts it.
+ * The components in folder `under` (absolute, in the toolchain root) (spec
+ * §6's discovery): every `.svelte` and `.vue` file of the root's source
+ * folder (`src/` when it has one) inside it, and every `.tsx`/`.jsx`
+ * exporting a component react-docgen recognises, routes and builds left
+ * out; each with the story files whose meta mounts it, wherever in the
+ * source folder they are.
  */
-async function discovered(): Promise<Found[]> {
+async function discovered(under: string): Promise<Found[]> {
   // Nuxt's source dir is its own (`app/` from Nuxt 4), and its `app/` holds components, not routes.
   const top =
     nuxtOptions?.srcDir ??
     (existsSync(join(root, "src")) ? join(root, "src") : root);
-  const all = componentFiles(top);
+  const all = componentFiles(top).filter(
+    (file) => file === under || file.startsWith(`${under}${sep}`)
+  );
   // Each story file's meta component, resolved as Vite resolves the import: no props read.
   const shown = await Promise.all(
     (all.length > 0 ? storyFilesUnder(top) : []).map(async (story) => {
@@ -880,6 +1204,183 @@ async function discovered(): Promise<Found[]> {
       ? [{ name, file: relative(root, file), sheets: sheets.get(file) ?? [] }]
       : [];
   });
+}
+
+/** A component file's imports of other files, as it writes them: its script's `import … from "…"` and `import "…"`. Ours: no parser, a component's imports are its first lines. */
+const IMPORT_FROM = /\bimport\s+(?:[\w*{}\s,$]+\s+from\s+)?["']([^"']+)["']/g;
+/** Each component file's resolved imports of other component files, kept by the file's time. */
+const importsKept = new Map<string, { at: number; to: string[] }>();
+
+/** The component files `file` imports (absolute), resolved as Vite resolves them. */
+async function componentImports(file: string): Promise<string[]> {
+  const at = statTime(file);
+  const kept = importsKept.get(file);
+  if (kept?.at === at) {
+    return kept.to;
+  }
+  const text = readFileSync(file, "utf8");
+  const sources = [
+    ...new Set([...text.matchAll(IMPORT_FROM)].map((one) => one[1] as string)),
+  ];
+  const to = (
+    await Promise.all(sources.map((source) => resolved(source, file)))
+  ).filter(
+    (one): one is string =>
+      !!one && COMPONENT_FILE.test(one) && !STORY_FILE.test(one)
+  );
+  importsKept.set(file, { at, to });
+  return to;
+}
+
+/** A component's name from its file. */
+const nameOf = (file: string): string => fileName(file);
+
+/**
+ * The design map (component canvas §4, `design_map`): the library under
+ * `dir`, each component with its states, what a browser drew of them, the
+ * components it renders (made of) and those that render it (used in), from
+ * the frames' component chains the stage's reports keep and, before any page
+ * has drawn, a static scan of each component's imports. Paged; one
+ * component's card when asked.
+ */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass joins the scan, the stories and the reports into each card
+async function designMap(ask: DesignQuery): Promise<DesignMap> {
+  const top = ask.dir ? resolve(root, ask.dir) : sourceTop();
+  const inside = relative(root, top);
+  if (inside.startsWith("..") || !existsSync(top)) {
+    throw new StoryRefusal(
+      `${ask.dir} is no folder inside ${root}: dir is a folder from the toolchain root, like src/lib.`
+    );
+  }
+  let found = await discovered(top);
+  if (ask.query) {
+    const needle = ask.query.toLowerCase();
+    found = found.filter((one) => one.name.toLowerCase().includes(needle));
+  }
+  if (ask.component) {
+    const wanted = relative(root, resolve(root, ask.component));
+    found = found.filter((one) => one.file === wanted);
+    if (found.length === 0) {
+      throw new StoryRefusal(
+        `${ask.component} is no component under ${inside || "."}: name its file from the toolchain root, like src/lib/Card.svelte, or call without component for the list.`
+      );
+    }
+  }
+  const total = found.length;
+  const limit = Math.min(
+    DESIGN_MAP_LIMITS.max,
+    Math.max(1, ask.limit ?? DESIGN_MAP_LIMITS.limit)
+  );
+  const start = Math.max(0, Number(ask.cursor ?? 0) || 0);
+  const page = found.slice(start, start + limit);
+  const detailed = ask.detailed || !!ask.component;
+  // Made of and used in: the static scan over the whole source folder, then each drawn frame's chain.
+  const madeOf = new Map<string, Map<string, DesignLink>>();
+  const usedIn = new Map<string, Map<string, DesignLink>>();
+  const link = (from: string, to: string, at: string | null) => {
+    if (from === to) {
+      return;
+    }
+    const made = madeOf.get(from) ?? new Map<string, DesignLink>();
+    const had = made.get(to);
+    made.set(to, { name: nameOf(to), file: to, at: at ?? had?.at ?? null });
+    madeOf.set(from, made);
+    const used = usedIn.get(to) ?? new Map<string, DesignLink>();
+    const was = used.get(from);
+    used.set(from, {
+      name: nameOf(from),
+      file: from,
+      at: at ?? was?.at ?? null,
+    });
+    usedIn.set(to, used);
+  };
+  const everything = componentFiles(sourceTop());
+  const imports = await Promise.all(everything.map(componentImports));
+  everything.forEach((file, at) => {
+    for (const to of imports[at] ?? []) {
+      link(relative(root, file), relative(root, to), null);
+    }
+  });
+  const statesOf = new Map<
+    string,
+    { file: string; read: ReturnType<typeof readStoryFile> }[]
+  >();
+  for (const one of found) {
+    for (const sheet of one.sheets) {
+      const abs = resolve(root, sheet);
+      const read = readStoryFile(abs, readFileSync(abs, "utf8"));
+      statesOf.set(one.file, [
+        ...(statesOf.get(one.file) ?? []),
+        { file: sheet, read },
+      ]);
+      for (const frame of reports.get(sheet)?.section.frames ?? []) {
+        for (const part of frame.parts) {
+          link(one.file, part.file, part.at);
+        }
+      }
+    }
+  }
+  const components: DesignCard[] = await Promise.all(
+    page.map(async (one) => {
+      const sheets = statesOf.get(one.file) ?? [];
+      const frames = one.sheets.flatMap(
+        (sheet) => reports.get(sheet)?.section.frames ?? []
+      );
+      const made = [...(madeOf.get(one.file)?.values() ?? [])];
+      const used = [...(usedIn.get(one.file)?.values() ?? [])];
+      const card: DesignCard = {
+        name: one.name,
+        file: one.file,
+        states: sheets.reduce(
+          (sum, sheet) => sum + sheet.read.stories.length,
+          0
+        ),
+        drawn: frames.filter((frame) => frame.state === "drawn").length,
+        usedIn: detailed ? used : used.length,
+        madeOf: detailed ? made : made.length,
+      };
+      if (!detailed) {
+        return card;
+      }
+      card.statesFiles = one.sheets;
+      card.stories = sheets.flatMap((sheet) =>
+        sheet.read.stories.map((story) => {
+          const own = (reports.get(sheet.file)?.section.frames ?? []).filter(
+            (frame) => frame.story === story.name
+          );
+          return {
+            name: story.name,
+            label: story.label,
+            interactions: [...new Set(own.map((frame) => frame.interaction))],
+            drawn: own.some((frame) => frame.state === "drawn"),
+          };
+        })
+      );
+      card.moves = sheets.flatMap((sheet) =>
+        sheet.read.stories
+          .filter((story) => story.from && story.play)
+          .map((story) => ({ from: story.from as string, to: story.name }))
+      );
+      if (ask.component) {
+        card.props = (await propsOf(resolve(root, one.file), one.name)).props;
+      }
+      return card;
+    })
+  );
+  const more = start + limit < total;
+  return {
+    root: ".",
+    dir: inside || ".",
+    components,
+    total,
+    has_more: more,
+    next_cursor: more ? String(start + limit) : null,
+    ...(more
+      ? {
+          steer: `${start + page.length} of ${total} under ${inside || "."}: narrow with dir or query, or pass cursor "${start + limit}".`,
+        }
+      : {}),
+  };
 }
 
 /** Every story file under `dir`, routes and builds left out. */
@@ -916,6 +1417,7 @@ const VIA_DEPTH = 6;
  * each module a page has asked for, counted once, under the story file's
  * import that reached it first. Null until a page has loaded the sheet.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one walk of Vite's graph gives the totals, each import's share, its via, and what it brings
 async function weightOf(file: string): Promise<SheetWeight | null> {
   const abs = resolve(root, file);
   const story = [
@@ -1002,6 +1504,26 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
       byImport.set(top, sum);
     }
   }
+  // Modules under each module, counted where first reached.
+  const countUnder = new Map<ModuleNode, number>();
+  for (const mod of queue.toReversed()) {
+    const up = parent.get(mod) as ModuleNode;
+    const mine =
+      (countUnder.get(mod) ?? 0) + (PREBUNDLED.test(mod.url) ? 0 : 1);
+    countUnder.set(mod, mine);
+    countUnder.set(up, (countUnder.get(up) ?? 0) + mine);
+  }
+  /** What `top` imports directly that brings the most: where its weight enters, no half rule. */
+  const bringsOf = (top: ModuleNode) =>
+    (children.get(top) ?? [])
+      .filter((one) => !PREBUNDLED.test(one.url))
+      .sort((a, b) => (brought.get(b) ?? 0) - (brought.get(a) ?? 0))
+      .slice(0, HEAVIEST)
+      .map((one) => ({
+        file: relative(root, one.file ?? one.url),
+        bytes: brought.get(one) ?? 0,
+        modules: countUnder.get(one) ?? 1,
+      }));
   const heaviest: SheetImport[] = [...byImport]
     .sort(([, a], [, b]) => b.bytes - a.bytes)
     .slice(0, HEAVIEST)
@@ -1012,9 +1534,45 @@ async function weightOf(file: string): Promise<SheetWeight | null> {
         file: relative(root, at),
         ...sum,
         via: viaOf(top),
+        brings: bringsOf(top),
       };
     });
-  return { ...own, deps, heaviest, measuredAt: new Date().toISOString() };
+  const over =
+    own.modules > COMPONENT_BUDGET.modules ||
+    own.bytes > COMPONENT_BUDGET.bytes;
+  return {
+    ...own,
+    deps,
+    heaviest,
+    measuredAt: new Date().toISOString(),
+    budget: { ...COMPONENT_BUDGET },
+    over,
+    cut: over ? cutOf(heaviest[0], read) : null,
+  };
+}
+
+const megabytes = (bytes: number) => `${(bytes / 1_000_000).toFixed(1)} MB`;
+
+/**
+ * Where to cut, one sentence from the graph: the story's own component
+ * bringing the weight is a seam in the component (or a fixture), never the
+ * story; any other import is the story's to cut.
+ */
+function cutOf(
+  top: SheetImport | undefined,
+  read: ReturnType<typeof readStoryFile>
+): string | null {
+  if (!top) {
+    return null;
+  }
+  const own = [read.meta.component, ...read.stories.map((one) => one.component)]
+    .map((name) => (name ? read.imports.get(name) : undefined))
+    .includes(top.specifier);
+  const [entry] = top.brings;
+  if (own && entry) {
+    return `${top.file.split("/").at(-1)} imports ${entry.file} (${megabytes(entry.bytes)}, ${entry.modules} modules): the component reads it itself, so the cut is a seam in the component (its state as props) or a fixture, not the story.`;
+  }
+  return `The states file's import ${top.specifier} brings ${megabytes(top.bytes)} in ${top.modules} modules: cut it from the states file, or pass what it gives as args.`;
 }
 
 /** A refusal's answer: a write the file can't take is the person's or agent's to fix (422); anything else is the stage's. */
@@ -1028,6 +1586,7 @@ const refusedWith = (res: ServerResponse, error: unknown) =>
  * sheet's page, its read and its writes, and the components; anything else
  * goes on to the project's.
  */
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the stage's every path in one router, each branch a line or two
 async function serveStage(
   dev: DevServer,
   req: IncomingMessage,
@@ -1049,8 +1608,16 @@ async function serveStage(
     return;
   }
   if (path === COMPONENTS_PATH) {
-    await discovered().then(
-      (components) => json(res, 200, { components }),
+    const ask = url.searchParams;
+    await designMap({
+      dir: ask.get("dir") ?? undefined,
+      query: ask.get("query") ?? undefined,
+      component: ask.get("component") ?? undefined,
+      cursor: ask.get("cursor") ?? undefined,
+      limit: ask.has("limit") ? Number(ask.get("limit")) : undefined,
+      detailed: ask.get("detailed") === "1",
+    }).then(
+      (map) => json(res, 200, map),
       (error) => refusedWith(res, error)
     );
     return;
@@ -1064,22 +1631,52 @@ async function serveStage(
       );
     return;
   }
-  if (path !== SHEET_PATH && path !== STORIES_PATH && path !== WEIGHT_PATH) {
+  const asset = CANVAS_ASSETS[path];
+  if (asset) {
+    res.setHeader("content-type", asset.type);
+    res.setHeader("cache-control", "max-age=3600");
+    res.end(asset.text);
+    return;
+  }
+  if (path === RENDERED_PATH && req.method === "POST") {
+    await bodyOf(req).then(
+      (body) => {
+        keepReport(body);
+        json(res, 200, { ok: true });
+      },
+      (error) => refusedWith(res, error)
+    );
+    return;
+  }
+  if (
+    path !== CANVAS_PATH &&
+    path !== STORIES_PATH &&
+    path !== WEIGHT_PATH &&
+    path !== REPORT_PATH
+  ) {
     next();
     return;
   }
-  const named = url.searchParams.get("file");
-  const file = storyFile(named);
-  if (!file) {
+  const named = url.searchParams.getAll("file");
+  const files = named.map(storyFile);
+  if (named.length === 0 || files.some((one) => !one)) {
     json(res, 404, {
-      error: `${named ?? "No file"} is no story file in ${root}: a sheet is a .stories.ts (or .js, .tsx, .jsx) file inside the toolchain root.`,
+      error: `${named.find((_, at) => !files[at]) ?? "No file"} is no states file in ${root}: a states file is a .stories.ts (or .js, .tsx, .jsx) file inside the toolchain root.`,
     });
     return;
   }
-  if (path === SHEET_PATH) {
-    await serveSheet(dev, req, res, next, file);
+  if (path === CANVAS_PATH) {
+    await serveCanvas(dev, req, res, next);
     return;
   }
+  if (path === REPORT_PATH) {
+    await reportOf(files as string[]).then(
+      (report) => json(res, 200, report),
+      (error) => refusedWith(res, error)
+    );
+    return;
+  }
+  const file = files[0] as string;
   if (path === WEIGHT_PATH) {
     await weightOf(file).then(
       (weight) => json(res, 200, { weight }),
@@ -1172,11 +1769,16 @@ function cawcoStage() {
       if (mod.file && STORY_FILE.test(mod.file)) {
         found.add(relative(root, mod.file));
       }
-      // A sheet's own module imports the app's global CSS: an error there is every importing sheet's.
       if (mod.id?.startsWith(`\0${VIRTUAL}`)) {
         found.add(
           decodeURIComponent(mod.id.slice(VIRTUAL.length + 1, -".js".length))
         );
+      }
+      // The canvas's entry imports the app's global CSS: an error there is every canvas's.
+      if (mod.id === `\0${VIRTUAL_STAGE}entry.js`) {
+        for (const kept of reports.keys()) {
+          found.add(kept);
+        }
       }
       queue.push(...mod.importers);
     }
@@ -1186,9 +1788,24 @@ function cawcoStage() {
   return {
     name: "cawco:stage",
     resolveId(id: string) {
-      return id.startsWith(VIRTUAL) ? `\0${id}` : null;
+      return id.startsWith(VIRTUAL) || id.startsWith(VIRTUAL_STAGE)
+        ? `\0${id}`
+        : null;
     },
     load(id: string) {
+      if (id.startsWith(`\0${VIRTUAL_STAGE}`)) {
+        const name = id.slice(VIRTUAL_STAGE.length + 1);
+        if (name === "entry.js") {
+          return entryModule();
+        }
+        if (name === "runtime.js") {
+          return CANVAS_RUNTIME;
+        }
+        if (name === "adapter.js") {
+          return ADAPTERS[framework];
+        }
+        return name === "svelte-props.js" ? svelteProps() : null;
+      }
       if (!id.startsWith(`\0${VIRTUAL}`)) {
         return null;
       }
@@ -1198,7 +1815,7 @@ function cawcoStage() {
       if (toolchain === "nuxt") {
         watchStory(resolve(root, file));
       }
-      return sheetModule(file);
+      return sectionModule(file);
     },
     // A story file's edit runs its sheet's module again from a fresh load: its stories' places may have moved.
     // A component's edit reads its props again, and every sheet's page hears them (`cawco:props`).
@@ -1442,20 +2059,54 @@ const onPort = (got: number | undefined, name: string): number => {
   return got;
 };
 
-/** The project's Vite, from its own config file (vite.dev/guide/api-javascript `createServer`). */
+/**
+ * The project's Vite, from its own config file (vite.dev/guide/api-javascript
+ * `createServer`), loaded by the stage's own runtime, which is always bun
+ * (agent stage.ts): `native` "executes the original config file directly …
+ * It requires a runtime that supports the syntax used by your config file"
+ * (vite.dev/config), and bun reads what the default `bundle` loader does
+ * (TS enums, extensionless relative imports, `__dirname` in ESM). `bundle`
+ * itself "writes the bundled config to `node_modules/.vite-temp`" and fails
+ * on a read-only one (Vite 8.3.4 `loadConfigFromBundledFile` falls back
+ * beside the config only on EACCES, so EROFS throws; vitejs/vite#18839 open).
+ * `runner` transforms the config with Vite's own oxc, which fails the whole
+ * load on any `extends` it can't follow (oxc-resolver#1185, vitejs/vite
+ * #21852), such as SvelteKit 3's `$app/tsconfig` before `svelte-kit sync`
+ * has written it.
+ */
 async function startVite(): Promise<Started> {
   const vite = (await import(projectPackage("vite").href)) as Vite;
   const configFile = CONFIGS.map((name) => resolve(root, name)).find(
     existsSync
   );
-  const started = await vite.createServer({
-    root,
-    configFile: configFile ?? false,
-    clearScreen: false,
-    logLevel: "warn",
-    plugins: plugins(),
-    server: { host: HOST, port, strictPort: true, hmr: { overlay: false } },
-  });
+  // A config that does not load fails the stage with the load's own error,
+  // named as the config's: no other loader is tried (no fallback).
+  const logger = vite.createLogger("warn");
+  const said = logger.error;
+  let unread = false;
+  logger.error = (message, options) => {
+    unread ||= message.includes(CONFIG_UNREAD);
+    said(message, options);
+  };
+  const started = await vite
+    .createServer({
+      root,
+      configFile: configFile ?? false,
+      configLoader: "native",
+      cacheDir: CACHE_DIR,
+      clearScreen: false,
+      customLogger: logger,
+      plugins: plugins(),
+      server: { host: HOST, port, strictPort: true, hmr: { overlay: false } },
+    })
+    .catch((error: unknown) => {
+      throw unread && configFile
+        ? new Error(
+            `Vite couldn't load ${relative(root, configFile)}: ${error instanceof Error ? error.message : String(error)}`,
+            { cause: error }
+          )
+        : error;
+    });
   await started.listen();
   const address = started.httpServer?.address();
   return {
@@ -1483,9 +2134,11 @@ async function startAstro(): Promise<Started> {
   const astro = (await import(href)) as Astro;
   const started = await astro.dev({
     root,
+    cacheDir: CACHE_DIR,
     logLevel: "warn",
     server: { host: HOST, port },
     vite: {
+      cacheDir: join(CACHE_DIR, "vite"),
       clearScreen: false,
       plugins: plugins(),
       server: { strictPort: true, hmr: { overlay: false } },
@@ -1538,6 +2191,12 @@ async function startNuxt(): Promise<Started> {
     dev: true,
     overrides: {
       modules: [cawcoNuxtModule],
+      vite: { cacheDir: CACHE_DIR },
+      // Chrome DevTools Workspaces ("Default: `true`", nuxt.com/docs/api/
+      // nuxt-config): its `chrome-workspace.json` goes into
+      // node_modules/.cache/nuxt, and its route hands the project's root path
+      // to whoever views the preview. A sheet is no workspace to map.
+      experimental: { chromeDevtoolsProjectSettings: false },
       // A stage reports nothing anywhere: no telemetry from a boundary.
       telemetry: false,
     },

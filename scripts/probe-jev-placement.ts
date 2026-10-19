@@ -126,7 +126,7 @@ const respond = (request: Seen): Reply => {
 };
 
 const fleet = await scratchFleet({ name: "probe-jev-placement", respond });
-fleet.env.CAWCO_GITHUB_API = `http://127.0.0.1:${fake.port}`;
+fleet.standIns.githubApi = `http://127.0.0.1:${fake.port}`;
 const home = fleet.env.HOME as string;
 
 const send = async <T>(

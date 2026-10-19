@@ -23,17 +23,13 @@ export const isJudgeOf = (procId: string, workspace: string): boolean =>
 
 /**
  * A workspace's boundary of one generation (boundary.ts `start`): an older
- * one runs on beside the current one until nothing runs in it. A boundary
- * started before generations has none.
+ * one runs on beside the current one until nothing runs in it.
  */
-export const boundaryProcId = (workspace: string, generation?: string) =>
-  generation
-    ? `${procIdFor("boundary", workspace)}-${generation}`
-    : procIdFor("boundary", workspace);
+export const boundaryProcId = (workspace: string, generation: string) =>
+  `${procIdFor("boundary", workspace)}-${generation}`;
 
 /** Whether `procId` is one of workspace `workspace`'s boundaries, of any generation. */
 export const isBoundaryOf = (procId: string, workspace: string): boolean =>
-  procId === procIdFor("boundary", workspace) ||
   procId.startsWith(`${procIdFor("boundary", workspace)}-`);
 
 export function procIdFor(

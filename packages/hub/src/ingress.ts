@@ -36,7 +36,7 @@
  * - **A merged pull request** an attempt opened moves its task on
  *   (dispatch.ts `pullRequestMerged`), once, since only the insert calls it.
  */
-import { CAWCO_ENV, type InstanceRow, readEnv } from "@cawco/core";
+import type { InstanceRow } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
 import { Elysia, status, t } from "elysia";
 import { RE2JS } from "re2js";
@@ -57,6 +57,7 @@ import type { JevAccess } from "./jev";
 import { JevFailed, jevRoute, offLine, TO_LEAD } from "./jev-placement";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
 import type { Routines } from "./routines";
+import { GITHUB_API } from "./upstreams";
 
 /** One event as every path normalises it before the store. */
 export interface InboundEvent {
@@ -468,7 +469,7 @@ export const createIngress = ({
   routines,
 }: IngressDeps) => {
   const store = db.ingress;
-  const api = readEnv(CAWCO_ENV.githubApi) ?? "https://api.github.com";
+  const api = GITHUB_API;
   /** Polls under way, by `github:<project>` or `conn:<poll id>`: one at a time each. */
   const running = new Map<string, Promise<void>>();
   let timer: HubTimer | undefined;

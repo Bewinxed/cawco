@@ -6,31 +6,29 @@
  * new account, the row's dot shows the account it is moving to and the menu
  * says so.
  */
-import { type Account, type AccountProvider, providerOf } from "@cawco/core";
+import type { Account, AccountProvider } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import { failureWords } from "#lib/cawco/hub-read.js";
-import { cawco, type InstanceRow, moveInstanceAccount } from "../client.svelte";
+import { type BoardRow, cawco, moveInstanceAccount } from "../client.svelte";
 import { faultOn, pendingOn } from "../session-acts.svelte";
 import { accountsOf, nameOf, signinState } from "./model.svelte";
 
 /** Session id → the account it is moving to. */
 const moving = new SvelteMap<string, string>();
 
-/** The provider a session bills: its account's, else its model's. */
-function providerOfSession(instance: InstanceRow): AccountProvider | undefined {
-  const own = cawco.accounts?.accounts.find(
-    (one) => one.id === instance.accountId
-  );
-  return (
-    own?.provider ?? providerOf(instance.harness ?? "claude", instance.model)
-  );
-}
+/**
+ * The provider a session bills: its account's, as the hub keeps it. A session
+ * with no account on record bills none the hub knows, so it is offered no move.
+ */
+const providerOfSession = (instance: BoardRow): AccountProvider | undefined =>
+  cawco.accounts?.accounts.find((one) => one.id === instance.accountId)
+    ?.provider;
 
 /**
  * The accounts a session can run on, in fill-first order: its provider's,
  * signed in on its machine.
  */
-export function signedInHere(instance: InstanceRow): Account[] {
+export function signedInHere(instance: BoardRow): Account[] {
   const provider = providerOfSession(instance);
   if (!provider) {
     return [];
@@ -42,19 +40,19 @@ export function signedInHere(instance: InstanceRow): Account[] {
 }
 
 /** {@link signedInHere}, for the menu: empty unless there is a choice (two or more). */
-export function switchable(instance: InstanceRow): Account[] {
+export function switchable(instance: BoardRow): Account[] {
   const eligible = signedInHere(instance);
   return eligible.length > 1 ? eligible : [];
 }
 
 /** The account a session is moving to, until its row names that account. */
-export function movingTo(instance: InstanceRow): string | undefined {
+export function movingTo(instance: BoardRow): string | undefined {
   const target = moving.get(instance.id);
   return target && target !== instance.accountId ? target : undefined;
 }
 
 /** The account a session's row draws: the one it is moving to, else its own. */
-export const shownAccount = (instance: InstanceRow): string | null =>
+export const shownAccount = (instance: BoardRow): string | null =>
   movingTo(instance) ?? instance.accountId ?? null;
 
 /**
@@ -64,7 +62,7 @@ export const shownAccount = (instance: InstanceRow): string | null =>
  * hub's words, with Try again.
  */
 export async function moveTo(
-  instance: InstanceRow,
+  instance: BoardRow,
   accountId: string
 ): Promise<void> {
   if (accountId === instance.accountId || movingTo(instance) === accountId) {

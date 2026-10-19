@@ -1,0 +1,12 @@
+:root {
+  --radius: 10px;
+  --ground: light-dark(#fbfbfd, #121216);
+  --ink: light-dark(#18181b, #f0f0f3);
+  color-scheme: light dark;
+}
+
+body {
+  background-color: var(--ground);
+  color: var(--ink);
+  font-family: system-ui, sans-serif;
+}

@@ -57,7 +57,7 @@ export interface TokenView {
 }
 
 export interface TokensCssOptions {
-  /** Declares `color-scheme: light dark` on `:root`, so `light-dark()` follows the person's scheme. */
+  /** Declares the system's schemes on `:root`: `light dark` when it has a dark context, so `light-dark()` follows the person's scheme; `light` when it has none. */
   colorScheme?: boolean;
   /** The comment the file opens with, whole: where it came from and how to change it. */
   header: string;
@@ -353,7 +353,8 @@ export function tokensCss(view: TokenView, options: TokensCssOptions): string {
   const [dark] = scheme;
   const root = ["  :root {"];
   if (options.colorScheme) {
-    root.push("    color-scheme: light dark;");
+    // The base is the light scheme; a dark context is the only other one.
+    root.push(`    color-scheme: ${dark ? "light dark" : "light"};`);
   }
   for (const token of tokens) {
     if (token.description) {
@@ -948,12 +949,18 @@ export async function buildTokens(
   options: TokensCssOptions
 ): Promise<BuiltTokens> {
   const system = await loadTokenSystem(resolverPath, read);
+  const conforms = () => {
+    const problems = schemaProblems(system);
+    if (problems.length > 0) {
+      throw new Error(`not DTCG 2025.10: ${problems.join("; ")}`);
+    }
+  };
+  // The files as written first, so a value of the wrong type is named as
+  // the spec names it before the CSS view reads it; then as settled.
+  conforms();
   const view = await tokenView(system);
   const changedFiles = settle(system, view);
-  const problems = schemaProblems(system);
-  if (problems.length > 0) {
-    throw new Error(`not DTCG 2025.10: ${problems.join("; ")}`);
-  }
+  conforms();
   if (changedFiles.size === 0) {
     return {
       changed: new Map(),

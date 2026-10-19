@@ -8,9 +8,9 @@
  * - the task is design-shaped: its project's template is design, brand,
  *   launch or social, or its labels hold `ui` or `design`, or its outputs
  *   are images or screens;
- * - the project has no `design/` (its folder on the hub, and the root of
- *   every checkout of it, online; a checkout that cannot be read now is
- *   asked again on the next such move);
+ * - the project has no `design/` (its folder on the hub, and the landed
+ *   default branch of every checkout of it, landed.ts; a checkout that
+ *   cannot be read now is asked again on the next such move);
  * - no task already builds one, and the project was never offered.
  *
  * Then one card in the thread that named the task (else a thread of its
@@ -24,9 +24,9 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { CommandResult, DesignOfferState, ThreadNote } from "@cawco/core";
-import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { Elysia, t } from "elysia";
 import type { DbShape } from "./db";
+import { projectDesign } from "./landed";
 import { FolderRefusal, projectRoot, refused } from "./project-folder";
 import type { StagesTemplate } from "./stages";
 import type { TaskActor, TaskEvent, Tasks, TaskView } from "./tasks";
@@ -41,14 +41,14 @@ const DESIGN_TEMPLATES: ReadonlySet<StagesTemplate> = new Set([
 const DESIGN_LABELS: ReadonlySet<string> = new Set(["ui", "design"]);
 const PICTURE = /\.(png|jpe?g|webp|gif|svg|avif)$/i;
 const SCREEN = /screen/i;
-/** A read of whether a checkout has design/; past this the machine is not going to answer. */
-const READ_MS = 10_000;
 
 export const BUILD_TITLE = "Build the design system";
 export const DESIGN_SKILL = "design-system";
 
 export interface DesignOffersDeps {
   db: DbShape;
+  /** The person said Not now: the project's starters stop suggesting one (project-starters.ts). */
+  declined: (projectId: string) => void;
   /** A note in a project's thread that wakes no one; answers the thread it went to (caw.ts `notice`). */
   notice: (
     projectId: string,
@@ -108,6 +108,25 @@ const listed = (words: string[]): string =>
     ? (words[0] ?? "")
     : `${words.slice(0, -1).join(", ")} and ${words.at(-1)}`;
 
+/**
+ * "Build the design system" in the hub's own words, whoever files it (the
+ * offer's Build, or Caw when the person asks him): the design-system skill
+ * and what Projects spec §5.7 asks of extraction, among it "asks the person
+ * through a decision page whatever the evidence can't settle". No filer adds
+ * to it, so nothing in a task overrides the skill's steps.
+ */
+const buildWords = (sources: string[]) => ({
+  title: BUILD_TITLE,
+  labels: ["design"],
+  description: `Build this project's design system from its own material${sources.length ? ` (${listed(sources)})` : ""}. Use the ${DESIGN_SKILL} skill: it says what to read, what to write to design/ with design_write, what to ask on a decision page, and how to hand in.`,
+  acceptance: [
+    "- design/ holds the system the design-system skill describes, written with design_write, every token's source in manifest.json: a file:line or URL read, a decision page card, or the person's edit.",
+    "- DESIGN.md answers every visual-foundations question from the material, citing where each answer comes from.",
+    "- Whatever the material can't settle was asked on one decision page, “Design decisions”, before hand-in; each pick is written with its card as the source. No question is left open in DESIGN.md or answered with a default.",
+    "- The Foundations page and each recipe's sheet open as artifacts for the person to comment on and approve.",
+  ].join("\n"),
+});
+
 export const createDesignOffers = (deps: DesignOffersDeps) => {
   const { db, tasks } = deps;
   /** Projects being looked at now, so a burst of moves asks once. */
@@ -128,50 +147,49 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
     ];
   };
 
-  /**
-   * Whether the project holds a design system: true when its folder or any
-   * checkout has design/, false when none does, undefined when a checkout
-   * that might cannot be read now.
-   */
-  const hasSystem = async (projectId: string): Promise<boolean | undefined> => {
-    if (existsSync(join(projectRoot(projectId), "design"))) {
-      return true;
-    }
-    const checkouts = (db.project(projectId)?.places ?? []).filter(
-      (place) => place.kind === "checkout"
-    );
-    let unknown = false;
-    for (const place of checkouts) {
-      if (!deps.online(place.machineId)) {
-        unknown = true;
-        continue;
-      }
-      // biome-ignore lint/performance/noAwaitInLoops: stops at the first checkout that has one
-      const read = await deps
-        .run(
-          place.machineId,
-          place.path,
-          `${SAFE_GIT_SHELL}cd "$(git rev-parse --show-toplevel 2>/dev/null || pwd)" && if [ -d design ]; then echo yes; else echo no; fi`,
-          READ_MS
-        )
-        .catch(() => undefined);
-      const said = read?.exitCode === 0 ? read.stdout.trim() : undefined;
-      if (said === "yes") {
-        return true;
-      }
-      unknown ||= said !== "no";
-    }
-    return unknown ? undefined : false;
-  };
-
-  /** A task that builds the system already: filed by Build, or by Caw when the person asked him (the same title, caw.ts). */
-  const building = async (projectId: string): Promise<boolean> => {
+  /** The open task that builds the system already: filed by Build, or by Caw when the person asked him ({@link fileBuild}). */
+  const building = async (projectId: string) => {
     const { tasks: all } = await tasks.list(projectId);
-    return all.some(
+    return all.find(
       (task) =>
         task.kind !== "done" &&
         task.kind !== "dropped" &&
         task.title === BUILD_TITLE
+    );
+  };
+
+  /**
+   * Files "Build the design system" in the stage named, else the first
+   * to-do stage, in {@link buildWords}. Refused while one is open, or once
+   * the project has a system ({@link projectDesign}).
+   */
+  const fileBuild = async (
+    projectId: string,
+    actor: TaskActor,
+    stage?: string
+  ): Promise<TaskView> => {
+    const open = await building(projectId);
+    if (open) {
+      throw new FolderRefusal(
+        409,
+        `${open.id} already builds this project's design system.`
+      );
+    }
+    if ((await projectDesign(deps, projectId)).hasDesign === true) {
+      throw new FolderRefusal(
+        409,
+        "This project has a design system already (design/ on its default branch, or in its folder): a change to it is a design_write proposal, not a build."
+      );
+    }
+    const { stages } = await tasks.stages(projectId);
+    const first = stage ?? stages.find((each) => each.kind === "todo")?.name;
+    return await tasks.create(
+      projectId,
+      {
+        ...buildWords(sourcesOf(projectId)),
+        ...(first ? { stage: first } : {}),
+      },
+      actor
     );
   };
 
@@ -185,7 +203,7 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
       task.kind !== "active" ||
       !designShaped(project.template ?? null, task) ||
       (await building(projectId)) ||
-      (await hasSystem(projectId)) !== false
+      (await projectDesign(deps, projectId)).hasDesign !== false
     ) {
       return;
     }
@@ -250,10 +268,11 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
         return this.state(projectId);
       }
       db.designOffers.answer(projectId, "dismissed");
+      deps.declined(projectId);
       return this.state(projectId);
     },
 
-    /** "Build": files "Build the design system" in the first to-do stage, naming the skill. */
+    /** "Build": files "Build the design system" in the first to-do stage ({@link fileBuild}). */
     async build(
       projectId: string,
       actor: TaskActor
@@ -262,22 +281,13 @@ export const createDesignOffers = (deps: DesignOffersDeps) => {
       if (row.answer) {
         return this.state(projectId);
       }
-      const { stages } = await tasks.stages(projectId);
-      const first = stages.find((stage) => stage.kind === "todo");
-      const sources = sourcesOf(projectId);
-      const task = await tasks.create(
-        projectId,
-        {
-          title: BUILD_TITLE,
-          ...(first ? { stage: first.name } : {}),
-          labels: ["design"],
-          description: `Build this project's design system from its own material${sources.length ? ` (${listed(sources)})` : ""}. Use the ${DESIGN_SKILL} skill: it says what to read, what to write to design/ with design_write, what to ask on a decision page, and how to hand in.`,
-        },
-        actor
-      );
+      const task = await fileBuild(projectId, actor);
       db.designOffers.answer(projectId, "built", task.id);
       return this.state(projectId);
     },
+
+    /** Caw's `task_create` of "Build the design system" (task-tools.ts): the hub's words, not his. */
+    fileBuild,
   };
 };
 

@@ -18,15 +18,12 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
-  import FleetFault from "#lib/cawco/FleetFault.svelte";
   import { type FleetMemoryDocRow, formatBytes } from "#lib/cawco/fleet.js";
-  import { causeOf } from "#lib/cawco/fleet-faults.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
-  import { IconBook, IconTrash, IconWarningTriangle } from "#lib/icons.js";
+  import { IconBook, IconTrash } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
 
   /**
@@ -53,17 +50,6 @@
   );
   const mainShown = $derived(
     MAIN.toLowerCase().includes(filter.trim().toLowerCase())
-  );
-
-  /**
-   * Machines whose model-memory hook did not register: the documents are on
-   * the machine and nothing puts them in front of a session.
-   */
-  const hookFailed = $derived(
-    machines.flatMap((row) => {
-      const hook = row.fleet?.memoryHook;
-      return hook?.state === "failed" ? [{ machine: row, hook }] : [];
-    })
   );
 
   const facts = (row: { content: string; updatedAt: string }) =>
@@ -197,51 +183,5 @@
     >
       No file matches “{filter.trim()}”.
     </p>
-  {/if}
-
-  {#if hookFailed.length > 0}
-    <!-- literal: 72ch -->
-    <!-- literal: 8px -->
-    <div
-      data-slot="group"
-      class="flex flex-col gap-(--group-gap) border-t border-t-border-hairline pt-space-5"
-      style:--group-gap="8px"
-      style:--note-measure="72ch"
-    >
-      <SectionHeader
-        hue="var(--status-attn-ink)"
-        icon={IconWarningTriangle}
-        label="Model documents are not being loaded everywhere"
-      />
-      <p
-        data-slot="note"
-        class="type-meta max-w-(--note-measure) text-ink-muted"
-      >
-        The documents are put in front of a session by a SessionStart hook CawCo
-        registers. Where it did not register, the files are on the machine and
-        nothing reads them.
-      </p>
-      {#each hookFailed as { machine, hook } (machine.machineId)}
-        <FleetFault
-          group={{
-            origin: "machine",
-            cause: causeOf(hook.detail),
-            scope: "memoryHook",
-            machineId: machine.machineId,
-            faults: [
-              {
-                origin: "machine",
-                scope: "memoryHook",
-                key: "",
-                machineId: machine.machineId,
-                detail: hook.detail,
-                cause: causeOf(hook.detail),
-              },
-            ],
-          }}
-          {machines}
-        />
-      {/each}
-    </div>
   {/if}
 </SectionFrame>

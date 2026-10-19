@@ -12,10 +12,18 @@
  * its property taken out with its comma; the rest of the file, its quote
  * style, indent and trailing commas, stays as it was. Values are written
  * as JSON literals in the file's own quote; an arg whose value is code (a
- * fixture import, a function) is never touched.
+ * fixture import, a function) is never touched. The stage then formats the
+ * one statement a write printed into ({@link storyStatement}) with the
+ * project's own formatter (host.ts `inProjectStyle`).
  */
 import { parse } from "@babel/parser";
-import type { Story, StoryOp } from "@cawco/core/stage";
+import {
+  FORMS,
+  type Form,
+  type FormName,
+  type Story,
+  type StoryOp,
+} from "@cawco/core/stage";
 
 /** A node of Babel's syntax tree, as far as a story file is read. */
 interface Node {
@@ -34,6 +42,7 @@ export interface StaticSheet {
     args: Record<string, unknown>;
     code: Record<string, string>;
     component: string | null;
+    title: string | null;
   };
   /** Each story, its `component` its local name when it names its own. */
   stories: Story[];
@@ -92,9 +101,74 @@ const keyOf = (property: Node): string | null => {
   return key?.type === "StringLiteral" ? (key.value as string) : null;
 };
 
-/** Whether an expression is a literal the inspector writes: its value, else undefined. */
-function literal(node: Node | null): { value: unknown } | undefined {
-  const at = bare(node);
+/**
+ * What a name stands for inside a local helper a story is built by: each
+ * parameter bound to the call's argument, each local `const` to its value,
+ * each in the scope it is read in. A story's own object reads in an empty one.
+ */
+type Env = Map<string, Bound>;
+
+/** An expression and the names it reads in. */
+interface Bound {
+  env: Env;
+  node: Node;
+}
+
+const NO_ENV: Env = new Map();
+
+/** The file's top-level names a story may be built from: each `const`'s value, each function declaration. */
+type Scope = Map<string, Node>;
+
+function scopeOf(body: Node[]): Scope {
+  const scope: Scope = new Map();
+  for (const node of body) {
+    const declaration =
+      node.type === "ExportNamedDeclaration"
+        ? child(node, "declaration")
+        : node;
+    if (declaration?.type === "VariableDeclaration") {
+      for (const one of children(declaration, "declarations")) {
+        const name = identifier(child(one, "id"));
+        const init = child(one, "init");
+        if (name && init) {
+          scope.set(name, init);
+        }
+      }
+    } else if (declaration?.type === "FunctionDeclaration") {
+      const name = identifier(child(declaration, "id"));
+      if (name) {
+        scope.set(name, declaration);
+      }
+    }
+  }
+  return scope;
+}
+
+/** An expression followed through the helper parameters and locals it names, to what they were given. */
+function deref(at: Bound): Bound {
+  let now = at;
+  for (let hops = 0; hops < MAX_DEPTH; hops += 1) {
+    const name = identifier(now.node);
+    const next = name ? now.env.get(name) : undefined;
+    if (!next) {
+      return now;
+    }
+    now = next;
+  }
+  return now;
+}
+
+/** How many spreads, names and calls deep the reader follows a story before it gives up. */
+const MAX_DEPTH = 12;
+
+/** Whether an expression is a literal the inspector writes: its value, else undefined. A helper's parameter reads as what its call gave it. */
+function literal(
+  node: Node | null,
+  env: Env = NO_ENV
+): { value: unknown } | undefined {
+  const found = node ? deref({ node: bare(node) ?? node, env }) : null;
+  const at = bare(found?.node ?? null);
+  const scope = found?.env ?? env;
   switch (at?.type) {
     case "StringLiteral":
     case "NumericLiteral":
@@ -111,25 +185,25 @@ function literal(node: Node | null): { value: unknown } | undefined {
           }
         : undefined;
     case "UnaryExpression": {
-      const inner = literal(child(at, "argument"));
+      const inner = literal(child(at, "argument"), scope);
       return at.operator === "-" && typeof inner?.value === "number"
         ? { value: -inner.value }
         : undefined;
     }
     case "ArrayExpression":
-      return arrayLiteral(at);
+      return arrayLiteral(at, scope);
     case "ObjectExpression":
-      return objectLiteral(at);
+      return objectLiteral(at, scope);
     case undefined:
       return;
   }
 }
 
 /** An array of literals: its values; undefined at the first element that is code. */
-function arrayLiteral(at: Node): { value: unknown[] } | undefined {
+function arrayLiteral(at: Node, env: Env): { value: unknown[] } | undefined {
   const values: unknown[] = [];
   for (const element of children(at, "elements")) {
-    const one = literal(element);
+    const one = literal(element, env);
     if (!one) {
       return;
     }
@@ -140,12 +214,14 @@ function arrayLiteral(at: Node): { value: unknown[] } | undefined {
 
 /** An object of literals under plain keys: its value; undefined at the first property that is code. */
 function objectLiteral(
-  at: Node
+  at: Node,
+  env: Env
 ): { value: Record<string, unknown> } | undefined {
   const value: Record<string, unknown> = {};
   for (const property of children(at, "properties")) {
     const key = property.type === "ObjectProperty" ? keyOf(property) : null;
-    const one = key === null ? undefined : literal(child(property, "value"));
+    const one =
+      key === null ? undefined : literal(child(property, "value"), env);
     if (key === null || !one) {
       return;
     }
@@ -154,26 +230,266 @@ function objectLiteral(
   return { value };
 }
 
-/** An object literal's args: each literal one's value, and the source of each that is code (a spread under its own text). */
-function argsOf(
-  text: string,
-  object: Node | null
-): { args: Record<string, unknown>; code: Record<string, string> } {
-  const args: Record<string, unknown> = {};
-  const code: Record<string, string> = {};
-  for (const property of children(object ?? { type: "" }, "properties")) {
-    const source = text.slice(property.start ?? 0, property.end ?? 0);
-    const key = property.type === "ObjectProperty" ? keyOf(property) : null;
-    if (key === null) {
-      code[source] = source;
+/** A node's source text. */
+const sourceOf = (text: string, node: Node): string =>
+  text.slice(node.start ?? 0, node.end ?? 0);
+
+/** One key an object built by a story ends up with: its value, the names it reads in, and the top-level spread it came through (null for the story's own property). */
+interface Entry {
+  env: Env;
+  key: string;
+  value: Node;
+  via: Node | null;
+}
+
+/** An object's keys in order, its spreads, names and local helper calls followed; or why the reader can't follow them. */
+type Flat = { entries: Entry[] } | { why: string };
+
+/** What the reader can see of a story file to follow a story: its text, its top-level names and its imports. */
+interface Reading {
+  imports: Map<string, string>;
+  scope: Scope;
+  text: string;
+}
+
+/** Why name `name` leads nowhere this file says: it is imported, or not declared here. */
+const elsewhere = (reading: Reading, name: string): string => {
+  const source = reading.imports.get(name);
+  return source
+    ? `${name} is imported from ${source}, which this reader doesn't open`
+    : `${name} isn't declared at the top of this file`;
+};
+
+/**
+ * Expression `at` followed to the object literal it stands for, flattened to
+ * its keys in order (a later one wins): a spread of a local object or a call
+ * of a local function returning one is read from that literal, its
+ * parameters bound to the call's arguments. `via` is the top-level spread an
+ * entry came through.
+ */
+function flatten(
+  reading: Reading,
+  at: Bound,
+  via: Node | null = null,
+  depth = 0
+): Flat {
+  const { node, env } = deref(at);
+  const expr = bare(node);
+  if (!expr) {
+    return { why: "it has no value" };
+  }
+  if (depth > MAX_DEPTH) {
+    return {
+      why: `\`${sourceOf(reading.text, expr)}\` goes deeper than the reader follows`,
+    };
+  }
+  switch (expr.type) {
+    case "ObjectExpression":
+      return flattenObject(reading, expr, env, via, depth);
+    case "Identifier": {
+      const name = expr.name as string;
+      const declared = reading.scope.get(name);
+      return declared && declared.type !== "FunctionDeclaration"
+        ? flatten(reading, { node: declared, env: NO_ENV }, via, depth + 1)
+        : { why: elsewhere(reading, name) };
+    }
+    case "MemberExpression": {
+      const key = expr.computed ? null : identifier(child(expr, "property"));
+      const object = child(expr, "object");
+      if (!(key && object)) {
+        return { why: `\`${sourceOf(reading.text, expr)}\` is computed` };
+      }
+      const flat = flatten(reading, { node: object, env }, via, depth + 1);
+      if ("why" in flat) {
+        return flat;
+      }
+      const entry = flat.entries.findLast((one) => one.key === key);
+      return entry
+        ? flatten(
+            reading,
+            { node: entry.value, env: entry.env },
+            via,
+            depth + 1
+          )
+        : { why: `\`${sourceOf(reading.text, expr)}\` names no key it has` };
+    }
+    case "CallExpression":
+      return flattenCall(reading, expr, env, via, depth);
+    default:
+      return {
+        why: `\`${sourceOf(reading.text, expr)}\` is computed, not an object this file writes`,
+      };
+  }
+}
+
+function flattenObject(
+  reading: Reading,
+  object: Node,
+  env: Env,
+  via: Node | null,
+  depth: number
+): Flat {
+  const entries: Entry[] = [];
+  for (const property of children(object, "properties")) {
+    if (property.type === "SpreadElement") {
+      const flat = flatten(
+        reading,
+        { node: child(property, "argument") ?? property, env },
+        via ?? property,
+        depth + 1
+      );
+      if ("why" in flat) {
+        return flat;
+      }
+      entries.push(...flat.entries);
       continue;
     }
-    const one = literal(child(property, "value"));
+    const key = keyOf(property);
+    if (key === null) {
+      return {
+        why: `\`${sourceOf(reading.text, property)}\` has a computed key`,
+      };
+    }
+    // A method (`render() {…}`) is code under its key.
+    const value =
+      property.type === "ObjectProperty" ? child(property, "value") : property;
+    entries.push({ key, value: value ?? property, env, via });
+  }
+  return { entries };
+}
+
+/** A local function's call followed to the object literal it returns: its parameters bound to the call's arguments, its `const`s to their values. */
+function flattenCall(
+  reading: Reading,
+  call: Node,
+  env: Env,
+  via: Node | null,
+  depth: number
+): Flat {
+  const said = sourceOf(reading.text, call);
+  const name = identifier(child(call, "callee"));
+  if (!name) {
+    return { why: `\`${said}\` calls no function by name` };
+  }
+  const fn = bare(reading.scope.get(name) ?? null);
+  if (!fn) {
+    return { why: elsewhere(reading, name) };
+  }
+  if (!(
+    fn.type === "FunctionDeclaration" ||
+    fn.type === "ArrowFunctionExpression" ||
+    fn.type === "FunctionExpression"
+  )) {
+    return { why: `${name} is no function this file declares` };
+  }
+  const inner = bindings(call, fn, env);
+  if (typeof inner === "string") {
+    return { why: inner.replace("$fn", name) };
+  }
+  const body = child(fn, "body");
+  if (body && body.type !== "BlockStatement") {
+    return flatten(reading, { node: body, env: inner }, via, depth + 1);
+  }
+  const returned = returnedBy(children(body ?? { type: "" }, "body"), inner);
+  return returned
+    ? flatten(reading, { node: returned, env: inner }, via, depth + 1)
+    : { why: `${name} does more than return an object` };
+}
+
+/** Function `fn`'s parameters bound to `call`'s arguments (read in `env`), a default read in the function's own; or why not, `$fn` standing for its name. */
+function bindings(call: Node, fn: Node, env: Env): Env | string {
+  const inner: Env = new Map();
+  const given = children(call, "arguments");
+  for (const [at, param] of children(fn, "params").entries()) {
+    const arg = given[at];
+    if (arg?.type === "SpreadElement") {
+      return "`$fn(…)` spreads its arguments";
+    }
+    const left =
+      param.type === "AssignmentPattern" ? child(param, "left") : param;
+    if (left?.type !== "Identifier") {
+      return "$fn takes its arguments as a pattern";
+    }
+    const fallback =
+      param.type === "AssignmentPattern" ? child(param, "right") : null;
+    inner.set(left.name as string, {
+      node: arg ?? fallback ?? { type: "Identifier", name: "undefined" },
+      env: arg || !fallback ? env : inner,
+    });
+  }
+  return inner;
+}
+
+/** A function body's returned expression, its `const`s bound in `inner` first; null when it does anything else. */
+function returnedBy(statements: Node[], inner: Env): Node | null {
+  const last = statements.at(-1);
+  for (const statement of statements.slice(0, -1)) {
+    if (statement.type !== "VariableDeclaration") {
+      return null;
+    }
+    for (const one of children(statement, "declarations")) {
+      const local = identifier(child(one, "id"));
+      const init = child(one, "init");
+      if (!(local && init)) {
+        return null;
+      }
+      inner.set(local, { node: init, env: inner });
+    }
+  }
+  return last?.type === "ReturnStatement" ? child(last, "argument") : null;
+}
+
+/**
+ * An args object's args: each literal one's value, and the source of each
+ * that is code. A spread the reader follows adds its keys; one it can't
+ * stays code under its own text. Args the reader can't follow at all (an
+ * imported object) answer why.
+ */
+function argsOf(
+  reading: Reading,
+  at: Bound | null
+):
+  | { args: Record<string, unknown>; code: Record<string, string> }
+  | { why: string } {
+  const args: Record<string, unknown> = {};
+  const code: Record<string, string> = {};
+  if (!at) {
+    return { args, code };
+  }
+  const found = deref(at);
+  const object = bare(found.node);
+  const entries: Entry[] = [];
+  if (object?.type === "ObjectExpression") {
+    for (const property of children(object, "properties")) {
+      const one = flattenObject(
+        reading,
+        { type: "ObjectExpression", properties: [property] },
+        found.env,
+        null,
+        0
+      );
+      if ("why" in one) {
+        const source = sourceOf(reading.text, property);
+        code[source] = source;
+      } else {
+        entries.push(...one.entries);
+      }
+    }
+  } else {
+    const flat = flatten(reading, found);
+    if ("why" in flat) {
+      return flat;
+    }
+    entries.push(...flat.entries);
+  }
+  for (const { key, value, env } of entries) {
+    delete args[key];
+    delete code[key];
+    const one = literal(value, env);
     if (one) {
       args[key] = one.value;
     } else {
-      const value = child(property, "value");
-      code[key] = text.slice(value?.start ?? 0, value?.end ?? 0);
+      code[key] = sourceOf(reading.text, deref({ node: value, env }).node);
     }
   }
   return { args, code };
@@ -191,8 +507,9 @@ const identifier = (node: Node | null): string | null => {
   return at?.type === "Identifier" ? (at.name as string) : null;
 };
 
-/** One story export: its name, the statement it stands in, its object literal (null for a function story), its name's place. */
+/** One story export: its name, the statement it stands in, its value (null for a function story), its object literal when its value is one, its name's place. */
 interface Export {
+  init: Node | null;
   name: string;
   object: Node | null;
   place: Node;
@@ -200,22 +517,7 @@ interface Export {
 }
 
 /** The default export's object literal, followed through a local `const meta = {…}; export default meta`. */
-function metaObject(body: Node[]): Node | null {
-  const declared = new Map<string, Node | null>();
-  for (const node of body) {
-    const declaration =
-      node.type === "ExportNamedDeclaration"
-        ? child(node, "declaration")
-        : node;
-    if (declaration?.type === "VariableDeclaration") {
-      for (const one of children(declaration, "declarations")) {
-        const name = identifier(child(one, "id"));
-        if (name) {
-          declared.set(name, bare(child(one, "init")));
-        }
-      }
-    }
-  }
+function metaObject(body: Node[], scope: Scope): Node | null {
   const exported = body.find(
     (node) => node.type === "ExportDefaultDeclaration"
   );
@@ -229,7 +531,8 @@ function metaObject(body: Node[]): Node | null {
     return first?.type === "ObjectExpression" ? first : null;
   }
   const name = identifier(value);
-  return name ? (declared.get(name) ?? null) : null;
+  const declared = bare(name ? (scope.get(name) ?? null) : null);
+  return declared?.type === "ObjectExpression" ? declared : null;
 }
 
 /** A variable declaration's names, each with its object literal (null when its value is none), its place and `statement`. */
@@ -243,6 +546,7 @@ const declaredIn = (declaration: Node, statement: Node): Export[] =>
     const init = bare(child(one, "init"));
     return [
       {
+        init,
         name,
         object: init?.type === "ObjectExpression" ? init : null,
         place: id,
@@ -261,7 +565,13 @@ function exportedBy(node: Node, local: Map<string, Export>): Export[] {
     const id = child(declaration, "id");
     const name = identifier(id);
     if (name && id) {
-      found.push({ name, object: null, place: id, statement: node });
+      found.push({
+        init: null,
+        name,
+        object: null,
+        place: id,
+        statement: node,
+      });
     }
   }
   for (const specifier of children(node, "specifiers")) {
@@ -275,6 +585,7 @@ function exportedBy(node: Node, local: Map<string, Export>): Export[] {
     ) {
       const from = local.get(identifier(child(specifier, "local")) ?? "");
       found.push({
+        init: from?.init ?? null,
         name,
         object: from?.object ?? null,
         place: exported,
@@ -320,43 +631,279 @@ function importsOf(body: Node[]): Map<string, string> {
   return found;
 }
 
+/** A comment's words: a JSDoc block's lines without their stars, a line comment's text; blank lines and tags (`@param`) left out. */
+const commentWords = (comment: Node): string =>
+  String(comment.value ?? "")
+    .split("\n")
+    .map((line) => line.replace(COMMENT_STAR, "").trim())
+    .filter((line) => line && !line.startsWith("@"))
+    .join(" ")
+    .trim();
+const COMMENT_STAR = /^\s*\*+\s?/;
+
+/**
+ * A story's label: its doc comment in plain words, the comments right
+ * above its statement (a `/** … *\/` block, or a run of `//` lines), the
+ * last block when several stand apart. Null when it has none.
+ */
+function labelOf(text: string, statement: Node): string | null {
+  const comments = (statement.leadingComments as Node[] | undefined) ?? [];
+  // The comments that touch the statement: a blank line ends the run.
+  const run: Node[] = [];
+  let next = statement.start ?? 0;
+  for (const comment of comments.toReversed()) {
+    const between = text.slice(comment.end ?? 0, next);
+    if (BLANK_BETWEEN.test(between)) {
+      break;
+    }
+    run.unshift(comment);
+    next = comment.start ?? 0;
+  }
+  const words = run.map(commentWords).filter(Boolean).join(" ");
+  return words ? words.slice(0, LABEL_LIMIT) : null;
+}
+const BLANK_BETWEEN = /\n[ \t]*\n/;
+/** A label's longest. Ours: a frame's caption, one line. */
+const LABEL_LIMIT = 160;
+
+/**
+ * A story's form from `parameters.viewport`: a width (`390`), a preset's
+ * name (`"phone"`, `"tablet"`, `"desk"`), `{ width }`, or Storybook's
+ * `{ defaultViewport }` with its own preset names. Null when it names none.
+ */
+function formOf(parameters: Node | null): Form | null {
+  const viewport = bare(
+    child(propertyOf(parameters, "viewport") ?? { type: "" }, "value")
+  );
+  const value = literal(viewport)?.value;
+  const width = (n: unknown): Form | null =>
+    typeof n === "number" && n > 0 ? presetOf(n) : null;
+  if (typeof value === "number") {
+    return width(value);
+  }
+  if (typeof value === "string") {
+    return namedForm(value);
+  }
+  if (value && typeof value === "object") {
+    const one = value as { defaultViewport?: unknown; width?: unknown };
+    if (typeof one.width === "number") {
+      return width(one.width);
+    }
+    if (typeof one.defaultViewport === "string") {
+      return namedForm(one.defaultViewport);
+    }
+  }
+  return null;
+}
+
+/** Storybook's own viewport preset names (`MINIMAL_VIEWPORTS`), as the canvas's forms. */
+const STORYBOOK_VIEWPORTS: Record<string, FormName> = {
+  mobile1: "phone",
+  mobile2: "phone",
+  tablet: "tablet",
+  desktop: "desk",
+};
+
+const namedForm = (name: string): Form | null => {
+  const preset = name in FORMS ? (name as FormName) : STORYBOOK_VIEWPORTS[name];
+  return preset ? { name: preset, width: FORMS[preset] } : null;
+};
+
+/** A width as its preset when it is one, else its own. */
+const presetOf = (width: number): Form => {
+  const preset = (Object.keys(FORMS) as FormName[]).find(
+    (name) => FORMS[name] === width
+  );
+  return { name: preset ?? "custom", width };
+};
+
+/** `Story.play = …` and `Story.from = …` assignments at the top of the file, by story. */
+function assignedOf(body: Node[]): Map<string, Map<string, Node>> {
+  const found = new Map<string, Map<string, Node>>();
+  for (const node of body) {
+    const expression =
+      node.type === "ExpressionStatement" ? child(node, "expression") : null;
+    const target =
+      expression?.type === "AssignmentExpression"
+        ? child(expression, "left")
+        : null;
+    if (target?.type !== "MemberExpression" || target.computed) {
+      continue;
+    }
+    const story = identifier(child(target, "object"));
+    const field = identifier(child(target, "property"));
+    if (story && field) {
+      const fields = found.get(story) ?? new Map<string, Node>();
+      fields.set(field, child(expression as Node, "right") as Node);
+      found.set(story, fields);
+    }
+  }
+  return found;
+}
+
 /**
  * What story file `file` (absolute) says: each story by its export's name
- * and 1-based place, with its args; the meta's args and component. The
- * default export is the meta, a type is no story, and Storybook's
- * `__namedExportsOrder` is no story either.
+ * and 1-based place, with its args, its label (its doc comment), its form,
+ * and its flow move (`from` and `play`); the meta's args, component and
+ * title. The default export is the meta, a type is no story, and
+ * Storybook's `__namedExportsOrder` is no story either.
  */
 export function readStoryFile(file: string, text: string): StaticSheet {
   const body = parsed(file, text);
-  const meta = metaObject(body);
-  const stories = exportsOf(body).map(({ name, object, place }): Story => {
-    const args = argsOf(
-      text,
-      bare(child(propertyOf(object, "args") ?? { type: "" }, "value"))
-    );
+  const scope = scopeOf(body);
+  const reading: Reading = { imports: importsOf(body), scope, text };
+  const meta = metaObject(body, scope);
+  const metaArgs = child(propertyOf(meta, "args") ?? { type: "" }, "value");
+  const metaRead = argsOf(
+    reading,
+    metaArgs ? { node: metaArgs, env: NO_ENV } : null
+  );
+  const assigned = assignedOf(body);
+  const metaParameters = bare(
+    child(propertyOf(meta, "parameters") ?? { type: "" }, "value")
+  );
+  const title = literal(
+    child(propertyOf(meta, "title") ?? { type: "" }, "value")
+  )?.value;
+  /** A story's canvas fields: its label (doc comment), form, and flow move. */
+  const canvasOf = (
+    one: Export
+  ): Pick<Story, "form" | "from" | "label" | "play"> => {
+    const later = assigned.get(one.name);
+    const from = literal(
+      later?.get("from") ??
+        child(propertyOf(one.object, "from") ?? { type: "" }, "value")
+    )?.value;
     return {
-      name,
-      line: place.loc?.start.line ?? 1,
-      column: (place.loc?.start.column ?? 0) + 1,
-      ...args,
-      component: identifier(
-        child(propertyOf(object, "component") ?? { type: "" }, "value")
-      ),
+      label: labelOf(text, one.statement),
+      form:
+        formOf(
+          bare(
+            child(propertyOf(one.object, "parameters") ?? { type: "" }, "value")
+          )
+        ) ?? formOf(metaParameters),
+      from: typeof from === "string" ? from : null,
+      play: Boolean(propertyOf(one.object, "play") || later?.has("play")),
     };
-  });
+  };
   return {
-    imports: importsOf(body),
+    imports: reading.imports,
     meta: {
-      ...argsOf(
-        text,
-        bare(child(propertyOf(meta, "args") ?? { type: "" }, "value"))
-      ),
+      ...("why" in metaRead
+        ? {
+            args: {},
+            code: metaArgs
+              ? { [sourceOf(text, metaArgs)]: sourceOf(text, metaArgs) }
+              : {},
+          }
+        : metaRead),
       component: identifier(
         child(propertyOf(meta, "component") ?? { type: "" }, "value")
       ),
+      title: typeof title === "string" ? title : null,
     },
-    stories,
+    stories: exportsOf(body).map((one): Story => ({
+      name: one.name,
+      line: one.place.loc?.start.line ?? 1,
+      column: (one.place.loc?.start.column ?? 0) + 1,
+      ...storyRead(reading, one),
+      ...canvasOf(one),
+    })),
   };
+}
+
+/** A story whose component and args the reader can't follow: it mounts all the same, and the inspector shows it read-only with `reason`. */
+const unread = (
+  name: string,
+  reason: string
+): Pick<Story, "args" | "code" | "component" | "readOnly"> => ({
+  args: {},
+  code: {},
+  component: null,
+  readOnly: {
+    read: false,
+    reason: `${name}: args not readable here: ${reason}.`,
+  },
+});
+
+/**
+ * Story `story`'s component and args as its file builds them: its own
+ * object literal, its spreads of local objects and its calls of local
+ * functions followed to the literals they return. `readOnly` says why the
+ * inspector can't write its args: they come from shared code (a spread,
+ * a helper, another story), or the reader couldn't follow them at all.
+ */
+function storyRead(
+  reading: Reading,
+  story: Export
+): Pick<Story, "args" | "code" | "component" | "readOnly"> {
+  const { name, init } = story;
+  if (
+    !init ||
+    init.type === "ArrowFunctionExpression" ||
+    init.type === "FunctionExpression"
+  ) {
+    return unread(
+      name,
+      "it is a function (CSF 2), not a story object; make it `export const " +
+        `${name} = { args: {…} }\``
+    );
+  }
+  const flat = flatten(reading, { node: init, env: NO_ENV });
+  if ("why" in flat) {
+    return unread(name, flat.why);
+  }
+  const argsEntry = flat.entries.findLast((one) => one.key === "args");
+  const componentEntry = flat.entries.findLast(
+    (one) => one.key === "component"
+  );
+  const read = argsOf(
+    reading,
+    argsEntry ? { node: argsEntry.value, env: argsEntry.env } : null
+  );
+  if ("why" in read) {
+    return unread(name, read.why);
+  }
+  const component = componentEntry
+    ? identifier(
+        deref({ node: componentEntry.value, env: componentEntry.env }).node
+      )
+    : null;
+  return {
+    ...read,
+    component,
+    readOnly: writeBlock(reading, story, argsEntry),
+  };
+}
+
+/** Why the inspector can't write readable story `story`'s args, whose last `args` key is `argsEntry`; null when it can. */
+function writeBlock(
+  reading: Reading,
+  story: Export,
+  argsEntry: Entry | undefined
+): Story["readOnly"] {
+  const { name, init, object } = story;
+  const said = (node: Node) => `\`${sourceOf(reading.text, node)}\``;
+  if (!object) {
+    return {
+      read: true,
+      reason: `${name} is built by ${said(init ?? story.place)}, code other stories may share, so its args are edited in the file.`,
+    };
+  }
+  if (argsEntry?.via) {
+    return {
+      read: true,
+      reason: `${name}'s args come from ${said(argsEntry.via)}, code other stories may share, so they are edited in the file.`,
+    };
+  }
+  const value = bare(argsEntry?.value ?? null);
+  if (value && value.type !== "ObjectExpression") {
+    return {
+      read: true,
+      reason: `${name}'s args are ${said(value)}, no object literal, so they are edited in the file.`,
+    };
+  }
+  return null;
 }
 
 /* --- Writing ---------------------------------------------------------- */
@@ -573,15 +1120,19 @@ export function writeArgs(
   unset: string[] = []
 ): { lines: { from: number; to: number }; text: string } {
   const style = styleOf(text);
-  const exports = exportsOf(parsed(file, text));
-  const { object } = storyNamed(file, exports, story);
+  const body = parsed(file, text);
+  const exports = exportsOf(body);
+  const named = storyNamed(file, exports, story);
+  const { readOnly } = storyRead(
+    { imports: importsOf(body), scope: scopeOf(body), text },
+    named
+  );
+  if (readOnly) {
+    throw new StoryRefusal(readOnly.reason);
+  }
+  const { object } = named;
   const argsProperty = propertyOf(object, "args");
   const args = bare(argsProperty ? child(argsProperty, "value") : null);
-  if (argsProperty && args?.type !== "ObjectExpression") {
-    throw new StoryRefusal(
-      `${story}'s args in ${file} are \`${text.slice(args?.start ?? 0, args?.end ?? 0)}\`, no object literal, so they can't be written: make them one.`
-    );
-  }
   const keys = Object.keys(values);
   if (keys.length === 0 && unset.length === 0) {
     throw new StoryRefusal(
@@ -698,6 +1249,23 @@ function freshName(file: string, exports: Export[], name: string): void {
   if (exports.some((one) => one.name === name)) {
     throw new StoryRefusal(`${file} has a story ${name} already.`);
   }
+}
+
+/**
+ * Where story `name`'s statement stands in `text`, from its first character
+ * to its last: what the stage formats in the project's style after a write
+ * printed values into it (host.ts `inProjectStyle`).
+ */
+export function storyStatement(
+  file: string,
+  text: string,
+  name: string
+): { from: number; to: number } {
+  const story = exportsOf(parsed(file, text)).find((one) => one.name === name);
+  if (!story) {
+    throw new StoryRefusal(`${file} has no story ${name}.`);
+  }
+  return { from: story.statement.start ?? 0, to: story.statement.end ?? 0 };
 }
 
 /** Story file `file` with `op` made: a story added after the last, duplicated after its original, removed, or moved before another. */

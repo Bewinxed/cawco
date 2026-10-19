@@ -24,7 +24,11 @@
    * it attached, and what it presented, open the task beside the
    * conversation.
    */
-  import { artifactName, type ResultArtifact } from "@cawco/core";
+  import {
+    artifactName,
+    deliverableKind,
+    type ResultArtifact,
+  } from "@cawco/core";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
@@ -43,6 +47,7 @@
   import {
     addComment,
     approveTarget,
+    folderFileHref,
     folderRawHref,
     outputUrl,
     readTask,
@@ -229,10 +234,14 @@
         break;
     }
     // One of the task's outputs is where the hub copied it; any other
-    // file is where it stands in the project's folder.
-    return task.outputs.includes(one.path)
-      ? outputUrl(projectId, task.id, one.path)
-      : folderRawHref(projectId, one.path);
+    // file is its address in the project's folder (`?file=`), and a
+    // picture, video or sound there is its bytes.
+    if (task.outputs.includes(one.path)) {
+      return outputUrl(projectId, task.id, one.path);
+    }
+    return ["image", "video", "audio"].includes(deliverableKind(one.path))
+      ? folderRawHref(projectId, one.path)
+      : folderFileHref(projectId, one.path);
   };
   const nameOf = (one: ResultArtifact): string =>
     one.kind === "link"

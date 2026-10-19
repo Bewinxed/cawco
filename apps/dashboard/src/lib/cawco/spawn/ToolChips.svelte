@@ -51,6 +51,7 @@
    * Effort and permission as chips that open their pickers on one shared
    * popover surface. Read-only, they are the same chips as plain text.
    */
+  import { IconShield } from "#lib/icons.js";
   import Down from "~icons/solar/alt-arrow-down-linear";
   import Tuning from "~icons/solar/tuning-2-bold-duotone";
   import { crossIn, crossOut } from "../motion/curves.svelte";
@@ -59,6 +60,9 @@
   import NsPopoverGroup from "./NsPopoverGroup.svelte";
   import PermissionSection from "./PermissionSection.svelte";
   import { permissionLook } from "./permission-look";
+
+  /** The permission chip while no mode is chosen. */
+  const UNCHOSEN_MODE = "Choose a mode";
 
   let {
     tools,
@@ -143,6 +147,9 @@
     {@const Icon = look.icon}
     <Icon style={`color:${look.hue}`} />
     <span data-slot="chip-label">{look.name}</span>
+  {:else}
+    <IconShield class="text-ink-subtle" />
+    <span data-slot="chip-label">{UNCHOSEN_MODE}</span>
   {/if}
 {/snippet}
 
@@ -212,12 +219,13 @@
             </div>
           </NsPopover>
         {/if}
-        <!-- A session with no mode (its harness has none) shows nothing here. -->
-        {#if tools.modes.length && tools.permission}
+        <!-- A harness with no modes shows nothing here; one with modes and
+             none chosen yet (a form with nothing remembered) says so. -->
+        {#if tools.modes.length}
           <NsPopover
             align="end"
             id={`${id}-permission`}
-            label={`Permission mode: ${look?.name ?? ""}`}
+            label={`Permission mode: ${look?.name ?? UNCHOSEN_MODE}`}
             onchange={(value) => {
               pop = value ? "permission" : null;
             }}

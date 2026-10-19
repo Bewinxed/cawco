@@ -65,6 +65,7 @@ import {
   type CawNotWokenReason,
   type CawRunning,
   type CawView,
+  type ConnectionView,
   CURATOR_DENIED_TOOLS,
   type Envelope,
   type EventThreadMessage,
@@ -72,12 +73,14 @@ import {
   type InstanceRow,
   type ItemEnd,
   type NeutralOrigin,
+  type PermissionMode,
   type PermissionRequestFrame,
   type PermissionResult,
   type ProjectSpend,
   type ProjectStopFrame,
   type ProjectView,
   questionsOf,
+  type RelayProvider,
   type SendPayload,
   type SpawnPayload,
   type ThreadAnswer,
@@ -98,7 +101,8 @@ import {
   type WorkspaceRef,
 } from "@cawco/core";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
-import { LEAD_PLACE_SUFFIX } from "@cawco/core/workspace-policy";
+import type { RelayCandidate } from "@cawco/core/stream-relay";
+import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
@@ -117,7 +121,6 @@ import { mediaBase64, storeImage } from "./media";
 import { MAKE_A_NOTE, personsTier, ROUTINE_ORIGIN } from "./memory";
 import { VIEW_PROMPT } from "./openui";
 import type { Caps } from "./project-caps";
-import { readProjectTypes } from "./project-delegate-types";
 import {
   FOLDER_CONTENT_LIMIT,
   FOLDER_ENCODINGS,
@@ -242,8 +245,8 @@ export const withCawDenials = (
  * manager and see no other session's processes, exactly as a delegate's. Its
  * id names the project, machine and folder (the first 8 characters name its
  * scratch and door dirs, so they are the hash's), and ends
- * {@link LEAD_PLACE_SUFFIX}, which the machine's policy reads as a lead's
- * place (workspace-policy.ts `isLeadPlace`). None for any other row.
+ * {@link PLACE_SUFFIX}, which the machine's policy reads as a place
+ * (workspace-policy.ts `isPlace`). None for any other row.
  */
 export const leadPlaceRef = (
   row: Pick<InstanceRow, "role" | "projectId" | "machineId" | "cwd">
@@ -253,10 +256,32 @@ export const leadPlaceRef = (
         id: `${createHash("sha256")
           .update(`${row.projectId}\0${row.machineId}\0${row.cwd}`)
           .digest("hex")
-          .slice(0, 8)}${LEAD_PLACE_SUFFIX}`,
+          .slice(0, 8)}${PLACE_SUFFIX}`,
         path: row.cwd,
       }
     : undefined;
+
+/**
+ * The place a sheet's stage is named by for a session with no workspace of
+ * its own (live components): Caw's place ({@link leadPlaceRef}); for any
+ * other session, a place over the folder it works in, on its machine. The
+ * machine runs the stage in that place's stage clone (agent stage-clone.ts):
+ * a clone of the checkout at its HEAD with its uncommitted changes, kept in
+ * step with it, in a boundary of its own, so the toolchain writes its own
+ * tree and never the person's, while the session's own commands stay on the
+ * host. Its id names the machine and folder, so every session there shares
+ * one stage.
+ */
+export const stagePlaceRef = (
+  row: Pick<InstanceRow, "role" | "projectId" | "machineId" | "cwd">
+): WorkspaceRef =>
+  leadPlaceRef(row) ?? {
+    id: `${createHash("sha256")
+      .update(`${row.machineId}\0${row.cwd}`)
+      .digest("hex")
+      .slice(0, 8)}${PLACE_SUFFIX}`,
+    path: row.cwd,
+  };
 
 /**
  * What wakes Caw: who it is from (`you`, the person's own words: a thread, a
@@ -406,6 +431,8 @@ const TASK_ID = /^tsk-\d{1,9}$/;
 /** The most files one reply names. */
 const FILES_MAX = 40;
 const STAGES_FILE = "stages.md";
+/** A project's delegate types: Caw's write there is a proposal the person approves (memory.ts `proposeType`). */
+const DELEGATES_DIR = "delegates/";
 /** Attempts whose thread is kept for the other half of their end ({@link createCaw}'s `attemptThread`). */
 const ATTEMPT_THREADS_KEPT = 200;
 
@@ -418,6 +445,16 @@ const folderCall = async <T>(call: () => T | Promise<T>): Promise<T> => {
       throw new Error(error.message, { cause: error });
     }
     throw error;
+  }
+};
+
+/** stages.md as Caw writes it, refused with what does not read. */
+const stagesRead = (body: string | Uint8Array): void => {
+  const reading = readStages(
+    typeof body === "string" ? body : new TextDecoder().decode(body)
+  );
+  if (!reading.ok) {
+    throw new Error(`stages.md was not written: ${reading.problems.join(" ")}`);
   }
 };
 
@@ -522,7 +559,7 @@ const refuse = (code: 400 | 403 | 404 | 409, message: string): never => {
 const briefOf = (projectName: string): string =>
   [
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
-    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, delegates/, decisions/), decision pages (artifact_create with kind page builds decisions/<name>/page.html and shows it; artifact_read has the picks), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate), send_to_user, and the fleet's MCP tools every session has (web search and fetch among them).",
+    "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, decisions/, and delegates/, where a type you write is a proposal the person approves or declines before it is committed), decision pages (the decision-page skill: write decisions/<name>/page.oui, a program over the decision library, then artifact_create with kind page and the name builds and shows it; artifact_read has the picks; artifact_update's statements revise it; a decision's after and a Section draw the project's decision graph), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate), send_to_user, and the fleet's MCP tools every session has (web search and fetch among them).",
     "You have shell and edit tools, inside the boundary of your place, this folder: you write only here and in $TMPDIR, read no credential store, reach no service manager and see no other session's processes, and files only their owner may read are hidden from you. The hub decides each call before it runs. Read-only commands (ls, cat, grep, find, file, stat, du, wc, head, tail, git that only reads, chained with ; && || or |, output only into /dev/null or 2>&1) run without asking whatever woke you. In a turn the person's own message woke, so do git init, git add <paths> and git commit where no one else works; every other shell or edit call raises an Approve card the person answers, wherever they are. In a turn anything else woke (an event, a routine, a report, outside text riding on your wake) every call but a read-only command raises the card, and so does every such call after you read web content in a turn. In a shared checkout git checkout, switch, restore, reset, stash, clean, rebase and push, git add -A or git add ., and any git alias are refused: file a task. Your edits are docs, config and assets only, 5 files a wake at most: anything bigger, file a task. At most 20 shell or edit calls a wake: delegate the rest. Every call shows in your thread. A task whose only changes are your own passes review only once the person approved them.",
     "Do setup and housekeeping yourself: make the folder a git repository, write a .gitignore or a config file, look at what is there. Real task work goes to tasks and delegates. Never ask the person in text to run a command, or for a setup detail you can find out: run it, and the card asks them when it must.",
     "AGENTS.md and knowledge/ are your project's memory: write one with memory_propose (the file's whole new text and why); it commits as you and is noted in the thread. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
@@ -531,7 +568,7 @@ const briefOf = (projectName: string): string =>
     "When the person writes in a thread, answer them in plain text: what you say in the turn after reading their words is posted in that thread as your reply when the turn ends, and they watch it in the thread as you write it, so say nothing in plain text you would not say to them. When a reply names tasks (its `tasks`, shown as cards) or files you wrote, or belongs in another thread, send it with thread_reply instead: a thread_reply to their thread is your reply there, and what you say in plain text after it stays in your session.",
     "When you need the person's decision, ask with AskUserQuestion, with options; it shows as a card in the thread and their pick comes back to you. Never end a message with a question for them to answer in text. Never hand them shell commands or ask them for setup details in text: do it with your tools, or ask with the card.",
     "A view-request event is the person asking for a view of the project: it carries how to write one, and the page to stand it on when they asked from one. Answer it with view_draft, then say in that thread what you drafted; the person keeps or discards it. A view-change event is the person asking to change a kept view: it carries the view's program; draft the change under the same name.",
-    "When the person asks for a design system, look for design/ first (your folder's and the repository root's). With one there, answer: \"This project has one; say what to change.\" Without one, say what the build will read (the repository's styles and components, the site named in knowledge/, the brand kit in knowledge/brand/, the fonts and pictures in assets/: the ones the project has), then file one task, “Build the design system”, in the first to-do stage, its description naming the design-system skill, and say you filed it. Never build one yourself, and never start one the person did not ask for: the hub asks them once when the work needs one.",
+    "When the person asks for a design system, file one task with task_create, its title “Build the design system” and nothing else (a stage only if they named one): the hub writes its description and acceptance, the design-system skill's steps with its decision page among them, and refuses it when the project already has a system or a build is open. Refused because it has one, answer: \"This project has one; say what to change.\" Filed, say what the build will read (the repository's styles and components, the site named in knowledge/, the brand kit in knowledge/brand/, the fonts and pictures in assets/: the ones the project has) and that you filed it. Never build one yourself, and never start one the person did not ask for: the hub asks them once when the work needs one.",
     "A project with no code yet starts as real code from its first screen. When the person asks for a screen, a component or a design to look at and the repository has no app, name the stack: the one they named, or ask once with AskUserQuestion (SvelteKit, Vite with React or Vue, Astro, Nuxt). Then file one task that scaffolds it with that framework's own creator and builds the first screen as a real component with its sheet, its description naming the stack and the screen skill.",
     'Judgments go to Jev while the person has connected it; while Jev is off some are yours, and never about your own work. Mark a task `fields: { ready: "yes" }` when an agent can do it from its file alone: the dispatcher starts no other. Rank tasks with `rank`: the dispatcher starts them in that order. Triage the tasks a wake lists for triage. Judge an attempt\'s acceptance criteria when a wake asks you to.',
   ].join("\n\n");
@@ -599,6 +636,17 @@ export interface CawDeps {
   /** Every dashboard and the app read the projects again: his switch, harness or model moved. */
   readonly projectsChanged: () => void;
   /**
+   * His `folder_write` of a `delegates/` file, parked as the person's
+   * proposal in his thread and drawn at the call `toolUseId` (memory.ts
+   * `proposeType`): nothing is committed until they approve it.
+   */
+  readonly proposeType: (
+    actor: InstanceRow,
+    path: string,
+    content: string,
+    toolUseId: string | undefined
+  ) => Promise<{ id: string; path: string; waiting: string }>;
+  /**
    * Tells every open dashboard a thread changed, or (`project.stop`) that his
    * turn an event started stopped as he was turned off (the ledger's
    * broadcast).
@@ -613,10 +661,16 @@ export interface CawDeps {
    * machine cannot hold it: the wake does not go out.
    */
   readonly refreshPlace: (lead: InstanceRow) => Promise<void>;
+  /** The machines the setup page's stream relay card offers, while it is to be asked; null once the fleet has a relay or the card was answered. */
+  readonly relayOffer: () => readonly RelayCandidate[] | null;
   /** Delivers one message to a session through the hub's one send path: whether the hub took it (its record `pending`). */
   readonly send: (envelope: Envelope<SendPayload>) => boolean;
-  /** Starts a session, resolved once its machine says it is in place. */
-  readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
+  /** Starts a session in `mode` where its harness has modes, resolved once its machine says it is in place. */
+  readonly spawn: (
+    machineId: string,
+    payload: SpawnPayload,
+    mode: PermissionMode
+  ) => Promise<void>;
   /**
    * A project's forget stop path (project-stops.ts): its running sessions as
    * a tree, and their stop, each end reported as `project.stop` once its
@@ -662,6 +716,7 @@ export const createCaw = ({
   db,
   end,
   fleetChoicesSet,
+  relayOffer,
   upstreamAnswered,
   folderChanged,
   inTurn,
@@ -670,6 +725,7 @@ export const createCaw = ({
   makeNote,
   online,
   projectsChanged,
+  proposeType,
   publish,
   refreshPlace,
   send,
@@ -1196,16 +1252,22 @@ export const createCaw = ({
       );
     const instanceId = crypto.randomUUID();
     cawDenied(project.cawHarness);
-    await spawn(place.machineId, {
-      instanceId,
-      cwd: place.cwd,
-      harness: project.cawHarness,
-      ...(project.cawModel ? { model: project.cawModel } : {}),
-      projectId: project.id,
-      title: "Caw",
-      role: "lead",
-      requestId: crypto.randomUUID(),
-    });
+    await spawn(
+      place.machineId,
+      {
+        instanceId,
+        cwd: place.cwd,
+        harness: project.cawHarness,
+        ...(project.cawModel ? { model: project.cawModel } : {}),
+        projectId: project.id,
+        title: "Caw",
+        role: "lead",
+        requestId: crypto.randomUUID(),
+      },
+      // Caw's own mode: no tool ask parks for a person, as every shell and
+      // edit call of his is put to the hub's gate instead (lead-gate.ts).
+      "bypassPermissions"
+    );
     db.setProjectCaw(project.id, { leadInstanceId: instanceId });
     // A Claude lead's context is the project's whole history, and an idle
     // hour costs it a full rewrite: kept warm, under keep-alive's cap of one
@@ -2100,6 +2162,8 @@ export const createCaw = ({
         askFleet: !fleetChoicesSet(),
         askUpstream: !upstreamAnswered(),
         from,
+        placed: project.places.some((place) => place.kind === "checkout"),
+        relay: relayOffer(),
         projectName: project.name,
         template,
         threadId,
@@ -2199,6 +2263,27 @@ export const createCaw = ({
     wake,
     wakeOnce,
     view,
+
+    /**
+     * §5.5: "Caw offers the relay when you connect a push-only service". The
+     * project now has `connection` signed in, whose service pushes its
+     * events and is never polled, and no relay for `provider`: an event wake
+     * (so only while he is on) on the project's newest conversation, whose
+     * words ask him to offer one with relay_create. It carries no note: he
+     * makes the offer there himself, as his question card.
+     */
+    offerRelay(
+      projectId: string,
+      connection: Pick<ConnectionView, "account" | "name" | "service">,
+      provider: RelayProvider
+    ): void {
+      const threadId = db.newestConversation(projectId)?.id;
+      wakeQuietly(projectId, {
+        by: "event",
+        ...(threadId ? { threadId } : {}),
+        text: `Event connection: the person signed in the connection “${connection.name}” (${connection.service}, ${connection.account}) for this project. ${connection.service} pushes its events instead of being polled, so none of them reach the project until it has a relay. Offer one: ask the person with AskUserQuestion${threadId ? ` in thread ${threadId}` : ""} whether to open a public webhook path for it. On yes, call relay_create({ provider: "${provider}" }), which puts the opening in front of them as an Approve card, then tell them in the thread what to register at ${connection.service}. On no, leave it: polling stays as it is.`,
+      });
+    },
 
     /**
      * Whose turn the project's Caw `instanceId` is in, for what he starts in
@@ -2360,7 +2445,9 @@ export const createCaw = ({
     /**
      * Starts a thread with your first message, answered once it is kept, and
      * wakes Caw with it behind that answer ({@link wakeForYou}); "Make a
-     * note: …" goes to AGENTS.md instead. `sent`: the message's id, the send
+     * note: …" goes to AGENTS.md instead. A project's first thread is its
+     * Setup thread, Caw woken to set the project up ({@link wakeForSetup}).
+     * `sent`: the message's id, the send
      * to his session it came as ({@link personSent}), and what rode with
      * your words, which the message keeps ({@link keepCarried}) and the wake
      * carries to him. The same `id` again is the same message ({@link once}).
@@ -2380,6 +2467,27 @@ export const createCaw = ({
           return { ...opened.said, thread: summaryOf(opened.row) };
         }
         listening(projectId);
+        // A project's first words to him, where nothing opened its Setup
+        // thread (one made from a folder): they open it, and wake him to set
+        // the project up, as New project's prompt does (setup).
+        if (db.projectThreads(projectId).length === 0) {
+          const project = projectOf(projectId);
+          const made = db.createThread({
+            id: crypto.randomUUID(),
+            projectId,
+            title: `Set up ${project.name}`,
+            setup: true,
+            first: {
+              author: "you",
+              body,
+              ...keepCarried(carried),
+              ...(id ? { id } : {}),
+            },
+          });
+          const opened = said(made.thread, made.message, false);
+          wakeForSetup(project, made.thread.id, "prompt", project.template);
+          return { ...opened, thread: summaryOf(made.thread) };
+        }
         const opened = open(projectId, body, id, keepCarried(carried));
         wakeForYou(projectId, opened.row.id, opened.said.message.id, {
           by: "you",
@@ -3068,8 +3176,12 @@ export const createCaw = ({
       cutConfirmed(instanceId);
     },
 
-    /** Caw's thread and view tools, for the session `actor`; refused to any session but its project's lead. */
-    tools(actor: InstanceRow | undefined) {
+    /**
+     * Caw's thread, view, folder and decision graph tools, for the session
+     * `actor` and its call `toolUseId` (where a proposal it parks is drawn);
+     * refused to any session but its project's lead.
+     */
+    tools(actor: InstanceRow | undefined, toolUseId?: string) {
       const mine = (): string => {
         const project = leadOf(actor);
         if (!project) {
@@ -3078,6 +3190,13 @@ export const createCaw = ({
           );
         }
         return project.id;
+      };
+      /** The lead calling: discovery, with no session, executes nothing. */
+      const me = (): InstanceRow => {
+        if (!actor) {
+          throw new Error("Discovery cannot execute tools");
+        }
+        return actor;
       };
       /**
        * The project whose folder `folder_read` reads: the lead's, or a
@@ -3185,7 +3304,7 @@ export const createCaw = ({
         ),
         tool(
           "folder_write",
-          "Commit a file to your project's hub folder; bytes as base64. stages.md must parse.",
+          "Commit a file to your project's hub folder; bytes as base64. stages.md must parse; a delegates/ type waits for the person's approval.",
           {
             path: z.string().min(1),
             content: z.string().max(FOLDER_CONTENT_LIMIT),
@@ -3201,15 +3320,16 @@ export const createCaw = ({
             const body = await folderCall(() =>
               folderContent(content, encoding)
             );
-            if (rel === STAGES_FILE) {
-              const reading = readStages(
-                typeof body === "string" ? body : new TextDecoder().decode(body)
-              );
-              if (!reading.ok) {
+            if (rel.startsWith(DELEGATES_DIR)) {
+              if (typeof body !== "string") {
                 throw new Error(
-                  `stages.md was not written: ${reading.problems.join(" ")}`
+                  `${rel} was not proposed: a delegate type is text, not bytes.`
                 );
               }
+              return ok(await proposeType(me(), rel, body, toolUseId));
+            }
+            if (rel === STAGES_FILE) {
+              stagesRead(body);
             }
             const written = await folderCall(() =>
               writeFolderFile(projectId, rel, body, {
@@ -3217,22 +3337,7 @@ export const createCaw = ({
               })
             );
             folderChanged(projectId);
-            const problems = rel.startsWith("delegates/")
-              ? readProjectTypes(projectId).problems.filter(
-                  (problem) => problem.path === rel
-                )
-              : [];
-            return ok({
-              ok: true,
-              path: rel,
-              sha: written.sha,
-              ...(problems.length
-                ? {
-                    problems: problems.map((problem) => problem.problem),
-                    note: `${rel} was written but does not make a delegate type yet; fix it and write it again.`,
-                  }
-                : {}),
-            });
+            return ok({ ok: true, path: rel, sha: written.sha });
           }
         ),
         tool(

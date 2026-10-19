@@ -192,6 +192,7 @@
 @custom-variant aria-readonly-false (&[aria-readonly="false"]);
 @custom-variant aria-required-false (&[aria-required="false"]);
 @custom-variant aria-selected-false (&[aria-selected="false"]);
+@custom-variant axis-row (&[data-axis="row"]);
 @custom-variant axis-x (&[data-axis="x"]);
 @custom-variant axis-y (&[data-axis="y"]);
 @custom-variant back-true (&[data-back="true"]);
@@ -240,6 +241,7 @@
 @custom-variant kind-phone (&[data-kind="phone"]);
 @custom-variant kind-stream (&[data-kind="stream"]);
 @custom-variant kind-tablet (&[data-kind="tablet"]);
+@custom-variant kind-tailnet (&[data-kind="tailnet"]);
 @custom-variant kind-you (&[data-kind="you"]);
 @custom-variant lead-expiring (&[data-lead="expiring"]);
 @custom-variant lead-paused (&[data-lead="paused"]);
@@ -266,6 +268,7 @@
 @custom-variant role-label (&[data-role="label"]);
 @custom-variant role-meta (&[data-role="meta"]);
 @custom-variant role-title (&[data-role="title"]);
+@custom-variant scheme-dark (&[data-scheme="dark"]);
 @custom-variant session-hover-tone-done (&[data-session-hover-tone="done"]);
 @custom-variant session-hover-tone-failed (&[data-session-hover-tone="failed"]);
 @custom-variant session-hover-tone-needs (&[data-session-hover-tone="needs"]);
@@ -367,6 +370,7 @@
 @custom-variant slot-field (&[data-slot="field"]);
 @custom-variant slot-field-content (&[data-slot="field-content"]);
 @custom-variant slot-field-label (&[data-slot="field-label"]);
+@custom-variant slot-filed-task (&[data-slot="filed-task"]);
 @custom-variant slot-fill (&[data-slot="fill"]);
 @custom-variant slot-filters (&[data-slot="filters"]);
 @custom-variant slot-finder (&[data-slot="finder"]);
@@ -414,6 +418,7 @@
 @custom-variant slot-md (&[data-slot="md"]);
 @custom-variant slot-mention-chip (&[data-slot="mention-chip"]);
 @custom-variant slot-menu (&[data-slot="menu"]);
+@custom-variant slot-meta (&[data-slot="meta"]);
 @custom-variant slot-mobile (&[data-slot="mobile"]);
 @custom-variant slot-model-pop (&[data-slot="model-pop"]);
 @custom-variant slot-modes (&[data-slot="modes"]);
@@ -428,6 +433,7 @@
 @custom-variant slot-older-rows-box (&[data-slot="older-rows-box"]);
 @custom-variant slot-order (&[data-slot="order"]);
 @custom-variant slot-page-head (&[data-slot="page-head"]);
+@custom-variant slot-page-thumb (&[data-slot="page-thumb"]);
 @custom-variant slot-pair (&[data-slot="pair"]);
 @custom-variant slot-palette-item (&[data-slot="palette-item"]);
 @custom-variant slot-pane (&[data-slot="pane"]);
@@ -504,6 +510,7 @@
 @custom-variant slot-stack (&[data-slot="stack"]);
 @custom-variant slot-stage (&[data-slot="stage"]);
 @custom-variant slot-starters (&[data-slot="starters"]);
+@custom-variant slot-step-number (&[data-slot="step-number"]);
 @custom-variant slot-strategy-picker-card (&[data-slot="strategy-picker-card"]);
 @custom-variant slot-strip (&[data-slot="strip"]);
 @custom-variant slot-stroke (&[data-slot="stroke"]);
@@ -600,6 +607,7 @@
 @custom-variant swipe-out-true (&[data-swipe-out="true"]);
 @custom-variant swiping-true (&[data-swiping="true"]);
 @custom-variant tab-finished (&[data-tab="finished"]);
+@custom-variant theme-dark (&[data-theme="dark"]);
 @custom-variant tone-accent (&[data-tone="accent"]);
 @custom-variant tone-attn (&[data-tone="attn"]);
 @custom-variant tone-bad (&[data-tone="bad"]);

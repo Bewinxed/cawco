@@ -1,13 +1,13 @@
 /**
  * A project's starters: what an empty board (StarterCards) and Caw's panel
- * hero (CawStarters) offer to say to Caw, written for that project from what
+ * hero (StarterCards' rows) offer to say to Caw, written for that project from what
  * it holds now (hub project-starters.ts, asked of Jev in jev-placement.ts).
  * Each carries why it is offered and what in the project it comes from.
  */
 
 /**
  * The kinds of work a starter names, each drawn by the dashboard as its
- * Solar duotone glyph (CawStarters, StarterCards).
+ * Solar duotone glyph (StarterCards).
  */
 export const STARTER_GLYPHS = [
   "brief",

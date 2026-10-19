@@ -6,7 +6,7 @@
    * (`/api/projects/:id/design-offer`). Build files the task; nothing is
    * built before it.
    */
-  import type { DesignOfferState } from "@cawco/core";
+  import { type DesignOfferState, offerWords } from "@cawco/core";
   import { untrack } from "svelte";
   import {
     answerDesignOffer,
@@ -66,28 +66,32 @@
 >
   {#if now?.answer === "open"}
     <Button
-      label="Build"
+      label={offerWords.build}
       onclick={() => act("build")}
       pending={acting === "build"}
-      pendingLabel="Filing…"
+      pendingLabel={offerWords.filing}
       size="xs"
       variant="outline"
     />
     <Button
-      label="Not now"
+      label={offerWords.notNow}
       onclick={() => act("dismiss")}
       pending={acting === "dismiss"}
-      pendingLabel="Not now…"
+      pendingLabel={offerWords.notNowPending}
       size="xs"
       variant="ghost"
     />
   {:else if now?.answer === "built"}
-    <span class="text-size-meta font-normal text-ink-muted">Filed</span>
+    <span class="text-size-meta font-normal text-ink-muted"
+      >{offerWords.filed}</span
+    >
     {#if href}
-      <Button {href} label="Open" size="xs" variant="ghost" />
+      <Button {href} label={offerWords.open} size="xs" variant="ghost" />
     {/if}
   {:else if now?.answer === "dismissed"}
-    <span class="text-size-meta font-normal text-ink-muted">Not now</span>
+    <span class="text-size-meta font-normal text-ink-muted"
+      >{offerWords.notNow}</span
+    >
   {/if}
   {#if problem}
     <p class="basis-full m-0 text-size-meta font-normal text-status-fail-ink">

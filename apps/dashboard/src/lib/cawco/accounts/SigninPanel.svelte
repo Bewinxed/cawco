@@ -89,9 +89,11 @@
     />
   </form>
   {#if flow.problem}
+    <!-- The daemon's sentence, then the CLI's screen lines, each its own line. -->
     <p
       data-slot="error"
-      class="type-meta flex items-start gap-space-2 text-status-fail-ink"
+      class="type-meta flex items-start gap-space-2 text-status-fail-ink whitespace-pre-line wrap-anywhere"
+      data-signin-problem
       id="{codeId}-problem"
       role="alert"
       in:appear

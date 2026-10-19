@@ -103,6 +103,27 @@
 
   const chips = new Map<HTMLElement, () => void>();
 
+  /**
+   * Whether a `<br>` opens a line: one with something after it but the
+   * tail. One that ends its box draws no line of its own (a box's last
+   * `<br>` adds no line), and the field writes its own newlines as "\n" in
+   * text, so a box's last `<br>` is the browser's: the one it keeps in a
+   * line it has emptied (select all and delete). Read as "\n", it made an
+   * empty field a draft of one newline, two lines tall once focused.
+   */
+  function breaks(br: Node): boolean {
+    for (let next = br.nextSibling; next; next = next.nextSibling) {
+      const tailBreak =
+        next instanceof HTMLElement && next.dataset.tail !== undefined;
+      const blank =
+        next.nodeType === Node.TEXT_NODE && (next as Text).data === "";
+      if (!(tailBreak || blank)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** The message as sent: text as typed, each chip as its serialised form. */
   function serialise(node: Node): string {
     let out = "";
@@ -110,19 +131,25 @@
       if (child.nodeType === Node.TEXT_NODE) {
         out += (child as Text).data.replaceAll(" ", " ");
       } else if (child instanceof HTMLElement) {
-        if (child.dataset.mention) {
-          out += child.dataset.mention;
-        } else if (child.dataset.tail !== undefined) {
-          // The line a trailing newline opens, drawn: no character of its own.
-        } else if (child.tagName === "BR") {
-          out += "\n";
-        } else {
-          out +=
-            (child.tagName === "DIV" && out ? "\n" : "") + serialise(child);
-        }
+        out += serialiseElement(child, out);
       }
     }
     return out;
+  }
+
+  /** An element of the field as sent, after `before`: a chip, a break, or a box's text. */
+  function serialiseElement(child: HTMLElement, before: string): string {
+    if (child.dataset.mention) {
+      return child.dataset.mention;
+    }
+    if (child.dataset.tail !== undefined) {
+      // The line a trailing newline opens, drawn: no character of its own.
+      return "";
+    }
+    if (child.tagName === "BR") {
+      return breaks(child) ? "\n" : "";
+    }
+    return (child.tagName === "DIV" && before ? "\n" : "") + serialise(child);
   }
 
   /**
@@ -253,8 +280,9 @@
 
   /**
    * How many characters of the message a piece of the field is: a text's
-   * own, a chip's serialised form, a line break's one; none for the tail
-   * and anything else; null for a box holding more (`serialise`).
+   * own, a chip's serialised form, a line break's one (none for a box's
+   * last, `breaks`); none for the tail and anything else; null for a box
+   * holding more (`serialise`).
    */
   function lengthOf(child: Node): number | null {
     if (child.nodeType === Node.TEXT_NODE) {
@@ -266,7 +294,10 @@
     if (child.dataset.mention) {
       return child.dataset.mention.length;
     }
-    return child.tagName === "BR" ? 1 : null;
+    if (child.tagName === "BR") {
+      return breaks(child) ? 1 : 0;
+    }
+    return null;
   }
 
   function atoms(): Atom[] {

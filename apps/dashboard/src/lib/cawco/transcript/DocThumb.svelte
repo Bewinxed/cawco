@@ -92,7 +92,7 @@
       <svg
         data-slot="ring"
         aria-hidden="true"
-        class="ring size-icon-md m-space-1 -rotate-90"
+        class="size-icon-md m-space-1 -rotate-90"
         viewBox="0 0 24 24"
       >
         <circle

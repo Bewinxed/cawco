@@ -25,7 +25,10 @@
  * A bash script holds one for its own life through heavy-run.sh, which runs
  * this file as `hold <pid> <command…>`: it takes a slot for the shell `pid`
  * (its parent), prints `held` on stdout, and lets the slot go within
- * {@link POLL_MS} once that shell is gone. `count` prints the ceiling and the
+ * {@link POLL_MS} once that shell is gone or it is sent TERM, INT or HUP;
+ * still waiting then, it gives up its place, a landing gate's ticket
+ * included (core heavy-run.ts). A run under a landing gate's step
+ * (`CAWCO_HEAVY_GATE`) waits as a gate. `count` prints the ceiling and the
  * machine's room now.
  */
 import { join } from "node:path";
@@ -34,6 +37,7 @@ import {
   HEAVY_RUN_HELD_ENV,
   type HeavyHolder,
   type HeavyTaken,
+  heavyGate,
   heavyRunsSaid,
   heavyWhere,
   POLL_MS,
@@ -122,6 +126,7 @@ export async function heavySlot(): Promise<HeavySlot> {
         pid: process.pid,
         where: heavyWhere(),
         command: process.argv.slice(1).join(" "),
+        gate: heavyGate(),
       });
       const taken = await taking;
       taking = undefined;
@@ -172,9 +177,22 @@ if (import.meta.main) {
     );
     process.exit(2);
   }
-  const gone = () => parentPid() !== shell;
+  // Stopped the runner's way (TERM to its group), a hold gives up its place
+  // in the line, or its slot, at once, as when its shell is gone.
+  let stopped = false;
+  for (const signal of ["SIGTERM", "SIGINT", "SIGHUP"] as const) {
+    process.on(signal, () => {
+      stopped = true;
+    });
+  }
+  const gone = () => stopped || parentPid() !== shell;
   const taken = await take(
-    { pid: shell, where: heavyWhere(), command: command.join(" ") },
+    {
+      pid: shell,
+      where: heavyWhere(),
+      command: command.join(" "),
+      gate: heavyGate(),
+    },
     gone
   );
   if (taken === undefined) {

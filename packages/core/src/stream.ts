@@ -68,12 +68,16 @@ import type { CarrySessionRequest } from "./harness";
  *    branch of `origin` that held it, where it is cut again, in place of
  *    `landed`, the commit its last landing recorded. No page reads it; a
  *    page built for 12 reloads first all the same.
+ * 14: a machine's `container-runtime` capability says `media`, what the
+ *    runtime forwards to a browser's media port (`udp+tcp`, `tcp` or
+ *    `none`), in place of `udp`. No page reads it; a page built for 13
+ *    reloads first all the same.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 13;
+export const WIRE_PROTOCOL = 14;
 
 /**
  * What a session's stream carries: the changes each frame made to its
@@ -245,9 +249,8 @@ export type StreamClientMessage =
  * Where a frame came from: the sessiond line it was derived from, named by the
  * daemon's per-boot `epoch` and that line's `srcSeq`.
  *
- * Additive on the `frames` message, exactly as this protocol requires of every
- * shape here: an agent that has no sessiond behind it (opencode, pi, a legacy
- * build) sends frames without it, and a hub that predates the field ignores it.
+ * Optional on the `frames` message: a frame that no sessiond line produced
+ * (opencode's and pi's) carries none.
  * The dashboard never sees `srcSeq` and sessiond never sees the hub's `seq` —
  * this is the only place the two sequences touch.
  */
@@ -288,7 +291,14 @@ export interface DeliveryMark {
 
 /** `register`'s ack, with the ledger the returning agent reattaches against. */
 export interface RegisterAckPayload {
-  addressContract?: true;
+  /**
+   * The dashboard's ports: `hub`, where the hub's computer serves it to the
+   * network (hub config.ts `DASHBOARD_PORT`), and `local`, its port on every
+   * computer's loopback (core `localDashboardPort`). The agent serves `local`
+   * on its own loopback, carried to the hub's `hub` (agent hub-loopback.ts),
+   * with {@link previewPorts}.
+   */
+  dashboardPorts: { hub: number; local: number };
   /**
    * The hub's delivery mark for each instance the register names
    * ({@link DeliveryMark}): the agent sends again what it has past it.
@@ -297,19 +307,20 @@ export interface RegisterAckPayload {
    */
   delivered?: Record<string, DeliveryMark>;
   /**
+   * Whether this machine is the hub's own computer: its machine id is the
+   * hub's (hub server.ts `isHubMachine`: "an agent registered under it shares
+   * the hub's disk"). The agent's loopback carries nothing there (agent
+   * hub-loopback.ts): the dashboard's own socket listens on the loopback port.
+   */
+  hostsHub: boolean;
+  /**
    * This hub process, random at its start: an agent that last saw another
    * epoch knows the hub restarted since, and that every connection a harness
    * held to it (OpenCode's MCP streams) went with it.
    */
   hubEpoch: string;
-  /**
-   * Per instance id. ABSENT from a hub that predates this — which is not an
-   * empty ledger: the difference is what stops an agent replaying a backlog
-   * into a hub that never asked for one. Both readings land on the same safe
-   * behaviour (follow from head), and {@link readIngested} keeps them apart
-   * anyway.
-   */
-  ingested?: Record<string, IngestMark>;
+  /** Per instance id: an instance with no mark follows from head. */
+  ingested: Record<string, IngestMark>;
   /**
    * The machine's credential for the hub's git remote (`/git/…`, HTTP Basic
    * `<machineId>:<credential>`), minted for this connection and replaced on
@@ -319,6 +330,8 @@ export interface RegisterAckPayload {
    */
   machineCredential: string;
   ok: true;
+  /** The ports the hub's preview listeners take (hub config.ts `PREVIEW_PORTS`), served on the agent's loopback beside {@link dashboardPorts}. */
+  previewPorts: { first: number; last: number };
   /**
    * The fleet's session limits ({@link import("./index").SessionLimits}), so
    * the first process the machine starts after it connects runs under them.
@@ -436,17 +449,12 @@ export const alreadyDelivered = (
   sent.seq <= mark.seq;
 
 /**
- * The ledger off a register ack. `undefined` when the hub said nothing — an
- * old-shape ack is tolerated, never fatal, and leaves every instance following
- * from head (design §7's honest-loss rule).
+ * The ledger off a register ack, each mark read off the wire: a malformed one
+ * is dropped, which leaves its instance following from head (design §7's
+ * honest-loss rule).
  */
-export const readIngested = (
-  payload: unknown
-): Record<string, IngestMark> | undefined => {
-  const marks = record(record(payload)?.ingested);
-  if (!marks) {
-    return undefined;
-  }
+export const readIngested = (payload: unknown): Record<string, IngestMark> => {
+  const marks = record(record(payload)?.ingested) ?? {};
   const read: Record<string, IngestMark> = {};
   for (const [instanceId, value] of Object.entries(marks)) {
     const mark = record(value);

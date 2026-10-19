@@ -8,9 +8,15 @@
 import { ARTIFACT_NAME, PREVIEW_START_PATH } from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
-import { SERVE_COMMAND_LIMIT, STORY_FILE } from "@cawco/core/stage";
+import {
+  CANVAS_SPEC_LIMITS,
+  DESIGN_MAP_LIMITS,
+  SERVE_COMMAND_LIMIT,
+  STORY_FILE,
+} from "@cawco/core/stage";
 import { z } from "zod";
 import { PAGE_LIMIT } from "../decision-page";
+import { PROGRAM_MAX } from "../decision-program";
 
 /** A workspace id, or the 8-character prefix delegate reports. */
 export const WORKSPACE_ID = /^[0-9a-f][0-9a-f-]{7,35}$/;
@@ -29,7 +35,7 @@ export const ARTIFACT_TOOLS = [
   "comment_read",
   "comment_reply",
   "comment_resolve",
-  "components_list",
+  "design_map",
 ] as const;
 
 /** A story's export name in a CSF file: `Roomy`. */
@@ -62,6 +68,60 @@ const elements = z
     'Excalidraw skeletons, like {"type":"rectangle","id":"api","x":0,"y":0,"width":160,"height":60,"label":{"text":"API"}}; an arrow binds with "start":{"id":"api"}. Your id is the outline\'s.'
   );
 
+/** A story on a canvas: its export, or `file:Story` across states files. */
+const storyRef = z.string().min(1).max(1100);
+
+/** A component canvas's about, edges, groups and dials, as create and update take them. */
+const canvasFields = {
+  about: z
+    .string()
+    .min(1)
+    .max(CANVAS_SPEC_LIMITS.about)
+    .optional()
+    .describe(
+      "A component canvas's purpose, one sentence. Required on create."
+    ),
+  edges: z
+    .array(
+      z.object({
+        from: storyRef,
+        to: storyRef,
+        label: z.string().max(CANVAS_SPEC_LIMITS.label).optional(),
+      })
+    )
+    .max(CANVAS_SPEC_LIMITS.edges)
+    .optional()
+    .describe(
+      'Edges between frames, like [{"from":"Waiting","to":"Scanning"}].'
+    ),
+  group: z
+    .record(storyRef, storyRef)
+    .optional()
+    .describe("Story → its parent story."),
+  dials: z
+    .array(
+      z.object({
+        name: z.string().min(1).max(60),
+        label: z.string().max(CANVAS_SPEC_LIMITS.label).optional(),
+        kind: z.enum(["number", "color", "select", "toggle"]),
+        min: z.number().optional(),
+        max: z.number().optional(),
+        step: z.number().positive().optional(),
+        unit: z.string().max(10).optional(),
+        options: z.array(z.string().max(100)).max(24).optional(),
+        target: z.union([
+          z.object({ cssVar: z.string().regex(/^--[\w-]+$/) }),
+          z.object({ arg: z.string().min(1).max(100) }),
+        ]),
+      })
+    )
+    .max(CANVAS_SPEC_LIMITS.dials)
+    .optional()
+    .describe(
+      'The person\'s controls, like [{"name":"radius","kind":"number","max":24,"unit":"px","target":{"cssVar":"--radius"}}]; a target is a CSS variable or {"arg":…}.'
+    ),
+};
+
 const mermaid = z
   .string()
   .min(1)
@@ -72,29 +132,36 @@ const mermaid = z
 export const artifactCreate = {
   name: "artifact_create",
   description:
-    "Make an artifact and open it in your panel. A page is `html`, or `dir` " +
-    "holding a decision page's page.html (decision-page skill); in a project, neither builds decisions/<name>/page.html " +
-    "from its folder. A sheet is a component's states: `file`, a CSF 3 story file beside the real component " +
-    "(`export default { component, args }`, a named export per state), run on the project's own Vite, Astro or Nuxt. " +
+    "Make an artifact and open it in your panel. A page is `program` (a decision page, decision-page skill) or " +
+    "`html`, or `dir` holding page.oui or page.html; in a project, neither builds decisions/<name>/ from its folder. " +
+    "A component is its canvas: `file`, the CSF 3 states file beside it (or a list), and " +
+    "`about`; every story drawn live in every state its CSS reaches (component-canvas skill). " +
     "A preview is a whole app: a folder (`dir`) or a server on `port`; in a workspace `serve` is its command, which " +
     "CawCo runs there with PORT and keeps up (never start it yourself). Options to pick between: " +
     "design-explore skill first. A canvas is `elements` or `mermaid`, " +
     "or empty for the person. The same kind and name again replaces it, picks kept. " +
-    "Answers its id and `opened` (false: `why`); a folder preview, its `weight`.",
+    "Answers its id and `opened` (false: `why`); a folder preview, its `weight`; a component, each frame as drawn.",
   input: {
-    kind: z.enum(["page", "sheet", "preview", "canvas"]),
+    kind: z.enum(["page", "component", "preview", "canvas"]),
     name: z
       .string()
       .regex(ARTIFACT_NAME)
       .describe("Lowercase letters, digits and dashes, like onboarding."),
+    program: z.string().min(1).max(PROGRAM_MAX).optional(),
     html: z.string().min(1).max(PAGE_LIMIT).optional(),
     file: z
-      .string()
-      .min(1)
-      .max(1000)
-      .regex(STORY_FILE)
+      .union([
+        z.string().min(1).max(1000).regex(STORY_FILE),
+        z
+          .array(z.string().min(1).max(1000).regex(STORY_FILE))
+          .min(1)
+          .max(CANVAS_SPEC_LIMITS.files),
+      ])
       .optional()
-      .describe("From your clone's root."),
+      .describe(
+        "A states file from your workspace's root, else your cwd; a list for a surface of several."
+      ),
+    ...canvasFields,
     dir: z
       .string()
       .startsWith("/")
@@ -149,13 +216,15 @@ export const artifactCreateToParent = {
 export const artifactUpdate = {
   name: "artifact_update",
   description:
-    "Change one of your artifacts in place. `html` replaces a page without a reload; picks, fields, focus and " +
-    "scroll stay. `patch` is a " +
+    "Change one of your artifacts in place. `statements` revises a decision page's program: only the statements " +
+    "that change, merged by name. `html` replaces a page without a reload; picks, fields, focus and scroll stay. " +
+    "`patch` is a " +
     'JSON Patch (RFC 6902) over its state, keyed by choice id or field name, like [{"op":"replace","path":"/hero/options","value":["b"]}]; ' +
     "all of it applies or none. Answers the state after the change. A canvas takes `elements` (added, or replacing " +
     'the one of the id given), `delete` (ids) or `mermaid` (added below); it answers its outline and "<id> changed ' +
-    "under you\" for what you replaced that the person changed since your last read. A sheet's `args` sets a " +
-    "story's values, its `story` adds, duplicates, removes or moves one; each answers the lines it wrote.",
+    "under you\" for what you replaced that the person changed since your last read. A component's `args` sets a " +
+    "story's values, `story` adds, duplicates, removes or moves one; each answers the lines and the story's frames. " +
+    "`about`, `edges`, `group`, `dials` change the canvas.",
   input: {
     id,
     elements,
@@ -184,7 +253,9 @@ export const artifactUpdate = {
       .min(1)
       .max(CANVAS_LIMITS.deletePerCall)
       .optional(),
+    statements: z.string().min(1).max(PROGRAM_MAX).optional(),
     html: z.string().min(1).max(PAGE_LIMIT).optional(),
+    ...canvasFields,
     patch: z
       .array(
         z.object({
@@ -207,13 +278,24 @@ export const artifactRead = {
     "`since` (the `seq` of your last read) returns only what changed after it. No id: your newest. " +
     "When the person sends picks, you are told the `since` to read from. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
-    "the person changed since `since` or your last read; `png: true` adds its picture. A sheet adds " +
-    "`sheet` (stories, args, props), its stage's `status` and `errors`, and `weight` (null until viewed; `heaviest`: " +
-    "the imports to cut); its picks are stories; a served preview, its server's `stage`.",
+    "the person changed since `since` or your last read; `png: true` adds its picture. A component answers each " +
+    "frame as drawn, its moves' animations, its stories, the person's `dials` and `tuned` motion; `state` adds a " +
+    "frame's style delta, `detail: \"story\"` a story's args, `render` draws it now.",
   input: {
     id: id.optional(),
     since: z.number().int().min(0).optional(),
     png: z.boolean().optional(),
+    detail: z.enum(["summary", "story"]).optional(),
+    story: z.string().optional(),
+    state: z
+      .object({
+        story: z.string(),
+        interaction: z.enum(["rest", "hover", "focus", "pressed"]).optional(),
+        scheme: z.enum(["light", "dark"]).optional(),
+        width: z.number().int().positive().optional(),
+      })
+      .optional(),
+    render: z.boolean().optional(),
   },
 };
 
@@ -250,15 +332,25 @@ export const artifactDelete = {
   input: { id },
 };
 
-export const componentsList = {
-  name: "components_list",
+export const designMap = {
+  name: "design_map",
   description:
-    "Your workspace's components a sheet can show, and each one's story files.",
+    "The project's component library: each component's states, frames drawn, and what it is made of and used in. " +
+    "`component` (a file) answers its card: props, stories, moves, call sites. Mount what it lists.",
   input: {
     dir: z
       .string()
+      .min(1)
+      .max(1000)
       .optional()
-      .describe("Only under this folder of your clone."),
+      .describe(
+        "A folder from your workspace's root, like apps/web/src/lib. Omitted, the source folder."
+      ),
+    query: z.string().min(1).max(100).optional(),
+    component: z.string().min(1).max(1000).optional(),
+    limit: z.number().int().min(1).max(DESIGN_MAP_LIMITS.max).optional(),
+    cursor: z.string().max(20).optional(),
+    response_format: z.enum(["concise", "detailed"]).optional(),
   },
 };
 

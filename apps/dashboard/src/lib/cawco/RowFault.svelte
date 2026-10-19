@@ -11,6 +11,11 @@
    * A fault that carries its own reading and remedy (a fleet fault) is drawn
    * as `children` in the same place instead of a reason line.
    *
+   * `details`: what refused it, word for word, where the reason line is the
+   * plain sentence for it (a machine's own error, its paths and ids): Show
+   * details beside the reason unfolds it under the line, in the figure
+   * face, and Hide details folds it away.
+   *
    * It unfolds and folds on its own `{#if}` (motion/fold, `unfold`): mounted
    * already holding a fault (a list row arriving), it stands still and the
    * list's own motion carries it.
@@ -29,10 +34,13 @@
     againPending = "Trying again…",
     class: className,
     children,
+    details,
     ...rest
   }: {
     /** Why it did not go; nothing is drawn while it is empty. */
     reason?: string | null;
+    /** What refused it, word for word, folded under Show details. */
+    details?: string | null;
     /** The way on: run the action again. */
     again?: () => unknown;
     againLabel?: string;
@@ -44,6 +52,9 @@
   } = $props();
 
   let trying = $state(false);
+  /** The details stand unfolded. */
+  let shown = $state(false);
+  const detailsId = $props.id();
   /**
    * What the last `again` threw, and the caller's reason it was thrown over:
    * shown until the next try, or until the caller says something new.
@@ -94,6 +105,20 @@
         >
           {said}
         </p>
+        {#if details}
+          <Button
+            data-details
+            aria-controls={detailsId}
+            aria-expanded={shown}
+            class="flex-none"
+            label={shown ? "Hide details" : "Show details"}
+            onclick={() => {
+              shown = !shown;
+            }}
+            size="xs"
+            variant="ghost"
+          />
+        {/if}
         {#if again}
           <Button
             data-again
@@ -108,6 +133,16 @@
           />
         {/if}
       </div>
+      {#if details && shown}
+        <p
+          id={detailsId}
+          data-slot="details"
+          class="m-0 ps-(--fault-indent) pe-(--fault-end) pb-space-1 type-meta font-mono whitespace-pre-wrap wrap-anywhere text-ink-muted"
+          transition:unfold
+        >
+          {details}
+        </p>
+      {/if}
     {/if}
   </div>
 {/if}

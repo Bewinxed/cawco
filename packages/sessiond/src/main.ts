@@ -9,10 +9,8 @@
  * whenever its job restarts it. Its handover publishes it the first time.
  */
 
-import { lstat, readlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import { readKeeperVersion } from "@cawco/core/binary-installation";
-import { RETIRING_LIST_MS } from "@cawco/core/clock";
 import { detach } from "@cawco/core/detach";
 import { MACHINE_ENDPOINT, publishKeeper } from "@cawco/core/keepers";
 import { runtimeVersion } from "@cawco/core/runtime";
@@ -23,6 +21,7 @@ import {
 } from "@cawco/core/sessiond";
 import { placeChildren } from "./cgroup";
 import { SessiondServer } from "./server";
+import { childCapRefusal } from "./tasks";
 
 const main = async (): Promise<void> => {
   // Read directly: `CAWCO_ENV` has no key for sessiond's own override.
@@ -33,16 +32,6 @@ const main = async (): Promise<void> => {
   if (sessiondHomePath(endpoint) !== endpoint) {
     sessiondLinkDir();
   }
-  // The machine's endpoint as a symlink is a build's keeper's: one started on
-  // it (a legacy keeper's unit, restarted after its keeper was retired) would
-  // take it over, or refuse it again every two seconds. Nothing here is
-  // wanted, and an exit of 0 is not restarted.
-  if ((await lstat(endpoint).catch(() => undefined))?.isSymbolicLink()) {
-    console.log(
-      `[sessiond] ${endpoint} names the keeper at ${await readlink(endpoint)}; this keeper is not wanted, and exits`
-    );
-    process.exit(0);
-  }
   // Linux only: macOS has no cgroups, and limits threads per process, so the
   // children there cannot take the keeper's.
   const placement =
@@ -50,20 +39,15 @@ const main = async (): Promise<void> => {
   if (placement) {
     console.log(`[sessiond] ${placement.said}`);
   }
+  // Said once at the start: a keeper that cannot cap its children's tasks
+  // starts none, and each spawn it refuses says why.
+  const uncapped = await childCapRefusal();
+  if (uncapped) {
+    console.error(`[sessiond] no child will start: ${uncapped}`);
+  }
   const server = new SessiondServer({
     build: { version: runtimeVersion, startedAt: Date.now() },
     ...(placement?.children ? { children: placement.children } : {}),
-    // The stage 2 proof's pace alone (clock.ts): a keeper the `keeper` link no
-    // longer names, a retiring one, answers each `list` that late.
-    ...(RETIRING_LIST_MS > 0
-      ? {
-          listLate: async () =>
-            basename(endpoint) !== MACHINE_ENDPOINT &&
-            ((await readKeeperVersion()) ?? runtimeVersion) !== runtimeVersion
-              ? RETIRING_LIST_MS
-              : 0,
-        }
-      : {}),
   });
   await server.listen(endpoint);
   console.log(

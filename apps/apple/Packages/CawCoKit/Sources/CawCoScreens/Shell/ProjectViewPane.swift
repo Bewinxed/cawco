@@ -13,10 +13,13 @@ import WebKit
 /// same-origin reads, which the dashboard hands to the hub, as the hub's API
 /// is reached from this app with no credential of its own. A task tapped in
 /// the view opens the app's task sheet: the route posts `cawco:open-task`
-/// to the `cawco` handler here.
+/// to the `cawco` handler here. A link to a file of the project's folder
+/// (the project page's `?file=`) opens the app's file sheet.
 final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandler {
     /// A task tapped in the view.
     var onOpenTask: (String) -> Void = { _ in }
+    /// A link to a file of the project's folder, by its path.
+    var onOpenFile: (String) -> Void = { _ in }
     /// Keep and Discard: the hub's refusal is thrown back, and said under the bar.
     var keep: (String) async throws -> Void = { _ in }
     var discard: (String) async throws -> Void = { _ in }
@@ -298,18 +301,22 @@ final class ProjectViewPane: UIView, WKNavigationDelegate, WKScriptMessageHandle
         failed(error.localizedDescription)
     }
 
-    /// The page stays on its view: a link to the project's page on a task
-    /// opens the app's sheet, and nothing else leaves the route.
+    /// The page stays on its view: a link to the project's page on a task or
+    /// a file of its folder opens the app's sheet, and nothing else leaves
+    /// the route.
     func webView(_: WKWebView, decidePolicyFor action: WKNavigationAction, decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
         // Only the page itself is held to its route; a frame inside it is the page's own business.
         guard action.targetFrame?.isMainFrame != false else { return decisionHandler(.allow) }
         guard let url = action.request.url, let loaded else { return decisionHandler(.cancel) }
         if url.host() == loaded.host(), url.port == loaded.port {
             if url.path() == loaded.path() { return decisionHandler(.allow) }
-            if url.path() == "/project/\(projectId)",
-               let task = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems?.first(where: { $0.name == "task" })?.value {
-                onOpenTask(task)
-                return decisionHandler(.cancel)
+            if url.path() == "/project/\(projectId)" {
+                let query = URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? []
+                if let file = query.first(where: { $0.name == "file" })?.value, !file.isEmpty {
+                    onOpenFile(file)
+                } else if let task = query.first(where: { $0.name == "task" })?.value {
+                    onOpenTask(task)
+                }
             }
         }
         decisionHandler(.cancel)

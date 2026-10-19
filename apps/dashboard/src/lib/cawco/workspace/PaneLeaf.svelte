@@ -504,7 +504,7 @@
             active={isActive}
             browsing={ctx?.machine ?? null}
             browsingCwd={ctx?.cwd ?? ""}
-            browsingHarness={ctx?.harness ?? "claude"}
+            browsingHarness={ctx?.harness}
             focused={false}
             serverTail={paneId === page.params.id
               ? ((page.data as { tail?: ServerTail | null }).tail ?? null)

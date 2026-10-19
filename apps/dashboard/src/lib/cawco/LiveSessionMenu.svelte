@@ -18,7 +18,6 @@
    */
   import {
     CONTROL_SPIN_OFF_HELD,
-    type HarnessKind,
     holdsNothing,
     machineLabel,
     type SpinOffHeld,
@@ -138,9 +137,7 @@
       machineId: machine.machineId,
       cwd: session?.cwd || instance.cwd,
       sessionId: forkable,
-      harness: (session?.harness ??
-        instance.harness ??
-        "claude") as HarnessKind,
+      harness: instance.harness,
     });
     await goto(
       conversationHref(
@@ -193,7 +190,7 @@
             instance.machineId,
             sessionId,
             instance.cwd || undefined,
-            (instance.harness ?? undefined) as HarnessKind | undefined
+            instance.harness
           ),
           "whether the transcript was deleted is not known"
         ),
@@ -351,7 +348,7 @@
           instanceId: instance.id,
           machineId: instance.machineId,
           cwd: instance.cwd,
-          harness: (instance.harness ?? "claude") as HarnessKind,
+          harness: instance.harness,
           model: instance.model ?? undefined,
           title: sessionName(instance.id, {}, instance.cwd).label,
         })}

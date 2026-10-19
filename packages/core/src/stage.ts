@@ -1,19 +1,193 @@
 /**
  * Live components (Projects spec D29, `2026-10-16-live-components.md`): a
- * component exists once, as the project's real file, and a sheet is a CSF 3
- * story file beside it (`Who.stories.ts`). One stage per workspace's Vite
- * root runs the project's own dev toolchain inside the workspace's boundary
- * with CawCo's plugin added (agent `stage.ts`, `stage-host/`), and serves the
- * sheet at {@link SHEET_PATH}; the hub shows it as a `sheet` artifact through
- * the workspace's port preview. These are the shapes every hop speaks: the
+ * component exists once, as the project's real file, and its states file is
+ * a CSF 3 story file beside it (`Who.stories.ts`). One stage per workspace's
+ * Vite root runs the project's own dev toolchain inside the workspace's
+ * boundary with CawCo's plugin added (agent `stage.ts`, `stage-host/`), and
+ * serves the component canvas at {@link CANVAS_PATH}: every story mounted
+ * live in every interaction state its CSS reaches; the hub shows it as a
+ * `component` artifact through the workspace's port preview. These are the shapes every hop speaks: the
  * daemon's answer to {@link STAGE_ENSURE}, the {@link StageFrame} it sends on
  * each change, and the state the hub keeps in the sheet's doc (`meta.stage`).
  * A workspace preview's server ({@link ServeSpec}) runs on the same
  * supervision, and its preview's doc keeps its state the same way.
  */
 
-/** Where a stage serves a sheet: `?file=<story file, from the toolchain root>`. Outside the hub's own `/__cawco/`, after Vite's `/@vite/`. */
-export const SHEET_PATH = "/@cawco/sheet";
+/**
+ * Where a stage serves a component canvas: `?file=<states file, from the
+ * toolchain root>`, once per section, and `spec=<CanvasSpec JSON>`. Outside
+ * the hub's own `/__cawco/`, after Vite's `/@vite/`.
+ */
+export const CANVAS_PATH = "/@cawco/canvas";
+
+/** Where a canvas page posts its {@link RenderReport} (`POST`), beside the page so a panel's preview reaches it. */
+export const RENDERED_PATH = "/@cawco/rendered";
+
+/** Where the daemon reads a canvas's newest {@link RenderReport} (`?file=…` per section), next to the stage. */
+export const REPORT_PATH = "/__cawco/report";
+
+/** The daemon's control method that draws a canvas in the machine's browser when no panel has (agent `stage-render.ts`). */
+export const STAGE_RENDER = "stageRender";
+
+/** How long a daemon's render of a canvas may take, page load to the last section's report, past the stage's own start. Ours: a screen's first load transforms its modules. */
+export const STAGE_RENDER_MS = 90_000;
+
+/** The states the canvas derives from a component's CSS, never authored: `rest` is the story as mounted. */
+export type Interaction = "rest" | "hover" | "focus" | "pressed";
+export const INTERACTIONS: readonly Interaction[] = [
+  "rest",
+  "hover",
+  "focus",
+  "pressed",
+];
+
+export type Scheme = "light" | "dark";
+
+/** The width presets a frame takes when its story names no viewport of its own. Ours, DESIGN.md's breakpoints. */
+export const FORMS = { phone: 390, tablet: 768, desk: 1280 } as const;
+export type FormName = keyof typeof FORMS;
+
+/** A story's form: a preset's name and width, or a width of its own (`custom`). */
+export interface Form {
+  name: FormName | "custom";
+  width: number;
+}
+
+/** What a browser drew of one frame: `unseen` until one drew it since its file last changed. */
+export type FrameState = "drawn" | "empty" | "failed" | "unseen";
+
+/** Where a page's code threw, 1-based, the file from the toolchain root when it is the project's. */
+export interface PageError {
+  column: number | null;
+  file: string | null;
+  line: number | null;
+  message: string;
+}
+
+/** One animation the engine ran, as `getAnimations()` reports it: ms, CSS easing. */
+export interface AnimationRead {
+  delay: number;
+  duration: number;
+  easing: string;
+  kind: "transition" | "animation" | "web";
+  /** Its CSS property, or its keyframes' properties, or its `@keyframes` name. */
+  property: string;
+  /** Since the move began, ms. */
+  start: number;
+  /** The element it ran on, as `tag.class` with its source when the dev build marks it. */
+  target: string;
+}
+
+/** One element whose computed style changed between rest and a forced state. */
+export interface StyleDelta {
+  changed: Record<string, [string, string]>;
+  selector: string;
+  /** Its source, `file:line:column` from the toolchain root, when the dev build marks it. */
+  source: string | null;
+}
+
+/** A component a frame drew: its name, its file and where it is used. */
+export interface PartUse {
+  /** Where it is called, `file:line:column`; null when it is the story's own. */
+  at: string | null;
+  file: string;
+  name: string;
+}
+
+/** One frame: a story drawn at one point of interaction × scheme × width. */
+export interface FrameRender {
+  /** Its box on the canvas, unscaled. */
+  box: { h: number; w: number; x: number; y: number };
+  /** The forced state's computed-style delta from rest, the transitions it fired with it; rest has none. */
+  delta?: { animations: AnimationRead[]; changed: StyleDelta[] };
+  error?: PageError;
+  form: string;
+  interaction: Interaction;
+  label: string | null;
+  /** The component files whose elements it drew, each with its call site. */
+  parts: PartUse[];
+  scheme: Scheme;
+  state: FrameState;
+  story: string;
+  /** Its first words, at most 80 characters. */
+  text: string;
+  width: number;
+}
+
+/** A flow move as a browser played it: the animations it fired, or why it did not run. */
+export interface MoveRender {
+  animations: AnimationRead[];
+  error?: PageError;
+  from: string;
+  to: string;
+}
+
+/** One states file's section of a canvas, as a browser drew it. */
+export interface SectionRender {
+  file: string;
+  frames: FrameRender[];
+  /** The content hash of the states file and the components it mounts it was drawn from. */
+  hash: string;
+  moves: MoveRender[];
+  /** Interaction selectors the canvas could not force (§7.1): their columns are not drawn. */
+  notForced: string[];
+  title: string;
+}
+
+/**
+ * What a browser drew of a canvas: the page's own errors, each section
+ * drawn, and the stories with no doc comment. Posted by the canvas page
+ * itself to {@link RENDERED_PATH}; the stage keeps the newest per states
+ * file and answers it at {@link REPORT_PATH}, every frame `unseen` once the
+ * file or a component it mounts changed since.
+ */
+export interface RenderReport {
+  at: string;
+  by: "panel" | "stage";
+  page: { errors: PageError[] };
+  sections: SectionRender[];
+  /** `File:Story` of each story with no doc comment: drawn by its export name alone. */
+  unnamed: string[];
+}
+
+/** A layout edge an agent declares between two frames (by story, `file:Story` when the canvas has several sections). */
+export interface CanvasEdge {
+  from: string;
+  label?: string;
+  to: string;
+}
+
+/** A property dial an agent declares on a canvas: a CSS variable on every frame, or an arg re-rendered through `update`. */
+export interface CanvasDial {
+  kind: "number" | "color" | "select" | "toggle";
+  label?: string;
+  max?: number;
+  min?: number;
+  name: string;
+  options?: string[];
+  step?: number;
+  target: { cssVar: string } | { arg: string };
+  unit?: string;
+}
+
+/** What a canvas page is told besides its files: what it is for, the agent's edges and groups, its dials. */
+export interface CanvasSpec {
+  about?: string;
+  dials?: CanvasDial[];
+  edges?: CanvasEdge[];
+  /** Story → the parent story or section heading it groups under. */
+  group?: Record<string, string>;
+  name?: string;
+}
+
+/** The bounds a canvas spec keeps. Ours. */
+export const CANVAS_SPEC_LIMITS = {
+  about: 240,
+  dials: 24,
+  edges: 100,
+  files: 24,
+  label: 80,
+} as const;
 
 /** Where the daemon reads a sheet's stories next to the stage; never through the hub. */
 export const STORIES_PATH = "/__cawco/stories";
@@ -34,16 +208,27 @@ export const WEIGHT_PATH = "/__cawco/weight";
  * so a sheet has a weight once a view has loaded it.
  */
 export interface SheetWeight {
+  /** The budget a component's states file keeps (the component-canvas skill's); a screen is judged against the page's ceiling instead. */
+  budget: { bytes: number; modules: number };
   /** Project code: its modules and their transformed bytes. */
   bytes: number;
+  /** Where to cut, one sentence: the import, or the seam in the component when it is the component's own; null under budget. */
+  cut: string | null;
   deps: { bytes: number; modules: number };
   heaviest: SheetImport[];
   measuredAt: string;
   modules: number;
+  /** Past the component budget. */
+  over: boolean;
 }
+
+/** A component's states file's budget. The component-canvas skill's numbers. */
+export const COMPONENT_BUDGET = { modules: 250, bytes: 1_000_000 } as const;
 
 /** One of a story file's imports, as its sheet's weight names it. */
 export interface SheetImport {
+  /** The modules it imports directly that bring the most, each with all it brings: where its weight enters. */
+  brings: { bytes: number; file: string; modules: number }[];
   bytes: number;
   /** The module it resolves to, from the toolchain root. */
   file: string;
@@ -100,6 +285,15 @@ export const STAGE_UNSERVE = "stageUnserve";
 
 /** How long a stage has to answer once started. The spec's number. */
 export const STAGE_READY_MS = 60_000;
+
+/** How long a place's stage clone's git may take, each cut or step (agent `stage-clone.ts`). Ours: a one-commit fetch from the same disk. */
+export const STAGE_CLONE_GIT_MS = 60_000;
+
+/** How long a place's stage clone's install inside its boundary may take (agent `stage-clone.ts` `installAt`). Ours. */
+export const STAGE_CLONE_INSTALL_MS = 180_000;
+
+/** How long a place's stage clone may take before its stage starts (agent `stage-clone.ts`): its git, then its project's install (`installStage`). */
+export const STAGE_CLONE_MS = STAGE_CLONE_GIT_MS + STAGE_CLONE_INSTALL_MS;
 
 /** How often the daemon asks a running stage whether it serves. The spec's number. */
 export const STAGE_HEALTH_MS = 15_000;
@@ -162,8 +356,26 @@ export interface Story {
   column: number;
   /** The story's own component, from the toolchain root, when it names one apart from the meta's. */
   component: string | null;
+  /** Its form, from `parameters.viewport` (the story's, else the meta's); null when it names none. */
+  form: Form | null;
+  /** The story its flow move starts from (`from`), when it declares one with a `play`. */
+  from: string | null;
+  /** Its doc comment in plain words, the frame's label; null when it has none (`unnamed`). */
+  label: string | null;
   line: number;
   name: string;
+  /** Whether it has a `play`: with `from`, a flow move. */
+  play: boolean;
+  /**
+   * Why the inspector can't write this story's args, when it can't; null
+   * when it can. `read` false: the story file builds it with code the
+   * reader can't follow (an imported helper, a computed value), so
+   * `component` and `args` say nothing of it, though it mounts all the same;
+   * `reason` says "args not readable here" and why. `read` true: its
+   * component and args were read through a spread or a local helper,
+   * shared code that is edited in the file.
+   */
+  readOnly: { read: boolean; reason: string } | null;
 }
 
 /** What a story file's default export says every story shares: its args, and the component each mounts unless it names its own. */
@@ -172,6 +384,8 @@ export interface SheetMeta {
   code: Record<string, string>;
   /** The component, from the toolchain root; null when the meta names none the stage could resolve. */
   component: string | null;
+  /** CSF's `title`, the section's path (`Settings/Pairing`); null when it has none. */
+  title: string | null;
 }
 
 /**
@@ -278,6 +492,8 @@ export type StoryOp =
 /** What a write did: the story file's lines it changed (1-based, as written), and the sheet as it reads after. */
 export interface SheetWritten {
   file: string;
+  /** The project's formatter that shaped the changed statement, like "prettier 3.9.10"; null when the project has none. */
+  formatted: string | null;
   lines: { from: number; to: number };
   sheet: SheetRead;
 }
@@ -290,19 +506,97 @@ export interface Found {
 }
 
 /**
- * A stage as the hub keeps it in each of its sheets' docs (`meta.stage`):
- * where it is, the toolchain root it runs (from the clone's root), why it failed
- * when it did, and the compile errors standing now.
+ * What `design_map` asks the stage (component canvas §4): the components
+ * under `dir` (from the toolchain root; omitted, its source folder), those
+ * whose name holds `query`, or the one card of `component` (a file);
+ * `limit` at a time from `cursor`, each a count line or (`detailed`) its
+ * card.
  */
-export interface StageState {
+export interface DesignQuery {
+  component?: string;
+  cursor?: string;
+  detailed?: boolean;
+  dir?: string;
+  limit?: number;
+  query?: string;
+}
+
+/** A design map's page bounds. The design's numbers. */
+export const DESIGN_MAP_LIMITS = { limit: 50, max: 200 } as const;
+
+/** Where a component is used, or what it renders: the other component, and the call site when a draw saw it. */
+export interface DesignLink {
+  at: string | null;
+  file: string;
+  name: string;
+}
+
+/** A component in the library, as the map answers it: counts, or its card. */
+export interface DesignCard {
+  /** Frames a browser drew of its states (rest and forced), from the stage's reports. */
+  drawn: number;
+  file: string;
+  madeOf: number | DesignLink[];
+  /** Flow moves its states files declare (`from` + `play`), detailed only. */
+  moves?: { from: string; to: string }[];
+  name: string;
+  /** Its props as docgen reads them, for one component's card only. */
+  props?: PropMeta[];
+  /** Stories across its states files. */
+  states: number;
+  /** Its states files, detailed only. */
+  statesFiles?: string[];
+  stories?: {
+    drawn: boolean;
+    interactions: Interaction[];
+    label: string | null;
+    name: string;
+  }[];
+  usedIn: number | DesignLink[];
+}
+
+/** A page of the design map. */
+export interface DesignMap {
+  components: DesignCard[];
+  /** The folder the page covers, from the toolchain root. */
+  dir: string;
+  has_more: boolean;
+  next_cursor: string | null;
+  /** The toolchain root, from the clone's root. */
+  root: string;
+  /** What to do when the page was cut, one sentence. */
+  steer?: string;
+  total: number;
+}
+
+/** What every stage's state says: where it is, where it runs, why it failed when it did, the compile errors standing now. */
+interface StageStateOf {
   at: string;
-  /** The toolchain root, from the clone's root ("." for the root itself). */
+  /** Where it runs from the clone's root ("." for the root itself): a sheet's toolchain root, a server's `cwd`. */
   dir: string;
   errors: StageError[];
   /** Why it is in `error`, one sentence; none otherwise. */
   message?: string;
   status: StageStatus;
 }
+
+/** A sheet's stage: the project's own dev toolchain on its toolchain root. */
+export interface SheetStageState extends StageStateOf {
+  runs: "sheet";
+  toolchain: StageToolchain;
+}
+
+/** A workspace preview's server: the command its preview names (`serve`). */
+export interface ServerStageState extends StageStateOf {
+  runs: "serve";
+}
+
+/**
+ * A stage as the hub keeps it in each of its artifacts' docs (`meta.stage`),
+ * as the daemon states it: a sheet's, with the toolchain it runs, or a
+ * workspace preview's server's.
+ */
+export type StageState = SheetStageState | ServerStageState;
 
 /** The daemon's word on each change of a stage: every artifact of the workspace's that previews its port hears it. */
 export interface StageFrame {
@@ -313,6 +607,26 @@ export interface StageFrame {
   workspace: string;
 }
 
+/**
+ * The daemon's word that a place's stage clone (agent `stage-clone.ts`) is
+ * cut and in step, sent on each use: the hub files it as a workspace of the
+ * stage kind (schema `workspaces.stageFor`), which its retire sweep settles
+ * once the place's stage sleeps.
+ */
+export interface StageCloneFrame {
+  /** The clone's workspace id (core workspace-policy.ts `stageCloneId`). */
+  id: string;
+  kind: "stage-clone";
+  /** The clone's root. */
+  path: string;
+  /** The place whose sheets' stage runs in it. */
+  place: string;
+  /** The repository root of the checkout it was cut from. */
+  repoRoot: string;
+  /** Its scratch dir, its commands' `TMPDIR`. */
+  tmp: string;
+}
+
 /** The daemon's answer to {@link STAGE_ENSURE}: the stage's port, root and state, and the sheet as it reads. */
 export interface StageOpened {
   /** The toolchain root, from the clone's root. */
@@ -320,6 +634,8 @@ export interface StageOpened {
   /** The sheet's story file, from the toolchain root. */
   file: string;
   port: number;
+  /** What a browser last drew of the canvas's states files, each `unseen` since its file or a component it mounts changed. */
+  report: RenderReport;
   sheet: SheetRead;
   state: StageState;
   /** What the sheet loads; null until a view has loaded it. */
@@ -327,8 +643,9 @@ export interface StageOpened {
 }
 
 /**
- * What the sheet's page tells the pane on each run and each props refresh
- * (`cawco:sheet`, through the overlay): the sheet as the stage read it.
+ * What the canvas page tells the pane on each run and each props refresh
+ * (`cawco:sheet`, through the overlay): the section in view, as the stage
+ * read it.
  */
 export interface SheetOnPage extends SheetRead {
   file: string;

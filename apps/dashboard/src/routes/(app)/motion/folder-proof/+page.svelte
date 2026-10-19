@@ -198,7 +198,7 @@
   });
 
   /** The drawer layout, where the home is the phone's page, not the rail's. */
-  const phone = new MediaQuery("(max-width: 899px)");
+  const phone = new MediaQuery("(width < 900px)");
 
   const scheme = $derived(
     page.url.searchParams.get("theme") === "dark" ? "dark" : "light"

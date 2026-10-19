@@ -34,12 +34,11 @@ public enum ModelCatalog {
 
     /// A harness's models (models.svelte.ts `catalog` through model-catalog.ts
     /// `modelsForHarness`): what the machines report, and for Claude each
-    /// account's catalog on the machines it is signed in on, else what a
-    /// running session of it answered; one row a model id; given `machineIds`,
-    /// a reported row only when every one of them reports it, since a spawn
-    /// resolves its model on the machine it runs on; given `accountId`, only
-    /// that account's. Claude rows carry the context window the hub has seen
-    /// a turn report.
+    /// account's catalog on the machines it is signed in on; one row a model
+    /// id; given `machineIds`, a row only when every one of them reports it,
+    /// since a spawn resolves its model on the machine it runs on; given
+    /// `accountId`, only that account's. Claude rows carry the context window
+    /// the hub has seen a turn report.
     @MainActor
     public static func models(_ fleet: FleetStore, harness: String, machineIds: [String], accountId: String? = nil) -> [Components.Schemas.ModelInfo] {
         var reported: [(machineId: String, model: Components.Schemas.ModelInfo)] = []
@@ -63,15 +62,11 @@ public enum ModelCatalog {
         }
         var seen = Set<String>()
         var rows: [Components.Schemas.ModelInfo] = []
-        if reported.isEmpty {
-            rows = SpawnMemory.offered(harness).filter { seen.insert($0.value).inserted }
-        } else {
-            for row in reported where !seen.contains(row.model.value) {
-                let everywhere = machineIds.allSatisfy { id in reported.contains { $0.machineId == id && $0.model.value == row.model.value } }
-                guard everywhere else { continue }
-                seen.insert(row.model.value)
-                rows.append(row.model)
-            }
+        for row in reported where !seen.contains(row.model.value) {
+            let everywhere = machineIds.allSatisfy { id in reported.contains { $0.machineId == id && $0.model.value == row.model.value } }
+            guard everywhere else { continue }
+            seen.insert(row.model.value)
+            rows.append(row.model)
         }
         guard harness == "claude" else { return rows }
         return rows.map { row in
@@ -81,29 +76,32 @@ public enum ModelCatalog {
         }
     }
 
-    /// Asks a running session of `harness` what it offers, when no machine
-    /// reports that harness's catalog (models.svelte.ts `ensureModels`): each
-    /// session once a launch, until one answers. Returns whether the list changed.
+    /// Why `harness` offers nothing to pick on `machineIds` (every machine
+    /// when none are named), or nil when it offers something or nothing says
+    /// why (models.svelte.ts `unread`): each machine that could not read its
+    /// catalog, in its own words; for Claude, the hub's last probe of each
+    /// account signed in there whose models it could not read, or that it has
+    /// not read them yet (it tries again until it can).
     @MainActor
-    public static func ensure(_ hub: HubConnection, harness: String) async -> Bool {
-        let reported = hub.fleet.machines.contains { machine in
-            (machine.harnesses ?? []).contains { $0.harness.rawValue == harness && !($0.models ?? []).isEmpty }
-        }
-        // Claude's catalogs are its accounts', which the hub keeps.
-        let described = reported || (harness == "claude" && !(hub.fleet.accounts?.catalogs.isEmpty ?? true))
-        guard !described else { return false }
-        let candidates = hub.fleet.rows.filter { $0.status == .running && ($0.harness ?? "claude") == harness && !asked.contains($0.id) }
-        for row in candidates {
-            asked.insert(row.id)
-            if let list = try? await hub.supportedModels(instanceId: row.id, machineId: row.machineId) {
-                SpawnMemory.setOffered(harness, list)
-                return true
+    public static func unread(_ fleet: FleetStore, harness: String, machineIds: [String]) -> String? {
+        guard models(fleet, harness: harness, machineIds: machineIds).isEmpty else { return nil }
+        let machines = fleet.machines.filter { machineIds.isEmpty || machineIds.contains($0.machineId) }
+        let said: [String]
+        if harness == "claude" {
+            let accounts = Set((fleet.accounts?.signins ?? []).filter { signin in
+                signin.state == .signedIn && machines.contains { $0.machineId == signin.machineId }
+            }.map(\.accountId))
+            guard !accounts.isEmpty else { return nil }
+            said = (fleet.accounts?.catalogFaults ?? []).filter { accounts.contains($0.accountId) }.map(\.reason)
+            if said.isEmpty { return "The hub hasn't read the models of the Claude accounts signed in here yet. It tries again until it can." }
+        } else {
+            said = machines.compactMap { machine in
+                machine.harnesses?.first { $0.harness.rawValue == harness }?.modelsUnread.map { "\(machine.name): \($0)" }
             }
+            if said.isEmpty { return nil }
         }
-        return false
+        return "\(harnessName(harness))'s models couldn't be read. " + said.joined(separator: " ")
     }
-
-    @MainActor private static var asked = Set<String>()
 
     // MARK: Continue in new session (core continuation.ts)
 
@@ -305,20 +303,6 @@ public enum SpawnMemory {
         let id = model.trimmingCharacters(in: .whitespaces)
         guard !id.isEmpty else { return }
         write(Array(([id] + typed.filter { $0 != id }).prefix(5)), recentKey)
-    }
-
-    /// What a running session of each harness answered, for harnesses no
-    /// machine reports (models.svelte.ts `store.offered`, under the same key's prefix).
-    private static let offeredKey = "cawco-models:by-harness"
-
-    public static func offered(_ harness: String) -> [Components.Schemas.ModelInfo] {
-        (read([String: [Components.Schemas.ModelInfo]].self, offeredKey) ?? [:])[harness] ?? []
-    }
-
-    static func setOffered(_ harness: String, _ models: [Components.Schemas.ModelInfo]) {
-        var all = read([String: [Components.Schemas.ModelInfo]].self, offeredKey) ?? [:]
-        all[harness] = models
-        write(all, offeredKey)
     }
 
     /// Claude models' context windows as the hub last saw a turn report them,

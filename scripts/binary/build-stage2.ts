@@ -1,5 +1,5 @@
 /**
- * Builds what prove-stage2.sh needs into OUTPUT: the proof's key pair and three
+ * Builds what prove-stage2.sh needs into OUTPUT: the proof's key pair and two
  * real linux-x64 builds of the repository's entry point, each with that key's
  * public half embedded as the release key and the stub harnesses linked in
  * (and with them the proof clock, scripts/binary/proof-clock.ts). Usage:
@@ -9,18 +9,14 @@
  * overlay) are prepared already, as build-binary.ts's flag of that name says;
  * release.ts passes it after its own proof build prepared them.
  *
- * - cawco-1, 0.0.1-test.1: built from {@link BEFORE_SIDE_BY_SIDE}, the last
- *   commit whose machines run one session keeper, `cawco-sessiond.service`,
- *   on the machine's endpoint itself, as the fleet's machines were installed.
- *   Only the legacy rig installs it, so the fleet's own first update runs.
- * - cawco-2, 0.0.1-test.2: this tree. Every other rig installs it.
+ * - cawco-2, 0.0.1-test.2: this tree. Every rig installs it.
  * - cawco-3, 0.0.1-test.3: this tree again, newer: the build each rig updates to.
  *
  * KEPT BETWEEN RUNS, in the proof cache (`CAWCO_PROOF_CACHE`, default
  * ~/.cache/cawco-proof). The key pair is made once and kept there, mode 0600:
  * it signs only the proof's fixtures, and only proof builds trust it; the
- * release key is never in reach of this script (release.ts holds it). Build 1
- * is made once per key, for its commit never changes. Builds 2 and 3 are kept
+ * release key is never in reach of this script (release.ts holds it). Builds
+ * 2 and 3 are kept
  * per tree (`git rev-parse HEAD^{tree}`) of a clean checkout, so a proof run
  * again at the same commit compiles nothing; a checkout with changes always
  * compiles them.
@@ -28,25 +24,11 @@
  * A heavy run: it holds one of the machine's slots (lib/heavy-run.ts) for
  * its whole life, waiting for one when all are held.
  */
-import { copyFile, mkdir, rename, rm } from "node:fs/promises";
-import { createRequire } from "node:module";
+import { copyFile, mkdir, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { buildBinary, packageDir } from "../build-binary";
+import { buildBinary } from "../build-binary";
 import { heavySlot } from "../lib/heavy-run";
-import { stageNativeClaude } from "./native-tarball";
-
-/** The commit before keepers ran side by side (packages/core/src/keepers.ts). */
-const BEFORE_SIDE_BY_SIDE = "eedffee6d89def230ba998aae49f289269abab43";
-
-/** The Claude Agent SDK version installed in the tree whose agent package is `agentManifest`. */
-const agentSdkVersion = async (agentManifest: string): Promise<string> => {
-  const manifest = join(
-    packageDir("@anthropic-ai/claude-agent-sdk", createRequire(agentManifest)),
-    "package.json"
-  );
-  return JSON.parse(await Bun.file(manifest).text()).version;
-};
 
 const [, , output] = Bun.argv;
 if (!output?.startsWith("/")) {
@@ -105,75 +87,6 @@ const publicKey = (
 ).trim();
 const keyId = hash(publicKey);
 
-// Build 1: that commit's own tree (a git worktree: its build reads git), its dependencies installed, built by its
-// own build script; the worktree is removed once the build is made.
-const buildOne = join(
-  cache,
-  "build-1",
-  `${BEFORE_SIDE_BY_SIDE.slice(0, 12)}-${keyId}`,
-  "cawco"
-);
-if (!(await exists(buildOne))) {
-  const before = join(cache, "before-side-by-side");
-  const removeBefore = async () => {
-    await run([
-      "git",
-      "-C",
-      repository,
-      "worktree",
-      "remove",
-      "--force",
-      before,
-    ]).catch(() => undefined);
-    await rm(before, { recursive: true, force: true });
-    await run(["git", "-C", repository, "worktree", "prune"]);
-  };
-  await removeBefore();
-  await run([
-    "git",
-    "-C",
-    repository,
-    "worktree",
-    "add",
-    "--detach",
-    before,
-    BEFORE_SIDE_BY_SIDE,
-  ]);
-  try {
-    await run([process.execPath, "install", "--frozen-lockfile"], before);
-    // That commit predates CawCo using the installed Claude Code: its build
-    // script still embeds the SDK's native CLI, and downloads it unless it
-    // finds one already extracted in its work dir. Put it there from the
-    // verified cache, so a dropped npm connection never fails the proof.
-    const beforeSdk = await agentSdkVersion(
-      join(before, "packages/agent/package.json")
-    );
-    await stageNativeClaude(
-      "linux-x64",
-      beforeSdk,
-      join(before, ".context/binary-build/native", beforeSdk, "linux-x64")
-    );
-    const { buildBinary: buildBefore } = (await import(
-      join(before, "scripts/build-binary.ts")
-    )) as {
-      buildBinary: typeof buildBinary;
-    };
-    await buildBefore({
-      target: "linux-x64",
-      outfile: join(before, "cawco-1"),
-      version: "0.0.1-test.1",
-      commit: "1111111111111111111111111111111111111111",
-      testPublicKey: publicKey,
-      stubHarness: true,
-      prepare: true,
-    });
-    await keep(join(before, "cawco-1"), buildOne);
-  } finally {
-    await removeBefore();
-  }
-}
-await copyFile(buildOne, join(output, "cawco-1"));
-
 // Builds 2 and 3: this tree, kept per tree of a clean checkout.
 const clean = (await read(["git", "status", "--porcelain"], repository)) === "";
 const tree = clean
@@ -218,7 +131,7 @@ for (const [name, version, commit] of builds) {
   await provide(name, version, commit);
 }
 console.log(
-  `Built 3 binaries in ${output} (build 1 from ${BEFORE_SIDE_BY_SIDE.slice(0, 8)}, before keepers ran side by side; ${
+  `Built 2 binaries in ${output} (${
     keptDir
       ? `builds 2 and 3 kept in ${keptDir}`
       : "builds 2 and 3 from a checkout with changes, not kept"

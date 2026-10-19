@@ -3,6 +3,8 @@
  * one hub setting that switches them on. Suggestions are text the operator
  * chooses to add to a prompt; the harness's tool set is never touched.
  */
+
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { send } from "./project-tasks";
 
 /**
@@ -69,7 +71,7 @@ export async function saveSuggestSetting(enabled: boolean): Promise<void> {
     body: JSON.stringify({ enabled }),
   });
   if (!response.ok) {
-    throw new Error(`${response.status} ${await response.text()}`);
+    throw await hubRefusal(response);
   }
   suggestions.enabled = enabled;
 }

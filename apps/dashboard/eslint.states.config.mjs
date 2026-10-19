@@ -37,13 +37,15 @@ export default defineConfig([
     plugins,
     rules,
   },
-  // The agent's browser code (the canvas host, the preview overlay) is its
-  // own project, tsconfig.browser.json (the DOM's lib, React's JSX), which
-  // the project service, finding only tsconfig.json, never reads.
+  // The agent's browser code (the canvas host, the preview overlay, the
+  // stage host's canvas) is its own project, tsconfig.browser.json (the
+  // DOM's lib, React's JSX), which the project service, finding only
+  // tsconfig.json, never reads.
   {
     files: [
       "packages/agent/src/canvas-host/**/*.{ts,tsx}",
       "packages/agent/src/preview-overlay/**/*.{ts,tsx}",
+      "packages/agent/src/stage-host/canvas/**/*.{ts,tsx}",
     ],
     languageOptions: {
       parser: tsParser,

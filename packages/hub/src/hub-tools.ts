@@ -22,7 +22,7 @@ import type { InstanceRow } from "@cawco/core";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import type { DesignFinding, DesignPick } from "./db/schema";
-import { DESIGN_WRITE_FILES, type DesignFile } from "./design-system";
+import { DESIGN_WRITE_FILES, type DesignFileIn } from "./design-system";
 import { hubHttpUrl, selfFetch } from "./hub-self";
 import { FOLDER_CONTENT_LIMIT, FOLDER_ENCODINGS } from "./project-folder";
 
@@ -58,7 +58,7 @@ export interface HubToolsDeps {
   /** Writes the caller's project's design system, or proposes the change (design-system.ts `write`). */
   designWrite: (
     actor: InstanceRow,
-    files: DesignFile[],
+    files: DesignFileIn[],
     why: string | undefined,
     toolUseId: string | undefined
   ) => Promise<unknown>;
@@ -157,14 +157,15 @@ export const createHubTools =
       ),
       tool(
         "design_write",
-        "Write files of the project's design/ system, as the design-system skill says. Changing a system the project already had is a proposal, with your why; you hear the person's answer.",
+        "Write design/ files per the design-system skill: content, or from a file where you work. Changing an existing system is a proposal (why).",
         {
           files: z
             .array(
               z.object({
                 path: z.string().min(1),
-                content: z.string().max(FOLDER_CONTENT_LIMIT),
+                content: z.string().max(FOLDER_CONTENT_LIMIT).optional(),
                 encoding: z.enum(FOLDER_ENCODINGS).optional(),
+                from: z.string().min(1).optional(),
               })
             )
             .min(1)

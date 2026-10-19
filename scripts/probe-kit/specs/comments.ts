@@ -43,6 +43,8 @@
  *    document; a tap stores an anchor with the frame chain and the button's
  *    inner selector and opens its card; a reload that moves the button finds
  *    the pin on it again; the inner frame's own scroll moves the disc.
+ * b2. A same-origin frame put in with its document opened (no root until it
+ *    is written) says no error as the overlay reads it.
  * c. The card's head holds Resolve pin, ⋯ and Close, its foot Reply. Delete
  *    pin (its ⋯), asked in the card itself: the pin leaves the doc and the page,
  *    its card closes, the other pins keep their numbers; the app's
@@ -86,9 +88,34 @@
  *    Each finishes, its picture drawn, with no main-thread task of the
  *    page's past 50ms, and its picture is the paragraph's box with its 24px
  *    margin, never the page.
+ *
+ * And the owner's report (2026-10-18: "also when commenting on sth in the
+ * preview the slhoettes don't line up?", on a page showing desks as frames
+ * drawn smaller than their own size):
+ * h. A page holding a frame drawn at half scale by a transform and one at
+ *    its own: hovering the transcript in each outlines its box on screen
+ *    (±1px), the label on the outline's top-left; a tap on the half-scale
+ *    one stores that box under its frame chain and stands its disc at the
+ *    tapped point (±2px).
+ *
+ * And the probe of 2026-10-18 (a merge that put a decision ahead of the
+ * pinned one moved the pin onto the new card, and wrote its anchor back):
+ * i. On a page of repeated cards with no id and no source, and of decision
+ *    cards, a revision that puts a card in ahead of each pinned one: a
+ *    plain card's pin stays on it by its words; one whose words the
+ *    revision changed waits in the moved tray; a decision card's stays on
+ *    it by its choice; a picture's with no words (the same image in each
+ *    card) stays on it by its alt; none stands on a card the revision put in.
+ *
+ * And the owner's report (2026-10-18: "if i open comments and i click one of
+ * the comments it opens behind the list ofcomments, not very navigateable"):
+ * j. With the Comments panel open, on the desk and on a phone: a pin the
+ *    page scrolled under the panel, then one at the page's very top-right,
+ *    opened from its row, then J and K: each card and each disc stand clear
+ *    of the panel (and on a phone, the disc clear of the card at the foot).
  */
 import { join } from "node:path";
-import type { Frame, Locator } from "playwright-core";
+import type { Frame, Locator, Page } from "playwright-core";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { traceMain } from "../frames";
@@ -372,6 +399,7 @@ const run = async (kit: Kit) => {
   for (const checks of [
     () => tapAndDeleteChecks(on, frame),
     () => frameChecks(on),
+    () => scaledFrameChecks(on),
     () => scrollChecks(on, "window"),
     () => scrollChecks(on, "container"),
     () => dismissChecks(on),
@@ -379,6 +407,8 @@ const run = async (kit: Kit) => {
     () => wordlessChecks(on),
     () => documentChecks(on),
     () => mapPressChecks(on),
+    () => insertChecks(on),
+    () => listChecks(on),
   ]) {
     // biome-ignore lint/performance/noAwaitInLoops: the checks run in order, one after another
     await shutList(on);
@@ -1229,6 +1259,108 @@ const innerButtonBox = (outer: Frame) =>
     };
   });
 
+/**
+ * (b2) A same-origin frame whose document has no root yet when the overlay
+ * reads it: a frame put in and its document opened (`document.open()` takes
+ * its root away until it is written), as a navigation's new document stands
+ * from its commit to its first bytes. The overlay watches that frame's root
+ * once it has one, and says no error: main observed `documentElement`
+ * whatever it was ("Failed to execute 'observe' on 'ResizeObserver':
+ * parameter 1 is not of type 'Element'", seen twice by the probe of
+ * 2026-10-18). The error's stack, when there is one, is in the line.
+ */
+const rootlessFrameCheck = async (on: On, outer: Frame) => {
+  const said = await outer.evaluate(async (idleMs) => {
+    const errors: string[] = [];
+    let phase = "at rest";
+    const caught = (event: ErrorEvent) => {
+      const where =
+        event.currentTarget === window
+          ? "page"
+          : ((event.currentTarget as Window | null)?.frameElement?.getAttribute(
+              "title"
+            ) ?? "frame");
+      errors.push(
+        `[${phase}, ${where}] ${event.message} @ ${event.error?.stack ?? "no stack"}`
+      );
+    };
+    // The page's window and every frame's: a frame's own observer reports there.
+    const views = () => [
+      window,
+      ...[...document.querySelectorAll("iframe")].flatMap((one) =>
+        one.contentWindow ? [one.contentWindow] : []
+      ),
+    ];
+    for (const view of views()) {
+      view.addEventListener("error", caught);
+    }
+    // What the page says at rest before the frame comes.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    phase = "the frame put in";
+    const frame = document.createElement("iframe");
+    frame.title = "Rootless";
+    document.body.append(frame);
+    // Before the overlay's MutationObserver hears the frame come: its document emptied.
+    const doc = frame.contentDocument;
+    doc?.open();
+    const rootless = !!doc && doc.documentElement === null;
+    frame.contentWindow?.addEventListener("error", caught);
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    doc?.write("<!doctype html><p>Written later.</p>");
+    doc?.close();
+    phase = "written";
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    phase = "idle after";
+    // At rest, a pin standing in the inner frame: the pin layer draws no disc again.
+    const layer = document.querySelector("svg[data-cawco-pins]");
+    let drawn = 0;
+    const watch = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof Element && node.hasAttribute("data-pin-id")) {
+            drawn += 1;
+          }
+        }
+      }
+    });
+    if (layer) {
+      watch.observe(layer, { childList: true });
+    }
+    const discs = layer?.querySelectorAll("[data-pin-id]").length ?? 0;
+    await new Promise((resolve) => setTimeout(resolve, idleMs));
+    watch.disconnect();
+    for (const view of [...views(), frame.contentWindow]) {
+      view?.removeEventListener("error", caught);
+    }
+    frame.remove();
+    return { rootless, errors, discs, drawn };
+  }, IDLE_MS);
+  on.kit.check(
+    "b2: a same-origin frame whose document has no root yet when the overlay reads it: no window says an error, the page's nor a frame's",
+    said.rootless && said.errors.length === 0,
+    JSON.stringify({
+      rootless: said.rootless,
+      count: said.errors.length,
+      by: Object.entries(
+        said.errors.reduce<Record<string, number>>((all, one) => {
+          const key = one.slice(0, one.indexOf("]") + 1);
+          all[key] = (all[key] ?? 0) + 1;
+          return all;
+        }, {})
+      ),
+      first: said.errors.slice(0, 2),
+    })
+  );
+  on.kit.check(
+    `b2: at rest with a pin in a same-origin frame, the page draws no disc again over ${IDLE_MS} ms`,
+    said.discs > 0 && said.drawn === 0,
+    `discs ${said.discs}; drawn again ${said.drawn}`
+  );
+};
+
+/** How long b2 leaves the page alone while its pin layer is watched, ms. */
+const IDLE_MS = 1000;
+
 /** (b) Comment mode reaches into a same-origin inner frame: the outline, the anchor, the card, re-location after a reload. */
 const frameChecks = async (on: On) => {
   let innerLoads = 0;
@@ -1407,6 +1539,203 @@ const frameChecks = async (on: On) => {
       "b: scrolling the inner frame 40px moves the pin's disc up 40px (±1px)",
       !!disc && !!scrolled && Math.abs(disc.y - 40 - scrolled.y) <= 1,
       `disc y ${disc?.y} → ${scrolled?.y}`
+    );
+    await rootlessFrameCheck(on, reloaded);
+  } finally {
+    await app.stop(true);
+  }
+};
+
+/**
+ * A page that shows other pages as frames drawn smaller than their own size,
+ * as the owner's files preview does (figures holding desks): one frame drawn
+ * at half its size by a transform, one at its own; each bordered and padded,
+ * so neither offset is a round number.
+ */
+const SCALED_APP = `<!doctype html><html lang="en"><head><title>Desks</title>
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui; }
+  header { height: 41px; }
+  .desks { padding-left: 19px; }
+  figure { margin: 0 0 23px; overflow: hidden; }
+  iframe { display: block; border: 3px solid #999; padding: 5px; }
+  .half { width: 408px; height: 248px; }
+  .half iframe { width: 800px; height: 480px; transform: scale(0.5); transform-origin: 0 0; }
+  .whole iframe { width: 300px; height: 240px; }
+</style></head>
+<body><header>Desks</header><div class="desks"><figure class="half"><iframe src="desk/" title="Desk half"></iframe></figure><figure class="whole"><iframe src="desk/" title="Desk whole"></iframe></figure></div></body></html>`;
+const DESK_APP = `<!doctype html><html lang="en"><head><title>Desk</title>
+<style>
+  body { margin: 0; padding: 24px 29px; font: 16px/1.5 system-ui; }
+  .transcript { width: 200px; height: 120px; background: #eee; }
+</style></head>
+<body><p>A desk.</p><div class="transcript">The transcript.</div></body></html>`;
+/** Where a pin is tapped on the scaled desk's transcript, as fractions of its box. */
+const SCALED_TAP = { x: 0.3, y: 0.5 };
+
+/**
+ * (h) Comment mode in frames drawn at another scale: the hover outline, its
+ * label and a placed pin's disc and box stand on the element, at half scale
+ * and at its own.
+ */
+const scaledFrameChecks = async (on: On) => {
+  const app = Bun.serve({
+    port: 0,
+    fetch: (request) =>
+      new Response(
+        new URL(request.url).pathname.includes("/desk") ? DESK_APP : SCALED_APP,
+        { headers: { "content-type": "text/html" } }
+      ),
+  });
+  try {
+    await on.call(CREATE, { kind: "preview", name: "desks", port: app.port });
+    const outer = (await until(
+      "the desks page in the pane",
+      async () => {
+        const frame = await pageFrame(on);
+        return (await frame
+          .locator("iframe[title^='Desk']")
+          .count()
+          .catch(() => 0)) === 2
+          ? frame
+          : null;
+      },
+      Boolean,
+      60_000
+    )) as Frame;
+    /** The transcript in desk `title`, its box on the dashboard's screen (Playwright's, through every frame and transform). */
+    const transcriptIn = async (title: string) => {
+      const desk = await until(
+        `${title}'s transcript`,
+        async () => {
+          const handle = await outer
+            .locator(`iframe[title="${title}"]`)
+            .elementHandle()
+            .catch(() => null);
+          const inner = await handle?.contentFrame();
+          return inner && (await inner.locator(".transcript").count()) === 1
+            ? inner
+            : null;
+        },
+        Boolean,
+        30_000
+      );
+      const box = await desk?.locator(".transcript").boundingBox();
+      return box ? { x: box.x, y: box.y, w: box.width, h: box.height } : null;
+    };
+    await settle(on.page, 600);
+    await on.page
+      .locator(
+        ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+      )
+      .click();
+    await pageInComment(outer, true);
+    const pane = await on.page.locator(FRAME).boundingBox();
+    if (!pane) {
+      on.kit.check("h: the pane's frame has a box", false, "none");
+      return;
+    }
+    /** A box on the dashboard's screen, in the preview's viewport. */
+    const inPane = (screen: {
+      x: number;
+      y: number;
+      w: number;
+      h: number;
+    }) => ({
+      ...screen,
+      x: screen.x - pane.x,
+      y: screen.y - pane.y,
+    });
+    for (const [title, scale] of [
+      ["Desk half", 0.5],
+      ["Desk whole", 1],
+    ] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one desk hovered after the other
+      const shown = await transcriptIn(title);
+      if (!shown) {
+        on.kit.check(`h: ${title}'s transcript has a box`, false, "none");
+        continue;
+      }
+      const centre = { x: shown.x + shown.w / 2, y: shown.y + shown.h / 2 };
+      await on.page.mouse.move(centre.x - 20, centre.y - 20);
+      await on.page.mouse.move(centre.x, centre.y, { steps: 4 });
+      await settle(on.page, 200);
+      const outline = await outlineOf(outer);
+      const label = await outer.evaluate(() => {
+        const el = document
+          .querySelector("cawco-overlay")
+          ?.shadowRoot?.querySelector<HTMLElement>(".label");
+        const r = el?.getBoundingClientRect();
+        return el && r
+          ? { text: el.textContent ?? "", x: r.x, bottom: r.bottom }
+          : null;
+      });
+      const want = inPane(shown);
+      on.kit.check(
+        `h: hovering the transcript in a frame drawn at ${scale}: the outline is its box on screen (±1px), and the label stands on the outline's top-left (±1px)`,
+        Math.abs(shown.w - 200 * scale) <= 1 &&
+          near(outline, want, 1) &&
+          !!label &&
+          label.text.includes("transcript") &&
+          Math.abs(label.x - want.x) <= 1 &&
+          Math.abs(label.bottom - want.y) <= 1,
+        `on screen ${JSON.stringify(want)}; outline ${JSON.stringify(outline)}; label ${JSON.stringify(label)}`
+      );
+    }
+
+    const half = await transcriptIn("Desk half");
+    if (!half) {
+      return;
+    }
+    const tap = {
+      x: half.x + half.w * SCALED_TAP.x,
+      y: half.y + half.h * SCALED_TAP.y,
+    };
+    await on.page.mouse.move(tap.x, tap.y, { steps: 4 });
+    const before = Object.keys((await docOf(outer)).pins).length;
+    await on.page.mouse.click(tap.x, tap.y);
+    const pins = await until(
+      "the scaled transcript's pin in the doc",
+      async () => (await docOf(outer)).pins,
+      (all) => Object.keys(all).length > before,
+      10_000
+    ).catch(() => ({}) as Pins);
+    const made = Object.values(pins).sort(
+      (a, b) => Number(b.number) - Number(a.number)
+    )[0] as
+      | {
+          anchor: {
+            box?: { h: number; w: number; x: number; y: number };
+            frames?: string[];
+          };
+          number: number;
+        }
+      | undefined;
+    if (!made) {
+      on.kit.check("h: a tap pins the scaled transcript", false, "no pin");
+      return;
+    }
+    await writeIn(on, made.number, "This desk.");
+    await on.page.keyboard.press("Escape");
+    await on.page.keyboard.press("Escape");
+    await settle(on.page, 300);
+    const disc = await discAt(outer, made.number);
+    const scroll = await outer.evaluate(() => ({ x: scrollX, y: scrollY }));
+    const want = inPane(half);
+    const at = { x: tap.x - pane.x, y: tap.y - pane.y };
+    const { box } = made.anchor;
+    on.kit.check(
+      "h: a pin tapped on the half-scale transcript stores its box on screen (±1px) under its frame chain, and its disc stands at the tapped point (±2px)",
+      made.anchor.frames?.length === 1 &&
+        near(
+          box ? { ...box, x: box.x - scroll.x, y: box.y - scroll.y } : null,
+          want,
+          1
+        ) &&
+        !!disc &&
+        Math.abs(disc.x - at.x) <= 2 &&
+        Math.abs(disc.y - at.y) <= 2,
+      `anchor ${JSON.stringify(made.anchor)}; on screen ${JSON.stringify(want)}; disc ${JSON.stringify(disc)}; tapped ${JSON.stringify(at)}`
     );
   } finally {
     await app.stop(true);
@@ -2533,6 +2862,514 @@ const mapPressChecks = async (on: On) => {
   } finally {
     pictures.stop();
     await on.page.keyboard.press("Escape");
+  }
+};
+
+/** (i)'s decision cards: each one's choice and its question. */
+const DECISIONS = [
+  ["auth", "How do people sign in?"],
+  ["db", "Which database holds it?"],
+  ["deploy", "How does it ship?"],
+] as const;
+/** The plain card and the decision card (i)'s revision puts in ahead of the pinned ones. */
+const INSERTED = "Inserted ahead";
+const INSERTED_DECISION = ["region", "Where does it run?"] as const;
+const REWORDED = "Delta, once Charlie";
+/** Each plain card's picture: the same image in every card, told apart by its alt alone. */
+const PICTURE = `data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='48' height='48'><rect width='48' height='48' fill='#ccc'/></svg>")}`;
+const pictureOf = (words: string) => `Picture of ${words}`;
+
+/**
+ * (i)'s page: plain cards a list repeats, no id, no source, each told apart
+ * by its words alone, and decision cards, each by its choice. `revised`: a
+ * card put in ahead of Bravo, Charlie reworded, a decision put in ahead of
+ * the second.
+ */
+const repeatedPage = (revised: boolean) => {
+  const plain = revised
+    ? ["Alpha", INSERTED, "Bravo", REWORDED]
+    : ["Alpha", "Bravo", "Charlie"];
+  const decisions = revised
+    ? [DECISIONS[0], INSERTED_DECISION, ...DECISIONS.slice(1)]
+    : DECISIONS;
+  return `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui; }
+  .card { margin: 0 24px 16px; padding: 12px 16px; border: 1px solid #ccc; border-radius: 8px; }
+  h2 { margin: 0; font-size: 18px; width: 60%; }
+</style></head>
+<body><main>
+<div class="plain">${plain.map((words) => `<section class="card"><h2>${words}</h2><img alt="${pictureOf(words)}" width="48" height="48" src="${PICTURE}"><p>One of the cards the list repeats.</p></section>`).join("")}</div>
+<div class="decisions">${decisions.map(([choice, question]) => `<section class="card" data-cawco-choice="${choice}"><h2>${question}</h2><button data-option="a">A</button> <button data-option="b">B</button></section>`).join("")}</div>
+</main></body></html>`;
+};
+
+/**
+ * (i) The probe of 2026-10-18: a merge that put a decision ahead of the
+ * pinned one moved its pin onto the new card, and wrote that card's anchor
+ * back. On a page of repeated cards, three pins (a plain card, a plain card
+ * whose words the revision changes, a decision card), then a revision that
+ * puts a card in ahead of each: each pin stands on its own card, or waits
+ * in the moved tray, and none stands on a card the revision put in.
+ */
+const insertChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    name: "repeated-cards",
+    html: repeatedPage(false),
+  });
+  const artifactId = made.match(ANSWERED_ID)?.[1];
+  if (!artifactId) {
+    on.kit.check("i: the page is made", false, made.slice(0, 300));
+    return;
+  }
+  const frame = (await until(
+    "the repeated cards in the pane",
+    async () => {
+      const one = await pageFrame(on);
+      const ready = await one
+        .evaluate(
+          () =>
+            document.querySelectorAll(".plain .card").length === 3 &&
+            "cawcoArtifact" in window
+        )
+        .catch(() => false);
+      return ready ? one : null;
+    },
+    Boolean,
+    60_000
+  )) as Frame;
+  await settle(on.page, 400);
+  const pane = await on.page.locator(FRAME).boundingBox();
+  if (!pane) {
+    on.kit.check("i: the pane's frame has a box", false, "none");
+    return;
+  }
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    )
+    .click();
+  await pageInComment(frame, true);
+  /** A tap on the heading reading `words` (or the picture by that alt), and a reply that keeps its pin; the pin's id. */
+  const pinOn = async (words: string) => {
+    const box = await frame.evaluate((text) => {
+      const mark = [...document.querySelectorAll<HTMLElement>("h2, img")].find(
+        (one) =>
+          (one instanceof HTMLImageElement ? one.alt : one.textContent) === text
+      );
+      const r = mark?.getBoundingClientRect();
+      return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
+    }, words);
+    if (!box) {
+      return null;
+    }
+    const held = new Set(Object.keys((await docOf(frame)).pins));
+    await on.page.mouse.click(pane.x + box.x, pane.y + box.y);
+    const pins = await until(
+      `the pin on "${words}"`,
+      async () => (await docOf(frame)).pins,
+      (all) => Object.keys(all).some((one) => !held.has(one)),
+      10_000
+    ).catch(() => ({}) as Pins);
+    const id = Object.keys(pins).find((one) => !held.has(one));
+    const number = id ? Number(pins[id]?.number) : undefined;
+    const card = on.page.locator(
+      `[data-slot="pin-card"][data-pin-card="${number}"]`
+    );
+    await card.getByRole("textbox").fill(`This is ${words}.`);
+    await card.getByRole("button", { name: "Reply" }).click();
+    await until(
+      `the reply on "${words}"`,
+      async () =>
+        (
+          (await docOf(frame)).pins[id ?? ""] as
+            { thread?: unknown[] } | undefined
+        )?.thread?.length ?? 0,
+      (count) => count === 1,
+      5000
+    ).catch(() => 0);
+    return id ?? null;
+  };
+  const bravo = await pinOn("Bravo");
+  const charlie = await pinOn("Charlie");
+  const db = await pinOn(DECISIONS[1][1]);
+  const picture = await pinOn(pictureOf("Bravo"));
+  await on.page.keyboard.press("Escape");
+  await interactTab(on).click();
+  await pageInComment(frame, false);
+  const anchorsBefore = Object.fromEntries(
+    Object.entries((await docOf(frame)).pins).map(([id, pin]) => [
+      id,
+      (pin.anchor as { selector?: string }).selector,
+    ])
+  );
+
+  await on.call(UPDATE, { id: artifactId, html: repeatedPage(true) });
+  await until(
+    "the revision in the page",
+    () =>
+      frame.evaluate(
+        (words) =>
+          [...document.querySelectorAll("h2")].some(
+            (one) => one.textContent === words
+          ),
+        INSERTED
+      ),
+    Boolean,
+    15_000
+  ).catch(() => false);
+  await settle(on.page, 1000);
+  /** Where each pin stands now: the heading its disc is on, or moved, as the page and its doc have it. */
+  const standsOn = await frame.evaluate(
+    (ids) => {
+      const { doc } = (
+        window as unknown as {
+          cawcoArtifact: {
+            doc: {
+              getMap: (n: string) => {
+                get: (id: string) => { movedAt?: string } | undefined;
+              };
+            };
+          };
+        }
+      ).cawcoArtifact;
+      const pins = doc.getMap("pins");
+      const marks = [...document.querySelectorAll<HTMLElement>("h2, img")];
+      return ids.map((id) => {
+        // The disc's centre in the page: its group's translate.
+        const at = document
+          .querySelector<SVGGElement>(
+            `svg[data-cawco-pins] [data-pin-id="${id}"]`
+          )
+          ?.transform.baseVal.consolidate()?.matrix;
+        const x = at ? at.e - scrollX : Number.NaN;
+        const y = at ? at.f - scrollY : Number.NaN;
+        const mark = marks.find((one) => {
+          const r = one.getBoundingClientRect();
+          return (
+            x >= r.left - 2 &&
+            x <= r.right + 2 &&
+            y >= r.top - 2 &&
+            y <= r.bottom + 2
+          );
+        });
+        return {
+          id,
+          on:
+            (mark instanceof HTMLImageElement ? mark.alt : mark?.textContent) ??
+            null,
+          moved: !!pins.get(id)?.movedAt,
+        };
+      });
+    },
+    [bravo ?? "", charlie ?? "", db ?? "", picture ?? ""]
+  );
+  const [onBravo, onCharlie, onDb, onPicture] = standsOn;
+  const putIn = new Set([INSERTED, pictureOf(INSERTED), INSERTED_DECISION[1]]);
+  const said = JSON.stringify({ before: anchorsBefore, after: standsOn });
+  on.kit.check(
+    "i: a card put in ahead of a pinned plain card (no id, no source): the pin stays on its card, never on the one put in",
+    !!bravo && onBravo?.on === "Bravo" && !onBravo.moved,
+    said
+  );
+  on.kit.check(
+    "i: a pinned plain card reworded as a card is put in ahead of it: its pin waits in the moved tray, never on the card now at its place",
+    !!charlie && !!onCharlie?.moved && onCharlie.on === null,
+    said
+  );
+  on.kit.check(
+    "i: a decision put in ahead of a pinned decision card: the pin stays on its card by its choice",
+    !!db && onDb?.on === DECISIONS[1][1] && !onDb.moved,
+    said
+  );
+  on.kit.check(
+    "i: a card put in ahead of a pinned picture with no words (the same image in every card, its alt its own): the pin stays on that picture",
+    !!picture && onPicture?.on === pictureOf("Bravo") && !onPicture.moved,
+    said
+  );
+  on.kit.check(
+    "i: no pin stands on a card the revision put in",
+    standsOn.every((one) => !(one.on && putIn.has(one.on))),
+    said
+  );
+};
+
+/**
+ * (j)'s page: words at its very top-right, under where the Comments panel
+ * hangs and above any scroll; words far down its right side; words on its
+ * left. Tall enough to scroll.
+ */
+const LISTED_PAGE = `<!doctype html>
+<html><head><meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { margin: 0; font: 16px/1.5 system-ui; height: 2400px; position: relative; }
+  p { position: absolute; width: 150px; margin: 0; }
+  #corner { top: 16px; right: 16px; }
+  #low { top: 1200px; right: 16px; }
+  #left { top: 600px; left: 16px; }
+</style></head>
+<body><p id="corner">Words in the top-right corner.</p><p id="low">Words far down the right side.</p><p id="left">Words on the left.</p></body></html>`;
+
+interface Rect {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+}
+const meets = (a: Rect, b: Rect) =>
+  a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+
+/** The Comments panel's, the open card's and pin `id`'s disc's boxes in the dashboard's viewport; null for one not on screen. The disc is read in the page's own frame (another origin), its frame's offset added. */
+const listedBoxes = async (screen: Page, frame: Frame, id: string) => {
+  const chrome = await screen.evaluate(() => {
+    const box = (el: Element | null | undefined) => {
+      const r = el?.getBoundingClientRect();
+      return r && r.width > 0
+        ? { x: r.x, y: r.y, w: r.width, h: r.height }
+        : null;
+    };
+    const holder = [
+      ...document.querySelectorAll<HTMLIFrameElement>(
+        'iframe[title="Preview"]'
+      ),
+    ].find((one) => one.checkVisibility());
+    const at = holder?.getBoundingClientRect();
+    return {
+      list: box(document.querySelector("[data-pin-list-pop]")),
+      card: box(document.querySelector('[data-slot="pin-card"]')),
+      offset:
+        at && holder
+          ? { x: at.x + holder.clientLeft, y: at.y + holder.clientTop }
+          : null,
+    };
+  });
+  const disc = await frame
+    .evaluate((pin) => {
+      const r = document
+        .querySelector(`svg[data-cawco-pins] [data-pin-id="${pin}"] circle`)
+        ?.getBoundingClientRect();
+      return r && r.width > 0
+        ? { x: r.x, y: r.y, w: r.width, h: r.height }
+        : null;
+    }, id)
+    .catch(() => null);
+  return {
+    list: chrome.list,
+    card: chrome.card,
+    disc:
+      disc && chrome.offset
+        ? { ...disc, x: disc.x + chrome.offset.x, y: disc.y + chrome.offset.y }
+        : null,
+  };
+};
+
+/**
+ * (j) The owner's report (2026-10-18: "if i open comments and i click one
+ * of the comments it opens behind the list ofcomments, not very
+ * navigateable"), as Figma's comments list keeps a chosen comment's pin and
+ * card both on the part of the page the list leaves free: with the
+ * Comments panel open, a pin opened from its row, then by J and by K,
+ * stands with its card beside the panel, neither under it. A pin the page
+ * has scrolled under the panel is scrolled out; one at the page's very top
+ * (no scroll can) has the panel make room for it. On the desk, and on a
+ * phone, where the card stands at the well's foot and the pin clear of it
+ * too.
+ */
+const listChecks = async (on: On) => {
+  const made = await on.call(CREATE, {
+    kind: "page",
+    name: "listed",
+    html: LISTED_PAGE,
+  });
+  const artifactId = made.match(ANSWERED_ID)?.[1];
+  if (!artifactId) {
+    on.kit.check("j: the page is made", false, made.slice(0, 300));
+    return;
+  }
+  const frame = (await until(
+    "the listed page in the pane",
+    async () => {
+      const one = await pageFrame(on);
+      const ready = await one
+        .evaluate(
+          () => !!document.querySelector("#corner") && "cawcoArtifact" in window
+        )
+        .catch(() => false);
+      return ready ? one : null;
+    },
+    Boolean,
+    60_000
+  )) as Frame;
+  await settle(on.page, 400);
+  const pane = await on.page.locator(FRAME).boundingBox();
+  if (!pane) {
+    on.kit.check("j: the pane's frame has a box", false, "none");
+    return;
+  }
+  await on.page
+    .locator(
+      ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[aria-keyshortcuts=\'C\']'
+    )
+    .click();
+  await pageInComment(frame, true);
+  /** A tap on `selector`, scrolled into view, and a reply that keeps its pin: its id and number. */
+  const pinOn = async (selector: string) => {
+    const box = await frame.evaluate((s) => {
+      const el = document.querySelector(s);
+      el?.scrollIntoView({ block: "center" });
+      const r = el?.getBoundingClientRect();
+      return r ? { x: r.x + r.width / 2, y: r.y + r.height / 2 } : null;
+    }, selector);
+    if (!box) {
+      return null;
+    }
+    const held = new Set(Object.keys((await docOf(frame)).pins));
+    await on.page.mouse.click(pane.x + box.x, pane.y + box.y);
+    const pins = await until(
+      `the pin on ${selector}`,
+      async () => (await docOf(frame)).pins,
+      (all) => Object.keys(all).some((one) => !held.has(one)),
+      10_000
+    ).catch(() => ({}) as Pins);
+    const id = Object.keys(pins).find((one) => !held.has(one));
+    const number = id ? Number(pins[id]?.number) : Number.NaN;
+    await writeIn(on, number, `About ${selector}.`);
+    return id ? { id, number } : null;
+  };
+  const low = await pinOn("#low");
+  const corner = await pinOn("#corner");
+  const left = await pinOn("#left");
+  await on.page.keyboard.press("Escape");
+  await interactTab(on).click();
+  await pageInComment(frame, false);
+  if (!(low && corner && left)) {
+    on.kit.check(
+      "j: three pins made",
+      false,
+      JSON.stringify({ low, corner, left })
+    );
+    return;
+  }
+  await listLeg(on.kit, on.page, frame, "desk", { low, corner, left });
+
+  // The same on a phone, where the pane is the sheet over the conversation.
+  const phone = await on.kit.page("phone");
+  await open(
+    phone,
+    `${await on.fleet.dashboard()}/session/${on.session}`,
+    COMPOSER
+  );
+  /** The phone's page frame, once it shows the listed page. */
+  const listedOn = async (): Promise<Frame | null> => {
+    try {
+      const handle = await phone
+        .locator('iframe[title="Preview"]')
+        .first()
+        .elementHandle({ timeout: 1000 });
+      const inner = await handle?.contentFrame();
+      return (await inner?.evaluate(() => !!document.querySelector("#corner")))
+        ? (inner ?? null)
+        : null;
+    } catch {
+      return null;
+    }
+  };
+  const shown = await until(
+    "the listed page on the phone",
+    listedOn,
+    Boolean,
+    60_000
+  ).catch(() => null);
+  if (!shown) {
+    on.kit.check(
+      "j (phone): the listed page in the phone's pane",
+      false,
+      "not shown"
+    );
+    return;
+  }
+  await settle(phone, 600);
+  await listLeg(on.kit, phone, shown, "phone", { low, corner, left });
+  await phone.close();
+};
+
+/** (j) on one view: the panel open, pins opened from its rows, then J and K; each card and disc beside the panel. */
+const listLeg = async (
+  kit: Kit,
+  screen: Page,
+  frame: Frame,
+  view: "desk" | "phone",
+  pins: Record<"low" | "corner" | "left", { id: string; number: number }>
+) => {
+  // #low scrolled to where the panel will hang.
+  await frame.evaluate(() => {
+    const low = document.querySelector("#low");
+    if (low) {
+      scrollTo(0, low.getBoundingClientRect().top + scrollY - 40);
+    }
+  });
+  await settle(screen, 300);
+  const button = screen.locator(
+    ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"]) button[data-slot="comments"]'
+  );
+  if ((await button.getAttribute("aria-expanded")) !== "true") {
+    await button.click();
+  }
+  const list = screen.locator('[data-pin-list-pop] [data-slot="pin-list"]');
+  await list.waitFor({ timeout: 5000 }).catch(() => undefined);
+  const row = (number: number) =>
+    list.locator(`[data-slot="pin-row"][data-pin-row="${number}"]`);
+  const clear = (seen: Awaited<ReturnType<typeof listedBoxes>>) =>
+    !!seen.list &&
+    !!seen.card &&
+    !!seen.disc &&
+    !meets(seen.card, seen.list) &&
+    !meets(seen.disc, seen.list) &&
+    (view === "desk" || !meets(seen.disc, seen.card));
+  const opened = async (pin: { id: string; number: number }) => {
+    await settle(screen, 1200);
+    return listedBoxes(screen, frame, pin.id);
+  };
+  await row(pins.low.number).click();
+  const fromRow = await opened(pins.low);
+  kit.check(
+    `j (${view}): a pin the page scrolled under the open Comments panel, opened from its row: its card and its disc stand clear of the panel`,
+    clear(fromRow),
+    JSON.stringify(fromRow)
+  );
+  await row(pins.corner.number).click();
+  const atTop = await opened(pins.corner);
+  kit.check(
+    `j (${view}): a pin at the page's very top-right, under the panel, opened from its row: its card and its disc stand clear of the panel`,
+    clear(atTop),
+    JSON.stringify(atTop)
+  );
+  // J and K from the panel's rows, its card open: the next pin, then back.
+  const stepped: {
+    key: string;
+    seen: Awaited<ReturnType<typeof listedBoxes>>;
+  }[] = [];
+  for (const [key, pin] of [
+    ["j", pins.left],
+    ["k", pins.corner],
+  ] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one key at a time, each read where it lands
+    await row(
+      pin === pins.left ? pins.corner.number : pins.left.number
+    ).focus();
+    await screen.keyboard.press(key);
+    stepped.push({ key, seen: await opened(pin) });
+  }
+  kit.check(
+    `j (${view}): J and K with the panel open: each pin's card and disc stand clear of the panel`,
+    stepped.length === 2 && stepped.every((one) => clear(one.seen)),
+    JSON.stringify(stepped)
+  );
+  await screen.keyboard.press("Escape");
+  if ((await button.getAttribute("aria-expanded")) === "true") {
+    await button.click();
   }
 };
 

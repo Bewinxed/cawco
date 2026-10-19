@@ -2,7 +2,7 @@
 
 **UI wordmark:** “Caw&Co”, set in the landing's Nunito Variable face. Product names in sentences, page titles and notices remain “CawCo”.
 
-**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing) · 2026-10-16 (hub auth: *paired device*, *Require paired devices*, *code*, *admit*; Admit and Require join the button verbs)
+**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing) · 2026-10-16 (hub auth: *paired device*, *Require paired devices*, *code*, *admit*; Admit and Require join the button verbs) · 2026-10-18 (browser take-over, projects §5.11: *browser*, *take over*, *private*, *hand back*, *browser ask*, *stream relay*, *container runtime* / *local browser*; Take over and Hand back join the button verbs) · 2026-10-18 (Ask joins the button verbs: the project head's Ask Caw)
 **Doctorate authority:** `content-design` (design-for-ai 4.2.0) — voice/tone per Podmajersky (2019), error
 formula per Yifrah (2017), plain language per Redish (2007), destructive confirmation per Nielsen
 #5 (1994) and the microcopy-patterns catalog. **Pairs with DESIGN.md** (visual tokens, LOCKED) and
@@ -154,8 +154,9 @@ it actually means.
 | One identity for work across machines, folders and kinds of work (code, a launch, an X account) | **project** | The project page, its threads, its tasks. | "workspace" (that is a clone); "repo" when the project is more than one |
 | Where a project's files are: a checkout on a machine, a delegate's clone, the hub folder | **place** | The project's places list. | "location", "mount" |
 | A clone plus branch kept for one task | **workspace** | A delegate's or attempt's working copy, `ws-4f2a`. | "worktree" in copy (fine as the git term in code) |
-| A workspace whose work ended with work that is nowhere else (commits on no remote, changed files, stashes), kept until you continue it or discard it. One whose work landed retires on its own | **held** | The places list: "Held: 1 commit on no remote · 4 MB", then Continue and Discard. | "kept", "stale", "orphaned" |
-| The unit of work a project tracks | **task** | A task file, a card in a view, `tsk-142`. | "ticket", "card" (a card is how a view draws it), "issue" (unless it is the GitHub issue) |
+| A workspace whose work ended with work that is nowhere else (commits on no remote, changed files, stashes), kept until the session that delegated it continues it or discards it. One whose work landed, itself or through a workspace cut from it, retires on its own | **held** | The delegating session's notice: "Workspace … holds 1 commit on no remote (4 MB at …)", then continue it or discard_workspace; delegate_list under held. | "kept", "stale", "orphaned" |
+| The unit of work a project tracks | **task** | A task file, a card in a view, `tsk-142`. | "ticket", "card" (a card is how a view draws it), "issue" (unless it is the GitHub or Linear issue) |
+| Where a project's tasks live: CawCo's files alone, or GitHub Issues or Linear as the record of each task's title, description, labels, stage and comments, every task still a file naming its **issue** | **tracker** | The project's details: Tasks · CawCo, GitHub Issues, Linear; "Use Linear"; a task's "#12 on GitHub Issues". | "integration", "sync target", "board" |
 | Where a task is in its project's own lifecycle, named by the project (Draft, Scheduled, Posted) | **stage** | The task file's `stage:` and a view's columns. | "status" (status words are liveness: `working` / `idle` / `done` / `needs you`); "column" as the concept |
 | The fixed category a stage belongs to: to do, active, waiting, you, done, dropped | **kind** | `stages.md`; how CawCo knows what a stage means. | "type", "category" |
 | A checklist line inside a task | **to-do** | The task file's checklist; ticked by you, Caw or the attempt's session. | "subtask" (a subtask that needs its own attempt is a task) |
@@ -178,7 +179,7 @@ it actually means.
 | The project's notes waiting to be curated | **inbox** | "20 notes wait". | "queue", "backlog" |
 | A note the hub never offers for curation: from a routine's run, a keep-alive turn, a harness subagent, or a turn that read the web | **tainted** | A note's `taint:`; "tainted: web". | "unsafe", "blocked" |
 | The routine that reads the inbox daily (and when it passes 20 notes) and proposes what to keep | **memory curator** | The Memory curator routine; a proposal's asker. | "memory agent", "librarian" |
-| A change to AGENTS.md or a knowledge file, shown as its diff, that the person approves or rejects: the curator's, or one Caw asked about | **proposal** | A Needs you item, and a card where it was made (Caw's thread, the curator's run): Approve applies it, Deny rejects it and archives its notes. | "suggestion", "PR", "decision page" |
+| A change to AGENTS.md or a knowledge file, shown as its diff, that the person approves or rejects: the curator's, or one Caw asked about; and a delegate type Caw wrote | **proposal** | A Needs you item, and a card where it was made (Caw's thread, the curator's run): Approve applies it, Deny rejects it and archives its notes. | "suggestion", "PR", "decision page" |
 | One of a project's own settings Caw changes himself, each noted in his thread: a connection granted to it, its GitHub repository linked or made and published, where its work lands. One he asks about, and every publish, is an Approve/Deny card in his thread first | **project setting** | "Caw changed this project's settings"; the push "Project setting" under the project; "Publish this project to a private GitHub repository, owner/name". | "config", "preference", "permission" |
 | Your words straight into AGENTS.md, no model in between: a Caw thread message that opens with "Make a note:" | **Make a note** | "Make a note: deploys go out on Fridays." | "remember this", "save to memory" |
 | One shell command or file edit Caw makes himself, in his place, each decided by the hub before it runs: let run, put to you on an Approve card, or refused. Each is a note in his thread: what ran and its exit, what he edited, what was refused and why, what you denied. A refusal ends with what to do instead: "file a task" (a history-moving git command in a shared checkout, an edit past docs, config and assets or past 5 files), "delegate the rest" (past 20 calls in one wake) | **Caw's call** | "Caw · ran \`git init\`", "Caw · edited docs/setup.md", "Caw · refused \`git stash\`", "Caw · you denied \`rm notes.txt\`". | "command" alone (an approved action is one too), "tool use" in copy |
@@ -186,7 +187,15 @@ it actually means.
 | One exact tool call you approved, run once by the hub at its time | **approved action** | "Posts at 12:30" rows; approval cards. | "scheduled post" as the general term, "automation" |
 | A provider's sign-in or key, held once per machine for the harnesses there that speak that provider (Claude Code, pi, OpenCode) | **account** | Configure › Accounts; the New session account chip. | "connection" (a connection is a service key the hub holds) |
 | A signed-in outside service whose key the hub holds | **connection** | Settings › Connections; `x-brand`. | "integration", "account" (an account is what a connection signs in as) |
+| The name a hub holds on the networks it sits on, `cawco.local`, or `cawco-2.local` when another hub there holds it first. It reaches the hub from devices on the same network, and over a VPN that carries multicast (ZeroTier); never over Tailscale or WireGuard, which don't | **On this network** (the address row) / **the .local name** (in prose) | "On this network · http://cawco.local:3456"; "The .local name reaches machines on the same network, or on a VPN that carries it like ZeroTier; Tailscale and WireGuard don't." | "mDNS", "Bonjour", "LAN address", "hostname" in copy |
 | The optional public path that lets push-only services reach the hub | **relay** | "Relay off · Set up". | "tunnel", "webhook server" in copy |
+| A project's own Chrome, run by CawCo on one of its machines (in a container, or as a local Chromium where the machine has no container runtime yet), where its agents browse and its sign-ins last; a session outside any project uses its machine's | **browser** | The panel's browser artifact; the project page's Browser row. | "sandbox", "container" in copy, "neko", "remote browser" |
+| The person driving the browser from the preview panel, every agent's hand off it | **take over** (verb) / **take-over** (noun) / **Take over** (the button) | Take over in the panel's head and on a browser ask's card. | "remote control", "VNC", "screen share" |
+| A take-over during which nothing typed or shown reaches any agent | **private** | The band's "Private" chip while you have control. | "secure mode", "incognito", "shield" in copy (the code's name) |
+| Ending a take-over so the agent carries on | **hand back** (verb) / **Hand back** (the button) | Hand back in the panel's head while you have control. | "release", "give control" |
+| An agent's request that the person take over, with its reason and the page's origin; register Permission / approval (no nudge); push category `CAWCO_BROWSER` | **browser ask** | Needs you; the transcript's "Take over the browser" card; the phone's "Needs you in the browser". | "login request", "takeover request" |
+| The TURN server CawCo runs on a machine of the fleet with a public address, so a browser's stream reaches any screen through any network | **stream relay** | Settings › Browsers › Stream relay; its onboarding step. | "TURN" in copy, "relay" alone (the webhook path), "coturn" |
+| The machine has no Docker, OrbStack, Colima or Podman, so its browser runs as a local Chromium and its take-over shows one page | **container runtime** (the thing missing) / **local browser** (what runs instead) | The band's line "This machine shows one page at a time until a container runtime is installed." | "fallback", "degraded", "CDP mode" in copy |
 | A browser (on one address), the app or a CLI run the hub knows as the person's, by a token it was handed once | **paired device** / **pair** (verb) | Configure › Devices; "Pair this browser"; "This hub requires paired devices." | "logged in", "signed in", "session" (a session is an agent's), "authorized device" |
 | The one fleet setting that makes every device and machine prove itself to the hub; off, being on the network is enough | **Require paired devices** | The Devices section's switch; its confirm names what every other device will see. | "lockdown", "secure mode", "auth" in copy |
 | The short code a device shows while it waits, matched by the person before approving (`KQ7-M3P`) | **code** | "Approve only if this is the code on the device in front of you." | "PIN", "token" (the token is never shown) |
@@ -237,6 +246,15 @@ Adopted verbatim from the doctrine (Yifrah 2017) and the Phase-7 plan constraint
   on the machine, then Reconnect."**
 - Hub unreachable (connection band): **"Hub unreachable — retrying in 12s. Reconnect now."** (the
   countdown makes it determinate; the board holds its last good rows, so the false zero never renders)
+- Hub updating (connection band, the waiting tone): **"CawCo is updating to 1.4.2 — the hub is back
+  within 40s."** (the same shape as the outage's line; the deadline the hub gave makes it determinate,
+  nothing is pressed while it runs, and only past the deadline does the band say "Hub unreachable");
+  once it answers, **"CawCo updated to 1.4.2."** The app's status line says the same: both read core
+  `words/connection.ts`
+- A project the hub didn't give (an error empty, where its board would be): **"The tasks, stages and
+  views for Launch couldn't be read. The hub didn't answer (502). Nothing was changed." → [Retry]**
+  (one failed read is said once, in one place, naming only the parts that didn't come; its one Retry
+  reads all of them again; the reason is a sentence of its own, never joined to the first with a colon)
 
 ---
 
@@ -266,7 +284,9 @@ Every button parses as **[Verb] + [Object]** and stays comprehensible with surro
 Allowlisted imperative verbs for the gate: *Start, Create, Add, Save, Cancel, Delete, Remove,
 Approve, Deny, Allow, Deny, Reconnect, Retry, Export, Filter, Manage, Open, Stop, Interrupt, Send,
 Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure, Copy, Draw, Dock, Undock, Annotate,
-Comment, Illustrate, Erase, Done, Admit, Require*. "Continue" is acceptable only where the
+Comment, Illustrate, Erase, Done, Admit, Require, Ask*, and the phrasal *Take over* and *Hand back* (each
+[Verb]+[Object] read as one act: the browser). "Ask" takes its object by name: "Ask Caw", the project
+head's way to tell him new work (his panel on a new thread), and "Ask Caw for a view". "Continue" is acceptable only where the
 next step is already visible in context (microcopy-patterns catalog).
 
 **Composer exception (recorded):** the transcript composer's `<textarea>` carries `aria-label="Message

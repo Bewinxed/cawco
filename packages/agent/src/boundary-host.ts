@@ -239,12 +239,12 @@ const lstatOf = (path: string): Stats | undefined => {
 /**
  * Why the folder this boundary holds is no longer there to hold, when it is
  * not: a delegate's clone whose `.git` is no repository (`isGitDirSync`), or
- * a project lead's place that is no folder. Nothing is ever made at a clone's
+ * a place that is no folder. Nothing is ever made at a clone's
  * path but by its create: a clone deleted under a running sandbox stays
  * gone, rather than refilled with stand-ins (`standIn`) into a husk.
  */
 const goneReason = (): string | undefined => {
-  if (process.env.CAWCO_LEAD_PLACE === "1") {
+  if (process.env.CAWCO_PLACE === "1") {
     return lstatOf(clone)?.isDirectory()
       ? undefined
       : `${clone} is not a folder`;
@@ -271,7 +271,7 @@ if (goneAtStart) {
   refuseGone(goneAtStart);
 }
 // srt resolves its own mandatory names against this working directory and
-// makes a mount point for each that is absent. A project lead's place is a
+// makes a mount point for each that is absent. A place is a
 // person's own folder, never written into, so there srt starts in the place's
 // scratch dir (`CAWCO_SANDBOX_CWD`); a clone's are stood in for (standIn).
 process.chdir(process.env.CAWCO_SANDBOX_CWD || clone);
@@ -607,8 +607,8 @@ const inherited = [
   "LOGNAME",
   "LANG",
   "CAWCO_WORKSPACE",
-  // A lead's place: nothing a command starts outlives it (boundary.ts `LAUNCH`).
-  "CAWCO_LEAD_PLACE",
+  // A place: nothing a command starts outlives it (boundary.ts `LAUNCH`).
+  "CAWCO_PLACE",
 ];
 const runnerEnv = {
   PATH: "/usr/sbin:/usr/bin:/sbin:/bin",
@@ -839,8 +839,8 @@ const watchClone = (): void => {
       });
     }
   };
-  const lead = process.env.CAWCO_LEAD_PLACE === "1";
-  for (const dir of lead ? [clone] : [clone, join(clone, ".git")]) {
+  const place = process.env.CAWCO_PLACE === "1";
+  for (const dir of place ? [clone] : [clone, join(clone, ".git")]) {
     try {
       // Every change in the folder or its `.git` is looked at: a look is
       // three stats, and the folder going is one of them.

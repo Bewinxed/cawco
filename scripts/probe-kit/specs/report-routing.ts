@@ -636,4 +636,8 @@ const run = async (kit: Kit) => {
   });
 };
 
-export default { name: "report-routing", run } satisfies Spec;
+export default {
+  name: "report-routing",
+  host: "it delegates, so its fleet cuts workspaces",
+  run,
+} satisfies Spec;

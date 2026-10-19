@@ -19,6 +19,8 @@ declare global {
     // interface Locals {}
     // interface PageData {}
     interface PageState {
+      /** As `taskOpened`, for a project folder's file opened as its own page (`?file=`). */
+      fileOpened?: boolean;
       /**
        * A project's task page was opened on a phone from the page before it
        * in this tab's history: its Back is the browser's back.

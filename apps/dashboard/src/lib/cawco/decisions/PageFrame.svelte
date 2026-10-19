@@ -18,6 +18,7 @@
     previewRoute,
   } from "@cawco/core";
   import { untrack } from "svelte";
+  import { hubRefusal } from "#lib/cawco/hub-read.js";
   import { theme } from "#lib/theme.svelte.js";
 
   let {
@@ -52,7 +53,7 @@
 
   /** The hub's sentence for a refused request, or the fallback words. */
   const said = async (answer: Response | null, otherwise: string) =>
-    (await answer?.text().catch(() => "")) || otherwise;
+    answer ? (await hubRefusal(answer)).message : otherwise;
 
   /** Its address: straight on a port, or entered with a new pass by host name. */
   async function enter(at: string, byHost: boolean, wanted: string) {

@@ -13,18 +13,35 @@
  *    first to-do stage, its description naming the design-system skill.
  * 4. A project whose folder has design/ is never asked.
  * 5. On an empty design project's board, with Jev on (a stand-in on
- *    `CAWCO_TYPESAFE_URL`, probe-kit jev-mock.ts), the "Build a design
+ *    `standIns.typesafeUrl`, probe-kit jev-mock.ts), the "Build a design
  *    system" starter Jev offers for a design project with no design/ opens
  *    Caw's panel with its words in his composer, and sends nothing.
+ * 6. The app (this checkout's simulator build, on an iPhone simulator of its
+ *    own), opened on another such project's thread, draws Build and Not now
+ *    under the card (its DEBUG `probe design offer … answer=open` line), and
+ *    with `-design-offer-build` its Build files the task the hub then names
+ *    (CawCoTranscript DesignOfferActions.swift).
  *
  *   bun scripts/probe-kit/run.ts design-offers
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: a project's few threads, read one by one
+// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each leg's steps are read in order.
 import { mkdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
 import { join } from "node:path";
+import type { Subprocess } from "bun";
+import { freshApp } from "../../lib/apple-app";
+import { type MacSim, macSim } from "../../lib/mac-sim";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { jevMock, jevOn } from "../jev-mock";
-import { COMPOSER_FIELD, type Kit, open, type Spec, settle } from "../kit";
+import {
+  COMPOSER_FIELD,
+  type Kit,
+  open,
+  ROOT,
+  type Spec,
+  settle,
+} from "../kit";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -51,8 +68,8 @@ const run = async (kit: Kit) => {
   // for 5, so 1 to 4 run as they always have.
   const jev = jevMock();
   const fleet = await kit.fleet(respond);
-  fleet.env.CAWCO_TYPESAFE_URL = jev.url;
-  fleet.env.CAWCO_STARTERS_PACE = "1500/5000";
+  fleet.standIns.typesafeUrl = jev.url;
+  fleet.standIns.startersPace = { quiet: 1500, gap: 5000 };
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
@@ -309,6 +326,149 @@ const run = async (kit: Kit) => {
     `starters ${shown.join(" | ")}; field “${value}”; threads ${before} → ${await threadCount()}`
   );
   jev.stop();
+
+  // ── 6. the app: Build and Not now under the card, and Build files the task ──
+  const { path: app, problem } = freshApp(ROOT);
+  if (
+    !kit.check("6a: the app is built from this tree", !problem, problem ?? app)
+  ) {
+    return;
+  }
+  const osprey = await project("osprey");
+  await fileActive(osprey.id, "Design the map screen");
+  await until(
+    "Osprey's card",
+    () => cards(osprey.id),
+    (found) => found.length === 1,
+    60_000
+  );
+  const ospreyThreads = await fleet.api<{ id: string }[]>(
+    `/api/projects/${osprey.id}/threads`
+  );
+  let threadId: string | undefined;
+  for (const thread of ospreyThreads) {
+    const read = await fleet.api<{ messages: Card[] }>(
+      `/api/projects/${osprey.id}/threads/${thread.id}`
+    );
+    if (read.messages.some((m) => m.designOffer)) {
+      threadId = thread.id;
+    }
+  }
+  let sim: MacSim | undefined;
+  let stream: Subprocess | undefined;
+  const heard: string[] = [];
+  const offerLines = () =>
+    heard.filter((line) => line.startsWith(`probe design offer ${osprey.id}`));
+  try {
+    sim = await macSim(IOS_SIM);
+    const { udid } = sim;
+    await Bun.$`xcrun simctl bootstatus ${udid} -b`.quiet();
+    await Bun.$`xcrun simctl install ${udid} ${app}`.quiet();
+    const child = Bun.spawn(
+      [
+        "bash",
+        "-c",
+        `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "Transcript"'`,
+      ],
+      { stdout: "pipe", stderr: "ignore" }
+    );
+    stream = child;
+    (async () => {
+      const decoder = new TextDecoder();
+      const reader = child.stdout.getReader();
+      let rest = "";
+      for (;;) {
+        // The stream is read in order.
+        const { done, value: chunk } = await reader.read();
+        if (done) {
+          break;
+        }
+        rest += decoder.decode(chunk, { stream: true });
+        const split = rest.split("\n");
+        rest = split.pop() ?? "";
+        for (const line of split) {
+          if (line.includes("dev.cawco.app")) {
+            heard.push(line.replace(LOG_HEAD, ""));
+          }
+        }
+      }
+    })().catch(() => undefined);
+    await quietly(1500);
+    const launch = (flags: string[] = []) =>
+      Bun.$`xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -open-session ${`thread:${threadId}`} ${flags}`.quiet();
+    // Captured beside the web's thread, light and dark, while the offer stands.
+    await mkdir(KEEP, { recursive: true });
+    let standing: string | undefined;
+    for (const theme of ["light", "dark"] as const) {
+      await Bun.$`xcrun simctl ui ${udid} appearance ${theme}`.quiet();
+      const seen = offerLines().length;
+      await launch();
+      standing = await until(
+        `the ${theme} offer's actions`,
+        () =>
+          offerLines()
+            .slice(seen)
+            .findLast((line) => line.includes("answer=open")),
+        Boolean,
+        90_000
+      ).catch(() => standing);
+      await quietly(1500);
+      await Bun.$`xcrun simctl io ${udid} screenshot ${join(KEEP, `app-design-offer-${theme}.png`)}`.quiet();
+      const phone = await kit.page("iphone", { engine: "webkit", theme });
+      await open(
+        phone,
+        `${base}/session/thread:${threadId}`,
+        () => document.body.innerText.length > 0
+      );
+      await phone
+        .locator(`[data-design-offer='${osprey.id}'] button`)
+        .first()
+        .waitFor({ timeout: 15_000 })
+        .catch(() => undefined);
+      await settle(phone, 600);
+      await phone.screenshot({
+        path: join(KEEP, `web-design-offer-${theme}.png`),
+      });
+      await phone.close();
+    }
+    await Bun.$`xcrun simctl ui ${udid} appearance light`.quiet();
+    console.log(`  captures: ${KEEP}`);
+    await launch(["-design-offer-build"]);
+    const built6 = await until(
+      "the app's Build answered",
+      () => offerLines().findLast((line) => line.includes("answer=built")),
+      Boolean,
+      90_000
+    ).catch(() => offerLines().at(-1));
+    const stands = await offerState(osprey.id);
+    kit.check(
+      "6: the app draws Build and Not now under Caw's card in his thread, and its Build files the task the hub then names",
+      !!threadId &&
+        !!standing &&
+        !!built6 &&
+        stands.body?.answer === "built" &&
+        !!stands.body.builtTaskId &&
+        built6.includes(`task=${stands.body.builtTaskId} `),
+      `thread ${threadId}; standing: ${standing ?? "nothing"}; after Build: ${built6 ?? "nothing"}; hub ${stands.status} ${JSON.stringify(stands.body)}`
+    );
+  } finally {
+    stream?.kill();
+    await sim?.release();
+  }
 };
+
+/** iOS 18.5, the app's oldest target, as the iOS specs run it. */
+const IOS_SIM = {
+  runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
+  device: "iPhone 16 Pro",
+};
+const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
+/** Where the paired captures go: outside the workspace, for a later review of app against web. */
+const KEEP = join(
+  process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"),
+  "cawco-captures",
+  "prd-parity",
+  "b4-design-offer"
+);
 
 export default { name: "design-offers", run } satisfies Spec;

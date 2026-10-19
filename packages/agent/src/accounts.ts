@@ -92,8 +92,9 @@ const AUTH_STATUS_TIMEOUT_MS = 20_000;
 /**
  * What `claude auth status --json` said for a config dir: its sign-in, or
  * `unread` with the sentence why it says nothing of one (the version gate
- * refused to run it, or it printed nothing it could mean). Neither is
- * signed out.
+ * refused to run it, or it printed nothing it could mean), or `locked`: it
+ * was not asked, its login being in the locked login keychain
+ * ({@link lockedAway}). None is signed out.
  */
 export type AuthStatus =
   | {
@@ -102,7 +103,8 @@ export type AuthStatus =
       authMethod?: string;
       identity?: AccountIdentity;
     }
-  | { kind: "unread"; why: string };
+  | { kind: "unread"; why: string }
+  | { kind: "locked"; why: string };
 
 /** The sentence for a `claude auth status` on `dir` that gave no answer in time, or ended before it answered. */
 export const noAuthAnswer = (
@@ -140,6 +142,8 @@ const statusIn = (
  * `dir`): signed in, how, and as whom ({@link AuthStatus}). Unanswered when
  * it ran out of {@link AUTH_STATUS_TIMEOUT_MS} (however the process then
  * took its end), or something else ended it before it answered (`dead`).
+ * Not run, and `locked`, when the dir's login is in the locked login
+ * keychain ({@link lockedAway}).
  */
 export const authStatusIn = async (
   env: Record<string, string | undefined>,
@@ -159,6 +163,15 @@ export const authStatusIn = async (
       };
     }
     throw error;
+  }
+  if (await lockedAway(serviceOf(env.CLAUDE_CONFIG_DIR))) {
+    return {
+      kind: "answered",
+      value: {
+        kind: "locked",
+        why: `\`claude auth status\` was not run for ${dir}: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it. Its sign-in was not read.`,
+      },
+    };
   }
   return readWithin<AuthStatus>(AUTH_STATUS_TIMEOUT_MS, async (signal) => {
     const child = Bun.spawn([executable, "auth", "status", "--json"], {
@@ -180,6 +193,15 @@ export const authStatusIn = async (
       return {
         kind: "unread",
         why: `Claude Code answered \`claude auth status\` for ${dir} with no JSON carrying a loggedIn (exit ${child.exitCode}). Its sign-in was not read.`,
+      };
+    }
+    // It "Exits with code 0 if logged in, 1 if not"
+    // (https://code.claude.com/docs/en/cli): an exit that says otherwise
+    // than its JSON leaves neither read.
+    if (status.loggedIn !== (child.exitCode === 0)) {
+      return {
+        kind: "unread",
+        why: `Claude Code answered \`claude auth status\` for ${dir} with loggedIn ${status.loggedIn} but exit ${child.exitCode}, which say opposite things. Its sign-in was not read.`,
       };
     }
     // `email` and `orgName` are the login's `emailAddress` and
@@ -239,40 +261,55 @@ export const changingSignins = <T>(change: Promise<T>): Promise<T> => {
 /**
  * What one read of the machine's account dirs found: each dir Claude Code
  * answered for, and the dirs whose sign-in was not read ({@link
- * authStatusIn} unanswered, or answered with nothing of a sign-in), which are
- * neither signed in nor out: the hub keeps what it last had for each.
+ * authStatusIn} unanswered, answered with nothing of a sign-in, or not asked
+ * for a login in the locked keychain), which are neither signed in nor out:
+ * the hub keeps what it last had for each. `locked` names the unread ones
+ * whose login is in the locked keychain.
  */
 export interface AccountsRead {
   accounts: AccountReport[];
+  locked: string[];
   unread: string[];
 }
 
 /** The account dirs whose last read went unanswered, so each is said once until it answers again. */
 const unanswered = new Set<string>();
 
-/** The account id of a dir whose sign-in was not read, said once per streak with `why`. */
-const unreadAccount = (account: string, why: string): string => {
+/** A dir whose sign-in was not read, and whether its login is in the locked keychain. */
+interface Unread {
+  account: string;
+  locked: boolean;
+}
+
+/** A dir whose sign-in was not read, said once per streak with `why`. */
+const unreadAccount = (
+  account: string,
+  why: string,
+  locked: boolean
+): Unread => {
   if (!unanswered.has(account)) {
     unanswered.add(account);
     console.warn(`[accounts] ${why}`);
   }
-  return account;
+  return { account, locked };
 };
 
-/** One account dir read, or the account id when its sign-in was not read (said once). */
+/** One account dir read, or the dir unread (said once). */
 const readAccount = async (
   account: string
-): Promise<AccountReport | string> => {
+): Promise<AccountReport | Unread> => {
   const dir = accountConfigDir(account);
   const read = await authStatusIn(envFor(account), dir);
   switch (read.kind) {
     case "unanswered":
-      return unreadAccount(account, noAuthAnswer(dir, read));
+      return unreadAccount(account, noAuthAnswer(dir, read), false);
     case "answered": {
       const status = read.value;
       switch (status.kind) {
         case "unread":
-          return unreadAccount(account, status.why);
+          return unreadAccount(account, status.why, false);
+        case "locked":
+          return unreadAccount(account, status.why, true);
         case "signin": {
           unanswered.delete(account);
           const kind = kindOf(status.authMethod);
@@ -308,11 +345,13 @@ export const accountReports = async (): Promise<AccountsRead> => {
     const seen = signinChanged;
     const read = await Promise.all(accountIds().map(readAccount));
     if (seen === signinChanged) {
+      const unread = read.filter((one): one is Unread => "locked" in one);
       return {
         accounts: read.filter(
-          (one): one is AccountReport => typeof one !== "string"
+          (one): one is AccountReport => !("locked" in one)
         ),
-        unread: read.filter((one): one is string => typeof one === "string"),
+        locked: unread.filter((one) => one.locked).map((one) => one.account),
+        unread: unread.map((one) => one.account),
       };
     }
   }
@@ -346,50 +385,69 @@ const KEYCHAIN_USER = /^[a-zA-Z0-9._-]+$/;
  * also https://github.com/musistudio/claude-code-router/issues/1601.
  */
 export const keychainService = (account: string): string =>
-  `Claude Code-credentials-${createHash("sha256")
-    .update(accountConfigDir(account).normalize("NFC"))
-    .digest("hex")
-    .slice(0, 8)}`;
+  serviceOf(accountConfigDir(account));
+
+/** The default dir's Keychain service: no `CLAUDE_CONFIG_DIR`, no hash suffix. */
+export const HOME_SERVICE = "Claude Code-credentials";
+
+/** The Keychain service of the dir `CLAUDE_CONFIG_DIR` names, or of the default dir when it names none ({@link keychainService}). */
+const serviceOf = (configDir: string | undefined): string =>
+  configDir === undefined
+    ? HOME_SERVICE
+    : `${HOME_SERVICE}-${createHash("sha256")
+        .update(configDir.normalize("NFC"))
+        .digest("hex")
+        .slice(0, 8)}`;
 
 /**
- * Whether the keychain holds an account's login item: its attributes only
- * (no `-w`), which read while the keychain is locked and never touch the
- * secret, so no prompt rises. A missing item exits 44.
+ * Whether the keychain holds the login item filed under `service`: its
+ * attributes only (no `-w`), which read while the keychain is locked and
+ * never touch the secret, so no prompt rises. A missing item exits 44.
  */
-const keychainHolds = async (account: string): Promise<boolean> => {
+const keychainHolds = async (service: string): Promise<boolean> => {
   const read =
-    await Bun.$`security find-generic-password -a ${keychainUser()} -s ${keychainService(account)}`
+    await Bun.$`security find-generic-password -a ${keychainUser()} -s ${service}`
       .quiet()
       .nothrow();
   return read.exitCode === 0;
 };
 
 /**
- * The machine's word on Claude, from its account dirs alone: authenticated
- * when any account is signed in here; on macOS, `unreadable-credentials`
- * when none is, the keychain holds one's login, and the login keychain is
- * locked for this process (login-keychain.ts, read with no secret and no
- * UI); else unauthenticated. The machine's own `~/.claude` has no say.
- * Undefined when none answered signed in and some dir gave no answer: its
- * dirs have not said, and the hub keeps the machine's last word.
+ * Whether the login filed under `service` is in the login keychain while it
+ * is locked for this process: on macOS, the item is there and the keychain is
+ * locked (login-keychain.ts, no secret, no UI). Claude Code reads a login
+ * only with its secret (`security find-generic-password … -w`, CLI 2.1.302),
+ * which on a locked keychain raises the unlock dialog inside the desktop
+ * session and waits on it, so nothing that runs it in the background is
+ * started on such a login. The item is read first: the lock is read only of
+ * a keychain that holds one.
  */
-export const claudeAuth = async ({
+const lockedAway = async (service: string): Promise<boolean> =>
+  platform() === "darwin" &&
+  (await keychainHolds(service)) &&
+  keychainLocked(loginKeychainPath());
+
+/**
+ * The machine's word on Claude, from its account dirs alone: authenticated
+ * when any account is signed in here; else `unreadable-credentials` when a
+ * dir's login is in the locked login keychain ({@link lockedAway}), whatever
+ * the other dirs said; else, when some dir gave no answer, undefined (its
+ * dirs have not said, and the hub keeps the machine's last word); else
+ * unauthenticated. The machine's own `~/.claude` has no say.
+ */
+export const claudeAuth = ({
   accounts,
+  locked,
   unread,
-}: AccountsRead): Promise<AuthState | undefined> => {
+}: AccountsRead): AuthState | undefined => {
   if (accounts.some((report) => report.loggedIn)) {
     return "authenticated";
   }
+  if (locked.length > 0) {
+    return "unreadable-credentials";
+  }
   if (unread.length > 0) {
     return undefined;
-  }
-  if (platform() === "darwin") {
-    const held = await Promise.all(
-      accounts.map((report) => keychainHolds(report.account))
-    );
-    if (held.some(Boolean) && keychainLocked(loginKeychainPath())) {
-      return "unreadable-credentials";
-    }
   }
   return "unauthenticated";
 };
@@ -400,12 +458,10 @@ export const claudeAuth = async ({
  * the hub leaves as they were), and the machine's word on Claude when its
  * dirs settle it. The one place the report's sign-ins are made.
  */
-export const claudeSignins = async (
+export const claudeSignins = (
   read: AccountsRead
-): Promise<
-  Pick<MachineHarnessReport, "accounts" | "auth" | "unreadAccounts">
-> => {
-  const auth = await claudeAuth(read);
+): Pick<MachineHarnessReport, "accounts" | "auth" | "unreadAccounts"> => {
+  const auth = claudeAuth(read);
   return {
     accounts: read.accounts,
     ...(read.unread.length > 0 ? { unreadAccounts: read.unread } : {}),
@@ -438,9 +494,15 @@ const PROBE_TIMEOUT_MS = 60_000;
  * initialize and waits. Nothing it loads makes a request: no user settings,
  * no MCP servers, nothing persisted. Throws with the CLI's word when it
  * cannot answer, and with its own sentence when it gave no answer in time
- * (never a probe that read nothing).
+ * (never a probe that read nothing). Not started on a login in the locked
+ * login keychain ({@link lockedAway}): it throws that sentence.
  */
 export const probeAccount = async (account: string): Promise<AccountProbe> => {
+  if (await lockedAway(keychainService(account))) {
+    throw new Error(
+      `${accountConfigDir(account)} was not probed: its login is in the login keychain, which is locked, and Claude Code reads it only by unlocking it.`
+    );
+  }
   const handle = query({
     prompt: idle,
     options: {

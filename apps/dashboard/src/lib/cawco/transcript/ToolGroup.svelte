@@ -9,6 +9,7 @@
     resultField,
   } from "@cawco/core/tool-presentation";
   import { getContext, untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { showArtifact } from "#lib/cawco/artifact-api.js";
   import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
@@ -50,6 +51,7 @@
    * as Prompt.svelte's permission fields, so the two surfaces read as one
    * idea.
    */
+  import PageThumb from "../preview/PageThumb.svelte";
   import type { Message } from "../types";
   import { useLedger } from "./arrivals.svelte";
   import DocThumb from "./DocThumb.svelte";
@@ -275,6 +277,35 @@
   ): boolean {
     return !!wanted && preview?.artifact?.id === wanted.id;
   }
+
+  /**
+   * The card on screen asks for its page's thumbnail, once per revision
+   * (PreviewPane takes it): a card nobody scrolls to, or one in a tab off
+   * screen, never costs the page a capture. A new revision watches it again,
+   * and the observer's first report asks again.
+   */
+  const wantsThumbnail =
+    (
+      record: () => (typeof cawco.previews)[string] | undefined
+    ): Attachment<HTMLElement> =>
+    (node) => {
+      const revision = record()?.revision;
+      if (!revision) {
+        return;
+      }
+      const watch = new IntersectionObserver((entries) => {
+        const preview = untrack(record);
+        if (
+          entries.some((entry) => entry.isIntersecting) &&
+          preview?.revision === revision &&
+          preview.thumbnailRevision !== revision
+        ) {
+          preview.thumbnailWanted = true;
+        }
+      });
+      watch.observe(node);
+      return () => watch.disconnect();
+    };
 </script>
 
 <div data-slot="tools" data-tool-group-rail-row class="rail-row">
@@ -414,12 +445,13 @@
             <!-- literal: 80px -->
             <div
               data-slot="preview-tool"
-              class="relative flex items-center gap-space-2 max-w-(--card-max) min-h-(--card-min) p-space-2 my-space-2 border border-border-hairline rounded-md bg-surface-raised shadow-tile not-has-[[data-slot=artifact-thumb]]:w-fit has-hover:bg-surface-hover has-focus-visible:outline-(length:--focus-ring-width) has-focus-visible:outline-focus-ring has-focus-visible:outline-offset-(--focus-ring-inset)"
+              class="relative flex items-center gap-space-2 max-w-(--card-max) min-h-(--card-min) p-space-2 my-space-2 border border-border-hairline rounded-md bg-surface-raised shadow-tile not-has-[[data-slot=page-thumb]]:w-fit has-hover:bg-surface-hover has-focus-visible:outline-(length:--focus-ring-width) has-focus-visible:outline-focus-ring has-focus-visible:outline-offset-(--focus-ring-inset)"
               data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
               data-share-ttl="10000"
               style:--card-max="440px"
               style:--card-min="80px"
+              {@attach wantsThumbnail(() => preview)}
             >
               <!-- literal: 44px -->
               <!-- The button draws no ring of its own (the card takes it):
@@ -484,22 +516,7 @@
                 >
               </button>
               {#if preview?.thumbnail}
-                <!-- literal: 90px -->
-                <!-- literal: 64px -->
-                <div
-                  aria-hidden="true"
-                  data-slot="artifact-thumb"
-                  class="w-(--thumb-w) h-(--thumb-h) shrink-0 overflow-hidden border border-border-hairline rounded-sm bg-surface-recess"
-                  inert
-                  style:--thumb-w="90px"
-                  style:--thumb-h="64px"
-                >
-                  <Shot
-                    alt="Preview"
-                    size="thumb"
-                    src={`data:image/png;base64,${preview.thumbnail}`}
-                  />
-                </div>
+                <PageThumb thumbnail={preview.thumbnail} />
               {/if}
             </div>
             {#if openFailed.has(callId(m))}
@@ -781,18 +798,6 @@
     border-radius: var(--radius-md);
   }
 
-  /* residual: foreign-dom */
-  /* The thumbnail is Shot's own box and image, which take no class. Their
-     block size is Shot's thumb's (48px, and the image 100% of it): at the
-     base its `figure.thumb .box` and `figure.thumb img` outrank this. */
-  [data-slot="artifact-thumb"] :global([data-slot="shot-box"]) {
-    min-block-size: 0;
-  }
-  [data-slot="artifact-thumb"] :global(img) {
-    inline-size: 100%;
-    object-fit: cover;
-    object-position: top;
-  }
   /* Each picture is a Shot, whose root takes no class. */
   [data-slot="shots"] > :global(*) {
     flex: 1 1 var(--shot-basis);

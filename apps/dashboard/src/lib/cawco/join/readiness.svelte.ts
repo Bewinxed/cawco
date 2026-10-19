@@ -12,6 +12,7 @@ import {
   IconSuccess,
   IconToolQuestion,
 } from "#lib/icons.js";
+import { devDebug } from "../dev-debug";
 
 export type Readiness =
   | { kind: "not-mac" }
@@ -128,17 +129,17 @@ export function readinessLine(
 }
 
 const source = $state<{ staged: Readiness }>({ staged: { kind: "not-mac" } });
+// The motion bench stands a state in to draw the real dialog in it (dev-debug.ts).
+if (import.meta.env.DEV) {
+  devDebug({ macReadiness: source });
+}
 
 /**
  * Each joined machine's readiness. No daemon reports it yet, so every machine
- * reads as not a Mac and its row says only that it joined. The motion bench
- * stages a state to draw the real dialog in it.
+ * reads as not a Mac and its row says only that it joined.
  */
 export const macReadiness = {
   of(_machineId: string | null): Readiness {
     return source.staged;
-  },
-  stage(readiness: Readiness): void {
-    source.staged = readiness;
   },
 };

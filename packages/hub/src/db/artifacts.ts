@@ -1,4 +1,5 @@
 import type { PreviewSource } from "@cawco/core";
+import { isPlace } from "@cawco/core/workspace-policy";
 import { and, asc, count, desc, eq, gt, gte, or, sql } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
@@ -15,6 +16,7 @@ type SourceColumn =
   | "sourcePort"
   | "sourcePath"
   | "sourceWorkspace"
+  | "sourcePlace"
   | "sourceStageDir"
   | "sourceStageFile"
   | "sourceServeCommand"
@@ -25,6 +27,16 @@ export type ArtifactRow = Omit<StoredArtifact, SourceColumn> & {
   source: PreviewSource;
 };
 
+/** A port source's `workspace`: a workspace's id, kept as its key, or a place's, kept as itself ({@link isPlace}). */
+const workspaceColumnsOf = (
+  source: PreviewSource
+): Pick<StoredArtifact, "sourcePlace" | "sourceWorkspace"> => {
+  const named = "port" in source ? (source.workspace ?? null) : null;
+  return named !== null && isPlace(named)
+    ? { sourceWorkspace: null, sourcePlace: named }
+    : { sourceWorkspace: named, sourcePlace: null };
+};
+
 /** A source as its columns keep it: one of page, dir or port set, the rest of its kind's beside it. */
 export const sourceColumnsOf = (
   source: PreviewSource
@@ -33,7 +45,7 @@ export const sourceColumnsOf = (
   sourceDir: "dir" in source ? source.dir : null,
   sourcePort: "port" in source ? source.port : null,
   sourcePath: "page" in source ? null : (source.path ?? null),
-  sourceWorkspace: "port" in source ? (source.workspace ?? null) : null,
+  ...workspaceColumnsOf(source),
   sourceStageDir: "port" in source ? (source.stage?.dir ?? null) : null,
   sourceStageFile: "port" in source ? (source.stage?.file ?? null) : null,
   sourceServeCommand: "port" in source ? (source.serve?.command ?? null) : null,
@@ -47,6 +59,7 @@ export const artifactOf = ({
   sourcePort,
   sourcePath,
   sourceWorkspace,
+  sourcePlace,
   sourceStageDir,
   sourceStageFile,
   sourceServeCommand,
@@ -54,6 +67,7 @@ export const artifactOf = ({
   ...row
 }: StoredArtifact): ArtifactRow => {
   const path = sourcePath === null ? {} : { path: sourcePath };
+  const workspace = sourceWorkspace ?? sourcePlace;
   const port = (): PreviewSource => ({
     port: sourcePort ?? 0,
     ...path,
@@ -63,7 +77,7 @@ export const artifactOf = ({
     ...(sourceServeCommand === null
       ? {}
       : { serve: { command: sourceServeCommand, cwd: sourceServeCwd ?? "." } }),
-    ...(sourceWorkspace === null ? {} : { workspace: sourceWorkspace }),
+    ...(workspace === null ? {} : { workspace }),
   });
   const folder = (): PreviewSource =>
     sourceDir === null ? port() : { dir: sourceDir, ...path };
@@ -84,23 +98,6 @@ export interface ArtifactChange {
 export type ArtifactPatch = Partial<
   Omit<ArtifactRow, "id" | "instanceId" | "projectId" | "kind" | "createdAt">
 >;
-
-/** A canvas's picks as the tables before artifacts kept them (drizzle 0144 set them aside). */
-export interface LegacyCanvas {
-  choices: {
-    choice: string;
-    note: string | null;
-    options: string;
-    pageHash: string;
-    updatedAt: number;
-    value: string | null;
-  }[];
-  id: string;
-  instanceId: string;
-  pageHash: string | null;
-  sentAt: number | null;
-  updatedAt: number;
-}
 
 /** The rows artifacts/ keeps: the list, and each document's update log. */
 export interface ArtifactsDb {
@@ -128,11 +125,7 @@ export interface ArtifactsDb {
   /** Replaces the log with one snapshot, at the seq the log had reached. */
   readonly compact: (id: string, snapshot: Uint8Array) => void;
   readonly create: (row: ArtifactRow) => ArtifactRow;
-  /** Drops the tables the canvases were set aside in, once imported. */
-  readonly dropLegacy: () => void;
   readonly get: (id: string) => ArtifactRow | undefined;
-  /** The canvases set aside for import; empty once they are dropped. */
-  readonly legacy: () => LegacyCanvas[];
   /** A session's artifacts, newest first. */
   readonly ofInstance: (instanceId: string) => ArtifactRow[];
   /** A project's artifacts, any of its sessions', newest first. */
@@ -244,33 +237,9 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
         .returning()
         .get()
     ),
-  dropLegacy: () => {
-    db.run(sql`DROP TABLE IF EXISTS legacy_canvas_choices`);
-    db.run(sql`DROP TABLE IF EXISTS legacy_canvases`);
-  },
   get: (id) => {
     const row = db.select().from(artifacts).where(eq(artifacts.id, id)).get();
     return row && artifactOf(row);
-  },
-  legacy: () => {
-    const there = db.get(
-      sql`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'legacy_canvases'`
-    );
-    if (!there) {
-      return [];
-    }
-    const canvases = db.all<Omit<LegacyCanvas, "choices">>(
-      sql`SELECT id, instance_id AS instanceId, page_hash AS pageHash, sent_at AS sentAt, updated_at AS updatedAt FROM legacy_canvases`
-    );
-    const choices = db.all<
-      LegacyCanvas["choices"][number] & { canvasId: string }
-    >(
-      sql`SELECT canvas_id AS canvasId, choice, options, note, value, page_hash AS pageHash, updated_at AS updatedAt FROM legacy_canvas_choices`
-    );
-    return canvases.map((canvas) => ({
-      ...canvas,
-      choices: choices.filter((choice) => choice.canvasId === canvas.id),
-    }));
   },
   ofInstance: (instanceId) =>
     db
@@ -295,6 +264,7 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
       .where(
         or(
           eq(artifacts.sourceWorkspace, id),
+          eq(artifacts.sourcePlace, id),
           and(
             eq(artifacts.machineId, machineId),
             or(

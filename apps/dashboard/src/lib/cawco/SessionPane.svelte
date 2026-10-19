@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PermissionResult } from "@cawco/core";
+  import type { HarnessKind, PermissionResult } from "@cawco/core";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer, grown into any parked permission
@@ -86,6 +86,7 @@
     composerBindings,
   } from "./workspace/composer-dock.svelte";
   import { settleWhile } from "./workspace/dock.svelte";
+  import { layoutPolicy } from "./workspace/layout-policy.svelte";
   import { rebuildScheduler } from "./workspace/scheduler.svelte";
   import { workspace } from "./workspace/workspace.svelte";
 
@@ -113,7 +114,8 @@
     viewId: string;
     browsing: string | null;
     browsingCwd: string;
-    browsingHarness: string;
+    /** The stored conversation's harness; its address is none without it. */
+    browsingHarness: HarnessKind | undefined;
     visible: boolean;
     /** Its group's active tab (PaneHost). */
     active: boolean;
@@ -121,12 +123,6 @@
     serverTail?: ServerTail | null;
   } = $props();
 
-  /**
-   * A named state stands in the middle of the transcript area, its mark,
-   * title and line centred in it, as the board's empty state stands: never
-   * a start-aligned block set in the middle.
-   */
-  const STATEFUL = "m-auto max-w-(--stateful-measure) items-center text-center";
   let paneWidth = $state(0);
   /**
    * The side surface's share of this pane's width, in percent (SideSplit):
@@ -135,6 +131,8 @@
    */
   let previewShare = $state(0);
   const phone = $derived(paneWidth > 0 && paneWidth < 900);
+  /** The side surface is the bottom drawer, not the split (layoutPolicy.sideDrawer). */
+  const drawer = $derived(layoutPolicy.sideDrawer(paneWidth));
   let side = $state<ReturnType<typeof SideSplit>>();
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */
   let parkedRoom = $state(0);
@@ -329,7 +327,8 @@
     const id = viewId;
     const cwd = browsingCwd;
     const harness = browsingHarness;
-    const hint = browsing ? { machineId: browsing, cwd, harness } : null;
+    const hint =
+      browsing && harness ? { machineId: browsing, cwd, harness } : null;
     const running = isLive;
     // biome-ignore lint/complexity/noVoid: read-only dependency — Retry bumps `attempt` purely to re-run this effect
     void attempt;
@@ -1084,11 +1083,13 @@
 {/snippet}
 
 <!-- A named state, not an empty pane: what happened, in one line, and the one
-     thing that can be done about it. -->
+     thing that can be done about it. Each named state stands where the
+     transcript's first row would, from the area's top on the transcript's
+     start edge (`pad="transcript"`). The owner: "I didn't say center the
+     whole block! No sane ui developer does this". -->
 {#snippet faultState(fault: ReadFault)}
   <EmptyState
-    class={STATEFUL}
-    pad="pane"
+    pad="transcript"
     icon={fault.reason === "offline" ? IconLaptop : IconAlert}
     line={faultLine}
     role="alert"
@@ -1122,8 +1123,7 @@
 
 {#snippet missingState()}
   <EmptyState
-    class={STATEFUL}
-    pad="pane"
+    pad="transcript"
     icon={IconAlert}
     title="This session isn't reachable from here"
   >
@@ -1138,11 +1138,9 @@
   </EmptyState>
 {/snippet}
 
-<!-- literal: 46ch -->
 <div
   data-slot="pane"
   class="relative flex min-h-0 min-w-0 flex-auto flex-col @container bg-surface-recess"
-  style:--stateful-measure="46ch"
   bind:clientWidth={paneWidth}
 >
   {#if prestart}
@@ -1150,7 +1148,7 @@
   {:else if session}
     <SideSplit
       {active}
-      {phone}
+      phone={drawer}
       planOf={viewId}
       task={besideStages ? besideSurface : undefined}
       taskOpen={!!beside}
@@ -1184,8 +1182,7 @@
           {:else if blank}
             <div class="flex min-h-0 flex-auto flex-col" in:crossIn out:leave>
               <EmptyState
-                class={STATEFUL}
-                pad="pane"
+                pad="transcript"
                 icon={IconChat}
                 line="Write the first message below."
                 title="Nothing has been said here yet"

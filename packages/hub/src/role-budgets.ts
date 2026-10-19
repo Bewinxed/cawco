@@ -62,11 +62,11 @@ import type { Tasks } from "./tasks";
  * project_settings' `set_runs_on`: an Apple task named a Mac nowhere, so
  * task_start placed it on Linux (tsk-7, tsk-15). About 80 tokens for the
  * worker, 95 for the lead, descriptions cut to a clause (worker 23,830,
- * lead 15,583 measured). project_settings' `set_apple_gate` (apple-gate.ts):
- * two commits landed with iOS compile errors no Linux check saw, and the
- * gate that stops that is the person's per project. About 30 tokens for
+ * lead 15,583 measured). project_settings' `set_apple_gate`: two commits
+ * landed with iOS compile errors no Linux check saw. About 30 tokens for
  * the lead, its description cut to the kinds that always ask (lead 15,638
- * measured). `artifact_delete` (a superseded artifact leaves the panel) fits
+ * measured); gone on 2026-10-18, when a project's gate became its gate.md
+ * (gate-file.ts). `artifact_delete` (a superseded artifact leaves the panel) fits
  * the same budgets: the artifact and comment tools' words were cut to pay
  * for it (worker 23,877, delegate 6,440, lead 15,641 measured).
  * 2026-10-15: `machine_pause` (machine-pause.ts), the orchestrator's way to
@@ -122,7 +122,7 @@ import type { Tasks } from "./tasks";
  * component from its sheet, and the agent writes the same: artifact_update's
  * `args` (a story's values set and dropped) and `story` (add, duplicate,
  * remove, move), artifact_read's `sheet` (args and props), and
- * `components_list` (§6's discovery), deferred. Their words say only what
+ * `design_map` (the component library), deferred. Their words say only what
  * the schema does not (what a write answers, where `dir` starts), and the
  * story name's pattern is left to the route and the stage, which say why
  * they refuse: 305 tokens for the worker, the delegate and the lead (worker
@@ -185,11 +185,47 @@ import type { Tasks } from "./tasks";
  * 2026-10-16/17). About 60 tokens for the delegate (7,392 measured), the
  * words already cut twice. Raised deliberately for the delegate; the
  * worker's and the lead's fit as they stand.
+ * 2026-10-18: `memory_recall` (session-prose.ts), the owner's pick of the
+ * memory upgrade ("core and session search"): "have we tried this before",
+ * answered from a project's past sessions, for the worker, the delegate and
+ * the lead. memory_note gains `since`, memory_propose takes `files` and
+ * names the fact line's shape. Every new description cut to a clause and its
+ * parameters to a few words; the tool's schema alone is about 220 tokens.
+ * About 300 tokens for each (worker 24,877, delegate 7,624, lead 16,466
+ * measured). Raised deliberately for the delegate and the lead; the
+ * worker's fits.
+ * 2026-10-18: decision pages as OpenUI programs (Projects spec §5.8, the
+ * owner's picks of 2026-10-18): artifact_create's `program` and
+ * artifact_update's `statements`, the page clause of each rewritten to
+ * name them, and the lead's decision_add, decision_link and decision_group
+ * gone with decisions.json (the graph is derived from the programs). About
+ * 70 tokens for the worker and the delegate, about 300 fewer for the lead
+ * (worker 25,192, delegate 7,693, lead 16,148 measured, landed together
+ * with memory_recall). Raised deliberately for the worker and the delegate,
+ * both owner-picked features; the lead's lowered to what it measures.
+ * 2026-10-18, after them: `discard_workspace` (work-items.ts `discardFor`): a held
+ * workspace is its delegating session's to decide, told by a notice, no
+ * longer the owner's from the places list (38 sat there for him to sort),
+ * and a discard still writes a carry. One sentence and a one-line argument,
+ * about 70 tokens for the worker and the lead (worker 25,314, delegate
+ * 7,693, lead 16,270 measured beside `memory_recall` and the decision
+ * programs). Raised deliberately for the worker and the lead, both at their
+ * budgets.
+ * 2026-10-19: the component canvas (the owner's design system, "a canvas
+ * where the agent can interactively build components and show it to me"):
+ * artifact_create's and artifact_update's `about`, `edges`, `group` and
+ * `dials`, artifact_read's `detail`, `story`, `state` and `render`, and
+ * design_map in place of components_list (dir, query, component, paging).
+ * Every field description past an example was cut; what stays is the shape.
+ * About 1,260 tokens for the worker, the delegate and the lead (worker
+ * 26,577, delegate 8,956, lead 17,533 measured beside the decision
+ * programs, memory_recall and discard_workspace). Raised deliberately, by
+ * that, for each.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 25_000,
-  delegate: 7400,
-  lead: 16_220,
+  worker: 26_580,
+  delegate: 8960,
+  lead: 17_540,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
@@ -233,15 +269,17 @@ export interface RoleSize {
   tools: number;
 }
 
-/** Each role's listed tools, their count and size against its budget. */
+/** Each role's listed tools, their count and size against its budget, on Claude Code. */
 export const measureRoles = (): RoleSize[] => {
   const rows = SESSION_ROLES.map((role): InstanceRow => ({
     id: role,
     machineId: "machine",
     cwd: "/",
+    harness: "claude",
     launchDir: "known",
     sessionId: null,
     status: "running",
+    kind: "mainline",
     ...SAMPLES[role],
   }));
   // The server's sweeps start with it; closed below, through the one path.
@@ -281,10 +319,12 @@ export const measureRoles = (): RoleSize[] => {
         caps: {} as never,
         // Caw reads back the turns his leads are in as he is made: none here.
         db: { leadTurns: () => [] } as never,
+        proposeType: () => Promise.reject(new Error("measuring")),
         end: () => undefined,
         inTurn: () => false,
         interrupt: () => undefined,
         fleetChoicesSet: () => false,
+        relayOffer: () => null,
         upstreamAnswered: () => false,
         folderChanged: () => undefined,
         leadHome: () => Promise.resolve(undefined),
@@ -356,6 +396,7 @@ export const measureRoles = (): RoleSize[] => {
         folderChanged: () => undefined,
         notice: () => undefined,
         park: () => undefined,
+        recall: () => Promise.reject(new Error("measuring")),
         settle: () => undefined,
         threadOf: () => undefined,
         watch: createTurnWatch({

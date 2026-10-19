@@ -7,7 +7,7 @@
  * the same change.
  *
  * Fakes in this process and the sandbox:
- * - GitHub's REST API (`CAWCO_GITHUB_API`): the lists the poller reads, and
+ * - GitHub's REST API (`fleet.standIns.githubApi`): the lists the poller reads, and
  *   `POST/DELETE /repos/probe/app/hooks`, which records the webhook's URL and
  *   secret and then sends GitHub's signed `ping` to the receiver, as GitHub
  *   does through Funnel.
@@ -308,7 +308,7 @@ if (args[0] === "funnel" && args.includes("--bg")) {
 await writeFile(join(bin, "tailscale"), FAKE_TAILSCALE);
 chmodSync(join(bin, "tailscale"), 0o755);
 fleet.env.PATH = `${bin}:${fleet.env.PATH}`;
-fleet.env.CAWCO_GITHUB_API = API;
+fleet.standIns.githubApi = API;
 
 const setMode = (mode: string) => writeFile(join(tsDir, "mode"), `${mode}\n`);
 const tsCalls = async () =>
