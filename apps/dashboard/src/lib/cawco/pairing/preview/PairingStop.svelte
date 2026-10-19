@@ -8,19 +8,13 @@
     | "denied"
     | "expired"
     | "failed";
-  /** A take the owner picks between, shown on its own stop. */
-  export interface StopPick {
-    choice: string;
-    label: string;
-    option: string;
-  }
 </script>
 
 <script lang="ts">
   /**
    * One stop of the pairing sheet: the real PairingPanel at rest in the
-   * stop's state, the control that plays the moment into it from the state
-   * before, and, on a take's stop, its Pick. Preview only.
+   * stop's state, and the control that plays the moment into it from the
+   * state before. A take is picked on the decision page. Preview only.
    */
   import { onDestroy, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -32,20 +26,18 @@
     type PanelStage,
   } from "../PairingPanel.svelte";
   import type { QrWait } from "../PairingQr.svelte";
-  import { FIXTURE, timeline, verification } from "./picks.svelte";
+  import { FIXTURE, timeline, verification } from "./fixture";
 
   let {
     stop,
-    wait = "sweep",
+    wait = "ping",
     approved = "swallow",
     expired = "park",
-    pick,
   }: {
     stop: PairingStopName;
     wait?: QrWait;
     approved?: ApprovedTake;
     expired?: ExpiredTake;
-    pick?: StopPick;
   } = $props();
 
   const SECOND = 1000;
@@ -211,27 +203,15 @@
 </script>
 
 <div class="stop">
-  {#if control || pick}
+  {#if control}
     <div class="controls">
-      {#if control}
-        <Button
-          icon={IconPlay}
-          label={control.label}
-          onclick={control.play}
-          size="xs"
-          variant="secondary"
-        />
-      {/if}
-      {#if pick}
-        <div data-cawco-choice={pick.choice}>
-          <Button
-            data-option={pick.option}
-            label="Pick: {pick.label}"
-            size="xs"
-            variant="ghost"
-          />
-        </div>
-      {/if}
+      <Button
+        icon={IconPlay}
+        label={control.label}
+        onclick={control.play}
+        size="xs"
+        variant="secondary"
+      />
     </div>
   {/if}
   {#key run}

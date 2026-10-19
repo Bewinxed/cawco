@@ -7,7 +7,7 @@
   import CawPanel from "../../home/CawPanel.svelte";
   import type { CawFeed } from "../../home/caw-feed.svelte";
   import type { NeedsItem } from "../../home/home-state.svelte";
-  import { FIXTURE } from "./picks.svelte";
+  import { FIXTURE } from "./fixture";
 
   const raisedAt = Date.now() - 20_000;
   const needs: NeedsItem[] = [
