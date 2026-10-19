@@ -12,21 +12,26 @@
  * loop ran on in the older sandbox, where nothing the delegate ran could see
  * or signal it.
  *
- * 0. First, H runs a command in the foreground that listens on nothing and
- *    runs {@link FG_SECONDS} s (`sh -c 'sleep …; exit 7'`). While it runs,
- *    its boundary's record of what it started with
- *    (`boundaries/<gen>/policy.json`) is removed, as a boundary a build
- *    before the record started has none, and the agent restarts on an older
- *    form, as the upgrade does. On 2026-10-19 the install of 4343 over 4303
- *    stopped 20 such boundaries "as its access narrowed … (what its boundary
- *    started with is not on record)", leaf 3b8e7144's probe run kf-2 among
- *    them, cut off with exit 137. The command finishes with its own exit
- *    code, 7, in the boundary it started in (`FG-STATUS-7`, not the
- *    executor's "boundary stopped" line); the agent's log says it cannot
- *    compare the grant and keeps the boundary while its work runs
- *    (agent boundary.ts `compareGrant`), and no line says "not on record".
+ * 0. First, F, a delegate of its own with a boundary of its own, runs a
+ *    command in the foreground that listens on nothing and runs
+ *    {@link FG_SECONDS} s (`sh -c 'sleep …; exit 7'`). While it runs, its
+ *    boundary's record of what it started with (`boundaries/<gen>/policy.json`)
+ *    is removed, as a boundary a build before the record started has none,
+ *    and the agent restarts on an older form, as the upgrade does. On
+ *    2026-10-19 the install of 4343 over 4303 stopped 20 such boundaries "as
+ *    its access narrowed … (what its boundary started with is not on
+ *    record)", leaf 3b8e7144's probe run kf-2 among them, cut off with exit
+ *    137. The command finishes with its own exit code, 7, in the boundary it
+ *    started in (`FG-STATUS-7`, not the executor's "boundary stopped" line);
+ *    the agent's log says it cannot compare the grant and keeps the boundary
+ *    while its work runs (agent boundary.ts `compareGrant`), and stops
+ *    nothing as narrowed. Once the command has ended, F resting with nothing
+ *    in its boundary, the boundary is handed over to one that starts with
+ *    this build's record. F is not H: a boundary with no record is kept for
+ *    as long as anything runs in it, and H's loop never ends, so legs 4 to 6,
+ *    which narrow a boundary with a record, run on H's own.
  *
- * H then starts `setsid nohup sh -c 'while :; do date +%s >> beat; sleep 2; done'`
+ * H, delegated next, starts `setsid nohup sh -c 'while :; do date +%s >> beat; sleep 2; done'`
  * in its clone and ends its turn in a wait, its item live. Its boundary is
  * given an older form (an account added to its policy, as a session on
  * another account would) and the agent restarts. A message then gives H a
@@ -49,7 +54,7 @@
  *    loop by its command and pid, saying it can be started again.
  * 6. The hub's own move of a project's folder is an event: with the agent's
  *    look held off, H's loop started again in a boundary that reads the
- *    folder, and H and its parent asleep, the project is deleted; within 10 s
+ *    folder, and H, F and their parent asleep, the project is deleted; within 10 s
  *    the fleet sync that follows replaces H's boundary, its loop stopped and
  *    the line queued for H's next command.
  *
@@ -79,14 +84,30 @@ const FOREGROUND = [
   `echo "FG-""STATUS-$?"`,
 ].join("; ");
 const FG_STATUS = /FG-STATUS-(\d+)/;
-/** The account round 0's restart adds, apart from round 1's, so each restart is a form change of its own. */
+/** F's brief: round 0's delegate, apart from H. */
+const FG_TAG = "PROBE-FG-F:";
+/** The account round 0's restart adds to F's policy: a form change of F's boundary alone. */
 const FG_ACCOUNT = "acct-probe-older-form-fg";
 /** The executor's line for a command cut off by its boundary's end (agent boundary.ts `execScript`). */
 const CUT_OFF = "boundary stopped while this command ran";
 /** How the agent says it keeps a boundary whose grant it cannot compare (boundary.ts `ensure`, `compareGrant`). */
 const UNKNOWN_GRANT_LINE = "grant cannot be compared with this build's policy";
-/** How main's agent said it stopped one with no record (boundary.ts `narrowing`, before `compareGrant`). */
-const NOT_ON_RECORD = "not on record";
+/**
+ * How the agent says it stopped a boundary as narrowed (boundary.ts
+ * `replaceNarrowed`, `recheckNow`). The parent of 3aa74a224 said it of a
+ * boundary with no record ("… is stopped now, as its access narrowed … (what
+ * its boundary started with is not on record)"); the line that keeps one
+ * says "not on record" too, so the stop is matched by its own words.
+ */
+const STOPPED_NARROWED =
+  /is stopped now, as its access narrowed|its narrowed boundaries are stopped now/;
+/** How the agent says it handed boundary `pid` over once nothing ran in it (boundary.ts `handOver`, `restartStubbed`). */
+const handedOver = (pid: string): RegExp =>
+  new RegExp(
+    `its boundary ${pid} (?:\\(form [^)]*\\) is handed over to|held an srt mount point .* is replaced by) (\\d+)`
+  );
+/** How long after F's command ends its boundary may take to be handed over: the agent's look each 5 s (boundary.ts `STALE_LOOK_MS`), a start, and slack. */
+const HANDOVER_BOUND_MS = 30_000;
 const TAG = /PROBE-BEAT-(?:CHECK-|NARROW-|AGAIN-)?H:/;
 /** The loop's beat, `sleep 2`: a read of the heartbeat that must see it grow waits more than one. */
 const BEAT_GAP_MS = 5000;
@@ -127,7 +148,6 @@ const CHECK = [
 
 const steps: {
   checked?: boolean;
-  foreground?: boolean;
   narrowed?: boolean;
   restarted?: boolean;
   rested: number;
@@ -151,18 +171,38 @@ const offered = (request: Seen, name: string, input: object): Reply => {
     : text(`${name} is not offered`);
 };
 
-/** H: starts the loop, rests; asked to check, checks, rests again. */
-const respond = (request: Seen): Reply => {
-  if (!(request.tools && TAG.test(request.all))) {
-    return text("ok");
-  }
-  if (!steps.foreground) {
-    steps.foreground = true;
+const fgSteps: { ran?: boolean; rested?: boolean } = {};
+
+/** F: runs its foreground command, then rests, nothing left in its boundary. */
+const respondF = (request: Seen): Reply => {
+  if (!fgSteps.ran) {
+    fgSteps.ran = true;
     return tool("Bash", {
       command: FOREGROUND,
       description: "Run the long command",
       timeout: 300_000,
     });
+  }
+  if (!fgSteps.rested) {
+    const reply = offered(request, WAIT, {
+      minutes: 60,
+      reason: "its parent's word on the long command",
+    });
+    if (reply.tool?.name === WAIT) {
+      fgSteps.rested = true;
+    }
+    return reply;
+  }
+  return text("ok");
+};
+
+/** F as {@link respondF}; H: starts the loop, rests; asked to check, checks, rests again. */
+const respond = (request: Seen): Reply => {
+  if (request.tools && request.all.includes(FG_TAG)) {
+    return respondF(request);
+  }
+  if (!(request.tools && TAG.test(request.all))) {
+    return text("ok");
   }
   if (!steps.started) {
     steps.started = true;
@@ -223,27 +263,39 @@ const seenWith = (fleet: Fleet, marker: RegExp, from: number) =>
 const projectFolderOf = (fleet: Fleet, id: string): string =>
   join(fleet.sandbox, "hub", "projects", id);
 
+/** Workspace `id`'s state dir on the agent's machine. */
+const stateOf = (home: string, id: string): string =>
+  join(home, ".cawco", "workspaces", id);
+
+/** Workspace `id`'s current boundary as the agent records it (agent boundary.ts `readHeld`): its generation and pid. */
+const heldOf = async (
+  home: string,
+  id: string
+): Promise<{ gen?: string; pid?: number }> =>
+  JSON.parse(
+    await readFile(join(stateOf(home, id), "boundary.json"), "utf8").catch(
+      () => "{}"
+    )
+  ) as { gen?: string; pid?: number };
+
 /** The policy workspace `id`'s current boundary started with, as its generation keeps it (agent boundary.ts `grantedOf`); none on record. */
 const grantedNow = async (
   home: string,
   id: string
 ): Promise<{ allowRead?: string[] } | undefined> => {
-  const state = join(home, ".cawco", "workspaces", id);
-  const held = JSON.parse(
-    await readFile(join(state, "boundary.json"), "utf8").catch(() => "{}")
-  ) as { gen?: string };
-  if (!held.gen) {
+  const { gen } = await heldOf(home, id);
+  if (!gen) {
     return;
   }
   return JSON.parse(
     await readFile(
-      join(state, "boundaries", held.gen, "policy.json"),
+      join(stateOf(home, id), "boundaries", gen, "policy.json"),
       "utf8"
     ).catch(() => "null")
   ) as { allowRead?: string[] } | undefined;
 };
 
-/** The fleet up, a project, its parent session and H delegated. */
+/** The fleet up, a project and its parent session; each delegate is delegated by `delegate`. */
 const standUp = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   const home = fleet.env.HOME as string;
@@ -277,19 +329,21 @@ const standUp = async (kit: Kit) => {
   const parent = await fleet.spawn("claude", "Parent", src, {
     projectId: project.id,
   });
-  const h = await fleet.api<{
-    instanceId: string;
-    workItemId: string;
-    workspaceId: string;
-  }>("/api/work-items", {
-    parentInstanceId: parent,
-    title: "Beat H",
-    prompt: "PROBE-BEAT-H: start the heartbeat, then wait.",
-    harness: "claude",
-    model: "claude-haiku-4-5",
-    cwd: src,
-  });
-  return { fleet, home, h, parent, project: project.id };
+  /** A delegate of the parent's, in a workspace of its own. */
+  const delegate = (title: string, prompt: string) =>
+    fleet.api<{
+      instanceId: string;
+      workItemId: string;
+      workspaceId: string;
+    }>("/api/work-items", {
+      parentInstanceId: parent,
+      title,
+      prompt,
+      harness: "claude",
+      model: "claude-haiku-4-5",
+      cwd: src,
+    });
+  return { delegate, fleet, home, parent, project: project.id };
 };
 
 /** Gives workspace `id` an older form (`account` added to its policy), then restarts the agent, as an update does. */
@@ -329,8 +383,18 @@ const run = async (kit: Kit) => {
     );
     return;
   }
-  const { fleet, home, h, parent, project } = await standUp(kit);
-  await foregroundAcross(kit, fleet, home, h.workspaceId);
+  const { delegate, fleet, home, parent, project } = await standUp(kit);
+  const f = await delegate(
+    "Long command F",
+    `${FG_TAG} run the long command, then wait.`
+  );
+  await foregroundAcross(kit, fleet, home, f.workspaceId);
+  // H's boundary is its own and keeps its record throughout: legs 4 to 6
+  // narrow a boundary whose grant can be compared.
+  const h = await delegate(
+    "Beat H",
+    "PROBE-BEAT-H: start the heartbeat, then wait."
+  );
   const item = () =>
     fleet.query<{ state: string; wait_until: number | null }>(
       "SELECT state, wait_until FROM work_items WHERE id = ?",
@@ -409,26 +473,19 @@ const run = async (kit: Kit) => {
     clone,
     id: h.workspaceId,
     instanceId: h.instanceId,
-    parent,
+    others: [f.instanceId, parent],
     project,
   });
 };
 
-/** H's boundary's generation dir, where its record of what it started with lies (agent boundary.ts `grantedOf`). */
-const generationOf = async (home: string, id: string): Promise<string> => {
-  const state = join(home, ".cawco", "workspaces", id);
-  const held = JSON.parse(
-    await readFile(join(state, "boundary.json"), "utf8").catch(() => "{}")
-  ) as { gen?: string };
-  return join(state, "boundaries", held.gen ?? "unread");
-};
-
 /**
- * 0: H's foreground command, listening on nothing, runs across an agent
+ * 0: F's foreground command, listening on nothing, runs across an agent
  * restart that gives its boundary an older form, its record of what it
  * started with (`policy.json` in its generation dir) removed first, as a
  * boundary a build before the record started has none; it finishes with its
- * own exit code ({@link FOREGROUND}).
+ * own exit code ({@link FOREGROUND}), nothing is stopped as narrowed, and
+ * once it has ended, F resting, the boundary is handed over to one that
+ * starts with this build's record.
  */
 const foregroundAcross = async (
   kit: Kit,
@@ -437,7 +494,7 @@ const foregroundAcross = async (
   id: string
 ): Promise<void> => {
   const clone = await until(
-    "H's clone",
+    "F's clone",
     () =>
       fleet.query<{ path: string }>(
         "SELECT path FROM workspaces WHERE id = ?",
@@ -447,12 +504,20 @@ const foregroundAcross = async (
     120_000
   ).catch(() => undefined);
   const started = await until(
-    "H's foreground command started",
+    "F's foreground command started",
     () => (clone ? existsSync(join(clone, "fg.started")) : false),
     Boolean,
     240_000
   ).catch(() => false);
-  const file = join(await generationOf(home, id), "policy.json");
+  // The boundary the command runs in: the one the agent's record names as
+  // it starts (its gen holds the record removed here).
+  const ran = await heldOf(home, id);
+  const file = join(
+    stateOf(home, id),
+    "boundaries",
+    ran.gen ?? "unread",
+    "policy.json"
+  );
   const record = existsSync(file) ? `removed (${file})` : `not there (${file})`;
   await rm(file, { force: true });
   const restartAt = Date.now();
@@ -461,7 +526,7 @@ const foregroundAcross = async (
   }
   const restarted = Date.now() - restartAt;
   const result = await until(
-    "H's foreground command's result",
+    "F's foreground command's result",
     () =>
       fleet.seen.find(
         (one) => FG_STATUS.test(one.last) || one.last.includes(CUT_OFF)
@@ -470,26 +535,68 @@ const foregroundAcross = async (
     (FG_SECONDS + 120) * 1000
   ).catch(() => undefined);
   const said = result?.last ?? "";
-  const lines = (await fleet.logs("agent"))
-    .split("\n")
-    .filter((line) => line.includes(id));
-  kit.note(`0: the agent's lines for H's workspace:\n${lines.join("\n")}`);
+  const linesOf = async () =>
+    (await fleet.logs("agent")).split("\n").filter((line) => line.includes(id));
+  const lines = await linesOf();
+  const stopped = () =>
+    lines.find((line) => STOPPED_NARROWED.test(line)) ??
+    "no line says it stopped a boundary as narrowed";
   kit.check(
-    `0: H's foreground command, listening on nothing, ran across an agent restart that gave its boundary an older form with its record of what it started with ${record}, ${Math.round(restarted / 1000)} s into its ${FG_SECONDS} s, and finished with its own exit code`,
+    `0: F's foreground command, listening on nothing, ran across an agent restart that gave its boundary ${ran.pid ?? "unread"} an older form with its record of what it started with ${record}, ${Math.round(restarted / 1000)} s into its ${FG_SECONDS} s, and finished with its own exit code`,
     started &&
       restarted < FG_SECONDS * 1000 &&
       FG_STATUS.exec(said)?.[1] === "7" &&
       !said.includes(CUT_OFF),
-    `started: ${started}; ${result ? `its result: ${said.slice(0, 400)}` : "no result"}; ${lines.find((line) => line.includes(NOT_ON_RECORD)) ?? "no line says not on record"}`
+    `started: ${started}; ${result ? `its result: ${said.slice(0, 400)}` : "no result"}; ${stopped()}`
+  );
+  const unknownSaid = lines.find(
+    (line) =>
+      line.includes(`its boundary ${ran.pid}'s `) &&
+      line.includes(UNKNOWN_GRANT_LINE)
   );
   kit.check(
-    "0: the agent's log says it cannot compare the boundary's grant and keeps it while its work runs, and stops nothing as not on record",
-    lines.some((line) => line.includes(UNKNOWN_GRANT_LINE)) &&
-      !lines.some((line) => line.includes(NOT_ON_RECORD)),
-    lines.find(
-      (line) =>
-        line.includes(UNKNOWN_GRANT_LINE) || line.includes(NOT_ON_RECORD)
-    ) ?? "no such line"
+    "0: the agent's log says it cannot compare the boundary's grant and keeps it while its work runs, and stops nothing as narrowed",
+    ran.pid !== undefined &&
+      unknownSaid !== undefined &&
+      !lines.some((line) => STOPPED_NARROWED.test(line)),
+    `${unknownSaid ?? `no line says boundary ${ran.pid ?? "unread"}'s grant cannot be compared`}; ${stopped()}`
+  );
+
+  // F rests now, nothing left in its boundary: the agent's look hands it
+  // over, said in its log, to one that starts with this build's record.
+  const ended = Date.now();
+  // A pid unread names no boundary, so no line matches it.
+  const over = handedOver(String(ran.pid ?? "unread"));
+  const handed = await until(
+    "F's boundary handed over",
+    async () => {
+      const now = await heldOf(home, id);
+      const granted = await grantedNow(home, id);
+      const line = (await linesOf()).find((one) => over.test(one));
+      return { granted, line, now };
+    },
+    ({ granted, line, now }) =>
+      line !== undefined &&
+      now.pid !== undefined &&
+      now.pid !== ran.pid &&
+      granted?.allowRead !== undefined,
+    HANDOVER_BOUND_MS
+  ).catch(async () => ({
+    granted: await grantedNow(home, id),
+    line: (await linesOf()).find((one) => over.test(one)),
+    now: await heldOf(home, id),
+  }));
+  const took = Date.now() - ended;
+  const all = await linesOf();
+  kit.note(`0: the agent's lines for F's workspace:\n${all.join("\n")}`);
+  kit.check(
+    `0: once F's command has ended, its boundary is handed over within ${HANDOVER_BOUND_MS / 1000} s to one started with this build's record, and nothing is stopped as narrowed`,
+    handed.line !== undefined &&
+      over.exec(handed.line)?.[1] === String(handed.now.pid) &&
+      handed.now.pid !== ran.pid &&
+      handed.granted?.allowRead !== undefined &&
+      !all.some((line) => STOPPED_NARROWED.test(line)),
+    `ran in ${ran.pid ?? "unread"}; now ${handed.now.pid ?? "unread"}, ${took} ms after the command's result; ${handed.line ?? "no line says it was handed over"}; the new boundary's record ${handed.granted?.allowRead ? "is there" : "is not"}; ${all.find((line) => STOPPED_NARROWED.test(line)) ?? "nothing stopped as narrowed"}`
   );
 };
 
@@ -608,7 +715,7 @@ const asleep = (fleet: Fleet, id: string): Promise<string | undefined> => {
  * again with its look held off (`CAWCO_NARROW_LOOK_MS`), so only an event
  * can act; H's idle boundary, of an older form since the folder came back,
  * is handed over to one that reads it, and H starts its loop again there.
- * With H and its parent asleep (a project is deleted only once nothing of it
+ * With H, F and their parent asleep (a project is deleted only once nothing of it
  * runs), the project is deleted: the hub trashes its folder and syncs every
  * machine's fleet config (server.ts `projectFolderMoved`). Within
  * {@link LOOK_BOUND_MS} of the delete H's boundary is replaced, said as the
@@ -623,7 +730,8 @@ const deletedStops = async (
     clone: string;
     id: string;
     instanceId: string;
-    parent: string;
+    /** The project's other sessions, F and the parent, asleep too before the delete. */
+    others: readonly string[];
     project: string;
   }
 ): Promise<void> => {
@@ -653,10 +761,11 @@ const deletedStops = async (
     had?.allowRead?.includes(folder) === true && loopPid !== undefined,
     `${folder} in its allowRead: ${had?.allowRead ? had.allowRead.includes(folder) : "not on record"}; loop pid ${loopPid ?? "unread"}`
   );
-  const sleeping = [
-    await asleep(fleet, h.instanceId),
-    await asleep(fleet, h.parent),
-  ];
+  const sleeping: (string | undefined)[] = [];
+  for (const session of [h.instanceId, ...h.others]) {
+    // biome-ignore lint/performance/noAwaitInLoops: each session is asked to sleep in turn, as the dashboard would
+    sleeping.push(await asleep(fleet, session));
+  }
   const running = await boundariesOf(fleet, h.id);
   const asked = Date.now();
   const deleted = await fetch(`${fleet.base}/api/projects/${h.project}`, {
@@ -720,7 +829,7 @@ const keptAsItWas = async (
     .split("\n")
     .filter((line) => line.includes(id));
   kit.note(`3: the agent's lines for H's workspace:\n${lines.join("\n")}`);
-  // The last: round 0's restart said one too, for the boundary H had then.
+  // The last: the line round 1's restart said for the boundary H runs in.
   const kept = lines.findLast((line) => line.includes(KEPT_LINE));
   const live = KEPT_PID.exec(kept ?? "")?.[1];
   const pidOf = (entry: string) => entry.slice(entry.lastIndexOf("@") + 1);
