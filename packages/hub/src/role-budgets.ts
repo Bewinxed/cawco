@@ -276,11 +276,11 @@ import type { Tasks } from "./tasks";
  * description always said and the approval card now reads it under the
  * grant line (approval card, report 1 finding 1). Its description is
  * shorter than it was, but each write's schema now lists it as required:
- * 29 tokens for the worker (MEASURED measured beside `does` and `ask`), the
+ * 37 tokens for the worker (27,609 measured beside `does` and `ask`), the
  * only role that lists them. Raised deliberately, by that.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 27_580,
+  worker: 27_610,
   delegate: 9970,
   lead: 18_210,
   overseer: 770,

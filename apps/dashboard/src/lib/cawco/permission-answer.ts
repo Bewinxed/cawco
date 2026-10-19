@@ -10,14 +10,14 @@ export type PermissionAnswer = "allow" | "deny" | "always";
  */
 export function permissionAnswer(
   request: {
-    /** A browser ask (core `BrowserAskFrame`), whose Decline carries the person's words alone. */
+    /** A browser ask (core `BrowserAskFrame`), whose Deny carries the person's words alone. */
     browserAsk?: unknown;
     input: Record<string, unknown>;
     suggestions?: PermissionUpdate[];
   },
   answer: PermissionAnswer
 ): PermissionResult {
-  // A browser ask's Decline carries the person's words alone, none here.
+  // A browser ask's Deny carries the person's words alone, none here.
   if (answer === "deny") {
     return {
       behavior: "deny",
