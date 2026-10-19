@@ -166,21 +166,24 @@ export async function framePicture(
       `Frame ${key} does not stand whole in the canvas (${JSON.stringify(rect)}, ${read.view}): its picture would be cut.`
     );
   }
-  // The clip on whole device pixels, out from the box: the screenshot then
-  // rounds nothing, and the picture holds every pixel the frame touches.
+  // The clip as the screenshot takes it, so it rounds nothing: its corner on
+  // a whole device pixel at or before the box's, and its size in whole CSS
+  // pixels (Playwright floors a clip's size to whole CSS pixels before
+  // Chromium sees it, `helper.enclosingIntSize`), out to the box's far edge.
+  // The picture then holds every pixel the frame touches.
   const left = Math.floor(rect.x * scale) / scale;
   const top = Math.floor(rect.y * scale) / scale;
-  const right = Math.ceil((rect.x + rect.w) * scale) / scale;
-  const bottom = Math.ceil((rect.y + rect.h) * scale) / scale;
+  const width = Math.ceil(rect.x + rect.w - left - SAME);
+  const height = Math.ceil(rect.y + rect.h - top - SAME);
   const png = await page.screenshot({
-    clip: { x: left, y: top, width: right - left, height: bottom - top },
+    clip: { x: left, y: top, width, height },
     animations: "disabled",
     caret: "hide",
   });
   const size = pngSize(png);
   const want = {
-    w: Math.round((right - left) * scale),
-    h: Math.round((bottom - top) * scale),
+    w: Math.round(width * scale),
+    h: Math.round(height * scale),
   };
   if (
     size.w !== want.w ||
@@ -189,7 +192,7 @@ export async function framePicture(
     size.h < own.h * scale - SAME
   ) {
     throw new FramePictureRefusal(
-      `Frame ${key}'s picture came out ${size.w}×${size.h} px for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)} at ×${scale} (${want.w}×${want.h} on whole device pixels).`
+      `Frame ${key}'s picture came out ${size.w}×${size.h} px for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)} at ×${scale} (its clip, ${width}×${height} CSS px from (${left}, ${top}), is ${want.w}×${want.h}).`
     );
   }
   return { png, read };
