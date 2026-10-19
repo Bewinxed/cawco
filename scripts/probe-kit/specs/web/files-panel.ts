@@ -511,8 +511,8 @@ const desk = async (
       .map((card) => card.title)
   );
   kit.check(
-    `8 (${theme}): the undecodable picture and the pages never pictured stand as their kind's glyph in the well`,
-    [...UNPICTURED, BROKEN].every((name) => glyphs.includes(name)),
+    `8 (${theme}): a picture that won't decode stands as its kind's glyph in the well`,
+    glyphs.includes(BROKEN),
     JSON.stringify(glyphs)
   );
   // The long name gives way with an ellipsis, inside its card.
@@ -1607,6 +1607,60 @@ const roundThree = async (
     JSON.stringify(jumpRing)
   );
   await jump.close();
+
+  // 32. The pages no pane had a picture of are drawn unseen by Files, and
+  // kept by the hub; neither is shown in the session's panel for it.
+  const drawn = await openSession(kit, base, "desk", "light", ids.many);
+  await drawn.locator("[data-files-control]").click();
+  await drawn.locator("[data-files-card]").first().waitFor({ timeout: 30_000 });
+  const pictured = await until(
+    "the never-pictured pages drawn",
+    () =>
+      drawn.evaluate(
+        (names) =>
+          names.map(
+            (name) =>
+              document
+                .querySelector(
+                  `[data-files-card][title="${name}"] [data-files-thumb]`
+                )
+                ?.getAttribute("data-files-thumb") ?? null
+          ),
+        UNPICTURED
+      ),
+    (thumbs) => thumbs.every((one) => one === "picture"),
+    60_000
+  ).catch(() => null);
+  const kept = await drawn.evaluate(
+    async ({ id, names }) => {
+      const listed = (await (
+        await fetch(`/api/instances/${encodeURIComponent(id)}/artifacts`)
+      ).json()) as { id: string; name: string; thumbnail: unknown }[];
+      return Promise.all(
+        listed
+          .filter((one) => names.includes(one.name))
+          .map(async (one) => {
+            const found = (await (
+              await fetch(`/api/artifacts/${encodeURIComponent(one.id)}`)
+            ).json()) as { shown: boolean };
+            return {
+              name: one.name,
+              thumbnail: one.thumbnail !== null,
+              shown: found.shown,
+            };
+          })
+      );
+    },
+    { id: ids.many, names: UNPICTURED }
+  );
+  kit.check(
+    "32: a page no pane had a picture of is drawn unseen by Files and kept by the hub, its card taking the picture, and it is never shown in the session's panel for it",
+    pictured !== null &&
+      kept.length === UNPICTURED.length &&
+      kept.every((one) => one.thumbnail && !one.shown),
+    `cards ${JSON.stringify(pictured)}; hub ${JSON.stringify(kept)}`
+  );
+  await drawn.close();
 
   // 31. The skeleton gives its place to the empty state in one cross-fade.
   const emptied = await openSession(

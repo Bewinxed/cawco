@@ -66,6 +66,7 @@
     readAttachments,
     searchAttachments,
   } from "./files.svelte";
+  import { drawMissingPages } from "./page-thumbs";
 
   let {
     instanceId,
@@ -121,6 +122,15 @@
   const artifactsRead = $derived(artifactsOf(instanceId));
   const attachmentsRead = $derived(attachmentsOf(instanceId));
   const artifacts = $derived(artifactsRead?.list ?? null);
+  // The pages no pane has a picture of yet are drawn unseen, one at a time
+  // (page-thumbs); their cards take the pictures as the list is read again.
+  $effect(() => {
+    const read = artifacts;
+    const id = instanceId;
+    if (read) {
+      untrack(() => drawMissingPages(id, read));
+    }
+  });
   const attachments = $derived(attachmentsRead?.list ?? null);
   const artifactsFailed = $derived(
     artifacts === null ? (artifactsRead?.failed ?? null) : null
