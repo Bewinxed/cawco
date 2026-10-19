@@ -97,16 +97,15 @@
     {#if done.length > 0}
       <!-- The toggle in the text column, its chevron's ink on the trailing
            edge: it hangs past the edge by the kit's 1px transparent border,
-           its inline-end padding (the xs size's 6px beside an icon) and the
-           12px chevron's side bearing (its stroke ends at 19.75 of 24), so its
-           box keeps its size. -->
-      <!-- literal: 28px -->
+           its inline-end padding (the xs size's 1.5 spacing steps beside an
+           icon) and the chevron's side bearing (its stroke ends at 19.75 of
+           24 of the icon's box), so its box keeps its size. -->
       <div
         data-slot="more"
         class="flex justify-end ps-(--text-column) pe-space-3 coarse:pb-space-1"
         data-flip
-        style:--hang="calc(-1 * (1px + 6px + 12px * 4.25 / 24))"
-        style:--text-column="calc(var(--space-3) + 28px + var(--space-3))"
+        style:--hang="calc(-1 * (1px + 1.5 * var(--spacing) + var(--icon-sm) * 4.25 / 24))"
+        style:--text-column="calc(var(--space-3) + var(--c-row-lead) + var(--space-3))"
       >
         <!-- Open, it says so in its words and its flipped chevron, not in the
              kit ghost's expanded fill, which would stand hung past the
@@ -132,19 +131,17 @@
           <IconChevronDown
             data-chev
             aria-hidden="true"
-            class="transition-[transform] dur-panel ease-out group-aria-expanded/button:transform-(--chev-flip) motion-reduce:transition-off"
+            class="non-scaling-stroke transition-[scale] dur-panel ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
             data-icon="inline-end"
-            style="--chev-flip: scaleY(-1)"
           />
         </Button>
       </div>
       <!-- The fold (UpdateCard's notes' recipe): the grid row is the track,
            the inner box clips, fades and cross-blurs; shutting is quicker than
            opening; the chevron flips with it. -->
-      <!-- literal: 0fr, 1fr -->
       <div
         data-slot="fold"
-        class="group grid grid-rows-(--fold-shut) transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-(--fold-open) [&[data-open]]:dur-panel motion-reduce:transition-off"
+        class="group grid grid-rows-(--fold-shut) data-open:grid-rows-(--fold-open) motion-safe:transition-[grid-template-rows] motion-safe:dur-exit motion-safe:ease-out motion-safe:data-open:dur-panel"
         data-open={open || undefined}
         id="moved-done"
         inert={!open}
@@ -152,7 +149,6 @@
         style:--fold-open="1fr"
         style:--fold-shut="0fr"
       >
-        <!-- literal: 0 -->
         <div
           data-slot="fold-inner"
           class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open:opacity-100 motion-safe:group-data-open:blur-(--fold-clear) motion-safe:group-data-open:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:ease-out motion-reduce:group-data-open:blur-(--fold-clear) motion-reduce:group-data-open:dur-panel"
@@ -168,10 +164,3 @@
     {/if}
   </div>
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  [data-slot="more"] :global([data-chev] path) {
-    vector-effect: non-scaling-stroke;
-  }
-</style>

@@ -90,13 +90,11 @@
     data-inset={inset || undefined}
     {@attach holdWhileInside("home:recent")}
   >
-    <!-- literal: 36px -->
     <button
       data-slot="disclosure"
       aria-expanded={recentOpen}
-      class="group/disclosure kit-section-head press-tint focus-inset min-h-(--disclosure-min) w-full cursor-pointer rounded-t-sm border-none border-current bg-transparent transition-control hover:bg-surface-hover hover:text-ink-strong"
+      class="group/disclosure kit-section-head press-tint focus-inset min-h-c-btn-h w-full cursor-pointer rounded-t-sm border-none border-current bg-transparent transition-control hover:bg-surface-hover hover:text-ink-strong"
       onclick={toggleRecent}
-      style:--disclosure-min="36px"
       type="button"
     >
       <span
@@ -110,19 +108,15 @@
            tells the reader a running session is in it. -->
       <span data-num data-slot="count" class="num count" data-box>
         <span
-          class="inline-grid"
-          style:inline-size="{String(home.recentCount).length}ch"
+          class="inline-grid w-(--digits)"
+          style:--digits="{String(home.recentCount).length}ch"
           ><MorphText text={String(home.recentCount)} /></span
         >
         {#if !recentOpen && home.recentRunning > 0}
           <!-- What a closed Recent still holds live, after its count: the
                words an "N older" row says its failures in, in the header's
                own muted ink. -->
-          <!-- literal: 0.3em -->
-          <span
-            data-slot="live"
-            class="ms-(--live-gap)"
-            style:--live-gap="0.3em"
+          <span data-slot="live" class="ms-space-1"
             ><MorphText text={runningWords(home.recentRunning)} /></span
           >
         {/if}
@@ -136,11 +130,9 @@
         {@attach echoBeat()}
         {@attach view.keys}
       >
-        <!-- literal: 1px -->
         <label
           data-slot="search"
-          class="touch-hit field-shell mx-0 mt-space-1 mb-space-2 flex h-c-input-h items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 text-ink-muted"
-          style:--hit-edge="1px"
+          class="touch-hit hit-edge-hair field-shell mx-0 mt-space-1 mb-space-2 flex h-c-input-h items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 text-ink-muted"
         >
           <IconSearch aria-hidden="true" class="size-icon-md flex-none" />
           <input

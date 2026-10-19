@@ -155,17 +155,16 @@
      Sections part with a vermillion hairline: 1px of the brand's vermillion
      (`brand-solid`), solid, across the rows' width, as Files draws it: it
      holds 3:1 on the raised panel in both schemes. -->
-<!-- literal: 40px; 560px, 120px; 44px, 96px -->
 <div
   data-slot="list"
   class={[
-    "flex max-h-(--list-max) flex-col overflow-y-auto overscroll-contain has-data-stuck:mask-(--stuck-fade) max-phone:max-h-(--list-max-phone) [&>[data-slot=section]+[data-slot=section]]:mt-space-2 [&>[data-slot=section]+[data-slot=section]]:border-t [&>[data-slot=section]+[data-slot=section]]:border-bs-brand-solid [&>[data-slot=section]+[data-slot=section]]:pt-space-2",
+    "flex max-h-(--list-max) flex-col overflow-y-auto overscroll-contain has-data-stuck:mask-(--stuck-fade) max-phone:max-h-(--list-max-phone)",
     overflowing && "kit-edge-fade-block",
   ]}
   data-safe-bottom
-  style:--fade-len="40px"
-  style:--list-max="min(560px, calc(100dvh - 120px))"
-  style:--list-max-phone={"calc(100dvh - 44px - var(--space-3) - var(--safe-bottom) - 96px)"}
+  style:--fade-len="var(--c-caw-list-fade)"
+  style:--list-max="min(var(--c-caw-list-h), calc(100dvh - var(--c-caw-list-clear)))"
+  style:--list-max-phone={"calc(100dvh - var(--c-top-bar-h) - var(--space-3) - var(--safe-bottom) - var(--c-caw-list-clear-phone))"}
   style:--stuck-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--fade-start), var(--mask-opaque))"}
   {@attach reflow()}
   {@attach measured}
@@ -178,14 +177,11 @@
       >
         <!-- The section's glyph centred in the panel's one lead column, so
              its title starts on the rows' text column. -->
-        <!-- literal: 28px -->
         <span
           data-slot="needs"
           data-caw-panel-glyph
-          class="me-(--glyph-gap) grid w-(--glyph-w) flex-none place-items-center self-center text-status-attn-glyph"
+          class="me-space-1 grid w-c-row-lead flex-none place-items-center self-center text-status-attn-glyph"
           data-box
-          style:--glyph-gap="calc(var(--space-3) - var(--space-2))"
-          style:--glyph-w="28px"
           ><IconNeedsYou aria-hidden="true" class="size-icon-md" /></span
         >
         <span
@@ -206,18 +202,22 @@
   {/if}
 
   {#if noticeCount > 0}
-    <section data-slot="section" aria-labelledby="caw-notices" data-flip="box">
+    <section
+      data-slot="section"
+      aria-labelledby="caw-notices"
+      class={needs.length > 0 &&
+        "mt-space-2 border-t border-bs-brand-solid pt-space-2"}
+      data-flip="box"
+    >
       <div
         data-slot="head"
         class="mark-line flex items-center gap-space-2 px-space-3 pt-space-2 pb-space-1"
+        style:--clear-hang="calc(-1 * (1px + 2 * var(--spacing) + 0.07em))"
       >
-        <!-- literal: 28px -->
         <span
           data-slot="glyph"
-          class="me-(--glyph-gap) grid w-(--glyph-w) flex-none place-items-center self-center text-ink-muted"
+          class="me-space-1 grid w-c-row-lead flex-none place-items-center self-center text-ink-muted"
           data-box
-          style:--glyph-gap="calc(var(--space-3) - var(--space-2))"
-          style:--glyph-w="28px"
           ><IconNotices aria-hidden="true" class="size-icon-md" /></span
         >
         <span
@@ -232,20 +232,18 @@
           <!-- Clear all: the kit's xs ghost, always shown, its words ending
                on the panel's one trailing edge: it hangs past the edge by
                what stands between its box and its last letter's ink (the
-               kit's 1px transparent border, the xs size's 8px padding and
+               kit's 1px transparent border, the xs size's two spacing steps of padding and
                the l's side bearing in Figtree, 0.07em), so its box and its
                hover fill keep their size. It rides the head's line without
                making it taller. -->
-          <!-- literal: -4px; 8px, 0.07em -->
           <Button
             data-clear
             aria-label="Clear all {noticeCount} notices"
             data-box
-            class="ms-auto me-(--clear-hang) my-(--clear-pull) self-center"
+            class="ms-auto me-(--clear-hang) -my-space-1 self-center"
             onclick={clearAll}
             size="xs"
             tone="quiet"
-            style="--clear-pull: -4px; --clear-hang: calc(-1 * (1px + 8px + 0.07em));"
             variant="ghost">Clear all</Button
           >
         {/if}
@@ -253,18 +251,17 @@
       <!-- Notices part with a hairline, as rows of one list do. -->
       <ul
         data-slot="notices"
-        class="m-0 list-none p-0 [&>li+li]:border-t [&>li+li]:border-t-border-hairline"
+        class="m-0 list-none divide-y divide-border-hairline p-0"
       >
         {#if damaged}
           <!-- The damaged record: its words on the rows' text column, Reset
                at the panel's one trailing edge, the hub's refusal under
                them. -->
-          <!-- literal: 1fr auto; 28px -->
           <li
-            class="grid grid-cols-(--damaged-cols) items-box-start gap-x-space-2 gap-y-space-1 py-space-2 pr-space-3 pl-(--damaged-lead)"
+            class="grid grid-cols-(--damaged-cols) items-box-start gap-x-space-2 gap-y-space-1 py-space-2 pe-space-3 ps-(--damaged-lead)"
             data-flip
             style:--damaged-cols="1fr auto"
-            style:--damaged-lead="calc(var(--space-3) + 28px + var(--space-3))"
+            style:--damaged-lead="calc(var(--space-3) + var(--c-row-lead) + var(--space-3))"
           >
             <p
               data-slot="words"

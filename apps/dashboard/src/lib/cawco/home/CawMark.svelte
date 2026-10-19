@@ -92,12 +92,14 @@
 <span
   data-slot="mark"
   aria-hidden="true"
-  class="relative inline-block size-(--side) pointer-events-none select-none"
+  class="caw-mark-face relative inline-block size-(--side) pointer-events-none select-none"
   data-box
+  data-playing={playing || undefined}
   style:--bleed="{CAW_STILL_BLEED}px"
   style:--side="{size}px"
-  class:playing
 >
+  <!-- His face is drawn and ready under the clip, unseen until it lands:
+       `caw-mark-face` hides it while `data-playing`. -->
   <CawFace {size} {status} />
   {#if playing}
     <canvas
@@ -108,17 +110,3 @@
     ></canvas>
   {/if}
 </span>
-
-<style>
-  /* residual: foreign-dom — the face is named by its own attribute: under
-     `.playing`, Chrome keys an attribute selector to the attribute's name
-     alone, and `[data-slot="caw-face"]` restyled every `data-slot` in the
-     mark. */
-  [data-slot="mark"] > :global([data-caw-face]) {
-    display: block;
-  }
-  /* His face is drawn and ready under the clip, unseen until it lands. */
-  [data-slot="mark"].playing > :global([data-caw-face]) {
-    visibility: hidden;
-  }
-</style>
