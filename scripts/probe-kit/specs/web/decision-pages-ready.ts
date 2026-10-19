@@ -674,7 +674,9 @@ function readPage() {
     /** The smallest drawn line of text in any diagram, in px: a diagram zoomed to fit a phone can shrink past reading. */
     diagramText: Math.min(
       ...[
-        ...document.querySelectorAll(".dp-card .diagram svg text, .dp-card .diagram svg foreignObject div"),
+        ...document.querySelectorAll(
+          ".dp-card .diagram svg text, .dp-card .diagram svg foreignObject div"
+        ),
       ]
         .map((one) => one.getBoundingClientRect().height)
         .filter((h) => h > 0)
