@@ -313,13 +313,10 @@
         class="flex flex-wrap items-center justify-end gap-x-space-3 gap-y-space-2"
       >
         {#if refused}
-          <!-- literal: 1 1 18rem, 72ch -->
           <p
             data-slot="refused"
-            class="type-meta m-0 max-w-(--measure) flex-(--refused-flex) text-pretty text-status-fail-ink"
+            class="type-meta m-0 max-w-(--c-block-refused-max) grow basis-(--c-block-refused-basis) text-pretty text-status-fail-ink"
             role="status"
-            style:--measure="72ch"
-            style:--refused-flex="1 1 18rem"
           >
             {refused}
           </p>
@@ -360,5 +357,5 @@
 {/if}
 
 {#snippet newer()}
-  <p class="newer">{words.newer}</p>
+  <p class="m-0 p-space-3 type-meta text-ink-muted">{words.newer}</p>
 {/snippet}

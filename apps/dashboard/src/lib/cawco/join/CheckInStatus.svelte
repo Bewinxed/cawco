@@ -9,23 +9,17 @@
   let { trail }: { trail?: Snippet } = $props();
 </script>
 
-<!-- literal: 8px -->
 <div
-  class="flex min-h-c-btn-h-sm items-center justify-between gap-(--gap)"
-  style:--gap="8px"
+  class="flex min-h-c-btn-h-sm items-center justify-between gap-space-2"
 >
-  <!-- literal: 8px -->
   <span
     aria-live="polite"
-    class="mark-line flex items-center gap-(--gap) type-meta text-ink-muted"
-    style:--gap="8px"
+    class="mark-line flex items-center gap-space-2 type-meta text-ink-muted"
   >
-    <!-- literal: 6px -->
     <span
       data-slot="dot"
-      class="size-(--dot) flex-none rounded-pill bg-hue-orange-500"
+      class="size-space-2 flex-none rounded-pill bg-hue-orange-500"
       data-box
-      style:--dot="6px"
     ></span>
     <span>Waiting for check-in…</span>
   </span>
