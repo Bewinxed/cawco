@@ -270,11 +270,15 @@
       <p class="type-meta text-status-fail-ink" in:appear>{nameProblem}</p>
     {:else if server && serverName.trim() !== "" && serverName.trim() !== server.name}
       <!-- Said before Save, where the name is changed: that is its consequence. -->
-      <p data-slot="note" class="note" in:appear>
+      <p
+        data-slot="note"
+        class="type-meta max-w-(--c-measure) text-ink-muted"
+        in:appear
+      >
         {words.renamed(server.name)}
       </p>
     {:else}
-      <p data-slot="note" class="note">
+      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
         <Coded text={words.callsAs(serverName || "name")} />
       </p>
     {/if}
@@ -315,8 +319,18 @@
       {@attach morph({ ms: dur("--dur-pop") })}
     >
       {#if mode === "bunx"}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
-          <p data-slot="note" class="note">{HOW.bunx}</p>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-space-2"
+          in:crossIn
+          out:crossOut
+        >
+          <p
+            data-slot="note"
+            class="type-meta max-w-(--c-measure) text-ink-muted"
+          >
+            {HOW.bunx}
+          </p>
           <Field id="mcp-package" label={words.package}>
             <Input
               autocomplete="off"
@@ -344,8 +358,18 @@
           </Field>
         </div>
       {:else if mode === "command"}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
-          <p data-slot="note" class="note">{HOW.command}</p>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-space-2"
+          in:crossIn
+          out:crossOut
+        >
+          <p
+            data-slot="note"
+            class="type-meta max-w-(--c-measure) text-ink-muted"
+          >
+            {HOW.command}
+          </p>
           <Field id="mcp-command" label={words.command}>
             <Input
               autocomplete="off"
@@ -368,8 +392,18 @@
           </Field>
         </div>
       {:else}
-        <div data-slot="fold" class="fold" in:crossIn out:crossOut>
-          <p data-slot="note" class="note">{HOW.remote}</p>
+        <div
+          data-slot="fold"
+          class="flex flex-col gap-space-2"
+          in:crossIn
+          out:crossOut
+        >
+          <p
+            data-slot="note"
+            class="type-meta max-w-(--c-measure) text-ink-muted"
+          >
+            {HOW.remote}
+          </p>
           <Field id="mcp-url" label={words.url}>
             <Input
               autocomplete="off"
@@ -405,7 +439,12 @@
         icon={IconKey}
         label={mode === "remote" ? words.headers : words.environment}
       >
-        <p data-slot="note" class="note"><Coded text={words.expanded} /></p>
+        <p
+          data-slot="note"
+          class="type-meta max-w-(--c-measure) text-ink-muted"
+        >
+          <Coded text={words.expanded} />
+        </p>
         <div
           data-slot="kind"
           class="relative flex flex-col"
@@ -436,7 +475,9 @@
   {/if}
 
   <EditorSection hue={HUE} icon={IconMapPoint} label={words.where}>
-    <p data-slot="note" class="note">{words.whereNote}</p>
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+      {words.whereNote}
+    </p>
     <div>
       <PickerChip
         label={words.scope}

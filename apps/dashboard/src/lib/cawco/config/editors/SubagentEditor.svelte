@@ -150,12 +150,7 @@ You are a <role>, working in one repository at a time.
     >
       {agent ? agent.name : front.name || "New subagent"}
     </h1>
-    <!-- literal: 72ch -->
-    <p
-      data-slot="note"
-      class="type-meta max-w-(--measure) text-ink-muted"
-      style:--measure="72ch"
-    >
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
       The file is the definition. It lands at
       <span class="font-mono"
         >{userLayerLabel("agents", `${target ?? "name"}.md`)}</span
@@ -171,11 +166,10 @@ You are a <role>, working in one repository at a time.
 
   <EditorSection hue={HUE} icon={IconDocument} label="Definition">
     {#snippet right()}
-      <!-- literal: 72ch -->
       <span
         data-slot="num"
-        class="num type-meta max-w-(--measure) text-ink-muted"
-        style:--measure="72ch">{claims.join(" · ")}</span
+        class="num type-meta max-w-(--c-measure) text-ink-muted"
+        >{claims.join(" · ")}</span
       >
     {/snippet}
     {#if problem}
@@ -183,12 +177,7 @@ You are a <role>, working in one repository at a time.
         Not storable yet — {problem}.
       </p>
     {:else if front.description}
-      <!-- literal: 72ch -->
-      <p
-        data-slot="note"
-        class="type-meta max-w-(--measure) text-ink-muted"
-        style:--measure="72ch"
-      >
+      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
         {front.description}
       </p>
     {/if}
