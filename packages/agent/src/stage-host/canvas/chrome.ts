@@ -213,7 +213,7 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 .cawco-waiting { animation: cawco-wait 1ms var(--dur-wait-grace) both; }
 .cawco-section-status { grid-column: 2; grid-row: 1; align-self: baseline; margin: 0; font: var(--type-meta); color: var(--ink-muted); }
 .cawco-stand-in { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); }
-.cawco-stand-in > .cawco-frame-words { padding: 2px var(--space-1); }
+.cawco-stand-in > .cawco-frame-words { padding: var(--space-row) var(--space-1); }
 /* The skeleton recipe: a surface-fill block at the frame's size, one raised band crossing it each loop, still without motion. */
 .cawco-stand-in-body { position: relative; overflow: hidden; inline-size: var(--c-canvas-skeleton-w); max-inline-size: 100vw; block-size: var(--c-canvas-skeleton-h);
   border-radius: var(--radius-sm); background: var(--surface-fill); }
@@ -241,8 +241,8 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 .cawco-colhead { font: var(--type-meta); color: var(--ink-muted); text-transform: none; }
 /* The gap clears the selected ring (2px at a 2px offset) of the label above and the status below. */
 .cawco-frame { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); min-inline-size: 0; position: relative; }
-.cawco-frame-label { all: unset; box-sizing: border-box; display: grid; gap: 2px; max-inline-size: 360px; cursor: grab; border-radius: var(--radius-xs);
-  padding: 2px var(--space-1); }
+.cawco-frame-label { all: unset; box-sizing: border-box; display: grid; gap: var(--space-row); max-inline-size: 360px; cursor: grab; border-radius: var(--radius-xs);
+  padding: var(--space-row) var(--space-1); }
 .cawco-frame-label:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
 .cawco-frame-words { font: var(--type-label); color: var(--ink-strong); overflow-wrap: anywhere; }
 .cawco-frame-small { font: var(--type-meta); color: var(--ink-muted); overflow-wrap: anywhere; }
@@ -377,11 +377,7 @@ export class Chrome {
   #timelineRoot: { update: (next: Record<string, unknown>) => void } | null =
     null;
   /** Whether a look for the frame in view waits on the next frame; whether the page is a phone's; whether the dials stand. */
-  readonly #flags: {
-    dialed: boolean;
-    pending: boolean;
-    phone: boolean;
-  } = {
+  readonly #flags: { dialed: boolean; pending: boolean; phone: boolean } = {
     dialed: false,
     pending: false,
     phone: false,
