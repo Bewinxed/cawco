@@ -33,6 +33,9 @@ import {
   type Page,
 } from "playwright-core";
 import { readWithin } from "../../../../packages/core/src/bounded";
+import type { InstancesFrame } from "../../../../packages/core/src/frames";
+import type { Envelope } from "../../../../packages/core/src/index";
+import { WIRE_PROTOCOL } from "../../../../packages/core/src/stream";
 import { type Kit, open, ROOT, type Spec, settle } from "../../kit";
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
@@ -72,6 +75,32 @@ const AWAY_ROUTES = [
 const AWAY_WIDTHS = [390, 640, 1024, 1440];
 /** The wall clock the away-from-the-line pages read. */
 const AWAY_CLOCK = new Date("2026-10-18T12:00:00Z");
+/**
+ * The hub's first frame on every socket, its board, here empty. The client
+ * counts the hub reached on the board alone (client.svelte.ts `hubReached`:
+ * "an open socket proves nothing"), so an answered socket that stays silent
+ * leaves the page connecting, and past HubBand's 4 s grace its band opens
+ * with Reconnect's spinner turning. Answered with the board, every page,
+ * bench or not, is connected and its band rests shut. Empty, it adds no
+ * row or machine, and the pulses a bench feeds are merged, never replaced.
+ */
+const EMPTY_BOARD: Envelope<InstancesFrame> = {
+  verb: "frames",
+  machineId: "hub",
+  payload: {
+    kind: "instances",
+    agents: [],
+    continuations: [],
+    formerIds: {},
+    handoffs: {},
+    hubBuild: { startedAt: 0, version: "0.0.0" },
+    instances: [],
+    moves: [],
+    noticesSeen: [],
+    protocol: WIRE_PROTOCOL,
+    pulses: {},
+  },
+};
 const HEIGHT = 900;
 
 type Side = "drawer" | "desk";
@@ -633,39 +662,48 @@ async function takeAway(
   // `Date.now()` (DelegateTray's `animation-delay: -{now % 2000}ms`)
   // reads the same before and after. Timers run on as they do.
   await page.clock.setFixedTime(AWAY_CLOCK);
-  // The hub answers: the dashboard's socket opens here and stays quiet. With
-  // no hub behind the dev server the client tries, fails and backs off
-  // again and again, and HubBand opens on each failure and shuts on each
-  // try (its `fault` is null while "connecting" before the tab ever had the
-  // hub), so no read could land on one state. Answered, the client is
-  // connected and the band rests shut. (Its heartbeat asks first after 20s,
-  // and with `Date.now()` pinned it never finds the hub silent.)
+  // The hub answers: the dashboard's socket opens here and is sent the
+  // board (EMPTY_BOARD), then stays quiet. With no hub behind the dev server
+  // the client tries, fails and backs off again and again, and HubBand
+  // opens on each failure and shuts on each try, so no read could land on
+  // one state. Answered with the board, the client is connected and the
+  // band rests shut. (Its heartbeat asks first after 20s, and with
+  // `Date.now()` pinned it never finds the hub silent.)
   const { promise: answered, resolve: answer } = Promise.withResolvers<void>();
   await page.routeWebSocket(
     (url) => url.pathname === "/ws/dashboard",
-    () => answer()
+    (hubSide) => {
+      hubSide.send(JSON.stringify(EMPTY_BOARD));
+      answer();
+    }
   );
   await openBench(page, base, route);
-  if (!route.startsWith("/motion/")) {
-    const socket = await readWithin(15_000, () => answered);
-    switch (socket.kind) {
-      case "answered":
-        break;
-      case "unanswered":
-        throw new Error(
-          `${route}: the dashboard opened no hub socket in ${socket.after} ms`
-        );
-      default:
-        throw new Error(`unknown read ${socket satisfies never}`);
-    }
-    await page.waitForFunction(
-      () =>
-        document.querySelector(".band-slot > .band-row > :not([data-open])") !==
-        null,
-      undefined,
-      { timeout: 15_000 }
-    );
+  // Every page, a bench too, opens the hub socket (the shell's client), so
+  // each is read connected, its band shut: a bench left connecting opened
+  // its band 4 s in, mid-read on a slow page and not on a quick one.
+  const socket = await readWithin(15_000, () => answered);
+  switch (socket.kind) {
+    case "answered":
+      break;
+    case "unanswered":
+      throw new Error(
+        `${route}: the dashboard opened no hub socket in ${socket.after} ms`
+      );
+    default:
+      throw new Error(`unknown read ${socket satisfies never}`);
   }
+  await page.waitForFunction(
+    () =>
+      (
+        globalThis as unknown as {
+          __cawcoDebug?: { state: { status: string } };
+        }
+      ).__cawcoDebug?.state.status === "connected" &&
+      document.querySelector(".band-slot > .band-row > :not([data-open])") !==
+        null,
+    undefined,
+    { timeout: 15_000 }
+  );
   const taken = await restingSnapshot(page, route);
   await page.close();
   return taken;
