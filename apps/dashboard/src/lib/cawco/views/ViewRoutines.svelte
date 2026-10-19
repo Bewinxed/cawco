@@ -851,6 +851,7 @@
     <div data-slot="starters" class="w-full max-w-(--c-starters-w) p-space-3">
       {#if canTalk}
         <EmptyState
+          class="items-stretch"
           icon={IconClock}
           line={words.emptyCaw(project.name)}
           title={words.empty}

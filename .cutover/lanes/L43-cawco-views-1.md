@@ -50,15 +50,15 @@ removed: ViewRoutines.svelte (style) `th[data-slot="actions-table-col-status"]` 
 removed: ViewRoutines.svelte `style:--none="0"` — nothing in the file reads `--none`
 removed: ViewRoutines.svelte `.routine-starters :global(.starter-glyph)` (style) — the glyph carries `size-icon-md flex-none text-ink-muted` itself
 removed: ViewRoutines.svelte `ledger` class on the sources and actions wrappers (`container: routines-ledger`) — no query reads that container there; RoutineDetail's `@max-routines-ledger-399px/routines-ledger` sits under the routines wrapper, which keeps `@container/routines-ledger`
-removed: ViewRoutines.svelte `align-self: stretch` on `.kit-empty-action` — the wrapper inside the action snippet fills the slot
+removed: ViewRoutines.svelte `align-self: stretch` on `.kit-empty-action` — the EmptyState's `items-stretch` and the wrapper inside the action snippet fill the slot (see the `fixed:` line below)
 
 ## Gaps
 fixed: ViewRoutines.svelte:914 `ghostRows="tr.row"` matched nothing since the rows lost their `row` class; now `[data-view-routines-row]`, so the hover ghost glides over the rows again — DESIGN.md Components, the ledger's hover highlight
 fixed: ViewRoutines.svelte:969 the sources ledger's heads and cells read `--col-state`, which only the routines wrapper set; the sources wrapper sets it now, so the state column holds its width — DESIGN.md Layout (a ledger's fixed columns)
 fixed: ViewMade.svelte:40 the grid's column min is `min(100%, …)` so a tile never overruns a narrow column — defensive-css auto-fill rule
-gap: ViewRoutines.svelte:921 the old `.ledger table > thead th` rule made the heads of the tables in ActionsTable.svelte and RoutineDetail.svelte sticky too; a rule aimed at another file's table cannot be written here, so those two tables' heads (ActionsTable.svelte:101-122, RoutineDetail.svelte:165-182) must carry `sticky top-0 z-2` themselves — DESIGN.md Density ("a 32px header band")
-gap: ViewRoutines.svelte:861 the empty page's action slot is `.kit-empty-action` (EmptyState); the old rule stretched that div, and the stretch is now a wrapper inside the snippet; if EmptyState centres its action, it needs a `stretch` look — DESIGN.md Empty, loading and skeleton states
-gap: ViewCalendar.svelte:137 the Event Calendar sheet is unlayered, so its overrides cannot move to a layer without importing the sheet into one (`@import … layer(vendor)` in app.css, which is not a lane's file) — a post-cutover item
+gap: ViewRoutines.svelte:921 the old `.ledger table > thead th` rule made the heads of the tables in ActionsTable.svelte and RoutineDetail.svelte sticky too; a rule aimed at another file's table cannot be written here, so those two tables' heads (apps/dashboard/src/lib/cawco/routines/ActionsTable.svelte:98, apps/dashboard/src/lib/cawco/routines/RoutineDetail.svelte:171) must carry `sticky top-0 z-2` themselves — DESIGN.md Density ("a 32px header band")
+fixed: ViewRoutines.svelte:854 the empty page's action slot (`.kit-empty-action`) was stretched by a rule aimed at the kit's div; `.kit-empty` aligns its children at the start, so the EmptyState now takes `items-stretch` and the slot's content is one flex column (`flex flex-col gap-space-3`) — DESIGN.md Empty, loading and skeleton states
+gap: ViewCalendar.svelte:137 the Event Calendar sheet is unlayered, so its overrides cannot move to a layer unless the sheet is imported into one, which needs the layer order at apps/dashboard/src/app.css:29 (`@layer theme, base, components, utilities, overrides`) to name a vendor layer first — DESIGN.md Overview (one cascade order)
 
 ## Contracts
 (none)
