@@ -48,7 +48,25 @@
     )
   );
   /** Where it stands, in one line: its figure and step, or what it waits on. */
+  /**
+   * What it needs from the person, said in full where it is opened: its
+   * question, or why it failed. The row itself says the state in a word
+   * and offers the act beside it, so a row is one line under its title.
+   */
+  const detail = $derived.by(() => {
+    const { wait } = delegate;
+    if (wait?.kind === "you") {
+      return wait.words.split(" · ").slice(1).join(" · ");
+    }
+    return wait?.kind === "fail" ? wait.words : "";
+  });
   const standing = $derived.by(() => {
+    if (delegate.wait?.kind === "you") {
+      return "Waiting on you";
+    }
+    if (delegate.wait?.kind === "fail") {
+      return "Failed";
+    }
     if (delegate.wait) {
       return delegate.wait.words;
     }
@@ -88,7 +106,7 @@
       onclick={press}
       type="button"
     >
-      <span class="name">{delegate.name}</span>
+      <span class="sr-only">{delegate.name}: </span>
       <span class="problem">{delegate.problem}</span>
     </button>
     <span class="trail mark-line" data-slot="trail">
@@ -126,11 +144,21 @@
            Resume; every failure names its way back). -->
       {#if delegate.wait?.kind === "you"}
         <span class="act"
-          ><Button label="Answer" size="xs" variant="outline" /></span
+          ><Button
+            class="touch-hit"
+            label="Answer"
+            size="sm"
+            variant="outline"
+          /></span
         >
       {:else if delegate.wait?.kind === "fail"}
         <span class="act"
-          ><Button label="Retry" size="xs" variant="outline" /></span
+          ><Button
+            class="touch-hit"
+            label="Retry"
+            size="sm"
+            variant="outline"
+          /></span
         >
       {/if}
     </span>
@@ -138,6 +166,9 @@
   {#if !pushes}
     <Fold id={foldId} {open}>
       <div class="body">
+        {#if detail}
+          <p class="detail" data-kind={delegate.wait?.kind}>{detail}</p>
+        {/if}
         {#if delegate.steps.length > 0}
           <ul class="steps">
             <SubRows steps={delegate.steps} />
@@ -214,16 +245,10 @@
       background: var(--surface-hover);
     }
   }
-  .name {
-    font-weight: var(--weight-strong);
-  }
-  .name::after {
-    content: " ";
-  }
   .problem {
     font-weight: var(--weight-body);
   }
-  .row[data-status="done"] :is(.name, .problem) {
+  .row[data-status="done"] .problem {
     color: var(--ink-muted);
   }
   .trail {
@@ -263,15 +288,25 @@
   .under {
     grid-area: under;
     display: grid;
-    grid-template-columns: minmax(48px, 32%) minmax(0, 1fr);
+    grid-template-columns: minmax(48px, 32%) minmax(0, 1fr) auto;
     align-items: center;
     column-gap: var(--space-2);
     min-inline-size: 0;
   }
   .act {
-    grid-column: 2;
     display: flex;
-    margin-block-start: var(--space-1);
+  }
+  /* The question or the failure's reason, first in the fold. */
+  .detail {
+    margin: 0;
+    font: var(--type-body);
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+
+    &[data-kind="fail"] {
+      color: var(--status-fail-ink);
+    }
   }
   .standing {
     display: flex;

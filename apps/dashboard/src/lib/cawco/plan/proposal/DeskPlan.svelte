@@ -14,8 +14,18 @@
   // Page-local Solar glyph the proposal adds (not in $lib/icons.ts yet).
   import GlyphTask from "~icons/solar/clipboard-check-bold-duotone";
   import { type PlanFixture, progress } from "./fixtures";
+  import { holdOn } from "./focus";
 
-  let { plan, children }: { plan: PlanFixture; children: Snippet } = $props();
+  let {
+    plan,
+    focus,
+    children,
+  }: {
+    plan: PlanFixture;
+    /** The row the card stands scrolled to (a step a story opens). */
+    focus?: string;
+    children: Snippet;
+  } = $props();
 
   setSideExpand({
     available: true,
@@ -51,7 +61,7 @@
         <IconChevronRight aria-hidden="true" />
       </button>
     {/snippet}
-    <div class="body kit-edge-fade-block">
+    <div class="body kit-edge-fade-block" {@attach holdOn(focus)}>
       {@render children()}
     </div>
   </SideSurface>
@@ -91,6 +101,17 @@
   }
   /* The head's names in one size, on one line (the head recipe's label
      role): "Plan", the task's title, its stage. */
+  /* The head's title group keeps its words' width (SideSurface lets it
+     shrink to nothing, and "1 of 6" ran under the badge); the task's badge
+     stands a step clear of it and gives way by truncating its title. */
+  .desk :global(.side-head .identity) {
+    min-inline-size: max-content;
+  }
+  .task {
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    margin-inline-start: var(--space-3);
+  }
   .task-title,
   .stage {
     font: var(--type-label);
@@ -98,6 +119,9 @@
     white-space: nowrap;
   }
   .task-title {
+    min-inline-size: 0;
+    overflow: clip;
+    text-overflow: ellipsis;
     color: var(--ink-strong);
   }
   .stage {

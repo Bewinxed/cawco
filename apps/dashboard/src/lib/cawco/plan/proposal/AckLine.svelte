@@ -29,8 +29,12 @@
     who === "This session" ? "this session" : who;
   const said = $derived.by(() => {
     const also = ack.also ? ` · ${ack.also.toLowerCase()} heard it` : "";
-    return ack.phase === "sent"
-      ? `${told} sent to ${named(ack.to)}`
+    if (ack.phase === "sent") {
+      return `${told} sent to ${named(ack.to)}`;
+    }
+    // A comment's answer stands on the step's thread, once.
+    return ack.phase === "replied" && ack.change === "commented"
+      ? `Answered by ${named(ack.to)} on the thread${also}`
       : `Seen by ${named(ack.to)}${also}`;
   });
 </script>
@@ -46,7 +50,7 @@
     </span>
     <span class="said"><MorphText text={said} /></span>
   </span>
-  {#if ack.reply}
+  {#if ack.reply && ack.change !== "commented"}
     <p class="reply" in:fade={{ duration: 200 }}>
       <span class="who">{ack.to}</span>
       <span>{ack.reply}</span>

@@ -287,7 +287,8 @@ const spec: Spec = {
       const made = await makeCanvas<{
         id: string;
         render?: {
-          frames?: string[];
+          /** Each frame as the hub's render report lists it (artifacts/component.ts `frameLine`). */
+          frames?: { story: string; interaction: string; state: string }[];
           unnamed?: string[];
           pageErrors?: unknown[];
         };
@@ -306,7 +307,7 @@ const spec: Spec = {
       kit.check(
         `${way.label}: its canvas is made with its dials, and all ${frames.length} frames are drawn, none unnamed`,
         frames.length >= 6 &&
-          frames.every((line) => line.includes("drawn")) &&
+          frames.every((one) => one.state === "drawn") &&
           (made.render?.unnamed?.length ?? 0) === 0 &&
           (made.render?.pageErrors?.length ?? 0) === 0,
         JSON.stringify(made.render).slice(0, 600)

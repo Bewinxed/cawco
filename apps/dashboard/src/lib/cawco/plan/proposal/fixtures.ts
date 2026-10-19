@@ -294,7 +294,8 @@ function datePicker(moment: Moment): Step {
     description:
       "Skip the days the harbour master closes the slipway. The list is kept in `closed_days`, not read from the tide site, so a closed day shows greyed out and can't be booked.",
     state: done ? "done" : "doing",
-    startedAgo: MIN + 15 * SEC,
+    // Longer than Fable's run: the step started it.
+    startedAgo: 4 * MIN + 30 * SEC,
     took: done ? "2m 06s" : undefined,
     after: ["a1"],
     delegates: ["fable-calendar-21c"],
