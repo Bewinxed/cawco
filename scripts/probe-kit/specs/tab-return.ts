@@ -29,7 +29,13 @@
  *    e (hidden `HELD_MS`, held: no animation frame or timer of the page's
  *    runs), d (as b). The kept returns, a, c and e, are read again on
  *    WebKit, without a trace, each a person's press: c and e the pointer's,
- *    and f (as c) the strip's arrow key, whose reach and choice are one key.
+ *    and f (as c) the strip's arrow key, from the keyboard's focus resting
+ *    on the tab before it, whose reach let its neighbours' previews go
+ *    (warm.svelte.ts `besides`). g is f on the one-process Chromium, which
+ *    reports the key's Event Timing; h is f with no rest, the first arrow
+ *    into the strip, its first frame said and not bound. Then the keyboard's
+ *    reach is read whole (`keyReach`), and two arrow keys in one task each
+ *    choose their tab.
  * 3. A session with nothing said yet (the preview's, the light ones') shown
  *    in turn, on Chromium and on WebKit: its blank state, never a skeleton
  *    (a skeleton that never went kept its pane laid out and its sweep
@@ -75,7 +81,7 @@
 import { readFileSync } from "node:fs";
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { CDPSession, Frame, Page } from "playwright-core";
+import type { CDPSession, Frame, Locator, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
 import { type Kit, open, ROOT, type Spec } from "../kit";
@@ -198,12 +204,16 @@ interface Back {
   shown: string;
   /** From `shownStateOf`: elements with an inline skip, computing it hidden, rows in view, and those with no text box; empty when unread. */
   shownCounts: number[];
+  /** WebKit: the first of the dashboard's frames that shows the pane (the frame painting the switch), ms after the press; null where unread. */
+  shownMs: number | null;
   /** How many item sizes told from the reach to the press differ from the size the item had before it. */
   sizeChanges: number;
   /** How many of its rows were still staged (an inline skip) as the press came. */
   stagedAtPress: number;
   /** From the reach to the press: the rows staged, the sizes virtua was told and which changed (`watchSizes`). */
   staging: string;
+  /** WebKit: that frame, the press's Event Timing, and the strip's selection and focus once over (`stripOf`). */
+  switchLine: string;
   /** Read off a DevTools trace (Chromium); a WebKit return is its click alone. */
   traced: boolean;
   /**
@@ -948,6 +958,56 @@ const hiddenLoopsOf = (page: Page) =>
     };
   });
 
+/** warm.svelte.ts `COOL_MS`: how long a reach outlasts the pointer or the focus that made it. */
+const REACH_COOL_MS = 1500;
+/** How long a preview's page is given to answer an animation frame of its own (held, it waits). */
+const RUNS_MS = 400;
+
+/**
+ * Each preview frame standing in the dashboard, by its pane, and whether its
+ * page runs: an animation frame it is asked for comes within `RUNS_MS`
+ * (held, the overlay keeps it waiting). A pane whose page is unloaded has
+ * no frame, and is not listed.
+ */
+async function previewsRunning(
+  page: Page
+): Promise<{ pane: string; runs: boolean }[]> {
+  const iframes = page.locator(
+    '[data-slot="pane"][data-pane] iframe[title="Preview"]'
+  );
+  const asked: { pane: string; frame: Frame }[] = [];
+  for (const one of await iframes.all()) {
+    const pane = await one.evaluate(
+      (el) =>
+        el
+          .closest('[data-slot="pane"][data-pane]')
+          ?.getAttribute("data-pane") ?? "?"
+    );
+    const frame = await (await one.elementHandle())?.contentFrame();
+    if (frame) {
+      await frame
+        .evaluate(() => {
+          const w = window as unknown as { __runs: boolean };
+          w.__runs = false;
+          requestAnimationFrame(() => {
+            w.__runs = true;
+          });
+        })
+        .catch(() => undefined);
+      asked.push({ pane, frame });
+    }
+  }
+  await page.waitForTimeout(RUNS_MS);
+  return Promise.all(
+    asked.map(async ({ pane, frame }) => ({
+      pane,
+      runs: await frame
+        .evaluate(() => (window as unknown as { __runs: boolean }).__runs)
+        .catch(() => false),
+    }))
+  );
+}
+
 /**
  * Pane `pane` as it stands: whether it says nothing has been said there
  * (SessionPane's blank state) and how many transcript skeletons stand in it.
@@ -1034,7 +1094,7 @@ function noteOf(back: Back, turns: number): string {
   const warm = Number.isNaN(back.warmTask)
     ? "not traced"
     : `${back.warmTask.toFixed(1)}ms`;
-  return `${back.scene}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${page}${landed}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach task (its warm and the frame laying the pane out) ${warm}: ${back.warmWhat} | the longest from the reach to the press ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input}; its task: ${back.pressWhat} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`;
+  return `${back.scene}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${page}${landed}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach task (its warm and the frame laying the pane out) ${warm}: ${back.warmWhat} | the longest from the reach to the press ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input}; its task: ${back.pressWhat} | the switch: ${back.switchLine} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`;
 }
 
 /**
@@ -1361,6 +1421,8 @@ async function measureBack(
     inputMs,
     pressAt: origin + madeAt,
     reachAt: reachEpoch,
+    shownMs: null,
+    switchLine: "read off the trace",
     elsewhere:
       main
         .elsewhere(madeMark, madeMark + ELSEWHERE_MS * 1000)
@@ -1421,21 +1483,49 @@ async function measureBack(
 
 /**
  * In the dashboard's own document: the next press (a pointer's or a key's),
- * when it came by the event's own stamp (epoch ms), and the dashboard's
- * first animation frames after it.
+ * when it came by the event's own stamp (epoch ms), the dashboard's first
+ * animation frames after it, the first of them in which pane `pane` stands
+ * shown (neither put away nor laid out unseen: the frame that paints the
+ * switch) and when that frame had rendered, and the press's Event Timing
+ * entry where the engine reports one.
  */
-function armPress(): void {
+function armPress(pane: string): void {
   const w = window as unknown as {
     __press: number;
     __pressFrames: number[];
+    __pressShown: number;
+    __pressPainted: number;
+    __pressTiming: string[];
     __pressOff?: () => void;
   };
   w.__pressOff?.();
   w.__press = 0;
+  w.__pressPainted = 0;
   w.__pressFrames = [];
+  w.__pressShown = 0;
+  w.__pressTiming = [];
+  const shown = () => {
+    const box = document.querySelector(
+      `[data-slot="pane"][data-pane="${CSS.escape(pane)}"]`
+    );
+    return !!box && !box.matches("[data-pane-hidden], [data-pane-settling]");
+  };
   const look = () => {
-    w.__pressFrames.push(performance.timeOrigin + performance.now());
-    if (w.__pressFrames.length < 4) {
+    const at = performance.timeOrigin + performance.now();
+    w.__pressFrames.push(at);
+    if (!w.__pressShown && shown()) {
+      w.__pressShown = at;
+      // A message posted from the frame's callbacks runs once that frame has rendered.
+      const after = new MessageChannel();
+      after.port1.onmessage = () => {
+        w.__pressPainted = performance.timeOrigin + performance.now();
+      };
+      after.port2.postMessage(0);
+    }
+    if (
+      (w.__pressFrames.length < 4 || !w.__pressShown) &&
+      w.__pressFrames.length < 120
+    ) {
       requestAnimationFrame(look);
     }
   };
@@ -1450,38 +1540,110 @@ function armPress(): void {
     w.__press = performance.timeOrigin + stamp;
     requestAnimationFrame(look);
   };
+  let timing: PerformanceObserver | null = null;
+  if (PerformanceObserver.supportedEntryTypes?.includes("event")) {
+    timing = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries() as PerformanceEventTiming[]) {
+        if (entry.name === "keydown" || entry.name === "pointerdown") {
+          w.__pressTiming.push(
+            `${entry.name} ${Math.round(entry.duration)}ms (processing ${Math.round(entry.processingStart - entry.startTime)}-${Math.round(entry.processingEnd - entry.startTime)}ms)`
+          );
+        }
+      }
+    });
+    timing.observe({
+      type: "event",
+      durationThreshold: 16,
+    } as PerformanceObserverInit);
+  }
   addEventListener("pointerdown", pressed, true);
   addEventListener("keydown", pressed, true);
   w.__pressOff = () => {
+    timing?.disconnect();
     removeEventListener("pointerdown", pressed, true);
     removeEventListener("keydown", pressed, true);
   };
 }
 
-/** What `armPress` read: the press, epoch ms, and the dashboard's frames after it. */
+/** What `armPress` read: the press, epoch ms, the dashboard's frames after it, the first showing the pane, and its Event Timing. */
 const pressOf = (page: Page) =>
   page.evaluate(() => {
     const w = window as unknown as {
       __press: number;
       __pressFrames: number[];
+      __pressShown: number;
+      __pressPainted: number;
+      __pressTiming: string[];
       __pressOff?: () => void;
     };
     w.__pressOff?.();
-    return { at: w.__press, frames: [...w.__pressFrames] };
+    return {
+      at: w.__press,
+      frames: [...w.__pressFrames],
+      paintedAt: w.__pressPainted,
+      shownAt: w.__pressShown,
+      timing: [...w.__pressTiming],
+    };
   });
+
+/**
+ * The strip as the accessibility tree says it (Playwright's aria snapshot of
+ * the tablist holding `id`'s tab): the tab selected and the tab focused, by
+ * their place in it.
+ */
+async function stripOf(page: Page, id: string): Promise<string> {
+  const list = page
+    .locator('[role="tablist"]')
+    .filter({ has: page.locator(`[data-session-tab="${id}"]`) })
+    .first();
+  const aria = await list.ariaSnapshot().catch(() => "");
+  const tabs = aria.split("\n").filter((line) => line.includes("- tab "));
+  const selected = tabs.findIndex((line) => line.includes("[selected]"));
+  const focused = await list.evaluate((el) =>
+    [...el.querySelectorAll('[role="tab"]')].indexOf(
+      document.activeElement as Element
+    )
+  );
+  return `${tabs.length} tabs; tab ${selected + 1} [selected], tab ${focused + 1} focused (aria: ${tabs.map((line) => (line.includes("[selected]") ? "selected" : "-")).join(" ")})`;
+}
+
+/**
+ * The keyboard's focus on `tab` (its id `id`), as a person reaches the strip:
+ * focused, then Tab out of the strip and Shift+Tab back onto its one tab
+ * stop, so the focus is the keyboard's (`:focus-visible`), as the strip's
+ * own keyboard reach asks (PaneTabs `besideOf`).
+ */
+async function keyFocus(page: Page, tab: Locator, id: string): Promise<void> {
+  await tab.focus();
+  await page.keyboard.press("Tab");
+  await page.keyboard.press("Shift+Tab");
+  const focused = await page.evaluate(() => {
+    const el = document.activeElement;
+    return {
+      id: el?.getAttribute("data-session-tab") ?? null,
+      keyboard: !!el?.matches(":focus-visible"),
+    };
+  });
+  if (focused.id !== id || !focused.keyboard) {
+    throw new Error(
+      `tab-return: the keyboard's focus is not on tab ${id.slice(0, 8)} (${focused.id?.slice(0, 8) ?? "elsewhere"}, ${focused.keyboard ? "" : "not "}focus-visible)`
+    );
+  }
+}
 
 /**
  * One return to `id` on WebKit, which has no trace: a person's press, timed
  * by the dashboard's clock, and the window after it. `pointer`: the pointer
- * comes onto the tab, rests `REACH_MS`, presses; `keyboard`: the focus rests
- * on the chosen tab before it as long, and the arrow moves onto it and
- * chooses it, in one key (TabsList `onkeydown`).
+ * comes onto the tab, rests `rest`, presses; `keyboard`: the keyboard's focus
+ * rests on the chosen tab before it as long (`keyFocus`), and the arrow moves
+ * the focus onto it and chooses it (TabsList `onkeydown`).
  */
 async function pressBack(
   page: Page,
   id: string,
   how: "pointer" | "keyboard",
-  waitFor?: () => Promise<boolean>
+  waitFor?: () => Promise<boolean>,
+  rest = REACH_MS
 ): Promise<Read> {
   const tab = page
     .locator(`[data-session-tab="${id}"]`)
@@ -1492,13 +1654,14 @@ async function pressBack(
   if (!box) {
     throw new Error("tab-return: a tab to switch to has no box");
   }
-  await page.evaluate(armPress);
-  const reachAt = await page.evaluate(
-    () => performance.timeOrigin + performance.now()
-  );
+  const now = () =>
+    page.evaluate(() => performance.timeOrigin + performance.now());
+  let reachAt = 0;
   if (how === "pointer") {
+    await page.evaluate(armPress, id);
+    reachAt = await now();
     await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-    await page.waitForTimeout(REACH_MS);
+    await page.waitForTimeout(rest);
     await page.mouse.down();
     await page.mouse.up();
   } else {
@@ -1509,22 +1672,17 @@ async function pressBack(
       .locator('[role="tab"][data-session-tab]')
       .filter({ visible: true });
     const ids = await strip.evaluateAll((tabs) =>
-      tabs.map((one) => one.getAttribute("data-session-tab"))
+      tabs.map((one) => one.getAttribute("data-session-tab") ?? "")
     );
     const at = ids.indexOf(id);
     if (at < 1) {
       throw new Error("tab-return: a keyboard return needs a tab before it");
     }
-    await strip.nth(at - 1).focus();
-    await page.waitForTimeout(REACH_MS);
-    const focused = await page.evaluate(() =>
-      document.activeElement?.getAttribute("data-session-tab")
-    );
-    if (focused !== ids[at - 1]) {
-      throw new Error(
-        `tab-return: the focus is not on the tab before it (${focused ?? "elsewhere"})`
-      );
-    }
+    // The reach is the focus's: its keys (Tab and back) come before the press is watched.
+    reachAt = await now();
+    await keyFocus(page, strip.nth(at - 1), ids[at - 1]);
+    await page.waitForTimeout(rest);
+    await page.evaluate(armPress, id);
     await page.keyboard.press("ArrowRight");
   }
   await page.waitForTimeout(WINDOW_MS);
@@ -1533,6 +1691,17 @@ async function pressBack(
     throw new Error(`tab-return: the ${how}'s press never reached the page`);
   }
   const pressAt = press.at;
+  const shownMs = press.shownAt ? Math.round(press.shownAt - pressAt) : null;
+  const timed = await page.evaluate(
+    () => PerformanceObserver.supportedEntryTypes?.includes("event") ?? false
+  );
+  const timing = timed
+    ? press.timing.join(", ") || "no entry of 16ms or more"
+    : "not reported by this engine";
+  const paintedMs = press.paintedAt
+    ? Math.round(press.paintedAt - pressAt)
+    : null;
+  const switchLine = `shown in the dashboard's frame ${shownMs === null ? "never" : `${shownMs}ms after the press`}, that frame rendered ${paintedMs === null ? "never" : `${paintedMs}ms after the press`}; Event Timing ${timing}; the strip after: ${await stripOf(page, id)}`;
   if (waitFor) {
     const began = Date.now();
     while (!(await waitFor()) && Date.now() - began < READY_MS) {
@@ -1560,6 +1729,8 @@ async function pressBack(
     longestWhat: `not traced; the dashboard's thread stood still at most ${Math.round(worstMs)}ms, ${Math.round(worstAt - pressAt)}ms after the press (its longest timer gap; every gap over 50ms: ${gaps.map(([at, ms]) => `${Math.round(ms)}ms at ${Math.round(at - pressAt)}ms`).join(", ") || "none"})`,
     pressAt,
     reachAt,
+    shownMs,
+    switchLine,
     elsewhere: "not traced",
     reach: 0,
     reachWhat: "not traced",
@@ -1637,6 +1808,36 @@ function checkQuiet(
       `${read.scene}: every animation in a pane off screen is held (none running)`,
       read.running === 0,
       read.line
+    );
+  }
+}
+
+/** A return to the preview: kept and held (its first frame bound, but for the first arrow into the strip), or past the bound and loaded again. */
+function checkPage(kit: Kit, back: Back): void {
+  const { page } = back;
+  // The first arrow into the strip comes with no reach before it: its first frame is said, not bound.
+  if (back.kind === "kept" && page && back.scene.startsWith("2h")) {
+    kit.check(
+      `${back.scene}: the page is the one it was, held off screen (no animation frame or timer of its ran)`,
+      !page.reloaded && page.hiddenTicks === 0 && page.hiddenTimers === 0,
+      pageLine(page)
+    );
+  } else if (back.kind === "kept" && page) {
+    kit.check(
+      `${back.scene}: the page is the one it was, held off screen (no animation frame or timer of its ran), and its first animation frame comes within ${BACK_MS}ms of the press`,
+      !page.reloaded &&
+        page.hiddenTicks === 0 &&
+        page.hiddenTimers === 0 &&
+        page.firstTickMs !== null &&
+        page.firstTickMs <= BACK_MS,
+      pageLine(page)
+    );
+  }
+  if (back.kind === "past" && page) {
+    kit.check(
+      `${back.scene}: off screen past the bound its page was let go, and it loads again with its tab`,
+      Number.isNaN(page.hiddenTicks) && page.reloaded,
+      pageLine(page)
     );
   }
 }
@@ -1803,6 +2004,114 @@ const run = async (kit: Kit) => {
     });
   };
   /**
+   * The keyboard's reach (warm.svelte.ts `besides`): with the keyboard's
+   * focus resting on the quiet tab, the previews of the tabs an arrow lands
+   * on next run, two at most, and nothing else does; with the focus gone
+   * from the strip, once its reach is over, every preview is held again and
+   * no loop off screen runs.
+   */
+  const keyReach = async (on: Desk, engine: string) => {
+    const { page } = on;
+    await away(page, front);
+    await page.waitForTimeout(REACH_COOL_MS + SETTLE_MS);
+    const strip = page
+      .locator('[role="tab"][data-session-tab]')
+      .filter({ visible: true });
+    const ids = await strip.evaluateAll((tabs) =>
+      tabs.map((one) => one.getAttribute("data-session-tab") ?? "")
+    );
+    const at = ids.indexOf(front);
+    const beside = [
+      ids[(at - 1 + ids.length) % ids.length],
+      ids[(at + 1) % ids.length],
+    ];
+    const place = (id: string) => `tab ${ids.indexOf(id) + 1}`;
+    const said = (runs: { pane: string; runs: boolean }[]) =>
+      runs
+        .map((one) => `${place(one.pane)} ${one.runs ? "runs" : "held"}`)
+        .join(", ") || "no preview standing";
+    await keyFocus(page, strip.nth(at), front);
+    await page.waitForTimeout(REACH_MS);
+    const resting = await previewsRunning(page);
+    const restingLoops = await hiddenLoopsOf(page);
+    await page.evaluate(() =>
+      (document.activeElement as HTMLElement | null)?.blur()
+    );
+    await page.waitForTimeout(REACH_COOL_MS + SETTLE_MS);
+    const left = await previewsRunning(page);
+    const leftLoops = await hiddenLoopsOf(page);
+    const running = resting.filter((one) => one.runs);
+    kit.check(
+      `${engine}: the keyboard's focus resting on a tab lets go the previews of the tabs an arrow lands on next, two at most, and no other`,
+      running.length <= 2 &&
+        running.every((one) => beside.includes(one.pane)) &&
+        running.some((one) => one.pane === previewed),
+      `focus on ${place(front)}, an arrow lands on ${beside.map(place).join(" or ")}: ${said(resting)}; ${restingLoops.line}`
+    );
+    kit.check(
+      `${engine}: the focus gone from the strip, its reach over, every preview is held again and no loop off screen runs`,
+      left.every((one) => !one.runs) && leftLoops.running === 0,
+      `${REACH_COOL_MS + SETTLE_MS}ms after the focus left: ${said(left)}; ${leftLoops.line}`
+    );
+  };
+  /**
+   * Two arrow keys in one task from the quiet tab: each chooses its tab in
+   * its own key (TabsList), and the second is the one selected.
+   */
+  const doubleArrow = async (on: Desk, engine: string) => {
+    const { page } = on;
+    await away(page, front);
+    await page.waitForTimeout(SETTLE_MS);
+    const strip = page
+      .locator('[role="tab"][data-session-tab]')
+      .filter({ visible: true });
+    const ids = await strip.evaluateAll((tabs) =>
+      tabs.map((one) => one.getAttribute("data-session-tab") ?? "")
+    );
+    const at = ids.indexOf(front);
+    await keyFocus(page, strip.nth(at), front);
+    await page.waitForTimeout(REACH_MS);
+    const clicked = await page.evaluate(async () => {
+      const seen: string[] = [];
+      const heard = (event: Event) => {
+        const tab = (event.target as Element | null)?.closest(
+          '[role="tab"][data-session-tab]'
+        );
+        if (tab) {
+          seen.push(tab.getAttribute("data-session-tab") ?? "?");
+        }
+      };
+      addEventListener("click", heard, true);
+      for (const _ of [1, 2]) {
+        document.activeElement?.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            key: "ArrowRight",
+            bubbles: true,
+            cancelable: true,
+          })
+        );
+      }
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      removeEventListener("click", heard, true);
+      return seen;
+    });
+    const selected = await page.evaluate(
+      () =>
+        document
+          .querySelector('[role="tab"][data-session-tab][aria-selected="true"]')
+          ?.getAttribute("data-session-tab") ?? ""
+    );
+    const place = (id: string) => ids.indexOf(id) + 1;
+    kit.check(
+      `${engine}: two arrow keys in one task each choose their tab, the second last`,
+      clicked.length === 2 &&
+        clicked[0] === ids[at + 1] &&
+        clicked[1] === ids[at + 2] &&
+        selected === ids[at + 2],
+      `from tab ${at + 1}: the strip clicked ${clicked.map((id) => `tab ${place(id)}`).join(", ") || "nothing"}; tab ${place(selected)} selected; ${await stripOf(page, front)}`
+    );
+  };
+  /**
    * One return to `to`: a busy tab's, a kept preview's (the quiet tab in
    * front for `absence`), or a preview's past the bound (`pastBound`). A
    * preview's page's window is read as the switch away has settled, just
@@ -1820,6 +2129,8 @@ const run = async (kit: Kit) => {
     const { page, input, ready } = on;
     const got: { read?: Read; page?: PageBack } = {};
     const turns = kind === "busy" ? Math.round(absence / TURN_MS) : 0;
+    // A keyboard return is untraced on every engine: the strip's own key, timed by the page.
+    const traced = how === "pointer" ? input : null;
     const psi = await quietLeg(name, pressure, async () => {
       let before: Clock | null = null;
       if (kind === "past") {
@@ -1841,9 +2152,9 @@ const run = async (kit: Kit) => {
       }
       const hidden = kind === "busy" ? null : await clockOf(page, to);
       const waitFor = kind === "past" ? ready : undefined;
-      got.read = input
-        ? await measureBack(page, input, to, waitFor, rest)
-        : await pressBack(page, to, how, waitFor);
+      got.read = traced
+        ? await measureBack(page, traced, to, waitFor, rest)
+        : await pressBack(page, to, how, waitFor, rest);
       if (kind !== "busy") {
         got.page = pageBack(
           before,
@@ -1951,6 +2262,15 @@ const run = async (kit: Kit) => {
     );
     await leg(
       shared,
+      `2g: preview in the dashboard's process, back after ${SHORT_MS / 1000}s by the keyboard (kept, held)`,
+      previewed,
+      "kept",
+      SHORT_MS,
+      REACH_MS,
+      "keyboard"
+    );
+    await leg(
+      shared,
       "2d: preview in the dashboard's process, back past the bound",
       previewed,
       "past"
@@ -1980,6 +2300,17 @@ const run = async (kit: Kit) => {
       REACH_MS,
       "keyboard"
     );
+    await leg(
+      webkit,
+      `2h (WebKit): preview, back after ${SHORT_MS / 1000}s by the keyboard's first arrow into the strip, with no rest (kept, held)`,
+      previewed,
+      "kept",
+      SHORT_MS,
+      0,
+      "keyboard"
+    );
+    await keyReach(webkit, "WebKit");
+    await doubleArrow(webkit, "WebKit");
     await silentLeg(webkit, "WebKit");
   };
   // TAB_RETURN_LEGS=busy: scene 1 alone, its busy returns.
@@ -2011,25 +2342,7 @@ const run = async (kit: Kit) => {
         back.input
       );
     }
-    const { page } = back;
-    if (back.kind === "kept" && page) {
-      kit.check(
-        `${back.scene}: the page is the one it was, held off screen (no animation frame or timer of its ran), and its first animation frame comes within ${BACK_MS}ms of the press`,
-        !page.reloaded &&
-          page.hiddenTicks === 0 &&
-          page.hiddenTimers === 0 &&
-          page.firstTickMs !== null &&
-          page.firstTickMs <= BACK_MS,
-        pageLine(page)
-      );
-    }
-    if (back.kind === "past" && page) {
-      kit.check(
-        `${back.scene}: off screen past the bound its page was let go, and it loads again with its tab`,
-        Number.isNaN(page.hiddenTicks) && page.reloaded,
-        pageLine(page)
-      );
-    }
+    checkPage(kit, back);
   }
   checkQuiet(kit, silentReads, loopReads);
 };
