@@ -142,7 +142,7 @@
         }
       : null
   );
-  const RESPONSE_GLYPHS: Record<ArtifactKind, Component> = {
+  const RESPONSE_GLYPHS: Record<ArtifactKind, Component<{ class?: string }>> = {
     page: IconArtifactPage,
     canvas: IconArtifactCanvas,
     preview: IconWindow,
@@ -207,7 +207,7 @@
         <Collapsible.Trigger
           class="inline-flex bg-transparent border-none border-current p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start max-w-full rail-line"
         >
-          <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
+          <span data-slot="rail-cell" class="rail-cell"><IconInfo class="size-icon-sm" /></span>
           <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
             >{harness.title}</span
           >
@@ -220,12 +220,10 @@
               >{harness.status}</span
             >
           {/if}
-          <!-- literal: rotate(90deg) -->
           <span
             data-open={open || undefined}
-            style:--chev-turn="rotate(90deg)"
-            class="inline-flex flex-none data-open:transform-(--chev-turn) motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out"
-            data-box><IconChevronRight /></span
+            class="inline-flex flex-none data-open:rotate-90 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out"
+            data-box><IconChevronRight class="size-icon-sm" /></span
           >
         </Collapsible.Trigger>
         <Collapsible.Content reveal>
@@ -242,7 +240,7 @@
       <span
         class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
       >
-        <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
+        <span data-slot="rail-cell" class="rail-cell"><IconInfo class="size-icon-sm" /></span>
         <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
           >{harness.title}</span
         >
@@ -270,7 +268,7 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
+      <span data-slot="rail-cell" class="rail-cell"><IconInfo class="size-icon-sm" /></span>
       <span
         class="flex-none text-ink-strong data-bad:text-data-bad"
         data-bad={message?.content === "task failed" || undefined}
@@ -296,7 +294,7 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconTerminal /></span>
+      <span data-slot="rail-cell" class="rail-cell"><IconTerminal class="size-icon-sm" /></span>
       <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
         >{foldCommand ?? "Output"}</span
       >
@@ -317,7 +315,7 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconStop /></span>
+      <span data-slot="rail-cell" class="rail-cell"><IconStop class="size-icon-sm" /></span>
       <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
         >Interrupted</span
       >
@@ -338,15 +336,13 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted gap-space-2 items-baseline rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><ResponseGlyph /></span>
-      <!-- literal (the name's underline offset): 0.2em -->
+      <span data-slot="rail-cell" class="rail-cell"><ResponseGlyph class="size-icon-sm" /></span>
       <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
         >{responses.lead}
         <button
           aria-busy={opening}
           data-slot="aname"
-          style:--name-offset="0.2em"
-          class="py-space-1 px-0 border-none border-current bg-transparent text-ink-strong cursor-pointer underline decoration-current/35 underline-offset-(--name-offset) focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:dur-control can-hover:motion-safe:ease-out"
+          class="py-space-1 px-0 border-none border-current bg-transparent text-ink-strong cursor-pointer underline decoration-current/35 underline-offset-2 focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) focus-visible:rounded-xs hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:dur-control can-hover:motion-safe:ease-out"
           onclick={openResponses}
           title="Open {responses.name}"
           type="button"
@@ -390,7 +386,7 @@
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted rail-line"
     >
       <span data-slot="rail-cell" class="text-status-live-glyph rail-cell"
-        ><IconSuccess /></span
+        ><IconSuccess class="size-icon-sm" /></span
       >
       <span
         data-slot="ftitle"
@@ -419,13 +415,13 @@
   <div
     data-system-line-rail-row
     data-slot="note"
-    class="unread py-space-2 text-size-label font-medium text-ink-muted rail-row"
+    class="py-space-2 text-size-label font-medium text-ink-muted rail-row"
     data-unread-note={message?.id}
   >
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-strong rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconClock /></span>
+      <span data-slot="rail-cell" class="rail-cell"><IconClock class="size-icon-md" /></span>
       <span
         data-slot="ftitle"
         class="min-w-0 overflow-clip text-ellipsis wrap-anywhere text-pretty"
@@ -459,7 +455,7 @@
     <span
       class="inline-flex max-w-full text-size-label font-medium text-inherit rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconError /></span>
+      <span data-slot="rail-cell" class="rail-cell"><IconError class="size-icon-sm" /></span>
       <b data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
         >{failTitle}</b
       >
@@ -477,14 +473,15 @@
   <div
     data-system-line-rail-row
     data-slot="note"
-    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 data-code:bg-none data-code:bg-auto data-code:bg-repeat rail-row"
+    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 rail-row"
     data-code={wokeCaw || undefined}
+    style:--rail-head={wokeCaw ? "none" : undefined}
   >
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
       <Collapsible.Trigger
         class="inline-flex bg-transparent border-none border-current p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line"
       >
-        <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
+        <span data-slot="rail-cell" class="rail-cell"><IconInfo class="size-icon-sm" /></span>
         <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
           >{foldTitle}</span
         >
@@ -496,12 +493,10 @@
             datetime={eventAt.toISOString()}>{eventClock}</time
           >
         {/if}
-        <!-- literal: rotate(90deg) -->
         <span
           data-open={open || undefined}
-          style:--chev-turn="rotate(90deg)"
-          class="inline-flex flex-none data-open:transform-(--chev-turn) motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out"
-          data-box><IconChevronRight /></span
+          class="inline-flex flex-none data-open:rotate-90 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out"
+          data-box><IconChevronRight class="size-icon-sm" /></span
         >
       </Collapsible.Trigger>
       <Collapsible.Content reveal>
@@ -533,13 +528,14 @@
   <div
     data-system-line-rail-row
     data-slot="note"
-    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 data-code:bg-none data-code:bg-auto data-code:bg-repeat rail-row"
+    class="group/note text-size-label font-medium text-ink-muted data-code:ps-0 rail-row"
     data-code={wokeCaw || undefined}
+    style:--rail-head={wokeCaw ? "none" : undefined}
   >
     <span
       class="inline-flex max-w-full text-size-label font-medium text-ink-muted group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line"
     >
-      <span data-slot="rail-cell" class="rail-cell"><IconInfo /></span>
+      <span data-slot="rail-cell" class="rail-cell"><IconInfo class="size-icon-sm" /></span>
       <span data-slot="ftitle" class="min-w-0 overflow-clip text-ellipsis"
         >{foldTitle}</span
       >
@@ -563,19 +559,3 @@
     {/if}
   </div>
 {/if}
-
-<style>
-  /* residual: foreign-dom: every svg on the row at the glyph size, the
-     row's own marks and those MessageBody and the action rows draw inside
-     it; the unread row's clock at the 16px glyph size, with both its tones
-     standing clear of the row (unlayered, so it outranks the rule above). */
-  [data-slot="note"] :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-    flex: 0 0 auto;
-  }
-  .unread .rail-cell :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-</style>

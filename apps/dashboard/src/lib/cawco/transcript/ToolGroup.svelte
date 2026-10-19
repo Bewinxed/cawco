@@ -347,14 +347,12 @@
             out:glyphOut
             >{#if d.favicon && !brokenIcons.has(d.favicon)}
               {@const src = d.favicon}
-              <!-- literal: 14px -->
               <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror is an image-load callback — a site with no icon keeps the tool's glyph -->
               <img
                 alt=""
-                class="col-start-1 row-start-1 size-(--fav) block rounded-xs"
+                class="col-start-1 row-start-1 size-icon-md block rounded-xs"
                 onerror={() => brokenIcons.add(src)}
                 {src}
-                style:--fav="14px"
                 in:iconSwap
                 out:iconSwap
               />
@@ -441,19 +439,14 @@
                  (app.css field-shell), and the button draws nothing. Neither
                  line sets the card's width, so the card fits any row it
                  stands in. -->
-            <!-- literal: 440px -->
-            <!-- literal: 80px -->
             <div
               data-slot="preview-tool"
-              class="relative flex items-center gap-space-2 max-w-(--card-max) min-h-(--card-min) p-space-2 my-space-2 border border-border-hairline rounded-md bg-surface-raised shadow-tile not-has-[[data-slot=page-thumb]]:w-fit has-hover:bg-surface-hover has-focus-visible:outline-(length:--focus-ring-width) has-focus-visible:outline-focus-ring has-focus-visible:outline-offset-(--focus-ring-inset)"
+              class="relative flex items-center gap-space-2 max-w-(--tx-preview-max) min-h-(--tx-preview-min) p-space-2 my-space-2 border border-border-hairline rounded-md bg-surface-raised shadow-tile not-has-[[data-slot=page-thumb]]:w-fit has-hover:bg-surface-hover has-focus-visible:outline-(length:--focus-ring-width) has-focus-visible:outline-focus-ring has-focus-visible:outline-offset-(--focus-ring-inset)"
               data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
               data-share-ttl="10000"
-              style:--card-max="440px"
-              style:--card-min="80px"
               {@attach wantsThumbnail(() => preview)}
             >
-              <!-- literal: 44px -->
               <!-- The button draws no ring of its own (the card takes it):
                    the outline shorthand's none, which also puts the ring's
                    width and colour back to their initial values. -->
@@ -462,8 +455,7 @@
                 aria-disabled={busy || !called || undefined}
                 aria-label={preview?.title || name}
                 data-slot="artifact-open"
-                class="flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--hit-min) focus-visible:outline-off"
-                style:--hit-min="44px"
+                class="flex items-center gap-space-2 flex-1 min-w-0 border-none border-current p-space-2 bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-c-btn-h-lg after:absolute after:inset-0 after:rounded-md focus-visible:outline-off"
                 onclick={whileIdle(
                   () => busy || !called,
                   () => {
@@ -476,29 +468,20 @@
                 )}
                 type="button"
               >
-                <!-- literal: 17px -->
-                <!-- Two background layers, the overlay over the hue, as the
-                     shorthand wrote them: the overlay and an empty layer,
-                     the hue under both. -->
                 <span
                   data-slot="mark"
-                  class="size-(--mark-size) shrink-0 grid place-items-center rounded-xs text-mark-glyph bg-(image:--mark-layers) bg-mark-6"
-                  style:--mark-size="17px"
-                  style:--mark-layers="var(--mark-overlay), none"
+                  class="size-c-row-mark shrink-0 grid place-items-center rounded-xs text-mark-glyph bg-mark-overlay bg-mark-6"
                   ><IconWindow class="size-icon-sm" /></span
                 >
                 <!-- The name wraps, whole, and breaks inside a word only
                      when the word alone is wider than the row; the place
                      stays one line, cut at its end, and contained, so
                      however long it is it takes the width it is given. The
-                     place's face is the font shorthand's: meta size, mono,
-                     its weight and line height reset. -->
+                     place's face is the meta role in mono. -->
                 <span class="flex flex-col min-w-0"
-                  ><!-- literal: 12px -->
-                  <span
-                    class="flex items-center gap-(--btn-gap) wrap-anywhere"
-                    style:--btn-gap="var(--space-1)"
-                    style:--btn-icon="12px"
+                  ><span
+                    class="flex items-center gap-space-1 wrap-anywhere"
+                    style:--btn-icon="var(--icon-sm)"
                     ><PendingContent
                       failed={openFailed.has(callId(m))}
                       label={preview?.title || name}
@@ -507,8 +490,7 @@
                     /></span
                   ><span
                     data-slot="artifact-path"
-                    class="truncate text-ink-muted contain-inline-size text-size-meta font-(family-name:--font-mono) font-normal leading-(--path-leading)"
-                    style:--path-leading="normal"
+                    class="truncate text-ink-muted contain-inline-size type-meta font-(family-name:--font-mono)"
                     >{preview?.source
                       ? previewPlace(preview.source)
                       : (called?.kind ?? "")}</span
@@ -522,11 +504,9 @@
             {#if openFailed.has(callId(m))}
               <!-- What happened and the way back, under the row that asked;
                    the row itself is still the way to open it. -->
-              <!-- literal: 440px -->
               <p
-                class="max-w-(--card-max) -mt-space-1 mx-0 mb-space-2 text-data-bad text-size-meta font-normal"
+                class="max-w-(--tx-preview-max) mb-space-2 text-data-bad text-size-meta font-normal"
                 role="alert"
-                style:--card-max="440px"
               >
                 Couldn't open {name}: {openFailed.get(callId(m))} Press it to try
                 again.
@@ -543,28 +523,22 @@
                  is shared by this button and the plain <div> below, with the
                  button's chrome stripped back to the ledger's; its inline
                  geometry is the rail line's (app.css `.rail-line`). -->
-            <!-- literal: 26px -->
-            <!-- literal: 44px -->
             <button
               aria-controls={opened.has(callId(m)) ? body : undefined}
               aria-expanded={disclosed.get()}
               data-slot="trow"
-              class="group/trow rail-line press-tint w-full min-h-(--trow-min) coarse:min-h-(--trow-min-coarse) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start cursor-pointer"
+              class="group/trow rail-line press-tint w-full min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start cursor-pointer"
               data-state={disclosed.get() ? "open" : "closed"}
               onclick={() => disclosed.set(!disclosed.get())}
-              style:--trow-min="26px"
-              style:--trow-min-coarse="44px"
               type="button"
             >
               {@render line()}
               <!-- The affordance sits at the tail so the row's left anatomy
                    is unchanged. -->
-              <!-- literal: rotate(90deg) -->
               <span
                 data-slot="chev"
-                class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out group-state-open/trow:transform-(--chev-turn)"
+                class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/trow:rotate-90"
                 data-box
-                style:--chev-turn="rotate(90deg)"
                 ><IconChevronRight class="size-icon-md block" /></span
               >
             </button>
@@ -586,18 +560,16 @@
                        it attempted, under the harness's reason. The file path
                        in each header reads at the text column, the diff's
                        frame reaching out past it by its 1px border and its
-                       header's 12px inset (DiffView's `px-3`). -->
-                      <!-- literal: 13px -->
+                       header's inset (`--tx-diff-head-inline`). -->
                       <div
                         class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--diffs-start)"
-                        style:--diffs-start="calc(var(--x-hang) - 13px)"
+                        style:--diffs-inset="calc(var(--tx-diff-head-inline) + 1px)"
+                        style:--diffs-start="calc(var(--x-hang) - var(--diffs-inset))"
                       >
                         {#if refusal}
-                          <!-- literal: 13px -->
                           <p
                             data-slot="refusal"
-                            class="my-0 me-0 ms-(--refusal-start) text-size-label text-data-bad wrap-anywhere"
-                            style:--refusal-start="13px"
+                            class="ms-(--diffs-inset) text-size-label text-data-bad wrap-anywhere"
                           >
                             {refusal}
                           </p>
@@ -634,20 +606,16 @@
                             class="text-size-label font-medium text-ink-muted"
                             >result</span
                           >
-                          <!-- literal: 300px -->
                           <pre
-                            class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
-                            style:--value-max="300px">{result.text}</pre>
+                            class="max-h-(--tx-field-cap) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
                         </div>
                       </div>
                     {:else if d.expanded === "prose" && !failed}
                       <!-- A skill's arguments are the agent's own words to
                            it: prose at the text column, with no well around
                            them. -->
-                      <!-- literal: 70ch -->
                       <div
-                        class="mt-space-1 mb-space-3 ms-(--x-hang) max-w-(--measure)"
-                        style:--measure="70ch"
+                        class="mt-space-1 mb-space-3 ms-(--x-hang) max-w-c-measure"
                       >
                         <ToolProse source={proseOf(toolInput)} />
                       </div>
@@ -665,10 +633,8 @@
                               class="text-size-label font-medium text-ink-muted"
                               >{f.key}</span
                             >
-                            <!-- literal: 300px -->
                             <pre
-                              class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
-                              style:--value-max="300px">{f.text}</pre>
+                              class="max-h-(--tx-field-cap) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word">{f.text}</pre>
                           </div>
                         {/each}
                         {#if result}
@@ -680,10 +646,8 @@
                               class="text-size-label font-medium text-ink-muted"
                               >result</span
                             >
-                            <!-- literal: 300px -->
                             <pre
-                              class="m-0 max-h-(--value-max) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word"
-                              style:--value-max="300px">{result.text}</pre>
+                              class="max-h-(--tx-field-cap) overflow-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap break-word">{result.text}</pre>
                             {#if result.more}
                               <span
                                 data-slot="more"
@@ -700,13 +664,9 @@
               </Collapsible.Root>
             {/if}
           {:else}
-            <!-- literal: 26px -->
-            <!-- literal: 44px -->
             <div
               data-slot="trow"
-              class="rail-line w-full min-h-(--trow-min) coarse:min-h-(--trow-min-coarse) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
-              style:--trow-min="26px"
-              style:--trow-min-coarse="44px"
+              class="rail-line w-full min-h-(--tx-line) coarse:min-h-(--tx-line-touch) text-size-label font-medium text-ink-strong bg-transparent border-none border-current rounded-xs p-0 m-0 text-start"
             >
               {@render line()}
             </div>
@@ -716,11 +676,9 @@
               path: string;
               caption?: string;
             }}
-            <!-- literal: 240px -->
             <div
               data-slot="shots"
               class="flex flex-wrap gap-space-2 ms-(--x-hang) mt-space-2"
-              style:--shot-basis="240px"
             >
               <Shot
                 alt={input.caption ?? pathLeaf(input.path)}
@@ -734,12 +692,10 @@
             </div>
           {/if}
           {#if machine && !failed && sentAttachments(m).length}
-            <!-- literal: 240px -->
             <div
               data-slot="shots"
               class="flex flex-wrap gap-space-2 ms-(--x-hang) mt-space-2"
               data-gallery
-              style:--shot-basis="240px"
             >
               {#each sentAttachments(m) as path (path)}
                 {#if CAPTIONS_FILE.test(path)}
@@ -768,12 +724,10 @@
             </div>
           {/if}
           {#if m.metadata?.resultImages?.length}
-            <!-- literal: 240px -->
             <div
               data-slot="shots"
               class="flex flex-wrap gap-space-2 ms-(--x-hang) mt-space-2"
               data-gallery
-              style:--shot-basis="240px"
             >
               {#each m.metadata.resultImages as image, i (i)}
                 <Shot
@@ -789,21 +743,3 @@
     </TranscriptRow>
   {/each}
 </div>
-
-<style>
-  /* residual: pseudo */
-  /* The button is the whole card: its ::after covers the card's box. */
-  [data-slot="artifact-open"]::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: var(--radius-md);
-  }
-
-  /* Each picture is a Shot, whose root takes no class. */
-  [data-slot="shots"] > :global(*) {
-    flex: 1 1 var(--shot-basis);
-    min-inline-size: 0;
-    max-inline-size: 100%;
-  }
-</style>

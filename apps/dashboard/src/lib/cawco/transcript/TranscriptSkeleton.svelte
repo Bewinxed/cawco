@@ -27,6 +27,7 @@
   data-skeleton
   aria-busy="true"
   style:--sk-foot="max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))"
+  style:--sk-line-my="calc((1lh - var(--c-skeleton-x-height)) / 2)"
   class="relative flex flex-col justify-end flex-auto min-h-0 overflow-hidden pb-(--sk-foot) ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 tx-columns"
   role="status"
 >
@@ -42,7 +43,6 @@
        at --leading-body in a 74ch measure, each bar centred in one line box,
        so the pitch is the prose's pitch. The well pads by the turn's --pad,
        which steps down at the narrow breakpoint (`turn-pad`). -->
-  <!-- literal: 64px, 74ch, 0.75em -->
   <div data-you data-slot="block" class="mt-space-4 turn-pad">
     <div
       data-slot="who"
@@ -51,37 +51,35 @@
     >
       <Skeleton
         data-transcript-skeleton-mark
-        class="size-space-5 flex-none"
+        class="size-c-row-mark flex-none"
         radius="text"
       /><Skeleton
         data-transcript-skeleton-name
-        class="w-(--name-w) h-icon-sm"
-        radius="text"
-        style="--name-w: 64px"
+        height="x-height"
+        radius="line"
+        type="label"
+        width="short"
       />
     </div>
     <div
       data-slot="well"
-      style:--well-pad-x="calc(var(--pad) - 1px)"
-      class="ms-(--well-x) py-space-2 px-(--well-pad-x) border border-well-edge rounded-well-r bg-surface-recess-deep"
+      style:--well-pad-block="calc(var(--space-2) + 1px)"
+      class="ms-(--well-x) py-(--well-pad-block) px-(--pad) inset-ring-1 inset-ring-well-edge rounded-well-r bg-surface-recess-deep"
     >
       <div
-        style:--measure="74ch"
-        style:--ln-h="0.75em"
-        style:--ln-my="calc((1lh - 0.75em) / 2)"
-        class="prose max-w-(--measure) text-size-body leading-body [.prose+&]:mt-space-3"
+        class="flex flex-col max-w-c-measure text-size-body leading-body"
       >
         <Skeleton
-          class="w-(--ln-w) h-(--ln-h) [.prose>&]:my-(--ln-my)"
-          radius="text"
-          style="--ln-w: 52%"
+          class="my-(--sk-line-my)"
+          height="x-height"
+          radius="line"
+          style="width: 52%"
         />
       </div>
     </div>
   </div>
 
   <!-- The agent's answer: two paragraphs, ragged the way prose is. -->
-  <!-- literal: 64px, 74ch, 0.75em -->
   <div data-slot="block" class="mt-space-4">
     <div
       data-slot="who"
@@ -90,26 +88,28 @@
     >
       <Skeleton
         data-transcript-skeleton-mark
-        class="size-space-5 flex-none"
+        class="size-c-row-mark flex-none"
         radius="text"
       /><Skeleton
         data-transcript-skeleton-name
-        class="w-(--name-w) h-icon-sm"
-        radius="text"
-        style="--name-w: 64px"
+        height="x-height"
+        radius="line"
+        type="label"
+        width="short"
       />
     </div>
     {#each ANSWER as lines, i (i)}
       <div
-        style:--measure="74ch"
-        style:--ln-h="0.75em"
-        style:--ln-my="calc((1lh - 0.75em) / 2)"
-        class="prose max-w-(--measure) text-size-body leading-body [.prose+&]:mt-space-3"
+        class={[
+          "flex flex-col max-w-c-measure text-size-body leading-body",
+          i > 0 && "mt-space-3",
+        ]}
       >
         {#each lines as width (width)}
           <Skeleton
-            class="h-(--ln-h) [.prose>&]:my-(--ln-my)"
-            radius="text"
+            class="my-(--sk-line-my)"
+            height="x-height"
+            radius="line"
             style="width: {width}"
           />
         {/each}
@@ -118,17 +118,15 @@
   </div>
 
   <!-- Its tool calls, one row each, on the rail, as ToolGroup draws it
-       (app.css `.rail-row`): 26px rows, the glyph in the rail cell, the
-       verb, then the mono argument. -->
-  <!-- literal: 26px, 40px -->
+       (app.css `.rail-row`): rows at the transcript's line height, the glyph
+       in the rail cell, the verb, then the mono argument. -->
   <div data-slot="tools" data-transcript-skeleton-rail-row class="rail-row">
     {#each TOOLS as width (width)}
-      <div style:--trow-h="26px" class="min-h-(--trow-h) rail-line">
+      <div class="min-h-(--tx-line) coarse:min-h-(--tx-line-touch) rail-line">
         <Skeleton data-rail-cell radius="text" cell="rail" data-box /><Skeleton
-          class="w-(--tk-w) h-space-3 flex-none"
+          class="w-space-8 h-space-3 flex-none"
           radius="text"
           data-box
-          style="--tk-w: 40px"
         />
         <Skeleton
           class="h-space-3"
@@ -141,7 +139,6 @@
   </div>
 
   <!-- And what it said about them. -->
-  <!-- literal: 64px, 74ch, 0.75em -->
   <div data-slot="block" class="mt-space-4">
     <div
       data-slot="who"
@@ -150,25 +147,24 @@
     >
       <Skeleton
         data-transcript-skeleton-mark
-        class="size-space-5 flex-none"
+        class="size-c-row-mark flex-none"
         radius="text"
       /><Skeleton
         data-transcript-skeleton-name
-        class="w-(--name-w) h-icon-sm"
-        radius="text"
-        style="--name-w: 64px"
+        height="x-height"
+        radius="line"
+        type="label"
+        width="short"
       />
     </div>
     <div
-      style:--measure="74ch"
-      style:--ln-h="0.75em"
-      style:--ln-my="calc((1lh - 0.75em) / 2)"
-      class="prose max-w-(--measure) text-size-body leading-body [.prose+&]:mt-space-3"
+      class="flex flex-col max-w-c-measure text-size-body leading-body"
     >
       {#each AFTER as width (width)}
         <Skeleton
-          class="h-(--ln-h) [.prose>&]:my-(--ln-my)"
-          radius="text"
+          class="my-(--sk-line-my)"
+          height="x-height"
+          radius="line"
           style="width: {width}"
         />
       {/each}
