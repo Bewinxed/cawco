@@ -91,10 +91,11 @@
       <span class="name">{delegate.name}</span>
       <span class="problem">{delegate.problem}</span>
     </button>
-    <span class="trail" data-slot="trail">
+    <span class="trail mark-line" data-slot="trail">
       <span
         aria-hidden="true"
         class="chev"
+        data-box
         data-open={(open && !pushes) || undefined}
         data-slot="chevron"><IconChevronRight /></span
       >
@@ -102,16 +103,36 @@
     </span>
     <span class="under">
       <ProgressLine {delegate} />
-      <span class="standing" data-kind={delegate.wait?.kind} data-slot="wait">
-        {#if delegate.wait?.kind === "you"}
-          <IconNeedsYou aria-hidden="true" />
-        {:else if delegate.wait?.kind === "slot"}
-          <GlyphWaiting aria-hidden="true" />
-        {:else if delegate.wait?.kind === "fail"}
-          <IconError aria-hidden="true" />
+      <span
+        class="standing mark-line"
+        data-kind={delegate.wait?.kind}
+        data-slot="wait"
+      >
+        {#if delegate.wait}
+          <span class="mark-cell">
+            {#if delegate.wait.kind === "you"}
+              <IconNeedsYou aria-hidden="true" />
+            {:else if delegate.wait.kind === "slot"}
+              <GlyphWaiting aria-hidden="true" />
+            {:else}
+              <IconError aria-hidden="true" />
+            {/if}
+          </span>
         {/if}
         <span class="standing-words">{standing}</span>
       </span>
+      <!-- What it needs from you, where it asks: answer its question (as
+           Cofounder answers in place), or retry what failed (Relevance AI's
+           Resume; every failure names its way back). -->
+      {#if delegate.wait?.kind === "you"}
+        <span class="act"
+          ><Button label="Answer" size="xs" variant="outline" /></span
+        >
+      {:else if delegate.wait?.kind === "fail"}
+        <span class="act"
+          ><Button label="Retry" size="xs" variant="outline" /></span
+        >
+      {/if}
     </span>
   </div>
   {#if !pushes}
@@ -126,7 +147,7 @@
           <p class="report" data-slot="report">{delegate.report}</p>
         {/if}
         <span class="acts">
-          <button class="open pressable" type="button">
+          <button class="open pressable mark-line" type="button">
             <span>Open its session</span>
             <IconExternal aria-hidden="true" />
           </button>
@@ -246,6 +267,11 @@
     align-items: center;
     column-gap: var(--space-2);
     min-inline-size: 0;
+  }
+  .act {
+    grid-column: 2;
+    display: flex;
+    margin-block-start: var(--space-1);
   }
   .standing {
     display: flex;

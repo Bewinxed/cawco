@@ -124,13 +124,19 @@ export const openBefore = (from: PlanFixture, step: Step): Step[] =>
     return found && found.state !== "done" ? [found] : [];
   });
 
-/** A delegate's place in the stack: working first, then you, queued, done, failed. */
+/**
+ * A delegate's place in the stack: what needs you first (waiting on you,
+ * then failed), then working, queued, done. Base44's agent "comes back to
+ * you when it needs an answer from you or hits something it cannot get
+ * past" (docs.base44.com/changelog/product): the first row answers "does
+ * anything need me?".
+ */
 const ORDER: Record<MarkStatus, number> = {
-  live: 0,
-  attn: 1,
-  idle: 2,
-  done: 3,
-  fail: 4,
+  attn: 0,
+  fail: 1,
+  live: 2,
+  idle: 3,
+  done: 4,
 };
 export const stackOrder = (delegates: Delegate[]): Delegate[] =>
   [...delegates].sort((a, b) => ORDER[a.status] - ORDER[b.status]);
@@ -412,60 +418,3 @@ export function livePlan(beat: number): PlanFixture {
     pickerDone: beat >= 3,
   });
 }
-
-/** A row as the panel draws it today: flat, its to-do id written into its words. */
-export interface TodayRow {
-  depth: number;
-  id: string;
-  status: "pending" | "in_progress" | "completed";
-  text: string;
-}
-
-const todayStatus = (state: StepState): TodayRow["status"] => {
-  if (state === "done") {
-    return "completed";
-  }
-  return state === "todo" || state === "waiting" ? "pending" : "in_progress";
-};
-
-/**
- * The session's own steps as it writes them today: each to-do's step with
- * `[td-n]` in its words and its sub-steps under it; a delegate is one more
- * line of words (the panel never draws a delegate's own steps).
- */
-export function todaySteps(from: PlanFixture): TodayRow[] {
-  return from.steps.flatMap((step, index) => [
-    {
-      id: step.id,
-      depth: 0,
-      status: todayStatus(step.state),
-      text: `[td-${index + 1}] ${step.words}`,
-    },
-    ...(step.subs ?? []).map((sub) => ({
-      id: sub.id,
-      depth: 1,
-      status: todayStatus(sub.state),
-      text: sub.words,
-    })),
-    ...carriersOf(from, step).map((one) => ({
-      id: one.id,
-      depth: 1,
-      status: todayStatus(one.status === "done" ? "done" : "doing"),
-      text: one.problem,
-    })),
-  ]);
-}
-
-/** The task's to-dos as the panel's second list draws them today. */
-export function todayTodos(from: PlanFixture): TodayRow[] {
-  return from.steps.map((step, index) => ({
-    id: `td-${index + 1}`,
-    depth: 0,
-    status: step.state === "done" ? "completed" : "pending",
-    text: step.words,
-  }));
-}
-
-/** The task's id, as the panel's "To-dos" head writes it today. */
-export const TODAY_TASK_ID = "tsk-12";
-export const TODAY_SPEC = SPEC;
