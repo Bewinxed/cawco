@@ -29,12 +29,9 @@
 <ul class="m-0 mt-space-3 flex list-none flex-wrap gap-space-2 p-0">
   {#each files as path (path)}
     <li>
-      <!-- literal: 30px, 2px -->
       <a
         aria-current={shown === path ? "page" : undefined}
-        class="group/file mark-line press-tint type-label inline-flex min-h-(--chip-h) max-w-full cursor-pointer items-center gap-space-2 rounded-sm border border-border-control bg-surface-raised px-space-3 text-ink-strong transition-[background-color] dur-control ease-out focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-offset) text-center no-underline aria-current-page:bg-selected-bg aria-current-page:text-selected-ink"
-        style:--chip-h="30px"
-        style:--focus-offset="2px"
+        class="group/file mark-line press-tint type-label inline-flex min-h-c-btn-h-sm max-w-full cursor-pointer items-center gap-space-2 rounded-sm border border-border-control bg-surface-raised px-space-3 text-ink-strong transition-[background-color] dur-control ease-out focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) text-center no-underline aria-current-page:bg-selected-bg aria-current-page:text-selected-ink"
         data-folder-chip={path}
         href={folderFileHref(projectId, path)}
       >
