@@ -11,22 +11,25 @@
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { IconChevronRight } from "#lib/icons.js";
+  // Page-local Solar glyph the proposal adds (not in $lib/icons.ts yet).
+  import GlyphTask from "~icons/solar/clipboard-check-bold-duotone";
   import { type PlanFixture, progress } from "./fixtures";
 
   let {
     plan,
     today = false,
-    toEnd = false,
+    focus,
     fit = false,
     narrow = "card",
+    bare = false,
     conversation,
     children,
   }: {
     plan: PlanFixture;
     /** Draw the head as it is now: the title alone. */
     today?: boolean;
-    /** The card stands scrolled to its foot (the spec opened there). */
-    toEnd?: boolean;
+    /** The row the card stands scrolled to (its id), near its top. */
+    focus?: string;
     /** The frame grows to its plan's whole height, so nothing is cut at its foot. */
     fit?: boolean;
     /**
@@ -34,6 +37,8 @@
      * conversation shows stacked over it ("stack"), each at the page's width.
      */
     narrow?: "card" | "stack";
+    /** The side card alone, at its 360px, with no conversation beside it. */
+    bare?: boolean;
     /** What the conversation shows; quiet lines when nothing is given. */
     conversation?: Snippet;
     children: Snippet;
@@ -49,20 +54,38 @@
 
   const got = $derived(progress(plan));
 
-  /** Holds the card at its foot while what is in it lays out. */
+  /** Holds the scroller on the focused row while what is in it lays out. */
   function foot(node: HTMLElement) {
-    if (!toEnd) {
+    if (!focus) {
       return;
     }
     const hold = () => {
-      node.scrollTop = node.scrollHeight;
+      const row = node.querySelector<HTMLElement>(
+        `[data-row="${CSS.escape(focus)}"]`
+      );
+      if (row) {
+        node.scrollTop +=
+          row.getBoundingClientRect().top -
+          node.getBoundingClientRect().top -
+          8;
+      }
     };
     const sizes = new ResizeObserver(hold);
     for (const child of node.children) {
       sizes.observe(child);
     }
     hold();
-    return () => sizes.disconnect();
+    // The person's own scroll takes over from the first wheel or touch.
+    const stop = () => sizes.disconnect();
+    node.addEventListener("wheel", stop, { once: true, passive: true });
+    node.addEventListener("touchstart", stop, { once: true, passive: true });
+    node.addEventListener("pointerdown", stop, { once: true });
+    return () => {
+      sizes.disconnect();
+      node.removeEventListener("wheel", stop);
+      node.removeEventListener("touchstart", stop);
+      node.removeEventListener("pointerdown", stop);
+    };
   }
 </script>
 
@@ -73,6 +96,7 @@
   <div
     class="desk-frame"
     data-slot="desk-frame"
+    data-bare={bare || undefined}
     data-fit={fit || undefined}
     data-narrow={narrow}
   >
@@ -114,6 +138,7 @@
               class="task mark-line"
               type="button"
             >
+              <GlyphTask aria-hidden="true" class="task-glyph" />
               <span class="task-title">{plan.task.title}</span>
               <span class="stage">· {plan.task.stage}</span>
               <IconChevronRight aria-hidden="true" />
@@ -216,6 +241,13 @@
   .task-title {
     color: var(--ink-strong);
   }
+  /* The task badge's glyph, grown to the head with the task's title. */
+  .desk :global(.task-glyph) {
+    flex: none;
+    inline-size: 12px;
+    block-size: 12px;
+    color: var(--ink-muted);
+  }
   .stage {
     color: var(--ink-muted);
   }
@@ -256,5 +288,15 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     padding: var(--space-1) var(--space-2) var(--space-4);
+  }
+  .desk-frame[data-bare] {
+    inline-size: auto;
+    padding: 0;
+    background: none;
+    box-shadow: none;
+
+    & .conversation {
+      display: none;
+    }
   }
 </style>
