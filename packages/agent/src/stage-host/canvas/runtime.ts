@@ -192,6 +192,12 @@ const frameTick = () =>
     requestAnimationFrame(() => requestAnimationFrame(() => done()))
   );
 
+/** The next task: what the page has queued runs first, drawn or not. */
+const nextTask = () =>
+  new Promise<void>((done) => {
+    setTimeout(done, 0);
+  });
+
 /** The view the page's URL asks for. */
 function viewOf(params: URLSearchParams): View {
   const scheme = params.get("scheme");
@@ -1122,43 +1128,58 @@ export function boot(options: BootOptions): void {
     );
   };
   let pumping = false;
+  /** A walk was asked for while one ran: the view may have moved past where it judged. */
+  let again = false;
   /**
    * Loads the sections near the view, in the file's order: one only once
    * every section before it stands at its drawn height (a section not yet
    * drawn is a short placeholder, which would put the next one in view
-   * before its time).
+   * before its time). Nothing in it waits on the page being drawn: a
+   * section's frames mount as it loads, `nearView` reads the layout as it
+   * stands, and between sections it yields a task, never a frame. A page
+   * the browser does not draw (a cross-origin frame off screen, as a
+   * decision page's second and third embeds stand) gets no frames and no
+   * observer callbacks, and its canvas still loads. One walk at a time; one
+   * asked for meanwhile runs after it.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one walk of the sections, in order, for a person's view and for the stage's sweep alike
-  const pump = async () => {
+  const pump = async (): Promise<void> => {
     if (pumping) {
+      again = true;
       return;
     }
     pumping = true;
+    again = false;
     try {
-      for (const section of sections) {
-        if (section.loaded) {
-          continue;
-        }
-        // A section taken down keeps its drawn height; one never drawn is a placeholder, past which nothing is judged yet.
-        const asleep = section.el.dataset.cawcoAsleep !== undefined;
-        if (!(sweeping || nearView(section))) {
-          if (asleep) {
-            continue;
-          }
-          break;
-        }
-        // biome-ignore lint/performance/noAwaitInLoops: each section laid out before the next is judged
-        await loadSection(section);
-        await frameTick();
-        if (sweeping) {
-          await settled(section);
-        }
-      }
-      if (sweeping) {
-        canvasState.swept = true;
-      }
+      await walk();
     } finally {
       pumping = false;
+    }
+    if (again) {
+      await pump();
+    }
+  };
+  const walk = async () => {
+    for (const section of sections) {
+      if (section.loaded) {
+        continue;
+      }
+      // A section taken down keeps its drawn height; one never drawn is a placeholder, past which nothing is judged yet.
+      const asleep = section.el.dataset.cawcoAsleep !== undefined;
+      if (!(sweeping || nearView(section))) {
+        if (asleep) {
+          continue;
+        }
+        break;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: each section laid out before the next is judged
+      await loadSection(section);
+      await nextTask();
+      if (sweeping) {
+        await settled(section);
+      }
+    }
+    if (sweeping) {
+      canvasState.swept = true;
     }
   };
   /**
@@ -2493,7 +2514,7 @@ export function boot(options: BootOptions): void {
     playMove: async (file, to) => (await playVisible(file, to))?.move ?? null,
     world: () => ({ ...zoom }),
   };
-  // Each section stands in its place until it draws, now every column's rule is defined; its load waits on the observer's first callback.
+  // Each section stands in its place until it draws, now every column's rule is defined.
   for (const section of sections) {
     standIn(
       section,
@@ -2514,6 +2535,11 @@ export function boot(options: BootOptions): void {
   }
   place();
   chrome.layout();
+  // The sections near the view load now, from the layout as it stands; the
+  // observers load the rest as the view reaches them. Their first callback
+  // comes with the page's first drawn frame, which a page the browser does
+  // not draw never gets.
+  quietly(pump());
 }
 
 /**

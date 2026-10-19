@@ -283,18 +283,29 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
-  /* The progress line, then where it stands: the line a fixed share of
-     the row so every delegate's line starts and ends on one x. */
+  /* The progress line, then where it stands, then its act. The line takes
+     the row's room first, up to a fixed share (32%), so every delegate's
+     line starts and ends on one x where there is room. Where the row is
+     short the line gives way first, to its 48px floor; past that, what
+     follows it goes to the next line whole, never through it, so a state
+     beside its act ("Waiting on you" by Answer) never breaks. */
   .under {
     grid-area: under;
-    display: grid;
-    grid-template-columns: minmax(48px, 32%) minmax(0, 1fr) auto;
+    display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    column-gap: var(--space-2);
+    gap: var(--space-1) var(--space-2);
     min-inline-size: 0;
+
+    & > :global([data-slot="progress-line"]) {
+      flex: 1000 1 48px;
+      max-inline-size: max(48px, 32%);
+    }
   }
   .act {
     display: flex;
+    flex: none;
+    margin-inline-start: auto;
   }
   /* The question or the failure's reason, first in the fold. */
   .detail {
@@ -308,8 +319,11 @@
       color: var(--status-fail-ink);
     }
   }
+  /* Words that wrap take what the line leaves them; a state in a word or
+     two keeps its own width, one line. */
   .standing {
     display: flex;
+    flex: 1 1 0;
     align-items: start;
     gap: var(--space-1);
     min-inline-size: 0;
@@ -332,6 +346,13 @@
     min-inline-size: 0;
     overflow-wrap: anywhere;
     text-wrap: pretty;
+  }
+  .standing:is([data-kind="you"], [data-kind="fail"]) {
+    flex: none;
+
+    & .standing-words {
+      white-space: nowrap;
+    }
   }
   /* What its fold holds, on the words' column. */
   .body {

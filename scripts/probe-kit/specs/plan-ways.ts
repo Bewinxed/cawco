@@ -23,15 +23,25 @@
  *   opened step's title stands clear of the scroller's top fade; Crew
  *   first's tiles are 18px, none over another; the after chip's names are
  *   links that light their steps;
+ * - the desk head's count is never cut, the task's chip giving way first;
+ *   a delegate's state beside its act stands on one line; the queued
+ *   delegate's words hold 4.5:1 on the paper with the foot's fade at rest;
+ *   the list's last words at rest run on past the foot or stand clear of
+ *   its fade;
  * - while the live story's delegate works, its progress sweep runs only on
  *   a working delegate's line;
  * - in the at-rest story, a step opens to its description, and a comment
  *   typed on its thread is sent to Fable, seen, then answered, live;
  * - nothing is written to the console as an error.
  *
- * Captures of each canvas go to `$TMPDIR/caps/` and the clone's `caps/`:
- * each frame whole (label, card, the card's own end), every timed run in it
- * held at rest by the Animation domain.
+ * And once, the three canvases framed from another site as a decision page
+ * stacks them at 1440, two below the fold: each draws its six states and
+ * their acknowledgements.
+ *
+ * Captures of every state's frame, at 1440 and 390, light and dark, go to
+ * `$TMPDIR/caps/`, the clone's `caps/` and `.probe/plan-view/` (the set the
+ * branch carries): each frame whole (label, card, the card's own end),
+ * every timed run in it held at rest by the Animation domain.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one canvas at a time
 import { type ChildProcess, spawn } from "node:child_process";
@@ -50,7 +60,21 @@ import { DIALS } from "./plan-decision";
 
 const DASHBOARD = join(ROOT, "apps", "dashboard");
 const STORIES = "src/lib/cawco/plan/proposal";
-const CAPS = [join(process.env.TMPDIR ?? "/tmp", "caps"), join(ROOT, "caps")];
+/** Where each capture goes: the run's caps, the clone's, and the set the branch carries for a reviewer. */
+const CAPS = [
+  join(process.env.TMPDIR ?? "/tmp", "caps"),
+  join(ROOT, "caps"),
+  join(ROOT, ".probe", "plan-view"),
+];
+/** Every state each way's states file draws, in its order. */
+const STATES = [
+  "Plan",
+  "Phone",
+  "Edited",
+  "Commented",
+  "Acknowledged",
+  "Live",
+] as const;
 
 /** A figure in a head: the to-dos head carries none. */
 const DIGIT = /\d/;
@@ -401,6 +425,34 @@ const stillOf = (page: Page, selector: string) =>
   }, selector);
 
 /**
+ * A frame the view does not hold whole where the canvas stands it (the
+ * phone's 844 and its label; on a phone's canvas, a frame under its head
+ * and strip): the view grows to hold it, the canvas standing it again.
+ */
+async function growToHold(
+  page: Page,
+  selector: string,
+  first: Awaited<ReturnType<typeof goTo>>
+): Promise<Awaited<ReturnType<typeof goTo>>> {
+  let box = first;
+  for (let tries = 0; box && tries < 2; tries += 1) {
+    const now = page.viewportSize();
+    if (
+      !now ||
+      (box.x + box.width <= now.width && box.y + box.height <= now.height)
+    ) {
+      break;
+    }
+    await page.setViewportSize({
+      width: Math.max(now.width, Math.ceil(box.x + box.width + 32)),
+      height: Math.max(now.height, Math.ceil(box.y + box.height + 64)),
+    });
+    box = await goTo(page, selector);
+  }
+  return box;
+}
+
+/**
  * The frame alone, whole (its label, its card, the card's own end): the
  * canvas's chrome and the Dials panel hidden, the view grown to hold the
  * frame where it would not, and every run in it held at rest. Says how it
@@ -435,15 +487,7 @@ async function capture(
       `${story}'s frame is not shown: ${await hiddenWhy(page, selector)}`
     );
   }
-  if (box && (box.height > was.height || box.width > was.width)) {
-    // A frame taller than the view (the phone's 844 and its label): the
-    // view grows to hold it whole, and the canvas stands it in the middle.
-    await page.setViewportSize({
-      width: Math.max(was.width, Math.ceil(box.width + 64)),
-      height: Math.ceil(box.height + 64),
-    });
-    box = await goTo(page, selector);
-  }
+  box = await growToHold(page, selector, box);
   const view = page.viewportSize();
   try {
     if (!(box && view)) {
@@ -490,12 +534,19 @@ async function capture(
         }, selector),
       selector
     );
-    const still = await stillOf(page, selector);
-    if (
-      still.moving > 0 ||
-      still.pulses.some((one) => one !== 0) ||
-      still.breaths.some((one) => one !== 1)
-    ) {
+    // A run a live beat starts is held as it starts, the pause landing a
+    // moment after: the frame is read until it stands still.
+    const atRest = (now: Awaited<ReturnType<typeof stillOf>>) =>
+      now.moving === 0 &&
+      now.pulses.every((one) => one === 0) &&
+      now.breaths.every((one) => one === 1);
+    const still = await until(
+      `${story}'s frame at rest`,
+      () => stillOf(page, selector),
+      atRest,
+      1500
+    ).catch(() => stillOf(page, selector));
+    if (!atRest(still)) {
       throw new Error(
         `${story}'s frame is not at rest for its picture: ${JSON.stringify(still)}`
       );
@@ -953,7 +1004,21 @@ const readDrawn = (page: Page) =>
       {
         acks: { lines: number; text: string }[];
         blank: number | null;
+        count: {
+          chip: string;
+          cut: number;
+          nameOver: number;
+          text: string;
+        } | null;
         crew: { overlaps: number; sides: number[] };
+        faded: string[];
+        last: { faded: number; lines: number; row: string } | null;
+        queued: {
+          alpha: number;
+          contrast: number;
+          lines: number;
+        } | null;
+        standing: { lines: number; over: number; text: string }[];
         crossings: string[];
         rails: { lanes: number[]; off: string[] } | null;
         shared: number | null;
@@ -985,18 +1050,19 @@ const readDrawn = (page: Page) =>
       }
       const zoom = body.getBoundingClientRect().width / (body.offsetWidth || 1);
       // Every text box drawn in the plan.
-      const texts: { box: DOMRect; words: string }[] = [];
+      const texts: { box: DOMRect; el: Element; words: string }[] = [];
       const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
       for (let node = walker.nextNode(); node; node = walker.nextNode()) {
         const words = node.textContent?.trim() ?? "";
-        if (!(words && shownText(node.parentElement))) {
+        const el = node.parentElement;
+        if (!(words && el && shownText(el))) {
           continue;
         }
         const range = document.createRange();
         range.selectNodeContents(node);
         for (const box of range.getClientRects()) {
           if (box.width > 1 && box.height > 1) {
-            texts.push({ box, words: words.slice(0, 24) });
+            texts.push({ box, el, words: words.slice(0, 24) });
           }
         }
       }
@@ -1221,8 +1287,234 @@ const readDrawn = (page: Page) =>
           : Math.round(
               (foot - Math.max(...above.map((text) => text.box.bottom))) / zoom
             );
+      // Round 5, D1. The desk head's count: whole, the name's box holding
+      // it (its scrollWidth within its clientWidth), the task's chip giving
+      // way first.
+      const figure = body.querySelector<HTMLElement>(
+        '[data-slot="side-head"] .figure'
+      );
+      let count: {
+        chip: string;
+        cut: number;
+        nameOver: number;
+        text: string;
+      } | null = null;
+      if (figure && shownText(figure)) {
+        const box = figure.getBoundingClientRect();
+        let { right } = box;
+        for (
+          let at = figure.parentElement;
+          at && at !== body;
+          at = at.parentElement
+        ) {
+          if (getComputedStyle(at).overflowX !== "visible") {
+            right = Math.min(right, at.getBoundingClientRect().right);
+          }
+        }
+        const name = figure.closest<HTMLElement>(".identity");
+        const chip = body.querySelector<HTMLElement>(
+          '[data-slot="side-head"] .task-title'
+        );
+        count = {
+          text: figure.textContent?.trim() ?? "",
+          cut: Math.round(((box.right - right) / zoom) * 10) / 10,
+          nameOver: name ? name.scrollWidth - name.clientWidth : 0,
+          chip: chip
+            ? `${chip.scrollWidth > chip.clientWidth ? "cut" : "whole"}, ${getComputedStyle(chip).textOverflow}`
+            : "none",
+        };
+      }
+      // D2. Where a delegate stands beside its act ("Waiting on you" by
+      // Answer, "Failed" by Retry): one line, nothing past its box.
+      const standing = [
+        ...body.querySelectorAll<HTMLElement>(
+          '[data-slot="wait"]:is([data-kind="you"], [data-kind="fail"])'
+        ),
+      ]
+        .filter((el) => shownText(el))
+        .map((el) => {
+          const said = el.querySelector<HTMLElement>(".standing-words") ?? el;
+          const range = document.createRange();
+          range.selectNodeContents(said);
+          const tops = new Set(
+            [...range.getClientRects()]
+              .filter((r) => r.width > 0)
+              .map((r) => Math.round(r.top / zoom))
+          );
+          return {
+            text: said.textContent?.trim() ?? "",
+            lines: tops.size,
+            over: Math.max(
+              said.scrollWidth - said.clientWidth,
+              el.scrollWidth - el.clientWidth
+            ),
+          };
+        });
+      // The scroller's edge fades as they stand at rest, in client pixels:
+      // each its length, cut short where the scroller caps it (app.css
+      // `--fade-cap-start`, `--fade-cap-end`).
+      const fades = scroller
+        ? (() => {
+            const style = getComputedStyle(scroller);
+            const px = (name: string, none: number) => {
+              const value = Number.parseFloat(style.getPropertyValue(name));
+              return (Number.isNaN(value) ? none : value) * zoom;
+            };
+            const box = scroller.getBoundingClientRect();
+            const inf = Number.POSITIVE_INFINITY;
+            return {
+              box,
+              start: Math.min(
+                px("--fade-start", 0),
+                px("--fade-cap-start", inf)
+              ),
+              end: Math.min(px("--fade-end", 0), px("--fade-cap-end", inf)),
+              inset: px("--fade-inset-end", 0),
+              masked: style.maskImage !== "none",
+            };
+          })()
+        : null;
+      /** A line drawn whole inside the scroller. */
+      const whole = (r: DOMRect) =>
+        !!fades &&
+        r.top >= fades.box.top - 0.5 &&
+        r.bottom <= fades.box.bottom - fades.inset + 0.5;
+      /** The weakest alpha the mask lays on a line: at its top and its foot. */
+      const lineAlpha = (r: DOMRect) =>
+        Math.min(alphaAt(r.top + 1), alphaAt(r.bottom - 1));
+      /** The mask's alpha at `y`: 1 clear of both fades. */
+      const alphaAt = (y: number): number => {
+        if (!fades?.masked) {
+          return 1;
+        }
+        const { box, start, end, inset } = fades;
+        const edge = box.bottom - inset;
+        if (y < box.top || y > edge) {
+          return 0;
+        }
+        if (start > 0 && y < box.top + start) {
+          return (y - box.top) / start;
+        }
+        if (end > 0 && y > edge - end) {
+          return (edge - y) / end;
+        }
+        return 1;
+      };
+      /** sRGB bytes of a computed colour, read off a 1px canvas. */
+      const pen = document.createElement("canvas").getContext("2d", {
+        willReadFrequently: true,
+      });
+      const rgba = (paint: string): number[] => {
+        if (!pen) {
+          return [0, 0, 0, 0];
+        }
+        pen.clearRect(0, 0, 1, 1);
+        pen.fillStyle = paint;
+        pen.fillRect(0, 0, 1, 1);
+        return [...pen.getImageData(0, 0, 1, 1).data];
+      };
+      const luminance = ([r = 0, g = 0, b = 0]: number[]) => {
+        const lin = (c: number) => {
+          const v = c / 255;
+          return v <= 0.040_45 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+        };
+        return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+      };
+      const ratio = (a: number[], b: number[]) => {
+        const [hi, lo] = [luminance(a), luminance(b)].sort((p, q) => q - p);
+        return ((hi ?? 0) + 0.05) / ((lo ?? 0) + 0.05);
+      };
+      // D3. The queued delegate's words against the paper, the edge fades
+      // at rest laid over them: each line drawn whole, at its weakest.
+      const waits = body.querySelector<HTMLElement>(
+        '[data-row="ios-booking-9a0"] [data-slot="wait"] .standing-words'
+      );
+      let queued: { alpha: number; contrast: number; lines: number } | null =
+        null;
+      if (waits && scroller && shownText(waits)) {
+        let paper = [255, 255, 255, 255];
+        for (let at: HTMLElement | null = scroller; at; at = at.parentElement) {
+          const paint = rgba(getComputedStyle(at).backgroundColor);
+          if ((paint[3] ?? 0) > 0) {
+            paper = paint;
+            break;
+          }
+        }
+        let opacity = 1;
+        for (let el: Element | null = waits; el && el !== body;) {
+          opacity *= Number(getComputedStyle(el).opacity);
+          el = el.parentElement;
+        }
+        const ink = rgba(getComputedStyle(waits).color);
+        const range = document.createRange();
+        range.selectNodeContents(waits);
+        const shown = [...range.getClientRects()].filter(
+          (r) => r.width > 0 && whole(r)
+        );
+        let worst = { alpha: 1, contrast: Number.POSITIVE_INFINITY };
+        for (const line of shown) {
+          const alpha = lineAlpha(line) * opacity * ((ink[3] ?? 255) / 255);
+          const drawn = [0, 1, 2].map(
+            (c) => (paper[c] ?? 0) + ((ink[c] ?? 0) - (paper[c] ?? 0)) * alpha
+          );
+          const contrast = ratio(drawn, paper);
+          if (contrast < worst.contrast) {
+            worst = { alpha, contrast };
+          }
+        }
+        queued = {
+          lines: shown.length,
+          alpha: Math.round(worst.alpha * 100) / 100,
+          contrast:
+            shown.length > 0 ? Math.round(worst.contrast * 100) / 100 : 0,
+        };
+      }
+      // D4. The list's last row at rest (Crew first's booking step, its
+      // "after Date picker · Deposit"): each of its lines drawn whole
+      // stands clear of the foot's fade; a line the foot cuts is the fade's.
+      let last: {
+        faded: number;
+        lines: number;
+        row: string;
+      } | null = null;
+      // And every line drawn whole, anywhere in the list: clear of both fades.
+      const faded: string[] = [];
+      if (scroller && fades) {
+        const rows = [
+          ...scroller.querySelectorAll<HTMLElement>(
+            '[data-row] > [data-slot="plan-row"]'
+          ),
+        ].filter((one) => shownText(one) && one.getBoundingClientRect().height);
+        const row = rows.at(-1);
+        if (row) {
+          const lines = texts.filter(
+            (text) => row.contains(text.el) && whole(text.box)
+          );
+          last = {
+            row: row.parentElement?.getAttribute("data-row") ?? "",
+            lines: lines.length,
+            faded: lines.filter((text) => lineAlpha(text.box) < 0.99).length,
+          };
+        }
+        for (const text of texts) {
+          if (
+            scroller.contains(text.el) &&
+            whole(text.box) &&
+            lineAlpha(text.box) < 0.99
+          ) {
+            faded.push(
+              `"${text.words}" at ${Math.round(lineAlpha(text.box) * 100) / 100}`
+            );
+          }
+        }
+      }
       out[story] = {
         blank,
+        count,
+        faded,
+        last,
+        queued,
+        standing,
         crossings,
         rails,
         shared,
@@ -1301,6 +1593,7 @@ function checkDrawn(
       ),
     json(acks)
   );
+  checkRound5(kit, name, drawn, view);
   if (way.variation === "a") {
     return;
   }
@@ -1336,6 +1629,70 @@ function checkDrawn(
       json(crew)
     );
   }
+}
+
+/**
+ * The round-5 review, read off every rest frame shown: the head's count
+ * never cut (D1), a delegate's state on one line beside its act (D2), the
+ * queued delegate's words 4.5:1 on the paper with the foot's fade at rest
+ * (D3), the list's last words clear of that fade (D4).
+ */
+function checkRound5(
+  kit: Kit,
+  name: string,
+  drawn: Awaited<ReturnType<typeof readDrawn>>,
+  view: "desk" | "phone"
+): void {
+  const json = (value: unknown) => String(JSON.stringify(value)).slice(0, 700);
+  const shown = Object.entries(drawn);
+  const counts = shown.flatMap(([story, one]) =>
+    one.count ? [{ story, ...one.count }] : []
+  );
+  kit.check(
+    `${name}: the head's count is whole, the name's box holding it, the task's chip giving way first (${counts.map((one) => `${one.story} "${one.text}" cut ${one.cut}px, name ${one.nameOver}px over, chip ${one.chip}`).join("; ")})`,
+    (view === "phone" || counts.length >= 4) &&
+      counts.every(
+        (one) =>
+          DIGIT.test(one.text) &&
+          one.cut <= 0 &&
+          one.nameOver <= 0 &&
+          one.chip.endsWith("ellipsis")
+      ),
+    json(counts)
+  );
+  const standing = shown.flatMap(([story, one]) =>
+    one.standing.map((said) => ({ story, ...said }))
+  );
+  kit.check(
+    `${name}: a delegate's state beside its act stands on one line, nothing past its box (${standing.map((one) => `${one.story} "${one.text}" ${one.lines} line${one.lines === 1 ? "" : "s"}, ${one.over}px over`).join("; ")})`,
+    standing.length > 0 &&
+      standing.every((one) => one.lines === 1 && one.over <= 0),
+    json(standing)
+  );
+  const queued = shown.flatMap(([story, one]) =>
+    one.queued && one.queued.lines > 0 ? [{ story, ...one.queued }] : []
+  );
+  kit.check(
+    `${name}: the queued delegate's words hold 4.5:1 on the paper with the foot's fade at rest (${queued.map((one) => `${one.story} ${one.contrast}:1 at alpha ${one.alpha}`).join("; ") || "out of view"})`,
+    queued.every((one) => one.contrast >= 4.5),
+    json(queued)
+  );
+  const lasts = shown.flatMap(([story, one]) =>
+    one.last ? [{ story, ...one.last }] : []
+  );
+  kit.check(
+    `${name}: at rest the list's last row stands clear of the foot's fade wherever it shows whole (${lasts.map((one) => `${one.story} ${one.row} ${one.lines} whole lines, ${one.faded} faded`).join("; ")})`,
+    lasts.length > 0 && lasts.every((one) => one.faded === 0),
+    json(lasts)
+  );
+  const faded = shown.flatMap(([story, one]) =>
+    one.faded.map((what) => `${story}: ${what}`)
+  );
+  kit.check(
+    `${name}: every line drawn whole stands clear of the edge fades, at rest (${faded.length} faded)`,
+    shown.length > 0 && faded.length === 0,
+    faded.slice(0, 8).join(" | ")
+  );
 }
 
 /** 8. The after chip: no arrow; each name a link that lights its step. */
@@ -1857,33 +2214,29 @@ async function leg(
     checkDesk(kit, name, way, report, stories);
     await checkSweeps(kit, name, page);
   }
-  if (view === "desk") {
-    // The frames alone: the desk card, the phone sheet, and a step opened
-    // with its comment answered.
-    const clock = await Clock.on(page);
-    for (const [shot, story] of [
-      ["desk", "Plan"],
-      ["phone", "Phone"],
-      ["answered", "Acknowledged"],
-    ] as const) {
-      // A frame that cannot be pictured is a failed check, never the end of the run.
-      const said = await capture(
-        page,
-        clock,
-        `plan-ways-${way.file}-${shot}-${theme}`,
-        story
-      ).then(
-        (how) => ({ ok: true, how }),
-        (error: unknown) => ({ ok: false, how: String(error).slice(0, 400) })
-      );
-      kit.check(
-        `${name}: the ${story} frame is captured whole and still (${said.ok ? said.how : "failed"})`,
-        said.ok,
-        said.how
-      );
-    }
+  // Every state's frame alone, at the desk's 1440 and the phone's 390: the
+  // desk card (Plan, Edited, Commented, Acknowledged, Live) and the phone
+  // sheet (Phone).
+  const clock = await Clock.on(page);
+  for (const story of STATES) {
+    // A frame that cannot be pictured is a failed check, never the end of the run.
+    const said = await capture(
+      page,
+      clock,
+      `plan-ways-${way.file}-${story}-${view === "desk" ? 1440 : 390}-${theme}`,
+      story
+    ).then(
+      (how) => ({ ok: true, how }),
+      (error: unknown) => ({ ok: false, how: String(error).slice(0, 400) })
+    );
+    kit.check(
+      `${name}: the ${story} frame is captured whole and still (${said.ok ? said.how : "failed"})`,
+      said.ok,
+      said.how
+    );
   }
   if (view === "desk" && theme === "light") {
+    await scrollCost(kit, name, page);
     await checkComment(kit, name, page);
     await checkAfterLinks(kit, name, page);
   }
@@ -1895,12 +2248,340 @@ async function leg(
   await page.close();
 }
 
+/**
+ * What the edge fades' caps cost a scroll (DESIGN.md, Edge fade): the desk
+ * card's list scrolled down its length and back, 6px a frame, at a 4×
+ * CPU throttle. Says the longest task (the Long Tasks API reports 50ms and
+ * up), the longest frame, and the page's scripting per frame (the
+ * protocol's ScriptDuration over the run). Read on the tree before the caps
+ * and after them, for the same canvas.
+ */
+async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  const metric = async () =>
+    Object.fromEntries(
+      (
+        (await cdp.send("Performance.getMetrics")) as {
+          metrics: { name: string; value: number }[];
+        }
+      ).metrics.map((one) => [one.name, one.value])
+    );
+  await cdp.send("Performance.enable");
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+  try {
+    const before = await metric();
+    const run = await page.evaluate(async (selector) => {
+      const scroller = document.querySelector<HTMLElement>(
+        `${selector} [data-slot="side-card"] .body`
+      );
+      if (!scroller) {
+        return null;
+      }
+      let longest = 0;
+      const tasks = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          longest = Math.max(longest, entry.duration);
+        }
+      });
+      tasks.observe({ type: "longtask" });
+      const range = scroller.scrollHeight - scroller.clientHeight;
+      const gaps: number[] = [];
+      await new Promise<void>((done) => {
+        let down = true;
+        let last = performance.now();
+        const tick = (now: number) => {
+          gaps.push(now - last);
+          last = now;
+          scroller.scrollTop += down ? 6 : -6;
+          if (down && scroller.scrollTop >= range - 0.5) {
+            down = false;
+          } else if (!down && scroller.scrollTop <= 0) {
+            done();
+            return;
+          }
+          requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      });
+      tasks.disconnect();
+      return {
+        range: Math.round(range),
+        frames: gaps.length,
+        worstFrame: Math.round(Math.max(...gaps.slice(1))),
+        longest: Math.round(longest),
+      };
+    }, FRAME("Plan"));
+    const after = await metric();
+    const script =
+      run && run.frames > 0
+        ? Math.round(
+            (((after.ScriptDuration ?? 0) - (before.ScriptDuration ?? 0)) *
+              1000 *
+              100) /
+              run.frames
+          ) / 100
+        : 0;
+    kit.note(
+      `${name}: the desk card's list scrolled ${run?.range ?? 0}px down and back at 4× CPU throttle: ${run?.frames ?? 0} frames, scripting ${script} ms a frame, longest frame ${run?.worstFrame ?? 0} ms, longest task ${run?.longest ? `${run.longest} ms` : "none of 50 ms or more"}`
+    );
+    kit.check(
+      `${name}: scrolling the desk card's list at 4× CPU throttle runs no task of 50ms or more (${run?.longest ?? "no read"})`,
+      !!run && run.frames > 10 && run.longest < 50,
+      JSON.stringify({ run, script })
+    );
+  } finally {
+    await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
+    await cdp.detach();
+  }
+}
+
+/**
+ * The delegate rows where the card is narrow: each way's canvas with every
+ * frame drawn at 320, and at 160 (320 at 200% zoom). Where a delegate's
+ * state stands beside its act (Answer, Retry), the row scrolls nothing
+ * sideways, the state is one line, the progress line keeps its 48px floor,
+ * and the line, the state and the act stand clear of each other; the desk
+ * head's count stands whole.
+ */
+async function checkNarrow(kit: Kit, base: string): Promise<void> {
+  for (const way of WAYS) {
+    const page = await kit.page("desk", { init: [BRIDGE, HELPERS] });
+    await page.goto(
+      `${canvasUrl(base, `${STORIES}/${way.file}.stories.ts`, {
+        name: way.label,
+        dials: DIALS as CanvasSpec["dials"],
+      })}&width=320,160`
+    );
+    await reportOn(page);
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one read of every frame, run in the page's own scope, so it cannot call helpers of the spec's
+    const read = await page.evaluate(() => {
+      const rows: {
+        at: string;
+        lines: number;
+        line: number;
+        overlaps: number;
+        over: number;
+        state: string;
+      }[] = [];
+      const heads: { at: string; cut: number; over: number }[] = [];
+      for (const frame of document.querySelectorAll<HTMLElement>(
+        '.cawco-frame[data-cawco-interaction="rest"]'
+      )) {
+        const body = frame.querySelector<HTMLElement>(".cawco-frame-body");
+        if (!body) {
+          continue;
+        }
+        const zoom =
+          body.getBoundingClientRect().width / (body.offsetWidth || 1);
+        const at = `${frame.dataset.cawcoStory} ${frame.dataset.cawcoWidth}`;
+        for (const state of body.querySelectorAll<HTMLElement>(
+          '[data-slot="wait"]:is([data-kind="you"], [data-kind="fail"])'
+        )) {
+          const row = state.closest<HTMLElement>('[data-slot="plan-row"]');
+          const under = state.parentElement;
+          if (!(row && under) || row.getBoundingClientRect().width === 0) {
+            continue;
+          }
+          const words = state.querySelector(".standing-words") ?? state;
+          const range = document.createRange();
+          range.selectNodeContents(words);
+          const tops = new Set(
+            [...range.getClientRects()]
+              .filter((r) => r.width > 0)
+              .map((r) => Math.round(r.top / zoom))
+          );
+          const line = under.querySelector<HTMLElement>(
+            '[data-slot="progress-line"]'
+          );
+          const act = under.querySelector<HTMLElement>(".act");
+          const boxes = [line, state, act]
+            .filter((el): el is HTMLElement => !!el)
+            .map((el) => el.getBoundingClientRect())
+            .filter((box) => box.width > 0);
+          let overlaps = 0;
+          for (const [i, a] of boxes.entries()) {
+            for (const b of boxes.slice(i + 1)) {
+              if (
+                a.left < b.right - 0.5 &&
+                b.left < a.right - 0.5 &&
+                a.top < b.bottom - 0.5 &&
+                b.top < a.bottom - 0.5
+              ) {
+                overlaps += 1;
+              }
+            }
+          }
+          rows.push({
+            at,
+            state: words.textContent?.trim() ?? "",
+            lines: tops.size,
+            over: Math.max(
+              row.scrollWidth - row.clientWidth,
+              under.scrollWidth - under.clientWidth
+            ),
+            line: line
+              ? Math.round((line.getBoundingClientRect().width / zoom) * 10) /
+                10
+              : 0,
+            overlaps,
+          });
+        }
+        const figure = body.querySelector<HTMLElement>(
+          '[data-slot="side-head"] .figure'
+        );
+        const head = body.querySelector<HTMLElement>('[data-slot="side-head"]');
+        if (figure && head) {
+          const box = figure.getBoundingClientRect();
+          let { right } = box;
+          for (
+            let up = figure.parentElement;
+            up && up !== body;
+            up = up.parentElement
+          ) {
+            if (getComputedStyle(up).overflowX !== "visible") {
+              right = Math.min(right, up.getBoundingClientRect().right);
+            }
+          }
+          heads.push({
+            at,
+            cut: Math.round(((box.right - right) / zoom) * 10) / 10,
+            over: head.scrollWidth - head.clientWidth,
+          });
+        }
+      }
+      return { rows, heads };
+    });
+    const widths = [...new Set(read.rows.map((one) => one.at.split(" ")[1]))];
+    kit.check(
+      `narrow ${way.label}: at ${widths.join(" and ")}, each state beside its act is one line, its row scrolls nothing sideways, its progress line keeps 48px, nothing overlaps (${read.rows
+        .filter((one) => one.at.startsWith("Plan "))
+        .map(
+          (one) =>
+            `${one.at} "${one.state}" ${one.lines} line, ${one.over}px over, line ${one.line}px, ${one.overlaps} overlaps`
+        )
+        .join("; ")})`,
+      widths.length === 2 &&
+        read.rows.every(
+          (one) =>
+            one.lines === 1 &&
+            one.over <= 0 &&
+            one.line >= 47.5 &&
+            one.overlaps === 0
+        ),
+      JSON.stringify(
+        read.rows.filter(
+          (one) =>
+            one.lines !== 1 ||
+            one.over > 0 ||
+            one.line < 47.5 ||
+            one.overlaps > 0
+        )
+      ).slice(0, 700)
+    );
+    kit.check(
+      `narrow ${way.label}: the desk head's count stands whole, nothing past the head (${read.heads
+        .filter((one) => one.at.startsWith("Plan "))
+        .map((one) => `${one.at} cut ${one.cut}px, ${one.over}px over`)
+        .join("; ")})`,
+      read.heads.length > 0 &&
+        read.heads.every((one) => one.cut <= 0 && one.over <= 0),
+      JSON.stringify(
+        read.heads.filter((one) => one.cut > 0 || one.over > 0)
+      ).slice(0, 700)
+    );
+    await page.close();
+  }
+}
+
+/**
+ * The three canvases as a decision page holds them at 1440 (plan-decision on
+ * the host, where only the first drew its acknowledgements): each framed
+ * from another site, 16:10 at the card's width, one under another, the
+ * second and third below the fold. Each draws every state, wherever it
+ * stands.
+ */
+async function checkEmbedded(kit: Kit, base: string): Promise<void> {
+  const frames = WAYS.map(
+    (way, at) =>
+      `<iframe title="${way.label}" style="position:absolute;inset-inline-start:24px;inset-block-start:${24 + at * 1100}px;inline-size:720px;block-size:450px;border:0" src="${canvasUrl(
+        base,
+        `${STORIES}/${way.file}.stories.ts`,
+        { name: way.label, dials: DIALS as CanvasSpec["dials"] }
+      ).replaceAll("&", "&amp;")}"></iframe>`
+  ).join("");
+  // The page on another origin of the same host, as the decision page's
+  // port is to its embeds'.
+  const parent = Bun.serve({
+    port: 0,
+    hostname: "127.0.0.1",
+    fetch: () =>
+      new Response(
+        `<!doctype html><html><body style="margin:0;block-size:3400px;position:relative">${frames}</body></html>`,
+        { headers: { "content-type": "text/html; charset=utf-8" } }
+      ),
+  });
+  const page = await kit.page("desk", { theme: "light" });
+  const failed: string[] = [];
+  page.on("requestfailed", (request) =>
+    failed.push(
+      `${request.url().slice(0, 60)} ${request.failure()?.errorText ?? ""}`
+    )
+  );
+  await page.goto(`http://127.0.0.1:${parent.port}/`);
+  const read = () =>
+    Promise.all(
+      page
+        .frames()
+        .filter((one) => one.url().includes("/@cawco/canvas"))
+        .map((one) =>
+          one
+            .evaluate(() => ({
+              file: new URLSearchParams(location.search).get("file") ?? "",
+              stories: [
+                ...new Set(
+                  [...document.querySelectorAll(".cawco-frame")].map(
+                    (frame) => (frame as HTMLElement).dataset.cawcoStory ?? ""
+                  )
+                ),
+              ].length,
+              acks: [...document.querySelectorAll('[data-slot="ack"]')].map(
+                (ack) => ack.textContent?.replace(/\s+/g, " ").trim() ?? ""
+              ),
+            }))
+            .catch(() => ({ file: "", stories: 0, acks: [] as string[] }))
+        )
+    );
+  const drew = (one: { acks: string[] }) =>
+    ["Seen by this session", "Comment sent to Fable", "Answered on the thread"]
+      .map((words) => one.acks.some((ack) => ack.includes(words)))
+      .every(Boolean);
+  const now = await until(
+    "three embedded canvases drawing their acknowledgements",
+    read,
+    (all) => all.length === 3 && all.every(drew),
+    90_000
+  ).catch(() => read());
+  kit.check(
+    `embedded as a decision page stacks them at 1440, two below the fold: each canvas draws its six states and their acknowledgements (${now.map((one) => `${one.file.split("/").at(-1)} ${one.stories} states, ${one.acks.length} acks`).join("; ")})`,
+    now.length === 3 && now.every((one) => drew(one) && one.stories === 6),
+    JSON.stringify({
+      now,
+      frames: page.frames().map((one) => one.url().slice(0, 80)),
+      failed: failed.slice(0, 4),
+    }).slice(0, 900)
+  );
+  await page.close();
+  await parent.stop(true);
+}
+
 const spec: Spec = {
   name: "plan-ways",
   run: async (kit: Kit) => {
     const stage = await stageOn();
     kit.note(`the dashboard's stage served in ${stage.ms} ms`);
     try {
+      await checkEmbedded(kit, stage.base);
+      await checkNarrow(kit, stage.base);
       for (const view of ["desk", "phone"] as const) {
         for (const theme of ["light", "dark"] as const) {
           for (const way of WAYS) {
