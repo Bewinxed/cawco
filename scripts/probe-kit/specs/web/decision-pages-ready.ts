@@ -40,7 +40,13 @@
  *   bun scripts/probe-kit/run.ts web decision-pages-ready
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one page, one states file, one leg at a time
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
@@ -694,10 +700,20 @@ const spec: Spec = {
 
     // 1. Each program, as the hub would keep it.
     const programs = new Map<string, string>();
+    /** The states files the pages embed, by placeholder: what the stage serves and the sweep draws. */
+    const embedded = new Set<string>();
     for (const one of PAGES) {
       const written = readFileSync(join(ROOT, one.folder, "page.oui"), "utf8");
       const names = [...written.matchAll(PLACEHOLDER)].map((m) => m[1] ?? "");
-      const unknown = names.filter((name) => !FILES[name]);
+      // A placeholder with no states file, or one whose file is not on disk,
+      // is refused here by name: the stage would 404 it and its sweep hang.
+      const unknown = names.filter(
+        (name) =>
+          !(
+            FILES[name] &&
+            existsSync(join(ROOT, "apps/dashboard", FILES[name] ?? ""))
+          )
+      );
       const program = written.replace(
         PLACEHOLDER,
         (_, name: string) => `"${idOf(name)}"`
@@ -715,6 +731,11 @@ const spec: Spec = {
         refusal || unknown.join(", ")
       );
       programs.set(one.name, program);
+      for (const name of names) {
+        if (!unknown.includes(name)) {
+          embedded.add(name);
+        }
+      }
       manifest.pages[one.name] = {
         folder: one.folder,
         placeholders: Object.fromEntries(
@@ -731,7 +752,7 @@ const spec: Spec = {
     const stage = await startDecisionStage(
       programs,
       Object.fromEntries(
-        Object.entries(FILES).map(([key, file]) => [idOf(key), file])
+        [...embedded].map((key) => [idOf(key), FILES[key] ?? ""])
       )
     );
 
@@ -743,7 +764,11 @@ const spec: Spec = {
           const errors: string[] = [];
           page.on("console", (message) => {
             if (message.type() === "error") {
-              errors.push(message.text().slice(0, 240));
+              // A failed load says only its status; its location names what failed.
+              const where = message.location().url;
+              errors.push(
+                `${message.text().slice(0, 240)}${where ? ` (${where})` : ""}`
+              );
             }
           });
           page.on("pageerror", (error) =>
@@ -752,7 +777,7 @@ const spec: Spec = {
 
           // 2. The proposed states files.
           const read: Partial<Record<string, Read>> = {};
-          for (const section of Object.keys(FILES)) {
+          for (const section of embedded) {
             read[section] = await sweepFile(
               page,
               stage.stagePort,
