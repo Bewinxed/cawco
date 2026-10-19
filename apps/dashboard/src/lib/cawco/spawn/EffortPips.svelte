@@ -196,10 +196,9 @@
       >
         <div
           data-slot="knob"
-          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-space-2 font-body text-size-label leading-none font-medium text-ink-muted capitalize num shadow-(--knob-shadow) transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
+          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-space-2 font-body text-size-label leading-none font-medium text-ink-muted capitalize num shadow-(--shadow-knob) transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
           data-active={active || undefined}
           style:--bars={n}
-          style:--knob-shadow={"inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)"}
           style:opacity={n ? 1 : 0.7}
           bind:offsetWidth={knobWidth}
         >

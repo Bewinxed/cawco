@@ -244,11 +244,10 @@
         <button
           data-slot="browse"
           aria-expanded={browsing}
-          class="ns-in inline-flex h-c-btn-h-sm max-phone:h-c-row-h flex-none cursor-pointer items-center justify-start gap-space-2 rounded-sm border border-border-control bg-surface-recess px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong shadow-(--browse-shadow) enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
+          class="ns-in inline-flex h-c-btn-h-sm max-phone:h-c-row-h flex-none cursor-pointer items-center justify-start gap-space-2 rounded-sm border border-border-control bg-surface-recess px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong shadow-(--shadow-knob) enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
           disabled={!machineId}
           id="session-browse"
           onclick={toggleBrowse}
-          style:--browse-shadow={"inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)"}
           style:opacity={machineId ? 1 : 0.5}
           type="button"
         >

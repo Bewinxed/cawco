@@ -35,9 +35,10 @@ token: --c-model-list-h 300px — the model list's fixed viewport so the section
 token: --c-model-row-basis 12rem — the width a model row keeps beside its chips before they drop to their own line
 token: --c-folder-list-max-h 196px — the folder browser's list cap (five 36px rows and their gaps)
 
+token: --shadow-knob inset 0 0 0 1px var(--neutral-8), var(--shadow-raised) — the lifted block with a neutral-8 inner edge (DESIGN.md, Effort chip; EffortPips knob, LocationSection Browse); no shadow token holds it
+
 ## Gaps
 gap: ui/drawer/drawer-content.svelte `look.new-session` carries `motion-reduce:animate-none! motion-reduce:transition-none!` — a bang in the kit — Delta T
-gap: EffortPips.svelte `--knob-shadow` and LocationSection `--browse-shadow` hold `inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)` as a style value — one shadow token for the "lifted block with neutral-8 edge" recipe is missing (DESIGN.md, Effort chip)
 
 ## fixed
 fixed: MachinesChip.svelte `radius()` joined-row corners read `var(--radius-sm)` instead of `8px` — DESIGN.md Shapes (items in a surface 8)
@@ -113,4 +114,4 @@ none
 - Design Critique (interface-craft, vs DESIGN.md, from markup): fixed: touch rows reach c-row-h 44px; fixed: ladder spacing; gap: effort knob inner edge shadow has no token (above); no other findings.
 - Ladder ties taken: 6px→space-2 (7), 8→space-2, 10→space-3 (11), 12→space-3, 24→space-7 (25), 22→space-6 (21), 1px gap→space-row; rows 34/36/40/42/48→c-btn-h / c-row-h (44) per DESIGN's 44px row pitch.
 - Breakpoints: `max-phone:` (639) replaces the old 640 edge in the Segmented rows; the dialog's phone exit no longer needs a query (the drawer renders only under `(max-width: 640px)`).
-- Counts: theme 5, kit-swap 0, token 5, removed 11, fixed 9, gap 2.
+- Counts: theme 5, kit-swap 0, token 6, removed 11, fixed 9, gap 1.
