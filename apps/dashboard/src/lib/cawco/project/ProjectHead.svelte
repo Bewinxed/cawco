@@ -318,15 +318,13 @@
   }
 </script>
 
-<!-- literal: 18rem, 3px, 24px, 12px -->
 <header
   data-slot="project-head"
-  class="flex flex-wrap items-center gap-x-space-4 gap-y-space-3 pt-space-6 pr-space-6 pb-space-4 pl-space-7 max-[900px]:pt-space-5 max-[900px]:pr-space-5 max-[900px]:pb-space-3 max-[900px]:pl-space-5"
+  class="flex flex-wrap items-center gap-x-space-4 gap-y-space-3 pt-space-6 pe-space-6 pb-space-4 ps-space-7 max-desk:pt-space-5 max-desk:pe-space-5 max-desk:pb-space-3 max-desk:ps-space-5"
 >
   <div
     data-slot="who"
-    class="flex min-w-0 shrink grow basis-(--who-basis) items-center gap-space-3"
-    style:--who-basis="18rem"
+    class="flex min-w-0 shrink grow basis-(--c-head-who-basis) items-center gap-space-3"
   >
     <div
       data-slot="txt"
@@ -389,7 +387,6 @@
           <a
             data-slot="ask"
             class="min-w-0 overflow-hidden text-ellipsis text-link-ink no-underline hover:underline hover:underline-offset-(--underline-offset)"
-            style:--underline-offset="3px"
             href="/session/thread:{words.threadId}"
             ><MorphText text={words.text} /></a
           >
@@ -449,7 +446,7 @@
   </div>
   <div
     data-slot="acts"
-    class="flex shrink-0 grow-0 basis-auto items-center gap-space-2 phone:max-[900px]:shrink phone:max-[900px]:grow phone:max-[900px]:basis-full max-phone:shrink-0 max-phone:grow-0 max-phone:basis-auto"
+    class="flex shrink-0 grow-0 basis-auto items-center gap-space-2 phone:max-desk:shrink phone:max-desk:grow phone:max-desk:basis-full max-phone:shrink-0 max-phone:grow-0 max-phone:basis-auto"
   >
     <!-- He sits at the head's end, by Ask Caw, so the name's start edge is
          the same whether he sits here or stands over the empty board. His
@@ -487,7 +484,7 @@
           <Button
             {...props}
             aria-label="More for {project.name}"
-            class="max-[900px]:ms-auto max-[900px]:me-(--more-bleed)"
+            class="max-desk:ms-auto max-desk:me-(--more-bleed)"
             size="icon"
             style="--more-bleed: calc((var(--c-btn-h) - var(--icon-md)) / -2)"
             variant="ghost"
@@ -609,9 +606,9 @@
     <Popover.Content
       align="end"
       aria-label="Caw, lead of {project.name}"
-      class="w-(--settings-w) max-[900px]:w-(--settings-w-narrow)"
+      class="w-(--settings-w) max-desk:w-(--settings-w-narrow)"
       pad="inset"
-      style="--settings-w: min(var(--c-panel-w), calc(100vw - 24px)); --settings-w-narrow: min(var(--c-panel-w), calc(100vw - 12px - env(safe-area-inset-right, 0px)))"
+      style="--settings-w: min(var(--c-panel-w), calc(100vw - var(--space-7))); --settings-w-narrow: min(var(--c-panel-w), calc(100vw - var(--space-3) - env(safe-area-inset-right, 0px)))"
       collisionPadding={12}
       customAnchor={more}
       side="bottom"
@@ -633,15 +630,4 @@
   />
 {/if}
 <!-- A forget asked from `⋯`, under the head, from where its title starts. -->
-<ForgetProjectTray at={forgetAt} class="head-forget max-w-128" />
-
-<style>
-  /* residual: foreign-dom */
-  /* The head's own leading padding, so the tray starts where its words do;
-     as wide as the dialog it replaces (`max-w-lg`, set where it is drawn). */
-  /* css-scope: the forget tray is drawn by ForgetProjectTray, outside this head's markup; only this head names the class */
-  :global(.head-forget) {
-    --ask-indent: var(--space-7);
-    --fault-indent: var(--space-7);
-  }
-</style>
+<ForgetProjectTray at={forgetAt} class="tray-indent-space-7 max-w-128" />

@@ -604,11 +604,13 @@
 <!-- GitHub: the Project whose Status carries the stages, and each stage's option. -->
 {#snippet projectPick()}
   {#if ghRefused}
-    <p data-slot="note" class="note" data-projects-refused>{ghRefused}</p>
+    <p data-slot="note" class="type-meta text-ink-muted" data-projects-refused>
+      {ghRefused}
+    </p>
   {:else if ghProjects}
     <NativeSelect.Root
       aria-label="GitHub Project"
-      class="bind-project"
+      class="col-span-full w-full"
       size="sm"
       bind:value={
         () => pickProject,
@@ -624,22 +626,27 @@
       {/each}
     </NativeSelect.Root>
     {#if chosenProject && chosenProject.options.length === 0}
-      <p data-slot="note" class="note" data-no-status>
+      <p data-slot="note" class="type-meta text-ink-muted" data-no-status>
         {chosenProject.title} has no single-select field named Status: stages show
         on GitHub only as open and closed.
       </p>
     {:else if chosenProject}
       {@const options = chosenProject.options}
-      <fieldset class="status-map" data-status-map>
-        <legend data-slot="note" class="note">
+      <fieldset
+        class="col-span-full grid min-w-0 grid-cols-(--status-cols) items-center gap-x-space-2 gap-y-space-1 @max-details/details:grid-cols-1"
+        data-status-map
+        style:--status-cols="minmax(0, max-content) minmax(0, 1fr)"
+      >
+        <legend data-slot="note" class="type-meta pb-space-1 text-ink-muted">
           Each stage's Status on {chosenProject.title}
         </legend>
         {#each stageNames as stage, at (stage)}
-          <label class="status-stage" for="{uid}-status-{at}"
-            ><bdi>{stage}</bdi></label
+          <label
+            class="min-w-0 type-label wrap-anywhere text-ink-strong"
+            for="{uid}-status-{at}"><bdi>{stage}</bdi></label
           >
           <NativeSelect.Root
-            class="status-pick"
+            class="w-full"
             id="{uid}-status-{at}"
             size="sm"
             bind:value={
@@ -662,7 +669,7 @@
       </fieldset>
     {/if}
   {:else if !ghFault}
-    <p data-slot="note" class="note">
+    <p data-slot="note" class="type-meta text-ink-muted">
       Reading the GitHub Projects {pickConnection} reaches…
     </p>
   {/if}
@@ -670,16 +677,16 @@
 
 <section
   aria-label="Project details"
-  class="@container/details max-w-(--details-max) min-w-0 pt-space-1 pr-space-6 pb-space-3 pl-space-7 max-[900px]:max-w-none max-[900px]:pr-space-5 max-[900px]:pl-space-5"
+  class="@container/details max-w-(--details-max) min-w-0 pt-space-1 pe-space-6 pb-space-3 ps-space-7 max-desk:max-w-none max-desk:pe-space-5 max-desk:ps-space-5"
   data-project-details={project.id}
-  style:--details-max="calc(32rem + var(--space-7) + var(--space-6))"
+  style:--details-max="calc(var(--c-project-details-measure) + var(--space-7) + var(--space-6))"
   transition:unfold
   {@attach escapes}
 >
   <div
     data-slot="tile"
     class="grid gap-space-4 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3 shadow-raised"
-    style:--row-cols="6.5rem minmax(0, 1fr)"
+    style:--row-cols="var(--c-project-details-label-w) minmax(0, 1fr)"
   >
     <!-- Place: where it lives, its places, and adding one. -->
     <div
@@ -718,7 +725,6 @@
           <button
             aria-expanded={listOpen}
             class="group press-tint mark-line type-label -mx-space-1 inline-flex cursor-pointer items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover"
-            style:--chev="14px"
             data-places-toggle
             onclick={() => {
               listOpen = !listOpen;
@@ -730,7 +736,7 @@
             >
             <IconChevronDown
               data-chev
-              class="size-(--chev) text-ink-muted transition-[rotate] dur-control ease-out group-aria-expanded:rotate-180"
+              class="size-icon-sm text-ink-muted transition-[rotate] dur-control ease-out group-aria-expanded:rotate-180"
             />
           </button>
           {#if !adding}
@@ -809,8 +815,7 @@
             data-slot="add"
             class="grid grid-cols-(--add-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
             data-add-place-form
-            style:--add-cols="minmax(0, 10rem) minmax(0, 1fr)"
-            style:--field-h="30px"
+            style:--add-cols="minmax(0, var(--c-project-details-select-w)) minmax(0, 1fr)"
             onsubmit={(event) => {
               event.preventDefault();
               add();
@@ -832,7 +837,7 @@
             <Input
               aria-label="Folder on that machine"
               autocomplete="off"
-              class="add-path h-(--c-btn-h-sm) text-label"
+              class="h-(--c-btn-h-sm)"
               placeholder="/absolute/path on that machine"
               spellcheck="false"
               text="label"
@@ -897,23 +902,43 @@
 
     <!-- Large files: each origin's own LFS, or where the project declared
          they live, bound to a connection with a key. -->
-    <div data-slot="row" class="row" data-detail="lfs">
-      <p data-slot="project-details-label" class="label">{lfsWords.label}</p>
-      <div data-slot="value" class="value">
+    <div
+      data-slot="row"
+      class="grid grid-cols-(--row-cols) items-box-start gap-x-space-3 gap-y-space-1 @max-details/details:grid-cols-1"
+      data-detail="lfs"
+    >
+      <p
+        data-slot="project-details-label"
+        class="type-label pt-space-1 text-ink-muted"
+      >
+        {lfsWords.label}
+      </p>
+      <div
+        data-slot="value"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+      >
         {#if project.lfsUrl}
-          <p class="fact" data-lfs-url><bdi>{project.lfsUrl}</bdi></p>
-          <p data-slot="note" class="note">
+          <p
+            class="type-label flex min-w-0 items-center gap-space-2 wrap-anywhere text-ink-strong"
+            data-lfs-url
+          >
+            <bdi>{project.lfsUrl}</bdi>
+          </p>
+          <p data-slot="note" class="type-meta text-ink-muted">
             {lfsWords.declared(project.lfsConnection ?? "")}
             {lfsWords.pinned}
           </p>
         {:else}
-          <p data-slot="note" class="note">{lfsWords.own}</p>
+          <p data-slot="note" class="type-meta text-ink-muted">
+            {lfsWords.own}
+          </p>
         {/if}
         {#if lfsEditing}
           <form
             data-slot="add"
-            class="add"
+            class="grid grid-cols-(--add-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
             data-lfs-form
+            style:--add-cols="minmax(0, var(--c-project-details-select-w)) minmax(0, 1fr)"
             onsubmit={(event) => {
               event.preventDefault();
               saveLfs({ url: lfsUrl.trim(), connection: lfsConnection });
@@ -922,7 +947,7 @@
           >
             <NativeSelect.Root
               aria-label={lfsWords.connection}
-              class="add-machine"
+              class="w-full"
               disabled={lfsKeyed.length === 0}
               size="sm"
               bind:value={lfsConnection}
@@ -936,19 +961,25 @@
             <Input
               aria-label={lfsWords.url}
               autocomplete="off"
-              class="add-path h-(--c-btn-h-sm) text-label"
+              class="h-(--c-btn-h-sm)"
               placeholder={lfsWords.urlPlaceholder}
               spellcheck="false"
+              text="label"
               type="url"
               bind:value={lfsUrl}
             />
             {#if lfsKeyed.length === 0 && lfsListed}
-              <p data-slot="note" class="note lfs-none">
+              <p
+                data-slot="note"
+                class="col-span-full type-meta text-ink-muted"
+              >
                 {lfsWords.noConnections}
-                <a href="/config/connections">{lfsWords.connectionsLink}</a>.
+                <a class="text-link-ink" href="/config/connections"
+                  >{lfsWords.connectionsLink}</a
+                >.
               </p>
             {/if}
-            <div class="add-acts">
+            <div class="col-span-full flex justify-end gap-space-2">
               <Button
                 label={lfsWords.cancel}
                 onclick={stopLfs}
@@ -967,7 +998,7 @@
             </div>
           </form>
         {:else}
-          <div class="lfs-acts">
+          <div class="flex flex-wrap gap-space-2 pt-space-1">
             <Button
               data-lfs-declare
               label={project.lfsUrl ? lfsWords.change : lfsWords.declare}
@@ -1167,9 +1198,8 @@
           {@const service = picking === "github" ? "GitHub" : "Linear"}
           <form
             data-slot="bind"
-            class="grid grid-cols-(--bind-cols) gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
+            class="grid grid-cols-2 gap-space-2 pt-space-2 @max-details/details:grid-cols-1"
             data-bind-form={picking}
-            style:--bind-cols="minmax(0, 1fr) minmax(0, 1fr)"
             onsubmit={(event) => {
               event.preventDefault();
               if (picking) {
@@ -1294,7 +1324,7 @@
             data-projects-fault
             reason={ghFault}
           />
-          <p data-slot="note" class="note">
+          <p data-slot="note" class="type-meta text-ink-muted">
             New issues there become tasks here, and new tasks become issues.
             Each task's title, description, labels, stage and comments stay one
             with its issue.
@@ -1315,7 +1345,7 @@
               >
               <a
                 data-slot="bound-target"
-                class="min-w-0 text-link-ink no-underline wrap-anywhere hover-hover:[&:hover]:underline hover-hover:[&:hover]:underline-offset-4"
+                class="min-w-0 text-link-ink no-underline wrap-anywhere hover:underline hover:underline-offset-(--underline-offset)"
                 href={bound.targetUrl}
                 rel="noreferrer"
                 target="_blank">{bound.targetName}</a
@@ -1338,8 +1368,13 @@
             {bound.linked === 1 ? "task" : "tasks"} linked · {syncWords(bound)}
           </p>
           {#if bound.githubProject}
-            <p data-slot="note" class="note" data-github-project>
+            <p
+              data-slot="note"
+              class="type-meta text-ink-muted"
+              data-github-project
+            >
               Stages show on <a
+                class="text-link-ink"
                 href={bound.githubProject.url}
                 rel="noreferrer"
                 target="_blank">{bound.githubProject.title}</a
@@ -1347,7 +1382,11 @@
             </p>
           {/if}
           {#if bound.githubProjectReason}
-            <p data-slot="note" class="note" data-github-project-reason>
+            <p
+              data-slot="note"
+              class="type-meta text-ink-muted"
+              data-github-project-reason
+            >
               {bound.githubProjectReason}
             </p>
           {/if}
@@ -1381,7 +1420,7 @@
       </p>
       <div
         data-slot="value"
-        class="flex min-w-0 flex-col gap-space-1 pt-space-1"
+        class="flex min-w-0 flex-col gap-space-1 pt-space-1 type-label text-ink-strong"
       >
         <CawLeadSwitch
           label="Leads this project"
@@ -1445,215 +1484,3 @@
     </div>
   </div>
 </section>
-
-<style>
-  /* residual: foreign-dom */
-  [data-slot="value"] :global([data-slot="lead-switch"]) {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .path {
-    overflow: hidden;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    direction: rtl;
-    text-align: start;
-  }
-  .kept {
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
-  .add {
-    display: grid;
-    grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
-    gap: var(--space-2);
-    padding-block-start: var(--space-2);
-  }
-  .add :global(.add-machine) {
-    inline-size: 100%;
-  }
-  .lfs-none {
-    grid-column: 1 / -1;
-  }
-  .note a {
-    color: var(--link-ink);
-  }
-  .lfs-acts {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-2);
-    padding-block-start: var(--space-1);
-  }
-  .add-acts {
-    display: flex;
-    grid-column: 1 / -1;
-    justify-content: flex-end;
-    gap: var(--space-2);
-  }
-  @container details (width < 30rem) {
-    .add {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  .value :global(.kit-segmented.lands),
-  .value :global(.kit-segmented.trackers) {
-    flex-wrap: wrap;
-    align-self: flex-start;
-    max-inline-size: 100%;
-  }
-  /* Asked, not yet answered: the thumb breathes on the live-work loop. */
-  .value :global(.kit-segmented.lands[data-pending] .kit-thumb),
-  .value :global(.kit-segmented.trackers[data-pending] .kit-thumb) {
-    @media (prefers-reduced-motion: no-preference) {
-      animation: breath var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  /* The binding's form: its connection and its repository or team, then Use. */
-  .bind {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-    gap: var(--space-2);
-    padding-block-start: var(--space-2);
-  }
-  .bind > .note {
-    grid-column: 1 / -1;
-    overflow-wrap: anywhere;
-  }
-  .bind :global(.bind-connection),
-  .bind :global(.bind-target) {
-    inline-size: 100%;
-  }
-  /* The GitHub Project under the repository, as wide as the form. */
-  .bind :global(.bind-project) {
-    grid-column: 1 / -1;
-    inline-size: 100%;
-  }
-  /* Each stage beside its Status option; on a narrow tray, over it. */
-  .status-map {
-    display: grid;
-    grid-column: 1 / -1;
-    grid-template-columns: minmax(0, max-content) minmax(0, 1fr);
-    gap: var(--space-1) var(--space-2);
-    align-items: center;
-    min-inline-size: 0;
-    margin: 0;
-    padding: 0;
-    border: 0;
-  }
-  .status-map > legend {
-    padding: 0 0 var(--space-1);
-  }
-  .status-stage {
-    min-inline-size: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .status-map :global(.status-pick) {
-    inline-size: 100%;
-  }
-  @container details (width < 30rem) {
-    .status-map {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  @container details (width < 30rem) {
-    .bind {
-      grid-template-columns: minmax(0, 1fr);
-    }
-  }
-  .note a,
-  .bound-target {
-    color: var(--link-ink);
-  }
-  /* The bound repository or team and its Change, as the places' head stands
-     their count and Add a place. */
-  .bound-head {
-    display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: var(--space-2);
-    min-inline-size: 0;
-  }
-  /* Its mark on the first line of a name that wraps; as the head's flex
-     item it shrinks, so a long unbroken name never pushes Change off. */
-  .bound {
-    align-items: flex-start;
-    min-inline-size: 0;
-  }
-  .bound-target {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-    text-decoration: none;
-  }
-  @media (hover: hover) {
-    .bound-target:hover {
-      text-decoration: underline;
-      text-underline-offset: 4px;
-    }
-  }
-  .bound :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-  /* Landing checks: one entry per step, in gate.md's order; every line
-     wraps, a command or path breaking anywhere rather than overflowing. */
-  .gate-steps {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  /* A step's lines stand on their own line heights: one entry, set apart
-     from the next by the list's gap. */
-  .gate-check {
-    display: flex;
-    flex-direction: column;
-    min-inline-size: 0;
-  }
-  .gate-name {
-    min-inline-size: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .gate-command {
-    min-inline-size: 0;
-    font: var(--type-meta);
-    font-family: var(--font-mono);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-    white-space: pre-wrap;
-  }
-  .gate-facts {
-    min-inline-size: 0;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  /* A text link: its words start on the value column with the rest. */
-  .value :global(.gate-edit) {
-    align-self: flex-start;
-    padding-inline: 0;
-  }
-  .switch-line {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    cursor: pointer;
-  }
-  .value :global(.lead-switch) {
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .foot {
-    display: flex;
-    justify-content: flex-end;
-  }
-</style>
