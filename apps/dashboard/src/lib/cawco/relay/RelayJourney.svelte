@@ -41,8 +41,11 @@
     machine,
     steps = [],
     summary = null,
+    row = false,
     onact,
   }: {
+    /** Drawn as Caw's Needs you row: its kind and where under it, as every onboarding row says. */
+    row?: boolean;
     /** Which face: the take-over's entry, the journey's steps, the live relay's summary, or Needs you's ticked row. */
     view?: "entry" | "journey" | "summary" | "done";
     /** The domain the person reached CawCo through, seen through a proxy; null by IP or the tailnet. */
@@ -222,6 +225,9 @@
     "min-w-0 text-meta text-(--ink-muted) text-pretty [overflow-wrap:anywhere]";
   const FAIL =
     "min-w-0 text-meta text-(--status-fail-ink) text-pretty [overflow-wrap:anywhere]";
+  /** Needs you's meta line (NeedsCard's `.meta`): meta, muted, one line. */
+  const META =
+    "min-w-0 max-w-full overflow-hidden text-meta text-(--ink-muted) text-ellipsis whitespace-nowrap";
   /** A step's controls: side by side, each the column's width in a narrow card, `space-2` apart. */
   const CONTROLS =
     "flex min-w-0 flex-wrap items-center gap-(--space-2) @max-md:[&>*]:w-full";
@@ -281,16 +287,19 @@
     <CopyBox {label} {text} wrap />
   </div>
   <div class="hidden min-w-0 flex-col gap-(--space-2) @max-md:flex" data-box>
+    <!-- The box keeps its edge and padding; the clamp is on the words
+         inside it, so a third line is cut at the words' edge, never shown
+         in the box's padding. -->
     <code
-      class={[
-        "min-w-0 rounded-md border border-(--border-control) bg-(--surface-hover) px-(--space-3) py-(--space-2) font-mono text-meta text-(--ink-strong)",
-        clamp ? "line-clamp-2" : "block",
-      ]}
+      class="block min-w-0 rounded-md border border-(--border-control) bg-(--surface-hover) px-(--space-3) py-(--space-2) font-mono text-meta text-(--ink-strong)"
       title={text}
-      ><span class="sr-only">{label}:{" "}</span
-      >{#each text.split(" ") as word, index (index)}{#if index > 0}{" "}{/if}<span
-          class="inline-block max-w-full [overflow-wrap:anywhere]">{word}</span
-        >{/each}</code
+      ><span class={clamp ? "line-clamp-2" : "block"} data-slot="copy-words"
+        ><span class="sr-only">{label}:{" "}</span
+        >{#each text.split(" ") as word, index (index)}{#if index > 0}{" "}{/if}<span
+            class="inline-block max-w-full [overflow-wrap:anywhere]"
+            >{word}</span
+          >{/each}</span
+      ></code
     >
     <Button
       class="w-full"
@@ -302,10 +311,16 @@
   </div>
 {/snippet}
 
+<!-- The title's line: the card's mark in the lead column (Caw's panel's
+     28px one); in a narrow card, where the steps take the card's own edge,
+     the mark stands in the steps' mark column and the title on their
+     labels' edge. -->
 {#snippet head(done: boolean)}
-  <div class="mark-line flex min-w-0 items-center gap-(--space-3)">
+  <div
+    class="mark-line flex min-w-0 items-center gap-(--space-3) @max-md:gap-(--space-2)"
+  >
     <span
-      class="grid w-7 flex-none place-items-center text-(--ink-muted)"
+      class="grid w-7 flex-none place-items-center text-(--ink-muted) @max-md:w-(--icon-md)"
       data-box
     >
       {#if done}
@@ -501,7 +516,12 @@
       <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
       <ol class="m-0 grid list-none gap-(--space-3) p-0" role="list">
         {#each steps as step, index (step.step)}
-          {@const mark = markOf(step)}
+          <!-- Only the open step stands on the person; another that will
+               ask once it is reached waits in the meantime. -->
+          {@const mark =
+            index !== open && markOf(step) === "standing"
+              ? "waiting"
+              : markOf(step)}
           <li
             class="mark-line grid grid-cols-[var(--icon-md)_minmax(0,1fr)] items-start gap-x-(--space-2) gap-y-(--space-1) text-label"
             data-open={index === open || undefined}
@@ -531,6 +551,9 @@
           </li>
         {/each}
       </ol>
+      {#if row}
+        <p class={META}>{words.rowMeta}</p>
+      {/if}
       {#if later}
         <div class="flex justify-end">
           <Button
@@ -556,9 +579,14 @@
     data-relay-entry
   >
     <p
-      class="text-body text-(--ink-strong) text-pretty [overflow-wrap:anywhere]"
+      class="text-body text-(--ink-strong) text-pretty [overflow-wrap:anywhere] @max-md:hidden"
     >
       {words.entry(domain)}
+    </p>
+    <p
+      class="hidden text-body text-(--ink-strong) text-pretty [overflow-wrap:anywhere] @max-md:block"
+    >
+      {words.entryShort(domain)}
     </p>
     <Button
       class="@max-md:w-full"
@@ -584,6 +612,9 @@
       >
         {words.doneRow(summary.name ?? summary.machine.address)}
       </p>
+      {#if row}
+        <p class={META}>{words.rowMeta}</p>
+      {/if}
       <Button
         class="@max-md:w-full"
         href="/config/browsers"

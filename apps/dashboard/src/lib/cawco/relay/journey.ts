@@ -240,7 +240,12 @@ export const JOURNEY_WORDS = {
 
   entry: (domain: string) =>
     `The stream didn't connect: this screen reaches CawCo through ${domain}, which carries pages, not streams. A stream relay carries them from anywhere.`,
+  /** The phone's entry (the design's 390 wireframe): why, and nothing after it. */
+  entryShort: (domain: string) =>
+    `The stream didn't connect: this screen reaches CawCo through ${domain}, which carries pages, not streams.`,
   setUp: "Set up the stream relay",
+  /** Needs you's meta line under the row, as every onboarding row's. */
+  rowMeta: "Onboarding · Stream relay",
 
   /** Caw's Needs you row once the relay is live and proven: its tick and where it is seen. */
   doneRow: (where: string) =>

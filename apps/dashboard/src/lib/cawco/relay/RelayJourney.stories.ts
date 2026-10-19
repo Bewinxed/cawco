@@ -82,8 +82,11 @@ const needsYou = {
 };
 /** B · Needs you: the name doesn't resolve yet and the low ports need the command; the name, first, is the one open. */
 export const NeedsYou = { args: needsYou, parameters: desk };
-/** B · Needs you, in Caw's panel or on a phone. */
-export const NeedsYouPhone = { args: needsYou, parameters: phone };
+/** B · Needs you as Caw's Needs you row, with its onboarding meta line. */
+export const NeedsYouPhone = {
+  args: { ...needsYou, row: true },
+  parameters: phone,
+};
 
 const lowPorts = {
   steps: path({
@@ -191,7 +194,7 @@ export const NoNamePhone = { args: noName, parameters: phone };
 
 /** Needs you's ticked row, in Caw's panel: live at turn.bewinxed.com, and Settings › Browsers to open. */
 export const DonePhone = {
-  args: { view: "done", summary: proven },
+  args: { view: "done", summary: proven, row: true },
   parameters: phone,
 };
 
