@@ -17,7 +17,12 @@
  *   `leftOut: { path, why }[]` when it made one (the note written). Throws
  *   an Error whose message is the machine's sentence when the place cannot
  *   be made one (not a folder there, past 500 MB to commit, a `.git` git
- *   cannot read, git failing), or the machine is not connected.
+ *   cannot read, git failing), or the machine is not connected. A place has
+ *   one step in flight: a second `ensure` while it runs joins it.
+ * - `hold(machineId, path)` registers the place's step before what must
+ *   run first; its `ensure` starts it, its `release` ends it unstarted.
+ * - `settled(machineId, path)` resolves once that place's step in flight,
+ *   if any, has finished, whichever way: a move's plan inspects after it.
  */
 import {
   CONTROL_PLACE_REPO,
@@ -116,7 +121,7 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     );
   };
 
-  const ensure = async (place: PlaceRef): Promise<PlaceRepo> => {
+  const make = async (place: PlaceRef): Promise<PlaceRepo> => {
     const answer = (await call(place.machineId, CONTROL_PLACE_REPO, [
       place.path,
     ])) as PlaceRepo;
@@ -126,8 +131,79 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     return answer;
   };
 
+  /**
+   * Each place's one repo step in flight, by machine and path. A held step
+   * ({@link hold}) that ended without starting answers `undefined`.
+   */
+  const inFlight = new Map<string, Promise<PlaceRepo | undefined>>();
+  const keyOf = (machineId: string, path: string): string =>
+    `${machineId}\0${path}`;
+
+  const track = (key: string, step: Promise<PlaceRepo | undefined>): void => {
+    inFlight.set(key, step);
+    const forget = () => {
+      if (inFlight.get(key) === step) {
+        inFlight.delete(key);
+      }
+    };
+    step.then(forget, forget);
+  };
+
+  /** A place's repo step: the one in flight, joined, else a new one, registered before this returns. */
+  const ensure = (place: PlaceRef): Promise<PlaceRepo> => {
+    const key = keyOf(place.machineId, place.path);
+    const running = inFlight.get(key);
+    if (running !== undefined) {
+      // A held step that never started leaves this one to start its own.
+      return running.then((answer) => answer ?? ensure(place));
+    }
+    const mine = make(place);
+    track(key, mine);
+    return mine;
+  };
+
+  /**
+   * The place's step held from now, while what must come before it runs
+   * (server.ts `addProjectPlace` reads the folder's remote first, and may
+   * merge its project): `settled` waits on it and an `ensure` elsewhere
+   * joins it. The hold's `ensure` starts the step, after one already in
+   * flight; `release` ends a hold whose step never started, at once, as
+   * `settled` resolves at once for a place that needs no step. A release
+   * after `ensure` does nothing.
+   */
+  const hold = (machineId: string, path: string) => {
+    const key = keyOf(machineId, path);
+    const before = inFlight.get(key);
+    const held = Promise.withResolvers<PlaceRepo | undefined>();
+    track(key, held.promise);
+    return {
+      ensure: (place: PlaceRef): Promise<PlaceRepo> => {
+        const step =
+          before === undefined
+            ? make(place)
+            : before.then((answer) => answer ?? make(place));
+        held.resolve(step);
+        return step;
+      },
+      release: (): void => {
+        held.resolve(before);
+      },
+    };
+  };
+
   return {
     ensure,
+    hold,
+
+    /**
+     * Resolves once the place at `path` on `machineId` has no repo step in
+     * flight: what reads the folder to decide what to ask or do (a move's
+     * plan) reads its settled state, whichever step started first. A step
+     * that fails leaves the folder as it was; its error is its caller's.
+     */
+    async settled(machineId: string, path: string): Promise<void> {
+      await inFlight.get(keyOf(machineId, path))?.catch(() => undefined);
+    },
 
     /**
      * Before a workspace is cut from `cwd` on `machineId` for `projectId`:

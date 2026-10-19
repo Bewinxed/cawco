@@ -31377,6 +31377,11 @@
             "description": "Explicitly abort unadopted custody too, then tear down spin-off resources.",
             "type": "boolean"
           },
+          "forget": {
+            "description": "The hub forgets the session once this stop is confirmed (its end is a\ndelete or a transcript delete): the machine lets go of what it kept for\nthe session to be reattached, its browser door among it.",
+            "const": true,
+            "type": "boolean"
+          },
           "from": {
             "description": "The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate.",
             "type": "string"
@@ -55141,9 +55146,6 @@
           "devtools": {
             "type": "number"
           },
-          "gate": {
-            "type": "number"
-          },
           "http": {
             "type": "number"
           },
@@ -55152,8 +55154,7 @@
           }
         },
         "required": [
-          "devtools",
-          "gate"
+          "devtools"
         ]
       },
       "BrowserState": {

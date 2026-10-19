@@ -3,9 +3,12 @@
  * agent connection to a project's browser goes through. Chromium's own
  * DevTools port answers anyone who reaches it, and a browser is shared by
  * every session of its project, so no session is given that port. Each
- * session's browser tool connects here instead, to
- * `ws://127.0.0.1:<gate>/<workspace id>` with its workspace's token as a
- * bearer, and the gate speaks to Chromium for it on a connection of its own.
+ * session's browser tool connects here instead, to the machine's one gate
+ * port, `ws://127.0.0.1:<browserGatePort()>/<gate id>` with its gate id's
+ * token as a bearer: the id names the browser (its project's, else the
+ * machine's), and that browser's gate speaks to Chromium for it on a
+ * connection of its own. A gate id is a workspace's, or a session's own
+ * outside any workspace (door.ts).
  *
  * What a connection sees and drives is its workspace's pages alone: the
  * pages it opened (`Target.createTarget`, always as a window of its own),
@@ -37,7 +40,7 @@ import { randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
-import type { BrowserKey } from "@cawco/core/browser";
+import { type BrowserKey, browserGatePort } from "@cawco/core/browser";
 import { workspaceProjectFile, workspaceStateDir } from "@cawco/core/paths";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
 import type { Server, ServerWebSocket } from "bun";
@@ -54,7 +57,7 @@ export const GATE_WORDS = {
   wide: "That reaches every page of the project's browser: send it to one of your own pages.",
   flat: "This browser attaches agents in flat sessions only: pass flatten: true.",
   token: "This browser opens to a workspace's own token.",
-  project: "This browser is another project's.",
+  none: "No browser is kept for this workspace's project on this machine.",
   ended: "This workspace's boundary ended, and its pages with it.",
   stopped: "The browser stopped.",
   traceShared:
@@ -235,8 +238,8 @@ const tokenOf = async (id: string, given: string): Promise<boolean> => {
   );
 };
 
-/** The browser workspace `id`'s sessions use: its project's, else its machine's. */
-const keyOfWorkspace = async (
+/** The browser gate id `id`'s sessions use: its project's, else its machine's. */
+export const keyOfWorkspace = async (
   id: string,
   machineId: string
 ): Promise<BrowserKey> => {
@@ -326,9 +329,6 @@ export interface GateDeps {
    */
   devtools: (wake: boolean) => Promise<string | undefined>;
   key: BrowserKey;
-  /** The machine's id, for the key of a workspace outside any project. */
-  machineId: () => string;
-  port: number;
   /** Called as the first connection opens (`true`) and the last closes (`false`). */
   used: (held: boolean) => void;
 }
@@ -353,7 +353,6 @@ interface Watch {
 
 export class Gate {
   readonly #deps: GateDeps;
-  #server: Server<LinkData> | undefined;
   readonly #links = new Set<Link>();
   #closedWhy: string | undefined;
   #owners: Owners = { contexts: {}, targets: {} };
@@ -373,38 +372,16 @@ export class Gate {
     return this.#deps.key;
   }
 
-  get port(): number {
-    return this.#deps.port;
-  }
-
   /** Whether any agent is connected now. */
   get held(): boolean {
     return this.#links.size > 0;
   }
 
-  /** Listens on 127.0.0.1 at its port. */
-  listen(): void {
-    this.#server ??= Bun.serve<LinkData>({
-      hostname: "127.0.0.1",
-      port: this.#deps.port,
-      fetch: (request, server) => this.#upgrade(request, server),
-      websocket: {
-        maxPayloadLength: MAX_MESSAGE,
-        sendPings: true,
-        open: (socket) => socket.data.link.opened(socket),
-        message: (socket, data) => socket.data.link.said(said(data)),
-        close: (socket) => socket.data.link.closed(),
-      },
-    });
-  }
-
-  /** Cuts every connection and stops listening. */
+  /** Cuts every connection: its browser is gone. */
   stop(): void {
     for (const link of this.#links) {
       link.close(1001, GATE_WORDS.stopped);
     }
-    this.#server?.stop(true);
-    this.#server = undefined;
     this.#unwatch();
   }
 
@@ -482,33 +459,9 @@ export class Gate {
     );
   }
 
-  // -- the door ------------------------------------------------------------
-
-  async #upgrade(
-    request: Request,
-    server: Server<LinkData>
-  ): Promise<Response | undefined> {
-    const id = new URL(request.url).pathname.slice(1);
-    if (
-      !WORKSPACE_ID.test(id) ||
-      request.headers.get("upgrade") !== "websocket"
-    ) {
-      return new Response("Not found.", { status: 404 });
-    }
-    const bearer = BEARER.exec(request.headers.get("authorization") ?? "")?.[1];
-    if (!(bearer && (await tokenOf(id, bearer)))) {
-      return new Response(GATE_WORDS.token, { status: 401 });
-    }
-    if ((await keyOfWorkspace(id, this.#deps.machineId())) !== this.key) {
-      return new Response(GATE_WORDS.project, { status: 403 });
-    }
-    if (this.#closedWhy) {
-      return new Response(this.#closedWhy, { status: 423 });
-    }
-    const link = new Link(this, id);
-    return server.upgrade(request, { data: { link } })
-      ? undefined
-      : new Response("A WebSocket upgrade was expected.", { status: 400 });
+  /** A connection of gate id `id`, or why the shield refuses it now. */
+  admit(id: string): Link | string {
+    return this.#closedWhy ?? new Link(this, id);
   }
 
   /** Chromium's browser connection URL, the browser woken first when `wake`. */
@@ -1381,19 +1334,77 @@ class Link {
 
 const gates = new Map<BrowserKey, Gate>();
 
-/** The gate of `key`, listening, made the first time. */
+/** The gate of `key`, made the first time; it takes connections once {@link listenGates} listens. */
 export const serveGate = (deps: GateDeps): Gate => {
   let gate = gates.get(deps.key);
-  if (gate && gate.port !== deps.port) {
-    gate.stop();
-    gate = undefined;
-  }
   if (!gate) {
     gate = new Gate(deps);
-    gate.listen();
     gates.set(deps.key, gate);
   }
   return gate;
+};
+
+/** The machine's gate port's upgrade: the path's gate id, its token, and the gate of its browser. */
+const upgrade = async (
+  request: Request,
+  server: Server<LinkData>,
+  machineId: () => string
+): Promise<Response | undefined> => {
+  const id = new URL(request.url).pathname.slice(1);
+  if (
+    !WORKSPACE_ID.test(id) ||
+    request.headers.get("upgrade") !== "websocket"
+  ) {
+    return new Response("Not found.", { status: 404 });
+  }
+  const bearer = BEARER.exec(request.headers.get("authorization") ?? "")?.[1];
+  if (!(bearer && (await tokenOf(id, bearer)))) {
+    return new Response(GATE_WORDS.token, { status: 401 });
+  }
+  const gate = gates.get(await keyOfWorkspace(id, machineId()));
+  if (!gate) {
+    return new Response(GATE_WORDS.none, { status: 404 });
+  }
+  const admitted = gate.admit(id);
+  if (typeof admitted === "string") {
+    return new Response(admitted, { status: 423 });
+  }
+  return server.upgrade(request, { data: { link: admitted } })
+    ? undefined
+    : new Response("A WebSocket upgrade was expected.", { status: 400 });
+};
+
+let listening: Server<LinkData> | undefined;
+
+/**
+ * Listens on 127.0.0.1 at `browserGatePort()`, the one door to every
+ * browser of the machine; the daemon's alone. A port another process holds
+ * is said in the log, and every session's browser tool answers that it
+ * cannot connect until the agent starts again with it free.
+ */
+export const listenGates = (machineId: () => string): void => {
+  if (listening) {
+    return;
+  }
+  const port = browserGatePort();
+  try {
+    listening = Bun.serve<LinkData>({
+      hostname: "127.0.0.1",
+      port,
+      fetch: (request, server) => upgrade(request, server, machineId),
+      websocket: {
+        maxPayloadLength: MAX_MESSAGE,
+        sendPings: true,
+        open: (socket) => socket.data.link.opened(socket),
+        message: (socket, data) => socket.data.link.said(said(data)),
+        close: (socket) => socket.data.link.closed(),
+      },
+    });
+  } catch (error) {
+    console.warn(
+      `[browser] the DevTools gate does not listen on 127.0.0.1:${port}: ${String(error)}`
+    );
+  }
 };
 
 /** The gate of `key`, when this process serves it. */

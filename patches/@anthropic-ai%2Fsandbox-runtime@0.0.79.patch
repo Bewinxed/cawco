@@ -1,0 +1,20 @@
+diff --git a/dist/sandbox/linux-sandbox-utils.js b/dist/sandbox/linux-sandbox-utils.js
+index 2a87e5f..438efdf 100644
+--- a/dist/sandbox/linux-sandbox-utils.js
++++ b/dist/sandbox/linux-sandbox-utils.js
+@@ -2540,6 +2540,15 @@ async function generateFilesystemArgs(readConfig, writeConfig, maskedFileBinds,
+     if (emptySource !== undefined) {
+         args.push('--ro-bind', emptySource, emptySource);
+     }
++    // CawCo: a read-denied directory is read-only, not an empty writable tmpfs
++    // (sandbox-runtime #149, open at 0.0.80): a write under it fails at once
++    // with EROFS naming its path, instead of landing in the sandbox's memory
++    // and vanishing with it. Last, once every mount point inside each tmpfs is
++    // made; `--remount-ro` is not recursive, so what is bound back into it
++    // (an allowed write path, a read carve-out) keeps its own flags.
++    for (const landing of new Set(readDenyTmpfsUnits.map(unit => unit.landing))) {
++        args.push('--remount-ro', landing);
++    }
+     return args;
+ }
+ /**

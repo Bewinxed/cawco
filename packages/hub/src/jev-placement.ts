@@ -54,11 +54,10 @@ export const ROWS = {
   order: "Dispatch order",
   voice: "Voice check",
   // Asked in memory.ts: the curator's inbox, how its lasting notes bear on
-  // the fact lines, and an attempt's brief; in session-prose.ts, recall.
+  // the fact lines, and an attempt's brief.
   inbox: "Memory inbox",
   sorting: "Fact sorting",
   context: "Brief context",
-  recall: "Session search",
   // Asked in project-starters.ts: what a project's board and Caw's panel offer.
   starters: "Starters",
 } as const;

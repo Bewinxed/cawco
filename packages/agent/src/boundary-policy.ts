@@ -11,18 +11,24 @@ import type {
   FilesystemPathEntry,
   SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
-import { BROWSER_PORTS } from "@cawco/core/browser";
+import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
 import type { Policy } from "@cawco/core/workspace-judge";
 
 /**
- * Every port of {@link BROWSER_PORTS}: the browsers' neko, DevTools, gate and
- * media ports, which no command of a workspace dials on this machine.
+ * Every port of {@link BROWSER_PORTS} (the machine's DevTools gate, and the
+ * browsers' neko, DevTools and media ports), and the gate's port where a
+ * second agent on the host moved it: none of them is dialled by a command of
+ * a workspace on this machine.
  */
-const browserPorts = (): number[] =>
-  Array.from(
-    { length: BROWSER_PORTS.last - BROWSER_PORTS.first + 1 },
-    (_, at) => BROWSER_PORTS.first + at
-  );
+const browserPorts = (): number[] => [
+  ...new Set([
+    ...Array.from(
+      { length: BROWSER_PORTS.last - BROWSER_PORTS.first + 1 },
+      (_, at) => BROWSER_PORTS.first + at
+    ),
+    browserGatePort(),
+  ]),
+];
 
 const within = (path: string, root: string): boolean =>
   root === "/" || path === root || path.startsWith(`${root}/`);
@@ -69,6 +75,15 @@ export interface SrtPlace {
  * the host, so that entry would hand a command the agent's and hub's own
  * loopback services (REPORT.md §5l). A dev server a command starts is reached
  * inside the sandbox's own network namespace.
+ *
+ * Every read-denied dir (the home dir, `/tmp`, `/run`) is an empty tmpfs that
+ * srt mounts and the repository's patch of srt remounts read-only once what
+ * is bound back into it is in place (`patches/`, srt #149): a write there fails
+ * at once with EROFS naming its path, never lands in the sandbox's memory to
+ * vanish with it. What a command writes is the policy's `allowWrite` alone:
+ * the clone, its scratch dir (`TMPDIR`, its XDG config, data and state homes)
+ * and the workspaces' cache (every tool's cache, `XDG_CACHE_HOME`,
+ * `XDG_RUNTIME_DIR`).
  *
  * Besides the policy:
  * - `/tmp` is read-denied: the host's `/tmp` holds other sessions' files and

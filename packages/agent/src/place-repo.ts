@@ -605,8 +605,37 @@ const commitPlan = async (
   }
 };
 
-/** Each place's run in flight: two starts at once make one repository. */
-const making = new Map<string, Promise<PlaceRepo>>();
+/**
+ * Each folder's step in flight that may make it a git repository: this
+ * module's first commit, and a move's prepare (move.ts `movePrepare`). They
+ * run one at a time per folder, each after the last has finished either
+ * way, so no two `git init` one folder at once and each reads the folder
+ * the last one left.
+ */
+const turns = new Map<string, Promise<unknown>>();
+
+/** Runs `step` on the folder at `root` once every step queued on it before has finished. */
+export const placeTurn = <T>(
+  root: string,
+  step: () => Promise<T>
+): Promise<T> => {
+  const mine = (turns.get(root) ?? Promise.resolve())
+    .catch(() => undefined)
+    .then(step);
+  turns.set(root, mine);
+  const forget = () => {
+    if (turns.get(root) === mine) {
+      turns.delete(root);
+    }
+  };
+  mine.then(forget, forget);
+  return mine;
+};
+
+/** Resolves once every step queued on the folder at `root` has finished, either way. */
+export const placeSettled = async (root: string): Promise<void> => {
+  await turns.get(root)?.catch(() => undefined);
+};
 
 /** {@link CONTROL_PLACE_REPO}. */
 export const placeRepo = (
@@ -618,17 +647,7 @@ export const placeRepo = (
   if (dryRun === true) {
     return placeRepoNow(root, true);
   }
-  const mine = (making.get(root) ?? Promise.resolve())
-    .catch(() => undefined)
-    .then(() => placeRepoNow(root, false));
-  making.set(root, mine);
-  const forget = () => {
-    if (making.get(root) === mine) {
-      making.delete(root);
-    }
-  };
-  mine.then(forget, forget);
-  return mine;
+  return placeTurn(root, () => placeRepoNow(root, false));
 };
 
 const placeRepoNow = async (root: string, dry: boolean): Promise<PlaceRepo> => {

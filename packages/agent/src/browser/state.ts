@@ -43,6 +43,8 @@ export interface BrowserRecord {
     image: string;
     /** What its media port was published, and neko's candidates advertised, for. */
     media: MediaPath;
+    /** The ports it was published on: one made for other ports is made again. */
+    ports?: BrowserPorts;
     userPassword: string;
     volume: string;
   };
@@ -68,8 +70,11 @@ export interface BrowserRecord {
   relayExpiresAt?: number;
   /** The stream relay's URLs that credential is for. */
   relayUrls?: string[];
-  /** Its place in BROWSER_PORTS, kept until it is removed. */
-  slot: number;
+  /**
+   * Its place in BROWSER_PORTS, taken as it first starts and kept until it is
+   * removed. None while it was only reserved for a session's browser tool.
+   */
+  slot?: number;
   state: BrowserState;
   takeover: BrowserRow["takeover"];
   why?: string;
@@ -195,8 +200,8 @@ const portFree = (port: number): Promise<boolean> =>
   });
 
 /**
- * The record of `key`, made with the lowest slot of BROWSER_PORTS no other
- * record keeps and whose ports are free now, when it has none.
+ * The record of `key`, made when it has none: asleep, holding no ports until
+ * it first starts ({@link slotted}).
  */
 export const recordFor = async (
   key: BrowserKey,
@@ -207,12 +212,35 @@ export const recordFor = async (
   if (kept) {
     return kept;
   }
+  const record: BrowserRecord = {
+    key,
+    name,
+    host,
+    state: "asleep",
+    lastUsedAt: Date.now(),
+    takeover: null,
+  };
+  await writeBrowser(record);
+  return record;
+};
+
+/**
+ * `record` with its ports: the lowest slot of BROWSER_PORTS no other record
+ * keeps and whose ports are free now, taken and written as it first starts.
+ */
+export const slotted = async (
+  record: BrowserRecord
+): Promise<BrowserRecord & { slot: number }> => {
+  const { slot: kept } = record;
+  if (kept !== undefined) {
+    return { ...record, slot: kept };
+  }
   await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
   return holding(
     join(browsersDir(), "slots.lock"),
     "The browser ports",
     async () => {
-      const taken = new Set((await allBrowsers()).map((record) => record.slot));
+      const taken = new Set((await allBrowsers()).map((one) => one.slot));
       for (let slot = 0; slot < BROWSER_SLOTS; slot += 1) {
         if (taken.has(slot)) {
           continue;
@@ -221,34 +249,25 @@ export const recordFor = async (
         // biome-ignore lint/performance/noAwaitInLoops: the first free slot, in order.
         const free = await Promise.all(ports.map(portFree));
         if (free.every(Boolean)) {
-          const record: BrowserRecord = {
-            key,
-            name,
-            host,
-            slot,
-            state: "asleep",
-            lastUsedAt: Date.now(),
-            takeover: null,
-          };
-          await writeBrowser(record);
-          return record;
+          const placed = { ...record, slot };
+          await writeBrowser(placed);
+          return placed;
         }
       }
       throw new Error(
-        `Every browser port of this machine (${ports(0).http}–${ports(BROWSER_SLOTS - 1).media}) is taken: stop or remove a browser first.`
+        `Every browser port of this machine (${browserPorts(0).http}–${browserPorts(BROWSER_SLOTS - 1).media}) is taken by a browser that has run: stop and remove one first.`
       );
     }
   );
 };
 
-const ports = browserPorts;
-
-/** The ports `record`'s host uses: DevTools and the gate on the local host, all four in a container. */
+/** The ports `record`'s host uses: DevTools on the local host, all three in a container. Only a browser that has started has any. */
 export const portsOf = (record: BrowserRecord): BrowserPorts => {
+  if (record.slot === undefined) {
+    throw new Error(`${record.key} has not started yet, so it has no ports.`);
+  }
   const all = browserPorts(record.slot);
-  return record.host === "container"
-    ? all
-    : { devtools: all.devtools, gate: all.gate };
+  return record.host === "container" ? all : { devtools: all.devtools };
 };
 
 /** Whether `url` answers 2xx within `ms` (a server that is starting, or one asked whether it is up). */

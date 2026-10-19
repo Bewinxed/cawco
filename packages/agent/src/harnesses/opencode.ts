@@ -4359,12 +4359,12 @@ export class OpencodeHarness implements Harness {
     // MCP servers are its location's, so a workspace's location launches its
     // chrome-devtools through the workspace's door (the plugin reads it), and
     // a location in no workspace launches none.
-    if (ctx.workspace && ctx.browserDoor) {
+    if (ctx.boundary && ctx.browserDoor) {
       await ctx
         .browserDoor()
         .catch((error: unknown) =>
           console.warn(
-            `[opencode] ${ctx.instanceId}: workspace ${ctx.workspace}'s browser door could not be made, so its location launches no chrome-devtools: ${error instanceof Error ? error.message : String(error)}`
+            `[opencode] ${ctx.instanceId}: its workspace's browser door could not be made, so its location launches no chrome-devtools: ${error instanceof Error ? error.message : String(error)}`
           )
         );
     }

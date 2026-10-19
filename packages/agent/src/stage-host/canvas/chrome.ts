@@ -17,6 +17,7 @@ import type {
   RenderReport,
 } from "@cawco/core/stage";
 import { bridge, type Section, type View } from "./runtime";
+import { type PageScheme, pageScheme } from "./scheme";
 
 /** DialKit's vanilla build as the page has it once loaded (`window.DialKit`). */
 interface DialKitGlobal {
@@ -30,13 +31,18 @@ interface DialKitGlobal {
       listener: (values: Record<string, unknown>) => void
     ) => () => void;
   };
-  createDialRoot: (options: Record<string, unknown>) => unknown;
+  createDialRoot: (options: Record<string, unknown>) => {
+    element: HTMLElement;
+  };
   createDialTimeline: (
     name: string,
     config: Record<string, unknown>,
     options?: Record<string, unknown>
   ) => TimelineHandle;
-  createDialTimelineRoot: (options: Record<string, unknown>) => unknown;
+  createDialTimelineRoot: (options: Record<string, unknown>) => {
+    element: HTMLElement;
+    update: (next: Record<string, unknown>) => void;
+  };
   DialStore: {
     getValues: (id: string) => Record<string, unknown>;
     updateValues: (id: string, values: Record<string, unknown>) => void;
@@ -81,6 +87,8 @@ export interface ChromeOptions {
 /** A pane narrower than this is a phone's: one frame at a time. DESIGN.md's breakpoint. */
 const PHONE_MAX = 640;
 const SWIPE_PX = 48;
+/** DialKit's timeline handle's step, per arrow key (vendor/dialkit browser.global.js, `createDialTimelineRoot`). */
+const TIMELINE_STEP = 20;
 
 /** Solar's glyphs the chrome draws (24px grid): the linear chevrons and the duotone sort-vertical (DESIGN.md, Icons). */
 const GLYPHS = {
@@ -113,19 +121,21 @@ svg { inline-size: 16px; block-size: 16px; flex: none; }
 .name { font: var(--type-label); color: var(--ink-strong); min-width: 0; overflow-wrap: anywhere; }
 .about { grid-column: 1; font: var(--type-meta); color: var(--ink-muted); min-width: 0; overflow-wrap: anywhere; text-wrap: pretty; }
 .crumb { grid-column: 1; font: var(--type-meta); color: var(--ink-muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.crumb b { font-weight: var(--weight-strong); color: var(--ink-strong); }
-.tools { grid-column: 2; grid-row: 1 / span 3; display: flex; align-items: start; gap: var(--space-1); }
+.crumb .num { font-variant-numeric: tabular-nums; }
+.crumb .said { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+.tools { grid-column: 2; grid-row: 1 / span 3; align-self: center; display: flex; align-items: center; gap: var(--space-1); }
 .ghost { all: unset; box-sizing: border-box; position: relative; font: var(--type-label); color: var(--ink-strong); block-size: 30px;
   padding: 0 var(--space-2); border-radius: var(--radius-sm); display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer; }
 @media (hover: hover) { .ghost:not([aria-pressed="true"]):hover { background: var(--surface-hover); } }
 /* Pressed is the kit Toggle's on step, never the hover's. */
 .ghost[aria-pressed="true"] { background: var(--surface-pressed); }
 .ghost:focus-visible, .chip:focus-visible { outline: var(--focus-ring-width) solid var(--focus-ring); outline-offset: var(--focus-ring-offset); }
-.outline { pointer-events: auto; position: absolute; inset-block: var(--band, 88px) var(--foot, 32px); inset-inline-end: 0;
+.outline { pointer-events: auto; position: absolute; inset-block: var(--band) calc(var(--foot) + var(--cawco-floor)); inset-inline-end: 0;
   inline-size: min(280px, 80vw); overflow: auto; overscroll-behavior: contain; background: var(--surface-raised);
   border-inline-start: 1px solid var(--border-well); padding: var(--space-2) 0; }
 .outline[hidden] { display: none; }
-.outline h3 { margin: var(--space-2) var(--space-3) var(--space-1); font: var(--type-caps); color: var(--ink-muted); }
+.outline h3 { margin: var(--space-2) var(--space-3) var(--space-1); font: var(--type-caps); color: var(--ink-muted); overflow-wrap: anywhere; }
+.outline h3 code { font: var(--type-code); font-variant-ligatures: none; }
 .row { all: unset; box-sizing: border-box; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: var(--space-2); align-items: center;
   inline-size: 100%; min-block-size: 32px; padding: var(--space-1) var(--space-3); cursor: pointer; font: var(--type-meta); color: var(--ink-strong); }
 .row span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
@@ -155,7 +165,7 @@ svg { inline-size: 16px; block-size: 16px; flex: none; }
   padding: 0 var(--space-3); border-radius: var(--radius-sm); display: inline-flex; align-items: center; background: var(--surface-recess);
   cursor: pointer; }
 .chip[aria-pressed="true"] { box-shadow: inset 0 0 0 1px var(--brand-solid); }
-.steps { pointer-events: auto; position: absolute; inset-inline: 0; inset-block-end: var(--foot, 32px); display: none;
+.steps { pointer-events: auto; position: absolute; inset-inline: 0; inset-block-end: calc(var(--foot) + var(--cawco-floor)); display: none;
   justify-content: space-between; padding: var(--space-2) var(--space-3); }
 :host([data-phone]) .steps { display: flex; }
 .steps .ghost { block-size: 44px; background: var(--surface-raised); box-shadow: var(--shadow-xs); }
@@ -173,14 +183,19 @@ svg { inline-size: 16px; block-size: 16px; flex: none; }
 
 /** Light-DOM chrome: frames, labels, section heads, edges and the docks, on classes no project writes. */
 export const PAGE_CSS = `
-html.cawco-canvas-page { color-scheme: light dark; }
+/* The room the chrome takes from the canvas (Chrome #reserve): at the floor (a move's timeline, a phone's dials),
+   at the inline end (a desk's outline and dials), and the outline's own width; none until any of them stands. */
+html.cawco-canvas-page { color-scheme: light dark; --cawco-floor: 0px; --cawco-end: 0px; --cawco-outline: 0px; --cawco-timeline-room: 0px; }
 html.cawco-canvas-page[data-theme="light"] { color-scheme: light; }
 html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
 /* The page is the well the frames stand in (surface-well): the frame recesses, each frame's own page reads raised on it. */
 html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100%; overflow: hidden; background: var(--surface-well); }
-.cawco-canvas { position: fixed; inset: 0; overflow: hidden; touch-action: none; background: var(--surface-well); }
+/* The canvas begins under the head and ends where the rest of the chrome begins (the foot, the docks, a desk's outline): no frame
+   is ever drawn under any of it, whatever the head grows to. */
+.cawco-canvas { position: fixed; inset-block: var(--band) calc(var(--foot) + var(--cawco-floor)); inset-inline: 0 var(--cawco-end); overflow: hidden;
+  touch-action: none; background: var(--surface-well); }
 .cawco-world { position: absolute; inset-block-start: 0; inset-inline-start: 0; transform-origin: 0 0; display: flex; flex-direction: column;
-  gap: var(--space-8); padding-block-end: 160px; will-change: transform; }
+  gap: var(--space-8); padding-block-end: 160px; will-change: transform; --cawco-gutter: 0px; padding-inline-start: var(--cawco-gutter); }
 .cawco-section { display: flex; flex-direction: column; gap: var(--space-3); min-block-size: 120px; }
 .cawco-section[data-cawco-asleep] .cawco-grid { display: none; }
 /* A section's head: the sheet's title in the title role when it has one, its file in code. */
@@ -209,15 +224,23 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
 .cawco-frame-status { font: var(--type-meta); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
 .cawco-frame-status[data-state="failed"] { color: var(--status-fail-ink); }
 .cawco-edges { position: absolute; inset: 0; inline-size: 1px; block-size: 1px; overflow: visible; pointer-events: none; z-index: 1; }
-.cawco-edge { fill: none; stroke: var(--text-muted); stroke-width: 1.5; }
-.cawco-edge-move { stroke: var(--coral-9); stroke-width: 2; pointer-events: stroke; cursor: pointer; }
+.cawco-edge { fill: none; stroke: var(--ink-muted); stroke-width: 1.5; }
+.cawco-edge-move { stroke: var(--brand-solid); stroke-width: 2; pointer-events: stroke; cursor: pointer; }
 .cawco-edge-group { stroke-dasharray: 3 4; }
 .cawco-edges marker path { fill: context-stroke; }
 .cawco-edge-label { font: var(--type-meta); fill: var(--ink-muted); paint-order: stroke; stroke: var(--surface-well); stroke-width: 4px; }
-.cawco-edge-label[data-cawco-move] { pointer-events: auto; cursor: pointer; fill: var(--coral-11); }
+.cawco-edge-label[data-cawco-move] { pointer-events: auto; cursor: pointer; fill: var(--brand-ink); }
 .cawco-rig { position: fixed; inset-inline-start: -20000px; inset-block-start: 0; visibility: visible; pointer-events: none; }
-.cawco-dock-dials { position: fixed; inset-inline-end: var(--space-3); inset-block-start: var(--band, 96px); z-index: 2147483001; inline-size: 280px; }
-.cawco-dock-timeline { position: fixed; inset-inline: var(--space-3); inset-block-end: calc(var(--foot, 32px) + var(--space-2)); z-index: 2147483001; }
+/* The docks stand as chrome, never on each other: a move's timeline across the floor over the foot; on a desk the dials at the
+   inline end under the band, left of an open outline, above the timeline; on a phone the dials across the floor over the timeline. */
+.cawco-dock-timeline { position: fixed; inset-inline: var(--space-3); inset-block-end: calc(var(--foot) + var(--space-2)); z-index: 2147483001; }
+.cawco-dock-dials { position: fixed; z-index: 2147483001; overflow: auto; overscroll-behavior: contain;
+  inset-block-start: calc(var(--band) + var(--space-2)); inset-inline-end: calc(var(--cawco-outline) + var(--space-3)); inline-size: 280px;
+  max-block-size: calc(100dvh - var(--band) - var(--foot) - var(--cawco-floor) - var(--space-2) * 2); }
+/* On a phone the two docks share the floor and leave the canvas most of the screen: the dials at most a quarter of it, scrolling
+   inside; the timeline starts at a quarter too (Chrome.openMove), its height the person's after that, through DialKit's handle. */
+html[data-cawco-phone] .cawco-dock-dials { inset-block-start: auto; inset-inline: var(--space-3); inline-size: auto;
+  inset-block-end: calc(var(--foot) + var(--space-2) + var(--cawco-timeline-room)); max-block-size: 25dvh; }
 html[data-cawco-phone][data-cawco-current] .cawco-frame:not([data-cawco-shown]), html[data-cawco-phone] .cawco-colhead, html[data-cawco-phone][data-cawco-current] .cawco-section:not([data-cawco-shown]) { display: none; }
 `;
 
@@ -242,6 +265,37 @@ function bezierOf(easing: string): [number, number, number, number] {
 const BEZIER = /cubic-bezier\(([^)]+)\)/;
 const CLIP_NAME = /[^A-Za-z0-9_]/g;
 
+/**
+ * DialKit drawn in CawCo's own tokens (DESIGN.md: its theme follows ours),
+ * through its own custom properties, over its sheet's layer: every colour a
+ * token that follows the page's scheme live (light-dark()), the house faces,
+ * no weight past 500, our radii and shadows. The vendored file is untouched.
+ */
+const DIALKIT_THEME = `
+.dialkit-root {
+  --dial-surface: var(--surface-recess); --dial-surface-subtle: var(--surface-recess);
+  --dial-surface-hover: var(--surface-hover); --dial-surface-active: var(--surface-pressed);
+  --dial-text-root: var(--ink-strong); --dial-text-focus: var(--ink-strong); --dial-text-primary: var(--ink-strong);
+  --dial-text-section: var(--ink-muted); --dial-text-label: var(--ink-muted); --dial-text-secondary: var(--ink-muted);
+  --dial-text-tertiary: var(--ink-subtle);
+  --dial-border: var(--border-hairline); --dial-border-hover: var(--border-control); --dial-focus-ring: var(--focus-ring);
+  --dial-timeline-clip-overlay: transparent;
+  --dial-glass-bg: var(--surface-raised); --dial-dropdown-bg: var(--surface-raised); --dial-backdrop-blur: 0px;
+  --dial-radius: var(--radius-sm);
+  --dial-shadow: var(--shadow-md); --dial-shadow-collapsed: var(--shadow-xs); --dial-shadow-dropdown: var(--shadow-overlay);
+  font-family: var(--font-sans); color: var(--ink-strong);
+}
+.dialkit-root :is(.dialkit-folder-title, .dialkit-folder-title-root, .dialkit-shortcut-pill, .dialkit-shortcuts-title,
+  .dialkit-shortcuts-row-key, .dialkit-timeline-title, .dialkit-timeline-label, .dialkit-timeline-loop-infinity,
+  .dialkit-timeline-playhead-flag, .dialkit-timeline-popover-title) { font-weight: var(--weight-strong); }
+.dialkit-root :is(.dialkit-slider-value, .dialkit-slider-input, .dialkit-shortcuts-row-key) { font-family: var(--font-mono); font-variant-ligatures: none; }
+.dialkit-root .dialkit-toggle-thumb { background: var(--surface-lift); box-shadow: var(--shadow-raised); }
+/* DialKit fixes its timeline to the viewport's foot (12px up), over the canvas's foot and frames: it stands in our dock instead, above the foot. */
+.cawco-dock-timeline .dialkit-timeline { position: static; }
+.dialkit-root .dialkit-timeline-dock { border-radius: var(--radius-lg); }
+.dialkit-root .dialkit-toggle[data-checked="true"] .dialkit-toggle-track { background: var(--brand-solid); }
+`;
+
 /** DialKit's vanilla build, its stylesheet and nothing else, loaded once from the stage. */
 let dialKit: Promise<DialKitGlobal> | undefined;
 const loadDialKit = (): Promise<DialKitGlobal> => {
@@ -251,7 +305,8 @@ const loadDialKit = (): Promise<DialKitGlobal> => {
     ).text();
     const style = document.createElement("style");
     style.dataset.cawcoDialkit = "";
-    style.textContent = css;
+    // DialKit's sheet in a layer of its own under the page's: the theme below (unlayered) wins whatever its selectors.
+    style.textContent = `@layer dialkit {\n${css}\n}\n${DIALKIT_THEME}`;
     document.head.append(style);
     await new Promise<void>((done, fail) => {
       const script = document.createElement("script");
@@ -283,6 +338,10 @@ export class Chrome {
   #current: string | null = null;
   #timeline: TimelineHandle | null = null;
   #dock: HTMLElement | null = null;
+  /** DialKit's two roots, as their own handles: each takes the page's scheme its own way (scheme). */
+  #dialRoot: { element: HTMLElement } | null = null;
+  #timelineRoot: { update: (next: Record<string, unknown>) => void } | null =
+    null;
   /** Whether a look for the frame in view waits on the next frame; whether the page is a phone's; whether the dials stand. */
   readonly #flags: { dialed: boolean; pending: boolean; phone: boolean } = {
     dialed: false,
@@ -307,6 +366,8 @@ export class Chrome {
     const name = document.createElement("div");
     name.className = "name";
     name.textContent = options.spec.name ?? "Component canvas";
+    // In a panel (or the artifact's own tab) the host's head names the canvas: the band would say it twice.
+    name.hidden = window.top !== window;
     const about = document.createElement("div");
     about.className = "about";
     about.textContent = options.spec.about ?? "";
@@ -318,10 +379,6 @@ export class Chrome {
     const outlineButton = this.#button("Outline", () => {
       this.#outline.hidden = !this.#outline.hidden;
       outlineButton.setAttribute("aria-pressed", String(!this.#outline.hidden));
-      // The frame in view is marked while the outline stands open.
-      if (this.#current) {
-        this.current(this.#current);
-      }
     });
     outlineButton.setAttribute("aria-pressed", "false");
     outlineButton.title = "Outline: every section and frame (J and K step)";
@@ -348,8 +405,11 @@ export class Chrome {
       this.#steps,
       this.#foot
     );
-    // The head grows as the strip's chips wrap and the about line runs on: what stands under it follows.
-    new ResizeObserver(() => this.#measure()).observe(this.#head);
+    // What stands over the canvas (the head as its chips wrap, the foot, the outline, the docks) is measured as it changes size, and the canvas ends where it begins.
+    this.#measure();
+    this.#sizes.observe(this.#head);
+    this.#sizes.observe(this.#foot);
+    this.#sizes.observe(this.#outline);
     window.addEventListener("keydown", (event) => this.#key(event));
     this.#swipes();
   }
@@ -368,18 +428,61 @@ export class Chrome {
     return this.#flags.phone;
   }
 
-  /** The head's height, the band's and on a phone the strip's under it: where the world starts below it. */
+  /** The head's height, the band's and on a phone the strip's under it: where the canvas begins (`--band`). */
   top(): number {
-    return this.#head.getBoundingClientRect().height || 72;
+    return this.#head.getBoundingClientRect().height;
   }
 
-  /** The head's and the foot's heights, for what stands between them (the outline, the docks). */
+  /**
+   * The page's scheme turned (runtime's one subscription, scheme.ts): each
+   * DialKit root takes it its own way, the timeline's through its `update`,
+   * the dials' (which has none) on the attribute it reads.
+   */
+  scheme(scheme: PageScheme): void {
+    this.#timelineRoot?.update({ theme: scheme });
+    if (this.#dialRoot) {
+      this.#dialRoot.element.dataset.theme = scheme;
+    }
+  }
+
+  readonly #sizes = new ResizeObserver(() => this.#measure());
+
+  /**
+   * The room each piece of chrome standing over the canvas takes, so no
+   * frame is ever drawn under it: the head (`--band`) and the foot
+   * (`--foot`); at the floor over the foot, a move's timeline and a phone's
+   * dials (`--cawco-floor`, the timeline's own share `--cawco-timeline-room`
+   * for the dials stacked over it); at the inline end, a desk's open outline
+   * (`--cawco-outline`) and its dials beside it (`--cawco-end`).
+   */
   #measure(): void {
-    const band = this.top();
-    const foot = this.#foot.getBoundingClientRect().height || 32;
+    const px = (value: string) =>
+      Number.parseFloat(getComputedStyle(this.#host).getPropertyValue(value));
+    const gap = px("--space-2");
+    const inset = px("--space-3");
+    const box = (el: Element | null) =>
+      el?.getBoundingClientRect() ?? new DOMRect();
+    const timeline = box(document.getElementById("cawco-dock-timeline"));
+    const dials = box(document.getElementById("cawco-dock-dials"));
+    const outline = box(this.#outline);
+    const { phone } = this.#flags;
+    const timelineRoom = timeline.height > 0 ? timeline.height + gap : 0;
+    const dialsAtFloor = phone && dials.height > 0 ? dials.height + gap : 0;
+    const outlineWide = !phone && outline.width > 0 ? outline.width : 0;
+    const dialsAtEnd = !phone && dials.width > 0 ? dials.width + inset * 2 : 0;
+    const room: Record<string, number> = {
+      "--band": this.top(),
+      "--foot": box(this.#foot).height,
+      "--cawco-timeline-room": timelineRoom,
+      "--cawco-floor":
+        timelineRoom + dialsAtFloor + (timelineRoom || dialsAtFloor ? gap : 0),
+      "--cawco-outline": outlineWide,
+      "--cawco-end": outlineWide + dialsAtEnd,
+    };
     for (const el of [this.#host, document.documentElement]) {
-      el.style.setProperty("--band", `${band}px`);
-      el.style.setProperty("--foot", `${foot}px`);
+      for (const [name, value] of Object.entries(room)) {
+        el.style.setProperty(name, `${value}px`);
+      }
     }
   }
 
@@ -422,7 +525,14 @@ export class Chrome {
     this.#outline.replaceChildren();
     for (const section of this.#o.sections()) {
       const head = document.createElement("h3");
-      head.textContent = section.mod?.SHEET.meta.title ?? section.file;
+      const title = section.mod?.SHEET.meta.title;
+      if (title) {
+        head.textContent = title;
+      } else {
+        const file = document.createElement("code");
+        file.textContent = section.file;
+        head.append(file);
+      }
       this.#outline.append(head);
       if (!section.loaded) {
         const row = document.createElement("button");
@@ -472,7 +582,7 @@ export class Chrome {
       this.#flags.pending = false;
       const box = this.#o.canvas.getBoundingClientRect();
       const cx = box.x + box.width / 2;
-      const cy = box.y + (box.height + this.top()) / 2;
+      const cy = box.y + box.height / 2;
       let best: { key: string; d: number } | null = null;
       for (const one of this.#frames()) {
         const el = one.section.frames.get(one.key)?.el;
@@ -504,10 +614,8 @@ export class Chrome {
     }
     for (const section of this.#o.sections()) {
       for (const frame of section.frames.values()) {
-        frame.el.toggleAttribute(
-          "data-cawco-current",
-          frame.key === key && this.#current !== null && this.#outlineOpen()
-        );
+        // Always marked: the crumb's "Frame N of M" points at it.
+        frame.el.toggleAttribute("data-cawco-current", frame.key === key);
         frame.el.toggleAttribute("data-cawco-shown", frame.key === key);
       }
       section.el.toggleAttribute("data-cawco-shown", one?.section === section);
@@ -515,31 +623,28 @@ export class Chrome {
     if (!one) {
       return;
     }
+    // The crumb says the one thing nothing else on screen does: which of
+    // the frames J and K stand on. Its sheet, story and state are the
+    // section head's, the label's and the column's (the picker's and the
+    // chips' on a phone); a reader hears them with it.
     const frame = one.section.frames.get(key);
-    const title = one.section.mod?.SHEET.meta.title ?? one.section.file;
-    this.#crumb.replaceChildren();
-    const parts = [
-      title,
+    const all = this.#frames();
+    const at = all.findIndex((each) => each.key === key) + 1;
+    const place = document.createElement("span");
+    place.className = "num";
+    place.textContent = `Frame ${at} of ${all.length}`;
+    const said = document.createElement("span");
+    said.className = "said";
+    said.textContent = `: ${[
+      one.section.mod?.SHEET.meta.title ?? one.section.file,
       frame?.story.label ?? frame?.story.name ?? "",
       frame?.column.interaction ?? "",
-    ];
-    // A frame drawn in a scheme of its own, not the page's, says which.
-    if (frame && frame.column.scheme !== "page") {
-      parts.push(frame.column.scheme);
-    }
-    parts.forEach((part, at) => {
-      if (at > 0) {
-        this.#crumb.append(" › ");
-      }
-      const b = document.createElement(at === 1 ? "b" : "span");
-      b.textContent = part;
-      this.#crumb.append(b);
-    });
+      frame && frame.column.scheme !== "page" ? frame.column.scheme : "",
+    ]
+      .filter(Boolean)
+      .join(", ")}`;
+    this.#crumb.replaceChildren(place, said);
     this.#phoneStrip();
-  }
-
-  #outlineOpen(): boolean {
-    return !this.#outline.hidden;
   }
 
   /** J and K step through the frames; nothing while a field has the keys. */
@@ -776,7 +881,32 @@ export class Chrome {
     });
   }
 
-  /** The dock DialKit draws into, made once, in the page (DialKit's own CSS is scoped to its classes). */
+  /**
+   * DialKit starts its timeline 400px tall and keeps its height inline, the
+   * person's to change with its resize handle (a separator that steps 20px
+   * on each arrow key): on a phone it starts at `most` instead, stepped down
+   * through that same handle, so the person can still make it taller.
+   */
+  #timelineStartsAt(dock: HTMLElement, most: number): void {
+    const handle = dock.querySelector<HTMLElement>(
+      ".dialkit-timeline-resize-handle"
+    );
+    const inner = dock.querySelector<HTMLElement>(".dialkit-timeline-dock");
+    if (!(handle && inner)) {
+      return;
+    }
+    const now = Number.parseFloat(getComputedStyle(inner).maxHeight);
+    const steps = Number.isFinite(now)
+      ? Math.max(0, Math.ceil((now - most) / TIMELINE_STEP))
+      : 0;
+    for (let step = 0; step < steps; step += 1) {
+      handle.dispatchEvent(
+        new KeyboardEvent("keydown", { key: "ArrowDown", bubbles: true })
+      );
+    }
+  }
+
+  /** The dock DialKit draws into, made once, in the page (DialKit's own CSS is scoped to its classes); its size takes its room from the canvas. */
   #dockOf(kind: "dials" | "timeline"): HTMLElement {
     const id = `cawco-dock-${kind}`;
     let dock = document.getElementById(id);
@@ -785,6 +915,7 @@ export class Chrome {
       dock.id = id;
       dock.className = `cawco-dock-${kind}`;
       document.body.append(dock);
+      this.#sizes.observe(dock);
     }
     return dock;
   }
@@ -804,11 +935,13 @@ export class Chrome {
     this.#timeline?.destroy();
     if (!this.#dock) {
       this.#dock = this.#dockOf("timeline");
-      kit.createDialTimelineRoot({
+      this.#timelineRoot = kit.createDialTimelineRoot({
         target: this.#dock,
-        theme:
-          document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+        theme: pageScheme(),
       });
+      if (this.#flags.phone) {
+        this.#timelineStartsAt(this.#dock, window.innerHeight / 4);
+      }
     }
     const clips: Record<string, unknown> = {};
     const names = played.replays.map((one, at) => {
@@ -830,11 +963,26 @@ export class Chrome {
       return name;
     });
     const move = `${played.move.from} → ${played.move.to}`;
-    const timeline = kit.createDialTimeline(move, clips, {
-      autoplay: false,
-      id: `move:${file}|${to}`,
-    });
+    const timeline = kit.createDialTimeline(
+      `${played.move.from} to ${played.move.to}`,
+      clips,
+      {
+        autoplay: false,
+        id: `move:${file}|${to}`,
+      }
+    );
     this.#timeline = timeline;
+    // The canvas has just given the timeline its room: the move's frame is shown in what is left.
+    this.#measure();
+    const shown = this.#frames().find(
+      (one) =>
+        one.section.file === file &&
+        one.section.frames.get(one.key)?.story.name === to &&
+        one.section.frames.get(one.key)?.column.interaction === "rest"
+    );
+    if (shown) {
+      this.#o.go(shown.key);
+    }
     let kept: ReturnType<typeof setTimeout> | undefined;
     timeline.subscribe((values) => {
       const tuned = kit.DialStore.getValues(timeline.id);
@@ -903,11 +1051,10 @@ export class Chrome {
   async #dials(dials: CanvasDial[]): Promise<void> {
     const kit = await loadDialKit();
     const dock = this.#dockOf("dials");
-    kit.createDialRoot({
+    this.#dialRoot = kit.createDialRoot({
       mode: "inline",
       target: dock,
-      theme:
-        document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+      theme: pageScheme(),
     });
     const config: Record<string, unknown> = {};
     const first = document.querySelector<HTMLElement>(".cawco-frame-body");

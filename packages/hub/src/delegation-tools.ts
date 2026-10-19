@@ -1323,7 +1323,7 @@ export function handoffTools(deps: HandoffDeps) {
  * non-deferred so Claude can call them without searching first"
  * (platform.claude.com/docs/en/agents-and-tools/tool-use/tool-search-tool).
  */
-export const ALWAYS_LOAD: ReadonlySet<string> = new Set([
+const ALWAYS_LOAD: ReadonlySet<string> = new Set([
   "delegate",
   "handoff",
   "finish_item",
@@ -1332,12 +1332,27 @@ export const ALWAYS_LOAD: ReadonlySet<string> = new Set([
 ]);
 
 /**
+ * `find` (find-tool.ts) loads upfront too for the sessions that search most,
+ * an orchestrator and a project's Caw (roles.ts `memoryRoleOf`): the owner
+ * saw the orchestrator grep transcripts and query the hub's database for
+ * what a session said, with the dashboard's own search a tool away
+ * (2026-10-19). Every other session finds it by the deferred groups' first
+ * line ({@link DEFERRED_GROUPS}).
+ */
+export const loadsUpfront = (name: string, searcher: boolean): boolean =>
+  ALWAYS_LOAD.has(name) || (searcher && name === "find");
+
+/**
  * The deferred groups by prefix, as the server's instructions name them:
  * "Use consistent namespacing … so one search matches the whole group" and
  * "Add a system prompt section describing available tool categories"
  * (tool-search-tool docs).
  */
 const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
+  {
+    prefixes: ["find"],
+    what: "anything said or made, as the dashboard's Find finds it; search it before reading transcripts, files or the database",
+  },
   { prefixes: ["admin_"], what: "fleet configuration" },
   { prefixes: ["task_"], what: "project tasks" },
   {
@@ -1378,6 +1393,8 @@ export interface Listable {
   inProject: ReadonlySet<string>;
   names: readonly string[];
   outsideProject: ReadonlySet<string>;
+  /** The names Claude loads upfront for this session ({@link loadsUpfront}). */
+  upfront: ReadonlySet<string>;
 }
 
 /** Where a name, or a group of them, is listed, when only on one side. */
@@ -1398,8 +1415,8 @@ const sideOf = (members: readonly string[], listable: Listable): string => {
  */
 const loadingLine = (listable: Listable): string => {
   const { names } = listable;
-  const upfront = names.filter((name) => ALWAYS_LOAD.has(name));
-  const deferred = names.filter((name) => !ALWAYS_LOAD.has(name));
+  const upfront = names.filter((name) => listable.upfront.has(name));
+  const deferred = names.filter((name) => !listable.upfront.has(name));
   const grouped = new Set<string>();
   const groups = DEFERRED_GROUPS.flatMap(({ prefixes, what }) => {
     const members = deferred.filter((name) =>

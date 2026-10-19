@@ -1,16 +1,16 @@
 # Card recipes
 
-Every card is an `<article class="dp-card" id="<id>">`. The bridge does the picking: a click on a `[data-option]` inside a `[data-cawco-choice]` stores the pick in the hub and the hub's answer marks it (`data-cawco-picked`, `aria-pressed`). `kit/page.js` keeps the progress, each card's state line and notes in step. Copy is calm, short and sentence case; option labels are what the person gets, not "Option A".
+Every card is one question of the interview (SKILL.md, The card): an `<article class="dp-card" id="<id>">`, its why the reason for the one Recommended, each option's line what it gets and its `.dp-cost` what it costs. The bridge does the picking: a click on a `[data-option]` inside a `[data-cawco-choice]` stores the pick in the hub and the hub's answer marks it (`data-cawco-picked`, `aria-pressed`). `kit/page.js` keeps the progress, each card's state line and notes in step. Copy is calm, short and sentence case; option labels are what the person gets, not "Option A".
 
 ## One pick
 
 ```html
 <article class="dp-card" id="lead">
   <header><h2>Who leads the project?</h2><span class="dp-state" data-dp-state="lead">Not picked</span></header>
-  <p class="dp-why">Today: you write every brief.</p>
+  <p class="dp-why">Caw keeps the board moving while you are away.</p>
   <div class="dp-opts" data-cawco-choice="lead" role="group" aria-label="Who leads the project">
-    <button class="dp-opt" type="button" data-option="you"><b>You</b><span>You write every brief.</span></button>
-    <button class="dp-opt" type="button" data-option="caw"><b>Caw, woken by events</b><span>Board tools, no edit tools.</span><span class="dp-tag">Recommended</span></button>
+    <button class="dp-opt" type="button" data-option="you"><b>You</b><span>Every brief in your words.</span><span class="dp-cost">Cost: nothing moves while you are away.</span></button>
+    <button class="dp-opt" type="button" data-option="caw"><b>Caw, woken by events</b><span>Board tools, no edit tools.</span><span class="dp-cost">Cost: you review its briefs after the fact.</span><span class="dp-tag">Recommended</span></button>
   </div>
   <label class="dp-note">Note<textarea data-dp-note="lead" rows="1" placeholder="Anything to add"></textarea></label>
 </article>

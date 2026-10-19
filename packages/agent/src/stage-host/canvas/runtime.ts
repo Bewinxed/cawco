@@ -51,6 +51,7 @@ import {
   type Rewrite,
   rewriteSheet,
 } from "./pseudo";
+import { onPageScheme, pageScheme } from "./scheme";
 
 /** What the adapter is handed for one story (Storybook's `decorateStory` inputs). */
 export interface MountSpec {
@@ -479,17 +480,9 @@ export function boot(options: BootOptions): void {
     return `${preset ?? "width"} ${width}`;
   };
 
-  /** A frame's scheme: its column's, or the page's own (the host's theme, else the system's). */
-  const schemeOf = (column: Column): Scheme => {
-    if (column.scheme !== "page") {
-      return column.scheme;
-    }
-    const { theme } = document.documentElement.dataset;
-    if (theme) {
-      return theme === "dark" ? "dark" : "light";
-    }
-    return media("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  };
+  /** A frame's scheme: its column's, or the page's own (scheme.ts: the host's theme, else the system's). */
+  const schemeOf = (column: Column): Scheme =>
+    column.scheme === "page" ? pageScheme() : column.scheme;
 
   /**
    * A frame's small line: its story's name where the label above it says
@@ -1357,11 +1350,14 @@ export function boot(options: BootOptions): void {
     "wheel",
     (event) => {
       event.preventDefault();
+      letGo();
       if (event.ctrlKey || event.metaKey) {
+        // The world's translate is the canvas's own: the pointer measured from the canvas's corner, which stands under the head.
+        const box = canvas.getBoundingClientRect();
         zoomAt(
           zoom.z * Math.exp(-event.deltaY * 0.01),
-          event.clientX,
-          event.clientY
+          event.clientX - box.x,
+          event.clientY - box.y
         );
       } else {
         zoom.x -= event.shiftKey ? event.deltaY : event.deltaX;
@@ -1378,6 +1374,7 @@ export function boot(options: BootOptions): void {
     if (canvas.scrollTop === 0 && canvas.scrollLeft === 0) {
       return;
     }
+    letGo();
     zoom.x -= canvas.scrollLeft;
     zoom.y -= canvas.scrollTop;
     canvas.scrollTop = 0;
@@ -1442,6 +1439,7 @@ export function boot(options: BootOptions): void {
       }
       drawEdges();
     } else {
+      letGo();
       zoom.x = drag.ox + dx;
       zoom.y = drag.oy + dy;
       place();
@@ -1484,33 +1482,76 @@ export function boot(options: BootOptions): void {
     drawEdges();
   };
 
-  /** Brings a frame to the middle of the view at the zoom it has. */
-  const go = (key: string) => {
-    const el = world.querySelector<HTMLElement>(
-      `[data-cawco-key="${CSS.escape(key)}"]`
-    );
-    if (!el) {
-      return;
+  /**
+   * An element's box in the world's own coordinates, before the world's
+   * transform: its layout offsets up to the world, and a frame's drag
+   * (`translate`). Unlike a screen rect it is the same whatever the world's
+   * transform is now, or is animating through.
+   */
+  const worldBox = (el: HTMLElement) => {
+    let x = 0;
+    let y = 0;
+    for (
+      let at: HTMLElement | null = el;
+      at && at !== world;
+      at = at.offsetParent as HTMLElement | null
+    ) {
+      x += at.offsetLeft;
+      y += at.offsetTop;
     }
+    const dragged = moved[el.dataset.cawcoKey ?? ""] ?? [0, 0];
+    return {
+      x: x + dragged[0],
+      y: y + dragged[1],
+      w: el.offsetWidth,
+      h: el.offsetHeight,
+    };
+  };
+
+  /**
+   * The frame `go` last showed while the view is still where it put it; the
+   * person's own pan or zoom lets it go. While it is held, it is shown again
+   * as its box changes (its component mounting, the faces arriving, the
+   * scheme re-dressing it), so where it stands never depends on when.
+   */
+  let held: { key: string; el: HTMLElement } | null = null;
+  const holding = new ResizeObserver(() => {
+    if (held?.el.isConnected) {
+      show(held.key, held.el, false);
+    }
+  });
+  const letGo = () => {
+    held = null;
+    holding.disconnect();
+  };
+
+  /** Places the world so frame `el` stands in the middle of the view, from its world box alone: the same at any moment for the same frame and view. */
+  const show = (key: string, el: HTMLElement, animate: boolean) => {
     const from = world.style.transform;
-    const bounds = canvas.getBoundingClientRect();
+    const width = canvas.clientWidth;
+    const height = canvas.clientHeight;
+    const own = worldBox(el);
     if (chrome.phone()) {
       // One frame at a time, as wide as the screen lets it be, never past its own size.
-      const own = el.getBoundingClientRect().width / zoom.z;
       zoom.z = Math.max(
         ZOOM_MIN,
-        Math.min(1, (bounds.width - 24) / Math.max(1, own))
+        Math.min(1, (width - 24) / Math.max(1, own.w))
       );
-      place();
     }
-    const box = el.getBoundingClientRect();
-    zoom.x += bounds.x + bounds.width / 2 - (box.x + box.width / 2);
-    zoom.y +=
-      bounds.y +
-      Math.min(bounds.height / 2, chrome.top() + box.height / 2 + 24) -
-      (box.y + box.height / 2);
+    // On a phone the frame stands alone in its section: it is shown with its section's head, which names its sheet.
+    const headEl = chrome.phone()
+      ? el
+          .closest(".cawco-section")
+          ?.querySelector<HTMLElement>(".cawco-section-head")
+      : null;
+    const top = headEl ? Math.min(worldBox(headEl).y, own.y) : own.y;
+    const box = { x: own.x, y: top, w: own.w, h: own.y + own.h - top };
+    zoom.x = width / 2 - (box.x + box.w / 2) * zoom.z;
+    zoom.y =
+      Math.min(height / 2, WORLD_INSET.y + (box.h * zoom.z) / 2) -
+      (box.y + box.h / 2) * zoom.z;
     place();
-    if (!media("(prefers-reduced-motion: reduce)").matches) {
+    if (animate && !media("(prefers-reduced-motion: reduce)").matches) {
       world.animate(
         [{ transform: from }, { transform: world.style.transform }],
         {
@@ -1520,6 +1561,30 @@ export function boot(options: BootOptions): void {
       );
     }
     chrome.current(key);
+    // On a phone the frame shown changed: its edges are drawn again, to frames now drawn only.
+    drawEdges();
+  };
+
+  /** Brings a frame to the middle of the view, and holds it there until the person moves the view. */
+  const go = (key: string) => {
+    const el = world.querySelector<HTMLElement>(
+      `[data-cawco-key="${CSS.escape(key)}"]`
+    );
+    if (!el) {
+      return;
+    }
+    letGo();
+    show(key, el, true);
+    held = { key, el };
+    holding.observe(el);
+    // The canvas resizing (a dock taking its room, the pane resized) shows it again too.
+    holding.observe(canvas);
+    const headEl = el
+      .closest(".cawco-section")
+      ?.querySelector<HTMLElement>(".cawco-section-head");
+    if (headEl) {
+      holding.observe(headEl);
+    }
   };
 
   /* --- Edges: moves always, the agent's own when it sent them ---------- */
@@ -1563,9 +1628,10 @@ export function boot(options: BootOptions): void {
             from,
             to,
             kind: "move",
+            // The arrow is the edge's own marker: the words name the two ends.
             label: fired
-              ? `${move.from} → ${move.to} · ${fired.animations.length} animation${fired.animations.length === 1 ? "" : "s"}`
-              : `${move.from} → ${move.to}`,
+              ? `${move.from} to ${move.to} · ${fired.animations.length} animation${fired.animations.length === 1 ? "" : "s"}`
+              : `${move.from} to ${move.to}`,
             file: section.file,
             story: move.to,
           });
@@ -1586,6 +1652,46 @@ export function boot(options: BootOptions): void {
         lines.push({ from, to, kind: "group", label: "" });
       }
     }
+    edges.replaceChildren();
+    edges.innerHTML = `<defs><marker id="cawco-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>`;
+    // An end not drawn (a phone shows one frame) has no box: no edge is drawn to it.
+    const drawn = lines.filter((line) =>
+      [line.from, line.to].every((el) => {
+        const box = el.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+      })
+    );
+    // Every edge joins two stories' rest frames, and a rest frame stands in
+    // its section's first column: so every edge runs in the world's left
+    // gutter, out of its frame's left side, along a lane of its own and into
+    // the other's, crossing no frame whatever the grid; its label stands in
+    // the gutter too, left of every lane. The labels' widths set the gutter.
+    const svg = "http://www.w3.org/2000/svg";
+    const texts = drawn.map((line) => {
+      if (!line.label) {
+        return null;
+      }
+      const text = document.createElementNS(svg, "text");
+      text.classList.add("cawco-edge-label");
+      text.setAttribute("text-anchor", "end");
+      text.textContent = line.label;
+      if (line.kind === "move") {
+        text.dataset.cawcoMove = `${line.file}|${line.story}`;
+      }
+      edges.append(text);
+      return text;
+    });
+    const widest = Math.max(
+      0,
+      ...texts.map((text) => text?.getComputedTextLength() ?? 0)
+    );
+    const lanesWide =
+      drawn.length > 0 ? EDGE_OUT + EDGE_LANE * (drawn.length - 1) : 0;
+    const gutter =
+      drawn.length > 0
+        ? Math.ceil(lanesWide + (widest > 0 ? EDGE_LABEL_GAP * 2 + widest : 0))
+        : 0;
+    world.style.setProperty("--cawco-gutter", `${gutter}px`);
     const origin = world.getBoundingClientRect();
     const local = (rect: DOMRect) => ({
       x: (rect.x - origin.x) / zoom.z,
@@ -1593,35 +1699,32 @@ export function boot(options: BootOptions): void {
       w: rect.width / zoom.z,
       h: rect.height / zoom.z,
     });
-    edges.replaceChildren();
-    edges.innerHTML = `<defs><marker id="cawco-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>`;
-    for (const line of lines) {
-      const a = local(line.from.getBoundingClientRect());
-      const b = local(line.to.getBoundingClientRect());
-      const across =
-        Math.abs(b.x + b.w / 2 - (a.x + a.w / 2)) >=
-        Math.abs(b.y + b.h / 2 - (a.y + a.h / 2));
-      let start: [number, number];
-      let end: [number, number];
-      if (across) {
-        const right = b.x > a.x;
-        start = [right ? a.x + a.w : a.x, a.y + a.h / 2];
-        end = [right ? b.x : b.x + b.w, b.y + b.h / 2];
-      } else {
-        const down = b.y > a.y;
-        start = [a.x + a.w / 2, down ? a.y + a.h : a.y];
-        end = [b.x + b.w / 2, down ? b.y : b.y + b.h];
-      }
-      const bend = across
-        ? [(end[0] - start[0]) / 2, 0]
-        : [0, (end[1] - start[1]) / 2];
-      const path = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "path"
-      );
+    const labelsEnd = gutter - lanesWide - EDGE_LABEL_GAP;
+    let below = Number.NEGATIVE_INFINITY;
+    const placed = drawn
+      .map((line, lane) => {
+        const a = local(line.from.getBoundingClientRect());
+        const b = local(line.to.getBoundingClientRect());
+        return { line, lane, a, b, words: texts[lane] ?? null };
+      })
+      .sort((one, two) => (one.a.y + one.b.y) / 2 - (two.a.y + two.b.y) / 2);
+    for (const { line, lane, a, b, words } of placed) {
+      const x = gutter - EDGE_OUT - EDGE_LANE * lane;
+      const fromY = a.y + a.h / 2;
+      const toY = b.y + b.h / 2;
+      const turn = Math.min(EDGE_TURN, Math.abs(toY - fromY) / 2);
+      const down = toY >= fromY ? 1 : -1;
+      const path = document.createElementNS(svg, "path");
       path.setAttribute(
         "d",
-        `M${start[0]} ${start[1]} C${start[0] + (bend[0] as number)} ${start[1] + (bend[1] as number)} ${end[0] - (bend[0] as number)} ${end[1] - (bend[1] as number)} ${end[0]} ${end[1]}`
+        [
+          `M${a.x} ${fromY}`,
+          `H${x + turn}`,
+          `Q${x} ${fromY} ${x} ${fromY + down * turn}`,
+          `V${toY - down * turn}`,
+          `Q${x} ${toY} ${x + turn} ${toY}`,
+          `H${b.x}`,
+        ].join(" ")
       );
       path.classList.add("cawco-edge", `cawco-edge-${line.kind}`);
       if (line.kind !== "group") {
@@ -1631,28 +1734,17 @@ export function boot(options: BootOptions): void {
       path.dataset.cawcoTo = line.to.dataset.cawcoKey ?? "";
       if (line.kind === "move") {
         path.dataset.cawcoMove = `${line.file}|${line.story}`;
-        const title = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "title"
-        );
+        const title = document.createElementNS(svg, "title");
         title.textContent = `${line.label}: open its timeline`;
         path.append(title);
       }
       edges.append(path);
-      if (line.label) {
-        const text = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "text"
-        );
-        text.classList.add("cawco-edge-label");
-        text.setAttribute("x", String((start[0] + end[0]) / 2));
-        text.setAttribute("y", String((start[1] + end[1]) / 2 - 6));
-        text.setAttribute("text-anchor", "middle");
-        text.textContent = line.label;
-        if (line.kind === "move") {
-          text.dataset.cawcoMove = `${line.file}|${line.story}`;
-        }
-        edges.append(text);
+      if (words) {
+        // At its lane's middle, below the label above it where two would meet.
+        const y = Math.max((fromY + toY) / 2 + 4, below + EDGE_LABEL_LINE);
+        below = y;
+        words.setAttribute("x", String(labelsEnd));
+        words.setAttribute("y", String(y));
       }
     }
   }
@@ -1769,10 +1861,11 @@ export function boot(options: BootOptions): void {
       }
     }
     if (next.zoom === "fit") {
+      letGo();
       fit();
     } else if (typeof next.zoom === "number") {
-      const box = canvas.getBoundingClientRect();
-      zoomAt(next.zoom, box.width / 2, box.height / 2);
+      letGo();
+      zoomAt(next.zoom, canvas.clientWidth / 2, canvas.clientHeight / 2);
     }
     chrome.view(view);
     later();
@@ -1795,8 +1888,8 @@ export function boot(options: BootOptions): void {
     const box = canvas.getBoundingClientRect();
     const width = world.scrollWidth || box.width;
     zoom.z = Math.max(ZOOM_MIN, Math.min(1, (box.width - 48) / width));
-    zoom.x = 24;
-    zoom.y = chrome.top() + 16;
+    zoom.x = WORLD_INSET.x;
+    zoom.y = WORLD_INSET.y;
     place();
   };
 
@@ -1846,6 +1939,19 @@ export function boot(options: BootOptions): void {
     world: () => zoom,
   });
 
+  // The page's scheme turned (the host's theme, or the system's): every frame drawn in it, and the chrome's DialKit, follow.
+  onPageScheme((scheme) => {
+    for (const section of sections) {
+      for (const frame of section.frames.values()) {
+        if (frame.column.scheme === "page") {
+          dress(frame);
+        }
+      }
+    }
+    chrome.scheme(scheme);
+    later();
+  });
+
   bridge()?.on("picks", (picks) => {
     const layout = picks.layout?.value;
     if (layout && typeof layout === "object" && !drag) {
@@ -1889,13 +1995,31 @@ export function boot(options: BootOptions): void {
     world: () => ({ ...zoom }),
   };
   window.__cawcoCanvas = canvasState;
-  zoom.y = chrome.top() + 16;
-  zoom.x = 24;
+  zoom.x = WORLD_INSET.x;
+  zoom.y = WORLD_INSET.y;
   place();
   chrome.layout();
 }
 
+/**
+ * Where the world stands from the canvas's corner when fitted, and the
+ * least a frame shown by `go` keeps from its top. The canvas begins under
+ * the head (chrome.ts PAGE_CSS), so this is room from the head's foot.
+ */
+const WORLD_INSET = { x: 24, y: 16 };
+
 /** `file:Story`: the colon before the story's name. */
 const LAST_COLON = /:(?=[^:]+$)/;
+/**
+ * The edges' gutter, on DESIGN.md's spacing ladder: a lane's first stands
+ * 18px out from the frames, each next one 7px further, its corners turn on
+ * a 7px radius, the labels stand 7px clear of the lanes, a line (16px, the
+ * meta role's) apart where two would meet.
+ */
+const EDGE_OUT = 18;
+const EDGE_LANE = 7;
+const EDGE_TURN = 7;
+const EDGE_LABEL_GAP = 7;
+const EDGE_LABEL_LINE = 16;
 const BODY_RULE = /(^|,)\s*(body|html|:root)\s*(,|$)/;
 const REDUCED_QUERY = /prefers-reduced-motion/;

@@ -185,7 +185,7 @@ import type { Tasks } from "./tasks";
  * 2026-10-16/17). About 60 tokens for the delegate (7,392 measured), the
  * words already cut twice. Raised deliberately for the delegate; the
  * worker's and the lead's fit as they stand.
- * 2026-10-18: `memory_recall` (session-prose.ts), the owner's pick of the
+ * 2026-10-18: `memory_recall` (since replaced by `find`), the owner's pick of the
  * memory upgrade ("core and session search"): "have we tried this before",
  * answered from a project's past sessions, for the worker, the delegate and
  * the lead. memory_note gains `since`, memory_propose takes `files` and
@@ -221,11 +221,20 @@ import type { Tasks } from "./tasks";
  * 26,577, delegate 8,956, lead 17,533 measured beside the decision
  * programs, memory_recall and discard_workspace). Raised deliberately, by
  * that, for each.
+ * 2026-10-19: `find` (find-tool.ts) in place of `memory_recall`, the owner's
+ * ask ("why not give yourself the tool to do this?"): the dashboard's Find
+ * as a tool, every kind it finds across the fleet, narrowed by project,
+ * machine, since and who said it, paged, with `around` to read a hit's
+ * turns. One tool where there was one; its description cut to what it finds
+ * and when to reach for it, each parameter to a few words, the kinds the
+ * engine's own enum. About 233 tokens more than memory_recall's for the
+ * worker, the delegate and the lead (worker 26,810, delegate 9,189, lead
+ * 17,766 measured). Raised deliberately, by that, for each.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 26_580,
-  delegate: 8960,
-  lead: 17_540,
+  worker: 26_820,
+  delegate: 9200,
+  lead: 17_780,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
@@ -396,7 +405,6 @@ export const measureRoles = (): RoleSize[] => {
         folderChanged: () => undefined,
         notice: () => undefined,
         park: () => undefined,
-        recall: () => Promise.reject(new Error("measuring")),
         settle: () => undefined,
         threadOf: () => undefined,
         watch: createTurnWatch({
@@ -438,6 +446,7 @@ export const measureRoles = (): RoleSize[] => {
       askPerson: () => Promise.reject(new Error("measuring")),
       designVerdict: () => Promise.reject(new Error("measuring")),
       designWrite: () => Promise.reject(new Error("measuring")),
+      find: () => Promise.reject(new Error("measuring")),
       machineIds: () => [],
       pairing: () => false,
     }),

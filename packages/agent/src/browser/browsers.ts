@@ -4,7 +4,8 @@
  * runtime is looked for as the agent starts and every 10 minutes while any
  * browser is local, so an install is found without a restart; a local
  * browser moves into a container at its next start (its sign-ins start over
- * there). A move leaves nothing of the host it left: the local profile is
+ * there). A browser takes its ports as it first starts, not as it is
+ * reserved. A move leaves nothing of the host it left: the local profile is
  * deleted, and the container with its volume is removed, at once, or, when
  * the move was the runtime going away, as soon as it answers again. A
  * browser stops after 30 minutes with no agent connection and no viewer, its
@@ -12,9 +13,10 @@
  * whole list on each change ({@link BrowserFrame}); `cawco browser` acts on
  * the same records from a terminal.
  *
- * The daemon serves each browser's DevTools gate (gate.ts) on the browser's
- * gate port, for every browser it keeps a record of, asleep ones too: a
- * session's browser tool connecting wakes its browser (with the stream relay
+ * The daemon serves the machine's DevTools gate (gate.ts) on its one port
+ * (`BROWSER_GATE_PORT`), with a gate behind it for every browser it keeps a
+ * record of, asleep ones and ones only reserved for a session's browser tool
+ * too: a session's browser tool connecting wakes its browser (with the stream relay
  * the hub last gave it), and holds it awake while connected. It watches the
  * records' dir, so a browser `cawco browser` starts has its gate as its
  * record is written, and one it removes has none.
@@ -25,7 +27,6 @@ import { join } from "node:path";
 import type {
   BrowserFrame,
   BrowserKey,
-  BrowserPorts,
   BrowserRelay,
   BrowserRow,
   BrowserRuntime,
@@ -34,7 +35,7 @@ import type {
 import { isBrowserKey } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { ContainerHost, RELAY_RENEW_MS } from "./container-host";
-import { gateOf, servedGates, serveGate, stopGate } from "./gate";
+import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
 import { findRuntime, type Runtime } from "./runtime";
 import {
@@ -48,6 +49,7 @@ import {
   portsOf,
   readBrowser,
   recordFor,
+  slotted,
   withBrowser,
   writeBrowser,
 } from "./state";
@@ -123,7 +125,7 @@ const rowOf = (record: BrowserRecord): BrowserRow => {
     host: record.host,
     state: now?.state ?? record.state,
     ...(now?.progress ? { progress: now.progress } : {}),
-    ports: portsOf(record),
+    ...(record.slot === undefined ? {} : { ports: portsOf(record) }),
     lastUsedAt: record.lastUsedAt,
     viewers: 0,
     takeover: record.takeover,
@@ -133,7 +135,13 @@ const rowOf = (record: BrowserRecord): BrowserRow => {
 
 /** Every browser of the machine as its records say. */
 export const browserRows = async (): Promise<BrowserRow[]> =>
-  (await allBrowsers()).sort((a, b) => a.slot - b.slot).map(rowOf);
+  (await allBrowsers())
+    .sort(
+      (a, b) =>
+        (a.slot ?? Number.POSITIVE_INFINITY) -
+        (b.slot ?? Number.POSITIVE_INFINITY)
+    )
+    .map(rowOf);
 
 /** Tells the hub the runtime and every browser, when anything of it changed. */
 const tell = async (): Promise<void> => {
@@ -161,8 +169,6 @@ const why = (error: unknown): string =>
 
 /** Whether this process serves the gates: the daemon's, never a terminal's. */
 let servingGates = false;
-/** Why a gate did not listen, by key, said once until it does. */
-const gateFailed = new Map<BrowserKey, string>();
 
 /** Writes `key`'s last use as now: a gate connection opened or closed. */
 const used = (key: BrowserKey): void => {
@@ -213,31 +219,17 @@ const devtoolsOf = async (
     : undefined;
 };
 
-/** Serves `record`'s gate on its gate port, when this process serves gates. */
+/** Serves `record`'s gate behind the machine's one gate port, when this process serves gates. */
 const gateFor = (record: BrowserRecord): void => {
   if (!servingGates) {
     return;
   }
   const { key } = record;
-  const port = portsOf(record).gate;
-  try {
-    serveGate({
-      key,
-      port,
-      machineId: () => machineId,
-      devtools: (wake) => devtoolsOf(key, wake),
-      used: () => used(key),
-    });
-    gateFailed.delete(key);
-  } catch (error) {
-    const said = why(error);
-    if (gateFailed.get(key) !== said) {
-      gateFailed.set(key, said);
-      console.warn(
-        `[browser] ${key}'s gate does not listen on 127.0.0.1:${port}: ${said}`
-      );
-    }
-  }
+  serveGate({
+    key,
+    devtools: (wake) => devtoolsOf(key, wake),
+    used: () => used(key),
+  });
 };
 
 /** Every record's gate served, and the gate of a browser no record keeps any more stopped. */
@@ -357,6 +349,7 @@ export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
     if (relay) {
       record = { ...record, relay };
     }
+    record = await slotted(record);
     if (
       record.state === "live" &&
       (await host.running(record)) &&
@@ -438,16 +431,13 @@ const reserved = async (key: BrowserKey): Promise<BrowserRecord> => {
 };
 
 /**
- * `key`'s record, and so its ports, kept, and its gate served, starting no
- * browser: what a session's browser tool is launched toward (door.ts). The
- * gate wakes the browser as the tool first connects.
+ * `key`'s record kept, and its gate served behind the machine's gate port,
+ * starting no browser and taking no ports: what a session's browser tool is
+ * launched toward (door.ts). The gate wakes the browser as the tool first
+ * connects, and the browser takes its ports then.
  */
-export const reserveBrowser = async (
-  key: BrowserKey
-): Promise<BrowserPorts> => {
-  const record = await reserved(key);
-  gateFor(record);
-  return portsOf(record);
+export const reserveBrowser = async (key: BrowserKey): Promise<void> => {
+  gateFor(await reserved(key));
 };
 
 /** Whether a live container's relay credential is near its end and a fresh one came. */
@@ -623,6 +613,7 @@ const tick = async (): Promise<void> => {
  */
 export const watchBrowsers = async (): Promise<void> => {
   servingGates = true;
+  listenGates(() => machineId);
   await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
   watch(browsersDir(), { recursive: true }, (_event, name) => {
     if (name?.endsWith("record.json")) {

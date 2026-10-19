@@ -65,6 +65,9 @@
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "ultracite": "7.12.2"
   },
+  "patchedDependencies": {
+    "@anthropic-ai/sandbox-runtime@0.0.79": "patches/@anthropic-ai%2Fsandbox-runtime@0.0.79.patch"
+  },
   "trustedDependencies": [
     "socket-activation"
   ]

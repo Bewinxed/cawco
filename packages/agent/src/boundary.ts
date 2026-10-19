@@ -8,7 +8,9 @@
  * - Linux: one @anthropic-ai/sandbox-runtime (srt) sandbox per workspace,
  *   hosted by `boundary-host.ts` in library mode. Inside it a command reads
  *   nothing in the home dir but what the policy reads back, writes only the
- *   clone, its scratch dir and the workspaces' cache, sees and signals only
+ *   clone, its scratch dir and the workspaces' cache (a write anywhere else,
+ *   the read-denied home dir, `/tmp` and `/run` among them, fails at once
+ *   with EROFS: `srtSettings` in boundary-policy.ts), sees and signals only
  *   the workspace's processes (its own pid namespace), and reaches the
  *   network only through srt's proxy: any public host, none of the owner's
  *   machines. Every host socket is out of sight.
@@ -45,10 +47,10 @@
  * there, core keepers.ts), is handed over ({@link handOver}): a boundary of
  * this build's form starts beside it on the current keeper, every new command
  * runs in the new one, and the older one runs on, untouched, until nothing
- * runs in it, then closes ({@link closeIdle}). One whose work listens on a
- * port is not handed over until that ends ({@link servedPorts}): the new
- * one's network is another, where its own next command would find nothing
- * listening. Every boundary and judge
+ * runs in it, then closes ({@link closeIdle}). One whose work still runs
+ * anything is not handed over until that ends ({@link workLeft}): the new
+ * one's pid namespace and network are others, where the delegate's next
+ * command would find nothing of what it left running. Every boundary and judge
  * process is found and stopped on whichever keeper holds it. A boundary runs
  * only while something holds it ({@link liveWhy}); one nothing has held for
  * {@link QUIET_CLOSE_MS} closes with its judge, its clone and state left as
@@ -2165,21 +2167,23 @@ const replaceOlder = async (
     restartWhenIdle(ref);
     return armHook(ref.id, held);
   }
-  // Every command after a handover runs in the new sandbox's network, where
-  // nothing listens: a dev server the work left running in this one would
-  // answer its previews but never its own next curl (5be5bfbb, 2026-10-15:
-  // its server on 5222 "gone" at each turn after a handover). So a boundary
-  // whose work serves on a port is kept as it is, armed, and handed over at
-  // the first look after its last listener ends ({@link handOverStale}); one
-  // nothing holds closes once quiet ({@link sweepQuiet}), and its next start
-  // is of this form.
-  const serving = (await servedPorts(ref.id, held)).join(", ");
-  if (serving) {
+  // Every command after a handover runs in the new sandbox: its own pid
+  // namespace, where nothing the work left running in this one can be seen
+  // or signalled, and its own network, where nothing listens. A dev server
+  // answered its previews but never its own next curl (5be5bfbb, 2026-10-15:
+  // its server on 5222 "gone" at each turn after a handover), and a `setsid
+  // nohup` loop was "gone" at the next turn (9b87c52b, 2026-10-19). So a
+  // boundary whose work runs anything is kept as it is, armed, and handed
+  // over at the first look after the last of it ends ({@link
+  // handOverStale}); one nothing holds closes once quiet ({@link
+  // sweepQuiet}), with what runs in it, and its next start is of this form.
+  const work = await workLeft(ref.id, held);
+  if (work) {
     replaceSoon(ref);
-    if (keptServing.get(ref.id) !== serving) {
-      keptServing.set(ref.id, serving);
+    if (keptRunning.get(ref.id) !== work) {
+      keptRunning.set(ref.id, work);
       console.info(
-        `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work listens on ${serving}, and handed over once that ends`
+        `[workspace] ${ref.id}: its boundary ${held.pid} (form ${held.form ?? "none"}) is kept as it is while its work ${work}, and handed over once that ends`
       );
     }
     return armHook(ref.id, held);
@@ -2466,7 +2470,27 @@ const hostScript = (): string =>
     ? runtimeExecutable("srt/host.js")
     : join(import.meta.dir, "boundary-host.ts");
 
-/** What the host script holds, for the form: a change to it is a change of form. */
+/**
+ * What the host script runs, for the form: a change to it is a change of
+ * form. A build's script bundles srt; a checkout's imports it, so srt's
+ * module that writes the sandbox's mounts is read beside it (the repository's
+ * patch makes each read-denied dir read-only there, `patches/`).
+ */
+const readHostText = async (host: string): Promise<string> => {
+  if (standalone) {
+    return await Bun.file(host).text();
+  }
+  const srt = dirname(
+    Bun.resolveSync("@anthropic-ai/sandbox-runtime", dirname(host))
+  );
+  const texts = await Promise.all(
+    [host, join(srt, "sandbox", "linux-sandbox-utils.js")].map((file) =>
+      Bun.file(file).text()
+    )
+  );
+  return texts.join("\0");
+};
+
 let hostText: Promise<string> | undefined;
 
 /** How a workspace's boundary of one generation starts in this build, and the form that names it. */
@@ -2594,7 +2618,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   const srtTmp = srtTmpOf(id, gen);
   const settings = `${JSON.stringify(srtSettings(policy, { rg: ripgrep(), srtTmp }), null, 2)}\n`;
   const host = hostScript();
-  hostText ??= Bun.file(host).text();
+  hostText ??= readHostText(host);
   // What the host makes in the clone before each sandbox, so srt binds
   // each deny path onto itself and leaves nothing on the host
   // (`cloneDenies`), and guards for the sandbox's whole life.
@@ -3063,25 +3087,35 @@ const workPorts = async (seen: Seen[], place: Place): Promise<number[]> => {
 };
 
 /**
- * The ports the work of workspace `id`'s running boundary `held` listens on
- * ({@link workPorts}); none on macOS, whose boundary has no network of its
- * own.
+ * What the work of workspace `id`'s running boundary `held` still runs, in
+ * words ("listens on 5222", "runs"); nothing once nothing does. Its work is
+ * every process in it its runner did not start with ({@link busyOld}), what
+ * a command left behind with `&`, `nohup`, `setsid` or a double fork among
+ * them, whatever its session or process group: on Linux each descends from
+ * the sandbox's init, on macOS each carries the workspace's marker.
  */
-const servedPorts = async (id: string, held: Held): Promise<number[]> => {
-  if (process.platform !== "linux") {
-    return [];
+const workLeft = async (
+  id: string,
+  held: Held
+): Promise<string | undefined> => {
+  const seen = await snapshot();
+  if (!(await busyOld(seen, id, { ...held, executors: [] }, undefined))) {
+    return;
   }
-  const place = await readPlace(id, held.gen);
-  return place ? workPorts(await snapshot(), place) : [];
+  const place =
+    process.platform === "linux" ? await readPlace(id, held.gen) : undefined;
+  const ports = place ? await workPorts(seen, place) : [];
+  return ports.length > 0 ? `listens on ${ports.join(", ")}` : "runs";
 };
 
 /**
  * The workspaces whose boundary of an older form, or on a retiring keeper,
- * is kept as it is because its work serves on a port ({@link replaceOlder}),
- * each with those ports as last said: said once per change. Each stays
- * {@link stale}, looked at until its last listener ends, then handed over.
+ * is kept as it is because its work still runs ({@link replaceOlder}), each
+ * with what it runs as last said ({@link workLeft}): said once per change.
+ * Each stays {@link stale}, looked at until the last of its work ends, then
+ * handed over.
  */
-const keptServing = new Map<string, string>();
+const keptRunning = new Map<string, string>();
 
 /** The socket inodes process `pid` has open, as its `/proc/<pid>/fd` links name them (`socket:[INODE]`); none once it is gone. */
 const socketsOf = async (pid: number): Promise<string[]> => {
@@ -3355,12 +3389,9 @@ const handOverStale = async (): Promise<void> => {
         forgetStale(ref.id);
         continue;
       }
-      // One kept while its work serves ({@link replaceOlder}) is only looked
+      // One kept while its work runs ({@link replaceOlder}) is only looked
       // at, not ensured: an ensure is a use, and its quiet time must run.
-      if (
-        keptServing.has(ref.id) &&
-        (await servedPorts(ref.id, held)).length > 0
-      ) {
+      if (keptRunning.has(ref.id) && (await workLeft(ref.id, held))) {
         continue;
       }
       await ensureBoundary(ref);
@@ -3441,7 +3472,7 @@ const stopLooking = (): void => {
 
 const forgetStale = (id: string): void => {
   stale.delete(id);
-  keptServing.delete(id);
+  keptRunning.delete(id);
   stopLooking();
 };
 

@@ -689,6 +689,12 @@ export interface StopPayload {
   cwd?: string;
   /** Explicitly abort unadopted custody too, then tear down spin-off resources. */
   discard?: boolean;
+  /**
+   * The hub forgets the session once this stop is confirmed (its end is a
+   * delete or a transcript delete): the machine lets go of what it kept for
+   * the session to be reattached, its browser door among it.
+   */
+  forget?: true;
   /** The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate. */
   from?: string;
   /**
@@ -1886,6 +1892,12 @@ export const CAWCO_ENV = {
    * checkout) names its own.
    */
   mcpPort: "CAWCO_MCP_PORT",
+  /**
+   * The port of the agent's DevTools gate (browser.ts `browserGatePort`).
+   * Unset on every installed machine; a second agent on one host (a rig, a
+   * scratch fleet) names its own.
+   */
+  browserGatePort: "CAWCO_BROWSER_GATE_PORT",
 } as const;
 
 /** One of {@link CAWCO_ENV}'s variable names. */

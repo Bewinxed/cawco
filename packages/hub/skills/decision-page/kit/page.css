@@ -145,9 +145,56 @@ a {
 .dp-state {
   font-size: var(--text-meta);
   color: var(--ink-muted);
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
 }
 .dp-state.on {
   color: var(--brand-ink);
+}
+/* A picked card folds to its one line: the question, "Decided: <option>"
+   and Change. Its body stays mounted, hidden; open, it lays out as part of
+   the card. */
+.dp-card[data-decided] {
+  padding-block: var(--space-3);
+}
+.dp-body {
+  display: contents;
+}
+.dp-body[hidden] {
+  display: none;
+}
+/* Change (a folded card) and Done (an open one with a pick): a quiet text
+   button; under a finger its area reaches 44px (DESIGN.md, The 44 Touch
+   Rule), its drawn size unchanged. */
+.dp-change {
+  position: relative;
+  font: inherit;
+  font-size: var(--text-label);
+  color: var(--ink-muted);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-1);
+  cursor: pointer;
+  transition: color var(--dur-control) var(--ease-out);
+}
+.dp-change:hover {
+  color: var(--ink-strong);
+}
+.dp-change:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (pointer: coarse) {
+  .dp-change::after {
+    content: "";
+    position: absolute;
+    inset-block-start: 50%;
+    inset-inline-start: 50%;
+    inline-size: max(100%, 44px);
+    block-size: max(100%, 44px);
+    translate: -50% -50%;
+  }
 }
 .dp-why {
   color: var(--ink-muted);
@@ -194,7 +241,20 @@ a {
   grid-auto-rows: 1fr;
   gap: var(--space-2);
 }
+/* A program page's option cell: the chip (the pick), then the option's own
+   media under it, outside the pick, live to the pointer. The chip fills
+   what the media leaves, so chips stay peers in a row. */
+.dp-optcell {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+}
+.dp-optmedia {
+  min-width: 0;
+}
 .dp-opt {
+  flex: 1 1 auto;
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -249,6 +309,9 @@ a {
   color: var(--ink-muted);
   line-height: 1.4;
 }
+.dp-opt .dp-cost {
+  font-size: var(--text-meta);
+}
 .dp-opt .dp-tag {
   align-self: flex-start;
   font-size: var(--text-meta);
@@ -271,6 +334,7 @@ a {
 }
 @media (prefers-reduced-motion: reduce) {
   .dp-opt,
+  .dp-change,
   .dp-bar i {
     transition: none;
   }

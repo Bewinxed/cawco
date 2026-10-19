@@ -8,6 +8,8 @@
  * agent's ports, the daemon's {@link BrowserFrame} and the hub's commands.
  */
 
+import { CAWCO_ENV, readEnv } from "./index";
+
 /** Which browser: a project's, or the machine's for sessions outside any project. */
 export type BrowserKey = `project:${string}` | `machine:${string}`;
 
@@ -15,38 +17,58 @@ export type BrowserKey = `project:${string}` | `machine:${string}`;
 export type BrowserHostKind = "container" | "local";
 
 /**
- * The agent's ports for browsers, four per browser in this order: neko's
- * HTTP, Chromium's DevTools, the gate, and the media port (UDP and TCP, the
- * same number). HTTP, DevTools and the gate listen on 127.0.0.1 alone; media
- * on every address. The local host uses DevTools and the gate only.
+ * The agent's ports for browsers: the machine's one DevTools gate first
+ * ({@link BROWSER_GATE_PORT}), then three per browser started, in this
+ * order: neko's HTTP, Chromium's DevTools, and the media port (UDP and TCP,
+ * the same number). The gate, HTTP and DevTools listen on 127.0.0.1 alone;
+ * media on every address. The local host uses DevTools only. A browser
+ * takes its three when it first starts, not before.
  */
-export const BROWSER_PORTS = { first: 43_000, last: 43_079 } as const;
+export const BROWSER_PORTS = { first: 43_000, last: 43_060 } as const;
+
+/** The machine's DevTools gate: every session's browser tool, every browser, by the path's gate id. */
+export const BROWSER_GATE_PORT = BROWSER_PORTS.first;
+
+/**
+ * The port this machine's agent serves its DevTools gate on:
+ * `CAWCO_BROWSER_GATE_PORT`, else {@link BROWSER_GATE_PORT}. The agent's
+ * listener and every door it writes read it here, so a second agent on one
+ * host (a scratch fleet) runs its gate on a port of its own.
+ */
+export const browserGatePort = (): number => {
+  const named = readEnv(CAWCO_ENV.browserGatePort);
+  const port = named === undefined ? BROWSER_GATE_PORT : Number(named);
+  if (!(Number.isInteger(port) && port > 0 && port < 65_536)) {
+    throw new Error(
+      `${CAWCO_ENV.browserGatePort} must be a port number, not "${named}"`
+    );
+  }
+  return port;
+};
 
 /** How many ports one browser takes from {@link BROWSER_PORTS}. */
-export const BROWSER_PORTS_EACH = 4;
+export const BROWSER_PORTS_EACH = 3;
 
 /** One browser's ports; `http` and `media` are the container host's alone. */
 export interface BrowserPorts {
   devtools: number;
-  gate: number;
   http?: number;
   media?: number;
 }
 
-/** The ports of the `slot`th browser of {@link BROWSER_PORTS}, from 0. */
+/** The ports of the `slot`th browser of {@link BROWSER_PORTS}, from 0: after the gate's. */
 export const browserPorts = (slot: number): Required<BrowserPorts> => {
-  const first = BROWSER_PORTS.first + slot * BROWSER_PORTS_EACH;
+  const first = BROWSER_GATE_PORT + 1 + slot * BROWSER_PORTS_EACH;
   return {
     http: first,
     devtools: first + 1,
-    gate: first + 2,
-    media: first + 3,
+    media: first + 2,
   };
 };
 
 /** How many browsers {@link BROWSER_PORTS} holds on one machine. */
 export const BROWSER_SLOTS =
-  (BROWSER_PORTS.last - BROWSER_PORTS.first + 1) / BROWSER_PORTS_EACH;
+  (BROWSER_PORTS.last - BROWSER_GATE_PORT) / BROWSER_PORTS_EACH;
 
 export type BrowserState =
   | "pulling"

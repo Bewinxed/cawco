@@ -298,7 +298,6 @@ export interface MoveHubRemote {
 export interface MovePrepareRequest {
   /** Paths (relative) to track with LFS before the commit. */
   bigFiles: string[];
-  gitInit: boolean;
   jobId: string;
   path: string;
 }
