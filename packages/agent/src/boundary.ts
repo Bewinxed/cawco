@@ -181,6 +181,7 @@ import {
 import { closeWorkspaceBrowsers, ensureGateToken } from "./browser/gate";
 import { colimaHome } from "./browser/media-forwarding";
 import { runtimeSockets } from "./browser/runtime";
+import { bunNodeShim } from "./bun-node-shim";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { cawcoCommand } from "./git-credential";
@@ -2571,6 +2572,10 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   });
   const hash = createHash("sha256");
   const runtimes = await containerSockets();
+  // Made on the host at every look, on both OSes, where Bun looks for it
+  // (bun-node-shim.ts); macOS reads `/private/tmp` as it stands, Linux binds it
+  // back into the sandbox's `/tmp`.
+  const bunNode = await bunNodeShim();
   if (process.platform === "darwin") {
     const profile = seatbeltProfile(policy, {
       // With the scratch dir's short name, its `TMPDIR`: a tool's socket
@@ -2658,6 +2663,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       bwrap,
       rg: ripgrep(),
       srtTmp,
+      bunNode,
       containerSockets: runtimes,
     }),
     null,

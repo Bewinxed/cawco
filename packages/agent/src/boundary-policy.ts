@@ -56,6 +56,11 @@ export const DENIED_RESOLVED_ADDRESSES = [
 
 /** Where srt runs for one Linux workspace: what its settings name besides the policy. */
 export interface SrtPlace {
+  /**
+   * Bun's `--bun` node shim dir, made on the host (bun-node-shim.ts), read
+   * back into the sandbox's denied `/tmp`, where Bun looks for it.
+   */
+  readonly bunNode: string | undefined;
   /** The bwrap srt runs (its `bwrapPath`): {@link readOnlyDeniesBwrap}, as the workspace's boundary writes it. */
   readonly bwrap: string;
   /**
@@ -131,7 +136,10 @@ const runtimeSocketDenies = (
  *   sandbox a private `/tmp` (srt #294).
  * - `/tmp/claude`, which srt always grants and every sandbox of the user
  *   shares, is write-denied (srt #654).
- * - srt's own temp dir and the resolver files under `/run` are read back.
+ * - srt's own temp dir and the resolver files under `/run` are read back, and
+ *   Bun's `--bun` node shim dir under `/tmp` ({@link SrtPlace.bunNode}), which
+ *   Bun only ever looks for there: read-only, so the shim the host's own bun
+ *   runs through is never a workspace's to write.
  * - `allowAllUnixSockets`: the seccomp helper that would refuse every unix
  *   socket cannot start under Ubuntu's AppArmor profile for bwrap (srt #429);
  *   the sockets are hidden by path, and abstract ones are cut off by the
@@ -168,6 +176,7 @@ export const srtSettings = (
     allowRead: literal([
       ...policy.allowRead,
       place.srtTmp,
+      ...(place.bunNode ? [place.bunNode] : []),
       "/run/systemd/resolve/stub-resolv.conf",
       "/run/systemd/resolve/resolv.conf",
     ]),

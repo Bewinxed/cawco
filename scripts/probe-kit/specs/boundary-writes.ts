@@ -21,7 +21,12 @@
  *   the host's disk after the boundary's process is gone;
  * - `bun install --frozen-lockfile` in the clone finishes;
  * - `git commit` in the clone finishes, and the commit is in the clone's log
- *   on the host.
+ *   on the host;
+ * - `bunx --bun` runs a package's `#!/usr/bin/env node` bin under Bun, as on
+ *   the host: it reads `process.versions.bun`, and imports `bun:sqlite` as a
+ *   SvelteKit vite.config does (before the fix Bun could not make its node
+ *   shim in the read-only `/tmp`, so the bin ran under Node and the import
+ *   failed with ERR_UNSUPPORTED_ESM_URL_SCHEME; agent bun-node-shim.ts).
  *
  *   bun scripts/probe-kit/run.ts boundary-writes
  */
@@ -45,6 +50,8 @@ const COMMIT_SUBJECT = "Probe commit inside the boundary";
 const HOME_TARGET = ".cache/cawco-orchestrator/probe-x";
 /** Node's fs error for a write refused as read-only, and the path it names. */
 const EROFS_PATH = /EROFS: read-only file system, \w+ '([^']+)'/;
+/** `process.versions.bun` under Bun; under Node the bin says "none-" and Node's version. */
+const BUN_VERSION = /^\d+\.\d+\.\d+/;
 
 /** `marker` spelled apart in a command, so only the command's output carries it whole. */
 const apart = (marker: string): string =>
@@ -57,6 +64,24 @@ const apart = (marker: string): string =>
  */
 const HOME_WRITE = `const fs = require("node:fs"); const path = require("node:path"); const target = process.argv[1]; try { fs.mkdirSync(path.dirname(target), { recursive: true }); fs.writeFileSync(target, "probe\\n"); } catch (error) { console.error(error.message); process.exit(1); }`;
 
+/**
+ * A package in `$TMPDIR` with two `#!/usr/bin/env node` bins, each run by
+ * `bunx --bun`: one says the Bun it runs under ("none" and Node's version
+ * under Node), one imports `bun:sqlite` and says a query's answer, or the
+ * import's error code. The markers are spelled apart in the files too.
+ */
+const BUNX = `mkdir -p "$TMPDIR/bunx-probe/node_modules/.bin" && cd "$TMPDIR/bunx-probe" && echo '{"name":"bunx-probe","private":true}' > package.json
+cat > node_modules/.bin/probe-runtime <<'BIN'
+#!/usr/bin/env node
+console.log("BUNX" + "-RUNTIME:" + (process.versions.bun ?? "none-" + process.version));
+BIN
+cat > node_modules/.bin/probe-sqlite <<'BIN'
+#!/usr/bin/env node
+import("bun:sqlite").then(({ Database }) => console.log("BUNX" + "-SQLITE:" + new Database(":memory:").query("select 1 as one").get().one), (error) => console.log("BUNX" + "-SQLITE:" + error.code));
+BIN
+chmod +x node_modules/.bin/probe-runtime node_modules/.bin/probe-sqlite
+bunx --bun probe-runtime 2>&1; bunx --bun probe-sqlite 2>&1; cd - > /dev/null`;
+
 /** The delegate's one command: each write, the install and the commit, each followed by its exit. */
 const COMMAND = [
   `bun -e '${HOME_WRITE}' "$HOME/${HOME_TARGET}" 2> "$TMPDIR/home.err"; echo ${apart("HOME-WRITE:")}$?; cat "$TMPDIR/home.err"`,
@@ -64,6 +89,7 @@ const COMMAND = [
   `echo kept > ${CLONE_FILE}; echo ${apart("CLONE-WRITE:")}$?`,
   `bun install --frozen-lockfile > "$TMPDIR/install.log" 2>&1; echo ${apart("INSTALLED:")}$?; tail -n 3 "$TMPDIR/install.log"`,
   `git add ${CLONE_FILE} && git commit -qm '${COMMIT_SUBJECT}' 2>&1; echo ${apart("COMMITTED:")}$?`,
+  BUNX,
   `echo ${apart(END)}`,
 ].join("\n");
 
@@ -273,6 +299,18 @@ const run = async (kit: Kit) => {
     "git commit in the clone finishes inside the boundary, and the commit is in the clone on the host",
     after(said, "COMMITTED:") === "0" && subject === COMMIT_SUBJECT,
     `exit ${after(said, "COMMITTED:")}; the clone's last commit on the host: ${JSON.stringify(subject)}`
+  );
+  const runtime = after(said, "BUNX-RUNTIME:");
+  kit.check(
+    "bunx --bun runs a #!/usr/bin/env node bin under Bun, which reads process.versions.bun",
+    runtime !== undefined && BUN_VERSION.test(runtime),
+    `process.versions.bun: ${runtime ?? "unread"}`
+  );
+  const sqlite = after(said, "BUNX-SQLITE:");
+  kit.check(
+    "bunx --bun runs a bin that imports bun:sqlite, as a SvelteKit vite.config does",
+    sqlite === "1",
+    `bun:sqlite query: ${sqlite ?? "unread"}`
   );
 };
 
