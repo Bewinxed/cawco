@@ -135,11 +135,17 @@
     {@const runs = wellRuns(drawn)}
     <!-- The transcript, in a well of its own — concentric with what it holds.
          Its own x=0 is the host's text column: the well reaches out past it by
-         its padding, and every row inside repeats the columns from there. -->
+         its padding, and every row inside repeats the columns from there. Its
+         rows draw their own rails and start their own line: the well publishes
+         the rail's rest, so they do not inherit the continuation the OUTER row
+         published, or a nested tool run paints the tail weight and hugs the
+         row above it. -->
     <div
       data-slot="inner"
       class="mt-space-2 mb-0 ms-(--well-start) me-0 p-space-1 rounded-sm bg-surface-recess"
       style:--well-start="var(--well-at, 0)"
+      style:--rail-head="var(--rail)"
+      style:--rail-gap="var(--space-4)"
     >
       {#if loading}
         <p
@@ -229,14 +235,3 @@
     </div>
   {/snippet}
 </CollapsibleLazy>
-
-<style>
-  /* residual: foreign-dom */
-  /* The well's own rows draw their own rails, and they start their own
-     line — they must not inherit the continuation the OUTER row published,
-     or a nested tool run paints the tail weight and hugs the row above it. */
-  [data-slot="inner"] :global(*) {
-    --rail-head: var(--rail);
-    --rail-gap: var(--space-4);
-  }
-</style>

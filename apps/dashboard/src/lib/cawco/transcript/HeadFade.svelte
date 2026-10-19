@@ -40,7 +40,7 @@
     <!-- The layer's blur and its slice (progressive-blur.ts). -->
     <div
       data-slot="layer"
-      class="absolute inset-0 opacity-0"
+      class="absolute inset-0 opacity-0 head-fade-scrub"
       style="-webkit-backdrop-filter: {layerBlur(
         layer
       )}; backdrop-filter: {layerBlur(layer)}; mask-image: {layerMask(layer)}"
@@ -49,23 +49,6 @@
   <!-- The chosen tab's sheet, over the blur, on the ramp. -->
   <div
     data-slot="layer"
-    class="absolute inset-0 opacity-0 bg-tab-sheet mask-(--head-tint-ramp)"
+    class="absolute inset-0 opacity-0 bg-tab-sheet mask-(--head-tint-ramp) head-fade-scrub"
   ></div>
 </div>
-
-<style>
-  /* residual: keyframes — the animation, then its scroll timeline and range
-     (animation longhands of the same animation), after the shorthand that
-     resets them, in the same rule */
-  [data-slot="layer"] {
-    animation: head-fade linear both;
-    animation-timeline: --transcript-head;
-    animation-range: 0 var(--c-head-fade);
-  }
-  /* residual: keyframes */
-  @keyframes head-fade {
-    to {
-      opacity: 1;
-    }
-  }
-</style>
