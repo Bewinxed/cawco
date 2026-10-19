@@ -12,9 +12,9 @@
  * - control: `npx -y chrome-devtools-mcp@<old> --version` with that cache
  *   says nothing for {@link CONTROL_MS} (npm's with-lock.js waits until the
  *   lock is 60 s old);
- * - the fleet's chrome-devtools at <old>: the entry the sync writes for
- *   Claude Code and for OpenCode launches node on the install's bin, and
- *   names npx nowhere;
+ * - the fleet's chrome-devtools at <old>: the entry the sync sets for
+ *   Claude Code's and pi's sessions (the agent's fleet set) and writes for
+ *   OpenCode launches node on the install's bin, and names npx nowhere;
  * - that entry, started as a session starts it, answers `initialize` as
  *   chrome-devtools-mcp <old> within {@link START_BOUND_MS};
  * - the row moved to <new>: the sync installs <new> and the entries launch
@@ -33,7 +33,6 @@ import { existsSync } from "node:fs";
 import { mkdir, readFile, utimes } from "node:fs/promises";
 import { basename, join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
-import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { type Reply, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -150,12 +149,16 @@ const run = async (kit: Kit): Promise<void> => {
         }),
       })
     ).ok;
+  /** The entry every Claude Code and pi session takes: the agent's fleet set (agent fleet-mcp-set.ts). */
   const claudeEntry = async (): Promise<Entry | undefined> =>
     (
       JSON.parse(
-        await readFile(join(home, CLAUDE_JSON_NAME), "utf8").catch(() => "{}")
-      ) as { mcpServers?: Record<string, Entry> }
-    ).mcpServers?.[SERVER];
+        await readFile(
+          join(home, ".local", "share", "cawco", "fleet-mcp-set.json"),
+          "utf8"
+        ).catch(() => "{}")
+      ) as { servers?: Record<string, Entry> }
+    ).servers?.[SERVER];
   const opencodeEntry = async (): Promise<string> =>
     await readFile(
       join(home, ".config", "opencode", "cawco-fleet-mcp.json"),
@@ -206,7 +209,7 @@ const run = async (kit: Kit): Promise<void> => {
     await putRow(SERVER, ["-y", `${PACKAGE}@${OLD}`, "--no-usage-statistics"])
   );
   const old = await until(
-    `the sync wrote ${SERVER} for Claude Code from ${PACKAGE}@${OLD}'s install`,
+    `the sync set ${SERVER} for Claude Code and pi sessions from ${PACKAGE}@${OLD}'s install`,
     claudeEntry,
     (entry) => entry.args?.[2]?.startsWith(`${installDir(OLD)}/`) === true,
     180_000
@@ -249,7 +252,7 @@ const run = async (kit: Kit): Promise<void> => {
     await putRow(SERVER, ["-y", `${PACKAGE}@${NEW}`, "--no-usage-statistics"])
   );
   const next = await until(
-    `the sync wrote ${SERVER} for Claude Code from ${PACKAGE}@${NEW}'s install`,
+    `the sync set ${SERVER} for Claude Code and pi sessions from ${PACKAGE}@${NEW}'s install`,
     claudeEntry,
     (entry) => entry.args?.[2]?.startsWith(`${installDir(NEW)}/`) === true,
     180_000

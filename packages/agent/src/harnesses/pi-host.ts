@@ -1,6 +1,7 @@
 /** NDJSON host, spawned exclusively by sessiond. Agent disconnects do not end it. */
 import { createInterface } from "node:readline";
 import { INSTALL_SESSION_CREDENTIAL, MESSAGES_READ } from "@cawco/core";
+import type { BrowserDoor } from "../browser/door";
 import type { HarnessContext, HarnessSession } from "../harness";
 import { startPiHost } from "./pi-runtime";
 import {
@@ -39,6 +40,10 @@ function start(
     instanceId: command.spec.instanceId,
     cwd: command.spec.cwd,
     ...(command.boundary ? { boundary: command.boundary } : {}),
+    // The door its agent made: the host makes none of its own.
+    ...(command.door
+      ? { browserDoor: () => Promise.resolve(command.door as BrowserDoor) }
+      : {}),
     frame: (message) => {
       if (message.type === "system" && message.subtype === MESSAGES_READ) {
         const read = new Set(message.read);
