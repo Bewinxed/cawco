@@ -17,9 +17,16 @@
  * - The other email's session sits idle, still running, while its reading
  *   goes unrefreshed for two hours (its time set back: an hour cannot pass
  *   in a probe): it reads stale with that time, on the hub and on its tile.
+ * - The other email's session details (its tab's card) show its own
+ *   account's limit, never another account's on the same machine.
  * - The Team seat's reading, set back the same, runs a turn whose usage
  *   moved nothing (no `rate_limit_event`): the turn confirms it, current
  *   again as of that turn.
+ * - A new session on the other email reports its plan at start (Claude
+ *   Code's initialize): the reading's time stays where it was, since no
+ *   window was read.
+ * - Benched at its limit, the other email's dial says when it last
+ *   reported, not only when it is back.
  *
  *   bun scripts/probe-kit/run.ts usage-accounts
  */
@@ -29,6 +36,7 @@ import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type {
   PlacementPreview,
+  ProviderForecast,
   UsageLimitsResponse,
 } from "../../../packages/core/src";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
@@ -318,6 +326,33 @@ const run = async (kit: Kit) => {
     );
   }
 
+  // 3b. The other email's session details: its own account's limit (the
+  // fullest of its windows, 75% used), not the first account signed in on
+  // the machine.
+  await open(
+    page,
+    `${base}/session/${sessions[OTHER]}`,
+    `[data-session-tab="${sessions[OTHER]}"]`,
+    120_000
+  );
+  await page
+    .locator(`[data-session-tab="${sessions[OTHER]}"]`)
+    .filter({ visible: true })
+    .first()
+    .hover();
+  const shownLimit = await page
+    .waitForSelector(".session-details-popover [data-limit-left]", {
+      timeout: 15_000,
+    })
+    .then((node) => node.textContent())
+    .then((text) => text?.replace(/\s+/g, " ").trim() ?? "")
+    .catch((error: unknown) => `none: ${String(error)}`);
+  kit.check(
+    "a session's details show its own account's limit",
+    shownLimit === "25% left",
+    JSON.stringify({ want: "25% left", got: shownLimit })
+  );
+
   // 4. Nothing refreshes the other email's reading for two hours, its
   // session idle but running: stale, as of that time.
   const agedAt = Date.now() - AGED_MS;
@@ -375,6 +410,62 @@ const run = async (kit: Kit) => {
     "the confirmed account's dial is current",
     teamTile !== null && !teamTile.say.startsWith("Hasn’t reported"),
     JSON.stringify(teamTile)
+  );
+
+  // 7. A session's start reports the account's plan (initialize) and no
+  // window: the reading's time stays.
+  const startedAt = Date.now();
+  await fleet.spawn("claude", "Usage plan only", fleet.repo, {
+    account: OTHER,
+  });
+  const reported = await until(
+    "the new session's plan reported (its catalog kept)",
+    () =>
+      fleet.query<{ read_at: number }>(
+        "SELECT read_at FROM account_catalogs WHERE account_id = ?",
+        OTHER
+      )[0],
+    (row) => row.read_at >= startedAt,
+    120_000
+  ).catch(() => undefined);
+  const asked7 = fleet.seen.filter(
+    (one) => one.at >= startedAt && accountOf(one) === OTHER
+  ).length;
+  // Read from the forecast, which every build serves: the reading's time.
+  const seenAt = (
+    await fleet.api<ProviderForecast>(
+      "/api/accounts/forecast?provider=anthropic"
+    )
+  ).accounts.find((one) => one.accountId === OTHER)?.lastSeenAt;
+  kit.check(
+    "a plan reported at a session's start leaves the reading's time where it was",
+    reported !== undefined && asked7 === 0 && seenAt === agedAt,
+    JSON.stringify({
+      reported: reported?.read_at ?? null,
+      modelRequestsSince: asked7,
+      lastSeenAt: seenAt,
+      agedAt,
+    })
+  );
+
+  // 8. Benched at its limit, its dial still says how old its reading is.
+  fleet.write(
+    "INSERT OR REPLACE INTO account_bench (account_id, scope, until) VALUES (?, '', ?)",
+    OTHER,
+    Date.now() + 3 * HOUR_MS
+  );
+  await open(page, `${base}/usage`, `[data-tile][data-account="${OTHER}"]`);
+  const limited = await until(
+    "the other email's tile at its limit",
+    () => tileOf(page, OTHER),
+    (tile) => tile?.say.startsWith("At its limit") === true,
+    30_000
+  ).catch(() => tileOf(page, OTHER));
+  kit.check(
+    "an account at its limit with an old reading says when it last reported",
+    limited?.say.startsWith("At its limit") === true &&
+      limited.say.includes("Last reported 2h"),
+    JSON.stringify(limited)
   );
 };
 

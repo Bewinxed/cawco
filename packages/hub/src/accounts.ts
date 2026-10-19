@@ -424,10 +424,10 @@ export const limitsOf = (
 
 /**
  * The account that speaks for a machine where a choice needs one Claude
- * account there (its default model's catalog, the BRIDGE in
- * {@link usageLimits}), out of sign-ins already read: the first account
- * signed in there.
+ * account there (its default model's catalog), out of sign-ins already read:
+ * the first account signed in there.
  */
+// Also fills the per-machine `limits` BRIDGE (wire-compat.ts, {@link usageLimits}); the bridge's deletion takes that use, not this.
 const speakerAmong = (
   signins: readonly AccountSignin[],
   claude: ReadonlySet<string>,

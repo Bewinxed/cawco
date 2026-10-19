@@ -114,13 +114,13 @@ export const BRIDGES: Bridge[] = [
     property: "machines",
     beside: "claude",
     until:
-      "limits per machine in `/api/usage/limits` (core UsageLimitsResponse), Claude's the first account signed in there, kept for TestFlight 20261015 to 20261018; every reader since reads each account's own (`claude`) and each machine's Go plan (`openCodeGo`). It goes in the change that expires those builds",
+      "the per-machine Claude `limits` (in `/api/usage/limits`'s `machines`) before per-account `claude`; it goes in the change that expires TestFlight 20261017 and 20261018 (bash apps/apple/scripts/testflight.sh --expire 20261017, --expire 20261018), once a build from this change is installed",
   },
   {
     property: "limits",
     beside: "claude",
     until:
-      "limits per machine in the `usage` frame (core UsageLimitsReading), Claude's the first account signed in there, kept for TestFlight 20261015 to 20261018; every reader since reads each account's own (`claude`) and each machine's Go plan (`openCodeGo`). It goes in the change that expires those builds",
+      "the per-machine Claude `limits` before per-account `claude`; it goes in the change that expires TestFlight 20261017 and 20261018 (bash apps/apple/scripts/testflight.sh --expire 20261017, --expire 20261018), once a build from this change is installed",
   },
   {
     property: "host",
