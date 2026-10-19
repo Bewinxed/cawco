@@ -20,12 +20,7 @@
   } = $props();
 </script>
 
-<!-- literal: 10px -->
-<div
-  data-slot="row"
-  class="flex items-start gap-(--row-gap)"
-  style:--row-gap="10px"
->
+<div data-slot="row" class="flex items-start gap-space-3">
   <Switch
     align="first-line"
     {disabled}
@@ -40,16 +35,10 @@
       for={id}>{label}</label
     >
     {#if typeof hint === "string"}
-      <!-- literal: 72ch -->
-      <span
-        class="type-meta max-w-(--measure) text-ink-muted"
-        style:--measure="72ch">{hint}</span
-      >
+      <span class="type-meta max-w-(--c-measure) text-ink-muted">{hint}</span>
     {:else if hint}
-      <!-- literal: 72ch -->
-      <span
-        class="type-meta max-w-(--measure) text-ink-muted"
-        style:--measure="72ch">{@render hint()}</span
+      <span class="type-meta max-w-(--c-measure) text-ink-muted"
+        >{@render hint()}</span
       >
     {/if}
   </span>
