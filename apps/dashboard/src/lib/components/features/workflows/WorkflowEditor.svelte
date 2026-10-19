@@ -485,7 +485,7 @@
             type="button"
           >
             <span
-              class="grid size-c-mark min-w-0 shrink-0 place-items-center rounded-sm border border-neutral-8 wrap-anywhere data-filled:bg-brand-solid data-filled:text-on-brand"
+              class="grid size-c-mark min-w-0 shrink-0 place-items-center rounded-sm border border-border-control wrap-anywhere data-filled:bg-brand-solid data-filled:text-on-brand"
               data-filled={entry.kind === "step" || undefined}
               ><entry.icon class="size-icon-md" /></span
             >
