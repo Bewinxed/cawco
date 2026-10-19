@@ -4180,14 +4180,18 @@ export class ClaudeHarness implements Harness {
       const from = Math.max(head - span, 0);
       const activity = new ChildActivity("claude");
       // biome-ignore lint/performance/noAwaitInLoops: each look reaches further back only when the one before it found nothing about a turn
-      const oldest = await readRing(
+      const read = await readRing(
         client,
         procIdFor("claude", instanceId),
         from,
         head,
         (event) => activity.read(parseLine(event.data))
       );
-      if (activity.decided || from === 0 || oldest > from + 1) {
+      // Let go since it was listed: no keeper holds it, so it runs no turn.
+      if (read.kind === "gone") {
+        return false;
+      }
+      if (activity.decided || from === 0 || read.oldest > from + 1) {
         return activity.turnRunning;
       }
     }
@@ -4272,7 +4276,7 @@ export class ClaudeHarness implements Harness {
     // `head` is the listing's, taken before every earlier row was adopted; a
     // ring that has since dropped past it ends the read rather than stalling
     // every later row behind this one ({@link readRing}).
-    const oldest = await readRing(client, procId, RING_START, head, (event) => {
+    const read = await readRing(client, procId, RING_START, head, (event) => {
       const parsed = parseLine(event.data);
       readAsk(asks, parsed, event.data);
       if (
@@ -4291,6 +4295,11 @@ export class ClaudeHarness implements Harness {
         sessionId = parsed.session_id;
       }
     });
+    // Ended and let go while it was read: no keeper holds it any more.
+    if (read.kind === "gone") {
+      throw new Error(`no keeper holds a live child ${procId}`);
+    }
+    const { oldest } = read;
     const replayable =
       options.afterSeq !== undefined && options.afterSeq + 1 >= oldest;
     // What the CLI was handed is all it holds: a send the agent before this

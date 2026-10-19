@@ -441,6 +441,15 @@ interface ProcListener {
     /** The process that exited, when its keeper says (what {@link SessiondClient.release} names). */
     pid: number | undefined
   ) => void;
+  /**
+   * The keeper holds no child under the id: the listing that answers this
+   * subscribe, read after it on the same ordered socket, does not name it
+   * (one dead and still listed is told as an `exit`). Its end, if it had
+   * one, was read and released elsewhere ({@link SessiondClient.release}).
+   * Only for a listener that follows a child known to have been there: a
+   * subscribe before a spawn lands is answered the same way.
+   */
+  gone?: () => void;
   line?: (event: SessiondLine) => void;
   /**
    * `nextSeq` is where this subscription resumes; `oldest` is the earliest
@@ -891,9 +900,19 @@ export class SessiondClient {
       ...(afterSeq === undefined ? {} : { afterSeq }),
     });
     this.#send({ type: "list" });
-    // Its welcome is read by the death check in `#onMessage`, not by a caller.
+    // Its welcome is read by the death check in `#onMessage`, and by this
+    // listener's `gone` when it does not list the child at all.
     this.#welcomeWaiters.push({
-      resolve: () => undefined,
+      resolve: (welcome) => {
+        if (
+          listener.gone &&
+          this.#listeners.get(procId) === listener &&
+          !this.#toldExit.has(listener) &&
+          !welcome.procs.some((proc) => proc.procId === procId)
+        ) {
+          listener.gone();
+        }
+      },
       reject: () => undefined,
     });
   }

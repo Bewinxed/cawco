@@ -32,6 +32,10 @@
  * - (f) a child that died with nobody following it is listed dead, with its
  *   exit code, to the next connection; an attach to it learns its end from
  *   that listing, and only then does it leave. Main fails the leaving;
+ * - (j) two connections follow one child, as an update's old agent and new
+ *   one do: one reads its end and releases it, and the other's ring read
+ *   (sessiond-custody.ts `readRing`), from 0 and from a seq, settles as gone
+ *   within 5 s. Main fails: both reads wait for good;
  * - (g) an OpenCode server whose launch never heard where it listens is
  *   ended and its record let go, without a wait on an activity no read can
  *   reach. Main fails: it is deferred, and still runs;
@@ -61,6 +65,8 @@ import {
   SessiondClient,
   sessiondBridge,
 } from "../../../packages/agent/src/sessiond-client";
+import { readRing } from "../../../packages/agent/src/sessiond-custody";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
@@ -190,6 +196,73 @@ const recordOf = async (
     name.endsWith(`-account-${account}.json`)
   );
   return JSON.parse(await readFile(join(dir, file ?? "none"), "utf8"));
+};
+
+/**
+ * (j) Two agents follow one child on the keeper at `current` (`now` its
+ * connection): the one that reads its end lets it go, and the other reads
+ * its ring from a listing taken before. The other connection, for closing.
+ */
+const twoFollowers = async (
+  kit: Kit,
+  now: SessiondClient,
+  current: string,
+  dir: string
+): Promise<SessiondClient> => {
+  const shared = `claude-probe-${crypto.randomUUID()}`;
+  await now.spawnProc(shared, {
+    command: "/bin/sh",
+    args: ["-c", "echo one; echo two; read line; exit 5"],
+    cwd: dir,
+    env: {},
+  });
+  const other = await welcomed(current);
+  const head = await until(
+    "the shared child's two lines",
+    async () =>
+      (await other.list()).procs.find((one) => one.procId === shared)?.head,
+    (seq) => seq >= 2,
+    10_000
+  );
+  const ended = new Promise<ProcessExit | undefined>((resolve) => {
+    sessiondBridge(
+      now,
+      shared,
+      { command: "/bin/sh", args: [], env: {} },
+      { attach: { afterSeq: head, head, prelude: [] }, seqs: new Map() },
+      () => undefined,
+      resolve
+    );
+  });
+  await now.stdinEnd(shared);
+  const first = await ended;
+  const released = await settlesTo(
+    () => listedAs(current, shared),
+    "not listed",
+    5000
+  );
+  // One read after the other: a connection follows an id with one listener,
+  // as every reader on it does.
+  const reads: string[] = [];
+  for (const from of [0, 1]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one listener per id on a connection
+    const read = await readWithin(5000, () =>
+      readRing(other, shared, from, head, () => undefined)
+    );
+    reads.push(
+      read.kind === "answered"
+        ? `from ${from}: ${JSON.stringify(read.value)}`
+        : `from ${from}: still waiting after ${read.after} ms`
+    );
+  }
+  kit.check(
+    "(j) one follower reads the end of a child two follow and lets it go; the other's ring read, from 0 and from a seq, settles as gone within 5 s",
+    first?.code === 5 &&
+      released === "not listed" &&
+      reads.every((one) => one.endsWith('{"kind":"gone"}')),
+    `the first read ${JSON.stringify(first)}, then it is ${released}; the other's reads: ${reads.join("; ")}`
+  );
+  return other;
 };
 
 const spec: Spec = {
@@ -341,6 +414,8 @@ const spec: Spec = {
           afterAttach === "not listed",
         `while nobody followed it: ${whileAway}; the attach read ${JSON.stringify(attachedEnd)}; then: ${afterAttach}`
       );
+
+      clients.push(await twoFollowers(kit, now, current, dir));
 
       // (g) and (h): OpenCode servers on the current keeper, each launched
       // as a harness launches one, its announcement read by `attach`.
