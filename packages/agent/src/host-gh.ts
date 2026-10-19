@@ -1,9 +1,9 @@
 /**
- * The host's `gh`, as CawCo runs it outside every workspace's boundary: the
- * executor reads its token for an unguarded workspace's commands
- * (boundary.ts `ghToken`), and a guarded workspace's git door hands it to one
- * allowed `gh` call at a time and authenticates its origin's fetches and
- * pushes with it (hub-git.ts).
+ * The host's `gh`, and any program the host runs with its own sign-ins, as
+ * CawCo runs them outside every workspace's boundary: the executor reads gh's
+ * token for an unguarded workspace's commands (boundary.ts `ghToken`), the
+ * GitHub door signs gh's requests with it (github-door.ts), and the forge
+ * adapters sign in with it, or start gitea-mcp (forges/).
  */
 import { realpath } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -27,11 +27,15 @@ const writableInside = (): string[] => [
 ];
 
 /**
- * `gh` as the host runs it, by its real path; none when the agent finds
- * none, or finds it where a workspace writes.
+ * The program `name` as the host runs it, by its real path; none when the
+ * agent finds none on its PATH, or finds it where a workspace writes, since
+ * the host runs it with its own sign-ins (gh, a forge's gitea-mcp).
  */
-export const hostGh = async (): Promise<string | undefined> => {
-  const found = Bun.which("gh");
+export const hostProgram = async (
+  name: string
+): Promise<string | undefined> => {
+  // The PATH as it is now: Bun.which alone reads the one the process began with.
+  const found = Bun.which(name, { PATH: process.env.PATH ?? "" });
   const real = found ? await realpath(found).catch(() => undefined) : undefined;
   if (
     !real ||
@@ -41,6 +45,9 @@ export const hostGh = async (): Promise<string | undefined> => {
   }
   return real;
 };
+
+/** `gh` as the host runs it ({@link hostProgram}). */
+export const hostGh = (): Promise<string | undefined> => hostProgram("gh");
 
 /** The host's GitHub token (`gh auth token`, from its keyring); none when gh has none or is not here. */
 export const hostGhToken = async (): Promise<string | undefined> => {

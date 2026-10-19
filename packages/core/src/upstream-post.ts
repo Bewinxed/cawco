@@ -11,9 +11,57 @@
  * - `git`: a push to a repository that is not the project's, on any host,
  *   through the workspace's git door; the host pushes the same commits with
  *   its own credential.
- * - `mcp`: a write tool of a GitHub connection (hub connections.ts); the hub
- *   calls it once.
+ * - `mcp`: a write tool of a forge's connection (hub connections.ts); the
+ *   hub calls it once.
+ * - `forge`: an issue, a pull or merge request, or a comment an agent asked
+ *   for (`forge_post`), on GitHub, GitLab or Gitea; the machine makes it
+ *   through that forge's adapter with its own sign-in there (agent
+ *   forges/forge.ts, docs/forge-adapters.md).
  */
+
+/** The forges CawCo posts to through an adapter. */
+export const FORGES = ["github", "gitlab", "gitea"] as const;
+export type Forge = (typeof FORGES)[number];
+
+/** Each forge as a person names it. */
+export const FORGE_NAMES: Readonly<Record<Forge, string>> = {
+  github: "GitHub",
+  gitlab: "GitLab",
+  gitea: "Gitea",
+};
+
+/** What a pull request is called on each forge: GitLab's is a merge request. */
+export const changeRequestWords = (forge: Forge): string =>
+  forge === "gitlab" ? "merge request" : "pull request";
+
+/**
+ * One write to a repository on a forge: an issue, a pull or merge request
+ * from `head` into `base`, or a comment on an issue's or a pull request's
+ * `number` (GitLab numbers its issues and merge requests apart).
+ */
+export type ForgeWrite =
+  | { readonly body: string; readonly op: "issue"; readonly title: string }
+  | {
+      readonly base: string;
+      readonly body: string;
+      readonly head: string;
+      readonly op: "pull_request";
+      readonly title: string;
+    }
+  | {
+      readonly body: string;
+      readonly number: number;
+      readonly on: "issue" | "pull_request";
+      readonly op: "comment";
+    };
+
+/** A forge write to the repository `repo` (`host/path`), on the forge its machine found for that host. */
+export interface ForgePost {
+  readonly forge: Forge;
+  readonly repo: string;
+  readonly via: "forge";
+  readonly write: ForgeWrite;
+}
 
 /** A request to GitHub's API, as the door read it. */
 export interface HttpPost {
@@ -49,18 +97,65 @@ export interface McpPost {
   readonly via: "mcp";
 }
 
-export type UpstreamPost = HttpPost | GitPost | McpPost;
+export type UpstreamPost = HttpPost | GitPost | McpPost | ForgePost;
 
 /** The tool name an upstream post's ask is parked under: the permission card draws it (permission-presentation.ts). */
 export const UPSTREAM_POST_TOOL = "mcp__cawco__upstream_post";
 
-/** The machine control that makes an approved post on the machine whose workspace held it; args `[workspaceId, UpstreamPost]`, answers {@link PostMade}. */
+/**
+ * The machine control that makes a post once, with no decision, on the
+ * machine that holds its sign-in: an approved held post, or a landing's pull
+ * request. Args `[workspaceId | null, UpstreamPost]` (a forge post needs no
+ * workspace), answers {@link PostMade}.
+ */
 export const CONTROL_UPSTREAM_POST = "upstreamPost";
 
-/** What making a post said: whether it went, and what the host's program or GitHub answered. */
+/**
+ * The machine control a session's `forge_post` reaches (agent forges/forge.ts
+ * `forgePost`): args `[UpstreamRule | null, ForgeAsk]`, the project's rule as
+ * the hub holds it; answers what the write came to there.
+ */
+export const CONTROL_FORGE_POST = "forgePost";
+
+/** A session's forge write as the hub sends it: the repository by URL or `host/path`, and the write. */
+export interface ForgeAsk {
+  readonly repo: string;
+  readonly write: ForgeWrite;
+}
+
+/** A forge ask read off the wire; undefined when it is none. */
+export const readForgeAsk = (value: unknown): ForgeAsk | undefined => {
+  const ask = value as { repo?: unknown; write?: unknown } | null;
+  return ask &&
+    typeof ask === "object" &&
+    typeof ask.repo === "string" &&
+    isForgeWrite(ask.write)
+    ? { repo: ask.repo, write: ask.write }
+    : undefined;
+};
+
+/**
+ * What a session's forge write came to on the machine: made (or the
+ * making failed, in its words), held with the post and the account it would
+ * post as for the person's ask, or refused in the guard's words.
+ */
+export type ForgeVerdict =
+  | { readonly kind: "made"; readonly made: PostMade }
+  | {
+      readonly account: string;
+      readonly kind: "held";
+      readonly post: ForgePost;
+      readonly what: string;
+    }
+  | { readonly kind: "refused"; readonly why: string };
+
+/** What making a post said: whether it went, and what the host's program or the forge answered; a forge write's page when it made or found one. */
 export interface PostMade {
+  /** A pull or merge request that was open already for the same branches. */
+  readonly existing?: boolean;
   readonly ok: boolean;
   readonly said: string;
+  readonly url?: string;
 }
 
 /** What the person reads on the ask: where it posts, what, as whom, and the post itself. */
@@ -105,6 +200,67 @@ const MUTATION_FIELD = /mutation\b[^{]*\{\s*(?:\w+\s*:\s*)?(\w+)/;
 const TRAILING_SLASHES = /\/+$/;
 /** A branch's ref prefix, left off where a push names its branches. */
 const HEADS = /^refs\/heads\//;
+
+/** A forge write's kind and its one line, as the card says them. */
+const forgeDescribed = (
+  post: ForgePost
+): Omit<UpstreamAskInput, "account" | "repo"> => {
+  const forge = FORGE_NAMES[post.forge];
+  const { write } = post;
+  switch (write.op) {
+    case "issue":
+      return {
+        kind: `${forge} issue`,
+        title: write.title,
+        body: write.body,
+        command: `open an issue on ${post.repo}`,
+      };
+    case "pull_request":
+      return {
+        kind: `${forge} ${changeRequestWords(post.forge)}`,
+        title: write.title,
+        body: write.body,
+        command: `open a ${changeRequestWords(post.forge)} on ${post.repo} from ${write.head} into ${write.base}`,
+      };
+    case "comment":
+      return {
+        kind: `${forge} comment`,
+        body: write.body,
+        command: `comment on ${write.on === "issue" ? "issue" : changeRequestWords(post.forge)} ${write.number} of ${post.repo}`,
+      };
+    default: {
+      const unhandled: never = write;
+      throw new Error(`unhandled forge write: ${JSON.stringify(unhandled)}`);
+    }
+  }
+};
+
+/** Whether a value read off the wire is a forge write the adapters make. */
+const isForgeWrite = (value: unknown): value is ForgeWrite => {
+  const write = value as Record<string, unknown> | null;
+  if (!write || typeof write !== "object") {
+    return false;
+  }
+  switch (write.op) {
+    case "issue":
+      return typeof write.title === "string" && typeof write.body === "string";
+    case "pull_request":
+      return (
+        typeof write.title === "string" &&
+        typeof write.body === "string" &&
+        typeof write.base === "string" &&
+        typeof write.head === "string"
+      );
+    case "comment":
+      return (
+        typeof write.body === "string" &&
+        Number.isInteger(write.number) &&
+        (write.on === "issue" || write.on === "pull_request")
+      );
+    default:
+      return false;
+  }
+};
 
 /** A JSON text's `title` and `body`, at its top or in a GraphQL request's variables (`input` too). */
 const titled = (
@@ -201,6 +357,9 @@ export const describePost = (
     case "http":
       described = httpDescribed(post);
       break;
+    case "forge":
+      described = forgeDescribed(post);
+      break;
     case "git":
       described = {
         kind: "push",
@@ -220,7 +379,7 @@ export const describePost = (
 /** One post as it is compared with another: two asks for the same post are one. */
 export const postKey = (post: UpstreamPost): string => JSON.stringify(post);
 
-/** Whether a value read off the wire is a post of one of the three kinds. */
+/** Whether a value read off the wire is a post of one of the four kinds. */
 export const isUpstreamPost = (value: unknown): value is UpstreamPost => {
   const post = value as { via?: unknown } | null;
   if (!post || typeof post !== "object") {
@@ -246,6 +405,12 @@ export const isUpstreamPost = (value: unknown): value is UpstreamPost => {
             typeof ref.dst === "string" &&
             typeof ref.force === "boolean"
         )
+      );
+    case "forge":
+      return (
+        (FORGES as readonly unknown[]).includes(one.forge) &&
+        typeof one.repo === "string" &&
+        isForgeWrite(one.write)
       );
     case "mcp":
       return (

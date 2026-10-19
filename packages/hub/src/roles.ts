@@ -156,6 +156,9 @@ const DELEGATE_SESSION = [
   "workflow_steer",
   "workflow_list",
   "generate_image",
+  // An issue, a pull or merge request or a comment on any forge, as its
+  // machine's sign-in there (forge-posts.ts): what gh did inside a workspace.
+  "forge_post",
   "list_delegate_types",
   "list_sessions",
   "start_session",

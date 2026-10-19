@@ -19,16 +19,17 @@ import {
   SAFE_GIT_ENV,
   safeGitArgv,
 } from "@cawco/core/safe-git";
-import { hostEnvironment } from "@cawco/core/session-env";
 import { GITHUB_API } from "@cawco/core/upstream-guard";
-import type {
-  GitPost,
-  HttpPost,
-  PostMade,
-  UpstreamPost,
+import {
+  FORGE_NAMES,
+  type GitPost,
+  type HttpPost,
+  type PostMade,
+  type UpstreamPost,
 } from "@cawco/core/upstream-post";
 import { toHttpBase } from "./discovery";
-import { hostGh, hostGhToken } from "./host-gh";
+import { FORGE_ADAPTERS, forgeLocation, makeForgePost } from "./forges/forge";
+import { hostGhToken } from "./host-gh";
 import { hostGitEnv, isNetworkRemote, pushLfs } from "./hub-git";
 import { provenFetch } from "./hub-proof";
 import { workspaceRefs } from "./workspace-records";
@@ -38,7 +39,7 @@ const MAKE_MS = 5 * 60_000;
 /** How much of what the post's program said is kept for the session. */
 const SAID_MAX = 4000;
 
-/** How long `gh api user` may take to name the login. Our choice. */
+/** How long a forge may take to name the login. Our choice. */
 const ACCOUNT_MS = 15_000;
 
 /** What a program said: its exit, and its stdout and stderr together. */
@@ -90,35 +91,29 @@ const madeBy = (read: Bounded<Ran>, what: string): PostMade => {
 };
 
 /**
- * Who a post to `repo` (`host/owner/repo`) is made as: on github.com, the
- * login this machine's gh posts as, or a plain phrase when gh cannot say in
- * time; on any other host, this machine's own git sign-in there, which only
- * its credential helper or ssh knows.
+ * Who a post to `repo` (`host/owner/repo`) is made as: the login of the
+ * host's own sign-in on that host's forge, as its adapter reads it (gh, glab
+ * or tea, forges/), or that forge's sign-in in words when the login cannot
+ * be read in time; on a host no forge CLI signs in to, this machine's own git
+ * sign-in there, which only its credential helper or ssh knows.
  */
 export const hostAccount = async (repo: string): Promise<string> => {
-  const host = repo.split("/")[0] ?? "";
-  if (host !== "github.com") {
-    return "this machine's git sign-in";
-  }
-  const gh = await hostGh();
-  if (!gh) {
-    return "this machine's GitHub sign-in";
-  }
-  const read = await runWithin(
-    ACCOUNT_MS,
-    [gh, "api", "user", "--jq", ".login"],
-    {
-      env: hostEnvironment(),
-      stdin: "ignore",
+  const at = repo.indexOf("/");
+  const host = repo.slice(0, at);
+  for (const adapter of FORGE_ADAPTERS) {
+    // biome-ignore lint/performance/noAwaitInLoops: the first forge that signs in to the host is its forge
+    const signIn = await adapter.signIn(host);
+    if (typeof signIn !== "object") {
+      continue;
     }
-  );
-  const login =
-    read.kind === "answered" && read.value.code === 0
-      ? read.value.said.split("\n")[0]?.trim()
-      : undefined;
-  return login && !login.includes(" ")
-    ? `@${login}`
-    : "this machine's GitHub sign-in";
+    const read = await readWithin(ACCOUNT_MS, () =>
+      adapter.client(signIn, repo.slice(at + 1)).account()
+    ).catch(() => undefined);
+    return read?.kind === "answered" && !read.value.includes(" ")
+      ? `@${read.value}`
+      : `this machine's ${FORGE_NAMES[adapter.forge]} sign-in`;
+  }
+  return "this machine's git sign-in";
 };
 
 /**
@@ -139,7 +134,10 @@ export const raiseUpstreamAsk = async (
       text: `cawco: \`${what}\` did not run: this machine has no hub to ask the owner through. Nothing was posted.`,
     };
   }
-  const account = await hostAccount(repo);
+  // A push names its host with its port, as a forge CLI's login does; the
+  // repository's identity, as the rule compares it, names none.
+  const at = post.via === "git" ? forgeLocation(post.url) : undefined;
+  const account = await hostAccount(at ? `${at.host}/${at.path}` : repo);
   try {
     const answer = await provenFetch(`${hub}/api/upstream/asks`, {
       method: "POST",
@@ -286,17 +284,20 @@ export const makeHeldPush = async (
 };
 
 /**
- * Makes one approved post for workspace `id`, once (the hub's
- * `CONTROL_UPSTREAM_POST`): answers whether it went and what was said.
+ * Makes one post once (the hub's `CONTROL_UPSTREAM_POST`), approved or the
+ * project's own: a held request or push for workspace `id`, or a forge write,
+ * which needs no workspace. Answers whether it went and what was said.
  */
 export const makeUpstreamPost = async (
-  id: string,
+  id: string | null,
   post: UpstreamPost
 ): Promise<PostMade> => {
   console.log(`[upstream] ${id}: making an approved ${post.via} post`);
   switch (post.via) {
     case "http":
       return await makeHttp(post);
+    case "forge":
+      return await makeForgePost(post);
     case "git": {
       const ref = (await workspaceRefs()).find((each) => each.id === id);
       return ref

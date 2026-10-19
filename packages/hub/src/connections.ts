@@ -242,13 +242,13 @@ export interface ConnectionsDeps {
   readonly typeConnections: (row: InstanceRow) => readonly string[];
   /**
    * The upstream guard on a session's call (server.ts, upstream-asks.ts): a
-   * GitHub connection's write tool to another person's repository is
-   * refused (off) or held for the person (ask), and this answers the
-   * session instead of the call; undefined when the call goes ahead.
+   * forge connection's write tool to another person's repository is refused
+   * (off) or held for the person (ask), and this answers the session instead
+   * of the call; undefined when the call goes ahead.
    */
   readonly upstream: (
     actor: InstanceRow,
-    connection: Pick<ConnectionRow, "account" | "name" | "service">,
+    connection: Pick<ConnectionRow, "account" | "name" | "service" | "url">,
     tool: Tool,
     args: Record<string, unknown>
   ) => CallToolResult | undefined;

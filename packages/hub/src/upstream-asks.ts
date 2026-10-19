@@ -24,6 +24,7 @@ import type { Envelope, InstanceRow, PermissionResult } from "@cawco/core";
 import { heldWords } from "@cawco/core/upstream-guard";
 import {
   describePost,
+  FORGE_NAMES,
   type PostMade,
   postKey,
   UPSTREAM_POST_TOOL,
@@ -32,14 +33,14 @@ import {
 
 /** What an upstream ask's payload carries for the hub, beside what the card shows. */
 export interface HeldPost {
-  /** The machine that makes it: the workspace's; none for a connection's, which the hub calls. */
+  /** The machine that makes it: the workspace's, or the session's for a forge write; none for a connection's, which the hub calls. */
   readonly machineId?: string;
   readonly post: UpstreamPost;
   /** Where it lands, `host/owner/repo`. */
   readonly repo: string;
   /** The call in a few words, as the session wrote it. */
   readonly what: string;
-  /** The workspace that held it; none for a connection's. */
+  /** The workspace that held it; none for a connection's or a forge write's, which needs none. */
   readonly workspaceId?: string;
 }
 
@@ -49,10 +50,10 @@ export interface UpstreamAsksDeps {
     post: Extract<UpstreamPost, { via: "mcp" }>,
     requestId: string
   ) => Promise<PostMade>;
-  /** Has the machine make an approved post (agent `CONTROL_UPSTREAM_POST`). */
+  /** Has the machine make an approved post (agent `CONTROL_UPSTREAM_POST`); a forge write names no workspace. */
   readonly make: (
     machineId: string,
-    workspaceId: string,
+    workspaceId: string | null,
     post: UpstreamPost
   ) => Promise<PostMade>;
   /** Parks an ask for the person, kept across a hub restart. */
@@ -72,6 +73,15 @@ export interface UpstreamAsksDeps {
   /** The thread a project's Caw asks in; undefined for any other session. */
   readonly threadOf: (actor: InstanceRow) => string | undefined;
 }
+
+/** Who answered a made post: its forge by name, else its host. */
+const answererOf = (held: HeldPost): string => {
+  if (held.post.via === "forge") {
+    return FORGE_NAMES[held.post.forge];
+  }
+  const host = held.repo.split("/")[0] ?? "";
+  return host === "github.com" ? "GitHub" : host;
+};
 
 /** A parked ask's held post; undefined for every other ask. */
 export const heldPostOf = (
@@ -105,6 +115,8 @@ export const createUpstreamAsks = (deps: UpstreamAsksDeps) => {
     try {
       if (held.post.via === "mcp") {
         made = await deps.callConnection(held.post, requestId);
+      } else if (held.machineId && held.post.via === "forge") {
+        made = await deps.make(held.machineId, null, held.post);
       } else if (held.machineId && held.workspaceId) {
         made = await deps.make(held.machineId, held.workspaceId, held.post);
       } else {
@@ -119,7 +131,7 @@ export const createUpstreamAsks = (deps: UpstreamAsksDeps) => {
     deps.tell(
       instanceId,
       made.ok
-        ? `The owner approved \`${held.what}\` to ${held.repo}. CawCo posted it once, exactly as written; ${held.repo.split("/")[0] === "github.com" ? "GitHub" : held.repo.split("/")[0]} said:\n\n${made.said}`
+        ? `The owner approved \`${held.what}\` to ${held.repo}. CawCo posted it once, exactly as written; ${answererOf(held)} said:\n\n${made.said}`
         : `The owner approved \`${held.what}\` to ${held.repo}, but posting it failed, so it may not be there; CawCo did not try again. What came back:\n\n${made.said}`
     );
   };

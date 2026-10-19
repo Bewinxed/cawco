@@ -362,15 +362,14 @@ import {
   type StageStatus,
 } from "@cawco/core/stage";
 import type { RelayFrame } from "@cawco/core/stream-relay";
+import { decideWrite, type UpstreamRules } from "@cawco/core/upstream-guard";
 import {
-  otherWrite,
-  type UpstreamRules,
-  writeRefusal,
-} from "@cawco/core/upstream-guard";
-import {
+  CONTROL_FORGE_POST,
   CONTROL_UPSTREAM_POST,
+  type ForgeVerdict,
   isUpstreamPost,
   type PostMade,
+  readForgeAsk,
 } from "@cawco/core/upstream-post";
 import { WIRE_MESSAGE_LIMIT_BYTES } from "@cawco/core/wire";
 import { isPlace } from "@cawco/core/workspace-policy";
@@ -447,6 +446,7 @@ import {
   PREVIEW_PORTS,
   SPAWN_START_TIMEOUT_MS,
 } from "./config";
+import { connectionWrite } from "./connection-writes";
 import { connectionRoutes, createConnections } from "./connections";
 import {
   asksOpening,
@@ -538,6 +538,7 @@ import { FleetMcp } from "./fleet-mcp";
 import { FleetMcpChanges, type RidingChanges } from "./fleet-mcp-changes";
 import { createFleetWatch, type FleetWatch } from "./fleet-watch";
 import { accountForecasts, carrySequence } from "./forecast";
+import { createForgePosts } from "./forge-posts";
 import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
@@ -2994,6 +2995,37 @@ export const createServer = (
     },
     tell: (instanceId, text) => tellSession(instanceId, text, UPSTREAM_ORIGIN),
     threadOf: (actor) => lead?.askThread(actor),
+  });
+  // A session's forge_post (forge-posts.ts): decided and made on its
+  // machine with the machine's own sign-in, or held as the person's ask.
+  const forgePosts = createForgePosts({
+    ask: (actor, held, account) => upstreamAsks.ask(actor, held, account),
+    remoteOf: (projectId) =>
+      (projectId ? db.project(projectId)?.remote : undefined) ?? undefined,
+    ruleOf: (projectId) => upstreamRuleOf(db, projectId),
+    call: async (machineId, rule, ask) => {
+      const answer = await callAgent(
+        machineId,
+        CONTROL_FORGE_POST,
+        [rule, ask],
+        UPSTREAM_POST_MS
+      );
+      if (answer.kind === "unanswered") {
+        return {
+          kind: "failed",
+          why:
+            answer.reason === "dead"
+              ? `${machineName(machineId)} is not connected, so nothing was posted.`
+              : `${machineName(machineId)} did not say how the post went in time; it may or may not be there.`,
+        };
+      }
+      return answer.value.ok
+        ? { kind: "answered", verdict: answer.value.result as ForgeVerdict }
+        : {
+            kind: "failed",
+            why: answer.value.error ?? "The machine refused the post.",
+          };
+    },
   });
   // Each project's Caw (caw.ts), made further down once its services are; the
   // settlement, answer and process-end paths above it reach it through this.
@@ -19987,48 +20019,43 @@ export const createServer = (
           )?.connections ?? [])
         : [],
     changed: () => toolsMayHaveChanged(),
-    // A GitHub connection's write tool (github-mcp-server marks each read
-    // `ReadOnlyHint: true`, pkg/github/issues.go) naming another person's
-    // `owner`/`repo`: refused under off, held for the person under ask.
+    // A forge connection's write tool (connection-writes.ts) to another
+    // person's repository: decided as every write is (core decideWrite),
+    // refused under off, held for the person under ask.
     upstream: (actor, connection, tool, args) => {
-      const { owner, repo } = args;
-      if (
-        connection.service.trim().toLowerCase() !== "github" ||
-        tool.annotations?.readOnlyHint === true ||
-        typeof owner !== "string" ||
-        typeof repo !== "string"
-      ) {
+      const write = connectionWrite(connection, tool, args);
+      if (!write) {
         return;
       }
-      const rule = upstreamRuleOf(db, actor.projectId);
-      const write = otherWrite(rule, {
-        what: `${connection.name} ${tool.name}`,
-        repo: `github.com/${owner}/${repo}`,
-      });
-      if (rule.posts === "on" || !write?.repo) {
-        return;
+      const decision = decideWrite(upstreamRuleOf(db, actor.projectId), write);
+      switch (decision.kind) {
+        case "go":
+          return;
+        case "refuse":
+          return {
+            isError: true,
+            content: [{ type: "text", text: decision.why }],
+          };
+        case "hold": {
+          const text = upstreamAsks.ask(
+            actor,
+            {
+              post: {
+                via: "mcp",
+                connection: connection.name,
+                tool: tool.name,
+                args,
+              },
+              repo: decision.repo,
+              what: write.what,
+            },
+            `${connection.account || connection.name} (connection ${connection.name})`
+          );
+          return { content: [{ type: "text", text }] };
+        }
+        default:
+          throw unreachable(decision);
       }
-      if (rule.posts === "off") {
-        return {
-          isError: true,
-          content: [{ type: "text", text: writeRefusal(rule, write) ?? "" }],
-        };
-      }
-      const text = upstreamAsks.ask(
-        actor,
-        {
-          post: {
-            via: "mcp",
-            connection: connection.name,
-            tool: tool.name,
-            args,
-          },
-          repo: write.repo,
-          what: write.what,
-        },
-        `${connection.account || connection.name} (connection ${connection.name})`
-      );
-      return { content: [{ type: "text", text }] };
     },
   });
   // Tracker sync (tracker.ts): a project's tasks one record with their
@@ -22575,11 +22602,14 @@ export const createServer = (
               `cawco: \`${what}\` did not run: the hub holds no session of this workspace, so the owner could not be asked. Nothing was posted.`
             );
           }
-          const rule = upstreamRuleOf(db, actor.projectId);
-          if (rule.posts !== "ask" || !otherWrite(rule, { what, repo })) {
+          const decision = decideWrite(upstreamRuleOf(db, actor.projectId), {
+            what,
+            repo,
+          });
+          if (decision.kind !== "hold") {
             return status(
               409,
-              `cawco: \`${what}\` did not run: this project's choice changed since the call (${writeRefusal(rule, { what, repo }) ? "agents are kept off other repositories" : "it may post there now"}). Run it again to go by the choice as it is now.`
+              `cawco: \`${what}\` did not run: this project's choice changed since the call (${decision.kind === "refuse" ? "agents are kept off other repositories" : "it may post there now"}). Run it again to go by the choice as it is now.`
             );
           }
           return upstreamAsks.ask(
@@ -22712,6 +22742,34 @@ export const createServer = (
         ({ params, status }) =>
           machineRow(params.machineId) ??
           status(404, machineFault(params.machineId, "unknown"))
+      )
+      // A session's forge_post (forge-posts.ts): what it says is the
+      // tool's answer; a write that did not go is a refusal in its words.
+      .post(
+        "/api/instances/:id/forge-post",
+        {
+          ...hidden,
+          body: t.Object({
+            repo: t.Optional(t.String({ minLength: 1 })),
+            write: t.Any(),
+          }),
+        },
+        async ({ params, body, status, request, server }) => {
+          const [row] = db.listedInstancesByIds([params.id]);
+          const write = readForgeAsk({ repo: "-", write: body.write })?.write;
+          if (!(row && write)) {
+            return status(
+              row ? 400 : 404,
+              row ? "forge_post takes one write." : "Unknown calling session."
+            );
+          }
+          server?.timeout(request, 0);
+          const answer = await forgePosts.post(row, {
+            write,
+            ...(body.repo ? { repo: body.repo } : {}),
+          });
+          return answer.ok ? answer.text : status(422, answer.text);
+        }
       )
       .post(
         "/api/instances/:id/generate-image",

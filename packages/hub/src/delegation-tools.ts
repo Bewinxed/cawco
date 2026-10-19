@@ -3,6 +3,7 @@ import {
   LANDS_MODES,
   type LandsMode,
 } from "@cawco/core";
+import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import {
@@ -48,6 +49,37 @@ const accountParameter = () =>
     .describe(
       "The account the session runs on, by its label or id. Name one only when the user asks for that account; omitted, the hub places it by the fleet's routing."
     );
+
+/** `forge_post`'s arguments as the one write they name, or a refusal saying what the kind needs. */
+const forgeWriteOf = (asked: {
+  base?: string;
+  body: string;
+  head?: string;
+  kind: "issue" | "pull_request" | "comment";
+  number?: number;
+  on?: "issue" | "pull_request";
+  title?: string;
+}): ForgeWrite => {
+  const { kind, body, title, head, base, number } = asked;
+  if (kind === "issue" && title) {
+    return { op: "issue", title, body };
+  }
+  if (kind === "pull_request" && title && head && base) {
+    return { op: "pull_request", title, body, head, base };
+  }
+  if (kind === "comment" && number && body.trim()) {
+    return { op: "comment", body, number, on: asked.on ?? "issue" };
+  }
+  throw new Error(
+    {
+      issue: "An issue needs its title.",
+      pull_request:
+        "A pull or merge request needs its title, head (the pushed branch) and base.",
+      comment:
+        "A comment needs its body and the number of the issue or pull request it is on.",
+    }[kind]
+  );
+};
 
 function tool<T extends z.ZodRawShape>(
   name: string,
@@ -399,6 +431,61 @@ export function handoffTools(deps: HandoffDeps) {
         return {
           content: [{ type: "text" as const, text: JSON.stringify(image) }],
           structuredContent: image,
+        };
+      },
+      {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: false,
+        openWorldHint: true,
+      }
+    ),
+    tool(
+      "forge_post",
+      "Open an issue, a pull/merge request or a comment on a repository's forge (GitHub, GitLab, Gitea, Forgejo), with your machine's own sign-in there. " +
+        "Defaults to this project's repository; one elsewhere may be refused or held for the owner (you are told; never repeat it). Push the head branch first.",
+      {
+        kind: z
+          .enum(["issue", "pull_request", "comment"])
+          .describe(
+            "issue: title, body. pull_request: title, body, head, base. comment: body, number, on."
+          ),
+        repo: z
+          .string()
+          .trim()
+          .min(1)
+          .optional()
+          .describe("Git URL or host/path; omitted, this project's."),
+        title: z.string().trim().min(1).optional(),
+        body: z.string().optional(),
+        head: z.string().trim().min(1).optional(),
+        base: z.string().trim().min(1).optional(),
+        number: z.number().int().positive().optional(),
+        on: z
+          .enum(["issue", "pull_request"])
+          .optional()
+          .describe("What number names; default issue."),
+      },
+      async ({ kind, repo, title, body, head, base, number, on }) => {
+        const write = forgeWriteOf({
+          kind,
+          body: body ?? "",
+          ...(title ? { title } : {}),
+          ...(head ? { head } : {}),
+          ...(base ? { base } : {}),
+          ...(number ? { number } : {}),
+          ...(on ? { on } : {}),
+        });
+        return {
+          content: [
+            {
+              type: "text" as const,
+              text: await actions.forgePost({
+                write,
+                ...(repo ? { repo } : {}),
+              }),
+            },
+          ],
         };
       },
       {

@@ -69,9 +69,8 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import {
   askRefusal,
+  decideWrite,
   normaliseRemote,
-  owns,
-  writeRefusal,
 } from "@cawco/core/upstream-guard";
 import type { GitPost, PushedRef } from "@cawco/core/upstream-post";
 import { upstreamRule } from "./github-door";
@@ -633,26 +632,18 @@ const doorTarget = (ref: WorkspaceRef, url: string): DoorTarget => {
       `cawco: git did not reach ${url} through the workspace's git door: it takes this clone's own origin, and pushes across the network, alone`
     );
   }
-  const rule = upstreamRule(ref.id);
   const repo = normaliseRemote(url);
-  if (!rule || rule.posts === "on" || (repo && owns(rule.remotes, repo))) {
-    return { kind: "host", origin: false, push: { kind: "go" } };
-  }
+  const decision = decideWrite(upstreamRule(ref.id), {
+    what: `git push ${url}`,
+    ...(repo ? { repo } : {}),
+  });
   return {
     kind: "host",
     origin: false,
     push:
-      rule.posts === "ask"
-        ? { kind: "hold", repo: repo ?? url }
-        : {
-            kind: "refuse",
-            why: oneLine(
-              writeRefusal(rule, {
-                what: `git push ${url}`,
-                ...(repo ? { repo } : {}),
-              }) ?? `cawco: \`git push ${url}\` did not run`
-            ),
-          },
+      decision.kind === "refuse"
+        ? { kind: "refuse", why: oneLine(decision.why) }
+        : decision,
   };
 };
 

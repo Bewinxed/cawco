@@ -45,8 +45,9 @@
  *
  * A work item that lands `branch` or `pr` goes to a branch of its own
  * instead ({@link pushBranch}): HEAD as it is, replacing only what the hub
- * read there a moment before; `pr` then opens a pull request for it with
- * `gh`, or finds the one already open ({@link openPullRequest}).
+ * read there a moment before; for `pr` the hub then has the workspace's
+ * machine open the pull or merge request through its origin's forge adapter
+ * (work-items.ts `pullRequestFor`, agent forges/).
  */
 import type { CommandResult, RunsOnCapability } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
@@ -70,7 +71,7 @@ export interface Refusal {
    * `push check`: the dry run of the push before the landing gate ran a
    * step ({@link pushCheck}), its detail git's whole output.
    */
-  step: "read" | "fetch" | "push check" | "push" | "pull request";
+  step: "read" | "fetch" | "push check" | "push";
   /** The pushes made, for a `race`. */
   tries?: number;
 }
@@ -801,41 +802,4 @@ async function leasedPush(
         cause: "race",
         tries: n,
       };
-}
-
-/** What asking GitHub for a pull request came to. */
-export type PullRequestOutcome =
-  { kind: "opened" | "open"; url: string } | Refusal;
-
-const PR_URL = /https?:\/\/\S+\/pull\/\d+/;
-
-/**
- * The open pull request from `branch` into `base`, or a new one with `title`
- * and `body`: `gh pr view`, then `gh pr create`, in the workspace (whose
- * boundary exports GH_TOKEN). A branch that already has an open pull request
- * keeps it; the push before this updated it. A create gh turns down answers
- * gh's own words.
- */
-export async function openPullRequest(
-  request: { base: string; body: string; branch: string; title: string },
-  run: LandingDeps<unknown>["run"]
-): Promise<PullRequestOutcome> {
-  const { base, body, branch, title } = request;
-  const open = await run(
-    `gh pr view ${quote(branch)} --json url,state,baseRefName --jq ${quote('select(.state == "OPEN") | .url')}`,
-    NETWORK_MS
-  );
-  const existing = PR_URL.exec(open.stdout)?.[0];
-  if (open.exitCode === 0 && existing) {
-    return { kind: "open", url: existing };
-  }
-  const created = await run(
-    `gh pr create --base ${quote(base)} --head ${quote(branch)} --title ${quote(title)} --body ${quote(body)}`,
-    NETWORK_MS
-  );
-  const url = PR_URL.exec(created.stdout)?.[0];
-  if (created.exitCode === 0 && url) {
-    return { kind: "opened", url };
-  }
-  return refusal("pull request", created);
 }

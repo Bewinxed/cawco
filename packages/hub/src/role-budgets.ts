@@ -230,10 +230,17 @@ import type { Tasks } from "./tasks";
  * engine's own enum. About 233 tokens more than memory_recall's for the
  * worker, the delegate and the lead (worker 26,810, delegate 9,189, lead
  * 17,766 measured). Raised deliberately, by that, for each.
+ * 2026-10-19, after it: `forge_post` (forge-posts.ts, docs/forge-adapters.md),
+ * the owner's "an obvious yes" to GitLab and Gitea: an issue, a pull or merge
+ * request or a comment on any forge with the machine's own sign-in, which
+ * only gh inside a workspace did before, for GitHub alone. Its fields carry
+ * no description their names already give. About 329 tokens for the worker
+ * and the delegate (worker 27,142, delegate 9,520 measured beside
+ * `find`). Raised deliberately, by that, for both.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 26_820,
-  delegate: 9200,
+  worker: 27_150,
+  delegate: 9530,
   lead: 17_780,
   overseer: 770,
   "web-facing": 3400,

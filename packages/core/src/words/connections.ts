@@ -108,6 +108,14 @@ export interface ConnectionWay {
  * - Slack: "We do not support SSE-based connections or Dynamic Client
  *   Registration at this time" (docs.slack.dev/ai/slack-mcp-server), so a
  *   user token, as Bearer.
+ * - GitLab: its MCP server "supports OAuth 2.0 Dynamic Client Registration"
+ *   and takes "A fine-grained personal access token with the MCP tool
+ *   resource and the Execute permission"; legacy personal access tokens "cannot
+ *   have the `mcp` scope, so the GitLab MCP server rejects them"
+ *   (docs.gitlab.com/user/model_context_protocol/mcp_server). A session's
+ *   write through it to another person's project is judged by the hub
+ *   (connection-writes.ts). Pushes, issues and merge requests through
+ *   `forge_post` sign in with the machine's glab instead.
  */
 export interface ConnectionService {
   label: string;
@@ -155,6 +163,24 @@ export const CONNECTION_SERVICES: readonly ConnectionService[] = [
         auth: "oauth",
         label: "Sign in",
         says: "Linear's own sign-in, for agents' Linear tools. A project's tasks need a Linear app or an API key.",
+      },
+    ],
+  },
+  {
+    service: "gitlab",
+    label: "GitLab",
+    url: "https://gitlab.com/api/v4/mcp",
+    ways: [
+      {
+        auth: "oauth",
+        label: "Sign in",
+        says: "GitLab's own sign-in, for agents' GitLab tools.",
+      },
+      {
+        auth: "bearer",
+        label: "Token",
+        says: "A fine-grained personal access token with the MCP tool resource's Execute permission, limited to the projects' groups.",
+        key: "It acts as you.",
       },
     ],
   },

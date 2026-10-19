@@ -21,8 +21,14 @@
  * - GitHub's API, through the GitHub door (agent github-door.ts): a write
  *   against `/repos/<owner>/<repo>`, or a GraphQL mutation, by the
  *   repository it names or its node ids resolve to
- *   ({@link upstreamHttpWrite}).
- * Anything else has nothing to sign in with, so it posts nowhere.
+ *   ({@link upstreamHttpWrite});
+ * - an issue, a pull or merge request or a comment on GitHub, GitLab or
+ *   Gitea, through `forge_post` and that forge's adapter on the machine
+ *   (agent forges/), with the host's sign-in where the forge's CLI keeps it;
+ * - a forge connection's write tool, called by the hub (hub
+ *   connection-writes.ts).
+ * Each of them decides by {@link decideWrite} alone. Anything else has
+ * nothing to sign in with, so it posts nowhere.
  */
 
 /**
@@ -261,18 +267,6 @@ export const owns = (remotes: readonly string[], repo: string): boolean =>
   remotes.some((remote) => remote.toLowerCase() === repo.toLowerCase());
 
 /**
- * The write a request makes to another repository under `rule`: what `ask`
- * holds for the person. None when it writes to none, or to the project's own.
- */
-export const otherWrite = (
-  rule: UpstreamRule,
-  write: UpstreamWrite | undefined
-): UpstreamWrite | undefined =>
-  write && !(write.repo !== undefined && owns(rule.remotes, write.repo))
-    ? write
-    : undefined;
-
-/**
  * Why a post under `ask` cannot wait for the person as it stands, in the
  * words the session reads: `why`, and what to do instead. Nothing was posted.
  */
@@ -309,6 +303,52 @@ export const writeRefusal = (
       ? `this project's repository is ${rule.remotes.join(", ")}`
       : "this session has no repository of its own";
   return `cawco: \`${write.what}\` did not run: ${targetWords(write, rule)}, and ${own}. Sessions here are kept off other people's repositories (the owner's choice), so nothing is posted under their account. Put what you would have posted (the title and body, or the comment) in your report as a draft instead; the owner decides whether to post it.`;
+};
+
+/**
+ * What a write to a repository comes to under the project's rule: it goes
+ * (`go`), it waits for the person (`hold`, under "Ask me first"), or it does
+ * not run (`refuse`, in the words the session reads).
+ */
+export type WriteDecision =
+  | { readonly kind: "go" }
+  | { readonly kind: "hold"; readonly repo: string }
+  | { readonly kind: "refuse"; readonly why: string };
+
+/**
+ * The one decision on a write, whatever forge or door it reaches by: no rule,
+ * "Let agents post upstream", or the project's own repository goes; under
+ * "Ask me first" a write to another repository is held, and one whose
+ * repository cannot be named is refused, since the person could not be shown
+ * where it lands; under "Keep agents off" it is refused. The git door, the
+ * GitHub door, forge posts and a connection's write tools all decide here
+ * (docs/forge-adapters.md §3.3).
+ */
+export const decideWrite = (
+  rule: UpstreamRule | undefined,
+  write: UpstreamWrite
+): WriteDecision => {
+  if (!rule || rule.posts === "on") {
+    return { kind: "go" };
+  }
+  const refusal = writeRefusal(rule, write);
+  if (!refusal) {
+    return { kind: "go" };
+  }
+  if (rule.posts === "off") {
+    return { kind: "refuse", why: refusal };
+  }
+  return write.repo !== undefined && !write.unread
+    ? { kind: "hold", repo: write.repo }
+    : {
+        kind: "refuse",
+        why: askRefusal(
+          write.what,
+          write.unread
+            ? "the guard could not read where it writes"
+            : "it names no repository the owner could be shown"
+        ),
+      };
 };
 
 /** Where a refused call writes, in the refusal's words. */

@@ -115,9 +115,12 @@ import {
   RELAY_STOP,
   type RelayStartArgs,
 } from "@cawco/core/stream-relay";
+import { readUpstreamRule } from "@cawco/core/upstream-guard";
 import {
+  CONTROL_FORGE_POST,
   CONTROL_UPSTREAM_POST,
   isUpstreamPost,
+  readForgeAsk,
 } from "@cawco/core/upstream-post";
 import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { announcingParts, clientLine } from "@cawco/core/wire";
@@ -160,6 +163,7 @@ import { convertWorktrees } from "./clone";
 import { readConfig, writeConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
 import { rediscoverHub, toWsUrl } from "./discovery";
+import { forgePost } from "./forges/forge";
 import type { Harness } from "./harness";
 import { harness, harnesses } from "./harnesses";
 import { removeCawcoSessionConfigs } from "./harnesses/opencode";
@@ -2997,15 +3001,29 @@ export const startDaemon = (rediscover = false) =>
         discardWorkspace
       )
     );
-    // A post to another person's repository the person approved, made once
-    // with this machine's GitHub sign-in (upstream-posts.ts).
+    // A post made once with this machine's own sign-in (upstream-posts.ts):
+    // one the person approved, or a landing's pull or merge request.
     supervisor.registerDaemonFunction(CONTROL_UPSTREAM_POST, (id, post) => {
-      if (!(typeof id === "string" && isUpstreamPost(post))) {
+      if (!(
+        isUpstreamPost(post) &&
+        (typeof id === "string" || (id === null && post.via === "forge"))
+      )) {
         return Promise.reject(
           new Error("upstreamPost takes a workspace id and a post")
         );
       }
       return makeUpstreamPost(id, post);
+    });
+    // A session's forge write under its project's rule (forges/forge.ts):
+    // made, held for the person, or refused here.
+    supervisor.registerDaemonFunction(CONTROL_FORGE_POST, (rule, ask) => {
+      const read = readForgeAsk(ask);
+      if (!read || (rule !== null && !readUpstreamRule(rule))) {
+        return Promise.reject(
+          new Error("forgePost takes the project's rule and a forge write")
+        );
+      }
+      return forgePost(readUpstreamRule(rule), read);
     });
     // A project's browser (browser/browsers.ts): started or woken on its
     // machine's host, stopped, removed; the whole list told on each change.

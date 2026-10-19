@@ -96,6 +96,11 @@ import {
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import type { StageCloneFrame } from "@cawco/core/stage";
 import {
+  CONTROL_FORGE_POST,
+  type ForgeVerdict,
+  type ForgeWrite,
+} from "@cawco/core/upstream-post";
+import {
   excludedPaths,
   IGNORED_STATUS,
   stageCloneId,
@@ -133,7 +138,6 @@ import {
   type LandingTurn,
   land,
   landingQueue,
-  openPullRequest,
   pushBranch,
   quote,
   type Refusal,
@@ -1761,7 +1765,6 @@ const refusedLine = (
     "push check": `the push check (git push --dry-run to ${target}, before any landing gate step)`,
     push: `the push to ${target}`,
     read: "reading the workspace's git",
-    "pull request": "opening the pull request",
   };
   let said = `${step[refusal.step]} on ${machine} failed`;
   if (refusal.cause === "race") {
@@ -6027,7 +6030,13 @@ export const createWorkItems = ({
     return pullRequestFor(workspace, item, summary, gate, at, landed);
   };
 
-  /** Opens the pull request for an item's pushed branch, or finds the open one. */
+  /**
+   * Opens the pull or merge request for an item's pushed branch, or finds
+   * the open one: the workspace's machine makes it through the forge adapter
+   * of its origin's host with its own sign-in there (agent forges/,
+   * `CONTROL_FORGE_POST`, the project's own repository, so no rule holds
+   * it). A forge that turns it down refuses the landing in its words.
+   */
   const pullRequestFor = async (
     workspace: WorkspaceRow,
     item: WorkItemRow,
@@ -6038,31 +6047,58 @@ export const createWorkItems = ({
   ): Promise<Landed> => {
     const { base } = workspace;
     const branch = landingBranch(item);
+    const machine = machineName(workspace.machineId);
     const title =
       (item.projectId && item.taskId
         ? taskTitle?.(item.projectId, item.taskId)
         : undefined) ?? item.title;
-    const pr = await openPullRequest(
-      { base, branch, title, body: pullRequestBody(item, summary, gate) },
-      runIn(workspace, item)
-    );
-    if (pr.kind === "refused") {
-      const why = `gh on ${machineName(workspace.machineId)} did not open the pull request`;
+    const origin = (
+      await runIn(workspace, item)("git remote get-url origin", GIT_TIMEOUT_MS)
+    ).stdout.trim();
+    const write: ForgeWrite = {
+      op: "pull_request",
+      base,
+      head: branch,
+      title,
+      body: pullRequestBody(item, summary, gate),
+    };
+    let verdict: ForgeVerdict;
+    try {
+      verdict = (await call(workspace.machineId, CONTROL_FORGE_POST, [
+        null,
+        { repo: origin, write },
+      ])) as ForgeVerdict;
+    } catch (error) {
+      verdict = {
+        kind: "refused",
+        why: error instanceof Error ? error.message : String(error),
+      };
+    }
+    const made =
+      verdict.kind === "made"
+        ? verdict.made
+        : {
+            ok: false,
+            said:
+              verdict.kind === "refused"
+                ? verdict.why
+                : "it was held, which a project's own repository never is",
+          };
+    if (!(made.ok && made.url)) {
       return {
         kind: "refused",
         gate,
-        line: `Pushed to branch ${at}, but ${why}. gh said:${fenced(pr.detail)}\nOpen it by hand from ${branch} into ${base}, or start the task again once gh can.`,
+        line: `Pushed to branch ${at}, but ${machine} did not open the pull or merge request. It said:${fenced(made.said)}\nOpen it by hand from ${branch} into ${base}, or start the task again once ${machine} can.`,
       };
     }
     return {
       kind: "done",
       gate,
       landed,
-      prUrl: pr.url,
-      line:
-        pr.kind === "opened"
-          ? `Pushed to branch ${at} and opened a pull request against ${base}: ${pr.url}`
-          : `Pushed to branch ${at}, which updates its open pull request: ${pr.url}`,
+      prUrl: made.url,
+      line: made.existing
+        ? `Pushed to branch ${at}, which updates its open pull or merge request: ${made.url}`
+        : `Pushed to branch ${at} and opened a pull or merge request against ${base}: ${made.url}`,
     };
   };
 

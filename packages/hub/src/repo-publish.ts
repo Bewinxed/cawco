@@ -12,8 +12,9 @@
  *   scan would have kept out. The card says them all.
  * - **Publish**, on Approve: the place pushes its branch to the hub's own
  *   remote of the project with its machine's credential; the hub creates
- *   the repository through the connection (`POST /user/repos`, private as
- *   asked) and pushes that branch from its bare repository with the token in
+ *   the repository through the connection with Octokit
+ *   (`repos.createForAuthenticatedUser`, private as asked) and pushes that
+ *   branch from its bare repository with the token in
  *   an `http.extraHeader` given through git's environment, never argv; the
  *   project is then linked to it, as `link_repo` links one.
  */
@@ -24,6 +25,7 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { GIT_LOCALE } from "@cawco/core/safe-git";
+import { Octokit } from "@octokit/rest";
 import type { Connections } from "./connections";
 import type { ProjectRow } from "./db";
 import type { PlaceRepos } from "./place-repo";
@@ -214,30 +216,32 @@ export const createRepoPublish = ({
       false,
     ])) as PlacePush;
     const token = connections.githubToken(change.connection);
+    const octokit = new Octokit({
+      auth: token,
+      baseUrl: GITHUB_API,
+      userAgent: "CawCo-hub",
+    });
     const asked = await readWithin(API_MS, async (signal) => {
-      const response = await fetch(`${new URL(GITHUB_API).origin}/user/repos`, {
-        method: "POST",
-        headers: {
-          Accept: "application/vnd.github+json",
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-          "User-Agent": "CawCo-hub",
-          "X-GitHub-Api-Version": "2022-11-28",
-        },
-        body: JSON.stringify({
+      try {
+        const { data } = await octokit.rest.repos.createForAuthenticatedUser({
           name: change.name,
           private: change.private,
           auto_init: false,
-        }),
-        redirect: "error",
-        signal,
-      });
-      const made = (await response.json().catch(() => ({}))) as {
-        clone_url?: string;
-        full_name?: string;
-        message?: string;
-      };
-      return { response, made };
+          request: { signal, redirect: "error" },
+        });
+        return { made: data };
+      } catch (error) {
+        const failed = error as {
+          message?: string;
+          response?: { data?: { message?: unknown } };
+          status?: number;
+        };
+        const said = failed.response?.data?.message;
+        return {
+          refused:
+            `${failed.status ?? "no answer"} ${typeof said === "string" ? said : (failed.message ?? "")}`.trim(),
+        };
+      }
     });
     switch (asked.kind) {
       case "answered":
@@ -251,11 +255,9 @@ export const createRepoPublish = ({
         throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
     }
-    const { response, made } = asked.value;
-    if (!(response.ok && made.full_name && made.clone_url)) {
-      throw new Error(
-        `GitHub did not create ${change.name}: ${response.status} ${made.message ?? response.statusText}`
-      );
+    const { made, refused } = asked.value;
+    if (!made) {
+      throw new Error(`GitHub did not create ${change.name}: ${refused}`);
     }
     await pushFromHub(project.id, pushed.branch, made.clone_url, token);
     console.log(

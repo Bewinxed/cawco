@@ -165,8 +165,14 @@ judges own-vs-other or Off/Ask/On itself:
 | GitLab | glab's `config.yml` (`$GLAB_CONFIG_DIR`, else `$XDG_CONFIG_HOME/glab-cli`, else `~/.config/glab-cli`), `hosts.<host>.token`, its `api_protocol` and `api_host` | docs.gitlab.com/cli/config: "`token`: Your GitLab access token … Scoped per host"; "`api_protocol` … Supported values: `http`, `https`" |
 | Gitea | tea's `config.yml` (`$XDG_CONFIG_HOME/tea`, else `~/.config/tea`), the login whose `url` is on the host, its `token` | gitea.com/gitea/tea: "Configuration is persisted in $XDG_CONFIG_HOME/tea" |
 
-A glab login kept in the OS keyring (`use_keyring: true`) has no token in the
-file; the write says so and names `glab auth login` without the keyring. A
+A login is found by the repository's host with its port (`gitea.local:3000`,
+as each CLI names a self-hosted forge), or, for a project's remote, which
+names no port (core `normaliseRemote`), by its hostname alone; the first of
+GitHub, GitLab, Gitea whose CLI signs in there is the host's forge. A glab
+login kept in the OS keyring (`use_keyring: true`) has no token in the
+file; the write says so and names `glab auth login` without the keyring.
+gitea-mcp, like gh, runs only from where no workspace writes
+(`host-gh.ts` `hostProgram`). A
 token the person adds in Configure → Connections is the hub's and stays
 there: it serves that connection's MCP tools (§3.6), not the machine's
 adapter. Nothing is ever exported into a workspace.
@@ -205,6 +211,7 @@ request, on Gitea a pull request.
 | `landing.ts` `openPullRequest`, `PullRequestOutcome`, `PR_URL`, the `gh pr view`/`gh pr create` commands | the origin's adapter, made on the machine (§3.7) |
 | The own-vs-other and Off/Ask/On branches in `hub-git.ts` `doorTarget`, `github-door.ts` `serve`, and the hub's connection guard | `decideWrite` |
 | `upstream-posts.ts` `hostAccount`'s GitHub-only login | each adapter's `account()` |
+| core `otherWrite`, and the landing refusal's `pull request` step | `decideWrite`; the forge's own words on the landing line |
 | `repo-publish.ts`'s hand-made `POST /user/repos` | Octokit |
 | The connection guard's GitHub-only `service === "github"` test | the forge of the connection's service |
 
@@ -212,3 +219,16 @@ request, on Gitea a pull request.
 under On is today's GitHub behaviour, which this item keeps. Removing it is a
 one-line proposal for the owner, as it changes what an unguarded workspace's
 `gh` can do.
+
+## 5. What runs where, and its proof
+
+- `forge_post` (hub `delegation-tools.ts`, granted to delegates and
+  workers, `roles.ts`) → `/api/instances/:id/forge-post` → `forge-posts.ts`
+  → the session's machine (`CONTROL_FORGE_POST`) → `forges/forge.ts`
+  `forgePost`. A held write is the existing upstream ask card, its kind
+  "GitLab merge request", "Gitea issue", and made on approval through
+  `CONTROL_UPSTREAM_POST`.
+- Probe kit: `forge-adapters` (runs anywhere: GitHub and GitLab every leg,
+  Gitea its pushes, refusal and held card) and `forge-adapters-gitea` (host:
+  Gitea's writes through the real gitea-mcp). Stand-ins in
+  `scripts/probe-kit/forge-stubs.ts`; legs in `forge-legs.ts`.

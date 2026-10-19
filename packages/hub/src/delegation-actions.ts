@@ -36,6 +36,7 @@ import {
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { MachinePath } from "@cawco/core/machine-path";
+import type { ForgeWrite } from "@cawco/core/upstream-post";
 import type { WorkBudget, WorkItemSubmission } from "./db/schema";
 import type { DelegateListInclude, DelegateNode } from "./delegation-tree";
 import { hubHttpUrl, selfFetch } from "./hub-self";
@@ -915,6 +916,15 @@ export interface HandoffActions {
    * lands it, or fails it as blocked. Answers what the hub says of it.
    */
   readonly finishItem: (request: WorkItemSubmission) => Promise<string>;
+  /**
+   * One write on a repository's forge, made on this session's machine with
+   * its own sign-in there, under the project's choice on other people's
+   * repositories (forge-posts.ts). Answers what came of it, in words.
+   */
+  readonly forgePost: (ask: {
+    repo?: string;
+    write: ForgeWrite;
+  }) => Promise<string>;
   readonly generateImage: (
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
@@ -1725,6 +1735,21 @@ export const handoffActions = ({
         throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
     }
+  },
+  async forgePost(ask) {
+    const response = await fetch(
+      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/forge-post`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(ask),
+      }
+    );
+    const text = (await response.text()).trim();
+    if (!response.ok) {
+      throw new Error(text);
+    }
+    return text;
   },
   async artifactCall(method, path, body) {
     const response = await fetch(
