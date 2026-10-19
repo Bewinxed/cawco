@@ -45,17 +45,19 @@ export interface BrowserRecord {
     media: MediaPath;
     /** The ports it was published on: one made for other ports is made again. */
     ports?: BrowserPorts;
+    /** The runtime it was made on, as the record names it while that runtime is away. */
+    runtime?: { endpoint: string; kind: "docker" | "podman" };
     /** The STUN server neko's own ICE servers name (core `stunServer`): one made for another is made again. */
     stun?: string;
     userPassword: string;
     volume: string;
   };
   /**
-   * A container of this key that a move to the local host left behind (its
-   * runtime did not answer then), removed with its volume as soon as one
-   * does.
+   * The host it was made on, for good: a browser never moves between hosts,
+   * since its sign-ins are that host's profile (a volume, a local profile
+   * dir). Only a browser made for the first time picks its host from what
+   * answers then.
    */
-  containerLeft?: true;
   host: BrowserHostKind;
   key: BrowserKey;
   lastUsedAt: number;
@@ -72,6 +74,12 @@ export interface BrowserRecord {
   relayExpiresAt?: number;
   /** The stream relay's URLs that credential is for. */
   relayUrls?: string[];
+  /**
+   * A container browser whose runtime does not answer now: not live, its
+   * `why` naming the runtime, started again as soon as the runtime answers.
+   * Its container and volume are kept.
+   */
+  runtimeAway?: true;
   /**
    * Its place in BROWSER_PORTS, taken as it first starts and kept until it is
    * removed. None while it was only reserved for a session's browser tool.

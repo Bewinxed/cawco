@@ -1,17 +1,21 @@
 /**
  * The machine's browsers over both hosts (Projects spec §5.11): a container
- * where the machine's runtime answers, a local Chromium where none does. The
- * runtime is looked for as the agent starts and every 10 minutes while any
- * browser is local, so an install is found without a restart; a local
- * browser moves into a container at its next start (its sign-ins start over
- * there). A browser takes its ports as it first starts, not as it is
- * reserved. A move leaves nothing of the host it left: the local profile is
- * deleted, and the container with its volume is removed, at once, or, when
- * the move was the runtime going away, as soon as it answers again. A
- * browser stops after 30 minutes with no agent connection and no viewer, its
- * profile kept, and wakes on the next need. The daemon tells the hub the
- * whole list on each change ({@link BrowserFrame}); `cawco browser` acts on
- * the same records from a terminal.
+ * where the machine's runtime answers, a local Chromium where it has none. A
+ * browser is made on the host that answers as it is first made, and stays
+ * there for good: its sign-ins are that host's (a container's volume, a
+ * local profile dir), so it is never moved, and nothing of it is removed
+ * because a runtime was absent for a while (a Mac's agent starting before
+ * Colima does). A container browser whose runtime does not answer is not
+ * live, and says which runtime is away; it starts again by itself once that
+ * runtime answers. The runtime is looked for as the agent starts, every
+ * minute while a browser waits on it, and every 10 minutes while none
+ * answers, so a new install is found without a restart. A browser takes its
+ * ports as it first starts, not as it is reserved, and stops after 30
+ * minutes with no agent connection and no viewer, its profile kept, waking
+ * on the next need. The daemon tells the hub the whole list on each change
+ * ({@link BrowserFrame}), and answers it whole when the hub asks as the
+ * machine registers; `cawco browser` acts on the same records from a
+ * terminal.
  *
  * The daemon serves the machine's DevTools gate (gate.ts) on its one port
  * (`BROWSER_GATE_PORT`), with a gate behind it for every browser it keeps a
@@ -58,7 +62,7 @@ import {
 /** How long a browser with no agent connection and no viewer stays up. */
 export const BROWSER_IDLE_MS = 30 * 60_000;
 
-/** How often the runtime is looked for again while a browser is local. */
+/** How often the runtime is looked for again while none answers and no browser waits on it. */
 const RUNTIME_RECHECK_MS = 10 * 60_000;
 
 /** How often idle browsers are looked for. */
@@ -80,7 +84,7 @@ export const browserRuntime = async (
 
 const local = new LocalHost();
 
-/** The host a browser starts on now: the container host wherever a runtime answered. */
+/** The host a browser being made for the first time is made on: the container host wherever a runtime answers. */
 export const hostFor = async (): Promise<BrowserHost> => {
   const found = await browserRuntime();
   return "missing" in found ? local : new ContainerHost(found);
@@ -144,14 +148,17 @@ export const browserRows = async (): Promise<BrowserRow[]> =>
     )
     .map(rowOf);
 
+/** The runtime and every browser of the machine, whole, as its records hold them now. */
+export const browserFrame = async (): Promise<BrowserFrame> => ({
+  kind: "browsers",
+  machineId,
+  runtime: runtimeRow(await browserRuntime()),
+  browsers: await browserRows(),
+});
+
 /** Tells the hub the runtime and every browser, when anything of it changed. */
 const tell = async (): Promise<void> => {
-  const frame: BrowserFrame = {
-    kind: "browsers",
-    machineId,
-    runtime: runtimeRow(await browserRuntime()),
-    browsers: await browserRows(),
-  };
+  const frame = await browserFrame();
   const text = JSON.stringify(frame);
   if (text !== lastSent) {
     lastSent = text;
@@ -164,6 +171,9 @@ const told = (): void => {
     console.warn(`[browser] the frame was not sent: ${String(error)}`)
   );
 };
+
+/** A record changed outside the registry (the shield's take-over): the hub is told. */
+export const browsersChanged = (): void => told();
 
 const why = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -314,58 +324,40 @@ const stopOn = async (record: BrowserRecord): Promise<void> => {
   await (await hostOf(record))?.stop(record);
 };
 
-/** The container host now, when the runtime answers. */
-const containerHost = async (): Promise<BrowserHost | undefined> => {
-  const found = await browserRuntime();
-  return "missing" in found ? undefined : new ContainerHost(found);
+/**
+ * Why a container browser cannot start now: its runtime does not answer, in
+ * the person's words (WORDS, the error formula): what happened, why, the fix,
+ * and what is safe and comes next.
+ */
+const runtimeAwayWhy = (record: BrowserRecord): string => {
+  const madeOn = record.container?.runtime;
+  const named = madeOn
+    ? `${madeOn.kind === "podman" ? "Podman" : "Docker"} at ${madeOn.endpoint}`
+    : "its container runtime";
+  return `This browser runs in a container, and ${named} isn't answering, so it can't start. Start the container runtime; the browser starts again by itself, with its sign-ins kept.`;
 };
 
 /**
- * Removes the container (and its volume) a move to the local host left of
- * `record`, when the runtime answers now; the record without its mark once
- * it is gone.
+ * `record` whose runtime does not answer, written so (once, while that
+ * stays so): not live, its `why` naming the runtime, everything else of it
+ * kept (a take-over the person holds included), started again once the
+ * runtime answers. Answers that `why`.
  */
-const removeLeft = async (record: BrowserRecord): Promise<BrowserRecord> => {
-  if (!record.containerLeft) {
-    return record;
+const markAway = async (record: BrowserRecord): Promise<string> => {
+  const away = runtimeAwayWhy(record);
+  if (!(record.runtimeAway && record.why === away)) {
+    await writeBrowser({
+      ...record,
+      state: "failed",
+      runtimeAway: true,
+      why: away,
+    });
+    console.info(
+      `[browser] ${record.key}: its container runtime does not answer; kept as it is until it does`
+    );
+    told();
   }
-  const containers = await containerHost();
-  if (!containers) {
-    return record;
-  }
-  await containers.remove({ ...record, host: "container" });
-  console.info(
-    `[browser] ${record.key}: the container its move to the local host left is removed, with its volume`
-  );
-  const { containerLeft: _left, ...rest } = record;
-  return rest;
-};
-
-/**
- * `record` moved to the `to` host: what it left on the other goes (its
- * sign-ins cannot follow it, Projects spec §5.11). The local profile is
- * deleted; the container and its volume are removed, or, when the runtime
- * is the thing that went (the only way a container moves to the local
- * host), marked to be removed once it answers again.
- */
-const leave = async (
-  record: BrowserRecord,
-  to: BrowserHost
-): Promise<BrowserRecord> => {
-  const { container: _container, local: _local, ...rest } = record;
-  if (record.host === "local") {
-    await local.remove(record);
-    return removeLeft({ ...rest, host: to.kind });
-  }
-  const containers = await containerHost();
-  if (containers) {
-    await containers.remove(record);
-    return { ...rest, host: to.kind };
-  }
-  console.info(
-    `[browser] ${record.key}: its container and volume are removed once the container runtime answers again`
-  );
-  return { ...rest, host: to.kind, containerLeft: true };
+  return away;
 };
 
 /**
@@ -378,21 +370,13 @@ export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
     return Promise.reject(new Error(`${String(key)} is no browser key.`));
   }
   return withBrowser(key, async () => {
-    const host = await hostFor();
-    let record = await recordFor(key, key, host.kind);
-    // A browser the person holds privately stays where it runs, as it is,
-    // until the hand-back: never moved or started again under them.
-    if (record.host !== host.kind && record.takeover) {
-      throw new Error(
-        `${key} is held privately on the ${record.host} host, so it stays there until the person hands it back; this machine's browsers start on the ${host.kind} host now.`
-      );
-    }
-    if (record.host !== host.kind) {
-      console.info(
-        `[browser] ${key} moves from the ${record.host} host to the ${host.kind} host; its sign-ins start over there`
-      );
-      record = await leave(record, host);
-      await writeBrowser(record);
+    // Made on the host that answers now; kept on the host it was made on.
+    let record =
+      (await readBrowser(key)) ??
+      (await recordFor(key, key, (await hostFor()).kind));
+    const host = await hostOf(record);
+    if (!host) {
+      throw new Error(await markAway(record));
     }
     if (relay) {
       record = { ...record, relay };
@@ -418,7 +402,7 @@ export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
           told();
         },
       });
-      const { why: _why, ...live } = record;
+      const { why: _why, runtimeAway: _away, ...live } = record;
       record = { ...live, state: "live", lastUsedAt: Date.now() };
       await writeBrowser(record);
       console.info(`[browser] ${key} live on the ${host.kind} host`);
@@ -540,16 +524,12 @@ export const removeBrowser = async (key: BrowserKey): Promise<void> => {
     const record = await readBrowser(key);
     if (record) {
       const host = await hostOf(record);
-      if (
-        (!host && record.host === "container") ||
-        (record.containerLeft && !(await containerHost()))
-      ) {
+      if (!host) {
         throw new Error(
           `${key}'s profile is a volume of the container runtime, which does not answer now: start it, then remove the browser again.`
         );
       }
-      await host?.remove(record);
-      await removeLeft(record);
+      await host.remove(record);
     }
   });
   stopGate(key);
@@ -571,17 +551,20 @@ const readBack = async (): Promise<void> => {
     // biome-ignore lint/performance/noAwaitInLoops: one record at a time, each under its own lock.
     await withBrowser(record.key, async () => {
       const now = await readBrowser(record.key);
-      if (!now || now.state === "asleep" || now.state === "failed") {
+      if (
+        !now ||
+        now.state === "asleep" ||
+        (now.state === "failed" && !now.runtimeAway)
+      ) {
         return;
       }
       const host = await hostOf(now);
-      // A browser held privately whose host cannot be asked now (its
-      // runtime does not answer) is not known to have stopped: it stays held.
-      if (!host && now.takeover) {
+      // Its runtime does not answer: not known to run or to have stopped.
+      if (!host) {
+        await markAway(now);
         return;
       }
-      const running = host ? await host.running(now) : false;
-      if (!running) {
+      if (!(await host.running(now))) {
         await writeBrowser({ ...now, state: "asleep", takeover: null });
       }
     }).catch((error: unknown) =>
@@ -620,41 +603,38 @@ const idleDown = async (): Promise<void> => {
   }
 };
 
-/** The containers moves to the local host left, removed once the runtime answers. */
-const sweepLeft = async (records: BrowserRecord[]): Promise<void> => {
+/**
+ * The browsers that waited on their runtime, started again now that it
+ * answers: each as it was, its container and volume kept.
+ */
+const backFromAway = async (records: BrowserRecord[]): Promise<void> => {
   for (const record of records) {
-    if (!record.containerLeft) {
+    if (!record.runtimeAway) {
       continue;
     }
+    console.info(
+      `[browser] ${record.key}: its container runtime answers again; starting it`
+    );
     // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, each under its own lock.
-    await withBrowser(record.key, async () => {
-      const now = await readBrowser(record.key);
-      if (now?.containerLeft) {
-        const swept = await removeLeft(now);
-        if (swept !== now) {
-          await writeBrowser(swept);
-        }
-      }
-    }).catch((error: unknown) =>
-      console.warn(
-        `[browser] ${record.key}: the container its move left was not removed: ${why(error)}`
-      )
+    await wakeBrowser(record.key).catch((error: unknown) =>
+      console.warn(`[browser] ${record.key} did not start again: ${why(error)}`)
     );
   }
 };
 
-/** One tick: the runtime again when due, every browser's gate, what moves left, the records against their hosts, the idle ones down, and the frame. */
+/** One tick: the runtime again when due, every browser's gate, the records against their hosts, those that waited on the runtime started again, the idle ones down, and the frame. */
 const tick = async (): Promise<void> => {
   const records = await allBrowsers();
-  if (
-    records.some((record) => record.host === "local") &&
-    Date.now() - runtimeAt > RUNTIME_RECHECK_MS
-  ) {
+  const waiting = records.some((record) => record.runtimeAway);
+  const missing = "missing" in (await browserRuntime());
+  if (waiting || (missing && Date.now() - runtimeAt > RUNTIME_RECHECK_MS)) {
     await browserRuntime(true);
   }
   await gatesNow();
-  await sweepLeft(records);
   await readBack();
+  if (!("missing" in (await browserRuntime()))) {
+    await backFromAway(await allBrowsers());
+  }
   await idleDown();
   await tell();
 };

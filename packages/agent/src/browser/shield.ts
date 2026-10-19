@@ -12,12 +12,24 @@
  * (the local host's headless Chromium has no clipboard the person could
  * fill), opens the gate, and answers the page's origin and nothing else.
  *
- * The person hands back with the button, or by closing every view: with no
- * view open for {@link TAKEOVER_UNWATCHED_MS} the daemon hands back itself
- * and tells the hub ({@link BrowserHandedBackFrame}). A take-over is kept in
- * the browser's dir (`shield.json`, beside its record's `takeover`), so a
- * daemon that restarts mid-take-over holds the gate closed from its first
- * moment, and the hub sends the shield again as the machine registers.
+ * The machine is the one truth of a take-over: its record's `takeover`
+ * (with `shield.json` beside it for the page and the viewer), written here
+ * alone, and told to the hub on every change. It ends in one place,
+ * {@link release}, whichever way it ends:
+ *
+ * - the person's Hand back (`browser.handback`), answered to the hub's call;
+ * - no view open for {@link TAKEOVER_UNWATCHED_MS}: the daemon hands back
+ *   itself, and tells the hub ({@link BrowserHandedBackFrame}) before the
+ *   record's frame, so the ask's call answers with the page's origin;
+ * - the browser stopped (`cawco browser stop`, a stop route, its process or
+ *   container gone): the registry clears the record's `takeover`, the watch
+ *   below releases it and tells the hub, with no page.
+ *
+ * A daemon that restarts mid-take-over holds it again from the record
+ * ({@link restoreShields}), its gate closed from the registry's first gate
+ * (browsers.ts `gateFor`); the hub reads the machine's rows as it registers
+ * and sends nothing again. A container runtime that is away ends nothing: the
+ * browser is not known to have stopped, so its take-over stands.
  */
 import { rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -33,7 +45,7 @@ import {
   TAKEOVER_UNWATCHED_MS,
 } from "@cawco/core/browser";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
-import { browserRows, startBrowser } from "./browsers";
+import { browserRows, browsersChanged, startBrowser } from "./browsers";
 import {
   CdpLink,
   CdpTakeover,
@@ -72,8 +84,8 @@ interface Kept {
 
 /** A take-over this process holds. */
 interface Held extends Kept {
-  /** The local host's take-over session. */
-  cdp?: CdpTakeover;
+  /** The local host's view of its page, started once (restore or shield, whichever comes first). */
+  cdp?: Promise<CdpTakeover | undefined>;
   /** Views the hub counts (its sockets for neko or the CDP bridge). */
   hubViewers: number;
   /** Since when no view was open; undefined while one is. */
@@ -235,9 +247,9 @@ const rowOf = async (key: BrowserKey): Promise<BrowserRow> => {
   return row;
 };
 
-/** Writes the record's `takeover` as the shield holds it now. */
-const recordTakeover = (key: BrowserKey, take: Held | undefined) =>
-  withBrowser(key, async () => {
+/** Writes the record's `takeover` as the shield holds it now, and tells the hub. */
+const recordTakeover = async (key: BrowserKey, take: Held | undefined) => {
+  await withBrowser(key, async () => {
     const record = await readBrowser(key);
     if (record) {
       await writeBrowser({
@@ -253,12 +265,34 @@ const recordTakeover = (key: BrowserKey, take: Held | undefined) =>
       });
     }
   });
+  browsersChanged();
+};
+
+/** The local host's view of the take-over's page: started once, whoever asks first. */
+const viewFor = (
+  key: BrowserKey,
+  record: BrowserRecord,
+  take: Held
+): Promise<CdpTakeover | undefined> | undefined => {
+  if (record.host !== "local" || !take.targetId) {
+    return;
+  }
+  take.cdp ??= CdpTakeover.start(
+    `http://127.0.0.1:${portsOf(record).devtools}`,
+    take.targetId
+  ).catch((error: unknown): undefined => {
+    console.warn(
+      `[browser] ${key}'s take-over view did not start: ${why(error)}`
+    );
+  });
+  return take.cdp;
+};
 
 /**
  * Take over: the gate closed, the asking workspace's page in front, control
  * the person's. Sent again for a browser already held (a viewer's neko
- * session now known, or the hub re-sending after this daemon restarted), it
- * keeps the take-over and gives control to the viewer.
+ * session now known), it keeps the take-over and gives control to the
+ * viewer.
  */
 export const shieldBrowser = async (
   args: BrowserShieldArgs
@@ -270,9 +304,8 @@ export const shieldBrowser = async (
   // Closed before anything else: no agent reads the page from here on.
   gateOf(key)?.closeAll(SHIELD_WORDS);
   const before = held.get(key);
-  // A take-over this daemon holds already (sent again with a viewer, or as
-  // the machine registered after a restart) keeps its browser as it runs:
-  // it is never started again, or moved, under the person.
+  // A take-over this daemon holds already (sent again with a viewer) keeps
+  // its browser as it runs: it is never started again under the person.
   if (!before) {
     await startBrowser({ key });
   }
@@ -313,12 +346,7 @@ export const shieldBrowser = async (
       link.close();
     }
   }
-  if (record.host === "local" && !take.cdp && take.targetId) {
-    take.cdp = await CdpTakeover.start(
-      `http://127.0.0.1:${portsOf(record).devtools}`,
-      take.targetId
-    );
-  }
+  await viewFor(key, record, take);
   if (record.host === "container" && args.viewer) {
     await neko(record, `/room/control/give/${encodeURIComponent(args.viewer)}`);
     take.viewer = args.viewer;
@@ -397,7 +425,9 @@ const reloadFront = async (
  * and the gate stays closed: the private period ends only whole.
  */
 export const handBackBrowser = async (
-  key: BrowserKey
+  key: BrowserKey,
+  /** How it came to be handed back: the person's Hand back, or the daemon's own. */
+  said: BrowserHandedBackFrame["why"] = "person"
 ): Promise<BrowserHandback> => {
   if (!isBrowserKey(key)) {
     throw new Error(`${String(key)} is no browser key.`);
@@ -413,9 +443,9 @@ export const handBackBrowser = async (
       try {
         return await work();
       } catch (error) {
-        const said = `${key} was not handed back: ${what} failed (${why(error)}); its gate stays closed.`;
-        console.warn(`[browser] ${said}`);
-        throw new Error(said, { cause: error });
+        const failure = `${key} was not handed back: ${what} failed (${why(error)}); its gate stays closed.`;
+        console.warn(`[browser] ${failure}`);
+        throw new Error(failure, { cause: error });
       }
     };
     if (record.host === "container") {
@@ -424,7 +454,7 @@ export const handBackBrowser = async (
       );
     } else {
       await step("ending the page's view", async () => {
-        await take.cdp?.stop();
+        await (await take.cdp)?.stop();
       });
     }
     origin = await step("loading the page again", () =>
@@ -439,19 +469,30 @@ export const handBackBrowser = async (
       );
     }
   }
-  await release(key);
-  console.info(
-    `[browser] ${key} handed back${origin ? ` on ${origin}` : ""}, its gate open`
-  );
-  return {
+  const answer: BrowserHandback = {
     key,
     origin,
     ...(take?.requestId ? { requestId: take.requestId } : {}),
   };
+  await release(key, answer, said);
+  console.info(
+    `[browser] ${key} handed back${origin ? ` on ${origin}` : ""}, its gate open`
+  );
+  return answer;
 };
 
-/** The take-over over: forgotten here and in the browser's dir, the gate open. */
-const release = async (key: BrowserKey): Promise<void> => {
+/**
+ * The one place a take-over ends: forgotten here and in the browser's dir,
+ * the gate open, and the hub told. The hand-back is told first, whoever
+ * ended it (`said`), so the ask's call answers with the page's origin; then
+ * the record, whose frame every screen follows.
+ */
+const release = async (
+  key: BrowserKey,
+  answer: BrowserHandback,
+  said: BrowserHandedBackFrame["why"]
+): Promise<void> => {
+  tellHub(answer, said);
   held.delete(key);
   await rm(shieldFile(key), { force: true });
   await recordTakeover(key, undefined).catch((error: unknown) =>
@@ -484,7 +525,7 @@ export const cdpView = async (
 ): Promise<
   { input: (text: string) => void; leave: () => void } | undefined
 > => {
-  const cdp = held.get(key)?.cdp;
+  const cdp = await held.get(key)?.cdp;
   if (!cdp) {
     return;
   }
@@ -528,15 +569,22 @@ const watchOnce = async (): Promise<void> => {
   for (const [key, take] of held) {
     // biome-ignore lint/performance/noAwaitInLoops: one browser at a time.
     const record = await readBrowser(key);
-    // The browser stopped (Stop, its machine, its container) and its
-    // take-over with it: answered as a hand-back with no page.
-    if (!record?.takeover || record.state !== "live") {
-      await take.cdp?.stop();
-      await release(key);
-      tellHub({ key, origin: null, requestId: take.requestId }, "stopped");
+    // The browser stopped (Stop, its machine, its container), and the
+    // registry cleared its take-over: answered as a hand-back with no page.
+    if (!record?.takeover) {
+      await (await take.cdp)?.stop();
+      await release(
+        key,
+        {
+          key,
+          origin: null,
+          ...(take.requestId ? { requestId: take.requestId } : {}),
+        },
+        "stopped"
+      );
       continue;
     }
-    const views = Math.max(take.hubViewers, take.cdp?.viewers ?? 0);
+    const views = Math.max(take.hubViewers, (await take.cdp)?.viewers ?? 0);
     if (views > 0) {
       take.unwatchedSince = undefined;
       continue;
@@ -548,10 +596,7 @@ const watchOnce = async (): Promise<void> => {
       );
       // A step that fails leaves the gate closed (handBackBrowser says
       // which); the next count tries the hand-back again.
-      const answer = await handBackBrowser(key).catch(() => undefined);
-      if (answer) {
-        tellHub(answer, "unwatched");
-      }
+      await handBackBrowser(key, "unwatched").catch(() => undefined);
     }
   }
 };
@@ -572,12 +617,11 @@ const tellHub = (
 
 /**
  * The daemon starting: every browser its records say is taken over is held
- * again (its `shield.json`, else what its record's `takeover` says), until
- * the hub sends the shield again (which starts a local host's view of
- * its page again, `shieldBrowser`) or the person hands back. Its gate starts
- * closed: the registry closes a gate it makes for a record that holds a
- * take-over (browsers.ts `gateFor`). A browser that stopped meanwhile has
- * its take-over forgotten.
+ * again (its `shield.json`, else what its record's `takeover` says), with a
+ * local host's view of its page started again, until the person hands back.
+ * Its gate starts closed: the registry closes a gate it makes for a record
+ * that holds a take-over (browsers.ts `gateFor`). A browser that stopped
+ * meanwhile has its take-over released by the watch.
  */
 export const restoreShields = async (): Promise<void> => {
   const keys: BrowserKey[] = [];
@@ -591,14 +635,16 @@ export const restoreShields = async (): Promise<void> => {
       continue;
     }
     const { by, since, requestId } = record.takeover;
-    held.set(record.key, {
+    const take: Held = {
       since,
       ...(by ? { workspaceId: by } : {}),
       ...(requestId ? { requestId } : {}),
       ...kept,
       hubViewers: 0,
       unwatchedSince: Date.now(),
-    });
+    };
+    held.set(record.key, take);
+    viewFor(record.key, record, take);
     keys.push(record.key);
   }
   if (keys.length === 0) {

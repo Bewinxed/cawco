@@ -28011,8 +28011,15 @@ export const createServer = (
               // The relay's machine back: a relay that should run starts again
               // (kept as it is when its container runs).
               streamRelay.connected(message.machineId);
-              // A take-over it held is sent again: its gate stays closed.
-              browsers.connected(message.machineId);
+              // Its browsers read from it whole: every row, take-overs
+              // included, is what the machine holds now.
+              browsers
+                .connected(message.machineId)
+                .catch((error: unknown) =>
+                  console.warn(
+                    `[browser] ${machineName(message.machineId)}'s browsers were not read as it registered: ${error instanceof Error ? error.message : String(error)}`
+                  )
+                );
               browserStream.connected(message.machineId);
               relayJourney.connected(message.machineId);
               // A question parked by a process that is gone cannot be answered:

@@ -74,6 +74,7 @@ import {
   BROWSER_HANDBACK,
   BROWSER_LISTEN,
   BROWSER_REMOVE,
+  BROWSER_ROWS,
   BROWSER_SHIELD,
   BROWSER_START,
   BROWSER_STOP,
@@ -163,6 +164,7 @@ import {
   watchQuietBoundaries,
 } from "./boundary";
 import {
+  browserFrame,
   removeBrowser,
   setBrowserSink,
   startBrowser,
@@ -3179,6 +3181,9 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(BROWSER_VIEWER_TOKEN, async (args) =>
       viewerSession(browserKeyOf(args))
     );
+    // The machine's browsers whole, as its records hold them: what the hub
+    // reads as the machine registers (its take-overs are the machine's own).
+    supervisor.registerDaemonFunction(BROWSER_ROWS, () => browserFrame());
     supervisor.registerDaemonFunction(BROWSER_VIEWERS, (args) => {
       const { count } = args as BrowserViewersArgs;
       const key = browserKeyOf(args);

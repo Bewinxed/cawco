@@ -31,7 +31,11 @@
  *   `gateFor` makes it closed from the record's `takeover`), and the
  *   take-over still hands back as below;
  * - a second ask taken over with no view for two minutes is handed back by
- *   the daemon, and A's tool answers the same shape.
+ *   the daemon, and A's tool answers the same shape;
+ * - on the local leg (the agent's runtime hidden), the container leg's
+ *   browser is still a container browser: not live, its why naming the
+ *   runtime that isn't answering, its volume kept; with the runtime back it
+ *   is live again on the container host by itself, the same volume.
  *
  * Run on the host, outside every workspace boundary (a boundary hides the
  * runtime's socket and the browser's ports):
@@ -177,6 +181,23 @@ const evaluate = async (raw: Raw, session: string, expression: string) =>
       session
     )
   ).result?.result as { value?: unknown } | undefined;
+
+/** Whether `key`'s container volume (its sign-ins) is on the runtime, read from the runtime itself. */
+const volumeOf = async (key: BrowserKey): Promise<"kept" | "gone"> => {
+  const { findRuntime } =
+    await import("../../../packages/agent/src/browser/runtime");
+  const found = await findRuntime();
+  if ("missing" in found) {
+    return "gone";
+  }
+  return found.docker
+    .getVolume(`cawco-browser-${key.replace(":", "-")}`)
+    .inspect()
+    .then(
+      () => "kept" as const,
+      () => "gone" as const
+    );
+};
 
 /** What a page holds now, or undefined while it answers nothing (it is loading). */
 const readPage = async (raw: Raw, session: string) => {
@@ -490,14 +511,15 @@ async function leg(
     const { readBrowser } =
       await import("../../../packages/agent/src/browser/state");
     const kept = await readBrowser(earlier);
+    const volume = await volumeOf(earlier);
     kit.check(
-      `${host}: the container leg's browser ${earlier} stayed on the ${kept?.host} host with the runtime hidden (takeover ${kept?.takeover ? "held" : "none"})`,
-      kept?.host === "container",
-      JSON.stringify({
-        host: kept?.host,
-        state: kept?.state,
-        takeover: kept?.takeover,
-      })
+      `${host}: with the runtime hidden, the container leg's browser ${earlier} is still a container browser, ${kept?.state} and not live ("${kept?.why}"), its volume ${volume}`,
+      kept?.host === "container" &&
+        kept.state !== "live" &&
+        kept.runtimeAway === true &&
+        !!kept.why?.includes("isn't answering") &&
+        volume === "kept",
+      JSON.stringify({ host: kept?.host, state: kept?.state, why: kept?.why })
     );
   }
 
@@ -546,7 +568,9 @@ async function leg(
     // neko serves the clipboard to its host alone: read as the admin hosting
     // for a moment, then left with no host again.
     await admin.post("/room/control/take");
-    clipboard = (await admin.get("/room/clipboard")).text;
+    // neko leaves an empty clipboard's text out (room/clipboard.go,
+    // `Text string \`json:"text,omitempty"\``): absent is empty.
+    clipboard = (await admin.get("/room/clipboard")).text ?? "";
     await admin.post("/room/control/reset");
   }
   kit.check(
@@ -732,6 +756,30 @@ const run = async (kit: Kit): Promise<void> => {
       host === "local" ? containerKey : undefined
     );
     containerKey ??= key;
+  }
+  // The runtime back: the container browser starts again by itself, on the
+  // container host, its volume (its sign-ins) the one it had.
+  if (containerKey) {
+    const back = containerKey;
+    await fleet.stop("agent");
+    await agentOn(`unix://${runtime.endpoint}`);
+    const { readBrowser } =
+      await import("../../../packages/agent/src/browser/state");
+    const kept = await until(
+      `${back} live again on the container host`,
+      () => readBrowser(back),
+      (record) => record?.state === "live" && record.host === "container",
+      180_000
+    ).catch(() => undefined);
+    const volume = await volumeOf(back);
+    kit.check(
+      `the runtime back: ${back} is live again on the ${kept?.host} host by itself, its volume ${volume}`,
+      kept?.state === "live" &&
+        kept.host === "container" &&
+        !kept.runtimeAway &&
+        volume === "kept",
+      JSON.stringify({ host: kept?.host, state: kept?.state, why: kept?.why })
+    );
   }
   stand.stop(true);
 };

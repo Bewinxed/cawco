@@ -954,6 +954,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/BrowserHandedBackFrameWhy`.
     public enum BrowserHandedBackFrameWhy: OpenEnum {
+        case person
         case stopped
         case unwatched
         /// A value this app does not know: a newer hub's.
@@ -961,6 +962,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "person": self = .person
             case "stopped": self = .stopped
             case "unwatched": self = .unwatched
             default: self = .unrecognized(rawValue)
@@ -969,6 +971,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .person: "person"
             case .stopped: "stopped"
             case .unwatched: "unwatched"
             case let .unrecognized(rawValue): rawValue
@@ -979,7 +982,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.stopped, .unwatched]
+        public static let allCases: [Self] = [.person, .stopped, .unwatched]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -800,7 +800,7 @@ async function removeFleetBrowsers(dir: string): Promise<void> {
     return;
   }
   const { findRuntime } = await import("../packages/agent/src/browser/runtime");
-  const runtime = records.some((one) => one.container || one.containerLeft)
+  const runtime = records.some((one) => one.container)
     ? await findRuntime()
     : undefined;
   for (const record of records) {
@@ -833,7 +833,7 @@ async function removeBrowser(
     await new LocalHost().stop(record);
     gone.push("its local Chromium stopped");
   }
-  if (!(record.container || record.containerLeft)) {
+  if (!record.container) {
     return gone.join(", ") || undefined;
   }
   if (!runtime || "missing" in runtime) {
@@ -847,7 +847,7 @@ async function removeBrowser(
       await import("../packages/agent/src/browser/container-host");
     await new ContainerHost(runtime).remove(record);
     gone.push("its container and volume removed");
-  } else if (record.container) {
+  } else {
     const absent = (error: unknown) => {
       if ((error as { statusCode?: number }).statusCode !== 404) {
         throw error;

@@ -386,6 +386,7 @@ export class ContainerHost implements BrowserHost {
       image,
       media,
       ports: { http, devtools, media: port },
+      runtime: { kind: this.#runtime.kind, endpoint: this.#runtime.endpoint },
       stun,
       volume,
       adminPassword: passwords.admin,

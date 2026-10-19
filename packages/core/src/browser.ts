@@ -166,6 +166,14 @@ export interface BrowserShieldArgs {
  */
 export const BROWSER_HANDBACK = "browser.handback";
 
+/**
+ * Hub → daemon: the machine's browsers as its records hold them now, whole
+ * (a {@link BrowserFrame}): what the hub reads as the machine registers, so
+ * its rows, take-overs included, are the machine's own and never a copy the
+ * hub kept while it was away.
+ */
+export const BROWSER_ROWS = "browser.rows";
+
 /** Hub → daemon: how many views of the browser of `key` are open now; with none for two minutes a take-over is handed back. */
 export const BROWSER_VIEWERS = "browser.viewers";
 export interface BrowserViewersArgs {
@@ -224,14 +232,15 @@ export interface BrowserHandback {
 }
 
 /**
- * Daemon-originated: a take-over ended on the machine without the hub's
- * hand-back (no view was open for {@link TAKEOVER_UNWATCHED_MS}, or the
- * browser stopped), as the hub's own hand-back would have answered it.
+ * Daemon-originated: a take-over ended on the machine, whichever way: the
+ * person's Hand back, no view open for {@link TAKEOVER_UNWATCHED_MS}, or the
+ * browser stopped. Sent before the record's own frame, so the hub learns
+ * every end the same way and the ask's call answers with the page's origin.
  */
 export interface BrowserHandedBackFrame extends BrowserHandback {
   kind: "browser_handback";
   machineId: string;
-  why: "unwatched" | "stopped";
+  why: "person" | "unwatched" | "stopped";
 }
 
 /** Whether `value` is a {@link BrowserKey}. */

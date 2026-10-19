@@ -54603,7 +54603,7 @@
         ]
       },
       "BrowserHandedBackFrame": {
-        "description": "Daemon-originated: a take-over ended on the machine without the hub's\nhand-back (no view was open for {@link TAKEOVER_UNWATCHED_MS}, or the\nbrowser stopped), as the hub's own hand-back would have answered it.",
+        "description": "Daemon-originated: a take-over ended on the machine, whichever way: the\nperson's Hand back, no view open for {@link TAKEOVER_UNWATCHED_MS}, or the\nbrowser stopped. Sent before the record's own frame, so the hub learns\nevery end the same way and the ask's call answers with the page's origin.",
         "type": "object",
         "properties": {
           "kind": {
@@ -57553,6 +57553,7 @@
       "BrowserHandedBackFrameWhy": {
         "type": "string",
         "enum": [
+          "person",
           "stopped",
           "unwatched"
         ]
