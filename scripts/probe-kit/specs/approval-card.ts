@@ -10,12 +10,18 @@
  *    story's own form), every states file the decision page shows (the
  *    sheet, each option's, today's card and today's tool row): no error;
  *    every frame drawn at its story's width, none failed; every card's
- *    content box at least 340 wide in its 390 frame; no text wrapping in a
- *    box narrower than 120px. (A story with no form once drew every card
- *    24 px wide on his screen, a sentence a word a line.)
+ *    content box at least 340 wide in its 390 frame; no text wrapping onto
+ *    a second line in a box narrower than 120px; and each card drawn as a
+ *    story with no form draws it (its frame body at its own width) still
+ *    at least 340 wide. The card once reached his screen 24 px wide
+ *    (`drawn 24×7206`), a sentence a word a line: it was an inline-size
+ *    container (`container: ask / inline-size`), and size containment
+ *    gives a box no width of its own, so in a frame that sets its child at
+ *    its own width the card stood at the frame body's 24px floor.
  * 1. The canvas page logs no error and its report none.
  * 2. Every story is drawn, none empty, in every width and scheme.
- * 3. The card is at least 340 wide at 390, and as wide as its column at 1440.
+ * 3. The card's content box is at least 340 wide at 390, and the card as
+ *    wide as its column at 1440.
  * 4. The head's chips, the grant line, the reason and the count line never
  *    overlap one another, and stand inside the card.
  * 5. Nothing spills past the card at 390, 680 or 1440, light or dark: every
@@ -142,7 +148,7 @@ const freePort = async (): Promise<number> => {
   return port;
 };
 
-/** Console errors and page errors a page logged, kept as it runs. */
+/** Console errors, page errors and refused loads a page logged, kept as it runs: a refused load by its address and the server's first words. */
 function errorsOf(page: Page): string[] {
   const errors: string[] = [];
   page.on("console", (message) => {
@@ -151,6 +157,18 @@ function errorsOf(page: Page): string[] {
     }
   });
   page.on("pageerror", (error) => errors.push(error.message));
+  page.on("response", (response) => {
+    if (response.status() >= 400) {
+      response
+        .text()
+        .catch(() => "")
+        .then((body) =>
+          errors.push(
+            `${response.status()} ${response.url()}: ${body.replace(SPACES, " ").slice(0, 400)}`
+          )
+        );
+    }
+  });
   return errors;
 }
 
@@ -186,6 +204,8 @@ interface CardRead {
   cardWidth: number;
   columnWidth: number;
   consequences: string[];
+  /** The card's content box, inside its padding. */
+  content: number;
   count: string | null;
   grant: string | null;
   links: string[];
@@ -214,6 +234,10 @@ function cardFacts(frame: string) {
   return {
     bound: words(card.querySelector('[data-slot="bound"]')),
     cardWidth: card.offsetWidth,
+    content:
+      card.clientWidth -
+      Number.parseFloat(getComputedStyle(card).paddingInlineStart) -
+      Number.parseFloat(getComputedStyle(card).paddingInlineEnd),
     columnWidth: (card.parentElement as HTMLElement).clientWidth,
     consequences: all('[data-slot="consequence"] .consequence-words'),
     count: words(card.querySelector('[data-slot="count"]')),
@@ -428,12 +452,14 @@ function judge(
     consequences: say.consequences,
   };
   const narrow =
-    (width === 390 && read.cardWidth < 340) ||
+    (width === 390 && read.content < 340) ||
     (width === 1440 && read.cardWidth !== read.columnWidth);
   const boundOk = story.decided || read.bound === shown.bound;
   return {
     narrow: narrow
-      ? [`${at}: ${read.cardWidth}px of ${read.columnWidth}px`]
+      ? [
+          `${at}: card ${read.cardWidth}px (content ${read.content}px) of ${read.columnWidth}px`,
+        ]
       : [],
     overlaps: read.overlaps.map((one) => `${at}: ${one}`),
     spills: read.spills.map((one) => `${at}: ${one}`),
@@ -481,7 +507,7 @@ async function cardLegs(kit: Kit, page: Page): Promise<void> {
     }
   }
   kit.check(
-    "3: the card is at least 340 wide at 390 and its column's width at 1440",
+    "3: the card's content box is at least 340 wide at 390, and the card its column's width at 1440",
     faults.narrow.length === 0,
     faults.narrow.join("; ") || "every card"
   );
@@ -817,6 +843,36 @@ function panelFrames(floor: number) {
       Number.parseFloat(style.paddingInlineEnd)
     );
   };
+  // The box a run of words wraps in: its nearest ancestor that lays out
+  // lines (an inline span has no width of its own to wrap in).
+  const lineBox = (from: Element): HTMLElement => {
+    let at: Element | null = from;
+    while (at && ["inline", "contents"].includes(getComputedStyle(at).display)) {
+      at = at.parentElement;
+    }
+    return (at ?? from) as HTMLElement;
+  };
+  /** A text's wrap, when it takes more than one line in a box under the floor. */
+  const wrapOf = (node: Node): string | null => {
+    const parent = node.parentElement;
+    const words = (node.textContent ?? "").trim();
+    if (!(parent && words)) {
+      return null;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(node);
+    // Lines, not fragments: an ellipsis or a trimmed edge shares its line's top.
+    const lines = new Set(
+      [...range.getClientRects()]
+        .filter((rect) => rect.width > 0)
+        .map((rect) => Math.round(rect.top))
+    ).size;
+    const box = lineBox(parent);
+    const room = box.clientWidth > 0 ? inner(box) : 0;
+    return lines > 1 && room < floor
+      ? `"${words.slice(0, 40)}" wraps to ${lines} lines in ${Math.round(room)}px (${box.tagName.toLowerCase()}.${[...box.classList].join(".")})`
+      : null;
+  };
   return [
     ...document.querySelectorAll<HTMLElement>(
       '.cawco-frame[data-cawco-interaction="rest"]'
@@ -827,20 +883,13 @@ function panelFrames(floor: number) {
       body?.querySelector<HTMLElement>('[data-slot="hitl"]') ??
       (body?.firstElementChild as HTMLElement | null);
     const narrow: string[] = [];
-    if (body) {
-      const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-      for (let node = walker.nextNode(); node; node = walker.nextNode()) {
-        const parent = node.parentElement;
-        if (!(parent && (node.textContent ?? "").trim())) {
-          continue;
-        }
-        const range = document.createRange();
-        range.selectNodeContents(node);
-        if (range.getClientRects().length > 1 && parent.clientWidth < floor) {
-          narrow.push(
-            `"${(node.textContent ?? "").trim().slice(0, 40)}" wraps in ${parent.clientWidth}px`
-          );
-        }
+    const walker = body
+      ? document.createTreeWalker(body, NodeFilter.SHOW_TEXT)
+      : null;
+    for (let node = walker?.nextNode(); node; node = walker?.nextNode()) {
+      const wrap = wrapOf(node);
+      if (wrap) {
+        narrow.push(wrap);
       }
     }
     return {
@@ -849,6 +898,46 @@ function panelFrames(floor: number) {
       narrow,
     };
   });
+}
+
+/**
+ * Each card as the canvas draws a story that names no form (runtime.ts
+ * `dress`: the frame's body without a width, in its frame's column that
+ * sets each child at its own width): the card's content box and the body's
+ * width, then every body put back as it was. In the page.
+ */
+async function fitFrames() {
+  const bodies = [
+    ...document.querySelectorAll<HTMLElement>(
+      '.cawco-frame[data-cawco-interaction="rest"] > .cawco-frame-body'
+    ),
+  ].filter((body) => body.querySelector('[data-slot="hitl"]'));
+  const kept = bodies.map((body) => body.style.width);
+  for (const body of bodies) {
+    body.style.width = "";
+  }
+  await new Promise((done) =>
+    requestAnimationFrame(() => requestAnimationFrame(done))
+  );
+  const read = bodies.map((body) => {
+    const frame = body.closest<HTMLElement>(".cawco-frame");
+    const card = body.querySelector<HTMLElement>('[data-slot="hitl"]');
+    const style = card ? getComputedStyle(card) : null;
+    return {
+      key: `${frame?.dataset.cawcoFile}:${frame?.dataset.cawcoStory}/${frame?.dataset.cawcoScheme}`,
+      body: body.offsetWidth,
+      content:
+        card && style
+          ? card.clientWidth -
+            Number.parseFloat(style.paddingInlineStart) -
+            Number.parseFloat(style.paddingInlineEnd)
+          : 0,
+    };
+  });
+  bodies.forEach((body, at) => {
+    body.style.width = kept[at] ?? "";
+  });
+  return read;
 }
 
 /** One states file as the panel opens it: its report's frames, what each drew, and the page's errors. */
@@ -866,16 +955,16 @@ async function panelFile(page: Page, base: string, file: string) {
       one.frames.map((frame) => ({ ...frame, file: one.file }))
     ),
     drawn: await page.evaluate(panelFrames, WRAP_FLOOR),
+    fit: await page.evaluate(fitFrames),
   };
 }
 
 /**
  * Leg 0: the canvas as the panel opens it, no width asked: every frame takes
- * its story's own form, as the owner's panel draws it. The owner saw every
- * card drawn 24 px wide (`drawn 24×7206`), a sentence a word a line, because
- * no story named a form and the frame shrank to the card's narrowest. The
- * canvas loads one states file at a time as it comes into view, so each
- * file is opened on its own.
+ * its story's own form, as the owner's panel draws it; then each card as a
+ * story with no form draws it, where the owner saw every card 24 px wide
+ * (`drawn 24×7206`). The canvas loads one states file at a time as it comes
+ * into view, so each file is opened on its own.
  */
 async function panelLeg(kit: Kit, base: string): Promise<void> {
   const reads: Awaited<ReturnType<typeof panelFile>>[] = [];
@@ -928,6 +1017,18 @@ async function panelLeg(kit: Kit, base: string): Promise<void> {
     `0d: as the panel opens them, no text wraps in a box narrower than ${WRAP_FLOOR}px`,
     wraps.length === 0,
     `${wraps.length}: ${wraps.slice(0, 8).join("; ")}`
+  );
+  const fit = reads.flatMap((one) => one.fit);
+  const collapsed = fit.filter((one) => one.content < 340);
+  kit.check(
+    "0e: drawn as a story with no form (its frame setting it at its own width), every card stands at least 340 wide, never at the frame's 24px floor",
+    fit.length > 0 && collapsed.length === 0,
+    `${fit.length} cards; under 340: ${
+      collapsed
+        .slice(0, 8)
+        .map((one) => `${one.key} card ${one.content}px in a ${one.body}px body`)
+        .join("; ") || "none"
+    }`
   );
 }
 
