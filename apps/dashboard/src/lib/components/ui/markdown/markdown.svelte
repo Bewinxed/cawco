@@ -270,12 +270,13 @@
 	     `shikiThemes` pins every fence to whichever theme is listed first, and
 	     following the appearance instead means re-tokenizing every block on every
 	     switch, through a second shiki with a second cache. Ours paints each token
-	     with a house code token that carries both appearances. Prose dresses every `pre` and `code` it
-	     contains, so the well opts out of that dressing here; inline code
-	     (`codespan`) keeps it, because it is prose, not a listing. -->
+	     with a house code token that carries both appearances. The well is
+	     `not-prose`, so prose's `pre` and `code` dressing leaves it alone;
+	     inline code (`codespan`) keeps it, because it is prose, not a
+	     listing. -->
     {#snippet code({ token })}
       <div
-        class="not-prose my-3 well-code:bg-transparent well-code:p-0 well-pre:border-0 well-pre:bg-transparent"
+        class="not-prose my-3"
       >
         <OutputBlock language={token.lang} text={token.text} />
       </div>

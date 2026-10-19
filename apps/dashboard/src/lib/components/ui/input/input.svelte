@@ -5,7 +5,7 @@
   /** Its callers' looks, each as they drew it: the mono face for what is
       typed exactly (a path, a command, a key), a text size, the small
       control height beside an `sm` select or button, tight pads for a short
-      figure, the placeholder's ink, and how wide it may run. */
+      figure, and how wide it may run. */
   export const inputVariants = tv({
     variants: {
       face: { mono: "font-mono" },
@@ -14,9 +14,6 @@
           Button in the same row. */
       size: { sm: "h-c-btn-h-sm" },
       pad: { tight: "px-space-2" },
-      /** `subtle`: the placeholder in the subtle ink, as every field on the
-          new-session surface draws it (ns-theme's K2). */
-      placeholderInk: { subtle: "placeholder:text-ink-subtle" },
       measure: {
         shrink: "min-w-0",
         "cap-sm": "max-w-64",
@@ -58,14 +55,13 @@
     text,
     size,
     pad,
-    placeholderInk,
     measure,
     flex,
     "data-slot": dataSlot = "input",
     ...restProps
   }: Props = $props();
   const looks = $derived(
-    inputVariants({ face, text, size, pad, placeholderInk, measure, flex })
+    inputVariants({ face, text, size, pad, measure, flex })
   );
   /** The field's own look, the same for a file picker and a text field. */
   const field = [
