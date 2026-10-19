@@ -2217,7 +2217,6 @@ async function leg(
   await page.goto(
     canvasUrl(base, `${STORIES}/${way.file}.stories.ts`, {
       name: way.label,
-      about: `${way.label}: the plan on the desk card and the phone sheet, edited, commented, answered, and live`,
       dials: DIALS as CanvasSpec["dials"],
     })
   );

@@ -45,13 +45,26 @@ const STORIES = "apps/dashboard/src/lib/cawco/plan/proposal";
 /** How long a component canvas's first stage start may take: session-sheet's budget for the same call. */
 const STAGE_START_MS = 240_000;
 
-/** Each way: its option id, its name on the card, its states file, its variation. */
+/** Each way: its option id, its name on the card, its canvas's ask, its states file, its variation. */
 const WAYS = [
-  { id: "one-list", label: "A · One list", file: "OneList", variation: "a" },
-  { id: "lanes", label: "B · Lanes", file: "Lanes", variation: "b" },
+  {
+    id: "one-list",
+    label: "A · One list",
+    ask: "Judge the plan as one list, on the desk and the phone",
+    file: "OneList",
+    variation: "a",
+  },
+  {
+    id: "lanes",
+    label: "B · Lanes",
+    ask: "Judge the plan in lanes, on the desk and the phone",
+    file: "Lanes",
+    variation: "b",
+  },
   {
     id: "crew-first",
     label: "C · Crew first",
+    ask: "Judge the plan with its crew first, on the desk and the phone",
     file: "CrewFirst",
     variation: "c",
   },
@@ -300,7 +313,8 @@ const spec: Spec = {
         kind: "component",
         name: `plan-${way.id}`,
         file: `${STORIES}/${way.file}.stories.ts`,
-        about: `${way.label}: the plan on the desk card, on the phone sheet, and live. Dials: tile size, line weight, sweep speed.`,
+        does: "judge",
+        ask: way.ask,
         dials: DIALS,
       });
       ids[way.id] = made.id;
@@ -321,6 +335,8 @@ const spec: Spec = {
     const page = await make<{ decisions?: string[]; id: string }>({
       kind: "page",
       name: "plan-view",
+      does: "pick",
+      ask: "Pick how the side panel shows a plan",
       program: programOf(ids),
     });
     kit.check(
