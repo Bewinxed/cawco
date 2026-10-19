@@ -138,7 +138,7 @@
         aria-checked={checked}
         aria-label={words.card(strategy.label, strategy.line)}
         class="group flex min-w-0 cursor-pointer flex-col gap-space-3 rounded-lg border border-border-well bg-surface-raised p-space-3 text-start transition-[border-color,background-color] dur-fade ease-out not-aria-checked:hover:border-border-control aria-checked:border-focus-ring aria-checked:bg-strategy-card-picked focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) motion-safe:transition-pick-card motion-safe:active:transform-(--card-press)"
-        style:--card-press="scale(0.995)"
+        style:--card-press="scale(var(--press-scale))"
         onclick={(event) => {
           if (
             !(event.target as HTMLElement).closest(
@@ -162,19 +162,17 @@
           data-slot="top"
           class="flex min-h-c-btn-h-sm flex-wrap items-center gap-x-space-3 gap-y-space-2 px-space-1"
         >
-          <!-- literal: 1.5px, 50%, 8px -->
           <span
             aria-hidden="true"
-            class="radio grid size-icon-md flex-none place-items-center rounded-(--radio-radius) border-(length:--radio-border) border-neutral-8 transition-[border-color] dur-fade ease-out group-aria-checked:border-selected-icon"
-            style:--radio-border="1.5px"
-            style:--radio-radius="50%"
-            style:--radio-dot="8px"
-          ></span>
-          <!-- literal: 1px -->
+            class="grid size-icon-md flex-none place-items-center rounded-pill border-2 border-neutral-8 transition-[border-color] dur-fade ease-out group-aria-checked:border-selected-icon"
+          >
+            <span
+              class="size-space-2 scale-0 rounded-pill bg-selected-icon transition-[scale] dur-toggle ease-out group-aria-checked:scale-100"
+            ></span>
+          </span>
           <span
             data-slot="words"
-            class="type-label flex min-w-0 flex-auto flex-col gap-(--words-gap) text-ink-strong"
-            style:--words-gap="1px"
+            class="type-label flex min-w-0 flex-auto flex-col gap-space-row text-ink-strong"
           >
             {strategy.label}
             <small class="type-meta text-ink-muted">{strategy.line}</small>
@@ -228,28 +226,11 @@
       </div>
     {/each}
   </div>
-  <!-- literal: 14px -->
   <p
     class="mark-line type-meta flex items-center gap-space-2 text-ink-muted"
-    style:--forks-icon="14px"
   >
-    <IconSubagent class="size-(--forks-icon)" />
+    <IconSubagent class="size-icon-md" />
     <span>{words.forks}</span>
   </p>
 </div>
 
-<style>
-  /* residual: pseudo */
-  .radio::after {
-    content: "";
-    width: var(--radio-dot);
-    height: var(--radio-dot);
-    border-radius: 50%;
-    background: var(--selected-icon);
-    scale: 0;
-    transition: scale var(--dur-toggle) var(--ease-out);
-  }
-  [data-slot="strategy-picker-card"][aria-checked="true"] .radio::after {
-    scale: 1;
-  }
-</style>
