@@ -223,7 +223,10 @@
   open={doc !== null}
 >
   <DialogPrimitive.Portal>
-    <DialogOverlay data-lightbox-leaving={leaving || undefined} />
+    <DialogOverlay
+      class="lightbox-leaving:animate-kit-fade-out"
+      data-lightbox-leaving={leaving || undefined}
+    />
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
          it is open, and clears it at once (floating-presence). -->
     <DialogPrimitive.Content
@@ -250,13 +253,9 @@
 {#snippet docView()}
   {#if doc}
     {@const extension = extensionOf(doc.name)}
-    <!-- literal: min(100%, 60rem) -->
-    <!-- literal: min(86dvh, 100%) -->
     <div
-      class="pointer-events-auto flex w-(--sheet-w) max-h-(--sheet-max) flex-col rounded-sm border border-border-hairline bg-surface-raised text-ink-strong shadow-tile"
+      class="pointer-events-auto flex w-(--c-lightbox-sheet-w) max-h-(--c-lightbox-sheet-max-h) flex-col rounded-sm border border-border-hairline bg-surface-raised text-ink-strong shadow-tile"
       bind:this={sheet}
-      style:--sheet-max="min(86dvh, 100%)"
-      style:--sheet-w="min(100%, 60rem)"
       {@attach land(() => doc.share, {
         mode: "grow",
         anchor: '[data-slot="doc-head"]',
@@ -311,123 +310,3 @@
     </div>
   {/if}
 {/snippet}
-
-<style>
-  /* residual: keyframes — the scrim leaves with the sheet, not after it. */
-  :global(.kit-scrim[data-lightbox-leaving]) {
-    animation: kit-fade-out var(--dur-exit) var(--ease-out) both;
-  }
-
-  /* residual: foreign-dom — PhotoSwipe's DOM */
-  /* ── PhotoSwipe, in house tokens. Its root is appended to <body>, so these
-     rules are global; `.cawco-pswp` is the `mainClass` it carries. */
-  /* css-scope .cawco-pswp: ScreenEdges reads the open lightbox for the screen's edge colour */
-  :global {
-    .cawco-pswp {
-      --pswp-bg: var(--scrim);
-      --pswp-placeholder-bg: var(--surface-recess);
-      --pswp-icon-color: var(--ink-strong);
-      --pswp-error-text-color: var(--ink-muted);
-      color: var(--ink-strong);
-    }
-    .cawco-pswp .pswp__bg {
-      backdrop-filter: blur(var(--scrim-blur));
-    }
-    .cawco-pswp .pswp__top-bar {
-      gap: var(--space-2);
-      padding: var(--space-2);
-      block-size: auto;
-    }
-    .cawco-pswp .pswp__button {
-      display: grid;
-      place-items: center;
-      inline-size: var(--c-top-bar-h);
-      block-size: var(--c-top-bar-h);
-      border: 1px solid var(--border-hairline);
-      border-radius: var(--radius-sm);
-      background: var(--surface-raised);
-      color: var(--ink-strong);
-      opacity: 1;
-      overflow: visible;
-
-      & svg {
-        inline-size: var(--icon-lg);
-        block-size: var(--icon-lg);
-      }
-      &:hover {
-        background: var(--surface-hover);
-      }
-    }
-    .cawco-pswp .pswp__button--arrow {
-      inline-size: var(--c-top-bar-h);
-      block-size: var(--c-top-bar-h);
-      margin-block-start: calc(var(--c-top-bar-h) / -2);
-    }
-    .cawco-pswp .pswp__button--arrow--prev {
-      inset-inline-start: var(--space-3);
-    }
-    .cawco-pswp .pswp__button--arrow--next {
-      inset-inline-end: var(--space-3);
-    }
-    /* The counter is chrome like the buttons: their 44px chip on the raised
-       surface inside a hairline, so the page under the scrim never reads
-       through it. */
-    .cawco-pswp .pswp__counter {
-      block-size: var(--c-top-bar-h);
-      margin: 0;
-      padding-inline: var(--space-3);
-      border: 1px solid var(--border-hairline);
-      border-radius: var(--radius-sm);
-      background: var(--surface-raised);
-      font-size: var(--text-meta);
-      font-weight: var(--weight-body);
-      font-variant-numeric: tabular-nums;
-      line-height: calc(var(--c-top-bar-h) - 2px);
-      color: var(--ink-strong);
-      text-shadow: none;
-      opacity: 1;
-    }
-    /* PhotoSwipe fades its own chrome with the zoom (`pswp--ui-visible`);
-     the description goes with it. */
-    .cawco-pswp .pswp__description {
-      position: absolute;
-      inset-inline: var(--space-3);
-      inset-block-end: var(--space-3);
-      display: flex;
-      align-items: center;
-      gap: var(--space-3);
-      padding: var(--space-2) var(--space-3);
-      border: 1px solid var(--border-hairline);
-      border-radius: var(--radius-sm);
-      background: var(--surface-recess);
-      color: var(--ink-muted);
-      font-size: var(--text-meta);
-      font-weight: var(--weight-body);
-      opacity: 0;
-
-      & .lines {
-        display: flex;
-        flex-direction: column;
-        flex: 1;
-        min-inline-size: 0;
-        overflow-wrap: anywhere;
-      }
-      & .path {
-        font-family: var(--font-mono);
-      }
-      & a {
-        white-space: nowrap;
-        text-decoration: underline;
-        color: inherit;
-      }
-    }
-    .cawco-pswp.pswp--ui-visible .pswp__description {
-      opacity: 1;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      .cawco-pswp .pswp__description {
-        transition: opacity var(--dur-control) var(--ease-out);
-      }
-    }
-  }
-</style>

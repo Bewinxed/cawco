@@ -226,27 +226,21 @@
   {#if !labelled}
     <!-- One label for the whole rail: beside a vertical rail, under a
          horizontal one. -->
-    <!-- literal: calc(100% + 6px) -->
     <span
       data-slot="tip"
       aria-hidden="true"
-      class="pointer-events-none absolute top-0 left-0 z-5 flex items-center overflow-hidden rounded-sm bg-ink-strong text-neutral-2 shadow-raised transition-[opacity] dur-control ease-out motion-safe:transition-rail-tip group-axis-x/rail:top-(--tip-top) group-axis-y/rail:left-(--tip-left)"
-      style:--tip-left="calc(100% + 6px)"
-      style:--tip-top="calc(100% + 6px)"
+      class="pointer-events-none absolute top-0 left-0 z-5 flex items-center overflow-hidden rounded-sm bg-ink-strong text-neutral-2 shadow-raised transition-[opacity] dur-control ease-out motion-safe:transition-rail-tip group-axis-x/rail:top-(--tip-off) group-axis-y/rail:left-(--tip-off)"
+      style:--tip-off="calc(100% + var(--space-2))"
       style:height={tipBox ? `${tipBox.h}px` : undefined}
       style:opacity={tip >= 0 ? 1 : 0}
       style:transform={translate(tipBox, axis)}
       style:width="{tipWidth}px"
     >
       {#key shownTip}
-        <!-- literal: 6px -->
-        <!-- literal: 10px -->
         <span
           data-slot="tip-text"
-          class="inline-flex items-center gap-(--gap) px-(--pad) font-body text-size-meta leading-none font-normal whitespace-nowrap"
+          class="inline-flex items-center gap-space-2 px-space-3 font-body text-size-meta leading-none font-normal whitespace-nowrap motion-safe:animate-rail-label-in"
           bind:offsetWidth={tipWidth}
-          style:--gap="6px"
-          style:--pad="10px"
           >{items[shownTip]?.label}
           {#if tipExtra && items[shownTip]}
             {@render tipExtra(items[shownTip])}
@@ -256,12 +250,3 @@
     </span>
   {/if}
 </div>
-
-<style>
-  /* residual: keyframes */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="tip-text"] {
-      animation: rail-label-in var(--dur-exit) var(--ease-out) both;
-    }
-  }
-</style>

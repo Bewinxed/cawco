@@ -14,7 +14,7 @@
   let open = $state(false);
 </script>
 
-<div class="grid gap-space-2 min-w-0" style:--details-min-h="26px">
+<div class="grid gap-space-2 min-w-0">
   {#each ask.lines as line, i (i)}
     <p
       class="m-0 type-body text-ink-strong text-pretty data-follows:text-ink-muted"
@@ -24,17 +24,15 @@
     </p>
   {/each}
   <Collapsible.Root bind:open>
-    <!-- literal: 26px -->
     <Collapsible.Trigger
-      class="mark-line press-tint inline-flex items-center gap-space-1 justify-self-box-start min-h-(--details-min-h) p-0 border-none border-current rounded-xs bg-transparent type-label text-ink-muted cursor-pointer hover:text-ink-strong"
+      class="mark-line press-tint inline-flex items-center gap-space-1 justify-self-box-start min-h-space-7 p-0 border-none border-current rounded-xs bg-transparent type-label text-ink-muted cursor-pointer hover:text-ink-strong"
     >
       <span>Details</span>
       <span
         data-slot="chev"
         aria-hidden="true"
-        class="inline-grid motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out data-open:transform-(--chev-turn)"
+        class="inline-grid motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out data-open:rotate-90"
         data-open={open || undefined}
-        style:--chev-turn="rotate(90deg)"
         data-box><IconChevronRight class="size-icon-sm" /></span
       >
     </Collapsible.Trigger>
