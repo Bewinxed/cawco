@@ -227,11 +227,7 @@
   <div data-slot="body" class="grid gap-space-row type-meta">
     {#each n.lines as line, i (i)}
       {#if line.state === "busy" && i === spinnerAt}
-        <!-- literal: 6px -->
-        <div
-          class="mark-line flex items-center gap-(--busy-gap) text-ink-strong"
-          style:--busy-gap="6px"
-        >
+        <div class="mark-line flex items-center gap-space-2 text-ink-strong">
           <Spinner class="size-space-4 shrink-0" tone="muted" />
           <span>{line.text}</span>
         </div>
@@ -277,18 +273,14 @@
     ></div>
     {#if leaving}
       <!-- The goodbye's one line, beside his waiting mark and centred on it. -->
-      <!-- literal: 28px -->
       <span
-        class="flex min-h-(--line-min) items-center type-label text-ink-strong"
-        style:--line-min="28px"
+        class="flex min-h-c-row-lead items-center type-label text-ink-strong"
         {@attach arrive}>{GOODBYE}</span
       >
     {:else if notice}
-      <!-- literal: 6px -->
       <h2
         data-slot="title"
-        class="mark-line m-0 flex items-center gap-(--title-gap) pe-(--x-room) type-label wrap-anywhere text-ink-strong"
-        style:--title-gap="6px"
+        class="mark-line m-0 flex items-center gap-space-2 pe-(--x-room) type-label wrap-anywhere text-ink-strong"
       >
         {#if notice.failed}
           <IconError
@@ -309,16 +301,14 @@
              its air is the inner box's own padding, never the track's, so it
              closes to nothing. Shutting is quicker than opening. With less
              motion nothing travels: the notes only fade. -->
-        <!-- literal: 0fr, 1fr; -2px -->
         <div
           data-slot="fold"
-          class="group/fold mt-(--fold-pull) grid grid-rows-(--fold-shut) transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-(--fold-open) [&[data-open]]:dur-panel motion-reduce:transition-off"
+          class="group/fold -mt-space-row grid grid-rows-(--fold-shut) transition-[grid-template-rows,margin-top] dur-exit ease-out data-open:mt-0 data-open:grid-rows-(--fold-open) motion-safe:data-open:dur-panel motion-reduce:transition-off"
           data-open={open || undefined}
           id="update-notes"
           inert={!open}
           ontransitionend={settled}
           style:--fold-open="1fr"
-          style:--fold-pull="-2px"
           style:--fold-shut="0fr"
         >
           <!-- Open, no filter at all: a blur(0) is still a filter, and WebKit
@@ -328,10 +318,7 @@
             data-slot="fold-inner"
             class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
           >
-            <div
-              class="flex flex-col gap-space-1 pt-(--fold-air)"
-              style:--fold-air="calc(2px + var(--space-1))"
-            >
+            <div class="flex flex-col gap-space-1 pt-space-1">
               <div class="type-body text-ink-row">
                 <ReleaseNotes source={notes.full} />
               </div>
@@ -363,11 +350,10 @@
              trailing edge. -->
         <div
           data-slot="actions"
-          class="sticky bottom-0 z-1 mt-space-1 flex flex-wrap items-center justify-end gap-space-1 bg-surface-raised"
+          class="sticky bottom-0 z-1 mt-space-1 flex flex-wrap items-center justify-end gap-space-1 bg-surface-raised before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-(--fade-len) before:bg-linear-to-b before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:dur-control before:ease-out data-stuck:before:opacity-100"
           {@attach held}
         >
           {#if showConfigure}
-            <!-- literal: 11px -->
             <Button
               data-settings
               class={[
@@ -378,7 +364,7 @@
               href="/config/updates"
               label="Configure update behaviour"
               size="sm"
-              style="--settings-hang: calc(-1 * (1px + 11px));"
+              style="--settings-hang: calc(-1 * (1px + var(--space-3)));"
               variant="link"
               width="shrink"
             />
@@ -393,7 +379,6 @@
                  size's as ever (11px and 8px padding). The chevron flips
                  from ⌄ to ⌃ with the fold (scaleY through a flat line), its
                  stroke kept even through the flip. -->
-            <!-- literal: 1px, 16px * 4.25 / 24; 11px + 8px; scaleY(-1) -->
             <Button
               data-toggle
               aria-controls="update-notes"
@@ -403,16 +388,15 @@
               expanded="unfilled"
               size="sm"
               toggle="last"
-              style="--end: calc(var(--space-3) - 1px - 16px * 4.25 / 24); --toggle-start: calc(11px + 8px - var(--end));"
+              style="--end: calc(var(--space-3) - 1px - var(--icon-md) * 4.25 / 24); --toggle-start: calc(var(--space-3) + var(--space-2) - var(--end));"
               variant="ghost"
             >
               <span>{open ? "Hide changes" : "Show changes"}</span>
               <IconChevronDown
                 data-chev
                 aria-hidden="true"
-                class="transition-[transform] dur-panel ease-out group-aria-expanded/button:transform-(--chev-flip) motion-reduce:transition-off"
+                class="non-scaling-stroke transition-[scale] dur-panel ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
                 data-icon="inline-end"
-                style="--chev-flip: scaleY(-1);"
               />
             </Button>
           {/if}
@@ -430,27 +414,3 @@
     {/if}
   </div>
 </NoticeRow>
-
-<style>
-  /* residual: pseudo — the house edge fade above the footer, shown while it
-     is held at the panel's foot (`held` sets data-stuck). */
-  [data-slot="actions"]::before {
-    content: "";
-    position: absolute;
-    inset-inline: 0;
-    inset-block-end: 100%;
-    block-size: var(--fade-len);
-    pointer-events: none;
-    background: linear-gradient(to bottom, transparent, var(--surface-raised));
-    opacity: 0;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  [data-slot="actions"]:global([data-stuck])::before {
-    opacity: 1;
-  }
-  /* residual: svg-paint — the chevron's stroke kept even through its flip
-     (its paths are the icon's). */
-  [data-slot="actions"] :global([data-chev] path) {
-    vector-effect: non-scaling-stroke;
-  }
-</style>
