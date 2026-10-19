@@ -38,13 +38,12 @@
   );
 </script>
 
-<!-- The board's column width, so a card reads the same on both: 15rem. Waiting
-     on you, the `you` column's wash stands as a margin round the card. -->
+<!-- The board's column width, so a card reads the same on both. Waiting on
+     you, the `you` column's wash stands as a margin round the card. -->
 <div
   data-slot="task-node"
-  class="w-(--node-w) rounded-md kind-you:bg-brand-wash kind-you:p-space-1"
+  class="w-c-board-col-min rounded-md kind-you:bg-brand-wash kind-you:p-space-1"
   data-kind={node.task.kind ?? undefined}
-  style:--node-w="15rem"
 >
   <Handle id="flow-in" isConnectable={false} position={ends.in} type="target" />
   <Handle
@@ -75,8 +74,8 @@
 </div>
 
 <style>
-  /* residual: foreign-dom — Svelte Flow's handle takes its own unlayered rules,
-     which a utility class would lose to */
+  /* tailwind: Svelte Flow's stylesheet is unlayered, and unlayered rules outrank every layer, utilities included — https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layers */
+  /* residual: foreign-dom */
   [data-slot="task-node"] :global(.svelte-flow__handle) {
     inline-size: 1px;
     block-size: 1px;

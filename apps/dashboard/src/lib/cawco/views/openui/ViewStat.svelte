@@ -15,11 +15,7 @@
   const tone = $derived(TONES.find((each) => each === props.tone) ?? "neutral");
 </script>
 
-<!-- literal: 10rem -->
-<div
-  class="min-w-(--stat-min) shrink grow basis-(--stat-min)"
-  style:--stat-min="10rem"
->
+<div class="min-w-c-stat-min shrink grow basis-c-stat-min">
   <StatTile
     label={String(props.label ?? "")}
     {tone}

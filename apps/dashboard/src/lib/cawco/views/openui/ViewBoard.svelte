@@ -14,10 +14,9 @@
       {String(props.title)}
     </h3>
   {/if}
-  <!-- literal: minmax(15rem, 22rem) -->
   <div
     class="grid auto-cols-(--board-cols) grid-flow-col gap-space-3 overflow-x-auto overscroll-x-contain pb-space-3 max-phone:auto-cols-(--board-cols-narrow) max-phone:snap-x max-phone:snap-mandatory"
-    style:--board-cols="minmax(15rem, 22rem)"
+    style:--board-cols="minmax(var(--c-board-col-min), var(--c-board-col-max))"
     style:--board-cols-narrow="calc(100% - var(--space-8))"
   >
     {@render renderNode(props.children)}
