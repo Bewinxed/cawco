@@ -1,5 +1,7 @@
 # Lane L12-cawco-config-3
 
+Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, interface-craft, ui-observer. Rules followed: better-ui (concentric radii kept, no transition-all, hover/touch through existing variants); better-layout (ladder spacing, minmax(0,1fr) phone grid, one 72ch measure).
+
 7 files done of 7. No `<style>` kept: MemoryEditor's whole scoped sheet is gone (every rule moved to utilities, the rest was dead).
 
 | file | rules moved | literals handled (S2) | breakpoint edges |
