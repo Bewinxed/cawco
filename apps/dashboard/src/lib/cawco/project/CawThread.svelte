@@ -356,7 +356,6 @@
   </div>
 </div>
 
-<!-- literal: 416px, 24px, 760px -->
 {#if leadId}
   <Popover.Root
     onOpenChange={(next) => {
@@ -372,7 +371,7 @@
       aria-label="Caw’s session"
       class="z-60 flex max-h-(--lead-max-h) w-(--lead-w) overflow-hidden"
       pad="none"
-      style="--lead-w: min(416px, calc(100vw - 24px)); --lead-max-h: min(760px, var(--bits-popover-content-available-height, 85dvh))"
+      style="--lead-w: min(var(--c-lead-card-w), calc(100vw - var(--space-7))); --lead-max-h: min(var(--c-lead-card-max-h), var(--bits-popover-content-available-height, var(--c-sheet-max-h)))"
       collisionPadding={12}
       customAnchor={cardAnchor}
       onfocusin={() => {

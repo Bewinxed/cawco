@@ -65,17 +65,16 @@
 
 {#if phone.current}
   <Drawer.Root onOpenChange={setOpen} {open}>
-    <!-- literal: 85dvh -->
     <!-- The kit's bottom sheet as its recipe draws it (ui/drawer): full-bleed
          and flush on the screen's foot, its top corners rounded, its hairline
          along the top edge. The panel runs edge to edge inside it, from under
          the grabber to the foot, which keeps the safe area clear itself
          (ThreadPane's docked composer). -->
     <Drawer.Content
-      class="h-(--sheet-h)"
+      class="h-(--c-sheet-max-h)"
       data-caw-float-sheet
       pad="none"
-      style="--drawer-max-height: 85dvh; --sheet-h: 85dvh;"
+      style="--drawer-max-height: var(--c-sheet-max-h)"
     >
       <Drawer.Title class="sr-only">Caw, lead of {projectName}</Drawer.Title>
       <div class="flex min-h-0 flex-auto flex-col overflow-hidden">
