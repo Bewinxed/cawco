@@ -57,11 +57,9 @@
           tabindex="-1"
           {@attach (node) => node.focus()}
         >
-          <!-- literal: 2.25rem -->
           <span
             data-slot="mark"
-            class="grid size-(--mark-size) place-items-center text-ink-muted"
-            style:--mark-size="2.25rem"
+            class="grid size-(--c-status-mark) place-items-center text-ink-muted"
           >
             <Spinner aria-hidden="true" box="large" role="presentation" />
           </span>
@@ -85,19 +83,16 @@
       {:else if answer}
         <!-- mark-line: a column; the mark stands above the title -->
         <div class="flex flex-col gap-space-2" role="status">
-          <!-- literal: 2.25rem -->
           <span
             data-slot="mark"
             data-enter
-            class="enter grid size-(--mark-size) place-items-center {ok
-              ? 'text-success-9'
-              : 'text-warning-9'}"
-            style:--mark-size="2.25rem"
+            class="grid size-(--c-status-mark) place-items-center tone-caution:text-warning-9 tone-ok:text-success-9 motion-safe:animate-mark-in"
+            data-tone={ok ? "ok" : "caution"}
           >
             {#if ok}
-              <IconSuccess class="size-9" />
+              <IconSuccess class="size-(--c-status-mark)" />
             {:else}
-              <IconWarningTriangle class="size-9" />
+              <IconWarningTriangle class="size-(--c-status-mark)" />
             {/if}
           </span>
           <p
@@ -126,19 +121,3 @@
   {/key}
 </div>
 
-<style>
-  /* residual: keyframes */
-  @media (prefers-reduced-motion: no-preference) {
-    .enter {
-      animation: mark-in var(--dur-pop) var(--ease-out) both;
-    }
-  }
-
-  @keyframes mark-in {
-    from {
-      opacity: 0;
-      scale: 0.25;
-      filter: blur(var(--space-1));
-    }
-  }
-</style>

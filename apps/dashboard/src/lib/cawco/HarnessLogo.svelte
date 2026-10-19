@@ -15,10 +15,3 @@
   data-harness-logo={harness}><Mark /></span
 >
 
-<style>
-  /* residual: foreign-dom — the logos' own svg roots take no class */
-  [data-harness-logo] :global(svg) {
-    width: 100%;
-    height: 100%;
-  }
-</style>
