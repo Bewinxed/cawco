@@ -10453,19 +10453,26 @@ export const createServer = (
       path,
       kind: "checkout",
     });
-    if (added) {
-      placesChanged(machineId, project.id);
+    // The place's repo step is held from here, so a move planned while its
+    // remote is read waits for the folder to settle (place-repo.ts `hold`).
+    const step = placeRepos.hold(machineId, path);
+    try {
+      if (added) {
+        placesChanged(machineId, project.id);
+      }
+      if (!project.remote) {
+        await learnRemote(project.id, machineId, path);
+      }
+      // A plain folder is made a git repository now, off the request: a
+      // machine away, or a place that cannot be one, is tried again, and
+      // refused in its words, when a workspace is first cut from it.
+      detach(
+        step.ensure({ projectId: project.id, machineId, path }),
+        "place-repo"
+      );
+    } finally {
+      step.release();
     }
-    if (!project.remote) {
-      await learnRemote(project.id, machineId, path);
-    }
-    // A plain folder is made a git repository now, off the request: a
-    // machine away, or a place that cannot be one, is tried again, and
-    // refused in its words, when a workspace is first cut from it.
-    detach(
-      placeRepos.ensure({ projectId: project.id, machineId, path }),
-      "place-repo"
-    );
     return {
       ...projectOut(db.project(project.id) ?? project),
       place,

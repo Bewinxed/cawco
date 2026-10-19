@@ -1,9 +1,9 @@
 /**
  * What a move asks depends only on the folder's settled state (hub
- * place-repo.ts `settled`, moves.ts `plan`). A project made from a plain
- * folder has the folder made a git repository off the request; a move's
- * plan asked for straight after waits for that step, so it never asks the
- * person to "git init" a folder CawCo is making a repository anyway.
+ * place-repo.ts `settled` and `hold`, moves.ts `plan`). A plain folder made
+ * a project's place is made a git repository off the request; a move's plan
+ * asked for meanwhile waits for that step, so it never asks the person to
+ * "git init" a folder CawCo is making a repository anyway.
  *
  * On a scratch fleet with two machines (real hub, agents and sessiond; no
  * session is started). Machine A is the fleet's own; machine B is
@@ -13,6 +13,12 @@
  * - the folder is a git repository by then (place-repo made it);
  * - once the folder is a repository, the estimate read again says the same:
  *   what the move asks did not depend on which step finished first.
+ *
+ * One more round adds a plain folder to a project that has no checkout
+ * yet, while the hub's read of the folder's remote is held: machine A is
+ * paused (machine-pause.ts holds every command the hub runs there, the
+ * remote read among them; the agent's own calls go on). The estimate asked
+ * while the read is held must give the same settled answer once A resumes.
  *
  *   bun scripts/probe-kit/run.ts move-settled
  */
@@ -28,6 +34,8 @@ const B = "probe-settled-b";
 const ROUNDS = 8;
 /** Files per folder: enough that a first commit takes longer than an inspection. */
 const FILES = 40;
+/** How long the held round keeps the remote read held after asking for the estimate. */
+const HELD_MS = 3000;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -38,6 +46,27 @@ const asked = (estimate: MoveEstimate) => ({
   details: estimate.ask?.details ?? [],
   refused: estimate.refused ?? null,
 });
+
+/** A settled answer: no approval, no `git init`, nothing refused. */
+const settledAnswer = (said: ReturnType<typeof asked>): boolean =>
+  said.refused === null &&
+  said.needsApproval === false &&
+  said.gitInit === false &&
+  !said.details.includes("git init");
+
+/** A plain folder of {@link FILES} small sources and a README. */
+const plainFolder = async (folder: string, name: string): Promise<void> => {
+  await mkdir(join(folder, "src"), { recursive: true });
+  await Promise.all(
+    Array.from({ length: FILES }, (_, index) =>
+      writeFile(
+        join(folder, "src", `file-${index}.ts`),
+        `export const value${index} = ${index};\n`
+      )
+    )
+  );
+  await writeFile(join(folder, "README.md"), `# ${name}\n`);
+};
 
 const run = async (kit: Kit) => {
   const { check } = kit;
@@ -51,25 +80,26 @@ const run = async (kit: Kit) => {
   await fleet.agentUp();
   await fleet.launchMachine(B);
 
+  const estimateQuery = (label: string): string =>
+    `machine=${encodeURIComponent(B)}&path=${encodeURIComponent(join(fleet.sandbox, `moved-${label}`))}`;
+  const repoMade = (label: string, dir: string) =>
+    until(
+      `${label}: ${dir} a git repository`,
+      () => existsSync(join(dir, ".git")),
+      (made) => made,
+      60_000
+    );
+
   for (const round of Array.from({ length: ROUNDS }, (_, index) => index + 1)) {
     const folder = join(fleet.sandbox, `plain-${round}`);
     // biome-ignore lint/performance/noAwaitInLoops: one round at a time, each its own race with nothing else running
-    await mkdir(join(folder, "src"), { recursive: true });
-    await Promise.all(
-      Array.from({ length: FILES }, (_, index) =>
-        writeFile(
-          join(folder, "src", `file-${index}.ts`),
-          `export const value${index} = ${index};\n`
-        )
-      )
-    );
-    await writeFile(join(folder, "README.md"), `# Plain ${round}\n`);
+    await plainFolder(folder, `Plain ${round}`);
     const project = await fleet.api<{ id: string }>("/api/projects", {
       name: `Settled ${round}`,
       machineId: MACHINE,
       cwd: folder,
     });
-    const query = `machine=${encodeURIComponent(B)}&path=${encodeURIComponent(join(fleet.sandbox, `moved-${round}`))}`;
+    const query = estimateQuery(String(round));
     const first = asked(
       await fleet.api<MoveEstimate>(
         `/api/projects/${project.id}/move-estimate?${query}`
@@ -78,10 +108,7 @@ const run = async (kit: Kit) => {
     const isRepo = existsSync(join(folder, ".git"));
     check(
       `round ${round}: the estimate asked straight away asks no "git init" and no approval`,
-      first.refused === null &&
-        first.needsApproval === false &&
-        first.gitInit === false &&
-        !first.details.includes("git init"),
+      settledAnswer(first),
       JSON.stringify(first)
     );
     check(
@@ -89,12 +116,7 @@ const run = async (kit: Kit) => {
       isRepo,
       `${folder}/.git ${isRepo ? "exists" : "missing"}`
     );
-    await until(
-      `round ${round}: ${folder} a git repository`,
-      () => existsSync(join(folder, ".git")),
-      (made) => made,
-      60_000
-    );
+    await repoMade(`round ${round}`, folder);
     const settled = asked(
       await fleet.api<MoveEstimate>(
         `/api/projects/${project.id}/move-estimate?${query}`
@@ -106,6 +128,61 @@ const run = async (kit: Kit) => {
       `first ${JSON.stringify(first)}, settled ${JSON.stringify(settled)}`
     );
   }
+
+  // The held round: a place added while its remote read is held.
+  const folder = join(fleet.sandbox, "plain-held");
+  await plainFolder(folder, "Plain held");
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Settled held",
+  });
+  await fleet.api(`/api/machines/${MACHINE}/pause`, {
+    until: new Date(Date.now() + 10 * 60_000).toISOString(),
+  });
+  const adding = fleet.api(`/api/projects/${project.id}/places`, {
+    machineId: MACHINE,
+    path: folder,
+  });
+  await until(
+    "the held place is the project's checkout",
+    () =>
+      fleet.query<{ path: string }>(
+        "SELECT path FROM project_places WHERE project_id = ? AND kind = 'checkout'",
+        project.id
+      )[0],
+    (place) => place.path === folder,
+    20_000
+  );
+  let answeredAt: number | undefined;
+  const asking = fleet
+    .api<MoveEstimate>(
+      `/api/projects/${project.id}/move-estimate?${estimateQuery("held")}`
+    )
+    .then((estimate) => {
+      answeredAt = Date.now();
+      return estimate;
+    });
+  await Bun.sleep(HELD_MS);
+  const answeredWhileHeld = answeredAt !== undefined;
+  const resumedAt = Date.now();
+  await fleet.api(`/api/machines/${MACHINE}/resume`, {});
+  await adding;
+  const held = asked(await asking);
+  check(
+    'held round: the estimate asked while the remote read is held asks no "git init" and no approval',
+    settledAnswer(held),
+    `${JSON.stringify(held)}; answered ${answeredWhileHeld ? "while the read was held" : `${(answeredAt ?? resumedAt) - resumedAt} ms after A resumed`}`
+  );
+  await repoMade("held round", folder);
+  const after = asked(
+    await fleet.api<MoveEstimate>(
+      `/api/projects/${project.id}/move-estimate?${estimateQuery("held")}`
+    )
+  );
+  check(
+    "held round: the estimate read again once the folder is a repository says the same",
+    JSON.stringify(after) === JSON.stringify(held),
+    `held ${JSON.stringify(held)}, settled ${JSON.stringify(after)}`
+  );
 };
 
 export default { name: "move-settled", run } satisfies Spec;
