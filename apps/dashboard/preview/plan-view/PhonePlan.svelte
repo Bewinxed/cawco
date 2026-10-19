@@ -10,39 +10,59 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { IconChevronRight } from "#lib/icons.js";
+  // Page-local Solar glyph the proposal adds (not in $lib/icons.ts yet).
+  import GlyphTask from "~icons/solar/clipboard-check-bold-duotone";
   import { type PlanFixture, progress } from "./fixtures";
 
   let {
     plan,
     today = false,
-    toEnd = false,
+    focus,
     children,
   }: {
     plan: PlanFixture;
     /** The sheet's head as it is now: the title alone. */
     today?: boolean;
-    /** The sheet stands scrolled to its foot (the spec opened there). */
-    toEnd?: boolean;
+    /** The row the sheet stands scrolled to (its id), near its top. */
+    focus?: string;
     children: Snippet;
   } = $props();
 
   let host = $state<HTMLElement>();
   const got = $derived(progress(plan));
 
-  /** Holds the sheet at its foot while what is in it lays out. */
+  /** Holds the scroller on the focused row while what is in it lays out. */
   function foot(node: HTMLElement) {
-    if (!toEnd) {
+    if (!focus) {
       return;
     }
     const hold = () => {
-      node.scrollTop = node.scrollHeight;
+      const row = node.querySelector<HTMLElement>(
+        `[data-row="${CSS.escape(focus)}"]`
+      );
+      if (row) {
+        node.scrollTop +=
+          row.getBoundingClientRect().top -
+          node.getBoundingClientRect().top -
+          8;
+      }
     };
     const sizes = new ResizeObserver(hold);
     for (const child of node.children) {
       sizes.observe(child);
     }
     hold();
-    return () => sizes.disconnect();
+    // The person's own scroll takes over from the first wheel or touch.
+    const stop = () => sizes.disconnect();
+    node.addEventListener("wheel", stop, { once: true, passive: true });
+    node.addEventListener("touchstart", stop, { once: true, passive: true });
+    node.addEventListener("pointerdown", stop, { once: true });
+    return () => {
+      sizes.disconnect();
+      node.removeEventListener("wheel", stop);
+      node.removeEventListener("touchstart", stop);
+      node.removeEventListener("pointerdown", stop);
+    };
   }
 </script>
 
@@ -87,6 +107,7 @@
             class="task touch-hit"
             type="button"
           >
+            <GlyphTask aria-hidden="true" class="task-glyph" />
             <span class="task-title">{plan.task.title}</span>
             <span class="stage">· {plan.task.stage}</span>
             <IconChevronRight aria-hidden="true" />
@@ -164,6 +185,11 @@
       outline: 2px solid var(--focus-ring);
       outline-offset: -2px;
     }
+  }
+  .task :global(.task-glyph) {
+    margin-inline-start: 0;
+    inline-size: 12px;
+    block-size: 12px;
   }
   .task-title {
     min-inline-size: 0;
