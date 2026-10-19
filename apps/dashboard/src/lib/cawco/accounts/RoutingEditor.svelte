@@ -172,10 +172,8 @@
         {#each [["yours", words.yours], ["delegates", words.delegates]] as [kind, label] (kind)}
           <TabItem {label} value={kind}>
             {#snippet trail()}
-              <!-- literal: 0.25em -->
               <span
-                class="ms-(--strategy-gap) font-normal text-ink-muted @max-kinds/kinds:hidden"
-                style:--strategy-gap="0.25em"
+                class="ms-space-1 font-normal text-ink-muted @max-kinds/kinds:hidden"
                 >{words.trail(
                   strategyLabel(draft[kind as Kind].strategy)
                 )}</span
