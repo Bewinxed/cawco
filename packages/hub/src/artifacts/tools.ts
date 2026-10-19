@@ -288,7 +288,7 @@ export const artifactRead = {
   name: "artifact_read",
   description:
     "Read the person's picks, notes and values on one of your artifacts (or your project's pages), each " +
-    "with the page hash it was made on; a decision page adds its `program`. " +
+    "with its page hash; a decision page adds its `program`. " +
     "`since` (the `seq` of your last read) returns only what changed after it. No id: your newest. A canvas answers " +
     "its outline (a line per element; the person's pen strokes as ink over the ids they cross) and `changed`, what " +
     "the person changed since `since` or your last read; `png: true` adds its picture. A component answers its " +
