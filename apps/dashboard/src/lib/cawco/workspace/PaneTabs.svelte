@@ -60,6 +60,7 @@
     TabsList,
     type TabsTravel,
   } from "#lib/components/ui/fluid-tabs/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -1711,29 +1712,35 @@
                        no chevron: a long press opens the tab's menu (Session
                        details first), and a tap on the chosen tab its
                        details. -->
-                  <button
-                    data-slot="tdetails"
-                    aria-hidden="true"
-                    class="group/tdetails touch-hit pointer-hit pressable grid h-c-btn-h-xs w-icon-lg flex-none cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent text-ink-muted hover:bg-surface-fill data-idle:scale-(--pop-scale) data-idle:opacity-0 max-desk:hidden motion-safe:transition-[opacity,scale] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease) motion-safe:in-data-ride:transition-off motion-reduce:in-data-ride:transition-off"
-                    style:--hit-gap-x="var(--space-1)"
+                  <span
+                    class="group/tdetails flex flex-none data-idle:scale-(--pop-scale) data-idle:opacity-0 max-desk:hidden motion-safe:transition-[opacity,scale] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease) motion-safe:in-data-ride:transition-off motion-reduce:in-data-ride:transition-off"
                     data-idle={!chosen || undefined}
                     data-open={chosen && detailsOpen && detailId === tab.id
                       ? ""
                       : undefined}
-                    onclick={(event) => {
-                      if (chosen) {
-                        clickTab(tab.id, event);
-                      } else {
-                        workspace.activate(tab.id, leaf.id);
-                      }
-                    }}
-                    tabindex="-1"
-                    type="button"
                   >
-                    <IconChevronDown
-                      class="size-icon-sm group-data-open/tdetails:rotate-180 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out"
-                    />
-                  </button>
+                    <Button
+                      data-slot="tdetails"
+                      aria-hidden="true"
+                      class="pointer-hit"
+                      style="--hit-gap-x: var(--space-1)"
+                      onclick={(event) => {
+                        if (chosen) {
+                          clickTab(tab.id, event);
+                        } else {
+                          workspace.activate(tab.id, leaf.id);
+                        }
+                      }}
+                      size="icon-xs"
+                      tabindex={-1}
+                      tone="muted"
+                      variant="ghost"
+                    >
+                      <IconChevronDown
+                        class="group-data-open/tdetails:rotate-180 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out"
+                      />
+                    </Button>
+                  </span>
                 {/if}
                 <!-- A mouse's close. A finger's is in the tab's options,
                      held or pulled down from the tab, and the phone's row
@@ -1744,22 +1751,26 @@
                      stands 2px inside its 20px box. A finger closes a tab
                      from its options (owner: "remove the x make it close on
                      hold menu then close"). -->
-                <button
-                  data-slot="tclose"
-                  aria-hidden="true"
-                  class="touch-hit pointer-hit pressable ms-space-row grid size-icon-lg flex-none cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted hover:bg-surface-fill hover:text-ink-strong motion-safe:transition-[background-color,color,transform] motion-safe:dur-control motion-safe:ease-out max-desk:hidden coarse:hidden"
-                  style:--hit-gap-x="var(--space-1)"
-                  onauxclick={(event) => middleClose(tab.id, event)}
-                  onclick={() => {
-                    closeDetails();
-                    workspace.close(tab.id);
-                  }}
-                  onmousedown={middleDown}
-                  tabindex="-1"
-                  type="button"
-                >
-                  <IconClose class="block size-icon-md" />
-                </button>
+                <span class="ms-space-row flex flex-none max-desk:hidden coarse:hidden">
+                  <Button
+                    data-slot="tclose"
+                    aria-hidden="true"
+                    class="pointer-hit"
+                    style="--hit-gap-x: var(--space-1)"
+                    onauxclick={(event) => middleClose(tab.id, event)}
+                    onclick={() => {
+                      closeDetails();
+                      workspace.close(tab.id);
+                    }}
+                    onmousedown={middleDown}
+                    size="icon-xs"
+                    tabindex={-1}
+                    tone="quiet"
+                    variant="ghost"
+                  >
+                    <IconClose />
+                  </Button>
+                </span>
               {/snippet}
             </TabItem>
           </ContextMenu.Trigger>
@@ -1816,27 +1827,29 @@
     <Tooltip.Root bind:open={newTip}>
       <Tooltip.Trigger>
         {#snippet child({ props })}
-          <button
+          <Button
             {...props}
             aria-busy={starting || undefined}
             aria-describedby={refused ? refusedId : undefined}
             aria-label="New session"
             data-tnew
-            class="touch-hit pointer-hit pressable grid size-icon-lg flex-none cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted hover:bg-surface-fill not-data-refused:hover:text-ink-strong data-refused:text-status-fail-glyph motion-safe:transition-[background-color,color,transform] motion-safe:dur-control motion-safe:ease-out"
+            class="group/new pointer-hit"
             data-refused={refused ? "" : undefined}
             onclick={() => {
               if (!starting) {
                 startHere();
               }
             }}
-            type="button"
+            size="icon-xs"
+            tone="quiet"
+            variant="ghost"
           >
             {#if starting}
               <Spinner aria-label="Starting a session" />
             {:else}
-              <IconAddLine class="block size-icon-md" />
+              <IconAddLine class="group-data-refused/new:text-status-fail-glyph" />
             {/if}
-          </button>
+          </Button>
         {/snippet}
       </Tooltip.Trigger>
       <!-- 8px clear of the viewport's edges, as every tooltip (Tip). -->

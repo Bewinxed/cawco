@@ -337,7 +337,6 @@ theme: component project-page-foreign
 token: --c-deck-gap 12px — the gap between two cards of the phone's deck, equal to `GAP` in workspace/deck.svelte.ts (a script constant that sizes the drag travel); no ladder step fits, the two must stay equal.
 token: --c-new-project-w 72rem — the new-project page's column; a page measure wider than the reading measure, no ladder step.
 token: --c-caw-hero 80px — the slot that holds Caw at his hero size over the new-project page, equal to `CAW_SIZE` in project/new/+page.svelte; a component dimension.
-token: --c-details-head-icon 28px — the session details head's copy button and harness mark, level with the title's first line; a component dimension.
 token: --c-context-bar-min 48px — the least a context meter's bar draws in the details strip; component dimension.
 token: --c-context-bar-max 96px — the most a context meter's bar draws in the details strip; component dimension.
 token: --c-model-list-max 232px — the model popover's list height cap in the details card: five 44px rows, four gaps and the list's padding, so rows scroll whole; component dimension.
@@ -359,7 +358,16 @@ removed: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:693 `[data
 removed: apps/dashboard/src/lib/cawco/workspace/SessionStatus.svelte:1 the whole `<style>` — every selector (`.session-status`, `.glyph`, `.mark`, `.compact`, `.working .glyph` …) named a class the markup no longer carries; the markup already holds each rule as utilities.
 removed: apps/dashboard/src/lib/cawco/workspace/PaneDeck.svelte:107 the `[data-lifted] [data-pane-lift]::before` and reduced-motion `<style>` rules (three) — the lift's shadow is `before:` utilities under `group-data-lifted/deck:` and `motion-reduce:before:transition-off`; the rest-state `border-radius: var(--radius-lg)` is `before:rounded-lg`.
 
+removed: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:608 the hand-rolled copy-link square (28px, own `rounded-sm`, own hover fill, `pressable`-less) — DESIGN.md Buttons gives the icon sizes 36/30/24/44 and "Ghost: transparent until hovered or expanded"; the 28px was a hand-kept number (S3).
+removed: apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte:1715,1748,1823 the hand-rolled chevron (20×24), close (20) and "+" (20) squares with their own `rounded-xs`, `bg-surface-fill` hover and `pressable` — same rule; DESIGN.md's Folder tabs section names no size for them, so the Buttons scale holds.
+removed: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:626 `--c-details-head-icon` (28px token, now unused) — the harness mark is level with the 30px copy button (`h-c-btn-h-sm`).
+
 ## Fixed
+
+fixed: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:608 copy link is the kit Button, ghost, `icon-sm` (30px), tone muted; `aria-label`, handler and `data-slot="icon-action"` kept (no file selects it, but the hook sweep put it there) — DESIGN.md Buttons.
+fixed: apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte:1715 chevron is the kit Button, ghost, `icon-xs` (24px); the idle fade, scale, open turn and desk-only reach sit on the span that holds it (a state is an attribute on the holder, the Button is not restyled); handler, `aria-hidden`, `tabindex=-1`, `data-slot="tdetails"` kept.
+fixed: apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte:1748 close is the kit Button, ghost, `icon-xs`, tone quiet (strong ink under the pointer); `data-slot="tclose"` kept (folder-proof and head-tint pages select it); its desk-only, no-touch reach is on its holder.
+fixed: apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte:1823 "+" is the kit Button, ghost, `icon-xs`, tone quiet; the refused ink is the glyph's (`group-data-refused/new:text-status-fail-glyph`); `{...props}` (tooltip trigger), `aria-busy`, `aria-describedby`, handler kept. Press is the kit's default scale.
 
 fixed: apps/dashboard/src/lib/cawco/workspace/SessionStatus.svelte:57 the working glyph lost its breath in the 10-17 conversion (the `.working .glyph` rule that ran `breath` matched nothing once the classes went) — `motion-safe:animate-breath` restores DESIGN.md's "Live work breathes".
 fixed: apps/dashboard/src/routes/(app)/project/[id]/+page.svelte:1678 the draft bar and its line were classes (`draft-bar`, `draft-line`) with no rule behind them after the merge — they drew as plain text; the main rule is back as utilities (flex-wrap row, band surface, hairline ring, the line a 14rem measure that wraps the actions beneath it).
@@ -382,6 +390,11 @@ kit-swap: apps/dashboard/src/routes/(app)/project/[id]/+page.svelte:2174 Skeleto
 kit-swap: apps/dashboard/src/routes/(app)/project/[id]/+page.svelte:2175 Skeleton `h-c-skeleton-card-h` — a board card's placeholder (54px): Skeleton height="board-card"
 kit-swap: apps/dashboard/src/routes/(app)/project/[id]/+page.svelte:2176 Skeleton `h-c-skeleton-card-h` — the same
 
+kit-swap: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:608 Button ghost icon-sm — done
+kit-swap: apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte:1715 Button ghost icon-xs — done
+kit-swap: apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte:1748 Button ghost icon-xs — done
+kit-swap: apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte:1823 Button ghost icon-xs — done
+
 shadcn variant: apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte:1734 data-open rotate
 
 ## Contracts
@@ -394,7 +407,6 @@ cross-file hook: apps/dashboard/src/lib/cawco/workspace/PaneDeck.svelte:107 `[da
 
 ## Gaps
 
-gap: apps/dashboard/src/lib/components/ui/button/button.svelte (no line: the variants) the details head's copy-link button (`data-slot="icon-action"`, SessionDetails.svelte:608) and the tab strip's chevron, close and "+" (PaneTabs.svelte:1715, 1748, 1823) are hand-rolled icon buttons — 28px/20px/24px squares with the house hover fill; the kit's Button has no 20px or 28px icon size and its `ghost` corner is 10px, so a swap is not straight — DESIGN.md Buttons: "one button, its looks are variants".
 gap: apps/dashboard/src/lib/components/ui/popover/popover-content.svelte:96 the details card's `z-index: 60` outranks the kit popover's `z-50` so it stands over the shell's top bar; the shell's stack has no scale — DESIGN.md Elevation & Depth: stacking by role, not by number.
 gap: apps/dashboard/src/lib/components/ui/fluid-tabs/Tabs.svelte (the `tabsVariants`) the session strip's host rules (`pane-tabs-strip`: flex row, padding, shelf surface) restyle the kit's Tabs root and TabsList from outside; they belong to a `Tabs variant="strip"` — DESIGN.md Folder tabs.
 

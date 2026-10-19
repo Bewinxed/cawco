@@ -9,6 +9,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconCheck } from "#lib/icons.js";
   import Down from "~icons/solar/alt-arrow-down-linear";
@@ -604,23 +605,25 @@
           >
             <MorphText text={title} wrap />
           </h2>
-          <button
+          <Button
             data-slot="icon-action"
             aria-label="Copy link"
-            class="touch-hit grid size-c-details-head-icon flex-none cursor-pointer place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted hover:bg-surface-hover"
+            class="flex-none"
             onclick={() =>
               copyToClipboard("Link", new URL(href, location.origin).href)}
-            type="button"
+            size="icon-sm"
+            tone="muted"
+            variant="ghost"
           >
-            <Link class="size-icon-md" />
-          </button>
+            <Link />
+          </Button>
         </div>
         {#if harness}
           <!-- Level with the title's first line, like the copy button beside
                it. -->
           <span
             aria-label={harnessNames[harness]}
-            class="inline-flex h-c-details-head-icon flex-none items-center"
+            class="inline-flex h-c-btn-h-sm flex-none items-center"
             role="img"
             title={harnessNames[harness]}
           >
