@@ -219,18 +219,26 @@ interface HydrationSeen {
   frames: (Layout & { frame: number })[];
   /** A tab the server drew rewritten as another: `from → to`. */
   rewritten: string[];
+  /** What is on screen at set frames after hydration (0, 10, 60), whether or not it changed. */
+  samples: Record<number, Layout>;
   /** The strip's tabs as the first client render left them. */
   strip: string[];
 }
 
-/** What the reader sees of the shell: the strip's tabs and box, the rail's, and what shares the bar's slot. */
+/** What the reader sees of the shell: the strip's tabs and box, the rail's, what shares the bar's slot, and the bar's tools. */
 interface Layout {
+  /** The "+"'s left edge, px; null where there is none. */
+  add: number | null;
+  /** The number the bar's Machines draws, or "none". */
+  count: string;
   /** Where the strip's drawn things stand: the last tab's right edge and the "+"'s left, px. */
   marks: string;
   rail: string;
   slot: string;
   strip: string;
   tabs: number;
+  /** The bar's tools group (Files, Jump, Machines, Caw's head). */
+  tools: string;
 }
 
 /**
@@ -249,6 +257,7 @@ function watchHydration(): void {
     rewritten: [],
     strip: [],
     frames: [],
+    samples: {},
   };
   window.probeHydration = seen;
   const PART = "[data-slot], [data-session-tab]";
@@ -289,6 +298,17 @@ function watchHydration(): void {
           `${el.getAttribute("data-slot")}${el.classList.contains("lifted") ? " lifted" : ""} ${Math.round(el.getBoundingClientRect().width)}`
       )
       .join(" + "),
+    tools: box(document.querySelector('[data-slot="top"] [data-slot="tools"]')),
+    count:
+      document
+        .querySelector('[data-slot="top"] [data-machines] [data-slot="num"]')
+        ?.textContent?.trim() ?? "none",
+    add: (() => {
+      const add = document
+        .querySelector("[data-session-tabs] .tnew")
+        ?.getBoundingClientRect();
+      return add ? Math.round(add.left) : null;
+    })(),
     marks: (() => {
       const strip = document.querySelector("[data-session-tabs]");
       const last = [...(strip?.querySelectorAll("[data-session-tab]") ?? [])]
@@ -301,6 +321,9 @@ function watchHydration(): void {
   /** The frames after hydration, each kept where it differs from the one before. */
   const track = (frame: number) => {
     const now = { ...layout(), frame };
+    if (frame === 0 || frame === 10 || frame === 60) {
+      seen.samples[frame] = now;
+    }
     const last = seen.frames.at(-1);
     if (
       !last ||
@@ -308,7 +331,9 @@ function watchHydration(): void {
       last.strip !== now.strip ||
       last.rail !== now.rail ||
       last.slot !== now.slot ||
-      last.marks !== now.marks
+      last.marks !== now.marks ||
+      last.tools !== now.tools ||
+      last.count !== now.count
     ) {
       seen.frames.push(now);
     }
@@ -454,7 +479,7 @@ async function checkFirstRender(
     `${step}: on screen as hydration ends, then each frame that differs: ${drawn.frames
       .map(
         (f) =>
-          `#${f.frame} ${f.tabs} tab(s), strip ${f.strip}, ${f.marks}, rail ${f.rail}, slot [${f.slot}]`
+          `#${f.frame} ${f.tabs} tab(s), strip ${f.strip}, ${f.marks}, rail ${f.rail}, slot [${f.slot}], tools ${f.tools}, machines ${f.count}`
       )
       .join(" | ")}`
   );
@@ -925,6 +950,66 @@ const spec: Spec = {
       await bare.close();
       const page = await tabsPage(kit, ids, "phone");
       await firstRender(step, page, copies, { kept: ids, railDropped: true });
+      await page.close();
+    }
+
+    // ---- (j) a strip past the bar's width: the bar holds still after the first paint ----
+    // As many tabs as overflow the strip, the server's copy the page's, so
+    // nothing the page keeps differs; what the hub says after the paint (the
+    // machines) must not move the bar's tools or the strip's "+".
+    {
+      const step = "(j) the bar from the first paint";
+      const wide = [
+        ids[0],
+        ...Array.from({ length: 30 }, () => crypto.randomUUID()),
+        ...ids.slice(1),
+      ];
+      const page = await tabsPage(kit, wide);
+      await firstRender(
+        step,
+        page,
+        { "cawco-workspace": treeOf(wide) },
+        { kept: wide }
+      );
+      await page.waitForFunction(
+        () => window.probeHydration.samples[60] !== undefined,
+        null,
+        { timeout: 30_000 }
+      );
+      const { samples } = await page.evaluate(() => window.probeHydration);
+      const [first, tenth, last] = [samples[0], samples[10], samples[60]];
+      const machines = (await (
+        await fetch(`${fleet.base}/api/agents`)
+      ).json()) as unknown[];
+      kit.check(
+        `${step}: the strip overflows, its "+" pinned at its end`,
+        first.add !== null && first.add > 1000,
+        `"+" at ${first.add}`
+      );
+      kit.check(
+        `${step}: the bar's tools stand where they were drawn, at #10 and #60`,
+        first.tools === tenth.tools && first.tools === last.tools,
+        `#0 ${first.tools}, #10 ${tenth.tools}, #60 ${last.tools}`
+      );
+      kit.check(
+        `${step}: the strip's "+" stands where it was drawn, at #10 and #60`,
+        first.add === tenth.add && first.add === last.add,
+        `#0 ${first.add}, #10 ${tenth.add}, #60 ${last.add}`
+      );
+      const live = await page.evaluate(
+        () =>
+          document
+            .querySelector(
+              '[data-slot="top"] [data-machines] [data-slot="num"]'
+            )
+            ?.textContent?.trim() ?? "none"
+      );
+      kit.check(
+        `${step}: Machines counts the hub's machines from the first paint, and once the socket answers`,
+        first.count === String(machines.length) &&
+          live === String(machines.length),
+        `the hub has ${machines.length}; drawn ${first.count} at #0, ${live} once settled`
+      );
       await page.close();
     }
   },

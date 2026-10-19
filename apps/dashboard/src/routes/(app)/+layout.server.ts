@@ -1,4 +1,5 @@
 import {
+  type AgentRow,
   type HubAuthState,
   harnessNamed,
   type InstanceRow,
@@ -181,8 +182,18 @@ export const load: LayoutServerLoad = async ({
   // is shown the pairing screen from the first paint, and a paired one the
   // app. Its cookie is SameSite=Lax, so it rides a link from another site
   // too.
-  const authRead = await readHub<HubAuthState>(fetch, "/api/auth");
+  // How many machines the bar's Machines counts (MachinesButton), so its
+  // number is in the first paint and the bar does not widen when the
+  // socket's list lands; null where the hub would not say.
+  const [authRead, machinesRead] = await Promise.all([
+    readHub<HubAuthState>(fetch, "/api/auth"),
+    readHub<AgentRow[]>(fetch, "/api/agents"),
+  ]);
   const auth = authRead.ok ? authRead.value : null;
+  const machineCount =
+    machinesRead.ok && Array.isArray(machinesRead.value)
+      ? machinesRead.value.length
+      : null;
   const stored = Number(pref(RAIL_KEY));
   const railWidth =
     Number.isFinite(stored) && stored > 0
@@ -244,12 +255,30 @@ export const load: LayoutServerLoad = async ({
   /** Each open tab's pulse as the hub held it for this request. */
   const pulses: Record<string, SessionPulse> = {};
   if (!workspace) {
-    return { railWidth, narrow, workspace, names, pulses, foldBoxes, auth };
+    return {
+      railWidth,
+      narrow,
+      workspace,
+      names,
+      pulses,
+      foldBoxes,
+      auth,
+      machineCount,
+    };
   }
 
   const open = leavesOf(workspace.root).flatMap((leaf) => leaf.tabs);
   if (open.length === 0) {
-    return { railWidth, narrow, workspace, names, pulses, foldBoxes, auth };
+    return {
+      railWidth,
+      narrow,
+      workspace,
+      names,
+      pulses,
+      foldBoxes,
+      auth,
+      machineCount,
+    };
   }
 
   // What the fleet calls these conversations, and what each is doing as the
@@ -353,5 +382,14 @@ export const load: LayoutServerLoad = async ({
     }
   }
 
-  return { railWidth, narrow, workspace, names, pulses, foldBoxes, auth };
+  return {
+    railWidth,
+    narrow,
+    workspace,
+    names,
+    pulses,
+    foldBoxes,
+    auth,
+    machineCount,
+  };
 };
