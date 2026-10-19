@@ -866,6 +866,9 @@ export const watchBrowsers = async (): Promise<() => void> => {
   // A page's origin that settled is told as any change is.
   setOriginSink(() => told());
   await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
+  // A local browser's profile an earlier agent kept beside its record moves
+  // under `chromium/` before anything starts one (local-host.ts `moveKeptFiles`).
+  await local.moveKeptFiles();
   // Every kept browser's gate made before the port answers, so a connection
   // as the agent starts meets its gate as its record says: closed under a
   // take-over the daemon restarted in (`gateFor`), never the no-browser 404.
