@@ -46,9 +46,7 @@
       class="group grid min-h-c-btn-h-lg w-full grid-cols-(--row-cols) items-center gap-space-3 rounded-md bg-surface-recess px-space-3 text-start text-ink-strong kind-dropped:text-ink-muted kind-you:bg-brand-wash max-phone:grid-cols-(--row-cols-narrow) max-phone:gap-y-space-1 max-phone:py-space-2 max-phone:grid-areas-(--row-areas)"
       data-kind={stage.kind}
       style:--row-areas={'"name count" "track track"'}
-      style:--row-cols="minmax(var(--c-pipeline-name-min),
-      var(--c-pipeline-name-max)) minmax(var(--c-pipeline-kind-min),
-      var(--c-pipeline-kind-max)) 1fr var(--c-pipeline-count-w)"
+      style:--row-cols={"minmax(var(--c-pipeline-name-min), var(--c-pipeline-name-max)) minmax(var(--c-pipeline-kind-min), var(--c-pipeline-kind-max)) 1fr var(--c-pipeline-count-w)"}
       style:--row-cols-narrow="1fr auto"
     >
       <span

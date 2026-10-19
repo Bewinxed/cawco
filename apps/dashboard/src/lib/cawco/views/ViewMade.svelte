@@ -37,8 +37,7 @@
 <ul
   aria-label={madeWords.tab}
   class="m-0 grid list-none grid-cols-(--made-cols) items-start gap-space-3 p-0"
-  style:--made-cols="repeat(auto-fill, minmax(min(100%, var(--c-made-tile-min)),
-  1fr))"
+  style:--made-cols={"repeat(auto-fill, minmax(min(100%, var(--c-made-tile-min)), 1fr))"}
 >
   {#each made as task (task.id)}
     <li
