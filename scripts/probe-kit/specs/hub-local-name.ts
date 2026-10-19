@@ -12,18 +12,31 @@
  *    reads an address off the announcements.
  * 4. Each hub's Connect a machine list (`/api/join`) carries
  *    "On this network · http://<held name>:<port>".
+ * 5. A device on the LAN is answered with the LAN's addresses alone (RFC
+ *    6762 §14). A third hub runs in a network of its own (bwrap: a user and
+ *    network namespace) holding `lan0` (192.168.77.1/24, the default route's
+ *    network), `lan1` on another network (192.168.88.1/24), and `br9`
+ *    (10.89.77.1/24), a bridge whose one port is a veth, as Podman's and
+ *    Docker's are. The hub listens on `::`, so AAAA records answer too. A
+ *    device at 192.168.77.2 on `lan0` asks for `cawco.local` (A and AAAA)
+ *    from a port other than 5353, so every answer comes back by unicast
+ *    (§6.7), as the QU answers macOS asks for do. Each record answering it
+ *    is one of `lan0`'s addresses: none of `br9`'s, none of `lan1`'s.
  *
  * Multicast needs an interface that carries it: inside a workspace there is
- * only loopback, so this runs on the host. A hub already on the network (the
- * machine's own) holds `cawco.local` first; then the scratch hubs hold the
- * next two names, which is the same proof.
+ * only loopback, and leg 5 makes namespaces, so this runs on the host. A hub
+ * already on the network (the machine's own) holds `cawco.local` first; then
+ * the scratch hubs hold the next two names, which is the same proof.
  *
  *   bun scripts/probe-kit/run.ts hub-local-name
  */
+import { createSocket } from "node:dgram";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { networkInterfaces } from "node:os";
 import { join } from "node:path";
 import makeMdns from "multicast-dns";
 import { browseMdns } from "../../../packages/agent/src/discovery";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { freePortRange, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -82,6 +95,90 @@ const ask = async <T>(
   return heard;
 };
 
+/** The flag that runs this file as leg 5's device: `--ask <name> <from>`. */
+const ASK = "--ask";
+/** How long leg 5's device keeps asking while the hub probes its name. */
+const ASK_MS = 60_000;
+
+/**
+ * Leg 5's device: asks for `name`'s A and AAAA records from `from`, an
+ * address on the LAN, on an ephemeral port, so each responder that hears the
+ * question answers it by unicast to `from` (RFC 6762 §6.7). Asks every
+ * second until something answers, then listens {@link LISTEN_MS} more, and
+ * answers every address heard.
+ */
+const askFromLan = async (name: string, from: string): Promise<string[]> => {
+  const socket = createSocket("udp4");
+  await new Promise<void>((bound) => socket.bind(0, from, bound));
+  socket.setMulticastInterface(from);
+  const mdns = makeMdns({ socket, bind: false, multicast: false });
+  const heard = new Set<string>();
+  mdns.on("response", (packet) => {
+    for (const record of [...packet.answers, ...packet.additionals]) {
+      if (
+        (record.type === "A" || record.type === "AAAA") &&
+        record.name.toLowerCase() === name
+      ) {
+        heard.add(String(record.data).split("%")[0] ?? "");
+      }
+    }
+  });
+  const question = {
+    questions: [
+      { name, type: "A" as const },
+      { name, type: "AAAA" as const },
+    ],
+  };
+  const deadline = Date.now() + ASK_MS;
+  while (heard.size === 0 && Date.now() < deadline) {
+    mdns.query(question, { port: 5353, address: "224.0.0.251" });
+    // biome-ignore lint/performance/noAwaitInLoops: one question a second until the hub has probed its name
+    await Bun.sleep(1000);
+  }
+  await Bun.sleep(LISTEN_MS);
+  mdns.destroy();
+  return [...heard];
+};
+
+/**
+ * Leg 5's network, built inside the namespace as its root: `lan0` and `lan1`
+ * are dummies with multicast on (an interface of its own, as a NIC is), `br9`
+ * a bridge with a veth port. Then the hub, and once `br9` is up, the device
+ * at 192.168.77.2 asking. `$1` the leg's folder, `$2` bun, `$3` the hub,
+ * `$4` this file.
+ */
+const LAN_SCRIPT = `set -eu
+ip link set lo up
+ip link add lan0 type dummy
+ip link set lan0 multicast on
+ip addr add 192.168.77.1/24 dev lan0
+ip addr add 192.168.77.2/24 dev lan0
+ip link set lan0 up
+ip route add default via 192.168.77.254 dev lan0
+ip link add lan1 type dummy
+ip link set lan1 multicast on
+ip addr add 192.168.88.1/24 dev lan1
+ip link set lan1 up
+ip link add br9 type bridge forward_delay 0
+ip link add ct0 type veth peer name ct1
+ip link set ct0 master br9
+ip addr add 10.89.77.1/24 dev br9
+ip link set br9 up
+ip link set ct0 up
+ip link set ct1 up
+for _ in $(seq 50); do ip -o link show br9 | grep -q LOWER_UP && break; sleep 0.2; done
+ip -d -o link show > "$1/links.txt"
+"$2" "$3" > "$1/hub.log" 2>&1 &
+trap "kill $!" EXIT
+"$2" "$4" ${ASK} cawco.local 192.168.77.2 > "$1/answers.json"
+ip -json addr show > "$1/addresses.json"
+`;
+
+interface IpAddr {
+  addr_info: { local: string }[];
+  ifname: string;
+}
+
 /** A hub's own ports: one for its listener, the rest for its previews. */
 const ports = async () => {
   const [first, last] = (await freePortRange(13)).split("-").map(Number) as [
@@ -94,7 +191,105 @@ const ports = async () => {
   };
 };
 
+/**
+ * Leg 5: a hub in a network of its own (LAN_SCRIPT), asked from its LAN.
+ * Its folder keeps the namespace's links, the hub's log and what was heard.
+ */
+const lanLeg = async (
+  kit: Kit,
+  env: Record<string, string>,
+  sandbox: string
+): Promise<void> => {
+  const bwrap = Bun.which("bwrap");
+  kit.check(
+    "5: the host has bwrap, to give a hub a network of its own",
+    bwrap !== null,
+    "bwrap is not on PATH"
+  );
+  if (!bwrap) {
+    return;
+  }
+  const dir = join(sandbox, "lan-leg");
+  mkdirSync(dir, { recursive: true });
+  const box = Bun.spawn(
+    [
+      bwrap,
+      "--dev-bind",
+      "/",
+      "/",
+      "--unshare-user",
+      "--unshare-net",
+      "--uid",
+      "0",
+      "--gid",
+      "0",
+      "--cap-add",
+      "ALL",
+      "--die-with-parent",
+      "--",
+      "sh",
+      "-c",
+      LAN_SCRIPT,
+      "sh",
+      dir,
+      process.execPath,
+      HUB_ENTRY,
+      import.meta.path,
+    ],
+    {
+      cwd: ROOT,
+      env: {
+        ...env,
+        ...(await ports()),
+        CAWCO_NO_MDNS: "0",
+        HOST: "::",
+        CAWCO_DB_PATH: join(dir, "hub.db"),
+      },
+      stdout: "ignore",
+      stderr: "pipe",
+    }
+  );
+  // The hub's boot, its probe and the device's asking: well inside this.
+  const exit = await readWithin(ASK_MS + 60_000, () => box.exited);
+  if (exit.kind === "unanswered") {
+    box.kill("SIGKILL");
+  }
+  const ended = exit.kind === "answered" ? exit.value : undefined;
+  const read = (name: string) =>
+    existsSync(join(dir, name)) ? readFileSync(join(dir, name), "utf8") : "";
+  const err = await new Response(box.stderr).text();
+  const answered = (
+    read("answers.json") ? JSON.parse(read("answers.json")) : []
+  ) as string[];
+  const addresses = (
+    read("addresses.json") ? JSON.parse(read("addresses.json")) : []
+  ) as IpAddr[];
+  const of = (ifname: string) =>
+    addresses
+      .find((entry) => entry.ifname === ifname)
+      ?.addr_info.map((info) => info.local) ?? [];
+  const lan = of("lan0");
+  kit.check(
+    "5: the namespace stood up and its device was answered for cawco.local",
+    ended === 0 && answered.includes("192.168.77.1"),
+    `exit ${ended ?? "timed out"}; heard ${answered.join(", ") || "nothing"}; stderr ${err.slice(-600)}; hub.log ${read(
+      "hub.log"
+    )
+      .split("\n")
+      .filter((line) => line.includes("mDNS") || line.includes("holding"))
+      .join(" | ")}`
+  );
+  const foreign = answered.filter((address) => !lan.includes(address));
+  kit.check(
+    "5: every A and AAAA record a LAN device is answered with is lan0's, none of br9's or lan1's",
+    answered.length > 0 && foreign.length === 0,
+    `heard ${answered.join(", ") || "nothing"}; lan0 ${lan.join(", ")}; br9 ${of("br9").join(", ")}; lan1 ${of("lan1").join(", ")}; not lan0's: ${foreign.join(", ") || "none"}`
+  );
+  kit.note(`leg 5's links, hub log and answers: ${dir}`);
+};
+
 const spec: Spec = {
+  host: "leg 5 makes a user and network namespace (bwrap), and legs 1-4 announce on the machine's own interfaces",
   name: "hub-local-name",
   run: async (kit: Kit) => {
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
@@ -207,7 +402,18 @@ const spec: Spec = {
           .join(" | ")}`
       );
     }
+
+    // 5. A device on the LAN hears the LAN's addresses alone.
+    await lanLeg(kit, fleet.env, fleet.sandbox);
   },
 };
 
 export default spec;
+
+if (import.meta.main && process.argv[2] === ASK) {
+  const [name, from] = process.argv.slice(3);
+  if (!(name && from)) {
+    throw new Error(`usage: bun ${import.meta.path} ${ASK} <name> <from>`);
+  }
+  console.log(JSON.stringify(await askFromLan(name, from)));
+}
