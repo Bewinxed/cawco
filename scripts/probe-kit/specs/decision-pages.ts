@@ -51,9 +51,9 @@
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { readWithin } from "@cawco/core/bounded";
 import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
+import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
