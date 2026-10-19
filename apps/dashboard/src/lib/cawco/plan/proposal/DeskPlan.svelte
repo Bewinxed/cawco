@@ -120,9 +120,7 @@
   /* The head's names in one size, on one line (the head recipe's label
      role): "Plan", the task's title, its stage. The task's badge stands a
      step clear of the name and gives way first, its title ending in an
-     ellipsis. */
-  /* The chip's slot, shrinkable: SideSurface keeps its direct-child
-     buttons whole, and the chip is the one that gives way. */
+     ellipsis; its slot is the box that shrinks. */
   .task-at {
     display: flex;
     flex: 0 1 auto;

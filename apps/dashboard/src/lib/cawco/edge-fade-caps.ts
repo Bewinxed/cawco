@@ -14,10 +14,11 @@
  * it, and when it stops. Those few are the only candidates. A frame reads
  * the scroller's box and the candidates' line boxes, then writes the two
  * caps: reads before writes, nothing else read. The tree is walked for runs
- * and marks only when the list's own nodes change, never on a scroll. While
- * motion of a set length runs in the list (a row sliding to its place), a
- * frame reads again until it ends: a transform moves a line past an edge
- * without a scroll, a resize or a mutation to say so.
+ * and marks only when the list's own nodes change, never on a scroll. After
+ * such a change (a row arriving, a fold opening), while motion of a set
+ * length runs in the list, a frame reads again until it ends: a transform
+ * moves a line past an edge without a scroll, a resize or a mutation to say
+ * so. A scroll's frames never ask after the list's motion.
  */
 import type { Attachment } from "svelte/attachments";
 
@@ -35,11 +36,18 @@ interface Reach {
 const MARKS =
   ':is(svg, img, [data-box]):not([data-slot="connectors"], [data-slot="connectors"] *)';
 
+/**
+ * How far past an edge a run may stand and still be drawn whole, in drawn
+ * pixels: a row come to rest a fraction of a pixel over the foot shows all
+ * its ink, and a fade across it would wash a whole line out.
+ */
+const SLACK = 1;
+
 /** Whether an edge of `box` cuts the run from `top` to `bottom`. */
 const crosses = (box: DOMRect, top: number, bottom: number): boolean =>
   top < box.bottom &&
   bottom > box.top &&
-  (top < box.top || bottom > box.bottom);
+  (top < box.top - SLACK || bottom > box.bottom + SLACK);
 
 /** Drawn: a shut fold's words are inert and transparent, a reader's own clipped to a pixel. */
 const drawn = (el: Element, width: number): boolean =>
@@ -49,10 +57,10 @@ const drawn = (el: Element, width: number): boolean =>
 
 /** Takes in a run an edge of `box` cuts: what shows of it inside that edge. */
 function cut(reach: Reach, box: DOMRect, top: number, bottom: number): void {
-  if (top < box.top) {
+  if (top < box.top - SLACK) {
     reach.start = Math.max(reach.start, bottom - box.top);
   }
-  if (bottom > box.bottom) {
+  if (bottom > box.bottom + SLACK) {
     reach.end = Math.max(reach.end, box.bottom - top);
   }
 }
@@ -113,6 +121,8 @@ const moving = (node: HTMLElement): boolean =>
 export const capEdgeFades: Attachment<HTMLElement> = (node) => {
   let frame = 0;
   let scan = 0;
+  /** The list's nodes changed: motion may have started with them, so frames read on until it ends. A scroll never asks. */
+  let follow = false;
   const written = { start: "", end: "" };
   /** What stands partly inside the scroller now, an edge across it. */
   const partly = new Set<Element>();
@@ -140,8 +150,11 @@ export const capEdgeFades: Attachment<HTMLElement> = (node) => {
     }
     write("start", reach.start, scale);
     write("end", reach.end, scale);
-    if (moving(node)) {
-      later();
+    if (follow) {
+      follow = moving(node);
+      if (follow) {
+        later();
+      }
     }
   };
   function later(): void {
@@ -179,6 +192,7 @@ export const capEdgeFades: Attachment<HTMLElement> = (node) => {
       }
     }
     watched = now;
+    follow = true;
     later();
   };
   const changes = new MutationObserver(() => {
@@ -186,7 +200,9 @@ export const capEdgeFades: Attachment<HTMLElement> = (node) => {
       scan = requestAnimationFrame(watch);
     }
   });
+  // A fold opening or shutting moves the lines under it on its own clock.
   changes.observe(node, {
+    attributeFilter: ["aria-expanded", "data-open", "inert"],
     characterData: true,
     childList: true,
     subtree: true,

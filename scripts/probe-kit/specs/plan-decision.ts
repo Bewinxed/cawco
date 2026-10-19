@@ -154,11 +154,6 @@ const cardIn = (frame: Frame) =>
         .map((option) => option.getAttribute("data-option") ?? ""),
       note: !!card?.querySelector(".dp-note textarea"),
       embeds: [...document.querySelectorAll("iframe")].map((one) => one.src),
-      /** Each embed's top and height in the panel's page, against its view's height. */
-      boxes: [...document.querySelectorAll("iframe")].map((one) => {
-        const box = one.getBoundingClientRect();
-        return `${Math.round(box.top)}+${Math.round(box.height)}/${innerHeight}`;
-      }),
       overflow: (() => {
         const width = document.documentElement.clientWidth;
         return {
@@ -214,20 +209,12 @@ const canvasesOn = (page: Page) =>
             threads: [...document.querySelectorAll('[data-slot="thread"]')].map(
               (thread) => thread.textContent?.replace(/\s+/g, " ").trim() ?? ""
             ),
-            // Which stories stand mounted, and whose frames hold an acknowledgement.
-            stories: [...document.querySelectorAll(".cawco-frame")].map(
-              (frame) =>
-                `${(frame as HTMLElement).dataset.cawcoStory}:${frame.querySelectorAll('[data-slot="plan-row"]').length}r${frame.querySelectorAll('[data-slot="ack"]').length}a`
-            ),
-            file: new URLSearchParams(location.search).get("file") ?? "",
           }))
-          .catch((error: unknown) => ({
+          .catch(() => ({
             variations: [] as string[],
             rows: 0,
             acks: [] as string[],
             threads: [] as string[],
-            stories: [String(error).slice(0, 120)],
-            file: "",
           }))
       )
   );
@@ -393,13 +380,7 @@ const spec: Spec = {
             told("Answered on the thread") >= 3 &&
             answered >= 3 &&
             told("Seen by this session") >= 3,
-          JSON.stringify(
-            drawnNow.map((one) => ({
-              file: one.file,
-              acks: one.acks,
-              stories: one.stories,
-            }))
-          )
+          JSON.stringify(acks.slice(0, 6))
         );
         kit.check(
           `${leg}: nothing past the panel frame's width`,
