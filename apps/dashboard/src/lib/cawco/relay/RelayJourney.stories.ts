@@ -123,22 +123,6 @@ export const PickMachinePhone = {
   parameters: phone,
 };
 
-const onlyMac = {
-  machine: null,
-  candidates: 0,
-  steps: [
-    { step: "machine", state: "none", notLinux: ["studio"] },
-    { step: "name", state: "waiting", name },
-    { step: "certificate", state: "waiting" },
-    { step: "start", state: "waiting" },
-    { step: "prove", state: "waiting" },
-  ] satisfies RelayStep[],
-};
-/** 1 · The internet reaches only a Mac: no machine can run it, and why (it runs only on Linux). */
-export const OnlyAMac = { args: onlyMac, parameters: desk };
-/** 1 · The same, on a phone. */
-export const OnlyAMacPhone = { args: onlyMac, parameters: phone };
-
 const checking = { steps: path({}) };
 /** A · Checking: just started through the domain; obelisk ticked, the name and the low ports being checked. */
 export const Checking = { args: checking, parameters: desk };
@@ -197,6 +181,27 @@ const lowPorts = {
 export const LowPorts = { args: lowPorts, parameters: desk };
 /** B · The low ports, on a phone: the command clamped to two lines, Copy command takes it whole. */
 export const LowPortsPhone = { args: lowPorts, parameters: phone };
+
+const forwarder = {
+  steps: path({
+    name: ticked.name,
+    runtime: {
+      step: "runtime",
+      state: "needs",
+      lowest: 443,
+      network: "published",
+      need: {
+        kind: "forwarder",
+        why: "Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 443 and UDP 49152–49400: switch it to its forwarder that carries both.",
+        command: "colima stop && colima start --port-forwarder grpc",
+      },
+    },
+  }),
+};
+/** B · On a Mac with Colima: its ssh forwarder carries TCP alone; the grpc one to switch to, once, on obelisk. */
+export const ColimaForwarder = { args: forwarder, parameters: desk };
+/** B · Colima's forwarder, on a phone. */
+export const ColimaForwarderPhone = { args: forwarder, parameters: phone };
 
 const routerAsks = {
   steps: path({
