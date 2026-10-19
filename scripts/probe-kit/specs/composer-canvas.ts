@@ -89,6 +89,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressIn,
   type Spec,
   settle,
   VIEWS,
@@ -1252,7 +1253,7 @@ const strokes = async (on: On, pen: ReturnType<typeof penOf>) => {
     throw new Error("the canvas's iframe has no document");
   }
   await frame.waitForSelector(".canvas-host .excalidraw", { timeout: 60_000 });
-  await frame.click('.rail-box[aria-label^="Pen"]');
+  await pressIn(frame, '.rail-box[aria-label^="Pen"]');
   const at = (await box(on.page, FRAME)) as Box;
   const p = (fx: number, fy: number): [number, number] => [
     at.left + at.width * fx,
@@ -1667,7 +1668,7 @@ const removeCheck = async (
     return;
   }
   await frame.waitForSelector(".canvas-host .excalidraw", { timeout: 60_000 });
-  await frame.click('.rail-box[aria-label^="Pen"]');
+  await pressIn(frame, '.rail-box[aria-label^="Pen"]');
   const at = (await box(page, FRAME)) as Box;
   await pen(
     [at.left + at.width * 0.3, at.top + at.height * 0.5],
@@ -1675,7 +1676,7 @@ const removeCheck = async (
   );
   await settle(page, 300);
   await clock.catchRuns(
-    () => frame.click('.rail-box[aria-label="Remove"]'),
+    () => pressIn(frame, '.rail-box[aria-label="Remove"]'),
     MOTION,
     8000
   );
@@ -1779,7 +1780,7 @@ const syncCheck = async (on: On) => {
     said.filter((one) => one.startsWith("sync ")).at(-1);
   const lastLink = (said: string[]) => lastSaid(said)?.split(":")[0];
   const stroke = async (fx: number) => {
-    await frame.click('.rail-box[aria-label^="Pen"]');
+    await pressIn(frame, '.rail-box[aria-label^="Pen"]');
     const at = (await box(page, FRAME)) as Box;
     await pen(
       [at.left + at.width * fx, at.top + at.height * 0.4],
@@ -1983,7 +1984,7 @@ const heldExportCheck = async (on: On) => {
   }
   await frame.waitForSelector(".canvas-host .excalidraw", { timeout: 60_000 });
   await settle(page, 800);
-  await frame.click('.rail-box[aria-label^="Pen"]');
+  await pressIn(frame, '.rail-box[aria-label^="Pen"]');
   const at = (await box(page, FRAME)) as Box;
   await pen(
     [at.left + at.width * 0.3, at.top + at.height * 0.4],
@@ -2264,7 +2265,7 @@ const dockCheck = async (on: On, clock: Clock) => {
   }
   const fromBox = await box(page, FRAME);
   const dockCaught = await clock.catchRuns(
-    () => frame.click('.rail-box[aria-label="Dock"]'),
+    () => pressIn(frame, '.rail-box[aria-label="Dock"]'),
     MOTION,
     8000
   );
@@ -2446,7 +2447,9 @@ const chipCheck = async (on: On): Promise<string | null> => {
   const frame = await (
     await page.locator(FRAME).elementHandle()
   )?.contentFrame();
-  await frame?.click('.rail-box[aria-label="Done"]');
+  if (frame) {
+    await pressIn(frame, '.rail-box[aria-label="Done"]');
+  }
   const thumb = await until(
     "the chip's thumbnail",
     () =>

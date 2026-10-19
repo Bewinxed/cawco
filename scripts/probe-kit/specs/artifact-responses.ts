@@ -36,7 +36,7 @@ import { Database } from "bun:sqlite";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, open, ROOT, type Spec, settle } from "../kit";
+import { type Kit, open, pressIn, ROOT, type Spec, settle } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const READ = "mcp__cawco__artifact_read";
@@ -312,7 +312,7 @@ const run = async (kit: Kit) => {
   );
 
   // 2. The page's own Send.
-  await frame.locator("[data-dp-send]").click();
+  await pressIn(frame, "[data-dp-send]");
   const firstSend = await until(
     "the responses event",
     () => sendsOf(dbPath, session, busyAt),
@@ -346,7 +346,7 @@ const run = async (kit: Kit) => {
 
   // 3. A third edit and a second Send while it waits.
   await typeNote(FINAL_NOTE);
-  await frame.locator("[data-dp-send]").click();
+  await pressIn(frame, "[data-dp-send]");
   const secondSend = await until(
     "the second responses event",
     () => sendsOf(dbPath, session, busyAt),

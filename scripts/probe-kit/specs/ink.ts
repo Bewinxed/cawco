@@ -62,6 +62,7 @@ import {
   type Kit,
   type KitFleet,
   open,
+  pressIn,
   type Spec,
   settle,
 } from "../kit";
@@ -1255,9 +1256,9 @@ const canvasChecks = async (on: On) => {
   const frame = (await (
     await on.page.locator(CANVAS_FRAME).elementHandle()
   )?.contentFrame()) as Frame;
-  await frame.click('.rail-box[aria-label="Zoom"]');
-  await frame.click('.rail-item:has-text("Zoom to fit")');
-  await frame.click('.rail-box[aria-label^="Pen"]');
+  await pressIn(frame, '.rail-box[aria-label="Zoom"]');
+  await pressIn(frame, '.rail-item:has-text("Zoom to fit")');
+  await pressIn(frame, '.rail-box[aria-label^="Pen"]');
   await on.page.waitForTimeout(400);
   const well = (await on.page.locator(CANVAS_FRAME).boundingBox()) as {
     x: number;

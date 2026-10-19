@@ -38,7 +38,14 @@ import {
   placePickWords as pickWords,
 } from "../../../packages/core/src/index";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import {
+  type Kit,
+  type KitFleet,
+  open,
+  pressIn,
+  type Spec,
+  settle,
+} from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -156,9 +163,7 @@ const pick = async (
   between: () => Promise<void> = async () => undefined
 ) => {
   const frame = page.frameLocator('iframe[title="Preview"]');
-  // The panel's frame takes no press while it is still coming in.
-  await settle(page);
-  await frame.locator("[data-pick]").click();
+  await pressIn(frame, "[data-pick]");
   const form = page.getByRole("form", { name: "Pick a machine and folder" });
   await form.waitFor({ timeout: 15_000 });
   const select = form.locator('[data-slot="select-trigger"]');

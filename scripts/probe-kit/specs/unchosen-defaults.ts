@@ -60,7 +60,15 @@ import {
   type Seen,
   until,
 } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, ROOT, type Spec, settle } from "../kit";
+import {
+  type Kit,
+  type KitFleet,
+  open,
+  pressIn,
+  ROOT,
+  type Spec,
+  settle,
+} from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 const COMMAND = /PROBE-CALL:(\d+)/g;
@@ -588,10 +596,10 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
   }
   const placeTab = await tabOn(place);
   await settle(placeTab.page);
-  await placeTab.page
-    .frameLocator('iframe[title="Preview"]')
-    .locator("[data-pick]")
-    .click();
+  await pressIn(
+    placeTab.page.frameLocator('iframe[title="Preview"]'),
+    "[data-pick]"
+  );
   const picker = placeTab.page.getByRole("form", {
     name: placePickWords.title,
   });
