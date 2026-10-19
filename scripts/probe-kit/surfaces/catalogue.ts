@@ -89,6 +89,35 @@ export const LAYER =
 const press = (name: string | RegExp) => (page: Page) =>
   page.getByRole("button", { name }).filter({ visible: true }).first().click();
 
+/**
+ * A pane head's control by its key (SideSurface `data-head-item`), where the
+ * head stands it: pressed in the head when it has room, chosen from More when
+ * the head's fit put it there (SideSurface `stands`: by priority, the
+ * narrowest form first, whatever has no room in More). `entry` is its name in
+ * More. The head stands every control until its first fit, which its
+ * ResizeObserver runs in the frames after it is drawn: the control is looked
+ * for once the head is there and two frames have passed.
+ */
+const headControl =
+  (key: string, entry: string | RegExp) => async (page: Page) => {
+    const item = page.locator(`[data-head-item="${key}"]:not([hidden])`);
+    const more = page.locator('[data-slot="more"]').filter({ visible: true });
+    await page.locator(`[data-head-item="${key}"]`).first().waitFor({
+      state: "attached",
+    });
+    await page.evaluate(() => window.__ssReader?.frames(2));
+    if (await item.count()) {
+      await item.getByRole("button").first().click();
+      return;
+    }
+    await more.first().click();
+    await page
+      .locator('[role="menuitem"], [role="menuitemcheckbox"]')
+      .filter({ hasText: entry, visible: true })
+      .first()
+      .click();
+  };
+
 /** Picks the board's first card, then presses the bulk bar's button named `name`. */
 const pickThen = (name: RegExp) => async (page: Page) => {
   await page
@@ -602,11 +631,7 @@ const dropPin = async (page: Page) => {
  */
 const inspectSheet = async (page: Page) => {
   await page.frameLocator(PREVIEW_FRAME).locator(SHEET_STORY).first().waitFor();
-  await page
-    .getByRole("button", { name: INSPECT, exact: true })
-    .filter({ visible: true })
-    .first()
-    .click();
+  await headControl("inspect", INSPECT)(page);
   await page.locator(INSPECTOR_ROW).first().waitFor();
 };
 
@@ -1759,12 +1784,11 @@ export const SURFACES: Surface[] = [
         root: "body",
         widths: ["desk"],
       },
-      // The pane's Comments panel: its pins' list. The button's name carries
-      // its open pins' count only above 0 ("Comments" or "Comments, 2 open").
+      // The pane's Comments panel: its pins' list.
       {
         name: "comments",
         route: (s) => `/session/${s.art}`,
-        act: press(/^Comments\b/),
+        act: headControl("comments", "Comments"),
         root: "body",
         widths: ["desk"],
       },
