@@ -42,7 +42,7 @@
   data-slot="native-select-wrapper"
 >
   <select
-    class="rounded-md shadow-xs [transition:var(--transition-control)] h-9 data-[size=sm]:h-[30px] w-full min-w-0 appearance-none border border-[var(--border-control)] bg-[var(--surface-raised)] text-[var(--ink-strong)] pr-space-8 pl-3 text-body select-none selection:bg-action-solid selection:text-on-action placeholder:text-ink-muted aria-invalid:border-error-9 dark:aria-invalid:border-error-9/50 disabled:pointer-events-none disabled:cursor-not-allowed"
+    class="rounded-md shadow-xs transition-control h-c-input-h size-sm:h-c-btn-h-sm w-full min-w-0 appearance-none border border-border-control bg-surface-raised text-ink-strong pr-space-8 pl-3 text-body select-none selection:bg-action-solid selection:text-on-action placeholder:text-ink-muted aria-invalid:border-error-9 dark:aria-invalid:border-error-9/50 disabled:pointer-events-none disabled:cursor-not-allowed"
     data-size={size}
     data-slot="native-select"
     bind:this={ref}

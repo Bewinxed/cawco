@@ -173,7 +173,10 @@
   });
 </script>
 
-<!-- literal: -100vw (how far a rolling digit's clip reaches past its slot), inset(50%) (the words said once, clipped away) -->
+<!-- The letters' box: one line broken only at "\n", the morph holding its
+     size. Nothing it draws reaches past the box on the inline axis; clip
+     (unlike hidden) keeps its text baseline. The letters the morph writes
+     into it are drawn by the theme's `morph-letters` component rule. -->
 <span
   data-slot="morph-text"
   class="data-wrap:block"
@@ -183,32 +186,7 @@
       class="relative inline-block overflow-x-clip whitespace-nowrap"
       aria-hidden="true"
       data-slot="letters"
-      style:--roll-bleed="-100vw"
       {@attach letters}
-    ></span><span
-      class="absolute -m-px size-px overflow-hidden whitespace-pre select-none clip-path-(--said-clip)"
-      data-slot="said"
-      style:--said-clip="inset(50%)">{text}</span
+    ></span><span class="sr-only select-none" data-slot="said">{text}</span
     >{:else}{text}{/if}</span
 >
-
-<style>
-  /* The letters' box: one line broken only at "\n", the morph holding its
-     size. Nothing it draws reaches past the box on the inline axis; clip
-     (unlike hidden) keeps its text baseline. */
-  /* residual: foreign-dom */
-  [data-slot="letters"] {
-    > :global(:not(br)) {
-      display: inline-block;
-      white-space: pre;
-    }
-    /* A digit rolls in a slot that clips it on the block axis only, so a
-       glyph's overhang is not shaved. */
-    > :global([data-roll]) {
-      clip-path: inset(0 var(--roll-bleed));
-    }
-    > :global([data-roll] > span) {
-      display: inline-block;
-    }
-  }
-</style>

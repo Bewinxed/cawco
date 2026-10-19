@@ -168,7 +168,7 @@
    * reply again — 2,600 elements styled and laid out inside the frame the
    * answer finished in. A message that streamed keeps the render it
    * streamed in, and settling is its last chunk; the two lay out the same
-   * (see the token spans' styles below).
+   * (the theme's `markdown-tokens` rule lays the token spans out inline).
    */
   const tokens = untrack(() => streaming);
 
@@ -243,7 +243,9 @@
      would switch spans on after mount is not reactive and a paragraph that
      mounted as plain text stayed plain for good. That is what lets a chunk's
      words be told from the ones already on screen. Streamdown's own per-word
-     animation is switched off below, so mounting with spans replays nothing;
+     animation is switched off by the theme's `markdown-tokens` rule (it is
+     written inline, so only an important declaration outranks it), so
+     mounting with spans replays nothing;
      the chunk fade above is the only motion text has. A message that mounts
      settled renders static: plain text nodes, the same layout. -->
 <div data-slot="md" class="contents" bind:this={host}>
@@ -273,7 +275,7 @@
 	     (`codespan`) keeps it, because it is prose, not a listing. -->
     {#snippet code({ token })}
       <div
-        class="not-prose my-3 [&_code]:bg-transparent! [&_code]:p-0! [&_pre]:border-0! [&_pre]:bg-transparent!"
+        class="not-prose my-3 well-code:bg-transparent well-code:p-0 well-pre:border-0 well-pre:bg-transparent"
       >
         <OutputBlock language={token.lang} text={token.text} />
       </div>
@@ -290,22 +292,3 @@
     {/snippet}
   </Streamdown>
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  [data-slot="md"] {
-    /* Streamdown writes its token and block animation inline; the chunk fade
-       in the script is the only motion streamed text has. */
-    & :global([style*="sd-"]) {
-      animation: none !important;
-    }
-    /* Its token spans are inline-block and pre-wrap, which wraps a line
-       differently from the plain text the same words settle into; inline,
-       with the prose's own white-space, the streamed paragraph and the
-       settled one lay out identically. */
-    & :global(span[style*="sd-"]) {
-      display: inline !important;
-      white-space: inherit !important;
-    }
-  }
-</style>
