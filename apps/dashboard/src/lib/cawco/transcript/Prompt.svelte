@@ -1078,13 +1078,18 @@
       block-size: var(--icon-lg);
     }
   }
+  /* Who asks gives way first (The Truncate Inside Rule): it shrinks a
+     hundred times faster than anything beside it, cut inside its own box. */
   .title {
+    flex: 0 100 auto;
     min-inline-size: 0;
     overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* Where it stands ("2 of 3") keeps its width, on one line. */
   h2 :global(.place) {
+    flex: none;
     margin-inline-start: auto;
   }
   /* The minimize chevron ends the title row, in the title's muted ink; it

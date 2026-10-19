@@ -1,5 +1,5 @@
 /**
- * Two shared dashboard rules, read from the engine.
+ * Three shared dashboard rules, read from the engine.
  *
  * 1. Live work's breath holds 3:1 at its floor (DESIGN.md Live work
  *    breathes; WCAG 2.2 SC 1.4.11, unrounded). On the /motion/breath-floor
@@ -20,6 +20,12 @@
  *    drawn past the card's edge; and the name's first word is
  *    drawn whole, or to NAME_KEEPS when it is longer (its words keep their
  *    width; only trailing text cuts).
+ *
+ * 3. An ask's place keycap ("2 of 3") keeps its width (Prompt). On the
+ *    /motion/prompt-head bench, the real approval card at 390, second of
+ *    three, from a session with a long title: the keycap's text lays out as
+ *    one line box, and the asker is cut with an ellipsis inside its own box
+ *    (it runs past it, and its box ends before the keycap starts).
  *
  *   bun scripts/probe-kit/run.ts web breath-and-head
  */
@@ -293,12 +299,59 @@ async function sideHead(kit: Kit, bench: string): Promise<void> {
   }
 }
 
+interface PromptHead {
+  askerClips: boolean;
+  askerEnd: number;
+  lines: number;
+  placeStart: number;
+  placeText: string;
+}
+
+async function promptHead(kit: Kit, bench: string): Promise<void> {
+  const page = await kit.page("phone", { theme: "light" });
+  await open(page, `${bench}/motion/prompt-head`, '[data-slot="hitl"] h2 .place');
+  const head = await page.evaluate((): PromptHead | null => {
+    const h2 = document.querySelector('[data-slot="hitl"] h2');
+    const place = h2?.querySelector<HTMLElement>(".place");
+    const asker = h2?.querySelector<HTMLElement>('[data-slot="title"]');
+    if (!(place && asker)) {
+      return null;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(place);
+    // One line box: every text rect of the keycap on one baseline.
+    const tops = new Set(
+      [...range.getClientRects()]
+        .filter((rect) => rect.width > 0)
+        .map((rect) => Math.round(rect.top))
+    );
+    return {
+      askerClips:
+        asker.scrollWidth > asker.clientWidth &&
+        getComputedStyle(asker).textOverflow === "ellipsis",
+      askerEnd: asker.getBoundingClientRect().right,
+      lines: tops.size,
+      placeStart: place.getBoundingClientRect().left,
+      placeText: place.textContent?.trim() ?? "",
+    };
+  });
+  kit.check(
+    "390px: an ask's place keycap stands on one line, and the long asker is cut inside its own box before it",
+    !!head &&
+      head.lines === 1 &&
+      head.askerClips &&
+      head.askerEnd <= head.placeStart + 0.5,
+    `\n    ${JSON.stringify(head)}`
+  );
+}
+
 const spec: Spec = {
   name: "breath-and-head",
   run: async (kit: Kit) => {
     const bench = await kit.bench();
     await breathFloor(kit, bench);
     await sideHead(kit, bench);
+    await promptHead(kit, bench);
   },
 };
 
