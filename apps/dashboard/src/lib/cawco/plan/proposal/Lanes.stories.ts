@@ -26,6 +26,24 @@ export const OnPhone = {
   parameters: { viewport: "phone" },
 };
 
+/** Desk · Lanes, a to-do reworded: the line under it says this session, the task's attempt, has seen it. */
+export const Edited = {
+  args: { frame: "desk", scenario: "edited" },
+  parameters: { viewport: 360 },
+};
+
+/** Desk · Lanes, a comment on the date picker, which Fable carries: sent to Fable, this session hears it too. */
+export const Commented = {
+  args: { frame: "desk", scenario: "commented" },
+  parameters: { viewport: 360 },
+};
+
+/** Desk · Lanes, the comment answered: seen by Fable, its reply on the step's thread and under the step. */
+export const Acknowledged = {
+  args: { frame: "desk", scenario: "acknowledged" },
+  parameters: { viewport: 360 },
+};
+
 /** Desk · Lanes live: the pulse runs to the working delegate; the date picker and deposit finish and their lines meet at the step that waited. */
 export const Live = {
   args: { frame: "desk", live: true },

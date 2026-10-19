@@ -15,9 +15,11 @@
   import { nestFrom } from "#lib/cawco/motion/branch.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconChevronRight } from "#lib/icons.js";
+  import AckLine from "./AckLine.svelte";
   import Fold from "./Fold.svelte";
   import { openBefore, type PlanFixture, type Step } from "./fixtures";
   import StepTile from "./StepTile.svelte";
+  import StepTools from "./StepTools.svelte";
   import SubRows from "./SubRows.svelte";
   import TaskBadge from "./TaskBadge.svelte";
   import { pointAt, useView } from "./view.svelte";
@@ -25,6 +27,7 @@
   let {
     step,
     plan,
+    steps,
     pushes = false,
     lane = 0,
     trail,
@@ -33,6 +36,8 @@
   }: {
     step: Step;
     plan: PlanFixture;
+    /** The plan's rows as the person has them, for a move. */
+    steps: Step[];
     /** Pressing the words pushes the step's page (a phone, Lanes and Crew first). */
     pushes?: boolean;
     /** Lanes: which of the two lanes its tile stands in. */
@@ -57,6 +62,8 @@
   let dismissed = $state(false);
   const uid = $props.id();
   const foldId = $derived(`fold-${uid}`);
+  const gone = $derived(view.removed.has(step.id));
+  const ack = $derived(view.acks.get(step.id));
 
   function press(): void {
     if (pushes) {
@@ -75,85 +82,107 @@
   hidden={dismissed}
   style:--lead-in="calc({lane} * (var(--pv-tile, 18px) + var(--space-2)))"
 >
-  <div class="row" data-slot="plan-row" data-state={now}>
-    <span class="pv-lead"
-      ><span class="tile-at" data-tile={step.id}
-        ><StepTile
-          label={step.words}
-          onpress={() => {
-            if (view.ticked.has(step.id)) {
-              view.ticked.delete(step.id);
-            } else {
-              view.ticked.add(step.id);
-            }
-          }}
-          state={now}
-        /></span
-      ></span
-    >
-    <button
-      aria-controls={pushes ? undefined : foldId}
-      aria-expanded={pushes ? undefined : open}
-      class="words press-tint"
-      data-slot="words"
-      onclick={press}
-      type="button"
-    >
-      {step.words}
-    </button>
-    <span class="trail mark-line" data-slot="trail">
-      {@render trail?.()}
-      {#if step.promoted}
-        <span data-box
-          ><TaskBadge
-            stage={step.promoted.stage}
-            title={step.promoted.title}
-          /></span
-        >
-      {/if}
-      <span
-        aria-hidden="true"
-        class="chev"
-        data-box
-        data-open={(open && !pushes) || undefined}
-        data-slot="chevron"><IconChevronRight /></span
+  {#if gone}
+    <div class="gone">
+      <span class="gone-words">Removed: {step.words}</span>
+      <Button
+        onclick={() => {
+          view.removed.delete(step.id);
+          view.tell(step, "added");
+        }}
+        size="xs"
+        variant="ghost">Undo</Button
       >
-      <span class="num time" data-num data-slot="time">{time}</span>
-    </span>
-    {#if waitsOn.length > 0 && now !== "done"}
-      <span class="under after" data-slot="after" out:fade={{ duration: 160 }}>
-        <span>after</span>
-        {#each waitsOn as before, index (before.id)}
-          {#if index > 0}<span aria-hidden="true">·</span>{/if}
-          <button
-            class="link pressable"
-            onclick={(event) => pointAt(view, event.currentTarget, before.id)}
-            type="button">{before.short}</button
+    </div>
+  {:else}
+    <div class="row" data-slot="plan-row" data-state={now}>
+      <span class="pv-lead"
+        ><span class="tile-at" data-tile={step.id}
+          ><StepTile
+            label={step.words}
+            onpress={() => {
+              if (view.ticked.has(step.id)) {
+                view.ticked.delete(step.id);
+              } else {
+                view.ticked.add(step.id);
+              }
+              view.tell(step, "ticked");
+            }}
+            state={now}
+          /></span
+        ></span
+      >
+      <button
+        aria-controls={pushes ? undefined : foldId}
+        aria-expanded={pushes ? undefined : open}
+        class="words press-tint"
+        data-slot="words"
+        onclick={press}
+        type="button"
+      >
+        {step.words}
+      </button>
+      <span class="trail mark-line" data-slot="trail">
+        {@render trail?.()}
+        {#if step.promoted}
+          <span data-box
+            ><TaskBadge
+              stage={step.promoted.stage}
+              title={step.promoted.title}
+            /></span
           >
-        {/each}
-        <span aria-hidden="true">↑</span>
-      </span>
-    {:else if proposed}
-      <span class="under">
-        <span>Proposed by the session</span>
-        <Button
-          class="agree"
-          onclick={() => view.agreed.add(step.id)}
-          size="xs"
-          variant="outline">Agree</Button
+        {/if}
+        <span
+          aria-hidden="true"
+          class="chev"
+          data-box
+          data-open={(open && !pushes) || undefined}
+          data-slot="chevron"><IconChevronRight /></span
         >
-        <Button
-          class="agree"
-          onclick={() => {
-            dismissed = true;
-          }}
-          size="xs"
-          variant="ghost">Dismiss</Button
-        >
+        <span class="num time" data-num data-slot="time">{time}</span>
       </span>
-    {/if}
-  </div>
-  {#if !pushes}
+      {#if waitsOn.length > 0 && now !== "done"}
+        <span
+          class="under after"
+          data-slot="after"
+          out:fade={{ duration: 160 }}
+        >
+          <span>after</span>
+          {#each waitsOn as before, index (before.id)}
+            {#if index > 0}<span aria-hidden="true">·</span>{/if}
+            <button
+              class="link pressable"
+              onclick={(event) => pointAt(view, event.currentTarget, before.id)}
+              type="button">{before.short}</button
+            >
+          {/each}
+          <span aria-hidden="true">↑</span>
+        </span>
+      {:else if proposed}
+        <span class="under">
+          <span>Proposed by the session</span>
+          <Button
+            class="agree"
+            onclick={() => view.agreed.add(step.id)}
+            size="xs"
+            variant="outline">Agree</Button
+          >
+          <Button
+            class="agree"
+            onclick={() => {
+              dismissed = true;
+            }}
+            size="xs"
+            variant="ghost">Dismiss</Button
+          >
+        </span>
+      {/if}
+    </div>
+  {/if}
+  {#if ack}
+    <AckLine {ack} />
+  {/if}
+  {#if !(pushes || gone)}
     <Fold id={foldId} {open}>
       <div class="body">
         <div class="description" data-slot="description">
@@ -164,11 +193,14 @@
             <SubRows steps={step.subs} />
           </ul>
         {/if}
+        <StepTools {plan} {step} {steps} />
         {@render inFold?.()}
       </div>
     </Fold>
   {/if}
-  {@render below?.()}
+  {#if !gone}
+    {@render below?.()}
+  {/if}
 </li>
 
 <style>
@@ -181,6 +213,26 @@
     &[data-lit] {
       background: var(--surface-hover);
     }
+  }
+  .gone {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    min-block-size: 28px;
+    padding-inline-start: calc(
+      var(--lead-w, var(--pv-tile, 18px)) + var(--space-2)
+    );
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .gone-words {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    text-decoration: line-through;
+  }
+  :global([data-coarse]) .gone {
+    min-block-size: 44px;
   }
   .row {
     display: grid;

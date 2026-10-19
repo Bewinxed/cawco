@@ -26,6 +26,24 @@ export const OnPhone = {
   parameters: { viewport: "phone" },
 };
 
+/** Desk · One list, a to-do reworded: the line under it says this session, the task's attempt, has seen it. */
+export const Edited = {
+  args: { frame: "desk", scenario: "edited" },
+  parameters: { viewport: 360 },
+};
+
+/** Desk · One list, a comment on the date picker, which Fable carries: sent to Fable, this session hears it too. */
+export const Commented = {
+  args: { frame: "desk", scenario: "commented" },
+  parameters: { viewport: 360 },
+};
+
+/** Desk · One list, the comment answered: seen by Fable, its reply on the step's thread and under the step. */
+export const Acknowledged = {
+  args: { frame: "desk", scenario: "acknowledged" },
+  parameters: { viewport: 360 },
+};
+
 /** Desk · One list live: a sub-step ticks, the deposit's delegate fills its line and stops, the waiting step starts. */
 export const Live = {
   args: { frame: "desk", live: true },
