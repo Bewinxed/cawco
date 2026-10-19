@@ -1382,11 +1382,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     /// What opens for `id`: itself, but a project's Caw session is never a
     /// tab of its own (thread-tabs.ts `inLists`): it opens his newest
-    /// thread, else a new one, so what is said there reaches the thread the
-    /// web shows.
+    /// conversation thread, else a new one (never the notes thread), so what
+    /// is said there reaches the thread the web shows.
     static func tabId(_ id: String, hub: HubConnection) -> String {
         guard let row = hub.fleet.byId[id]?.session, row.role == .lead, let projectId = row.projectId else { return id }
-        return hub.threads.of(projectId).first.map { ThreadTabs.tabId($0.id) } ?? ThreadTabs.newTabId(projectId)
+        return hub.threads.newestConversation(projectId).map { ThreadTabs.tabId($0.id) } ?? ThreadTabs.newTabId(projectId)
     }
 
     /// Puts the workspace where the width shows it.

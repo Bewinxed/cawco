@@ -251,6 +251,11 @@ public final class ThreadsStore {
     /// A project's threads, newest first.
     public func of(_ projectId: String) -> [ThreadSummary] { byProject[projectId] ?? [] }
 
+    /// A project's newest conversation with Caw: never its notes thread,
+    /// whose messages are the person's notes (CawThread.svelte `newestOf`,
+    /// the hub's `newestConversation`).
+    public func newestConversation(_ projectId: String) -> ThreadSummary? { of(projectId).first { !$0.notes } }
+
     /// The thread a `thread:` id names, when the hub has told of it.
     public func thread(_ id: String) -> ThreadSummary? { ThreadTabs.threadId(of: id).flatMap { byId[$0] } }
 

@@ -292,6 +292,9 @@ export const MAKE_A_NOTE = /^make a note\s*:\s*/i;
 /** The name of a project's one standing notes thread, where every note made from the Memory view lands (WORDS.md: Make a note). */
 export const NOTES_THREAD = "Make a note";
 
+/** The composer's placeholder wherever its words become a note: the notes thread, on the web and in the app (Words.Memory.notesPlaceholder), and the Memory view's fields. */
+export const NOTES_PLACEHOLDER = `${NOTES_THREAD}…`;
+
 /** The days a use sparkline draws. */
 export const MEMORY_USE_DAYS = 14;
 
@@ -353,7 +356,7 @@ export const memoryViewWords = {
   /** The person's notes row and card: the file itself (WORDS.md: AGENTS.md, not "memory file"). */
   yourNotes: "AGENTS.md",
   everyBrief: "every brief",
-  addPlaceholder: "Make a note…",
+  addPlaceholder: NOTES_PLACEHOLDER,
   addLabel: "Make a note",
   /** Counts and meta. */
   lines: (n: number) => `${n} ${n === 1 ? "line" : "lines"}`,

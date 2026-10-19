@@ -2417,6 +2417,10 @@ public enum Words {
         public static let scopeAnd = " and "
 
         public static let scopeGone = "a project that is gone"
+
+        // packages/core/src/memory-view.ts `NOTES_PLACEHOLDER`
+        /// The composer's placeholder wherever its words become a note: the notes thread, on the web and in the app (Words.Memory.notesPlaceholder), and the Memory view's fields.
+        public static let notesPlaceholder = "Make a note…"
     }
 
     public enum Skills {

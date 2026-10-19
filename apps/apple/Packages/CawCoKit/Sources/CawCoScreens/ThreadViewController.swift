@@ -79,7 +79,6 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
         seat = CawView(status: .ready, ledge: .peek)
         super.init(nibName: nil, bundle: nil)
         composerBinding.agentName = "Caw"
-        composerBinding.placeholder = "Message the project…"
         composerBinding.delegates = false
         // Files and pictures ride with the words in a thread too (ThreadPane's Composer, `attach` on).
         attacher = ComposerAttacher(hub: hub, binding: composerBinding, presenter: self)
@@ -337,6 +336,9 @@ final class ThreadViewController: ObservedViewController, ComposerPane {
     override func refreshContent() {
         let connected = hub.state == .connected
         let status = thread?.status
+        // The notes thread's words are notes (ThreadPane.svelte's placeholder).
+        let placeholder = thread?.notes == true ? Words.Memory.notesPlaceholder : "Message the project…"
+        if composerBinding.placeholder != placeholder { composerBinding.placeholder = placeholder }
         // The thread is read whole on each connection; frames keep it from then on.
         if !connected { readAsked = false }
         if connected, !readAsked, let threadId, !projectId.isEmpty {

@@ -197,7 +197,14 @@ const ENUMS: { members: Member[]; swift: string }[] = [
   },
   {
     swift: "Memory",
-    members: [{ file: "words/memory.ts", export: "memoryWords", as: "" }],
+    members: [
+      { file: "words/memory.ts", export: "memoryWords", as: "" },
+      {
+        file: "memory-view.ts",
+        export: "NOTES_PLACEHOLDER",
+        as: "notesPlaceholder",
+      },
+    ],
   },
   {
     swift: "Skills",

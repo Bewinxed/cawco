@@ -296,7 +296,7 @@ final class ProjectCawPanel: KitPopoverController {
             self?.field.becomeFirstResponder()
         }
         last = KitButton.make("Open last thread", variant: .ghost, height: .sm) { [weak self] in
-            guard let self, let thread = hub.threads.of(lead.projectId).first else { return }
+            guard let self, let thread = hub.threads.newestConversation(lead.projectId) else { return }
             dismiss(animated: true)
             openThread(thread.id)
         }
@@ -384,7 +384,7 @@ final class ProjectCawPanel: KitPopoverController {
             offTray.isHidden = true
         }
         let problem = view?.problem != nil
-        let lastThread = hub.threads.of(lead.projectId).first
+        let lastThread = hub.threads.newestConversation(lead.projectId)
         talk.isHidden = problem || talking
         last.isHidden = lastThread == nil
         talk.superview?.isHidden = talk.isHidden && last.isHidden
