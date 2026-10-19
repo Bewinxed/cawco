@@ -14,6 +14,7 @@
    */
   import { type AgentRow, CAPABILITIES_NONE } from "@cawco/core";
   import type { Pin } from "@cawco/core/comments";
+  import { onMount } from "svelte";
   import PlanRing from "#lib/cawco/plan/PlanRing.svelte";
   import PinList from "#lib/cawco/preview/PinList.svelte";
   import FolderFiles from "#lib/cawco/project/FolderFiles.svelte";
@@ -26,7 +27,6 @@
   import ProjectChip from "#lib/cawco/spawn/ProjectChip.svelte";
   import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
   import { IconEye, IconLaptop, IconPen, IconServer } from "#lib/icons.js";
-  import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
 

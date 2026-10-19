@@ -672,8 +672,8 @@ async function takeAway(
   const { promise: answered, resolve: answer } = Promise.withResolvers<void>();
   await page.routeWebSocket(
     (url) => url.pathname === "/ws/dashboard",
-    (socket) => {
-      socket.send(JSON.stringify(EMPTY_BOARD));
+    (hubSide) => {
+      hubSide.send(JSON.stringify(EMPTY_BOARD));
       answer();
     }
   );
