@@ -39,7 +39,8 @@ theme: utility arc-ground
 ## Tokens
 token: --c-rings-key-label-w 52px — the usage key's label column; fixed so values line up down a tile and across the tiles in a row; no ladder step is near.
 token: --c-rings-key-value-w 84px — the usage key's value column, same rule.
-token: --c-mark-dot 6px — the dot that leads an account's name in running words (Words); DESIGN's other 6px dots are the status dot and the presence dot, which are other roles (identity is ink, never a status dot).
+token: --c-mark-dot 6px — the dot that leads an account's name in running words (Words); DESIGN's other 6px dots are the status dot and the presence dot, which are other roles (identity is ink, never a status dot, DESIGN.md Project identity); `status-dot-size` is the status role, so it is not reused here.
+token: --c-usage-figure-w 5.5rem — the room a Where-it-goes row reserves beside its meter for the figure and the gap before it; the meter is the share of the rest. No ladder step is 88px.
 token: --c-meter-bar-h 8px — the height of a row meter on the Usage page ("8px on a page", DESIGN.md Limit bar); no ladder step is 8.
 
 ## Removed
@@ -68,7 +69,10 @@ shadcn/no-restyle: usage/SessionsChip.svelte:193 PopoverContent overflow-hidden
 none.
 
 ## Gaps
-gap: apps/dashboard/src/lib/cawco/usage/WhereItGoes.svelte:652 the row's 2fr / 3fr split is a `style:--row-cols` ratio, and the meter's `calc(var(--share) * (100% - 5.5rem))` hand-keeps the number column's room as 5.5rem — the track should be a grid column that takes the rest, with the figure in a fixed column — DESIGN.md Layout (no hand-kept magic numbers).
+none.
+
+## Fixed
+fixed: apps/dashboard/src/lib/cawco/usage/WhereItGoes.svelte:685 and :704 the meter's `calc(var(--share) * (100% - 5.5rem))` hand-kept the room the figure and its gap take as 5.5rem — it reads `--c-usage-figure-w` — DESIGN.md Layout (no hand-kept magic numbers). The 2fr / 3fr split stays as the row's grid-template.
 
 ## Notes
 - needs variant: none. needs transition token: none. needs colour token: none. cross-file hook: none. important kept: none. shadcn variant: none. shadow kept residual: none.
