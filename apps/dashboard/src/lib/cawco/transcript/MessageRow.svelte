@@ -622,35 +622,26 @@
                 bind:value={editContent}
               />
               <div data-slot="actions" class="flex gap-space-2 mt-space-2">
-                <button
+                <Button
                   data-slot="action"
-                  style:--btn-gap="var(--space-1)"
-                  style:--btn-icon="var(--icon-sm)"
-                  class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50"
                   disabled={editPending}
                   onclick={cancelEditing}
-                  type="button"
+                  size="xs"
+                  variant="outline"
                 >
                   Cancel edit
-                </button>
-                <button
+                </Button>
+                <Button
                   data-slot="action"
-                  aria-busy={editPending || undefined}
-                  aria-disabled={editPending || undefined}
-                  style:--btn-gap="var(--space-1)"
-                  style:--btn-icon="var(--icon-sm)"
-                  class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50"
                   disabled={!(canEdit && editContent.trim())}
-                  onclick={whileIdle(() => editPending, submitEdit)}
-                  type="button"
-                >
-                  <PendingContent
-                    failed={!!editError}
-                    label="Send edited message"
-                    pending={editPending}
-                    pendingLabel="Sending…"
-                  />
-                </button>
+                  failed={!!editError}
+                  label="Send edited message"
+                  onclick={submitEdit}
+                  pending={editPending}
+                  pendingLabel="Sending…"
+                  size="xs"
+                  variant="outline"
+                />
               </div>
             {:else}
               <MessageBody source={shownContent} />
@@ -658,16 +649,13 @@
                 <!-- Over the well's top edge at its end; a grouped row's sit
                      inside the well, on its raised surface, and flip under
                      the edge when the well's top is off screen. -->
-                <!-- literal: translateY(-100%) -->
                 <div
                   data-message-row-shown={actionsShown || undefined}
                   data-slot="actions"
                   data-flipped={actionsFlipped || undefined}
                   data-pending={forkPending || retrying || undefined}
                   data-shown={actionsShown || undefined}
-                  style:--actions-shift="translateY(-100%)"
-                  style:--actions-lift="translateY(calc(var(--space-2) - 100%))"
-                  class="flex gap-space-2 absolute top-0 end-(--pad) z-1 transform-(--actions-shift) opacity-0 pointer-events-none transition-[opacity] dur-control ease-out group-data-grouped/turn:transform-(--actions-lift) group-data-grouped/turn:bg-surface-raised group-data-grouped/turn:rounded-md group-data-grouped/turn:data-flipped:transform-none group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto can-hover:data-pending:opacity-100 can-hover:data-pending:pointer-events-auto coarse:data-shown:opacity-100 coarse:data-shown:pointer-events-auto"
+                  class="flex gap-space-2 absolute top-0 end-(--pad) z-1 -translate-y-full opacity-0 pointer-events-none transition-[opacity] dur-control ease-out group-data-grouped/turn:top-space-2 group-data-grouped/turn:bg-surface-raised group-data-grouped/turn:rounded-md group-data-grouped/turn:data-flipped:top-0 group-data-grouped/turn:data-flipped:translate-none group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto can-hover:data-pending:opacity-100 can-hover:data-pending:pointer-events-auto coarse:data-shown:opacity-100 coarse:data-shown:pointer-events-auto"
                   {@attach placeActions}
                 >
                   {#if canEdit || offered.edit === "queued"}
@@ -686,36 +674,27 @@
                     </Tip>
                   {/if}
                   {#if (recoverable || retried) && !shownRecovery}
-                    <button
+                    <Button
                       data-slot="action"
-                      aria-busy={retrying || undefined}
-                      aria-disabled={retrying || undefined}
-                      style:--btn-gap="var(--space-1)"
-                      style:--btn-icon="var(--icon-sm)"
-                      class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50"
-                      onclick={whileIdle(() => retrying, tryAgain)}
-                      type="button"
-                    >
-                      <PendingContent
-                        {failed}
-                        label="Send again"
-                        pending={retrying || (retried && !failed)}
-                        pendingLabel="Sending again…"
-                      />
-                    </button>
+                      {failed}
+                      label="Send again"
+                      onclick={tryAgain}
+                      pending={retrying || (retried && !failed)}
+                      pendingLabel="Sending again…"
+                      size="xs"
+                      variant="outline"
+                    />
                   {/if}
                   {#if editable || (retried && heldEdit)}
-                    <button
+                    <Button
                       data-slot="action"
-                      style:--btn-gap="var(--space-1)"
-                      style:--btn-icon="var(--icon-sm)"
-                      class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50"
                       disabled={retrying}
                       onclick={edit}
-                      type="button"
+                      size="xs"
+                      variant="outline"
                     >
                       Edit
-                    </button>
+                    </Button>
                   {/if}
                   {#if canFork}
                     <Tip label="Fork from here">
@@ -796,16 +775,13 @@
         <!-- The reason + actions unfold on a `grid-template-rows` track
              rather than `height`, so the animated size is intrinsic content
              height with no measurement pass. -->
-        <!-- literal: 0fr, 1fr -->
         <div
           data-slot="failure"
           data-opens
           inert={!open}
           data-open={open || undefined}
-          style:--rows-shut="0fr"
-          style:--rows-open="1fr"
           style:--fail-delay="calc(var(--dur-control) / 3)"
-          class="grid grid-rows-(--rows-shut) opacity-0 data-open:grid-rows-(--rows-open) data-open:opacity-100 data-open:mt-space-2 motion-safe:transition-[grid-template-rows,opacity,margin-block-start] motion-safe:dur-pop motion-safe:ease-out motion-safe:delay-(--fail-delay)"
+          class="grid grid-rows-fold-shut opacity-0 data-open:grid-rows-fold-open data-open:opacity-100 data-open:mt-space-2 motion-safe:transition-[grid-template-rows,opacity,margin-block-start] motion-safe:dur-pop motion-safe:ease-out motion-safe:delay-(--fail-delay)"
         >
           <div class="overflow-hidden min-h-0">
             {#if failed || retried}
@@ -831,90 +807,65 @@
                   {#if shownRecovery.holds}
                     {#each shownRecovery.actions as action, i (i)}
                       {#if action.kind === "link"}
-                        <a
+                        <Button
                           data-slot="action"
-                          style:--btn-gap="var(--space-1)"
-                          style:--btn-icon="var(--icon-sm)"
-                          class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover min-w-0 max-w-full no-underline"
+                          class="max-w-full"
                           href={action.href}
+                          size="xs"
+                          variant="outline"
+                          width="shrink"
                           ><span data-slot="message-row-label" class="truncate"
                             >{action.label}</span
-                          ></a
+                          ></Button
                         >
                       {:else if action.kind === "move"}
                         {@const going =
                           !!target && movingTo(target) === action.account.id}
-                        <button
+                        <Button
                           data-slot="action"
-                          aria-busy={going || undefined}
-                          aria-disabled={going || undefined}
-                          style:--btn-gap="var(--space-1)"
-                          style:--btn-icon="var(--icon-sm)"
-                          class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50 mark-line"
-                          onclick={whileIdle(
-                            () => going,
-                            () => moveAndSend(action.account.id)
-                          )}
-                          type="button"
+                          onclick={() => moveAndSend(action.account.id)}
+                          pending={going}
+                          size="xs"
+                          variant="outline"
                         >
                           <!-- An account's own dot, as its menu draws it
                                (AccountSubmenu). -->
-                          <!-- literal: 8px, 50% -->
                           <i
                             data-slot="dot"
                             aria-hidden="true"
-                            class="flex-none size-(--dot) rounded-(--dot-r) bg-(--c)"
+                            class="flex-none size-space-2 rounded-pill bg-(--c)"
                             data-box
                             style:--c={hueVar(action.account.hue)}
-                            style:--dot="8px"
-                            style:--dot-r="50%"
                           ></i>
                           <PendingContent
                             label={`Move to ${nameOf(action.account)}`}
                             pending={going}
                             pendingLabel={`Moving to ${nameOf(action.account)}…`}
                           />
-                        </button>
+                        </Button>
                       {:else}
-                        <button
+                        <Button
                           data-slot="action"
-                          aria-busy={starting || undefined}
-                          aria-disabled={starting || undefined}
-                          style:--btn-gap="var(--space-1)"
-                          style:--btn-icon="var(--icon-sm)"
-                          class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50 mark-line"
-                          onclick={whileIdle(
-                            () => starting,
-                            () => startWith(action)
-                          )}
-                          type="button"
-                        >
-                          <PendingContent
-                            label="Start a new session"
-                            pending={starting}
-                            pendingLabel="Opening…"
-                          />
-                        </button>
+                          label="Start a new session"
+                          onclick={() => startWith(action)}
+                          pending={starting}
+                          pendingLabel="Opening…"
+                          size="xs"
+                          variant="outline"
+                        />
                       {/if}
                     {/each}
                   {:else}
-                    <button
+                    <Button
                       data-slot="action"
-                      aria-busy={retrying || undefined}
-                      aria-disabled={retrying || undefined}
-                      style:--btn-gap="var(--space-1)"
-                      style:--btn-icon="var(--icon-sm)"
-                      class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50"
-                      onclick={whileIdle(() => retrying, tryAgain)}
-                      type="button"
-                    >
-                      <PendingContent
-                        {failed}
-                        label="Send again"
-                        pending={retrying || (retried && !failed)}
-                        pendingLabel="Sending again…"
-                      />
-                    </button>
+                      {failed}
+                      label="Send again"
+                      onclick={tryAgain}
+                      pending={retrying || (retried && !failed)}
+                      pendingLabel="Sending again…"
+                      size="xs"
+                      variant="outline"
+                    />
                   {/if}
                 </div>
               {/if}
@@ -947,22 +898,3 @@
   <SystemLine disclosed={disclosure(message)} {message} />
 {/if}
 
-<style>
-  /* residual: foreign-dom: the speaker line (Who) is drawn by turn/Who,
-     which takes no class, as a direct child of the turn's section. Sending
-     and queued, it stands at reduced presence with the words. Not colour
-     alone: the note text and the missing clock carry the state too. The
-     line is named by its own attribute (`data-turn-who`): under a state,
-     Chrome keys an attribute selector to the attribute's name alone, and
-     `[data-slot="who"]` restyled every `data-slot` in the turn. */
-  /* css-scope: this row's turn (Turn) and its speaker line (Who), the turn/ components it draws around its words */
-  :global([data-slot="turn"][data-ghost] > [data-turn-who]) {
-    opacity: var(--ghost-presence);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    /* css-scope: this row's turn (Turn) and its speaker line (Who), the turn/ components it draws around its words */
-    :global([data-slot="turn"][data-you] > [data-turn-who]) {
-      transition: opacity var(--dur-menu) var(--ease-out);
-    }
-  }
-</style>

@@ -118,11 +118,9 @@
          with the same muted small label; the body hangs at the text column.
          The line is the disclosure: its trigger's hit area stretches over
          all of it. -->
-    <!-- literal: 26px -->
     <p
       data-slot="peer-label"
-      style:--label-min="26px"
-      class="relative min-h-(--label-min) m-0 type-label leading-ui text-ink-muted rail-line"
+      class="relative min-h-space-7 type-label leading-ui text-ink-muted rail-line"
     >
       <span
         data-rail-cell
@@ -147,8 +145,7 @@
            cuts a long name while the link's padded hit area is not clipped
            with it. The sender's link stands above the line's stretched
            trigger, so it stays a link; vertical padding on an inline box
-           grows its hit area to the 24px floor without moving the line.
-           literal (the link's underline offset): 0.2em -->
+           grows its hit area to the 24px floor without moving the line. -->
       <span
         data-slot="text"
         class="min-w-0 overflow-clip clip-margin-space-1 text-ellipsis whitespace-nowrap"
@@ -157,8 +154,7 @@
         {#if senderId}
           <a
             data-slot="name"
-            style:--name-offset="0.2em"
-            class="text-ink-strong relative z-1 py-space-1 underline decoration-current/35 underline-offset-(--name-offset) hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:dur-control can-hover:motion-safe:ease-out"
+            class="text-ink-strong relative z-1 py-space-1 underline decoration-current/35 underline-offset-2 hover:text-brand-ink can-hover:motion-safe:transition-[color] can-hover:motion-safe:dur-control can-hover:motion-safe:ease-out"
             href={conversationHref(senderId, cawco.instanceIndex)}>{row.name}</a
           >
         {:else}
@@ -193,12 +189,10 @@
         class="group/toggle ms-auto flex-none grid place-items-center p-0 border-none border-current bg-transparent text-ink-muted cursor-pointer press-tint"
         data-box
       >
-        <!-- literal: rotate(90deg) -->
         <span
           data-slot="chev"
           aria-hidden="true"
-          style:--chev-turn="rotate(90deg)"
-          class="grid place-items-center group-state-open/toggle:transform-(--chev-turn) motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out"
+          class="grid place-items-center group-state-open/toggle:rotate-90 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out"
           ><IconChevronRight class="size-icon-md block" /></span
         >
       </Collapsible.Trigger>
@@ -220,23 +214,3 @@
   </Collapsible.Root>
 </div>
 
-<style>
-  /* residual: pseudo: the trigger is a bits-ui element, so it is addressed
-     globally; its ::after is the whole line's hit area, and the focus ring
-     in place of its own outline. */
-  [data-slot="peer-label"] :global([data-slot="collapsible-trigger"]) {
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: var(--radius-xs);
-    }
-    &:focus-visible {
-      outline: none;
-    }
-    &:focus-visible::after {
-      outline: var(--focus-ring-width) solid var(--focus-ring);
-      outline-offset: var(--focus-ring-inset);
-    }
-  }
-</style>

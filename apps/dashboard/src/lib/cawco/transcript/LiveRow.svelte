@@ -230,7 +230,7 @@
     <div
       data-slot="face"
       aria-hidden={face.leaving ? true : undefined}
-      class="flow-root min-w-0 data-leaving:absolute data-leaving:top-0 data-leaving:inset-x-0 data-leaving:pointer-events-none"
+      class="flow-root min-w-0 data-leaving:absolute data-leaving:top-0 data-leaving:inset-x-0 data-leaving:pointer-events-none motion-safe:data-leaving:animate-face-out motion-safe:data-entering:animate-face-in"
       data-entering={face.entering || undefined}
       data-leaving={face.leaving !== null || undefined}
       inert={face.leaving !== null}
@@ -242,25 +242,3 @@
     </div>
   {/each}
 </div>
-
-<style>
-  /* residual: keyframes */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-leaving] {
-      animation: face-out var(--dur-exit) var(--ease-out) forwards;
-    }
-    [data-entering] {
-      animation: face-in var(--dur-menu) var(--ease-out) backwards;
-    }
-  }
-  @keyframes face-out {
-    to {
-      opacity: 0;
-    }
-  }
-  @keyframes face-in {
-    from {
-      opacity: 0;
-    }
-  }
-</style>

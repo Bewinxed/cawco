@@ -63,17 +63,23 @@
 </script>
 
 <div
-  class="lfs-offer rail-hang"
+  data-slot="lfs-offer"
+  class="rail-hang min-w-0 mt-space-2"
   data-answer={now?.answer}
   data-lfs-offer={offer.id}
 >
   {#if now}
     <!-- biome-ignore lint/a11y/noRedundantRoles: with list-style none, WebKit drops a list's semantics; its own answer is an explicit role="list" (https://www.scottohara.me/blog/2019/01/12/lists-and-safari.html) -->
-    <ul class="patterns" role="list">
+    <ul class="flex flex-col gap-space-1" role="list">
       {#each now.rows as row (row.pattern)}
-        <li class="pattern-line" data-lfs-pattern={row.pattern}>
-          <code class="pattern">{row.pattern}</code>
-          <span class="count num"
+        <li
+          class="flex flex-wrap items-baseline gap-x-space-2 min-w-0"
+          data-lfs-pattern={row.pattern}
+        >
+          <code class="min-w-0 text-size-meta text-ink-strong wrap-anywhere"
+            >{row.pattern}</code
+          >
+          <span class="num text-size-meta font-normal text-ink-muted"
             >{lfsWords.row(row.count, size(row.bytes))}</span
           >
         </li>
@@ -103,36 +109,3 @@
     {/if}
   </OfferActs>
 </div>
-
-<style>
-  .lfs-offer {
-    min-inline-size: 0;
-    margin-block-start: var(--space-2);
-  }
-  .patterns {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-1);
-    margin: 0;
-    padding: 0;
-    list-style: none;
-  }
-  .pattern-line {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0 var(--space-2);
-    min-inline-size: 0;
-  }
-  .pattern {
-    min-inline-size: 0;
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .count {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-</style>
