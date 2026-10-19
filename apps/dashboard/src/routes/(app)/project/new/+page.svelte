@@ -176,6 +176,8 @@
     {@attach morph()}
   >
     {#if caw === "page"}
+      <!-- His slot holds his height whether or not he is drawn: `c-caw-hero`
+           is `CAW_SIZE`; keep them equal. -->
       <div
         data-slot="caw-80"
         class="grid min-h-c-caw-hero place-items-center"

@@ -1468,8 +1468,8 @@
     class={[
       "flex min-w-0 items-center gap-space-3 pt-0",
       inBar
-        ? "grow shrink basis-0 self-stretch pr-space-3 pb-0 pl-space-7"
-        : "pr-space-6 pb-space-4 pl-space-7 max-desk:px-space-5",
+        ? "grow shrink basis-0 self-stretch pe-space-3 pb-0 ps-space-7"
+        : "pe-space-6 pb-space-4 ps-space-7 max-desk:px-space-5",
     ]}
   >
     <Tabs onValueChange={choose} value={current}>
@@ -1617,10 +1617,8 @@
 {#snippet tableBody(_block: string)}
   <div class="flex flex-col gap-space-3">
     {#if adding}
-      <!-- literal: 36rem -->
       <div
-        class="max-w-(--new-max) rounded-lg bg-surface-raised p-space-3 shadow-tile"
-        style:--new-max="36rem"
+        class="max-w-c-new-task-w rounded-lg bg-surface-raised p-space-3 shadow-tile"
       >
         <NewTaskForm
           oncreate={create}
@@ -1675,8 +1673,12 @@
         {#if view.draft}
           <!-- The tab already says `draft`; the bar says what it is and
                offers the two answers, kept together on one row. -->
-          <div class="draft-bar" out:crossOut>
-            <span class="draft-line"
+          <div
+            class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2 rounded-lg bg-surface-band px-space-3 py-space-2 inset-ring inset-ring-border-hairline"
+            out:crossOut
+          >
+            <span
+              class="type-label min-w-0 shrink grow basis-c-draft-line text-ink-strong"
               >{viewsWords.drafted(viewLabel(view.name))}</span
             >
             <div class="flex flex-none gap-space-2">
@@ -1784,7 +1786,7 @@
       {taskOf}
     />
   {:else if !list}
-    <div class="max-w-(--state-max)" style:--state-max="72ch">
+    <div class="max-w-c-measure">
       <EmptyState
         icon={IconToolTodo}
         line={unread ??
@@ -1808,7 +1810,7 @@
     {:else if canTalk}
       <!-- While his panel is open the project's starters are in it (CawFloat);
            put away, they stand here and open it with their words. -->
-      <div data-slot="caw-empty" class="w-full max-w-(--c-starters-w)">
+      <div data-slot="caw-empty" class="w-full max-w-c-starters-w">
         <EmptyState line={cawLine} title="Nothing on the board yet">
           {#snippet mark()}
             <!-- He stands here instead of sitting in the head, and is the
@@ -1841,7 +1843,7 @@
         </EmptyState>
       </div>
     {:else}
-      <div class="max-w-(--state-max)" style:--state-max="72ch">
+      <div class="max-w-c-measure">
         <EmptyState
           icon={IconToolTodo}
           line="Add a task by hand while Caw can’t start."
@@ -1902,7 +1904,7 @@
 {/snippet}
 
 {#if !project}
-  <div class="flex flex-1 items-center justify-center p-6">
+  <div class="flex flex-1 items-center justify-center p-space-7">
     <p class="text-body text-ink-muted">
       No such project. It may have been removed; pick another from the rail.
     </p>
@@ -1912,18 +1914,17 @@
        where it has the room for both, under it where it has not; the page
        yields the panel its room, so it never covers a column or the head.
        On a phone the panel is the bottom sheet, and the page keeps it all. -->
-  <!-- literal: 938px (the panel and the page at their narrowest, summed
-       from the tokens because a container query takes no var():
-       --c-panel-w 380px and its --space-6 end margin; the pane's --space-7
-       and --space-6 inline padding; two board columns at 240px and the
-       --space-3 between); min(var(--c-caw-panel-h), 50%) -->
+  <!-- The side column (`project-dock`, the panel and the page at their
+       narrowest) stands from the width where both fit: the panel with its
+       end margin, the pane's inline padding and two board columns with the
+       gap between. -->
   <div class="@container flex h-full min-h-0 min-w-0 flex-1 flex-col">
     <!-- Open where the page has no room beside it: a row of its own under
          the page, at most half the height (from 640px; a phone's panel is
          the bottom sheet). With room for the board beside it: a column of
          its own at the page's end, a conversation's width. -->
     <div
-      class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) @min-[938px]:data-caw-open:grid-areas-(--docked-areas-side) @min-[938px]:data-caw-open:grid-cols-(--docked-cols-side) @min-[938px]:data-caw-open:grid-rows-(--docked-rows)"
+      class="grid min-h-0 flex-1 grid-areas-(--docked-areas) grid-cols-(--docked-cols) grid-rows-(--docked-rows) phone:data-caw-open:grid-areas-(--docked-areas-row) phone:data-caw-open:grid-rows-(--docked-rows-row) @min-project-dock:data-caw-open:grid-areas-(--docked-areas-side) @min-project-dock:data-caw-open:grid-cols-(--docked-cols-side) @min-project-dock:data-caw-open:grid-rows-(--docked-rows)"
       data-caw-open={docked || undefined}
       style:--docked-areas={'"page"'}
       style:--docked-areas-row={'"page" "dock"'}
@@ -2014,7 +2015,7 @@
               {#if lead.view?.problem}
                 <Alert
                   data-id-page-notice
-                  class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5"
+                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
                   variant="warning"
                 >
                   <AlertDescription>{lead.view.problem}</AlertDescription>
@@ -2023,7 +2024,7 @@
               {#if stages && stages.problems.length > 0}
                 <Alert
                   data-id-page-notice
-                  class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5"
+                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
                   variant="warning"
                 >
                   <AlertDescription>{unreadStages}</AlertDescription>
@@ -2032,7 +2033,7 @@
               {#if list && list.problems.length > 0}
                 <Alert
                   data-id-page-notice
-                  class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5"
+                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
                   variant="warning"
                 >
                   <AlertDescription>{list.problems.join(" ")}</AlertDescription>
@@ -2043,7 +2044,7 @@
                  once, here, with its Retry. -->
                 <Alert
                   data-id-page-notice
-                  class="mr-space-6 mb-space-3 ml-space-7 w-auto max-desk:mx-space-5"
+                  class="me-space-6 mb-space-3 ms-space-7 w-auto max-desk:mx-space-5"
                   variant="warning"
                 >
                   <AlertDescription>{unread}</AlertDescription>
@@ -2150,7 +2151,7 @@
     data-slot="pane"
     aria-busy={cawco.hub === "unreachable" || awaiting || reading}
     class={[
-      "group flex min-h-0 flex-auto flex-col overflow-y-auto pt-0 pr-space-6 pb-space-6 pl-space-7 max-desk:px-space-5 view-board:overflow-hidden view-board:pb-0 view-canvas:overflow-hidden view-canvas:pb-space-5 view-decisions-graph:overflow-hidden view-decisions-graph:pb-space-5 view-decisions-page:overflow-hidden view-decisions-page:pb-0 max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:h-(--pane-h) max-phone:view-canvas:overflow-visible max-phone:view-decisions-graph:h-(--pane-h) max-phone:view-decisions-graph:overflow-visible max-phone:view-decisions-page:h-(--pane-h) max-phone:view-decisions-page:overflow-visible",
+      "group flex min-h-0 flex-auto flex-col overflow-y-auto pt-0 pe-space-6 pb-space-6 ps-space-7 max-desk:px-space-5 view-board:overflow-hidden view-board:pb-0 view-canvas:overflow-hidden view-canvas:pb-space-5 view-decisions-graph:overflow-hidden view-decisions-graph:pb-space-5 view-decisions-page:overflow-hidden view-decisions-page:pb-0 max-phone:shrink-0 max-phone:overflow-visible max-phone:view-board:overflow-visible max-phone:view-canvas:h-(--pane-h) max-phone:view-canvas:overflow-visible max-phone:view-decisions-graph:h-(--pane-h) max-phone:view-decisions-graph:overflow-visible max-phone:view-decisions-page:h-(--pane-h) max-phone:view-decisions-page:overflow-visible",
       fadeOn === "pane" && "kit-edge-fade-block",
     ]}
     data-view={reading ? "board" : paneView}
@@ -2162,20 +2163,17 @@
       <div
         aria-hidden="true"
         class="grid auto-cols-(--skeleton-col) grid-flow-col gap-space-3 overflow-hidden max-phone:auto-cols-(--skeleton-col-phone)"
-        style:--skeleton-col="minmax(15rem, 22rem)"
+        style:--skeleton-col="minmax(var(--c-board-col-min), var(--c-board-col-max))"
         style:--skeleton-col-phone="calc(100% - var(--space-8))"
         out:crossOut
       >
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
-          <!-- literal: 54px (a card's height) -->
           <div
-            class="flex flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 shadow-(--hairline-ring)"
-            style:--hairline-ring="inset 0 0 0 1px var(--border-hairline)"
-            style:--card-h="54px"
+            class="flex flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 inset-ring inset-ring-border-hairline"
           >
             <Skeleton class="h-space-4 w-3/5" />
-            <Skeleton class="h-(--card-h) w-full" radius="chip" />
-            <Skeleton class="h-(--card-h) w-full" radius="chip" />
+            <Skeleton class="h-c-skeleton-card-h w-full" radius="chip" />
+            <Skeleton class="h-c-skeleton-card-h w-full" radius="chip" />
           </div>
         {/each}
       </div>
@@ -2215,7 +2213,7 @@
       class="w-(--ask-w)"
       customAnchor={askAnchor}
       side="bottom"
-      style="--ask-w: min(var(--c-panel-w), calc(100vw - 2 * var(--space-3)))"
+      style="--ask-w: min(var(--c-panel-w), calc(100vw - 2 * var(--c-screen-margin)))"
     >
       <div
         class="relative w-full"
@@ -2261,23 +2259,3 @@
     bind:open={stagesOpen}
   />
 {/if}
-
-<style>
-  /* residual: foreign-dom */
-  /* The tabs' own root, which takes no class. */
-  [data-slot="strip"] > :global([data-slot="tabs"]) {
-    display: flex;
-    flex: 0 1 auto;
-    min-inline-size: 0;
-  }
-  /* residual: foreign-dom */
-  [data-slot="caw-empty"] :global(.kit-empty-action) {
-    align-self: stretch;
-  }
-  @media (max-width: 639px) {
-    /* residual: foreign-dom */
-    [data-slot="project-page"] > :global(*) {
-      flex-shrink: 0;
-    }
-  }
-</style>
