@@ -33,6 +33,7 @@ fixed: apps/dashboard/src/lib/components/features/workflows/WorkflowEdge.svelte:
 fixed: apps/dashboard/src/lib/components/features/workflows/WorkflowEditor.svelte:705 skeleton rows use the kit's `height="block"` (5rem, exactly the old literal), clearing two `no-restyle` flags
 fixed: apps/dashboard/src/lib/components/features/workflows/WorkflowEditor.svelte:858 the palette dialog's scroll is on its body, not on the dialog, so the title and description stay in view
 fixed: apps/dashboard/src/lib/components/features/workflows/WorkflowEditor.svelte:552 `left-space-2` → `start-space-2`; :819 `text-left` → `text-start`; :776 `border-r` → `border-e` (mirror correctly in RTL)
+fixed: apps/dashboard/src/lib/components/features/workflows/WorkflowCanvas.svelte:181 the handle's colour comes through xyflow's `--xy-handle-background-color` (set on the section at :181–:182, and by `:active` in the theme component), never painted as `background`, so WorkflowNodeCard's `fine:data-near:xy-handle-brand` shows — the near port's brand colour
 fixed: apps/dashboard/src/lib/components/features/workflows/WorkflowCanvas.svelte:177 `data-canvas` → `data-slot="workflow-canvas"` (a hook is `data-slot`)
 
 ## Tokens
@@ -63,6 +64,21 @@ theme: component workflow-pane-glide
 ```
 Anchor: `data-slot="pane"` in WorkflowEditor.svelte:717. While paneforge marks a pane collapsing or expanding, every pane of the group glides to its width together; a drag stays 1:1. paneforge's sheet sets no `transition`, so a layered rule wins. The old `<style>` block at WorkflowEditor.svelte:902 is deleted.
 
+theme: component workflow-canvas-handle
+```css
+@layer components {
+  [data-slot="workflow-canvas"] .svelte-flow__handle {
+    width: var(--c-graph-handle);
+    height: var(--c-graph-handle);
+  }
+  /* A handle is placed by its transform, so its press is colour, not scale. */
+  [data-slot="workflow-canvas"] .svelte-flow__handle:active {
+    --xy-handle-background-color: var(--brand-solid);
+  }
+}
+```
+Anchor: `data-slot="workflow-canvas"` in WorkflowCanvas.svelte:177. xyflow's sheet is layered below `components` at integration, so the layered rule wins. The old `<style>` at WorkflowCanvas.svelte (the end of the file) is deleted.
+
 ## Kit swaps
 kit-swap: apps/dashboard/src/lib/components/features/workflows/WorkflowEditor.svelte:868 Drawer.Title `sr-only` — a visually hidden title (`hidden="visually"`), the kit's own part
 kit-swap: apps/dashboard/src/lib/components/features/workflows/WorkflowEditor.svelte:869 Drawer.Description `sr-only` — the same, a visually hidden description
@@ -71,7 +87,7 @@ kit-swap: apps/dashboard/src/lib/components/features/workflows/WorkflowEditor.sv
 (none)
 
 ## Residual `<style>` kept
-WorkflowCanvas.svelte:267 — first line `/* tailwind: Svelte Flow's sheet is unlayered, so every Tailwind layer loses to it, and a handle's size has no custom property of its own to set from the section — https://tailwindcss.com/docs/adding-custom-styles#adding-component-classes */`. Two rules: the handle's `width`/`height` (xyflow's `.svelte-flow__handle` sets both unlayered, no variable), and its `:active` colour through `--xy-handle-background-color`. Same reason the sonner lane kept its `<style>`.
+none.
 
 ## Other lists
 needs variant: none

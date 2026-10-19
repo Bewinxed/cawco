@@ -263,16 +263,3 @@
     >
   </ContextMenu.Content>
 </ContextMenu.Root>
-
-<style>
-  /* tailwind: Svelte Flow's sheet is unlayered, so every Tailwind layer loses to it, and a handle's size has no custom property of its own to set from the section — https://tailwindcss.com/docs/adding-custom-styles#adding-component-classes */
-  /* residual: foreign-dom */
-  [data-slot="workflow-canvas"] :global(.svelte-flow__handle) {
-    width: var(--c-graph-handle);
-    height: var(--c-graph-handle);
-  }
-  /* residual: foreign-dom — a handle is placed by its transform, so its press is colour, not scale. */
-  [data-slot="workflow-canvas"] :global(.svelte-flow__handle:active) {
-    --xy-handle-background-color: var(--brand-solid);
-  }
-</style>
