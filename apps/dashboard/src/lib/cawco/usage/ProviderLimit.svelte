@@ -57,8 +57,7 @@
   style:--row-paint="var(--surface-raised)"
 >
   <span class="flex-none whitespace-nowrap text-ink-muted">{label}</span>
-  <!-- literal: 64px -->
-  <span class="w-(--bar-w) flex-none" style:--bar-w="64px" title={pace}>
+  <span class="w-(--c-limit-bar) flex-none" title={pace}>
     <LimitBar
       elapsed={meter.elapsed}
       {label}

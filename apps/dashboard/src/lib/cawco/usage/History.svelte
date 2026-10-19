@@ -354,19 +354,16 @@
 
 {#snippet plot(chart: Chart, live: boolean)}
   <div class="flex flex-col gap-space-1">
-    <!-- literal: 96px; 1 1 0 (each slot's share, from no basis) -->
     <div
-      class="flex h-(--bars-h) items-end gap-space-row border-b border-b-border-hairline"
-      style:--bars-h="96px"
-      style:--slot-flex="1 1 0"
+      class="flex h-(--c-usage-plot) items-end gap-space-row border-b border-b-border-hairline"
     >
       {#each chart.points as point (point.at)}
         {#if !live}
           <span
             data-slot="slot"
-            class="group flex min-w-0 flex-(--slot-flex) items-end h-full"
+            class="group flex h-full min-w-0 flex-1 items-end"
             ><span
-              class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-[:hover]:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
+              class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
               style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
               style:--bar-h="calc(var(--h) * 100%)"
             ></span></span
@@ -381,11 +378,11 @@
                   aria-label="{periodLabel(point.at)}: {chart.approx}{money(
                     point.cost
                   )}"
-                  class="group flex min-w-0 flex-(--slot-flex) items-end h-full"
+                  class="group flex h-full min-w-0 flex-1 items-end"
                   role="img"
                 >
                   <span
-                    class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-[:hover]:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
+                    class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
                     style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
                     style:--bar-h="calc(var(--h) * 100%)"
                   ></span>

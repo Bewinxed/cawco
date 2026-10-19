@@ -37,19 +37,16 @@
   {@const name = nameOf(account)}
   <Tip label={name}>
     {#snippet children(tip)}
-      <!-- literal: 6px, 50% -->
       <span
         data-account-dot-dot
         {...tip}
         aria-label="On {name}"
-        class="inline-block size-(--dot) flex-none rounded-(--dot-r) bg-(color:--c) align-middle transition-[background-color] dur-panel ease-out data-inline:me-space-1"
+        class="inline-block size-space-2 flex-none rounded-pill bg-(color:--c) align-middle transition-[background-color] dur-panel ease-out data-inline:me-space-1"
         data-account-dot={account.id}
         data-box
         data-inline={inline || undefined}
         role="img"
         style:--c="var(--account-{account.hue})"
-        style:--dot="6px"
-        style:--dot-r="50%"
       ></span>
     {/snippet}
   </Tip>
