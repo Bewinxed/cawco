@@ -39118,7 +39118,7 @@
             "type": "string"
           },
           "setup": {
-            "description": "The project's Setup thread: the one New project opens with your prompt,\nwhere Caw shows the setup page and lists what he wrote. Its replies that\nname files offer \"Open the board\".",
+            "description": "A Setup thread of the project: the one New project opens with your\nprompt, or one you asked Caw to set the project up in, where he shows\nthe setup page and lists what he wrote. Its replies that name files\noffer \"Open the board\".",
             "type": "boolean"
           },
           "status": {
