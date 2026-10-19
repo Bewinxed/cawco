@@ -177,7 +177,9 @@
         );
       } else if (one.dataset.slot === "more") {
         widths.set(
-          one.querySelector(".more-count") ? "more:counted" : "more",
+          one.querySelector('[data-slot="more-count"]')
+            ? "more:counted"
+            : "more",
           width
         );
       } else if (!item && one !== name) {
@@ -281,7 +283,7 @@
       seen.observe(identity);
     }
     for (const child of el.querySelectorAll(
-      ":scope > [data-head-item], :scope > .identity > *"
+      ':scope > [data-head-item], :scope > [data-slot="identity"] > *'
     )) {
       seen.observe(child);
     }
@@ -333,28 +335,37 @@
   data-expanded-recessed={(expanded && recessed) || undefined}
   data-recessed={recessed || undefined}
   aria-label={label}
-  class="group/card @container flex h-full min-h-0 min-w-0 flex-col rounded-lg bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:dur-panel motion-safe:in-data-split-sliding:ease-drawer {className}"
+  class="group/card @container flex h-full min-h-0 min-w-0 flex-col rounded-lg bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:dur-panel motion-safe:in-data-split-sliding:ease-drawer {className}"
   style:--expanded-inset="calc(var(--space-3) + var(--space-2))"
+  style:--card-max="calc(100% - var(--sheet-hidden, 0px))"
   bind:this={section}
 >
   <!-- One header: its first word, the switch's or the title's, stands on
        the well's left edge. -->
-  <!-- literal: 44px, 30px -->
   <!-- mark-line: its icons are controls at the head's end, each its own
        button, not marks set beside the title -->
   <header
     data-slot="side-head"
-    class="side-head"
-    class:fitted={all.length > 0}
+    data-fitted={all.length > 0 || undefined}
+    class="flex h-c-btn-h-lg flex-none items-center gap-space-1 hit-gap-x-space-1 coarse:data-fitted:gap-space-4 coarse:data-fitted:hit-gap-x-space-4"
     bind:this={head}
   >
     {#if switcher}
       {@render switcher()}
     {/if}
+    <!-- The name keeps its own width up to NAME_KEEPS (`--name-keeps`, set
+         from its lead as drawn), so the actions never draw over it; what it
+         holds is cut at its own box, which reaches a focus ring's width past
+         the name on every side (the negative margin takes it back), so a
+         title control's ring is not cut. Its text stands where the controls'
+         text does, their inset: a switch before it takes its own inset
+         back, and a title control's padding is its text's inset. -->
     <div
-      style:min-inline-size="{nameKeeps}px"
-      class="identity"
-      class:controlled={!!titleControl}
+      data-slot="identity"
+      data-controlled={titleControl ? "" : undefined}
+      data-switched={switcher ? "" : undefined}
+      class="-m-space-1 flex min-w-(--name-keeps) flex-1 flex-col items-start overflow-hidden p-space-1 ps-space-3 data-switched:ps-space-2 data-controlled:not-data-switched:ps-space-1"
+      style:--name-keeps="{nameKeeps}px"
       bind:this={identity}
     >
       {#if titleControl}
@@ -373,9 +384,9 @@
         <!-- One line under the name, cut with an ellipsis; whole in its tooltip. -->
         <span
           data-slot="subtitle"
-          class="subtitle"
-          class:code={subtitleCode}
+          data-code={subtitleCode || undefined}
           data-dropped={subtitleStands ? undefined : ""}
+          class="truncate type-meta text-ink-muted data-code:type-code data-dropped:pointer-events-none data-dropped:invisible data-dropped:absolute"
           id={subtitleId}
           title={subtitle}>{subtitle}</span
         >
@@ -386,7 +397,7 @@
       <div
         data-form={formOf(one.key)}
         data-head-item={one.key}
-        class="head-item"
+        class="unhidden:flex unhidden:flex-none"
         hidden={!stands(one.key)}
       >
         {#if one.compact && formOf(one.key) === "compact"}
@@ -403,12 +414,14 @@
           aria-label={moreCount
             ? `More, ${moreCount.of} ${moreCount.n} open`
             : "More"}
-          class="more mark-line"
+          class="mark-line"
           title="More"
         >
           <IconMore />
           {#if moreCount}
-            <span class="more-count">{moreCount.n}</span>
+            <span data-slot="more-count" class="text-ink-muted num"
+              >{moreCount.n}</span
+            >
           {/if}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" class="w-56">
@@ -453,180 +466,3 @@
     {@render children()}
   {/if}
 </section>
-
-<style>
-  .side-card {
-    container-type: inline-size;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-    height: 100%;
-    padding: 0 var(--space-2) var(--space-2);
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-drawer);
-  }
-  /* One header: its first word, the switch's or the title's, stands on the
-     well's left edge. */
-  .side-head {
-    --hit-gap-x: var(--space-1);
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    height: 44px;
-    flex-shrink: 0;
-  }
-  /* A head whose controls stand by priority (head.ts): each control keeps
-     its own width, and under a finger the controls open to the 44px pitch
-     their touch areas need (The 44 Touch Rule), so fewer stand and the rest
-     go to More. */
-  .head-item:not([hidden]) {
-    display: flex;
-    flex: none;
-  }
-  @media (pointer: coarse) {
-    .side-head.fitted {
-      --hit-gap-x: var(--space-4);
-      gap: var(--space-4);
-    }
-  }
-  /* More says the open comments it holds, as Comments does. */
-  .more-count {
-    min-inline-size: 1ch;
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  /* The header's first thing, the switch or the title, stands on the
-     well's edge, with or without the switch. After the switch, a gap. */
-  /* The name keeps its own width up to NAME_KEEPS (`min-inline-size`, set
-     from its lead as drawn), beside `items` and `actions` alike, so the
-     actions never draw over it; past that only the name's own box gives,
-     its trailing text cut with an ellipsis inside it. Each child stands at
-     its own width, never wider than the group. */
-  .identity {
-    /* The title's text stands where the controls' text does: their inset. */
-    --inset: var(--space-2);
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    /* Whatever the name holds is cut at its own box, never drawn under the
-       actions; the box reaches a focus ring's width (2px + 2px offset) past
-       the name on every side, the margin taking it back, so a title
-       control's ring is not cut. */
-    overflow: hidden;
-    margin: calc(-1 * var(--space-1));
-    padding: var(--space-1);
-    padding-inline-start: calc(var(--inset) + var(--space-1));
-
-    & > * {
-      max-inline-size: 100%;
-    }
-  }
-  /* The switch's tablist, not the mode's among the controls: the name's
-     inset holds while the mode takes its segments back. */
-  .side-head:has(:global([role="tablist"]:not(.head-item *))) .identity {
-    --inset: var(--space-1);
-  }
-  /* A title control's own padding is its text's inset, as the controls'. */
-  .identity.controlled {
-    --inset: 0px;
-  }
-  /* A pane's own `actions` keep their width: the name gives, not they. */
-  .side-head > :global(:is(button, a)) {
-    flex: none;
-  }
-  .title,
-  .subtitle {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* What is on show is a name in a toolbar row of 30px label-type
-     controls and the switch's label-type tabs: the label role (DESIGN.md,
-     The Role, Not Size Rule). The title role is a sheet's own head
-     (.kit-sheet-head), which stands over its content, not in a bar. */
-  .title {
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  /* What is on show, described: the meta role. */
-  .subtitle {
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-  .subtitle.code {
-    font: var(--text-meta) var(--font-mono);
-  }
-  /* A title control with its line under it: the control sizes to its own
-     text, so the two stand inside the 44px head. */
-  .identity.controlled:has(> .subtitle:not([data-dropped]))
-    > :global(:is(button, a)) {
-    block-size: auto;
-    padding-block: var(--space-1);
-  }
-  /* Dropped, the line keeps its words for the control it describes and for
-     its own measure, out of the flow and out of sight. */
-  .subtitle[data-dropped] {
-    position: absolute;
-    visibility: hidden;
-    pointer-events: none;
-  }
-  /* Every control in the header, the pane's and Close: one recipe, one
-     press. */
-  .side-head :global(:is(button, a):not([role="tab"])) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-1);
-    min-width: var(--head-control);
-    height: var(--head-control);
-    padding: 0 var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    color: var(--ink-muted);
-    background: transparent;
-    cursor: pointer;
-    text-decoration: none;
-    /* The UA's button face reset as longhands, not the `font` shorthand: a
-       control's own numeric variant (PreviewPane's Comments count) stands. */
-    font-family: inherit;
-    font-style: inherit;
-    line-height: inherit;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out),
-      transform var(--dur-control) var(--ease-out),
-      opacity var(--dur-control) var(--ease-in-out);
-  }
-  [data-slot="side-head"] :global(:is(button, a):not([role="tab"]) svg) {
-    width: var(--icon-md);
-    height: var(--icon-md);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    /* `[data-pressed]`: a kit menu Trigger keeps its press while its menu takes focus (f5082a811). */
-    [data-slot="side-head"]
-      :global(:is(button, a):not([role="tab"]):is(:active, [data-pressed])) {
-      transform: scale(var(--press-scale));
-    }
-  }
-  /* A pressed button stands a step past the hover by day (the kit Toggle's
-     on state), and keeps it under the pointer. */
-  .side-head :global(button[aria-pressed="true"]:not([role="tab"])) {
-    background: var(--surface-pressed);
-    color: var(--ink-strong);
-  }
-  [data-slot="side-head"] :global(button:disabled) {
-    opacity: 0.5;
-  }
-  @media (hover: hover) {
-    [data-slot="side-head"]
-      :global(:is(button, a):not([role="tab"], [aria-pressed="true"]):hover) {
-      background: var(--surface-hover);
-    }
-  }
-</style>

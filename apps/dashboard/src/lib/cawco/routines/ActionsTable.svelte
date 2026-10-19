@@ -84,13 +84,10 @@
     action.proposerTitle;
 </script>
 
-<!-- literal: 6rem -->
-<!-- literal: 0 -->
 <div
   data-slot="actions-ledger"
   style:--lead-w="calc(var(--c-row-lead) + var(--space-3))"
   style:--none="0"
-  style:--when-w="6rem"
 >
   <Table.Root
     data-actions
@@ -99,21 +96,32 @@
     spacing="flush"
   >
     <Table.Header>
-      <Table.Row class="band border-0">
+      <Table.Row variant="band">
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-mark" scope="col"
+        <Table.Head
+          class="h-c-toolbar-ctl w-(--lead-w)"
+          scope="col"
+          variant="caps"
           ><span class="sr-only">{words.columnService}</span></Table.Head
         >
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-action" scope="col"
+        <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
           >{words.columnAction}</Table.Head
         >
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-status" scope="col"
-          >{words.columnStatus}</Table.Head
+        <Table.Head
+          data-slot="actions-table-col-status"
+          class="h-c-toolbar-ctl w-c-routine-time-w"
+          scope="col"
+          variant="caps">{words.columnStatus}</Table.Head
         >
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="col-when" scope="col">{words.columnWhen}</Table.Head>
+        <Table.Head
+          data-slot="actions-table-col-when"
+          class="h-c-toolbar-ctl w-(--c-ledger-when-w)"
+          scope="col"
+          variant="caps">{words.columnWhen}</Table.Head
+        >
       </Table.Row>
     </Table.Header>
     <Table.Body>
@@ -147,7 +155,7 @@
               title="{action.service} · {action.tool}">{action.reason}</span
             >
             {#if from}
-              <span data-slot="from" class="from">{words.from(from)}</span>
+              <span data-slot="from" class="block truncate type-meta text-ink-muted">{words.from(from)}</span>
             {/if}
           </Table.Cell>
           <Table.Cell
