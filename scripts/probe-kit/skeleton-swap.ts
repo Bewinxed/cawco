@@ -59,13 +59,6 @@ export interface SwapSite {
   skeleton: string;
 }
 
-interface Box {
-  h: number;
-  w: number;
-  x: number;
-  y: number;
-}
-
 interface Arrival {
   duration: number;
   easing: string;
