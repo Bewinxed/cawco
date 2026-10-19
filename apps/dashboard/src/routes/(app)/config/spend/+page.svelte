@@ -56,8 +56,8 @@
   ready={onCap !== null}
   title={section.label}
 >
-  <div data-slot="group" class="group">
-    <p data-slot="note" class="note">{spendWords.note}</p>
+  <div data-slot="group" class="flex flex-col gap-space-2">
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{spendWords.note}</p>
     <Field
       hint={means}
       id="spend-on-cap"

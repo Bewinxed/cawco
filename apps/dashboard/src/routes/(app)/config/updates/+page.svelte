@@ -173,8 +173,7 @@
   title={section.label}
 >
   {#if policy}
-    <!-- literal: 8px -->
-    <div data-slot="group" class="flex flex-col gap-(--gap)" style:--gap="8px">
+    <div data-slot="group" class="flex flex-col gap-space-2">
       <SectionHeader
         hue="var(--hue-blue-500)"
         icon={IconDownload}
@@ -201,10 +200,9 @@
       <div class="overflow-hidden" {@attach morph()}>
         {#key pendingText}
           {#if pendingText}
-            <!-- literal: 72ch -->
             <p
               aria-live="polite"
-              class="type-meta max-w-(--measure) text-ink-muted"
+              class="type-meta max-w-(--c-measure) text-ink-muted"
               in:blur={{
                 duration: dur("--dur-panel"),
                 easing: easeOut,
@@ -215,7 +213,6 @@
                 easing: easeOut,
                 amount: 2,
               }}
-              style:--measure="72ch"
             >
               {pendingText}
             </p>
@@ -239,12 +236,7 @@
             <span>What's new in {displayVersion(release.version)}</span>
           </button>
           {#if foldOpen}
-            <!-- literal: 6px -->
-            <div
-              class="type-body pt-(--pt) text-ink-strong"
-              style:--pt="6px"
-              transition:unfold
-            >
+            <div class="type-body pt-space-2 text-ink-strong" transition:unfold>
               <ReleaseNotes source={notes.full} />
             </div>
           {/if}
@@ -252,11 +244,9 @@
       {/if}
     </div>
 
-    <!-- literal: 8px -->
     <div
       data-slot="group"
-      class="flex flex-col gap-(--gap) border-t border-t-border-hairline pt-space-5"
-      style:--gap="8px"
+      class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
     >
       <SectionHeader
         hue="var(--hue-green-500)"

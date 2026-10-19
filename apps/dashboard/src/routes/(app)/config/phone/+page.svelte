@@ -132,14 +132,7 @@
   ready={loaded}
   title={section.label}
 >
-  <!-- literal: 72ch -->
-  <!-- literal: 8px -->
-  <div
-    data-slot="group"
-    class="flex flex-col gap-(--group-gap)"
-    style:--group-gap="8px"
-    style:--note-measure="72ch"
-  >
+  <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconPhone} label="Devices">
       {#snippet right()}
         <Button
@@ -152,25 +145,21 @@
         />
       {/snippet}
     </SectionHeader>
-    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
       A push names the session or task and nothing else; the app reads the rest
       over your tailnet.
     </p>
     {#each testLines as line, index (index)}
-      <!-- literal: 8px -->
       <p
         data-slot="num"
-        class="num mark-line group type-body flex items-center gap-(--status-gap) text-ink-muted tone-ok:text-ink-strong"
+        class="num mark-line group type-body flex items-center gap-space-2 text-ink-muted tone-ok:text-ink-strong"
         data-tone={line.tone}
-        style:--status-gap="8px"
         transition:unfold
       >
-        <!-- literal: 50% -->
         <span
           data-slot="dot"
           aria-hidden="true"
-          style:--dot-r="50%"
-          class="size-space-2 flex-none rounded-(--dot-r) bg-ink-muted opacity-50 group-tone-bad:bg-status-attn-glyph group-tone-bad:opacity-100 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
+          class="size-space-2 flex-none rounded-pill bg-ink-muted opacity-50 group-tone-bad:bg-status-attn-glyph group-tone-bad:opacity-100 group-tone-ok:bg-status-live-glyph group-tone-ok:opacity-100"
           data-box
         ></span>
         <span>{line.text}</span>
@@ -179,7 +168,7 @@
     {#if devices.length === 0}
       <p
         data-slot="note"
-        class="type-meta max-w-(--note-measure) text-ink-muted"
+        class="type-meta max-w-(--c-measure) text-ink-muted"
       >
         Your devices will appear here. Open the CawCo app on your phone and
         allow notifications to register it.
@@ -187,14 +176,12 @@
     {:else}
       <ul class="flex flex-col">
         {#each devices as device (device.id)}
-          <!-- literal: 12px, 10px; minmax(0, 1fr) auto auto, and minmax(0, 1fr) auto on a phone (the row's tracks) -->
+          <!-- minmax(0, 1fr) auto auto, and minmax(0, 1fr) auto on a phone (the row's tracks) -->
           <li
             data-slot="device"
-            class="grid grid-cols-(--device-cols) items-center gap-(--device-gap) not-first:border-t not-first:border-t-border-hairline py-(--device-pad-y) max-phone:grid-cols-(--device-cols-phone)"
+            class="grid grid-cols-(--device-cols) items-center gap-space-3 not-first:border-t not-first:border-t-border-hairline py-space-3 max-phone:grid-cols-(--device-cols-phone)"
             style:--device-cols="minmax(0, 1fr) auto auto"
             style:--device-cols-phone="minmax(0, 1fr) auto"
-            style:--device-gap="12px"
-            style:--device-pad-y="10px"
           >
             <div data-slot="who" class="flex min-w-0 flex-col">
               <span data-slot="name" class="type-body text-ink-strong"
@@ -232,6 +219,7 @@
             <Button
               label="Remove"
               onclick={() => forget(device)}
+              class="max-phone:col-start-2 max-phone:row-start-1"
               size="sm"
               variant="ghost"
             />
@@ -250,13 +238,3 @@
     {/if}
   </div>
 </SectionFrame>
-
-<style>
-  @media (max-width: 639px) {
-    /* residual: foreign-dom */
-    [data-slot="device"] > :global(:nth-child(2)) {
-      grid-column: 1 / -1;
-      grid-row: 2;
-    }
-  }
-</style>

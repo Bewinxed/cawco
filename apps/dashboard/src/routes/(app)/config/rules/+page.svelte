@@ -195,12 +195,10 @@
         >
           {#snippet badge()}
             {#if row.stats.pending > 0}
-              <!-- literal: 1px 6px -->
               <span
                 data-slot="num"
-                class="num type-label flex-none rounded-xs bg-status-attn-bg px-(--waiting-pad-x) py-(--waiting-pad-y) text-status-attn-ink"
-                style:--waiting-pad-x="6px"
-                style:--waiting-pad-y="1px">{row.stats.pending} waiting</span
+                class="num type-label flex-none rounded-xs bg-status-attn-bg px-space-2 py-space-row text-status-attn-ink"
+                >{row.stats.pending} waiting</span
               >
             {/if}
           {/snippet}

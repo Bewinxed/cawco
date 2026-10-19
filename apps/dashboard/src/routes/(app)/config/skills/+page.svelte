@@ -349,9 +349,9 @@
     {#if hubBroken.length > 0}
       <Button
         data-num
-        class="num"
         disabled={hubDown() !== null}
         failed={refetchFailed}
+        figures="tabular"
         icon={IconRefresh}
         label={words.fetchAllAgain(hubBroken.length)}
         onclick={refetchAll}
@@ -378,10 +378,10 @@
     />
   {/snippet}
 
-  <div data-slot="group" class="group">
+  <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={HUE} icon={IconBolt} label={words.skills} />
     {#if skills.length === 0}
-      <p data-slot="note" class="note">{words.noSkills}</p>
+      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.noSkills}</p>
     {:else}
       <RowList label={words.skills}>
         {#each skills as row (row.name)}
@@ -449,7 +449,7 @@
                   <div
                     data-slot="listing"
                     aria-label={words.readingVersions(row.name)}
-                    class="listing"
+                    class="flex flex-col gap-space-row"
                     role="status"
                   >
                     {#each [0, 1] as line (line)}
@@ -472,13 +472,16 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="note">{words.degraded}</p>
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.degraded}</p>
   </div>
 
-  <div data-slot="group" class="group">
+  <div
+    data-slot="group"
+    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+  >
     <SectionHeader hue={HUE} icon={IconShop} label={words.marketplaces} />
     {#if marketplaces.length === 0}
-      <p data-slot="note" class="note">{words.noMarketplaces}</p>
+      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.noMarketplaces}</p>
     {:else}
       <RowList label={words.marketplaces}>
         {#each marketplaces as row (row.name)}
@@ -533,7 +536,7 @@
                   <div
                     data-slot="listing"
                     aria-label={words.reading(row.name)}
-                    class="listing"
+                    class="flex flex-col gap-space-row"
                     role="status"
                   >
                     {#each [0, 1, 2] as line (line)}
@@ -545,28 +548,23 @@
                     {unread[row.name]}
                   </p>
                 {:else if (listings[row.name] ?? []).length === 0}
-                  <p data-slot="note" class="note">{words.listsNothing}</p>
+                  <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.listsNothing}</p>
                 {:else}
                   <ul
                     data-slot="listing"
-                    class="m-0 flex list-none flex-col gap-space-row p-0"
+                    class="flex flex-col gap-space-row"
                   >
                     {#each listings[row.name] as plugin (plugin.name)}
                       {@const id = `${plugin.name}@${row.name}`}
-                      <!-- literal: 8px 10px -->
                       <li
-                        class="flex flex-wrap items-center gap-(--gap) rounded-sm bg-surface-recess px-(--offer-pad-x) py-(--offer-pad-y)"
-                        style:--offer-pad-x="10px"
-                        style:--offer-pad-y="8px"
+                        class="flex flex-wrap items-center gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
                       >
-                        <!-- literal: 240px -->
                         <span
                           data-slot="text"
-                          class="flex min-w-0 shrink grow basis-(--text-basis) flex-col gap-space-row"
-                          style:--text-basis="240px"
+                          class="flex min-w-0 shrink grow basis-(--c-offer-text-basis) flex-col gap-space-row"
                         >
                           <span
-                            class="flex flex-wrap items-baseline gap-(--gap)"
+                            class="flex flex-wrap items-baseline gap-space-2"
                           >
                             <span class="type-label text-ink-strong"
                               >{plugin.name}</span
@@ -574,14 +572,14 @@
                             {#if plugin.version}
                               <span
                                 data-slot="note"
-                                class="type-meta max-w-(--note-measure) text-ink-muted"
+                                class="type-meta max-w-(--c-measure) text-ink-muted"
                                 >{plugin.version}</span
                               >
                             {/if}
                             {#if plugin.category}
                               <span
                                 data-slot="note"
-                                class="type-meta max-w-(--note-measure) text-ink-muted"
+                                class="type-meta max-w-(--c-measure) text-ink-muted"
                                 >{plugin.category}</span
                               >
                             {/if}
@@ -589,13 +587,13 @@
                           {#if plugin.description}
                             <span
                               data-slot="note"
-                              class="type-meta max-w-(--note-measure) text-ink-muted"
+                              class="type-meta max-w-(--c-measure) text-ink-muted"
                               >{plugin.description}</span
                             >
                           {/if}
                         </span>
                         {#if installed(id)}
-                          <span data-slot="note" class="note"
+                          <span data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted"
                             >{words.added}</span
                           >
                         {:else}
@@ -622,10 +620,13 @@
     {/if}
   </div>
 
-  <div data-slot="group" class="group">
+  <div
+    data-slot="group"
+    class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
+  >
     <SectionHeader hue={HUE} icon={IconLayers} label={words.plugins} />
     {#if plugins.length === 0}
-      <p data-slot="note" class="note">{words.noPlugins}</p>
+      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.noPlugins}</p>
     {:else}
       <RowList label={words.plugins}>
         {#each plugins as row (row.id)}
@@ -684,7 +685,7 @@
         {/each}
       </RowList>
     {/if}
-    <p data-slot="note" class="note">{words.pluginOff}</p>
+    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">{words.pluginOff}</p>
   </div>
 
   <MachineInventory
