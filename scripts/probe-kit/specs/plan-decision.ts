@@ -18,8 +18,8 @@
  * - no words or boxes past the panel frame's width;
  * - every way's states draw a step's acknowledgement: a comment sent to
  *   Fable, which carries the step (this session hears it too), the same
- *   comment seen by Fable with its reply, a reworded to-do seen by this
- *   session, the task's attempt;
+ *   comment answered on the step's thread with Fable's reply there, a
+ *   reworded to-do seen by this session, the task's attempt;
  * - a pick is kept as the card's state, and a note with it;
  * - the pick folds the card itself to "Decided: C · Crew first" with
  *   Change;
@@ -206,11 +206,15 @@ const canvasesOn = (page: Page) =>
             acks: [...document.querySelectorAll('[data-slot="ack"]')].map(
               (ack) => ack.textContent?.replace(/\s+/g, " ").trim() ?? ""
             ),
+            threads: [...document.querySelectorAll('[data-slot="thread"]')].map(
+              (thread) => thread.textContent?.replace(/\s+/g, " ").trim() ?? ""
+            ),
           }))
           .catch(() => ({
             variations: [] as string[],
             rows: 0,
             acks: [] as string[],
+            threads: [] as string[],
           }))
       )
   );
@@ -363,14 +367,18 @@ const spec: Spec = {
           ways.join(",") === "a,b,c",
           JSON.stringify(await canvasesOn(shown))
         );
-        const acks = (await canvasesOn(shown)).flatMap((one) => one.acks);
+        const drawnNow = await canvasesOn(shown);
+        const acks = drawnNow.flatMap((one) => one.acks);
         const told = (words: string) =>
           acks.filter((ack) => ack.includes(words)).length;
+        const answered = drawnNow.filter((one) =>
+          one.threads.some((thread) => thread.includes("closed_days only"))
+        ).length;
         kit.check(
-          `${leg}: every way draws a step's acknowledgement: sent to Fable (${told("sent to Fable")}), seen by Fable with its reply (${told("Seen by Fable")}), a reworded to-do seen by this session (${told("Seen by this session")})`,
-          told("sent to Fable") >= 3 &&
-            told("Seen by Fable") >= 3 &&
-            acks.some((ack) => ack.includes("closed_days only")) &&
+          `${leg}: every way draws a step's acknowledgement: a comment sent to Fable (${told("Comment sent to Fable")}), answered on the thread (${told("Answered on the thread")}, Fable's answer on ${answered} threads), a reworded to-do seen by this session (${told("Seen by this session")})`,
+          told("Comment sent to Fable") >= 3 &&
+            told("Answered on the thread") >= 3 &&
+            answered >= 3 &&
             told("Seen by this session") >= 3,
           JSON.stringify(acks.slice(0, 6))
         );

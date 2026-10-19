@@ -3,8 +3,8 @@
    * A step's row (proposal), on RunSteps' recipe: the step tile, the words,
    * then at the trailing edge the task badge, the fold's chevron and the
    * time in a 7ch tabular column, so every time ends on one x. Under the
-   * words: what it waits on ("after Date picker ↑"), or the session's
-   * proposal. The words are the switch: pressed, the row tints (The Press
+   * words: what it waits on ("after Date picker", each name a link to its
+   * step), or the session's proposal. The words are the switch: pressed, the row tints (The Press
    * Rule: a wide control never scales) and the step opens on the accordion
    * to its description and sub-steps; on a phone in Lanes and Crew first it
    * pushes the step's page instead. The tile stays the to-do's checkbox.
@@ -155,15 +155,18 @@
           out:fade={{ duration: 160 }}
         >
           <span>after</span>
+          <!-- Each name is a link to its step: pressed, the plan scrolls to
+               that step's row and lights it. -->
           {#each waitsOn as before, index (before.id)}
             {#if index > 0}<span aria-hidden="true">·</span>{/if}
             <button
+              aria-label="Go to {before.short}"
               class="link pressable"
+              data-goes={before.id}
               onclick={(event) => pointAt(view, event.currentTarget, before.id)}
               type="button">{before.short}</button
             >
           {/each}
-          <span aria-hidden="true">↑</span>
         </span>
       {:else if proposed}
         <span class="under">

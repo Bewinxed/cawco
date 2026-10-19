@@ -1,10 +1,11 @@
 <script lang="ts">
   /**
-   * WHO IS ON A TO-DO (proposal, Crew first): a 12px copy of each delegate's
-   * tile at the to-do's trailing edge, two overlapping by 3px (the avatar
-   * group). A fine pointer lifts the one under it; pressing one points at
-   * that delegate's row in the stack above. A tile arrives from 0.92 over
-   * 120ms and leaves over --dur-exit.
+   * WHO IS ON A TO-DO (proposal, Crew first): each delegate's own tile at
+   * the to-do's trailing edge, at the tree mark's 18px (DESIGN.md), a
+   * --space-1 apart, never stacked over one another. A fine pointer lifts
+   * the one under it; pressing one points at that delegate's row in the
+   * stack above. A tile arrives from 0.92 over 120ms and leaves over
+   * --dur-exit.
    */
   import { scale } from "svelte/transition";
   import SessionMark from "#lib/cawco/SessionMark.svelte";
@@ -37,24 +38,19 @@
   .crew {
     display: inline-flex;
     align-items: center;
-    padding-inline-start: 3px;
+    gap: var(--space-1);
   }
   .mini {
-    --mark-size: 12px;
+    --mark-size: var(--pv-tile, 18px);
     display: grid;
+    flex: none;
     place-items: center;
-    margin-inline-start: -3px;
     padding: 0;
     border: 0;
     border-radius: var(--radius-xs);
     background: none;
-    box-shadow: 0 0 0 1.5px var(--surface-raised);
     cursor: pointer;
 
-    & :global(svg) {
-      inline-size: 8px;
-      block-size: 8px;
-    }
     &:focus-visible {
       outline: 2px solid var(--focus-ring);
       outline-offset: 2px;
