@@ -1350,10 +1350,12 @@ export function boot(options: BootOptions): void {
     (event) => {
       event.preventDefault();
       if (event.ctrlKey || event.metaKey) {
+        // The world's translate is the canvas's own: the pointer measured from the canvas's corner, which stands under the head.
+        const box = canvas.getBoundingClientRect();
         zoomAt(
           zoom.z * Math.exp(-event.deltaY * 0.01),
-          event.clientX,
-          event.clientY
+          event.clientX - box.x,
+          event.clientY - box.y
         );
       } else {
         zoom.x -= event.shiftKey ? event.deltaY : event.deltaX;
@@ -1495,11 +1497,20 @@ export function boot(options: BootOptions): void {
       );
       place();
     }
-    const box = el.getBoundingClientRect();
+    // On a phone the frame stands alone in its section: it is shown with its section's head, which names its sheet.
+    const head = chrome.phone()
+      ? el
+          .closest(".cawco-section")
+          ?.querySelector(".cawco-section-head")
+          ?.getBoundingClientRect()
+      : undefined;
+    const own = el.getBoundingClientRect();
+    const top = head ? Math.min(head.top, own.top) : own.top;
+    const box = new DOMRect(own.x, top, own.width, own.bottom - top);
     zoom.x += bounds.x + bounds.width / 2 - (box.x + box.width / 2);
     zoom.y +=
       bounds.y +
-      Math.min(bounds.height / 2, chrome.top() + box.height / 2 + 24) -
+      Math.min(bounds.height / 2, WORLD_INSET.y + box.height / 2) -
       (box.y + box.height / 2);
     place();
     if (!media("(prefers-reduced-motion: reduce)").matches) {
@@ -1816,8 +1827,8 @@ export function boot(options: BootOptions): void {
     const box = canvas.getBoundingClientRect();
     const width = world.scrollWidth || box.width;
     zoom.z = Math.max(ZOOM_MIN, Math.min(1, (box.width - 48) / width));
-    zoom.x = 24;
-    zoom.y = chrome.top() + 16;
+    zoom.x = WORLD_INSET.x;
+    zoom.y = WORLD_INSET.y;
     place();
   };
 
@@ -1923,11 +1934,18 @@ export function boot(options: BootOptions): void {
     world: () => ({ ...zoom }),
   };
   window.__cawcoCanvas = canvasState;
-  zoom.y = chrome.top() + 16;
-  zoom.x = 24;
+  zoom.x = WORLD_INSET.x;
+  zoom.y = WORLD_INSET.y;
   place();
   chrome.layout();
 }
+
+/**
+ * Where the world stands from the canvas's corner when fitted, and the
+ * least a frame shown by `go` keeps from its top. The canvas begins under
+ * the head (chrome.ts PAGE_CSS), so this is room from the head's foot.
+ */
+const WORLD_INSET = { x: 24, y: 16 };
 
 /** `file:Story`: the colon before the story's name. */
 const LAST_COLON = /:(?=[^:]+$)/;

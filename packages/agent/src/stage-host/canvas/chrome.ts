@@ -190,8 +190,9 @@ html.cawco-canvas-page[data-theme="light"] { color-scheme: light; }
 html.cawco-canvas-page[data-theme="dark"] { color-scheme: dark; }
 /* The page is the well the frames stand in (surface-well): the frame recesses, each frame's own page reads raised on it. */
 html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100%; overflow: hidden; background: var(--surface-well); }
-/* The canvas ends where the chrome begins (the foot, the docks, a desk's outline): no frame is ever drawn under any of it. */
-.cawco-canvas { position: fixed; inset-block: 0 calc(var(--foot) + var(--cawco-floor)); inset-inline: 0 var(--cawco-end); overflow: hidden;
+/* The canvas begins under the head and ends where the rest of the chrome begins (the foot, the docks, a desk's outline): no frame
+   is ever drawn under any of it, whatever the head grows to. */
+.cawco-canvas { position: fixed; inset-block: var(--band) calc(var(--foot) + var(--cawco-floor)); inset-inline: 0 var(--cawco-end); overflow: hidden;
   touch-action: none; background: var(--surface-well); }
 .cawco-world { position: absolute; inset-block-start: 0; inset-inline-start: 0; transform-origin: 0 0; display: flex; flex-direction: column;
   gap: var(--space-8); padding-block-end: 160px; will-change: transform; --cawco-gutter: 0px; padding-inline-start: var(--cawco-gutter); }
@@ -427,7 +428,7 @@ export class Chrome {
     return this.#flags.phone;
   }
 
-  /** The head's height, the band's and on a phone the strip's under it: where the world starts below it. */
+  /** The head's height, the band's and on a phone the strip's under it: where the canvas begins (`--band`). */
   top(): number {
     return this.#head.getBoundingClientRect().height;
   }
@@ -581,7 +582,7 @@ export class Chrome {
       this.#flags.pending = false;
       const box = this.#o.canvas.getBoundingClientRect();
       const cx = box.x + box.width / 2;
-      const cy = box.y + (box.height + this.top()) / 2;
+      const cy = box.y + box.height / 2;
       let best: { key: string; d: number } | null = null;
       for (const one of this.#frames()) {
         const el = one.section.frames.get(one.key)?.el;

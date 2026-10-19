@@ -501,6 +501,7 @@ async function canvasLeg(
   page.on("pageerror", (error) => errors.push(error.message));
   await page.goto(`${stage.base}${canvasPath()}`);
   await drawn(page);
+  await worldLeg(kit, page, `${width} ${theme}`);
   const read = await readCanvas(page);
   const leg = `${width} ${theme}`;
   await reviewLeg(kit, page, leg, phone, theme);
@@ -1199,6 +1200,22 @@ async function seamLeg(kit: Kit, page: Page, leg: string): Promise<void> {
   const canvasFrame = page
     .frames()
     .find((one) => one.url().includes("/@cawco/canvas"));
+  // N7's cause, framed: the world clear of the page's head in the panel, after load and after Zoom to fit.
+  if (canvasFrame) {
+    const loaded = await canvasFrame.evaluate(WORLD_TOP);
+    await canvasFrame.evaluate(() =>
+      dispatchEvent(
+        new CustomEvent("cawco:canvas-view", { detail: { zoom: "fit" } })
+      )
+    );
+    await page.waitForTimeout(400);
+    const fitted = await canvasFrame.evaluate(WORLD_TOP);
+    kit.check(
+      `N7b: ${leg} in the panel: the world never stands under the page's head, after load and after Zoom to fit`,
+      loaded.clear && fitted.clear,
+      `loaded: ${loaded.said}; fitted: ${fitted.said}`
+    );
+  }
   const band = canvasFrame
     ? await canvasFrame.evaluate(() => {
         const root = document.getElementById("cawco-chrome")
@@ -1634,6 +1651,50 @@ async function commentsCount(
   await page.close();
 }
 
+/** Where the world's first drawn section head stands against the page's head, and what a press at its title's centre meets. */
+const WORLD_TOP = () => {
+  const chrome = document.getElementById("cawco-chrome")?.shadowRoot;
+  const foot =
+    chrome?.querySelector(".head")?.getBoundingClientRect().bottom ?? 0;
+  const gap = Number.parseFloat(
+    getComputedStyle(document.documentElement).getPropertyValue("--space-2")
+  );
+  const head = [
+    ...document.querySelectorAll<HTMLElement>(".cawco-section-head"),
+  ].find((one) => one.getBoundingClientRect().height > 0);
+  const title = head?.firstElementChild as HTMLElement | undefined;
+  const t = title?.getBoundingClientRect();
+  const hit = t
+    ? document.elementFromPoint(t.x + t.width / 2, t.y + t.height / 2)
+    : null;
+  const top = head?.getBoundingClientRect().top ?? 0;
+  return {
+    clear: !!head && !!title && top >= foot + gap - 0.5 && hit === title,
+    said: `head's foot ${foot.toFixed(1)}, section head top ${top.toFixed(1)} (needs ≥ ${(foot + gap).toFixed(1)}), a press at "${title?.textContent}" meets ${hit === title ? "it" : hit?.id || hit?.className || "nothing"}`,
+  };
+};
+
+/**
+ * N7's cause: the world placed under the page's head. After load and after
+ * Zoom to fit, the first drawn section head stands space-2 or more under
+ * the head's foot, and a press at its title's centre meets the title.
+ */
+async function worldLeg(kit: Kit, page: Page, leg: string): Promise<void> {
+  const loaded = await page.evaluate(WORLD_TOP);
+  await page.evaluate(() =>
+    dispatchEvent(
+      new CustomEvent("cawco:canvas-view", { detail: { zoom: "fit" } })
+    )
+  );
+  await page.waitForTimeout(400);
+  const fitted = await page.evaluate(WORLD_TOP);
+  kit.check(
+    `N7b: ${leg}: the world never stands under the page's head: its first section head clear of the head's foot, after load and after Zoom to fit`,
+    loaded.clear && fitted.clear,
+    `loaded: ${loaded.said}; fitted: ${fitted.said}`
+  );
+}
+
 /**
  * N7: the canvas page as a desk's side panel draws it, under 640px wide so
  * the phone's band and strip stand, with a mouse's fine pointer: every edge
@@ -1649,6 +1710,7 @@ async function footLeg(
   await page.setViewportSize({ width: 560, height: 844 });
   await page.goto(`${stage.base}${canvasPath()}`);
   await drawn(page);
+  await worldLeg(kit, page, `560 desk pointer ${theme}`);
   const foot = await page.evaluate(
     () =>
       document
