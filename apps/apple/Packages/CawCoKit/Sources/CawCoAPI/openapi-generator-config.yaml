@@ -134,8 +134,6 @@ typeOverrides:
     RelayPortName: OpenEnums.RelayPortName
     RelayProvider: OpenEnums.RelayProvider
     RelayState: OpenEnums.RelayState
-    RepoInfoVisibility: OpenEnums.RepoInfoVisibility
-    ReposResultError: OpenEnums.ReposResultError
     RestartHoldReason: OpenEnums.RestartHoldReason
     RoutineMadeEventBy: OpenEnums.RoutineMadeEventBy
     RoutineRunState: OpenEnums.RoutineRunState

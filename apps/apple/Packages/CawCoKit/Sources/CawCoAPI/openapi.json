@@ -31423,7 +31423,7 @@
         ]
       },
       "ControlPayload": {
-        "description": "`control`: invoke a named method on a live session, or on the machine when\n`instanceId` is absent. The method is one of the neutral names in harness.ts\n({@link CONTROL_INTERRUPT}, …) plus {@link RESOLVE_PERMISSION}; the reply\ncomes back as a `control_result` frame carrying the same `requestId`.\n\nMachine-scoped, `method` names either a session-catalog operation — routed to\nwhichever harness owns the id (`harness`, or merged across all when listing)\n— or a machine feature (`listRepos`, `installTool`, the fleet controls). With\nno `instanceId` and no `harness`, `listSessions` merges every harness.",
+        "description": "`control`: invoke a named method on a live session, or on the machine when\n`instanceId` is absent. The method is one of the neutral names in harness.ts\n({@link CONTROL_INTERRUPT}, …) plus {@link RESOLVE_PERMISSION}; the reply\ncomes back as a `control_result` frame carrying the same `requestId`.\n\nMachine-scoped, `method` names either a session-catalog operation — routed to\nwhichever harness owns the id (`harness`, or merged across all when listing)\n— or a machine feature (`installTool`, the fleet controls). With\nno `instanceId` and no `harness`, `listSessions` merges every harness.",
         "type": "object",
         "properties": {
           "args": {
@@ -31579,28 +31579,6 @@
         "required": [
           "instanceId",
           "message"
-        ]
-      },
-      "ReposResult": {
-        "description": "What the machine-scoped `listRepos` control answers with. The GitHub CLI is\nthe machine's own credential store — cawco never holds a token.",
-        "anyOf": [
-          {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/RepoInfo"
-            }
-          },
-          {
-            "type": "object",
-            "properties": {
-              "error": {
-                "$ref": "#/components/schemas/ReposResultError"
-              }
-            },
-            "required": [
-              "error"
-            ]
-          }
         ]
       },
       "UpdateReport": {
@@ -55662,30 +55640,6 @@
           "path"
         ]
       },
-      "RepoInfo": {
-        "description": "One repository a machine can {@link SpawnPayload.bootstrap} from.",
-        "type": "object",
-        "properties": {
-          "description": {
-            "type": "string"
-          },
-          "nameWithOwner": {
-            "type": "string"
-          },
-          "updatedAt": {
-            "type": "string"
-          },
-          "visibility": {
-            "$ref": "#/components/schemas/RepoInfoVisibility"
-          }
-        },
-        "required": [
-          "description",
-          "nameWithOwner",
-          "updatedAt",
-          "visibility"
-        ]
-      },
       "ToolState": {
         "description": "What a probe or an install attempt found. The unit every surface renders.",
         "type": "string",
@@ -56214,21 +56168,6 @@
         "enum": [
           "added",
           "back"
-        ]
-      },
-      "RepoInfoVisibility": {
-        "type": "string",
-        "enum": [
-          "INTERNAL",
-          "PRIVATE",
-          "PUBLIC"
-        ]
-      },
-      "ReposResultError": {
-        "type": "string",
-        "enum": [
-          "gh-missing",
-          "gh-unauthenticated"
         ]
       },
       "RoutineMadeEventBy": {

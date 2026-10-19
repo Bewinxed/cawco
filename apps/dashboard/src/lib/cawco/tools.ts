@@ -49,7 +49,7 @@ export async function setPolicy(
 
 /**
  * Puts one tool on one machine, answering with the status the attempt settled
- * on. A machine-scoped control like `listRepos`, so the hub sees it go past,
+ * on. A machine-scoped control, so the hub sees it go past,
  * marks the cell `installing` and publishes — which is how every other
  * dashboard follows an install nobody there clicked.
  *

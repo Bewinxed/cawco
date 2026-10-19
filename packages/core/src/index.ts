@@ -423,21 +423,6 @@ export interface SpawnPayload {
   workspace?: import("./harness").WorkspaceRef;
 }
 
-/** One repository a machine can {@link SpawnPayload.bootstrap} from. */
-export interface RepoInfo {
-  description: string;
-  nameWithOwner: string;
-  updatedAt: string;
-  visibility: "PUBLIC" | "PRIVATE" | "INTERNAL";
-}
-
-/**
- * What the machine-scoped `listRepos` control answers with. The GitHub CLI is
- * the machine's own credential store — cawco never holds a token.
- */
-export type ReposResult =
-  RepoInfo[] | { error: "gh-missing" | "gh-unauthenticated" };
-
 const TRAILING_SLASHES = /\/+$/;
 const URL_SCHEME_AND_HOST = /^[a-z][a-z0-9+.-]*:\/\/[^/]+\//i;
 const SCP_LIKE_HOST = /^[^/]+@[^:]+:/;
@@ -739,7 +724,7 @@ export interface StopPayload {
  *
  * Machine-scoped, `method` names either a session-catalog operation — routed to
  * whichever harness owns the id (`harness`, or merged across all when listing)
- * — or a machine feature (`listRepos`, `installTool`, the fleet controls). With
+ * — or a machine feature (`installTool`, the fleet controls). With
  * no `instanceId` and no `harness`, `listSessions` merges every harness.
  */
 export interface ControlPayload {

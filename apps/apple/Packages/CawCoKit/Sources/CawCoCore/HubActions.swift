@@ -282,9 +282,6 @@ extension HubConnection {
         _ = try await control(machineId, harness: named, method: "tagSession", args: [sessionKey, tag, directory(dir)])
     }
     private func directory(_ dir: String?) -> [String: String] { dir.map { ["dir": $0] } ?? [:] }
-    public func repositories(machineId: String) async throws -> Components.Schemas.ReposResult {
-        try await machineControl(machineId: machineId, method: "listRepos")
-    }
     public func unlockKeychain(machineId: String, password: String) async throws -> Components.Schemas.AuthState {
         try await Self.decodeResult(await control(machineId, method: "unlockKeychain", args: [password]))
     }

@@ -60,7 +60,6 @@ export const FRAMES: Record<string, string[]> = {
     "FsEntry",
     "FsMedia",
     "SendPayload",
-    "ReposResult",
     "UpdateReport",
   ],
   // `NeutralSessionInfo`: what a machine's `listSessions` control answers,

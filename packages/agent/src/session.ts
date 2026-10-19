@@ -32,8 +32,6 @@ import type {
   NeutralResultMessage,
   NeutralSessionInfo,
   PermissionResult,
-  RepoInfo,
-  ReposResult,
   SendPayload,
   SessionAddress,
   SessionPulse,
@@ -455,9 +453,6 @@ interface SpinOff {
 /** A control reached by name through `control`. */
 type ControlMethod = (...args: unknown[]) => unknown;
 
-/** How many repositories the bootstrap picker asks a machine for. */
-const REPO_LIST_LIMIT = 100;
-
 /** The end of a command's output: enough to name what happened, not a wall of it. */
 const TAIL_LINES = 4;
 
@@ -509,15 +504,6 @@ const glanceOf = (input: Record<string, unknown> | undefined): string => {
   return "";
 };
 
-/** Whether the GitHub CLI is here at all — its absence is an answer, not a failure. */
-const ghAvailable = async (): Promise<boolean> =>
-  (await Bun.$`gh --version`.quiet().nothrow()).exitCode === 0;
-
-/**
- * The repositories `gh` can see from this machine. Whoever is logged in there
- * decides what that is — the private ones included, which is the point of
- * asking the machine rather than GitHub.
- */
 /**
  * {@link CONTROL_GIT_CHANGES}: exactly two read-only git commands in `cwd`.
  * `git status` refusing (exit 128: no work tree here) answers `{ repo: false }`.
@@ -558,25 +544,6 @@ const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
 
 /** How long each of {@link gitChanges}' two git commands may take. */
 const GIT_CHANGES_TIMEOUT_MS = 30_000;
-
-const listRepos = async (): Promise<ReposResult> => {
-  if (!(await ghAvailable())) {
-    return { error: "gh-missing" };
-  }
-  const auth = await Bun.$`gh auth status`.quiet().nothrow();
-  if (auth.exitCode !== 0) {
-    return { error: "gh-unauthenticated" };
-  }
-
-  const listed =
-    await Bun.$`gh repo list --json nameWithOwner,visibility,updatedAt,description --limit ${REPO_LIST_LIMIT}`
-      .quiet()
-      .nothrow();
-  if (listed.exitCode !== 0) {
-    throw new Error(`gh repo list failed: ${tail(listed.stderr.toString())}`);
-  }
-  return listed.json() as RepoInfo[];
-};
 
 /** A `<scheme>://` git URL's host and path, past any login and port. */
 const SCHEME_URL_PARTS =
@@ -5090,9 +5057,6 @@ export class SessionSupervisor {
       }
       if (method === CONTROL_SPIN_OFF_HELD) {
         return await this.#spinOffHeld(String(args[0]));
-      }
-      if (method === "listRepos") {
-        return await listRepos();
       }
       if (method === CONTROL_GIT_CHANGES) {
         return await gitChanges(args[0] as string, args[1] as string);
