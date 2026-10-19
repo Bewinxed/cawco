@@ -1383,13 +1383,28 @@ const roundThree = async (
         Math.abs(end - one.headRight) <= 0.5
       );
     });
+    // No ancestor that clips: nothing can cut the scroller or Show's area.
     const unclipped = read.every(
       (one) =>
-        !!one.clipper &&
         one.scrollerRight !== null &&
-        one.scrollerRight <= one.clipper.right + 0.5 &&
-        (one.showRight === null || one.showRight <= one.clipper.right + 0.5)
+        (one.clipper === null ||
+          (one.scrollerRight <= one.clipper.right + 0.5 &&
+            (one.showRight === null ||
+              one.showRight <= one.clipper.right + 0.5)))
     );
+    // Files' card, drawn round the regions: its trailing edge and its inline-end padding.
+    const card = await page.evaluate(() => {
+      const pop = document.querySelector<HTMLElement>(".kit-pop.files-pop");
+      if (!pop) {
+        return null;
+      }
+      const style = getComputedStyle(pop);
+      return {
+        right: pop.getBoundingClientRect().right,
+        paddingEnd: style.paddingInlineEnd,
+        overflow: `${style.overflowX} ${style.overflowY}`,
+      };
+    });
     kit.check(
       `24a (${view}): the top row's last card and an attachment row end on their region head's trailing edge (±0.5)`,
       flush,
@@ -1398,14 +1413,14 @@ const roundThree = async (
     kit.check(
       `24b (${view}): the scroller's trailing edge and Show's touch area lie inside the nearest ancestor that clips (named)`,
       unclipped,
-      JSON.stringify(
+      `${JSON.stringify(
         read.map((one) => ({
           region: one.region,
           scrollerRight: one.scrollerRight,
           showRight: one.showRight,
-          clipper: one.clipper,
+          clipper: one.clipper ?? "none: every ancestor's overflow is visible",
         }))
-      )
+      )}; Files' card ${JSON.stringify(card)}`
     );
     await page.close();
   }
