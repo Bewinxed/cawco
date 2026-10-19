@@ -107,24 +107,18 @@
   $effect(() => () => clearTimeout(savedTimer));
 </script>
 
-<!-- literal: 10px, 12px, 8px, 980px, 96px -->
 <footer
-  class="flex-none pt-(--foot-pt) pb-(--foot-pb) px-space-6 bg-surface-recess max-desk:px-space-2 max-phone:sticky max-phone:bottom-0 max-phone:pb-(--foot-pb-phone)"
+  class="flex-none py-space-3 px-space-6 bg-surface-recess max-desk:px-space-2 max-phone:sticky max-phone:bottom-0 max-phone:pb-(--off-bottom)"
   data-safe-bottom
-  style:--foot-pt="10px"
-  style:--foot-pb="12px"
-  style:--foot-pb-phone="calc(12px + var(--safe-bottom))"
-  style:--inner-gap="8px"
-  style:--inner-max="980px"
-  style:--save-min="96px"
+  style:--off-bottom="calc(var(--space-3) + var(--safe-bottom))"
   {@attach aboveKeyboard(() => body)}
 >
   {#if question}
-    <AskHere asker={question.asker} at="editor" class="max-w-(--inner-max)" />
+    <AskHere asker={question.asker} at="editor" class="max-w-(--c-editor-max-w)" />
   {/if}
   <div
     data-slot="inner"
-    class="flex items-center gap-(--inner-gap) max-w-(--inner-max) max-phone:flex-wrap max-phone:justify-end"
+    class="flex items-center gap-space-2 max-w-(--c-editor-max-w) max-phone:flex-wrap max-phone:justify-end"
   >
     {#if ondelete && deleteLabel}
       <Button
@@ -160,7 +154,7 @@
       {configureWords.cancel}
     </Button>
     <Button
-      class="min-w-(--save-min)"
+      class="min-w-(--c-btn-min-w)"
       disabled={down !== null || deleting || !canSave}
       {failed}
       label={saved ? configureWords.saved : saveLabel}

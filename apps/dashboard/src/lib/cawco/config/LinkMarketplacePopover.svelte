@@ -146,13 +146,12 @@
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="w-(--pop-w) max-w-(--pop-max)"
+    class="w-c-panel-w max-w-(--bits-popover-content-available-width)"
     gap="form"
     pad="form"
-    style="--pop-w: 380px; --pop-max: calc(100vw - 2rem)"
     bind:ref={surface}
   >
-    <form class="form" onsubmit={link}>
+    <form class="flex flex-col gap-space-3" onsubmit={link}>
       <Field id="market-source" label={words.source} problem={unread}>
         {#snippet hint()}
           <Coded text={words.marketSourceHint} />

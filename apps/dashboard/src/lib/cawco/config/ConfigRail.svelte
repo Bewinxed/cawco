@@ -55,13 +55,11 @@
   }
 </script>
 
-<!-- literal: 232px -->
 <nav
   data-slot="rail"
   aria-label={words.title}
-  class="group/rail flex flex-col px-space-2 pb-space-5 variant-rail:relative variant-rail:w-(--rail-w) variant-rail:flex-none variant-rail:overflow-y-auto variant-rail:rounded-lg variant-rail:bg-surface-raised variant-list:pb-space-2"
+  class="group/rail flex flex-col px-space-2 pb-space-5 variant-rail:relative variant-rail:w-(--c-config-rail-w) variant-rail:flex-none variant-rail:overflow-y-auto variant-rail:rounded-lg variant-rail:bg-surface-raised variant-list:pb-space-2"
   data-variant={variant}
-  style:--rail-w="232px"
   {@attach highlight({
     rows: '[data-slot="row"]',
     selected: '[aria-current="page"]',
@@ -75,29 +73,21 @@
       >
         {group}
       </h2>
-      <ul data-slot="list" class="flex flex-col m-0 p-0 list-none">
+      <ul data-slot="list" class="flex flex-col">
         {#each sections as section (section.slug)}
           {@const count = countOf(store, section.slug)}
           {@const waiting = section.badge === "updates-waiting"}
           {@const faults = badgeOf(store, section)}
           <li>
-            <!-- literal: 48px, 22px, 6px, 50%, 5px, 18px, 3ch -->
             <a
               data-slot="row"
               aria-current={current === section.slug ? "page" : undefined}
-              class="group/row relative flex items-center gap-space-3 h-c-rail-row-h pl-space-2 pr-space-3 rounded-sm text-ink-row no-underline transition-control aria-current-page:text-selected-ink group-variant-list/rail:h-(--list-row-h) focus-inset press-tint"
+              class="group/row relative flex items-center gap-space-3 h-c-rail-row-h pl-space-2 pr-space-3 rounded-sm text-ink-row no-underline transition-control aria-current-page:text-selected-ink group-variant-list/rail:h-c-row-h focus-inset press-tint"
               href="/config/{section.slug}"
-              style:--list-row-h="48px"
-              style:--tile="22px"
-              style:--dot="6px"
-              style:--dot-r="50%"
-              style:--fault-pad="5px"
-              style:--fault-h="18px"
-              style:--count-min="3ch"
             >
               <span
                 data-slot="tile"
-                class="inline-flex items-center justify-center flex-none size-(--tile) rounded-xs bg-surface-tile shadow-tile"
+                class="inline-flex items-center justify-center flex-none size-space-6 rounded-xs bg-surface-tile shadow-tile"
                 style:color={section.hue}><section.icon /></span
               >
               <span
@@ -107,7 +97,7 @@
               >
               {#if unsavedIn(store, section.slug)}
                 <span
-                  class="flex-none size-(--dot) rounded-(--dot-r) bg-ink-strong motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out motion-safe:starting:opacity-0"
+                  class="flex-none size-space-2 rounded-pill bg-ink-strong motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out motion-safe:starting:opacity-0"
                   title={words.unsaved}
                   ><span class="sr-only">{words.unsaved}</span></span
                 >
@@ -115,7 +105,7 @@
               {#if faults > 0}
                 <span
                   data-slot="num"
-                  class="flex-none min-w-space-5 h-space-5 px-(--fault-pad) rounded-xs bg-status-attn-bg type-meta leading-(--fault-h) text-center text-status-attn-ink num"
+                  class="flex items-center justify-center flex-none min-w-space-5 h-space-5 px-space-1 rounded-xs bg-status-attn-bg type-meta text-status-attn-ink num"
                   title={waiting
                     ? words.badgeWaiting(faults)
                     : words.badgeFailing(faults)}
@@ -134,9 +124,9 @@
                      A read count stands only above 0 (DESIGN.md, The Earned
                      Count Rule). -->
                 {#if count === null}
-                  <span data-slot="count" class="count">—</span>
+                  <span data-slot="count" class="flex-none min-w-(--c-rail-count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">—</span>
                 {:else if count > 0}
-                  <span data-slot="count" class="count">{count}</span>
+                  <span data-slot="count" class="flex-none min-w-(--c-rail-count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">{count}</span>
                 {/if}
               {/if}
             </a>
@@ -147,10 +137,3 @@
   {/each}
 </nav>
 
-<style>
-  /* residual: foreign-dom */
-  [data-slot="tile"] :global(svg) {
-    width: var(--space-4);
-    height: var(--space-4);
-  }
-</style>
