@@ -66,7 +66,12 @@ import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
 const PANE =
   ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])';
-const FRAME = `${PANE} iframe[title="Preview"]`;
+/**
+ * The panel's frame on screen: the pane keeps the frames it has shown, each
+ * inert but the current one (PreviewPane), so the first in the document may
+ * be a page shown before.
+ */
+const FRAME = `${PANE} iframe[title="Preview"]:not([inert])`;
 const NAME = "launch";
 
 const respond = (request: Seen): Reply => ({
