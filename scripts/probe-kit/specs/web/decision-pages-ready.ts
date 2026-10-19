@@ -70,7 +70,6 @@ const FILES: Record<string, string> = {
   empty: "src/lib/cawco/project/WorkColumnEmpty.stories.ts",
   head: "src/lib/cawco/project/ProjectHeadNewSession.stories.ts",
   "run-order": "src/lib/cawco/views/ViewPipelineRunOrder.stories.ts",
-  removed: "src/lib/cawco/views/preview/PipelineRemovedFixture.stories.ts",
 };
 
 const PAGES = [
