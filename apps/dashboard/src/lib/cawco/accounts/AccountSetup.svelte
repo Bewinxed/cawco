@@ -479,7 +479,6 @@
               />
             {:else}
               <span
-                data-step-dot
                 aria-hidden="true"
                 class="grid size-icon-md flex-none place-items-center after:size-space-2 after:rounded-pill after:bg-neutral-8 after:transition-[background-color] after:dur-fade after:ease-out group-data-cur:after:bg-selected-icon"
                 data-box
