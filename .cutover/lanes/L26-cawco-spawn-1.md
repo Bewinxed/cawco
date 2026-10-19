@@ -1,6 +1,6 @@
 # Lane L26-cawco-spawn-1
 
-Skills loaded, in order: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding. emil-design-eng and transitions-dev were not loaded (see Notes). interface-craft and ui-observer: not loaded (non-interactive run, no bench rendered; critique below is from markup and classes).
+Skills loaded, in order: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding. emil-design-eng, transitions-dev, interface-craft and ui-observer were loaded after the first push. ui-observer measured nothing: no bench renders these files in this workspace, so layout is Not verified in a browser.
 
 better-ui rules followed: concentric radius (EffortPips fill is rounded-md, the knob's rounded-sm plus its 2px pad); transition only what changes (`transition-[…]` lists kept); reduced motion gated by `motion-safe:` on every entrance (`ns-in`, `animate-ns-*`); hover under the `hover:` variant. better-layout rules followed: logical properties (`ps-/pe-`, `text-start`, `rounded-s-md`, `border-e`); `min-h-lh` instead of a fixed height for a text line; content-sized EffortPips box (no fixed height); 44px touch floor from `c-row-h`; ladder spacing only.
 
@@ -35,12 +35,12 @@ token: --c-model-row-basis 12rem — the width a model row keeps beside its chip
 token: --c-folder-list-max-h 196px — the folder browser's list cap (five 36px rows and their gaps)
 
 ## Gaps
-gap: spawn/MachinesChip.svelte `radius()` (script) returns "8px 8px" strings for the joined-row corners — literal radius in script (S5: script untouched); should read `var(--radius-sm)` — DESIGN.md Shapes (radii by role)
 gap: ui/drawer/drawer-content.svelte `look.new-session` carries `motion-reduce:animate-none! motion-reduce:transition-none!` — a bang in the kit — Delta T
 gap: vaul's sheet exit (see Theme additions, `ns-vaul-scrim-exit`): vaul injects its own unlayered animation on the overlay; `@layer components` may lose to it, in which case the scrim keeps vaul's 500ms leave on a phone. Needs a look at integration compare.
 gap: EffortPips.svelte `--knob-shadow` and LocationSection `--browse-shadow` hold `inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)` as a style value — one shadow token for the "lifted block with neutral-8 edge" recipe is missing (DESIGN.md, Effort chip)
 
 ## fixed
+fixed: MachinesChip.svelte `radius()` joined-row corners read `var(--radius-sm)` instead of `8px` — DESIGN.md Shapes (items in a surface 8)
 fixed: EffortPips.svelte fill `rounded-md` replaces `calc(var(--radius-md) - 1px)` — the Concentric Rule (knob 8 + 2px pad = 10)
 fixed: EffortPips.svelte ghost pad and gap read `--space-1`/`--space-row` instead of 4/2/5px — the bar pitch is the ladder step
 fixed: EffortPips.svelte the "nothing moves until measured" rule is `not-data-ready:transition-none` on the track and `group-not-data-ready:transition-none` on its transitioning children (the foreign-dom `:global(*)` rule is gone; MorphText runs no CSS transition of its own)
@@ -121,7 +121,8 @@ none
 - the mobile sheet's exit (`[data-session-card][data-vaul-drawer][data-state="closed"]` duration and easing) is now an inline `animation-duration` / `animation-timing-function` on the DrawerContent's style while `open` is false (NewSessionDialog.svelte), beating vaul's own sheet without a `!`.
 
 ## Notes
-- No transition/animation written new beyond the entrances above (same keyframes, same durations, tokens); emil-design-eng and transitions-dev were not loaded because the lane's motion is a transcription of existing entrances, not new motion.
+- Motion (emil-design-eng / transitions-dev): no new motion; entrances stay ease-out on tokens, 260-280ms enters, 160ms exits, `backwards` on entrances, `both` on exits, all under `motion-safe:`; hover under `hover:`.
+- Design Critique (interface-craft, vs DESIGN.md, from markup): fixed: touch rows reach c-row-h 44px; fixed: ladder spacing; gap: effort knob inner edge shadow has no token (above); no other findings.
 - Ladder ties taken: 6px→space-2 (7), 8→space-2, 10→space-3 (11), 12→space-3, 24→space-7 (25), 22→space-6 (21), 1px gap→space-row; rows 34/36/40/42/48→c-btn-h / c-row-h (44) per DESIGN's 44px row pitch.
 - Breakpoints: `max-phone:` (639) replaces the old 640 edge in the Segmented rows; the dialog's phone exit no longer needs a query (the drawer renders only under `(max-width: 640px)`).
-- Counts: theme 6, kit-swap 0, token 5, removed 10, fixed 7, gap 4.
+- Counts: theme 6, kit-swap 0, token 5, removed 10, fixed 9, gap 3.

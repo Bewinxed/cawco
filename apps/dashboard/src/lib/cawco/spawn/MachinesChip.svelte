@@ -63,7 +63,8 @@
     const prev = index > 0 && selected.includes(machines[index - 1].id);
     const next =
       index < machines.length - 1 && selected.includes(machines[index + 1].id);
-    return `${on && prev ? "0 0" : "8px 8px"} ${on && next ? "0 0" : "8px 8px"}`;
+    const r = "var(--radius-sm)";
+    return `${on && prev ? "0 0" : `${r} ${r}`} ${on && next ? "0 0" : `${r} ${r}`}`;
   };
 </script>
 
