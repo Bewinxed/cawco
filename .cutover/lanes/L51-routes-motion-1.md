@@ -60,7 +60,21 @@ fixed: apps/dashboard/src/routes/(app)/motion/artifact-head/+page.svelte:116 and
 
 ## Gaps
 gap: design/tokens/cawco.tokens.json (no z scale) — the benches' `z-40` stands between the shell's z-20 chrome and the kit's z-50 popovers; a named z scale in the tokens would let it say so (DESIGN.md Elevation & Depth names shadows, not stacking)
-Not rendered: `vite dev` in this workspace refuses to start without a hub (`[cawco] a vite server needs CAWCO_DEV_HUB_URL, the hub it talks to`), so ui-observer did not read these benches; layout was read from markup and classes against DESIGN.md.
+## Rendered check
+Method: `CAWCO_DEV_HUB_URL=http://127.0.0.1:59999 vite dev`, playwright-core on the cached Chromium 1248, `waitUntil: "domcontentloaded"`, 1440×900 and 390×844, the pending `c-bench-*` classes injected at runtime as one `<style>` with the values from `## Tokens` (`c-sidebar-w` is already in the theme). Readings are computed styles and `getBoundingClientRect`. Dev server stopped, scratch files deleted.
+
+- No horizontal overflow on any bench at either viewport (`scrollWidth` = `innerWidth`: 1440 and 390).
+- No page error and no console error from the benches' own markup. The only errors are the unreachable hub (502 on `/api/*`, the `/ws/dashboard` socket), filtered out as expected with no hub.
+- artifact-head: pane 523×811 at 1440 and 523×724 at 390 (width from `--pane-w` = 523px; the flex column of the shell squeezes `h-dvh` to the shell's main height, as the old `block-size: 100dvh` did), `padding-top` 7px (`pt-space-2`), background `oklch(0.967 0.008 84)` (`surface-recess`).
+- breath-floor: five `[data-surface]` sections, backgrounds `surface-page` oklch(0.966 0.008 85), `surface-raised` oklch(0.993 0.004 85), `surface-recess` oklch(0.967 0.008 84), `surface-recess-deep` oklch(0.92 0.011 83), `surface-well` oklch(0.967 0.008 84), each `border-radius` 10px and 1184×185 at 1440 (362×185 at 390); 60 tool-glyph svgs, all 16×16 (`size-icon-md`); 80 `[data-breather]` nodes.
+- caw-notices: controls column 326×209 (its content width, under `max-width` 380px); the phone iframe 390×844 at 1440 and 354×844 at 390 (it shrinks to the 354px the page leaves; the frame is not zero-size at either).
+- caw: stage 320×320; the bench's `min-height` computes 900px at 1440×900 and 844px at 390×844 (`min-h-dvh`).
+- chosen-hover: `align-items: flex-start` (`items-start`); 11 sections, each `min-width: 0`; side well 360×240 at 1440 (326×240 at 390, `min-w-0` lets it shrink to the page); model 480×196 and slash 480×264 at 1440 (326 wide at 390).
+- delegate-tray: root `position: fixed`, `z-index` 40, 1440×900 and 390×844 (the whole viewport); the dock's `--transcript-share` computes 100% (the lent `transcriptShare` is 1) and the dock is the viewport's size.
+- echo: bench `min-height` 900px / 844px; three rows, the no-beat line 84×20.
+- folder-proof: root `fixed`, `z-index` 40, 1440×900 and 390×844; the work strip is 228×556 at 1440 (`w-c-sidebar-w`) and 390×533 at 390 (`max-desk:w-full`); three slider readouts `min-width` 33.436px (4ch) and 33×17 each.
+- Stacking: the only elements at `z-index` 40 or over, outside a bench, are the shell's skip link (z100, at x = −9999, off screen) and a kit popover (z50). An open kit popover's wrapper (chosen-hover `?control=lifetime`) computes `z-index` 90, so a portalled card or menu stands over a z-40 bench with no override.
+- Nothing needed fixing in the eight files from this check.
 
 ## Design critique (interface-craft, from markup and classes)
 The eight files are dev benches, not product screens. The stack, spacing and radii now come from the ladder (`gap-space-*`, `p-space-*`, `rounded-md`/`rounded-lg`), controls stay in kit components, and no state is a class. Nothing here animates. Open points are the two `gap:` lines above and the two `kit-swap:` lines.
