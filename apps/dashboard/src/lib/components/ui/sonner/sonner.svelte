@@ -4,7 +4,7 @@
     type ToasterProps as SonnerProps,
   } from "svelte-sonner";
   import { navSheet } from "#lib/cawco/motion/clock.svelte.js";
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconError,
@@ -13,6 +13,7 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
+  import { cn } from "#lib/utils.js";
 
   let { ...restProps }: SonnerProps = $props();
 
@@ -71,13 +72,41 @@
    * entrance, so the stylesheet below can give the arrival its --dur-panel
    * rise while the toasts already there make room on the shorter stack
    * timing: sonner draws both from the same attribute change.
+   *
+   * With reduced motion, sonner's own sheet turns every transition and
+   * animation off, so a toast would appear and vanish in one frame. Reduced
+   * motion means stillness, not an instant swap (DESIGN.md, Reduced Motion
+   * Rule): the toast still fades in over --dur-panel and out over --dur-exit,
+   * both on --ease-out, through the Web Animations API, which that sheet does
+   * not reach. A toast sonner keeps hidden (past the visible count) is left
+   * hidden. With motion allowed, the transitions below do all of it.
    */
   $effect(() => {
     if (!layer) {
       return;
     }
     const timers = new Set<ReturnType<typeof setTimeout>>();
+    const fades = new WeakMap<HTMLElement, Animation>();
+    const fade = (
+      toast: HTMLElement,
+      from: number | string,
+      to: number,
+      length: "--dur-panel" | "--dur-exit"
+    ) => {
+      if (motionOk.current || toast.dataset.visible === "false") {
+        return;
+      }
+      fades.get(toast)?.cancel();
+      fades.set(
+        toast,
+        toast.animate([{ opacity: from }, { opacity: to }], {
+          duration: dur(length),
+          easing: ease("--ease-out"),
+        })
+      );
+    };
     const enter = (toast: HTMLElement) => {
+      fade(toast, 0, 1, "--dur-panel");
       toast.dataset.entering = "";
       const timer = setTimeout(() => {
         timers.delete(timer);
@@ -85,10 +114,33 @@
       }, dur("--dur-panel"));
       timers.add(timer);
     };
+    /** A toast leaving from wherever its entrance had got to. */
+    const leave = (toast: HTMLElement) => {
+      const entering = fades.get(toast)?.playState === "running";
+      fade(
+        toast,
+        entering ? getComputedStyle(toast).opacity : 1,
+        0,
+        "--dur-exit"
+      );
+    };
     // The first toast arrives inside the list sonner draws for it, so an
-    // added node is searched, not only matched.
+    // added node is searched, not only matched. A toast is marked
+    // `data-removed` as it starts to leave, and unmarked if it is kept after
+    // all.
     const arrivals = new MutationObserver((changes) => {
       for (const change of changes) {
+        if (
+          change.type === "attributes" &&
+          change.target instanceof HTMLElement
+        ) {
+          if (change.target.dataset.removed === "true") {
+            leave(change.target);
+          } else if (change.oldValue === "true") {
+            fade(change.target, 0, 1, "--dur-panel");
+          }
+          continue;
+        }
         for (const node of change.addedNodes) {
           if (!(node instanceof HTMLElement)) {
             continue;
@@ -104,7 +156,12 @@
         }
       }
     });
-    arrivals.observe(layer, { childList: true, subtree: true });
+    arrivals.observe(layer, {
+      childList: true,
+      subtree: true,
+      attributeFilter: ["data-removed"],
+      attributeOldValue: true,
+    });
     return () => {
       arrivals.disconnect();
       for (const timer of timers) {
@@ -121,9 +178,9 @@
      under it showed through, and its text and buttons read as painted over
      the toast even though the toast was on top and taking the taps. -->
 <div class="contents" bind:this={home}>
-  <!-- literal: 12px (a phone toast's inset from each side) -->
   <!-- A sheet over the viewport, above the app chrome (the highest is the
-       shell's 100), that takes no taps itself; the toasts take their own.
+       shell's 100), that takes no taps itself; the toasts take their own
+       (`pointer-events-auto` through sonner's `toastOptions.class`).
        Navigation stays above a toast. While the burger's sheet is open (its
        scrim and panel stand at 50), the layer goes under the scrim: a toast
        arriving then waits dimmed in the content area, and the sheet that
@@ -133,7 +190,6 @@
     bind:this={layer}
     data-slot="toast-layer"
     data-under-nav={navSheet.open || undefined}
-    style:--toast-edge="12px"
   >
     <Sonner
       data-sonner-group
@@ -141,6 +197,10 @@
       style="--normal-bg: var(--surface-raised); --normal-text: var(--ink-strong); --normal-border: var(--border-control);"
       theme={theme.current}
       {...restProps}
+      toastOptions={{
+        ...restProps.toastOptions,
+        class: cn("pointer-events-auto", restProps.toastOptions?.class),
+      }}
     >
       {#snippet loadingIcon()}
         <Spinner class="size-icon-md" />
@@ -162,10 +222,8 @@
 </div>
 
 <style>
-  /* residual: foreign-dom */
-  [data-slot="toast-layer"] :global([data-sonner-toast]) {
-    pointer-events: auto;
-  }
+  /* tailwind: sonner's own sheet is unlayered, and every Tailwind layer (components, utilities) loses to an unlayered rule, so the overrides of sonner's declarations stay unlayered here — https://tailwindcss.com/docs/adding-custom-styles#adding-component-classes */
+  /* residual: foreign-dom — sonner's toaster and toasts, drawn by svelte-sonner */
 
   /* The kit's floating surface, over sonner's own box. One attribute more
      specific than sonner's `[data-sonner-toast][data-styled=true]`, so the
@@ -248,21 +306,14 @@
     animation-duration: var(--dur-exit);
     animation-timing-function: var(--ease-out);
   }
-  /* Reduced motion: sonner turns every transition off; the fades stay, and
-     a toast swiped away fades where it was let go. */
-  @media (prefers-reduced-motion: reduce) {
-    :global([data-sonner-toaster] [data-sonner-toast]) {
-      transition: opacity var(--dur-panel) var(--ease-out) !important;
-    }
-    :global([data-sonner-toaster] [data-sonner-toast][data-removed="true"]) {
-      opacity: 0;
-      transition: opacity var(--dur-exit) var(--ease-out) !important;
-    }
-  }
+  /* Reduced motion: sonner's own rule turns every transition and animation
+     here off, important-flagged; the script above fades a toast in and out
+     instead, through the Web Animations API. */
 
   /* A phone's toast sits at the top, under the top bar: at the bottom it
      lands on the composer, which is exactly where the reader is typing.
-     Full width less 12px a side. The bar does not pad for the notch, so the
+     Full width less the phone bar's edge a side, so a toast lines up with
+     the bar's two ends. The bar does not pad for the notch, so the
      inset is added here. Sonner's own narrow rules stop at 600px; these hold
      to 640px, where the layout puts the toaster top-centre. */
   @media (max-width: 640px) {
@@ -270,8 +321,8 @@
       [data-sonner-toaster][data-y-position="top"][data-x-position="center"]
     ) {
       top: calc(env(safe-area-inset-top) + var(--c-top-bar-h) + var(--space-2));
-      right: var(--toast-edge);
-      left: var(--toast-edge);
+      right: var(--c-bar-phone-edge);
+      left: var(--c-bar-phone-edge);
       width: auto;
       transform: none;
     }

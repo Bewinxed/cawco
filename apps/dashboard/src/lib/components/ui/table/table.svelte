@@ -11,8 +11,17 @@
       spacing: {
         /** Cells apart by the caller's `--cell-gap`. */
         gap: { table: "border-spacing-(--cell-gap)" },
-        /** Cells flush, by the caller's `--none`. */
-        flush: { table: "border-spacing-(--none)" },
+        /** Cells flush. */
+        // eslint-disable-next-line shadcn/no-raw-colors -- @shadcn/lint 0.2.1's COLOR_PREFIX reads `border-spacing-0` as a border colour; 0.2.3 maps border-spacing to spacing.
+        flush: { table: "border-spacing-0" },
+      },
+      layout: {
+        /**
+         * A ledger: fixed columns, cells flush and apart, so a sticky band
+         * and each row's hairline draw on their own cells.
+         */
+        // eslint-disable-next-line shadcn/no-raw-colors -- as `flush` above: a linter misread of `border-spacing-0`.
+        ledger: { table: "table-fixed border-separate border-spacing-0" },
       },
       /** The sideways scroller fades the edges its content runs past. */
       fadeEdges: { true: { container: "kit-edge-fade" } },
@@ -20,6 +29,7 @@
   });
 
   export type TableSpacing = VariantProps<typeof tableVariants>["spacing"];
+  export type TableLayout = VariantProps<typeof tableVariants>["layout"];
 </script>
 
 <script lang="ts">
@@ -34,6 +44,7 @@
     ghostRows,
     scrollClass,
     spacing,
+    layout,
     fadeEdges,
     ...restProps
   }: WithElementRef<HTMLTableAttributes> & {
@@ -42,10 +53,11 @@
     /** The sideways scroller's own class (a table wider than its place scrolls). */
     scrollClass?: string;
     spacing?: TableSpacing;
+    layout?: TableLayout;
     fadeEdges?: boolean;
   } = $props();
 
-  const slots = $derived(tableVariants({ spacing, fadeEdges }));
+  const slots = $derived(tableVariants({ spacing, layout, fadeEdges }));
 </script>
 
 <div

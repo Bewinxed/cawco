@@ -20,6 +20,10 @@
         view: "h-40",
         chart: "h-48",
         board: "h-64",
+        /** A word's bar at its text's x-height, so it sits like the word's body. */
+        "x-height": "h-(--c-skeleton-x-height)",
+        /** A card's picture well, at the ghost picture's 16:10. */
+        picture: "aspect-16/10",
       },
       width: {
         glyph: "w-6",
@@ -29,6 +33,8 @@
         name: "w-24",
         title: "w-40",
         "chart-cap": "max-w-144",
+        /** A relative age ("3d"): two characters of the text it stands in. */
+        age: "w-(--c-skeleton-age)",
       },
       radius: {
         card: "rounded-lg",
@@ -36,8 +42,16 @@
         chip: "rounded-sm",
         text: "rounded-xs",
         flush: "rounded-none",
+        /** A text line's bar, too thin to round further (the hair). */
+        line: "rounded-hair",
       },
-      cell: { rail: "rail-cell" },
+      cell: {
+        rail: "rail-cell",
+        /** A 16px glyph's own cell. */
+        glyph: "size-icon-md",
+      },
+      /** The text role it stands in, so its x-height and its ch are that role's. */
+      type: { label: "type-label" },
     },
   });
 
@@ -55,6 +69,7 @@
     width,
     radius,
     cell,
+    type,
     ...restProps
   }: WithoutChildren<WithElementRef<HTMLAttributes<HTMLDivElement>>> &
     SkeletonLooks = $props();
@@ -65,7 +80,7 @@
 <div
   class={cn(
     "kit-skeleton",
-    skeletonVariants({ height, width, radius, cell }),
+    skeletonVariants({ height, width, radius, cell, type }),
     className
   )}
   data-slot="skeleton"
