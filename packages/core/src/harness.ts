@@ -1629,6 +1629,23 @@ export const CONTROL_SLEEP = "sleep";
 export const CONTROL_RESTLESS = "restless";
 
 /**
+ * Instance-scoped: what a session's process holds for later that ending it
+ * would lose, and no resume brings back (a background command, a one-time
+ * wake-up), answered {@link WorkInFlight}, or null when it holds none or has
+ * no process. What a continuation that ends the process waits for (hub
+ * server.ts `waitStep`), as an account move waits (`waitForLater`).
+ */
+export const CONTROL_WORK_IN_FLIGHT = "workInFlight";
+
+/** What {@link CONTROL_WORK_IN_FLIGHT} answers. */
+export interface WorkInFlight {
+  /** Since when it has run, epoch ms: its oldest background command's start; null when not known. */
+  since: number | null;
+  /** In the machine's words: `waiting for work in flight to end: 1 command running`. */
+  why: string;
+}
+
+/**
  * The live-session controls nothing sent after them depends on. A daemon runs
  * each after whatever is already on its way to the session, but nothing waits
  * for it — `reloadSkills` re-reads every skill (0.7 s measured), and a send
@@ -1638,6 +1655,7 @@ export const CONTROL_RESTLESS = "restless";
  */
 export const CONTROL_QUERIES: ReadonlySet<string> = new Set([
   CONTROL_CONTEXT_USAGE,
+  CONTROL_WORK_IN_FLIGHT,
   CONTROL_SUPPORTED_MODELS,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_RELOAD_SKILLS,

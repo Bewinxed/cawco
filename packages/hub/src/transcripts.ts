@@ -74,6 +74,9 @@ export interface TranscriptPorts {
   readonly sequence: (instanceId: string, frame: SessionStreamFrame) => void;
 }
 
+/** A transcript whose load took this long or longer says so in the log, read and build apart. */
+const SLOW_LOAD_MS = 1000;
+
 /** A transcript nobody follows and no process writes leaves memory after this. */
 const IDLE_MS = 10 * 60_000;
 /** At most this many such transcripts are kept, newest used first. */
@@ -210,8 +213,10 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     reset: boolean,
     at?: string
   ): Promise<HistoryRead> => {
+    const began = Date.now();
     const loading = ports.readHistory(instanceId, at).then(
       (read) => {
+        const readIn = Date.now() - began;
         if (entries.get(instanceId) !== entry) {
           return read;
         }
@@ -224,6 +229,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         entry.build = ports.build(read.where.machineId);
         // A law broken building it leaves no half-built transcript: the read
         // fails by the law's name, and the next frame or page reads again.
+        const building = Date.now();
         try {
           ports.laws.raise(() => {
             entry.builder.seed(read.entries, read.records);
@@ -235,6 +241,12 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
         } catch (error) {
           entries.delete(instanceId);
           throw error;
+        }
+        const builtIn = Date.now() - building;
+        if (readIn + builtIn >= SLOW_LOAD_MS) {
+          console.info(
+            `[transcripts] ${instanceId.slice(0, 8)}: ${read.entries.length} stored entries read in ${readIn} ms, built in ${builtIn} ms`
+          );
         }
         return read;
       },

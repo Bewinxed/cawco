@@ -27918,6 +27918,28 @@
       "postApiInstancesByIdContinue200": {
         "type": "object",
         "properties": {
+          "waiting": {
+            "type": "object",
+            "properties": {
+              "since": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "until": {
+                "type": "number"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "since",
+              "until",
+              "why"
+            ]
+          },
           "continuationId": {
             "type": "string"
           },
@@ -45402,7 +45424,7 @@
           },
           "stage": {
             "$ref": "#/components/schemas/ContinuationJobStage",
-            "description": "`filing`: the source's turn filing its open items (a person's Continue);\n`starting`: the new session is starting."
+            "description": "`waiting`: the source's process holds work in flight ending it would\nlose ({@link waiting}), and the job goes on by itself once that ends;\n`filing`: the source's turn filing its open items (a person's Continue);\n`starting`: the new session is starting."
           },
           "summariserInstanceId": {
             "description": "Absent when the source is short enough that nothing is summarised.",
@@ -45410,6 +45432,29 @@
           },
           "targetInstanceId": {
             "type": "string"
+          },
+          "waiting": {
+            "description": "While `waiting`: what for, in the machine's words (`waiting for work in\nflight to end: 1 command running`), since when it has run (epoch ms;\nnull when not known), and the latest moment it goes on, ending that\nwork (core `RESTART_WAIT_CAP_MS` from when it began to wait).",
+            "type": "object",
+            "properties": {
+              "since": {
+                "type": [
+                  "null",
+                  "number"
+                ]
+              },
+              "until": {
+                "type": "number"
+              },
+              "why": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "since",
+              "until",
+              "why"
+            ]
           }
         },
         "required": [
@@ -57724,7 +57769,8 @@
           "filing",
           "started",
           "starting",
-          "summarising"
+          "summarising",
+          "waiting"
         ]
       },
       "CreatedBy": {

@@ -394,6 +394,31 @@ const continuesWords = (
     : ` (once ${former})`;
 };
 
+/** "20:17": a moment as the hub's clock says it. */
+const clockOf = (at: number): string =>
+  new Date(at).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+
+/**
+ * A continue_session answered while its job waits on its source's work in
+ * flight: what it waits for, for how long that has run, and that it goes on
+ * by itself, by the bound at the latest. Nothing to call again.
+ */
+const waitingAnswer = (
+  source: string,
+  target: string,
+  waiting: { since: number | null; until: number; why: string }
+): string => {
+  const ran =
+    waiting.since === null
+      ? ""
+      : `, running for ${Math.max(1, Math.round((Date.now() - waiting.since) / 60_000))} min`;
+  return `Session ${source} holds work in flight that ending its process would lose (${waiting.why}${ran}), so its continuation waits for it. It goes on by itself in new session ${target} once that work ends, or at ${clockOf(waiting.until)} at the latest, ending it. Nothing to call again.`;
+};
+
 /** An `@` prefix on a target name, optional. */
 const AT_PREFIX = /^@/;
 
@@ -1617,9 +1642,21 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    const { continuationId } = (await response.json()) as {
-      continuationId: string;
-    };
+    const { continuationId, targetInstanceId, waiting } =
+      (await response.json()) as {
+        continuationId: string;
+        targetInstanceId: string;
+        waiting?: { since: number | null; until: number; why: string };
+      };
+    // Its source holds work in flight that ending it would lose: the job
+    // waits for that and goes on by itself, which the caller hears now.
+    if (waiting) {
+      return {
+        summariserInstanceId: null,
+        targetInstanceId,
+        text: waitingAnswer(source, targetInstanceId, waiting),
+      };
+    }
     // The hub runs the continuation as its own job; this waits for its report.
     const outcome = await fetch(
       `${hubHttpUrl()}/api/continuations/${encodeURIComponent(continuationId)}/outcome`

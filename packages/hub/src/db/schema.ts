@@ -3034,6 +3034,17 @@ export const continuations = sqliteTable("continuations", {
     .$type<ContinuationAsker>()
     .notNull()
     .default({ kind: "person" }),
+  /**
+   * While the job waits (`waiting`): the work in flight its source's process
+   * holds, which ending it would lose (core `CONTROL_WORK_IN_FLIGHT`), since
+   * when that has run (null when not known), and since when the job has
+   * waited, the bound counting from then (server.ts `waitStep`).
+   */
+  waiting: text("waiting", { mode: "json" }).$type<{
+    from: number;
+    since: number | null;
+    why: string;
+  }>(),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });

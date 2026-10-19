@@ -39,6 +39,7 @@ import type {
   SpawnPayload,
   SpinOffHeld,
   StopPayload,
+  WorkInFlight,
 } from "@cawco/core";
 import {
   ACCOUNT_READ,
@@ -56,6 +57,7 @@ import {
   CONTROL_READ_SESSION_CONTEXT,
   CONTROL_RESTLESS,
   CONTROL_RUN_COMMAND,
+  CONTROL_WORK_IN_FLIGHT,
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SLEEP,
   CONTROL_SPIN_OFF_HELD,
@@ -5518,11 +5520,27 @@ export class SessionSupervisor {
     if (method === CONTROL_SLEEP) {
       return await this.sleep(instanceId);
     }
+    if (method === CONTROL_WORK_IN_FLIGHT) {
+      return this.#workInFlight(instanceId);
+    }
     const session = this.#session(instanceId);
     if (method === "withdrawSend" && session.harness !== "claude") {
       return "started";
     }
     return await session.control(method, args);
+  }
+
+  /**
+   * What `instanceId`'s process holds for later that ending it would lose
+   * ({@link CONTROL_WORK_IN_FLIGHT}): null with no process here, or none held.
+   */
+  #workInFlight(instanceId: string): WorkInFlight | null {
+    const session = this.#sessions.get(instanceId);
+    const later = session?.heldForLater?.() ?? [];
+    if (!session || later.length === 0) {
+      return null;
+    }
+    return { why: waitingWords(later), since: session.heldSince?.() ?? null };
   }
 
   #session(instanceId: string): HarnessSession {

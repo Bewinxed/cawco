@@ -2233,6 +2233,7 @@ export interface DbShape {
         | "summariserInstanceId"
         | "prepared"
         | "openItems"
+        | "waiting"
       >
     >
   ) => ContinuationRow | undefined;

@@ -1666,6 +1666,7 @@ public enum OpenEnums {
         case started
         case starting
         case summarising
+        case waiting
         /// A value this app does not know: a newer hub's.
         case unrecognized(String)
 
@@ -1677,6 +1678,7 @@ public enum OpenEnums {
             case "started": self = .started
             case "starting": self = .starting
             case "summarising": self = .summarising
+            case "waiting": self = .waiting
             default: self = .unrecognized(rawValue)
             }
         }
@@ -1689,6 +1691,7 @@ public enum OpenEnums {
             case .started: "started"
             case .starting: "starting"
             case .summarising: "summarising"
+            case .waiting: "waiting"
             case let .unrecognized(rawValue): rawValue
             }
         }
@@ -1697,7 +1700,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.cancelled, .failed, .filing, .started, .starting, .summarising]
+        public static let allCases: [Self] = [.cancelled, .failed, .filing, .started, .starting, .summarising, .waiting]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

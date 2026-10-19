@@ -1809,6 +1809,8 @@ class ClaudeSession implements HarnessSession {
    * that ends it tells the session ({@link endedForMove}).
    */
   #background = new Map<string, { description: string; type: string }>();
+  /** When this daemon first heard of each of {@link #background}'s tasks, by task id. */
+  #backgroundSince = new Map<string, number>();
   /**
    * The main thread's tool calls that block its turn and can be moved to the
    * background (a shell command, a subagent), by `tool_use` id, from their
@@ -2367,6 +2369,13 @@ class ClaudeSession implements HarnessSession {
                 task.task_id,
                 { description: task.description, type: task.task_type },
               ])
+          );
+          const now = Date.now();
+          this.#backgroundSince = new Map(
+            [...this.#background.keys()].map((id) => [
+              id,
+              this.#backgroundSince.get(id) ?? now,
+            ])
           );
         }
         this.#trackForeground(message);
@@ -2969,6 +2978,11 @@ class ClaudeSession implements HarnessSession {
       Date.now() - this.#restingSince >= WAKEUPS_DECIDED_MS
       ? undefined
       : "its scheduled wake-ups are not known until its next turn ends";
+  }
+
+  heldSince(): number | undefined {
+    const starts = [...this.#backgroundSince.values()];
+    return starts.length > 0 ? Math.min(...starts) : undefined;
   }
 
   heldForLater(): RestartHold[] {

@@ -960,10 +960,13 @@
       title: continueFrom.title,
     }
   );
-  /** What Start says while its press waits: on the folder check, the source's filing, the summary, the start. */
+  /** What Start says while its press waits: on the folder check, the source's work in flight, its filing, the summary, the start. */
   const busyLabel = $derived.by(() => {
     if (pressedFor !== null) {
       return "Checking the folder…";
+    }
+    if (continueFrom && followed?.stage === "waiting") {
+      return continuationStageWords.waiting;
     }
     if (continueFrom && followed?.stage === "filing") {
       return continuationStageWords.filing;

@@ -176,6 +176,7 @@ import {
   CONTROL_PLACE_REPO,
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_CONTINUATION,
+  CONTROL_WORK_IN_FLIGHT,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
   CONTROL_READ_SESSION_CONTEXT,
@@ -200,6 +201,7 @@ import {
   type CommandQueueFrame,
   type CommandRun,
   type ContinuationRead,
+  type WorkInFlight,
   CUSTODY_HELD,
   clockWords,
   contextFitRefusal,
@@ -14242,6 +14244,131 @@ export const createServer = (
       : `${prepared.source.title} goes on as the same session, its conversation before read where it ran, so its continuation starts there, ${where}.`;
   };
 
+  /**
+   * Whether a continuation of `sourceId` ends its source's process: one
+   * anything but the person asked for is folded into one session
+   * ({@link foldContinued}), and a source whose work item goes on is
+   * retired ({@link retireContinued}). A person's Continue of anything else
+   * leaves the source running.
+   */
+  const endsSource = (
+    sourceId: string,
+    askedBy: ContinuationAsker
+  ): boolean => {
+    const [row] = db.getInstancesByIds([sourceId]);
+    return (
+      !!row &&
+      !["stopped", "discarded"].includes(row.status) &&
+      (askedBy.kind !== "person" || !!row.workItemId)
+    );
+  };
+
+  /**
+   * What `instanceId`'s process holds for later that ending it would lose
+   * (core `CONTROL_WORK_IN_FLIGHT`): null when nothing, or when no process of
+   * it runs. Throws when its machine does not answer.
+   */
+  const workInFlightOf = async (
+    instanceId: string
+  ): Promise<WorkInFlight | null> => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!(row && registry.agent(row.machineId))) {
+      return null;
+    }
+    const answer = await callAgent(
+      row.machineId,
+      CONTROL_WORK_IN_FLIGHT,
+      [],
+      READ_TIMEOUT_MS,
+      row.harness,
+      instanceId
+    );
+    switch (answer.kind) {
+      case "unanswered":
+        throw new Error(
+          `${machineName(row.machineId)} could not say what work ${sessionName(row)} has in flight: ${silentWords(row.machineId, answer)}`
+        );
+      case "answered":
+        if (!answer.value.ok) {
+          // No process of it here: nothing in flight to end.
+          return null;
+        }
+        return (answer.value.result as WorkInFlight | null) ?? null;
+      default:
+        throw unreachable(answer);
+    }
+  };
+
+  /** How often a waiting job looks again whether its source's work in flight has ended. */
+  const WAIT_LOOK_MS = 5000;
+
+  /**
+   * The `waiting` step: the source's process holds work in flight that
+   * ending it would lose (a background command, a one-time wake-up), so the
+   * job waits, as an account move does (`waitForLater`), until that work
+   * ends and the turn its end starts is over, or until the restart bound
+   * (core `waitedOut`) from when it began to wait, when the work ends with
+   * the process. Then the source is read again, so what that work brought
+   * is in the continuation, and the job goes on: refused, in the fit's own
+   * words, when it no longer fits. The job as it then stands; nothing when a
+   * Cancel landed or its machine went away.
+   */
+  const waitStep = async (
+    row: ContinuationRow
+  ): Promise<ContinuationRow | undefined> => {
+    const sourceId = row.sourceInstanceId;
+    const from = row.waiting?.from ?? Date.now();
+    for (;;) {
+      if (cancelledContinuation(row.id)) {
+        return undefined;
+      }
+      if (!registry.agent(machineFor(row))) {
+        return undefined;
+      }
+      if (waitedOut(from)) {
+        console.info(
+          `[continuation] ${row.prepared.source.title}'s continuation waited ${RESTART_WAIT_CAP_MS / 60_000} minutes for its work in flight; it goes on now, and that work ends with the source's process.`
+        );
+        break;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one look a beat until the work in flight ends
+      const now = await workInFlightOf(sourceId);
+      const [source] = db.getInstancesByIds([sourceId]);
+      if (!now && (!source || (await sessionIdle(source)))) {
+        break;
+      }
+      if (now && now.why !== row.waiting?.why) {
+        moveContinuation(row.id, {
+          waiting: { why: now.why, since: now.since, from },
+        });
+      }
+      await lifetime.sleep(WAIT_LOOK_MS);
+    }
+    const prepared = await prepareContinuation(
+      sourceId,
+      row.request.note,
+      row.request.asksOnly
+    );
+    const refusal = await continuationRefusal(
+      prepared,
+      row.request,
+      row.askedBy
+    );
+    if (refusal) {
+      throw new Error(refusal);
+    }
+    const summarise = !!prepared.prompt;
+    return moveContinuation(row.id, {
+      prepared,
+      summariserInstanceId:
+        summarise && !row.request.asksOnly
+          ? (row.summariserInstanceId ?? crypto.randomUUID())
+          : null,
+      stage: firstStage(filesFirst(prepared, row.askedBy), summarise),
+      waiting: null,
+    });
+  };
+
   /** The stages nothing more happens after. */
   const SETTLED = new Set<ContinuationJob["stage"]>([
     "started",
@@ -14259,6 +14386,15 @@ export const createServer = (
       : {}),
     stage: row.stage,
     ...(row.error ? { error: row.error } : {}),
+    ...(row.stage === "waiting" && row.waiting
+      ? {
+          waiting: {
+            why: row.waiting.why,
+            since: row.waiting.since,
+            until: row.waiting.from + RESTART_WAIT_CAP_MS,
+          },
+        }
+      : {}),
   });
 
   /** The job table, from its one record: what dashboards are handed. */
@@ -14271,7 +14407,9 @@ export const createServer = (
 
   /** The machine a job needs for its next step. */
   const machineFor = (row: ContinuationRow): string =>
-    row.stage === "filing" || row.stage === "summarising"
+    row.stage === "waiting" ||
+    row.stage === "filing" ||
+    row.stage === "summarising"
       ? row.prepared.source.machineId
       : targetMachineOf(row);
 
@@ -14374,12 +14512,12 @@ export const createServer = (
     prepared: PreparedContinuation,
     request: ContinueRequest,
     /** Who asked for it, as its log line names them. */
-    askedBy: ContinuationAsker
+    askedBy: ContinuationAsker,
+    /** The work in flight its source holds, which ending it would lose: it waits for that first ({@link waitStep}). */
+    inFlight?: WorkInFlight
   ): ContinuationRow => {
     const summarise = !!prepared.prompt;
-    const files =
-      askedBy.kind === "person" &&
-      db.getInstancesByIds([prepared.source.instanceId]).length > 0;
+    const files = filesFirst(prepared, askedBy);
     const row = db.insertContinuation({
       id: crypto.randomUUID(),
       sourceInstanceId: prepared.source.instanceId,
@@ -14391,10 +14529,18 @@ export const createServer = (
       openingUuid: crypto.randomUUID(),
       summary: null,
       openItems: null,
-      stage: files ? "filing" : afterFiling(summarise),
+      stage: inFlight ? "waiting" : firstStage(files, summarise),
       error: null,
       askedBy,
+      waiting: inFlight
+        ? { why: inFlight.why, since: inFlight.since, from: Date.now() }
+        : null,
     });
+    if (inFlight) {
+      console.info(
+        `[continuation] ${prepared.source.title} holds work in flight its continuation would end (${inFlight.why}), so the job waits for it: it goes on by itself once that ends, or in ${RESTART_WAIT_CAP_MS / 60_000} minutes at the latest, ending it.`
+      );
+    }
     console.info(
       startedWords(prepared, request, askedBy, { files, summarise })
     );
@@ -14403,6 +14549,20 @@ export const createServer = (
     detach(advanceContinuation(row.id), "continuation");
     return row;
   };
+
+  /** Whether a job's source files its open items first: a person's Continue of a session CawCo runs. */
+  const filesFirst = (
+    prepared: PreparedContinuation,
+    askedBy: ContinuationAsker
+  ): boolean =>
+    askedBy.kind === "person" &&
+    db.getInstancesByIds([prepared.source.instanceId]).length > 0;
+
+  /** A job's first step once nothing holds it: its source's filing turn, else what follows that. */
+  const firstStage = (
+    files: boolean,
+    summarise: boolean
+  ): ContinuationJob["stage"] => (files ? "filing" : afterFiling(summarise));
 
   /** The stage after the source's filing turn: the summary when there is one to write, else the start. */
   const afterFiling = (summarise: boolean): ContinuationJob["stage"] =>
@@ -14449,6 +14609,9 @@ export const createServer = (
    */
   const continuationSteps = async (id: string): Promise<void> => {
     let row = db.continuationRow(id);
+    if (row?.stage === "waiting") {
+      row = await waitStep(row);
+    }
     if (row?.stage === "filing") {
       row = await fileStep(row);
     }
@@ -18611,6 +18774,9 @@ export const createServer = (
   ): boolean =>
     at === undefined || where.harness !== "opencode" || entry.type !== "user";
 
+  /** A history read that took this long or longer says so in the log, part by part. */
+  const SLOW_HISTORY_MS = 1000;
+
   /**
    * A session's whole stored transcript, from its machine, with the records of
    * the sends it holds — cut after the entry `at` when given (a rewind, a fork
@@ -18628,12 +18794,14 @@ export const createServer = (
     const prior = held ? db.priorConversations(held.id) : [];
     const { where } = found;
     const row = "row" in found ? found.row : held;
+    const began = Date.now();
     // The conversations it went on from, oldest first, each followed by the
     // line between it and the next: the transcript reads as one.
     const earlier = row ? await priorEntries(row, where, prior) : [];
     if ("fault" in earlier) {
       return earlier;
     }
+    const priorRead = Date.now();
     const current = await currentEntries(
       where,
       at,
@@ -18642,6 +18810,7 @@ export const createServer = (
     if ("fault" in current) {
       return current;
     }
+    const currentRead = Date.now();
     const stored = [...earlier, ...current];
     // Pictures as references to the media store, before a send's record is
     // filled from one of these entries.
@@ -18650,6 +18819,12 @@ export const createServer = (
     const transcript = withoutPings(stored, records);
     if (row) {
       readRowHistory(row, transcript);
+    }
+    const done = Date.now();
+    if (done - began >= SLOW_HISTORY_MS) {
+      console.info(
+        `[transcripts] ${instanceId.slice(0, 8)}'s history: ${earlier.length} entries of ${prior.length} conversation(s) before read in ${priorRead - began} ms, ${current.length} of its own in ${currentRead - priorRead} ms, put together here in ${done - currentRead} ms`
+      );
     }
     return { entries: transcript, records, where };
   };
@@ -24036,13 +24211,34 @@ export const createServer = (
             release();
             return status(409, refusal);
           }
-          const row = startContinuation(prepared, request, asker);
+          // What the source's process holds that ending it would lose: the
+          // job waits for it, and the caller hears so at once.
+          let inFlight: WorkInFlight | null = null;
+          if (endsSource(params.id, asker)) {
+            try {
+              inFlight = await workInFlightOf(params.id);
+            } catch (error) {
+              release();
+              return status(
+                422,
+                error instanceof Error ? error.message : String(error)
+              );
+            }
+          }
+          const row = startContinuation(
+            prepared,
+            request,
+            asker,
+            inFlight ?? undefined
+          );
           // Its record holds the source's workspace from here (work-items.ts `holdOn`).
           release();
+          const { waiting } = continuationJob(row);
           return {
             continuationId: row.id,
             targetInstanceId: row.targetInstanceId,
             summariserInstanceId: row.summariserInstanceId,
+            ...(waiting ? { waiting } : {}),
           };
         }
       )

@@ -28,6 +28,11 @@
  *    where the transcript lives and answers with them alone. It goes on as
  *    one session, whose transcript reads.
  *
+ * 5. A session with a command running in the background, continued at a
+ *    session's ask: ending its process would lose that command, so the
+ *    continue answers at once that it waits (what for, until when at the
+ *    latest), and the job goes on by itself once the command has ended.
+ *
  * It delegates nothing, so it runs inside a workspace. limit-stall's
  * `continued` leg (host) proves 1 on a continuation `continue_session`
  * starts for a session held at its account's limit.
@@ -40,7 +45,7 @@ import type {
   TranscriptBlock,
   TranscriptPage,
 } from "../../../packages/core/src/transcript-types";
-import type { Reply } from "../../scratch-fleet";
+import type { Reply, Seen } from "../../scratch-fleet";
 import { until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
@@ -66,7 +71,34 @@ const OUTPUT_CHARS = 2000;
 /** The hub's bound on a read through a machine (server.ts `READ_TIMEOUT_MS`). */
 const READ_BOUND_MS = 10_000;
 
-const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
+/** The work-in-flight leg's session's first words, and how long its background command runs. */
+const BG_TURN = "PROBE-BG-old-turn";
+const BG_SECONDS = 45;
+/** When the work-in-flight leg's background command was started; 0 until then. */
+let bgStarted = 0;
+
+/**
+ * Every session answers "ok"; the work-in-flight leg's, asked its first
+ * words, starts a command in the background first, as a long build does.
+ */
+const respond = (request: Seen): Reply => {
+  if (request.all.includes(BG_TURN) && !request.afterTool && !bgStarted) {
+    bgStarted = Date.now();
+    return {
+      everyMs: 5,
+      words: [],
+      tool: {
+        name: "Bash",
+        input: {
+          command: `sleep ${BG_SECONDS} && echo PROBE-BG-done`,
+          description: "A long command in the background",
+          run_in_background: true,
+        },
+      },
+    };
+  }
+  return { everyMs: 5, words: ["ok"] };
+};
 
 /** A send's record, by words it carries. */
 const sendOf = (fleet: KitFleet, words: string) =>
@@ -569,10 +601,95 @@ const bigTranscript = async (kit: Kit, fleet: KitFleet, lead: string) => {
       (value) => ({ blocks: value.blocks.length }),
       (error: unknown) => ({ error: String(error) })
     );
+  const loads = (await fleet.logs("hub").catch(() => ""))
+    .split("\n")
+    .filter((line) => line.includes("[transcripts]"))
+    .slice(-4);
+  kit.note(`4: the hub's transcript loads: ${JSON.stringify(loads)}`);
   kit.check(
     "4: it goes on as one session, and that session's transcript, its 100 MB conversation before the line, reads",
     settled === "started" && "blocks" in page,
     JSON.stringify({ stage: settled, page, readIn: Date.now() - reading })
+  );
+};
+
+/**
+ * 5: a session with a command running in the background, continued at a
+ * session's ask: ending its process would lose that command, so the
+ * continue answers at once that it waits, for what and how long, and the
+ * job goes on by itself once the command ends.
+ */
+const workInFlight = async (kit: Kit, fleet: KitFleet, lead: string) => {
+  const old = await fleet.spawn("claude", "PROBE-busy source", fleet.repo);
+  await fleet.send(old, `${BG_TURN}: start the build`);
+  // Its turn has ended, the command still running.
+  await until(
+    "5: the command started and its turn ended",
+    () =>
+      bgStarted > 0 &&
+      fleet.seen.some(
+        (one) =>
+          one.afterTool && one.all.includes(BG_TURN) && one.at > bgStarted
+      ),
+    Boolean,
+    60_000
+  ).catch(() => false);
+  await Bun.sleep(2000);
+  const asked = Date.now();
+  const answer = await fleet
+    .api<{
+      targetInstanceId: string;
+      waiting?: { since: number | null; until: number; why: string };
+    }>(`/api/instances/${old}/continue`, {
+      target: {
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        permissionMode: "bypassPermissions",
+      },
+      asksOnly: true,
+      askedBy: lead,
+    })
+    .then(
+      (value) => value,
+      (error: unknown) => ({ error: String(error) })
+    );
+  const took = Date.now() - asked;
+  kit.check(
+    `5: continuing a session with a command running in the background answers within ${READ_BOUND_MS / 1000} s that it waits for that work`,
+    "targetInstanceId" in answer &&
+      took < READ_BOUND_MS &&
+      !!answer.waiting?.why.includes("1 command running") &&
+      answer.waiting.until > Date.now(),
+    JSON.stringify({ took, answer })
+  );
+  if (!("targetInstanceId" in answer)) {
+    return;
+  }
+  const stage = () =>
+    fleet.query<{ stage: string }>(
+      "SELECT stage FROM continuations WHERE target_instance_id = ?",
+      answer.targetInstanceId
+    )[0]?.stage;
+  const left = await until(
+    "5: the job leaves its wait",
+    () => (stage() === "waiting" ? undefined : Date.now()),
+    Boolean,
+    (BG_SECONDS + 120) * 1000
+  ).catch(() => undefined);
+  const settled = await until(
+    "5: the job settles",
+    stage,
+    (now) => now === "started" || now === "failed",
+    180_000
+  ).catch(stage);
+  const ended = bgStarted + BG_SECONDS * 1000;
+  kit.check(
+    "5: it goes on by itself once the command has ended, never before, and starts the new session",
+    !!left && left >= ended && settled === "started",
+    JSON.stringify({
+      leftWaitAfterTheCommandEnded: left ? left - ended : null,
+      stage: settled,
+    })
   );
 };
 
@@ -591,6 +708,7 @@ const run = async (kit: Kit) => {
   const lead = await fleet.spawn("claude", "PROBE-orchestrator", fleet.repo);
   await oneChat(kit, fleet, lead);
   await bigTranscript(kit, fleet, lead);
+  await workInFlight(kit, fleet, lead);
   await twoChats(kit, fleet);
   await continuedIn(kit, fleet);
 };
