@@ -2974,10 +2974,11 @@ export class OpencodeSession implements HarnessSession {
         return;
       }
       case CONTROL_MCP_FLEET_CHANGED:
-        // Already taken by the fleet sync that came before this: a written
-        // config restarts the server, and each session moves to the new one
-        // once idle; every proxied server is added and connected again at
-        // each live session's directory (opencode.ts `#syncFleet`).
+        // Already taken by the fleet sync that came before this: the fleet's
+        // servers ride the launch config, so a change starts a new server and
+        // each session moves to it once idle; a fleet server OpenCode holds
+        // failed at a live session's directory is started again there
+        // (opencode.ts `#startFailed`).
         console.info(
           `[opencode] ${this.instanceId}: fleet MCP ${(args[0] as FleetMcpChange[]).map(({ name, kind }) => `${name} ${kind}`).join(", ")}: taken by the fleet sync`
         );

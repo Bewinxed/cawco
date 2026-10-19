@@ -1,7 +1,10 @@
 /**
  * A fleet MCP server whose first start times out in OpenCode still reaches
  * it: CawCo starts it again on its own, with no fleet change, and the hub's
- * row (`agents.fleet`) reads `applied` for OpenCode once it connects.
+ * row (`agents.fleet`) reads `applied` for OpenCode once it connects. The
+ * config change starts it once, on the generation that serves it; the
+ * generation it replaces retires promptly; and no copy of it is left running
+ * in the machine server's own location once everything settles.
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code and OpenCode
  * against the mock model) whose fleet runs the fixture server `probe-slow`
@@ -12,12 +15,20 @@
  * it, where, and whether it was the slow one. After the one PUT that adds
  * it, nothing in the fleet changes:
  *
- * - the hub's row reads OpenCode's `failed`, in OpenCode's own words
- *   ("Request timed out"), for the slow first start;
+ * - the agent reads OpenCode's `failed`, in OpenCode's own words
+ *   ("Request timed out"), for the slow first start, and reads it again
+ *   later (the hub's row may hold that reading for less than a poll);
  * - within 240 s of the PUT the row reads `applied`, for the machine and for
  *   OpenCode's own reading;
- * - one OpenCode server started it twice in one location, the first the
- *   slow one, and the agent says it started it again itself;
+ * - (a) the generation the PUT replaced never starts it, and the new one
+ *   starts it once per location for the change (before the failed reading);
+ *   then it starts it again in that location itself, and that start
+ *   connects;
+ * - (b) the replaced generation, idle, exits within
+ *   {@link RETIRE_BOUND_MS} of the new one taking over, while the slow start
+ *   is still being waited for;
+ * - (c) once the row reads applied, no process an OpenCode server started of
+ *   it is still running, within {@link RELEASE_BOUND_MS};
  * - the hub carried `probe-slow` to the machine once.
  *
  * Runs inside a workspace or on the host alike: it delegates nothing.
@@ -27,12 +38,27 @@
 import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { MCP_CONNECT_MS } from "../../../packages/agent/src/mcp-status";
+import { isAlive, listedPid } from "../../../packages/core/src/signal";
 import { type Reply, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const SERVER = "probe-slow";
 /** How long after the PUT the row must read applied for OpenCode. */
 const CONVERGE_MS = 240_000;
+/**
+ * How soon an idle replaced generation must exit. Ours, from the agent's
+ * own clocks: the 2 s config tick runs the retirement, which samples the
+ * generation twice 2 s apart; a refused try waits 5 s; its SIGTERM grace is
+ * 15 s (opencode-server.ts `#end`). 24 s, rounded up.
+ */
+const RETIRE_BOUND_MS = 30_000;
+/**
+ * How soon the machine server's own location lets go of its fleet servers
+ * once read: at once, or at the next release try 30 s on when an operation
+ * held it (opencode.ts `DIRECTORY_RELEASE_RETRY_MS`), with margin.
+ */
+const RELEASE_BOUND_MS = 45_000;
+const CANDIDATE = /candidate→active [^/\s]+\/(\d+) → [^/\s]+\/(\d+)/;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -43,6 +69,39 @@ interface Row {
     Record<string, { detail?: string; state?: string }> | undefined
   >;
 }
+
+/** One start of the fixture, as it wrote it. */
+interface Start {
+  at: number;
+  cwd: string;
+  pid: number;
+  /** The OpenCode server that started it; none for another harness's. */
+  server?: number;
+  slow: boolean;
+}
+
+const startsIn = async (dir: string): Promise<Start[]> => {
+  const files = (await readdir(dir)).filter(
+    (file) => !file.startsWith("first-opencode")
+  );
+  const read = await Promise.all(
+    files.map(async (file): Promise<Start> => {
+      const [at, pid, who] = file.split("-");
+      const text = await Bun.file(join(dir, file)).text();
+      const cut = text.lastIndexOf(" ");
+      return {
+        at: Number(at),
+        pid: Number(pid),
+        cwd: text.slice(0, cut),
+        ...(who === "opencode" ? { server: Number(text.slice(cut + 1)) } : {}),
+        slow: file.endsWith("-slow"),
+      };
+    })
+  );
+  return read.sort((a, b) => a.at - b.at);
+};
+
+const running = (pid: number): boolean => pid > 1 && isAlive(listedPid(pid));
 
 const run = async (kit: Kit): Promise<void> => {
   const fleet = await kit.fleet(respond);
@@ -66,6 +125,7 @@ const run = async (kit: Kit): Promise<void> => {
     return text ? (JSON.parse(text) as Row) : undefined;
   };
 
+  const logBefore = (await fleet.logs("agent")).length;
   const put = await fetch(`${fleet.base}/api/fleet/mcp/${SERVER}`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -84,18 +144,55 @@ const run = async (kit: Kit): Promise<void> => {
   const putAt = Date.now();
   kit.check(`the fleet runs ${SERVER}`, put.ok, String(put.status));
 
+  // The generation the PUT replaced and the one taking over, when it took
+  // over, and when the replaced one's process ended.
+  const handover: {
+    at?: number;
+    gone?: number;
+    next?: number;
+    old?: number;
+  } = {};
+  const look = async (): Promise<void> => {
+    if (handover.at === undefined) {
+      const found = CANDIDATE.exec(
+        (await fleet.logs("agent")).slice(logBefore)
+      );
+      if (found) {
+        Object.assign(handover, {
+          at: Date.now(),
+          old: Number(found[1]),
+          next: Number(found[2]),
+        });
+      }
+    } else if (
+      handover.gone === undefined &&
+      !running(handover.old as number)
+    ) {
+      handover.gone = Date.now();
+    }
+  };
+  const stop = new AbortController();
+  const watcher = (async () => {
+    while (!stop.signal.aborted) {
+      // biome-ignore lint/performance/noAwaitInLoops: one look a beat, until the run ends
+      await look();
+      await Bun.sleep(250);
+    }
+  })();
+
   // Every reading of OpenCode's the hub kept, in order, until it applied.
-  const seen: { state: string; detail: string }[] = [];
+  const seen: { at: number; detail: string; state: string }[] = [];
   const applied = await until(
     `the hub's row reads ${SERVER} applied for OpenCode`,
     () => {
       const read = row();
       const opencode = read?.mcpByHarness?.opencode?.[SERVER];
-      if (opencode?.state) {
-        const last = seen.at(-1);
-        if (last?.state !== opencode.state) {
-          seen.push({ state: opencode.state, detail: opencode.detail ?? "" });
-        }
+      if (opencode?.state && seen.at(-1)?.state !== opencode.state) {
+        seen.push({
+          at: Date.now(),
+          state: opencode.state,
+          detail: opencode.detail ?? "",
+        });
       }
       return read;
     },
@@ -106,10 +203,18 @@ const run = async (kit: Kit): Promise<void> => {
   ).catch(() => undefined);
   const tookS = Math.round((Date.now() - putAt) / 1000);
 
-  const timedOut = seen.find((one) => one.state === "failed");
+  // OpenCode's verdict as the agent read it: the hub may hold it for less
+  // than a poll, when a second read follows at once.
+  const verdict = (await fleet.logs("agent"))
+    .split("\n")
+    .find(
+      (line) =>
+        line.includes("fleet MCP read again later:") &&
+        line.includes(`${SERVER} failed (Request timed out`)
+    );
   kit.check(
-    `OpenCode's first start timed out: the row read opencode failed — "${timedOut?.detail.slice(0, 80)}"`,
-    !!timedOut && timedOut.detail.includes("timed out"),
+    `OpenCode's first start timed out, and the agent read it again later: ${verdict?.trim().slice(0, 110)}`,
+    !!verdict,
     JSON.stringify(seen)
   );
   kit.check(
@@ -118,53 +223,75 @@ const run = async (kit: Kit): Promise<void> => {
     JSON.stringify({ seen, last: row()?.mcp?.[SERVER] })
   );
 
-  const files = (await readdir(starts)).filter(
-    (file) => !file.startsWith("first-opencode")
+  // (c) Nothing of it left running that an OpenCode server started.
+  const lingering = async () =>
+    (await startsIn(starts)).filter(
+      (one) => one.server !== undefined && running(one.pid)
+    );
+  const releasedAt = Date.now();
+  const left = await until(
+    "no fleet server process an OpenCode server started is left",
+    lingering,
+    (rows) => rows.length === 0,
+    RELEASE_BOUND_MS
+  ).catch(() => undefined);
+  kit.check(
+    `(c) once applied, no ${SERVER} process an OpenCode server started runs in the machine server's own location (${Math.round((Date.now() - releasedAt) / 1000)} s, within ${RELEASE_BOUND_MS / 1000} s)`,
+    left !== undefined,
+    JSON.stringify(await lingering())
   );
-  // Each start with the directory it ran in and the OpenCode server that
-  // started it, as it wrote them, in the order they started.
-  const startsRead = (
-    await Promise.all(
-      files.map(async (file) => ({
-        file,
-        where: await Bun.file(join(starts, file)).text(),
-      }))
-    )
-  ).sort((a, b) => Number(a.file.split("-")[0]) - Number(b.file.split("-")[0]));
-  // One OpenCode server's location: its slow first start, then the one CawCo made.
-  const restarted = Object.entries(
-    Object.groupBy(
-      startsRead.filter((one) => one.file.includes("-opencode")),
-      (one) => one.where
-    )
-  ).find(
-    ([, group]) =>
-      (group?.length ?? 0) >= 2 &&
-      !!group?.[0]?.file.endsWith("-slow") &&
-      !group[1]?.file.endsWith("-slow")
+  stop.abort();
+  await watcher;
+
+  const all = await startsIn(starts);
+  const opencodeStarts = all.filter((one) => one.server !== undefined);
+  // OpenCode's verdict on the slow start: its startup timeout after that
+  // start, by its own clock. What the new generation started before it, the
+  // config change started; what it started after, it started again.
+  const slowStart = opencodeStarts.find(
+    (one) => one.server === handover.next && one.slow
+  );
+  const failedAt = slowStart
+    ? slowStart.at + MCP_CONNECT_MS
+    : Number.POSITIVE_INFINITY;
+  const byOld = opencodeStarts.filter((one) => one.server === handover.old);
+  const forChange = opencodeStarts.filter(
+    (one) => one.server === handover.next && one.at < failedAt
+  );
+  const perLocation = Object.entries(
+    Object.groupBy(forChange, (one) => one.cwd)
   );
   kit.check(
-    `OpenCode's server ${restarted?.[0].split(" ")[1]} started ${SERVER} ${restarted?.[1]?.length} times in one location, the first the slow one`,
-    !!restarted,
-    JSON.stringify(startsRead)
+    `(a) the config change started ${SERVER} once per location on the new generation ${handover.next} (${perLocation.map(([cwd, group]) => `${group?.length}× in ${cwd}`).join(", ")}), never on the replaced ${handover.old}`,
+    handover.next !== undefined &&
+      byOld.length === 0 &&
+      perLocation.length > 0 &&
+      perLocation.every(([, group]) => group?.length === 1),
+    JSON.stringify({ handover, all })
+  );
+  const again = opencodeStarts.find(
+    (one) =>
+      one.server === handover.next &&
+      one.at > failedAt &&
+      !one.slow &&
+      forChange.some((first) => first.cwd === one.cwd)
+  );
+  kit.check(
+    `(a) after OpenCode's startup timeout on it, the new generation started it again in that location itself (pid ${again?.pid}, ${again ? ((again.at - failedAt) / 1000).toFixed(1) : "?"} s on) and it connected`,
+    !!again && !!applied,
+    JSON.stringify({ failedAt, all })
   );
 
-  const agentLog = await fleet.logs("agent");
-  const startedAgain = agentLog
-    .split("\n")
-    .find(
-      (line) =>
-        line.includes(
-          `${SERVER} at the machine's server: OpenCode held it failed (`
-        ) && line.includes("started again: settled")
-    );
+  const retiredInMs =
+    handover.at !== undefined && handover.gone !== undefined
+      ? handover.gone - handover.at
+      : undefined;
   kit.check(
-    `the agent started it again itself: ${startedAgain?.trim().slice(0, 160)}`,
-    !!startedAgain,
-    agentLog
-      .split("\n")
-      .filter((line) => line.includes(SERVER))
-      .join("\n")
+    `(b) the replaced generation ${handover.old}, idle, exited ${retiredInMs === undefined ? "never" : `${Math.round(retiredInMs / 1000)} s`} after the handover (within ${RETIRE_BOUND_MS / 1000} s), while the slow start was waited for`,
+    retiredInMs !== undefined &&
+      retiredInMs <= RETIRE_BOUND_MS &&
+      (handover.gone as number) < failedAt,
+    JSON.stringify({ handover, failedAt })
   );
 
   const hubLog = await fleet.logs("hub");
