@@ -48,13 +48,13 @@ function keptView(key: string): CanvasChosen {
 }
 
 /**
- * Built where a derived builds it (PreviewPane `canvasView`): its state is
- * set from storage and never read while it is built, so nothing the pane's
- * effects write to it (`send`) can rebuild it. Reading `this.chosen` here
- * made the pane's derived depend on the view its own effect sends, and the
- * two re-ran each other until Svelte stopped the side panel
- * (`effect_update_depth_exceeded`, the owner's "i selected plan view" on
- * nightly 4202, whenever a view was kept for the session).
+ * Built where a derived builds it (PreviewPane `canvasView`), once per
+ * session and kind: its view is set from storage and never read back while
+ * it is built. Nightly 4202's CanvasView read the kept view in an effect
+ * that spread `chosen` and wrote it again (`chosen = { ...chosen, ...kept }`),
+ * so with a view kept for the session it re-ran itself until Svelte stopped
+ * the side panel (`effect_update_depth_exceeded`, the owner's "i selected
+ * plan view"); this class reads it once, where nothing re-runs it.
  */
 export class CanvasViewState {
   chosen = $state<CanvasChosen>({ ...OWN_VIEW });

@@ -1845,7 +1845,8 @@
   const canvasView = $derived.by(() => {
     const session = instanceId;
     // Built untracked: the view depends on the session and the kind alone,
-    // never on the state it holds, which the effect below sends.
+    // never on the state it holds, which the effect below sends (nightly
+    // 4202's crash was a view's effect re-running on the state it wrote).
     return isSheet ? untrack(() => new CanvasViewState(session, post)) : null;
   });
   $effect(() => {
