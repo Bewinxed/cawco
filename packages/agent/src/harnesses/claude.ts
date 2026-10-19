@@ -10,7 +10,7 @@
  * with its `raw` self attached and nothing lost.
  */
 
-import { type Dirent, type FSWatcher, watch } from "node:fs";
+import type { Dirent } from "node:fs";
 import {
   access,
   appendFile,
@@ -104,7 +104,6 @@ import {
 } from "@cawco/core";
 import type { RestartHold } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
-import { LineSplitter } from "@cawco/core/lines";
 import {
   accountConfigDir,
   accountIds,
@@ -224,6 +223,7 @@ import {
   type SDKSessionMessage,
   withHarnessNote,
 } from "./claude-transcript";
+import { tailLines } from "./transcript-tail";
 
 /**
  * The signal a CLI's end names or encodes, as sessiond reaped it: the signal
@@ -1794,7 +1794,7 @@ class ClaudeSession implements HarnessSession {
   /** Set once the session was stopped because its boundary hook can no longer run ({@link #hookGone}). */
   #hookRefusal: HeldProcessRefused | undefined;
   /** The transcript tail of a CLI that does not report its hooks in its stream ({@link #watchTranscript}). */
-  #transcriptWatch: FSWatcher | undefined;
+  #transcriptWatch: (() => void) | undefined;
   /** The child's sessiond. */
   readonly #sessiond:
     | { client: SessiondClient; procId: string; attach?: BridgeRing["attach"] }
@@ -2495,7 +2495,7 @@ class ClaudeSession implements HarnessSession {
       ctx.busy(false);
       await processEnded(ctx, error, this.#exit, this.#conversationKept);
     } finally {
-      this.#transcriptWatch?.close();
+      this.#transcriptWatch?.();
       for (const delivery of this.#delivery.values()) {
         delivery.resolve();
       }
@@ -2799,43 +2799,19 @@ class ClaudeSession implements HarnessSession {
       );
       return;
     }
-    let offset = (await stat(file)).size;
-    // A transcript line can be megabytes (an image in a tool result), and a
-    // read can end mid-line and mid-character: both are carried to the next.
-    const lines = new LineSplitter();
-    const decoder = new TextDecoder();
-    let reading = Promise.resolve();
-    const read = async (): Promise<void> => {
-      const handle = await open(file, "r");
-      try {
-        const { size } = await handle.stat();
-        if (size <= offset) {
-          return;
+    this.#transcriptWatch?.();
+    this.#transcriptWatch = await tailLines(
+      file,
+      (line) => {
+        if (line.includes("hook_non_blocking_error")) {
+          this.#transcriptHookFailure(line);
         }
-        const added = Buffer.alloc(size - offset);
-        await handle.read(added, 0, added.length, offset);
-        offset = size;
-        for (const line of lines.push(
-          decoder.decode(added, { stream: true })
-        )) {
-          if (line.includes("hook_non_blocking_error")) {
-            this.#transcriptHookFailure(line);
-          }
-        }
-      } finally {
-        await handle.close();
-      }
-    };
-    this.#transcriptWatch?.close();
-    this.#transcriptWatch = watch(file, () => {
-      reading = reading
-        .then(read)
-        .catch((error: unknown) =>
-          console.warn(
-            `[claude] ${this.instanceId}: reading its transcript failed: ${String(error)}`
-          )
-        );
-    });
+      },
+      (error) =>
+        console.warn(
+          `[claude] ${this.instanceId}: reading its transcript failed: ${String(error)}`
+        )
+    );
   }
 
   /** One transcript line, whose records may be a hook's non-blocking failure. */

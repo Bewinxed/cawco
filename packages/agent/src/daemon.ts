@@ -1,4 +1,4 @@
-import { existsSync, watch } from "node:fs";
+import { unwatchFile, watchFile } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
 import { arch, homedir, hostname, networkInterfaces, platform } from "node:os";
 import { dirname, join } from "node:path";
@@ -407,6 +407,12 @@ const USAGE_INTERVAL = Duration.seconds(60);
 const MEMORY_LOG_INTERVAL = Duration.millis(MEMORY_LOG_INTERVAL_MS);
 /** How often every CawCo account dir's `auth status` is read again. */
 const CLAUDE_LOGIN_CHECK_INTERVAL_MS = 60_000;
+/**
+ * How often each of pi's settings, models and sign-in files is looked at
+ * (a stat) for a change. Ours: a change reaches the hub within this and the
+ * report's one-second settle, as a dir watch's did within the settle alone.
+ */
+const PI_FILE_LOOK_MS = 2000;
 /** How often every provider account's OAuth sign-in is checked for a refresh it needs. */
 const ACCOUNT_REFRESH_INTERVAL = Duration.seconds(60);
 
@@ -1697,27 +1703,23 @@ const attach = (
         );
       }, 1000);
     };
-    const piFiles = new Set(["settings.json", "models.json", "auth.json"]);
-    // A watch the system refuses (EMFILE: the user's inotify instances are
-    // all held) does not start, and says so: pi's report is still read again
-    // on its own schedule (PI_AUTH_CHECK_INTERVAL_MS, below). Thrown here, it
-    // ended this connection before it could carry a heartbeat (run A,
-    // 2026-10-15: "EMFILE: too many open files, watch '…/.pi/agent'").
-    const piWatch = existsSync(getAgentDir())
-      ? (() => {
-          try {
-            return watch(getAgentDir(), (_event, file) => {
-              if (file && piFiles.has(file)) {
-                reportPiSoon();
-              }
-            });
-          } catch (error) {
-            console.warn(
-              `[pi] ${getAgentDir()} is not watched (${error instanceof Error ? error.message : String(error)}): pi's report is read again every ${PI_AUTH_CHECK_INTERVAL_MS / 1000} s`
-            );
-          }
-        })()
-      : undefined;
+    // pi's three files, each looked at by its stat every PI_FILE_LOOK_MS, not
+    // its dir watched: on macOS a dir's watch is an FSEvents stream over the
+    // whole tree, and pi's `sessions/` under it is written on every turn,
+    // each write queued by fseventsd for this agent. A look sees each file
+    // made, rewritten in place (pi's own `writeFileSync`, auth-storage.js and
+    // settings-manager.js), replaced by an editor's rename or deleted, and
+    // holds no FSEvents stream and no inotify watch (so no EMFILE either).
+    const piFiles = ["settings.json", "models.json", "auth.json"].map((name) =>
+      join(getAgentDir(), name)
+    );
+    for (const file of piFiles) {
+      watchFile(
+        file,
+        { interval: PI_FILE_LOOK_MS, persistent: false },
+        reportPiSoon
+      );
+    }
     // The machine's network changed (an interface's address came or went):
     // its capabilities read again, so the public address its router maps it
     // to (STUN, browser/relay-reach.ts) follows the network it is on.
@@ -1753,7 +1755,9 @@ const attach = (
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         clearTimeout(piSoon);
-        piWatch?.close();
+        for (const file of piFiles) {
+          unwatchFile(file, reportPiSoon);
+        }
         clearInterval(networkWatch);
       })
     );
@@ -1909,7 +1913,7 @@ const attach = (
     }
 
     // pi's own word on its sign-in (pi-auth.ts), read again on a schedule
-    // beside the watch on its agent dir. The initial detect already read it.
+    // beside the looks at its files. The initial detect already read it.
     yield* Effect.forkScoped(
       Effect.repeat(
         Effect.promise(async () => {

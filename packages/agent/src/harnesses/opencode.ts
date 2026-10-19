@@ -263,6 +263,24 @@ const PLUGIN_FLAG = "CAWCO_PLUGIN";
 const CONFIG_FLAG = "CAWCO_CONFIG";
 
 /**
+ * What every server is launched with, whatever its account: no self-update
+ * under a pinned fleet, and no file watcher. On macOS OpenCode's watcher
+ * holds FSEvents streams over each session's dir and its `.git`, and over
+ * every dir from the session's up to `/` (read from a server's own
+ * FSEventStreamCreate calls, probe-kit `fsevents-scope`), so fseventsd
+ * queued it every event on the volume; CawCo reads none of the file events
+ * it drives. 2.0.29 reads `fs:{filewatcher:!b(process.env.
+ * OPENCODE_FILEWATCHER_DISABLE??process.env.OPENCODE_DISABLE_FILEWATCHER)}`,
+ * `b(e)` being `e==="1"||e?.toLowerCase()==="true"` (its binary). Its file
+ * index (fff), which its glob and grep tools search, keeps its own stream
+ * over the session's dir.
+ */
+export const SERVER_ENV: Readonly<Record<string, string>> = {
+  OPENCODE_DISABLE_AUTOUPDATE: "1",
+  OPENCODE_DISABLE_FILEWATCHER: "1",
+};
+
+/**
  * How one server is launched: `opencode serve` under the keeper, with its
  * launch config, no self-update under a pinned fleet, the model catalog the
  * agent holds (opencode-models.ts), and its sessions' git reaching the hub's
@@ -283,7 +301,7 @@ const serverLaunch = async (
     args: ["serve", "--hostname=127.0.0.1", "--port=0"],
     env: {
       OPENCODE_CONFIG_CONTENT: JSON.stringify(config),
-      OPENCODE_DISABLE_AUTOUPDATE: "1",
+      ...SERVER_ENV,
       ...catalogLaunchEnv(),
       ...sessionGitEnv(),
       ...env,
