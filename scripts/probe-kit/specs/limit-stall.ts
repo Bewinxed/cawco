@@ -643,12 +643,21 @@ const continuedLeg = async (
     !!hold && Date.now() < reset,
     `hold ${JSON.stringify(hold ?? null)}, ${reset - Date.now()} ms before the reset`
   );
+  // The send goes on the dashboard's socket and returns as it leaves; the
+  // hub's record of it is read once the hub has taken it.
   await fleet.send(old, `${HELD_NOTE}: and this`);
-  const [queued] = fleet.query<{ owed: number; state: string }>(
-    "SELECT owed IS NOT NULL AS owed, state FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
-    old,
-    `%${HELD_NOTE}%`
-  );
+  const record = () =>
+    fleet.query<{ owed: number; state: string }>(
+      "SELECT owed IS NOT NULL AS owed, state FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
+      old,
+      `%${HELD_NOTE}%`
+    )[0];
+  const queued = await until(
+    "continued: the hub took the person's message",
+    record,
+    Boolean,
+    20_000
+  ).catch(record);
   kit.check(
     "continued: the person's message to it is queued at the hub while it is held",
     queued?.state === "pending" && queued.owed === 1,
