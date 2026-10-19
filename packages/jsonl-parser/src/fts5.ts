@@ -917,6 +917,28 @@ export class TranscriptIndex {
       .toSorted((a, b) => b.hit.score - a.hit.score);
   }
 
+  /**
+   * Forget a conversation whose transcript was deleted (a purge): every
+   * document of `sessionId`, and the checkpoint of its transcript file, so
+   * no search finds its words and no hit points at a file that is gone.
+   * Synchronous, one transaction: run it between syncs, never inside one.
+   * Answers how many documents went.
+   */
+  forgetSession(sessionId: string): number {
+    const id = this.#strings.get(sessionId);
+    const forget = this.db.transaction(() => {
+      const gone =
+        id === undefined
+          ? 0
+          : this.db.prepare("DELETE FROM docs WHERE session = ?").run(id).changes;
+      this.db
+        .prepare("DELETE FROM files WHERE path LIKE ? ESCAPE '\\'")
+        .run(`%/${sessionId.replace(/[\\%_]/g, (c) => `\\${c}`)}.jsonl`);
+      return gone;
+    });
+    return forget();
+  }
+
   /** Document count in the index. */
   count(): number {
     return (this.db.prepare("SELECT count(*) AS c FROM docs").get() as { c: number }).c;

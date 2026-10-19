@@ -953,6 +953,15 @@ export class SessionSupervisor {
     this.#daemonFunctions[name] = fn;
   }
 
+  /** What a deleted transcript's words are forgotten by: the transcript index (daemon.ts). */
+  #transcriptDeleted: (sessionId: string) => Promise<void> = () =>
+    Promise.resolve();
+
+  /** Tells the transcript index each transcript this machine deletes, so a purge leaves no words behind. */
+  onTranscriptDeleted(forget: (sessionId: string) => Promise<void>): void {
+    this.#transcriptDeleted = forget;
+  }
+
   /**
    * Re-pointed at each hub connection; says whether the frame went out. Frames
    * produced while the hub is away are dropped; the hub replays what a session
@@ -4621,6 +4630,7 @@ export class SessionSupervisor {
     const adapter = harnessOf(spinOff.harness);
     if (await adapter?.getSessionInfo(spinOff.sessionId, spinOff.dir)) {
       await adapter?.deleteSession(spinOff.sessionId, spinOff.dir);
+      await this.#transcriptDeleted(spinOff.sessionId);
     }
     this.#spinOffs.delete(instanceId);
   }
@@ -5134,10 +5144,9 @@ export class SessionSupervisor {
             this.#closeTagging(args[0]);
             return undefined;
           case "deleteSession":
-            return await adapter.deleteSession(
-              args[0] as string,
-              dirOf(args[1])
-            );
+            await adapter.deleteSession(args[0] as string, dirOf(args[1]));
+            await this.#transcriptDeleted(args[0] as string);
+            return undefined;
           default:
             break;
         }

@@ -159,6 +159,19 @@ export class TranscriptSearchService {
     this.#syncedAt = startedAt;
   }
 
+  /**
+   * A transcript was deleted (a purge, from the dashboard or a spin-off
+   * discarded): its words leave the index, once the sync in flight, if any,
+   * has ended, so the dashboard's Find and every agent's stop finding them.
+   */
+  async forget(sessionId: string): Promise<void> {
+    await this.#syncing?.catch(() => undefined);
+    const gone = this.#index.forgetSession(sessionId);
+    console.info(
+      `[search] transcript ${sessionId} deleted: ${gone} indexed document${gone === 1 ? "" : "s"} forgotten`
+    );
+  }
+
   /** Start the background sync loop. First sync is kicked off immediately. */
   start(): void {
     // Fire-and-forget initial sync — must not block startup.

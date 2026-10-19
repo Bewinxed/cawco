@@ -2930,6 +2930,8 @@ export const startDaemon = (rediscover = false) =>
       TranscriptSearchService.create()
     );
     search.start();
+    // A deleted transcript's words leave the index with it (a purge).
+    supervisor.onTranscriptDeleted((sessionId) => search.forget(sessionId));
     // The agent's memory, by what holds it (memory.ts): once its first usage
     // scan and search sync have ended, and on its own clock from the start, so
     // an agent that never reaches its hub still says it.

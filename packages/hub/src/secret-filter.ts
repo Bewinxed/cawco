@@ -19,6 +19,12 @@
  *   upper and lower case, and a digit or a symbol). Nothing in secretlint's
  *   preset catches "my sudo password is …", which is how a person types one
  *   to an agent.
+ * - **A credential set to a value**: `password=…`, `token: …`, `secret`,
+ *   `passwd`, `api_key` or `apikey` followed by `:` or `=` and a value of six
+ *   characters or more, and `Bearer <token>`: the shapes core's
+ *   `CREDENTIAL_PATTERNS` caught in notes before this filter, which neither
+ *   rule above does when the value is all lower case. The value is cut, the
+ *   key kept.
  */
 import { lintSource } from "@secretlint/core";
 import { creator as recommended } from "@secretlint/secretlint-rule-preset-recommend";
@@ -50,6 +56,21 @@ export const passwordShaped = (word: string): boolean =>
   word !== REDACTED_SECRET;
 
 type Range = readonly [start: number, end: number];
+
+/** A credential's key and its value; the value (group 1) is what is cut. */
+const SET_TO_VALUE = [
+  /\b(?:password|passwd|secret|token|api[-_]?key)\s*[:=]\s*(\S{6,})/dgi,
+  /\bbearer\s+([A-Za-z0-9._~+/-]{16,}=*)/dgi,
+];
+
+/** Every value a credential's key is set to ({@link SET_TO_VALUE}). */
+const setCredentials = (text: string): Range[] =>
+  SET_TO_VALUE.flatMap((pattern) =>
+    [...text.matchAll(pattern)].flatMap((match): Range[] => {
+      const value = match.indices?.[1];
+      return value ? [[value[0], value[1]]] : [];
+    })
+  );
 
 /** Every password-shaped word of a sentence that talks about a credential. */
 const typedCredentials = (text: string): Range[] =>
@@ -84,7 +105,11 @@ export const redactSecrets = async (text: string): Promise<string> => {
   if (!text.trim()) {
     return text;
   }
-  const ranges = [...(await shapedCredentials(text)), ...typedCredentials(text)]
+  const ranges = [
+    ...(await shapedCredentials(text)),
+    ...typedCredentials(text),
+    ...setCredentials(text),
+  ]
     .filter(([start, end]) => end > start)
     .sort((a, b) => a[0] - b[0]);
   const merged: [number, number][] = [];

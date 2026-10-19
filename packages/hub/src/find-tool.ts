@@ -547,54 +547,72 @@ const redacted = async <Value extends string | null | undefined>(
 ): Promise<Value> =>
   (typeof value === "string" ? await redactSecrets(value) : value) as Value;
 
+const MARKED = /「([^」]+)」/g;
+const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
+
 /**
- * A hit's words as an agent reads them: its title, every moment's excerpt,
- * what it was for and its last word, through the secret filter before any
- * is cut to length.
+ * A moment's excerpt cut from its whole turn (`turn`, already through the
+ * secret filter): around the first of the words its snippet marked, those
+ * words marked again; the turn's start when none of them is in its words.
+ * {@link excerptOf} then cuts it to length.
  */
-const redactedResult = async (result: FindResult): Promise<FindResult> => {
-  const title = await redactSecrets(result.title);
-  switch (result.kind) {
-    case "conversation":
-      return {
-        ...result,
-        title,
-        purpose: await redacted(result.purpose),
-        lastReport: result.lastReport
-          ? {
-              ...result.lastReport,
-              headline: await redactSecrets(result.lastReport.headline),
-            }
-          : null,
-        moments: await redactedMoments(result.moments),
-      };
-    case "thread":
-      return {
-        ...result,
-        title,
-        moments: await redactedMoments(result.moments),
-      };
-    case "commit":
-    case "file":
-      return { ...result, title, what: await redacted(result.what) };
-    case "routine":
-      return {
-        ...result,
-        title,
-        lastOutcome: await redacted(result.lastOutcome),
-      };
-    default:
-      return { ...result, title };
+const cutFrom = (turn: string, snippet: string): string => {
+  const line = turn.replace(SPACES, " ").trim();
+  const lower = line.toLowerCase();
+  const terms = [
+    ...new Set(
+      [...snippet.matchAll(MARKED)].flatMap((match) =>
+        match[1] ? [match[1].toLowerCase()] : []
+      )
+    ),
+  ];
+  const found = terms
+    .map((term) => lower.indexOf(term))
+    .filter((at) => at >= 0);
+  const from = found.length > 0 ? Math.max(0, Math.min(...found) - 60) : 0;
+  let window = line.slice(from, from + 2 * EXCERPT_MAX);
+  for (const term of terms) {
+    window = window.replace(
+      new RegExp(term.replace(REGEX_SPECIAL, "\\$&"), "gi"),
+      (word) => `「${word}」`
+    );
   }
+  return `${from > 0 ? "…" : ""}${window}`;
 };
 
-const redactedMoments = (moments: FindMoment[]): Promise<FindMoment[]> =>
-  Promise.all(
-    moments.map(async (moment) => ({
-      ...moment,
-      excerpt: await redactSecrets(moment.excerpt),
-    }))
-  );
+/** Every word a stored entry holds that its machine's index searched: what was said, thought, called and answered. */
+const entryWords = (
+  entry: SessionMessage,
+  records: Record<string, SendRecord>
+): string => {
+  const content = (entry.message as { content?: unknown } | null)?.content;
+  const blocks = (Array.isArray(content) ? content : []) as {
+    input?: unknown;
+    name?: unknown;
+    thinking?: unknown;
+    type?: unknown;
+  }[];
+  return [
+    entryText(entry, records),
+    ...blocks.flatMap((block) => {
+      if (block.type === "thinking" && typeof block.thinking === "string") {
+        return [block.thinking];
+      }
+      return block.type === "tool_use"
+        ? [`${String(block.name)} ${JSON.stringify(block.input ?? {})}`]
+        : [];
+    }),
+    blocks.some((block) => block.type === "tool_result")
+      ? outputText(entry)
+      : null,
+  ]
+    .filter(Boolean)
+    .join("\n");
+};
+
+/** What a moment shows when its turn could not be read: never the index's snippet unfiltered. */
+const withheld = (why: string): string =>
+  `(not shown: its turn could not be read to check it for secrets: ${why})`;
 
 /** A name or id among `things`, or the refusal listing them with one call that works. */
 const pick = (
@@ -801,16 +819,17 @@ export const createFindTool = (deps: FindToolDeps) => {
       : { why: `session ${id} has no stored turns` };
   };
 
-  /** A conversation's turns around `docId`, its latest without one, as an agent reads them ({@link told}). */
+  /** A conversation's turns around `docId`, its latest without one, as an agent reads them ({@link told}); `read` reads its transcript. */
   const conversationTurns = async (
     id: string,
     sessionKey: string,
     docId: string | undefined,
     side: number,
     chars: number,
-    before?: number
+    before?: number,
+    read: typeof storedOf = storedOf
   ): Promise<TurnsRead | NoTurns> => {
-    const stored = await storedOf(id, sessionKey);
+    const stored = await read(id, sessionKey);
     return await told(
       "why" in stored ? stored : storedTurns(stored, id, docId, side),
       chars,
@@ -924,8 +943,110 @@ export const createFindTool = (deps: FindToolDeps) => {
     };
   };
 
+  /**
+   * A conversation's moments as an agent reads them: each excerpt cut from
+   * its whole turn after the secret filter ran over it ({@link cutFrom}),
+   * never from the index's snippet, whose window may have left out the word
+   * that marks a password; withheld when the turn cannot be read.
+   */
+  const conversationMoments = async (
+    result: Extract<FindResult, { kind: "conversation" }>,
+    read: typeof storedOf
+  ): Promise<FindMoment[]> => {
+    if (result.moments.length === 0) {
+      return result.moments;
+    }
+    const key = result.instanceId ?? result.sessionId;
+    const stored = key
+      ? await read(result.id, key)
+      : { why: "it names no transcript" };
+    return await Promise.all(
+      result.moments.map(async (moment) => {
+        if ("why" in stored) {
+          return { ...moment, excerpt: withheld(stored.why) };
+        }
+        const entry = stored.entries.find((each) =>
+          isRecord(each, moment.docId)
+        );
+        return {
+          ...moment,
+          excerpt: entry
+            ? cutFrom(
+                await redactSecrets(entryWords(entry, stored.records)),
+                moment.excerpt
+              )
+            : withheld(`${moment.docId} is not in its stored transcript now`),
+        };
+      })
+    );
+  };
+
+  /** A thread's moments as an agent reads them: each excerpt cut from its whole message after the secret filter. */
+  const threadMoments = async (
+    result: Extract<FindResult, { kind: "thread" }>
+  ): Promise<FindMoment[]> => {
+    const messages = new Map(
+      deps.threadMessages(result.id).map((message) => [message.id, message])
+    );
+    return await Promise.all(
+      result.moments.map(async (moment) => {
+        const message = messages.get(moment.docId);
+        return {
+          ...moment,
+          excerpt: message
+            ? cutFrom(await redactSecrets(message.body), moment.excerpt)
+            : withheld(`${moment.docId} is no message of it now`),
+        };
+      })
+    );
+  };
+
+  /**
+   * A hit's words as an agent reads them: its title, every moment's excerpt
+   * (from its whole turn), what it was for and its last word, through the
+   * secret filter before any is cut to length.
+   */
+  const redactedResult = async (
+    result: FindResult,
+    read: typeof storedOf
+  ): Promise<FindResult> => {
+    const title = await redactSecrets(result.title);
+    switch (result.kind) {
+      case "conversation":
+        return {
+          ...result,
+          title,
+          purpose: await redacted(result.purpose),
+          lastReport: result.lastReport
+            ? {
+                ...result.lastReport,
+                headline: await redactSecrets(result.lastReport.headline),
+              }
+            : null,
+          moments: await conversationMoments(result, read),
+        };
+      case "thread":
+        return { ...result, title, moments: await threadMoments(result) };
+      case "commit":
+      case "file":
+        return { ...result, title, what: await redacted(result.what) };
+      case "routine":
+        return {
+          ...result,
+          title,
+          lastOutcome: await redacted(result.lastOutcome),
+        };
+      default:
+        return { ...result, title };
+    }
+  };
+
   /** A detailed hit's turn either side of its best moment, when its transcript reads in time; with `before`, only those said by then. */
-  const neighboursOf = async (result: FindResult, before?: number) => {
+  const neighboursOf = async (
+    result: FindResult,
+    readStored: typeof storedOf,
+    before?: number
+  ) => {
     const [best] = momentsOf(result);
     let read: TurnsRead | NoTurns | undefined;
     if (best && result.kind === "thread") {
@@ -945,7 +1066,8 @@ export const createFindTool = (deps: FindToolDeps) => {
             best.docId,
             1,
             NEIGHBOUR_CHARS,
-            before
+            before,
+            readStored
           )
         : undefined;
     }
@@ -953,11 +1075,15 @@ export const createFindTool = (deps: FindToolDeps) => {
   };
 
   /** A detailed page's hits, the first {@link NEIGHBOURED_HITS} with their neighbouring turns. */
-  const withNeighbours = async (results: FindResult[], before?: number) => {
+  const withNeighbours = async (
+    results: FindResult[],
+    read: typeof storedOf,
+    before?: number
+  ) => {
     const turns = await Promise.all(
       results
         .slice(0, NEIGHBOURED_HITS)
-        .map((result) => neighboursOf(result, before))
+        .map((result) => neighboursOf(result, read, before))
     );
     return results.map((result, index) => {
       const beside = turns[index];
@@ -981,10 +1107,19 @@ export const createFindTool = (deps: FindToolDeps) => {
       ...(input.kinds?.length ? { kinds: input.kinds as FindKind[] } : {}),
       ...(input.by ? { author: AUTHOR[input.by] } : {}),
     });
-    const results = await Promise.all(page.results.map(redactedResult));
+    // Each transcript read once for this answer: its moments and its neighbours.
+    const reads = new Map<string, ReturnType<typeof storedOf>>();
+    const read: typeof storedOf = (id, key) => {
+      const known = reads.get(key) ?? storedOf(id, key);
+      reads.set(key, known);
+      return known;
+    };
+    const results = await Promise.all(
+      page.results.map((result) => redactedResult(result, read))
+    );
     const hits = bounded(
       input.response_format === "detailed"
-        ? await withNeighbours(results, where.before)
+        ? await withNeighbours(results, read, where.before)
         : results.map(hitOf)
     );
     const end = offset + hits.length;

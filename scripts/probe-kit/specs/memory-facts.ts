@@ -42,7 +42,8 @@
  *
  * The memory audit's legs (cockpit-1fea49b2#af39ccbe), Jev off:
  * 1. A made-up password typed into a note is committed `[redacted]`, the
- *    note marked secret (secret-filter.ts).
+ *    note marked secret (secret-filter.ts); so are `token: …` and
+ *    `password=…` set to a value.
  * 2. Purging a session (its transcript deleted from the dashboard) proposes
  *    withdrawing its note: one card retires the fact resting on it alone.
  * 3. A ruling survives a withdrawal (the person re-grounds the fact as a
@@ -1056,6 +1057,25 @@ const noteSecretLeg = async (kit: Kit, probe: Probe, writer: Caller) => {
       note.content.includes("verdict: secret")
     ),
     `memory_note: ${said.text}\n${note?.content ?? "no note"}`
+  );
+  const shapes = await probe.tool(writer, "memory_note", {
+    text: "The staging token: abcd1234efgh and the admin password=hunter2hunter2 are set.",
+  });
+  const valued = await until(
+    "the key-value note in the inbox",
+    () => probe.inboxNote("The staging token:"),
+    Boolean,
+    20_000
+  ).catch(() => undefined);
+  kit.check(
+    "1: `token: abcd1234efgh` and `password=hunter2hunter2` in a note are committed as [redacted]",
+    Boolean(
+      valued?.content.includes("token: [redacted]") &&
+      valued.content.includes("password=[redacted]") &&
+      !valued.content.includes("abcd1234efgh") &&
+      !valued.content.includes("hunter2hunter2")
+    ),
+    `memory_note: ${shapes.text}\n${valued?.content ?? "no note"}`
   );
 };
 

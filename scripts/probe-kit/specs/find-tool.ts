@@ -26,7 +26,11 @@
  *    `[redacted]` in find's concise and detailed answers and in `around`
  *    (secret-filter.ts).
  * i. A session the person purges (its transcript deleted from the
- *    dashboard) is no hit of an agent's find.
+ *    dashboard) is no hit of an agent's find, nor of the dashboard's
+ *    `GET /api/find`: its machine's index forgot its words.
+ * k. A made-up password typed more than 16 words after "password" in one
+ *    sentence (past the index's snippet window) comes back `[redacted]` in
+ *    a concise hit: the excerpt is cut from the whole turn, filtered.
  * j. `before` keeps the evidence at or before its day: a thread's message
  *    of September comes back, October's does not.
  *
@@ -41,6 +45,9 @@ import type { Kit, Spec } from "../kit";
 const WORD = "zebrafish";
 /** A made-up password, password-shaped (secret-filter.ts `passwordShaped`): never a real one. */
 const PASSWORD = "Zq7!vRt9Lm";
+/** Another, typed far from the word "password"; its two halves as the index tokenises it. */
+const FAR_PASSWORD = "Xk8#pLm2Qw";
+const FAR_HALVES = ["Xk8", "pLm2Qw"];
 const SAY = {
   one: "PROBE-FIND-ONE say hello",
   two: `PROBE-FIND-TWO did the ${WORD} marmalade build pass?`,
@@ -48,6 +55,7 @@ const SAY = {
   other: `PROBE-FIND-OTHER the ${WORD} lives in the other project too`,
   secret: `PROBE-FIND-SECRET my sudo password is ${PASSWORD} on the narwhal box.`,
   purge: "PROBE-FIND-PURGE the axolotl plan is off.",
+  far: `PROBE-FIND-FAR my password for the build box that we set up last spring on the shared rack beside the old printer near the window is ${FAR_PASSWORD} for the pangolin queue.`,
 } as const;
 const REPLY = {
   one: "Hello, ready when you are.",
@@ -56,6 +64,7 @@ const REPLY = {
   other: `Other project ${WORD} noted.`,
   secret: "Understood, the narwhal box.",
   purge: "The axolotl plan is off, noted.",
+  far: "Noted, the queue.",
 } as const;
 /** The deferred groups' first line, as delegation-tools.ts writes it for `find`. */
 const POINTER =
@@ -76,6 +85,7 @@ const respond = (request: Seen): Reply => {
     "other",
     "secret",
     "purge",
+    "far",
   ] as const) {
     if (request.last.includes(SAY[key])) {
       return text(REPLY[key]);
@@ -641,6 +651,42 @@ const purgeLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
       after !== undefined,
     `before ${said(before)}\nafter ${after ? said(after) : "still found after 30 s"}`
   );
+  const gone = (answer: { results: { id: string }[] }) =>
+    !answer.results.some(
+      (result) =>
+        result.id === talker.id ||
+        result.id.endsWith(`:${row?.session_id ?? ""}`)
+    );
+  const dashboard = await until(
+    "the purged session gone from the dashboard's Find",
+    () => probe.engine("axolotl"),
+    gone,
+    60_000
+  ).catch(() => undefined);
+  kit.check(
+    "i: after a purge, the dashboard's GET /api/find returns none of the session's turns: its machine's index forgot them",
+    dashboard !== undefined,
+    dashboard
+      ? JSON.stringify(dashboard.results)
+      : JSON.stringify((await probe.engine("axolotl")).results)
+  );
+};
+
+/** k: a password typed past the snippet's window from "password", in a concise hit. */
+const farSecretLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
+  const talker = await talkOnce(probe, "Pangolin queue", SAY.far);
+  await indexed(probe, "pangolin", talker.id, "the pangolin turn in /api/find");
+  const concise = await probe.find(seeded.orchestrator, {
+    query: "pangolin",
+    project: "all",
+  });
+  const hit = concise.answer.hits?.find((each) => each.id === talker.id);
+  kit.check(
+    'k: a password typed more than 16 words after "password" comes back [redacted] in a concise hit',
+    Boolean(hit?.excerpt?.includes("[redacted]")) &&
+      !FAR_HALVES.some((half) => concise.text.includes(half)),
+    said(concise)
+  );
 };
 
 /** j: `before` keeps a thread's September message, not its October one. */
@@ -705,6 +751,7 @@ const run = async (kit: Kit) => {
   await secretLeg(kit, probe, seeded);
   await purgeLeg(kit, probe, seeded);
   await beforeLeg(kit, probe, seeded);
+  await farSecretLeg(kit, probe, seeded);
 };
 
 export default { name: "find-tool", run } satisfies Spec;
