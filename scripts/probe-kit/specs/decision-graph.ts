@@ -171,6 +171,16 @@ const run = async (kit: Kit) => {
       JSON.stringify(now.state.trial?.options) === JSON.stringify(["week"]),
     JSON.stringify({ shape, state: now.state })
   );
+  const listed = (
+    await fleet.api<{ id: string; picks?: { asked: number; made: number } }[]>(
+      `${at(writer)}/status`
+    )
+  ).find((each) => each.id === pricing.id);
+  kit.check(
+    "(c) artifact_list counts no pick made on the card whose option went",
+    listed?.picks?.asked === 1 && listed.picks.made === 0,
+    JSON.stringify(listed?.picks)
+  );
   const said = [
     "launch#date comes after pricing#trial: pricing has no decision trial.",
     "launch#promo comes after pricing#discount: pricing has no decision discount.",

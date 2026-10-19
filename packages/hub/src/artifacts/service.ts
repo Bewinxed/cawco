@@ -3709,14 +3709,19 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return input.kind === "component" ? createSheet(making, input) : null;
   };
 
-  /** A decision page's choice ids: its program's decisions, or as its HTML declares them; empty for any other page. */
-  const choicesAsked = (row: ArtifactRow): string[] => {
+  /**
+   * A decision page's choices: its program's decisions with their cards,
+   * or the choice ids its HTML declares; empty for any other page.
+   */
+  const choicesAsked = (
+    row: ArtifactRow
+  ): { card?: DecisionCard; id: string }[] => {
     if (row.kind !== "page") {
       return [];
     }
     const program = programOf(row);
     if (program !== undefined) {
-      return readKept(program).cards.map((card) => card.id);
+      return readKept(program).cards.map((card) => ({ id: card.id, card }));
     }
     let html: string;
     try {
@@ -3726,7 +3731,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
     return [
       ...new Set([...html.matchAll(CHOICE_ATTRIBUTE)].map((match) => match[1])),
-    ];
+    ].map((id) => ({ id }));
   };
 
   /**
@@ -3936,7 +3941,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       asked.length > 0
         ? {
             asked: asked.length,
-            made: asked.filter((choice) => choice in state).length,
+            // A program's pick counts while its card still offers every option of it.
+            made: asked.filter(({ card, id }) =>
+              card ? pickOf(card, state[id]).picked : id in state
+            ).length,
             unsent: Object.entries(state).filter(
               ([key, entry]) =>
                 key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
@@ -4267,7 +4275,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
      * ({@link projectPage}), Caw's included: a later session links its
      * decisions by revising one statement. Its maker's, while the parent's
      * panel shows it, waits as its next version ({@link changedBy}); another
-     * session's of the project lands on the page itself.
+     * session's of the project lands on the page itself, or joins the next
+     * version waiting for the parent, so opening that keeps it. Each merges
+     * into the program of the row it lands on.
      */
     revise: async (
       instanceId: string,
@@ -4283,8 +4293,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           ? projectPage(instance, id)
           : undefined;
       const found = peer ?? ownedOrMade(instance, id);
-      const existing = programOf(found);
-      if (existing === undefined) {
+      if (programOf(found) === undefined) {
         throw new ArtifactRefusal(
           409,
           found.kind === "page"
@@ -4292,20 +4301,21 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             : `${named(found)} takes no statements: they revise a decision page's program.`
         );
       }
-      let merged: ReturnType<typeof mergeProgram>;
-      try {
-        merged = mergeProgram(existing, statements);
-      } catch (error) {
-        throw unmerged(error);
-      }
+      const revisedOn = (row: ArtifactRow): Promise<Revised> => {
+        // A next version is made from its artifact whole (holdNext), so it holds a program.
+        const existing = programOf(row) as string;
+        let merged: ReturnType<typeof mergeProgram>;
+        try {
+          merged = mergeProgram(existing, statements);
+        } catch (error) {
+          throw unmerged(error);
+        }
+        return programRevised(instance, row, existing, merged);
+      };
       if (peer) {
-        return await programRevised(instance, peer, existing, merged);
+        return heldAnswer(await revisedOn(db.heldOf(peer.id) ?? peer));
       }
-      return heldAnswer(
-        await changedBy(instance, found, (row) =>
-          programRevised(instance, row, existing, merged)
-        )
-      );
+      return heldAnswer(await changedBy(instance, found, revisedOn));
     },
 
     /**
