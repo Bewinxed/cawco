@@ -4,7 +4,8 @@
    * side-head probe: the real SideSurface as wide as Split stands it beside a
    * page (45% of it, never under its 320px floor, inside its 12px inset),
    * once for each kind of name a side card carries, beside a pane's actions:
-   * - the plan's: its title, its progress ring and figure (`titleControl`);
+   * - the plan's: its title, its progress ring and figure (`titleControl`,
+   *   the title its lead);
    * - a task attempt's to-dos with the task id under them (`title`, `subtitle`);
    * - a project file's path (`title`), the longest, beside icon actions.
    * The probe reads every word and the ring of the name against every action.
@@ -12,7 +13,7 @@
   import { planWords } from "@cawco/core";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
-  import { IconCopy, IconMaximize } from "#lib/icons.js";
+  import { IconCopy, IconExternal, IconMaximize } from "#lib/icons.js";
 
   const CARDS = [
     { key: "plan", title: undefined, subtitle: undefined },
@@ -28,7 +29,7 @@
 
 {#snippet planName()}
   <span class="plan-name" data-name-row>
-    <span>{planWords.plan}</span>
+    <span data-name-lead>{planWords.plan}</span>
     <TaskRing done={3} size="md" total={12} />
     <span class="figure">{planWords.figure(3, 12)}</span>
   </span>
@@ -55,7 +56,11 @@
             >
           {:else}
             <button data-action type="button"
-              ><IconMaximize />{planWords.openInCanvas}</button
+              ><IconExternal />{planWords.openInCanvas}</button
+            >
+            <!-- A desk's split gives every side card its Expand. -->
+            <button aria-label="Expand" data-action type="button"
+              ><IconMaximize /></button
             >
           {/if}
         {/snippet}

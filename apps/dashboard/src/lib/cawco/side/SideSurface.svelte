@@ -67,7 +67,7 @@
     switcher?: Snippet;
     /** What is on show, past what the switch says; nothing when it says it all. */
     title?: string;
-    /** What is on show as a control (the artifact panel's menu), in the title's place. */
+    /** What is on show as a control (the artifact panel's menu), in the title's place; its words that keep their width marked `data-name-lead`, what trails them cut inside the name's box. */
     titleControl?: Snippet;
     subtitle?: string;
     /** The pane's own controls, before Close. */
@@ -167,9 +167,15 @@
     return { kept, moreWidth };
   }
 
-  /** The name's box at its lead's own width, up to {@link NAME_KEEPS}: its inset and ring room around it. */
+  /**
+   * The name's box at its lead's own width, up to {@link NAME_KEEPS}: its
+   * inset and ring room around it. The lead is the title, or the part of a
+   * title control marked `data-name-lead` (its words, before a trailing ring
+   * or figure that may be cut), else the control whole.
+   */
   function nameWidth(name: HTMLElement): number {
-    const lead = name.firstElementChild;
+    const lead =
+      name.querySelector("[data-name-lead]") ?? name.firstElementChild;
     const style = getComputedStyle(name);
     const pad =
       (Number.parseFloat(style.paddingInlineStart) || 0) +
