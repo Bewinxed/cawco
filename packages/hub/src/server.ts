@@ -17698,12 +17698,13 @@ export const createServer = (
     | { refusal: string }
   > => {
     const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
+    const accounts = db.accounts.list();
     const move: AccountMove | null = from
       ? {
           kind: "moved",
           asked: true,
-          from: namedAccount(from),
-          to: namedAccount(account),
+          from: namedAccount(from, accounts),
+          to: namedAccount(account, accounts),
           sameOrganization: cacheCarries(from, account),
           tokens: row.contextTokens,
           window: null,
@@ -22458,12 +22459,13 @@ export const createServer = (
     console.info(
       `[rebalance] ${sessionName(row)} moves from ${accountName(from)} to ${accountName(to)} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${accountName(to)} is where placement puts it now. Its conversation is copied there before it starts.`
     );
+    const accounts = db.accounts.list();
     relaunchAtTurnEnd.set(row.id, {
       to: to.id,
       move: {
         kind: "moved",
-        from: namedAccount(from),
-        to: namedAccount(to),
+        from: namedAccount(from, accounts),
+        to: namedAccount(to, accounts),
         sameOrganization: cacheCarries(from, to),
         tokens: row.contextTokens,
         window: null,
@@ -22715,12 +22717,13 @@ export const createServer = (
     if (!(row && from && to) || row.accountId !== from.id) {
       return;
     }
+    const accounts = db.accounts.list();
     relaunchAtTurnEnd.set(row.id, {
       to: to.id,
       move: {
         kind: "moved",
-        from: namedAccount(from),
-        to: namedAccount(to),
+        from: namedAccount(from, accounts),
+        to: namedAccount(to, accounts),
         sameOrganization: cacheCarries(from, to),
         tokens: row.contextTokens,
         window: null,

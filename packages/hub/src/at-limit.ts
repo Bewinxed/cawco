@@ -558,10 +558,11 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       return;
     }
     const frees = decision.frees ? db.accounts.get(decision.frees) : undefined;
+    const accounts = db.accounts.list();
     ports.note(row, {
       kind: "waiting",
-      account: namedAccount(current),
-      ...(frees ? { frees: namedAccount(frees) } : {}),
+      account: namedAccount(current, accounts),
+      ...(frees ? { frees: namedAccount(frees, accounts) } : {}),
       until: decision.until,
       why: decision.why,
       tokens: row.contextTokens,
@@ -583,7 +584,10 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       until: null,
     });
     if (held?.until !== null) {
-      ports.note(row, { kind: "signed-out", account: namedAccount(current) });
+      ports.note(row, {
+        kind: "signed-out",
+        account: namedAccount(current, db.accounts.list()),
+      });
     }
   };
 
@@ -683,10 +687,11 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const cost = sameOrg
       ? undefined
       : reReadCost(readForecast(db, target.provider, now), row, target);
+    const accounts = db.accounts.list();
     return {
       kind: "moved",
-      from: namedAccount(current),
-      to: namedAccount(target),
+      from: namedAccount(current, accounts),
+      to: namedAccount(target, accounts),
       sameOrganization: sameOrg,
       ...(cost ? { cost } : {}),
       ...(cause === "refused" ? { because: { kind: "refused" as const } } : {}),
@@ -747,12 +752,13 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (!repeated) {
       // Said once, as the line written the first time logged itself: it
       // already says the hub tries again.
+      const accounts = db.accounts.list();
       ports.note(row, {
         kind: "unmoved",
         action: "move",
         ...(how.refused ? { signedOut: true as const } : {}),
-        from: namedAccount(current),
-        to: namedAccount(target),
+        from: namedAccount(current, accounts),
+        to: namedAccount(target, accounts),
         step: "start",
         reason,
         ...(how.waits ? { waits: true as const } : {}),
@@ -1047,7 +1053,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       // Its line says it, in the log too ({@link AtLimitPorts.note}).
       ports.note(row, {
         kind: "stopped",
-        account: namedAccount(current),
+        account: namedAccount(current, db.accounts.list()),
         resetsAt,
       });
     }

@@ -565,8 +565,8 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     const cost = kept ? undefined : reReadCost(source.forecast, row, target);
     const move: AccountMove = {
       kind: "moved",
-      from: namedAccount(from),
-      to: namedAccount(target),
+      from: namedAccount(from, source.forecast.accounts),
+      to: namedAccount(target, source.forecast.accounts),
       sameOrganization: kept,
       tokens: row.contextTokens,
       window: windowWords(stress.window),
@@ -845,7 +845,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
           to
         );
     group.moved.push({
-      to: namedAccount(to),
+      to: namedAccount(to, db.accounts.list()),
       tokens: context,
       cacheKept: cacheCarries(from, to),
       ...(cost ? { cost } : {}),
@@ -873,7 +873,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
         continue;
       }
       const group = groups.get(from.id) ?? {
-        from: namedAccount(from),
+        from: namedAccount(from, db.accounts.list()),
         moved: [],
         continued: 0,
         waiting: [],
@@ -893,9 +893,12 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     running: MovedOff[],
     held: RebalanceNotice["held"]
   ): void => {
+    const accounts = db.accounts.list();
     const came = cause.came.flatMap((one) => {
       const account = db.accounts.get(one.accountId);
-      return account ? [{ account: namedAccount(account), how: one.how }] : [];
+      return account
+        ? [{ account: namedAccount(account, accounts), how: one.how }]
+        : [];
     });
     if (came.length === 0 || (running.length === 0 && held.length === 0)) {
       return;
@@ -906,21 +909,28 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       at,
       came,
       machine: ports.machineName(machineId),
-      running: running.flatMap((one) =>
-        one.to
-          ? [
-              {
-                from: namedAccount(one.from),
-                organization: one.from.identity?.organization || null,
-                runsOutAt: one.runsOutAt,
-                to: namedAccount(one.to),
-                cacheKept: one.cacheKept,
-                moved: one.moved,
-                left: one.left,
-              },
-            ]
-          : []
-      ),
+      running: running.flatMap((one) => {
+        if (!one.to) {
+          return [];
+        }
+        const from = namedAccount(one.from, accounts);
+        return [
+          {
+            from,
+            // Its line names the organization after its name
+            // (core `rebalanceWords`): none where the name already does.
+            organization:
+              from.name === accountName(one.from)
+                ? one.from.identity?.organization || null
+                : null,
+            runsOutAt: one.runsOutAt,
+            to: namedAccount(one.to, accounts),
+            cacheKept: one.cacheKept,
+            moved: one.moved,
+            left: one.left,
+          },
+        ];
+      }),
       held,
     });
   };

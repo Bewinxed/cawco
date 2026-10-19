@@ -27,6 +27,10 @@
  *   window was read.
  * - Benched at its limit, the other email's dial says when it last
  *   reported, not only when it is back.
+ * - The Team seat refused at its limit, moving on (the other email still
+ *   benched): its session moves to the personal plan on its email, and the
+ *   line the hub writes into its transcript names both with their
+ *   organizations, as placement does (core `accountNames`).
  *
  *   bun scripts/probe-kit/run.ts usage-accounts
  */
@@ -34,10 +38,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import type {
-  PlacementPreview,
-  ProviderForecast,
-  UsageLimitsResponse,
+import {
+  type AccountMove,
+  accountMoveWords,
+  type PlacementPreview,
+  type ProviderForecast,
+  type UsageLimitsResponse,
 } from "../../../packages/core/src";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import {
@@ -94,12 +100,19 @@ const NAMED: Record<Id, string> = {
 };
 /** How long a reading goes unrefreshed in the stale leg. */
 const AGED_MS = 2 * HOUR_MS;
+/** The accounts the mock refuses as at their usage limit, until {@link LIMITED_UNTIL}. */
+const limited = new Set<Id>();
+/** Past the at-limit policy's wait, so the session moves rather than waits for it. */
+const LIMITED_UNTIL = STARTED + 3 * HOUR_MS;
 
 const accountOf = (request: Seen): Id | undefined =>
   ACCOUNTS.find((id) => request.auth.endsWith(TOKEN[id]));
 
 const respond = (request: Seen): Reply => {
   const id = accountOf(request);
+  if (id && limited.has(id)) {
+    return { everyMs: 5, words: [], refuse: { resetsAt: LIMITED_UNTIL } };
+  }
   const resets = id ? resetsOf(id) : undefined;
   return {
     everyMs: 5,
@@ -455,7 +468,7 @@ const run = async (kit: Kit) => {
     Date.now() + 3 * HOUR_MS
   );
   await open(page, `${base}/usage`, `[data-tile][data-account="${OTHER}"]`);
-  const limited = await until(
+  const benched = await until(
     "the other email's tile at its limit",
     () => tileOf(page, OTHER),
     (tile) => tile?.say.startsWith("At its limit") === true,
@@ -463,9 +476,54 @@ const run = async (kit: Kit) => {
   ).catch(() => tileOf(page, OTHER));
   kit.check(
     "an account at its limit with an old reading says when it last reported",
-    limited?.say.startsWith("At its limit") === true &&
-      limited.say.includes("Last reported 2h"),
-    JSON.stringify(limited)
+    benched?.say.startsWith("At its limit") === true &&
+      benched.say.includes("Last reported 2h"),
+    JSON.stringify(benched)
+  );
+
+  // 9. The Team seat refused at its limit, moving on, the other email still
+  // benched: its session moves to the personal plan on its email, and its
+  // transcript's line names each with its organization.
+  const put = await fetch(`${fleet.base}/api/accounts/routing/anthropic`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      yours: { strategy: "pinned" },
+      delegates: { strategy: "soonest-reset" },
+      atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
+    }),
+  });
+  if (!put.ok) {
+    throw new Error(`routing: ${put.status} ${await put.text()}`);
+  }
+  limited.add(TEAM);
+  await fleet.send(sessions[TEAM], "PROBE-USAGE at its limit");
+  const moved = await until(
+    "the Team seat's session moved at its limit",
+    () =>
+      fleet
+        .query<{ move: string }>(
+          "SELECT move FROM limit_events WHERE instance_id = ? ORDER BY at",
+          sessions[TEAM]
+        )
+        .map((row) => JSON.parse(row.move) as AccountMove)
+        .find((move) => move.kind === "moved"),
+    (move) => move !== undefined,
+    180_000
+  ).catch(() => undefined);
+  const words = moved ? accountMoveWords(moved, Date.now()) : undefined;
+  kit.check(
+    "a move at the limit to the account sharing its email names each with its organization",
+    moved?.kind === "moved" &&
+      moved.to.id === PERSONAL &&
+      moved.to.name === NAMED[PERSONAL] &&
+      moved.from.name === NAMED[TEAM] &&
+      words?.line.startsWith(`Moved to ${NAMED[PERSONAL]} · `) === true,
+    JSON.stringify({
+      want: { to: NAMED[PERSONAL], from: NAMED[TEAM] },
+      got: moved?.kind === "moved" ? { to: moved.to, from: moved.from } : moved,
+      words,
+    })
   );
 };
 

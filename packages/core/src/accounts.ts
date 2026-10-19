@@ -981,12 +981,22 @@ export const accountName = (
  * whose it is: "bewinxed@petralab.ai (Petralab)".
  */
 export const accountNames = (
-  accounts: readonly Pick<
-    Account,
-    "email" | "id" | "identity" | "label" | "provider"
-  >[]
-): Map<string, string> => {
-  const sharing = (one: (typeof accounts)[number]): boolean =>
+  accounts: readonly NameableAccount[]
+): Map<string, string> =>
+  new Map(accounts.map((one) => [one.id, nameAmong(one, accounts)]));
+
+type NameableAccount = Pick<
+  Account,
+  "email" | "id" | "identity" | "label" | "provider"
+>;
+
+/** `one`'s name among `accounts` ({@link accountNames}); `accounts` may hold other providers'. */
+const nameAmong = (
+  one: NameableAccount,
+  accounts: readonly NameableAccount[]
+): string => {
+  const org = one.identity?.organization;
+  const sharing =
     one.email !== null &&
     accounts.some(
       (other) =>
@@ -994,17 +1004,9 @@ export const accountNames = (
         other.provider === one.provider &&
         other.email?.toLowerCase() === one.email?.toLowerCase()
     );
-  return new Map(
-    accounts.map((one) => {
-      const org = one.identity?.organization;
-      return [
-        one.id,
-        !one.label && org && sharing(one)
-          ? `${one.email} (${org})`
-          : accountName(one),
-      ];
-    })
-  );
+  return !one.label && org && sharing
+    ? `${one.email} (${org})`
+    : accountName(one);
 };
 
 /** An account as a transcript line names it, as it was when the line was written. */
@@ -1014,9 +1016,13 @@ export interface NamedAccount {
   name: string;
 }
 
-export const namedAccount = (account: Account): NamedAccount => ({
+/** `account` as a line names it among `accounts`, the hub's every account ({@link accountNames}). */
+export const namedAccount = (
+  account: Account,
+  accounts: readonly Account[]
+): NamedAccount => ({
   id: account.id,
-  name: accountName(account),
+  name: nameAmong(account, accounts),
   hue: account.hue,
 });
 
