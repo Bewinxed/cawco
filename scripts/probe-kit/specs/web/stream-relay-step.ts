@@ -36,6 +36,7 @@ import type {
 } from "../../../../packages/core/src/stream-relay";
 import {
   RELAY_FAILURES,
+  RELAY_RANGE_WORDS,
   STREAM_RELAY_WORDS as words,
 } from "../../../../packages/core/src/stream-relay";
 import type { Kit, Spec, View } from "../../kit";
@@ -731,7 +732,7 @@ const failures = (kit: Kit): void => {
   const samples = {
     runtimeNeed: RELAY_FAILURES.runtimeNeed("relay", {
       kind: "forwarder",
-      why: "Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 443 and UDP 49152–49400: switch it to its forwarder that carries both.",
+      why: `Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 443 and UDP ${RELAY_RANGE_WORDS}: switch it to its forwarder that carries both.`,
       command: "colima stop && colima start --port-forwarder grpc",
     }),
     unforwarded: RELAY_FAILURES.unforwarded("relay", ["UDP 443"], 20),

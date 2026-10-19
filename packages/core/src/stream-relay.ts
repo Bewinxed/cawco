@@ -22,12 +22,24 @@ import { CAWCO_ENV, readEnv } from "./index";
  * never forwarded and never minted. Its allocations relay through the UDP
  * range. No preview, on the hub or on any agent, ever takes one of these (hub
  * preview.ts, agent hub-loopback.ts).
+ *
+ * The range lies outside every ephemeral range a machine of the fleet hands
+ * out (Linux: "The default values are 32768 and 60999", kernel ip-sysctl;
+ * macOS: `net.inet.ip.portrange.first: 49152`, `last: 65535`), so no
+ * process's outgoing socket ever holds one of its ports: a VM's forwarder
+ * that finds one held binds nothing for it, while coturn inside the VM still
+ * allocates it. It lies below Kubernetes' NodePort range too (30000–32767,
+ * the k3s a VM's runtime may run) and apart from the hub's and the browsers'
+ * ports. Its place is our call; its size is the relay's 249 allocations.
  */
 export const STREAM_RELAY_PORTS = {
   udp: [443, 444],
   tcp: [443, 5349, 5350],
-  relayRange: [49_152, 49_400],
+  relayRange: [24_000, 24_248],
 } as const;
+
+/** The relay range as the person reads it: `24000–24248`. */
+export const RELAY_RANGE_WORDS = `${STREAM_RELAY_PORTS.relayRange[0]}–${STREAM_RELAY_PORTS.relayRange[1]}`;
 
 /** The one port the relay listens on and its URLs name, UDP and TCP, plain and TLS. */
 export const STREAM_RELAY_PORT = 443;
@@ -530,7 +542,7 @@ export const relayWhen = (at: number, now = Date.now()): string => {
 
 /** The forwards to make on a router, as one line to copy: the listener and the relay range, TCP 80 for a certificate over HTTP. */
 const forwardsOf = (lan: string, http: boolean): string =>
-  `UDP 443 · TCP 443 · UDP 49152–49400${http ? " · TCP 80" : ""} → ${lan}`;
+  `UDP 443 · TCP 443 · UDP ${RELAY_RANGE_WORDS}${http ? " · TCP 80" : ""} → ${lan}`;
 
 /* ------------------------------------------------------------------ */
 /* Failures                                                             */
@@ -667,7 +679,7 @@ export const STREAM_RELAY_WORDS = {
   machine: "Pick the machine",
   machineDone: (machine: RelayMachine) =>
     `Runs on ${machine.name} · ${machine.address}${machine.lan ? ", behind a router" : ""}`,
-  none: "No machine of yours is reached from the internet yet. Add one (a small server at a host works), or open UDP and TCP 443 and UDP 49152–49400 on your router to a machine here, then come back.",
+  none: `No machine of yours is reached from the internet yet. Add one (a small server at a host works), or open UDP and TCP 443 and UDP ${RELAY_RANGE_WORDS} on your router to a machine here, then come back.`,
   runHere: "Run the stream relay here",
   behindRouter: "behind a router",
   offline: "offline",
@@ -721,9 +733,9 @@ export const STREAM_RELAY_WORDS = {
   routerRefused:
     "Your router didn't answer UPnP or NAT-PMP. Forward these on it, then come back; the last step proves they're open.",
   routerPartial: (how: RelayMapHow) =>
-    `The router opened UDP and TCP 443 (${how}) but not UDP 49152–49400. Forward that range on the router by hand; the last step proves it.`,
+    `The router opened UDP and TCP 443 (${how}) but not UDP ${RELAY_RANGE_WORDS}. Forward that range on the router by hand; the last step proves it.`,
   forwards: forwardsOf,
-  rangeForward: (lan: string) => `UDP 49152–49400 → ${lan}`,
+  rangeForward: (lan: string) => `UDP ${RELAY_RANGE_WORDS} → ${lan}`,
   forwardsLabel: "The forwards to make",
   copyRecord: "Copy record",
   copyForwards: "Copy forwards",

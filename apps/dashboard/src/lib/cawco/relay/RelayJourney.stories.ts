@@ -9,6 +9,7 @@
  * (stream-relay.ts), as the hub sends it.
  */
 import {
+  RELAY_RANGE_WORDS,
   type RelayStep,
   type RelaySummary,
   suggestedName,
@@ -192,7 +193,7 @@ const forwarder = {
       network: "published",
       need: {
         kind: "forwarder",
-        why: "Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 443 and UDP 49152–49400: switch it to its forwarder that carries both.",
+        why: `Colima forwards only TCP from its VM, and the stream relay needs UDP and TCP 443 and UDP ${RELAY_RANGE_WORDS}: switch it to its forwarder that carries both.`,
         command: "colima stop && colima start --port-forwarder grpc",
       },
     },
