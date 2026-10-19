@@ -56,7 +56,9 @@ function nextFrame(node: HTMLElement, fit: () => void) {
  *   the field glides to the value's size once let go; typing fits at once.
  * - `fold`: asked with the text's full height at each fit; when it says so
  *   the field stands at its stylesheet height (one line) instead, scrolled
- *   to its first line.
+ *   to its first line. A fit that folds the field or opens it marks it
+ *   `data-folding` for as long as the height change that fit started runs,
+ *   so the stylesheet can give folding and opening a clock of their own.
  * - `measured`: told the text's full height at each fit.
  */
 export function autosize(
@@ -107,6 +109,38 @@ export function autosize(
     node.after(twin);
     let width = 0;
     let natural = 0;
+    /** Whether the last fit left the field folded; unknown before the first. */
+    let wasFolded: boolean | undefined;
+    /** The fold change the mark stands for: a later one takes it over. */
+    let turn = 0;
+    /**
+     * The mark stays only while the height change this fit started runs,
+     * and goes as it ends or is cut short. A fold whose height did not move
+     * (a draft emptied in the same frame as the field took focus, or with
+     * less motion) starts none, and the mark goes at once: kept until a
+     * transition that never ran had ended, it stood for good, and every line
+     * typed after it grew on the fold's clock.
+     */
+    const markFold = () => {
+      turn += 1;
+      const mine = turn;
+      const glide = node
+        .getAnimations()
+        .find(
+          (run) =>
+            run instanceof CSSTransition && run.transitionProperty === "height"
+        );
+      const done = () => {
+        if (turn === mine) {
+          delete node.dataset.folding;
+        }
+      };
+      if (glide) {
+        glide.finished.then(done, done);
+      } else {
+        done();
+      }
+    };
     const fit = () => {
       width = node.offsetWidth;
       twin.style.width = `${width}px`;
@@ -131,8 +165,18 @@ export function autosize(
         Number.parseFloat(getComputedStyle(node).maxHeight) ||
         Number.POSITIVE_INFINITY;
       const next = folded ? "" : `${Math.min(natural, cap)}px`;
+      // Marked before the height is written, so the style that starts the
+      // change already has the fold's clock.
+      const turning = wasFolded !== undefined && folded !== wasFolded;
+      wasFolded = folded;
+      if (turning) {
+        node.dataset.folding = "";
+      }
       if (node.style.height !== next) {
         node.style.height = next;
+      }
+      if (turning) {
+        markFold();
       }
       if (folded) {
         node.scrollTop = 0;

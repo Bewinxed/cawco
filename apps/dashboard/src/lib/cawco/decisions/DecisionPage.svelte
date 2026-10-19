@@ -340,18 +340,23 @@
         {refusal}
       </p>
     {/if}
-    <!-- Its shell is the composer's (app.css `.kit-dock-shell`). -->
+    <!-- Its shell is the composer's (app.css `.kit-dock-shell`). The note's
+         sizes stand on the shell, so the field and the twin its autosize
+         measures on (motion/autosize.svelte.ts, which writes the twin's own
+         style whole) inherit them alike. -->
+    <!-- literal: 200px, 1.25, max(16px, var(--text-body)) -->
     <div
       data-slot="cin"
       class="kit-dock-shell flex items-end gap-space-2 p-c-composer-inset ps-space-3"
+      style:--note-max-h="200px"
+      style:--note-leading="1.25"
+      style:--note-fs="max(16px, var(--text-body))"
     >
-      <!-- literal: 200px, 1.25, max(16px, var(--text-body)) -->
       <Textarea
         data-note
         aria-label="Add a note for the session"
         class="max-h-(--note-max-h) min-h-c-composer-field flex-auto"
         look="note"
-        style="--note-max-h: 200px; --note-leading: 1.25; --note-fs: max(16px, var(--text-body))"
         oninput={() => {
           refusal = null;
         }}

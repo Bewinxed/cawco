@@ -5,14 +5,16 @@
   /** Its callers' looks, each as they drew it. */
   export const drawerContentVariants = tv({
     variants: {
-      /** Its foot: a sheet with a footer of its own height (`--sheet-foot`)
-          and no other padding; or the safe area alone, on every sheet or a
-          bottom sheet only. */
+      /** Its foot: none at all, a bottom sheet's safe-area foot included (its
+          content keeps the safe area clear itself); a sheet with a footer of
+          its own height (`--sheet-foot`) and no other padding; or the safe
+          area alone, on every sheet or a bottom sheet only. */
       pad: {
-        none: "p-0",
+        none: "p-0 vaul-drawer-direction-bottom:pb-0",
         "sheet-foot":
           "p-0 pb-(--sheet-foot) vaul-drawer-direction-bottom:pb-(--sheet-foot)",
-        "safe-bottom": "pb-(--safe-bottom)",
+        "safe-bottom":
+          "pb-(--safe-bottom) vaul-drawer-direction-bottom:pb-(--safe-bottom)",
         "sheet-safe-bottom": "vaul-drawer-direction-bottom:pb-(--safe-bottom)",
       },
       /** A sheet in a column that may shrink below its content. */

@@ -11,6 +11,10 @@
  *   bun scripts/probe-kit/run.ts style-snapshot [--surfaces=a,b] --approve    writes them
  *   bun scripts/probe-kit/run.ts style-snapshot --coverage                    the coverage map
  *   bun scripts/probe-kit/run.ts style-snapshot --coverage --styled-at=<rev>  of the files styled at <rev>
+ *   bun scripts/probe-kit/run.ts style-snapshot --coverage --surfaces=a        the element a difference line
+ *     --where='<key>'                                                       names: its source line and tag
+ *   bun scripts/probe-kit/run.ts style-snapshot --coverage --surfaces=a        a state's `$props.id()`s, in
+ *     --ids=<state>                                                         order, with their files (ids-*.txt)
  *   bun scripts/probe-kit/run.ts style-snapshot --record                      the hub tape, again
  *   bun scripts/probe-kit/run.ts style-snapshot --record --without-delegate   in a workspace: no delegate,
  *                                                                             its states left out with a NOTE
@@ -64,7 +68,7 @@ import { join, relative } from "node:path";
 import { recorder, type Tape, type TapeHub, writeTape } from "../hub-tape";
 import { type Kit, ROOT, type Spec } from "../kit";
 import { chosen, type Surface } from "../surfaces/catalogue";
-import { PROPS, readSurface } from "../surfaces/read";
+import { elementAt, PROPS, readSurface } from "../surfaces/read";
 import {
   enterVariant,
   HOLDS,
@@ -603,6 +607,30 @@ function filesUnder(root: string): { chain: string[]; own: string[] } {
   return { own: [...own], chain: [...chain] };
 }
 
+/**
+ * Every `$props.id()` the page still shows (`c<n>`, in an id or an
+ * attribute that names one), in the counter's order, each with the file
+ * that wrote its element: where two trees' counters part, the instances
+ * made between are the ones one tree makes and the other does not.
+ */
+function propsIds(): string[] {
+  const out = new Map<number, string>();
+  for (const el of document.querySelectorAll("*")) {
+    const file =
+      (el as unknown as { __svelte_meta?: { loc?: { file?: string } } })
+        .__svelte_meta?.loc?.file ?? "(no source)";
+    for (const attr of el.attributes) {
+      for (const match of attr.value.matchAll(/\bc(\d+)(?![\w])|\bc(\d+)-/g)) {
+        const n = Number(match[1] ?? match[2]);
+        if (!out.has(n)) {
+          out.set(n, `c${n} ${attr.name} <${el.localName}> ${file}`);
+        }
+      }
+    }
+  }
+  return [...out.entries()].sort((a, b) => a[0] - b[0]).map(([, v]) => v);
+}
+
 /** Each of `files` (as `__svelte_meta` names them) heard on `surface`, repo-relative. */
 function heard(
   into: Map<string, Set<string>>,
@@ -628,6 +656,24 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
     surfaces.map((s) => ({ ...s, serve: "dev" as const })),
     PASSES.filter((p) => !p.reduced && p.theme === "light"),
     async ({ page, pass, state, surface }) => {
+      const ids = flag("ids");
+      if (ids && state.name === ids) {
+        const listed = await page.evaluate(propsIds);
+        await writeFile(
+          join(kit.out, `ids-${surface.name}-${state.name}-${pass.width}.txt`),
+          `${listed.join("\n")}\n`
+        );
+      }
+      const where = flag("where");
+      if (where) {
+        const found = await page.evaluate(elementAt, {
+          key: where,
+          root: state.root,
+        });
+        kit.note(
+          `where ${surface.name}/${state.name} · ${pass.width}: ${found ? `${found.at} ${found.tag}` : "nothing at that key"}`
+        );
+      }
       const read = await page.evaluate(filesUnder, state.root);
       heard(seen, read.own, surface.name);
       heard(chained, read.chain, surface.name);
@@ -645,6 +691,11 @@ async function coverage(kit: Kit, surfaces: Surface[]): Promise<void> {
     },
     (what, why) => kit.note(`${what}: did not open (${why})`)
   );
+  // A walk that names one element, or lists a state's ids, counts nothing:
+  // the map stays as it was.
+  if (flag("where") || flag("ids")) {
+    return;
+  }
   const map: Record<string, string[]> = {};
   const uncovered: string[] = [];
   const at = flag("styled-at");

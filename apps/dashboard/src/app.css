@@ -2764,6 +2764,36 @@
   font-variant-numeric: tabular-nums !important;
 }
 
+/* A line pinned to its end whose start fades out over its first 30%
+   (Thinking's folded tail: the newest words show, the oldest fade). */
+@utility tail-fade {
+  mask-image: linear-gradient(to right, transparent, oklch(0% 0 0) 30%);
+}
+
+/* Crepe's inline LaTeX editor (MarkdownEditor) writes `class="container"`,
+   which Tailwind's `container` utility reaches: its full width, and at each
+   of Tailwind's own breakpoints (40rem, 48rem, 64rem, 80rem, 96rem) that
+   width at most. The theme's breakpoints (theme.css) would cap it at
+   theirs; these keep the widths it has. No element of the dashboard's own
+   writes `container`. */
+@utility container {
+  @media (width >= 40rem) {
+    max-width: 40rem;
+  }
+  @media (width >= 48rem) {
+    max-width: 48rem;
+  }
+  @media (width >= 64rem) {
+    max-width: 64rem;
+  }
+  @media (width >= 80rem) {
+    max-width: 80rem;
+  }
+  @media (width >= 96rem) {
+    max-width: 96rem;
+  }
+}
+
 /* A measured figure among Figtree words (a time, a share left, a count, an
    hour tick): JetBrains Mono at its line's size, ligatures off, tabular,
    its digits brought to Figtree's cap height (`mono-figure-cap`) so they

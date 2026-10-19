@@ -93,12 +93,19 @@
     const at = new Map(
       graph.cards.map((card) => [card.id, { x: card.x, y: card.y }])
     );
+    const before = new Map(untrack(() => nodes).map((node) => [node.id, node]));
     nodes = [
       ...framesOf(at),
       ...graph.cards.map((card) => ({
         id: card.id,
         type: "decision",
         position: { x: card.x, y: card.y },
+        // A card keeps what Svelte Flow measured of it across a redraw.
+        // Handed in unmeasured, it is drawn hidden, and its edges unhooked,
+        // until measured again: every change to the graph blinked them all.
+        ...(before.get(card.id)?.measured
+          ? { measured: before.get(card.id)?.measured }
+          : {}),
         connectable: false,
         selectable: false,
         data: {

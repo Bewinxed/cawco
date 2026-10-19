@@ -14,7 +14,7 @@
     SvelteFlow,
   } from "@xyflow/svelte";
   import "@xyflow/svelte/dist/style.css";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { newId } from "#lib/cawco/id.js";
   import { workflowState } from "#lib/cawco/workflow-state.svelte.js";
   import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
@@ -88,10 +88,18 @@
   const nameOf = (key: string | undefined) =>
     workflowState.workflows.find((entry) => entry.id === key)?.name;
   $effect(() => {
+    const before = new Map(untrack(() => nodes).map((node) => [node.id, node]));
     nodes = graph.nodes.map((node) => ({
       id: node.id,
       type: "workflow",
       position: node.position,
+      // A node keeps what Svelte Flow measured of it across a rebuild.
+      // Handed in unmeasured, it is drawn hidden until measured again: each
+      // pick hid every node for a frame, and the node just picked, hidden
+      // while it held focus, lost it.
+      ...(before.get(node.id)?.measured
+        ? { measured: before.get(node.id)?.measured }
+        : {}),
       selected: selection === node.id,
       data: {
         node,
