@@ -11,9 +11,9 @@
  * one without draw the same frame.
  */
 import { existsSync } from "node:fs";
-import { mkdir, rm } from "node:fs/promises";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import {
   type Browser,
   type BrowserContext,
@@ -25,6 +25,7 @@ import {
   webkit,
 } from "playwright-core";
 import { readWithin } from "../../packages/core/src/bounded";
+import { openLockFile, tryLock, unlock } from "../../packages/core/src/flock";
 import { type HeavySlot, heavySlot } from "../lib/heavy-run";
 import {
   type Fleet,
@@ -340,6 +341,23 @@ function installRuns(): void {
   };
 }
 
+/** The dashboard's vite, run as itself: one process a kill ends (`bunx` left its `node vite` running). */
+const VITE = join(DASHBOARD, "node_modules", ".bin", "vite");
+
+/**
+ * Every vite this process started (a build, a server) that has not ended:
+ * each is ended as the process exits, however it exits but a SIGKILL. A stop signal
+ * reaches the exit through scratch-fleet.ts's own handlers, which end the
+ * process once its fleets are gone; a run stopped that way left its `vite
+ * preview` servers running, their parent the init process.
+ */
+const VITES = new Set<Bun.Subprocess>();
+process.on("exit", () => {
+  for (const child of VITES) {
+    child.kill();
+  }
+});
+
 /**
  * The dashboard built, as the probes' `vite preview` serves it: the shipped
  * build's code in the `bench` mode, whose one difference is that the
@@ -347,7 +365,7 @@ function installRuns(): void {
  * spec times one as built.
  */
 const viteBuild = async (): Promise<void> => {
-  const child = Bun.spawn(["bunx", "vite", "build", "--mode", "bench"], {
+  const child = Bun.spawn([VITE, "build", "--mode", "bench"], {
     cwd: DASHBOARD,
     // This process's own, git's repository variables gone (scratch-fleet.ts
     // `GIT_REPOSITORY_ENV`): the build reads `git rev-parse` for its version.
@@ -355,6 +373,8 @@ const viteBuild = async (): Promise<void> => {
     stdout: "pipe",
     stderr: "pipe",
   });
+  VITES.add(child);
+  child.exited.then(() => VITES.delete(child));
   const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),
@@ -362,6 +382,78 @@ const viteBuild = async (): Promise<void> => {
   ]);
   if (code !== 0) {
     throw new Error(`vite build exited ${code}: ${(err || out).slice(-2000)}`);
+  }
+};
+
+/** The lock every run of this tree builds the dashboard under, and the tree state its build was made from. */
+const BUILD_LOCK = join(ROOT, ".probe", "dashboard-build.lock");
+const BUILD_STAMP = join(ROOT, ".probe", "dashboard-build.stamp");
+/** What `vite preview` serves: SvelteKit's output, there once a build has finished. */
+const BUILD_SERVED = join(DASHBOARD, ".svelte-kit", "output", "client");
+const BUILD_POLL_MS = 250;
+
+/**
+ * The tree's state as a build reads it: its commit, its changes against it
+ * (`git diff HEAD --binary`), and every untracked file's path and bytes. Two
+ * runs at one state build the same dashboard.
+ */
+const treeState = async (): Promise<string> => {
+  const git = (...args: string[]) =>
+    Bun.$`git ${args}`.cwd(ROOT).env(process.env).quiet().nothrow();
+  const hash = new Bun.CryptoHasher("sha256");
+  hash.update((await git("rev-parse", "HEAD")).stdout);
+  hash.update((await git("diff", "HEAD", "--binary")).stdout);
+  const untracked = (
+    await git("ls-files", "--others", "--exclude-standard", "-z")
+  ).stdout
+    .toString()
+    .split("\0")
+    .filter(Boolean)
+    .sort();
+  for (const path of untracked) {
+    hash.update(path);
+    hash.update(
+      // biome-ignore lint/performance/noAwaitInLoops: each file's bytes in path order, into one hash.
+      await Bun.file(join(ROOT, path))
+        .bytes()
+        .catch(() => new Uint8Array())
+    );
+  }
+  return hash.digest("hex");
+};
+
+/**
+ * The dashboard built for the tree as it stands, one run of this tree at a
+ * time: every `run.ts` builds into the one output (`.svelte-kit/output`,
+ * adapter-node's `.build-next`), and two building at once wrote over each
+ * other mid-build (a "use client" chunk read half-written). A run takes
+ * {@link BUILD_LOCK}, waiting while another holds it, and reuses the build
+ * another run finished at this same tree state (the stamp names it);
+ * otherwise it builds, its stamp cleared first so a build that fails is
+ * never reused, and written once it is whole.
+ */
+const sharedBuild = async (): Promise<void> => {
+  await mkdir(dirname(BUILD_LOCK), { recursive: true });
+  const fd = openLockFile(BUILD_LOCK, true);
+  try {
+    while (!tryLock(fd)) {
+      // biome-ignore lint/performance/noAwaitInLoops: waiting for another run's build of this tree.
+      await Bun.sleep(BUILD_POLL_MS);
+    }
+    const state = await treeState();
+    const stamp = (await readFile(BUILD_STAMP, "utf8").catch(() => "")).trim();
+    if (stamp === state && existsSync(BUILD_SERVED)) {
+      console.log(
+        "… the dashboard is built at this tree's state already (another run's build), reused"
+      );
+      return;
+    }
+    console.log("… building the dashboard");
+    await rm(BUILD_STAMP, { force: true });
+    await viteBuild();
+    await writeFile(BUILD_STAMP, `${state}\n`);
+  } finally {
+    unlock(fd);
   }
 };
 
@@ -380,16 +472,7 @@ async function serve(
 ) {
   const port = at ?? (await freePort());
   const child = Bun.spawn(
-    [
-      "bunx",
-      "vite",
-      how,
-      "--host",
-      host,
-      "--port",
-      String(port),
-      "--strictPort",
-    ],
+    [VITE, how, "--host", host, "--port", String(port), "--strictPort"],
     {
       cwd: DASHBOARD,
       env: {
@@ -401,6 +484,8 @@ async function serve(
       stderr: "ignore",
     }
   );
+  VITES.add(child);
+  child.exited.then(() => VITES.delete(child));
   const base = `http://${host.includes(":") ? `[${host}]` : host}:${port}`;
   await until(
     "the built dashboard answering",
@@ -477,12 +562,11 @@ export class Run {
     return this.slot;
   }
 
-  /** The dashboard built once per run, the first time a spec needs it. */
+  /** The dashboard built once per run, the first time a spec needs it, shared with every other run of this tree ({@link sharedBuild}). */
   build(): Promise<void> {
     this.built ??= (async () => {
       await this.heavy();
-      console.log("… building the dashboard");
-      await viteBuild();
+      await sharedBuild();
     })();
     return this.built;
   }
