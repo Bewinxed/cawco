@@ -1,0 +1,16 @@
+/**
+ * Resizing Caw's panel on a desk, one option for the decision page: drag the panel's leading edge, its foot or their corner, the rail's own grip.
+ */
+import PanelScreen from "./PanelScreen.svelte";
+
+export default {
+  title: "Making Caw's panel bigger/Its edges, as the rail's",
+  component: PanelScreen,
+  args: { scene: "thread", form: "desk", resize: "edges" },
+};
+
+/** Desk: at rest, 380 × 640. Try it here. */
+export const Desk = {
+  args: {},
+  parameters: { viewport: 820 },
+};
