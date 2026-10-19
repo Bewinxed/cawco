@@ -47,7 +47,7 @@
   <Popover.Trigger
     data-picker-chip
     aria-label="{label}: {chosen}"
-    class="inline-flex items-center gap-space-2 max-w-full h-c-btn-h-sm px-space-3 border border-border-control rounded-md bg-surface-raised type-label text-ink-strong transition-control hover:bg-surface-hover motion-safe:active:scale-(--press-scale) mark-line"
+    class="inline-flex items-center gap-space-2 max-w-full h-c-btn-h-sm px-space-3 border border-border-control rounded-sm bg-surface-raised type-label text-ink-strong transition-control hover:bg-surface-hover motion-safe:active:scale-(--press-scale) mark-line"
     motion="press"
   >
     <span class="text-ink-muted">{label}</span>

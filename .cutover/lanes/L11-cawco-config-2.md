@@ -7,7 +7,7 @@ Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:bet
 | file | rules moved / literals converted | `<style>` left |
 | --- | --- | --- |
 | config/NewMemoryPopover.svelte | inline popover size style + form gap literal → `width="widest"`, `max-w-(--bits-popover-content-available-width)`, `gap-space-3` | none |
-| config/PickerChip.svelte | chip gap/height/pad, option gap/pad, group pad literals; `--tpress` → `motion-safe:active:scale-(--press-scale)`; `[&:hover]` → `hover:`; clip/ellipsis/nowrap → `truncate`; `text-left` → `text-start` | none |
+| config/PickerChip.svelte | chip radius `rounded-sm` (DESIGN.md: setting chips 8px, 30px high); chip gap/height/pad, option gap/pad, group pad literals; `--tpress` → `motion-safe:active:scale-(--press-scale)`; `[&:hover]` → `hover:`; clip/ellipsis/nowrap → `truncate`; `text-left` → `text-start` | none |
 | config/PreviousVersions.svelte | 72ch measure ×3, gaps, pads literals; mono span off `font-mono` (R3) | none |
 | config/ReadingWell.svelte | 72ch measure, 12px pad | none |
 | config/RolloutChip.svelte | chip/popover/machine row/sync button/notes literals; sync button's dead `:global(svg)` rule deleted | none (was foreign-dom, dead) |
@@ -54,20 +54,19 @@ theme: component section-row-tile-glyph
   }
 }
 ```
-theme: component section-row-controls-ghost
+theme: utility ghost-rest-fill
 ```css
-@layer components {
+@utility ghost-rest-fill {
   @media (hover: hover) {
-    :root:not(.dark) [data-slot="row"] [data-slot="controls"] [data-ghost]:hover:not(:disabled) {
-      background: var(--surface-fill-strong);
+    :root:not(.dark) & [data-ghost]:hover:not(:disabled) {
+      background-color: var(--surface-fill-strong);
     }
   }
 }
 ```
-(The original was a scoped rule that beat the kit button's own hover; in `@layer components` the kit's `hover:bg-[var(--surface-hover)]` utility wins, so integration should apply it as the ghost variant below, not as this rule. By night the kit's own hover already is `--surface-hover`.)
+(A utility, so it is in the same layer as the kit button's `hover:bg-[var(--surface-hover)]` and its selector is more specific: it wins by day. By night the kit's own hover already is `--surface-hover`.)
 
 ## Kit swaps
-kit-swap: SectionRow.svelte:~170 (RowMenu's ghost trigger inside `[data-slot="controls"]`) Button variant ghost — `row-resting` variant: day hover `surface-fill-strong`, the row's hover step past the ghost.
 kit-swap: RolloutChip.svelte:~212 `<button data-slot="sync">` → kit Button `size="xs" variant="ghost"` — not a straight swap (PendingContent, `whileIdle`, aria-busy/aria-disabled handled by hand); left as is.
 
 ## Contracts
@@ -77,7 +76,6 @@ kit-swap: RolloutChip.svelte:~212 `<button data-slot="sync">` → kit Button `si
 gap: RolloutChip.svelte:~212 hand-rolled sync button (24px, label type, hover tint, press scale) — DESIGN.md Components: controls are the kit's button; needs a kit variant that takes `PendingContent` without `size-` override.
 gap: SectionRow.svelte [data-slot="controls"] `hit-gap-x` — the touch-hit gap should come from the kit's controls row, not be set per row; `hit-gap-coarse-*` in app.css is now unused by this file.
 gap: NewMemoryPopover.svelte / RolloutChip.svelte popovers use `width="widest"` (384px, was 360px): the kit has no 360px width step; DESIGN.md names none.
-gap: PickerChip.svelte chip radius is `rounded-md` (10px, a control) where DESIGN.md Components says setting chips are 8px (`rounded-sm`) and 30px high; height now `h-c-btn-h-sm` (30px, was 32px); the radius is not a literal and is left for the audit.
 
 ## Needs
 needs variant: none · needs transition token: none · kind-5 declarations: none · literals preserved: none · breakpoint edges: `max-phone:` (was `max-width: 639px`) unchanged.
