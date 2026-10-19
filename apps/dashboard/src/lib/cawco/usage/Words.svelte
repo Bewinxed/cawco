@@ -33,7 +33,7 @@
       {:else}
         <span
           data-slot="dot"
-          class="me-space-1 inline-block size-(--c-mark-dot) rounded-pill bg-(color:--c) align-middle"
+          class="me-space-1 inline-block size-c-mark-dot rounded-pill bg-(color:--c) align-middle"
           style:--c={part.color}
         ></span><b class="font-medium text-ink-strong">{part.account}</b>
       {/if}

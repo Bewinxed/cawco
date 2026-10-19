@@ -680,7 +680,7 @@
             <span {...props} class="flex min-w-0 items-center gap-space-2">
               <span
                 data-slot="fill"
-                class="h-(--c-meter-bar-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
+                class="h-c-meter-bar-h w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
                 style:--share={item.share}
                 style:--fill-w="calc(var(--share) * (100% - 5.5rem))"
               ></span>
@@ -699,7 +699,7 @@
       <span class="flex min-w-0 items-center gap-space-2">
         <span
           data-slot="fill"
-          class="h-(--c-meter-bar-h) w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
+          class="h-c-meter-bar-h w-(--fill-w) min-w-space-row flex-none rounded-hair bg-meter-share motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
           style:--share={item.share}
           style:--fill-w="calc(var(--share) * (100% - 5.5rem))"
         ></span>
