@@ -2494,6 +2494,7 @@ export const createAccount = (body: {
 export const patchAccount = (
   id: string,
   patch: {
+    atPlanLimit?: Account["atPlanLimit"];
     hue?: AccountHue;
     label?: string | null;
     neverBackup?: boolean;

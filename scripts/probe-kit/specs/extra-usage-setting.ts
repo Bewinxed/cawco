@@ -12,6 +12,8 @@
  * its plan.
  *
  * - default: A's setting reads `move` before anyone sets it.
+ * - edit sheet: A's Edit sheet, on a phone and a desk, switches it on and
+ *   off, and the hub holds what was saved.
  * - keep going: A set to `extra-usage`, a session's turn on A runs on its
  *   extra usage. Its turn's end and the hub's next look (at-limit.ts
  *   `RECHECK_MS`, armed when A's bench came, its rebalance pass over A's
@@ -25,10 +27,10 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { Account } from "../../../packages/core/src";
+import { type Account, accountsWords } from "../../../packages/core/src";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { ACCOUNT, type Reply, type Seen, until } from "../../scratch-fleet";
-import type { Kit, KitFleet, Spec } from "../kit";
+import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 const B = "acct-scratch-fleet-b";
 /** Each account's token, as its requests carry it. */
@@ -324,9 +326,87 @@ const run = async (kit: Kit) => {
     a?.atPlanLimit === "move",
     JSON.stringify(a ?? null)
   );
+  await editSheetLeg(kit, fleet);
   const instance = await keepGoingLeg(kit, fleet);
   if (instance) {
     await moveLeg(kit, fleet, instance);
+  }
+};
+
+/** A's setting as the hub holds it now. */
+const settingOfA = async (fleet: KitFleet) =>
+  (
+    await fleet.api<{ accounts: Partial<Account>[] }>("/api/accounts")
+  ).accounts.find((one) => one.id === ACCOUNT)?.atPlanLimit;
+
+/**
+ * A's Edit sheet (AccountEditor.svelte), on a phone and a desk: its switch
+ * reads A's setting, off at the default; on and saved, the hub holds
+ * `extra-usage` and the hint says its sessions carry on there; off and saved,
+ * `move` again. Nothing on the page is wider than the screen.
+ */
+const editSheetLeg = async (kit: Kit, fleet: KitFleet): Promise<void> => {
+  const base = await fleet.dashboard();
+  const words = accountsWords.editor;
+  for (const view of ["phone", "desk"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: both views save the hub's one setting of A, so they run in turn
+    const page = await kit.page(view);
+    await open(
+      page,
+      `${base}/config/accounts/${ACCOUNT}`,
+      `[role="switch"]#extra-usage`
+    );
+    const toggle = page.getByRole("switch", { name: words.extraUsage });
+    const save = page.getByRole("button", {
+      name: words.save,
+      exact: true,
+      disabled: false,
+    });
+    const before = await toggle.getAttribute("aria-checked");
+    const offHint = await page.getByText(words.extraUsageOff).count();
+    await toggle.click();
+    const onHint = await page.getByText(words.extraUsageOn).count();
+    await save.click();
+    const saved = await until(
+      `${view}: the hub holds A's setting as extra-usage`,
+      () => settingOfA(fleet),
+      (setting) => setting === "extra-usage",
+      20_000
+    ).catch(() => settingOfA(fleet));
+    const wide = await page.evaluate(() => ({
+      page: document.documentElement.scrollWidth,
+      screen: window.innerWidth,
+      row: Math.round(
+        document
+          .querySelector("#extra-usage")
+          ?.closest('[data-slot="row"]')
+          ?.getBoundingClientRect().right ?? Number.NaN
+      ),
+    }));
+    kit.check(
+      `edit sheet (${view}): the switch reads off at the default, its hint says sessions move; switched on and saved, the hub holds extra-usage and the hint says they carry on there; nothing overflows`,
+      before === "false" &&
+        offHint === 1 &&
+        onHint === 1 &&
+        saved === "extra-usage" &&
+        wide.page <= wide.screen &&
+        wide.row <= wide.screen,
+      `aria-checked ${before}; off hint ${offHint}, on hint ${onHint}; hub ${saved}; page ${wide.page}px, row ends ${wide.row}px, screen ${wide.screen}px`
+    );
+    await page.getByRole("switch", { name: words.extraUsage }).click();
+    await save.click();
+    const back = await until(
+      `${view}: the hub holds A's setting as move again`,
+      () => settingOfA(fleet),
+      (setting) => setting === "move",
+      20_000
+    ).catch(() => settingOfA(fleet));
+    kit.check(
+      `edit sheet (${view}): switched off and saved, the hub holds move again`,
+      back === "move",
+      `hub ${back}`
+    );
+    await page.close();
   }
 };
 

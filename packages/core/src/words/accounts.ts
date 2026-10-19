@@ -79,6 +79,10 @@ export const accountsWords = {
     looks: "Looks",
     limits: "Limits",
     neverBackup: "Never use as a backup",
+    /** At a plan limit with extra usage on (core `AtPlanLimit`): on, its sessions keep going there. */
+    extraUsage: "Keep going on extra usage at a plan limit",
+    extraUsageOn: "Its sessions carry on here, paid from its extra usage.",
+    extraUsageOff: "Its sessions move to an account with plan room.",
     reserve: "Stop placing new work past",
     reserveUnit: "% of the week",
     reserveInvalid:

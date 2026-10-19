@@ -7,7 +7,11 @@
    * Remove signs it out everywhere first, and a refusal (a session still on
    * it, a machine away) is the hub's sentence.
    */
-  import { type Account, accountsWords as words } from "@cawco/core";
+  import {
+    type Account,
+    CLAUDE_PROVIDER,
+    accountsWords as words,
+  } from "@cawco/core";
   import { untrack } from "svelte";
   import {
     cawco,
@@ -42,6 +46,8 @@
   let { account }: { account: Account } = $props();
 
   interface Fields {
+    /** At a plan limit with extra usage on: keep going here (on), or move (off). */
+    extraUsage: boolean;
     hue: Account["hue"];
     neverBackup: boolean;
     nickname: string;
@@ -53,6 +59,7 @@
     hue: account.hue,
     neverBackup: account.neverBackup,
     reserve: account.reservePct === null ? "" : String(account.reservePct),
+    extraUsage: account.atPlanLimit === "extra-usage",
   });
   let fields = $state<Fields>(untrack(saved));
   const dirty = $derived(JSON.stringify(fields) !== JSON.stringify(saved()));
@@ -64,6 +71,8 @@
     }
   );
   const limits = $derived(providerLimits(account.provider));
+  /** Extra usage is Claude's: only a Claude account has the choice. */
+  const extraUsage = $derived(account.provider === CLAUDE_PROVIDER);
 
   /** The reserve as the hub takes it: a whole percentage, or null. */
   const reservePct = $derived.by(() => {
@@ -90,6 +99,9 @@
         label: fields.nickname.trim() || null,
         hue: fields.hue,
         ...(limits ? { neverBackup: fields.neverBackup, reservePct } : {}),
+        ...(extraUsage
+          ? { atPlanLimit: fields.extraUsage ? "extra-usage" : "move" }
+          : {}),
       });
       kept.drop();
     } catch (error) {
@@ -191,6 +203,16 @@
         label={words.editor.neverBackup}
         bind:checked={fields.neverBackup}
       />
+      {#if extraUsage}
+        <SwitchField
+          id="extra-usage"
+          hint={fields.extraUsage
+            ? words.editor.extraUsageOn
+            : words.editor.extraUsageOff}
+          label={words.editor.extraUsage}
+          bind:checked={fields.extraUsage}
+        />
+      {/if}
       <div class="reserve">
         <label for="reserve">{words.editor.reserve}</label>
         <!-- The figure and its unit hold together on one line. -->
