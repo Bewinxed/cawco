@@ -350,7 +350,7 @@
              trailing edge. -->
         <div
           data-slot="actions"
-          class="sticky bottom-0 z-1 mt-space-1 flex flex-wrap items-center justify-end gap-space-1 bg-surface-raised before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-(--fade-len) before:bg-linear-to-b before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:dur-control before:ease-out data-stuck:before:opacity-100"
+          class="sticky bottom-0 z-1 mt-space-1 flex flex-wrap items-center justify-end gap-space-1 bg-surface-raised before:pointer-events-none before:absolute before:inset-x-0 before:bottom-full before:h-(--fade-len) before:bg-linear-to-b/srgb before:from-transparent before:to-surface-raised before:opacity-0 before:transition-[opacity] before:dur-control before:ease-out data-stuck:before:opacity-100"
           {@attach held}
         >
           {#if showConfigure}
