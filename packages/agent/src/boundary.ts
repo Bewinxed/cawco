@@ -179,6 +179,8 @@ import {
   srtSettings,
 } from "./boundary-policy";
 import { closeWorkspaceBrowsers, ensureGateToken } from "./browser/gate";
+import { colimaHome } from "./browser/media-forwarding";
+import { runtimeSockets } from "./browser/runtime";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
 import { cawcoCommand } from "./git-credential";
@@ -2327,14 +2329,13 @@ const LAUNCHD_SOCKETS = "/private/tmp";
 const SIMULATOR_SOCKETS = "/private/var/tmp";
 
 /**
- * Where a Mac's container runtimes keep their sockets (browser/runtime.ts
- * looks in each): Docker's system socket (its link and the file it names
- * both resolve past `/var/run`, which no policy denies on macOS) and the
- * user's Docker Desktop, OrbStack, Colima, Rancher Desktop and Podman
- * machine dirs, all under home, denied by the policy already and named here
- * so a policy's allow under home never reopens one.
+ * Where container runtimes keep their sockets: Docker's system socket (on
+ * macOS its link and the file it names both resolve past `/var/run`, which
+ * no policy denies there) and the user's Docker Desktop, OrbStack, Colima,
+ * Rancher Desktop and Podman machine dirs, under home, denied by the policy
+ * already and named so a policy's allow under home never reopens one.
  */
-const CONTAINER_SOCKETS = [
+const containerSocketDirs = (): string[] => [
   "/var/run/docker.sock",
   "/private/var/run/docker.sock",
   join(homedir(), ".docker", "run"),
@@ -2342,7 +2343,37 @@ const CONTAINER_SOCKETS = [
   join(homedir(), ".colima"),
   join(homedir(), ".rd"),
   join(homedir(), ".local", "share", "containers"),
+  // Colima's home where `COLIMA_HOME` or `$XDG_CONFIG_HOME/colima` puts it.
+  colimaHome(),
 ];
+
+/**
+ * Every place a container runtime's socket is, which no workspace connects
+ * to: the runtimes' own dirs ({@link containerSocketDirs}) and every socket
+ * the runtime registry may dial wherever it lives (browser/runtime.ts
+ * `runtimeSockets`: `DOCKER_HOST`'s, the Docker context's, each runtime's
+ * usual one), each as named and as the file it names. A command that
+ * reached one would run a container of its own beside a project's browser,
+ * or into it. `dirs` are runtime dirs, denied whole; `sockets` are the
+ * endpoints, which may sit in a dir that holds other things.
+ */
+const containerSockets = async (): Promise<{
+  dirs: string[];
+  sockets: string[];
+}> => {
+  const withReal = async (paths: string[]) => [
+    ...new Set([
+      ...paths,
+      ...(await Promise.all(
+        paths.map((path) => realpath(path).catch(() => path))
+      )),
+    ]),
+  ];
+  return {
+    dirs: await withReal(containerSocketDirs()),
+    sockets: await withReal(await runtimeSockets()),
+  };
+};
 
 /**
  * A host socket in {@link LAUNCHD_SOCKETS} or {@link SIMULATOR_SOCKETS}
@@ -2518,6 +2549,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     scratch: scratchOf(id),
   });
   const hash = createHash("sha256");
+  const runtimes = await containerSockets();
   if (process.platform === "darwin") {
     const profile = seatbeltProfile(policy, {
       // With the scratch dir's short name, its `TMPDIR`: a tool's socket
@@ -2535,18 +2567,17 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
             dirname(sessiondPath()),
             LAUNCHD_SOCKETS,
             SIMULATOR_SOCKETS,
-            // The container runtimes' sockets, the browsers' among them: a
-            // command that reached one would run a container of its own
-            // beside a project's browser, or into it. Each by the path a
-            // runtime is dialled at as well as by the file it names.
-            ...CONTAINER_SOCKETS,
             // The per-user temp and cache dirs: a workspace writes them for
             // Apple's build tools, and every host app keeps its sockets there
-            // (VS Code's git askpass, browsers' singletons, srt's proxies).
+            // (VS Code's git askpass, browsers' singletons, srt's proxies,
+            // Podman machine's API socket).
             ...(await darwinUserDirs()),
           ].map((path) => realpath(path).catch(() => path))
         )),
-        ...CONTAINER_SOCKETS,
+        // The container runtimes' sockets, the browsers' among them, each
+        // by the path a runtime is dialled at and by the file it names.
+        ...runtimes.dirs,
+        ...runtimes.sockets,
       ],
       reachedHostSockets: [TEST_MANAGER_SOCKET, REMOTE_AUTOMATION_SOCKET],
     });
@@ -2601,7 +2632,16 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   const srtTmp = srtTmpOf(id, gen);
   const bwrap = bwrapLauncherOf(id, gen);
   const launcher = readOnlyDeniesBwrap(hostBwrap());
-  const settings = `${JSON.stringify(srtSettings(policy, { bwrap, rg: ripgrep(), srtTmp }), null, 2)}\n`;
+  const settings = `${JSON.stringify(
+    srtSettings(policy, {
+      bwrap,
+      rg: ripgrep(),
+      srtTmp,
+      containerSockets: runtimes,
+    }),
+    null,
+    2
+  )}\n`;
   const host = hostScript();
   hostText ??= readHostText(host);
   // What the host makes in the clone before each sandbox, so srt binds

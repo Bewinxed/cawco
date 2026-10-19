@@ -215,7 +215,13 @@ export class LocalHost implements BrowserHost {
         `--user-data-dir=${profile}`,
         "--no-first-run",
         "--no-default-browser-check",
+        // Its own secrets kept in its profile, never the system's store:
+        // Linux's keyring (`--password-store=basic`) and the person's macOS
+        // login Keychain, whose access can wait on a prompt no one sees
+        // (`--use-mock-keychain`), the pair Playwright and Puppeteer launch
+        // Chromium with (playwright-core 1.64.1 `chromiumSwitches`).
         "--password-store=basic",
+        "--use-mock-keychain",
         "--disable-sync",
         "--disable-background-networking",
         "--window-size=1280,800",

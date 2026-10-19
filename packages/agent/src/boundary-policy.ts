@@ -58,6 +58,15 @@ export const DENIED_RESOLVED_ADDRESSES = [
 export interface SrtPlace {
   /** The bwrap srt runs (its `bwrapPath`): {@link readOnlyDeniesBwrap}, as the workspace's boundary writes it. */
   readonly bwrap: string;
+  /**
+   * The container runtimes' sockets on this machine (boundary.ts
+   * `containerSockets`): their own dirs, and every socket the runtime
+   * registry may dial, each as named and as the file it names.
+   */
+  readonly containerSockets: {
+    readonly dirs: readonly string[];
+    readonly sockets: readonly string[];
+  };
   /** The ripgrep srt scans the clone for its protected names with. */
   readonly rg: string;
   /**
@@ -68,6 +77,34 @@ export interface SrtPlace {
    */
   readonly srtTmp: string;
 }
+
+/**
+ * What a Linux workspace's srt hides of the container runtimes' sockets
+ * ({@link SrtPlace.containerSockets}): each runtime dir whole, and each
+ * endpoint's own dir whole when the policy reads and writes nothing in it
+ * or above it (`DOCKER_HOST` at `/srv/docker/docker.sock`), so a socket the
+ * runtime makes again behind a running sandbox is hidden too; else the
+ * endpoint itself. `/run`, `/var/run`, `/tmp` and the home dir are hidden
+ * already (core `LINUX_HOST_PRIVATE`, the policy's home deny): this is for
+ * a socket outside them, or under a path the policy allows.
+ */
+const runtimeSocketDenies = (
+  policy: Policy,
+  found: SrtPlace["containerSockets"]
+): string[] => {
+  const opened = [...policy.allowRead, ...policy.allowWrite];
+  return [
+    ...new Set([
+      ...found.dirs,
+      ...found.sockets.map((socket) => {
+        const dir = dirname(socket);
+        return opened.some((path) => within(path, dir) || within(dir, path))
+          ? socket
+          : dir;
+      }),
+    ]),
+  ];
+};
 
 /**
  * The srt settings of a Linux workspace's sandbox. The network reaches any
@@ -123,7 +160,11 @@ export const srtSettings = (
     allowAllUnixSockets: true,
   },
   filesystem: {
-    denyRead: literal([...policy.denyRead, "/tmp"]),
+    denyRead: literal([
+      ...policy.denyRead,
+      "/tmp",
+      ...runtimeSocketDenies(policy, place.containerSockets),
+    ]),
     allowRead: literal([
       ...policy.allowRead,
       place.srtTmp,
