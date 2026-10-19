@@ -109,7 +109,6 @@
 </script>
 
 <NsPopoverGroup>
-  <!-- literal: minmax(0, 1fr) max-content -->
   <ul
     aria-label={words.editor.machines}
     class="m-0 grid grid-cols-(--rows-cols) list-none p-0"

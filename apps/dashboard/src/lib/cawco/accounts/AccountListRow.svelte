@@ -24,13 +24,10 @@
   const problem = $derived(problemOf(account));
 </script>
 
-<!-- literal: 56px -->
 <li
-  class="@container/arow flex min-h-(--row-min) min-w-0 border-t border-t-border-hairline"
+  class="@container/arow flex min-h-c-row-h min-w-0 border-t border-t-border-hairline"
   data-flip
-  style:--row-min="56px"
 >
-  <!-- literal: 10px 16px 2px -->
   <a
     data-slot="account-list-row-link"
     class="grid min-w-0 flex-auto grid-areas-(--link-areas) grid-cols-(--link-cols) items-center gap-x-space-4 gap-y-space-row px-space-2 py-space-3 text-inherit no-underline transition-control focus-visible:outline-solid focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) active:bg-surface-fill data-two:grid-areas-(--link-areas-two)"
@@ -38,17 +35,14 @@
     {href}
     style:--link-areas={'"dot name chev"'}
     style:--link-areas-two={'"dot name chev" ". problem chev"'}
-    style:--link-cols="10px minmax(0, 1fr) 16px"
+    style:--link-cols="var(--space-3) minmax(0, 1fr) var(--icon-md)"
   >
-    <!-- literal: 10px, 50% -->
     <i
       data-slot="dot"
       aria-hidden="true"
-      class="col-(--area) row-(--area) size-(--dot) rounded-(--dot-r) bg-(--c) transition-[background-color] dur-fade ease-out"
+      class="col-(--area) row-(--area) size-space-3 rounded-pill bg-(--c) transition-[background-color] dur-fade ease-out"
       style:--area="dot"
       style:--c={hueVar(account.hue)}
-      style:--dot="10px"
-      style:--dot-r="50%"
     ></i>
     <span
       data-slot="name"
