@@ -39,10 +39,13 @@
  *     tab and Inspect; a wider head holds every control a narrower one does;
  *     the mode is its pick only where its segments have no room left; More
  *     holds the canvas view as its "Canvas view" submenu. Every 1pt from 300
- *     to 800, at 0 open pins and at 2: each width lays out the same frame
- *     after frame; at 0 More keeps its plain width; with pins open, a fit
- *     that leaves Comments in More is fitted again with More's count, and a
- *     width where that changes what stands is read;
+ *     to 800, for a component canvas and a plain preview, with Send picks
+ *     and without, at 0 open pins and at 2: each width lays out the same
+ *     frame after frame, and a wider head stands every control a narrower
+ *     one does (who stands is a prefix of the priority, More reserved at
+ *     the width it is drawn at), and as it widens the controls join and then
+ *     the forms widen in the order the web's head's do, no wider head saying
+ *     less (a form once whole stays whole), the mode whole at 800;
  * (v) that canvas's view (CanvasView.svelte): its button, its menu's
  *     entries, and for each entry pressed, and on the page's ready, the
  *     `cawco:canvas-view` message the app hands the page, as the web posts
@@ -137,11 +140,56 @@ const WANTED = [
   "expand",
 ];
 const STANDING =
-  /width=(\d+) name=(\d+) left=(-?\d+) segments=(\d+) open=(\d+) first=(\S+) shown=(.*) more=(\S+)$/;
-/** (h) A sweep's line: the widths whose layout moved between frames, those More's count changed, and where a wider head lost a control. */
-const SWEEP = /widths=300-800 unsettled=(\S+) recount=(\S+) drops=(\S+)$/;
-/** (h) The first width at which More's count changed what stands. */
-const RECOUNT_LINE = /head standing \[(\d+) open 2\] /;
+  /width=(\d+) name=(\d+) left=(-?\d+) segments=(\d+) open=(\d+) shown=(.*) more=(\S+)$/;
+/** (h) A sweep's line: the widths whose layout moved between frames, and where a wider head lost a control. */
+const SWEEP = /widths=300-800 unsettled=(\S+) drops=(\S+)$/;
+/** (h) The sweep's configurations: a component canvas or a plain preview, with Send picks or without, at 0 open pins and at 2. */
+const SWEEP_CONFIGS = ["canvas", "preview"].flatMap((panel) =>
+  ["sends", "quiet"].flatMap((send) =>
+    [0, 2].map((open) => `${panel} ${send} open ${open}`)
+  )
+);
+/**
+ * (h) The web's head (side/head.ts, da9158918) as it widens: the controls
+ * join in the priority's order, then the mode takes its segments, then Send
+ * picks and then Comments their words (a sweep's `:whole`). The widths
+ * differ by each platform's own control sizes; the order is the same.
+ */
+const PRIORITY = [
+  "send",
+  "mode",
+  "comments",
+  "expand",
+  "reload",
+  "inspect",
+  "view",
+  "undock",
+  "openTab",
+  "newCanvas",
+];
+const WIDENS = ["mode:whole", "send:whole", "comments:whole"];
+const ADDITIONS = [...PRIORITY, ...WIDENS];
+/** (h) One run of a sweep's `head stands` line: its widths and what stood. */
+const RUN = /^(\d+)-(\d+)=(.*)$/;
+/** The names in a sweep's runs in the order they first stand, those joining at one width in ADDITIONS order. */
+function additions(stands: string[]): string[] {
+  const seen: string[] = [];
+  for (const widths of stands) {
+    const names = RUN.exec(widths)?.[3]?.split("+") ?? [];
+    seen.push(
+      ...names
+        .filter((name) => !seen.includes(name))
+        .sort((a, b) => ADDITIONS.indexOf(a) - ADDITIONS.indexOf(b))
+    );
+  }
+  return seen;
+}
+const WHOLE = /:whole$/;
+/** What a run says: each name standing, a whole form saying its narrowest too. */
+function says(widths: string): Set<string> {
+  const names = RUN.exec(widths)?.[3]?.split("+") ?? [];
+  return new Set(names.flatMap((name) => [name, name.replace(WHOLE, "")]));
+}
 const SLOT = /^(\w+):(\w+)@(-?\d+),(-?\d+),(\d+)x(\d+)$/;
 /** (w) A `caw rule` line's fill and brand-solid, each as `#rrggbb a=N`. */
 const RULE_FILL = /fill=(#[0-9a-f]{6} a=[\d.]+)/;
@@ -161,7 +209,7 @@ function standingOf(said: string) {
   if (!parts) {
     return;
   }
-  const slots: Slot[] = (parts[7] ?? "")
+  const slots: Slot[] = (parts[6] ?? "")
     .split(" ")
     .map((one) => SLOT.exec(one))
     .filter((one): one is RegExpExecArray => one !== null)
@@ -177,9 +225,8 @@ function standingOf(said: string) {
     left: Number(parts[3]),
     segments: Number(parts[4]),
     open: Number(parts[5]),
-    first: parts[6] === "-" ? undefined : (parts[6] ?? "").split(","),
     slots,
-    more: parts[8] === "-" ? [] : (parts[8] ?? "").split(","),
+    more: parts[7] === "-" ? [] : (parts[7] ?? "").split(","),
   };
 }
 
@@ -355,34 +402,35 @@ function appLegs(kit: Kit, tag: string, heard: string[]): void {
     narrower = { set, width };
   }
 
-  // (h) More's count: every 1pt from 300 to 800, at 0 open pins and at 2.
-  for (const open of [0, 2]) {
-    const said = find(`head sweep [open ${open}] `);
+  // (h) Every 1pt from 300 to 800, in each configuration.
+  for (const config of SWEEP_CONFIGS) {
+    const said = find(`head sweep [${config}] `);
     const sweep = SWEEP.exec(said);
     kit.check(
-      `${tag}: h sweep ${open} open: every width lays out the same frame after frame${open === 0 ? ", and More keeps its plain width (no second fit)" : ""}`,
-      sweep?.[1] === "none" && (open > 0 || sweep?.[2] === "none"),
-      after(said, `head sweep [open ${open}] `)
+      `${tag}: h sweep ${config}: every width lays out the same frame after frame, and a wider head stands every control a narrower one does`,
+      sweep?.[1] === "none" && sweep?.[2] === "none",
+      after(said, `head sweep [${config}] `)
+    );
+    const stands = after(
+      find(`head stands [${config}] `),
+      `head stands [${config}] `
+    ).split(" ");
+    const order = additions(stands);
+    const said800 = says(stands.at(-1) ?? "");
+    const narrows = stands
+      .slice(1)
+      .filter((wider, at) =>
+        [...says(stands[at] ?? "")].some((name) => !says(wider).has(name))
+      );
+    kit.check(
+      `${tag}: h sweep ${config}: as it widens, controls join in the web's order and then forms widen in it (${ADDITIONS.join(" ")}), no wider run saying less than the one before, the mode whole at 800`,
+      order.join(" ") ===
+        ADDITIONS.filter((name) => order.includes(name)).join(" ") &&
+        narrows.length === 0 &&
+        said800.has("mode:whole"),
+      narrows.length ? `says less at ${narrows.join(" ")}` : stands.join(" ")
     );
   }
-  const recount = heard.find((one) => RECOUNT_LINE.test(one)) ?? "";
-  const counted = standingOf(recount);
-  const stoodKeys = (counted?.slots ?? [])
-    .map((slot) => (slot.key === "modePick" ? "mode" : slot.key))
-    .filter((key) => key !== "more" && key !== "close");
-  const firstKeys = (counted?.first ?? []).map((key) =>
-    key === "modePick" ? "mode" : key
-  );
-  kit.check(
-    `${tag}: h: with pins open, a width where More's count changes what stands: Comments in More, its count's room taken from a control the first fit stood`,
-    counted !== undefined &&
-      counted.open === 2 &&
-      counted.more.includes("comments") &&
-      firstKeys.some((key) => !stoodKeys.includes(key)),
-    recount
-      ? `${recount.slice(recount.indexOf("head standing"))}`
-      : "no width found"
-  );
 
   // (v) The canvas view.
   const button = find("canvas view button [head] ");

@@ -124,7 +124,7 @@ enum ParityProbe {
             preview.view.removeFromSuperview()
             preview.removeFromParent()
         }
-        preview.probeAsComponent(name: "Card.stories.js")
+        preview.probeAs(component: true, sends: true)
         for width in headWidths {
             // The head stands `space-2` in from the card's sides.
             preview.view.frame = CGRect(x: 0, y: 0, width: width + 2 * Space.space2, height: 640)
@@ -141,44 +141,21 @@ enum ParityProbe {
             await wait(0.1)
         }
 
-        // More's count: at 0 More keeps its plain width; with pins open, a fit
-        // that leaves Comments in More is fitted again with the count's room.
-        // Every 1pt from 300 to 800, each layout laid out twice more: what
-        // stands must not move between frames, nor a control a narrower head
-        // stands go from a wider one.
-        for open in [0, 2] {
-            preview.probeOpen = open
-            var unsettled: [Int] = []
-            var recounts: [Int] = []
-            var drops: [String] = []
-            var narrower: (width: Int, stood: Set<String>)?
-            for width in 300 ... 800 {
-                preview.view.frame = CGRect(x: 0, y: 0, width: Double(width) + 2 * Space.space2, height: 640)
-                preview.view.setNeedsLayout()
-                preview.view.layoutIfNeeded()
-                let first = preview.probeStood
-                var lines: [String] = []
-                for _ in 0 ..< 2 {
-                    preview.view.setNeedsLayout()
-                    preview.view.layoutIfNeeded()
-                    lines.append(preview.probeStanding())
+        // Every 1pt from 300 to 800, each layout laid out twice more, for a
+        // component canvas and a plain preview, with and without Send picks,
+        // at 0 open pins and at 2: what stands must not move between frames,
+        // nor a control a narrower head stands go from a wider one. What
+        // stands at each width is logged as runs, to read against the web's.
+        for component in [true, false] {
+            for sends in [true, false] {
+                preview.probeAs(component: component, sends: sends)
+                for open in [0, 2] {
+                    sweep(preview, "\(component ? "canvas" : "preview") \(sends ? "sends" : "quiet") open \(open)", open: open)
                 }
-                let stood = preview.probeStood
-                if first != stood || lines[0] != lines[1] { unsettled.append(width) }
-                if preview.probeRecounted {
-                    if recounts.isEmpty {
-                        log.notice("head standing [\(width, privacy: .public) open \(open, privacy: .public)] \(lines[1], privacy: .public)")
-                    }
-                    recounts.append(width)
-                }
-                if let narrower, !narrower.stood.isSubset(of: stood) {
-                    drops.append("\(width):\(narrower.stood.subtracting(stood).sorted().joined(separator: "+"))")
-                }
-                narrower = (width, stood)
             }
-            log.notice("head sweep [open \(open, privacy: .public)] widths=300-800 unsettled=\(unsettled.isEmpty ? "none" : spans(unsettled), privacy: .public) recount=\(recounts.isEmpty ? "none" : spans(recounts), privacy: .public) drops=\(drops.isEmpty ? "none" : drops.joined(separator: ","), privacy: .public)")
         }
         preview.probeOpen = nil
+        preview.probeAs(component: true, sends: true)
 
         let view = preview.probeCanvasView
         log.notice("canvas view button [head] label=\(view.button.accessibilityLabel ?? "-", privacy: .public) glyph=\(Glyph.dataLayers.rawValue, privacy: .public) menu=\(view.button.showsMenuAsPrimaryAction ? "primary" : "no", privacy: .public)")
@@ -199,6 +176,45 @@ enum ParityProbe {
         preview.probeReady()
         log.notice("canvas view ready [page] sent=\(sent.joined(separator: " + "), privacy: .public)")
         preview.probeDelivered = nil
+    }
+
+    /// One configuration's sweep, every 1pt from 300 to 800: the widths whose
+    /// layout moved between frames, where a wider head lost a control, and
+    /// what stood at each width, each widened form marked `:whole`, as runs
+    /// of widths.
+    private static func sweep(_ preview: PreviewController, _ config: String, open: Int) {
+        preview.probeOpen = open
+        var unsettled: [Int] = []
+        var drops: [String] = []
+        var runs: [(from: Int, to: Int, dressed: Set<String>)] = []
+        var narrower: Set<String>?
+        for width in 300 ... 800 {
+            preview.view.frame = CGRect(x: 0, y: 0, width: Double(width) + 2 * Space.space2, height: 640)
+            preview.view.setNeedsLayout()
+            preview.view.layoutIfNeeded()
+            let first = preview.probeStood
+            var lines: [String] = []
+            for _ in 0 ..< 2 {
+                preview.view.setNeedsLayout()
+                preview.view.layoutIfNeeded()
+                lines.append(preview.probeStanding())
+            }
+            let stood = preview.probeStood
+            if first != stood || lines[0] != lines[1] { unsettled.append(width) }
+            if let narrower, !narrower.isSubset(of: stood) {
+                drops.append("\(width):\(narrower.subtracting(stood).sorted().joined(separator: "+"))")
+            }
+            narrower = stood
+            let dressed = preview.probeDressed
+            if let last = runs.last, last.dressed == dressed {
+                runs[runs.count - 1].to = width
+            } else {
+                runs.append((width, width, dressed))
+            }
+        }
+        log.notice("head sweep [\(config, privacy: .public)] widths=300-800 unsettled=\(unsettled.isEmpty ? "none" : spans(unsettled), privacy: .public) drops=\(drops.isEmpty ? "none" : drops.joined(separator: ","), privacy: .public)")
+        let stands = runs.map { "\($0.from)-\($0.to)=\($0.dressed.sorted().joined(separator: "+"))" }
+        log.notice("head stands [\(config, privacy: .public)] \(stands.joined(separator: " "), privacy: .public)")
     }
 
     /// 6: the Caw button laid out at its own size, round and the phone's

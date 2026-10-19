@@ -539,7 +539,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             controller.deliver(["type": "cawco:theme", "theme": controller.theme])
         }
         NotificationCenter.default.addObserver(self, selector: #selector(cameForward), name: UIApplication.didBecomeActiveNotification, object: nil)
-        paintWell()
+        paintMode()
         paintPins()
         watchWorking()
         show()
@@ -732,18 +732,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     @objc private func cameForward() { sayShown() }
 
-    /// Narrow (PreviewPane.svelte's container under 640px), Comments says
-    /// itself by glyph and count alone.
+    /// Narrow (PreviewPane.svelte's container under 640px): Send picks and
+    /// Comments never take their words back.
     private var narrow: Bool { view.bounds.width < 640 }
-    private var laidNarrow: Bool?
 
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        if laidNarrow != narrow {
-            laidNarrow = narrow
-            paintMode()
-            paintPins()
-        }
         placeHeadItems()
         placeCard()
         #if DEBUG
@@ -806,52 +800,75 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }
     }
 
-    /// Each control the panel wants stands whole while they all fit beside
-    /// the name's floor. Otherwise More's room is kept, and each control by
-    /// `priority`, in its narrowest form (the mode as its pick), stands where
-    /// it fits and is passed over where it doesn't; then the mode takes its
-    /// segments back if the room left holds them, so they never cost another
-    /// control its place. What has no room goes to More, before Close. Close
-    /// and the name always stand. More's room is More as it will be drawn:
-    /// a fit that leaves Comments in More is fitted again with More holding
-    /// Comments' count, and that one stands. Both read only the controls'
-    /// own widths, the name's, the head's and the count, none of which what
-    /// stands changes, so a layout lays out the same again. A count is drawn
-    /// only above 0, so at 0 More keeps its plain width.
+    /// Who stands is a prefix of `priority` (the web's side/head.ts
+    /// `standing()`): each control the panel wants, in its narrowest form
+    /// (the mode as its pick, Send picks and Comments by glyph and count),
+    /// stands while it fits, and the first with no room goes to More with
+    /// every one after it, in head order, before Close. All of them stand
+    /// when they fit at their narrowest with no More. Each one placed keeps
+    /// room for More as More will be drawn should the rest go to it: with
+    /// Comments' count while Comments, pins open, is among them, plain
+    /// otherwise. So a wider head never stands fewer. Then forms widen, each
+    /// only where the room left holds it, so widening never costs a control
+    /// its place: the mode takes its segments back, then, on a pane 640pt or
+    /// wider, Send picks and then Comments their words, the first without
+    /// room stopping the rest, so a wider head never says less. Close and the name
+    /// always stand. It reads only the controls' widths in each form, the
+    /// name's, the head's and the count, none of which what stands changes,
+    /// so a layout lays out the same again.
     private func placeHeadItems() {
         guard isViewLoaded, let head = dragArea as? UIStackView else { return }
         let width = head.bounds.width
         guard width > 0 else { return }
         let wanted = HeadItem.allCases.filter(wants)
-        let room = { (item: HeadItem) in self.slots[item]?.fittingWidth ?? 0 }
+        let ranked = Self.priority.filter(wanted.contains).map { $0 == .mode ? HeadItem.modePick : $0 }
+        let narrowest = { (item: HeadItem) in self.formRoom[item]?.glyph ?? self.slots[item]?.fittingWidth ?? 0 }
         nameKept = min(Self.nameFloor, titleButton.wholeWidth)
         if nameWidth.constant != nameKept { nameWidth.constant = nameKept }
         // The count's figures before More's room is read.
         let count = "\(openPins)"
         if moreBadge.text != count { moreBadge.text = count }
         // The identity's own trailing margin stands with the name.
-        let name = nameKept + 8 - Space.space1
-        let close = Self.target
-        let all = wanted.reduce(0) { $0 + room($1) }
-        var shown = Set(wanted)
-        var left = width - name - all - close
-        #if DEBUG
-        laidFirst = nil
-        #endif
-        if left < 0 {
-            let beside = width - name - close
-            (shown, left) = Self.fit(beside - moreRoom(counted: false), wanted, room)
-            // A count is drawn only above 0: at 0 More keeps its plain width.
-            if wanted.contains(.comments), !shown.contains(.comments), openPins > 0 {
-                #if DEBUG
-                laidFirst = shown
-                #endif
-                (shown, left) = Self.fit(beside - moreRoom(counted: true), wanted, room)
+        var left = width - (nameKept + 8 - Space.space1) - Self.target
+        let whole = ranked.reduce(0) { $0 + narrowest($1) } <= left
+        // More as it will be drawn while `ranked[from...]` goes to it: its count only above 0.
+        let more = { (from: Int) -> Double in
+            guard !whole, from < ranked.count else { return 0 }
+            return self.moreRoom(counted: self.openPins > 0 && ranked[from...].contains(.comments))
+        }
+        var shown: Set<HeadItem> = []
+        for (at, item) in ranked.enumerated() {
+            guard narrowest(item) + more(at + 1) <= left else { break }
+            shown.insert(item)
+            left -= narrowest(item)
+        }
+        left -= more(shown.count)
+        // Forms widen as a prefix too: a form with no room stops the ones
+        // after it, so Send's words never stand where the mode is still its
+        // pick and go again once its segments come back wider.
+        var widens = !wanted.contains(.mode)
+        if shown.contains(.modePick), let segments = slots[.mode].map({ $0.fittingWidth - narrowest(.modePick) }), segments <= left {
+            shown.remove(.modePick)
+            shown.insert(.mode)
+            left -= segments
+            widens = true
+        }
+        var words: Set<HeadItem> = []
+        if widens, !narrow {
+            for item in Self.priority where shown.contains(item) {
+                guard let form = formRoom[item] else { continue }
+                guard form.words - form.glyph <= left else { break }
+                words.insert(item)
+                left -= form.words - form.glyph
             }
         }
         #if DEBUG
         laidLeft = left
         #endif
+        for item in [HeadItem.send, .comments] where words.contains(item) != worded.contains(item) {
+            dress(item, words: words.contains(item))
+        }
+        worded = words
         overflowed = wanted.filter { !shown.contains($0) && !($0 == .mode && shown.contains(.modePick)) }
         for item in HeadItem.allCases {
             let hidden = !shown.contains(item)
@@ -862,27 +879,41 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintMore()
     }
 
-    /// The web's `standing()` past its first case, in `room` (the head's,
-    /// less the name, Close and More): each wanted control by priority, in
-    /// its narrowest form (the mode as its pick), where it fits, one with no
-    /// room passed over; then the mode's segments where the room left holds
-    /// them. What stands, and the room left.
-    private static func fit(_ room: Double, _ wanted: [HeadItem], _ width: (HeadItem) -> Double) -> (shown: Set<HeadItem>, left: Double) {
-        var left = room
-        var shown: Set<HeadItem> = []
-        for item in priority where wanted.contains(item) {
-            let stands = item == .mode ? HeadItem.modePick : item
-            guard width(stands) <= left else { continue }
-            shown.insert(stands)
-            left -= width(stands)
+    /// Send picks' and Comments' room in the head in each form, pt: by glyph
+    /// and count alone, and with their words. Taken where their words or
+    /// count change, so the placing reads the same widths whichever form is drawn.
+    private var formRoom: [HeadItem: (glyph: Double, words: Double)] = [:]
+    /// Send picks and Comments where their words are drawn.
+    private var worded: Set<HeadItem> = []
+
+    /// Send picks or Comments in one form: its words after its glyph, or its glyph (and count) alone.
+    private func dress(_ item: HeadItem, words: Bool) {
+        switch item {
+        case .send:
+            if words {
+                KitButton.setTitle(sending ? "Sending…" : "Send picks", of: sendButton, variant: .ghost, height: .sm)
+            } else {
+                // No title at all: an empty one still keeps the gap after the glyph.
+                sendButton.configuration?.attributedTitle = nil
+            }
+        case .comments:
+            KitButton.setTitle(words ? "Comments" : "", of: pinsButton, variant: .ghost, height: .sm)
+        default:
+            break
         }
-        let segments = width(.mode) - width(.modePick)
-        if shown.contains(.modePick), segments <= left {
-            shown.remove(.modePick)
-            shown.insert(.mode)
-            left -= segments
+    }
+
+    /// Each form's room for Send picks and Comments, as they are dressed
+    /// now, then each put back in the form it stands in.
+    private func measureForms() {
+        for item in [HeadItem.send, .comments] {
+            guard let slot = slots[item] else { continue }
+            dress(item, words: false)
+            let glyph = slot.fittingWidth
+            dress(item, words: true)
+            formRoom[item] = (glyph, slot.fittingWidth)
+            dress(item, words: worded.contains(item))
         }
-        return (shown, left)
     }
 
     /// More's room in the head as it will be drawn: its slot, and, while it
@@ -1836,11 +1867,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private func paintPins() {
         guard isViewLoaded else { return }
         // The open count only once read and above 0 (The Earned Count Rule), one
-        // `--btn-gap` after the word (or the glyph alone on a narrow pane).
+        // `--btn-gap` after the word (or the glyph alone where the head leaves the word no room).
         let counted = openPins > 0
         pinsBadge.text = "\(openPins)"
         pinsBadge.isHidden = !counted
-        KitButton.setTitle(narrow ? "" : "Comments", of: pinsButton, variant: .ghost, height: .sm)
         pinsButton.accessibilityLabel = "Comments\(counted ? ", \(openPins) open" : "")\(pinsShown ? "" : ", pins hidden")"
         let badge = counted ? pinsBadge.intrinsicContentSize.width + Space.space1 : 0
         pinsButton.configuration?.contentInsets.trailing = Space.space2 + badge
@@ -1854,13 +1884,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let picks = comments.unsentPicks > 0
         sendButton.configuration?.showsActivityIndicator = sending
         let words = sending ? "Sending…" : "Send picks"
-        // On a narrow pane its glyph alone, as Comments' word goes there: the name keeps its room beside the mode.
-        if narrow {
-            // No title at all: an empty one still keeps the gap after the glyph.
-            sendButton.configuration?.attributedTitle = nil
-        } else {
-            KitButton.setTitle(words, of: sendButton, variant: .ghost, height: .sm)
-        }
+        // Its words and Comments' are drawn where the head's placing leaves them room.
+        measureForms()
         sendButton.accessibilityLabel = words
         sendButton.toolTip = words
         #if DEBUG
@@ -2445,21 +2470,24 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var probeSends = false
     /// The room `placeHeadItems` left once it placed the controls, pt.
     private var laidLeft = 0.0
-    /// What the first fit stood, when More held Comments' count and the second one was taken; nil otherwise.
-    private var laidFirst: Set<HeadItem>?
     /// The open pins the head is counted and laid out for, in place of the hub's read.
     var probeOpen: Int? {
         // Comments' badge takes the count, and its paint lays the head out again.
         didSet { paintPins() }
     }
 
-    /// The panel as a component canvas's, its page holding picks: the
-    /// inspection `adoptSheet` makes for a `.component` frame, so the head
-    /// wants what it wants for one.
-    func probeAsComponent(name: String) {
-        titleButton.show(kind: .component, name: name)
-        inspection = SheetInspection(post: { [weak self] message in self?.deliver(message) }, write: { _ in })
-        probeSends = true
+    /// The panel as a component canvas's (the inspection `adoptSheet` makes
+    /// for a `.component` frame) or a plain preview's, its page holding picks
+    /// or not, so the head wants what it wants for one.
+    func probeAs(component: Bool, sends: Bool) {
+        if component {
+            titleButton.show(kind: .component, name: "Card.stories.js")
+            inspection = SheetInspection(post: { [weak self] message in self?.deliver(message) }, write: { _ in })
+        } else {
+            titleButton.show(kind: .preview, name: "index.html")
+            inspection = nil
+        }
+        probeSends = sends
         paintSend()
     }
 
@@ -2470,10 +2498,19 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         Set(slots.filter { !$0.value.isHidden }.map { $0.key == .modePick ? HeadItem.mode.rawValue : $0.key.rawValue })
     }
 
-    /// Whether More's count changed what stands: the second fit stood otherwise than the first.
-    var probeRecounted: Bool {
-        laidFirst.map { $0 != Set(slots.filter { !$0.value.isHidden }.map(\.key)) } ?? false
+    /// The controls standing now, each widened one marked `:whole`: the
+    /// mode as its segments, Send picks and Comments with their words.
+    var probeDressed: Set<String> {
+        Set(slots.filter { !$0.value.isHidden }.map { key, _ in
+            switch key {
+            case .modePick: HeadItem.mode.rawValue
+            case .mode: "mode:whole"
+            case let item where worded.contains(item): "\(item.rawValue):whole"
+            default: key.rawValue
+            }
+        })
     }
+
     /// More's menu as it would open now.
     var probeOverflow: [UIMenuElement] { overflowMenu() }
 
@@ -2493,15 +2530,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             let form = switch key {
             case .mode: "segments"
             case .modePick: "pick"
-            case .send, .comments: narrow ? "glyph" : "words"
+            case let .some(item) where worded.contains(item): "words"
             default: "glyph"
             }
             let box = slot.frame
             return "\(name):\(form)@\(Int(box.minX.rounded())),\(Int(box.minY.rounded())),\(Int(box.width.rounded()))x\(Int(box.height.rounded()))"
         }
         let more = overflowed.isEmpty ? "-" : overflowed.map(\.rawValue).joined(separator: ",")
-        let first = laidFirst.map { set in HeadItem.allCases.filter(set.contains).map(\.rawValue).joined(separator: ",") } ?? "-"
-        return "width=\(Int(head.bounds.width.rounded())) name=\(Int(titleButton.bounds.width.rounded())) left=\(Int(laidLeft.rounded(.down))) segments=\(Int((room(.mode) - room(.modePick)).rounded(.up))) open=\(openPins) first=\(first.isEmpty ? "none" : first) shown=\(shown.joined(separator: " ")) more=\(more)"
+        return "width=\(Int(head.bounds.width.rounded())) name=\(Int(titleButton.bounds.width.rounded())) left=\(Int(laidLeft.rounded(.down))) segments=\(Int((room(.mode) - room(.modePick)).rounded(.up))) open=\(openPins) shown=\(shown.joined(separator: " ")) more=\(more)"
     }
 
     /// The header as last logged on a layout: logged again only when it moved.
