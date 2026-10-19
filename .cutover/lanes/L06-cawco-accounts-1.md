@@ -47,3 +47,10 @@ none
 
 ## Contracts
 none (cross-file hooks: none)
+
+## Design critique (interface-craft, from markup and classes against DESIGN.md; ui-observer: Not verified, no bench or stories file renders these in the workspace)
+fixed: step dot, list-row dot and menu dot now sit on the spacing ladder and the pill radius, so the three account dots no longer carry three one-off sizes
+fixed: the visually-hidden step name is `sr-only`, one primitive instead of a hand-kept clip recipe
+gap: AccountSetup.svelte:~459 the step rail and the 640px container query (`--container-setup`) are off DESIGN.md's 640/900/1024 breakpoint ladder as a container width; integration may fold `setup` into `phone`
+gap: AccountListRow.svelte:36 the row link carries `grid-areas-(--link-areas)` through two style vars; a flex row with a second line under the name would drop both vars (DESIGN.md row recipe: one lead column, one text column)
+gap: AccountSetup.svelte step rail current marker uses `data-cur` beside `aria-current="step"`; both state the same fact, and a `aria-current-step` variant would let the attribute carry it alone
