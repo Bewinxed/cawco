@@ -198,10 +198,8 @@
       >
         <label for="reserve">{words.editor.reserve}</label>
         <!-- The figure and its unit hold together on one line. -->
-        <!-- literal: 64px -->
         <span
           class="inline-flex flex-none items-center gap-space-3 whitespace-nowrap"
-          style:--field-w="64px"
         >
           <Input
             data-field
@@ -209,7 +207,7 @@
               ? "reserve-line"
               : undefined}
             aria-invalid={reservePct === undefined ? "true" : undefined}
-            class="num h-c-btn-h-sm w-(--field-w) flex-none text-center"
+            class="num h-c-btn-h-sm w-(--c-account-reserve-w) flex-none text-center"
             pad="tight"
             id="reserve"
             inputmode="numeric"
