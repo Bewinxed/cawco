@@ -148,9 +148,9 @@ final class TabsCell: HomeCell {
 
     func configure(tab: HomeModel.Tab, working: Int, finished: Int, finishedFailed: Bool, delegatesOn: Bool) {
         tabs.select(tab == .working ? 0 : 1, animated: window != nil)
-        show(working, on: counts[0])
+        show(working, on: counts[0], at: 0)
         counts[1].variant = finishedFailed ? .fail : .done
-        show(finished, on: counts[1])
+        show(finished, on: counts[1], at: 1)
         #if DEBUG
         // Each badge's pair as resolved in its scheme, and the numeral's contrast on its ground.
         for (tab, badge) in zip(["working", "finished"], counts) {
@@ -164,7 +164,7 @@ final class TabsCell: HomeCell {
             let ground = rgb(badge.pair.ground)
             let ink = rgb(badge.pair.ink)
             let ratio = (max(ground.luminance, ink.luminance) + 0.05) / (min(ground.luminance, ink.luminance) + 0.05)
-            HomeViewController.probeLog.notice("home count \(tab, privacy: .public) \(badge.text, privacy: .public) \(traits.userInterfaceStyle == .dark ? "dark" : "light", privacy: .public): ground \(ground.text, privacy: .public) ink \(ink.text, privacy: .public) \(String(format: "%.2f", ratio), privacy: .public):1")
+            HomeViewController.probeLog.notice("home count \(tab, privacy: .public) \(badge.text, privacy: .public) drawn=\(!badge.isHidden, privacy: .public) \(traits.userInterfaceStyle == .dark ? "dark" : "light", privacy: .public): ground \(ground.text, privacy: .public) ink \(ink.text, privacy: .public) \(String(format: "%.2f", ratio), privacy: .public):1")
         }
         #endif
         delegatesGlyph.glyph = delegatesOn ? .structureOn : .structure
@@ -177,13 +177,15 @@ final class TabsCell: HomeCell {
         tabs.scrub(from: from == .working ? 0 : 1, to: to == .working ? 0 : 1, progress: progress)
     }
 
-    /// `count` on its tab's badge, which pops as it changes (WorkTabs.svelte's `{#key count}`).
-    private func show(_ count: Int, on badge: KitBadge) {
-        let text = "\(count)"
+    /// `count` on its tab's badge, which pops as it changes (WorkTabs.svelte's `{#key count}`),
+    /// drawn only above 0 (DESIGN.md, The Earned Count Rule): at 0 the tab is its name alone.
+    private func show(_ count: Int, on badge: KitBadge, at index: Int) {
+        tabs.showTrail(count > 0, at: index)
+        let text = count > 0 ? "\(count)" : ""
         guard text != badge.text else {
             return
         }
-        let popping = !badge.text.isEmpty && !UIAccessibility.isReduceMotionEnabled
+        let popping = !badge.text.isEmpty && !text.isEmpty && !UIAccessibility.isReduceMotionEnabled
         badge.text = text
         if popping {
             Reflow.pop(badge)

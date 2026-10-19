@@ -267,7 +267,7 @@ final class ConfigureController: ObservedViewController, UICollectionViewDelegat
         }
         cell.accessibilityIdentifier = "config.row.\(slug)"
         cell.accessibilityLabel = section.label
-        cell.accessibilityValue = [state?.count.map { "\($0)" }, state?.unsaved == true ? Words.Configure.unsaved : nil, state?.badge?.said]
+        cell.accessibilityValue = [state?.count.flatMap { $0 > 0 ? "\($0)" : nil }, state?.unsaved == true ? Words.Configure.unsaved : nil, state?.badge?.said]
             .compactMap(\.self).joined(separator: ", ")
         cell.accessibilityTraits = section.opens ? .button : [.button, .notEnabled]
     }
@@ -507,9 +507,24 @@ private final class SectionRowView: UIView, UIContentView {
         unsaved.isHidden = !current.unsaved
         badge.text = current.badge.map { "\($0.count)" }
         badgeBox.isHidden = current.badge == nil
-        count.isHidden = !current.counted
+        // The dash while the count is unread; a read count only above 0 (DESIGN.md, The Earned Count Rule).
+        count.isHidden = !current.counted || current.count == 0
         count.text = current.count.map { "\($0)" } ?? "—"
         count.ink = current.chosen ? Palette.selectedInk : Palette.inkMuted
         alpha = current.opens ? 1 : 0.5
+        #if DEBUG
+        if current.counted {
+            let said = "config row \(current.label) count=\(current.count.map { "\($0)" } ?? "unread") drawn=\(!count.isHidden) text=\(count.text ?? "-")"
+            if Self.said[current.label] != said {
+                Self.said[current.label] = said
+                PreviewProbe.say(said)
+            }
+        }
+        #endif
     }
+
+    #if DEBUG
+    /// Each counted row as last said to the probe, by its name.
+    private static var said: [String: String] = [:]
+    #endif
 }

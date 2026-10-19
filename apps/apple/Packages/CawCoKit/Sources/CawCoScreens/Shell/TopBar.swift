@@ -684,7 +684,9 @@ final class TopBarCluster: UIView {
     /// the number the Machines item says; the asks are Caw's arcs, never this.
     func configure(needs: Int, notices: Int, quiet: String, machines total: Int, tone: MachineHealth.Tone?, panelOpen: Bool) {
         for head in [phoneCaw, groupCaw] { head.configure(count: needs, notices: notices, quiet: quiet, open: panelOpen) }
+        // The number only above 0 (DESIGN.md, The Earned Count Rule): with none it is the plain glyph item.
         machines.count.text = "\(total)"
+        machines.count.isHidden = total == 0
         // The glyph alone carries a machine in trouble; it crosses over `durFade`, never pulses.
         let ink: UIColor = switch tone {
         case .fail: Palette.statusFailGlyph
@@ -694,8 +696,20 @@ final class TopBarCluster: UIView {
         if machines.glyph.tintColor != ink {
             Motion.easeOut.animator(Motion.durFade) { self.machines.glyph.tintColor = ink }.startAnimation()
         }
-        machines.accessibilityValue = "\(total) \(total == 1 ? "machine" : "machines")"
+        machines.accessibilityValue = total > 0 ? "\(total) \(total == 1 ? "machine" : "machines")" : nil
+        #if DEBUG
+        let said = "bar machines n=\(total) drawn=\(!machines.count.isHidden) value=\(machines.accessibilityValue ?? "-")"
+        if said != Self.saidMachines {
+            Self.saidMachines = said
+            PreviewProbe.say(said)
+        }
+        #endif
     }
+
+    #if DEBUG
+    /// The Machines item as last said to the probe.
+    private static var saidMachines = ""
+    #endif
 
     /// Something new needs the operator: Caw's beat, where he is drawn.
     func beat() {

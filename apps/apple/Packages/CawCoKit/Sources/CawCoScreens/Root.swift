@@ -52,11 +52,15 @@ public final class RootViewController: ObservedViewController {
     /// A simulator pass's `-open-session <id>[,<id>…]`: these conversations
     /// land the way a restored scene's does, as tabs, the last in front.
     /// `-open-project <id>`: the shell lands on that project's page.
+    /// `-open-configure`: the shell lands on Configure.
     private static func probing(_ landing: ShellLanding) -> ShellLanding {
         let arguments = ProcessInfo.processInfo.arguments
         var probed = landing
         if let at = arguments.firstIndex(of: "-open-project"), arguments.indices.contains(at + 1) {
             probed.place = .project(arguments[at + 1])
+        }
+        if arguments.contains("-open-configure") {
+            probed.place = .configure
         }
         guard let at = arguments.firstIndex(of: "-open-session"), arguments.indices.contains(at + 1) else { return probed }
         probed.sessionIds = arguments[at + 1].split(separator: ",").map(String.init)

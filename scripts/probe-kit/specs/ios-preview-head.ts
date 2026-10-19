@@ -5,7 +5,8 @@
  * the rest go to one More menu in the head's order (HIG Toolbars, "Add a More
  * menu to contain additional actions"), the mode stays on the head (its three
  * segments, or the chosen one's pick where they have no room), and Comments'
- * open count stays on More while More holds Comments. The name keeps its own
+ * open count rides on More while More holds Comments, drawn only above 0
+ * (The Earned Count Rule). The name keeps its own
  * width up to 120pt. On a scratch fleet (real hub, agent and sessiond; Claude
  * Code against the mock model) and the built app, iOS 18.5 and 27.2, a
  * session of its own on each device makes a page whose script makes a pick,
@@ -17,12 +18,18 @@
  *    iPhone 16 Pro's drawer at the phone's full width. At each, the app's
  *    `preview head room …` line: what stands and what More holds are every
  *    control the panel wants, once; each slot at least 44×44; the name at its
- *    floor or more; the mode on the head; Comments' count on the head or on
- *    More; and nothing past the head's width. The head is captured light and
+ *    floor or more; the mode on the head; the page holds no pins, so More
+ *    draws no count; and nothing past the head's width. The head is captured light and
  *    dark.
  * 2. On the iPad's card, a finger's tap on More and on its Reload (axe):
  *    the page loads again, a document committed (`preview document`) with a
  *    new document clock (`preview doc origin=`).
+ * 3. Once the session has run its turn (so the board has work and its tabs
+ *    stand), The Earned Count Rule beyond the head: the
+ *    board's work tabs (`home count`), on the iPad the bar's Machines (`bar
+ *    machines`) and Configure's counted rows (`config row`, after
+ *    `-open-configure`) draw a count only above 0, its number the count, a
+ *    row not read yet "—"; the run says which states it reached.
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-preview-head
@@ -51,6 +58,17 @@ const COMMAND = /PROBE-CALL:(\d+)/g;
 /** PreviewController's `preview head room …` line. */
 const ROOM =
   /^preview head room width=(\d+) title=(\d+) floor=(\d+) shown=(\S*) more=(\S+) badge=(\S+)$/;
+/** HomeCells' `home count <tab> <text> drawn=<bool> …` line. */
+const HOME_COUNT = /^home count \w+ (\S*) ?drawn=(true|false) /;
+/** HomeViewController's counts once the session's last turn has ended unseen: on Finished, off Working. */
+const ENDED_UNSEEN = /^home counts: working=0 finished=[1-9]/;
+/** A count's own text: a number above 0. */
+const COUNTED = /^[1-9]\d*$/;
+/** TopBar's `bar machines n=<n> drawn=<bool> value=<words|->` line. */
+const MACHINES = /^bar machines n=(\d+) drawn=(true|false) value=(.+)$/;
+/** ConfigureController's `config row <name> count=<n|unread> drawn=<bool> text=<text>` line. */
+const CONFIG_ROW =
+  /^config row (.+) count=(\d+|unread) drawn=(true|false) text=(\S+)$/;
 const SLOT = /^(\w+):(\d+)x(\d+)$/;
 const DOC = /^preview doc origin=(\d+) /;
 const CREATE = "mcp__cawco__artifact_create";
@@ -165,7 +183,7 @@ async function openSim(
     [
       "bash",
       "-c",
-      `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "Probe"'`,
+      `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Probe" OR category == "HomeProbe")'`,
     ],
     { stdout: "pipe", stderr: "ignore" }
   );
@@ -274,8 +292,9 @@ function roomFaults(room: Room, wanted: string[]): string[] {
   if (!standing.includes("mode")) {
     faults.push("the mode is off the head");
   }
-  if (!standing.includes("comments") && room.badge === "-") {
-    faults.push("Comments' count is nowhere on the head");
+  // The page holds no pins: a count of none is drawn nowhere (The Earned Count Rule).
+  if (room.badge !== "-") {
+    faults.push(`More draws a count of ${room.badge} with no open pins`);
   }
   const used =
     room.title + room.shown.reduce((sum, slot) => sum + slot.width, 0);
@@ -341,7 +360,7 @@ async function readAt(
           .join(" | ") || "none"
       }`;
   on.kit.check(
-    `${on.tag} ${read}: every control the head wants stands in a 44pt slot or is in More, the name keeps its floor, the mode and Comments' count stay on the head`,
+    `${on.tag} ${read}: every control the head wants stands in a 44pt slot or is in More, the name keeps its floor, the mode stays on the head, and More draws no count of none`,
     faults.length === 0,
     `${room?.line ?? "no head room line"}; ${more ?? "no More line"}${faults.length > 0 ? `; ${faults.join("; ")}` : ""}${said}`
   );
@@ -370,6 +389,109 @@ async function reloadStep(on: On): Promise<void> {
     `${tag} 2: a finger's tap on More and on its Reload loads the page again: a document committed, its clock new`,
     !!before && !!origin && origin !== before && committed > 0,
     `${tapped.slice(0, 400)}; origin ${before ?? "-"} → ${origin ?? "-"}; documents committed ${committed}`
+  );
+}
+
+/**
+ * 3. The Earned Count Rule beyond the head (DESIGN.md): on the board, each
+ * work tab's count (HomeCells), and on a wide screen the bar's Machines
+ * (TopBar), drawn only above 0, its number the count; on Configure, each
+ * counted row's count drawn above 0 or as "—" while unread, and gone at 0.
+ * Says which states the run reached: a 0 and a count above it, where the
+ * fleet gives both.
+ */
+async function countsStep(on: On, pad: boolean, hub: string): Promise<void> {
+  const open = async (extra: string) => {
+    const mark = on.heard.length;
+    await sh(
+      `xcrun simctl launch --terminate-running-process ${on.udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${hub} -preview-probe ${extra} >/dev/null`
+    );
+    await Bun.sleep(9000);
+    return on.heard.slice(mark);
+  };
+  // The board on screen, the session runs one more turn: it works, then ends
+  // unseen, so Working and then Finished each count it above 0.
+  const mark = on.heard.length;
+  await open("");
+  await on.fleet.send(on.session, "One more turn, please.");
+  await until(
+    `${on.tag}: the session's turn on the board`,
+    () => on.heard.slice(mark).findLast((line) => ENDED_UNSEEN.test(line)),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const board = on.heard.slice(mark);
+  // Every state a launch passes through counts, the first read's 0s among them, not only the last.
+  const tabs = ["working", "finished"].map((tab) => {
+    const lines = board
+      .filter((line) => line.startsWith(`home count ${tab} `))
+      .map((line) => line.match(HOME_COUNT))
+      .filter((m): m is RegExpMatchArray => !!m);
+    const broken = lines.filter(
+      ([, text = "", drawn]) =>
+        drawn !== String(text !== "") || !(text === "" || COUNTED.test(text))
+    );
+    // The last drawn is the last count the board was told.
+    const told = board.findLast((line) =>
+      line.startsWith("home counts: working=")
+    );
+    const held = Number(told?.match(new RegExp(`${tab}=(\\d+)`))?.[1] ?? -1);
+    const last = lines.at(-1)?.[1] ?? "-";
+    return {
+      tab,
+      zero: lines.some(([, text]) => text === ""),
+      above: lines.some(([, text = ""]) => COUNTED.test(text)),
+      ok:
+        lines.length > 0 &&
+        broken.length === 0 &&
+        last === (held > 0 ? String(held) : ""),
+      said: `${tab}: ${lines.map(([, text, drawn]) => `${text || "none"}/${drawn}`).join(" → ") || "no line"}, told ${held}${broken.map((one) => `; broken ${one[0]}`).join("")}`,
+    };
+  });
+  const machines = pad
+    ? board
+        .filter((line) => MACHINES.test(line))
+        .map((line) => line.match(MACHINES) as RegExpMatchArray)
+    : [];
+  const machinesBroken = machines.filter(
+    ([, known, drawn, value]) =>
+      drawn !== String(Number(known) > 0) ||
+      Number(known) > 0 === (value === "-")
+  );
+  const machinesOk =
+    !pad || (machines.length > 0 && machinesBroken.length === 0);
+  const configure = await open("-open-configure");
+  const rows = configure
+    .filter((line) => CONFIG_ROW.test(line))
+    .map((line) => line.match(CONFIG_ROW) as RegExpMatchArray);
+  const rowFaults = rows.filter(([, , count, drawn, text]) => {
+    const shouldDraw = count === "unread" || Number(count) > 0;
+    const says = count === "unread" ? "—" : count;
+    return drawn !== String(shouldDraw) || (shouldDraw && text !== says);
+  });
+  const both = (zero: boolean, above: boolean) =>
+    [zero ? "at 0" : "", above ? "above 0" : ""]
+      .filter(Boolean)
+      .join(" and ") || "neither";
+  const reached = [
+    ...tabs.map((one) => `${one.tab} ${both(one.zero, one.above)}`),
+    ...(pad
+      ? [
+          `machines ${both(
+            machines.some(([, known]) => known === "0"),
+            machines.some(([, known]) => Number(known) > 0)
+          )}`,
+        ]
+      : []),
+    `config rows at 0: ${rows.filter((row) => row[2] === "0").length}, above 0: ${rows.filter((row) => Number(row[2]) > 0).length}, unread: ${rows.filter((row) => row[2] === "unread").length}`,
+  ];
+  on.kit.check(
+    `${on.tag} 3: a count is drawn only above 0 beyond the head: the work tabs${pad ? ", the bar's Machines" : ""} and Configure's rows, their number the count`,
+    tabs.every((one) => one.ok) &&
+      machinesOk &&
+      rows.length > 0 &&
+      rowFaults.length === 0,
+    `reached ${reached.join("; ")}; ${tabs.map((one) => one.said).join(" | ")}; ${pad ? machines.map((one) => one[0]).join(" → ") || "no bar machines line" : "no Machines on a phone"}; ${rowFaults.map((row) => row[0]).join(" | ") || `${rows.length} config rows hold the rule`}`
   );
 }
 
@@ -415,6 +537,7 @@ async function onDevice(
     if (!pad) {
       // The phone's drawer: no Expand.
       await readAt(on, "drawer", mark, WANTED);
+      await countsStep(on, pad, fleet.base);
       return;
     }
     await readAt(on, "card", mark, [...WANTED, "expand"]);
@@ -430,6 +553,7 @@ async function onDevice(
       await readAt(on, read, mark, [...WANTED, "expand"]);
     }
     console.log(`  captures: ${shots}`);
+    await countsStep(on, pad, fleet.base);
   } finally {
     await Bun.write(
       join(kit.out, `ios-preview-head-${label}.log`),
