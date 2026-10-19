@@ -129,7 +129,7 @@ import {
   syncMemory,
   writeJson,
 } from "./fleet-common";
-import { OpencodeActivity } from "./opencode-activity";
+import { type ActivitySnapshot, OpencodeActivity } from "./opencode-activity";
 import {
   answerOf,
   assertPluginLoaded,
@@ -572,14 +572,16 @@ const announceOpencodeServer = async (
                 settle(() => resolve(announced));
               }
             },
-            exit: (exitCode) =>
-              settle(() =>
+            exit: (exitCode, _signal, pid) =>
+              settle(() => {
+                // A server that never announced serves nobody: its end is read here.
+                client.release(procId, pid);
                 reject(
                   new Error(
                     `[opencode] serve exited (code ${exitCode}) before announcing a port`
                   )
-                )
-              ),
+                );
+              }),
             // The ring outran the announce line: the URL is unrecoverable from here.
             reset: (nextSeq) =>
               settle(() =>
@@ -1336,7 +1338,7 @@ export class OpencodeHarness implements Harness {
       (sessiond, procId, spec, signal) =>
         attachOpencodeServer({ sessiond, procId, spec, signal }),
       isMachineAgent,
-      (identity) => this.#generationIdle(identity),
+      (identity) => this.#whyNotIdle(identity),
       account
     );
   }
@@ -2323,18 +2325,31 @@ export class OpencodeHarness implements Harness {
   }
 
   #operationsPending(): boolean {
-    return (
-      !this.#custodyReadiness() ||
-      this.#applyGate !== null ||
-      this.#pendingSpawns.length > 0 ||
-      this.#opening > 0 ||
-      this.#mutatingMcp > 0 ||
-      this.#migrations.size > 0 ||
-      this.#moves.size > 0 ||
-      this.#pendingRecoveries.size > 0 ||
+    return this.#pendingOperations().length > 0;
+  }
+
+  /** The operations still pending against this adapter's servers, in words. */
+  #pendingOperations(): string[] {
+    return [
+      ...(this.#custodyReadiness() ? [] : ["custody not decided"]),
+      ...(this.#applyGate === null ? [] : ["a config apply"]),
+      ...(this.#pendingSpawns.length > 0
+        ? [`${this.#pendingSpawns.length} start(s) queued`]
+        : []),
+      ...(this.#opening > 0 ? [`${this.#opening} session(s) opening`] : []),
+      ...(this.#mutatingMcp > 0 ? ["an MCP change"] : []),
+      ...(this.#migrations.size > 0
+        ? [`handoff of ${[...this.#migrations.keys()].join(", ")}`]
+        : []),
+      ...(this.#moves.size > 0
+        ? [`move of ${[...this.#moves.keys()].join(", ")}`]
+        : []),
+      ...(this.#pendingRecoveries.size > 0 ||
       this.#recovering > 0 ||
       this.#recoveryWaiters.length > 0
-    );
+        ? ["a recovery"]
+        : []),
+    ];
   }
 
   /**
@@ -2430,42 +2445,63 @@ export class OpencodeHarness implements Harness {
     return observed.kind !== "decided" || observed.state !== "idle";
   }
 
-  /** Two complete reads of this exact generation, with a real sampling gap. */
-  async #generationIdle(identity: ServerIdentity): Promise<boolean> {
+  /**
+   * Why this exact generation is not idle, in words for the retirement's
+   * log line; undefined once two complete reads with a real sampling gap say
+   * it runs nothing, no operation is pending and no session is bound to it.
+   */
+  async #whyNotIdle(identity: ServerIdentity): Promise<string | undefined> {
     if (isV1(identity)) {
-      return await this.#v1Idle(identity);
+      return (await this.#v1Idle(identity))
+        ? undefined
+        : "the 1.x server runs something or was not read (its own line says which)";
     }
-    if (this.#operationsPending()) {
-      return false;
+    const pending = (): string | undefined => {
+      const operations = this.#pendingOperations();
+      return operations.length > 0
+        ? `operations pending: ${operations.join(", ")}`
+        : undefined;
+    };
+    const unread = (snapshot: ActivitySnapshot): string | undefined => {
+      if (!snapshot.known) {
+        return "its activity is not known";
+      }
+      return snapshot.instances.length > 0
+        ? `its activity is busy: ${snapshot.instances.join(", ")}`
+        : undefined;
+    };
+    const before = pending();
+    if (before) {
+      return before;
     }
     const activity = this.#activity(identity);
     const client = this.#clientForGeneration(identity);
     const first = await activity.sample(client, true);
-    if (!first.known || first.instances.length || this.#operationsPending()) {
-      return false;
+    const firstWhy = unread(first) ?? pending();
+    if (firstWhy) {
+      return firstWhy;
     }
     await Bun.sleep(2000);
     const second = await activity.sample(client, true);
+    const secondWhy = unread(second);
+    if (secondWhy) {
+      return secondWhy;
+    }
     if (
-      second.known &&
-      second.instances.length === 0 &&
       this.#slotOfGeneration(identity)?.owner.active?.procId !== identity.procId
     ) {
       await this.#handoffIdle();
-      if (
-        [...this.#sessionOwners.values()].some(
-          (owner) => owner.procId === identity.procId
-        )
-      ) {
-        return false;
+      const bound = [...this.#sessionOwners]
+        .filter(([, owner]) => owner.procId === identity.procId)
+        .map(([instanceId]) => instanceId);
+      if (bound.length > 0) {
+        return `session(s) still bound to it: ${bound.join(", ")}`;
       }
     }
-    return (
-      second.known &&
-      second.instances.length === 0 &&
-      second.sampledAt >= first.sampledAt + 2000 &&
-      !this.#operationsPending()
-    );
+    if (second.sampledAt < first.sampledAt + 2000) {
+      return "its two readings were less than 2 s apart";
+    }
+    return pending();
   }
 
   /** What each 1.x server was last seen running, so a wait on one is said once per change. */

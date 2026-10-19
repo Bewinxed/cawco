@@ -44636,6 +44636,11 @@
               "$ref": "#/components/schemas/KeptProcess"
             }
           },
+          "notAnswering": {
+            "description": "It is there and gave no welcome on the updater's last look: it is left\nas it is, and `sessions` is what it held when it last answered (0 when\nit never did).",
+            "const": true,
+            "type": "boolean"
+          },
           "sessions": {
             "description": "Its sessions, and any other process it holds (a workspace's boundary, an OpenCode server).",
             "type": "number"

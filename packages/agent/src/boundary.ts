@@ -724,9 +724,10 @@ const watchJudge = async (id: string, procId: string): Promise<void> => {
   watchedJudges.set(procId, client);
   client.subscribe(procId, {
     line: () => undefined,
-    exit: (code, signal) => {
+    exit: (code, signal, pid) => {
       watchedJudges.delete(procId);
       client.unsubscribe(procId);
+      client.release(procId, pid);
       // Counted as arming from its exit until it is started again, as the
       // handover decides ({@link armStep}).
       whileArming(id, async () => {
@@ -786,7 +787,7 @@ const watchHost = async (
           );
         }
       },
-      exit: (exitCode, signal) => {
+      exit: (exitCode, signal, pid) => {
         // Whatever ended it, the agent's own close or the host's own exit
         // (its sandbox ended, an OOM kill): the one record of the latter.
         console.info(
@@ -796,6 +797,7 @@ const watchHost = async (
           watchedHosts.delete(procId);
         }
         client.unsubscribe(procId);
+        client.release(procId, pid);
       },
     },
     afterSeq

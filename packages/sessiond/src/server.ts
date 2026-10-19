@@ -46,6 +46,7 @@ import {
   type ProcSpec,
   SESSIOND_DRAINING,
   SESSIOND_PROCESS_LIMIT,
+  SESSIOND_RELEASE,
   SESSIOND_V1,
   type SessiondAck,
   type SessiondLine,
@@ -90,6 +91,9 @@ import { capChildTasks, START_ROOM, spawnRefusal, TASK_RESERVE } from "./tasks";
 export const SESSIOND_RING_LINES = 4096;
 
 export const RING_BYTES = 8 * 1024 * 1024;
+
+/** What every welcome says this keeper speaks: the protocol, and `release`. */
+const CAPABILITIES = [SESSIOND_V1, SESSIOND_RELEASE];
 
 /**
  * The graceful window between stdin-EOF and SIGKILL during drain, mirroring
@@ -518,7 +522,7 @@ export class SessiondServer {
     this.#send(conn, {
       type: "welcome",
       epoch: this.epoch,
-      capabilities: [SESSIOND_V1],
+      capabilities: CAPABILITIES,
       build: this.#build,
       procs: this.procs(),
     });
@@ -575,7 +579,7 @@ export class SessiondServer {
         this.#send(conn, {
           type: "welcome",
           epoch: this.epoch,
-          capabilities: [SESSIOND_V1],
+          capabilities: CAPABILITIES,
           build: this.#build,
           procs: this.procs(),
         });
@@ -611,6 +615,13 @@ export class SessiondServer {
         break;
       case "stdin_end":
         settlement = this.#stdinEnd(commandId, String(msg.procId ?? ""));
+        break;
+      case "release":
+        settlement = this.#release(
+          commandId,
+          String(msg.procId ?? ""),
+          Number(msg.pid)
+        );
         break;
       default:
         // §5: unknown types are ANSWERED, never fatal. This is precisely how
@@ -865,6 +876,31 @@ export class SessiondServer {
     child.on("error", () => this.#reap(proc, null, null));
     child.on("exit", (code, signal) => this.#reap(proc, code, signal));
     await capChildTasks(pid);
+    return ack(commandId, "applied");
+  }
+
+  /**
+   * A DEAD CHILD STAYS UNTIL THE AGENT THAT FOLLOWS IT HAS SETTLED ITS END.
+   * Its exit and its ring are what an agent that was away when it died
+   * reads it by: a carry lets go of a session whose process its keeper lists
+   * exited (session.ts `#carryReady`), and a subscribe after the death learns
+   * it from the listing (agent sessiond-client.ts `subscribe`). The keeper
+   * cannot tell when that is over: an exit written to an agent that ended
+   * before reading it was never read. So it is the agent's to say, and a
+   * child it never releases stays as every dead child stayed before: the
+   * keeper of 4034 listed 184 children, one alive, after 34 hours (the Mac,
+   * 2026-10-19). Only the dead process under the id, by its pid.
+   */
+  #release(commandId: string, procId: string, pid: number): SessiondAck {
+    const proc = this.#procs.get(procId);
+    if (proc?.pid !== pid) {
+      // Gone, or a start since under the id: nothing of that process is held.
+      return ack(commandId, "applied");
+    }
+    if (proc.alive) {
+      return ack(commandId, "failed", `release: ${procId} (${pid}) is alive`);
+    }
+    this.#procs.delete(procId);
     return ack(commandId, "applied");
   }
 
@@ -1149,6 +1185,7 @@ export class SessiondServer {
       this.#send(conn, {
         type: "proc.exit",
         procId: proc.procId,
+        pid: proc.pid,
         exitCode: code,
         signal,
       });

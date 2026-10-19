@@ -255,6 +255,12 @@ export interface KeptProcess {
 export interface RetiringKeeper {
   /** Processes in its unit CawCo did not start, while they keep it from going: its hand-over finishes once they end. */
   kept?: KeptProcess[];
+  /**
+   * It is there and gave no welcome on the updater's last look: it is left
+   * as it is, and `sessions` is what it held when it last answered (0 when
+   * it never did).
+   */
+  notAnswering?: true;
   /** Its sessions, and any other process it holds (a workspace's boundary, an OpenCode server). */
   sessions: number;
   /** Its build. */

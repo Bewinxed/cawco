@@ -1,42 +1,65 @@
 /**
- * A retiring keeper is read whole while the agent's own loop stalls.
+ * A retiring keeper is read whole while the agent's own loop stalls, lets go
+ * of what it no longer needs to keep, and is tended on its own word.
  *
  * A reading of what every keeper holds (agent keepers.ts `withKeepers`: the
- * register's custody, every heartbeat's, the updater's look at which retiring
- * keeper to remove) dials each keeper and waits on its welcome under a timer
- * in the agent's loop. Under Bun a timer that came due while the loop was
- * busy runs before the socket's data is read, so a stall of the agent past
- * the bound reads a keeper that welcomed at once as not answering. The Mac's
- * agent logged it 67 times against the keeper of the build before (2026-10-19,
- * "no welcome within 2077 ms" to 3375 ms under a two-second bound, the keeper
- * idle in `kevent64`), and each such reading was not known.
+ * register's custody, every heartbeat's) dials each keeper and waits on its
+ * welcome under a timer in the agent's loop. Under Bun a timer that came due
+ * while the loop was busy runs before the socket's data is read, so a stall of
+ * the agent past the bound reads a keeper that welcomed at once as not
+ * answering. The Mac's agent logged it 67 times against the keeper of the
+ * build before (2026-10-19, "no welcome within 2077 ms" to 3375 ms under a
+ * two-second bound, the keeper idle in `kevent64`). That keeper listed 184
+ * children, one alive, after 34 hours: a keeper kept every dead child for
+ * life. Its one live child was an OpenCode server whose launch never heard
+ * its announcement, recorded with no URL, and deferred "busy or unknown"
+ * every 5 s for 11 hours.
  *
- * Two scratch keepers of this checkout's sessiond, which speaks the welcome
- * as that build's did (accept, then the welcome in the same turn): the build
- * before's, holding a child under an OpenCode server's id, and the current
- * one, which the machine's endpoint names. This process stalls its loop for
+ * Two scratch keepers of this checkout's sessiond: the build before's,
+ * holding a child under an OpenCode server's id, and the current one, which
+ * the machine's endpoint names. This process stalls its loop for
  * {@link STALL_MS} the moment its dial of the retiring keeper connects:
  *
  * - (a) unstalled, the reading lists both keepers and the retiring one's
  *   child alive;
- * - (b) stalled, the reading is whole all the same, the child alive on the
- *   retiring keeper. Main fails: "what the keepers hold is not known … no
- *   welcome within 25xx ms";
+ * - (b) stalled, the reading is whole all the same. Main fails: "what the
+ *   keepers hold is not known … no welcome within 25xx ms";
  * - (c) its child ended, a stalled reading says the retiring keeper holds
- *   nothing, which is what the updater removes it on. Main fails as (b);
- * - (d) a keeper that is there and never welcomes still makes the reading
- *   not known, never a keeper holding nothing.
+ *   nothing. Main fails as (b);
+ * - (e) a child whose end its transport read (sessiond-client.ts
+ *   `sessiondBridge`) leaves its keeper's welcome and listing. Main fails: it
+ *   is listed dead for as long as the keeper lives;
+ * - (f) a child that died with nobody following it is listed dead, with its
+ *   exit code, to the next connection; an attach to it learns its end from
+ *   that listing, and only then does it leave. Main fails the leaving;
+ * - (g) an OpenCode server whose launch never heard where it listens is
+ *   ended and its record let go, without a wait on an activity no read can
+ *   reach. Main fails: it is deferred, and still runs;
+ * - (h) a generation that is deferred says why ("its activity is not known").
+ *   Main fails: no deferral names a reason;
+ * - (d) a keeper that is there and never welcomes still makes the reading of
+ *   the whole machine not known, never a keeper holding nothing;
+ * - (i) with that keeper there, the updater's own reading of each keeper
+ *   (keepers.ts `withEachKeeper`, binary-update.ts `#retireKeepers`) reads
+ *   the empty retiring keeper on its own word, holding nothing, which is what
+ *   it is removed on, and names the silent one not answering. Main fails: it
+ *   tends by the whole machine's reading, which (d) shows is not known.
+ *
+ * Its own HOME: the OpenCode server records go under `~/.cawco`.
  *
  *   bun scripts/probe-kit/run.ts keeper-custody-stall
  */
-import { mkdtemp, readlink, rm } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, readlink, rm } from "node:fs/promises";
 import { createServer, Socket } from "node:net";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { OpencodeServerOwner } from "../../../packages/agent/src/harnesses/opencode-server";
 import { withKeepers } from "../../../packages/agent/src/keepers";
 import {
   KEEPER_WELCOME_MS,
+  type ProcessExit,
   SessiondClient,
+  sessiondBridge,
 } from "../../../packages/agent/src/sessiond-client";
 import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
@@ -54,9 +77,9 @@ const reading = async (): Promise<
 > => {
   try {
     return {
-      keepers: await withKeepers((keepers) =>
+      keepers: await withKeepers((found) =>
         Promise.resolve(
-          keepers.map(({ client, current, endpoint }) => ({
+          found.map(({ client, current, endpoint }) => ({
             endpoint,
             current,
             live: client.procs
@@ -136,8 +159,42 @@ const welcomed = (endpoint: string): Promise<SessiondClient> =>
     20_000
   ) as Promise<SessiondClient>;
 
+/** What a fresh connection to `endpoint` is told of `procId`: listed alive, dead (with its exit code), or not listed. */
+const listedAs = async (endpoint: string, procId: string): Promise<string> => {
+  const client = await welcomed(endpoint);
+  client.close();
+  const proc = client.procs.find((one) => one.procId === procId);
+  if (!proc) {
+    return "not listed";
+  }
+  return proc.alive ? "alive" : `dead, exit ${proc.exitCode ?? proc.signal}`;
+};
+
+/** `read` once it says `want`, or what it said last after `ms`. */
+const settlesTo = async (
+  read: () => Promise<string>,
+  want: string,
+  ms: number
+): Promise<string> =>
+  await until(`${want}`, read, (value) => value === want, ms).catch(read);
+
+/** The record an OpenCode server owner of `account` keeps, as written. */
+const recordOf = async (
+  account: string
+): Promise<{
+  active: { url: string } | null;
+  retired: { procId: string; url: string }[];
+}> => {
+  const dir = join(homedir(), ".cawco");
+  const file = (await readdir(dir)).find((name) =>
+    name.endsWith(`-account-${account}.json`)
+  );
+  return JSON.parse(await readFile(join(dir, file ?? "none"), "utf8"));
+};
+
 const spec: Spec = {
   name: "keeper-custody-stall",
+  ownHome: "the OpenCode server owner keeps its records under ~/.cawco",
   run: async (kit: Kit) => {
     const dir = await mkdtemp(join(tmpdir(), "kcs-"));
     const machine = join(dir, "sessiond.sock");
@@ -147,19 +204,22 @@ const spec: Spec = {
     const savedEndpoint = process.env.CAWCO_SESSIOND_ENDPOINT;
     process.env.CAWCO_SESSIOND_ENDPOINT = machine;
     const words: string[] = [];
-    const keepers: ReturnType<typeof startKeeper>[] = [];
-    let client: SessiondClient | undefined;
+    const started: ReturnType<typeof startKeeper>[] = [];
+    const clients: SessiondClient[] = [];
     const silent = createServer(() => {
       /* accepts, and never writes a welcome: a keeper whose loop does not turn */
     });
+    const { warn, info } = console;
     try {
       // The build before's keeper first, then the current one: each makes
       // the machine's endpoint name it as it starts (sessiond main.ts), so
       // the current one, started last, is the one it names.
-      keepers.push(startKeeper(retiring, words));
-      client = await welcomed(retiring);
-      keepers.push(startKeeper(current, words));
-      (await welcomed(current)).close();
+      started.push(startKeeper(retiring, words));
+      const old = await welcomed(retiring);
+      clients.push(old);
+      started.push(startKeeper(current, words));
+      const now = await welcomed(current);
+      clients.push(now);
       await until(
         "the machine's endpoint names the current keeper",
         () => readlink(machine),
@@ -167,7 +227,7 @@ const spec: Spec = {
         20_000
       );
       const procId = `opencode-server-account-probe-${crypto.randomUUID()}`;
-      await client.spawnProc(procId, {
+      await old.spawnProc(procId, {
         command: "/bin/sleep",
         args: ["600"],
         cwd: dir,
@@ -198,17 +258,17 @@ const spec: Spec = {
         `${said(stalled)} (${Math.round(performance.now() - stalledAt)} ms)`
       );
 
-      await client.signal(procId, "SIGTERM");
+      await old.signal(procId, "SIGTERM");
       await until(
         "the retiring keeper's child ended",
-        async () => (await client?.list())?.procs,
-        (procs) => procs?.some((proc) => proc.procId === procId && !proc.alive),
+        async () => (await old.list()).procs,
+        (procs) => procs.some((proc) => proc.procId === procId && !proc.alive),
         20_000
       );
       unstall = stallOnConnect(retiring, STALL_MS);
       const emptied = await reading().finally(unstall);
       kit.check(
-        "(c) its child ended, a stalled reading says the retiring keeper holds nothing live: what the updater removes it on",
+        "(c) its child ended, a stalled reading says the retiring keeper holds nothing live",
         typeof emptied !== "string" &&
           emptied.keepers.some(
             (one) => one.endpoint === retiring && one.live.length === 0
@@ -216,23 +276,231 @@ const spec: Spec = {
         said(emptied)
       );
 
+      // (e) A session's transport, as the Claude harness drives its child.
+      const followed = `claude-probe-${crypto.randomUUID()}`;
+      const followedEnd = new Promise<ProcessExit | undefined>((resolve) => {
+        sessiondBridge(
+          now,
+          followed,
+          { command: "/bin/sh", args: ["-c", "echo said; exit 3"], env: {} },
+          { seqs: new Map() },
+          () => undefined,
+          resolve
+        );
+      });
+      const ended = await followedEnd;
+      const afterEnd = await settlesTo(
+        () => listedAs(current, followed),
+        "not listed",
+        5000
+      );
+      kit.check(
+        "(e) a child whose end its transport read (exit 3) leaves its keeper's welcome and listing",
+        ended?.code === 3 && afterEnd === "not listed",
+        `its transport read ${JSON.stringify(ended)}; a fresh connection is told it is ${afterEnd}`
+      );
+
+      // (f) A child that died while no agent followed it.
+      const unfollowed = `claude-probe-${crypto.randomUUID()}`;
+      await now.spawnProc(unfollowed, {
+        command: "/bin/sh",
+        args: ["-c", "echo said; exit 4"],
+        cwd: dir,
+        env: {},
+      });
+      const whileAway = await settlesTo(
+        () => listedAs(current, unfollowed),
+        "dead, exit 4",
+        10_000
+      );
+      const attaching = await welcomed(current);
+      clients.push(attaching);
+      const head =
+        attaching.procs.find((one) => one.procId === unfollowed)?.head ?? 0;
+      const attachedEnd = await new Promise<ProcessExit | undefined>(
+        (resolve) => {
+          sessiondBridge(
+            attaching,
+            unfollowed,
+            { command: "/bin/sh", args: [], env: {} },
+            { attach: { afterSeq: 0, head, prelude: [] }, seqs: new Map() },
+            () => undefined,
+            resolve
+          );
+        }
+      );
+      const afterAttach = await settlesTo(
+        () => listedAs(current, unfollowed),
+        "not listed",
+        5000
+      );
+      kit.check(
+        "(f) a child that died with nobody following it is listed dead with its exit to the next connection; an attach learns its end from that, and only then it leaves",
+        whileAway === "dead, exit 4" &&
+          attachedEnd?.code === 4 &&
+          afterAttach === "not listed",
+        `while nobody followed it: ${whileAway}; the attach read ${JSON.stringify(attachedEnd)}; then: ${afterAttach}`
+      );
+
+      // (g) and (h): OpenCode servers on the current keeper, each launched
+      // as a harness launches one, its announcement read by `attach`.
+      const sleeper = {
+        command: "/bin/sleep",
+        args: ["600"],
+        cwd: dir,
+        env: {},
+        inherit: "server" as const,
+      };
+      const ownerOf = (
+        account: string,
+        announce: (procId: string) => Promise<string>,
+        whyNotIdle: () => Promise<string | undefined>
+      ) =>
+        new OpencodeServerOwner(
+          () => Promise.resolve(now),
+          (epoch) => Promise.resolve(epoch === now.epoch ? now : undefined),
+          async (client, launched) => {
+            await client.spawnProc(launched, sleeper);
+            return await announce(launched);
+          },
+          () => Promise.resolve(true),
+          whyNotIdle,
+          account
+        );
+      const launch = { flags: {}, spec: { command: "opencode", args: [] } };
+      const deferred: string[] = [];
+      const retires: string[] = [];
+      console.warn = (...args: unknown[]) => {
+        const line = args.map(String).join(" ");
+        if (line.includes("retirement deferred")) {
+          deferred.push(line);
+        }
+        warn(...args);
+      };
+      console.info = (...args: unknown[]) => {
+        const line = args.map(String).join(" ");
+        if (line.startsWith("[opencode] retire")) {
+          retires.push(line);
+        }
+        info(...args);
+      };
+
+      const silentLaunch = ownerOf(
+        "probe-unannounced",
+        () =>
+          Promise.reject(
+            new Error('no "server listening" line within 30000ms')
+          ),
+        // Never idle, whatever is asked: only a server that never announced
+        // goes past it.
+        () => Promise.resolve("")
+      );
+      const refused = await silentLaunch
+        .ensure(launch, { attempt: true, inputs: "probe" })
+        .then(
+          () => "it started",
+          (error: Error) => error.message
+        );
+      const orphanRead = async () => {
+        const record = await recordOf("probe-unannounced");
+        const [orphan] = record.retired;
+        return orphan
+          ? `retired with url ${JSON.stringify(orphan.url)}, ${await listedAs(current, orphan.procId)}`
+          : "no generation left";
+      };
+      const orphanEnd = await settlesTo(
+        orphanRead,
+        "no generation left",
+        25_000
+      );
+      const ending = retires.filter((line) =>
+        line.includes("probe-unannounced")
+      );
+      kit.check(
+        "(g) an OpenCode server whose launch never heard where it listens is ended for that, and its record lets it go",
+        ending.some((line) =>
+          line.includes("it never announced where it listens: SIGTERM")
+        ) && orphanEnd === "no generation left",
+        `the launch: ${refused}; 25 s on: ${orphanEnd}; said: ${ending.join(" | ") || "no retire line"}; deferred ${deferred.filter((line) => line.includes("probe-unannounced")).length} time(s)`
+      );
+
+      const unknownActivity = ownerOf(
+        "probe-unknown",
+        () => Promise.resolve("http://127.0.0.1:9"),
+        () => Promise.resolve("its activity is not known")
+      );
+      await unknownActivity.ensure(launch, { attempt: true, inputs: "probe" });
+      await unknownActivity.retireActive();
+      const reason = await until(
+        "a deferral of probe-unknown's generation",
+        () =>
+          deferred.find((line) =>
+            line.includes("opencode-server-account-probe-unknown")
+          ),
+        Boolean,
+        15_000
+      ).catch(() => undefined);
+      kit.check(
+        "(h) a generation whose retirement is deferred says why",
+        reason?.includes(
+          "OpenCode retirement deferred: its activity is not known."
+        ) === true,
+        reason ??
+          `no deferral was said; its record: ${JSON.stringify(await recordOf("probe-unknown"))}`
+      );
+      console.warn = warn;
+
       await new Promise<void>((resolve) => silent.listen(wedged, resolve));
       const wedgedAt = performance.now();
       const unknown = await reading();
       kit.check(
-        `(d) a keeper that is there and never welcomes makes the reading not known, after ${KEEPER_WELCOME_MS} ms`,
+        `(d) a keeper that is there and never welcomes makes the whole machine's reading not known, after ${KEEPER_WELCOME_MS} ms`,
         typeof unknown === "string" &&
           unknown.includes("what the keepers hold is not known") &&
           unknown.includes(wedged),
         `${said(unknown)} (${Math.round(performance.now() - wedgedAt)} ms)`
       );
+
+      // Asked of the module as it stands: a build with no reading of each
+      // keeper tends them by the whole machine's.
+      const { withEachKeeper } =
+        (await import("../../../packages/agent/src/keepers")) as Partial<
+          typeof import("../../../packages/agent/src/keepers")
+        >;
+      const each = withEachKeeper
+        ? await withEachKeeper((answered, unanswered) =>
+            Promise.resolve({
+              empty: answered.some(
+                ({ endpoint, client }) =>
+                  endpoint === retiring &&
+                  !client.procs.some((proc) => proc.alive)
+              ),
+              silent: unanswered.map(
+                ({ endpoint, why }) => `${endpoint.split("/").at(-1)}: ${why}`
+              ),
+            })
+          )
+        : undefined;
+      kit.check(
+        "(i) with that keeper there, the updater's reading of each keeper reads the empty retiring one as holding nothing, and names the silent one not answering",
+        each?.empty === true &&
+          each.silent.length === 1 &&
+          each.silent[0]?.startsWith("sessiond-0000-wedged.sock") === true,
+        each
+          ? JSON.stringify(each)
+          : "there is no reading of each keeper: the updater tends by the whole machine's, not known while one keeper is silent (d)"
+      );
     } finally {
-      client?.close();
+      console.warn = warn;
+      console.info = info;
+      for (const client of clients) {
+        client.close();
+      }
       silent.close();
-      for (const keeper of keepers) {
+      for (const keeper of started) {
         keeper.kill("SIGTERM");
       }
-      await Promise.all(keepers.map((keeper) => keeper.exited));
+      await Promise.all(started.map((keeper) => keeper.exited));
       if (savedEndpoint === undefined) {
         delete process.env.CAWCO_SESSIOND_ENDPOINT;
       } else {

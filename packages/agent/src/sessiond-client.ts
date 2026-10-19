@@ -40,6 +40,7 @@ import { standalone } from "@cawco/core/runtime";
 import {
   notAliveReason,
   type ProcSpec,
+  SESSIOND_RELEASE,
   SESSIOND_V1,
   type SessiondAck,
   type SessiondClientMessage,
@@ -434,7 +435,12 @@ interface ProcListener {
    * without saying how: a listing from a sessiond that predates the `signal`
    * field describes a child killed by a signal exactly that way.
    */
-  exit?: (exitCode: number | null, signal: NodeJS.Signals | null) => void;
+  exit?: (
+    exitCode: number | null,
+    signal: NodeJS.Signals | null,
+    /** The process that exited, when its keeper says (what {@link SessiondClient.release} names). */
+    pid: number | undefined
+  ) => void;
   line?: (event: SessiondLine) => void;
   /**
    * `nextSeq` is where this subscription resumes; `oldest` is the earliest
@@ -644,7 +650,12 @@ export class SessiondClient {
         for (const proc of message.procs) {
           const listener = this.#listeners.get(proc.procId);
           if (!proc.alive && listener) {
-            this.#exit(listener, proc.exitCode ?? null, proc.signal ?? null);
+            this.#exit(
+              listener,
+              proc.exitCode ?? null,
+              proc.signal ?? null,
+              proc.pid
+            );
           }
         }
         this.#welcomeWaiters.shift()?.resolve(this.#welcome);
@@ -676,7 +687,7 @@ export class SessiondClient {
       case "proc.exit": {
         const listener = this.#listeners.get(message.procId);
         if (listener) {
-          this.#exit(listener, message.exitCode, message.signal);
+          this.#exit(listener, message.exitCode, message.signal, message.pid);
         }
         return;
       }
@@ -691,13 +702,14 @@ export class SessiondClient {
   #exit(
     listener: ProcListener,
     exitCode: number | null,
-    signal: NodeJS.Signals | null
+    signal: NodeJS.Signals | null,
+    pid: number | undefined
   ): void {
     if (this.#toldExit.has(listener)) {
       return;
     }
     this.#toldExit.add(listener);
-    listener.exit?.(exitCode, signal);
+    listener.exit?.(exitCode, signal, pid);
   }
 
   #send(message: SessiondClientMessage): void {
@@ -761,6 +773,40 @@ export class SessiondClient {
       })
       .catch(() => {
         /* the connection ended: the next one says them again */
+      });
+  }
+
+  /**
+   * Tells this connection's keeper that the dead child `pid` under `procId`
+   * is settled here, so it lets the child go ({@link SessiondRelease}): sent
+   * by whatever follows the child once it has read the end it waited on, and
+   * by nothing earlier. A keeper whose welcome does not say
+   * {@link SESSIOND_RELEASE} is sent nothing: it keeps its dead children, as
+   * it always did. Nobody waits on it; a refusal is said in the log.
+   */
+  release(procId: string, pid: number | undefined): void {
+    if (
+      pid === undefined ||
+      this.retired ||
+      !this.capabilities.includes(SESSIOND_RELEASE)
+    ) {
+      return;
+    }
+    this.#command({
+      type: "release",
+      commandId: crypto.randomUUID(),
+      procId,
+      pid,
+    })
+      .then((settled) => {
+        if (settled.stage === "failed") {
+          console.warn(
+            `[sessiond] ${procId}: the keeper kept its process ${pid}: ${settled.reason ?? "no reason given"}`
+          );
+        }
+      })
+      .catch(() => {
+        /* the connection ended: the keeper keeps it, and its next follower reads its end there */
       });
   }
 
@@ -937,14 +983,18 @@ export const endProc = async (
   setTimeout(() => {
     client
       .list()
-      .then(({ procs }) =>
-        procs.some(
-          (proc) =>
-            proc.procId === procId && proc.alive && proc.pid === held.pid
-        )
-          ? quietly(client.signal(procId, "SIGKILL"))
-          : undefined
-      )
+      .then(({ procs }) => {
+        if (
+          procs.some(
+            (proc) =>
+              proc.procId === procId && proc.alive && proc.pid === held.pid
+          )
+        ) {
+          return quietly(client.signal(procId, "SIGKILL"));
+        }
+        // Ended, and nobody drives it: nothing is left to read its end.
+        client.release(procId, held.pid);
+      })
       .catch(() => undefined);
   }, END_GRACE_MS).unref();
 };
@@ -1185,11 +1235,13 @@ export const sessiondBridge = (
       }
       stdout.push(`${event.data}\n`);
     },
-    exit: (code, sig) => {
+    exit: (code, sig, pid) => {
       exitCode = code;
       signalCode = sig;
       stdout.push(null);
       end(code === null && sig === null ? undefined : { code, signal: sig });
+      // This transport is what follows its child: its end is read now.
+      client.release(procId, pid);
       // An `exit` with neither a code nor a signal is not one a process can
       // emit, and the SDK reads it as still running: its `waitForExit` waits
       // for another `exit` and never returns. A child whose end sessiond

@@ -223,6 +223,7 @@ export class PiRemoteSession implements HarnessSession {
           this.#unread.clear();
           this.#setBusy(false);
           ctx.closed?.();
+          client.release(procIdFor("pi", ctx.instanceId), pid);
         },
       },
       afterSeq
