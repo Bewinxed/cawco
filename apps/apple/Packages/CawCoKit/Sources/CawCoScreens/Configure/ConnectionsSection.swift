@@ -78,7 +78,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
 
         form.isHidden = true
         form.onCancel = { [weak self] in self?.form.close() }
-        form.onSubmit = { [weak self] service, way, account, key, app in self?.add(service, way: way, account: account, key: key, app: app) }
+        form.onSubmit = { [weak self] sent in self?.add(sent) }
         setContent([form, empty, list])
     }
 
@@ -243,10 +243,12 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
     #if DEBUG
     /// A service signed in to through the form, as a person fills and sends it.
     func probeAdd(service name: String, account: String, key: String) {
-        guard let service = Words.Connections.services.first(where: { $0.service == name }) else { return }
+        guard let service = Words.Connections.services.first(where: { $0.service == name }),
+              let way = service.ways.first(where: { $0.auth == "bearer" }) else { return }
         startAdding(service)
-        guard let way = service.ways.first(where: { $0.auth == "bearer" }) else { return }
-        add(service, way: way, account: account, key: key, app: nil)
+        form.probePick(way.label)
+        form.probeFill(account: account, key: key)
+        form.probeSend()
     }
 
     /// A service's app way picked in the form, its registration typed, then sent.
@@ -256,8 +258,29 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
         startAdding(service)
         form.probePick(way.label)
         form.probeFillApp(app)
-        add(service, way: way, account: account, key: "", app: app)
+        form.probeFill(account: account, key: "")
+        form.probeSend()
     }
+
+    /// The form opened on a service, as its Server address field then reads: shown or not, its words, its problem.
+    func probeOpenAddress(service name: String) -> ConnectionAddressRead? {
+        guard let service = Words.Connections.services.first(where: { $0.service == name }) else { return nil }
+        startAdding(service)
+        form.layoutIfNeeded()
+        return form.probeAddress
+    }
+
+    /// The open form filled with `address`, its account and key, then Sign in pressed.
+    func probeSendAddress(_ address: String, account: String, key: String) -> ConnectionAddressRead {
+        form.probeFill(address: address)
+        form.probeFill(account: account, key: key)
+        form.probeSend()
+        form.layoutIfNeeded()
+        return form.probeAddress
+    }
+
+    func probeFill(address typed: String) { form.probeFill(address: typed) }
+    var probeAddressRead: ConnectionAddressRead { form.probeAddress }
 
     /// The form opened on a service with one of its ways picked, as it then reads.
     func probeOpen(service name: String, way label: String) -> String {
@@ -282,13 +305,14 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
     }
 
     /// The account's words, then its way in: the row exists once the hub has it, and what follows is said on it.
-    private func add(_ service: Words.Connections.Service, way: Words.Connections.Way, account: String, key: String, app: FleetConnections.AppRegistration?) {
+    private func add(_ sent: ConnectionForm.Sent) {
+        let (service, way, key, app) = (sent.service, sent.way, sent.key, sent.app)
         form.pending = true
         Task { @MainActor [weak self] in
             guard let self else { return }
             let name: String
             do {
-                name = try await store.create(service, way: way, account: account)
+                name = try await store.create(service, way: way, account: sent.account, url: sent.url)
             } catch {
                 form.pending = false
                 form.problem = ThreadsStore.failureWords(error)
@@ -504,12 +528,49 @@ private final class ServiceCard: UIControl {
     }
 }
 
-/// Sign in to a service (`.add`): its mark and name, which account, its
-/// key for a service that takes one, the hub's refusal, then Cancel and
-/// Sign in; on the recess, `space-4` in.
+#if DEBUG
+/// The Server address field as the probe reads it.
+struct ConnectionAddressRead {
+    var shown: Bool
+    var value: String
+    var placeholder: String
+    var problem: String?
+    /// In the form's space: the form, the address input, the line under it, the account input.
+    var form: CGRect
+    var field: CGRect
+    var line: CGRect?
+    var account: CGRect
+    /// The form's frame in its superview, and that superview's width.
+    var inParent: CGRect
+    var parentWidth: CGFloat
+
+    var said: String {
+        func box(_ rect: CGRect?) -> String {
+            guard let rect else { return "none" }
+            return "[\(Int(rect.minX)),\(Int(rect.minY)) \(Int(rect.width))×\(Int(rect.height))]"
+        }
+        return "shown \(shown) | value '\(value)' | placeholder '\(placeholder)' | problem '\(problem ?? "")' | form \(box(form)) in parent \(box(inParent)) of \(Int(parentWidth)) | field \(box(field)) | line \(box(line)) | account \(box(account))"
+    }
+}
+#endif
+
+/// Sign in to a service (`.add`): its mark and name, its server's address
+/// for a service the person runs one of, which account, its key for a
+/// service that takes one, the hub's refusal, then Cancel and Sign in; on
+/// the recess, `space-4` in.
 private final class ConnectionForm: UIView {
+    /// What Sign in sends: the service, its way, the account's words, its key or app, and the address it is at.
+    struct Sent {
+        let service: Words.Connections.Service
+        let way: Words.Connections.Way
+        let account: String
+        let key: String
+        let app: FleetConnections.AppRegistration?
+        let url: String?
+    }
+
     var onCancel: () -> Void = {}
-    var onSubmit: (Words.Connections.Service, Words.Connections.Way, String, String, FleetConnections.AppRegistration?) -> Void = { _, _, _, _, _ in }
+    var onSubmit: (Sent) -> Void = { _ in }
     var pending = false { didSet { draw() } }
     var problem: String? { didSet { draw() } }
 
@@ -518,6 +579,10 @@ private final class ConnectionForm: UIView {
     private var way: Words.Connections.Way?
     private let mark = UIImageView()
     private let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+    /// The server's address, for a service the person runs one of (core `serverExample`).
+    private let address = KitField()
+    private var addressField: ConfigField!
+    private var addressProblem: String? { didSet { addressField.say(problem: addressProblem) } }
     private let account = KitField(placeholder: Words.Connections.accountPlaceholder)
     private var accountField: ConfigField!
     private let key = KitField()
@@ -539,6 +604,10 @@ private final class ConnectionForm: UIView {
         let head = UIStackView(arrangedSubviews: [mark, title, UIView()])
         head.spacing = Space.space2
         head.alignment = .center
+        address.keyboardType = .URL
+        address.textContentType = .URL
+        address.accessibilityIdentifier = "connection-server"
+        addressField = ConfigField(label: Words.Connections.serverAddress, control: address)
         accountField = ConfigField(label: "", control: account)
         accountField.say(hint: Words.Connections.accountHint)
         key.isSecureTextEntry = true
@@ -550,7 +619,7 @@ private final class ConnectionForm: UIView {
         submit = KitButton.make(Words.Connections.signIn, variant: .action, height: .sm) { [weak self] in self?.send() }
         let buttons = UIStackView(arrangedSubviews: [UIView(), cancel, submit])
         buttons.spacing = Space.space2
-        let column = UIStackView(arrangedSubviews: [head, wayField, waySays, accountField, keyField, app, refusal, buttons])
+        let column = UIStackView(arrangedSubviews: [head, wayField, waySays, addressField, accountField, keyField, app, refusal, buttons])
         column.axis = .vertical
         column.spacing = Space.space3
         column.translatesAutoresizingMaskIntoConstraints = false
@@ -564,6 +633,8 @@ private final class ConnectionForm: UIView {
             column.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space4),
         ])
         account.addAction(UIAction { [weak self] _ in self?.draw() }, for: .editingChanged)
+        // A refused address is said until it is typed again.
+        address.addAction(UIAction { [weak self] _ in self?.addressProblem = nil }, for: .editingChanged)
         key.addAction(UIAction { [weak self] _ in self?.draw() }, for: .editingChanged)
         accessibilityContainerType = .semanticGroup
     }
@@ -583,6 +654,11 @@ private final class ConnectionForm: UIView {
         accessibilityLabel = title.text
         accountField.setLabel(Words.Connections.account(service: next.label))
         keyField.setLabel(Words.Connections.key(service: next.label))
+        // Its server's address: GitLab's hosted one to start, Gitea's the person's own.
+        addressField.isHidden = next.serverExample == nil
+        address.setPlaceholder(next.serverExample ?? "")
+        address.text = next.url ?? ""
+        addressProblem = nil
         way = next.ways.first
         wayField.isHidden = next.ways.count <= 1
         waySays.isHidden = next.ways.count <= 1
@@ -603,6 +679,31 @@ private final class ConnectionForm: UIView {
     }
 
     func probeFillApp(_ registration: FleetConnections.AppRegistration) { app.probeFill(registration) }
+
+    func probeFill(account words: String, key typed: String) {
+        account.text = words
+        key.text = typed
+        draw()
+    }
+
+    func probeFill(address typed: String) {
+        address.text = typed
+        address.sendActions(for: .editingChanged)
+    }
+
+    func probeSend() { send() }
+
+    var probeAddress: ConnectionAddressRead {
+        layoutIfNeeded()
+        // The field's line under its input: the third of its parts, label, control, line.
+        let line = addressField.arrangedSubviews.last.flatMap { $0.isHidden ? nil : $0.convert($0.bounds, to: self) }
+        return ConnectionAddressRead(
+            shown: !addressField.isHidden, value: address.text ?? "",
+            placeholder: address.attributedPlaceholder?.string ?? "", problem: addressProblem,
+            form: bounds, field: address.convert(address.bounds, to: self), line: line,
+            account: account.convert(account.bounds, to: self),
+            inParent: frame, parentWidth: superview?.bounds.width ?? 0)
+    }
     #endif
 
     /// A way picked by its label.
@@ -646,7 +747,17 @@ private final class ConnectionForm: UIView {
 
     private func send() {
         guard let service, let way, filled, !pending else { return }
-        onSubmit(service, way, account.text ?? "", key.text ?? "", way.auth == "app" ? app.registration : nil)
+        // An address the hub can't take is refused under its field, and nothing is sent.
+        var url = service.url
+        if service.serverExample != nil {
+            url = FleetConnections.serverURL(address.text ?? "")
+            guard url != nil else {
+                addressProblem = Words.Connections.serverAddressProblem
+                return
+            }
+        }
+        onSubmit(Sent(service: service, way: way, account: account.text ?? "", key: key.text ?? "",
+                      app: way.auth == "app" ? app.registration : nil, url: url))
     }
 
     private func draw() {

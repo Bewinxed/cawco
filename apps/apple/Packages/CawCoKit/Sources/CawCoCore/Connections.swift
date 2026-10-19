@@ -40,14 +40,40 @@ public final class FleetConnections {
         return String(made.prefix(24)).replacingOccurrences(of: "-+$", with: "", options: .regularExpression)
     }
 
-    /// A new connection to one of the services the page offers; the row exists once this answers.
-    public func create(_ service: Words.Connections.Service, way: Words.Connections.Way, account: String) async throws -> String {
+    /// A typed server address as the hub takes one: an http(s) URL, or none (`serverUrl`).
+    public static func serverURL(_ typed: String) -> String? {
+        guard var url = URLComponents(string: typed.trimmingCharacters(in: .whitespacesAndNewlines)),
+              let scheme = url.scheme?.lowercased(), scheme == "https" || scheme == "http",
+              let host = url.host, !host.isEmpty else { return nil }
+        // As the web's `URL.href`: the scheme and host lowercased, an empty path made `/`.
+        url.scheme = scheme
+        url.host = host.lowercased()
+        if url.path.isEmpty { url.path = "/" }
+        return url.url?.absoluteString
+    }
+
+    #if DEBUG
+    /// Each new connection's body as it goes to the hub, for the probe's log.
+    public static var probeSent: ((String) -> Void)?
+    #endif
+
+    /// A new connection to one of the services the page offers, at `url` (the
+    /// service's own, or the server address typed for one the person runs); the row exists once this answers.
+    public func create(_ service: Words.Connections.Service, way: Words.Connections.Way, account: String, url: String?) async throws -> String {
         typealias Payload = Operations.PostApiConnections.Input.Body.JsonPayload
         let name = Self.name(service: service.service, account: account)
         guard let auth = Payload.AuthPayload(rawValue: way.auth) else { throw URLError(.badURL) }
-        let output = try await hub.api.connections.create(.init(body: .json(Payload(
+        let payload = Payload(
             name: name, service: service.service, account: account.trimmingCharacters(in: .whitespaces), transport: .http,
-            url: service.url, auth: auth))))
+            url: url, auth: auth)
+        #if DEBUG
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        if let probeSent = Self.probeSent, let body = try? encoder.encode(payload) {
+            probeSent(String(decoding: body, as: UTF8.self))
+        }
+        #endif
+        let output = try await hub.api.connections.create(.init(body: .json(payload)))
         guard case .ok = output else { throw await TaskRefusal.reading(output) }
         await read()
         return name

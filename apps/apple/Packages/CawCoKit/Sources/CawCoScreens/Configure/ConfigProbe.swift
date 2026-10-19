@@ -168,6 +168,54 @@ enum ConfigProbe {
         say("geometry \(stage)", "card \(Int(card.bounds.width))×\(Int(card.bounds.height)) in \(Int(pane)) | sets: \(sets.joined(separator: ", ")) | \(parts.joined(separator: " "))")
     }
 
+    /// The address the (d) and (e) legs type: longer than any phone is wide.
+    static let longAddress = "https://gitea.a-very-long-subdomain-for-a-self-hosted-forge.example.internal.company.com/mcp/servers/gitea-mcp-instance-with-a-long-name"
+
+    /// Connections' Server address (specs/connections-server-address.ts, the app's leg):
+    /// (a) the field in Gitea's and GitLab's form and no other's, (b) GitLab's on
+    /// its hosted address, (c) an address that is no http(s) URL refused under the
+    /// field with nothing sent, (d) a long one fitting at 320pt, (e) Sign in
+    /// sending the typed address as the connection's `url`.
+    private static func serverAddress(_ connections: ConnectionsSectionController, _ shell: ShellController) async {
+        var posts: [String] = []
+        FleetConnections.probeSent = { body in
+            posts.append(body)
+            say("connections address post", body)
+        }
+        defer { FleetConnections.probeSent = nil }
+        for service in ["gitea", "gitlab", "github", "linear", "slack"] {
+            say("connections address \(service)", connections.probeOpenAddress(service: service)?.said ?? "no service")
+            if service == "gitlab" { await capture("connections-gitlab", shell) }
+            connections.probeCloseForm()
+            try? await Task.sleep(for: .seconds(Motion.durControl + 0.2))
+        }
+        // (c): refused under the field, nothing sent.
+        _ = connections.probeOpenAddress(service: "gitea")
+        try? await Task.sleep(for: .seconds(Motion.durControl + 0.2))
+        let refused = connections.probeSendAddress("gitea.local/mcp", account: "probe", key: "probe-token")
+        try? await Task.sleep(for: .seconds(1))
+        say("connections address refused", "\(refused.said) | posts \(posts.count)")
+        await capture("connections-gitea-refused", shell)
+        // (d): a long address in a window 320pt wide.
+        if let window = shell.view.window {
+            let was = window.frame
+            window.frame = CGRect(x: was.minX, y: was.minY, width: 320, height: was.height)
+            connections.probeFill(address: longAddress)
+            window.layoutIfNeeded()
+            try? await Task.sleep(for: .seconds(Motion.durControl + 0.4))
+            window.layoutIfNeeded()
+            let cut = AccountsProbe.clipped(in: window)
+            say("connections address 320", "window \(Int(window.bounds.width)) | \(connections.probeAddressRead.said) | clipped \(cut.isEmpty ? "none" : cut.joined(separator: " / "))")
+            await capture("connections-gitea-320", shell)
+            window.frame = was
+            window.layoutIfNeeded()
+        }
+        // (e): the typed address goes as the connection's url.
+        let sent = connections.probeSendAddress(longAddress, account: "probe", key: "probe-token")
+        await until(60) { posts.count >= 1 && !connections.probeAdding && connections.probeRow("gitea-probe") != nil }
+        say("connections address sent", "\(sent.problem ?? "no problem") | posts \(posts.count) | row \(connections.probeRow("gitea-probe")?.url ?? "none")")
+    }
+
     // MARK: The run
 
     private static func run(_ shell: ShellController) async {
@@ -262,6 +310,7 @@ enum ConfigProbe {
                 try? await Task.sleep(for: .seconds(1))
                 say("connections app", AccountsProbe.texts(in: connections.view).joined(separator: " | "))
             }
+            await serverAddress(connections, shell)
         }
 
         // Skills: a skill a machine has, adopted into the fleet; then switched off.

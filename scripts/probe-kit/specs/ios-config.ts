@@ -16,7 +16,15 @@
  * 3. MCP: a command server for one project, made in its editor, then
  *    switched off from its row; the hub's fleet holds it so.
  * 4. Connections: GitHub signed in to with a key from the form, then one
- *    project allowed; the hub holds the key and the project.
+ *    project allowed; the hub holds the key and the project. Then its
+ *    Server address, as the web's (specs/connections-server-address.ts):
+ *    (a) the field in Gitea's and GitLab's form and no other's; (b) GitLab's
+ *    on its hosted address; (c) an address that is no http(s) URL refused
+ *    under the field, nothing sent; (d) a long one fitting a window 320pt
+ *    wide, as wide as the account field; (e) Sign in sending the typed
+ *    address as the connection's `url`, which the hub holds. Read from the
+ *    app's log: the field's frames and the body it sends. The dashboard's
+ *    same forms are captured in the simulator's Mobile Safari beside them.
  * 5. Skills: a skill the machine has, adopted from "On each machine", then
  *    switched off; the hub's fleet holds it so.
  * 6. Memory: a new document, written in the editor and loaded into leaf
@@ -26,7 +34,9 @@
  * mac-slot.sh slot, once in light and once in dark. Each stage's window, and
  * the dashboard's same page in the simulator's Safari, go to
  * ~/.cawco/workspace-cache/xdg/cawco-captures/prd-parity/config/<device>-<appearance>/
- * as `app-<stage>.png` and `web-<section>.png`, for a separate review.
+ * (or `$PROBE_CAPTURES/<device>-<appearance>/`) as `app-<stage>.png` and
+ * `web-<section>.png`, for a separate review; the Server address forms as
+ * `app-connections-<form>.png` beside Mobile Safari's `safari-connections-<form>.png`.
  *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-config
@@ -98,15 +108,40 @@ const SECTIONS = [
 ];
 /** The compact log's head, up to the `[subsystem:category] ` tag. */
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
-const CAPTURES = join(
-  homedir(),
-  ".cawco",
-  "workspace-cache",
-  "xdg",
-  "cawco-captures",
-  "prd-parity",
-  "config"
-);
+const CAPTURES =
+  process.env.PROBE_CAPTURES ??
+  join(
+    homedir(),
+    ".cawco",
+    "workspace-cache",
+    "xdg",
+    "cawco-captures",
+    "prd-parity",
+    "config"
+  );
+/** The width of the form's parent in a ConfigProbe line: ` of <w>`. */
+const PARENT_WIDTH = / of (\d+)/;
+/** The Gitea connection the Server address leg makes. */
+const GITEA_CONNECTION = "gitea-probe";
+/** The long address the app types (ConfigProbe `longAddress`). */
+const LONG_ADDRESS =
+  "https://gitea.a-very-long-subdomain-for-a-self-hosted-forge.example.internal.company.com/mcp/servers/gitea-mcp-instance-with-a-long-name";
+const ADDRESS_PROBLEM =
+  "A server address starts with https:// or http://, like the example.";
+/** A frame in a ConfigProbe line: `name [x,y w×h]`. */
+const frameIn = (line: string, name: string) => {
+  const found = new RegExp(
+    `${name} \\[(-?\\d+),(-?\\d+) (\\d+)×(\\d+)\\]`
+  ).exec(line);
+  return found
+    ? {
+        x: Number(found[1]),
+        y: Number(found[2]),
+        w: Number(found[3]),
+        h: Number(found[4]),
+      }
+    : null;
+};
 
 const respond = (): Reply => ({ words: ["Done."], everyMs: 20 });
 
@@ -125,6 +160,55 @@ async function sh(script: string): Promise<string> {
     throw new Error(`exited ${code}: ${err.trim() || said.trim()}`);
   }
   return said;
+}
+
+/**
+ * The dashboard's Connections page in the simulator's Mobile Safari, driven
+ * by AXe as a person taps it: GitLab's form as it opens, then Gitea's with
+ * an address that is no URL sent, each captured as `safari-connections-<form>.png`.
+ */
+async function safariForms(
+  udid: string,
+  dashboard: string,
+  folder: string
+): Promise<void> {
+  const axe = (args: string) => sh(`axe ${args} --udid ${udid}`);
+  const waitFor = async (label: string) => {
+    await until(
+      `Mobile Safari shows "${label}"`,
+      () => axe("describe-ui").catch(() => ""),
+      (tree) => tree.includes(label),
+      60_000
+    );
+  };
+  const shot = (name: string) =>
+    sh(
+      `xcrun simctl io ${udid} screenshot "${join(folder, `safari-${name}.png`)}" >/dev/null`
+    );
+  const openForm = async (service: string) => {
+    await sh(`xcrun simctl openurl ${udid} "${dashboard}/config/connections"`);
+    await waitFor("Sign in to a service");
+    await axe('tap --label "Sign in to a service" --element-type Button');
+    await waitFor(service);
+    await axe(`tap --label "${service}"`);
+    await waitFor("Server address");
+    await Bun.sleep(800);
+  };
+  await openForm("GitLab");
+  await shot("connections-gitlab");
+  await openForm("Gitea");
+  await axe('tap --label "Server address"');
+  await axe('type "gitea.local/mcp"');
+  await axe('tap --label "Which Gitea account"');
+  await axe('type "probe"');
+  await axe('tap --label "Gitea key"');
+  await axe('type "probe-token"');
+  await axe('tap --label "Sign in" --element-type Button');
+  await waitFor(ADDRESS_PROBLEM);
+  // The keyboard down, as the app's capture has none.
+  await axe("key 41").catch(() => "");
+  await Bun.sleep(800);
+  await shot("connections-gitea-refused");
 }
 
 interface Fleet {
@@ -228,6 +312,7 @@ async function run(kit: Kit): Promise<void> {
     await http("DELETE", `/api/fleet/mcp/${SERVER}`);
     await http("DELETE", `/api/connections/${CONNECTION}`);
     await http("DELETE", `/api/connections/${APP_CONNECTION}`);
+    await http("DELETE", `/api/connections/${GITEA_CONNECTION}`);
     await http("DELETE", "/api/fleet/memory/docs", { path: DOC });
     // Deleting the fleet's skill takes it off the machines too: once the
     // machine has let it go, it is written there again, to be adopted anew.
@@ -438,6 +523,104 @@ async function run(kit: Kit): Promise<void> {
             linearApp.includes("Client secret"),
           linearApp.slice(0, 400)
         );
+
+        // Server address: each step's report whole, its parts joined.
+        const whole = (step: string) =>
+          heard
+            .map((one) =>
+              new RegExp(
+                `config ${step}(?: \\[part \\d+/\\d+\\])?: (.*)$`
+              ).exec(one)
+            )
+            .filter((one): one is RegExpExecArray => one !== null)
+            .map((one) => one[1] ?? "")
+            .join("");
+        const forms = Object.fromEntries(
+          ["gitea", "gitlab", "github", "linear", "slack"].map((service) => [
+            service,
+            whole(`connections address ${service}`),
+          ])
+        );
+        kit.check(
+          `${at}: Connections (a): the Server address field is in Gitea's and GitLab's form and no other's`,
+          forms.gitea?.startsWith("shown true") === true &&
+            forms.gitlab?.startsWith("shown true") === true &&
+            ["github", "linear", "slack"].every(
+              (one) => forms[one]?.startsWith("shown false") === true
+            ),
+          JSON.stringify(
+            Object.fromEntries(
+              Object.entries(forms).map(([k, v]) => [k, v?.slice(0, 120)])
+            )
+          )
+        );
+        kit.check(
+          `${at}: Connections (b): GitLab's opens on its hosted address; Gitea's empty under its example`,
+          (forms.gitlab ?? "").includes(
+            "value 'https://gitlab.com/api/v4/mcp'"
+          ) &&
+            (forms.gitea ?? "").includes(
+              "value '' | placeholder 'https://gitea.example.com/mcp'"
+            ),
+          `${forms.gitlab?.slice(0, 160)} / ${forms.gitea?.slice(0, 160)}`
+        );
+        const refused = whole("connections address refused");
+        const refusedField = frameIn(refused, "field");
+        const refusedLine = frameIn(refused, "line");
+        kit.check(
+          `${at}: Connections (c): an address that is no http(s) URL is refused under the field, and nothing is sent`,
+          refused.includes(`problem '${ADDRESS_PROBLEM}'`) &&
+            refused.endsWith("posts 0") &&
+            refusedField !== null &&
+            refusedLine !== null &&
+            refusedLine.y >= refusedField.y + refusedField.h &&
+            refusedLine.x === refusedField.x,
+          refused.slice(0, 600)
+        );
+        const at320 = whole("connections address 320");
+        const n320Form = frameIn(at320, "in parent");
+        const n320Width = Number(PARENT_WIDTH.exec(at320)?.[1] ?? "-1");
+        const n320Field = frameIn(at320, "field");
+        const n320Account = frameIn(at320, "account");
+        const n320Box = frameIn(at320, "form");
+        kit.check(
+          `${at}: Connections (d): in a window 320pt wide the long address fits: the form inside its column, the field as wide as the account field, nothing cut`,
+          at320.startsWith("window 320") &&
+            at320.includes(`value '${LONG_ADDRESS}'`) &&
+            n320Form !== null &&
+            n320Form.x >= 0 &&
+            n320Form.x + n320Form.w <= n320Width &&
+            n320Field !== null &&
+            n320Account !== null &&
+            n320Box !== null &&
+            n320Field.w === n320Account.w &&
+            n320Field.x + n320Field.w <= n320Box.w &&
+            at320.endsWith("clipped none"),
+          at320.slice(0, 700)
+        );
+        const posted = whole("connections address post");
+        const sentBody = (() => {
+          try {
+            return JSON.parse(posted) as Record<string, unknown>;
+          } catch {
+            return {};
+          }
+        })();
+        const gitea = (
+          await fleet.api<{ connections: { name: string; url?: string }[] }>(
+            "/api/connections"
+          )
+        ).connections.find((one) => one.name === GITEA_CONNECTION);
+        kit.check(
+          `${at}: Connections (e): Sign in sends the typed address as the connection's url, which the hub holds`,
+          sentBody.url === LONG_ADDRESS &&
+            sentBody.service === "gitea" &&
+            sentBody.transport === "http" &&
+            sentBody.auth === "bearer" &&
+            whole("connections address sent").includes("posts 1") &&
+            gitea?.url === LONG_ADDRESS,
+          `body ${posted.slice(0, 300)}; hub ${JSON.stringify(gitea ?? null)}; app ${whole("connections address sent").slice(0, 200)}`
+        );
         kit.check(
           `${at}: Skills: the machine's skill adopted from On each machine, then switched off`,
           skill?.enabled === false,
@@ -548,6 +731,18 @@ async function run(kit: Kit): Promise<void> {
           }
         }
         await page.close();
+
+        // The Server address forms in the simulator's own Mobile Safari, at
+        // the app's viewport and appearance, beside `app-connections-<form>`.
+        try {
+          await safariForms(udid, dashboard, folder);
+        } catch (error) {
+          kit.check(
+            `${at}: Mobile Safari's Server address forms are captured`,
+            false,
+            (error as Error).message.split("\n").slice(0, 3).join(" / ")
+          );
+        }
       }
     } finally {
       await sim?.release();

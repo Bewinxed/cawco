@@ -11,7 +11,7 @@ public final class KitField: UITextField {
         let role = mono ? TypeScale.typeCode.with(points: TypeScale.typeBody.points) : TypeScale.typeBody
         font = role.font
         textColor = Palette.inkStrong
-        attributedPlaceholder = NSAttributedString(string: placeholder, attributes: [.font: role.font, .foregroundColor: Palette.mutedForeground])
+        setPlaceholder(placeholder)
         backgroundColor = Palette.surfaceRaised
         layer.cornerRadius = Radius.radiusMd
         layer.cornerCurve = .continuous
@@ -28,6 +28,11 @@ public final class KitField: UITextField {
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
         fatalError("KitField is built in code")
+    }
+
+    /// The placeholder, said anew in the field's face and the muted ink (a form whose subject changed).
+    public func setPlaceholder(_ text: String) {
+        attributedPlaceholder = NSAttributedString(string: text, attributes: [.font: font ?? TypeScale.typeBody.font, .foregroundColor: Palette.mutedForeground])
     }
 
     override public func textRect(forBounds bounds: CGRect) -> CGRect { bounds.insetBy(dx: 12, dy: 0) }
