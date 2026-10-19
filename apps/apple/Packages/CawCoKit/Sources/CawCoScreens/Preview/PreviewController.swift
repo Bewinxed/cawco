@@ -750,8 +750,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// Who keeps a place in the head when it is short of room, first to last:
     /// the key action, then what a person reaches for on every page (its mode,
     /// its Comments), then the panel's own (Expand, Reload), then what is
-    /// done now and then. The web's head has no such order (its only narrow
-    /// rule is Comments' word going under 640px): it is the app's own.
+    /// done now and then: the web's order (side/head.ts `HEAD_PRIORITY`).
     private static let priority: [HeadItem] = [.send, .mode, .comments, .expand, .reload, .inspect, .undock, .openTab, .newCanvas]
     /// A touch target's side (HIG Layout: "44x44 pt").
     private static let target = 44.0
@@ -796,9 +795,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     /// Each control the panel wants stands in the head while the name keeps
-    /// its floor, by `priority`; what has no room goes to More, which then
-    /// stands before Close. The mode gives up its segments for its pick
-    /// before it goes. Close and the name always stand.
+    /// its floor, by `priority`, in its narrowest form (the mode as its pick),
+    /// one with no room skipped and the lower ones still placed; then the
+    /// mode takes its segments back where the room left holds them (the web's
+    /// side/head.ts `standing`). What has no room goes to More, which then
+    /// stands before Close. Close and the name always stand.
     private func placeHeadItems() {
         guard isViewLoaded, let head = dragArea as? UIStackView else { return }
         let width = head.bounds.width
@@ -811,15 +812,21 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let name = nameKept + 8 - Space.space1
         let close = Self.target
         let all = wanted.reduce(0) { $0 + room($1) }
-        // First the room More takes, then each control by priority while it fits.
+        // First the room More takes, then each control by priority in its narrowest form
+        // while it fits; then the mode's segments, where what is left holds the difference.
         let fit = { (more: Double) -> Set<HeadItem> in
             var left = width - name - close - more
             var shown: Set<HeadItem> = []
             for item in Self.priority where wanted.contains(item) {
-                let stands = item == .mode && room(.mode) > left ? HeadItem.modePick : item
+                let stands = item == .mode ? HeadItem.modePick : item
                 guard room(stands) <= left else { continue }
                 shown.insert(stands)
                 left -= room(stands)
+            }
+            let back = room(.mode) - room(.modePick)
+            if shown.contains(.modePick), back <= left {
+                shown.remove(.modePick)
+                shown.insert(.mode)
             }
             return shown
         }

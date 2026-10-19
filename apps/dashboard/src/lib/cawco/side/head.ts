@@ -15,7 +15,7 @@ export interface HeadItem {
   bar: Snippet;
   /** Its one-button form (the mode's chosen glyph opening the three): its narrowest, taken first, `bar` once the room left holds it. */
   compact?: Snippet;
-  /** Its count, said on More whenever this stands in it, 0 too (Comments' open pins), under the name `of` gives it. */
+  /** Its count, said on More while this stands in it and the count is above 0 (Comments' open pins), under the name `of` gives it. */
   count?: { n: number; of: string };
   /** More rules it off from its neighbours: a group of entries (the mode, the canvas view). */
   group?: boolean;
