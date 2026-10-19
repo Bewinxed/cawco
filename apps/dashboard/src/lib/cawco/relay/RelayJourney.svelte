@@ -206,9 +206,17 @@
       {:else if mark === "working"}
         <Spinner aria-hidden="true" class="size-(--icon-md)" role="none" />
       {:else}
+        <!-- A step's number, no fill: in the muted ink on the control edge
+             while it waits, in the strong ink on the outline button's edge
+             (3:1) while it stands on you, so neither reads as a tick. -->
         <span
           aria-hidden="true"
-          class="box-border grid size-full place-items-center rounded-full border border-(--border-control) text-meta leading-none tabular-nums before:content-[attr(data-n)]"
+          class={[
+            "box-border grid size-full place-items-center rounded-full border bg-transparent text-meta leading-none tabular-nums before:content-[attr(data-n)]",
+            mark === "standing"
+              ? "border-(--border-button-outline) text-(--ink-strong)"
+              : "border-(--border-control) text-(--ink-muted)",
+          ]}
           data-n={n}
         ></span>
       {/if}
@@ -560,7 +568,7 @@
           label={words.addName}
           onclick={() => act("add-name")}
           size="sm"
-          variant="secondary"
+          variant="outline"
         />
       </div>
     {/if}
