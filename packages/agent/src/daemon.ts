@@ -258,7 +258,12 @@ import {
   readDueProviderAccounts,
   setProviderReadingSink,
 } from "./provider-usage";
-import { outbound, redactConsole } from "./redaction";
+import {
+  forgetRevoked,
+  outbound,
+  redactConsole,
+  storedHashes,
+} from "./redaction";
 import { fenced, setRestartSource } from "./restart";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
@@ -809,6 +814,14 @@ export interface RegisterPayload extends MachineIdentity {
    * The cawco this daemon is running (NEW.md §12), as it reported at register.
    */
   build?: BuildInfo;
+  /**
+   * The hub's name (a SHA-256 hex digest) for each credential this agent's
+   * redaction store holds (redaction.ts `storedHashes`): the ack names the
+   * ones the hub has revoked ({@link RegisterAckPayload.revokedCredentials}),
+   * and the store lets them go, so one revoked while this machine was away
+   * goes too.
+   */
+  credentialHashes: string[];
   /** Custody is not attachment: these still need a handle before being listed live. */
   custody: SessionCustody;
   /**
@@ -1512,6 +1525,7 @@ const attach = (
       instances: supervisor.instanceIds,
       previews: servingPreviews(),
       custody: snapshot.custody,
+      credentialHashes: storedHashes(),
       ...(snapshot.catalog
         ? {
             resumable: snapshot.catalog.map((entry) => entry.sessionId),
@@ -2569,6 +2583,11 @@ const attach = (
             previews: (envelope.payload as RegisterAckPayload).previewPorts,
           },
           (envelope.payload as RegisterAckPayload).hostsHub
+        );
+        // What the hub no longer honours of what the register named leaves
+        // the redaction store: it grants nothing, so nothing it shows leaks.
+        forgetRevoked(
+          (envelope.payload as RegisterAckPayload).revokedCredentials ?? []
         );
         // This connection's credential for the hub's git remote, in memory only.
         setHubCredential(

@@ -50,6 +50,7 @@ import {
   CAWCO_SCRATCH_TAG,
   CLI_OUTDATED,
   CONTROL_CARRY_SESSIONS,
+  CONTROL_FORGET_CREDENTIALS,
   CONTROL_GIT_CHANGES,
   CONTROL_LIST_SESSIONS,
   CONTROL_MCP_FLEET_HEAL,
@@ -180,7 +181,7 @@ import {
   stopPreviews,
 } from "./preview";
 import { parseProcId, type SESSION_PROC_KINDS } from "./proc-id";
-import { rememberCredential } from "./redaction";
+import { forgetRevoked, rememberCredential } from "./redaction";
 import { arrive, keepAnswer } from "./request-record";
 import { fenced } from "./restart";
 import { endProc, keeperLimits, procEpoch } from "./sessiond-client";
@@ -5390,6 +5391,10 @@ export class SessionSupervisor {
       if (method === CONTROL_RESTLESS) {
         return await this.#restless(args[0] as string[]);
       }
+      // The hub revoked these credentials: they grant nothing now.
+      if (method === CONTROL_FORGET_CREDENTIALS) {
+        return { forgotten: forgetRevoked(args[0] as string[]) };
+      }
       if (method === CONTROL_CARRY_SESSIONS) {
         return await this.carrySessions(args[0] as CarrySessionRequest[]);
       }
@@ -5560,6 +5565,11 @@ export class SessionSupervisor {
     const session = this.#session(instanceId);
     if (method === "withdrawSend" && session.harness !== "claude") {
       return "started";
+    }
+    // A credential the hub installs in a live session is known before the
+    // process can print it, as a launch's is ({@link #granted}).
+    if (method === INSTALL_SESSION_CREDENTIAL) {
+      rememberCredential(instanceId, String(args[0]));
     }
     return await session.control(method, args);
   }

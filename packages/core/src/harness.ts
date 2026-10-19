@@ -43,6 +43,16 @@ export const INSTALL_SESSION_CREDENTIAL = "installSessionCredential";
  */
 export const VERIFY_SESSION_CREDENTIAL = "verifySessionCredential";
 /**
+ * The hub's word that it has revoked these session credentials, by the
+ * hashes it names them by (hub session-identity.ts): `args[0]`, a list of
+ * SHA-256 hex digests. A machine control, sent to every connected machine as
+ * the hub revokes them; the machine's redaction store lets them go (agent
+ * redaction.ts `forgetRevoked`), as it does those a register's ack names
+ * (stream.ts `RegisterAckPayload.revokedCredentials`). An agent from before it
+ * answers that it does not know the control, and keeps them.
+ */
+export const CONTROL_FORGET_CREDENTIALS = "forgetCredentials";
+/**
  * The hub's word that a session's CawCo tool list changed, for a harness that
  * lists its CawCo tools itself rather than over MCP (pi): it lists them again
  * and replaces them for its next turn.

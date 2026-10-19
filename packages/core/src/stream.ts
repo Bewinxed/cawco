@@ -360,6 +360,14 @@ export interface RegisterAckPayload {
   /** The ports the hub's preview listeners take (hub config.ts `PREVIEW_PORTS`), served on the agent's loopback beside {@link dashboardPorts}. */
   previewPorts: { first: number; last: number };
   /**
+   * Of the credentials the register named by hash (agent daemon.ts
+   * `RegisterPayload.credentialHashes`), the ones this hub has revoked, or
+   * never issued: they grant nothing here, so the machine's redaction store
+   * lets them go (agent redaction.ts `forgetRevoked`). Absent from a hub
+   * from before it, and when the register named none.
+   */
+  revokedCredentials?: string[];
+  /**
    * The fleet's session limits ({@link import("./index").SessionLimits}), so
    * the first process the machine starts after it connects runs under them.
    * Every heartbeat's ack carries them again.

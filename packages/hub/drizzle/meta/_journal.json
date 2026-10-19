@@ -1856,6 +1856,13 @@
       "when": 1792443080982,
       "tag": "0272_continuation_waiting",
       "breakpoints": true
+    },
+    {
+      "idx": 273,
+      "version": "6",
+      "when": 1792445069797,
+      "tag": "0273_revoke_ended_identities",
+      "breakpoints": true
     }
   ]
 }

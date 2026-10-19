@@ -155,6 +155,7 @@ import {
   CONTROL_COMPLETE_PROVIDER_LOGIN,
   CONTROL_CONTEXT_USAGE,
   CONTROL_FORGET_ACCOUNT,
+  CONTROL_FORGET_CREDENTIALS,
   CONTROL_FORGET_PROVIDER_ACCOUNT,
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
@@ -1518,7 +1519,8 @@ const registerAck = (
   machineCredential: string,
   sessionLimits: SessionLimits,
   upstream: UpstreamRules,
-  hostsHub: boolean
+  hostsHub: boolean,
+  revokedCredentials: string[]
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
@@ -1538,6 +1540,7 @@ const registerAck = (
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
     instances,
+    revokedCredentials,
   },
 });
 
@@ -1829,6 +1832,25 @@ const peekInstances = (payload: unknown): string[] => {
     ? value.filter((id): id is string => typeof id === "string")
     : [];
 };
+
+/**
+ * The credential hashes a registering agent's redaction store holds
+ * (agent daemon.ts `RegisterPayload.credentialHashes`), each a sha256 in hex
+ * as the hub keeps them; none from an agent that sends none.
+ */
+const credentialHashesOf = (payload: unknown): string[] => {
+  if (typeof payload !== "object" || payload === null) {
+    return [];
+  }
+  const value = (payload as { credentialHashes?: unknown }).credentialHashes;
+  return Array.isArray(value)
+    ? value.filter(
+        (hash): hash is string =>
+          typeof hash === "string" && CREDENTIAL_HASH.test(hash)
+      )
+    : [];
+};
+const CREDENTIAL_HASH = /^[0-9a-f]{64}$/;
 
 interface ServingPreview {
   instanceId: string;
@@ -8829,6 +8851,39 @@ export const createServer = (
         }
       : reply;
   };
+
+  /**
+   * Each credential the hub revokes, named by its hash to every machine
+   * connected ({@link CONTROL_FORGET_CREDENTIALS}): any of them may hold it
+   * (a session moved keeps its old one on the machine it left), and a hash
+   * gives nothing away. A machine that does not hear it now asks again as
+   * it registers (`RegisterAckPayload.revokedCredentials`).
+   */
+  /** How long a machine gets to drop credentials from its store: one small file written. */
+  const FORGET_CREDENTIALS_TIMEOUT_MS = 30_000;
+  db.onCredentialsRevoked((hashes) => {
+    for (const machineId of registry.machineIds()) {
+      detach(
+        callAgent(
+          machineId,
+          CONTROL_FORGET_CREDENTIALS,
+          [hashes],
+          FORGET_CREDENTIALS_TIMEOUT_MS
+        ).then((answer) => {
+          if (answer.kind === "unanswered") {
+            console.warn(
+              `[session-identity] ${silentWords(machineId, answer)}, so it did not hear of ${hashes.length} revoked credential(s); it asks again as it registers`
+            );
+          } else if (!answer.value.ok) {
+            console.warn(
+              `[session-identity] ${machineName(machineId)} refused ${hashes.length} revoked credential(s): ${answer.value.error ?? "no reason given"}`
+            );
+          }
+        }),
+        "revoked credentials"
+      );
+    }
+  });
 
   /**
    * A session's start, waited on as {@link awaitReply} does, and on past
@@ -28894,7 +28949,10 @@ export const createServer = (
                   db.sessionLimits(),
                   upstreamRules(db),
                   // Its machine id is this hub's own: the same computer.
-                  await isHubMachine(message.machineId)
+                  await isHubMachine(message.machineId),
+                  // Which of the credentials its redaction store holds the
+                  // hub has revoked since: those leave the store.
+                  db.revokedAmong(credentialHashesOf(message.payload))
                 )
               );
               // Behind its ack, which it waits for to take requests: what

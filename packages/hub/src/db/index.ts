@@ -1362,6 +1362,12 @@ export interface DbShape {
     reason: ProjectOfferRow["reason"];
     line: string;
   }) => boolean;
+  /**
+   * `listener` hears the hashes of the credentials the hub revokes, once
+   * the write that revoked them is done and they no longer resolve: a
+   * session's end confirmed, a session gone, a credential replaced.
+   */
+  readonly onCredentialsRevoked: (listener: (hashes: string[]) => void) => void;
   readonly openInstance: (instance: {
     id: string;
     machineId: string;
@@ -1897,6 +1903,11 @@ export interface DbShape {
     held: string[],
     complete: boolean
   ) => void;
+  /**
+   * Of these credential hashes, those no session identity answers to: each
+   * grants nothing here, which is the hub's word that it is revoked.
+   */
+  readonly revokedAmong: (hashes: readonly string[]) => string[];
   /** Routines and their runs (routines.ts). */
   readonly routines: RoutinesDb;
   /** Where a rule stands with a session; absent means it has never fired there. */
@@ -3082,6 +3093,102 @@ const make = async (path: string): Promise<DbShape> => {
       : undefined;
   };
 
+  /** Who hears of the credentials the hub revokes ({@link DbShape.onCredentialsRevoked}). */
+  const revokedListeners = new Set<(hashes: string[]) => void>();
+  /** Hashes a write revoked, not yet told. */
+  let noted: Set<string> | undefined;
+
+  /**
+   * Of `hashes`, those no session identity answers to: what each names
+   * grants nothing here, the hub's word that it is revoked. One it never
+   * issued is among them.
+   */
+  const revokedAmong = (hashes: readonly string[]): string[] => {
+    const live = new Set<string>();
+    // Inside SQLite's bound on a statement's parameters, twice over.
+    for (let at = 0; at < hashes.length; at += 500) {
+      const chunk = hashes.slice(at, at + 500);
+      for (const row of db
+        .select({
+          credentialHash: sessionIdentities.credentialHash,
+          pendingHash: sessionIdentities.pendingHash,
+        })
+        .from(sessionIdentities)
+        .where(
+          or(
+            inArray(sessionIdentities.credentialHash, chunk),
+            inArray(sessionIdentities.pendingHash, chunk)
+          )
+        )
+        .all()) {
+        for (const hash of [row.credentialHash, row.pendingHash]) {
+          if (hash) {
+            live.add(hash);
+          }
+        }
+      }
+    }
+    return [...new Set(hashes)].filter((hash) => !live.has(hash));
+  };
+
+  const tellRevoked = (): void => {
+    const hashes = revokedAmong([...(noted ?? [])]);
+    noted = undefined;
+    if (hashes.length === 0) {
+      return;
+    }
+    for (const listener of revokedListeners) {
+      try {
+        listener(hashes);
+      } catch (error) {
+        console.error("[session-identity] telling a revocation failed", error);
+      }
+    }
+  };
+
+  /**
+   * Hashes the caller's write stops answering to. They are told once it is
+   * done, from a microtask (every transaction here runs synchronously, so
+   * none is open then), and only those that no longer resolve: a write
+   * rolled back revoked nothing, and nothing is told of it.
+   */
+  const noteRevoked = (hashes: readonly (string | null | undefined)[]) => {
+    for (const hash of hashes) {
+      if (!hash) {
+        continue;
+      }
+      if (!noted) {
+        noted = new Set();
+        queueMicrotask(tellRevoked);
+      }
+      noted.add(hash);
+    }
+  };
+
+  /**
+   * The credentials of `ids`' sessions revoked, inside the caller's
+   * transaction: what was installed and what was on its way. A session's
+   * credential grants while it may run; once its end is confirmed or it
+   * leaves the hub, nothing it held grants again, and a launch after mints
+   * its own (server.ts `grantLaunch`).
+   */
+  const revokeIdentities = (tx: Tx, ids: readonly string[]): void => {
+    if (ids.length === 0) {
+      return;
+    }
+    noteRevoked(
+      tx
+        .delete(sessionIdentities)
+        .where(inArray(sessionIdentities.instanceId, [...ids]))
+        .returning({
+          credentialHash: sessionIdentities.credentialHash,
+          pendingHash: sessionIdentities.pendingHash,
+        })
+        .all()
+        .flatMap((row) => [row.credentialHash, row.pendingHash])
+    );
+  };
+
   /**
    * Deletes session rows and everything keyed to them, inside the caller's
    * transaction — the one way a session leaves the hub, whether its machine
@@ -3092,6 +3199,7 @@ const make = async (path: string): Promise<DbShape> => {
       return;
     }
     const list = [...ids];
+    revokeIdentities(tx, list);
     // What belonged to those sessions goes with them.
     tx.delete(delegateEvents)
       .where(
@@ -3162,7 +3270,6 @@ const make = async (path: string): Promise<DbShape> => {
   ];
   /** A former session's state of the moment, which the session it is now keeps its own of. */
   const FOLD_DROPPED = [
-    "session_identities",
     "limit_holds",
     "limit_compactions",
     "parked_asks",
@@ -3428,6 +3535,8 @@ const make = async (path: string): Promise<DbShape> => {
         tx.run(sql`DELETE FROM ${name} WHERE ${by} IN (${idList(gone)})`);
       }
     }
+    // Its identity too: the session it is now holds its own.
+    revokeIdentities(tx, gone);
     for (const table of FOLD_DROPPED) {
       tx.run(
         sql`DELETE FROM ${sql.identifier(table)} WHERE instance_id IN (${idList(gone)})`
@@ -4104,6 +4213,9 @@ const make = async (path: string): Promise<DbShape> => {
             .where(eq(instances.id, id))
             .returning()
             .get();
+          if (status !== "stopping") {
+            revokeIdentities(tx, [id]);
+          }
           if (neverStarted && next === "delete") {
             dropInstances(tx, [id]);
           }
@@ -4140,6 +4252,8 @@ const make = async (path: string): Promise<DbShape> => {
           })
           .where(eq(instances.id, id))
           .run();
+        // Its process is gone: what it held grants nothing from here.
+        revokeIdentities(tx, [id]);
         if (row.endIntent === "delete") {
           dropInstances(tx, [id]);
         }
@@ -4232,39 +4346,71 @@ const make = async (path: string): Promise<DbShape> => {
           )
         )
         .get(),
-    stageSessionIdentity: (instanceId, pendingHash) => {
-      db.insert(sessionIdentities)
-        .values({ instanceId, pendingHash })
-        .onConflictDoUpdate({
-          target: sessionIdentities.instanceId,
-          set: { pendingHash, error: null },
-        })
-        .run();
-    },
-    acknowledgeSessionIdentity: (instanceId, hash) => {
-      const changed = db
-        .update(sessionIdentities)
-        .set({
-          credentialHash: hash,
-          pendingHash: null,
-          installedAt: new Date(),
-          error: null,
-        })
-        .where(
-          and(
-            eq(sessionIdentities.instanceId, instanceId),
-            eq(sessionIdentities.pendingHash, hash)
+    // Each write that replaces or clears a hash revokes the one it held.
+    stageSessionIdentity: (instanceId, pendingHash) =>
+      db.transaction((tx) => {
+        noteRevoked([
+          tx
+            .select({ pendingHash: sessionIdentities.pendingHash })
+            .from(sessionIdentities)
+            .where(eq(sessionIdentities.instanceId, instanceId))
+            .get()?.pendingHash,
+        ]);
+        tx.insert(sessionIdentities)
+          .values({ instanceId, pendingHash })
+          .onConflictDoUpdate({
+            target: sessionIdentities.instanceId,
+            set: { pendingHash, error: null },
+          })
+          .run();
+      }),
+    acknowledgeSessionIdentity: (instanceId, hash) =>
+      db.transaction((tx) => {
+        const before = tx
+          .select({ credentialHash: sessionIdentities.credentialHash })
+          .from(sessionIdentities)
+          .where(eq(sessionIdentities.instanceId, instanceId))
+          .get();
+        const changed = tx
+          .update(sessionIdentities)
+          .set({
+            credentialHash: hash,
+            pendingHash: null,
+            installedAt: new Date(),
+            error: null,
+          })
+          .where(
+            and(
+              eq(sessionIdentities.instanceId, instanceId),
+              eq(sessionIdentities.pendingHash, hash)
+            )
           )
-        )
-        .returning({ instanceId: sessionIdentities.instanceId })
-        .get();
-      return changed !== undefined;
-    },
-    sessionIdentityError: (instanceId, error, rejectPending = false) => {
-      db.update(sessionIdentities)
-        .set({ error, ...(rejectPending ? { pendingHash: null } : {}) })
-        .where(eq(sessionIdentities.instanceId, instanceId))
-        .run();
+          .returning({ instanceId: sessionIdentities.instanceId })
+          .get();
+        if (changed) {
+          noteRevoked([before?.credentialHash]);
+        }
+        return changed !== undefined;
+      }),
+    sessionIdentityError: (instanceId, error, rejectPending = false) =>
+      db.transaction((tx) => {
+        if (rejectPending) {
+          noteRevoked([
+            tx
+              .select({ pendingHash: sessionIdentities.pendingHash })
+              .from(sessionIdentities)
+              .where(eq(sessionIdentities.instanceId, instanceId))
+              .get()?.pendingHash,
+          ]);
+        }
+        tx.update(sessionIdentities)
+          .set({ error, ...(rejectPending ? { pendingHash: null } : {}) })
+          .where(eq(sessionIdentities.instanceId, instanceId))
+          .run();
+      }),
+    revokedAmong,
+    onCredentialsRevoked: (listener) => {
+      revokedListeners.add(listener);
     },
     getMcpServer: (name) => {
       const row = db
