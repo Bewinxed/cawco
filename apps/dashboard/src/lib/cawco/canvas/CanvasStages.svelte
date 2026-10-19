@@ -180,7 +180,7 @@
     class={[
       "group/grab absolute flex touch-none outline-off",
       handle === "top" &&
-        "start-(--grab-x) top-0 h-c-btn-h-lg w-(--grab-w) translate-x-(--grab-shift) cursor-ns-resize justify-center pt-space-1",
+        "start-1/2 top-0 h-c-btn-h-lg w-(--c-canvas-grab-w) -translate-x-1/2 cursor-ns-resize justify-center pt-space-1",
       handle === "top-left" &&
         "top-0 size-c-btn-h-lg start-(--corner-in) cursor-nwse-resize transition-[opacity] dur-grow ease-out starting:opacity-0",
       handle === "top-right" &&
@@ -193,17 +193,13 @@
     tabindex="0"
     style:--corner-in={`${stage.corner.inset}px`}
     style:--corner-r={`${stage.corner.radius}px`}
-    style:--grab-shift="-50%"
-    style:--grab-w="160px"
-    style:--grab-x="50%"
   >
-    <!-- literal: 100px, 6px (the drawer's grabber); 160px, 50%, -50% (the top grab) -->
     <span
       aria-hidden="true"
       class={[
         "group-focus-visible/grab:outline-(length:--focus-ring-width) group-focus-visible/grab:outline-offset-2 group-focus-visible/grab:outline-focus-ring group-focus-visible/grab:outline-solid",
         handle === "top" &&
-          "h-(--grabber-h) w-(--grabber-w) rounded-pill bg-border-control",
+          "h-(--c-grabber-h) w-(--c-grabber-w) rounded-pill bg-border-control",
         handle !== "top" &&
           "m-c-corner-grip-inset size-c-corner-grip-leg border-t-(length:--c-corner-grip-stroke) border-t-border-control",
         handle === "top-left" &&
@@ -211,8 +207,6 @@
         handle === "top-right" &&
           "rounded-se-(--grip-r) border-e-(length:--c-corner-grip-stroke) border-e-border-control",
       ]}
-      style:--grabber-h="6px"
-      style:--grabber-w="100px"
       style:--grip-r={"max(0px, calc(var(--corner-r) - var(--c-corner-grip-inset)))"}
     ></span>
   </div>
