@@ -1120,6 +1120,12 @@ export function boot(options: BootOptions): void {
       one.finish();
     }
   };
+  /** Every animation in `body` landed: what it has fired so far, played to its end or, a loop, cancelled. */
+  const landAll = (body: HTMLElement): void => {
+    for (const one of body.getAnimations({ subtree: true })) {
+      land(one);
+    }
+  };
 
   /** One story mounted in the rig, each of its interactions forced and released: the delta and the transitions each fires. */
   async function probe(
@@ -1145,6 +1151,8 @@ export function boot(options: BootOptions): void {
         if (interaction === "rest") {
           continue;
         }
+        // What runs at rest landed first (a loop cancelled), so both snapshots read the base style, never a frame of a loop.
+        landAll(body);
         const before = snapshot(body);
         const t0 = document.timeline.currentTime as number;
         for (const state of FORCED[interaction]) {
@@ -1152,19 +1160,16 @@ export function boot(options: BootOptions): void {
         }
         // biome-ignore lint/performance/noAwaitInLoops: each state read alone
         await frameTick();
-        const fired = body.getAnimations({ subtree: true });
-        const animations = fired.map((one) => readAnimation(one, t0));
-        for (const one of fired) {
-          land(one);
-        }
+        const animations = body
+          .getAnimations({ subtree: true })
+          .map((one) => readAnimation(one, t0));
+        landAll(body);
         const changed = deltaOf(before, snapshot(body), root);
         for (const state of FORCED[interaction]) {
           body.classList.remove(allClass(state));
         }
         await frameTick();
-        for (const one of body.getAnimations({ subtree: true })) {
-          land(one);
-        }
+        landAll(body);
         result.delta.set(interaction, { animations, changed });
       }
     } finally {

@@ -69,7 +69,9 @@
  *     viewport or a width"; the same card with a phone viewport is drawn.
  * 17. The stage's sweep ends on a story whose animation loops forever
  *     (`infinite`, a working mark's breath): the probe cancels it rather
- *     than finishing it, so the hover frame is drawn with its delta.
+ *     than finishing it, so the hover frame is drawn with its delta; the
+ *     loop is landed before the rest snapshot too, so that delta is the
+ *     hover's background alone, no opacity read mid-breath.
  *
 
  * Captures of the canvas (desk and phone, light and dark, its move's
@@ -1318,14 +1320,16 @@ async function endless(kit: Kit, stage: Stage): Promise<void> {
     rendered instanceof Error
       ? undefined
       : framesOf(rendered.report).find((one) => one.interaction === "hover");
+  const changed = hover?.delta?.changed ?? [];
   kit.check(
-    "17: the stage's sweep ends on a story whose breath loops forever, within 30 s, and its hover frame says its delta",
+    "17: the stage's sweep ends on a story whose breath loops forever, within 30 s, and its hover frame's delta is the hover's background alone, nothing from the breath",
     ms < 30_000 &&
       hover?.state === "drawn" &&
-      !!hover.delta?.changed.some(
-        (one) =>
-          one.selector.startsWith("span.breath") &&
-          one.changed["background-color"]
+      changed.length === 1 &&
+      !!changed[0]?.selector.startsWith("span.breath") &&
+      Object.keys(changed[0]?.changed ?? {}).join() === "background-color" &&
+      (hover.delta?.animations ?? []).every(
+        (one) => !one.property.includes("breath")
       ),
     rendered instanceof Error
       ? `${ms} ms: ${rendered.message.split("\n")[0]}`
