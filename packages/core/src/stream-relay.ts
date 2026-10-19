@@ -10,18 +10,23 @@
  */
 
 /**
- * The ports the relay listens on: UDP and TCP 3478 (`listening-port`), TCP
- * 443 as coturn's second plain port (`alt-listening-port`, which also takes
- * TLS once a certificate stands), TLS on 5349 (`tls-listening-port`) with a
- * DNS name, and the UDP range its allocations relay through. No preview, on
- * the hub or on any agent, ever takes one of these (hub preview.ts,
- * agent hub-loopback.ts).
+ * The ports the relay takes. It listens on one, 443 (`listening-port`), plain
+ * UDP and TCP always, and TLS on the same listener once a certificate stands
+ * (turnserver.conf: "TLS & DTLS sessions can connect to the 'plain' TCP & UDP
+ * port(s), too"). coturn opens the rest itself on one listening IP: the alt
+ * UDP side on 444, and with a certificate its TLS listener on 5349 and 5350,
+ * never forwarded and never minted. Its allocations relay through the UDP
+ * range. No preview, on the hub or on any agent, ever takes one of these (hub
+ * preview.ts, agent hub-loopback.ts).
  */
 export const STREAM_RELAY_PORTS = {
-  udp: [3478, 443],
-  tcp: [3478, 443, 5349],
+  udp: [443, 444],
+  tcp: [443, 5349, 5350],
   relayRange: [49_152, 49_400],
 } as const;
+
+/** The one port the relay listens on and its URLs name, UDP and TCP, plain and TLS. */
+export const STREAM_RELAY_PORT = 443;
 
 /** The relay's UDP relay range, as `relay.start` carries it. */
 export type RelayRange = readonly [first: number, last: number];
@@ -37,13 +42,12 @@ export const isStreamRelayPort = (port: number): boolean =>
 export type StreamRelayState =
   "pulling" | "starting" | "live" | "stopped" | "failed";
 
-/** What the relay's machine has bound: each listening port, and whether a certificate stands for TLS. */
+/** What the relay's machine has bound: its listener on UDP and TCP 443, and whether a certificate stands for TLS on it. */
 export interface RelayPorts {
   tcp443: boolean;
-  tcp3478: boolean;
-  /** A certificate stands: 443 and 5349 answer TLS. */
+  /** A certificate stands and TCP 443 is bound: the listener answers TLS. */
   tls: boolean;
-  udp3478: boolean;
+  udp443: boolean;
 }
 
 /** Daemon-originated: the stream relay on this machine, whole, on each change. */
@@ -72,7 +76,7 @@ export interface RelayStartArgs {
    * machine's own (a cloud NAT): `<public>` or `<public>/<private>`.
    */
   externalIp?: string;
-  /** A DNS name pointing at the machine: a Let's Encrypt certificate is issued for it, and TLS answers on 443 and 5349. */
+  /** A DNS name pointing at the machine: a Let's Encrypt certificate is issued for it, and TLS answers on 443. */
   hostname?: string;
   relayRange: RelayRange;
   /** The shared secret coturn checks each credential against (`static-auth-secret`). */
@@ -96,11 +100,10 @@ export interface RelayRenewed {
 }
 
 /**
- * The relay's ICE server URLs: TURN over UDP and TCP on 3478, plain TCP on
- * 443, and with a DNS name TURN over TLS on 443 and 5349. A browser whose
- * runtime forwards only TCP, or nothing, gathers relay candidates from the
- * TCP and TLS URLs alone (pion/ice `relayNetworkTypesForURL`), so each form
- * is listed.
+ * The relay's ICE server URLs, every one on 443: TURN over UDP and TCP, and
+ * with a DNS name TURN over TLS. A browser whose runtime forwards only TCP,
+ * or nothing, gathers relay candidates from the TCP and TLS URLs alone
+ * (pion/ice `relayNetworkTypesForURL`), so each form is listed.
  */
 export const streamRelayUrls = (
   address: string,
@@ -108,20 +111,16 @@ export const streamRelayUrls = (
 ): string[] => {
   const host = address.includes(":") ? `[${address}]` : address;
   return [
-    `turn:${host}:3478?transport=udp`,
-    `turn:${host}:3478?transport=tcp`,
-    `turn:${host}:443?transport=tcp`,
+    `turn:${host}:${STREAM_RELAY_PORT}?transport=udp`,
+    `turn:${host}:${STREAM_RELAY_PORT}?transport=tcp`,
     ...(hostname
-      ? [
-          `turns:${hostname}:443?transport=tcp`,
-          `turns:${hostname}:5349?transport=tcp`,
-        ]
+      ? [`turns:${hostname}:${STREAM_RELAY_PORT}?transport=tcp`]
       : []),
   ];
 };
 
 /** One port the hub's health check asks, by its chip's words. */
-export type RelayPortName = "udp 3478" | "tcp 3478" | "tcp 443" | "tls";
+export type RelayPortName = "udp 443" | "tcp 443" | "tls";
 
 /** One port's answer to the hub's STUN binding request. */
 export interface RelayPortHealth {
@@ -204,9 +203,10 @@ export const RELAY_FAILURES = {
     why: `${couldNotStart(machine)} ${name} is not a DNS name. Give a name like relay.example.com, or none, then start the relay again.`,
   }),
   lowPort: (machine: string, port: number): RelayFailure => {
-    const command = `sudo sysctl -w net.ipv4.ip_unprivileged_port_start=${port}`;
+    const setting = `net.ipv4.ip_unprivileged_port_start=${port}`;
+    const command = `sudo sh -c 'sysctl -w ${setting} && echo ${setting} > /etc/sysctl.d/90-cawco-relay.conf'`;
     return {
-      why: `${couldNotStart(machine)} port ${port} is below the range this machine lets a rootless container runtime bind. Run ${command} there (and the same line in /etc/sysctl.d/), or use a root container runtime, then start the relay again.`,
+      why: `${couldNotStart(machine)} port ${port} is below the range this machine lets a rootless container runtime bind. Run ${command} there once (it holds a reboot), or use a root container runtime, then start the relay again.`,
       command,
     };
   },
@@ -255,20 +255,19 @@ export const RELAY_FAILURES = {
 export const STREAM_RELAY_WORDS = {
   title: "Stream relay",
   lead: "A stream relay lets you take over a browser from anywhere: on cellular data, behind a strict firewall, through a web-only tunnel. It runs on one of your machines that has a public address.",
-  none: "No machine of yours has a public address yet. Add one (a small server at a host works), or open UDP and TCP 3478, TCP 443 and UDP 49152–49400 on your router to a machine here, then come back.",
+  none: "No machine of yours has a public address yet. Add one (a small server at a host works), or open UDP and TCP 443 and UDP 49152–49400 on your router to a machine here, then come back.",
   runHere: "Run the relay here",
   /** The picked machine's button: its state in words. */
   picked: "Picked",
   hostnameLabel: "DNS name (optional)",
   hostnameHint:
-    "A name pointing at this machine lets the relay answer over TLS on 443, which networks that inspect traffic need. Port 80 must reach it while the certificate is issued.",
+    "A name pointing at this machine lets the relay answer over TLS on 443, which networks that allow only real HTTPS need. Without one it answers plain on 443.",
   start: "Start relay",
   stop: "Stop relay",
   remove: "Remove relay",
   later: "Later",
   startTitle: (machine: string) => `Start the stream relay on ${machine}?`,
-  startBody:
-    "It listens on UDP and TCP 3478, TCP 443 and UDP 49152–49400 there.",
+  startBody: "It listens on UDP and TCP 443 and UDP 49152–49400 there.",
   stopTitle: (machine: string) => `Stop the stream relay on ${machine}?`,
   /** Why Stop relay waits while the relay pulls or starts. */
   stopWhileStarting: "It can be stopped once it has started.",

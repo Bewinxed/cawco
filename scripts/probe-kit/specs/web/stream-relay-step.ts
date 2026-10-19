@@ -97,12 +97,11 @@ const live: StreamRelayAnswer = {
     address: one.address,
     hostname: "relay.example.com",
     state: "live",
-    ports: { udp3478: true, tcp3478: true, tcp443: true, tls: true },
+    ports: { udp443: true, tcp443: true, tls: true },
     why: null,
     whyCommand: null,
     health: [
-      { port: "udp 3478", up: true },
-      { port: "tcp 3478", up: true },
+      { port: "udp 443", up: true },
       { port: "tcp 443", up: false, error: LONG_ERROR },
       { port: "tls", up: true },
     ],
@@ -129,7 +128,7 @@ const relayAs = (
 /** The failures as the agent words them (core RELAY_FAILURES), on a machine named relay. */
 const SYSCTL = RELAY_FAILURES.lowPort("relay", 443);
 const HELD = RELAY_FAILURES.held("relay", [
-  "TCP 3478 is held by cawco (pid 4242)",
+  "TCP 443 is held by caddy (pid 917)",
   "UDP 443 is held by caddy (pid 917)",
 ]);
 
@@ -195,10 +194,9 @@ const STATES: {
 /** Live with no DNS name, every port answering: no TLS chip, no name in its line. */
 const livePlain = relayAs({
   hostname: null,
-  ports: { udp3478: true, tcp3478: true, tcp443: true, tls: false },
+  ports: { udp443: true, tcp443: true, tls: false },
   health: [
-    { port: "udp 3478", up: true },
-    { port: "tcp 3478", up: true },
+    { port: "udp 443", up: true },
     { port: "tcp 443", up: true },
   ],
   checkedAt: Date.UTC(2026, 9, 19, 12),
@@ -554,12 +552,7 @@ const running = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
       read.line === `${one.address} · relay.example.com` &&
       read.errorsUnder &&
       JSON.stringify(read.chips) ===
-        JSON.stringify([
-          "udp 3478 up",
-          "tcp 3478 up",
-          "tcp 443 down",
-          "tls up",
-        ]) &&
+        JSON.stringify(["udp 443 up", "tcp 443 down", "tls up"]) &&
       JSON.stringify(read.error) ===
         JSON.stringify([`tcp 443: ${LONG_ERROR}`]) &&
       read.buttons.includes(STREAM_RELAY_WORDS.stop) &&
@@ -568,7 +561,7 @@ const running = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
   );
   if (leg.view !== "phone") {
     kit.check(
-      `${leg.name} live: the four port chips stand on one row (one top)`,
+      `${leg.name} live: the three port chips stand on one row (one top)`,
       read.chipTops.length === 1,
       JSON.stringify(read.chipTops)
     );
@@ -848,16 +841,16 @@ const steady = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
   );
 };
 
-/** Live with no DNS name: its line, three chips, and its Remove ask's sentence without a certificate. */
+/** Live with no DNS name: its line, two chips, and its Remove ask's sentence without a certificate. */
 const plain = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
   const page = await look(kit, base, leg, livePlain, "[data-relay-row]");
   const read = await relayRead(page);
   kit.check(
-    `${leg.name} live, no DNS name: badge "Live" (done), line "${one.address}", three chips, Stop relay and Remove relay`,
+    `${leg.name} live, no DNS name: badge "Live" (done), line "${one.address}", two chips (udp 443, tcp 443), Stop relay and Remove relay`,
     read.badge === "Live" &&
       read.badgeClass.includes("status-done") &&
       read.line === one.address &&
-      read.chips === 3 &&
+      read.chips === 2 &&
       JSON.stringify(read.controls) ===
         JSON.stringify([STREAM_RELAY_WORDS.stop, STREAM_RELAY_WORDS.remove]),
     JSON.stringify(read)
@@ -1220,6 +1213,17 @@ const failures = (kit: Kit): void => {
     JSON.stringify(
       read.filter((row) => !(row.ordered && row.command) || row.backtick)
     )
+  );
+  const sysctl = samples.lowPort.command ?? "";
+  const http = RELAY_FAILURES.lowPort("relay", 80).command ?? "";
+  const words = JSON.stringify({ STREAM_RELAY_WORDS, samples });
+  kit.check(
+    `the sysctl fix is one line that sets the value live and keeps it over a reboot ("${sysctl}"), 80 in place of 443 for a certificate over HTTP; no word of the relay's names 3478 or 5349`,
+    sysctl ===
+      "sudo sh -c 'sysctl -w net.ipv4.ip_unprivileged_port_start=443 && echo net.ipv4.ip_unprivileged_port_start=443 > /etc/sysctl.d/90-cawco-relay.conf'" &&
+      http === sysctl.replaceAll("=443", "=80") &&
+      !(words.includes("3478") || words.includes("5349")),
+    JSON.stringify({ sysctl, http })
   );
 };
 

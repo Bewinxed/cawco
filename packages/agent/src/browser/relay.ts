@@ -5,7 +5,8 @@
  * coturn's own README: "Or just use the host network directly (recommended,
  * as Docker performs badly with large port ranges)". With a DNS name, a
  * certbot container issues the name's Let's Encrypt certificate first, kept
- * on the volume `cawco-relay-certs`, and coturn answers TLS on 443 and 5349.
+ * on the volume `cawco-relay-certs`, and coturn answers TLS on its one
+ * listener, 443, beside plain UDP and TCP.
  *
  * Nothing starts where it could not run: on a machine that is not Linux (a
  * Mac's runtime has a VM's host network, which nothing outside reaches), with
@@ -30,7 +31,7 @@ import type {
 import {
   RELAY_FAILURES,
   type RelayFailure,
-  STREAM_RELAY_PORTS,
+  STREAM_RELAY_PORT,
 } from "@cawco/core/stream-relay";
 import type Docker from "dockerode";
 import { browserRuntime } from "./browsers";
@@ -76,8 +77,7 @@ const DNS_NAME =
   /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/i;
 
 const NO_PORTS: RelayPorts = {
-  udp3478: false,
-  tcp3478: false,
+  udp443: false,
   tcp443: false,
   tls: false,
 };
@@ -212,7 +212,7 @@ const processesOf = async (
   return found;
 };
 
-/** One port held by someone, in words: "TCP 3478 is held by cawco (pid 4242)". */
+/** One port held by someone, in words: "TCP 443 is held by caddy (pid 917)". */
 export interface HeldPort {
   port: number;
   proto: "tcp" | "udp";
@@ -252,17 +252,20 @@ export const heldPorts = async (
   return [...said.values()];
 };
 
-/** Whether each listening port is bound now, by anyone (coturn, once it is up). */
+/**
+ * Whether the listener is bound now on UDP and TCP 443, by anyone (coturn,
+ * once it is up). TLS answers on that same TCP socket, so it has no port of
+ * its own to watch: the hub's `stuns:` probe proves it after the start.
+ */
 const boundNow = async (tls: boolean): Promise<RelayPorts> => {
   const tcp = await boundSockets("tcp");
   const udp = await boundSockets("udp");
-  const has = (list: BoundSocket[], port: number) =>
-    list.some((one) => one.port === port);
+  const has = (list: BoundSocket[]) =>
+    list.some((one) => one.port === STREAM_RELAY_PORT);
   return {
-    udp3478: has(udp, 3478),
-    tcp3478: has(tcp, 3478),
-    tcp443: has(tcp, 443),
-    tls: tls && has(tcp, 5349),
+    udp443: has(udp),
+    tcp443: has(tcp),
+    tls: tls && has(tcp),
   };
 };
 
@@ -375,7 +378,6 @@ const port80Free = async (
 
 /** `name`'s certificate issued (or kept, when one stands and is not due), standalone over port 80. */
 const issue = async (docker: Docker, name: string): Promise<void> => {
-  await port80Free((held) => RELAY_FAILURES.port80(hostname(), held));
   const { code, said } = await runOnce(docker, CERTBOT_IMAGE, [
     "certonly",
     "--standalone",
@@ -394,16 +396,20 @@ const issue = async (docker: Docker, name: string): Promise<void> => {
   }
 };
 
-/** coturn's arguments for `args`, with the certificate's paths when one stands. */
+/**
+ * coturn's arguments for `args`: one listener on 443, plain UDP and TCP, and
+ * with the certificate's paths TLS on that same listener (turnserver.conf:
+ * "TLS & DTLS sessions can connect to the 'plain' TCP & UDP port(s), too").
+ * `tls-listening-port` keeps its default, never forwarded nor minted; without
+ * a certificate `--no-tls` starts no TLS listener at all.
+ */
 export const coturnArgs = (
   args: RelayStartArgs,
   certified: boolean
 ): string[] => [
   "-n",
   "--log-file=stdout",
-  "--listening-port=3478",
-  "--alt-listening-port=443",
-  "--tls-listening-port=5349",
+  `--listening-port=${STREAM_RELAY_PORT}`,
   "--fingerprint",
   "--use-auth-secret",
   `--static-auth-secret=${args.secret}`,
@@ -424,7 +430,7 @@ export const coturnArgs = (
         `--cert=${LETSENCRYPT}/live/${args.hostname}/fullchain.pem`,
         `--pkey=${LETSENCRYPT}/live/${args.hostname}/privkey.pem`,
       ]
-    : []),
+    : ["--no-tls"]),
   ...(args.externalIp ? [`--external-ip=${args.externalIp}`] : []),
 ];
 
@@ -460,7 +466,7 @@ const removeRelayContainer = async (docker: Docker): Promise<void> => {
     });
 };
 
-/** Waits until coturn has bound UDP and TCP 3478 and TCP 443, or throws with its last lines. */
+/** Waits until coturn has bound UDP and TCP 443, or throws with its last lines. */
 const waitLive = async (docker: Docker, tls: boolean): Promise<RelayPorts> => {
   const until = Date.now() + LIVE_MS;
   let ports = NO_PORTS;
@@ -480,16 +486,15 @@ const waitLive = async (docker: Docker, tls: boolean): Promise<RelayPorts> => {
       );
     }
     ports = await boundNow(tls);
-    if (ports.udp3478 && ports.tcp3478 && ports.tcp443 && (!tls || ports.tls)) {
+    if (ports.udp443 && ports.tcp443 && (!tls || ports.tls)) {
       return ports;
     }
     await Bun.sleep(LIVE_POLL_MS);
   }
   const missing = [
-    ports.udp3478 ? null : "UDP 3478",
-    ports.tcp3478 ? null : "TCP 3478",
-    ports.tcp443 ? null : "TCP 443",
-    !tls || ports.tls ? null : "TCP 5349",
+    ports.udp443 ? null : `UDP ${STREAM_RELAY_PORT}`,
+    ports.tcp443 ? null : `TCP ${STREAM_RELAY_PORT}`,
+    !tls || ports.tls ? null : `TLS on ${STREAM_RELAY_PORT}`,
   ].filter((port): port is string => port !== null);
   throw new RelayFailed(
     RELAY_FAILURES.coturnUnbound(hostname(), missing, LIVE_MS / 1000)
@@ -519,28 +524,33 @@ const relayRuntime = async (): Promise<Runtime> => {
  * `ip_unprivileged_port_start` up (podman rootless.md: "Podman can not create
  * containers that bind to ports < 1024 … `sysctl
  * net.ipv4.ip_unprivileged_port_start=443` allows rootless Podman containers
- * to bind to ports >= 443"): 443 always, and 80 while a certificate is issued.
+ * to bind to ports >= 443"): 443 always, and 80 when the certificate is
+ * issued over HTTP, so the one value asked covers every port it will need.
  */
 export const lowPortsRefusal = async (
   runtime: Pick<Runtime, "rootless">,
-  withCertificate: boolean
+  httpChallenge: boolean
 ): Promise<RelayFailure | undefined> => {
   if (!runtime.rootless) {
     return;
   }
   const start = Number((await readFile(UNPRIVILEGED, "utf8")).trim());
-  const lowest = withCertificate ? HTTP_PORT : 443;
+  const lowest = httpChallenge ? HTTP_PORT : STREAM_RELAY_PORT;
   if (start <= lowest) {
     return;
   }
   return RELAY_FAILURES.lowPort(hostname(), lowest);
 };
 
-/** The relay's listening ports held by another process, as its failure; undefined when every one is free. */
+/**
+ * The relay's listener held by another process, as its failure; undefined
+ * when UDP and TCP 443 are free. The ports coturn opens beside it (444, 5349,
+ * 5350) are only reserved: coturn starts without them.
+ */
 const portsRefusal = async (): Promise<RelayFailure | undefined> => {
   const held = await heldPorts([
-    ...STREAM_RELAY_PORTS.udp.map((port) => ({ proto: "udp" as const, port })),
-    ...STREAM_RELAY_PORTS.tcp.map((port) => ({ proto: "tcp" as const, port })),
+    { proto: "udp", port: STREAM_RELAY_PORT },
+    { proto: "tcp", port: STREAM_RELAY_PORT },
   ]);
   if (held.length === 0) {
     return;
@@ -574,6 +584,7 @@ const readyToStart = async (args: RelayStartArgs): Promise<Runtime> => {
     throw new RelayFailed(RELAY_FAILURES.notDnsName(hostname(), args.hostname));
   }
   const runtime = await relayRuntime();
+  // A name's certificate is issued over HTTP (certbot standalone, port 80).
   const lowPorts = await lowPortsRefusal(runtime, !!args.hostname);
   if (lowPorts) {
     throw new RelayFailed(lowPorts);
@@ -635,6 +646,9 @@ export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
       const refused = await portsRefusal();
       if (refused) {
         throw new RelayFailed(refused);
+      }
+      if (args.hostname) {
+        await port80Free((held) => RELAY_FAILURES.port80(hostname(), held));
       }
       tell({ state: "pulling", ports: NO_PORTS });
       await pullImage(docker, RELAY_IMAGE, (progress) =>

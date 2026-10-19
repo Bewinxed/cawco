@@ -32633,35 +32633,30 @@
         "description": "One port the hub's health check asks, by its chip's words.",
         "type": "string",
         "enum": [
-          "tcp 3478",
           "tcp 443",
           "tls",
-          "udp 3478"
+          "udp 443"
         ]
       },
       "RelayPorts": {
-        "description": "What the relay's machine has bound: each listening port, and whether a certificate stands for TLS.",
+        "description": "What the relay's machine has bound: its listener on UDP and TCP 443, and whether a certificate stands for TLS on it.",
         "type": "object",
         "properties": {
           "tcp443": {
             "type": "boolean"
           },
-          "tcp3478": {
-            "type": "boolean"
-          },
           "tls": {
-            "description": "A certificate stands: 443 and 5349 answer TLS.",
+            "description": "A certificate stands and TCP 443 is bound: the listener answers TLS.",
             "type": "boolean"
           },
-          "udp3478": {
+          "udp443": {
             "type": "boolean"
           }
         },
         "required": [
-          "tcp3478",
           "tcp443",
           "tls",
-          "udp3478"
+          "udp443"
         ]
       },
       "StreamRelayState": {
