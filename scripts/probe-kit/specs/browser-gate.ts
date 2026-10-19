@@ -5,10 +5,11 @@
  *
  * On a scratch fleet (real hub, agent and sessiond; Claude Code against the
  * mock model), two delegates A and B of one project start their boundaries,
- * which mint each workspace's gate token in its state dir. This process
- * drives the agent's registry with a data dir of its own, as `cawco browser`
- * and the daemon do: it starts the project's browser and serves its gate,
- * reading the delegates' tokens from the fleet's home. chrome-devtools-mcp
+ * which mint each workspace's gate token in its state dir. The agent's
+ * registry runs, as the daemon runs it, in a process of the kit's started
+ * with the fleet's HOME (browser-gate-host.ts) and a data dir of its own: it
+ * starts the project's browser and serves its gate, reading the delegates'
+ * tokens and projects from the fleet's home. chrome-devtools-mcp
  * 1.11.0 connects to the gate as A and as B (`--wsEndpoint`, `--wsHeaders`);
  * raw CDP connections with the same tokens read what the tool cannot name.
  * On each host:
@@ -43,12 +44,85 @@
 import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
-import type { BrowserKey } from "../../../packages/core/src/browser";
+import { GATE_WORDS } from "../../../packages/agent/src/browser/gate";
+import type {
+  BrowserKey,
+  BrowserRow,
+} from "../../../packages/core/src/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
-type Browsers = typeof import("../../../packages/agent/src/browser/browsers");
-type Gate = typeof import("../../../packages/agent/src/browser/gate");
+/** How the gate host prefixes its answers. */
+const HOST_LINE = "GATE-HOST ";
+
+/**
+ * The machine side (browser-gate-host.ts): the registry and its gates in a
+ * process started with the fleet's HOME, driven one command at a time.
+ */
+interface GateHost {
+  call: (verb: string, args?: object) => Promise<unknown>;
+  end: () => void;
+}
+
+const startGateHost = (env: Record<string, string>): GateHost => {
+  const child = Bun.spawn(
+    [process.execPath, join(import.meta.dir, "..", "browser-gate-host.ts")],
+    { env, stdin: "pipe", stdout: "pipe", stderr: "inherit" }
+  );
+  let next = 0;
+  const waiting = new Map<
+    number,
+    { resolve: (value: unknown) => void; reject: (error: Error) => void }
+  >();
+  const answered = (line: string): void => {
+    if (!line.startsWith(HOST_LINE)) {
+      if (line.trim()) {
+        console.log(line);
+      }
+      return;
+    }
+    const body = JSON.parse(line.slice(HOST_LINE.length)) as {
+      error?: string;
+      id: number;
+      ok: boolean;
+      value?: unknown;
+    };
+    const one = waiting.get(body.id);
+    waiting.delete(body.id);
+    if (body.ok) {
+      one?.resolve(body.value);
+    } else {
+      one?.reject(new Error(body.error));
+    }
+  };
+  (async () => {
+    const decoder = new TextDecoder();
+    let pending = "";
+    for await (const chunk of child.stdout) {
+      pending += decoder.decode(chunk);
+      const lines = pending.split("\n");
+      pending = lines.pop() ?? "";
+      for (const line of lines) {
+        answered(line);
+      }
+    }
+    const exit = await child.exited;
+    for (const one of waiting.values()) {
+      one.reject(new Error(`the gate host exited (${exit})`));
+    }
+    waiting.clear();
+  })().catch(() => undefined);
+  return {
+    call: (verb, args = {}) =>
+      new Promise((resolve, reject) => {
+        next += 1;
+        waiting.set(next, { resolve, reject });
+        child.stdin.write(`${JSON.stringify({ id: next, verb, ...args })}\n`);
+        child.stdin.flush();
+      }),
+    end: () => child.kill(),
+  };
+};
 
 const TAG = "PROBE-GATE";
 const MCP_VERSION = "1.11.0";
@@ -231,7 +305,7 @@ const upgradeAnswer = async (port: number, id: string, token: string) => {
 /** One host's gate checks, A and B through chrome-devtools-mcp and raw CDP. */
 const gateChecks = async (
   kit: Kit,
-  gates: Gate,
+  gateHost: GateHost,
   key: BrowserKey,
   port: number,
   host: string,
@@ -239,7 +313,7 @@ const gateChecks = async (
   realHome: string
 ): Promise<void> => {
   const { check } = kit;
-  const words = gates.GATE_WORDS;
+  const words = GATE_WORDS;
   const A = await mcpAs(port, who.A.id, who.A.token, realHome);
   const B = await mcpAs(port, who.B.id, who.B.token, realHome);
   try {
@@ -249,7 +323,7 @@ const gateChecks = async (
     check(
       `${host}: A's new_page https://example.com and take_snapshot work through the gate`,
       snapshot.text.includes("Example Domain"),
-      snapshot.text.slice(0, 300)
+      `new_page: ${opened.text.slice(0, 200)}; take_snapshot: ${snapshot.text.slice(0, 300)}`
     );
     const shot = await called(A, "take_screenshot", { pageId });
     const formOpened = await called(A, "new_page", { url: FORM });
@@ -336,11 +410,10 @@ const gateChecks = async (
       JSON.stringify(cookies)
     );
 
-    const gate = gates.gateOf(key);
-    gate?.closeAll(PRIVATE);
+    await gateHost.call("closeAll", { key, why: PRIVATE });
     const [aClosed, bClosed] = await Promise.all([rawA.closed, rawB.closed]);
     const refused = await upgradeAnswer(port, who.A.id, who.A.token);
-    gate?.open();
+    await gateHost.call("open", { key });
     const again = await rawAs(port, who.A.id, who.A.token).then(
       (raw) => {
         raw.socket.close();
@@ -371,7 +444,7 @@ const gateChecks = async (
       reload: false,
       autoStop: false,
     });
-    await gate?.forget(who.B.id);
+    await gateHost.call("forget", { key, workspace: who.B.id });
     const freshPage = selected(
       (await called(A, "new_page", { url: "about:blank" })).text
     );
@@ -423,15 +496,6 @@ const shellChecks = async (kit: Kit, leg: Leg): Promise<void> => {
   }
 };
 
-/** `DOCKER_HOST` as the run found it. */
-const restore = (hidden: string | undefined): void => {
-  if (hidden === undefined) {
-    delete process.env.DOCKER_HOST;
-  } else {
-    process.env.DOCKER_HOST = hidden;
-  }
-};
-
 const run = async (kit: Kit): Promise<void> => {
   const realHome = homedir();
   process.env.PLAYWRIGHT_BROWSERS_PATH ??= join(
@@ -475,20 +539,19 @@ const run = async (kit: Kit): Promise<void> => {
     });
   const items = { A: await delegated("A"), B: await delegated("B") };
 
-  // The registry and gate in this process read the delegates' state dirs in
-  // the fleet's home, and keep browsers in a data dir of their own.
+  // The registry and its gates run in a process of their own started with
+  // the fleet's HOME (browser-gate-host.ts: Bun reads HOME once, as a
+  // process starts), where the delegates' state dirs are; their browsers
+  // live in a data dir of their own.
   const data = await mkdtemp(join(tmpdir(), "cawco-browser-gate-"));
-  const hidden = process.env.DOCKER_HOST;
-  process.env.HOME = home;
-  process.env.XDG_DATA_HOME = data;
   const key: BrowserKey = `project:${project.id}`;
-  const browsers: Browsers =
-    await import("../../../packages/agent/src/browser/browsers");
-  const gates: Gate = await import("../../../packages/agent/src/browser/gate");
+  const gateHost = startGateHost({
+    ...(process.env as Record<string, string>),
+    HOME: home,
+    XDG_DATA_HOME: data,
+  });
   const { findRuntime } =
     await import("../../../packages/agent/src/browser/runtime");
-  const { readBrowser } =
-    await import("../../../packages/agent/src/browser/state");
   try {
     await until(
       "both delegates started",
@@ -496,60 +559,93 @@ const run = async (kit: Kit): Promise<void> => {
       Boolean,
       300_000
     );
+    // Each workspace's state dir in the fleet's home, by its path: this
+    // process's own home is the person's.
+    const stateFile = (id: string, name: string) =>
+      join(home, ".cawco", "workspaces", id, name);
     const tokenOf = async (name: "A" | "B") => {
       const id = items[name].workspaceId;
-      const token = (
-        await readFile(gates.gateTokenFile(id), "utf8").catch(() => "")
-      ).trim();
-      return { id, token };
+      const read = (file: string) =>
+        readFile(stateFile(id, file), "utf8").then(
+          (text) => text.trim(),
+          () => ""
+        );
+      return {
+        id,
+        token: await read("browser-token"),
+        project: await read("project.json"),
+      };
     };
     const who = { A: await tokenOf("A"), B: await tokenOf("B") };
     kit.check(
-      "each delegate's boundary minted its gate token in its state dir",
-      !!(who.A.token && who.B.token) && who.A.token !== who.B.token,
-      `${who.A.id}, ${who.B.id}`
+      "each delegate's boundary minted its gate token in its state dir, and keeps the project its gate's key names",
+      !!(who.A.token && who.B.token) &&
+        who.A.token !== who.B.token &&
+        [who.A.project, who.B.project].every(
+          (kept) => kept === JSON.stringify(project.id)
+        ),
+      JSON.stringify({
+        A: { id: who.A.id, token: !!who.A.token, project: who.A.project },
+        B: { id: who.B.id, token: !!who.B.token, project: who.B.project },
+      })
     );
     const runtime = await findRuntime();
     const socket =
       "missing" in runtime ? "/var/run/docker.sock" : runtime.endpoint;
-    await browsers.watchBrowsers();
+    await gateHost.call("watch");
 
     // The container host.
-    const live = await browsers.startBrowser({ key });
+    const live = (await gateHost.call("start", { key })) as BrowserRow;
     const ports = live.ports ?? { devtools: 0, gate: 0 };
     kit.check(
       `container: ${key} live on the ${live.host} host, gate on 127.0.0.1:${ports.gate}, DevTools ${ports.devtools}`,
-      live.host === "container" && !!gates.gateOf(key),
+      live.host === "container",
       JSON.stringify(live)
     );
-    await gateChecks(kit, gates, key, ports.gate, "container", who, realHome);
+    await gateChecks(
+      kit,
+      gateHost,
+      key,
+      ports.gate,
+      "container",
+      who,
+      realHome
+    );
     shell.container = { devtools: ports.devtools, socket };
     await shellChecks(kit, "container");
 
     // The local host: the runtime gone (its containers stop with it), then
     // hidden. The browser moves; its container and volume are marked to go
     // once the runtime answers again.
-    await browsers.stopBrowser(key);
-    process.env.DOCKER_HOST = "unix:///nonexistent";
-    await browsers.browserRuntime(true);
-    const local = await browsers.startBrowser({ key });
+    await gateHost.call("stop", { key });
+    await gateHost.call("runtime", { hidden: true });
+    const local = (await gateHost.call("start", { key })) as BrowserRow;
     const localPorts = local.ports ?? { devtools: 0, gate: 0 };
-    const moved = await readBrowser(key);
+    const moved = (await gateHost.call("record", { key })) as {
+      containerLeft?: boolean;
+    } | null;
     kit.check(
       `local (DOCKER_HOST=unix:///nonexistent): ${key} live on the ${local.host} host, gate on 127.0.0.1:${localPorts.gate}, its container marked to be removed`,
       local.host === "local" && moved?.containerLeft === true,
       JSON.stringify({ local, containerLeft: moved?.containerLeft })
     );
-    await gateChecks(kit, gates, key, localPorts.gate, "local", who, realHome);
+    await gateChecks(
+      kit,
+      gateHost,
+      key,
+      localPorts.gate,
+      "local",
+      who,
+      realHome
+    );
     shell.local = { devtools: localPorts.devtools, socket };
     await shellChecks(kit, "local");
 
     // The runtime back: the container and volume the move left go with the
     // browser's removal (a tick or the next start back in a container
     // removes them the same way).
-    restore(hidden);
-    await browsers.browserRuntime(true);
-    await browsers.removeBrowser(key);
+    await gateHost.call("runtime", { hidden: false });
+    await gateHost.call("remove", { key });
     if (!("missing" in runtime)) {
       const name = `cawco-browser-${key.replace(":", "-")}`;
       const containers = await runtime.docker.listContainers({
@@ -573,10 +669,11 @@ const run = async (kit: Kit): Promise<void> => {
       );
     }
   } finally {
-    restore(hidden);
-    await browsers.browserRuntime(true);
-    await browsers.removeBrowser(key).catch(() => undefined);
-    process.env.HOME = realHome;
+    await gateHost
+      .call("runtime", { hidden: false })
+      .then(() => gateHost.call("remove", { key }))
+      .catch(() => undefined);
+    gateHost.end();
     await rm(data, { recursive: true, force: true });
   }
 };
