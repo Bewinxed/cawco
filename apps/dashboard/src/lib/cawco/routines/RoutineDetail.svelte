@@ -111,17 +111,14 @@
   });
 </script>
 
-<!-- literal: 1lh -->
 <div
   data-slot="detail"
   class="flex flex-col gap-space-4 px-space-3 pb-space-4 @routines-ledger-400px/routines-ledger:ps-(--detail-lead)"
   style:--detail-lead="calc(var(--c-row-lead) + var(--space-3) * 2)"
 >
-  <!-- literal: 72ch -->
   <div
     data-slot="instruction-wrap"
-    class="flex max-w-(--measure) flex-col items-start gap-space-1"
-    style:--measure="72ch"
+    class="flex max-w-(--measure-prose) flex-col items-start gap-space-1"
   >
     <div
       data-slot="instruction"
@@ -152,9 +149,19 @@
   </div>
 
   {#if recent.length > 0}
-    <section data-slot="runs" aria-labelledby="runs-{routine.id}" class="runs">
-      <h4 class="runs-head" id="runs-{routine.id}">{words.recentRuns}</h4>
-      <div class="runs-ledger">
+    <section
+      data-slot="runs"
+      aria-labelledby="runs-{routine.id}"
+      class="flex flex-col gap-space-2"
+    >
+      <h4 class="m-0 type-label text-ink-strong" id="runs-{routine.id}">
+        {words.recentRuns}
+      </h4>
+      <div
+        data-slot="runs-ledger"
+        class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
+        style:--none="0"
+      >
         <Table.Root
           data-runs
           aria-labelledby="runs-{routine.id}"
@@ -162,21 +169,28 @@
           spacing="flush"
         >
           <Table.Header>
-            <Table.Row class="band border-0">
+            <Table.Row variant="band">
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-when" scope="col"
-                >{words.columnWhen}</Table.Head
+              <Table.Head
+                data-slot="routine-detail-col-when"
+                class="h-c-toolbar-ctl w-(--c-ledger-when-w) @max-routines-ledger-399px/routines-ledger:w-(--c-ledger-when-w-narrow)"
+                scope="col"
+                variant="caps">{words.columnWhen}</Table.Head
               >
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-outcome" scope="col"
-                >{words.columnOutcome}</Table.Head
+              <Table.Head
+                class="h-c-toolbar-ctl w-(--c-ledger-outcome-w) @max-routines-ledger-399px/routines-ledger:w-(--c-ledger-outcome-w-narrow)"
+                scope="col"
+                variant="caps">{words.columnOutcome}</Table.Head
               >
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-took" scope="col"
-                >{words.columnTook}</Table.Head
+              <Table.Head
+                class="h-c-toolbar-ctl w-(--c-ledger-took-w) @max-routines-ledger-399px/routines-ledger:hidden"
+                scope="col"
+                variant="caps">{words.columnTook}</Table.Head
               >
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-              <Table.Head class="col-result" scope="col"
+              <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
                 >{words.columnResult}</Table.Head
               >
             </Table.Row>
@@ -192,7 +206,7 @@
                 data-outcome={outcome.status}
               >
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--when-w) num @max-routines-ledger-399px/routines-ledger:w-(--when-w-narrow)"
+                  class="h-c-btn-h-lg w-(--c-ledger-when-w) num @max-routines-ledger-399px/routines-ledger:w-(--c-ledger-when-w-narrow)"
                   data-cell="when"
                   rule="top"
                   variant="ledger"
@@ -205,7 +219,7 @@
                   >
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--outcome-w) num @max-routines-ledger-399px/routines-ledger:w-(--outcome-w-narrow)"
+                  class="h-c-btn-h-lg w-(--c-ledger-outcome-w) num @max-routines-ledger-399px/routines-ledger:w-(--c-ledger-outcome-w-narrow)"
                   data-cell="outcome"
                   rule="top"
                   variant="ledger"
@@ -213,7 +227,7 @@
                   <RunStatus status={outcome.status} text={outcome.word} />
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--took-w) num @max-routines-ledger-399px/routines-ledger:hidden"
+                  class="h-c-btn-h-lg w-(--c-ledger-took-w) num @max-routines-ledger-399px/routines-ledger:hidden"
                   data-cell="took"
                   rule="top"
                   variant="ledger"
@@ -227,10 +241,9 @@
                   variant="ledger"
                 >
                   {#if href}
-                    <!-- literal: 3px -->
                     <a
                       data-slot="result"
-                      class="block truncate text-ink-row no-underline group-outcome-failed/run:text-status-fail-ink hover:underline hover:underline-offset-(--offset) hover:not-group-outcome-failed/run:text-link-ink"
+                      class="block truncate text-ink-row no-underline group-outcome-failed/run:text-status-fail-ink hover:underline hover:underline-offset-3 hover:not-group-outcome-failed/run:text-link-ink"
                       {href}
                       title={result || undefined}>{result || words.readRun}</a
                     >
@@ -256,17 +269,14 @@
       aria-labelledby="actions-{routine.id}"
       class="flex flex-col gap-space-2"
     >
-      <h4 class="runs-head" id="actions-{routine.id}">{words.columnActions}</h4>
-      <div class="runs-ledger">
+      <h4 class="m-0 type-label text-ink-strong" id="actions-{routine.id}">
+        {words.columnActions}
+      </h4>
+      <div
+        class="overflow-hidden rounded-sm border border-border-hairline bg-surface-raised"
+      >
         <ActionsTable {actions} label={words.columnActions} />
       </div>
     </section>
   {/if}
 </div>
-
-<style>
-  /* residual: foreign-dom — the Markdown's own first block */
-  [data-slot="instruction"] :global([data-slot="md"] > :first-child) {
-    margin-block-start: 0;
-  }
-</style>

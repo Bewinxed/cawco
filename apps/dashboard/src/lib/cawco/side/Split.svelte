@@ -329,7 +329,6 @@
      other: the split's size change is the information. Opening decelerates
      into place on the drawer curve; closing is a morph on --ease-in-out.
      Any other size — a drag, a pane sized off screen — is taken at once. -->
-<!-- literal: 6px -->
 <div
   data-slot="side-split"
   data-split-expanded={expanded || undefined}
@@ -338,7 +337,6 @@
   data-split-resizing={resizing || undefined}
   data-split-sliding={sliding || undefined}
   class="group/split flex min-h-0 min-w-0 flex-1"
-  style:--divider-hit="6px"
   bind:this={root}
   bind:clientWidth={width}
 >
@@ -367,7 +365,7 @@
     <Resizable.Handle
       data-side-divider={open || !open || undefined}
       data-hidden={!open || undefined}
-      class="z-2 group-data-split-expanded/split:after:left-space-1 group-data-split-expanded/split:direction-vertical:after:left-space-1 group-data-split-expanded/split:after:w-(--divider-hit) group-data-split-expanded/split:direction-vertical:after:w-(--divider-hit) group-data-split-expanded/split:after:transform-none data-hidden:hidden"
+      class="z-2 group-data-split-expanded/split:after:left-space-1 group-data-split-expanded/split:direction-vertical:after:left-space-1 group-data-split-expanded/split:after:w-(--c-side-grip-w) group-data-split-expanded/split:direction-vertical:after:w-(--c-side-grip-w) group-data-split-expanded/split:after:transform-none data-hidden:hidden"
       look="split"
       onDraggingChange={(dragging) => {
         resizing = dragging;
@@ -416,11 +414,9 @@
         <!-- Expanded, the card meets the split's edges (SideSurface), so the
              page is drawn at the full width; its inset goes on the slide's
              clock. -->
-        <!-- literal: 320px -->
         <div
           data-split-shown={open || undefined}
-          class="w-full min-w-(--surface-min) p-space-3 opacity-0 transform-(--surface-off) transition-[opacity] dur-panel ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:dur-panel data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
-          style:--surface-min="320px"
+          class="w-full min-w-(--c-side-surface-min) p-space-3 opacity-0 transform-(--surface-off) transition-[opacity] dur-panel ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:dur-panel data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
           style:--surface-off="translateX(var(--space-7))"
           style:--surface-on="translateX(0)"
           in:surfaceIn
@@ -438,12 +434,3 @@
   </Resizable.PaneGroup>
   {@render after?.()}
 </div>
-
-<style>
-  /* residual: foreign-dom — a frame anywhere in the split (a preview's
-     iframe, another component's DOM) takes no pointer while the divider is
-     dragged. */
-  [data-split-resizing] :global(iframe) {
-    pointer-events: none;
-  }
-</style>
