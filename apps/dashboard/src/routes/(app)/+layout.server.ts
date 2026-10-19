@@ -28,9 +28,12 @@ const RAIL_MIN = 216;
 const RAIL_MAX = 520;
 
 /**
- * The cookie workspace.svelte.ts mirrors its localStorage into — declared here
- * rather than imported so the server never pulls the client store (and its
- * module-level `$state`) into a request. The shapes mirror that module's.
+ * The server's copy of the workspace localStorage keeps (workspace.svelte.ts,
+ * Persistence): the whole tree or none, never a part. The first client render
+ * draws from what this load gives it, so hydration keeps what was served.
+ * Declared here rather than imported so the server never pulls the client
+ * store (and its module-level `$state`) into a request. The shapes are that
+ * module's.
  */
 const WORKSPACE_KEY = "cawco-workspace";
 /** The addresses of what the tree holds, kept apart from it (workspace.svelte.ts, Persistence). */
@@ -42,9 +45,11 @@ const SESSION_PATH = /^\/session\/([^/]+)/;
  * Whether this browser is a phone, for the session surface's first paint.
  * The deck-or-grid decision is a media query on the client, which the server
  * cannot run, so SSR drew the grid and the phone flipped to the deck once the
- * bundle ran. The client mirrors the query into this cookie; on the very first
- * visit, before any cookie, the client hints and the user agent stand in. The
- * cookie is primary because an iPad in desktop mode reports a Macintosh UA.
+ * bundle ran. The client keeps the query's answer in this cookie; on the very
+ * first visit, before any cookie, the client hints and the user agent stand
+ * in. The cookie is primary because an iPad in desktop mode reports a
+ * Macintosh UA. The first client render draws this answer too, and the query
+ * takes over a frame later (lib/cawco/first-render.svelte.ts).
  */
 const NARROW_KEY = "cawco-narrow";
 const PHONE_UA = /iPhone|iPod|Android.*Mobile|Windows Phone/i;
@@ -194,7 +199,7 @@ export const load: LayoutServerLoad = async ({
   }
 
   // Untrack URL access: a switch between conversations is a shallow pushState
-  // and the client store is authoritative after hydration. This load exists
+  // and the client store is authoritative once it has restored. This load exists
   // for the first paint only — re-running it on every navigation would repeat
   // the title fetches for nothing. Mirrors what `workspace.reveal()` does.
   const pathname = untrack(() => url.pathname);

@@ -70,9 +70,9 @@
   import { MediaQuery } from "svelte/reactivity";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import { browser } from "$app/env";
   import { page } from "$app/state";
   import { barGlass } from "./bar-glass.svelte";
+  import { firstRender } from "./first-render.svelte";
   import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { cawNotices } from "./home/caw-notices.svelte";
@@ -84,12 +84,12 @@
   import { dur, easeOut, motionOk } from "./motion/curves.svelte";
 
   /**
-   * The phone bar, where his glass is his own (Shell). The server has the
-   * width cookie's guess (`narrow`) for the first paint.
+   * The phone bar, where his glass is his own (Shell). The first paint, on
+   * both sides, has the width cookie's guess (`narrow`; first-render.svelte.ts).
    */
   const phoneQuery = new MediaQuery(DRAWER_QUERY);
   const phone = $derived(
-    browser ? phoneQuery.current : Boolean(page.data.narrow)
+    firstRender.held ? Boolean(page.data.narrow) : phoneQuery.current
   );
   /**
    * His head's side, px: the compacted still fills it. In the wide bar's

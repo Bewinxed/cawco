@@ -48,6 +48,7 @@
   import FilesItem from "./files/FilesItem.svelte";
   import FilesSheet from "./files/FilesSheet.svelte";
   import { files, filesCount, followFiles } from "./files/files.svelte";
+  import { firstRender } from "./first-render.svelte";
   import GlassCard from "./GlassCard.svelte";
   import HubBand from "./HubBand.svelte";
   import { deviceRatio } from "./home/device-ratio.svelte";
@@ -483,22 +484,44 @@
      is the burger's. The same width line the session layout draws — and, on
      the server, the same cookie — so the bar and the groups agree on who
      draws the tabs before anything is painted. */
+  // The first render on both sides draws the tree the server drew
+  // (workspace.svelte.ts, Persistence): hydration keeps every tab it drew,
+  // the URL's conversation among them (the server placed it in the
+  // cookie's tree), so a menu opened on that tab before hydration stays
+  // with it. The URL is the address, and the browser follows it before
+  // anything is drawn, as the server did.
+  workspace.serve(
+    (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null
+  );
   if (browser) {
-    // The URL is the address, and it wins before anything is drawn: the
-    // store restores what was open from localStorage at module load, and the
-    // bar's strip below reads it ahead of the session surface. Placed later,
-    // the tab the server drew (it placed the URL's conversation in the
-    // cookie's tree) came back a frame after hydration as a new tab, and a
-    // menu opened on it in that moment went with it.
     workspace.followUrl(location.href);
-  } else {
-    workspace.serve(
-      (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null
-    );
   }
+  // Once the first paint is up, the page's own answers: the tree
+  // localStorage keeps and the media queries (first-render.svelte.ts). In
+  // a task after the frame, so the strip has had its first frame and moves
+  // to the tree as it does for any change; at once in a hidden page, which
+  // draws no frame.
+  onMount(() => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const release = () => {
+      firstRender.release();
+      workspace.restore();
+    };
+    if (document.hidden) {
+      release();
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      timer = setTimeout(release);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  });
   const narrowQuery = new MediaQuery(NARROW_QUERY);
   const narrow = $derived(
-    browser ? narrowQuery.current : (page.data.narrow as boolean)
+    firstRender.held ? Boolean(page.data.narrow) : narrowQuery.current
   );
 
   /* ── One rail ────────────────────────────────────────────────────────
@@ -512,7 +535,14 @@
      layout to open it in. What a rail shows is kept outside it (which trees
      are open, the row in front, the dialog it starts a session in), and the
      wide screen's scroll is kept here, so crossing the line either way
-     brings it back as it was left. */
+     brings it back as it was left.
+
+     The one part the first client render draws other than the server did,
+     on purpose: under the drawer's line the server's rail (hidden there by
+     its `hidden min-[900px]:flex`) is dropped as the page hydrates, through
+     Svelte's block repair, rather than hydrated for a frame. It is stored
+     nowhere, so nothing the reader kept is lost, and it is never seen. The
+     probe kit holds it to that (tabs-region-errors (g)). */
   const drawerQuery = new MediaQuery(DRAWER_QUERY);
   const railed = $derived(browser ? !drawerQuery.current : true);
 
@@ -574,7 +604,11 @@
   $effect(() => {
     // Kept for the server's next render (prefs.ts), on every route, so its
     // answer is the one the page last used, orientation included — `/config`
-    // decides list-or-section by it.
+    // decides list-or-section by it. Not the server's own, sent back while
+    // the first paint holds it.
+    if (firstRender.held) {
+      return;
+    }
     keepPrefs({ "cawco-narrow": narrow ? "1" : "0" });
   });
   /** The groups whose tabs the bar carries, once the session has shown, on any route: those along the workspace's top edge. */
@@ -606,11 +640,14 @@
    * next route's data, is never drawn again; it goes when the fade has.
    */
   const stands = (_node: Element) => ({ duration: dur("--dur-control") });
-  /** The strip's place in the slot, kept from the first paint in the browser so its first arrival moves as every later one does. */
-  let stripMounted = $state(untrack(() => stripHosted));
-  onMount(() => {
-    stripMounted = true;
-  });
+  /**
+   * The page's strip's place in the slot, drawn from the first paint (the
+   * server's too) so its first arrival moves as every later one does. Where
+   * no strip is hosted it is drawn as `barTabs` holds one away, out of the
+   * row and hidden: mounted after the paint it stood in the row for a frame
+   * and took half the session's strip.
+   */
+  const stripAwayAtFirst = untrack(() => !stripHosted);
   // A row or card dragged inside the page never types into a field, and a
   // file let go off a composer never opens in the tab (internal-drag.ts).
   onMount(guardDrops);
@@ -1040,12 +1077,17 @@
               {/each}
             </div>
           {/if}
-          {#if stripMounted && !narrow}
+          {#if !narrow}
             <!-- The page's own strip (bar-strip), standing where the crumb
                would. -->
             <div
               data-slot="slot-strip"
-              class="slot-strip"
+              class={[
+                "slot-strip",
+                { lifted: stripAwayAtFirst, away: stripAwayAtFirst },
+              ]}
+              data-shell-away={stripAwayAtFirst || undefined}
+              inert={stripAwayAtFirst}
               {@attach barTabs(() => stripHosted)}
             >
               {#if stripHosted}
@@ -1095,28 +1137,29 @@
                    attachments, leads the group. -->
               <FilesItem count={filesCounted} />
             {/if}
-            {#if railed}
-              <Tip keys="⌘K" label="Jump to session">
-                {#snippet children(tip)}
-                  <button
-                    data-bar-item
-                    {...tip}
-                    aria-expanded={barGlass.open === "jump"}
-                    aria-haspopup="dialog"
-                    aria-label="Jump to session"
-                    class="bar-item jump touch-hit press-tint"
-                    data-share="jump"
-                    onclick={() => {
-                      barGlass.toggle("jump");
-                    }}
-                    type="button"
-                  >
-                    <IconSearch aria-hidden="true" />
-                  </button>
-                {/snippet}
-              </Tip>
-              <MachinesButton />
-            {/if}
+            <!-- Drawn on every screen and hidden on a phone by the styles
+                 (`.jump, .machines` under 900px), so the first client
+                 render keeps the bar the server drew. -->
+            <Tip keys="⌘K" label="Jump to session">
+              {#snippet children(tip)}
+                <button
+                  data-bar-item
+                  {...tip}
+                  aria-expanded={barGlass.open === "jump"}
+                  aria-haspopup="dialog"
+                  aria-label="Jump to session"
+                  class="bar-item jump touch-hit press-tint"
+                  data-share="jump"
+                  onclick={() => {
+                    barGlass.toggle("jump");
+                  }}
+                  type="button"
+                >
+                  <IconSearch aria-hidden="true" />
+                </button>
+              {/snippet}
+            </Tip>
+            <MachinesButton />
             <!-- Caw's head: what needs you, and its drawer. -->
             <NeedsCaw />
           </div>
@@ -1753,9 +1796,9 @@
     .tools::before {
       border-inline-end-width: 0;
     }
-    /* Jump and the machines live in the phone's sidebar (`{#if railed}`): the
-       server draws the wide bar, so its first paint here goes without them,
-       as the rail's does, and nothing leaves the bar as it hydrates. */
+    /* Jump and the machines live in the phone's sidebar: the bar draws them
+       on every screen and they go without here, so its first paint and its
+       hydration are the same bar. */
     .tools :global(:is(.jump, .machines)) {
       display: none;
     }

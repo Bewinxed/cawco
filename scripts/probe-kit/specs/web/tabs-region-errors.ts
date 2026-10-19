@@ -32,6 +32,7 @@
  *   bun scripts/probe-kit/run.ts web tabs-region-errors
  */
 import type { Page } from "playwright-core";
+import { PREF_VALUE_LIMIT } from "../../../../apps/dashboard/src/lib/cawco/prefs";
 import type { Reply } from "../../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../../kit";
 
@@ -153,20 +154,329 @@ function hubReports(page: Page): { message: string; stack: string }[] {
   return sent;
 }
 
-/** A desk page with `ids` open as one group's tabs. */
-async function tabsPage(kit: Kit, ids: string[]) {
-  const page = await kit.page("desk", { init: [captureErrors] });
-  await page.addInitScript((tabs) => {
-    localStorage.setItem(
-      "cawco-workspace",
-      JSON.stringify({
-        v: 1,
-        root: { t: "l", id: "pone", tabs, active: tabs[0], opened: null },
-        focusedLeaf: "pone",
-      })
-    );
-  }, ids);
+/** A workspace of one group holding `tabs`, `active` in front, as workspace.svelte.ts stores it. */
+const treeOf = (tabs: string[], active: string | null = tabs[0] ?? null) =>
+  JSON.stringify({
+    v: 1,
+    root: { t: "l", id: "pone", tabs, active, opened: null },
+    focusedLeaf: "pone",
+  });
+
+/** A page (`view`, the desk unless named) with `ids` open as one group's tabs in its localStorage. */
+async function tabsPage(
+  kit: Kit,
+  ids: string[],
+  view: "desk" | "phone" = "desk"
+) {
+  const page = await kit.page(view, { init: [captureErrors, watchHydration] });
+  await page.addInitScript((tree) => {
+    localStorage.setItem("cawco-workspace", tree);
+  }, treeOf(ids));
   return page;
+}
+
+/**
+ * The server's copies of this browser's prefs (lib/cawco/prefs.ts), as the
+ * browser holds them: an http 127.0.0.1 page's are unprefixed. `null`
+ * clears one.
+ */
+async function serverCopies(
+  page: Page,
+  base: string,
+  copies: Record<string, string | null>
+) {
+  const context = page.context();
+  for (const [name, value] of Object.entries(copies)) {
+    if (value === null) {
+      // biome-ignore lint/performance/noAwaitInLoops: one cookie at a time
+      await context.clearCookies({ name });
+    } else {
+      await context.addCookies([
+        { name, value: encodeURIComponent(value), url: base },
+      ]);
+    }
+  }
+}
+
+declare global {
+  interface Window {
+    /** What hydration did to the page the server drew, up to the root layout's mount (`releaseHeldTaps`). */
+    probeHydration: HydrationSeen;
+  }
+}
+
+interface HydrationSeen {
+  done: boolean;
+  /**
+   * Server-drawn parts (`data-slot`, `data-session-tab`) taken out of the
+   * page and not put back by the time it has hydrated (a part moved, as the
+   * dock moves a pane into its group, is not dropped): `rail ` ahead of one
+   * from the rail, `conversation ` ahead of one from the conversation the
+   * server paints in a group's pane slot, and where it was.
+   */
+  dropped: string[];
+  /** What is on screen as hydration ends, then at each frame after it that differs: what the reader sees move. */
+  frames: (Layout & { frame: number })[];
+  /** A tab the server drew rewritten as another: `from → to`. */
+  rewritten: string[];
+  /** The strip's tabs as the first client render left them. */
+  strip: string[];
+}
+
+/** What the reader sees of the shell: the strip's tabs and box, the rail's, and what shares the bar's slot. */
+interface Layout {
+  /** Where the strip's drawn things stand: the last tab's right edge and the "+"'s left, px. */
+  marks: string;
+  rail: string;
+  slot: string;
+  strip: string;
+  tabs: number;
+}
+
+/**
+ * Installed before the page's own scripts: what hydration changed of what the
+ * server drew. A part the parser put in and a script took out before the app
+ * mounted, or a tab whose id a script rewrote, is hydration drawing other
+ * data than the server did (Svelte repairs a block it finds different
+ * silently: if.js and each.js "remove the server-rendered DOM and start
+ * over"). It ends where the root layout's onMount calls app.html's
+ * `releaseHeldTaps`, once the whole tree has hydrated.
+ */
+function watchHydration(): void {
+  const seen: HydrationSeen = {
+    done: false,
+    dropped: [],
+    rewritten: [],
+    strip: [],
+    frames: [],
+  };
+  window.probeHydration = seen;
+  const PART = "[data-slot], [data-session-tab]";
+  const named = (el: Element, from: Element | null) => {
+    const tab = el.getAttribute("data-session-tab");
+    const part =
+      tab === null ? `slot ${el.getAttribute("data-slot")}` : `tab ${tab}`;
+    const within = from?.closest("[data-slot]")?.getAttribute("data-slot");
+    let whose = "";
+    if (from?.closest('[data-slot="rail"]')) {
+      whose = "rail ";
+    } else if (from?.closest('[data-slot="stack"] > [data-slot="pane"]')) {
+      whose = "conversation ";
+    }
+    return `${whose}${part} in ${within ?? from?.tagName.toLowerCase() ?? "?"}`;
+  };
+  /** Each part taken out, with where it was, until hydration ends. */
+  const removed: { el: Element; from: Element | null }[] = [];
+  const box = (el: Element | null) => {
+    if (!el) {
+      return "none";
+    }
+    const r = el.getBoundingClientRect();
+    const shown = getComputedStyle(el).display;
+    return `${shown} ${Math.round(r.x)},${Math.round(r.y)} ${Math.round(r.width)}x${Math.round(r.height)}`;
+  };
+  const layout = (): Layout => ({
+    tabs: document.querySelectorAll("[data-session-tabs] [data-session-tab]")
+      .length,
+    strip: box(document.querySelector("[data-session-tabs]")),
+    rail: box(document.querySelector('[data-slot="rail"]')),
+    slot: [
+      ...(document.querySelector('[data-slot="top"] [data-slot="slot"]')
+        ?.children ?? []),
+    ]
+      .map(
+        (el) =>
+          `${el.getAttribute("data-slot")}${el.classList.contains("lifted") ? " lifted" : ""} ${Math.round(el.getBoundingClientRect().width)}`
+      )
+      .join(" + "),
+    marks: (() => {
+      const strip = document.querySelector("[data-session-tabs]");
+      const last = [...(strip?.querySelectorAll("[data-session-tab]") ?? [])]
+        .at(-1)
+        ?.getBoundingClientRect();
+      const add = strip?.querySelector(".tnew")?.getBoundingClientRect();
+      return `last tab ends ${last ? Math.round(last.right) : "-"}, + at ${add ? Math.round(add.left) : "-"}`;
+    })(),
+  });
+  /** The frames after hydration, each kept where it differs from the one before. */
+  const track = (frame: number) => {
+    const now = { ...layout(), frame };
+    const last = seen.frames.at(-1);
+    if (
+      !last ||
+      last.tabs !== now.tabs ||
+      last.strip !== now.strip ||
+      last.rail !== now.rail ||
+      last.slot !== now.slot ||
+      last.marks !== now.marks
+    ) {
+      seen.frames.push(now);
+    }
+    if (frame < 60) {
+      requestAnimationFrame(() => track(frame + 1));
+    }
+  };
+  const note = (records: MutationRecord[]) => {
+    for (const record of records) {
+      if (record.type === "attributes") {
+        const to = (record.target as Element).getAttribute("data-session-tab");
+        seen.rewritten.push(`${record.oldValue} → ${to}`);
+        continue;
+      }
+      const from = record.target instanceof Element ? record.target : null;
+      for (const node of record.removedNodes) {
+        if (!(node instanceof Element)) {
+          continue;
+        }
+        const parts = [
+          ...(node.matches(PART) ? [node] : []),
+          ...node.querySelectorAll(PART),
+        ];
+        removed.push(...parts.map((el) => ({ el, from })));
+      }
+    }
+  };
+  const watch = new MutationObserver(note);
+  watch.observe(document, {
+    subtree: true,
+    childList: true,
+    attributes: true,
+    attributeFilter: ["data-session-tab"],
+    attributeOldValue: true,
+  });
+  let release: (() => void) | undefined;
+  Object.defineProperty(window, "releaseHeldTaps", {
+    configurable: true,
+    get: () =>
+      release &&
+      (() => {
+        note(watch.takeRecords());
+        watch.disconnect();
+        seen.dropped = removed
+          .filter(({ el }) => !el.isConnected)
+          .map(({ el, from }) => named(el, from));
+        seen.done = true;
+        seen.strip = [
+          ...document.querySelectorAll(
+            "[data-session-tabs] [data-session-tab]"
+          ),
+        ].map((el) => el.getAttribute("data-session-tab") ?? "");
+        track(0);
+        release?.();
+      }),
+    set: (value: () => void) => {
+      release = value;
+    },
+  });
+}
+
+/** The strip's tabs in the page the server sent, before any script ran. */
+function servedStrips(page: Page): string[][] {
+  const served: string[][] = [];
+  page.on("response", async (response) => {
+    if (response.request().resourceType() !== "document") {
+      return;
+    }
+    const ids: string[] = [];
+    const html = await response.text().catch(() => "");
+    await new HTMLRewriter()
+      .on("[data-session-tabs] [data-session-tab]", {
+        element(el) {
+          ids.push(el.getAttribute("data-session-tab") ?? "");
+        },
+      })
+      .transform(new Response(html))
+      .text();
+    served.push(ids);
+  });
+  return served;
+}
+
+/** What the page should come to once it has its own answers, and what hydration may take out. */
+interface Expected {
+  /** The strip once the page has restored the tree it keeps. */
+  kept: string[];
+  /**
+   * The phone's hidden rail is the one block the first render drops
+   * (Shell.svelte, "One rail"): the server draws it hidden, and a phone
+   * never hydrates it.
+   */
+  railDropped?: boolean;
+}
+
+/** Holds a load to the invariant: hydration drew what the server drew, and nothing stopped. */
+async function checkFirstRender(
+  kit: Kit,
+  step: string,
+  page: Page,
+  served: string[][],
+  expected: Expected
+) {
+  await page.waitForFunction(() => window.probeHydration.done, null, {
+    timeout: 60_000,
+  });
+  await settle(page, 1000);
+  const drawn = await page.evaluate(() => window.probeHydration);
+  const server = served.at(-1) ?? [];
+  kit.check(
+    `${step}: the first client render draws the strip the server drew`,
+    drawn.rewritten.length === 0 &&
+      JSON.stringify(drawn.strip) === JSON.stringify(server),
+    `served ${server.length} tab(s), first render ${drawn.strip.length}; rewritten: ${drawn.rewritten.slice(0, 4).join(", ") || "none"}`
+  );
+  // The conversation the server paints in a group's pane slot is its
+  // stand-in until the live pane docks there (PaneLeaf.svelte, `{#if
+  // !browser}`): the pane's, not the shell's or the strip's.
+  const railParts = drawn.dropped.filter((part) => part.startsWith("rail "));
+  const conversation = drawn.dropped.filter((part) =>
+    part.startsWith("conversation ")
+  );
+  const shell = drawn.dropped.filter(
+    (part) => !(part.startsWith("rail ") || part.startsWith("conversation "))
+  );
+  if (expected.railDropped) {
+    kit.check(
+      `${step}: of the shell, hydration takes out only the hidden rail`,
+      shell.length === 0 && railParts.length > 0,
+      `rail: ${railParts.length} part(s); else: ${shell.slice(0, 12).join(", ") || "none"}`
+    );
+  } else {
+    kit.check(
+      `${step}: hydration takes out nothing the server drew of the shell`,
+      shell.length === 0 && railParts.length === 0,
+      [...railParts, ...shell].slice(0, 12).join(", ") || "none"
+    );
+  }
+  kit.note(
+    `${step}: the server's conversation stand-in, replaced by the live pane: ${conversation.length} part(s)`
+  );
+  kit.note(
+    `${step}: on screen as hydration ends, then each frame that differs: ${drawn.frames
+      .map(
+        (f) =>
+          `#${f.frame} ${f.tabs} tab(s), strip ${f.strip}, ${f.marks}, rail ${f.rail}, slot [${f.slot}]`
+      )
+      .join(" | ")}`
+  );
+  const settled = await page.evaluate(
+    (strip) =>
+      [...document.querySelectorAll(strip)].map(
+        (el) => el.getAttribute("data-session-tab") ?? ""
+      ),
+    STRIP
+  );
+  kit.check(
+    `${step}: once mounted, the strip is the one this browser keeps`,
+    JSON.stringify(settled) === JSON.stringify(expected.kept),
+    `${settled.length} tab(s), kept ${expected.kept.length}; first differs at ${settled.findIndex((id, i) => id !== expected.kept[i])}`
+  );
+  const read = await readPage(page);
+  kit.check(
+    `${step}: Svelte warns of no mismatch`,
+    read.mismatches === 0,
+    `${read.mismatches} hydration_mismatch warning(s)`
+  );
+  checkRead(kit, step, read, false);
 }
 
 /** Waits for the strip to stand with every tab, or a region to fail. */
@@ -378,6 +688,243 @@ const spec: Spec = {
       checkRead(kit, step, read);
       await tryAgain(kit, step, page);
       checkReports(kit, step, sent);
+      await page.close();
+    }
+
+    /** One load of `at` on a page whose server copies are `copies`, held to the invariant. */
+    const firstRender = async (
+      step: string,
+      page: Page,
+      copies: Record<string, string | null>,
+      expected: Expected,
+      at = url
+    ) => {
+      const served = servedStrips(page);
+      await serverCopies(page, base, copies);
+      await open(page, at, "body", 120_000);
+      await checkFirstRender(kit, step, page, served, expected);
+      return served;
+    };
+
+    // ---- (h) the control: the server's copy is the page's ----
+    {
+      const page = await tabsPage(kit, ids);
+      await firstRender(
+        "(h) a copy in step",
+        page,
+        { "cawco-workspace": treeOf(ids) },
+        { kept: ids }
+      );
+      await page.close();
+    }
+
+    // ---- (c) the server's copy behind: another window's write, or one not yet sent ----
+    // Both windows share localStorage and the cookie, and the copy follows
+    // localStorage 300ms later (workspace.svelte.ts KEEP_AFTER_MS); a
+    // dashboard on another port of this host shares the cookie alone.
+    {
+      const behind = [...ids].reverse();
+      const page = await tabsPage(kit, behind);
+      await firstRender(
+        "(c) a copy behind",
+        page,
+        { "cawco-workspace": treeOf(ids) },
+        { kept: behind }
+      );
+      await page.close();
+    }
+
+    /** The copy the page asks the server to keep next, and what the server answered. */
+    const nextCopy = (page: Page) =>
+      page
+        .waitForResponse((r) => new URL(r.url()).pathname === "/prefs", {
+          timeout: 30_000,
+        })
+        .then(async (response) => ({
+          status: response.status(),
+          sent: JSON.parse(response.request().postData() ?? "{}") as Record<
+            string,
+            string | null
+          >,
+        }));
+    /** The server's copies this browser holds now. */
+    const heldCopies = async (page: Page) =>
+      Object.fromEntries(
+        (await page.context().cookies(base)).map((c) => [c.name, c.value])
+      );
+
+    // ---- (d) a strip too long for the server's copy ----
+    // As many tabs as take the tree past what a cookie keeps (prefs.ts
+    // PREF_VALUE_LIMIT), the URL's first and the real three last.
+    {
+      const step = "(d) a strip past the cookie";
+      const many = [ids[0]];
+      while (
+        encodeURIComponent(treeOf([...many, ...ids.slice(1)])).length <=
+        PREF_VALUE_LIMIT
+      ) {
+        many.push(crypto.randomUUID());
+      }
+      many.push(...ids.slice(1));
+      kit.note(
+        `${step}: ${many.length} tabs, ${encodeURIComponent(treeOf(many)).length} bytes encoded, over ${PREF_VALUE_LIMIT}`
+      );
+      const page = await tabsPage(kit, many);
+      await firstRender(
+        `${step}, loaded`,
+        page,
+        { "cawco-workspace": treeOf(ids) },
+        { kept: many }
+      );
+      // A tab chosen: the page sends its copy, which is too long.
+      const sending = nextCopy(page);
+      await page.locator(`[data-session-tab="${ids[1]}"]`).first().click();
+      const copy = await sending;
+      const cookies = await heldCopies(page);
+      kit.check(
+        `${step}: a copy too long is sent as none, and the server keeps none`,
+        copy.status === 200 &&
+          copy.sent["cawco-workspace"] === null &&
+          !("cawco-workspace" in cookies),
+        `POST /prefs ${copy.status}, sent ${JSON.stringify(copy.sent).slice(0, 120)}; cookies held: ${Object.keys(cookies).join(", ")}`
+      );
+      // The next load, after the page has sent what it could.
+      const served = servedStrips(page);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await checkFirstRender(kit, `${step}, reloaded`, page, served, {
+        kept: many,
+      });
+      const server = served.at(-1) ?? [];
+      kit.check(
+        `${step}: the server is given the whole strip, or none of it`,
+        JSON.stringify(server) === JSON.stringify(many) ||
+          JSON.stringify(server) === JSON.stringify([ids[1]]),
+        `served ${server.length} of ${many.length} tab(s)`
+      );
+      await page.close();
+    }
+
+    // ---- (i) addresses too long for the server's copy, the tree in step ----
+    // A stored conversation's tab is addressed by its machine and folder
+    // (workspace.svelte.ts ctx); as many as take them past a cookie.
+    {
+      const step = "(i) addresses past the cookie";
+      const ctx: Record<
+        string,
+        { machine: string; cwd: string; harness: string }
+      > = {};
+      while (
+        encodeURIComponent(JSON.stringify(ctx)).length <= PREF_VALUE_LIMIT
+      ) {
+        ctx[crypto.randomUUID()] = {
+          machine: "scratch-fleet",
+          cwd: `/home/probe/projects/${crypto.randomUUID()}`,
+          harness: "claude",
+        };
+      }
+      kit.note(
+        `${step}: ${Object.keys(ctx).length} addresses, ${encodeURIComponent(JSON.stringify(ctx)).length} bytes encoded`
+      );
+      const page = await kit.page("desk", {
+        init: [captureErrors, watchHydration],
+      });
+      await page.addInitScript(
+        (tree) => localStorage.setItem("cawco-workspace", tree),
+        JSON.stringify({ ...JSON.parse(treeOf(ids)), ctx })
+      );
+      await firstRender(
+        `${step}, loaded`,
+        page,
+        { "cawco-workspace": treeOf(ids) },
+        { kept: ids }
+      );
+      const sending = nextCopy(page);
+      await page.locator(`[data-session-tab="${ids[1]}"]`).first().click();
+      const copy = await sending;
+      const cookies = await heldCopies(page);
+      kit.check(
+        `${step}: the tree is kept and the addresses, too long, are kept as none`,
+        copy.status === 200 &&
+          typeof copy.sent["cawco-workspace"] === "string" &&
+          copy.sent["cawco-workspace-ctx"] === null &&
+          "cawco-workspace" in cookies &&
+          !("cawco-workspace-ctx" in cookies),
+        `POST /prefs ${copy.status}; cookies held: ${Object.keys(cookies).join(", ")}`
+      );
+      const served = servedStrips(page);
+      await page.reload({ waitUntil: "domcontentloaded" });
+      await checkFirstRender(kit, `${step}, reloaded`, page, served, {
+        kept: ids,
+      });
+      await page.close();
+    }
+
+    // ---- (e) no copy: expired, or never sent here ----
+    {
+      const page = await tabsPage(kit, ids);
+      await firstRender(
+        "(e) no copy",
+        page,
+        { "cawco-workspace": null },
+        { kept: ids },
+        `${base}/session/${ids[2]}`
+      );
+      await page.close();
+    }
+
+    // ---- (f) a wide window, the copy saying narrow (another window's) ----
+    {
+      const page = await tabsPage(kit, ids);
+      await firstRender(
+        "(f) wide, copy narrow",
+        page,
+        { "cawco-workspace": treeOf(ids), "cawco-narrow": "1" },
+        { kept: ids }
+      );
+      await page.close();
+    }
+
+    // ---- (g) a phone, the copy saying wide ----
+    {
+      const step = "(g) phone, copy wide";
+      const copies = { "cawco-workspace": treeOf(ids), "cawco-narrow": "0" };
+      // The page as served, no script run: its rail is drawn and hidden.
+      const bare = await kit.page("phone");
+      await bare.route(
+        (u) => u.pathname === new URL(url).pathname,
+        async (route) => {
+          const response = await route.fetch();
+          // The body's scripts: the head's make the viewport (app.html).
+          const html = new HTMLRewriter()
+            .on("body script", {
+              element(el) {
+                el.remove();
+              },
+            })
+            .transform(await response.text());
+          await route.fulfill({ response, body: html });
+        }
+      );
+      await serverCopies(bare, base, copies);
+      await bare.goto(url, { waitUntil: "load" });
+      const rail = await bare.evaluate(() => {
+        const el = document.querySelector('[data-slot="rail"]');
+        return el
+          ? {
+              display: getComputedStyle(el).display,
+              parts: el.querySelectorAll("[data-slot]").length,
+              width: window.innerWidth,
+            }
+          : null;
+      });
+      kit.check(
+        `${step}: the served rail is drawn hidden (display none) at the phone's width`,
+        rail !== null && rail.display === "none" && rail.parts > 0,
+        JSON.stringify(rail)
+      );
+      await bare.close();
+      const page = await tabsPage(kit, ids, "phone");
+      await firstRender(step, page, copies, { kept: ids, railDropped: true });
       await page.close();
     }
   },

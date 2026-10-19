@@ -48,6 +48,6 @@ export const DRAWER_QUERY = "(width < 900px)";
 /**
  * The app's one narrow line: under 900px wide, or a touch device held
  * upright. The Shell, the session deck and `/config` all ask this, and the
- * Shell mirrors the answer into the `cawco-narrow` cookie the server reads.
+ * Shell keeps the answer in the `cawco-narrow` cookie the server reads.
  */
 export const NARROW_QUERY = `${DRAWER_QUERY}, ((pointer: coarse) and (orientation: portrait))`;

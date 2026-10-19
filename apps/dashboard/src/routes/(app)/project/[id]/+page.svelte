@@ -54,6 +54,7 @@
     type DecisionsMode,
     ProjectDecisions,
   } from "#lib/cawco/decisions/decisions.svelte.js";
+  import { firstRender } from "#lib/cawco/first-render.svelte.js";
   import {
     failureSentence,
     type HubRead,
@@ -428,8 +429,10 @@
   const sheetQuery = new MediaQuery("(width < 900px)");
   /** Under 640px the page is the one scroller, not the pane (the styles' own line). */
   const pageScrollsQuery = new MediaQuery("(max-width: 639px)", false);
+  // The first paint, on both sides, has the width cookie's guess
+  // (first-render.svelte.ts); the queries answer from a frame after mount.
   const hosted = $derived(
-    !(browser ? narrowQuery.current : Boolean(page.data.narrow))
+    !(firstRender.held ? Boolean(page.data.narrow) : narrowQuery.current)
   );
   $effect(() => {
     if (!(hosted && project)) {
@@ -634,7 +637,7 @@
    * Under 900px a task is its own page (the session split's line), read off
    * the screen.
    */
-  const phone = $derived(browser ? sheetQuery.current : !hosted);
+  const phone = $derived(firstRender.held ? !hosted : sheetQuery.current);
 
   /**
    * Opens a task: on a desk beside the view, swapping the one open in place;
