@@ -38,12 +38,12 @@ const OWN_VIEW: CanvasChosen = { scheme: "page", width: "own", motion: "on" };
 function keptView(key: string): CanvasChosen {
   const kept = stored("local", key);
   if (!kept) {
-    return OWN_VIEW;
+    return { ...OWN_VIEW };
   }
   try {
     return { ...OWN_VIEW, ...(JSON.parse(kept) as Partial<CanvasChosen>) };
   } catch {
-    return OWN_VIEW;
+    return { ...OWN_VIEW };
   }
 }
 
@@ -57,7 +57,7 @@ function keptView(key: string): CanvasChosen {
  * nightly 4202, whenever a view was kept for the session).
  */
 export class CanvasViewState {
-  chosen = $state<CanvasChosen>(OWN_VIEW);
+  chosen = $state<CanvasChosen>({ ...OWN_VIEW });
   /** Map mode: the map stands over the page, which stays loaded under it. */
   map = $state(false);
   readonly #key: string;
