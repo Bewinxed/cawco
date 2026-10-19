@@ -515,7 +515,18 @@ export class Chrome {
     this.asCard();
   }
 
-  readonly #sizes = new ResizeObserver(() => this.#measure());
+  /**
+   * Measured on the next frame, never inside the observer's own delivery:
+   * `#measure` writes the room it reads back (`--foot`, `--cawco-floor`,
+   * which place the docks it watches), and a write in the callback was a
+   * ResizeObserver loop the page reported as its error on a phone, where
+   * the Dials dock stands at the floor.
+   */
+  #remeasure = 0;
+  readonly #sizes = new ResizeObserver(() => {
+    cancelAnimationFrame(this.#remeasure);
+    this.#remeasure = requestAnimationFrame(() => this.#measure());
+  });
 
   /**
    * The room each piece of chrome standing over the canvas takes, so no
