@@ -388,12 +388,21 @@
   };
 </script>
 
-<div class="files">
+<!-- The calcs every row and head reads. A row's inset from the lead column's
+     centre: its glyph's box, the lead's margin inside it; and the room a row
+     keeps at its end for Show in conversation (the kit's xs button and the
+     gap). Files' column: the search, then the regions or the segmented list,
+     filling what its card or its drawer gives it. -->
+<div
+  class="relative flex min-h-0 flex-1 flex-col"
+  style:--lead-pad="calc(var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2)"
+  style:--row-end="calc(var(--c-btn-h-xs) + var(--space-2))"
+>
   {#if nothing}
     <!-- What the skeleton stood in for, in one cross-fade (crossIn). -->
-    <div class="files-empty-place" in:crossIn>
+    <div class="flex min-h-0 flex-1 flex-col" in:crossIn>
       <EmptyState
-        class="files-empty"
+        class="flex-1"
         data-files-empty
         icon={IconFiles}
         line="Pages, canvases, previews and the files you and the agent share collect here."
@@ -411,9 +420,9 @@
       </EmptyState>
     </div>
   {:else}
-    <div class="files-main" out:crossOut>
+    <div class="flex min-h-0 flex-1 flex-col" out:crossOut>
       <!-- The finder's own field (FindField), as Jump's. -->
-      <div class="files-search" data-files-search>
+      <div class="mb-space-1 flex-none" data-files-search>
         <FindField
           aria-label="Search this session's files, by name or by what is in them"
           autocapitalize="off"
@@ -434,16 +443,15 @@
       {#if segmented}
         <!-- One list at a time under the kit's segmented control (Apple HIG,
            Segmented controls: "switch between closely related subviews"),
-           each segment its noun and its count, equal widths. -->
-        <Tabs.Root bind:value={list} class="files-tabs">
-          <Tabs.List
-            aria-label="Artifacts or attachments"
-            class="files-segments"
-          >
+           each segment its noun and its count, equal widths. The phone's one
+           list: the chosen list fills what is left of the drawer with its own
+           scroll. -->
+        <Tabs.Root bind:value={list} class="min-h-0 flex-1">
+          <Tabs.List aria-label="Artifacts or attachments" class="mt-space-1">
             <Tabs.Trigger data-files-segment="artifacts" value="artifacts">
               <span>Artifacts</span>
               {#if artifactsCount}
-                <span class="files-segment-count num" data-files-head-count
+                <span class="num text-ink-muted" data-files-head-count
                   >{artifactsCount}</span
                 >
               {/if}
@@ -451,21 +459,24 @@
             <Tabs.Trigger data-files-segment="attachments" value="attachments">
               <span>Attachments</span>
               {#if attachmentsCount}
-                <span class="files-segment-count num" data-files-head-count
+                <span class="num text-ink-muted" data-files-head-count
                   >{attachmentsCount}</span
                 >
               {/if}
             </Tabs.Trigger>
           </Tabs.List>
+          <!-- A region's only overflow is its scroller (The 44 Touch Rule:
+               nothing around it clips its scrollbar or its rows' touch
+               areas). -->
           <Tabs.Content
-            class="files-pane"
+            class="flex min-h-0 flex-col"
             data-files-region="artifacts"
             value="artifacts"
           >
             {@render artifactsBody()}
           </Tabs.Content>
           <Tabs.Content
-            class="files-pane"
+            class="flex min-h-0 flex-col"
             data-files-region="attachments"
             value="attachments"
           >
@@ -473,43 +484,76 @@
           </Tabs.Content>
         </Tabs.Root>
       {:else}
+        <!-- The two regions share the panel's height. Each track starts at
+             its floor (its head and a card, two rows, one, or its own words)
+             and grows toward what it holds; the room left is shared out
+             evenly between the tracks still growing (grid track sizing), so a
+             short region keeps all of itself and a long one takes the rest,
+             and two long ones split it. On a short window (a landscape
+             phone's, a desk at 200% zoom) the floors are each region's head
+             alone, so both heads stay in sight and the rows scroll under
+             them. A card's height: a landscape thumbnail and its two lines. -->
         <div
-          class="files-regions"
+          class="grid min-h-0 flex-1 grid-rows-(--region-rows) content-box-start short-window:artifacts-floor-cards:artifacts-min-(--c-section-head-h) short-window:attachments-floor-one:attachments-min-(--seam-head-floor) short-window:attachments-floor-two:attachments-min-(--seam-head-floor) tall-window:artifacts-floor-cards:artifacts-min-(--cards-floor) tall-window:attachments-floor-one:attachments-min-(--one-floor) tall-window:attachments-floor-two:attachments-min-(--two-floor)"
           data-artifacts-floor={artifactsFloor}
           data-attachments-floor={attachmentsFloor}
+          style:--region-rows="minmax(var(--artifacts-min, min-content), auto) minmax(var(--attachments-min, min-content), auto)"
+          style:--region-seam="calc(1px + 2 * var(--space-2))"
+          style:--seam-head-floor="calc(var(--c-section-head-h) + var(--region-seam))"
+          style:--cards-floor="calc(var(--c-section-head-h) + 4 * var(--c-artifact-row-h))"
+          style:--two-floor="calc(var(--c-section-head-h) + 2 * var(--c-artifact-row-h) + var(--region-seam))"
+          style:--one-floor="calc(var(--c-section-head-h) + var(--c-artifact-row-h) + var(--region-seam))"
         >
           <section
             aria-labelledby="{uid}-artifacts"
-            class="files-section"
+            class="flex min-h-0 flex-col"
             data-files-region="artifacts"
           >
-            <h3 class="files-head mark-line" id="{uid}-artifacts">
-              <span class="files-head-lead" data-box
-                ><IconLayers aria-hidden="true" /></span
+            <!-- A section's head as Caw's panel heads its sections: its 16px
+                 Solar duotone glyph in the rows' lead column, its name in the
+                 label role and strong ink, its count in meta at the end, over
+                 its region's scroll. -->
+            <h3
+              class="type-label mark-line flex min-h-c-section-head-h flex-none items-center gap-c-row-inset ps-(--lead-pad) pe-c-row-inset text-ink-strong"
+              id="{uid}-artifacts"
+            >
+              <span
+                class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
+                data-box><IconLayers aria-hidden="true" class="size-icon-md" /></span
               >
-              <span class="files-head-name">Artifacts</span>
+              <span class="min-w-0 truncate">Artifacts</span>
               {#if artifactsCount}
-                <span class="files-head-count num" data-files-head-count
-                  >{artifactsCount}</span
+                <span
+                  class="num type-meta ms-auto flex-none whitespace-nowrap text-ink-muted"
+                  data-files-head-count>{artifactsCount}</span
                 >
               {/if}
             </h3>
             {@render artifactsBody()}
           </section>
+          <!-- The regions part on Caw's panel's vermillion hairline: 1px of
+               `brand-solid`, whole (tokens: "Caw's panel's hairline between
+               its sections is brand-solid whole"). -->
           <section
             aria-labelledby="{uid}-attachments"
-            class="files-section"
+            class="mt-space-2 flex min-h-0 flex-col border-t border-brand-solid pt-space-2"
             data-files-region="attachments"
             data-files-rule
           >
-            <h3 class="files-head mark-line" id="{uid}-attachments">
-              <span class="files-head-lead" data-box
-                ><IconPaperclip aria-hidden="true" /></span
+            <h3
+              class="type-label mark-line flex min-h-c-section-head-h flex-none items-center gap-c-row-inset ps-(--lead-pad) pe-c-row-inset text-ink-strong"
+              id="{uid}-attachments"
+            >
+              <span
+                class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
+                data-box
+                ><IconPaperclip aria-hidden="true" class="size-icon-md" /></span
               >
-              <span class="files-head-name">Attachments</span>
+              <span class="min-w-0 truncate">Attachments</span>
               {#if attachmentsCount}
-                <span class="files-head-count num" data-files-head-count
-                  >{attachmentsCount}</span
+                <span
+                  class="num type-meta ms-auto flex-none whitespace-nowrap text-ink-muted"
+                  data-files-head-count>{attachmentsCount}</span
                 >
               {/if}
             </h3>
@@ -521,9 +565,11 @@
   {/if}
 </div>
 
+<!-- The sign at the region's trailing foot, over its fade, clear of the
+     scrollbar. -->
 {#snippet moreSign(region: string)}
   {#if (more[region] ?? 0) > 0}
-    <div class="files-more">
+    <div class="absolute end-space-3 bottom-space-1 z-1">
       <Button
         aria-controls="{uid}-{region}-scroll"
         data-files-more={more[region]}
@@ -554,14 +600,16 @@
     />
   {:else}
     <!-- The region's one place: its skeleton, then what the read brought,
-         one handing its place to the next (crossIn, crossOut). -->
-    <div class="files-body">
+         one handing its place to the next (crossIn, crossOut). It holds its
+         skeleton, its read, and the "N more" sign over its foot;
+         `relative` pins the view leaving (crossOut). -->
+    <div class="relative flex min-h-0 flex-auto flex-col">
       {#if artifacts === null}
         {#if artifactsGhost}
           <div
             aria-busy="true"
             aria-label="Reading artifacts"
-            class="files-scroll files-wait"
+            class="min-h-0 flex-auto -me-space-2 overflow-hidden pe-space-2"
             data-files-wait="artifacts"
             role="status"
             out:crossOut
@@ -570,7 +618,12 @@
           </div>
         {/if}
       {:else if artifacts.length === 0}
-        <div class="files-none files-none-ask" in:crossIn>
+        <!-- A region with nothing made offers to ask for it, on the same
+             line, wrapping under the words when the line is short. -->
+        <div
+          class="type-meta flex min-h-c-section-head-h flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-c-row-inset wrap-anywhere text-ink-muted"
+          in:crossIn
+        >
           <span>Nothing made yet</span>
           <Button
             data-files-ask
@@ -581,13 +634,25 @@
           />
         </div>
       {:else if shownHits && cards.length === 0}
-        <p class="files-none" data-files-none in:crossIn>
+        <p
+          class="type-meta flex min-h-c-section-head-h items-center px-c-row-inset wrap-anywhere text-ink-muted"
+          data-files-none
+          in:crossIn
+        >
           No artifacts match “{shownHits.q}”
         </p>
       {:else}
+        <!-- Each region's own scroll, with the house fade at its foot while
+             more is below, at its full length on every width as Caw's panel
+             has it. It pads its end into an equal negative margin (The 44
+             Touch Rule), by Files' card's own inset (`--space-2`, FilesFace),
+             so a row's Show in conversation keeps its touch area in the
+             scroller's own box, the cards and rows still end on their head's
+             trailing edge, and the scroller (and its scrollbar) ends on the
+             card's edge, never past it. -->
         <div
           aria-busy={searching || undefined}
-          class="files-scroll kit-edge-fade-block"
+          class="kit-edge-fade-block fade-len-(--c-edge-fade-len) min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-artifacts-scroll"
           in:crossIn
@@ -610,27 +675,32 @@
       reason="Couldn't read this session's attachments"
     />
   {:else}
-    <div class="files-body">
+    <div class="relative flex min-h-0 flex-auto flex-col">
       {#if attachments === null}
         {#if attachmentsGhost}
           <div
             aria-busy="true"
             aria-label="Reading attachments"
-            class="files-scroll files-wait"
+            class="min-h-0 flex-auto -me-space-2 overflow-hidden pe-space-2"
             data-files-wait="attachments"
             role="status"
             out:crossOut
           >
+            <!-- A row as it will stand (The Claim Of Nothing Rule: the
+                 skeleton at the real layout's size). -->
             {#each [0.46, 0.34] as share (share)}
-              <div class="files-ghost-row">
-                <span class="lead" data-box
-                  ><Skeleton class="ghost-glyph" /></span
+              <div
+                class="flex min-h-c-artifact-row-h items-center gap-c-row-inset ps-(--lead-pad) pe-c-row-inset"
+              >
+                <span class="grid w-c-row-lead flex-none place-items-center text-ink-muted" data-box
+                  ><Skeleton class="size-icon-md" radius="text" /></span
                 >
                 <Skeleton
-                  class="ghost-name"
-                  style="inline-size: {share * 100}%"
+                  class="h-space-2 w-(--name-w)"
+                  radius="text"
+                  style="--name-w: {share * 100}%"
                 />
-                <Skeleton class="ghost-age" />
+                <Skeleton class="ms-auto h-space-2 w-space-4" radius="text" />
               </div>
             {/each}
           </div>
@@ -638,7 +708,10 @@
       {:else if attachments.length === 0}
         <!-- The Empty Starts Work Rule's by-hand way: a person sends
              attachments, so the composer's own Attach is offered. -->
-        <div class="files-none files-none-ask" in:crossIn>
+        <div
+          class="type-meta flex min-h-c-section-head-h flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1 px-c-row-inset wrap-anywhere text-ink-muted"
+          in:crossIn
+        >
           <span>Nothing attached yet</span>
           <Button
             data-files-attach
@@ -649,27 +722,35 @@
           />
         </div>
       {:else if attachmentHits.length === 0}
-        <p class="files-none" data-files-none in:crossIn>
+        <p
+          class="type-meta flex min-h-c-section-head-h items-center px-c-row-inset wrap-anywhere text-ink-muted"
+          data-files-none
+          in:crossIn
+        >
           No attachments match “{asked}”
         </p>
       {:else}
         <div
-          class="files-scroll kit-edge-fade-block"
+          class="kit-edge-fade-block fade-len-(--c-edge-fade-len) min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-attachments-scroll"
           in:crossIn
           {@attach measured("attachments", "[data-files-row]")}
         >
           <ul
-            class="files-list"
+            class="relative pb-space-6"
             {@attach highlight({ rows: "[data-files-row]" })}
           >
             {#each attachmentHits as file (file.id)}
-              <li class="files-item attachment" data-files-row>
+              <!-- Every row stands on one grid with the heads: its mark
+                   centred in one 28px lead column, so every name starts on
+                   one text column; its Show in conversation at the row's
+                   end. -->
+              <li class="group/row relative rounded-sm" data-files-row>
                 {#if file.open.kind === "file"}
                   {#if file.open.href}
                     <a
-                      class="kit-item attachment-row"
+                      class="kit-item relative flex min-h-c-artifact-row-h w-full cursor-pointer items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset"
                       download={file.name}
                       href={file.open.href}
                       title={file.name}
@@ -681,13 +762,16 @@
                          of its hash: the hub can't serve it, so it is a
                          plain row, and Show in conversation still finds
                          where it was sent. -->
-                    <span class="kit-item attachment-row" title={file.name}>
+                    <span
+                      class="kit-item relative flex min-h-c-artifact-row-h w-full cursor-default items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset"
+                      title={file.name}
+                    >
                       {@render attachmentFace(file)}
                     </span>
                   {/if}
                 {:else}
                   <button
-                    class="kit-item attachment-row"
+                    class="kit-item relative flex min-h-c-artifact-row-h w-full cursor-pointer items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset"
                     onclick={(event) =>
                       openAttachment(file, event.currentTarget)}
                     title={file.name}
@@ -696,9 +780,12 @@
                     {@render attachmentFace(file)}
                   </button>
                 {/if}
+                <!-- Show in conversation: the kit's ghost icon button at the
+                     row's end, shown on the row's hover and focus, and always
+                     under a finger. -->
                 <Button
                   aria-label="Show {file.name} in conversation"
-                  class="files-show"
+                  class="absolute end-space-1 top-1/2 -translate-y-1/2 text-ink-muted opacity-0 transition-[opacity] dur-control ease-out group-focus-within/row:opacity-100 group-hover/row:opacity-100 coarse:opacity-100"
                   data-files-show
                   icon={IconChevronRight}
                   onclick={() => onshow(file)}
@@ -717,381 +804,27 @@
 {/snippet}
 
 {#snippet attachmentFace(file: AttachmentRow)}
-  <span class="lead" data-box>
+  <span
+    class="grid size-c-row-lead flex-none place-items-center overflow-clip text-ink-muted"
+    data-box
+  >
     {#if file.picture}
       <img
         alt=""
-        class="thumb"
+        class="size-c-row-lead max-w-none rounded-sm bg-surface-well object-cover -outline-offset-1 outline-1 outline-image-outline"
         decoding="async"
         loading="lazy"
         src={file.picture}
       />
     {:else}
-      <IconDocument aria-hidden="true" />
+      <IconDocument aria-hidden="true" class="size-icon-md" />
     {/if}
   </span>
-  <span class="words">
-    <span class="row-name">{file.name}</span>
-    <span class="row-meta"
+  <span class="flex min-w-0 flex-auto flex-col">
+    <span class="type-label min-w-0 truncate">{file.name}</span>
+    <span class="type-meta truncate text-ink-muted"
       >{file.kind} · {file.who}{#if file.at !== null}
         · <span class="num">{formatAgeShort(file.at)}</span>{/if}</span
     >
   </span>
 {/snippet}
-
-<style>
-  /* Files' column: the search, then the regions or the segmented list,
-     filling what its card or its drawer gives it. */
-  .files {
-    position: relative;
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-  /* The whole, or the empty state in its place: each fills the column. */
-  .files-main,
-  .files-empty-place {
-    display: flex;
-    flex: 1;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-  /* The two regions share the panel's height. Each track starts at its
-     floor (its head and a card, two rows, one, or its own words) and grows
-     toward what it holds; the room left is shared out evenly between the
-     tracks still growing (grid track sizing), so a short region keeps all
-     of itself and a long one takes the rest, and two long ones split it.
-     On a short window (a landscape phone's, a desk at 200% zoom) the floors
-     are each region's head alone, so both heads stay in sight and the rows
-     scroll under them. */
-  .files-regions {
-    /* The second region's rule and the space either side of it. */
-    --region-seam: calc(1px + 2 * var(--space-2));
-    --artifacts-min: min-content;
-    --attachments-min: min-content;
-    flex: 1;
-    min-block-size: 0;
-    display: grid;
-    grid-template-rows:
-      minmax(var(--artifacts-min), auto)
-      minmax(var(--attachments-min), auto);
-    align-content: start;
-
-    @media (height < 560px) {
-      &[data-artifacts-floor="cards"] {
-        --artifacts-min: var(--c-section-head-h);
-      }
-      &:is([data-attachments-floor="two"], [data-attachments-floor="one"]) {
-        --attachments-min: calc(var(--c-section-head-h) + var(--region-seam));
-      }
-    }
-    @media (height >= 560px) {
-      /* A card's height: a landscape thumbnail and its two lines. */
-      &[data-artifacts-floor="cards"] {
-        --artifacts-min: calc(
-          var(--c-section-head-h) + 4 * var(--c-artifact-row-h)
-        );
-      }
-      &[data-attachments-floor="two"] {
-        --attachments-min: calc(
-          var(--c-section-head-h) + 2 * var(--c-artifact-row-h) +
-            var(--region-seam)
-        );
-      }
-      &[data-attachments-floor="one"] {
-        --attachments-min: calc(
-          var(--c-section-head-h) + var(--c-artifact-row-h) + var(--region-seam)
-        );
-      }
-    }
-  }
-  /* The phone's one list: the kit's segmented control under the search,
-     the chosen list filling what is left of the drawer with its own scroll. */
-  .files :global(.files-tabs) {
-    flex: 1;
-    min-block-size: 0;
-  }
-  .files :global(.files-segments) {
-    margin-block-start: var(--space-1);
-  }
-  /* A region's only overflow is its scroller (The 44 Touch Rule: nothing
-     around it clips its scrollbar or its rows' touch areas). */
-  .files :global(.files-pane) {
-    display: flex;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-  .files-segment-count {
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .files-section {
-    display: flex;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-  /* The regions part on Caw's panel's vermillion hairline: 1px of
-     `brand-solid`, whole (tokens: "Caw's panel's hairline between its
-     sections is brand-solid whole"). */
-  .files-section + .files-section {
-    margin-block-start: var(--space-2);
-    padding-block-start: var(--space-2);
-    border-block-start: 1px solid var(--brand-solid);
-  }
-  .files-search {
-    flex: none;
-    margin-block-end: var(--space-1);
-
-    /* Under a finger the words stand at 16px, so iOS doesn't zoom. */
-    @media (pointer: coarse) {
-      & :global(input) {
-        font-size: 16px;
-      }
-    }
-  }
-  /* A region's one place: its skeleton, its read, and the "N more" sign
-     over its foot. `position: relative` pins the view leaving (crossOut). */
-  .files-body {
-    position: relative;
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-  /* Each region's own scroll, with the house fade at its foot while more is
-     below, at its full length on every width as Caw's panel has it. It pads
-     its end into an equal negative margin (The 44 Touch Rule), by Files'
-     card's own inset (`--space-2`, FilesFace), so a row's Show in
-     conversation keeps its touch area in the scroller's own box, the cards
-     and rows still end on their head's trailing edge, and the scroller (and
-     its scrollbar) ends on the card's edge, never past it. */
-  .files-scroll {
-    --fade-len: 40px;
-    flex: 1 1 auto;
-    min-block-size: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-inline-end: var(--space-2);
-    margin-inline-end: calc(-1 * var(--space-2));
-    scrollbar-width: thin;
-    scrollbar-color: var(--border-control) transparent;
-  }
-  .files-wait {
-    overflow: hidden;
-  }
-  /* The sign at the region's trailing foot, over its fade, clear of the
-     scrollbar. */
-  .files-more {
-    position: absolute;
-    inset-block-end: var(--space-1);
-    inset-inline-end: var(--space-3);
-    z-index: 1;
-  }
-  /* A section's head as Caw's panel heads its sections: its 16px Solar
-     duotone glyph in the rows' lead column, its name in the label role and
-     strong ink, its count in meta at the end, over its region's scroll. */
-  .files-head {
-    flex: none;
-    display: flex;
-    align-items: center;
-    gap: var(--c-row-inset);
-    min-block-size: var(--c-section-head-h);
-    margin: 0;
-    padding-inline: calc(
-        var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2
-      )
-      var(--c-row-inset);
-    color: var(--ink-strong);
-    font: var(--type-label);
-  }
-  .files-head-lead {
-    display: grid;
-    place-items: center;
-    flex: none;
-    inline-size: var(--c-row-lead);
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-  }
-  .files-head-name {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .files-head-count {
-    flex: none;
-    margin-inline-start: auto;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  /* The cards' gutter: the rows' edges, so a card's picture lines up with
-     the head's glyph. */
-  .files-scroll > :global([data-files-cards]) {
-    padding-inline: calc(
-      (var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2) -
-        var(--space-1)
-    );
-    padding-block-end: var(--space-6);
-  }
-  .files-list {
-    position: relative;
-    margin: 0;
-    padding: 0 0 var(--space-6);
-    list-style: none;
-  }
-  .files-item {
-    position: relative;
-    border-radius: var(--radius-sm);
-  }
-  /* Every row stands on one grid with the heads: its mark centred in one
-     28px lead column, so every name starts on one text column; its Show in
-     conversation at the row's end. */
-  .attachment-row {
-    position: relative;
-    display: flex;
-    align-items: center;
-    gap: var(--c-row-inset);
-    inline-size: 100%;
-    min-block-size: var(--c-artifact-row-h);
-    padding-inline: calc(
-        var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2
-      )
-      calc(var(--c-btn-h-xs) + var(--space-2));
-    border: 0;
-    background: none;
-    color: var(--ink-strong);
-    text-align: start;
-    text-decoration: none;
-    cursor: pointer;
-    user-select: none;
-
-    /* Inside its scroller the ring stands within its own edge. */
-    &:focus-visible {
-      outline-offset: var(--focus-ring-inset);
-    }
-  }
-  span.attachment-row {
-    cursor: default;
-  }
-  .row-name {
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    font: var(--type-label);
-  }
-  .lead {
-    display: grid;
-    place-items: center;
-    flex: none;
-    inline-size: var(--c-row-lead);
-    block-size: var(--c-row-lead);
-    overflow: clip;
-    color: var(--ink-muted);
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-  }
-  .thumb {
-    inline-size: var(--c-row-lead);
-    block-size: var(--c-row-lead);
-    max-inline-size: none;
-    border-radius: var(--radius-sm);
-    background: var(--surface-well);
-    object-fit: cover;
-    outline: 1px solid var(--image-outline);
-    outline-offset: -1px;
-  }
-  .words {
-    display: flex;
-    flex-direction: column;
-    flex: 1 1 auto;
-    min-inline-size: 0;
-  }
-  .row-meta {
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-
-    & .num {
-      font-variant-numeric: tabular-nums;
-    }
-  }
-  /* Show in conversation: the kit's ghost icon button at the row's end,
-     shown on the row's hover and focus, and always under a finger. */
-  .files :global(.files-show) {
-    position: absolute;
-    inset-block-start: 50%;
-    inset-inline-end: var(--space-1);
-    translate: 0 -50%;
-    color: var(--ink-muted);
-    opacity: 0;
-    transition: opacity var(--dur-control) var(--ease-out);
-  }
-  .files :global(.attachment:is(:hover, :focus-within) .files-show) {
-    opacity: 1;
-  }
-  @media (pointer: coarse) {
-    .files :global(.files-show) {
-      opacity: 1;
-    }
-  }
-  .files-none {
-    display: flex;
-    align-items: center;
-    min-block-size: var(--c-section-head-h);
-    margin: 0;
-    padding-inline: var(--c-row-inset);
-    color: var(--ink-muted);
-    font: var(--type-meta);
-    overflow-wrap: anywhere;
-  }
-  /* A region with nothing made offers to ask for it, on the same line,
-     wrapping under the words when the line is short. */
-  .files-none-ask {
-    flex-wrap: wrap;
-    justify-content: space-between;
-    gap: var(--space-1) var(--space-2);
-  }
-  /* A row as it will stand (The Claim Of Nothing Rule: the skeleton at the
-     real layout's size). */
-  .files-ghost-row {
-    display: flex;
-    align-items: center;
-    gap: var(--c-row-inset);
-    min-block-size: var(--c-artifact-row-h);
-    padding-inline: calc(
-        var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2
-      )
-      var(--c-row-inset);
-  }
-  .files-ghost-row :global(.ghost-glyph) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    border-radius: var(--radius-xs);
-  }
-  .files-ghost-row :global(.ghost-name),
-  .files-ghost-row :global(.ghost-age) {
-    block-size: 1ex;
-    border-radius: var(--radius-hair);
-    font: var(--type-label);
-  }
-  .files-ghost-row :global(.ghost-age) {
-    inline-size: 2ch;
-    margin-inline-start: auto;
-  }
-  .files :global(.files-empty) {
-    flex: 1;
-  }
-</style>
