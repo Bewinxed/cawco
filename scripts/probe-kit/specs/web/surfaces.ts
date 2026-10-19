@@ -121,7 +121,10 @@ const spec: Spec = {
         await page.evaluate(atRest);
         // Read before the capture's comparison, as the picture was taken.
         const dump = await page.evaluate(pageDump);
-        const differs = await diff(kit, page, entry, { clip });
+        const differs = await diff(kit, page, entry, {
+          clip,
+          ...(state.mask ? { mask: state.mask(page) } : {}),
+        });
         if (differs || dumpAll) {
           await writeFile(
             join(kit.out, `${entry}.dump.json`),

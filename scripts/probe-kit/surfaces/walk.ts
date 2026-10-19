@@ -24,7 +24,7 @@ import {
 } from "../hub-tape";
 import { type Kit, open, ROOT, type Theme, type View } from "../kit";
 import { actHolds, type State, type Surface, type Width } from "./catalogue";
-import { holdStill, installReader, PROPS } from "./read";
+import { elementAt, holdStill, installReader, PROPS } from "./read";
 import { type Scene, VARIANTS, type Variant } from "./scene";
 
 /** The hub the surfaces read: a scratch fleet's, recorded (`style-snapshot --record`). */
@@ -138,6 +138,11 @@ export class Servers {
     return this.own.has(url.host) && paths.includes(url.pathname);
   }
 
+  /** Whether the hub opens the socket at `url` and says nothing on it, on purpose (a hub not heard from yet). */
+  holdsSocket(url: string): boolean {
+    return this.held?.sockets.includes(new URL(url).pathname) === true;
+  }
+
   async close(): Promise<void> {
     (await this.dev)?.child.kill();
   }
@@ -228,6 +233,114 @@ function markHydrated(): void {
 const inFlight = new WeakMap<Page, Set<Request>>();
 /** Each page's hub's holds (`Servers.holds`): a held request is answered as far as `quiet` waits. */
 const heldOn = new WeakMap<Page, (request: Request) => boolean>();
+/**
+ * Each page's dashboard sockets whose board is not in yet: what `quiet`
+ * waits on beside its requests. The page counts the hub reached on the
+ * board alone (client.svelte.ts `bind`, main abc93d947), and a page not
+ * reached 4 s of its own time in opens the connection band (HubBand, main
+ * 27cc1572b). The board comes in the machine's time and the page's runs on
+ * the walk's stretches, so on a busy machine a stretch ran past the 4 s
+ * before the board landed, and the band stood in one run's read alone
+ * (task/review-opening).
+ */
+const boardsDue = new WeakMap<Page, Set<string>>();
+/** Each page's hub's held sockets (`Servers.holdsSocket`): one the hub never speaks on is not waited on. */
+const socketHeldOn = new WeakMap<Page, (url: string) => boolean>();
+/** The path of the dashboard's own socket to its hub (client.svelte.ts `hubSocketUrl`). */
+const DASHBOARD_SOCKET = "/ws/dashboard";
+
+/**
+ * `PROBE_TRACE="<surface>/<state> <key>[ | <key>…]"` (`<surface>/*` for
+ * every state of it): each key's element
+ * (read.ts `elementAt`: its box and its opening tag, inline style and all)
+ * said at every step the walk takes on that state, in order. Where two runs
+ * read a state apart, two traces say at which step they parted.
+ */
+const TRACE = process.env.PROBE_TRACE;
+/** The state each page walks now, and its root, for {@link trace}. */
+const tracing = new WeakMap<Page, { label: string; root: string }>();
+
+async function trace(page: Page, step: string): Promise<void> {
+  const on = tracing.get(page);
+  if (!(TRACE && on)) {
+    return;
+  }
+  const cut = TRACE.indexOf(" ");
+  const asked = TRACE.slice(0, cut);
+  // `<surface>/*`: every state of the surface.
+  if (
+    asked.endsWith("/*")
+      ? !on.label.startsWith(asked.slice(0, -1))
+      : asked !== on.label
+  ) {
+    return;
+  }
+  const [time, focus] = await page.evaluate(() => {
+    const at = document.activeElement;
+    return [
+      Math.round(performance.now()),
+      at
+        ? `${at.localName}${[...at.classList]
+            .slice(0, 3)
+            .map((c) => `.${c}`)
+            .join("")}`
+        : "none",
+    ] as const;
+  });
+  const keys = TRACE.slice(cut + 1).split(" | ");
+  // From hydration on, every write to the first key's style, with what the
+  // others stood as when it was written; said at the read.
+  if (step === "hydrated") {
+    await page.evaluate(([k, r]) => window.__ssReader?.watch(k, r), [
+      keys,
+      on.root,
+    ] as const);
+  }
+  if (step === "read") {
+    const heard = await page.evaluate(() => window.__ssReader?.watched() ?? []);
+    for (const line of heard) {
+      console.log(
+        `  trace ${on.label} ${page.viewportSize()?.width} wrote ${line}`
+      );
+    }
+  }
+  for (const key of keys) {
+    // biome-ignore lint/performance/noAwaitInLoops: one element at a time, in the order asked
+    const found = await page.evaluate(elementAt, { key, root: on.root });
+    console.log(
+      `  trace ${on.label} ${page.viewportSize()?.width} t${time} focus ${focus} ${step} ${key.split(" > ").at(-1)}: ${found ? `${found.box} ${found.tag}` : "none"}`
+    );
+  }
+}
+
+/**
+ * A frame's message once whole: a message sent whole, or the last of its
+ * parts (core wire.ts: `{"part":{"id","seq","last"},"text":"…"}`, a part's
+ * text the message's next slice). Null while a message's parts are coming.
+ */
+function wholeMessage(frame: string, parts: Map<string, string>): unknown {
+  let read: unknown;
+  try {
+    read = JSON.parse(frame);
+  } catch {
+    return null;
+  }
+  const { part } = read as { part?: { id: string; last: boolean } };
+  if (!part) {
+    return read;
+  }
+  const text = `${parts.get(part.id) ?? ""}${(read as { text: string }).text}`;
+  if (!part.last) {
+    parts.set(part.id, text);
+    return null;
+  }
+  parts.delete(part.id);
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
 /** Each request `quiet` gave up waiting on, said once: a page that keeps one open is slow, never still. */
 const gaveUp = new Set<string>();
 
@@ -315,10 +428,32 @@ export async function passPage(
   page.on("response", (response) => pending.delete(response.request()));
   page.on("requestfinished", (request) => pending.delete(request));
   page.on("requestfailed", (request) => pending.delete(request));
+  const due = new Set<string>();
+  boardsDue.set(page, due);
+  let sockets = 0;
+  page.on("websocket", (socket) => {
+    if (!new URL(socket.url()).pathname.endsWith(DASHBOARD_SOCKET)) {
+      return;
+    }
+    sockets += 1;
+    const id = `${sockets} ${socket.url()}`;
+    due.add(id);
+    const parts = new Map<string, string>();
+    socket.on("framereceived", ({ payload }) => {
+      const message = wholeMessage(String(payload), parts) as {
+        payload?: { kind?: string };
+      } | null;
+      if (message?.payload?.kind === "instances") {
+        due.delete(id);
+      }
+    });
+    socket.on("close", () => due.delete(id));
+  });
   // A new document: the last one's requests are nobody's to wait on.
   page.on("framenavigated", (frame) => {
     if (frame === page.mainFrame()) {
       pending.clear();
+      due.clear();
     }
   });
   // A state whose control is gone fails in seconds, not the default 30.
@@ -452,21 +587,31 @@ async function quiet(page: Page): Promise<void> {
       (actHolds.get(page) ?? []).some((holding) => holding(url))
     );
   };
-  const unanswered = () =>
-    pending ? [...pending].filter((request) => !held(request)) : [];
+  const socketHeld = socketHeldOn.get(page);
+  const boards = boardsDue.get(page);
+  const unanswered = () => [
+    ...(pending ? [...pending].filter((request) => !held(request)) : []),
+    ...(boards
+      ? [...boards].filter((id) => !socketHeld?.(id.slice(id.indexOf(" ") + 1)))
+      : []),
+  ];
   let calm = 0;
   for (let i = 0; i < 300 && calm < 2; i += 1) {
     calm = unanswered().length > 0 ? 0 : calm + 1;
     // biome-ignore lint/performance/noAwaitInLoops: polled until nothing is in flight
     await page.waitForTimeout(LAND_MS);
   }
-  for (const request of calm < 2 ? unanswered() : []) {
-    const url = request.url().replace(ORIGIN_PORT, ":<port>");
-    if (!gaveUp.has(url)) {
-      gaveUp.add(url);
+  for (const waited of calm < 2 ? unanswered() : []) {
+    const what =
+      typeof waited === "string"
+        ? `the board on ${waited.slice(waited.indexOf(" ") + 1)}`
+        : `${waited.method()} ${waited.url()}`;
+    const said = what.replace(ORIGIN_PORT, ":<port>");
+    if (!gaveUp.has(said)) {
+      gaveUp.add(said);
       const on = new URL(page.url());
       console.log(
-        `  quiet: gave up after 15 s on ${request.method()} ${url} (the page at ${on.pathname}${on.search})`
+        `  quiet: gave up after 15 s on ${said} (the page at ${on.pathname}${on.search})`
       );
     }
   }
@@ -557,11 +702,14 @@ const toTheStart = () => {
  */
 export async function stand(page: Page): Promise<void> {
   await page.evaluate(() => document.fonts.ready);
+  await trace(page, "stand");
   await settle(page);
+  await trace(page, "settled");
   await stillInPageTime(page);
   await page.evaluate(toTheStart);
   await stillInPageTime(page);
   await holdStill(page);
+  await trace(page, "stood");
 }
 
 /**
@@ -582,6 +730,7 @@ async function stillInPageTime(page: Page): Promise<void> {
     const now = await page.evaluate(scrollsAndBoxes);
     still = now === last ? still + 1 : 0;
     last = now;
+    await trace(page, `still ${i} (${still})`);
   }
 }
 
@@ -705,12 +854,15 @@ async function opened(
     await page.reload({ waitUntil: "domcontentloaded" });
   }
   await hydrated(page, "body");
+  await trace(page, "hydrated");
   await arrive(page);
+  await trace(page, "arrived");
   const { act } = state;
   if (!act) {
     return;
   }
   await actAtRest(page, (p) => act(p, scene), state.heldFrame === true);
+  await trace(page, "acted");
   if (!state.heldFrame) {
     await hydrated(page, state.root);
   }
@@ -754,13 +906,19 @@ export async function walk(
       }
       const page = await passPage(kit, pass, tape.at);
       heldOn.set(page, (request) => servers.holds(request));
+      socketHeldOn.set(page, (url) => servers.holdsSocket(url));
       await servers.attach(page.context());
       try {
         for (const state of states) {
           const what = `${surface.name}/${state.name} · ${pass.name}`;
+          tracing.set(page, {
+            label: `${surface.name}/${state.name}`,
+            root: state.root,
+          });
           try {
             // biome-ignore lint/performance/noAwaitInLoops: one state at a time on the pass's page
             await opened(page, base, surface, state, scene);
+            await trace(page, "read");
             await visit({ page, pass, scene, state, surface });
           } catch (error) {
             failed(what, String(error).split("\n")[0] ?? "");

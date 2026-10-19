@@ -248,6 +248,8 @@ export interface Read {
 
 /** The page's half of the reader, installed in the page by `installReader`. */
 interface PageReader {
+  /** The element a difference line names by its key (`tag:n` steps from `root`, scripts and styles not counted), or null. */
+  at: (key: string, root: string) => Element | null;
   delta: (i: number) => {
     nodes: Record<number, Record<number, string>>;
   };
@@ -284,6 +286,16 @@ interface PageReader {
     selector: string
   ) => { height: number; width: number; x: number; y: number } | null;
   still: () => number;
+  /**
+   * From now, each write to the first key's element's `style` (a layer a
+   * script places, the highlight's pill), said with what every key's
+   * element stood as at that moment: its drawn box, its own transform,
+   * translate and scale, and its running animations (`PROBE_TRACE`); and
+   * each press and each move of focus on the page, in order.
+   */
+  watch: (keys: string[], root: string) => void;
+  /** What `watch` heard since it was last asked, and no more. */
+  watched: () => string[];
 }
 
 declare global {
@@ -398,12 +410,31 @@ export function installReader(props: readonly string[]): void {
 
   // A value that names this page's own origin (its port is the run's) or a
   // blob the page made (its id is fresh on every load) reads without them.
+  // A `$props.id()` a value points at (`url("#c255-inside")`, a tab's fold)
+  // is Svelte's count of the instances made before it, which how many came
+  // and went before the read decides (session/diff read c234, c255 and c266
+  // on one tree): it reads as its order among the read's own, so the same
+  // reference reads the same.
   const ORIGIN = location.origin;
   const BLOB = /blob:[^)"'\s]+/g;
-  const plain = (v: string) =>
-    v.includes("blob:") || v.includes(ORIGIN)
-      ? v.replace(BLOB, "blob:").replaceAll(ORIGIN, "")
-      : v;
+  const PROPS_ID = /#c(\d+)-/g;
+  let propsIds = new Map<string, number>();
+  const plain = (v: string) => {
+    const own =
+      v.includes("blob:") || v.includes(ORIGIN)
+        ? v.replace(BLOB, "blob:").replaceAll(ORIGIN, "")
+        : v;
+    return own.includes("#c")
+      ? own.replace(PROPS_ID, (_, n: string) => {
+          let at = propsIds.get(n);
+          if (at === undefined) {
+            at = propsIds.size + 1;
+            propsIds.set(n, at);
+          }
+          return `#c${at}-`;
+        })
+      : own;
+  };
   const values = (el: Element, pseudo?: string): string[] => {
     const s = getComputedStyle(el, pseudo);
     return props.map((p) => plain(s.getPropertyValue(p)));
@@ -483,7 +514,136 @@ export function installReader(props: readonly string[]): void {
     return out.join(",");
   };
 
+  const SKIP_KEY = new Set([
+    "SCRIPT",
+    "STYLE",
+    "LINK",
+    "META",
+    "TEMPLATE",
+    "NOSCRIPT",
+    "TITLE",
+    "BASE",
+  ]);
+  const elementByKey = (key: string, root: string): Element | null => {
+    const [first, ...steps] = key.split(" > ");
+    let el: Element | null = document.querySelector(root);
+    if (!el || el.tagName.toLowerCase() !== first) {
+      return null;
+    }
+    for (const step of steps) {
+      const shadow = step.startsWith("#shadow>");
+      const [tag, nth] = step.replace("#shadow>", "").split(":");
+      const host: Element = el;
+      const kids = [
+        ...(shadow && host.shadowRoot
+          ? host.shadowRoot.children
+          : host.children),
+      ].filter(
+        (kid) => !SKIP_KEY.has(kid.tagName) && kid.tagName.toLowerCase() === tag
+      );
+      el = kids[Number(nth) - 1] ?? null;
+      if (!el) {
+        return null;
+      }
+    }
+    return el;
+  };
+  let heard: string[] = [];
+  let watching: MutationObserver | null = null;
+  const standing = (key: string, el: Element | null) => {
+    if (!el) {
+      return `${key.split(" > ").at(-1)} none`;
+    }
+    const r = el.getBoundingClientRect();
+    const s = getComputedStyle(el);
+    const runs = el.getAnimations().length;
+    return `${key.split(" > ").at(-1)} ${r.x},${r.y},${r.width},${r.height} transform ${s.transform} translate ${s.translate} scale ${s.scale}${runs ? ` runs ${runs}` : ""}`;
+  };
+
+  /** An element as the trace says it: its tag and first two classes. */
+  const nameOf = (at: EventTarget | null) =>
+    at instanceof Element
+      ? `${at.localName}${[...at.classList]
+          .slice(0, 2)
+          .map((c) => `.${c}`)
+          .join("")}`
+      : String(at);
+  /**
+   * Each press and each move of focus, in order, once `watch` is on: a
+   * press's target, and, once its dispatch is done (a message, which the
+   * walk's clock does not hold), whether a handler took its default and
+   * where focus stood after it.
+   */
+  let pressesHeard = false;
+  const hearPresses = () => {
+    if (pressesHeard) {
+      return;
+    }
+    pressesHeard = true;
+    const after = new MessageChannel();
+    const pending: (() => void)[] = [];
+    after.port1.onmessage = () => pending.shift()?.();
+    const at = () => `t${Math.round(performance.now())}`;
+    document.addEventListener(
+      "mousedown",
+      (event) => {
+        const when = at();
+        pending.push(() =>
+          heard.push(
+            `${when} mousedown on ${nameOf(event.target)} prevented ${event.defaultPrevented} focus then ${nameOf(document.activeElement)}`
+          )
+        );
+        after.port2.postMessage(null);
+      },
+      true
+    );
+    for (const type of ["focusin", "focusout"] as const) {
+      document.addEventListener(
+        type,
+        (event) => {
+          heard.push(
+            `${at()} ${type} ${nameOf(event.target)} to ${nameOf(event.relatedTarget)}${
+              event.target instanceof Element && !event.target.isConnected
+                ? " (gone)"
+                : ""
+            }`
+          );
+        },
+        true
+      );
+    }
+  };
+
   const reader: PageReader = {
+    at: elementByKey,
+    watch: (keys, root) => {
+      watching?.disconnect();
+      heard = [];
+      hearPresses();
+      const [first] = keys;
+      const target = first ? elementByKey(first, root) : null;
+      if (!target) {
+        heard.push("watch: nothing at the first key");
+        return;
+      }
+      watching = new MutationObserver(() => {
+        heard.push(
+          `t${Math.round(performance.now())} ${target.getAttribute("style")} | ${keys
+            .slice(1)
+            .map((key) => standing(key, elementByKey(key, root)))
+            .join(" | ")}`
+        );
+      });
+      watching.observe(target, {
+        attributes: true,
+        attributeFilter: ["style"],
+      });
+    },
+    watched: () => {
+      const out = heard;
+      heard = [];
+      return out;
+    },
     root: (selector) => {
       const el = rootOf(selector);
       if (!el) {
@@ -537,6 +697,7 @@ export function installReader(props: readonly string[]): void {
       elements = [];
       base = [];
       basePseudo = [];
+      propsIds = new Map<string, number>();
       const sigIndex = new Map<string, number>();
       const sigs: string[] = [];
       const sigOf = (vals: string[]) => {
@@ -679,6 +840,41 @@ export function installReader(props: readonly string[]): void {
     },
   };
   window.__ssReader = reader;
+}
+
+/**
+ * The element a difference line names, by its key (surfaces/read.ts steps:
+ * the root's tag, then `tag:n` among its kind, scripts and styles not
+ * counted): the source line that writes it (`__svelte_meta.loc`), its box
+ * and its opening tag. Null when the key reaches nothing on this page.
+ */
+export function elementAt({
+  key,
+  root,
+}: {
+  key: string;
+  root: string;
+}): { at: string; box: string; tag: string } | null {
+  const el = window.__ssReader?.at(key, root) ?? null;
+  if (!el) {
+    return null;
+  }
+  const loc = (
+    el as unknown as {
+      __svelte_meta?: {
+        loc?: { column?: number; file?: string; line?: number };
+      };
+    }
+  ).__svelte_meta?.loc;
+  const open = el.outerHTML.slice(0, el.outerHTML.indexOf(">") + 1);
+  const r = el.getBoundingClientRect();
+  return {
+    at: loc?.file
+      ? `${loc.file}:${loc.line}:${loc.column}`
+      : "(no source line)",
+    box: `${r.x},${r.y},${r.width},${r.height}${el.checkVisibility() ? "" : " unrendered"}${el instanceof HTMLElement && el.offsetWidth > el.clientWidth ? ` gutter ${el.offsetWidth - el.clientWidth}` : ""}`,
+    tag: open.slice(0, 600),
+  };
 }
 
 /**
