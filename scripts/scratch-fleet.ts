@@ -1270,6 +1270,13 @@ export type Role = keyof typeof ENTRY;
  * so what it starts stays findable by its group after its own parent is gone,
  * and a signal to the probe's terminal group reaches the probe alone.
  *
+ * Every service runs inside the fleet's heavy-run admission
+ * (CAWCO_HEAVY_ADMITTED, core heavy-run.ts `measureMemoryRoom`): the fleet
+ * was admitted for its memory as it started (`heavySlot` before any service),
+ * so a session start in it waits on no reading of the host's memory, which
+ * other runs on the machine move. Held, a start leaves its note in the
+ * session's transcript (agent session.ts `#roomForStart`).
+ *
  * `wrap` is a command the service runs under (`strace … -o file`): the
  * returned child is then the wrapper, and the service is its child.
  */
@@ -1299,6 +1306,7 @@ const serviceSpawn = (
       env: {
         ...options.env,
         [STARTER_ENV]: String(process.pid),
+        [HEAVY_ADMITTED_ENV]: `scratch fleet ${process.pid}`,
         ...(wrap.length > 0 ? { [WRAPPED_ENV]: "1" } : {}),
       },
       detached: true,
