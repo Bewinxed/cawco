@@ -142,15 +142,29 @@
            the screen's trailing edge: the tabs' top to the floor line, square
            on the screen's side, his 24px head in it (DESIGN.md, top bar's
            trailing edge). While the panel hangs it is the panel's surface
-           with its edge, run on down through the 4px neck. -->
+           with its edge, run on down through the 4px neck, its leading foot
+           flaring out by radius-lg into the panel's top edge (DESIGN.md,
+           Caw's panel). -->
       <div
         class="relative block-(--c-top-bar-h) border-(--border-hairline) border-be bg-(--surface-recess)"
       >
         <span
           bind:this={glass}
-          class="absolute inset-e-0 inset-bs-[calc(var(--c-top-bar-h)-var(--c-tab-row-h))] inset-be-px grid inline-(--c-bar-caw-glass-phone) justify-items-center rounded-ss-full border-(--border-control) border-bs border-s bg-(--surface-raised) pbs-(--space-1)"
+          class="absolute inset-e-0 inset-bs-[calc(var(--c-top-bar-h)-var(--c-tab-row-h))] inset-be-px grid inline-(--c-bar-caw-glass-phone) justify-items-center rounded-ss-full border-(--border-control) border-bs border-s bg-(--surface-raised) pbs-(--space-1) [--flare:var(--radius-lg)]"
           data-box
-          data-panel-glass><CawFace size={24} status={pose} /></span
+          data-panel-glass
+          ><CawFace
+            size={24}
+            status={pose}
+          /><!-- Its foot: the leading
+               flank curving out by --flare into the card's top edge, a
+               quarter turn in the glass's edge ink, the glass's surface
+               under it; the card's cut (HangCard's neck) shows its own edge
+               exactly where this stroke meets its top row. --><span
+            aria-hidden="true"
+            class="absolute -inset-s-(--flare) inset-be-0 block size-(--flare) bg-[radial-gradient(circle_at_0_0,transparent_calc(var(--flare)-1px),var(--border-control)_calc(var(--flare)-1px),var(--border-control)_var(--flare),var(--surface-raised)_var(--flare))]"
+            data-panel-glass-foot
+          ></span></span
         >
       </div>
       {#if glass}
@@ -166,7 +180,6 @@
             class="flex block-(--c-caw-panel-h) w-[calc(100cqi-var(--c-bar-phone-edge))] flex-col gap-0 overflow-hidden rounded-ee-none p-0 after:border-e-0"
             customAnchor={glass}
             data-panel
-            flared={false}
             forceMount
             onEscapeKeydown={(event) => event.preventDefault()}
             onInteractOutside={(event) => event.preventDefault()}

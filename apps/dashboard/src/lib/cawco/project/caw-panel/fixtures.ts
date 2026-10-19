@@ -84,9 +84,9 @@ export const LONG_ASK: Said = {
 
 /** A task Caw filed, as his reply's block shows it. */
 export interface Filed {
-  id: string;
   /** The task file's description (TaskView.description), its first line drawn. */
   description: string | null;
+  id: string;
   title: string;
   /** Waits on you: its why is marked with the needs-you glyph. */
   waits: boolean;

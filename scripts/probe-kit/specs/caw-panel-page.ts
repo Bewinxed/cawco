@@ -112,17 +112,35 @@ const sweepPage = (file: string): Sweep => {
       if (card) {
         const c = card.getBoundingClientRect();
         const g = glass.getBoundingClientRect();
+        // The glass's foot flares out by radius-lg into the card's top
+        // edge: its box ends on the glass's flank and sits on the card's
+        // top, and the card's neck is cut that far past the glass.
+        const foot = glass.querySelector<HTMLElement>(
+          "[data-panel-glass-foot]"
+        );
+        const f = foot?.getBoundingClientRect();
         const off = {
           top: (c.top - g.bottom) / scale,
           end: (s.right - c.right) / scale,
           start: (c.left - s.left) / scale,
           glassEnd: (s.right - g.right) / scale,
+          footEnd: f ? (g.left + scale - f.right) / scale : null,
+          footBottom: f ? (c.top - f.bottom) / scale : null,
+          footSize: f ? f.width / scale : null,
+          neckFlare: Number.parseFloat(
+            card.style.getPropertyValue("--neck-flare-start")
+          ),
         };
         if (
           Math.abs(off.top) > 1 ||
           Math.abs(off.end) > 1 ||
           Math.abs(off.start - 12) > 1 ||
-          Math.abs(off.glassEnd) > 1
+          Math.abs(off.glassEnd) > 1 ||
+          off.footEnd === null ||
+          Math.abs(off.footEnd) > 1 ||
+          Math.abs(off.footBottom ?? 9) > 1 ||
+          Math.abs((off.footSize ?? 0) - 12) > 1 ||
+          Math.abs(off.neckFlare - 12) > 1
         ) {
           out.hangs.push(`${where}: ${JSON.stringify(off)}`);
         }
@@ -367,21 +385,34 @@ const spec: Spec = {
         `total ${total}`
       );
       kit.check(
-        `1b: every phone frame (${hung}) hangs the real card from Caw's glass: its top on the floor line, its trailing side the screen's edge, 12px in at its leading side`,
+        `1b: every phone frame (${hung}) hangs the real card from Caw's glass: its top on the floor line, its trailing side the screen's edge, 12px in at its leading side, the glass's foot flaring 12px into its top edge`,
         hung > 0 && hangs.length === 0,
         hangs.slice(0, 8).join(" | ") || "all hang"
       );
       // 4. Each resize option, operated: a drag on the grip grows the panel
       // toward the page and down, a long drag stops at 720 wide, a double
       // press brings back 380 × 640; Wide panel in More makes it 560.
+      // Its size, and the room under its top (the window less the panel's
+      // top and the field's --space-3 inset: Resize's own bound).
       const sizeOf = () =>
         page.evaluate(() => {
           const panel = document.querySelector<HTMLElement>(
             '.cawco-frame[data-cawco-interaction="rest"] [data-panel]'
           );
-          return panel
-            ? { w: panel.offsetWidth, h: panel.offsetHeight }
-            : { w: 0, h: 0 };
+          if (!panel) {
+            return { w: 0, h: 0, room: 0 };
+          }
+          const inset = Number.parseFloat(
+            getComputedStyle(panel.parentElement as HTMLElement)
+              .paddingInlineEnd
+          );
+          return {
+            w: panel.offsetWidth,
+            h: panel.offsetHeight,
+            room: Math.round(
+              window.innerHeight - panel.getBoundingClientRect().top - inset
+            ),
+          };
         });
       const openResize = async (file: string) => {
         await page.goto(
@@ -400,6 +431,7 @@ const spec: Spec = {
             `.cawco-frame[data-cawco-interaction="rest"] [data-panel-grip="${grip}"]`
           )
           .first();
+        await handle.scrollIntoViewIfNeeded();
         const box = await handle.boundingBox();
         if (!box) {
           return false;
@@ -428,23 +460,30 @@ const spec: Spec = {
         ["ResizeCorner.stories.ts", "corner"],
       ] as const) {
         await openResize(file);
+        // The long drag first, from rest, so the grip stands where the
+        // frame drew it; then back, then a drag across and down.
         const rest = await sizeOf();
-        const found = await drag(grip, -120, 90);
-        const grown = await sizeOf();
-        await drag(grip, -2000, 0);
+        const found = await drag(grip, -600, 0);
         const widest = await sizeOf();
+        const reset = await resets(grip);
+        await drag(grip, -120, 90);
+        const grown = await sizeOf();
         const back = await resets(grip);
         kit.check(
-          `4: ${file}: a drag on the ${grip} grows the panel across and down, a long drag stops at 720 wide, a double press brings back 380 × 640`,
+          `4: ${file}: a long drag on the ${grip} stops at 720 wide, a double press brings back 380 × 640, a drag grows the panel across 1:1 and down as far as the room under it`,
           found &&
             rest.w === 380 &&
             rest.h === 640 &&
-            grown.w > rest.w + 40 &&
-            grown.h > rest.h + 30 &&
+            grown.w === rest.w + 120 &&
+            grown.h > rest.h &&
+            grown.h <= Math.max(rest.h, rest.room) &&
             widest.w === 720 &&
+            widest.h === rest.h &&
+            reset.w === 380 &&
+            reset.h === 640 &&
             back.w === 380 &&
             back.h === 640,
-          JSON.stringify({ rest, grown, widest, back })
+          JSON.stringify({ rest, widest, reset, grown, back })
         );
       }
       await openResize("ResizeEdges.stories.ts");
@@ -455,9 +494,10 @@ const spec: Spec = {
       const down = await sizeOf();
       kit.check(
         "4: ResizeEdges.stories.ts: the leading edge changes only the width, the foot only the height",
-        across.w > edgeRest.w + 30 &&
+        across.w === edgeRest.w + 100 &&
           across.h === edgeRest.h &&
-          down.h > across.h + 30 &&
+          down.h > across.h &&
+          down.h <= Math.max(across.h, across.room) &&
           down.w === across.w,
         JSON.stringify({ edgeRest, across, down })
       );
