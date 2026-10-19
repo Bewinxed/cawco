@@ -137,14 +137,20 @@ const pngSize = (png: Buffer) => ({
 
 /**
  * The picture of frame `key`'s body, posed (`poseFrame`): its own rect,
- * animations held, the caret hidden. Refused when the body stands scaled or
- * not whole in the canvas, or when the png is not its CSS size times the
- * device's scale.
+ * animations held, the caret hidden, with the clip it was taken by in page
+ * CSS px (its corner on a whole device pixel at or before the body's, so a
+ * point of the page stands in the png at `(x − clip.x) × scale`). Refused
+ * when the body stands scaled or not whole in the canvas, or when the png is
+ * not its CSS size times the device's scale.
  */
 export async function framePicture(
   page: Page,
   key: string
-): Promise<{ png: Buffer; read: FramePictureRead }> {
+): Promise<{
+  clip: { x: number; y: number; w: number; h: number };
+  png: Buffer;
+  read: FramePictureRead;
+}> {
   const read = await page.evaluate(
     (one) =>
       (globalThis as unknown as Pictures).__cawcoCanvas?.picture(one) ?? null,
@@ -195,5 +201,5 @@ export async function framePicture(
       `Frame ${key}'s picture came out ${size.w}×${size.h} px for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)} at ×${scale} (its clip, ${width}×${height} CSS px from (${left}, ${top}), is ${want.w}×${want.h}).`
     );
   }
-  return { png, read };
+  return { clip: { x: left, y: top, w: width, h: height }, png, read };
 }
