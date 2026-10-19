@@ -5106,9 +5106,18 @@
                       "sheet"
                     ]
                   },
-                  "about": {
+                  "does": {
+                    "type": "string",
+                    "enum": [
+                      "pick",
+                      "judge",
+                      "try",
+                      "draw"
+                    ]
+                  },
+                  "ask": {
                     "minLength": 1,
-                    "maxLength": 240,
+                    "maxLength": 160,
                     "type": "string"
                   },
                   "edges": {
@@ -5882,292 +5891,6 @@
           },
           "422": {
             "description": "deleteApiInstancesByIdArtifactsByArtifact 422",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/instances/{id}/artifacts/{artifact}/component": {
-      "patch": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "name": "artifact",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "args": {
-                    "type": "object",
-                    "properties": {
-                      "story": {
-                        "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                        "type": "string"
-                      },
-                      "values": {
-                        "type": "object",
-                        "patternProperties": {
-                          "^.*$": {}
-                        },
-                        "maxProperties": 100
-                      },
-                      "unset": {
-                        "maxItems": 100,
-                        "type": "array",
-                        "items": {
-                          "minLength": 1,
-                          "maxLength": 100,
-                          "type": "string"
-                        }
-                      }
-                    },
-                    "required": [
-                      "story",
-                      "values"
-                    ]
-                  },
-                  "story": {
-                    "anyOf": [
-                      {
-                        "type": "object",
-                        "properties": {
-                          "add": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": "string"
-                          },
-                          "args": {
-                            "type": "object",
-                            "patternProperties": {
-                              "^.*$": {}
-                            },
-                            "maxProperties": 100
-                          }
-                        },
-                        "required": [
-                          "add"
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "duplicate": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": "string"
-                          },
-                          "as": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "duplicate",
-                          "as"
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "remove": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "remove"
-                        ]
-                      },
-                      {
-                        "type": "object",
-                        "properties": {
-                          "move": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": "string"
-                          },
-                          "before": {
-                            "pattern": "^[A-Z][A-Za-z0-9_]{0,99}$",
-                            "type": [
-                              "string",
-                              "null"
-                            ]
-                          }
-                        },
-                        "required": [
-                          "move",
-                          "before"
-                        ]
-                      }
-                    ]
-                  },
-                  "about": {
-                    "minLength": 1,
-                    "maxLength": 240,
-                    "type": "string"
-                  },
-                  "edges": {
-                    "maxItems": 100,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "from": {
-                          "minLength": 1,
-                          "maxLength": 1100,
-                          "type": "string"
-                        },
-                        "to": {
-                          "minLength": 1,
-                          "maxLength": 1100,
-                          "type": "string"
-                        },
-                        "label": {
-                          "maxLength": 80,
-                          "type": "string"
-                        }
-                      },
-                      "required": [
-                        "from",
-                        "to"
-                      ]
-                    }
-                  },
-                  "group": {
-                    "type": "object",
-                    "patternProperties": {
-                      "^.*$": {
-                        "minLength": 1,
-                        "maxLength": 1100,
-                        "type": "string"
-                      }
-                    },
-                    "maxProperties": 200
-                  },
-                  "dials": {
-                    "maxItems": 24,
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "name": {
-                          "minLength": 1,
-                          "maxLength": 60,
-                          "pattern": "^[A-Za-z][\\w-]*$",
-                          "type": "string"
-                        },
-                        "label": {
-                          "maxLength": 80,
-                          "type": "string"
-                        },
-                        "kind": {
-                          "type": "string",
-                          "enum": [
-                            "number",
-                            "color",
-                            "select",
-                            "toggle"
-                          ]
-                        },
-                        "min": {
-                          "type": "number"
-                        },
-                        "max": {
-                          "type": "number"
-                        },
-                        "step": {
-                          "exclusiveMinimum": 0,
-                          "type": "number"
-                        },
-                        "unit": {
-                          "maxLength": 10,
-                          "type": "string"
-                        },
-                        "options": {
-                          "maxItems": 24,
-                          "type": "array",
-                          "items": {
-                            "maxLength": 100,
-                            "type": "string"
-                          }
-                        },
-                        "target": {
-                          "anyOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "cssVar": {
-                                  "pattern": "^--[\\w-]+$",
-                                  "maxLength": 100,
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "cssVar"
-                              ]
-                            },
-                            {
-                              "type": "object",
-                              "properties": {
-                                "arg": {
-                                  "minLength": 1,
-                                  "maxLength": 100,
-                                  "type": "string"
-                                }
-                              },
-                              "required": [
-                                "arg"
-                              ]
-                            }
-                          ]
-                        }
-                      },
-                      "required": [
-                        "name",
-                        "kind",
-                        "target"
-                      ]
-                    }
-                  }
-                }
-              }
-            }
-          }
-        },
-        "operationId": "patchApiInstancesByIdArtifactsByArtifactComponent",
-        "responses": {
-          "200": {
-            "description": "patchApiInstancesByIdArtifactsByArtifactComponent 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/patchApiInstancesByIdArtifactsByArtifactComponent200"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "patchApiInstancesByIdArtifactsByArtifactComponent 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -26562,32 +26285,6 @@
           "$ref": "#/components/schemas/ArtifactStatus"
         }
       },
-      "patchApiInstancesByIdArtifactsByArtifactComponent200": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/ComponentWritten"
-          },
-          {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "revision": {
-                "type": "number"
-              },
-              "spec": {
-                "$ref": "#/components/schemas/CanvasSpec"
-              }
-            },
-            "required": [
-              "id",
-              "revision",
-              "spec"
-            ]
-          }
-        ]
-      },
       "postApiInstancesByIdArtifactsByArtifactVerify200": {
         "type": "object",
         "properties": {
@@ -35692,8 +35389,16 @@
         "description": "One artifact as the panel's list shows it, newest first.",
         "type": "object",
         "properties": {
+          "ask": {
+            "description": "The one line the panel's head shows under its name: what the person does here, in their words. Empty on one made before asks were kept.",
+            "type": "string"
+          },
           "createdAt": {
             "type": "string"
+          },
+          "does": {
+            "$ref": "#/components/schemas/ArtifactDoes",
+            "description": "What the person does on it."
           },
           "id": {
             "type": "string"
@@ -35708,6 +35413,10 @@
             "description": "Its last promote into the project's folder (`artifact_promote`, the doc's `meta.promoted`); null until one.",
             "$ref": "#/components/schemas/ArtifactPromotion"
           },
+          "sent": {
+            "description": "The person pressed Send on it since the session last revised it or changed its ask.",
+            "type": "boolean"
+          },
           "shownAt": {
             "description": "When it was last brought to the front of the panel.",
             "type": [
@@ -35721,15 +35430,32 @@
           },
           "updatedAt": {
             "type": "string"
+          },
+          "waiting": {
+            "description": "The person has something to do on it now (`artifact_list`'s `waitingOn` person): its row wears a dot.",
+            "type": "boolean"
           }
         },
         "required": [
+          "ask",
           "createdAt",
+          "does",
           "id",
           "kind",
           "name",
+          "sent",
           "shownAt",
-          "updatedAt"
+          "updatedAt",
+          "waiting"
+        ]
+      },
+      "ArtifactDoes": {
+        "type": "string",
+        "enum": [
+          "draw",
+          "judge",
+          "pick",
+          "try"
         ]
       },
       "ArtifactKind": {
@@ -36588,10 +36314,14 @@
         ]
       },
       "FolderWeight": {
-        "description": "What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's.",
+        "description": "What a folder preview loads at most: its files, their bytes, and of those its JavaScript's and its WebAssembly's; and its start page's desk captures (core `deskCaptures`).",
         "type": "object",
         "properties": {
           "bytes": {
+            "type": "number"
+          },
+          "captures": {
+            "description": "`<img>` on the start page whose file is wider than `DESK_CAPTURE_WIDTH`.",
             "type": "number"
           },
           "files": {
@@ -36606,6 +36336,7 @@
         },
         "required": [
           "bytes",
+          "captures",
           "files",
           "js",
           "wasm"
@@ -36634,6 +36365,14 @@
         "description": "One artifact as `artifact_list` answers it.",
         "type": "object",
         "properties": {
+          "ask": {
+            "description": "Its line in the panel's head.",
+            "type": "string"
+          },
+          "does": {
+            "$ref": "#/components/schemas/ArtifactDoes",
+            "description": "What the person does on it."
+          },
           "id": {
             "type": "string"
           },
@@ -36679,6 +36418,10 @@
             "description": "Pins the person left open.",
             "type": "number"
           },
+          "sent": {
+            "description": "The person pressed Send since your last change (a revision, or a new ask).",
+            "type": "boolean"
+          },
           "session": {
             "description": "The session that made it, when it is not the caller's own (a lead reading its project's).",
             "type": "string"
@@ -36703,12 +36446,15 @@
           }
         },
         "required": [
+          "ask",
+          "does",
           "id",
           "kind",
           "name",
           "opened",
           "picksAwaiting",
           "pins",
+          "sent",
           "shown",
           "unread",
           "updatedAt",
@@ -37046,233 +36792,6 @@
             ]
           }
         }
-      },
-      "ComponentWritten": {
-        "description": "What `artifact_update` answers for a component canvas's write: nothing past the story it wrote (component canvas §4, G2).",
-        "type": "object",
-        "properties": {
-          "file": {
-            "type": "string"
-          },
-          "formatted": {
-            "description": "The project's formatter that shaped the lines, like \"prettier 3.9.10\"; null when the project has none.",
-            "type": [
-              "null",
-              "string"
-            ]
-          },
-          "lines": {
-            "type": "object",
-            "properties": {
-              "from": {
-                "type": "number"
-              },
-              "to": {
-                "type": "number"
-              }
-            },
-            "required": [
-              "from",
-              "to"
-            ]
-          },
-          "render": {
-            "anyOf": [
-              {
-                "type": "array",
-                "items": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "$ref": "#/components/schemas/PageError"
-                    },
-                    "state": {
-                      "$ref": "#/components/schemas/FrameState"
-                    },
-                    "box": {
-                      "type": "object",
-                      "properties": {
-                        "w": {
-                          "type": "number"
-                        },
-                        "h": {
-                          "type": "number"
-                        }
-                      },
-                      "required": [
-                        "h",
-                        "w"
-                      ]
-                    },
-                    "scheme": {
-                      "const": "dark",
-                      "type": "string"
-                    },
-                    "story": {
-                      "type": "string"
-                    },
-                    "label": {
-                      "type": [
-                        "null",
-                        "string"
-                      ]
-                    },
-                    "form": {
-                      "type": "string"
-                    },
-                    "interaction": {
-                      "$ref": "#/components/schemas/Interaction"
-                    }
-                  },
-                  "required": [
-                    "box",
-                    "form",
-                    "interaction",
-                    "label",
-                    "state",
-                    "story"
-                  ]
-                }
-              },
-              {
-                "const": "unseen",
-                "type": "string"
-              }
-            ]
-          },
-          "story": {
-            "type": "object",
-            "properties": {
-              "args": {
-                "type": "object"
-              },
-              "name": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "args",
-              "name"
-            ]
-          }
-        },
-        "required": [
-          "file",
-          "formatted",
-          "lines",
-          "render"
-        ]
-      },
-      "CanvasSpec": {
-        "description": "What a canvas page is told besides its files: what it is for, the agent's edges and groups, its dials.",
-        "type": "object",
-        "properties": {
-          "about": {
-            "type": "string"
-          },
-          "dials": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CanvasDial"
-            }
-          },
-          "edges": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/CanvasEdge"
-            }
-          },
-          "group": {
-            "type": "object",
-            "description": "Story → the parent story or section heading it groups under."
-          },
-          "name": {
-            "type": "string"
-          }
-        }
-      },
-      "CanvasDial": {
-        "description": "A property dial an agent declares on a canvas: a CSS variable on every frame, or an arg re-rendered through `update`.",
-        "type": "object",
-        "properties": {
-          "kind": {
-            "$ref": "#/components/schemas/CanvasDialKind"
-          },
-          "label": {
-            "type": "string"
-          },
-          "max": {
-            "type": "number"
-          },
-          "min": {
-            "type": "number"
-          },
-          "name": {
-            "type": "string"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "step": {
-            "type": "number"
-          },
-          "target": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "cssVar": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "cssVar"
-                ]
-              },
-              {
-                "type": "object",
-                "properties": {
-                  "arg": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "arg"
-                ]
-              }
-            ]
-          },
-          "unit": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "kind",
-          "name",
-          "target"
-        ]
-      },
-      "CanvasEdge": {
-        "description": "A layout edge an agent declares between two frames (by story, `file:Story` when the canvas has several sections).",
-        "type": "object",
-        "properties": {
-          "from": {
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "to": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "from",
-          "to"
-        ]
       },
       "Revised": {
         "description": "What a decision page's revision (`statements`) answers: what it changed,\nnot the page. The person's picks are read with `artifact_read`.",
@@ -38886,6 +38405,10 @@
         "description": "One option of a card, as the page labelled it.",
         "type": "object",
         "properties": {
+          "cost": {
+            "description": "What picking it costs the person (the Option's `cost`); empty when it has none.",
+            "type": "string"
+          },
           "id": {
             "type": "string"
           },
@@ -38906,6 +38429,7 @@
           }
         },
         "required": [
+          "cost",
           "id",
           "keycap",
           "label",
@@ -52400,9 +51924,12 @@
         "type": "object",
         "properties": {
           "artifact": {
-            "description": "The artifact the session's panel shows (Projects spec §5.10).",
+            "description": "The artifact the session's panel shows (Projects spec §5.10), with its\nask: the head's line under its name from the first frame, while its\npage is still on its way. None on one made before asks were kept.",
             "type": "object",
             "properties": {
+              "ask": {
+                "type": "string"
+              },
               "id": {
                 "type": "string"
               },
@@ -57523,15 +57050,6 @@
         "enum": [
           "docker",
           "podman"
-        ]
-      },
-      "CanvasDialKind": {
-        "type": "string",
-        "enum": [
-          "color",
-          "number",
-          "select",
-          "toggle"
         ]
       },
       "CatalogTypeSource": {

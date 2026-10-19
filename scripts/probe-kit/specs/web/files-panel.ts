@@ -158,6 +158,8 @@ const seed = (page: Page, id: string, names: string[]) =>
             body: JSON.stringify({
               kind: "page",
               name,
+              does: "judge",
+              ask: `Judge ${name}: pin anything that reads wrong`,
               html: `<!doctype html><html><body><h1>${name}</h1><p>${words}</p></body></html>`,
             }),
           }

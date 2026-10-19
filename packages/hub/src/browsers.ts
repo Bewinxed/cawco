@@ -148,6 +148,9 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       projectId: instance.projectId ?? null,
       kind: "browser",
       name: BROWSER_ARTIFACT_NAME,
+      // The person takes the browser over; each browser_ask carries its own reason, so the row keeps no line of its own.
+      does: "try",
+      ask: "",
       machineId: instance.machineId,
       source: { page: key },
       revision: 1,

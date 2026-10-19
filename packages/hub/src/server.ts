@@ -668,6 +668,7 @@ import {
   previewFrame,
   previewSourceKey,
   previewTargets,
+  shownArtifact,
   targetsOf,
 } from "./preview";
 import { mintTicket } from "./preview-access";
@@ -11359,7 +11360,7 @@ export const createServer = (
         artifact.instanceId,
         artifact.machineId ?? "",
         artifact.source,
-        { id: artifact.id, kind: artifact.kind, name: artifact.name }
+        shownArtifact(artifact)
       );
       if (!opened.ok) {
         return { ok: false, error: opened.error };
@@ -11399,7 +11400,11 @@ export const createServer = (
     relist: (instanceId) => {
       const target = previewTargets.get(instanceId);
       if (target) {
-        publishPreview(instanceId, "open", target);
+        // Its ask as the row holds it now: an artifact_update may have changed it.
+        const row = db.artifacts.get(target.artifact.id);
+        const now = row ? { ...target, artifact: shownArtifact(row) } : target;
+        previewTargets.set(instanceId, now);
+        publishPreview(instanceId, "open", now);
       }
     },
     // A preview gone holds the workspace it showed no longer.
@@ -11605,12 +11610,12 @@ export const createServer = (
       }
       return answer.result as StageState;
     },
-    // A folder preview's weight, from its folder on the machine that serves it.
-    folderWeight: async (machineId, dir) => {
+    // A folder preview's weight and its start page's desk captures, from its folder on the machine that serves it.
+    folderWeight: async (machineId, dir, path) => {
       const asked = await callAgent(
         machineId,
         PREVIEW_WEIGHT,
-        [dir],
+        [dir, path],
         BUSY_TIMEOUT_MS
       );
       switch (asked.kind) {
@@ -11653,11 +11658,7 @@ export const createServer = (
   const restoreShownPreviews = (): void => {
     for (const { instanceId, artifact } of db.artifacts.shown()) {
       previewTargets.set(instanceId, {
-        artifact: {
-          id: artifact.id,
-          kind: artifact.kind,
-          name: artifact.name,
-        },
+        artifact: shownArtifact(artifact),
         machineId: artifact.machineId ?? "",
         source: artifact.source,
         revision: crypto.randomUUID(),
@@ -11712,6 +11713,8 @@ export const createServer = (
       const made = await artifacts.create(instanceId, {
         kind: "canvas",
         name,
+        does: "draw",
+        ask: "Draw over the diagram",
         mermaid: body.mermaid,
       });
       return Response.json({ id: made.id, name: made.name }, { status: 201 });

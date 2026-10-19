@@ -149,7 +149,13 @@ const run = async (kit: Kit) => {
   const session = await fleet.spawn("claude", "Setup", fleet.repo);
   asks.set("1", {
     name: CREATE,
-    input: { kind: "page", name: "setup", html: PAGE },
+    input: {
+      kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "setup",
+      html: PAGE,
+    },
   });
   await fleet.send(session, "PROBE-CALL:1");
   const made = (await until(

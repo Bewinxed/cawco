@@ -1814,6 +1814,13 @@
       "when": 1792411528322,
       "tag": "0266_continued_into",
       "breakpoints": true
+    },
+    {
+      "idx": 267,
+      "version": "6",
+      "when": 1792411628322,
+      "tag": "0267_artifact_does_ask",
+      "breakpoints": true
     }
   ]
 }

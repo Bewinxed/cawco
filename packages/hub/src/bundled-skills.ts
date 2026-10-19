@@ -4,8 +4,9 @@
  * (workflows/skills.ts). Their files live in `packages/hub/skills/` and, in
  * the standalone binary, among its embedded assets (`build-binary.ts`).
  *
- * - {@link BUNDLED_SKILLS} reach every session on every machine:
- *   `decision-page` (§5.8), the planning skills and the design skills,
+ * - {@link BUNDLED_SKILLS} reach every session on every machine: `show`
+ *   (what the person does with anything opened in their panel, before any
+ *   kind's skill), `decision-page` (§5.8), the planning skills and the design skills,
  *   `design-explore` and `component-canvas` among them: every agent's
  *   component canvas is built by them.
  * - {@link TEMPLATE_SKILLS} are each project template's starter skills: bound
@@ -25,6 +26,7 @@ import { runtimeTree, standalone } from "@cawco/core/runtime";
 import type { StagesTemplate } from "./stages";
 
 export const BUNDLED_SKILLS = [
+  "show",
   "decision-page",
   "grill",
   "to-tasks",

@@ -970,7 +970,7 @@ export class SessionSupervisor {
       startPreview(options as Parameters<typeof startPreview>[0]),
     [PREVIEW_STOP]: (options) =>
       stopPreview(options as Parameters<typeof stopPreview>[0]),
-    [PREVIEW_WEIGHT]: (dir) => previewWeight(dir),
+    [PREVIEW_WEIGHT]: (dir, path) => previewWeight(dir, path),
     // A canvas no person's screen shows, drawn by this machine's Chromium (canvas-screen.ts).
     [CANVAS_SCREEN_OPEN]: (options) =>
       fenced()

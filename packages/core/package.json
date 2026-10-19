@@ -37,6 +37,7 @@
     "./handover": "./src/handover.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
+    "./captures": "./src/captures.ts",
     "./browser": "./src/browser.ts",
     "./browser-gate": "./src/browser-gate.ts",
     "./stream-relay": "./src/stream-relay.ts",

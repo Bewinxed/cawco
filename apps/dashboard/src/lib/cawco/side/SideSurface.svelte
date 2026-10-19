@@ -25,7 +25,7 @@
    * split's full width. The head keeps its place, so the control just
    * pressed is still under the pointer to press back.
    */
-  import type { Snippet } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import PendingContent, {
     whileIdle,
   } from "#lib/components/ui/button/pending-content.svelte";
@@ -53,6 +53,9 @@
     title,
     titleControl,
     subtitle,
+    subtitleId,
+    subtitleCode = false,
+    subtitleStands = $bindable(true),
     actions,
     items,
     onclose,
@@ -72,7 +75,19 @@
     title?: string;
     /** What is on show as a control (the artifact panel's menu), in the title's place; its words that keep their width marked `data-slot="name-lead"`, what trails them cut inside the name's box. */
     titleControl?: Snippet;
+    /** One line under it in meta ink (an artifact's ask), cut with an ellipsis, its whole text its title. */
     subtitle?: string;
+    /** The line's id, for the control it describes. */
+    subtitleId?: string;
+    /** The line is an identifier (a task's id), set as code. */
+    subtitleCode?: boolean;
+    /**
+     * Whether the line stands in the head: while the head gives the
+     * identity what the line needs by the name's own rule (`NAME_KEEPS`:
+     * its own width, up to that), else it is dropped from view for the pane
+     * to say elsewhere (the artifact menu's first row).
+     */
+    subtitleStands?: boolean;
     /** The pane's own controls, before Close. */
     actions?: Snippet;
     /** The pane's own controls, before Expand and Close, standing by the head's priority rule (head.ts). */
@@ -200,12 +215,19 @@
     );
   }
 
+  /** The line's own width, up to {@link NAME_KEEPS}: what it needs to stand, by the name's rule. */
+  function lineNeeds(line: HTMLElement): number {
+    return Math.ceil(Math.min(line.scrollWidth, NAME_KEEPS));
+  }
+
   /** Which controls stand, from the head's room and what each was drawn at. */
   function fit(): void {
     if (!(head && identity)) {
       return;
     }
     nameKeeps = nameWidth(identity);
+    const line = identity.querySelector<HTMLElement>('[data-slot="subtitle"]');
+    subtitleStands = !line || identity.clientWidth >= lineNeeds(line);
     if (all.length === 0) {
       return;
     }
@@ -255,12 +277,21 @@
     }
     const seen = new ResizeObserver(() => fit());
     seen.observe(el);
+    if (identity) {
+      seen.observe(identity);
+    }
     for (const child of el.querySelectorAll(
       ":scope > [data-head-item], :scope > .identity > *"
     )) {
       seen.observe(child);
     }
     return () => seen.disconnect();
+  });
+  // A new line is measured as it comes, once it is drawn.
+  $effect(() => {
+    if (subtitle !== undefined) {
+      untrack(fit);
+    }
   });
 </script>
 
@@ -329,8 +360,13 @@
       {/if}
       {#if subtitle}
         <!-- One line under the name, cut with an ellipsis; whole in its tooltip. -->
-        <span data-slot="subtitle" class="subtitle" title={subtitle}
-          >{subtitle}</span
+        <span
+          data-slot="subtitle"
+          class="subtitle"
+          class:code={subtitleCode}
+          data-dropped={subtitleStands ? undefined : ""}
+          id={subtitleId}
+          title={subtitle}>{subtitle}</span
         >
       {/if}
     </div>
@@ -501,6 +537,23 @@
   .subtitle {
     color: var(--ink-muted);
     font: var(--type-meta);
+  }
+  .subtitle.code {
+    font: var(--text-meta) var(--font-mono);
+  }
+  /* A title control with its line under it: the control sizes to its own
+     text, so the two stand inside the 44px head. */
+  .identity.controlled:has(> .subtitle:not([data-dropped]))
+    > :global(:is(button, a)) {
+    block-size: auto;
+    padding-block: var(--space-1);
+  }
+  /* Dropped, the line keeps its words for the control it describes and for
+     its own measure, out of the flow and out of sight. */
+  .subtitle[data-dropped] {
+    position: absolute;
+    visibility: hidden;
+    pointer-events: none;
   }
   /* Every control in the header, the pane's and Close: one recipe, one
      press. */

@@ -21,7 +21,8 @@
  *    is tested against every action's box; no action and not Close is
  *    drawn past the card's edge; and the name's first word is
  *    drawn whole, or to NAME_KEEPS when it is longer (its words keep their
- *    width; only trailing text cuts).
+ *    width; only trailing text cuts). The to-dos card's task id is set as
+ *    code (PlanPane's `subtitleCode`): the mono family at the meta size.
  *
  * 3. An ask's place keycap ("2 of 3") keeps its width (Prompt). On the
  *    /motion/prompt-head bench, the real approval card at 390, second of
@@ -346,6 +347,35 @@ async function sideHead(kit: Kit, bench: string): Promise<void> {
       `\n${heads.map((one) => `    ${JSON.stringify(one)}`).join("\n")}`
     );
   }
+  // A task attempt's id under its to-dos is code: its face and size are a
+  // probe's set as the line's own declaration was before the subtitle took
+  // the meta role (`font: var(--text-meta) var(--font-mono)`).
+  const face = await page.evaluate(() => {
+    const line = document.querySelector<HTMLElement>(
+      '[data-card="todos"] [data-slot="subtitle"]'
+    );
+    const probe = document.createElement("span");
+    probe.style.font = "var(--text-meta) var(--font-mono)";
+    document.body.append(probe);
+    const want = getComputedStyle(probe);
+    const own = line ? getComputedStyle(line) : null;
+    const read = {
+      text: line?.textContent ?? null,
+      family: own?.fontFamily ?? null,
+      size: own?.fontSize ?? null,
+      wantFamily: want.fontFamily,
+      wantSize: want.fontSize,
+    };
+    probe.remove();
+    return read;
+  });
+  kit.check(
+    "the to-dos card's task id is set as code: the mono family at the meta size",
+    face.text === "tsk-2026-10-19-plan" &&
+      face.family === face.wantFamily &&
+      face.size === face.wantSize,
+    JSON.stringify(face)
+  );
 }
 
 interface PromptHead {

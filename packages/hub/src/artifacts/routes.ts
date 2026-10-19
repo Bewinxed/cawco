@@ -6,7 +6,13 @@
  * any other id is 404. The person's Send is on the preview
  * listener, beside the doc's socket (sync.ts `artifactSend`).
  */
-import { ARTIFACT_NAME, PREVIEW_START_PATH, SHOWN_FAILURES } from "@cawco/core";
+import {
+  ARTIFACT_DOES,
+  ARTIFACT_NAME,
+  ASK_LIMIT,
+  PREVIEW_START_PATH,
+  SHOWN_FAILURES,
+} from "@cawco/core";
 import { CANVAS_LIMITS, SKELETON_TYPES } from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
 import {
@@ -21,7 +27,7 @@ import type { Operation } from "rfc6902";
 import { PAGE_LIMIT } from "../decision-page";
 import { PROGRAM_MAX } from "../decision-program";
 import type { StateAsk } from "./component";
-import { COMPONENT_EXAMPLE } from "./component";
+import { COMPONENT_EXAMPLE, CREATE_SHAPE } from "./component";
 import {
   ArtifactRefusal,
   type Artifacts,
@@ -137,11 +143,12 @@ const statesFile = t.String({
 /** A story on a canvas: `Story`, or `file:Story` across sections. */
 const storyRef = t.String({ minLength: 1, maxLength: 1100 });
 
-/** A component canvas's about, edges, groups and dials (core `CanvasSpec`), as create and update take them. */
+/** What the person does on an artifact, and its one line in the panel's head. */
+const doesField = t.Union(ARTIFACT_DOES.map((one) => t.Literal(one)));
+const askField = t.String({ minLength: 1, maxLength: ASK_LIMIT });
+
+/** A component canvas's edges, groups and dials (core `CanvasSpec`), as create and update take them. */
 const canvasFields = {
-  about: t.Optional(
-    t.String({ minLength: 1, maxLength: CANVAS_SPEC_LIMITS.about })
-  ),
   edges: t.Optional(
     t.Array(
       t.Object({
@@ -189,9 +196,9 @@ const canvasFields = {
 
 /** What a malformed body was refused for, in the tool's words with its valid shape: never the validator's own text (component canvas G3). */
 const SHAPES: Record<string, string> = {
-  create: `artifact_create takes kind, name and that kind's fields. A component canvas: { kind: "component", name, file, about, edges?, group?, dials? }; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle", min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`,
+  create: CREATE_SHAPE,
   update:
-    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or about, edges, group, dials (the canvas itself). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
+    'artifact_update takes id and one change: html or patch (a page); elements, delete or mermaid (a canvas); args { story, values, unset? } or story { add, args? } | { duplicate, as } | { remove } | { move, before } (a component canvas\'s states file); or edges, group, dials (the canvas itself); or ask (any kind\'s head). Example: { id, args: { story: "Waiting", values: { status: "waiting" } } }.',
   read: 'artifact_read takes id?, since?, png?, detail ("summary" | "story"), story, state { story, interaction?: "rest" | "hover" | "focus" | "pressed", scheme?: "light" | "dark", width? }, render. Example: { id, state: { story: "Waiting", interaction: "hover" } }.',
   map: `design_map takes dir?, query?, component?, limit? (1 to ${DESIGN_MAP_LIMITS.max}), cursor?, response_format? ("concise" | "detailed"). Example: { dir: "src/lib", query: "card" }.`,
 };
@@ -247,7 +254,7 @@ const changeOf = (body: {
   if (named.length !== 1) {
     throw new ArtifactRefusal(
       400,
-      "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements and a component's args, story, about, edges, group or dials go through their own routes."
+      "Pass exactly one of html or patch (a page), or elements, delete or mermaid (a canvas); a decision page's statements, an ask, and a component's args, story, edges, group or dials go through their own routes."
     );
   }
   if (body.html !== undefined) {
@@ -354,6 +361,9 @@ export const artifactRoutes = (artifacts: Artifacts) =>
             // Shipped apps' generated client still lists it (the wire guard): refused with the new shape.
             t.Literal("sheet"),
           ]),
+          // Every create names both but the person's own composer canvas (draft), which shipped apps make without them: refused with the tool's shape when missing (service.ts `askedOf`).
+          does: t.Optional(doesField),
+          ask: t.Optional(askField),
           ...canvasFields,
           elements: t.Optional(skeletons),
           mermaid: t.Optional(mermaid),
@@ -400,7 +410,7 @@ export const artifactRoutes = (artifacts: Artifacts) =>
           if (kind === "sheet") {
             throw new ArtifactRefusal(
               400,
-              `A component's states are a component canvas now: kind "component", with about. Example: ${COMPONENT_EXAMPLE}.`
+              `A component's states are a component canvas now: kind "component", with does and ask. Example: ${COMPONENT_EXAMPLE}.`
             );
           }
           if (body.draft && kind !== "canvas") {
@@ -478,25 +488,26 @@ export const artifactRoutes = (artifacts: Artifacts) =>
         }
       }
     )
-    // A component canvas's change by its session (artifact_update): a states file's story args or op, or the canvas's own about, edges, groups or dials.
+    // A component canvas's change by its session (artifact_update): a states file's story args or op, or the canvas's own edges, groups or dials.
     .patch(
       "/api/instances/:id/artifacts/:artifact/component",
-      { body: t.Object({ ...sheetChange, ...canvasFields }) },
+      // The agent's tool alone calls it: no dashboard or app reads its answer.
+      {
+        body: t.Object({ ...sheetChange, ...canvasFields }),
+        detail: { hide: true },
+      },
       async ({ params, body }) => {
         try {
-          const { about, edges, group, dials, args, story } = body;
-          const canvas = [about, edges, group, dials].some(
-            (one) => one !== undefined
-          );
+          const { edges, group, dials, args, story } = body;
+          const canvas = [edges, group, dials].some((one) => one !== undefined);
           if (canvas && (args !== undefined || story !== undefined)) {
             throw new ArtifactRefusal(
               400,
-              "about, edges, group and dials change the canvas itself: send them apart from a states file's args or story."
+              "edges, group and dials change the canvas itself: send them apart from a states file's args or story."
             );
           }
           return canvas
             ? await artifacts.canvasUpdate(params.id, params.artifact, {
-                about,
                 edges,
                 group,
                 dials,
@@ -506,6 +517,18 @@ export const artifactRoutes = (artifacts: Artifacts) =>
                 params.artifact,
                 sheetChangeOf({ args, story })
               );
+        } catch (error) {
+          return refused(error);
+        }
+      }
+    )
+    // Any kind's head line (artifact_update's ask): checked as a create's is, then every open view's head morphs to it.
+    .post(
+      "/api/instances/:id/artifacts/:artifact/ask",
+      { body: t.Object({ ask: askField }), detail: { hide: true } },
+      ({ params, body }) => {
+        try {
+          return artifacts.askUpdate(params.id, params.artifact, body.ask);
         } catch (error) {
           return refused(error);
         }

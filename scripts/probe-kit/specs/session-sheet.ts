@@ -16,7 +16,7 @@
  *
  * 1. `design_map` answers the repo's components, `src/Card.svelte`
  *    with its story file, never "this session runs in no workspace".
- * 2. `artifact_create(kind: "component", file: "src/Card.stories.js", about)`
+ * 2. `artifact_create(kind: "component", does: "judge", ask, file: "src/Card.stories.js")`
  *    answers an id and its stage `live`, which states it is a states file's on
  *    Vite (`runs: "sheet"`, `toolchain: "vite"`).
  * 3. A dashboard's raw `stageEnsure` control, naming a place id and a folder
@@ -38,7 +38,7 @@
  * '…/node_modules/$app/tsconfig.json'".
  *
  * 6. `design_map` answers `src/lib/Card.svelte` with its states file.
- * 7. `artifact_create(kind: "component", file: "src/lib/Card.stories.js", about)`
+ * 7. `artifact_create(kind: "component", does: "judge", ask, file: "src/lib/Card.stories.js")`
  *    answers an id and its stage `live`.
  * 8. The checkout holds nothing the stage wrote: its `git status
  *    --ignored` as before the legs, and no `node_modules/$app`.
@@ -105,16 +105,26 @@
  * 22. Once the panel has opened (its page resized a frame at a time), the
  *     first frame stands in the middle of the canvas, at the desk and at 390:
  *     each centring measured where the world stands, never mid-move.
- * 23. Name once, description once, no route (owner: "ur also repeating the
+ * 23. Name once, its ask once, no route (owner: "ur also repeating the
  *     title of the card twice, the url should have the description there
- *     instead"): at the desk and at 390 the line under the head's name is
- *     the canvas's `about`, one line inside the panel and whole in its
+ *     instead"; the artifact purpose spec: the ask is that line): at the desk
+ *     and at 390 the line under the head's name is the canvas's ask, one line inside the panel and whole in its
  *     tooltip; the name stands once across the panel and its canvas page,
  *     and no text in either holds `/@cawco/`.
  * 24. The hub's map of that canvas (`GET …/artifacts/:id/map`, what the
  *     panel's Map reads) answers Card in the middle with its states, its
  *     states file from the toolchain root, and its frames' thumbnail from
  *     the panel's draw; nothing renders it and it renders nothing.
+ *
+ * A canvas past its stage's time (artifact purpose spec §2.5, the owner's
+ * "am i supposed to do anything here? been ages"):
+ *
+ * 25. A canvas whose page never comes (its request held unanswered) stands
+ *     on the cover no longer than its stage is given (core `STAGE_READY_MS`):
+ *     then the well says "The canvas couldn't be drawn", why ("The stage never
+ *     answered within 60s."), and offers Try again and Remove. Remove is
+ *     asked in place ("Remove never-drawn?", Cancel and Remove canvas);
+ *     its confirm takes the canvas out of the session's artifacts.
  *
  * The stage's boundary is made of user namespaces: like a spec that
  * delegates, it runs outside every workspace boundary (README "A spec that
@@ -133,7 +143,11 @@ import {
 import { dirname, join, relative } from "node:path";
 import type { Page } from "playwright-core";
 import { projectClaudeDir } from "../../../packages/core/src/paths";
-import { type CanvasMap, STAGE_ENSURE } from "../../../packages/core/src/stage";
+import {
+  type CanvasMap,
+  STAGE_ENSURE,
+  STAGE_READY_MS,
+} from "../../../packages/core/src/stage";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, ROOT, type Spec } from "../kit";
 
@@ -401,15 +415,19 @@ const componentLegs = async (
     short(created.slice(created.indexOf('"render"')))
   );
 
-  // 2c. A canvas with no word on what it is for is refused, with the shape and an example.
+  // 2c. A canvas whose ask names a file, not the thing as the person calls it, is refused.
   const bare = await call("2c", "mcp__cawco__artifact_create", {
     kind: "component",
     name: "bare",
+    does: "judge",
+    ask: `Judge ${STORY}`,
     file: STORY,
   });
   kit.check(
-    "2c: artifact_create(kind: component) with no about is refused with its shape and an example",
-    bare.includes("takes about") && bare.includes('kind: "component"'),
+    "2c: artifact_create(kind: component) whose ask names a file is refused in the person's words",
+    bare.includes(
+      "The ask is in the person's words: no file, path or id in it. Name the thing as they call it."
+    ),
     short(bare)
   );
 
@@ -455,7 +473,8 @@ async function builtStories(
     kind: "component",
     name: "mixed",
     file: MIXED,
-    about: "The card's stories, built four ways",
+    does: "judge",
+    ask: "Judge the card's stories, built four ways",
   });
   const mixedId = mixed.match(ID)?.[1];
   kit.check(
@@ -661,7 +680,7 @@ const scaled = (transform: string, to: number) => {
 };
 
 /**
- * The canvas's name and description in legs 18 and 23: words no other text
+ * The canvas's name and ask in legs 18 and 23: words no other text
  * in the panel holds. The name is short on purpose: its trigger (glyph, name,
  * chevron) stays under side/head.ts `NAME_KEEPS` (120px), the room leg 18's
  * desk claim stands on. At a 523px pane the head's room is 509px; every
@@ -670,8 +689,8 @@ const scaled = (transform: string, to: number) => {
  * 92px leaves 25px to spare.
  */
 const PANEL_NAME = "pcard";
-/** The description the panel's artifact is made with: the head's line under the name reads it (leg 23). */
-const PANEL_DESCRIPTION = "The card in its panel, at every width";
+/** The ask the panel's artifact is made with: the head's line under the name reads it (leg 23). */
+const PANEL_ASK = "Judge the card in its panel, at every width";
 
 /** Leg 23's read: the head's line under the name and where it stands, and the name and any route across the rendered text of the panel and its canvas page. */
 async function describedOf(page: Page) {
@@ -706,7 +725,7 @@ async function describedOf(page: Page) {
   const inner = frame
     ? await frame.evaluate((name) => {
         // The chrome's shadow root has no innerText: its drawn text nodes, so
-        // the band's name and about, hidden in a frame (chrome.ts), count none.
+        // the band's name, hidden in a frame (chrome.ts), counts none.
         const root = document.getElementById("cawco-chrome")?.shadowRoot;
         const shown: string[] = [];
         if (root) {
@@ -727,16 +746,16 @@ async function describedOf(page: Page) {
   return { ...outer, frame: inner };
 }
 
-/** What leg 23 finds wrong in one read, each as what it compared (none: it holds): the description under the name, one line inside the panel, the name once across panel and page, no route. */
+/** What leg 23 finds wrong in one read, each as what it compared (none: it holds): the ask under the name, one line inside the panel, the name once across panel and page, no route. */
 const describedWrong = (read: Awaited<ReturnType<typeof describedOf>>) => {
   const names = read.names + (read.frame?.names ?? 0);
   return [
-    read.line === PANEL_DESCRIPTION
+    read.line === PANEL_ASK
       ? ""
-      : `line ${JSON.stringify(read.line)} is not ${JSON.stringify(PANEL_DESCRIPTION)}`,
-    read.tooltip === PANEL_DESCRIPTION
+      : `line ${JSON.stringify(read.line)} is not ${JSON.stringify(PANEL_ASK)}`,
+    read.tooltip === PANEL_ASK
       ? ""
-      : `tooltip ${JSON.stringify(read.tooltip)} is not ${JSON.stringify(PANEL_DESCRIPTION)}`,
+      : `tooltip ${JSON.stringify(read.tooltip)} is not ${JSON.stringify(PANEL_ASK)}`,
     read.inside ? "" : "line outside the panel",
     read.oneLine ? "" : "line on more than one line",
     read.frame ? "" : "no canvas frame to read",
@@ -760,7 +779,8 @@ async function panelLegs(
     kind: "component",
     name: PANEL_NAME,
     file: STORY,
-    about: PANEL_DESCRIPTION,
+    does: "judge",
+    ask: PANEL_ASK,
   });
   await desk
     .locator(`${FRAME}[data-ready]`)
@@ -895,7 +915,7 @@ async function panelLegs(
     await capture(phone, `panel-phone-${theme}`);
   }
   kit.check(
-    "23: at the desk and at 390 the line under the name is the canvas's about, one line inside the panel and whole in its tooltip; the name stands once across the panel and its page, and no text holds /@cawco/",
+    "23: at the desk and at 390 the line under the name is the canvas's ask, one line inside the panel and whole in its tooltip; the name stands once across the panel and its page, and no text holds /@cawco/",
     Object.keys(described).length === 3 &&
       Object.values(described).every(
         (read) => describedWrong(read).length === 0
@@ -998,6 +1018,108 @@ async function centredLegs(
   }
 }
 
+/** Leg 25: a canvas whose page never comes stands on the cover no longer than its stage is given. */
+async function neverDrawnLeg(
+  kit: Kit,
+  call: (n: string, name: string, input: object) => Promise<string>,
+  base: string,
+  session: string
+): Promise<void> {
+  const desk = await panelPage(kit, base, session, "desk", "light");
+  /** The session's artifacts by name, as its panel lists them. */
+  const panelArtifacts = async () =>
+    (
+      await desk.evaluate(
+        (who) =>
+          fetch(`/api/instances/${who}/artifacts`).then((response) =>
+            response.json()
+          ),
+        session
+      )
+    ).map((one: { name: string }) => one.name) as string[];
+  // 25. A canvas whose page never comes: the cover gives way once its stage's time is up.
+  await desk.route("**/@cawco/canvas**", () => {
+    // Held unanswered: the page never comes.
+  });
+  await call("25", "mcp__cawco__artifact_create", {
+    kind: "component",
+    name: "never-drawn",
+    does: "judge",
+    ask: "Judge the card while its page never comes",
+    file: STORY,
+  });
+  const waited = Date.now();
+  const covered = await desk
+    .locator(`${PANE} [data-slot="cover"] .cover-state`)
+    .textContent({ timeout: 30_000 })
+    .catch(() => null);
+  const stuck = await desk
+    .locator(`${PANE} [data-never-drawn]`)
+    .waitFor({ timeout: STAGE_READY_MS + 20_000 })
+    .then(
+      () =>
+        desk.locator(`${PANE} [data-never-drawn]`).evaluate((node) => ({
+          text: node.textContent?.replace(/\s+/g, " ").trim() ?? "",
+          buttons: [...node.querySelectorAll("button")].map((one) =>
+            one.textContent?.trim()
+          ),
+        })),
+      () => null
+    );
+  const took = Date.now() - waited;
+  kit.check(
+    "25: a canvas whose page never comes leaves the cover inside its stage's time and says it couldn't be drawn, why, with Try again and Remove",
+    covered === "Compiling…" &&
+      !!stuck &&
+      stuck.text.includes("The canvas couldn't be drawn") &&
+      stuck.text.includes(
+        `The stage never answered within ${STAGE_READY_MS / 1000}s.`
+      ) &&
+      stuck.buttons.includes("Try again") &&
+      stuck.buttons.includes("Remove") &&
+      took <= STAGE_READY_MS + 20_000,
+    `cover first said ${JSON.stringify(covered)}; ${took} ms: ${JSON.stringify(stuck)}`
+  );
+  // Remove is destructive: asked in place under its button, and only its confirm removes.
+  const before = await panelArtifacts();
+  await desk
+    .locator(`${PANE} [data-never-drawn] button`, { hasText: "Remove" })
+    .first()
+    .click();
+  const ask = desk.locator(`${PANE} [data-ask="never-drawn-remove"]`);
+  const asked = await ask
+    .evaluate((node) => ({
+      title: node.querySelector('[data-slot="title"]')?.textContent?.trim(),
+      buttons: [...node.querySelectorAll("button")].map((one) =>
+        one.textContent?.trim()
+      ),
+    }))
+    .catch(() => null);
+  const stillThere = (await panelArtifacts()).includes("never-drawn");
+  await ask.locator("button", { hasText: "Remove canvas" }).click();
+  const gone = await until(
+    "the canvas out of the session's artifacts",
+    panelArtifacts,
+    (names) => !names.includes("never-drawn"),
+    10_000
+  ).then(
+    () => true,
+    () => false
+  );
+  kit.check(
+    "25: its Remove is asked in place (Remove never-drawn?, Cancel, Remove canvas), nothing goes before the confirm, and the confirm removes the canvas",
+    before.includes("never-drawn") &&
+      asked?.title === "Remove never-drawn?" &&
+      asked.buttons.includes("Cancel") &&
+      asked.buttons.includes("Remove canvas") &&
+      stillThere &&
+      gone,
+    `asked ${JSON.stringify(asked)}; before the confirm ${stillThere ? "kept" : "gone"}; after ${gone ? "gone" : "kept"}`
+  );
+  await desk.unroute("**/@cawco/canvas**");
+  await desk.close();
+}
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   await writeProject(fleet.repo);
@@ -1051,7 +1173,8 @@ const run = async (kit: Kit) => {
     kind: "component",
     name: "cards",
     file: STORY,
-    about: "The card in each of its states",
+    does: "judge",
+    ask: "Judge the card in each of its states",
   });
   const id = created.match(ID)?.[1];
   kit.check(
@@ -1118,7 +1241,8 @@ const run = async (kit: Kit) => {
       kind: "component",
       name: "kit-cards",
       file: KIT_STORY,
-      about: "The kit's card in each of its states",
+      does: "judge",
+      ask: "Judge the kit's card in each of its states",
     },
     kitSession
   );
@@ -1151,7 +1275,8 @@ const run = async (kit: Kit) => {
       kind: "component",
       name: "npm-cards",
       file: STORY,
-      about: "The npm project's card in each of its states",
+      does: "judge",
+      ask: "Judge the npm project's card in each of its states",
     },
     npmSession
   );
@@ -1211,6 +1336,7 @@ const run = async (kit: Kit) => {
   await builtStories(kit, call, fleet.repo);
   await panelLegs(kit, call, await fleet.dashboard(), session);
   await centredLegs(kit, await fleet.dashboard(), session);
+  await neverDrawnLeg(kit, call, await fleet.dashboard(), session);
 
   /** Legs 13 to 15, in the SvelteKit checkout of legs 6 to 8 (its session `kitSession`), on the sheet leg 7 made (`kitId`). */
   async function scopedAndStyled(kitId: string | undefined): Promise<void> {

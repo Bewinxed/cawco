@@ -10,7 +10,8 @@
    * stands beside the preview, drawn as SideSplit draws it. `?own=1` draws
    * it as the artifact's own tab does (`/artifact/<id>`, PreviewPane
    * `ownTab`). `?kind=preview` holds a plain preview of that address
-   * instead (no view, no inspector). The probe answers the pane's reach
+   * instead (no view, no inspector). `?ask=` is the artifact's ask, which its
+   * frame carries to the head's line. The probe answers the pane's reach
    * check (`/__cawco/ping`) itself.
    */
   import { type ArtifactKind, type FsEntry, sideWords } from "@cawco/core";
@@ -36,13 +37,14 @@
   const path = page.url.searchParams.get("path") ?? "/";
   const name =
     page.url.searchParams.get("name") ?? "Preview canvas view states";
+  const ask = page.url.searchParams.get("ask");
   const switched = page.url.searchParams.get("switch") === "1";
   const own = page.url.searchParams.get("own") === "1";
   /** `?kind=page`: the first artifact a page (the switch below starts from one); `?kind=preview` a plain preview. */
   const asked = page.url.searchParams.get("kind");
   const kind: ArtifactKind =
     asked === "page" || asked === "preview" ? asked : "component";
-  /** `?then=` a second canvas address: the panel switches to it, a component canvas named `?thenName=`, `?after=` ms in. */
+  /** `?then=` a second canvas address: the panel switches to it, a component canvas named `?thenName=` asking `?thenAsk=`, `?after=` ms in. */
   const then = page.url.searchParams.get("then");
   const after = Number(page.url.searchParams.get("after") ?? 3000);
   const THEN = "00000000-0000-4000-8000-0000000000a2";
@@ -50,7 +52,7 @@
   let preview = $state<PanePreview>({
     kind: "preview",
     instanceId: INSTANCE,
-    artifact: { id: ARTIFACT, kind, name },
+    artifact: { id: ARTIFACT, kind, name, ...(ask ? { ask } : {}) },
     artifacts: [ARTIFACT],
     port,
     revision: "bench-1",
@@ -65,6 +67,9 @@
           id: THEN,
           kind: "component",
           name: page.url.searchParams.get("thenName") ?? "Switched canvas",
+          ...(page.url.searchParams.get("thenAsk")
+            ? { ask: page.url.searchParams.get("thenAsk") ?? "" }
+            : {}),
         },
         artifacts: [ARTIFACT, THEN],
         revision: "bench-2",

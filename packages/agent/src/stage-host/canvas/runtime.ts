@@ -1367,17 +1367,43 @@ export function boot(options: BootOptions): void {
     reportTimer = setTimeout(() => quietly(post()), REPORT_QUIET_MS);
   }
 
+  /**
+   * A frame that drew at its body's floor (its `min-inline-size`) with no
+   * width of its own: the story gave it none, and its content measures
+   * nothing (a size container), so it shrank to the floor and reads as a
+   * sliver. Said as the frame's failure, in words; no width is put in its
+   * place. Null when it stands at a width of its own or past the floor.
+   */
+  function atFloor(frame: Frame, box: DOMRect): PageError | null {
+    if (widthOf(frame.story, frame.column.width) !== null) {
+      return null;
+    }
+    const floor =
+      Number.parseFloat(getComputedStyle(frame.body).minInlineSize) || 0;
+    const width = box.width / zoom.z;
+    return floor > 0 && width <= floor + 0.5
+      ? {
+          message: `drawn ${Math.round(width)}px wide: the story has no width of its own; give it a viewport or a width`,
+          file: null,
+          line: null,
+          column: null,
+        }
+      : null;
+  }
+
   function frameRender(frame: Frame): FrameRender {
     const box = frame.body.getBoundingClientRect();
     const origin = world.getBoundingClientRect();
     let state: FrameRender["state"] = "empty";
-    if (frame.error) {
+    let { error } = frame;
+    if (error) {
       state = "failed";
     } else if (frame.el.getClientRects().length === 0) {
       // Not on screen at this width (a phone shows one frame at a time): it has not drawn nothing, it is not shown.
       state = "unshown";
     } else if (drew(frame.body)) {
-      state = "drawn";
+      error = atFloor(frame, box) ?? undefined;
+      state = error ? "failed" : "drawn";
     }
     const probeRead = frame.section.probes
       .get(frame.story.name)
@@ -1398,7 +1424,7 @@ export function boot(options: BootOptions): void {
       },
       text: firstWords(frame.body),
       parts: partsOf(frame.body, root),
-      ...(frame.error ? { error: frame.error } : {}),
+      ...(error ? { error } : {}),
       ...(frame.column.interaction === "rest" || !probeRead
         ? {}
         : { delta: probeRead }),

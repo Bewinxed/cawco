@@ -30,6 +30,7 @@
   import { IconClose } from "#lib/icons.js";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import type { ListHold } from "./artifact-doc";
+  import LiveDot from "./LiveDot.svelte";
   import PinDisc from "./PinDisc.svelte";
   import { pinName } from "./pin-name";
 
@@ -120,12 +121,7 @@
         <span class="last">{lastLine(pin)}</span>
       </span>
       {#if live.has(pin.id)}
-        <span
-          data-slot="live"
-          aria-label="The agent is working on it"
-          class="live"
-          role="img"
-        ></span>
+        <LiveDot label="The agent is working on it" />
       {/if}
     </button>
   </li>
@@ -326,24 +322,6 @@
   .last {
     color: var(--ink-muted);
     font-size: var(--text-meta);
-  }
-  /* The activity dot's working form: 8px, info blue, on the one loop. */
-  .live {
-    flex-shrink: 0;
-    width: 8px;
-    height: 8px;
-    border-radius: var(--radius-pill);
-    background: var(--status-live-glyph);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .live {
-      animation: pin-live var(--dur-loop) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes pin-live {
-    50% {
-      opacity: 0.4;
-    }
   }
   /* A skeleton row at a pin row's size: the disc, the name's line in the
      label role's height and the last line's in meta's. */

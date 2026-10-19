@@ -983,6 +983,14 @@ public enum Words {
             "\(name) wasn't removed: \(why)"
         }
 
+        /// The head's line under the name once the person's Send is in and the session has not changed it since.
+        public static func sentTo(session: String) -> String {
+            "Sent to \(session)"
+        }
+
+        /// A row's dot, for a screen reader: the person has something to do on it.
+        public static let waitingOnYou = "Waiting on you"
+
         /// Its skeleton rows, for a screen reader, while the pins are read past the wait's grace.
         public static let readingComments = "Reading the comments"
 
@@ -1165,6 +1173,27 @@ public enum Words {
 
         /// The line under it, in plain words; the server's own words stand under Show details.
         public static let serverDownLine = "It stopped before it answered. Try again starts it again."
+
+        /// Where the page would be, when the stage stood on its way past the time it is given to serve (core `STAGE_READY_MS`) and the canvas never drew.
+        public static let neverDrawnTitle = "The canvas couldn't be drawn"
+
+        /// The line under it, in plain words: how long it was given, then the two ways out; the stage's own words stand under Show details.
+        public static func neverDrawnLine(seconds: Int) -> String {
+            "The stage never answered within \(seconds)s. Try again starts it again, or remove the canvas."
+        }
+
+        /// The way out besides Try again: the canvas leaves the panel, once asked in place.
+        public static let remove = "Remove"
+
+        public static func removeTitle(name: String) -> String {
+            "Remove \(name)?"
+        }
+
+        public static let removeBody = "It leaves the panel, with its pins. Its states file stays, and the session can open it again."
+
+        public static let removeConfirm = "Remove canvas"
+
+        public static let removing = "Removing…"
 
         public static let tryAgain = "Try again"
 

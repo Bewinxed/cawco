@@ -3584,6 +3584,13 @@ export const artifacts = sqliteTable(
     projectId: text("project_id"),
     kind: text("kind").$type<import("@cawco/core").ArtifactKind>().notNull(),
     name: text("name").notNull(),
+    /** What the person does on it (core `ARTIFACT_DOES`): pick, judge, try or draw. Every create names it; rows made before it were set to judge. */
+    does: text("does")
+      .$type<import("@cawco/core").ArtifactDoes>()
+      .notNull()
+      .default("judge"),
+    /** The panel head's one line under its name: what the person does here, in their words. Empty on a row made before it, and on the person's own composer canvas. */
+    ask: text("ask").notNull().default(""),
     /** The machine a preview's dev server or folder is on; null for a page, which the hub serves. */
     machineId: text("machine_id"),
     /**

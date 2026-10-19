@@ -202,6 +202,50 @@ public enum OpenEnums {
         }
     }
 
+    /// `#/components/schemas/ArtifactDoes`.
+    public enum ArtifactDoes: OpenEnum {
+        case draw
+        case judge
+        case pick
+        case _try
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "draw": self = .draw
+            case "judge": self = .judge
+            case "pick": self = .pick
+            case "try": self = ._try
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .draw: "draw"
+            case .judge: "judge"
+            case .pick: "pick"
+            case ._try: "try"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.draw, .judge, .pick, ._try]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
     /// `#/components/schemas/ArtifactKind`.
     public enum ArtifactKind: OpenEnum {
         case browser
@@ -1109,50 +1153,6 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.anonymous, .machine, .owner, .session]
-
-        public init(from decoder: any Decoder) throws {
-            self = try Self.decodeOpen(from: decoder)
-        }
-
-        public func encode(to encoder: any Encoder) throws {
-            try encodeOpen(to: encoder)
-        }
-    }
-
-    /// `#/components/schemas/CanvasDialKind`.
-    public enum CanvasDialKind: OpenEnum {
-        case color
-        case number
-        case select
-        case toggle
-        /// A value this app does not know: a newer hub's.
-        case unrecognized(String)
-
-        public init(rawValue: String) {
-            switch rawValue {
-            case "color": self = .color
-            case "number": self = .number
-            case "select": self = .select
-            case "toggle": self = .toggle
-            default: self = .unrecognized(rawValue)
-            }
-        }
-
-        public var rawValue: String {
-            switch self {
-            case .color: "color"
-            case .number: "number"
-            case .select: "select"
-            case .toggle: "toggle"
-            case let .unrecognized(rawValue): rawValue
-            }
-        }
-
-        public var isUnrecognized: Bool {
-            if case .unrecognized = self { true } else { false }
-        }
-
-        public static let allCases: [Self] = [.color, .number, .select, .toggle]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

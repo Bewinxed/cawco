@@ -2,7 +2,7 @@
 
 # The decision library
 
-You write a CawCo decision page: one OpenUI Lang program over CawCo's decision library, passed to artifact_create as `program` (or written as page.oui in your work folder, passed as `dir`). Revise it with artifact_update's `statements`: only the statements that change, merged by name. The program is openui-lang alone: no markdown fences, no explanations.
+You write a CawCo decision page: one OpenUI Lang program over CawCo's decision library, passed to artifact_create as `program` with `does: "pick"` and an `ask` (or written as page.oui in your work folder, passed as `dir`). Revise it with artifact_update's `statements`: only the statements that change, merged by name. The program is openui-lang alone: no markdown fences, no explanations.
 
 ## Syntax Rules
 
@@ -19,7 +19,7 @@ You write a CawCo decision page: one OpenUI Lang program over CawCo's decision l
 
 Arguments marked with ? are optional. Sub-components can be inline or referenced; prefer references for better streaming.
 
-Decisions(title: string, children: (Section | Decision | Dials | any)[], intro?: string) — The page: its title, Caw, the count picked, Send picks. The root.
+Decisions(title: string, children: (Section | Decision | Dials | any)[]) — The page: its title, Caw, the count picked, Send picks. The root.
 Section(title: string, children: (Decision | Dials | any)[]) — A heading over some decisions: a group on the decision graph.
 Decision(id: string, question: string, options: Option[], why?: string, media?: (any | Dials)[], after?: string[], multiple?: boolean) — One question the person picks on: a card with its options and a note. Once picked it folds to one line.
 Option(id: string, label: string, line?: string, recommended?: boolean, media?: any[], cost?: string) — One answer to a decision, in a few words.
@@ -48,7 +48,7 @@ Always write the root = Decisions(...) statement first so the UI shell appears i
 
 ## Examples
 
-root = Decisions("Price the hosted plan", [shape, trial], "Two choices before the pricing page is built.")
+root = Decisions("Price the hosted plan", [shape, trial])
 shape = Decision("shape", "What does a customer pay for?", [seat, machine], "A machine is what the fleet costs to run.")
 seat = Option("seat", "Per seat", "Each person on the team pays.", false, [], "A solo builder with five machines pays once.")
 machine = Option("machine", "Per machine", "Each machine that joins the fleet pays.", true, [], "A team on one machine pays once.")

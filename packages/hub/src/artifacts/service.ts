@@ -19,16 +19,21 @@ import {
   type AgentRow,
   ARTIFACT_NAME,
   type ArtifactChoices,
+  type ArtifactDoes,
   type ArtifactHit,
   type ArtifactKind,
   type ArtifactPromotion,
   type ArtifactSummary,
   type ArtifactThumbnail,
+  ASK_BANNED,
+  ASK_PATHLIKE,
   artifactCommentsNotice,
   artifactErrorsNotice,
   artifactSavesNotice,
   type ChoiceEntry,
   choiceEntryProblem,
+  DESK_CAPTURE_WIDTH,
+  DESK_CAPTURES_PER_PAGE,
   type InstanceRow,
   machineLabel,
   noteText,
@@ -43,6 +48,7 @@ import {
   excalidrawFile,
   NO_SCREEN,
 } from "@cawco/core/canvas";
+import { dataUrlBytes, deskCaptures } from "@cawco/core/captures";
 import {
   COMMENT_LIMITS,
   inkSection,
@@ -119,6 +125,7 @@ import {
 import {
   type CanvasInput,
   COMPONENT_EXAMPLE,
+  CREATE_SHAPE,
   canvasProblem,
   errorsSaid,
   movesSaid,
@@ -164,11 +171,17 @@ const unmerged = (error: unknown): ArtifactRefusal =>
  * drawn from skeleton `elements` or `mermaid`; each kind's fields only.
  */
 export interface ArtifactInput {
-  /** A component canvas's one line of purpose, drawn under its name. */
-  about?: string | undefined;
+  /**
+   * The panel head's one line under its name: what the person does here,
+   * in their words (core `ASK_LIMIT`). Every create names it but the
+   * person's own composer canvas (`draft`), which asks them nothing.
+   */
+  ask?: string | undefined;
   /** A component canvas's dials: a CSS variable on every frame, or an arg. */
   dials?: CanvasDial[] | undefined;
   dir?: string | undefined;
+  /** What the person does on it (core `ARTIFACT_DOES`); named with `ask`. */
+  does?: ArtifactDoes | undefined;
   /**
    * A canvas the person opened in the composer (a pen's swipe, Draw, ⌘⇧D,
    * the panel's +): always a new one, `meta.draft` until its first send,
@@ -316,6 +329,50 @@ const previewProblem = (input: ArtifactInput): string | null => {
   return null;
 };
 
+/** Why an ask can't head the panel (checks 1 and 2): words the person never uses, or a file or path; null when it can. */
+export const askProblem = (ask: string): string | null => {
+  if (ASK_BANNED.test(ask)) {
+    return 'The ask reaches the person: say what they do (pick, pin, try, draw) and to what, without "tap" or "poke".';
+  }
+  if (ASK_PATHLIKE.test(ask)) {
+    return "The ask is in the person's words: no file, path or id in it. Name the thing as they call it.";
+  }
+  return null;
+};
+
+/** Why this kind can't deliver what `does` promises (checks 3, 4 and 4b), before anything is built; null when it can. */
+const doesProblem = (
+  input: ArtifactInput,
+  does: ArtifactDoes
+): string | null => {
+  const { kind } = input;
+  if (does === "pick" && kind !== "page") {
+    return `A pick happens on a decision page: kind "page" with a program holding one Decision per question (decision-page skill). This ${kind} is an option's media: embed it with Canvas or Preview inside the Option.`;
+  }
+  const program = input.program !== undefined;
+  if (
+    does === "try" &&
+    (kind === "component" || kind === "canvas" || (kind === "page" && program))
+  ) {
+    return `A try is a flow the person runs: a preview opened at its path, or a page with fields. A ${kind}${program ? " program" : ""} is judged or picked on, not tried.`;
+  }
+  if (does === "draw" && kind !== "canvas") {
+    return 'A drawing is a canvas: kind "canvas", with elements, mermaid or nothing.';
+  }
+  return null;
+};
+
+/** A choice in a page's HTML: a kit choice, or a field the person fills. */
+const HTML_CHOICE = /data-cawco-choice=|<(input|select|textarea)[^>]*\sname=/i;
+
+/** Check 3b: a page for picking that holds no choice, once built. */
+const NO_CHOICE =
+  "A page for picking holds a choice: a Decision in its program, or a data-cawco-choice in its HTML. This one holds none.";
+
+/** Check 5: a page for judging or picking that is a catalogue of desk captures. */
+const capturesRefused = (n: number): string =>
+  `${n} captures wider than ${DESK_CAPTURE_WIDTH}px on one page draw at a fraction of their size in the panel. Show one state at a time: a component canvas of the real component (does "judge"), or a decision page whose options embed them (does "pick").`;
+
 /**
  * Why a preview of a workspace's port with nothing named to serve it is
  * refused: a server the agent starts in its own shell ends with that shell,
@@ -400,6 +457,10 @@ const CHOICE_ATTRIBUTE = /\bdata-cawco-choice="([^"]+)"/g;
 
 /** One artifact as `artifact_list` answers it. */
 export interface ArtifactStatus {
+  /** Its line in the panel's head. */
+  ask: string;
+  /** What the person does on it. */
+  does: ArtifactDoes;
   id: string;
   kind: ArtifactKind;
   /** The delegate that put it in this session's panel, when another session made it. */
@@ -413,6 +474,8 @@ export interface ArtifactStatus {
   picksAwaiting: number;
   /** Pins the person left open. */
   pins: number;
+  /** The person pressed Send since your last change (a revision, or a new ask). */
+  sent: boolean;
   /** The session that made it, when it is not the caller's own (a lead reading its project's). */
   session?: string;
   /** Whether its session's panel shows it now. */
@@ -893,8 +956,12 @@ export interface ArtifactServiceDeps {
   docs: ArtifactDocs;
   /** Whether a session has ended: it takes no input now, so its marks go to its project's Caw. */
   ended: (instance: InstanceRow) => boolean;
-  /** What a folder preview of `dir` loads, weighed on machine `machineId` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
-  folderWeight: (machineId: string, dir: string) => Promise<FolderWeight>;
+  /** What a folder preview of `dir` loads, weighed on machine `machineId`, and the desk captures on its start page at `path` (agent preview.ts `previewWeight`). Throws an {@link ArtifactRefusal} saying why it can't. */
+  folderWeight: (
+    machineId: string,
+    dir: string,
+    path: string | undefined
+  ) => Promise<FolderWeight>;
   /**
    * Tells `parent` once that its delegate `maker` handed it `artifact`, not
    * opened (core `artifactHandedNotice`), on the channel the person's picks
@@ -1113,10 +1180,26 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return { at, single: true, width: size.width, height: size.height };
   };
 
+  /**
+   * Whether the person pressed Send since the session last changed it: the
+   * doc's `meta.sentAt` newer than its `meta.revisedAt`, which every revision
+   * and every new ask moves ({@link stampMeta}, {@link askNow}).
+   */
+  const sentOf = (row: ArtifactRow): boolean => {
+    const meta = docs.doc(row.id).getMap("meta");
+    const sentAt = meta.get("sentAt") as string | null | undefined;
+    const revisedAt = meta.get("revisedAt") as string | undefined;
+    return !!sentAt && (!revisedAt || sentAt > revisedAt);
+  };
+
   const summaryOf = (row: ArtifactRow): ArtifactSummary => ({
     id: row.id,
     kind: row.kind,
     name: row.name,
+    does: row.does,
+    ask: row.ask,
+    sent: sentOf(row),
+    waiting: waitingOnPerson(row),
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     shownAt: row.shownAt?.toISOString() ?? null,
@@ -1513,16 +1596,32 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
   };
 
-  /** Writes the doc's meta for the artifact as the hub keeps it. */
+  /**
+   * Writes the doc's meta for the artifact as the hub keeps it: what the
+   * person does there and its ask, which every open view's head reads, and
+   * when the session last changed it (`revisedAt`), which a Send answers.
+   */
   const stampMeta = (row: ArtifactRow, hash: string | null) => {
     docs.transact(row.id, "hub", (doc) => {
       const meta = doc.getMap("meta");
       meta.set("kind", row.kind);
       meta.set("name", row.name);
+      meta.set("does", row.does);
+      meta.set("ask", row.ask);
       meta.set("revision", row.revision);
+      meta.set("revisedAt", new Date().toISOString());
       if (hash !== null) {
         meta.set("pageHash", hash);
       }
+    });
+  };
+
+  /** A new ask in the doc, as a revision is: every open view's head morphs to it, and a Send before it is answered. */
+  const askNow = (id: string, ask: string) => {
+    docs.transact(id, "hub", (doc) => {
+      const meta = doc.getMap("meta");
+      meta.set("ask", ask);
+      meta.set("revisedAt", new Date().toISOString());
     });
   };
 
@@ -2423,6 +2522,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       projectId: instance.projectId ?? null,
       kind: "canvas",
       name: free,
+      // The person's own canvas: nothing is asked of them on it.
+      does: "draw",
+      ask: "",
       machineId: null,
       source: { page: free },
       revision: 1,
@@ -2449,25 +2551,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** The owner's canvas of that name, its maker now `maker`, or a new one; and what was there. */
+  /** The owner's canvas of that name, its maker now `maker` and its ask the input's, or a new one; and what was there. */
   const canvasPlaced = (
     { owner, maker }: Making,
-    name: string
+    input: ArtifactInput
   ): { before: ArtifactRow | undefined; row: ArtifactRow } => {
     const now = new Date();
-    const before = db.byName(owner.id, "canvas", name);
+    const before = db.byName(owner.id, "canvas", input.name);
+    const asked = askedOf(input);
     const row =
-      (before && db.update(before.id, { madeBy: maker.id, updatedAt: now })) ??
+      (before &&
+        db.update(before.id, { madeBy: maker.id, ...asked, updatedAt: now })) ??
       db.create({
         id: crypto.randomUUID(),
         instanceId: owner.id,
         madeBy: maker.id,
         projectId: owner.projectId ?? null,
         kind: "canvas",
-        name,
+        name: input.name,
+        ...asked,
         machineId: null,
         // The hub serves it, as it serves a page.
-        source: { page: name },
+        source: { page: input.name },
         revision: 1,
         seq: 0,
         deliveredSeq: 0,
@@ -2548,7 +2653,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         "A canvas takes elements or mermaid, not both."
       );
     }
-    const { before, row } = canvasPlaced(making, input.name);
+    const { before, row } = canvasPlaced(making, input);
     stampMeta(row, null);
     const change = drawingOf(input);
     let wrote: string[] | undefined;
@@ -2935,7 +3040,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         `A component canvas takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`
       );
     }
-    const problem = canvasProblem(input, true);
+    const problem = canvasProblem(input);
     if (problem) {
       throw new ArtifactRefusal(400, problem);
     }
@@ -2960,6 +3065,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           source,
           machineId,
           madeBy: maker.id,
+          ...askedOf(input),
           revision: before.revision + 1,
           updatedAt: now,
         }) as ArtifactRow)
@@ -2970,6 +3076,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           projectId: owner.projectId ?? null,
           kind: "component",
           name: input.name,
+          ...askedOf(input),
           machineId,
           source,
           revision: 1,
@@ -3140,6 +3247,66 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     });
   };
 
+  /**
+   * Whether a built page or a weighed folder holds what its `does` promises
+   * (checks 3b and 5): a page for picking holds a choice, and a page or
+   * folder for judging or picking is no catalogue of desk captures.
+   */
+  const deliversItsAsk = async (
+    input: Pick<ArtifactInput, "does">,
+    made: {
+      html: string | null;
+      program: BuiltProgram | undefined;
+      weight: FolderWeight | undefined;
+    }
+  ): Promise<void> => {
+    const { html, program, weight } = made;
+    if (input.does === "pick") {
+      const holds = program
+        ? program.read.cards.length > 0
+        : HTML_CHOICE.test(html ?? "");
+      if (!holds) {
+        throw new ArtifactRefusal(400, NO_CHOICE);
+      }
+    }
+    if (!(input.does === "judge" || input.does === "pick")) {
+      return;
+    }
+    let captures = weight?.captures ?? 0;
+    if (html !== null && !program) {
+      captures = await deskCaptures(html, dataUrlBytes);
+    }
+    if (captures > DESK_CAPTURES_PER_PAGE) {
+      throw new ArtifactRefusal(400, capturesRefused(captures));
+    }
+  };
+
+  /**
+   * Checks 1 to 4b, before anything is built or started: a create says what
+   * the person does there, in their words, on a kind that can deliver it.
+   * The person's own composer canvas (`draft`) asks them nothing.
+   */
+  const asksFirst = (input: ArtifactInput): void => {
+    if (input.draft) {
+      return;
+    }
+    const { does, ask } = askedOf(input);
+    const problem = askProblem(ask) ?? doesProblem(input, does);
+    if (problem) {
+      throw new ArtifactRefusal(400, problem);
+    }
+  };
+
+  /** What a create names the person does there and its ask, as its row keeps them; refused with the tool's shape when it names neither. */
+  const askedOf = (
+    input: Pick<ArtifactInput, "does" | "ask">
+  ): { ask: string; does: ArtifactDoes } => {
+    if (input.does === undefined || input.ask === undefined) {
+      throw new ArtifactRefusal(422, CREATE_SHAPE);
+    }
+    return { does: input.does, ask: input.ask };
+  };
+
   /** A canvas (or the composer's draft) and a sheet are each made their own way; a page or preview is null here, made by `create` itself. */
   const madeOwnWay = (
     making: Making,
@@ -3180,14 +3347,16 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    */
   const placed = (
     { owner, maker }: Making,
-    input: Pick<ArtifactInput, "kind" | "name">,
+    input: Pick<ArtifactInput, "kind" | "name" | "does" | "ask">,
     at: { machineId: string | null; source: PreviewSource }
   ): { before: ArtifactRow | undefined; row: ArtifactRow } => {
     const now = new Date();
     const before = db.byName(owner.id, input.kind, input.name);
+    const asked = askedOf(input);
     if (before) {
       const row = db.update(before.id, {
         ...at,
+        ...asked,
         madeBy: maker.id,
         revision: before.revision + 1,
         updatedAt: now,
@@ -3201,6 +3370,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       projectId: owner.projectId ?? null,
       kind: input.kind,
       name: input.name,
+      ...asked,
       ...at,
       revision: 1,
       seq: 0,
@@ -3238,6 +3408,12 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   /** The delegate that put it in its owner's panel, as `artifact_list` names it; nothing when the owner made it. */
   const handedBy = (row: ArtifactRow): { madeBy?: string } =>
     row.madeBy && row.madeBy !== row.instanceId ? { madeBy: row.madeBy } : {};
+
+  /** Whether the person has something to do on it now, as `artifact_list` reads it for its owner. */
+  const waitingOnPerson = (row: ArtifactRow): boolean => {
+    const owner = deps.instance(row.instanceId);
+    return !!owner && statusOf(owner, row).waitingOn.includes("person");
+  };
 
   /** One artifact as `artifact_list` answers it, read for `caller`. */
   const statusOf = (caller: InstanceRow, row: ArtifactRow): ArtifactStatus => {
@@ -3287,10 +3463,13 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       id: row.id,
       kind: row.kind,
       name: row.name,
+      does: row.does,
+      ask: row.ask,
       ...(row.instanceId === caller.id ? {} : { session: row.instanceId }),
       ...handedBy(row),
       shown,
       opened,
+      sent: sentOf(row),
       updatedAt: row.updatedAt.toISOString(),
       pins,
       unread: unread.length,
@@ -3475,6 +3654,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (stray) {
         throw new ArtifactRefusal(400, stray);
       }
+      asksFirst(input);
       const making: Making = {
         maker: instance,
         owner: ownerFor(instance, input),
@@ -3494,8 +3674,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       }
       const weight =
         "dir" in source && machineId
-          ? await deps.folderWeight(machineId, source.dir)
+          ? await deps.folderWeight(machineId, source.dir, source.path)
           : undefined;
+      await deliversItsAsk(input, { html, program, weight });
       const stage = await serveFirst(source, machineId);
       if (handing(making)) {
         await answersFirst({
@@ -3782,9 +3963,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
-     * `artifact_update` of a component canvas's about, edges, groups or
-     * dials: its page's address changes, so the panel draws it again at
-     * the next revision. Answers what changed and the canvas's new spec.
+     * `artifact_update` of a component canvas's edges, groups or dials: its
+     * page's address changes, so the panel draws it again at the next
+     * revision. Answers what changed and the canvas's new spec.
      */
     canvasUpdate: async (
       instanceId: string,
@@ -3797,15 +3978,14 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (!(sheet && "port" in row.source)) {
         throw new ArtifactRefusal(
           409,
-          `${row.name} is a ${row.kind}: about, edges, group and dials are a component canvas's.`
+          `${row.name} is a ${row.kind}: edges, group and dials are a component canvas's.`
         );
       }
-      const problem = canvasProblem(input, false);
+      const problem = canvasProblem(input);
       if (problem) {
         throw new ArtifactRefusal(400, problem);
       }
       const spec = specOf(row.name, {
-        about: input.about ?? sheet.spec.about,
         edges: input.edges ?? sheet.spec.edges,
         group: input.group ?? sheet.spec.group,
         dials: input.dials ?? sheet.spec.dials,
@@ -3816,10 +3996,33 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         revision: row.revision + 1,
         updatedAt: new Date(),
       }) as ArtifactRow;
+      stampMeta(next, null);
       if (deps.showing(next.instanceId) === next.id) {
         await show(next, "agent");
       }
       return { id: next.id, revision: next.revision, spec };
+    },
+
+    /**
+     * `artifact_update` with `ask`, for any kind: the head's line changes in
+     * every open view (it reads the doc's `meta.ask`), and the person's
+     * last Send is answered, so the head asks again.
+     */
+    askUpdate: (
+      instanceId: string,
+      id: string,
+      ask: string
+    ): { ask: string; id: string } => {
+      const row = ownedOrMade(sessionOf(instanceId), id);
+      const problem = askProblem(ask);
+      if (problem) {
+        throw new ArtifactRefusal(400, problem);
+      }
+      db.update(row.id, { ask, updatedAt: new Date() });
+      askNow(row.id, ask);
+      // Every view of the panel hears the frame again with the new ask; nothing reloads.
+      deps.relist(row.instanceId);
+      return { id: row.id, ask };
     },
 
     /**

@@ -240,10 +240,6 @@ export const decisionLibrary = <C>(
     z.object({
       title: z.string(),
       children: z.array(z.union([Section.ref, Decision.ref, Dials.ref, media])),
-      intro: z
-        .string()
-        .optional()
-        .describe("Why these decisions, and what happens with the picks."),
     })
   );
 
@@ -270,7 +266,7 @@ export const decisionLibrary = <C>(
 // --- the prompt ----------------------------------------------------------------
 
 /** One page, as the prompt shows it: two decisions, a diagram, an edge. */
-const EXAMPLE = `root = Decisions("Price the hosted plan", [shape, trial], "Two choices before the pricing page is built.")
+const EXAMPLE = `root = Decisions("Price the hosted plan", [shape, trial])
 shape = Decision("shape", "What does a customer pay for?", [seat, machine], "A machine is what the fleet costs to run.")
 seat = Option("seat", "Per seat", "Each person on the team pays.", false, [], "A solo builder with five machines pays once.")
 machine = Option("machine", "Per machine", "Each machine that joins the fleet pays.", true, [], "A team on one machine pays once.")
@@ -290,7 +286,7 @@ quarter = Option("quarter", "A quarter", "Time for a team to settle in.", false,
  */
 export const decisionPromptOptions = (): PromptOptions => ({
   preamble:
-    "You write a CawCo decision page: one OpenUI Lang program over CawCo's decision library, passed to artifact_create as `program` (or written as page.oui in your work folder, passed as `dir`). Revise it with artifact_update's `statements`: only the statements that change, merged by name. The program is openui-lang alone: no markdown fences, no explanations.",
+    "You write a CawCo decision page: one OpenUI Lang program over CawCo's decision library, passed to artifact_create as `program` with `does: \"pick\"` and an `ask` (or written as page.oui in your work folder, passed as `dir`). Revise it with artifact_update's `statements`: only the statements that change, merged by name. The program is openui-lang alone: no markdown fences, no explanations.",
   toolCalls: false,
   bindings: false,
   builtinFunctions: false,

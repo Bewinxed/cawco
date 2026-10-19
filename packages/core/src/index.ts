@@ -1730,19 +1730,42 @@ export type ArtifactKind =
 /** An artifact's name: lowercase letters, digits and dashes, like `onboarding`. */
 export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
+/** What the person does on an artifact: the reason it is in their panel. */
+export const ARTIFACT_DOES = ["pick", "judge", "try", "draw"] as const;
+export type ArtifactDoes = (typeof ARTIFACT_DOES)[number];
+/** The ask's length: one line in the panel's head. */
+export const ASK_LIMIT = 160;
+/** Words the owner banned from anything that reaches him. */
+export const ASK_BANNED = /\b(tap|poke)(s|ped|ping)?\b/i;
+/** A path or a file in the ask: the person's words carry neither. */
+export const ASK_PATHLIKE =
+  /(^|[\s(])[\w.-]*\/[\w.-]+\.[a-z]{1,5}\b|\b[\w-]+\.(svelte|tsx?|png|webp|jpe?g|oui|html)\b/i;
+/** Desk captures one page for judging or picking may hold: past it, the page is a catalogue of pictures drawn at a fraction of their size in the panel. */
+export const DESK_CAPTURES_PER_PAGE = 2;
+/** A capture wider than this many pixels is a desk capture: the panel is 600px beside the transcript, 390px on a phone. */
+export const DESK_CAPTURE_WIDTH = 1600;
+
 /** One artifact as the panel's list shows it, newest first. */
 export interface ArtifactSummary {
+  /** The one line the panel's head shows under its name: what the person does here, in their words. Empty on one made before asks were kept. */
+  ask: string;
   createdAt: string;
+  /** What the person does on it. */
+  does: ArtifactDoes;
   id: string;
   kind: ArtifactKind;
   name: string;
   /** Its last promote into the project's folder (`artifact_promote`, the doc's `meta.promoted`); null until one. */
   promoted: ArtifactPromotion | null;
+  /** The person pressed Send on it since the session last revised it or changed its ask. */
+  sent: boolean;
   /** When it was last brought to the front of the panel. */
   shownAt: string | null;
   /** Its latest picture, served at `GET /api/artifacts/:id/thumbnail/:scheme`; null until a screen drew one. */
   thumbnail: ArtifactThumbnail | null;
   updatedAt: string;
+  /** The person has something to do on it now (`artifact_list`'s `waitingOn` person): its row wears a dot. */
+  waiting: boolean;
 }
 
 /**

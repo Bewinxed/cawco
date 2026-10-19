@@ -56,6 +56,7 @@ import {
   PREVIEW_PORTS,
   PREVIEW_PORTS_TEXT,
 } from "./config";
+import type { ArtifactRow } from "./db/artifacts";
 import type { PreviewsDb } from "./db/previews";
 import { DECISION_ASSETS } from "./decision-program";
 import {
@@ -97,6 +98,16 @@ export interface PreviewTarget {
  * so the board, the panel's frames and the session's own port read it as one.
  */
 export const previewTargets = new Map<string, PreviewTarget>();
+
+/** An artifact as its panel's frame names it: with its ask, the head's line under its name, when it has one. */
+export const shownArtifact = (
+  row: Pick<ArtifactRow, "ask" | "id" | "kind" | "name">
+): PreviewFrame["artifact"] => ({
+  id: row.id,
+  kind: row.kind,
+  name: row.name,
+  ...(row.ask ? { ask: row.ask } : {}),
+});
 
 /**
  * A decision page's Preview of a session's dev-server preview or sheet: its

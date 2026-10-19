@@ -49,8 +49,12 @@ export interface FleetMcpFrame {
 }
 
 export interface PreviewFrame {
-  /** The artifact the session's panel shows (Projects spec §5.10). */
-  artifact: { id: string; kind: ArtifactKind; name: string };
+  /**
+   * The artifact the session's panel shows (Projects spec §5.10), with its
+   * ask: the head's line under its name from the first frame, while its
+   * page is still on its way. None on one made before asks were kept.
+   */
+  artifact: { ask?: string; id: string; kind: ArtifactKind; name: string };
   /**
    * Every artifact the session holds, by id, newest first: republished when
    * one is removed, so a panel's open list drops it at once.

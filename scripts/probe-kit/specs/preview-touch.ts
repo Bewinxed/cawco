@@ -283,7 +283,13 @@ const probe = async (kit: Kit) => {
 
   asks.set("1", {
     name: CREATE,
-    input: { kind: "page", name: "touch", html: PAGE },
+    input: {
+      kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "touch",
+      html: PAGE,
+    },
   });
   await fleet.send(session, "PROBE-CALL:1");
   await until("the page made", () => answered.get("1"), Boolean, 180_000);

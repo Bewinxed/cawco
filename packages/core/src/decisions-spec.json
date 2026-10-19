@@ -101,9 +101,6 @@
                 }
               ]
             }
-          },
-          "intro": {
-            "type": "string"
           }
         },
         "required": [

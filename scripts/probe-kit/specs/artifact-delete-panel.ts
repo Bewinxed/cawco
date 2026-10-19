@@ -97,6 +97,8 @@ const run = async (kit: Kit) => {
   const make = async (name: string): Promise<string> => {
     const said = await agent(CREATE, {
       kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
       name,
       html: pageOf(name),
     });

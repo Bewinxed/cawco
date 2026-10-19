@@ -208,6 +208,8 @@ const run = async (kit: Kit) => {
   await writeFile(join(folder, "index.html"), PREVIEW_HTML);
   const made = await call("artifact_create", {
     kind: "preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
     name: PREVIEW,
     dir: folder,
   });
@@ -262,6 +264,8 @@ const run = async (kit: Kit) => {
   // ── 2. a decision page with no picks waits on the person ─────────────
   await call("artifact_create", {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: DECISION,
     html: DECISION_HTML,
   });

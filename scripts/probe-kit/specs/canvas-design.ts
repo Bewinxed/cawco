@@ -36,7 +36,7 @@
  *    The name is whole or ellipsed, never under another control; every
  *    head control is 44px tall or reaches 44px through its ::after under a
  *    finger; the controls past the head's room stand in More, in head
- *    order; under the name stands the canvas's `about`, one line inside
+ *    order; under the name stands the canvas's ask, one line inside
  *    the head and whole in its tooltip, and no text in the pane holds a
  *    route (owner: "the url should have the description there instead").
  *
@@ -52,7 +52,7 @@
  *    the map is a list: Used in, This canvas, Made of, each card inside it.
  *
  * 8i. In a tab of its own (`/artifact/<id>`, the bench's `own=1`), the
- *    canvas is named once, by its head, its about on the line under the
+ *    canvas is named once, by its head, its ask on the line under the
  *    name; its page, framed there, names neither.
  * 10d. At the desk, the canvas view's Verify asks the hub once
  *    (`POST …/verify`) and toasts the hub's answer.
@@ -63,7 +63,7 @@
  *    condition: the overlay's `cawco:ready`, posted by the frame here), switches to a
  *    canvas whose states file does not exist and whose stage failed
  *    (plan-view's own state); it draws that canvas's failed state in the
- *    pane, its name in the head and its about under it, and nothing throws.
+ *    pane, its name in the head and its ask under it, and nothing throws.
  * 11. A stage that failed (its doc's `meta.stage` in error, with the words
  *    nightly 4202's hub answered: "Cannot find package 'playwright-core'
  *    imported from /$bunfs/root/cawco") says so where the page would be:
@@ -112,9 +112,10 @@ const FILES = [
   "src/lib/cawco/turn/Who.stories.ts",
   UNNAMED_FILE,
 ];
+/** The canvas's ask: what its frame carries to the head's line under the name. */
+const ASK = "Judge the stat tile, the speaker line and an unnamed story";
 const CANVAS: CanvasSpec = {
   name: "Dashboard parts",
-  about: "The stat tile, the speaker line and an unnamed story",
   dials: [
     {
       name: "radius",
@@ -1319,10 +1320,10 @@ async function seamLeg(kit: Kit, page: Page, leg: string): Promise<void> {
         const root = document.getElementById("cawco-chrome")
           ?.shadowRoot as ShadowRoot;
         const name = root.querySelector(".name") as HTMLElement;
-        const about = root.querySelector(".about") as HTMLElement;
         return {
           nameShown: getComputedStyle(name).display !== "none",
-          aboutShown: getComputedStyle(about).display !== "none",
+          lines: root.querySelectorAll(".band > div:not(.name, .crumb, .tools)")
+            .length,
           crumb:
             (root.querySelector(".crumb .num") as HTMLElement | null)
               ?.textContent ?? "",
@@ -1330,10 +1331,10 @@ async function seamLeg(kit: Kit, page: Page, leg: string): Promise<void> {
       })
     : null;
   kit.check(
-    `7d: ${leg}: in the panel the band says neither the name nor the about the head says, and its crumb counts frames only`,
+    `7d: ${leg}: in the panel the band says neither the name nor the ask the head says, and its crumb counts frames only`,
     !!band &&
       !band.nameShown &&
-      !band.aboutShown &&
+      band.lines === 0 &&
       FRAME_COUNT.test(band.crumb),
     JSON.stringify(band)
   );
@@ -1415,7 +1416,7 @@ async function openBench(
     })
   );
   await page.goto(
-    `${bench}/motion/artifact-head?w=${width}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}${query}`
+    `${bench}/motion/artifact-head?w=${width}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}&ask=${encodeURIComponent(ASK)}${query}`
   );
   const ready = await page
     .waitForSelector("[data-bench-pane] iframe.ready", { timeout: 60_000 })
@@ -1487,10 +1488,10 @@ async function headLeg(
     `bar ${read.bar.map((one) => one.key).join(",")}; More ${read.more.join(" | ") || "none"} (${read.moreLabel || "no More"})`
   );
   kit.check(
-    `8d: ${leg}: under the name stands the canvas's about, one line inside the head, whole in its tooltip; no text in the pane holds a route`,
+    `8d: ${leg}: under the name stands the canvas's ask, one line inside the head, whole in its tooltip; no text in the pane holds a route`,
     !!read.line &&
-      read.line.text === CANVAS.about &&
-      read.line.tooltip === CANVAS.about &&
+      read.line.text === ASK &&
+      read.line.tooltip === ASK &&
       read.line.inside &&
       read.line.oneLine &&
       !read.route,
@@ -1718,7 +1719,7 @@ async function mapLeg(
     (route) => route.fulfill({ json: MAP })
   );
   await page.goto(
-    `${bench}/motion/artifact-head?w=${width}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+    `${bench}/motion/artifact-head?w=${width}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}&ask=${encodeURIComponent(ASK)}`
   );
   await page.waitForSelector("[data-bench-pane] iframe.ready", {
     timeout: 60_000,
@@ -1867,9 +1868,9 @@ async function mapLeg(
 
 /** Leg 12's second canvas: plan-view's, its states file missing, its stage failed as the hub kept it. */
 const MISSING_FILE = "src/lib/cawco/plan/proposal/PlanFrame.stories.ts";
-const THEN_ABOUT = "The plan view's frame";
+const THEN_ASK = "Judge the plan view's frame";
 const thenPath = () =>
-  `/@cawco/canvas?file=${encodeURIComponent(MISSING_FILE)}&spec=${encodeURIComponent(JSON.stringify({ name: "plan-view", about: THEN_ABOUT }))}`;
+  `/@cawco/canvas?file=${encodeURIComponent(MISSING_FILE)}&spec=${encodeURIComponent(JSON.stringify({ name: "plan-view" }))}`;
 const missingStage = (): StageState => ({
   runs: "sheet",
   toolchain: "vite",
@@ -1941,7 +1942,7 @@ async function artifactSwitchLeg(
         }
       });
       await page.goto(
-        `${bench}/motion/artifact-head?w=720&kind=${from}&then=${encodeURIComponent(thenPath())}&thenName=plan-view&after=4000&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+        `${bench}/motion/artifact-head?w=720&kind=${from}&then=${encodeURIComponent(thenPath())}&thenName=plan-view&thenAsk=${encodeURIComponent(THEN_ASK)}&after=4000&port=${stage.port}&path=${encodeURIComponent(canvasPath())}&ask=${encodeURIComponent(ASK)}`
       );
       const down = await page
         .locator("[data-bench-pane] [data-slot=down][role=alert]")
@@ -1962,10 +1963,10 @@ async function artifactSwitchLeg(
         };
       });
       kit.check(
-        `12: ${theme}, from a ${from}${inspect ? " with Inspect open" : ""}: switching to a canvas whose stage failed draws its failed state in the pane, named in the head with its about, and nothing throws`,
+        `12: ${theme}, from a ${from}${inspect ? " with Inspect open" : ""}: switching to a canvas whose stage failed draws its failed state in the pane, named in the head with its ask, and nothing throws`,
         down &&
           read.name === "plan-view" &&
-          read.line === THEN_ABOUT &&
+          read.line === THEN_ASK &&
           read.title === "The stage for apps/dashboard didn't start" &&
           errors.length === 0,
         `${JSON.stringify(read)}; failed state ${down ? "drawn" : "never drawn"}; errors ${errors.join(" | ") || "none"}`
@@ -1978,7 +1979,7 @@ async function artifactSwitchLeg(
 /** The name the own-tab leg gives its canvas: words nothing else in the pane holds. */
 const OWN_NAME = "Own tab canvas";
 
-/** Leg 8i: the canvas in a tab of its own (`/artifact/<id>`): named once, by its head, with its about under the name. */
+/** Leg 8i: the canvas in a tab of its own (`/artifact/<id>`): named once, by its head, with its ask under the name. */
 async function ownTabLeg(
   kit: Kit,
   bench: string,
@@ -1994,7 +1995,7 @@ async function ownTabLeg(
     })
   );
   await page.goto(
-    `${bench}/motion/artifact-head?w=1024&own=1&name=${encodeURIComponent(OWN_NAME)}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+    `${bench}/motion/artifact-head?w=1024&own=1&name=${encodeURIComponent(OWN_NAME)}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}&ask=${encodeURIComponent(ASK)}`
   );
   await page.waitForSelector("[data-bench-pane] iframe.ready", {
     timeout: 60_000,
@@ -2017,24 +2018,28 @@ async function ownTabLeg(
         frame.url().includes("/@cawco/canvas") &&
         !frame.url().includes("by=map")
     );
-  // What the band shows, not what it holds: a framed band keeps its name and about hidden.
+  // What the band shows, not what it holds: a framed band keeps its name hidden, and draws no line under it.
   const band = canvas
     ? await canvas.evaluate(() => {
         const root = document.getElementById("cawco-chrome")?.shadowRoot;
-        return [...(root?.querySelectorAll<HTMLElement>(".name, .about") ?? [])]
+        return [
+          ...(root?.querySelectorAll<HTMLElement>(
+            ".band > div:not(.crumb, .tools)"
+          ) ?? []),
+        ]
           .filter((el) => getComputedStyle(el).display !== "none")
           .map((el) => el.textContent ?? "")
           .join(" | ");
       })
     : null;
   kit.check(
-    `8i: ${theme}: in its own tab the canvas is named once, by its head, its about on the line under the name; its page, framed there, says neither`,
-    pane.line === CANVAS.about &&
+    `8i: ${theme}: in its own tab the canvas is named once, by its head, its ask on the line under the name; its page, framed there, says neither`,
+    pane.line === ASK &&
       pane.names === 1 &&
       !pane.route &&
       band !== null &&
       !band.includes(CANVAS.name ?? "") &&
-      !band.includes(CANVAS.about ?? ""),
+      !band.includes(ASK),
     `pane ${JSON.stringify(pane)}; the page's band shows ${JSON.stringify(band)}`
   );
   await page.close();
@@ -2071,7 +2076,7 @@ async function stageDownLeg(
     },
   });
   await page.goto(
-    `${bench}/motion/artifact-head?w=720&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+    `${bench}/motion/artifact-head?w=720&port=${stage.port}&path=${encodeURIComponent(canvasPath())}&ask=${encodeURIComponent(ASK)}`
   );
   const down = page.locator("[data-bench-pane] [data-slot=down][role=alert]");
   const shown = await down
@@ -2303,7 +2308,7 @@ async function moreHoldsComments(
   );
   const doc = await serveDoc(page);
   await page.goto(
-    `${bench}/motion/artifact-head?w=330&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+    `${bench}/motion/artifact-head?w=330&port=${stage.port}&path=${encodeURIComponent(canvasPath())}&ask=${encodeURIComponent(ASK)}`
   );
   await page.waitForSelector("[data-bench-pane] [data-slot=send]", {
     timeout: 60_000,
@@ -2349,7 +2354,7 @@ async function commentsCount(
   );
   const doc = await serveDoc(page);
   await page.goto(
-    `${bench}/motion/artifact-head?w=720&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+    `${bench}/motion/artifact-head?w=720&port=${stage.port}&path=${encodeURIComponent(canvasPath())}&ask=${encodeURIComponent(ASK)}`
   );
   const button = page.locator(
     "[data-bench-pane] [data-slot=side-head] button[data-slot=comments]"

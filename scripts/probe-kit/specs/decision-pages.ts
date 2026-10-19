@@ -46,6 +46,13 @@
  *     live preview, then a second and a third published right after it;
  *     the hub's pid stays, /health answers throughout, every page draws, and
  *     the hub's log holds no FOREIGN KEY line.
+ * (j) The page's hero holds its title as an `h1` and no paragraph after it:
+ *     the ask heads the panel, so the hero says nothing twice.
+ * (k) A program whose option has no cost, whose card recommends two and
+ *     whose card recommends none is refused on create, 422, every reason at
+ *     once ("The program has 3 problems:"); the same cards as a revision of
+ *     a kept page are refused alike and change nothing; a program with every
+ *     cost, one recommended and a why per card is kept.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
@@ -79,19 +86,19 @@ const programOf = (ids: {
   image: string;
   mockup: string;
   site: string;
-}) => `root = Decisions("Shape the launch", [stack, host, later], "Three choices before the launch page is built.")
+}) => `root = Decisions("Shape the launch", [stack, host, later])
 stack = Decision("stack", "Which stack does the launch page use?", [svelte, astro], "Today: the landing is plain HTML.", [shot, flow])
-svelte = Option("svelte", "SvelteKit", "The dashboard's own stack.", true)
-astro = Option("astro", "Astro", "Content first, islands where needed.", false, [seq])
+svelte = Option("svelte", "SvelteKit", "The dashboard's own stack.", true, [], "Heavier than the plain page it replaces.")
+astro = Option("astro", "Astro", "Content first, islands where needed.", false, [seq], "A second stack to keep up.")
 host = Decision("host", "Where does the page run?", [hub, edge], "It ships with the hub today.", [sketch, tune], ["stack"])
-hub = Option("hub", "The hub", "Nothing new to run.")
+hub = Option("hub", "The hub", "Nothing new to run.", true, [], "Readers far from the hub wait longer.")
 edge = Option("edge", "An edge host", "Closer to readers.", false, [motion], "One more host to run.")
 later = Section("Later", [plan])
 plan = Decision("plan", "When does the plan ship?", [now, after], "The waitlist opens with it.", [gantt, status, site], ["host"])
 site = Preview("${ids.site}", "The site as it runs")
 status = Row([Text("Ships with the waitlist", "meta"), Badge("Planned", "attn")])
-now = Option("now", "With the page")
-after = Option("after", "A week after")
+now = Option("now", "With the page", "The waitlist opens with it.", true, [], "The page waits for the plan.")
+after = Option("after", "A week after", "The page ships first.", false, [], "The waitlist opens without it.")
 shot = Image("${ids.image}", "The landing as it stands: a title and one button", "Today's landing")
 flow = Diagram("flowchart LR\\nVisit[Visit] --> Read[Read] --> Join[Sign up]", "The reader's path")
 seq = Diagram("sequenceDiagram\\nReader->>Hub: open the page\\nHub-->>Reader: the page, live")
@@ -101,10 +108,10 @@ motion = Preview("${ids.mockup}", "How it moves")
 tune = Dials("Card", {radius: [12, 0, 32], accent: "#e65d46"})`;
 
 /** A revision that puts a decision ahead of every other. */
-const INSERT = `root = Decisions("Shape the launch", [audience, stack, host, later], "Three choices before the launch page is built.")
-audience = Decision("audience", "Who is the page for?", [teams, solo], "Today: no one in particular.")
-teams = Option("teams", "Teams")
-solo = Option("solo", "Solo builders")`;
+const INSERT = `root = Decisions("Shape the launch", [audience, stack, host, later])
+audience = Decision("audience", "Who is the page for?", [teams, solo], "Teams run the most machines.")
+teams = Option("teams", "Teams", "Each seat a person.", true, [], "Solo builders read past it.")
+solo = Option("solo", "Solo builders", "One person, many machines.", false, [], "Teams look elsewhere.")`;
 
 /** A revision that rewords one decision. */
 const REWORD = `host = Decision("host", "Where does the launch page run?", [hub, edge], "It ships with the hub today.", [sketch, tune], ["stack"])`;
@@ -184,7 +191,7 @@ const FIT_COST =
 const fitPage = (mockup: string) => `root = Decisions("Fit the phone", [fit])
 fit = Decision("fit", "Which host carries the launch?", [wide, plain], "One card on the narrowest phone.")
 wide = Option("wide", "${FIT_LABEL}", "Closer to readers.", true, [embed], "${FIT_COST}")
-plain = Option("plain", "The hub", "Nothing new to run.")
+plain = Option("plain", "The hub", "Nothing new to run.", false, [], "Readers far from the hub wait longer.")
 embed = Preview("${mockup}", "How it moves")`;
 
 /** A card's fold as the frame draws it: its mark, its line, its button, what of it shows, and where focus is. */
@@ -492,6 +499,8 @@ const publish = async (
   // first ask), then its Mermaid is drawn on that screen.
   const canvas = await make<{ id: string }>({
     kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
     name: "launch-sketch",
   });
   await until(
@@ -521,6 +530,8 @@ const publish = async (
   );
   const mockup = await make<{ id: string }>({
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "launch-motion",
     html: MOCKUP,
   });
@@ -542,6 +553,8 @@ const publish = async (
   });
   const site = await make<{ id: string }>({
     kind: "preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
     name: "launch-site",
     port: server.port,
     machine: MACHINE,
@@ -554,6 +567,8 @@ const publish = async (
   });
   const made = await make<{ decisions?: string[]; id: string }>({
     kind: "page",
+    does: "pick",
+    ask: "Pick one option on each card",
     name: NAME,
     program,
   });
@@ -664,6 +679,19 @@ const mediaLeg = async (
       media.row.badge !== "" &&
       media.row.badge !== "rgba(0, 0, 0, 0)",
     JSON.stringify({ faces: media.faces, row: media.row })
+  );
+  const hero = await frame.evaluate(() => {
+    const head = document.querySelector(".dp-hero");
+    return {
+      h1: head?.querySelector("h1")?.textContent ?? null,
+      after: head?.querySelectorAll("h1 ~ p, h1 ~ * p").length ?? -1,
+      paragraphs: head?.querySelectorAll("p").length ?? -1,
+    };
+  });
+  kit.check(
+    `(j) ${leg}: the hero has its h1 and no p after it`,
+    hero.h1 === "Shape the launch" && hero.after === 0 && hero.paragraphs === 0,
+    JSON.stringify(hero)
   );
   const sweep = await overflowIn(frame);
   kit.check(
@@ -1310,7 +1338,13 @@ const htmlPage = async (on: On) => {
   const { desk, fleet, kit, projectId, writer } = on;
   const budget = await fleet.api<{ id: string }>(
     `/api/instances/${writer}/artifacts`,
-    { kind: "page", name: "budget", html: HTML_PAGE }
+    {
+      kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "budget",
+      html: HTML_PAGE,
+    }
   );
   const html = await until(
     "the HTML page in the panel",
@@ -1323,21 +1357,48 @@ const htmlPage = async (on: On) => {
     Boolean,
     60_000
   ).catch(() => null);
+  /** The hub's read of the page: its pick and value once both landed, else null. */
+  const onHub = async () => {
+    const read = await fleet.api<{ state: Doc["state"] }>(
+      `/api/instances/${writer}/artifacts/${budget.id}`
+    );
+    return (read.state.mode?.options ?? []).includes("soft") &&
+      String(read.state.budget?.value) === "60"
+      ? read
+      : null;
+  };
+  /** One try: the pick and value made in the frame the pane shows now, then a short look on the hub. */
+  const pickNow = async () => {
+    const now = await frameAt(desk, FRAME);
+    if (now && (await countIn(now, '[data-cawco-choice="mode"]')) > 0) {
+      try {
+        await tapIn(desk, now, '[data-option="soft"]');
+        await now.locator('input[name="budget"]').fill("60");
+      } catch {
+        // The frame went mid-try: the next try finds the one that stayed.
+      }
+    }
+    try {
+      return await until("the pick on the hub", onHub, Boolean, 3000);
+    } catch {
+      return null;
+    }
+  };
+  // A pick made in a frame the pane is swapping out never lands: the frame
+  // that stays is found again and picked in until the hub holds both.
+  let operated: Awaited<ReturnType<typeof onHub>> = null;
   if (html) {
-    await tapIn(desk, html, '[data-option="soft"]');
-    await html.locator('input[name="budget"]').fill("60");
+    try {
+      operated = await until(
+        "the HTML page's pick and value on the hub",
+        pickNow,
+        Boolean,
+        30_000
+      );
+    } catch {
+      operated = null;
+    }
   }
-  const operated = await until(
-    "the HTML page's pick and value on the hub",
-    () =>
-      fleet.api<{ state: Doc["state"] }>(
-        `/api/instances/${writer}/artifacts/${budget.id}`
-      ),
-    (r) =>
-      (r.state.mode?.options ?? []).includes("soft") &&
-      String(r.state.budget?.value) === "60",
-    20_000
-  ).catch(() => null);
   const listed = await fleet.api<{
     pages: { cards: number; name: string; picked: number }[];
   }>(`/api/projects/${projectId}/decisions`);
@@ -1345,7 +1406,17 @@ const htmlPage = async (on: On) => {
   kit.check(
     "(f) an HTML page's option pick and range value are kept, and the tab reads its card from the built page",
     !!operated && row?.cards === 1 && row.picked === 1,
-    JSON.stringify({ state: operated?.state, row })
+    JSON.stringify({
+      frame: html ? html.url().slice(0, 80) : null,
+      hub:
+        operated?.state ??
+        (
+          await fleet.api<{ state: Doc["state"] }>(
+            `/api/instances/${writer}/artifacts/${budget.id}`
+          )
+        ).state,
+      row,
+    })
   );
 };
 
@@ -1413,6 +1484,8 @@ const reachLeg = async (on: On) => {
   const { fleet, kit, writer } = on;
   await fleet.api(`/api/instances/${writer}/artifacts`, {
     kind: "page",
+    does: "pick",
+    ask: "Pick one option on each card",
     name: "reach",
     program: REACH_PAGE,
   });
@@ -1604,7 +1677,8 @@ const fitLeg = async (on: On, theme: "light" | "dark") => {
       wide.aria.startsWith(`- button "${FIT_LABEL}"`) &&
       wide.description === `Closer to readers. Cost: ${FIT_COST} Recommended` &&
       plain.aria.startsWith('- button "The hub"') &&
-      plain.description === "Nothing new to run.",
+      plain.description ===
+        "Nothing new to run. Cost: Readers far from the hub wait longer.",
     JSON.stringify({ named, wide, plain })
   );
   await phone.close();
@@ -1809,13 +1883,32 @@ const openToDraw = async (on: On) => {
   await fleet
     .api(`/api/instances/${on.writer}/artifacts/${on.page}/show`, {})
     .catch(() => undefined);
-  const frame = await frameWith(desk, 4);
+  // The show draws the page at a new revision: the pane swaps its frame, and
+  // a card unfolded in the frame on its way out is folded in the one that
+  // stays. Found again and opened until its Open to draw stands in view.
+  const OPEN = "#decision-host figure button.open";
+  const frame = (await until(
+    "the host card open, its Open to draw in view",
+    async () => {
+      const now = await frameWith(desk, 4);
+      await unfold(desk, now, "host").catch(() => undefined);
+      const shows = await now
+        .evaluate(
+          (selector) =>
+            !!document.querySelector<HTMLElement>(selector)?.checkVisibility(),
+          OPEN
+        )
+        .catch(() => false);
+      return shows ? now : null;
+    },
+    Boolean,
+    30_000
+  )) as Frame;
   const canvasId = await frame
     .locator('iframe[src*="/__cawco/canvas/"]')
     .getAttribute("src")
     .then((src) => src?.split("/")[3] ?? "");
-  await unfold(desk, frame, "host");
-  await tapIn(desk, frame, "#decision-host figure button.open");
+  await tapIn(desk, frame, OPEN);
   const shown = await until(
     "the canvas at the front of the panel",
     () => fleet.api<{ shown: boolean }>(`/api/artifacts/${canvasId}`),
@@ -1833,12 +1926,10 @@ const openToDraw = async (on: On) => {
 };
 
 /** A page whose option embeds the dev server's preview, live. */
-const embedPage = (
-  site: string
-) => `root = Decisions("Pick the host", [where], "Where the site runs.")
+const embedPage = (site: string) => `root = Decisions("Pick the host", [where])
 where = Decision("where", "Where does the site run?", [here, there], "It runs on the machine today.")
-here = Option("here", "Here", "As it runs now.", true, [live])
-there = Option("there", "Elsewhere", "Somewhere new.")
+here = Option("here", "Here", "As it runs now.", true, [live], "Nothing new to try.")
+there = Option("there", "Elsewhere", "Somewhere new.", false, [], "A move to make first.")
 live = Preview("${site}", "The site as it runs")`;
 
 /** What the crash leg's fresh dev server says. */
@@ -1850,8 +1941,8 @@ const plainPage = (
   ask: string
 ) => `root = Decisions("${ask}", [${card}])
 ${card} = Decision("${card}", "${ask}", [yes, no], "Nothing is set yet.")
-yes = Option("yes", "Yes")
-no = Option("no", "No")`;
+yes = Option("yes", "Yes", "It is set.", true, [], "One more thing to keep.")
+no = Option("no", "No", "It stays unset.", false, [], "Nothing changes.")`;
 
 /**
  * (i) Nothing published takes the hub down: a page whose option embeds a
@@ -1892,6 +1983,8 @@ const burstLeg = async (on: On) => {
   const make = (name: string, program: string) =>
     fleet.api<{ id: string }>(`/api/instances/${writer}/artifacts`, {
       kind: "page",
+      does: "pick",
+      ask: "Pick one option on each card",
       name,
       program,
     });
@@ -1937,7 +2030,14 @@ const burstLeg = async (on: On) => {
   });
   const fresh = await fleet.api<{ id: string }>(
     `/api/instances/${writer}/artifacts`,
-    { kind: "preview", name: "fresh-site", port: server.port, machine: MACHINE }
+    {
+      kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      name: "fresh-site",
+      port: server.port,
+      machine: MACHINE,
+    }
   );
   const first = await make("host-pick", embedPage(fresh.id)).catch(
     (error: unknown) => ({ id: "", error: String(error) })
@@ -2012,6 +2112,76 @@ const burstLeg = async (on: On) => {
   server.stop(true);
 };
 
+/** Cards that break the interview's shape: a cost missing, two recommended, none recommended. */
+const UNSHAPED = `ship = Decision("ship", "When does it ship?", [soon, slow], "Soon reads as ready.")
+soon = Option("soon", "Soon", "Out this week.", true, [], "")
+slow = Option("slow", "Later", "Out next month.", true, [], "A month of waiting.")
+tone = Decision("tone", "How does it sound?", [calm, loud], "")
+calm = Option("calm", "Calm", "Short sentences.", false, [], "Easy to miss.")
+loud = Option("loud", "Loud", "Big claims.", false, [], "Hard to trust.")`;
+const SHAPED = `root = Decisions("Shape the release", [name])
+name = Decision("name", "What is the release called?", [plain, coined], "A plain name needs no explaining.")
+plain = Option("plain", "Release 2", "Says what it is.", true, [], "Forgettable.")
+coined = Option("coined", "Kestrel", "Memorable.", false, [], "Needs a line to explain it.")`;
+
+/** (k) Check 6: a program out of the interview's shape is refused on create and on revision, every reason at once. */
+const interviewShape = async (on: On) => {
+  const { fleet, kit, writer } = on;
+  const at = `/api/instances/${writer}/artifacts`;
+  const wanted = [
+    'Decision "ship", option "soon" has no cost: say what picking it costs them, in one line.',
+    'Decision "ship" recommends 2 options: mark exactly one.',
+    'Decision "tone" recommends nothing: mark exactly one option recommended, and say why in the decision\'s why.',
+  ];
+  const said = (error: Error) => error.message;
+  const created = await fleet
+    .api(at, {
+      kind: "page",
+      name: "unshaped",
+      does: "pick",
+      ask: "Pick when it ships and how it sounds",
+      program: `root = Decisions("Shape the release", [ship, tone])\n${UNSHAPED}`,
+    })
+    .then((answer) => `kept ${JSON.stringify(answer)}`, said);
+  kit.check(
+    "(k) a program with a cost missing, two recommended and none recommended is refused on create, 422, all three at once",
+    created.includes(": 422 The program has 3 problems:") &&
+      wanted.every((line) => created.includes(line)),
+    created.slice(0, 600)
+  );
+  const stored = await fleet
+    .api<{ id: string }>(at, {
+      kind: "page",
+      name: "shaped",
+      does: "pick",
+      ask: "Pick what the release is called",
+      program: SHAPED,
+    })
+    .then((answer) => answer, said);
+  kit.check(
+    "(k) a program with every cost, one recommended and a why per card is kept",
+    typeof stored !== "string" && !!stored.id,
+    JSON.stringify(stored)
+  );
+  if (typeof stored === "string") {
+    return;
+  }
+  const before = await fleet.api<{ pageHash: string }>(`${at}/${stored.id}`);
+  const revised = await fleet
+    .api(`${at}/${stored.id}/statements`, {
+      statements: `root = Decisions("Shape the release", [name, ship, tone])\n${UNSHAPED}`,
+    })
+    .then((answer) => `kept ${JSON.stringify(answer)}`, said);
+  const after = await fleet.api<{ pageHash: string }>(`${at}/${stored.id}`);
+  kit.check(
+    "(k) the same cards as a revision of the kept page are refused, all three at once, and the page is unchanged",
+    revised.includes(" 422 The program has 3 problems:") &&
+      wanted.every((line) => revised.includes(line)) &&
+      after.pageHash === before.pageHash,
+    `${revised.slice(0, 600)}; hash ${before.pageHash} → ${after.pageHash}`
+  );
+};
+
 const run = async (kit: Kit) => {
   const on = await publish(kit, await standUp(kit));
   for (const view of ["desk", "phone"] as const) {
@@ -2035,6 +2205,8 @@ const run = async (kit: Kit) => {
   await reachLeg(on);
   await on.fleet.api(`/api/instances/${on.writer}/artifacts`, {
     kind: "page",
+    does: "pick",
+    ask: "Pick one option on each card",
     name: "fit",
     program: fitPage(on.mockup),
   });
@@ -2043,7 +2215,8 @@ const run = async (kit: Kit) => {
   }
   await openToDraw(on);
   await openAsCanvas(on);
-  // Last: its pages join the project's graph, which (c) counts.
+  // Last: their pages take the panel's front and join the project's graph, which (c) counts.
+  await interviewShape(on);
   await burstLeg(on);
   kit.check(
     "the pages said no error",

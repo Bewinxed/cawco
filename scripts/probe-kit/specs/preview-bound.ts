@@ -583,6 +583,8 @@ const run = async (kit: Kit) => {
   const heavyOne = await fleet.spawn("claude", "Heavy preview", fleet.repo);
   await fleet.api(`/api/instances/${heavyOne}/artifacts`, {
     kind: "preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
     name: "heavy",
     dir: folder,
   });
@@ -591,6 +593,8 @@ const run = async (kit: Kit) => {
     const id = await fleet.spawn("claude", `Light ${name}`, fleet.repo);
     await fleet.api(`/api/instances/${id}/artifacts`, {
       kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
       name,
       html: pageOf(name),
     });
@@ -605,6 +609,8 @@ const run = async (kit: Kit) => {
   const fullOne = await fleet.spawn("claude", "Full page", fleet.repo);
   await fleet.api(`/api/instances/${fullOne}/artifacts`, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "full",
     html: fullPage(),
   });
@@ -613,6 +619,8 @@ const run = async (kit: Kit) => {
     const id = await fleet.spawn("claude", `Ticks ${name}`, fleet.repo);
     await fleet.api(`/api/instances/${id}/artifacts`, {
       kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
       name,
       html,
     });
@@ -873,7 +881,13 @@ const run = async (kit: Kit) => {
   await open(madeDesk, `${base}/session/${made}`, '[data-slot="pane"]');
   asks.set("1", {
     name: CREATE,
-    input: { kind: "page", name: "made", html: pageOf("Made") },
+    input: {
+      kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "made",
+      html: pageOf("Made"),
+    },
   });
   await fleet.send(made, "PROBE-CALL:1");
   await until("the page made", () => answered.get("1"), Boolean, 180_000);
@@ -1239,7 +1253,15 @@ const run = async (kit: Kit) => {
   const easel = await kit.page("desk", { init: [watchDashboard] });
   await tabsAt(easel, [drawn, lightOne], drawn);
   await open(easel, `${base}/session/${drawn}`, '[data-slot="pane"]');
-  asks.set("2", { name: CREATE, input: { kind: "canvas", name: "held" } });
+  asks.set("2", {
+    name: CREATE,
+    input: {
+      kind: "canvas",
+      does: "draw",
+      ask: "Draw on this canvas",
+      name: "held",
+    },
+  });
   await fleet.send(drawn, "PROBE-CALL:2");
   await until("the canvas made", () => answered.get("2"), Boolean, 180_000);
   const canvasFrame = easel.locator('iframe[title="Canvas"]').first();

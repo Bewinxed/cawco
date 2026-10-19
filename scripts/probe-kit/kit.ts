@@ -786,21 +786,45 @@ export async function open(
 
 /** Waits until every finite animation on the page has landed. */
 export async function settle(page: Page, ms = 150): Promise<void> {
-  // A finite run still going after 10s will not land (a timeline held
-  // still): named, as a failure, never waited on for ever.
+  // A finite run still going after 10s will not land: named, as a failure,
+  // never waited on for ever. A run lands when it finishes or stops running:
+  // one paused after the wait began (a faded cover's skeleton holds still)
+  // moves no more, and its `finished` never settles. Each run waited on is
+  // kept with whether it landed, so one that didn't is named with its state.
   const landed = await readWithin(10_000, () =>
     page.evaluate(async () => {
+      const waits = window
+        .kitRuns()
+        .filter(
+          (run) =>
+            run.playState === "running" &&
+            Number.isFinite(
+              Number(run.effect?.getComputedTiming().endTime ?? 0)
+            )
+        )
+        .map((run) => ({ run, settled: false }));
+      (window as unknown as { __kitWaits: typeof waits }).__kitWaits = waits;
+      /** Resolves once `run` no longer runs (paused, idle), read each frame. */
+      const stops = (run: Animation) =>
+        new Promise<void>((done) => {
+          const look = () => {
+            if (run.playState === "running") {
+              requestAnimationFrame(look);
+            } else {
+              done();
+            }
+          };
+          requestAnimationFrame(look);
+        });
       await Promise.all(
-        window
-          .kitRuns()
-          .filter(
-            (run) =>
-              run.playState === "running" &&
-              Number.isFinite(
-                Number(run.effect?.getComputedTiming().endTime ?? 0)
-              )
-          )
-          .map((run) => run.finished.catch(() => undefined))
+        waits.map((wait) =>
+          Promise.race([
+            wait.run.finished.catch(() => undefined),
+            stops(wait.run),
+          ]).then(() => {
+            wait.settled = true;
+          })
+        )
       );
     })
   );
@@ -809,27 +833,28 @@ export async function settle(page: Page, ms = 150): Promise<void> {
       break;
     case "unanswered": {
       const stuck = await page.evaluate(() =>
-        window
-          .kitRuns()
-          .filter(
-            (run) =>
-              run.playState === "running" &&
-              Number.isFinite(
-                Number(run.effect?.getComputedTiming().endTime ?? 0)
-              )
-          )
-          .map((run) => {
+        (
+          (
+            window as unknown as {
+              __kitWaits?: { run: Animation; settled: boolean }[];
+            }
+          ).__kitWaits ?? []
+        )
+          .filter((wait) => !wait.settled)
+          .map(({ run }) => {
             const target = (run.effect as KeyframeEffect | null)?.target;
-            const what =
-              run instanceof CSSTransition
-                ? `transition ${run.transitionProperty}`
-                : `${run.constructor.name} ${run.id}`;
+            let what = `${run.constructor.name} ${run.id}`;
+            if (run instanceof CSSTransition) {
+              what = `transition ${run.transitionProperty}`;
+            } else if (run instanceof CSSAnimation) {
+              what = `animation ${run.animationName}`;
+            }
             // The element by its hook, when it has one; its first class otherwise.
             const slot = target?.getAttribute("data-slot");
             const name = slot
               ? `[data-slot="${slot}"]`
               : `.${String(target?.className).split(" ")[0]}`;
-            return `${what} on ${target?.tagName.toLowerCase()}${name}`;
+            return `${what} on ${target?.tagName.toLowerCase()}${name} (${run.playState}${target?.isConnected === false ? ", detached" : ""})`;
           })
       );
       // The wait awaited the runs going when it began: one paused since

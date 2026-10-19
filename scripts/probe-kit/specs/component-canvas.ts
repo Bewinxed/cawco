@@ -46,8 +46,9 @@
  *     stage's report says `by: "stage"`, every frame drawn, the move read,
  *     and a frame's picture.
  * 14. A section on its way (a states file whose helper takes 4 s): opened
- *     alone, the band names the canvas once with its about (framed, the
- *     panel's head says both and the band neither: canvas-design 8i);
+ *     alone, the band names the canvas once and draws no line under it (the
+ *     ask is the panel head's alone; framed, the band says neither:
+ *     canvas-design 8i);
  *     the section is named in words (its title's last part) in the title
  *     role over its file in meta ink, never link-styled; one status line
  *     ("Drawing 2 stories"), the column's head and a skeleton frame per
@@ -61,6 +62,11 @@
  *     frames would stand, named by its component, with the error and its
  *     place under Show details, and the report holds the page error; no
  *     skeleton or status line is left.
+ * 16. A frame never silently draws at its floor (the owner's 24px approval
+ *     card, "this just showed up, dafuq"): a story of a size container
+ *     (`container-type: inline-size`) with no width of its own is reported
+ *     failed, "drawn 24px wide: the story has no width of its own; give it a
+ *     viewport or a width"; the same card with a phone viewport is drawn.
  *
  * Captures of the canvas (desk and phone, light and dark, its move's
  * timeline and its dials open) go to `$TMPDIR/caps/` and the clone's
@@ -246,8 +252,6 @@ const DURATION_KEY = /\.duration$/;
 
 const KIT_SPEC: CanvasSpec = {
   name: "Kit",
-  about:
-    "The kit's button, card, badge and pairing card in every state their CSS reaches, the pairing move, and the radius dial",
   dials: [
     {
       name: "radius",
@@ -628,7 +632,6 @@ async function views(kit: Kit, stage: Stage): Promise<void> {
     await phone.goto(
       canvasUrl(stage, ["src/Pairing.stories.js"], {
         name: "Pairing",
-        about: "The pairing card's two states and the move between them",
       })
     );
     const phoneReport = await reportOn(phone, 2000);
@@ -724,7 +727,6 @@ async function lazy(kit: Kit, stage: Stage): Promise<void> {
   await page.goto(
     canvasUrl(stage, ["src/Tall.stories.js", "src/Far.stories.js"], {
       name: "Screens",
-      about: "A long screen and one past it",
     })
   );
   await reportOn(page, 1500);
@@ -796,7 +798,6 @@ async function kept(kit: Kit, stage: Stage): Promise<void> {
   await page.goto(
     canvasUrl(stage, ["src/Badge.stories.js"], {
       name: "Badge",
-      about: "The badge",
     })
   );
   await reportOn(page);
@@ -814,7 +815,6 @@ async function kept(kit: Kit, stage: Stage): Promise<void> {
   await again.goto(
     canvasUrl(stage, ["src/Badge.stories.js"], {
       name: "Badge",
-      about: "The badge",
     })
   );
   await reportOn(again);
@@ -838,7 +838,6 @@ async function kept(kit: Kit, stage: Stage): Promise<void> {
   await broken.goto(
     canvasUrl(stage, ["src/Throws.stories.js"], {
       name: "Throws",
-      about: "A broken component",
     })
   );
   const [onPage] = framesOf(await reportOn(broken));
@@ -923,7 +922,7 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
   cdp.on("Animation.animationStarted", ({ animation }) => {
     started.push({ id: animation.id, name: animation.name });
   });
-  const spec = { name: "Waiting canvas", about: "Two marks that come late" };
+  const spec = { name: "Waiting canvas" };
   await page.goto(canvasUrl(stage, ["src/Slow.stories.js"], spec), {
     waitUntil: "domcontentloaded",
   });
@@ -933,6 +932,11 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
       document
         .getElementById("cawco-chrome")
         ?.shadowRoot?.querySelector(".band")?.textContent ?? "",
+    lines:
+      document
+        .getElementById("cawco-chrome")
+        ?.shadowRoot?.querySelectorAll(".band > div:not(.name, .crumb, .tools)")
+        .length ?? -1,
     page: `${document.body.innerText}\n${document.getElementById("cawco-chrome")?.shadowRoot?.textContent ?? ""}`,
     title: document.querySelector(".cawco-section-title")?.textContent,
     file: document.querySelector(".cawco-section-file")?.textContent,
@@ -957,9 +961,9 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
     own.decoration === "none" &&
     own.tag !== "A";
   kit.check(
-    "14a: alone (not framed), the band names the canvas once with its about, nothing else naming it; the section is named in words in the title role over its file in meta ink, never link-styled, and no text holds a route",
+    "14a: alone (not framed), the band names the canvas once and draws no line under it, nothing else naming it; the section is named in words in the title role over its file in meta ink, never link-styled, and no text holds a route",
     seen.band.includes(spec.name) &&
-      seen.band.includes(spec.about) &&
+      seen.lines === 0 &&
       seen.page.split(spec.name).length - 1 === 1 &&
       seen.title === "Late badge" &&
       seen.file === "src/Slow.stories.js" &&
@@ -1065,7 +1069,6 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
   await broken.goto(
     canvasUrl(stage, ["src/Broken.stories.js"], {
       name: "Broken canvas",
-      about: "A states file that never loads",
     })
   );
   await broken.waitForSelector(".cawco-section-failed", { timeout: 20_000 });
@@ -1149,7 +1152,6 @@ async function react(kit: Kit, stage: Stage): Promise<void> {
   await page.goto(
     canvasUrl(stage, ["src/Button.stories.jsx", "src/Toggle.stories.jsx"], {
       name: "React kit",
-      about: "The React button and toggle, and the toggle's move",
     })
   );
   const report = await reportOn(page, 2500);
@@ -1209,7 +1211,6 @@ async function adapterLegs(
   await page.goto(
     canvasUrl(stage, [files.button, files.toggle], {
       name: `${name} kit`,
-      about: `The ${name} button and toggle, and the toggle's move`,
     })
   );
   const report = await reportOn(page, 2500);
@@ -1277,7 +1278,7 @@ async function daemonRender(kit: Kit, stage: Stage): Promise<void> {
     // Its sandbox follows the rule (agent capabilities.ts `chromiumSandboxed`): off beneath a workspace's boundary.
     const rendered = await renderCanvas(socket, port, {
       files: ["src/Button.stories.js", "src/Pairing.stories.js"],
-      spec: { name: "Kit", about: "The button and the pairing card" },
+      spec: { name: "Kit" },
       png: true,
       state: { story: "Primary", interaction: "hover" },
     });
@@ -1300,6 +1301,31 @@ async function daemonRender(kit: Kit, stage: Stage): Promise<void> {
   }
 }
 
+/** Leg 16: a size container with no width of its own fails at the frame's floor, in words; with a viewport it draws. */
+async function floor(kit: Kit, stage: Stage): Promise<void> {
+  const page = await kit.page("desk", { init: [BRIDGE] });
+  await page.goto(
+    canvasUrl(stage, ["src/Approval.stories.js"], { name: "Approval" })
+  );
+  const report = await reportOn(page);
+  const frame = (story: string) =>
+    framesOf(report).find(
+      (one) => one.story === story && one.interaction === "rest"
+    );
+  const unsized = frame("Unsized");
+  const phone = frame("Phone");
+  kit.check(
+    "16: a size container with no width of its own is failed at the frame's floor, said in words; with a phone viewport it is drawn",
+    unsized?.state === "failed" &&
+      unsized.error?.message ===
+        "drawn 24px wide: the story has no width of its own; give it a viewport or a width" &&
+      phone?.state === "drawn" &&
+      phone.box.w === 390,
+    `Unsized ${JSON.stringify({ state: unsized?.state, w: unsized?.box.w, error: unsized?.error })}; Phone ${JSON.stringify({ state: phone?.state, w: phone?.box.w })}`
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "component-canvas",
   run: async (kit) => {
@@ -1311,6 +1337,7 @@ const spec: Spec = {
       await lazy(kit, svelte);
       await kept(kit, svelte);
       await waiting(kit, svelte);
+      await floor(kit, svelte);
       await daemonRender(kit, svelte);
     } finally {
       svelte.stop();

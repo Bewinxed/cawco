@@ -500,7 +500,16 @@ async function onIpad(
 
     // 5. A page shown: the preview takes the front, then the switch brings the plan back.
     const shownAt = heard.length;
-    await call({ kind: "page", name: "notes", html: PAGE }, CREATE);
+    await call(
+      {
+        kind: "page",
+        does: "judge",
+        ask: "Judge this page: pin anything that reads wrong",
+        name: "notes",
+        html: PAGE,
+      },
+      CREATE
+    );
     const both = `side ${session} shown=preview opened=plan,preview regular=true`;
     const back = `side ${session} shown=plan opened=plan,preview regular=true`;
     await until(

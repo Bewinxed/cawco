@@ -56,9 +56,9 @@
  *    untouched through the same flips.
  * 19. The head says no path under the artifact's name (owner: "a stray /
  *    below the preview title"): for the page, the live preview and a canvas
- *    the session makes, at 1440 and at 390, the head stands with no line
- *    under the name (only a component canvas has a description, its
- *    `about`: session-sheet leg 22), and no text in the panel holds a route.
+ *    the session makes, at 1440 and at 390, the head stands with the
+ *    artifact's own ask as its line under the name, and no text in the
+ *    panel holds a route.
  *
  * `artifact_promote` (slice 6), read from the project's folder on the hub
  * with git:
@@ -91,10 +91,38 @@
  * P1–P3. The delegate's `to: "parent"` preview of a folder that isn't there,
  *    and one of a port nothing listens on, are refused, and the parent gets
  *    no artifact and no send of either.
+ *
+ * Every artifact carries its ask (the artifact purpose spec's §4 legs 12 to
+ * 18, named "ask 12" to "ask 18" here), each the hub's own answer:
+ *
+ * ask 12. A create of a page with `program` and neither `does` nor `ask`, on
+ *    the hub's route (the tool's own schema refuses it before the hub hears
+ *    it): 422, the tool's shape.
+ * ask 13. `kind: "component"`, `does: "pick"`: a pick is a decision page's.
+ * ask 14. `kind: "page"`, `does: "pick"`, HTML with no choice and no named
+ *    field: a page for picking holds a choice.
+ * ask 15. `kind: "page"`, `does: "try"`, a program: a try is a flow.
+ * ask 16. `kind: "page"`, `does: "judge"`, a folder whose page.html shows
+ *    three 2880×1800 PNGs: too many desk captures for the panel.
+ * ask 17. `ask: "Tap the card"`: no "tap" or "poke".
+ * ask 18. `ask: "Judge src/lib/Card.svelte"`: no file in the person's words.
+ *
+ * The head carries the ask (§3.4, §4 "The head"), on a page made with
+ * `ask: "Judge the six pairing states: pin anything that reads wrong"`:
+ *
+ * ask 22. At 1440 and 390, light and dark, the 44px head says the ask once:
+ *    its subtitle under the name where the head has the room the line needs
+ *    by the name's own rule (side/head.ts `NAME_KEEPS`), else the menu's
+ *    first row; the title control's title is the ask either way.
+ * ask 23. Within 5 s of a Send with a note, the same line reads
+ *    "Sent to <the session's title>".
+ * ask 24. `artifact_update({ id, ask })` turns the line to the new ask with
+ *    no `load` on the frame.
  */
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
+import { PNG } from "pngjs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
 
@@ -383,6 +411,8 @@ const run = async (kit: Kit) => {
   // 1. The page, made by the session through the MCP tool.
   const created = await call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "hero-pick",
     html: PAGE,
   });
@@ -582,7 +612,9 @@ const run = async (kit: Kit) => {
     `replaced tools: ${strays.join(", ") || "none"}; artifact_read ${names("artifact_read")}`
   );
 
+  await askChecks({ kit, fleet, session, call });
   await fieldChecks({ kit, fleet, session, page, base, call, said });
+  await headChecks({ kit, fleet, session, base, call });
   await promoteChecks({ kit, fleet, base, callIn, session });
 };
 
@@ -645,6 +677,8 @@ const handChecks = async ({
   const own = await callParent(CREATE, {
     kind: "page",
     name: "parent-own",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     html: PAGE,
   });
   const ownId = own.match(ANSWERED_ID)?.[1];
@@ -663,6 +697,8 @@ const handChecks = async ({
   const handed = await callDelegate(CREATE, {
     kind: "canvas",
     name: "handed-canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
     to: "parent",
   });
   const handedId = handed.match(ANSWERED_ID)?.[1];
@@ -725,6 +761,8 @@ const handChecks = async ({
   const drawing = await callDelegate(CREATE, {
     kind: "canvas",
     name: "handed-drawing",
+    does: "draw",
+    ask: "Draw over this sketch",
     to: "parent",
     elements: [
       {
@@ -813,6 +851,8 @@ const handChecks = async ({
   const again = await callDelegate(CREATE, {
     kind: "canvas",
     name: "handed-canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
     to: "parent",
   });
   const sendsAgain = await until(
@@ -868,6 +908,8 @@ const refusedHandChecks = async ({
   const broken = await callDelegate(CREATE, {
     kind: "preview",
     name: "broken-preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
     dir: join(fleet.repo, "no-such-folder"),
     to: "parent",
   });
@@ -885,6 +927,8 @@ const refusedHandChecks = async ({
   const deaf = await callDelegate(CREATE, {
     kind: "preview",
     name: "silent-preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
     port: silent,
     to: "parent",
   });
@@ -905,6 +949,284 @@ const refusedHandChecks = async ({
     after2.artifacts === before.artifacts && after2.sends === before.sends,
     `artifacts ${before.artifacts} → ${after2.artifacts}; sends ${before.sends} → ${after2.sends}`
   );
+};
+
+/** A decision page's program with one question, as the decision library takes it. */
+const ONE_QUESTION = `root = Decisions("Pick a hero", [hero])
+hero = Decision("hero", "Which hero leads?", [a, b], "A reads at a glance.")
+a = Option("a", "Hero A", "One line, one button.", true, [], "Says less.")
+b = Option("b", "Hero B", "A picture and a quote.", false, [], "Slower to read.")`;
+
+/** A PNG of `width` × `height`, one flat colour: a desk capture as the page holds it. */
+const capturePng = (width: number, height: number): Buffer => {
+  const png = new PNG({ width, height });
+  png.data.fill(200);
+  return PNG.sync.write(png);
+};
+
+/** Checks ask 12 to ask 18: each refusal the hub gives a create that names no ask, or one its kind can't deliver. */
+const askChecks = async ({
+  kit,
+  fleet,
+  session,
+  call,
+}: Pick<OnSession, "call" | "fleet" | "kit" | "session">) => {
+  // ask 12: on the hub's route, as the tool posts it.
+  const bare = await fleet
+    .api(`/api/instances/${session}/artifacts`, {
+      kind: "page",
+      name: "no-ask",
+      program: ONE_QUESTION,
+    })
+    .then(
+      (answer) => `200 ${JSON.stringify(answer)}`,
+      (error: Error) => error.message
+    );
+  const body = bare.slice(bare.indexOf(" 422 ") + " 422 ".length);
+  kit.check(
+    "ask 12: a create with no does and no ask is 422, its body the tool's shape",
+    bare.includes(": 422 ") &&
+      body.startsWith(
+        "artifact_create takes kind, name, does (pick | judge | try | draw), ask"
+      ),
+    bare.slice(0, 300)
+  );
+
+  const refused = async (
+    leg: string,
+    input: object,
+    text: string,
+    status = 400
+  ) => {
+    const answer = await call(CREATE, input);
+    kit.check(
+      `${leg}: refused ${status} with "${text.slice(0, 60)}…"`,
+      answer.includes(text) && !ANSWERED_ID.test(answer),
+      answer.slice(0, 400)
+    );
+  };
+  await refused(
+    "ask 13",
+    {
+      kind: "component",
+      name: "picked-on-canvas",
+      does: "pick",
+      ask: "Pick the card",
+      file: "src/Card.stories.ts",
+    },
+    'A pick happens on a decision page: kind "page" with a program holding one Decision per question (decision-page skill). This component is an option\'s media: embed it with Canvas or Preview inside the Option.'
+  );
+  await refused(
+    "ask 14",
+    {
+      kind: "page",
+      name: "nothing-to-pick",
+      does: "pick",
+      ask: "Pick the hero",
+      html: '<!doctype html><html lang="en"><body><h1>Heroes</h1><p>Two of them.</p></body></html>',
+    },
+    "A page for picking holds a choice: a Decision in its program, or a data-cawco-choice in its HTML. This one holds none."
+  );
+  await refused(
+    "ask 15",
+    {
+      kind: "page",
+      name: "tried-program",
+      does: "try",
+      ask: "Try the hero",
+      program: ONE_QUESTION,
+    },
+    "is judged or picked on, not tried."
+  );
+  // ask 16: three desk captures beside page.html, in a folder on the session's machine.
+  const folder = join(fleet.sandbox, "captures");
+  mkdirSync(folder, { recursive: true });
+  for (const n of [1, 2, 3]) {
+    writeFileSync(join(folder, `state-${n}.png`), capturePng(2880, 1800));
+  }
+  writeFileSync(
+    join(folder, "page.html"),
+    `<!doctype html><html lang="en"><body>${[1, 2, 3]
+      .map((n) => `<img alt="State ${n}" src="state-${n}.png">`)
+      .join("")}</body></html>`
+  );
+  await refused(
+    "ask 16",
+    {
+      kind: "page",
+      name: "captures",
+      does: "judge",
+      ask: "Judge the relay's three states",
+      dir: folder,
+    },
+    "3 captures wider than 1600px on one page draw at a fraction of their size in the panel."
+  );
+  await refused(
+    "ask 17",
+    {
+      kind: "page",
+      name: "tapped",
+      does: "judge",
+      ask: "Tap the card",
+      html: PAGE,
+    },
+    'The ask reaches the person: say what they do (pick, pin, try, draw) and to what, without "tap" or "poke".'
+  );
+  await refused(
+    "ask 18",
+    {
+      kind: "page",
+      name: "pathed",
+      does: "judge",
+      ask: "Judge src/lib/Card.svelte",
+      html: PAGE,
+    },
+    "The ask is in the person's words: no file, path or id in it. Name the thing as they call it."
+  );
+};
+
+/** The ask the head legs' page opens with, and the round after it. */
+const ASK = "Judge the six pairing states: pin anything that reads wrong";
+const ASK_AGAIN = "Round two: judge the denied state";
+const PANE =
+  ':is([data-slot="preview-pane"], [data-side-surface-class~="preview-pane"])';
+
+/** The head's line as it shows: its subtitle under the name, or the menu's first row; the head's height and the title control's title. */
+const lineOf = async (on: Page) => {
+  const head = await on.evaluate((pane) => {
+    const side = document.querySelector(`${pane} [data-slot="side-head"]`);
+    const line = side?.querySelector<HTMLElement>('[data-slot="subtitle"]');
+    return {
+      height: side?.getBoundingClientRect().height ?? 0,
+      title:
+        side?.querySelector<HTMLElement>("[data-artifact-trigger]")?.title ??
+        "",
+      line:
+        line && !line.hasAttribute("data-dropped")
+          ? (line.textContent?.trim() ?? null)
+          : null,
+      inside: line
+        ? line.getBoundingClientRect().bottom <=
+          (side?.getBoundingClientRect().bottom ?? 0)
+        : false,
+    };
+  }, PANE);
+  if (head.line !== null) {
+    return { ...head, at: "head" as const };
+  }
+  await on.locator(`${PANE} [data-artifact-trigger]`).click();
+  const row = await on
+    .locator('[data-artifact-list] [data-slot="menu-line"]')
+    .textContent({ timeout: 5000 })
+    .catch(() => null);
+  await on.keyboard.press("Escape");
+  return { ...head, line: row?.trim() ?? null, at: "menu" as const };
+};
+
+/** Checks ask 22 to ask 24: the head's line, its Sent line, a new round's ask. */
+const headChecks = async ({
+  kit,
+  fleet,
+  session,
+  base,
+  call,
+}: Pick<OnSession, "base" | "call" | "fleet" | "kit" | "session">) => {
+  const made = await call(CREATE, {
+    kind: "page",
+    name: "pairing-ask",
+    does: "judge",
+    ask: ASK,
+    html: PAGE,
+  });
+  const id = made.match(ANSWERED_ID)?.[1];
+  if (!id) {
+    kit.check("ask 22: the page with its ask is made", false, made);
+    return;
+  }
+  for (const view of ["desk", "phone"] as const) {
+    for (const theme of ["light", "dark"] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one page at a time, as a person opens them
+      const shown = await kit.page(view, { theme });
+      await open(
+        shown,
+        `${base}/session/${session}`,
+        "[data-artifact-trigger]"
+      );
+      const seen = await until(
+        "the head's line",
+        () => lineOf(shown),
+        (now) => now.line === ASK,
+        15_000
+      ).catch(() => lineOf(shown));
+      kit.check(
+        `ask 22: at ${view === "desk" ? 1440 : 390} (${theme}) the 44px head says the ask once (${seen.at}), and the title control's title is it`,
+        seen.height === 44 &&
+          seen.line === ASK &&
+          seen.title === ASK &&
+          (seen.at === "menu" || seen.inside),
+        JSON.stringify(seen)
+      );
+      await shown.close();
+    }
+  }
+
+  // ask 23. The person's Send, with a note: the head says where it went.
+  const desk = await kit.page("desk", { theme: "light" });
+  await open(desk, `${base}/session/${session}`, "[data-artifact-trigger]");
+  const instance = (
+    await fleet.api<{ id: string; title: string | null }[]>("/api/instances")
+  ).find((one) => one.id === session);
+  const sentAt = Date.now();
+  const status = await desk.evaluate(
+    ({ who, artifact }) =>
+      fetch(`/api/instances/${who}/artifacts/${artifact}/send`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ text: "The denied state reads wrong" }),
+      }).then((response) => response.status),
+    { who: session, artifact: id }
+  );
+  const sent = await until(
+    "the head's Sent line",
+    () => lineOf(desk),
+    (now) => now.line?.startsWith("Sent to ") === true,
+    5000
+  ).catch(() => lineOf(desk));
+  const sentIn = Date.now() - sentAt;
+  kit.check(
+    "ask 23: within 5 s of the Send the head's line reads Sent to <the session's title>",
+    status === 200 &&
+      sent.line === `Sent to ${instance?.title ?? ""}` &&
+      sentIn <= 5000,
+    `send ${status} in ${sentIn} ms; ${JSON.stringify(sent)}; session title ${JSON.stringify(instance?.title)}`
+  );
+
+  // ask 24. A new round's ask: the head turns to it, the frame never loads again.
+  await desk.evaluate(() => {
+    const kept = window as unknown as { __loads: number };
+    kept.__loads = 0;
+    document
+      .querySelector('iframe[title="Preview"]')
+      ?.addEventListener("load", () => {
+        kept.__loads += 1;
+      });
+  });
+  const revised = await call(UPDATE, { id, ask: ASK_AGAIN });
+  const again = await until(
+    "the head's new ask",
+    () => lineOf(desk),
+    (now) => now.line === ASK_AGAIN,
+    10_000
+  ).catch(() => lineOf(desk));
+  const loads = await desk.evaluate(
+    () => (window as unknown as { __loads: number }).__loads
+  );
+  kit.check(
+    "ask 24: artifact_update with a new ask turns the head's line to it, with no load on the frame",
+    again.line === ASK_AGAIN && again.title === ASK_AGAIN && loads === 0,
+    `${revised.slice(0, 200)}; ${JSON.stringify(again)}; loads ${loads}`
+  );
+  await desk.close();
 };
 
 /** A git command in `folder`; its output. */
@@ -974,7 +1296,13 @@ const promoteChecks = async ({
     projectId: project.id,
   });
   const callP = callIn(inProject);
-  const made = await callP(CREATE, { kind: "page", name: "kept", html: PAGE });
+  const made = await callP(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "kept",
+    html: PAGE,
+  });
   const keptId = made.match(ANSWERED_ID)?.[1];
   if (!keptId) {
     kit.check("15: artifact_create answers the page's id", false, made);
@@ -1105,6 +1433,8 @@ const promoteChecks = async ({
   // 16. A canvas, once its screen drew its picture.
   const drawn = await callP(CREATE, {
     kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
     name: "sketch",
     mermaid: "flowchart LR; A --> B",
   });
@@ -1174,6 +1504,13 @@ const headLine = (page: Page) =>
     };
   });
 
+/** Leg 19's artifacts' asks: the line each one's head says under its name. */
+const HEAD_ASKS = {
+  page: "Judge this page: pin anything that reads wrong",
+  preview: "Try this page and say whether it works",
+  canvas: "Draw on this canvas",
+};
+
 /** {@link headLine} at the desk (1440) and at 390, the desk's size given back after. */
 async function headLines(page: Page) {
   // Text is read, not motion: a beat for the layout after each size.
@@ -1238,7 +1575,13 @@ const themeChecks = async (
       ),
   });
   try {
-    await call(CREATE, { kind: "preview", name: "own-app", port: app.port });
+    await call(CREATE, {
+      kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      name: "own-app",
+      port: app.port,
+    });
     const frames = page.locator('iframe[title="Preview"]');
     await until(
       "the panel's one frame showing the preview, its overlay in it",
@@ -1279,6 +1622,8 @@ const themeChecks = async (
     await call(CREATE, {
       kind: "canvas",
       name: "head-sketch",
+      does: "draw",
+      ask: HEAD_ASKS.canvas,
       mermaid: "flowchart LR; A --> B",
     });
     await until(
@@ -1293,9 +1638,17 @@ const themeChecks = async (
   }
   const reads = Object.values(lines).flatMap((one) => [one.desk, one.phone]);
   kit.check(
-    "19: for the page, the live preview and a canvas, at 1440 and 390, the head stands with no line under the name and no route in the panel",
+    "19: for the page, the live preview and a canvas, at 1440 and 390, the head stands with each one's ask as its line under the name and no route in the panel",
     Object.keys(lines).length === 3 &&
-      reads.every((read) => read.head && read.line === null && !read.route),
+      Object.entries(lines).every(([kind, read]) =>
+        [read.desk, read.phone].every(
+          (one) =>
+            one.head &&
+            one.line === HEAD_ASKS[kind as keyof typeof HEAD_ASKS] &&
+            !one.route
+        )
+      ) &&
+      reads.length === 6,
     JSON.stringify(lines)
   );
 };
@@ -1331,6 +1684,8 @@ const fieldChecks = async ({
   const askedAt = Date.now();
   const made = await call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "fields",
     html: fieldsPage("Fields, first"),
   });
@@ -1523,6 +1878,8 @@ const fieldChecks = async ({
   await freed.stop(true);
   const dead = await call(CREATE, {
     kind: "preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
     name: "dead-port",
     port: deadPort,
   });

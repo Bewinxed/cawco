@@ -592,12 +592,18 @@ async function folderRoot(dir: string): Promise<string> {
   return root;
 }
 
-/** What a folder preview of `dir` loads at most (core `folderWeight`). */
-export async function previewWeight(dir: unknown): Promise<FolderWeight> {
+/** What a folder preview of `dir` loads at most, and the desk captures on its start page at `path` (core `folderWeight`). */
+export async function previewWeight(
+  dir: unknown,
+  path?: unknown
+): Promise<FolderWeight> {
   if (typeof dir !== "string") {
     throw new Error("previewWeight takes a folder's absolute path.");
   }
-  return folderWeight(await folderRoot(dir));
+  return folderWeight(
+    await folderRoot(dir),
+    typeof path === "string" ? path : undefined
+  );
 }
 
 export function startPreview(options: {

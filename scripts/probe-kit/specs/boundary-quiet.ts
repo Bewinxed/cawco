@@ -234,6 +234,8 @@ const firstWork = (request: Seen, tag: string): Reply => {
     step.shown = true;
     return tool(CREATE, {
       kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
       name: `quiet-${tag.toLowerCase()}`,
       port: PORT[tag],
       serve: { command: servedCommand(tag) },

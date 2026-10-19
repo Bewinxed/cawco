@@ -130,10 +130,22 @@ const leg = async (
 
   // 1. A, then B, shown while the page is open.
   const a = (
-    await call(CREATE, { kind: "page", name: "alpha", html: pageOf("Alpha") })
+    await call(CREATE, {
+      kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "alpha",
+      html: pageOf("Alpha"),
+    })
   ).match(ANSWERED_ID)?.[1];
   const b = (
-    await call(CREATE, { kind: "page", name: "beta", html: pageOf("Beta") })
+    await call(CREATE, {
+      kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "beta",
+      html: pageOf("Beta"),
+    })
   ).match(ANSWERED_ID)?.[1];
   if (!(a && b)) {
     check("1: artifact_create answers both ids", false, `${a} ${b}`);

@@ -340,6 +340,8 @@ async function run(kit: Kit): Promise<void> {
   };
   const created = await call(CREATE, {
     kind: "preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
     name: "entered",
     port: server.port,
   });

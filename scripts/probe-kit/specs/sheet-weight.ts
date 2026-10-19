@@ -325,7 +325,13 @@ const folderCheck = async (kit: Kit) => {
     const session = await fleet.spawn("claude", "Weight", fleet.repo);
     asks.set("1", {
       name: "mcp__cawco__artifact_create",
-      input: { kind: "preview", name: "weighed", dir: folder },
+      input: {
+        kind: "preview",
+        does: "try",
+        ask: "Try this page and say whether it works",
+        name: "weighed",
+        dir: folder,
+      },
     });
     await fleet.send(session, "PROBE-CALL:1");
     const created = (await until(

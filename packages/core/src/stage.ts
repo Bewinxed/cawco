@@ -227,9 +227,8 @@ export function canvasOf(path: string): { files: string[]; spec: CanvasSpec } {
   return { files: query.getAll("file"), spec };
 }
 
-/** What a canvas page is told besides its files: what it is for, the agent's edges and groups, its dials. */
+/** What a canvas page is told besides its files: the agent's edges and groups, its dials. */
 export interface CanvasSpec {
-  about?: string;
   dials?: CanvasDial[];
   edges?: CanvasEdge[];
   /** Story → the parent story or section heading it groups under. */
@@ -239,7 +238,6 @@ export interface CanvasSpec {
 
 /** The bounds a canvas spec keeps. Ours. */
 export const CANVAS_SPEC_LIMITS = {
-  about: 240,
   dials: 24,
   edges: 100,
   files: 24,
