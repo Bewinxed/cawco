@@ -184,9 +184,9 @@ const HEAD_LINE =
 /** Pins.swift's `preview card …` line: the open pin's number, where its controls stand, whether it wears the live dot. */
 const CARD_LINE =
   /^preview card pin=(\d+) field=(none|-?\d+,-?\d+) reply=(none|-?\d+,-?\d+) resolve=(\S+)@(none|-?\d+,-?\d+) close=(none|-?\d+,-?\d+) live=(yes|no) thread=(\d+) delete=(?:none|-?\d+,-?\d+) writing=(?:true|false) asking=(?:true|false) problem=(.*)$/;
-/** Pins.swift's `preview list …` line, logged once the sheet is in its window: the counts, the filter, each row's number and centre, the live rows. */
+/** Pins.swift's `preview list …` line, logged once the sheet is in its window: the counts (open and resolved each counting moved pins), the filter, each row's number and centre, the live rows; then the moved rows under the filter and the read's hold. */
 const LIST_LINE =
-  /^preview list open=(\d+) resolved=(\d+) moved=(\d+) filter=(\S+)@(none|-?\d+,-?\d+) rows=(\S*) live=(\S*) scrim=(none|-?\d+,-?\d+)$/;
+  /^preview list open=(\d+) resolved=(\d+) moved=(\d+) filter=(\S+)@(none|-?\d+,-?\d+) rows=(\S*) live=(\S*) scrim=(none|-?\d+,-?\d+)(?: movedRows=\S* hold=\S+)?$/;
 /** The overlay's answer to the app's reply or resolve, as the app logs it. */
 const RESULT_LINE =
   /^preview (reply|resolve)-result (?:pin=(\d+) (ok|refused: .*)|none)$/;
