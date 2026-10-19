@@ -71,8 +71,7 @@ import { JUDGE_SCRIPT } from "../boundary";
 import {
   BROWSER_ARG,
   CHROME_DEVTOOLS,
-  GATE_ENDPOINT_NAME,
-  GATE_TOKEN_NAME,
+  GATE_CONFIG_NAME,
 } from "../browser/door";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import { readJson, writeJson } from "./fleet-common";
@@ -140,7 +139,7 @@ const cawcoPlacedMcp = ${JSON.stringify(OPENCODE_PLACED_MCP)};
 const machineData = ${JSON.stringify(machineDataHome())};
 const sessionNames = ${JSON.stringify(SESSION_CAWCO_ENV)};
 const workflowTools = ${JSON.stringify(WORKFLOW_TOOLS)};
-// chrome-devtools-mcp's arguments that pick a browser: the door picks it.
+// chrome-devtools-mcp's arguments that pick a browser or a config: the door picks both.
 const browserArg = ${BROWSER_ARG.toString()};
 // Where this server saves a truncated tool output (its own data dir's
 // \`opencode/tool-output\`, observed on 2.0.28).
@@ -461,8 +460,9 @@ export default {
     // Its chrome-devtools reaches the project's browser through the
     // workspace's door alone (the agent's browser/door.ts, made as its
     // session spawned): a location with none launches no browser tool.
-    const doorOf = (name) => { try { return readFileSync(state + "/" + name, "utf8").trim(); } catch { return ""; } };
-    const door = state ? { endpoint: doorOf(${JSON.stringify(GATE_ENDPOINT_NAME)}), token: doorOf(${JSON.stringify(GATE_TOKEN_NAME)}) } : undefined;
+    // Its config file names the gate and the token, so neither is on the
+    // server's command line, which every local user can read.
+    const door = state && existsSync(state + "/" + ${JSON.stringify(GATE_CONFIG_NAME)}) ? state + "/" + ${JSON.stringify(GATE_CONFIG_NAME)} : undefined;
     await ctx.mcp.transform((editor) => {
       placeMcp(editor, directory);
       for (const [name, config] of editor.list()) {
@@ -470,11 +470,11 @@ export default {
         editor.update(name, (server) => {
           server.environment = { ...(server.environment ?? {}), XDG_DATA_HOME: machineData };
           if (name !== ${JSON.stringify(CHROME_DEVTOOLS)}) return;
-          if (!(door?.endpoint && door.token)) {
+          if (!door) {
             server.enabled = false;
             return;
           }
-          server.command = [...server.command.filter((arg) => !browserArg.test(arg)), "--wsEndpoint=" + door.endpoint, "--wsHeaders=" + JSON.stringify({ Authorization: "Bearer " + door.token })];
+          server.command = [...server.command.filter((arg) => !browserArg.test(arg)), "--config=" + door];
           if (typeof roots?.scratch === "string" && typeof roots?.clone === "string") {
             server.command = [...server.command, "--filesystem-root=" + roots.scratch, "--filesystem-root=" + roots.clone];
           }

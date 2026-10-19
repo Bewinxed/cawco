@@ -205,16 +205,23 @@ export class ContainerHost implements BrowserHost {
     const { endpoint } = this.#runtime;
     const forwarding = await mediaForwarding(endpoint);
     let { media } = forwarding;
-    // The same image, the media port published for what the runtime forwards
-    // now, and its relay credential good for a day more (or no relay asked
-    // for): the container as it is. Otherwise a new one on the same volume,
+    // The same image, published on the record's ports, the media port
+    // published for what the runtime forwards now, and its relay credential
+    // good for a day more (or no relay asked for): the container as it is. Otherwise a new one on the same volume,
     // with the credential just minted.
     const relayHolds =
       !options.relay ||
       (record.relayUrls?.join(" ") === options.relay.urls.join(" ") &&
         (record.relayExpiresAt ?? 0) > Date.now() + RELAY_RENEW_MS);
+    const published = portsOf(record);
     let reuse =
-      kept && kept.image === image && kept.media === media && relayHolds
+      kept &&
+      kept.image === image &&
+      kept.media === media &&
+      kept.ports?.http === published.http &&
+      kept.ports?.devtools === published.devtools &&
+      kept.ports?.media === published.media &&
+      relayHolds
         ? await this.#docker
             .getContainer(kept.id)
             .inspect()
@@ -360,6 +367,7 @@ export class ContainerHost implements BrowserHost {
       id: created.id,
       image,
       media,
+      ports: { http, devtools, media: port },
       volume,
       adminPassword: passwords.admin,
       userPassword: passwords.user,

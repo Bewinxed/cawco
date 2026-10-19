@@ -1400,6 +1400,8 @@ async function standUp(
     CAWCO_HUB_PORT: String(hubPort),
     CAWCO_PREVIEW_PORTS: previewPorts,
     CAWCO_MCP_PORT: String(mcpPort),
+    // Its own DevTools gate port: the machine's own agent holds the default.
+    CAWCO_BROWSER_GATE_PORT: String(await freePort()),
     CAWCO_DASHBOARD_PORT: String(dashboardPort),
     CAWCO_LOCAL_DASHBOARD_PORT: String(localDashboardPort),
     HOST: hub.bind,
@@ -2035,6 +2037,7 @@ async function standUp(
       CAWCO_MACHINE_ID: machineId,
       CAWCO_SESSIOND_ENDPOINT: socketPath,
       CAWCO_MCP_PORT: String(await freePort()),
+      CAWCO_BROWSER_GATE_PORT: String(await freePort()),
     };
     const start = (role: "agent" | "sessiond") => {
       const err = join(sandbox, `${machineId}-${role}.err`);

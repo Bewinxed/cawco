@@ -12,7 +12,7 @@
  * stdout as `GATE-HOST {"id","ok","value"|"error"}`; every other line it
  * prints is the registry's log.
  *
- *   HOME=<fleet home> XDG_DATA_HOME=<dir> bun scripts/probe-kit/browser-gate-host.ts
+ *   HOME=<fleet home> XDG_DATA_HOME=<dir> CAWCO_BROWSER_GATE_PORT=<free port> bun scripts/probe-kit/browser-gate-host.ts
  */
 import type { BrowserKey } from "../../packages/core/src/browser";
 
@@ -45,6 +45,8 @@ const act = async (command: Command): Promise<unknown> => {
   switch (command.verb) {
     case "watch":
       return browsers.watchBrowsers();
+    case "reserve":
+      return browsers.reserveBrowser(key);
     case "start":
       return browsers.startBrowser({ key });
     case "stop":

@@ -8,8 +8,10 @@
  * which mint each workspace's gate token in its state dir. The agent's
  * registry runs, as the daemon runs it, in a process of the kit's started
  * with the fleet's HOME (browser-gate-host.ts) and a data dir of its own: it
- * starts the project's browser and serves its gate, reading the delegates'
- * tokens and projects from the fleet's home. chrome-devtools-mcp
+ * reserves the project's browser (a record, no ports, its gate served on the
+ * machine's one gate port, here a free port of its own as a second agent on
+ * the host names one), then starts it, reading the delegates' tokens and
+ * projects from the fleet's home. chrome-devtools-mcp
  * 1.11.0 connects to the gate as A and as B (`--wsEndpoint`, `--wsHeaders`);
  * raw CDP connections with the same tokens read what the tool cannot name.
  * On each host:
@@ -545,10 +547,19 @@ const run = async (kit: Kit): Promise<void> => {
   // live in a data dir of their own.
   const data = await mkdtemp(join(tmpdir(), "cawco-browser-gate-"));
   const key: BrowserKey = `project:${project.id}`;
+  // The machine's own agent holds the default gate port: this one is free.
+  const probe = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: { data: () => undefined },
+  });
+  const gatePort = probe.port;
+  probe.stop(true);
   const gateHost = startGateHost({
     ...(process.env as Record<string, string>),
     HOME: home,
     XDG_DATA_HOME: data,
+    CAWCO_BROWSER_GATE_PORT: String(gatePort),
   });
   const { findRuntime } =
     await import("../../../packages/agent/src/browser/runtime");
@@ -594,23 +605,40 @@ const run = async (kit: Kit): Promise<void> => {
       "missing" in runtime ? "/var/run/docker.sock" : runtime.endpoint;
     await gateHost.call("watch");
 
+    // Reserved, as a session's door reserves it: a record, no ports, and its
+    // gate answering on the machine's gate port before the browser starts.
+    await gateHost.call("reserve", { key });
+    const reserved = (await gateHost.call("record", { key })) as {
+      slot?: number;
+      state?: string;
+    } | null;
+    // Routed to this key's gate (a key with none answers 404, GATE_WORDS.none):
+    // its shield's sentence comes back, and no browser starts for it.
+    await gateHost.call("closeAll", { key, why: PRIVATE });
+    const before = await upgradeAnswer(gatePort, who.A.id, who.A.token);
+    await gateHost.call("open", { key });
+    const still = (await gateHost.call("record", { key })) as {
+      slot?: number;
+    } | null;
+    kit.check(
+      `reserved: ${key} has a record and no ports (state ${reserved?.state}), and the gate on 127.0.0.1:${gatePort} routes A to it (${before.status} "${before.text}") before it ever starts`,
+      reserved?.slot === undefined &&
+        reserved?.state === "asleep" &&
+        before.status === 423 &&
+        before.text === PRIVATE &&
+        still?.slot === undefined,
+      JSON.stringify({ reserved, before, still })
+    );
+
     // The container host.
     const live = (await gateHost.call("start", { key })) as BrowserRow;
-    const ports = live.ports ?? { devtools: 0, gate: 0 };
+    const ports = live.ports ?? { devtools: 0 };
     kit.check(
-      `container: ${key} live on the ${live.host} host, gate on 127.0.0.1:${ports.gate}, DevTools ${ports.devtools}`,
-      live.host === "container",
+      `container: ${key} live on the ${live.host} host with ports of its own now (DevTools ${ports.devtools}), behind the gate on 127.0.0.1:${gatePort}`,
+      live.host === "container" && ports.devtools > 0,
       JSON.stringify(live)
     );
-    await gateChecks(
-      kit,
-      gateHost,
-      key,
-      ports.gate,
-      "container",
-      who,
-      realHome
-    );
+    await gateChecks(kit, gateHost, key, gatePort, "container", who, realHome);
     shell.container = { devtools: ports.devtools, socket };
     await shellChecks(kit, "container");
 
@@ -620,24 +648,16 @@ const run = async (kit: Kit): Promise<void> => {
     await gateHost.call("stop", { key });
     await gateHost.call("runtime", { hidden: true });
     const local = (await gateHost.call("start", { key })) as BrowserRow;
-    const localPorts = local.ports ?? { devtools: 0, gate: 0 };
+    const localPorts = local.ports ?? { devtools: 0 };
     const moved = (await gateHost.call("record", { key })) as {
       containerLeft?: boolean;
     } | null;
     kit.check(
-      `local (DOCKER_HOST=unix:///nonexistent): ${key} live on the ${local.host} host, gate on 127.0.0.1:${localPorts.gate}, its container marked to be removed`,
+      `local (DOCKER_HOST=unix:///nonexistent): ${key} live on the ${local.host} host behind the same gate on 127.0.0.1:${gatePort}, its container marked to be removed`,
       local.host === "local" && moved?.containerLeft === true,
       JSON.stringify({ local, containerLeft: moved?.containerLeft })
     );
-    await gateChecks(
-      kit,
-      gateHost,
-      key,
-      localPorts.gate,
-      "local",
-      who,
-      realHome
-    );
+    await gateChecks(kit, gateHost, key, gatePort, "local", who, realHome);
     shell.local = { devtools: localPorts.devtools, socket };
     await shellChecks(kit, "local");
 

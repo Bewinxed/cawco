@@ -11,18 +11,24 @@ import type {
   FilesystemPathEntry,
   SandboxRuntimeConfig,
 } from "@anthropic-ai/sandbox-runtime";
-import { BROWSER_PORTS } from "@cawco/core/browser";
+import { BROWSER_PORTS, browserGatePort } from "@cawco/core/browser";
 import type { Policy } from "@cawco/core/workspace-judge";
 
 /**
- * Every port of {@link BROWSER_PORTS}: the browsers' neko, DevTools, gate and
- * media ports, which no command of a workspace dials on this machine.
+ * Every port of {@link BROWSER_PORTS} (the machine's DevTools gate, and the
+ * browsers' neko, DevTools and media ports), and the gate's port where a
+ * second agent on the host moved it: none of them is dialled by a command of
+ * a workspace on this machine.
  */
-const browserPorts = (): number[] =>
-  Array.from(
-    { length: BROWSER_PORTS.last - BROWSER_PORTS.first + 1 },
-    (_, at) => BROWSER_PORTS.first + at
-  );
+const browserPorts = (): number[] => [
+  ...new Set([
+    ...Array.from(
+      { length: BROWSER_PORTS.last - BROWSER_PORTS.first + 1 },
+      (_, at) => BROWSER_PORTS.first + at
+    ),
+    browserGatePort(),
+  ]),
+];
 
 const within = (path: string, root: string): boolean =>
   root === "/" || path === root || path.startsWith(`${root}/`);

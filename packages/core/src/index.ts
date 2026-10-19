@@ -1886,6 +1886,12 @@ export const CAWCO_ENV = {
    * checkout) names its own.
    */
   mcpPort: "CAWCO_MCP_PORT",
+  /**
+   * The port of the agent's DevTools gate (browser.ts `browserGatePort`).
+   * Unset on every installed machine; a second agent on one host (a rig, a
+   * scratch fleet) names its own.
+   */
+  browserGatePort: "CAWCO_BROWSER_GATE_PORT",
 } as const;
 
 /** One of {@link CAWCO_ENV}'s variable names. */

@@ -13,13 +13,16 @@
  *
  * - A's snapshot names Example Domain: the tool works through the gate;
  * - A's last list holds A's page and not B's, and B's the other way round;
- * - C's browser is its own project's: another key, another gate port, and
- *   C's list holds neither A's page nor B's;
+ * - C's browser is its own project's: another key, through the same gate
+ *   port, and C's list holds neither A's page nor B's;
  * - no Chromium on the machine has a chrome-devtools-mcp among its
  *   ancestors: the project browsers' are the only ones;
- * - a brand-new project's gate answers as its first session's door is made,
- *   with no wait for the agent's tick, and that session's first call is
- *   answered;
+ * - no chrome-devtools-mcp command line holds a token: each names its
+ *   door's 0600 config file alone (`--config=`);
+ * - a brand-new project's first session's door reserves its browser (a
+ *   record, no ports) and the machine's gate answers at once, with no wait
+ *   for the agent's tick; that session's first call is answered, and only
+ *   then does the browser take ports;
  * - each session's door was made in at most 200 ms (the agent's
  *   `[browser] <id>'s door … made in N ms` lines), so a spawn grows by no
  *   more than that.
@@ -90,13 +93,23 @@ const toolResults = (body: string): string[] => {
   return out;
 };
 
-const STEPS = (who: string) => [
+const SELECTED = /(\d+):[^\n]*\[selected\]/;
+
+/**
+ * Each session's four calls, a page-scoped one naming the page `new_page`
+ * selected: chrome-devtools-mcp 1.11.0 requires `pageId` on page-scoped
+ * tools (`pageIdRouting`, on by default).
+ */
+const STEPS = (who: string, done: readonly string[]) => [
   { name: `${TOOL}list_pages`, input: {} },
   {
     name: `${TOOL}new_page`,
     input: { url: `https://example.com/?who=${who}` },
   },
-  { name: `${TOOL}take_snapshot`, input: {} },
+  {
+    name: `${TOOL}take_snapshot`,
+    input: { pageId: Number(SELECTED.exec(done[1] ?? "")?.[1]) },
+  },
   { name: `${TOOL}list_pages`, input: {} },
 ];
 
@@ -108,7 +121,7 @@ const respond = async (request: Seen): Promise<Reply> => {
   }
   const done = toolResults(request.body);
   results[who] = done;
-  const steps = STEPS(who);
+  const steps = STEPS(who, done);
   const next = steps[done.length];
   if (!next) {
     return { everyMs: 5, words: ["done"] };
@@ -125,13 +138,12 @@ const respond = async (request: Seen): Promise<Reply> => {
   return { everyMs: 5, words: [], tool: next };
 };
 
-/** Every Chromium whose ancestors hold a chrome-devtools-mcp: none is the cutover. */
-const chromiumUnderMcp = async (): Promise<{
-  chromium: number;
-  underMcp: string[];
-}> => {
+type Procs = Map<number, { ppid: number; args: string }>;
+
+/** Every process of the machine, by pid. */
+const processes = async (): Promise<Procs> => {
   const lines = (await Bun.$`ps -eo pid=,ppid=,args=`.text()).split("\n");
-  const procs = new Map<number, { ppid: number; args: string }>();
+  const procs: Procs = new Map();
   for (const line of lines) {
     const match = PS_LINE.exec(line);
     if (match) {
@@ -141,6 +153,30 @@ const chromiumUnderMcp = async (): Promise<{
       });
     }
   }
+  return procs;
+};
+
+/** The first of `pid`'s ancestors `holds` accepts. */
+const ancestor = (
+  procs: Procs,
+  pid: number,
+  holds: (pid: number, args: string) => boolean
+): number | undefined => {
+  for (
+    let up = procs.get(pid)?.ppid ?? 0, hops = 0;
+    up > 1 && hops < 64;
+    up = procs.get(up)?.ppid ?? 0, hops += 1
+  ) {
+    if (holds(up, procs.get(up)?.args ?? "")) {
+      return up;
+    }
+  }
+};
+
+/** Every Chromium whose ancestors hold a chrome-devtools-mcp: none is the cutover. */
+const chromiumUnderMcp = (
+  procs: Procs
+): { chromium: number; underMcp: string[] } => {
   const isChromium = (args: string) =>
     CHROMIUM.test(args.split(" --")[0] ?? "") && !args.includes("--type=");
   let chromium = 0;
@@ -150,36 +186,55 @@ const chromiumUnderMcp = async (): Promise<{
       continue;
     }
     chromium += 1;
-    for (
-      let up = proc.ppid, hops = 0;
-      up > 1 && hops < 64;
-      up = procs.get(up)?.ppid ?? 0, hops += 1
-    ) {
-      if (procs.get(up)?.args.includes("chrome-devtools-mcp")) {
-        underMcp.push(`${pid} under ${up}: ${proc.args.slice(0, 120)}`);
-        break;
-      }
+    const mcp = ancestor(procs, pid, (_, args) =>
+      args.includes("chrome-devtools-mcp")
+    );
+    if (mcp) {
+      underMcp.push(`${pid} under ${mcp}: ${proc.args.slice(0, 120)}`);
     }
   }
   return { chromium, underMcp };
 };
 
-/** The agent's door lines, by gate id. */
+/** The fleet's chrome-devtools-mcp command lines: those under its sessiond. */
+const fleetMcpLines = (procs: Procs, sessiond: number): string[] =>
+  [...procs.entries()]
+    .filter(
+      ([pid, proc]) =>
+        proc.args.includes("chrome-devtools-mcp") &&
+        !!ancestor(procs, pid, (up) => up === sessiond)
+    )
+    .map(([, proc]) => proc.args);
+
+/** The agent's door lines, by gate id: the browser's key, the door's config file, and how long it took. */
 const doors = (
   logs: string
-): Map<string, { key: string; endpoint: string; ms: number }> => {
-  const found = new Map<
-    string,
-    { key: string; endpoint: string; ms: number }
-  >();
+): Map<string, { key: string; config: string; ms: number }> => {
+  const found = new Map<string, { key: string; config: string; ms: number }>();
   for (const match of logs.matchAll(DOOR_LINE)) {
     found.set(match[1] ?? "", {
       key: match[2] ?? "",
-      endpoint: match[3] ?? "",
+      config: match[3] ?? "",
       ms: Number(match[4]),
     });
   }
   return found;
+};
+
+/** A door's config as chrome-devtools-mcp reads it, and its file's mode. */
+const doorConfig = async (
+  file: string
+): Promise<{ wsEndpoint?: string; mode: string }> => {
+  const read = await Bun.file(file)
+    .json()
+    .catch(() => ({}) as { wsEndpoint?: string });
+  const stat = await Bun.file(file)
+    .stat()
+    .catch(() => undefined);
+  return {
+    ...(read as { wsEndpoint?: string }),
+    mode: stat ? (stat.mode % 0o1000).toString(8) : "missing",
+  };
 };
 
 const run = async (kit: Kit): Promise<void> => {
@@ -210,7 +265,7 @@ const run = async (kit: Kit): Promise<void> => {
     });
     await fleet.agentUp();
   };
-  fleet.launch("sessiond");
+  const sessiond = fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
   await fleet.hubUp();
@@ -288,6 +343,46 @@ const run = async (kit: Kit): Promise<void> => {
   const browsers: Browsers =
     await import("../../../packages/agent/src/browser/browsers");
 
+  /**
+   * A project's first session: its door reserves the browser (a record, no
+   * ports) and the machine's gate listens for it at once, before the agent's
+   * next tick and before any tool call. Answers the session.
+   */
+  const firstDoor = async (
+    host: string,
+    key: BrowserKey,
+    spawn: () => Promise<string>
+  ): Promise<string> => {
+    const fresh = !(await browsers.browserRows()).some(
+      (kept) => kept.key === key
+    );
+    const spawnedAt = Date.now();
+    const id = await spawn();
+    const door = doors(await fleet.logs("agent")).get(id);
+    const config = door ? await doorConfig(door.config) : { mode: "missing" };
+    const gate = config.wsEndpoint?.replace("ws://", "http://");
+    const answer = gate
+      ? await fetch(gate).then(
+          async (response) => `${response.status} ${await response.text()}`,
+          (error: unknown) => String(error)
+        )
+      : "no door";
+    const listening = Date.now() - spawnedAt;
+    const reserved = (await browsers.browserRows()).find(
+      (kept) => kept.key === key
+    );
+    kit.check(
+      `${host}: ${fresh ? "a brand-new" : "the"} project's first door reserves its browser (${reserved?.state}, ${reserved?.ports ? "with" : "no"} ports) and the gate at ${config.wsEndpoint} answers ${listening} ms after the spawn, under the agent's 60 s tick; the door's config is mode ${config.mode}`,
+      answer.startsWith("404") &&
+        listening < 60_000 &&
+        config.mode === "600" &&
+        reserved?.state === "asleep" &&
+        reserved.ports === undefined,
+      `${gate}: ${answer}; ${JSON.stringify(reserved)}`
+    );
+    return id;
+  };
+
   /** One host's sessions A, B (project one) and C (project two). */
   const leg = async (n: number, host: "container" | "local") => {
     const A = `A${n}`;
@@ -295,39 +390,21 @@ const run = async (kit: Kit): Promise<void> => {
     const C = `C${n}`;
     partner[A] = B;
     partner[B] = A;
-    const started = async (who: string, at: { id: string; repo: string }) => {
-      const id = await fleet.spawn("claude", `Cutover ${who}`, at.repo, {
-        projectId: at.id,
-      });
-      await fleet.send(id, `${TAG}-${who}: browse.`);
-      return id;
-    };
-    // Project one's first session: a key with no record yet, whose gate
-    // listens as the session's door is made, before the agent's next tick.
-    const fresh = !(await browsers.browserRows()).some(
-      (kept) => kept.key === keys[0]
+    const spawned = (who: string, at: { id: string; repo: string }) =>
+      fleet.spawn("claude", `Cutover ${who}`, at.repo, { projectId: at.id });
+    const browse = (who: string, id: string) =>
+      fleet.send(id, `${TAG}-${who}: browse.`);
+    const first = await firstDoor(host, keys[0] as BrowserKey, () =>
+      spawned(A, ours)
     );
-    const spawnedAt = Date.now();
-    const first = await started(A, ours);
-    const firstDoor = doors(await fleet.logs("agent")).get(first);
-    const gate = firstDoor?.endpoint.replace("ws://", "http://");
-    const answer = gate
-      ? await fetch(gate).then(
-          async (response) => `${response.status} ${await response.text()}`,
-          (error: unknown) => String(error)
-        )
-      : "no door line";
-    const listening = Date.now() - spawnedAt;
-    kit.check(
-      `${host}: ${fresh ? "a brand-new" : "the"} project's gate answers as its first session's door is made (${listening} ms after the spawn, under the agent's 60 s tick)`,
-      answer.startsWith("404") && listening < 60_000,
-      `${gate}: ${answer}`
-    );
+    await browse(A, first);
     const ids = {
       [A]: first,
-      [B]: await started(B, ours),
-      [C]: await started(C, theirs),
+      [B]: await spawned(B, ours),
+      [C]: await spawned(C, theirs),
     };
+    await browse(B, ids[B] ?? "");
+    await browse(C, ids[C] ?? "");
     for (const who of [A, B, C]) {
       // biome-ignore lint/performance/noAwaitInLoops: one session's four calls, then the next's.
       await until(
@@ -363,11 +440,12 @@ const run = async (kit: Kit): Promise<void> => {
     const rows = await browsers.browserRows();
     const row = (key: BrowserKey) => rows.find((kept) => kept.key === key);
     kit.check(
-      `${host}: C's browser is its own project's (another key and gate), and C's list holds neither A's page nor B's`,
+      `${host}: C's browser is its own project's (another key and DevTools port, the same gate), and C's list holds neither A's page nor B's`,
       door(A)?.key === keys[0] &&
         door(B)?.key === keys[0] &&
         door(C)?.key === keys[1] &&
-        door(A)?.endpoint.split("/")[2] !== door(C)?.endpoint.split("/")[2] &&
+        !!row(keys[0])?.ports &&
+        row(keys[0])?.ports?.devtools !== row(keys[1])?.ports?.devtools &&
         !!said(C)[3]?.includes(`who=${C}`) &&
         !said(C)[3]?.includes(`who=${A}`) &&
         !said(C)[3]?.includes(`who=${B}`),
@@ -376,6 +454,7 @@ const run = async (kit: Kit): Promise<void> => {
         B: door(B),
         C: door(C),
         list: said(C)[3]?.slice(0, 300),
+        ports: rows.map(({ key, ports }) => ({ key, ports })),
       })
     );
     kit.check(
@@ -388,11 +467,24 @@ const run = async (kit: Kit): Promise<void> => {
         rows.map(({ key, host: on, state }) => ({ key, on, state }))
       )
     );
-    const ps = await chromiumUnderMcp();
+    const procs = await processes();
+    const ps = chromiumUnderMcp(procs);
     kit.check(
       `${host}: ps shows no Chromium launched by an MCP server (${ps.chromium} Chromium browser process(es), the projects' own)`,
       ps.underMcp.length === 0 && ps.chromium >= 1,
       ps.underMcp.join("; ") || `${ps.chromium} browser process(es)`
+    );
+    const lines = fleetMcpLines(procs, sessiond.pid);
+    kit.check(
+      `${host}: no chrome-devtools-mcp command line holds a token (${lines.length} of the fleet's, each naming its door's config alone)`,
+      lines.length >= 3 &&
+        lines.every(
+          (line) =>
+            line.includes("--config=") &&
+            !line.includes("Bearer") &&
+            !line.includes("--wsHeaders")
+        ),
+      lines.map((line) => line.slice(0, 200)).join(" | ")
     );
     const ms = [A, B, C].map((who) => door(who)?.ms ?? Number.NaN);
     kit.check(

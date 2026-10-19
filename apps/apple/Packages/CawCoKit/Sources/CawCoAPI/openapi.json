@@ -55141,9 +55141,6 @@
           "devtools": {
             "type": "number"
           },
-          "gate": {
-            "type": "number"
-          },
           "http": {
             "type": "number"
           },
@@ -55152,8 +55149,7 @@
           }
         },
         "required": [
-          "devtools",
-          "gate"
+          "devtools"
         ]
       },
       "BrowserState": {

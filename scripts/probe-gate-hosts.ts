@@ -3,8 +3,10 @@
  * a pi host and an OpenCode server started on an older gate form are
  * relaunched onto the current one the first moment they are idle, never
  * mid-turn, and then refuse what the workspace's policy denies; a
- * workspace session's chrome-devtools-mcp writes captures to the workspace's
- * scratch and refuses a path outside the clone and the scratch; two
+ * workspace session's chrome-devtools-mcp, reaching the machine's browser
+ * through its workspace's door and the DevTools gate (a local Chromium:
+ * the runtime is hidden), writes captures to the workspace's scratch and
+ * refuses a path outside the clone and the scratch; two
  * workspaces' sessions on one OpenCode server each read back the output it
  * was told it saved and are refused the other's; a session in a directory
  * inside a clone is judged and bounded as that clone's; the opencode.jsonc
@@ -16,8 +18,9 @@
  *
  * Runs on a private HOME, a private sessiond, a local mock model and fake
  * keys only; it never reaches fleet services or a real provider. The real
- * pi host, the real `opencode` binary and the real chrome-devtools-mcp run
- * here, driven through the agent's own harness code. The hub's part of a pi
+ * pi host, the real `opencode` binary, the real chrome-devtools-mcp and the
+ * agent's own browser registry and gate run here, driven through the
+ * agent's own harness code. The hub's part of a pi
  * relaunch — stop the session at its turn boundary, spawn it again on its
  * conversation — is played here as the hub's `relaunchOntoHook` plays it.
  */
@@ -41,7 +44,8 @@ const sandbox =
   );
 if (!process.env.GATE_PROBE_SANDBOX) {
   // What the private HOME cannot find for itself: the fleet's pinned
-  // chrome-devtools-mcp and the Chromium it drives, from the real caches.
+  // chrome-devtools-mcp and Playwright's Chromium, which the agent's local
+  // browser runs, from the real caches.
   const npx = join(homedir(), ".npm", "_npx");
   const devtools = (
     await Array.fromAsync(
@@ -51,26 +55,27 @@ if (!process.env.GATE_PROBE_SANDBOX) {
     )
   ).map((file) => join(npx, file, ".."));
   const browsers = join(homedir(), ".cache", "ms-playwright");
-  const chrome = (
-    await Array.fromAsync(
-      new Bun.Glob("chromium-*/chrome-linux*/chrome").scan({ cwd: browsers })
-    )
-  )
-    .sort()
-    .map((file) => join(browsers, file))
-    .at(-1);
-  if (!(devtools[0] && chrome)) {
-    throw new Error(
-      `chrome-devtools-mcp (${devtools[0] ?? "not in ~/.npm/_npx"}) and Playwright's Chromium (${chrome ?? "not in ~/.cache/ms-playwright"}) are required.`
-    );
+  if (!devtools[0]) {
+    throw new Error("chrome-devtools-mcp (not in ~/.npm/_npx) is required.");
   }
+  // The machine's own agent holds the default gate port: this one is free.
+  const probe = Bun.listen({
+    hostname: "127.0.0.1",
+    port: 0,
+    socket: { data: () => undefined },
+  });
+  const gatePort = probe.port;
+  probe.stop(true);
   await mkdir(sandbox, { recursive: true });
   const home = join(sandbox, "home");
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     GATE_PROBE_SANDBOX: sandbox,
     GATE_PROBE_DEVTOOLS: devtools[0],
-    GATE_PROBE_CHROME: chrome,
+    PLAYWRIGHT_BROWSERS_PATH: process.env.PLAYWRIGHT_BROWSERS_PATH ?? browsers,
+    CAWCO_BROWSER_GATE_PORT: String(gatePort),
+    // The local host: a Chromium of the agent's, behind the gate.
+    DOCKER_HOST: "unix:///nonexistent",
     HOME: home,
     XDG_CONFIG_HOME: join(home, ".config"),
     XDG_DATA_HOME: join(home, ".local", "share"),
@@ -99,7 +104,6 @@ if (homedir() !== home) {
 }
 const endpoint = process.env.CAWCO_SESSIOND_ENDPOINT as string;
 const devtoolsDir = process.env.GATE_PROBE_DEVTOOLS as string;
-const chrome = process.env.GATE_PROBE_CHROME as string;
 
 // ── What the agent says, kept for the checks ───────────────────────────
 const said: string[] = [];
@@ -349,10 +353,6 @@ process.env.OPENCODE_DISABLE_MODELS_FETCH = "1";
 const devtoolsCommand = [
   Bun.which("node") ?? "node",
   join(devtoolsDir, "build", "src", "bin", "chrome-devtools-mcp.js"),
-  "--headless",
-  "--isolated",
-  `--executablePath=${chrome}`,
-  "--chromeArg=--no-sandbox",
   "--no-usage-statistics",
   "--no-performance-crux",
 ];
@@ -474,6 +474,14 @@ type Neutral = import("../packages/core/src/index").NeutralMessage;
 type Context = import("../packages/agent/src/harness").HarnessContext;
 type Session = import("../packages/agent/src/harness").HarnessSession;
 
+// The agent's browser registry and its gate, as the daemon runs them: each
+// workspace session's chrome-devtools reaches the machine's browser through
+// its workspace's door alone.
+const browsers = await import("../packages/agent/src/browser/browsers");
+const { browserDoor, throughGate } =
+  await import("../packages/agent/src/browser/door");
+await browsers.watchBrowsers();
+
 const sessiond = new SessiondServer();
 await sessiond.listen(endpoint);
 const keeper = welcomed(endpoint, await SessiondClient.connect(endpoint));
@@ -521,7 +529,11 @@ interface Watch {
 }
 const watch = (
   instanceId: string,
-  at: { boundary: typeof boundary; clone: string } = { boundary, clone }
+  at: { boundary: typeof boundary; clone: string; id: string } = {
+    boundary,
+    clone,
+    id: WS,
+  }
 ): Watch => {
   const seen: Watch = {
     busy: false,
@@ -530,6 +542,7 @@ const watch = (
       instanceId,
       cwd: at.clone,
       boundary: at.boundary,
+      browserDoor: () => browserDoor(at.id),
       busy: (active) => {
         seen.busy = active;
         wake();
@@ -933,7 +946,7 @@ try {
   // and the clone whose path extends this one's (`clone` and `clone-b`).
   const inside = join(clone, "packages", "agent");
   const SUB = "gate-probe-opencode-sub";
-  const seenSub = watch(SUB, { boundary, clone: inside });
+  const seenSub = watch(SUB, { boundary, clone: inside, id: WS });
   const { workspace: _named, ...unnamed } = ocSpec;
   const sub = await opencode.spawn(
     { ...unnamed, instanceId: SUB, cwd: inside },
@@ -1086,6 +1099,10 @@ try {
 } finally {
   await earlier?.dispose();
   await opencode.dispose();
+  for (const row of await browsers.browserRows()) {
+    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, each under its own lock.
+    await browsers.removeBrowser(row.key);
+  }
   await sessiond.drain(5000);
   keeper.close();
   await sessiond.close();
@@ -1107,7 +1124,10 @@ async function claudeCaptures(
   outsideRefused: boolean;
   outsideAnswer: string;
 }> {
-  const [command, ...args] = devtoolsCommand;
+  // As Claude Code launches it for a workspace session: through its
+  // workspace's door (claude.ts `gatedBrowserMcp`).
+  const door = await browserDoor(WS);
+  const [command, ...args] = throughGate(devtoolsCommand, door);
   const server = Bun.spawn([command as string, ...args], {
     cwd: clone,
     stdin: "pipe",

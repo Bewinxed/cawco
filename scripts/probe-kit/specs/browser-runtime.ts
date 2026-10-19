@@ -197,9 +197,9 @@ const containerHost = async (
   const coldAt = performance.now();
   const cold = await browsers.startBrowser({ key: CONTAINER_KEY });
   const coldS = seconds(coldAt);
-  const { http, devtools, gate, media = 0 } = cold.ports ?? {};
+  const { http, devtools, media = 0 } = cold.ports ?? { devtools: 0 };
   kit.check(
-    `${CONTAINER_KEY} live in ${coldS} s (cold, ≤ ${COLD_S} s) ports http=${http} devtools=${devtools} gate=${gate} media=${media}`,
+    `${CONTAINER_KEY} live in ${coldS} s (cold, ≤ ${COLD_S} s) ports http=${http} devtools=${devtools} media=${media}`,
     cold.state === "live" && cold.host === "container" && coldS <= COLD_S,
     `${cold.state} on ${cold.host}`
   );
