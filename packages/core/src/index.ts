@@ -21,6 +21,7 @@ export * from "./choices";
 export * from "./claude-dirs";
 export * from "./connections";
 export * from "./continuation";
+export * from "./continuation-read";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
 // so routing is by description instead of a raw model string.
 export * from "./delegate-types";

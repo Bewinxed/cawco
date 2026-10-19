@@ -216,12 +216,15 @@ export const holdPhrases = (holds: readonly RestartHold[]): string[] =>
     )(ids.length)
   );
 
+/** What opens {@link waitingWords}: what follows it is the work in flight, in words. */
+export const WORK_IN_FLIGHT = "waiting for work in flight to end: ";
+
 /**
  * What a restart that waits says it waits for, an update's and an account
  * move's alike: `waiting for work in flight to end: 1 command running`.
  */
 export const waitingWords = (holds: readonly RestartHold[]): string =>
-  `waiting for work in flight to end: ${holdPhrases(holds).join(", ")}`;
+  `${WORK_IN_FLIGHT}${holdPhrases(holds).join(", ")}`;
 
 /** Every hold of `lists`, one entry per reason, each id once. */
 export function mergeHolds(

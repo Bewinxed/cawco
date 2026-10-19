@@ -175,6 +175,7 @@ import {
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_PROBE_ACCOUNT,
+  CONTROL_READ_CONTINUATION,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
   CONTROL_READ_SESSION_CONTEXT,
@@ -198,6 +199,7 @@ import {
   type CommandQueue,
   type CommandQueueFrame,
   type CommandRun,
+  type ContinuationRead,
   CUSTODY_HELD,
   clockWords,
   contextFitRefusal,
@@ -476,15 +478,11 @@ import {
   asksOpening,
   type ContinuationSource,
   type ContinueRequest,
-  extractTranscript,
   finishedAnswer,
   gitSection,
-  liveScope,
   openingMessage,
   type PreparedContinuation,
-  scopeChars,
   summariserPrompt,
-  transcriptModel,
 } from "./continuation";
 import { damagedRecordsOf, peekDamagedRecords } from "./damaged-rows";
 import { dashboardErrorsRoutes } from "./dashboard-errors";
@@ -8861,8 +8859,16 @@ export const createServer = (
   /** What a move ended with a session's process, told to it once it runs on the new account ({@link tellEndedByMove}). */
   const endedByMove = new Map<string, MoveEnded>();
 
-  /** The move of `instanceId` is held by work its process holds for later: tried again, ending it, once its wait is over. */
-  const waitForLater = (instanceId: string, since = Date.now()): void => {
+  /**
+   * The move of `instanceId` is held by work its process holds for later:
+   * tried again, ending it, once its wait is over. Its wait counts from when
+   * it began, as its hold at the limit keeps that across hub restarts
+   * (at-limit.ts `unmoved`).
+   */
+  const waitForLater = (
+    instanceId: string,
+    since = db.atLimit.hold(instanceId)?.carry?.since ?? Date.now()
+  ): void => {
     if (laterWaits.has(instanceId)) {
       return;
     }
@@ -13887,10 +13893,11 @@ export const createServer = (
    */
   const contextTokensOf = async (
     row: KeepAliveRow | undefined,
-    scope: Parameters<typeof scopeChars>[0]
+    /** The characters a model reads of its live scope (core `scopeChars`). */
+    scopeChars: number
   ): Promise<number> => {
     if (!row) {
-      return estimateTokens(scopeChars(scope));
+      return estimateTokens(scopeChars);
     }
     if (row.status === "running" && registry.agent(row.machineId)) {
       return await liveContextTokensOf(row);
@@ -13901,9 +13908,7 @@ export const createServer = (
         `${sessionName(row)}'s context could not be read: ${silentWords(row.machineId, reported)}`
       );
     }
-    return "tokens" in reported
-      ? reported.tokens
-      : estimateTokens(scopeChars(scope));
+    return "tokens" in reported ? reported.tokens : estimateTokens(scopeChars);
   };
 
   /** How many tokens a running session holds right now, as its harness reads it. */
@@ -14047,6 +14052,39 @@ export const createServer = (
   };
 
   /**
+   * A session's continuation inputs, extracted on the machine that stores
+   * its transcript (core `CONTROL_READ_CONTINUATION`): the machine answers
+   * with them alone, never the transcript, which runs to hundreds of
+   * megabytes and could not cross the socket within the bound.
+   */
+  const readContinuationOf = async (
+    where: SessionLocation
+  ): Promise<ContinuationRead> => {
+    const answer = await callAgent(
+      where.machineId,
+      CONTROL_READ_CONTINUATION,
+      [where.sessionId, { dir: where.cwd || undefined }],
+      READ_TIMEOUT_MS,
+      where.harness
+    );
+    switch (answer.kind) {
+      case "unanswered":
+        throw new Error(
+          `${machineName(where.machineId)} could not read session ${where.sessionId}'s transcript: ${silentWords(where.machineId, answer)}`
+        );
+      case "answered":
+        if (!answer.value.ok) {
+          throw new Error(
+            `${machineName(where.machineId)} could not read session ${where.sessionId}'s transcript: ${answer.value.error ?? "it gave no reason"}`
+          );
+        }
+        return answer.value.result as ContinuationRead;
+      default:
+        throw unreachable(answer);
+    }
+  };
+
+  /**
    * A continuation's inputs, read and sized: the source's live context (last
    * compaction summary on), the artifact index over its whole transcript, and
    * the token counts the pickers and the run are both held to. The source is
@@ -14076,33 +14114,29 @@ export const createServer = (
     }
     const where = located.at;
     const since = await sessionStartOf(where);
-    const [live, whole, git] = await Promise.all([
-      readMessages(where, false),
-      readMessages(where, true),
+    const [read, git] = await Promise.all([
+      readContinuationOf(where),
       gitChangesOf(where, since),
     ]);
-    const scope = liveScope(live);
-    // Named by what it was first asked in words — the whole transcript's first
-    // prompt, not the compaction summary its live context starts with, nor a
-    // bare slash command (`/clear`) that names nothing.
-    const first = whole
-      .map(userTurnText)
-      .find(
-        (text) => text && !deriveTitleFromFirstMessage(text).startsWith("/")
-      );
+    const { extracted } = read;
+    // Named by what the person first asked in words — not the compaction
+    // summary its live context starts with, nor a bare slash command
+    // (`/clear`) that names nothing.
+    const first = extracted.asks.find(
+      (text) => !deriveTitleFromFirstMessage(text).startsWith("/")
+    );
     const source: ContinuationSource & { machineId: string } = {
       instanceId: sourceId,
       machineId: where.machineId,
       cwd: where.cwd,
       harness: where.harness,
-      model: row?.model ?? transcriptModel(live) ?? "model not recorded",
+      model: row?.model ?? read.model ?? "model not recorded",
       title:
         row?.title ||
         row?.derivedTitle ||
         (first ? deriveTitleFromFirstMessage(first) : "") ||
         (row ? sessionLabel(row).name : leafOf(where.cwd)),
     };
-    const extracted = extractTranscript(scope, whole);
     extracted.artifacts = `${extracted.artifacts}\n\n${gitSection(git, since)}`;
     const prompt =
       extracted.middle.length && !asksOnly
@@ -14112,14 +14146,14 @@ export const createServer = (
       source,
       extracted,
       prompt,
-      liveContextTokens: await contextTokensOf(row, scope),
+      liveContextTokens: await contextTokensOf(row, read.scopeChars),
       summariseInputTokens: prompt ? estimateTokens(prompt.length) : 0,
       openingTokens: asksOnly
         ? estimateTokens(asksOpening(source, extracted.asks, note).length)
         : estimateTokens(openingMessage(source, "", extracted, note).length) +
           SUMMARY_CAP_TOKENS,
-      compacted: scope[0]?.compactSummary === true,
-      entries: { live: live.length, whole: whole.length, scope: scope.length },
+      compacted: read.compacted,
+      entries: read.entries,
     };
   };
 
@@ -14731,7 +14765,7 @@ export const createServer = (
     }
     const named = (accountId: string | null | undefined) => {
       const account = accountId ? db.accounts.get(accountId) : undefined;
-      return account ? namedAccount(account) : null;
+      return account ? namedAccount(account, db.accounts.list()) : null;
     };
     const summariser = job.summariserInstanceId
       ? db.getInstancesByIds([job.summariserInstanceId])[0]
@@ -22831,6 +22865,7 @@ export const createServer = (
       );
     },
     owed: owedTargets,
+    laterSince: (instanceId) => laterWaits.get(instanceId)?.since,
     named: (row) => sessionName(row),
     handMove: (row) => {
       const owed = relaunchAtTurnEnd.get(row.id);

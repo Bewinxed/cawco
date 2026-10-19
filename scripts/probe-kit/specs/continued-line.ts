@@ -22,12 +22,20 @@
  *    composer, only that line, the title a link to the continuation that
  *    ellipsizes inside its own box (DESIGN.md, the Truncate Inside Rule).
  *
+ * 4. A session whose stored transcript is over 100 MB (89c82ab3's was
+ *    118 MB), continued at a session's ask, answers within the hub's
+ *    bound on a machine read: its machine reads the continuation's inputs
+ *    where the transcript lives and answers with them alone. It goes on as
+ *    one session, whose transcript reads.
+ *
  * It delegates nothing, so it runs inside a workspace. limit-stall's
  * `continued` leg (host) proves 1 on a continuation `continue_session`
  * starts for a session held at its account's limit.
  *
  *   bun scripts/probe-kit/run.ts continued-line
  */
+import { readdir, readFile, stat, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import type {
   TranscriptBlock,
   TranscriptPage,
@@ -49,6 +57,14 @@ const TWO_TITLE = "PROBE-two-chats source";
 const TWO_TURN = "PROBE-TWO-old-turn";
 const TWO_AFTER = "PROBE-TWO-sent-to-the-old-id";
 const WIDTH = 320;
+/** The big-transcript leg's session, its words, and how big its stored transcript is made. */
+const BIG_TITLE = "PROBE-big-transcript source";
+const BIG_TURN = "PROBE-BIG-old-turn";
+const BIG_BYTES = 110 * 1024 * 1024;
+/** One filler command's output: a real transcript's records run to a few kilobytes each, tens of thousands of them. */
+const OUTPUT_CHARS = 2000;
+/** The hub's bound on a read through a machine (server.ts `READ_TIMEOUT_MS`). */
+const READ_BOUND_MS = 10_000;
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 
@@ -369,6 +385,185 @@ const continuedIn = async (kit: Kit, fleet: KitFleet) => {
   );
 };
 
+/** A session's stored Claude transcript under the fleet's home, by its session key. */
+const transcriptFile = async (
+  fleet: KitFleet,
+  sessionId: string
+): Promise<string | undefined> => {
+  const found = (await readdir(fleet.home, { recursive: true })).find(
+    (path) =>
+      path.endsWith(`/${sessionId}.jsonl`) && !path.includes("/subagents/")
+  );
+  return found ? join(fleet.home, found) : undefined;
+};
+
+/**
+ * Makes a stored transcript `BIG_BYTES` or more, as a long session's is:
+ * command after command, each with a long output, ahead of its own first
+ * turn and chained to it, so its live conversation holds them all.
+ */
+const inflate = async (file: string): Promise<number> => {
+  const lines = (await readFile(file, "utf8")).split("\n").filter(Boolean);
+  const records = lines.map(
+    (line) => JSON.parse(line) as Record<string, unknown>
+  );
+  const root = records.findIndex(
+    (one) =>
+      (one.type === "user" || one.type === "assistant") &&
+      one.parentUuid === null
+  );
+  const first = records[root];
+  if (!first) {
+    throw new Error(`${file} has no conversation to grow`);
+  }
+  const shared = {
+    isSidechain: false,
+    userType: "external",
+    cwd: first.cwd,
+    sessionId: first.sessionId,
+    version: first.version,
+  };
+  const output = "x".repeat(OUTPUT_CHARS);
+  const filler: string[] = [];
+  let parent: string | null = null;
+  let size = 0;
+  for (let n = 0; size < BIG_BYTES; n += 1) {
+    const call = crypto.randomUUID();
+    const asking = crypto.randomUUID();
+    const answered = crypto.randomUUID();
+    const when = new Date(
+      Date.parse(String(first.timestamp)) - 1000
+    ).toISOString();
+    for (const record of [
+      {
+        ...shared,
+        parentUuid: parent,
+        type: "assistant",
+        uuid: asking,
+        timestamp: when,
+        message: {
+          id: `msg_${asking}`,
+          type: "message",
+          role: "assistant",
+          model: "claude-haiku-4-5",
+          content: [
+            {
+              type: "tool_use",
+              id: `toolu_${call}`,
+              name: "Bash",
+              input: { command: `PROBE-BIG-command-${n}` },
+            },
+          ],
+          stop_reason: "tool_use",
+          usage: { input_tokens: 1, output_tokens: 1 },
+        },
+      },
+      {
+        ...shared,
+        parentUuid: asking,
+        type: "user",
+        uuid: answered,
+        timestamp: when,
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: `toolu_${call}`,
+              content: output,
+            },
+          ],
+        },
+      },
+    ]) {
+      const line = JSON.stringify(record);
+      filler.push(line);
+      size += line.length + 1;
+    }
+    parent = answered;
+  }
+  records[root] = { ...first, parentUuid: parent };
+  await writeFile(
+    file,
+    `${[...lines.slice(0, root), ...filler, ...records.slice(root).map((one) => JSON.stringify(one))].join("\n")}\n`
+  );
+  return (await stat(file)).size;
+};
+
+/** 4: a session whose stored transcript is over 100 MB, continued. */
+const bigTranscript = async (kit: Kit, fleet: KitFleet, lead: string) => {
+  const old = await fleet.spawn("claude", BIG_TITLE, fleet.repo);
+  await said(fleet, old, BIG_TURN);
+  const [row] = fleet.query<{ session_id: string | null }>(
+    "SELECT session_id FROM instances WHERE id = ?",
+    old
+  );
+  const file = row?.session_id
+    ? await transcriptFile(fleet, row.session_id)
+    : undefined;
+  if (!file) {
+    kit.check(
+      "4: the big source's stored transcript is found",
+      false,
+      `session ${row?.session_id ?? "unknown"} has no transcript under ${fleet.home}`
+    );
+    return;
+  }
+  const bytes = await inflate(file);
+  const asked = Date.now();
+  const answer = await fleet
+    .api<{ targetInstanceId: string }>(`/api/instances/${old}/continue`, {
+      target: {
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        permissionMode: "bypassPermissions",
+      },
+      asksOnly: true,
+      askedBy: lead,
+    })
+    .then(
+      (value) => ({ to: value.targetInstanceId }),
+      (error: unknown) => ({ error: String(error) })
+    );
+  const took = Date.now() - asked;
+  const lines = (await fleet.logs("agent").catch(() => ""))
+    .split("\n")
+    .filter((line) => line.includes("[catalog]"))
+    .slice(-4);
+  kit.note(`4: the agent's catalog lines: ${JSON.stringify(lines)}`);
+  kit.check(
+    `4: continuing a session whose stored transcript is over 100 MB answers within the hub's ${READ_BOUND_MS / 1000} s bound`,
+    bytes > 100 * 1024 * 1024 && "to" in answer && took < READ_BOUND_MS,
+    JSON.stringify({ bytes, took, answer })
+  );
+  if (!("to" in answer)) {
+    return;
+  }
+  const stage = () =>
+    fleet.query<{ stage: string }>(
+      "SELECT stage FROM continuations WHERE target_instance_id = ?",
+      answer.to
+    )[0]?.stage;
+  const settled = await until(
+    "4: the big continuation settled",
+    stage,
+    (now) => now === "started" || now === "failed",
+    180_000
+  ).catch(stage);
+  const reading = Date.now();
+  const page = await fleet
+    .api<TranscriptPage>(`/api/instances/${answer.to}/transcript?limit=50`)
+    .then(
+      (value) => ({ blocks: value.blocks.length }),
+      (error: unknown) => ({ error: String(error) })
+    );
+  kit.check(
+    "4: it goes on as one session, and that session's transcript, its 100 MB conversation before the line, reads",
+    settled === "started" && "blocks" in page,
+    JSON.stringify({ stage: settled, page, readIn: Date.now() - reading })
+  );
+};
+
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
@@ -383,6 +578,7 @@ const run = async (kit: Kit) => {
   // orchestrator's continue_session does.
   const lead = await fleet.spawn("claude", "PROBE-orchestrator", fleet.repo);
   await oneChat(kit, fleet, lead);
+  await bigTranscript(kit, fleet, lead);
   await twoChats(kit, fleet);
   await continuedIn(kit, fleet);
 };

@@ -588,6 +588,11 @@ public enum Words {
                 "Stopped at \(from)’s limit; continues on \(to)"
             }
 
+            /// Its move to `to` waits for work in flight (`work`: "1 command running"), which no resume brings back: it moves when that ends, or at `clock` ("20:17") at the latest, ending it.
+            public static func carrying(from: String, to: String, work: String, clock: String) -> String {
+                "Stopped at \(from)’s limit; moves to \(to) when its work in flight ends (\(work)), by \(clock) at the latest"
+            }
+
             /// No account has room: held until its own account resets at `clock` ("15:40").
             public static func waiting(from: String, clock: String) -> String {
                 "Stopped at \(from)’s limit; continues at \(clock)"

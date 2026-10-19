@@ -2427,6 +2427,17 @@ export const limitHolds = sqliteTable("limit_holds", {
   /** The account at its limit. */
   accountId: text("account_id").notNull(),
   until: timestamp("until"),
+  /**
+   * Its move to another account waits for work in flight its process holds
+   * for later (at-limit.ts `unmoved`, server.ts `waitForLater`): where it
+   * goes, what it waits for in the machine's words, and since when, the
+   * wait's bound counting from then across hub restarts. Null otherwise.
+   */
+  carry: text("carry", { mode: "json" }).$type<{
+    since: number;
+    to: string;
+    why: string;
+  }>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),

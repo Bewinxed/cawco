@@ -16,6 +16,10 @@ import {
   type WaitReason,
   windowWords,
 } from "@cawco/core";
+import {
+  RESTART_WAIT_CAP_MS,
+  WORK_IN_FLIGHT,
+} from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
@@ -77,7 +81,8 @@ export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 /**
  * A session stopped at its account's limit, as its tray chip and
  * `delegate_list` say it (core `accountsWords.stalled`): the words, and
- * when it carries on (epoch ms) when it waits for a reset.
+ * when it carries on (epoch ms): the reset it waits for, or, while its move
+ * waits on work in flight, the latest moment that move goes.
  */
 export interface Stall {
   until?: number;
@@ -314,6 +319,11 @@ export interface AtLimitPorts {
   handMove: (row: LimitRow) => string | undefined;
   /** Whether `row` is between turns: nothing running and nothing waiting on it. */
   idle: (row: LimitRow) => Promise<boolean>;
+  /**
+   * Since when `instanceId`'s move has waited on work its process holds for
+   * later (server.ts `waitForLater`); undefined when it does not wait so.
+   */
+  laterSince: (instanceId: string) => number | undefined;
   /** Runs the next look and each settling session's timer until the hub closes. */
   lifetime: HubLifetimeShape;
   /** A machine as a sentence names it. */
@@ -774,10 +784,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (!how.held) {
       return;
     }
+    // Waiting on work in flight: what it waits for and since when, so its
+    // stalled words say what this line says ({@link stall}).
+    const since = how.waits ? ports.laterSince(row.id) : undefined;
     db.atLimit.putHold({
       instanceId: row.id,
       accountId: current.id,
       until: how.refused ? null : holdUntil(row, current, Date.now()),
+      ...(since === undefined
+        ? {}
+        : { carry: { to: target.id, why: reason, since } }),
     });
     ports.changed();
     plan();
@@ -1171,6 +1187,32 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
+   * A hold whose move waits on work in flight, as its stalled words say it:
+   * where it moves, what it waits for, and by when at the latest (the
+   * restart bound from when it began to wait, core `RESTART_WAIT_CAP_MS`),
+   * never the reset the move beats; `until` that latest moment.
+   */
+  const carryStall = (
+    from: string,
+    carry: NonNullable<LimitHold["carry"]>
+  ): Stall => {
+    const to = db.accounts.get(carry.to);
+    const by = carry.since + RESTART_WAIT_CAP_MS;
+    const work = carry.why.startsWith(WORK_IN_FLIGHT)
+      ? carry.why.slice(WORK_IN_FLIGHT.length)
+      : carry.why;
+    return {
+      words: accountsWords.stalled.carrying(
+        from,
+        to ? accountNameAmong(to, db.accounts.list()) : "another account",
+        work,
+        clockWords(by)
+      ),
+      until: by,
+    };
+  };
+
+  /**
    * Arms the next look: the earliest moment a held session's account frees
    * (its own reset, or another's that comes first), else the recheck, while
    * anything is held or two accounts could balance.
@@ -1200,7 +1242,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   return {
     /**
      * `instanceId` stopped at its account's limit, in words, while it is:
-     * on its way to an account with room (now, or once its turn ends), held
+     * on its way to an account with room (now, or once its turn ends), its
+     * move waiting on work in flight (when that ends, by the restart bound
+     * at the latest, as the hub's line says: {@link carryStall}), held
      * until the earliest reset (`until`, epoch ms; its own account's, or
      * another's that frees first and takes it), or held on a refused sign-in
      * until an account can take it. Undefined while it runs.
@@ -1213,6 +1257,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         const name = from
           ? accountNameAmong(from, db.accounts.list())
           : "its account";
+        if (held.carry) {
+          return carryStall(name, held.carry);
+        }
         if (held.until === null) {
           return { words: words.signedOut(name) };
         }

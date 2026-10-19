@@ -37,6 +37,14 @@
  *   transcript reads the old conversation, one `continued` line, then the
  *   new one; its page opens the live session.
  *
+ * - carry: A refuses it while its brief's command runs in the background,
+ *   which no resume on another account brings back, so its move to B (with
+ *   room) waits for that command (hub at-limit.ts `unmoved`, server.ts
+ *   `waitForLater`). While it waits, its tray chip says it moves to B when
+ *   its work in flight ends, by the restart bound at the latest, never A's
+ *   reset 40 minutes off; once the command ends it moves and runs on B,
+ *   and its chip says nothing more.
+ *
  *   bun scripts/probe-kit/run.ts limit-stall
  */
 import { mkdir, writeFile } from "node:fs/promises";
@@ -63,6 +71,9 @@ const LIMIT_MS: Record<Leg, number> = {
   move: 90_000,
   full: 75_000,
   continued: 150_000,
+  // Past the restart bound (30 minutes): a reset the move beats, which the
+  // words must never name.
+  carry: 40 * 60_000,
 };
 /** How long past A's reset the continued leg watches for its old session. */
 const PAST_RESET_MS = 45_000;
@@ -74,7 +85,7 @@ const FINISH = "mcp__cawco__finish_item";
 const CONTINUE = "mcp__cawco__continue_session";
 const HANDOFF = "mcp__cawco__handoff";
 
-const LEGS = ["move", "full", "continued"] as const;
+const LEGS = ["move", "full", "continued", "carry"] as const;
 type Leg = (typeof LEGS)[number];
 
 /** What each leg's delegate has done, as the mock saw it. */
@@ -104,6 +115,7 @@ const LIMITED: Record<Leg, string[]> = {
   move: [ACCOUNT],
   full: [ACCOUNT, B],
   continued: [ACCOUNT],
+  carry: [ACCOUNT],
 };
 let repo = "";
 let projectId = "";
@@ -140,6 +152,10 @@ const briefOf = (leg: Leg) => `PROBE-CHILD-${leg}`;
 const memoryOf = (leg: Leg) => `PROBE-MEMORY-${leg}`;
 /** The person's message to the full leg's delegate while it is stopped. */
 const NOTE = "PROBE-NOTE-while-stopped";
+/** How long the carry leg's background command runs: its move waits for it. */
+const COMMAND_S = 150;
+/** What the carry leg's background command says as it ends. */
+const COMMAND_DONE = "PROBE-CARRY-command-done";
 
 const text = (words: string): Reply => ({ everyMs: 5, words: [words] });
 const useTool = (name: string, input: object): Reply => ({
@@ -201,6 +217,15 @@ const child = (request: Seen, leg: Leg): Reply => {
   ) {
     state.refused.push(Date.now());
     return { everyMs: 5, words: [], refuse: { resetsAt: state.limitedUntil } };
+  }
+  // The carry leg's brief starts a background command, which no resume on
+  // another account brings back: a move off A waits for it.
+  if (leg === "carry" && !state.worked && !request.afterTool) {
+    return useTool("Bash", {
+      command: `sleep ${COMMAND_S} && echo ${COMMAND_DONE}`,
+      description: "A long command in the background",
+      run_in_background: true,
+    });
   }
   if (!state.worked) {
     state.worked = true;
@@ -873,6 +898,77 @@ const run = async (kit: Kit) => {
   if (held) {
     await continuedLeg(kit, fleet, orch, held);
   }
+  // Placed on A again, moving to B at A's limit: B has room.
+  await route(fleet, ACCOUNT, 0);
+  const carrying = await delegated(kit, fleet, orch, "carry");
+  if (carrying) {
+    await carryLeg(kit, fleet, look, carrying);
+  }
+};
+
+/**
+ * A delegate refused at A's limit with a command running in the background:
+ * its move to B waits for that command, as the hub's line says ("It moves to
+ * B when that work ends, or in 30 minutes at the latest"). Its tray chip,
+ * which `delegate_list` reads the same stall for (at-limit.ts `stall`), says
+ * so while it waits, never A's reset the move beats; once the command ends
+ * it moves, runs on B, and its chip says nothing more.
+ */
+const carryLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  look: Looks,
+  instance: string
+): Promise<void> => {
+  const reset = played.carry.limitedUntil;
+  const resetClock = new Date(reset).toLocaleTimeString("en-GB", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+  const waiting = await until(
+    "carry: its chip says it moves once its work in flight ends",
+    () => look.chip(instance),
+    (one) => !!one?.stalled?.includes("when its work in flight ends"),
+    120_000
+  ).catch(() => look.chip(instance));
+  const [hold] = fleet.query<{ carry: string | null; until: number | null }>(
+    "SELECT carry, until FROM limit_holds WHERE instance_id = ?",
+    instance
+  );
+  const ended = fleet.seen.some(
+    (one) =>
+      one.all.includes(briefOf("carry")) && one.all.includes(COMMAND_DONE)
+  );
+  kit.check(
+    "carry: while its move waits for its command, its chip says it moves to B when that work ends, by the bound at the latest, and never names A's reset",
+    !ended &&
+      !!waiting?.stalled?.startsWith("Stopped at") &&
+      waiting.stalled.includes("moves to Probe B") &&
+      waiting.stalled.includes("(1 command running)") &&
+      waiting.stalled.includes("at the latest") &&
+      !waiting.stalled.includes("continues at") &&
+      !waiting.stalled.includes(resetClock),
+    `stalled ${JSON.stringify(waiting?.stalled ?? null)}; hold ${JSON.stringify(hold ?? null)}; A resets at ${resetClock}; the command ended already: ${ended}`
+  );
+  const refusedAt = played.carry.refused[0] as number;
+  const onB = await until(
+    "carry: it runs on B once its command ends",
+    () => look.childSeen("carry", refusedAt).find((one) => onAccount(one, B)),
+    Boolean,
+    (COMMAND_S + 240) * 1000
+  ).catch(() => undefined);
+  const after = await until(
+    "carry: its chip says nothing once it moved",
+    () => look.chip(instance),
+    (one) => !one?.stalled,
+    60_000
+  ).catch(() => look.chip(instance));
+  kit.check(
+    "carry: once its command ends it moves to B and runs there, before A's reset, and its chip no longer says it is stopped",
+    !!onB && onB.at < reset && !after?.stalled,
+    `${onB ? `first request on B ${onB.at - refusedAt} ms after A's refusal` : "nothing on B"}; chip ${JSON.stringify(after?.stalled ?? null)}, state ${after?.state}; account ${look.accountOf(instance)}`
+  );
 };
 
 export default {
