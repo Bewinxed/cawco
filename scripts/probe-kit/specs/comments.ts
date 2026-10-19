@@ -373,6 +373,8 @@ const run = async (kit: Kit) => {
   const on = await setUp(kit);
   const made = await on.call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "comments",
     html: page("first"),
   });
@@ -1379,6 +1381,8 @@ const frameChecks = async (on: On) => {
   try {
     await on.call(CREATE, {
       kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
       name: "routines",
       port: app.port,
     });
@@ -1588,7 +1592,13 @@ const scaledFrameChecks = async (on: On) => {
       ),
   });
   try {
-    await on.call(CREATE, { kind: "preview", name: "desks", port: app.port });
+    await on.call(CREATE, {
+      kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      name: "desks",
+      port: app.port,
+    });
     const outer = (await until(
       "the desks page in the pane",
       async () => {
@@ -1952,6 +1962,8 @@ const scrollPage = (frame: Frame, top: number) =>
 const scrollChecks = async (on: On, scroller: Scroller) => {
   const made = await on.call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: `cards-${scroller}`,
     html: cardsPage(scroller),
   });
@@ -2675,6 +2687,8 @@ const headOf = (card: Locator) =>
 const wordlessChecks = async (on: On) => {
   await on.call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "wordless",
     html: `<!doctype html><html><head><style>body { margin: 0; } main { padding: 24px; }</style></head>
 <body><main><div data-insp-path="src/StatusBadge.svelte:4:3" style="width: 200px; height: 80px; background: #d8d4cc"></div></main></body></html>`,
@@ -2768,7 +2782,13 @@ const CROP_PAD = 24;
 
 /** (g) Presses on test-map: on its intro paragraph, and in the page's padding beside it. */
 const mapPressChecks = async (on: On) => {
-  await on.call(CREATE, { kind: "page", name: "test-map", html: TEST_MAP });
+  await on.call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: "test-map",
+    html: TEST_MAP,
+  });
   const frame = await testMapFrame(on);
   await settle(on.page, 600);
   await frame.evaluate(() => scrollTo(0, 0));
@@ -2916,6 +2936,8 @@ const repeatedPage = (revised: boolean) => {
 const insertChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "repeated-cards",
     html: repeatedPage(false),
   });
@@ -3180,6 +3202,8 @@ const listedBoxes = async (screen: Page, frame: Frame, id: string) => {
 const listChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "listed",
     html: LISTED_PAGE,
   });

@@ -1,4 +1,5 @@
 import {
+  type AgentRow,
   type HubAuthState,
   harnessNamed,
   type InstanceRow,
@@ -28,9 +29,12 @@ const RAIL_MIN = 216;
 const RAIL_MAX = 520;
 
 /**
- * The cookie workspace.svelte.ts mirrors its localStorage into — declared here
- * rather than imported so the server never pulls the client store (and its
- * module-level `$state`) into a request. The shapes mirror that module's.
+ * The server's copy of the workspace localStorage keeps (workspace.svelte.ts,
+ * Persistence): the whole tree or none, never a part. The first client render
+ * draws from what this load gives it, so hydration keeps what was served.
+ * Declared here rather than imported so the server never pulls the client
+ * store (and its module-level `$state`) into a request. The shapes are that
+ * module's.
  */
 const WORKSPACE_KEY = "cawco-workspace";
 /** The addresses of what the tree holds, kept apart from it (workspace.svelte.ts, Persistence). */
@@ -42,9 +46,11 @@ const SESSION_PATH = /^\/session\/([^/]+)/;
  * Whether this browser is a phone, for the session surface's first paint.
  * The deck-or-grid decision is a media query on the client, which the server
  * cannot run, so SSR drew the grid and the phone flipped to the deck once the
- * bundle ran. The client mirrors the query into this cookie; on the very first
- * visit, before any cookie, the client hints and the user agent stand in. The
- * cookie is primary because an iPad in desktop mode reports a Macintosh UA.
+ * bundle ran. The client keeps the query's answer in this cookie; on the very
+ * first visit, before any cookie, the client hints and the user agent stand
+ * in. The cookie is primary because an iPad in desktop mode reports a
+ * Macintosh UA. The first client render draws this answer too, and the query
+ * takes over a frame later (lib/cawco/first-render.svelte.ts).
  */
 const NARROW_KEY = "cawco-narrow";
 const PHONE_UA = /iPhone|iPod|Android.*Mobile|Windows Phone/i;
@@ -176,8 +182,18 @@ export const load: LayoutServerLoad = async ({
   // is shown the pairing screen from the first paint, and a paired one the
   // app. Its cookie is SameSite=Lax, so it rides a link from another site
   // too.
-  const authRead = await readHub<HubAuthState>(fetch, "/api/auth");
+  // How many machines the bar's Machines counts (MachinesButton), so its
+  // number is in the first paint and the bar does not widen when the
+  // socket's list lands; null where the hub would not say.
+  const [authRead, machinesRead] = await Promise.all([
+    readHub<HubAuthState>(fetch, "/api/auth"),
+    readHub<AgentRow[]>(fetch, "/api/agents"),
+  ]);
   const auth = authRead.ok ? authRead.value : null;
+  const machineCount =
+    machinesRead.ok && Array.isArray(machinesRead.value)
+      ? machinesRead.value.length
+      : null;
   const stored = Number(pref(RAIL_KEY));
   const railWidth =
     Number.isFinite(stored) && stored > 0
@@ -194,7 +210,7 @@ export const load: LayoutServerLoad = async ({
   }
 
   // Untrack URL access: a switch between conversations is a shallow pushState
-  // and the client store is authoritative after hydration. This load exists
+  // and the client store is authoritative once it has restored. This load exists
   // for the first paint only — re-running it on every navigation would repeat
   // the title fetches for nothing. Mirrors what `workspace.reveal()` does.
   const pathname = untrack(() => url.pathname);
@@ -239,12 +255,30 @@ export const load: LayoutServerLoad = async ({
   /** Each open tab's pulse as the hub held it for this request. */
   const pulses: Record<string, SessionPulse> = {};
   if (!workspace) {
-    return { railWidth, narrow, workspace, names, pulses, foldBoxes, auth };
+    return {
+      railWidth,
+      narrow,
+      workspace,
+      names,
+      pulses,
+      foldBoxes,
+      auth,
+      machineCount,
+    };
   }
 
   const open = leavesOf(workspace.root).flatMap((leaf) => leaf.tabs);
   if (open.length === 0) {
-    return { railWidth, narrow, workspace, names, pulses, foldBoxes, auth };
+    return {
+      railWidth,
+      narrow,
+      workspace,
+      names,
+      pulses,
+      foldBoxes,
+      auth,
+      machineCount,
+    };
   }
 
   // What the fleet calls these conversations, and what each is doing as the
@@ -348,5 +382,14 @@ export const load: LayoutServerLoad = async ({
     }
   }
 
-  return { railWidth, narrow, workspace, names, pulses, foldBoxes, auth };
+  return {
+    railWidth,
+    narrow,
+    workspace,
+    names,
+    pulses,
+    foldBoxes,
+    auth,
+    machineCount,
+  };
 };

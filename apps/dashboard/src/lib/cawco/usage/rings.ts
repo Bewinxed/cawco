@@ -149,14 +149,17 @@ export function shownHues(
 /**
  * What accounts/AccountName reads of a ring: its nickname over its email,
  * else its name, which names its organization when another account signs in
- * as the same email ({@link accountNames}).
+ * as the same email ({@link accountNames}); no identity, so that name is
+ * never named again.
  */
 export const nameFields = (
   r: Pick<RingAccount, "email" | "id" | "name" | "nick">
-): Pick<Account, "email" | "id" | "label"> => ({
+): Pick<Account, "email" | "id" | "identity" | "label" | "provider"> => ({
   id: r.id,
   email: r.nick ? r.email : r.name,
+  identity: null,
   label: r.nick,
+  provider: CLAUDE_PROVIDER,
 });
 
 /** A provider's accounts in carrying order, and the carry answer. */
@@ -828,7 +831,10 @@ const localOf = (r: RingAccount): string =>
 
 /** A name as the usage popover and strip show it: its first part, then a stem. */
 export interface ShownName {
-  /** The domain's stem ("@gmail"), or "" when the first part says enough. */
+  /**
+   * The domain's stem ("@gmail"), its organization (" (Acme)") beside an
+   * account on the same email, or "" when the first part says enough.
+   */
   domain: string;
   local: string;
 }
@@ -837,8 +843,10 @@ export interface ShownName {
  * The names the usage strip and popover show, one per account: its first
  * part (a nickname, else the email's local part), then, only where an
  * ungrouped account shares that first part with another shown with it, its
- * domain's stem ("@gmail"). Under an organization's head the head tells
- * them apart, as it does for `extra` (the Go plan).
+ * domain's stem ("@gmail"), or its organization (" (Acme)") where the other
+ * signs in as the same email, as core `accountNames` names it. Under an
+ * organization's head the head tells them apart, as it does for `extra`
+ * (the Go plan).
  */
 export function shownNames(
   accounts: RingAccount[],
@@ -860,11 +868,19 @@ export function shownNames(
   return new Map(
     all.map((r) => {
       const local = localOf(r);
-      const shared = (count.get(local) ?? 0) > 1;
+      if (grouped.has(r.id) || (count.get(local) ?? 0) < 2 || !r.email) {
+        return [r.id, { local, domain: "" }];
+      }
+      const email = r.email.toLowerCase();
+      const twin =
+        !r.nick &&
+        all.some(
+          (other) => other.id !== r.id && other.email?.toLowerCase() === email
+        );
       const domain =
-        !grouped.has(r.id) && shared && r.email
-          ? `@${r.email.slice(r.email.lastIndexOf("@") + 1).replace(TOP_DOMAIN, "")}`
-          : "";
+        twin && r.org
+          ? ` (${r.org})`
+          : `@${r.email.slice(r.email.lastIndexOf("@") + 1).replace(TOP_DOMAIN, "")}`;
       return [r.id, { local, domain }];
     })
   );

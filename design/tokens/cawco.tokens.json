@@ -3459,6 +3459,14 @@
         }
       }
     },
+    "underline-offset": {
+      "$type": "dimension",
+      "$value": {
+        "value": 3,
+        "unit": "px"
+      },
+      "$description": "How far under its words a text link's underline stands, when it is drawn (its hover)."
+    },
     "type-meta": {
       "$type": "typography",
       "$value": {

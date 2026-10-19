@@ -3,6 +3,11 @@ import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 import { PREVIEW_PING_PATH, type PreviewSource } from "@cawco/core";
 import {
+  type BrowserKey,
+  type BrowserListenArgs,
+  isBrowserKey,
+} from "@cawco/core/browser";
+import {
   cachePreview,
   causeOf,
   downResponse,
@@ -20,7 +25,10 @@ import {
   versionAssets,
   versionedFile,
 } from "@cawco/core/preview-proxy";
-import type { Server, WebSocketHandler } from "bun";
+import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
+import { wakeBrowser } from "./browser/browsers";
+import { cdpView } from "./browser/shield";
+import { type BrowserRecord, portsOf, readBrowser } from "./browser/state";
 import {
   closeBridge,
   reachWorkspace,
@@ -262,11 +270,300 @@ export function servingPreviews(): {
   }));
 }
 
-/** Stops every preview: each bridge's whole group is killed before this returns, its end awaited by no one. */
+/** Stops every preview and the browser listener: each bridge's whole group is killed before this returns, its end awaited by no one. */
 export function stopPreviews(): void {
   for (const instanceId of [...previews.keys()]) {
     stopPreview({ instanceId }).catch(console.error);
   }
+  browserListener?.listener.stop(true);
+  browserListener = undefined;
+}
+
+/** A take-over view's socket on the browser listener (local host): its frames out, its input in. */
+interface CdpSocket {
+  cdp: BrowserKey;
+  closed: boolean;
+  /** Input that came before the view was attached. */
+  early: string[];
+  view?: { input: (text: string) => void; leave: () => void };
+}
+
+type BrowserSocket = PreviewSocket | CdpSocket;
+
+const isCdp = (data: BrowserSocket): data is CdpSocket => "cdp" in data;
+
+/** What the hub tells a view whose browser is not taken over here. */
+const NOT_TAKEN_OVER =
+  "This browser is not taken over on this machine's local host.";
+
+const cdpSocket: WebSocketHandler<CdpSocket> = {
+  open(socket) {
+    const { data } = socket;
+    cdpView(data.cdp, {
+      send: (frame) => {
+        if (!data.closed) {
+          socket.send(frame);
+        }
+      },
+      close: (code, why) => socket.close(code, why),
+    })
+      .then((view) => {
+        if (!view) {
+          socket.close(4404, NOT_TAKEN_OVER);
+          return;
+        }
+        if (data.closed) {
+          view.leave();
+          return;
+        }
+        data.view = view;
+        for (const text of data.early.splice(0)) {
+          view.input(text);
+        }
+      })
+      .catch((error: unknown) => {
+        previewFailed(
+          "agent browser listener",
+          null,
+          `${data.cdp}'s take-over view did not attach: ${causeOf(error)}`
+        );
+        socket.close(1011, "The take-over view did not attach.");
+      });
+  },
+  message(socket, message) {
+    const text = String(message);
+    if (socket.data.view) {
+      socket.data.view.input(text);
+    } else {
+      socket.data.early.push(text);
+    }
+  },
+  close(socket) {
+    socket.data.closed = true;
+    socket.data.view?.leave();
+    socket.data.view = undefined;
+  },
+};
+
+const browserSocket: WebSocketHandler<BrowserSocket> = {
+  open: (socket) =>
+    isCdp(socket.data)
+      ? cdpSocket.open?.(socket as ServerWebSocket<CdpSocket>)
+      : previewWebSocket.open?.(socket as ServerWebSocket<PreviewSocket>),
+  message: (socket, message) =>
+    isCdp(socket.data)
+      ? cdpSocket.message(socket as ServerWebSocket<CdpSocket>, message)
+      : previewWebSocket.message(
+          socket as ServerWebSocket<PreviewSocket>,
+          message
+        ),
+  close: (socket, code, reason) =>
+    isCdp(socket.data)
+      ? cdpSocket.close?.(socket as ServerWebSocket<CdpSocket>, code, reason)
+      : previewWebSocket.close?.(
+          socket as ServerWebSocket<PreviewSocket>,
+          code,
+          reason
+        ),
+};
+
+/** `/__cawco/browser/<key>/api/…` or `/__cawco/browser/<key>/cdp` (core `browserMount`). */
+const BROWSER_PATH = /^\/__cawco\/browser\/([^/]+)\/(api(?:\/.*)?|cdp)$/;
+
+const refused = (status: number, why: string): Response =>
+  new Response(`${why}\n`, {
+    status,
+    headers: {
+      "content-type": "text/plain; charset=utf-8",
+      "cache-control": "no-store",
+    },
+  });
+
+/**
+ * The machine's one browser listener (core `BROWSER_LISTEN`): the hub's
+ * relay alone reaches it, by the token of its last `browser.listen`, as a
+ * preview listener's start token. A browser that sleeps is woken first.
+ */
+let browserListener:
+  { listener: Server<BrowserSocket>; token: Buffer } | undefined;
+
+/** The live browser a listener path names, woken first when it sleeps; or the refusal. */
+async function liveBrowser(
+  named: string | undefined
+): Promise<{ key: BrowserKey; record: BrowserRecord } | Response> {
+  let key = "";
+  try {
+    key = decodeURIComponent(named ?? "");
+  } catch {
+    // Not percent-encoded validly: no key.
+  }
+  if (!isBrowserKey(key)) {
+    return refused(404, "There is no such browser path on this machine.");
+  }
+  const before = await readBrowser(key);
+  if (before?.state === "live") {
+    return { key, record: before };
+  }
+  if (!before) {
+    return refused(404, `${key} has no browser on this machine.`);
+  }
+  try {
+    const record = await wakeBrowser(key);
+    return record
+      ? { key, record }
+      : refused(404, `${key} has no browser on this machine.`);
+  } catch (error) {
+    previewFailed("agent browser listener", null, causeOf(error));
+    return refused(503, `${key} did not wake: ${causeOf(error)}`);
+  }
+}
+
+/** The local host's take-over view of `key` (shield.ts `cdpView`), as a socket. */
+function takeoverView(
+  request: Request,
+  server: Server<BrowserSocket>,
+  key: BrowserKey,
+  record: BrowserRecord
+): Response | undefined {
+  if (record.host !== "local") {
+    return refused(
+      404,
+      `${key} runs in a container: its view is neko's, not the take-over's.`
+    );
+  }
+  if (request.headers.get("upgrade")?.toLowerCase() !== "websocket") {
+    return refused(400, "The take-over view is a WebSocket.");
+  }
+  return server.upgrade(request, {
+    data: { cdp: key, closed: false, early: [] },
+  })
+    ? undefined
+    : refused(400, "WebSocket upgrade failed");
+}
+
+/** neko's REST or its `/api/ws` socket (container host), at `rest` under its HTTP port. */
+async function toNeko(
+  request: Request,
+  server: Server<BrowserSocket>,
+  key: BrowserKey,
+  record: BrowserRecord,
+  at: string
+): Promise<Response | undefined> {
+  const { http } = portsOf(record);
+  if (record.host !== "container" || http === undefined) {
+    return refused(
+      404,
+      `${key} runs as a local Chromium on this machine: it has no neko to reach.`
+    );
+  }
+  const headers = proxyHeaders(request.headers);
+  // The relay's credential is this listener's; neko reads the viewer's
+  // Bearer the hub set, and nothing of the page that asked.
+  for (const name of [RELAY_HEADER, "host", "origin", "referer", "cookie"]) {
+    headers.delete(name);
+  }
+  if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+    return upgradePreview(
+      request,
+      server as unknown as Server<PreviewSocket>,
+      `ws://127.0.0.1:${http}${at}`,
+      headers,
+      { hop: "agent browser listener", instanceId: null }
+    )
+      ? undefined
+      : refused(400, "WebSocket upgrade failed");
+  }
+  let response: Response;
+  try {
+    response = await fetch(`http://127.0.0.1:${http}${at}`, {
+      method: request.method,
+      headers,
+      body: request.body,
+      redirect: "manual",
+    });
+  } catch (error) {
+    previewFailed(
+      "agent browser listener",
+      null,
+      `${key}'s neko didn't answer: ${causeOf(error)}`
+    );
+    return refused(502, `${key}'s neko didn't answer: ${causeOf(error)}`);
+  }
+  const answer = proxyHeaders(response.headers);
+  // fetch has already decoded the body.
+  if (answer.has("content-encoding")) {
+    answer.delete("content-encoding");
+    answer.delete("content-length");
+  }
+  return new Response(response.body, {
+    status: response.status,
+    headers: answer,
+  });
+}
+
+/** One request on the browser listener, its token already checked. */
+async function serveBrowser(
+  request: Request,
+  server: Server<BrowserSocket>
+): Promise<Response | undefined> {
+  const url = new URL(request.url);
+  if (url.pathname === PREVIEW_PING_PATH) {
+    return new Response("ok", { headers: { "cache-control": "no-store" } });
+  }
+  const [, named, rest] = url.pathname.match(BROWSER_PATH) ?? [];
+  if (!rest) {
+    return refused(404, "There is no such browser path on this machine.");
+  }
+  const live = await liveBrowser(named);
+  if (live instanceof Response) {
+    return live;
+  }
+  return rest === "cdp"
+    ? takeoverView(request, server, live.key, live.record)
+    : toNeko(request, server, live.key, live.record, `/${rest}${url.search}`);
+}
+
+/**
+ * Opens the machine's browser listener when it has none; from now on it
+ * answers `token` alone. Answers the port it listens on.
+ */
+export function listenBrowsers(args: unknown): { port: number } {
+  const { token } = (args ?? {}) as Partial<BrowserListenArgs>;
+  if (typeof token !== "string" || token.length === 0) {
+    throw new Error("browser.listen names the hub's token for it.");
+  }
+  if (browserListener) {
+    browserListener.token = Buffer.from(token);
+    return { port: browserListener.listener.port as number };
+  }
+  const listener = Bun.serve<BrowserSocket>({
+    hostname: "0.0.0.0",
+    port: 0,
+    websocket: browserSocket,
+    fetch(request, server) {
+      const given = Buffer.from(request.headers.get(RELAY_HEADER) ?? "");
+      const expected = browserListener?.token ?? Buffer.alloc(0);
+      if (
+        expected.length === 0 ||
+        given.length !== expected.length ||
+        !timingSafeEqual(given, expected)
+      ) {
+        previewFailed(
+          "agent browser listener",
+          null,
+          `refused a request to ${new URL(request.url).pathname} that its hub didn't relay`
+        );
+        return notRelayed();
+      }
+      return serveBrowser(request, server);
+    },
+    error(error) {
+      previewFailed("agent browser listener", null, causeOf(error));
+      return refused(502, causeOf(error));
+    },
+  });
+  browserListener = { listener, token: Buffer.from(token) };
+  return { port: listener.port as number };
 }
 
 /** A port source with the parts a start names, and none it leaves out. */
@@ -295,12 +592,18 @@ async function folderRoot(dir: string): Promise<string> {
   return root;
 }
 
-/** What a folder preview of `dir` loads at most (core `folderWeight`). */
-export async function previewWeight(dir: unknown): Promise<FolderWeight> {
+/** What a folder preview of `dir` loads at most, and the desk captures on its start page at `path` (core `folderWeight`). */
+export async function previewWeight(
+  dir: unknown,
+  path?: unknown
+): Promise<FolderWeight> {
   if (typeof dir !== "string") {
     throw new Error("previewWeight takes a folder's absolute path.");
   }
-  return folderWeight(await folderRoot(dir));
+  return folderWeight(
+    await folderRoot(dir),
+    typeof path === "string" ? path : undefined
+  );
 }
 
 export function startPreview(options: {

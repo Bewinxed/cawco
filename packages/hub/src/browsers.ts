@@ -18,10 +18,22 @@
  *
  * Every route is the person's: a session's credential is refused by the
  * hub's gate (hub-auth.ts, "Only the person takes over").
+ *
+ * The machine holds the truth of a take-over (agent shield.ts); the hub's row
+ * follows it and never sends one again. A take-over starts on the hub only
+ * with the machine's answer to `browser.shield`, and ends in one place,
+ * {@link ended}, from every path: the person's Hand back (the machine's
+ * answer), the machine's own hand-back (no view for two minutes, or the
+ * browser stopped: its `browser_handback` frame), and any end the hub was not
+ * there to hear (a machine's frame, or its rows read as it registers, with no
+ * take-over where the row had one). A browser ask withdrawn before the
+ * person took it never started one; one whose session ends while it stands
+ * keeps it until the person, or the machine, hands back.
  */
 import type { InstanceRow } from "@cawco/core";
 import {
   BROWSER_HANDBACK,
+  BROWSER_ROWS,
   BROWSER_SHIELD,
   BROWSER_START,
   BROWSER_STOP,
@@ -39,6 +51,13 @@ import type { BrowserAsks } from "./browser-tools";
 import type { ArtifactRow, ArtifactsDb } from "./db/artifacts";
 import type { BrowsersDb, StoredBrowser } from "./db/browsers";
 import type { RelayCall } from "./stream-relay";
+
+/** How a take-over came to end, as the hub's log says it. */
+const HANDED_BACK_BY: Record<BrowserHandedBackFrame["why"], string> = {
+  person: "by the person",
+  unwatched: "by its machine: no view for two minutes",
+  stopped: "by its machine: the browser stopped",
+};
 
 /** What a browser artifact is called in a panel. */
 export const BROWSER_ARTIFACT_NAME = "browser";
@@ -86,7 +105,8 @@ export const browserKeyOf = (instance: InstanceRow): BrowserKey =>
     ? `project:${instance.projectId}`
     : `machine:${instance.machineId}`;
 
-const answered = <T>(
+/** A machine's answer to a browser call, or its refusal in the person's words. */
+export const answered = <T>(
   read: Awaited<ReturnType<RelayCall>>,
   machine: string,
   what: string
@@ -147,6 +167,9 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       projectId: instance.projectId ?? null,
       kind: "browser",
       name: BROWSER_ARTIFACT_NAME,
+      // The person takes the browser over; each browser_ask carries its own reason, so the row keeps no line of its own.
+      does: "try",
+      ask: "",
       machineId: instance.machineId,
       source: { page: key },
       revision: 1,
@@ -243,20 +266,50 @@ export const createBrowsers = (deps: BrowsersDeps) => {
     }
   };
 
+  /**
+   * The one place a take-over ends on the hub: its row holds none, and the
+   * browser ask it answered (its call waiting on) answers with the page's
+   * origin, or none when the machine could not say.
+   */
+  const ended = (
+    machineId: string,
+    key: BrowserKey,
+    origin: string | null,
+    requestId: string | undefined
+  ): void => {
+    const row = db.browsers.get(machineId, key);
+    if (row?.takeover) {
+      db.browsers.put(machineId, { ...row, takeover: null });
+    }
+    deps.asks().handedBack(machineId, key, origin, requestId);
+  };
+
   const browsers = {
-    /** A machine's browsers, whole, as its frame said. */
+    /**
+     * A machine's browsers, whole, as it holds them: the rows follow it. A
+     * take-over the row held and the machine no longer does ended where
+     * the hub was not there to hear it.
+     */
     heard(machineId: string, frame: BrowserFrame): void {
+      const now = new Map(frame.browsers.map((row) => [row.key, row]));
+      for (const row of db.browsers.list()) {
+        if (
+          row.machineId === machineId &&
+          row.takeover &&
+          !now.get(row.key)?.takeover
+        ) {
+          ended(machineId, row.key, null, row.takeover.requestId ?? undefined);
+        }
+      }
       db.browsers.replace(machineId, frame.browsers.map(rowFrom));
     },
 
-    /** A take-over its machine ended itself: the ask's call answers as a hand-back would. */
+    /** A take-over its machine ended, whichever way: told before the record's frame, with the page's origin. */
     heardHandback(frame: BrowserHandedBackFrame): void {
       console.info(
-        `[browser] ${frame.key} on ${deps.machineName(frame.machineId)} handed back by its machine (${frame.why === "unwatched" ? "no view for two minutes" : "the browser stopped"})`
+        `[browser] ${frame.key} on ${deps.machineName(frame.machineId)} handed back (${HANDED_BACK_BY[frame.why]})`
       );
-      deps
-        .asks()
-        .handedBack(frame.machineId, frame.key, frame.origin, frame.requestId);
+      ended(frame.machineId, frame.key, frame.origin, frame.requestId);
     },
 
     /**
@@ -284,23 +337,18 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       }
     },
 
-    /** A machine connected: every take-over it holds is sent again, so its gate stays closed and control the person's. */
-    connected(machineId: string): void {
-      for (const row of db.browsers.list()) {
-        if (row.machineId !== machineId || !row.takeover) {
-          continue;
-        }
-        const { takeover } = row;
-        shield(machineId, {
-          key: row.key,
-          ...(takeover.by ? { workspaceId: takeover.by } : {}),
-          ...(takeover.requestId ? { requestId: takeover.requestId } : {}),
-        }).catch((error: unknown) =>
-          console.warn(
-            `[browser] ${row.key}'s take-over was not sent again to ${deps.machineName(machineId)}: ${error instanceof Error ? error.message : String(error)}`
-          )
-        );
-      }
+    /**
+     * A machine registered: its browsers are read from it whole, so every
+     * row (and every take-over) is what the machine holds now, not what the
+     * hub kept while it was away.
+     */
+    async connected(machineId: string): Promise<void> {
+      const frame = answered<BrowserFrame>(
+        await deps.call(machineId, BROWSER_ROWS, [], CALL_MS),
+        deps.machineName(machineId),
+        "say what it runs"
+      );
+      browsers.heard(machineId, frame);
     },
 
     /**
@@ -355,11 +403,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
         deps.machineName(machineId),
         "be handed back"
       );
-      const row = db.browsers.get(machineId, key);
-      if (row) {
-        db.browsers.put(machineId, { ...row, takeover: null });
-      }
-      deps.asks().handedBack(machineId, key, back.origin, back.requestId);
+      ended(machineId, key, back.origin, back.requestId);
       return back;
     },
 

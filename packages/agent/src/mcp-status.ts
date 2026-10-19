@@ -41,6 +41,26 @@ export const claudeMcpConnectMs = (env: Record<string, string | undefined>) => {
   const set = Number(env.MCP_TIMEOUT);
   return set > 0 ? Math.min(set, 2_147_483_647) : 30_000;
 };
+const fleetMcpListeners = new Set<() => void>();
+
+/**
+ * Hears a harness's reading of a fleet MCP server moving with no fleet
+ * change (a server it held failed connected when started again): the agent
+ * reads the machine's fleet report again and sends it to the hub. Answers
+ * the listener's removal.
+ */
+export const onFleetMcpMoved = (listener: () => void): (() => void) => {
+  fleetMcpListeners.add(listener);
+  return () => fleetMcpListeners.delete(listener);
+};
+
+/** Tells every {@link onFleetMcpMoved} listener. */
+export const fleetMcpMoved = (): void => {
+  for (const listener of fleetMcpListeners) {
+    listener();
+  }
+};
+
 /** CawCo's own bound on the CLI starting and answering its first status read. */
 const START_TIMEOUT_MS = 30_000;
 /** CawCo's own margin past Claude Code's connect timeout for its verdict to land. */

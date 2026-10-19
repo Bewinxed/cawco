@@ -114,7 +114,7 @@ interface TlsTo {
 }
 
 /** One TURN exchange: allocate with `user`, then (when asked) a permission to `peer`; what each answered. */
-const turn = (
+export const turn = (
   url: string,
   user: { username: string; credential: string },
   peer?: string,
@@ -226,7 +226,7 @@ const bindPort = (
  * hub's preview ports and the relay's own; `tries` more ports are asked for
  * when one is not.
  */
-const freeStandIn = async (tries = 20): Promise<number | undefined> => {
+export const freeStandIn = async (tries = 20): Promise<number | undefined> => {
   if (tries === 0) {
     return;
   }
@@ -257,7 +257,7 @@ const freeStandIn = async (tries = 20): Promise<number | undefined> => {
 };
 
 /** One STUN binding over `url`: answered, or why not. Over TLS through `connect`, which takes a server name and a CA. */
-const binding = (url: string, tls?: TlsTo): Promise<string> =>
+export const binding = (url: string, tls?: TlsTo): Promise<string> =>
   new Promise((resolve) => {
     if (!tls) {
       getPublicIP(url, { timeout: 3000 }, (error, address) =>
@@ -538,6 +538,16 @@ const relayLegs = async (
   args: RelayStartArgs
 ): Promise<void> => {
   const before = await listening();
+  // A name's certificate first, its own command (the journey's certificate
+  // step), over HTTP on port 80; then the start, on the certificate.
+  if (args.hostname) {
+    const certified = await relay.certifyRelay({ hostname: args.hostname });
+    kit.check(
+      `relay.certify for ${args.hostname} over HTTP: a certificate ending ${new Date(certified.expiresAt).toISOString()}`,
+      certified.expiresAt > Date.now(),
+      JSON.stringify(certified)
+    );
+  }
   const frame = await relay.startRelay(args);
   const opened = added(before, await listening());
   const inspected = await runtime.docker
@@ -716,7 +726,7 @@ const startProbe = async (
 };
 
 /** `arg` with the relay's 443 moved to `port`. */
-const onPort =
+export const onPort =
   (port: number) =>
   (arg: string): string =>
     arg === `--listening-port=${STREAM_RELAY_PORT}`
@@ -740,7 +750,13 @@ const refusedLegs = async (
     "/proc/sys/net/ipv4/ip_unprivileged_port_start",
     "utf8"
   );
-  const thrown = await relay.startRelay(args).then(
+  // With a name, the first command that binds below the start is the
+  // certificate's over HTTP (port 80); without, the start's (443).
+  const first = (): Promise<unknown> =>
+    args.hostname
+      ? relay.certifyRelay({ hostname: args.hostname })
+      : relay.startRelay(args);
+  const thrown = await first().then(
     () => ({ said: "started", command: undefined }),
     (error: unknown) => ({
       said: said(error),
@@ -1014,7 +1030,7 @@ const relaySpec = async (kit: Kit): Promise<void> => {
   let certified = false;
   try {
     // A name's certificate is issued over HTTP, on port 80.
-    const refusal = await relay.lowPortsRefusal(runtime, !!name);
+    const refusal = await relay.lowPortsRefusal(runtime, name ? 80 : 443);
     if (refusal) {
       await refusedLegs(kit, relay, runtime, args, refusal);
     } else {

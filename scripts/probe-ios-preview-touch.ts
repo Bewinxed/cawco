@@ -479,7 +479,13 @@ try {
   const id = await fleet.spawn("claude", "Preview touch probe");
   const made = await fleet.api<{ id: string; opened?: unknown }>(
     `/api/instances/${id}/artifacts`,
-    { kind: "page", name: "touch-probe", html: PAGE }
+    {
+      kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "touch-probe",
+      html: PAGE,
+    }
   );
   console.log(`  page artifact ${made.id} for session ${id}`);
   const port = Number(new URL(fleet.base).port);

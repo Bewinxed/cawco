@@ -18,6 +18,7 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
+import { BROWSER_SCREEN } from "@cawco/core/browser";
 
 /** What a view sends: the person's pointer, keys and words, in the page's CSS pixels. */
 export type CdpInput =
@@ -53,8 +54,8 @@ interface Message {
 /** A take-over's screencast: none yet, frames being made, or ended. */
 type CastState = "idle" | "casting" | "stopped";
 
-/** The frame's largest edges: the local browser's window (local-host.ts). */
-const FRAME = { width: 1280, height: 800 } as const;
+/** The frame's largest edges, and the page's viewport while it is taken over: the container host's screen. */
+const FRAME = BROWSER_SCREEN;
 const QUALITY = 70;
 
 /** How long one call to Chromium may take before it is given up. */
@@ -156,6 +157,24 @@ export class CdpLink {
       throw new Error(`${method} got no answer within ${CALL_MS / 1000} s.`);
     }
     return read.value;
+  }
+
+  /**
+   * Sends one call and waits for no answer: for a command whose answer is
+   * another party's to give (a navigation's, which comes with the site's
+   * response), where the caller must not wait on it.
+   */
+  post(method: string, params: Json = {}, sessionId?: string): void {
+    const id = this.#next;
+    this.#next += 1;
+    this.#socket.send(
+      JSON.stringify({
+        id,
+        method,
+        params,
+        ...(sessionId ? { sessionId } : {}),
+      })
+    );
   }
 
   /** A flat session on `targetId`. */
@@ -281,6 +300,23 @@ export class CdpTakeover {
     try {
       const session = await link.attach(targetId);
       await link.call("Page.enable", {}, session);
+      // The person's view is the container host's 1280x800 (its neko
+      // screen). Headless Chromium lays the page out in its window less the
+      // browser's own UI, whose height changes by version (1280x657 under
+      // Chrome 156's new headless for a 1280,800 window); the page's viewport
+      // is set as Playwright sets every viewport (`Emulation.
+      // setDeviceMetricsOverride`, playwright-core 1.64.1 `_updateViewport`),
+      // and lasts while this take-over's session is attached.
+      await link.call(
+        "Emulation.setDeviceMetricsOverride",
+        {
+          width: FRAME.width,
+          height: FRAME.height,
+          deviceScaleFactor: 1,
+          mobile: false,
+        },
+        session
+      );
       return new CdpTakeover(link, session, targetId);
     } catch (error) {
       link.close();

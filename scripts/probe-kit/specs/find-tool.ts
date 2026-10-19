@@ -267,6 +267,8 @@ const seed = async (probe: Probe) => {
   );
   const artifact = await probe.tool(talker, "artifact_create", {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: `${WORD}-notes`,
     html: `<p>The ${WORD} notes.</p>`,
   });

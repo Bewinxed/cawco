@@ -248,6 +248,8 @@ const run = async (kit: Kit) => {
   // panel (the panel's head stands once the session has an artifact).
   const created = await call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: NAME,
     html: kitPage(),
   });

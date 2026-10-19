@@ -1223,6 +1223,12 @@ export const instances = sqliteTable("instances", {
    * a delegate from before work items existed.
    */
   workItemId: text("work_item_id"),
+  /**
+   * The session a continuation moved this one's work item to (server.ts
+   * `retireContinued`): this one never runs again (core `relaunchOf`
+   * refuses it), and what is sent to it goes there. Null on every other.
+   */
+  continuedInto: text("continued_into"),
 });
 
 /** Only hashes reach disk; installing a replacement does not revoke a live credential before ACK. */
@@ -3567,8 +3573,8 @@ export const artifacts = sqliteTable(
       .references(() => instances.id, { onDelete: "cascade" }),
     /**
      * The session whose `artifact_create` last made it: the owner itself, or
-     * a delegate that put it in its parent's panel (`to: "parent"`), which
-     * may go on updating, reading and showing it. Null on one made before it
+     * a delegate that handed it to its parent (`to: "parent"`), which may
+     * go on updating and reading it. Null on one made before it
      * was kept.
      */
     madeBy: text("made_by").references(() => instances.id, {
@@ -3578,6 +3584,13 @@ export const artifacts = sqliteTable(
     projectId: text("project_id"),
     kind: text("kind").$type<import("@cawco/core").ArtifactKind>().notNull(),
     name: text("name").notNull(),
+    /** What the person does on it (core `ARTIFACT_DOES`): pick, judge, try or draw. Every create names it; rows made before it were set to judge. */
+    does: text("does")
+      .$type<import("@cawco/core").ArtifactDoes>()
+      .notNull()
+      .default("judge"),
+    /** The panel head's one line under its name: what the person does here, in their words. Empty on a row made before it, and on the person's own composer canvas. */
+    ask: text("ask").notNull().default(""),
     /** The machine a preview's dev server or folder is on; null for a page, which the hub serves. */
     machineId: text("machine_id"),
     /**
@@ -3715,8 +3728,6 @@ export const streamRelay = sqliteTable("stream_relay", {
     .notNull()
     .default(sql`'[]'`),
   checkedAt: timestamp("checked_at"),
-  /** When its certificate ends, as its last renewal said. */
-  certificateEndsAt: timestamp("certificate_ends_at"),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -3757,6 +3768,81 @@ export const browsers = sqliteTable(
   },
   (table) => [primaryKey({ columns: [table.machineId, table.key] })]
 );
+
+/**
+ * The stream relay's guided journey (relay-journey.ts) — one row, keyed
+ * `'journey'`, made when someone sets it up (Caw's setup card, Settings ›
+ * Browsers, a take-over through a domain) and gone with Remove relay. What
+ * the person and the machine settled on each step: the machine picked and
+ * the addresses it was found at, the name and how it stands, the Cloudflare
+ * token (sealed), what the router answered, the low ports allowed, the
+ * certificate, and whether the row was put away. What the hub checks again
+ * on its own (DNS, the low ports) lives in memory.
+ */
+export const streamRelayJourney = sqliteTable("stream_relay_journey", {
+  /** Always `'journey'`. */
+  id: text("id").primaryKey(),
+  /** The machine picked; null before a pick. */
+  machineId: text("machine_id").references(() => agents.machineId, {
+    onDelete: "set null",
+  }),
+  /** Its public address, and its address on its router's network when behind one, as last found. */
+  address: text("address"),
+  lan: text("lan"),
+  /** The domain the person reached CawCo through when they set it up: the name's suggestion. */
+  domain: text("domain"),
+  /** The relay's DNS name, suggested or given; null while none is known. */
+  name: text("name"),
+  /** `open` while it stands, `pointed` once it answered with the machine's address, `skipped`. */
+  nameState: text("name_state")
+    .$type<"open" | "pointed" | "skipped">()
+    .notNull()
+    .default("open"),
+  /** Sealed: the person's Cloudflare API token (Zone · DNS · Edit), for the record and the certificate's DNS challenge. */
+  cloudflareToken: sealedText("cloudflare_token"),
+  /** What the router answered "Open the ports" with; null before it was asked. */
+  router: text("router").$type<"mapped" | "partial" | "refused">(),
+  routerHow: text("router_how").$type<"UPnP" | "NAT-PMP">(),
+  /** The machine's runtime may bind the relay's lowest port, as last read. */
+  lowPorts: integer("low_ports", { mode: "boolean" }).notNull().default(false),
+  /** The name the certificate stands for, and when it ends. */
+  certificateName: text("certificate_name"),
+  certificateEndsAt: timestamp("certificate_ends_at"),
+  /** Why the certificate was not issued, in the error formula's words. */
+  certificateWhy: text("certificate_why"),
+  /** Put away from Needs you: `later` or `done-for-now`. */
+  closed: text("closed").$type<"later" | "done-for-now">(),
+  /** When the relay first went live on this journey: Settings shows its summary from then. */
+  liveAt: timestamp("live_at"),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/**
+ * Each device's last proof of the stream relay (relay-journey.ts): which
+ * URLs gave a relay candidate there, and whether the device was outside the
+ * relay's network. A fleet machine on another network proves it the same way
+ * (its id, `machine:<id>`). Gone with the relay.
+ */
+export const streamRelayProofs = sqliteTable("stream_relay_proofs", {
+  /** A paired device's id, a browser's own key, or `machine:<machineId>`. */
+  deviceId: text("device_id").primaryKey(),
+  /** "Chrome on Linux", "CawCo on iPhone", a machine's name. */
+  device: text("device").notNull(),
+  /** The public address it asked from, when it had one. */
+  address: text("address"),
+  /** Its public address differs from the relay's. */
+  outside: integer("outside", { mode: "boolean" }).notNull(),
+  /** The chips of the URLs that answered; empty when none did. */
+  ports: text("ports", { mode: "json" })
+    .$type<string[]>()
+    .notNull()
+    .default(sql`'[]'`),
+  /** A URL refused its credential (a 401), not unreachable. */
+  refused: integer("refused", { mode: "boolean" }).notNull().default(false),
+  at: timestamp("at").notNull(),
+});
 
 /**
  * How previews are reached, fleet-wide (core `PreviewSettings`) — one row,

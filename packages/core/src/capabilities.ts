@@ -21,6 +21,12 @@ export interface MachineCapability {
   installCommand: string;
   /** `container-runtime` only: what the runtime forwards to the browser's media port. Short of `udp+tcp`, `reason` says how to get both. */
   media?: MediaPath;
+  /**
+   * `public-address` only, on a machine with none of its own: the public
+   * address its router maps it to, as a STUN binding answered it, and its
+   * address on the router's network (core stream-relay.ts `STUN_SERVER`).
+   */
+  nat?: { address: string; lan: string };
   path?: string;
   reason?: string;
   version?: string;

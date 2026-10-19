@@ -1137,7 +1137,8 @@ const scheduledWakeups = (input: unknown): Wakeups | undefined => {
 
 /**
  * The CLI child's environment: the agent's own as a session gets it (core
- * `sessionEnvironment`), the spec's over it, and the session's own identity.
+ * `sessionEnvironment`), the spec's over it, a workspace session's temp root,
+ * and the session's own identity.
  *
  * Claude in Chrome follows the session's mode, like every other tool. The
  * CLI's server-side gate `tengu_cowork_chrome_automode_default` (the
@@ -1160,6 +1161,14 @@ const sessionEnv = (
   ...sessionEnvironment(process.env),
   CLAUDE_CHROME_CLASSIFIER_FLOOR: "0",
   ...specEnv,
+  // A workspace session's temp root, which its shell reads inside the
+  // boundary (boundary.ts `Boundary.claudeTmp`). The CLI's root is
+  // `CLAUDE_CODE_TMPDIR`, else `os.tmpdir()` ("function um(){…let
+  // e=a.CLAUDE_CODE_TMPDIR;if(e)return e;return C()}", Claude Code 2.1.302),
+  // and a background task's output is `<root>/claude-<uid>/…/tasks/<id>.output`:
+  // under the host's /tmp, which the boundary hides, the shell found "No such
+  // file or directory" for every one (leaf 74ec1894, 2026-10-19).
+  ...(ctx.boundary ? { CLAUDE_CODE_TMPDIR: ctx.boundary.claudeTmp } : {}),
   // The session's git reaches the hub's remote as this session (git-credential.ts).
   ...sessionGitEnv({ ...process.env, ...specEnv }),
   // The session's shell acts as this session and no other: `cawco tool`

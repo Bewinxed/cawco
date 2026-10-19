@@ -247,6 +247,7 @@ export const readPage = async (html: string): Promise<ReadPage> => {
             keycap: card.options.length + 1,
             label: "",
             line: "",
+            cost: "",
             recommended: false,
           },
         };

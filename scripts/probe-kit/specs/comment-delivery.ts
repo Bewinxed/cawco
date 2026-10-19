@@ -439,6 +439,8 @@ const endedWriterChecks = async (
   });
   const made = await callIn(writer, CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: WRITER_PAGE,
     html: WRITER_HTML,
   });
@@ -650,7 +652,13 @@ const run = async (kit: Kit) => {
     )) as string;
   };
   const call = (tool: string, input: object) => callIn(session, tool, input);
-  const made = await call(CREATE, { kind: "page", name: NAME, html });
+  const made = await call(CREATE, {
+    kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
+    name: NAME,
+    html,
+  });
   const id = made.match(ANSWERED_ID)?.[1];
   if (!id) {
     kit.check("the page is made", false, made.slice(0, 300));

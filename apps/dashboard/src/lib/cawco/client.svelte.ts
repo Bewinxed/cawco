@@ -66,6 +66,11 @@ import type {
   ProviderSigninChallenge,
   ProviderSigninResult,
   RebalanceNotice,
+  RelayAct,
+  RelayAnswer,
+  RelayJourneyView,
+  RelayProofReport,
+  RelayTry,
   SendAttachment,
   SendPayload,
   SendRecord,
@@ -415,7 +420,7 @@ const listedInHistory = (info: NeutralSessionInfo): boolean =>
   info.tag !== CAWCO_SCRATCH_TAG;
 
 export interface PendingPermission {
-  /** A browser ask's browser, reason and origin (core `BrowserAskFrame`): its card offers Decline and Take over. */
+  /** A browser ask's browser, reason and origin (core `BrowserAskFrame`): its card offers Deny and Take over. */
   browserAsk?: BrowserAskFrame;
   /**
    * When this device last heard the hub park it, in the order it hears
@@ -549,6 +554,13 @@ export interface SessionState {
   contextError: string | null;
   /** A `getContextUsage` call is out; the meter keeps its last number meanwhile. */
   contextPending: boolean;
+  /**
+   * The session a continuation took this one's work item on in, by its id
+   * and title, as its newest page said (core `TranscriptPage.continuedTo`):
+   * what its pane reads on its first paint and when the board no longer
+   * lists its row. Null on every other.
+   */
+  continuedTo: { instanceId: string; title: string } | null;
   /** The main loop's tool in flight, cleared by its result or the turn's end. */
   currentTool: ToolGlance | null;
   /**
@@ -1168,6 +1180,16 @@ const state = $state({
   /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
   tailnetTicked: false,
   /**
+   * The stream relay's journey (`GET /api/stream-relay`, then each
+   * `stream_relay.journey` frame): Needs you shows its row while it asks,
+   * Settings › Browsers its card or its summary; undefined until read.
+   */
+  relayJourney: undefined as RelayJourneyView | undefined,
+  /** The domain this page reached CawCo through, as the hub saw it (null by IP, the tailnet, a name of the hub's). */
+  relayDomain: null as string | null,
+  /** It went live and was proven from outside while this page stood: the row ticks until the next open. */
+  relayTicked: false,
+  /**
    * Each Claude account's own limits, by account id — folded in from the
    * `kind: 'usage'` frame so the pill updates live rather than polling
    * (USAGE-SPEC.md §7.1). Empty while there is no Claude account.
@@ -1328,6 +1350,7 @@ export function blankSession(instanceId: string): SessionState {
     queued: [],
     rev: 0,
     cursor: null,
+    continuedTo: null,
     records: {},
     local: [],
     notes: [],
@@ -1904,6 +1927,7 @@ function adoptTranscriptPage(
     target.sessionId = where.sessionKey;
   }
   seesCompaction(page);
+  target.continuedTo = page.continuedTo ?? null;
   target.blocks = page.blocks.map((block) => take(target, block, "blocks"));
   target.queued = (page.queued ?? []).map((block) =>
     take(target, block, "queued")
@@ -2714,6 +2738,8 @@ async function refresh(): Promise<boolean> {
   readFleetUpstream();
   // HTTPS on the tailnet name: Needs you shows its step while one stands.
   readTailnetHttps();
+  // The stream relay's journey: Needs you's row and Settings › Browsers.
+  readRelayJourney().catch(() => undefined);
   // Every project's threads, for the rail; frames keep them from here.
   readThreads();
   // What the socket says about asks from here on is newer than the read.
@@ -3236,6 +3262,12 @@ function handleFrame(frame: FramePayload): void {
     return;
   }
 
+  // The stream relay's journey moved: every place that draws it follows.
+  if (frame.kind === "stream_relay.journey") {
+    keepRelayJourney(frame.journey);
+    return;
+  }
+
   // HTTPS on the tailnet name changed: Needs you's step moves on, or ticks.
   if (frame.kind === "tailnet.https") {
     const ticked =
@@ -3406,6 +3438,10 @@ function handleFrame(frame: FramePayload): void {
   }
   // A place's stage clone travels machine → hub only; the hub files it as a workspace.
   if (frame.kind === "stage-clone") {
+    return;
+  }
+  // A machine's fleet report travels machine → hub only; screens read the hub's row.
+  if (frame.kind === "fleet_report") {
     return;
   }
 
@@ -6081,6 +6117,48 @@ async function readTailnetHttps(): Promise<void> {
   }
 }
 
+/** The journey as the hub has it now, and whether it ticked while this page stood (asking, then done). */
+function keepRelayJourney(journey: RelayJourneyView): void {
+  const before = state.relayJourney;
+  state.relayJourney = journey;
+  if (before?.asks && !journey.asks && journey.done) {
+    state.relayTicked = true;
+  }
+}
+
+/** The stream relay's journey as the hub has it now, with this page's domain; a failed read throws its words. */
+export async function readRelayJourney(): Promise<void> {
+  const read = await askHub<RelayAnswer>("/api/stream-relay");
+  state.relayDomain = read.domain;
+  keepRelayJourney(read.journey);
+}
+
+/** One act on the stream relay's journey: the hub's answer kept, its refusal thrown in its words. */
+export async function actOnRelay(act: RelayAct): Promise<void> {
+  const answered = await askHub<RelayAnswer>(
+    "/api/stream-relay/act",
+    json("POST", act)
+  );
+  state.relayDomain = answered.domain;
+  keepRelayJourney(answered.journey);
+}
+
+/** What this screen's proof found, told to the hub, and its answer kept. */
+export async function reportRelayProof(
+  report: RelayProofReport
+): Promise<void> {
+  const answered = await askHub<RelayAnswer>(
+    "/api/stream-relay/proof",
+    json("POST", report)
+  );
+  keepRelayJourney(answered.journey);
+}
+
+/** A 60 s credential for this screen's proof of the relay. */
+export function relayTry(): Promise<RelayTry> {
+  return askHub<RelayTry>("/api/stream-relay/try");
+}
+
 /** The fleet's upstream answer, as the hub holds it now. */
 async function readFleetUpstream(): Promise<void> {
   const read = await load<{ upstream: UpstreamPosts | null }>(
@@ -8301,7 +8379,7 @@ export function permissionAnswer(
   request: PendingPermission,
   answer: PermissionAnswer
 ): PermissionResult {
-  // A browser ask's Decline carries the person's words alone, none here.
+  // A browser ask's Deny carries the person's words alone, none here.
   if (answer === "deny") {
     return {
       behavior: "deny",
@@ -8768,6 +8846,18 @@ export const cawco = {
   /** Its step was taken while this page stood, a moment ago: the row ticks. */
   get tailnetTicked(): boolean {
     return state.tailnetTicked;
+  },
+  /** The stream relay's journey, as the hub has it; undefined until read. */
+  get relayJourney(): RelayJourneyView | undefined {
+    return state.relayJourney;
+  },
+  /** The domain this page reached CawCo through, as the hub saw it; null by IP, the tailnet or a name of the hub's. */
+  get relayDomain(): string | null {
+    return state.relayDomain;
+  },
+  /** The relay went live and was proven from outside while this page stood: its row ticks. */
+  get relayTicked(): boolean {
+    return state.relayTicked;
   },
   /** The ask a permission requestId belongs to, whichever delegate raised it. */
   delegateAskOf: (requestId: string): DelegateAskEvent | null => {

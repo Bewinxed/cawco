@@ -1,6 +1,6 @@
 /**
  * The fleet's stream relay (Projects spec §5.11, build items 4 and 5): one
- * TURN server, coturn, run by the agent of a machine with a public address
+ * TURN server, coturn, run by the agent of a machine the internet reaches
  * (agent browser/relay.ts). The hub keeps its record (`stream_relay`): the
  * machine, the address and DNS name it is reached by, and the shared secret,
  * sealed (secret-box.ts). From that secret it mints each credential a browser
@@ -8,10 +8,11 @@
  * `use-auth-secret` checks (turnserver.conf: "usercombo -> "timestamp:userid"
  * … turn password -> base64(hmac(secret key, usercombo))").
  *
- * - **Setup** picks the address from the machine's `public-address`
- *   capability (its first global IPv4), or the public address the hub sees
- *   its agent connect from where that differs (then coturn's `external-ip`
- *   maps it), makes the secret (32 random bytes) and sends `relay.start`.
+ * The guided journey (relay-journey.ts) brings it up: it picks the machine
+ * and its address (an interface's, the hub's view of it, or the one its
+ * router maps it to, by STUN), has the certificate issued, and calls
+ * {@link StreamRelay.setup} with all of it.
+ *
  * - **Health**: every 60 s one STUN binding request per transport on the
  *   relay's one port, 443: UDP, TCP, and TLS while a certificate stands; each
  *   answered within 3 s is up, with the request's error kept otherwise.
@@ -30,11 +31,14 @@ import type { BrowserRelay } from "@cawco/core/browser";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import { isPublicAddress, plainAddress } from "@cawco/core/public-address";
 import {
+  RELAY_CERTIFY,
   RELAY_REMOVE,
   RELAY_RENEW,
   RELAY_START,
   RELAY_STOP,
   type RelayCandidate,
+  type RelayCertified,
+  type RelayCertifyArgs,
   type RelayFrame,
   type RelayPortHealth,
   type RelayPortName,
@@ -42,11 +46,9 @@ import {
   type RelayStartArgs,
   STREAM_RELAY_PORT,
   STREAM_RELAY_PORTS,
-  type StreamRelayAnswer,
-  type StreamRelayView,
+  STREAM_RELAY_WORDS,
   streamRelayUrls,
 } from "@cawco/core/stream-relay";
-import { Elysia, t } from "elysia";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
 import type { HubLifetimeShape } from "./lifetime";
@@ -57,13 +59,12 @@ const STUN_MS = 3000;
 const HEALTH_MS = 60_000;
 /** How often a relay with a DNS name is asked to renew its certificate (certbot decides). */
 const RENEW_MS = 24 * 60 * 60_000;
-/** How long a relay start may take: two pulls and a certificate's issue. */
+/** How long a relay start may take: a pull of coturn's image and its bind. */
 const START_MS = 240_000;
+/** How long a certificate's issue may take: certbot's pull and its challenge. */
+const CERTIFY_MS = 240_000;
 const STOP_MS = 30_000;
 const RENEW_CALL_MS = 240_000;
-/** A DNS name the relay's certificate is issued for. */
-const DNS_NAME =
-  /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z][a-z0-9-]{0,61}[a-z0-9]$/i;
 
 /** One TURN REST API password: base64 of HMAC-SHA1 over the username, keyed by the shared secret. */
 export const turnCredential = (secret: string, username: string): string =>
@@ -89,7 +90,7 @@ export const mintCredential = (
 };
 
 /** One machine as the relay's choices read it. */
-export interface RelayMachine {
+export interface RelayFleetMachine {
   capabilities?: MachineCapabilities;
   machineId: string;
   name: string;
@@ -108,10 +109,16 @@ export type RelayCall = (
 
 export interface StreamRelayDeps {
   call: RelayCall;
+  /** The record changed: the journey's view follows. */
+  changed: () => void;
+  /** The person's Cloudflare token, for a renewal by DNS; null without one. */
+  cloudflareToken: () => string | null;
   db: StreamRelayDb;
   /** The hub's lifetime: the health and renewal timers run on it. */
   lifetime: HubLifetimeShape;
-  machines: () => RelayMachine[];
+  machines: () => RelayFleetMachine[];
+  /** A renewal said when the certificate ends now. */
+  renewed: (expiresAt: number) => void;
 }
 
 /** A refusal the routes answer with its status and the sentence. */
@@ -123,35 +130,65 @@ export class RelayRefusal extends Error {
   }
 }
 
-/** Where a machine's relay would be reached: its candidate row, or undefined when it has no public address. */
+/**
+ * Whether the machine can run the relay. coturn runs on the host network
+ * (agent browser/relay.ts), and only Linux puts that on the machine's own
+ * interfaces. On a Mac it is the container runtime's VM's, which nothing
+ * outside reaches: Docker Desktop's host networking "works on layer 4" and
+ * "Processes inside the container cannot bind to the IP addresses of the
+ * host" (docs.docker.com/engine/network/drivers/host), and Colima's and
+ * Lima's port forwarders carry TCP alone, or UDP only on the GRPC forwarder
+ * Colima marks experimental (its colima.yaml: "grpc supports both TCP and
+ * UDP, but is experimental"). A machine not yet reported is judged once
+ * its report comes.
+ */
+export const hostsRelay = (machine: RelayFleetMachine): boolean =>
+  machine.capabilities?.platform === "linux";
+
+/**
+ * Where a machine's relay would be reached: its candidate row, or undefined
+ * when the internet reaches it nowhere the hub knows. An interface's public
+ * address first; else the public address the hub sees its agent connect from;
+ * else the one its router maps it to, as a STUN binding answered it ("behind
+ * a router", its address on the router's network beside it for the forwards).
+ */
 export const candidateOf = (
-  machine: RelayMachine
+  machine: RelayFleetMachine
 ): RelayCandidate | undefined => {
-  const addresses =
-    machine.capabilities?.items.find((item) => item.id === "public-address")
-      ?.addresses ?? [];
+  const reach = machine.capabilities?.items.find(
+    (item) => item.id === "public-address"
+  );
+  const addresses = reach?.addresses ?? [];
   const seen =
     machine.seen && isPublicAddress(machine.seen)
       ? plainAddress(machine.seen)
       : undefined;
   const own = addresses.find((one) => !one.includes(":")) ?? addresses[0];
-  if (!(own || seen)) {
-    return;
-  }
-  const differs = seen !== undefined && seen !== own;
-  // The hub sees it from another public address (a cloud NAT in front of
-  // it): the relay is reached at that one, and coturn reports it for its
-  // allocations, mapped onto the interface's (`external-ip=<public>/<private>`).
-  const address = differs ? seen : (own as string);
-  return {
+  const base = {
     machineId: machine.machineId,
     name: machine.name,
     online: machine.online,
-    address,
-    addresses,
-    ...(differs ? { seen } : {}),
-    ...(differs ? { externalIp: own ? `${seen}/${own}` : seen } : {}),
   };
+  if (own) {
+    // The hub sees it from another public address (a cloud NAT in front of
+    // it): the relay is reached at that one, and coturn reports it for its
+    // allocations, mapped onto the interface's (`external-ip=<public>/<private>`).
+    return seen && seen !== own
+      ? { ...base, address: seen, lan: null, externalIp: `${seen}/${own}` }
+      : { ...base, address: own, lan: null };
+  }
+  const nat = reach?.nat;
+  if (nat) {
+    return {
+      ...base,
+      address: nat.address,
+      lan: nat.lan,
+      externalIp: `${nat.address}/${nat.lan}`,
+    };
+  }
+  return seen
+    ? { ...base, address: seen, lan: null, externalIp: seen }
+    : undefined;
 };
 
 /** One port's STUN binding: answered within {@link STUN_MS}, or why not. */
@@ -200,14 +237,15 @@ export const probeRelay = (
   );
 };
 
-/** The relay's machine's answer, or its refusal in its own words. */
 /** Each outcome a call asks for, as the act it names. */
 const ACT: Record<string, string> = {
   started: "start",
   stopped: "stop",
   renewed: "renewal",
+  issued: "certificate's issue",
 };
 
+/** The relay's machine's answer, or its refusal in its own words. */
 const answered = <T>(
   read: Bounded<{ ok: boolean; result?: unknown; error?: string }>,
   machine: string,
@@ -217,8 +255,8 @@ const answered = <T>(
     throw new RelayRefusal(
       503,
       read.reason === "dead"
-        ? `The relay was not ${what} on ${machine}: ${machine} is not connected. ${what === "started" ? `It starts when ${machine} connects again.` : `Try again once ${machine} is back.`}`
-        : `The relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. Settings › Browsers shows what it says next.`
+        ? STREAM_RELAY_WORDS.machineAway(machine)
+        : `The relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`
     );
   }
   if (!read.value.ok) {
@@ -230,25 +268,38 @@ const answered = <T>(
   return read.value.result as T;
 };
 
+/** What the journey hands a start: the machine, where it is reached, its name. */
+export interface RelaySetup {
+  address: string;
+  externalIp: string | null;
+  hostname: string | null;
+  machineId: string;
+}
+
 export interface StreamRelay {
-  /** What Settings › Browsers and the onboarding card read. */
-  answer: () => StreamRelayAnswer;
+  /** `relay.certify` on `machineId`: the certificate's end, or the refusal in its machine's words. */
+  certify: (machineId: string, args: RelayCertifyArgs) => Promise<number>;
   /** The relay's machine connected: a relay that should run is started again (kept as it is when it runs already). */
   connected: (machineId: string) => void;
   /** A machine's relay frame: the record follows it. */
   heard: (frame: RelayFrame) => void;
   /** A credential for `userId`, good for `ttlMs`; null while the fleet has no relay, or none that runs. */
   mint: (userId: string, ttlMs: number) => BrowserRelay | null;
+  /** How far its image pull is, while it pulls. */
+  progress: () => { done: number; total: number } | undefined;
+  /** The fleet's relay, as stored; null with none. */
+  read: () => StoredRelay | null;
   remove: () => Promise<void>;
-  setup: (pick: { machineId: string; hostname?: string }) => Promise<void>;
+  /** The relay set up as the journey picked it, and started; the one before goes from its machine. */
+  setup: (setup: RelaySetup) => Promise<void>;
   start: () => Promise<void>;
   stop: () => Promise<void>;
-  /** The health and renewal timers; the returned function ends them. */
+  /** The health and renewal timers, on the hub's lifetime (lifetime.ts); the returned function ends them. */
   watch: () => () => void;
 }
 
 export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
-  const { db, call } = deps;
+  const { db, call, changed } = deps;
   /** The latest progress of a pull, which the record does not keep. */
   let progress: { done: number; total: number } | undefined;
 
@@ -272,8 +323,13 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     };
   };
 
+  const update: StreamRelayDb["update"] = (change) => {
+    db.update(change);
+    changed();
+  };
+
   const send = async (relay: StoredRelay): Promise<void> => {
-    db.update({
+    update({
       wanted: true,
       state: "starting",
       why: null,
@@ -293,8 +349,16 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       );
       heard(frame);
     } catch (error) {
-      if (error instanceof RelayRefusal && read.kind === "answered") {
-        db.update({ state: "failed", why: error.message });
+      // A refusal in the machine's words (its frame said the command
+      // already), or the machine away: either stands on the start step.
+      if (error instanceof RelayRefusal) {
+        const relayNow = db.read();
+        update({
+          state: "failed",
+          why: error.message,
+          whyCommand:
+            relayNow?.why === error.message ? relayNow.whyCommand : null,
+        });
       }
       throw error;
     }
@@ -307,7 +371,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       return;
     }
     ({ progress } = frame);
-    db.update({
+    update({
       state: frame.state,
       ports: frame.ports,
       why: frame.why ?? null,
@@ -325,52 +389,40 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       relay.address,
       relay.ports?.tls && relay.hostname ? relay.hostname : null
     );
-    db.update({ health, checkedAt: Date.now() });
+    update({ health, checkedAt: Date.now() });
   };
 
-  /** `stream-relay-renew`: the certificate renewed when certbot says it is due. */
+  /** `stream-relay-renew`: the certificate renewed when certbot says it is due, by DNS with the token the journey keeps. */
   const renew = async (): Promise<void> => {
     const relay = db.read();
     if (!(relay?.wanted && relay.hostname && relay.state === "live")) {
       return;
     }
-    const read = await call(relay.machineId, RELAY_RENEW, [], RENEW_CALL_MS);
+    const token = deps.cloudflareToken();
+    const read = await call(
+      relay.machineId,
+      RELAY_RENEW,
+      [token ? { cloudflareToken: token } : {}],
+      RENEW_CALL_MS
+    );
     const done = answered<RelayRenewed>(
       read,
       machineName(relay.machineId),
       "renewed"
     );
-    db.update({ certificateEndsAt: done.expiresAt || null });
+    if (done.expiresAt) {
+      deps.renewed(done.expiresAt);
+    }
     console.info(
       `[stream-relay] stream-relay-renew: ${done.renewed ? "renewed" : "not due"}; the certificate ends ${new Date(done.expiresAt).toISOString()}`
     );
   };
 
-  const view = (relay: StoredRelay): StreamRelayView => ({
-    machineId: relay.machineId,
-    machineName: machineName(relay.machineId),
-    address: relay.address,
-    hostname: relay.hostname,
-    state: relay.state,
-    ports: relay.ports,
-    why: relay.why,
-    whyCommand: relay.whyCommand,
-    health: relay.health,
-    checkedAt: relay.checkedAt,
-    certificateEndsAt: relay.certificateEndsAt,
-    urls: streamRelayUrls(relay.address, relay.hostname),
-    ...(progress && relay.state === "pulling" ? { progress } : {}),
-  });
-
   return {
-    answer: () => {
+    read: () => db.read(),
+    progress: () => {
       const relay = db.read();
-      return {
-        relay: relay ? view(relay) : null,
-        candidates: deps
-          .machines()
-          .flatMap((machine) => candidateOf(machine) ?? []),
-      };
+      return relay?.state === "pulling" ? progress : undefined;
     },
     heard,
     mint: (userId, ttlMs) => {
@@ -388,41 +440,31 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         ttlMs
       );
     },
-    setup: async ({ machineId, hostname }) => {
-      const name = hostname?.trim().toLowerCase() || undefined;
-      if (name && !DNS_NAME.test(name)) {
-        throw new RelayRefusal(
-          400,
-          `The relay was not set up: ${name} is not a DNS name. Give a name like relay.example.com, or leave the field empty, then start it again.`
-        );
-      }
-      const machine = deps
-        .machines()
-        .find((one) => one.machineId === machineId);
-      if (!machine) {
-        throw new RelayRefusal(404, `No machine ${machineId} is in the fleet.`);
-      }
-      const candidate = candidateOf(machine);
-      if (!candidate) {
-        throw new RelayRefusal(
-          409,
-          `The relay was not set up on ${machine.name}: it has no public address, so nothing outside would reach the relay there. Pick a machine that has one.`
-        );
-      }
+    certify: async (machineId, args) => {
+      const read = await call(machineId, RELAY_CERTIFY, [args], CERTIFY_MS);
+      return answered<RelayCertified>(read, machineName(machineId), "issued")
+        .expiresAt;
+    },
+    setup: async ({ machineId, address, externalIp, hostname }) => {
       const before = db.read();
       if (before && before.machineId !== machineId) {
         // One relay for the fleet: the one before goes from its own machine,
-        // its certificate volume with it.
+        // its certificate volume and router mappings with it.
         await call(before.machineId, RELAY_REMOVE, [], STOP_MS);
       }
       db.set({
         machineId,
-        address: candidate.address,
-        hostname: name ?? null,
-        externalIp: candidate.externalIp ?? null,
-        secret: randomBytes(32).toString("base64url"),
+        address,
+        hostname,
+        externalIp,
+        // The secret a relay already had stays: a credential minted from it
+        // still answers while the relay starts again on its new settings.
+        secret:
+          before?.machineId === machineId && before.secret
+            ? before.secret
+            : randomBytes(32).toString("base64url"),
       });
-      db.asked();
+      changed();
       const relay = db.read();
       if (relay) {
         await send(relay);
@@ -446,7 +488,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         machineName(relay.machineId),
         "stopped"
       );
-      db.update({ wanted: false });
+      update({ wanted: false });
       heard(frame);
     },
     remove: async () => {
@@ -454,7 +496,8 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       if (!relay) {
         return;
       }
-      // Its container and its certificate volume go from the machine.
+      // Its container, its certificate volume and its router mappings go
+      // from the machine.
       const read = await call(relay.machineId, RELAY_REMOVE, [], STOP_MS);
       // A machine that is gone holds nothing the hub could remove; the record
       // goes either way, and every credential minted from it lapses.
@@ -465,6 +508,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         );
       }
       db.forget();
+      changed();
     },
     connected: (machineId) => {
       const relay = db.read();
@@ -494,49 +538,4 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       };
     },
   };
-};
-
-/** Answers a refusal with its status and sentence; anything else goes on as an error. */
-const refused = (error: unknown): Response => {
-  if (error instanceof RelayRefusal) {
-    return new Response(error.message, { status: error.status });
-  }
-  throw error;
-};
-
-/** Runs `work`, then answers what Settings reads, or the refusal. */
-const answering =
-  (relay: StreamRelay) =>
-  async (work: () => Promise<void>): Promise<StreamRelayAnswer | Response> => {
-    try {
-      await work();
-      return relay.answer();
-    } catch (error) {
-      return refused(error);
-    }
-  };
-
-/**
- * `GET /api/stream-relay`, `POST /api/stream-relay` (setup: `{ machineId,
- * hostname? }`), `POST /api/stream-relay/start`, `/stop`, and `DELETE
- * /api/stream-relay`. Every one is the person's: hub-auth.ts lists none for
- * sessions.
- */
-export const streamRelayRoutes = (relay: StreamRelay) => {
-  const run = answering(relay);
-  return new Elysia()
-    .get("/api/stream-relay", () => relay.answer())
-    .post(
-      "/api/stream-relay",
-      {
-        body: t.Object({
-          machineId: t.String({ minLength: 1 }),
-          hostname: t.Optional(t.String({ maxLength: 253 })),
-        }),
-      },
-      ({ body }) => run(() => relay.setup(body))
-    )
-    .post("/api/stream-relay/start", () => run(() => relay.start()))
-    .post("/api/stream-relay/stop", () => run(() => relay.stop()))
-    .delete("/api/stream-relay", () => run(() => relay.remove()));
 };

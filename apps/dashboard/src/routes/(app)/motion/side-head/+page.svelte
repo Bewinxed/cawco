@@ -6,7 +6,8 @@
    * once for each kind of name a side card carries, beside a pane's actions:
    * - the plan's: its title, its progress ring and figure (`titleControl`,
    *   the title its lead);
-   * - a task attempt's to-dos with the task id under them (`title`, `subtitle`);
+   * - a task attempt's to-dos with the task id under them (`title`, and
+   *   `subtitle` set as code, `subtitleCode`, as PlanPane sets it);
    * - a project file's path (`title`), the longest, beside icon actions.
    * The probe reads every word and the ring of the name against every action.
    */
@@ -43,6 +44,7 @@
         onclose={noop}
         recessed={false}
         subtitle={card.subtitle}
+        subtitleCode={card.key === "todos"}
         title={card.title}
         titleControl={card.key === "plan" ? planName : undefined}
       >

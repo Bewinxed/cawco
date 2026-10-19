@@ -1,10 +1,9 @@
 /**
- * What the canvas says about itself (component canvas §2, "What the canvas
- * says about itself"), in a shadow root so the project's CSS never reaches
- * it and it never reaches the project's: the name and the agent's `about`
- * line when the page stands alone (framed in a panel or the artifact's own
- * tab, the host's head says both, so the band says neither), the crumb of
- * the frame in view, an outline of sections and frames
+ * The canvas's own chrome (component canvas §2), in a shadow root so the
+ * project's CSS never reaches it and it never reaches the project's: the
+ * name when the page stands alone (framed in a panel or the artifact's own
+ * tab, the host's head names it and says its ask under it, so the band says
+ * neither), the crumb of the frame in view, an outline of sections and frames
  * that moves the canvas (J and K step), the count line, and on a phone one
  * frame at a time with a state strip and a swipe that plays the move. The
  * move's timeline and the agent's dials are DialKit's own (vendored at
@@ -121,11 +120,10 @@ svg { inline-size: 16px; block-size: 16px; flex: none; }
   background: var(--surface-raised); border-block-end: 1px solid var(--border-well); box-shadow: var(--shadow-xs); }
 .band { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: var(--space-1) var(--space-3); padding: var(--space-2) var(--space-3); }
 .name { font: var(--type-label); color: var(--ink-strong); min-width: 0; overflow-wrap: anywhere; }
-.about { grid-column: 1; font: var(--type-meta); color: var(--ink-muted); min-width: 0; overflow-wrap: anywhere; text-wrap: pretty; }
 .crumb { grid-column: 1; font: var(--type-meta); color: var(--ink-muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .crumb .num { font-variant-numeric: tabular-nums; }
 .crumb .said { position: absolute; inline-size: 1px; block-size: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.tools { grid-column: 2; grid-row: 1 / span 3; align-self: center; display: flex; align-items: center; gap: var(--space-1); }
+.tools { grid-column: 2; grid-row: 1 / span 2; align-self: center; display: flex; align-items: center; gap: var(--space-1); }
 .ghost { all: unset; box-sizing: border-box; position: relative; font: var(--type-label); color: var(--ink-strong); block-size: 30px;
   padding: 0 var(--space-2); border-radius: var(--radius-sm); display: inline-flex; align-items: center; gap: var(--space-1); cursor: pointer; }
 @media (hover: hover) { .ghost:not([aria-pressed="true"]):hover { background: var(--surface-hover); } }
@@ -400,13 +398,8 @@ export class Chrome {
     const name = document.createElement("div");
     name.className = "name";
     name.textContent = options.spec.name ?? "Component canvas";
-    // In a panel (or the artifact's own tab) the host's head names the canvas and says its about under the name: the band would say both twice.
-    const framed = window.top !== window;
-    name.hidden = framed;
-    const about = document.createElement("div");
-    about.className = "about";
-    about.textContent = options.spec.about ?? "";
-    about.hidden = framed;
+    // In a panel (or the artifact's own tab) the host's head names the canvas: the band would say it twice.
+    name.hidden = window.top !== window;
     this.#crumb = document.createElement("div");
     this.#crumb.className = "crumb";
     this.#crumb.setAttribute("aria-live", "polite");
@@ -420,7 +413,7 @@ export class Chrome {
     outlineButton.title = "Outline: every section and frame (J and K step)";
     const reset = this.#button("Reset layout", () => options.resetLayout());
     tools.append(outlineButton, reset);
-    this.#band.append(name, tools, about, this.#crumb);
+    this.#band.append(name, tools, this.#crumb);
     this.#strip = document.createElement("div");
     this.#strip.className = "strip";
     this.#head = document.createElement("div");

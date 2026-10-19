@@ -1,7 +1,7 @@
 /**
  * A component canvas as the agent's tools speak of it (component canvas
  * §4): what `artifact_create` and `artifact_update` take beyond its states
- * files (`about`, `edges`, `group`, `dials`), the canvas page's address on
+ * files (`edges`, `group`, `dials`), the canvas page's address on
  * the stage that carries them, and the bounded answers `artifact_create`,
  * `artifact_read` and `artifact_update` give, every one read from the render
  * report the canvas page posts (core `RenderReport`), never from the files
@@ -22,7 +22,6 @@ import {
 
 /** What a component canvas's create or update names beyond its files. */
 export interface CanvasInput {
-  about?: string | undefined;
   dials?: CanvasDial[] | undefined;
   edges?: CanvasEdge[] | undefined;
   group?: Record<string, string> | undefined;
@@ -30,19 +29,13 @@ export interface CanvasInput {
 
 /** An example call, quoted by every refusal of a component canvas's shape. */
 export const COMPONENT_EXAMPLE =
-  'artifact_create({ kind: "component", name: "pairing", file: "src/lib/Pairing.stories.ts", about: "The six states of the pairing card and the QR card\'s hover" })';
+  'artifact_create({ kind: "component", name: "pairing", does: "judge", ask: "Judge the six pairing states: pin anything that reads wrong", file: "src/lib/Pairing.stories.ts" })';
 
-/** Why a canvas's about, edges, groups or dials can't be taken, one sentence with the shape; null when they can. */
-export function canvasProblem(
-  input: CanvasInput,
-  creating: boolean
-): string | null {
-  if (creating && !input.about?.trim()) {
-    return `A component canvas takes about: one sentence on what this showing is for, drawn under its name, so the person knows what to look at. Example: ${COMPONENT_EXAMPLE}.`;
-  }
-  if (input.about && input.about.length > CANVAS_SPEC_LIMITS.about) {
-    return `about is one sentence, at most ${CANVAS_SPEC_LIMITS.about} characters; this one is ${input.about.length}.`;
-  }
+/** What `artifact_create` takes, said whole when a body is malformed or names no `does` or `ask`. */
+export const CREATE_SHAPE = `artifact_create takes kind, name, does (pick | judge | try | draw), ask (one line, what the person does here) and that kind's fields. A component canvas: { kind: "component", name, does: "judge", ask, file, edges?, group?, dials? }; edges [{ from: "Waiting", to: "Approved", label? }]; dials [{ name, kind: "number" | "color" | "select" | "toggle", min?, max?, step?, unit?, options?, target: { cssVar: "--radius" } | { arg: "size" } }]. Example: ${COMPONENT_EXAMPLE}.`;
+
+/** Why a canvas's edges, groups or dials can't be taken, one sentence with the shape; null when they can. */
+export function canvasProblem(input: CanvasInput): string | null {
   if ((input.edges?.length ?? 0) > CANVAS_SPEC_LIMITS.edges) {
     return `A canvas takes at most ${CANVAS_SPEC_LIMITS.edges} edges: { from: "<Story>", to: "<Story>", label? }, a story named by its export, or "file:Story" across states files.`;
   }
@@ -64,10 +57,9 @@ export function canvasProblem(
   return null;
 }
 
-/** The canvas's spec its page is given: its name, about, edges, groups and dials. */
+/** The canvas's spec its page is given: its name, edges, groups and dials. */
 export const specOf = (name: string, input: CanvasInput): CanvasSpec => ({
   name,
-  ...(input.about ? { about: input.about.trim() } : {}),
   ...(input.edges?.length ? { edges: input.edges } : {}),
   ...(input.group && Object.keys(input.group).length > 0
     ? { group: input.group }

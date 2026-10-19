@@ -114,6 +114,11 @@ Services
   restarts; \`--force\` restarts regardless, and is also the only way through
   when the question cannot be answered at all.
 
+  A session keeper's unit is restarted or uninstalled only while it holds
+  nothing but the keeper and what its sessions run: a process someone else
+  started that sits in it (a container's conmon from an older session) is
+  named, and the keeper is left alone. \`--force\` stops it regardless.
+
 Updating
   A machine updates itself from the app: automatically when auto-update is on,
   or when a person presses Install now. An update waits for what its restart
@@ -127,7 +132,7 @@ Options
   --hub <url>     hub to use, as http://host:port or ws://host:port/ws
   --dev           for \`service install\`: run from the checkout, watching it
   --when-idle     for \`service restart\`: wait until the restart would cut nothing
-  --force         for \`service restart\`: restart now, cutting what is in flight
+  --force         for \`service restart\` and \`uninstall\`: go ahead now, cutting what is in flight
   --follow, -f    keep printing, for \`service logs\`
   --verbose       narrate the discovery ladder
   --help          this

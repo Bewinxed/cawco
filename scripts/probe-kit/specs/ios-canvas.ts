@@ -535,6 +535,8 @@ async function formStep(on: On): Promise<string | undefined> {
   const madeAt = heard.length;
   const made = await call(fleet, session, CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "form",
     html: form(false),
   });

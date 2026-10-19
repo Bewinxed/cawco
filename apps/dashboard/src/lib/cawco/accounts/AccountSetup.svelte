@@ -252,8 +252,10 @@
   const shown = $derived({
     id: accountId ?? "new",
     email,
+    identity: account?.identity ?? null,
     label: nickname.trim() || null,
     kind: choice?.kind,
+    provider: provider ?? "",
   });
 
   // ── Routing (a provider's second account) ──────────────────────────────

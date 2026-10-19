@@ -1470,6 +1470,8 @@ export interface DbShape {
       accountId?: string | null;
       threadId?: string;
       projectId?: string;
+      /** The continuation its work item moved to: it never runs again. */
+      continuedInto?: string;
     }
   ) => PublicInstanceRow | undefined;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */

@@ -2,6 +2,7 @@ import { existsSync, readFileSync, realpathSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
+import { foreignIn, KeeperKept } from "@cawco/agent/keeper-jobs";
 import type { AgentRow } from "@cawco/core";
 import {
   CAWCO_ENV,
@@ -1710,12 +1711,73 @@ const installSystemdUnits = async (
   await lingerHint(note);
 };
 
+/** A dial that found no keeper listening. */
+const NOBODY_THERE = new Set(["ECONNREFUSED", "ENOENT"]);
+
+/**
+ * The pids of the live children the keeper at `endpoint` lists; none when
+ * no keeper listens there. Throws when one listens and does not answer:
+ * then what it holds is not known.
+ */
+const keeperChildren = async (endpoint: string): Promise<number[]> => {
+  // Imported here rather than at the top so no other verb pays for the keeper's client.
+  const { SessiondClient } = await import("@cawco/agent/sessiond-client");
+  let dialled: Awaited<ReturnType<typeof SessiondClient.connect>>;
+  try {
+    dialled = await SessiondClient.connect(endpoint);
+  } catch (error) {
+    if (NOBODY_THERE.has((error as NodeJS.ErrnoException).code ?? "")) {
+      return [];
+    }
+    throw error;
+  }
+  if (dialled.kind === "unanswered") {
+    throw new ServiceError(
+      `the session keeper at ${endpoint} did not answer within ${dialled.after} ms, so what it holds is not known and it was left alone. Go ahead anyway with --force.`
+    );
+  }
+  try {
+    const listed = await dialled.value.list();
+    return listed.procs.filter((proc) => proc.alive).map((proc) => proc.pid);
+  } finally {
+    dialled.value.close();
+  }
+};
+
+/**
+ * Before a session keeper's unit is stopped or restarted, unless `force`: it
+ * goes only while it holds nothing but the keeper and the process trees of
+ * the children the keeper lists (agent keeper-jobs.ts `foreignIn`). Anything
+ * else there was started by someone else, and the stop is refused, naming
+ * each process. Every other unit stops as it is.
+ */
+const mayStopKeeper = async (
+  spec: ServiceSpec,
+  force: boolean
+): Promise<void> => {
+  if (spec.id !== "sessiond" || force) {
+    return;
+  }
+  const stopping = unitName(spec.name);
+  const foreign = await foreignIn(
+    stopping,
+    await keeperChildren(spec.environment[CAWCO_ENV.sessiondEndpoint])
+  );
+  if (foreign.length > 0) {
+    throw new ServiceError(
+      `${new KeeperKept(stopping, foreign).message}. Go ahead anyway with --force.`
+    );
+  }
+};
+
 const uninstallSystemdUnits = async (
   specs: ServiceSpec[],
+  force: boolean,
   note: (line: string) => void
 ): Promise<void> => {
   for (const spec of specs) {
     // biome-ignore lint/performance/noAwaitInLoops: units uninstall one at a time so each one's notes print in its own order and a failure is attributable to the unit that caused it.
+    await mayStopKeeper(spec, force);
     await run(["systemctl", "--user", "disable", "--now", unitName(spec.name)]);
     await Bun.file(systemdPath(spec.name))
       .delete()
@@ -2039,6 +2101,7 @@ const restartLaunchAgent = async (
 
 const restartSystemdUnit = async (
   spec: ServiceSpec,
+  force: boolean,
   note: (line: string) => void
 ): Promise<void> => {
   if (!existsSync(systemdPath(spec.name))) {
@@ -2046,6 +2109,7 @@ const restartSystemdUnit = async (
       `${spec.id} is not installed — \`cawco service install ${spec.id}\` first.`
     );
   }
+  await mayStopKeeper(spec, force);
   const restarted = await run([
     "systemctl",
     "--user",
@@ -2533,7 +2597,7 @@ export const service = async (
     case "uninstall":
       return mac
         ? uninstallLaunchAgents(specs, note)
-        : uninstallSystemdUnits(specs, note);
+        : uninstallSystemdUnits(specs, force, note);
     case "restart":
       for (const [index, spec] of specs.entries()) {
         if (index > 0) {
@@ -2546,7 +2610,7 @@ export const service = async (
         try {
           await (mac
             ? restartLaunchAgent(spec, note)
-            : restartSystemdUnit(spec, note));
+            : restartSystemdUnit(spec, force, note));
         } catch (error) {
           // The restart did not happen: the agent takes new work again now, not when its fence lapses.
           if (fenced) {

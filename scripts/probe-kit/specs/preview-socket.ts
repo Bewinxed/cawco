@@ -394,7 +394,13 @@ const probe = async (kit: Kit) => {
 
   asks.set("1", {
     name: CREATE,
-    input: { kind: "preview", name: "socket", port: appPort },
+    input: {
+      kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      name: "socket",
+      port: appPort,
+    },
   });
   await fleet.send(session, "PROBE-CALL:1");
   await until("the preview made", () => answered.get("1"), Boolean, 180_000);
@@ -569,7 +575,13 @@ const probe = async (kit: Kit) => {
 
   asks.set("2", {
     name: CREATE,
-    input: { kind: "preview", name: "vite", port: vitePort },
+    input: {
+      kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      name: "vite",
+      port: vitePort,
+    },
   });
   const wildcards = await listeningOnAll();
   await fleet.send(session, "PROBE-CALL:2");

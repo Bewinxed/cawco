@@ -2,7 +2,9 @@
   /**
    * UPDATE STATES — every look of the update screens from fixtures, with no
    * hub needed: the channel cards (the fleet on Stable, then on Nightly with
-   * Stable chosen), one table row for each row of the Update cell, and the
+   * Stable chosen), one table row for each row of the Update cell (row 12
+   * also with a keeper handing over, and with one kept for what its unit
+   * holds), and the
    * seven notices as the update row of Caw's panel.
    */
   import { machineLabel } from "@cawco/core";
@@ -10,6 +12,7 @@
     BinaryUpdateChannels,
     BinaryUpdatePolicy,
     BinaryUpdateState,
+    KeptProcess,
   } from "@cawco/core/binary-updates";
   import UpdateCard from "#lib/cawco/home/UpdateCard.svelte";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
@@ -57,6 +60,16 @@
     { reason: "tool-call", ids: ["delegate#3f2a91c0", "start_session#8b1e"] },
     { reason: "image", ids: ["image-request-1"] },
   ];
+
+  /** What keeps a keeper: a container's conmon an old session left in its unit, and a stray sleep. */
+  const CONMON: KeptProcess[] = [
+    {
+      pid: 1_234_567,
+      command:
+        "/usr/bin/conmon --api-version 1 -c 4f2a91c03b1e8b1e4f2a91c03b1e8b1e -u 4f2a91c03b1e8b1e4f2a91c03b1e8b1e -r /usr/bin/crun -b /home/cawco/.local/share/containers/storage/overlay-containers/4f2a91c0/userdata",
+    },
+  ];
+  const SLEEP: KeptProcess = { pid: 88_421, command: "sleep 86400" };
 
   const CHANNELS: BinaryUpdateChannels = {
     checkedAt: 0,
@@ -155,6 +168,27 @@
     }),
     machine("r12", "obelisk-of-light", "linux", {
       binaryUpdate: update({ phase: "none", installedVersion: "1.4.2" }),
+    }),
+    machine("r12-handing", "nixbox", "linux", {
+      binaryUpdate: update({
+        phase: "none",
+        installedVersion: "1.4.2",
+        retiringKeepers: [{ version: NIGHTLY, sessions: 3 }],
+      }),
+    }),
+    machine("r12-kept", "obelisk-of-light", "linux", {
+      binaryUpdate: update({
+        phase: "none",
+        installedVersion: "1.4.2",
+        retiringKeepers: [{ version: NIGHTLY, sessions: 0, kept: CONMON }],
+      }),
+    }),
+    machine("r13", "nixbox", "linux", {
+      binaryUpdate: update({
+        phase: "none",
+        installedVersion: "1.4.2",
+        sessiondKept: [CONMON[0] as KeptProcess, SLEEP],
+      }),
     }),
   ];
 
@@ -313,7 +347,7 @@
     <ChannelCards channels={CHANNELS} chosen="stable" current="nightly" />
   </section>
 
-  <h1>Update cell, rows 1 to 12</h1>
+  <h1>Update cell, rows 1 to 13</h1>
   <section data-slot="updates-page-card" class="card" data-states="table">
     <UpdateTable machines={ROWS} policy={OFF} />
   </section>

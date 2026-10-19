@@ -1864,6 +1864,8 @@ const run = async (kit: Kit) => {
   const previewed = await fleet.spawn("claude", "Heavy preview", fleet.repo);
   await fleet.api(`/api/instances/${previewed}/artifacts`, {
     kind: "preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
     name: "heavy",
     dir: folder,
   });
@@ -1873,6 +1875,8 @@ const run = async (kit: Kit) => {
     const light = await fleet.spawn("claude", `Light ${name}`, fleet.repo);
     await fleet.api(`/api/instances/${light}/artifacts`, {
       kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
       name,
       html: `<!doctype html><html><head><meta charset="utf-8"><title>${name}</title></head><body><p>${name}</p></body></html>`,
     });

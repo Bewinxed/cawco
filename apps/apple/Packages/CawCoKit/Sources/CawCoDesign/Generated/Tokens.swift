@@ -428,6 +428,8 @@ public enum TypeScale {
     public static let trackTitle: Double = -0.01
     /// In em: multiply by the font size for points.
     public static let trackCaps: Double = 0.06
+    /// How far under its words a text link's underline stands, when it is drawn (its hover).
+    public static let underlineOffset: Double = 3
     /// Role shorthands (font: var(--type-label)). A kpi figure is always .num: the shorthand resets font-variant-numeric.
     public static let typeMeta = TypeRole(weight: .regular, size: 12...12, leading: 1.35, family: FontFamily.fontBody)
     public static let typeLabel = TypeRole(weight: .medium, size: 13...13, leading: 1.3, family: FontFamily.fontBody)

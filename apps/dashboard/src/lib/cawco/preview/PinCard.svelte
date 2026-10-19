@@ -47,6 +47,7 @@
   import Turn from "../turn/Turn.svelte";
   import Well from "../turn/Well.svelte";
   import Who from "../turn/Who.svelte";
+  import LiveDot from "./LiveDot.svelte";
   import PinDisc from "./PinDisc.svelte";
   import { pinName, pinSelector } from "./pin-name";
 
@@ -315,12 +316,7 @@
       {/if}
     </span>
     {#if live}
-      <span
-        data-slot="live"
-        aria-label="The agent is working on it"
-        class="live"
-        role="img"
-      ></span>
+      <LiveDot label="The agent is working on it" />
     {/if}
     {#if pin.resolvedAt}
       <Button
@@ -549,23 +545,6 @@
     text-align: left;
     color: var(--ink-muted);
     font: var(--text-meta) var(--font-mono);
-  }
-  .live {
-    flex-shrink: 0;
-    width: 8px;
-    height: 8px;
-    border-radius: var(--radius-pill);
-    background: var(--status-live-glyph);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .live {
-      animation: pin-card-live var(--dur-loop) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes pin-card-live {
-    50% {
-      opacity: 0.4;
-    }
   }
   /* The rows keep the transcript's rhythm: a turn --space-4 under the one
      before, its speaker line --space-2 over its words. The first turn starts

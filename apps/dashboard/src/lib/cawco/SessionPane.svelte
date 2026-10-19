@@ -1,5 +1,9 @@
 <script lang="ts">
-  import type { HarnessKind, PermissionResult } from "@cawco/core";
+  import {
+    CONTINUED_IN,
+    type HarnessKind,
+    type PermissionResult,
+  } from "@cawco/core";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer, grown into any parked permission
@@ -51,7 +55,7 @@
   import { cleanDetail } from "./command-detail";
   import { instanceTitle, projectOfRow } from "./home/home-state.svelte";
   import { deadlineIn } from "./hub-read";
-  import { delegateHandle } from "./links";
+  import { delegateHandle, rowHref } from "./links";
   import MoveWait from "./move/MoveWait.svelte";
   import { moveOf } from "./move.svelte";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
@@ -530,6 +534,25 @@
   );
 
   /**
+   * The session a continuation took this one's work item on in (core
+   * `InstanceRow.continuedInto`): this one never runs again, so its page
+   * says where its work went in its composer's place, a link to it, and the
+   * hub refuses a person's message to it in the same words.
+   */
+  const continuedTo = $derived.by((): { id: string; title: string } | null => {
+    // The rows while the board lists them; else its newest page's word.
+    const next = cawco.instances.find(
+      (one) => one.id === viewId
+    )?.continuedInto;
+    const to = next && cawco.instances.find((one) => one.id === next);
+    if (to) {
+      return { id: to.id, title: instanceTitle(to) };
+    }
+    const said = session?.continuedTo;
+    return said ? { id: said.instanceId, title: said.title } : null;
+  });
+
+  /**
    * What stopped the transcript arriving: the newest read's word, whoever
    * made it (this pane, a socket backfill, a peek, a read again at its
    * machine's reconnecting deadline), as the session's `readFault`; the
@@ -978,7 +1001,7 @@
   /** Whether this conversation takes messages from here at all. */
   const writable = $derived(
     !!session &&
-      !(prestart || unaddressable || readOnly) &&
+      !(prestart || unaddressable || readOnly || continuedTo) &&
       // An ask alone has a composer only while the ask stands: it is the card.
       (asking || !askAlone) &&
       // A transcript that could not be read leaves the conversation as
@@ -1236,7 +1259,14 @@
 
         <!-- The group draws the composer; only the server's first paint,
                  before any group composer exists, draws one here. -->
-        {#if !fault && (unaddressable || readOnly)}
+        {#if continuedTo}
+          <p class="readonly continued" in:crossIn out:crossOut>
+            <span>{CONTINUED_IN}</span>
+            <a class="touch-hit pointer-hit" href={rowHref(continuedTo.id)}
+              ><span>{continuedTo.title}</span></a
+            >
+          </p>
+        {:else if !fault && (unaddressable || readOnly)}
           <p class="readonly" in:crossIn out:crossOut>
             This transcript is stored; the session isn't reachable from here.
           </p>
@@ -1298,6 +1328,34 @@
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     text-align: center;
+  }
+  /* Where the work went: its words, then the new session's title as a link
+     that gives way first (DESIGN.md, the Truncate Inside Rule). */
+  .continued {
+    display: flex;
+    justify-content: center;
+    gap: var(--space-1);
+    max-inline-size: 100%;
+  }
+  .continued > span {
+    flex: none;
+    white-space: nowrap;
+  }
+  .continued a {
+    min-inline-size: 0;
+    color: var(--link-ink);
+    text-underline-offset: var(--underline-offset);
+  }
+  @media (hover: hover) {
+    .continued a:hover {
+      text-decoration: underline;
+    }
+  }
+  .continued a > span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .pane {

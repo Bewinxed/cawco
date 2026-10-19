@@ -313,7 +313,12 @@ const runSpec = async (kit: Kit) => {
  * shows the empty recipe, and its Draw picks the pen.
  */
 const emptyChecks = async (on: OnCanvas) => {
-  const answer = await on.call(CREATE, { kind: "canvas", name: "blank" });
+  const answer = await on.call(CREATE, {
+    kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
+    name: "blank",
+  });
   const frame = await until(
     "the blank canvas in the panel",
     async () => {
@@ -498,7 +503,12 @@ const refusalOn = (frame: Frame) =>
  */
 const imageChecks = async (on: OnCanvas) => {
   const { kit, page, fleet, session } = on;
-  const made = await on.call(CREATE, { kind: "canvas", name: "images" });
+  const made = await on.call(CREATE, {
+    kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
+    name: "images",
+  });
   const id = made.match(ANSWERED_ID)?.[1];
   if (!id) {
     kit.check("26: the image canvas is made", false, made.slice(0, 300));
@@ -1096,6 +1106,8 @@ const bindChecks = async (on: OnCanvas) => {
   }));
   const made = await on.call(CREATE, {
     kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
     name: "many",
     elements: many,
   });
@@ -1161,6 +1173,8 @@ const bindChecks = async (on: OnCanvas) => {
 const frameChecks = async (on: OnCanvas) => {
   const made = await on.call(CREATE, {
     kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
     name: "frames",
     elements: [
       {
@@ -1281,6 +1295,8 @@ const fitChecks = async (on: OnCanvas) => {
   ];
   const made = await on.call(CREATE, {
     kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
     name: "far",
     elements: far,
   });
@@ -2482,6 +2498,8 @@ const arrivalCheck = async (
 const shapeChecks = async (on: OnCanvas) => {
   const answer = await on.call(CREATE, {
     kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
     name: "shapes",
     elements: [
       { type: "rectangle", id: "anchor", x: 0, y: 0, width: 40, height: 40 },
@@ -2547,6 +2565,8 @@ const created = async (
   const { call, kit, page, said } = on;
   const answer = await call(CREATE, {
     kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
     name: "flow",
     mermaid: "flowchart LR; A[Hub] --> B[Agent]",
   });

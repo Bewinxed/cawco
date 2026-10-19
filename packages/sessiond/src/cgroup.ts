@@ -75,7 +75,7 @@
  */
 import { mkdir, readdir, readFile, rmdir, writeFile } from "node:fs/promises";
 import { availableParallelism, totalmem } from "node:os";
-import { basename, dirname, join } from "node:path";
+import { basename, dirname, join, relative } from "node:path";
 import type { ChildLimit, SessionLimits } from "@cawco/core";
 import { TASK_RESERVE } from "./tasks";
 
@@ -126,12 +126,16 @@ export interface Children {
   max?: number;
   /** Whether the unit delegates the memory controller: a memory limit set on the hub is written. */
   memory: boolean;
+  /** The cgroup v2 mount every path here is under. */
+  root: string;
   /** The delegated cgroup above it. */
   top: string;
 }
 
 /** One child's cgroup, as {@link openChildGroup} made it. */
 export interface ChildGroup {
+  /** Its path as `/proc/<pid>/cgroup` names it (its `0::` line): from the cgroup v2 mount, with a leading `/`. */
+  cgroup: string;
   /** The limits it runs under: tasks always, memory in bytes when set. */
   limits: { tasks: number; memory?: number };
   /** Its name under `children`. */
@@ -333,6 +337,7 @@ export async function placeChildren(
     const weighed = await weighKeeper(top, cpu);
     return {
       children: {
+        root: system.root,
         top,
         group,
         cpu,
@@ -465,6 +470,7 @@ export async function openChildGroup(
     return {
       name,
       path,
+      cgroup: `/${relative(children.root, path)}`,
       procs: join(path, "cgroup.procs"),
       limits: {
         tasks: CHILD_TASKS,

@@ -29,6 +29,8 @@ import type { ElementNode } from "@openuidev/lang-core";
 
 /** One option of a card, as the page labelled it. */
 export interface DecisionOption {
+  /** What picking it costs the person (the Option's `cost`); empty when it has none. */
+  cost: string;
   id: string;
   /** Its digit in the card: the kit numbers options 1, 2, 3… in page order. */
   keycap: number;
@@ -251,6 +253,7 @@ const cardOf = (
     keycap: index + 1,
     label: text(option.props.label) || text(option.props.id),
     line: text(option.props.line),
+    cost: text(option.props.cost),
     recommended: option.props.recommended === true,
   })),
   after: strings(props.after),

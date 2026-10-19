@@ -2,7 +2,7 @@
 
 **UI wordmark:** “Caw&Co”, set in the landing's Nunito Variable face. Product names in sentences, page titles and notices remain “CawCo”.
 
-**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing) · 2026-10-16 (hub auth: *paired device*, *Require paired devices*, *code*, *admit*; Admit and Require join the button verbs) · 2026-10-18 (browser take-over, projects §5.11: *browser*, *take over*, *private*, *hand back*, *browser ask*, *stream relay*, *container runtime* / *local browser*; Take over and Hand back join the button verbs) · 2026-10-18 (Ask joins the button verbs: the project head's Ask Caw)
+**Date:** 2026-08-21 · **Status:** confirmed · **Amended:** 2026-10-06 (projects: the terms from `.design-foundations/plans/2026-10-06-projects.md` §3; the tone register once called "Routine" is now "Readout", because a routine is scheduled work) · 2026-10-13 (artifacts, §5.10: *artifact*, *page*, *pin*; *canvas* now means a drawing) · 2026-10-16 (hub auth: *paired device*, *Require paired devices*, *code*, *admit*; Admit and Require join the button verbs) · 2026-10-18 (browser take-over, projects §5.11: *browser*, *take over*, *private*, *hand back*, *browser ask*, *stream relay*, *container runtime* / *local browser*; Take over and Hand back join the button verbs) · 2026-10-18 (Ask joins the button verbs: the project head's Ask Caw) · 2026-10-19 (the stream relay's guided journey: Set up, Done for now and Use ("Use this name") join the button verbs)
 **Doctorate authority:** `content-design` (design-for-ai 4.2.0) — voice/tone per Podmajersky (2019), error
 formula per Yifrah (2017), plain language per Redish (2007), destructive confirmation per Nielsen
 #5 (1994) and the microcopy-patterns catalog. **Pairs with DESIGN.md** (visual tokens, LOCKED) and
@@ -193,8 +193,8 @@ it actually means.
 | The person driving the browser from the preview panel, every agent's hand off it | **take over** (verb) / **take-over** (noun) / **Take over** (the button) | Take over in the panel's head and on a browser ask's card. | "remote control", "VNC", "screen share" |
 | A take-over during which nothing typed or shown reaches any agent | **private** | The band's "Private" chip while you have control. | "secure mode", "incognito", "shield" in copy (the code's name) |
 | Ending a take-over so the agent carries on | **hand back** (verb) / **Hand back** (the button) | Hand back in the panel's head while you have control. | "release", "give control" |
-| An agent's request that the person take over, with its reason and the page's origin; register Permission / approval (no nudge); push category `CAWCO_BROWSER` | **browser ask** | Needs you; the transcript's "Take over the browser" card; the phone's "Needs you in the browser". | "login request", "takeover request" |
-| The TURN server CawCo runs on a machine of the fleet with a public address, so a browser's stream reaches any screen through any network | **stream relay** | Settings › Browsers › Stream relay; its onboarding step. | "TURN" in copy, "relay" alone (the webhook path), "coturn" |
+| An agent's request that the person take over, with its reason and the page's origin; register Permission / approval (no nudge); push category `CAWCO_BROWSER` | **browser ask** | Needs you; the transcript's "Browser ask from <agent>" card; the phone's "Needs you in the browser". | "login request", "takeover request" |
+| The TURN server CawCo runs on a Linux machine of the fleet the internet reaches (its own public address, or its router's), so a browser's stream reaches any screen through any network; on a Mac it would run inside the container runtime's VM, so the journey offers only Linux machines and says so when the internet reaches only others | **stream relay** | Settings › Browsers › Stream relay; its guided journey, the same card in Caw's Needs you and a take-over's stream place. | "TURN" in copy, "relay" alone (the webhook path), "coturn" |
 | The machine has no Docker, OrbStack, Colima or Podman, so its browser runs as a local Chromium and its take-over shows one page | **container runtime** (the thing missing) / **local browser** (what runs instead) | The band's line "This machine shows one page at a time until a container runtime is installed." | "fallback", "degraded", "CDP mode" in copy |
 | A browser (on one address), the app or a CLI run the hub knows as the person's, by a token it was handed once | **paired device** / **pair** (verb) | Configure › Devices; "Pair this browser"; "This hub requires paired devices." | "logged in", "signed in", "session" (a session is an agent's), "authorized device" |
 | The one fleet setting that makes every device and machine prove itself to the hub; off, being on the network is enough | **Require paired devices** | The Devices section's switch; its confirm names what every other device will see. | "lockdown", "secure mode", "auth" in copy |
@@ -284,8 +284,10 @@ Every button parses as **[Verb] + [Object]** and stays comprehensible with surro
 Allowlisted imperative verbs for the gate: *Start, Create, Add, Save, Cancel, Delete, Remove,
 Approve, Deny, Allow, Deny, Reconnect, Retry, Export, Filter, Manage, Open, Stop, Interrupt, Send,
 Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure, Copy, Draw, Dock, Undock, Annotate,
-Comment, Illustrate, Erase, Done, Admit, Require, Ask*, and the phrasal *Take over* and *Hand back* (each
-[Verb]+[Object] read as one act: the browser). "Ask" takes its object by name: "Ask Caw", the project
+Comment, Illustrate, Erase, Done, Admit, Require, Ask, Use*, and the phrasal *Take over*, *Hand back*, *Set up*
+and *Done for now* (each [Verb]+[Object] read as one act: the browser; "Set up the stream relay", the
+relay's journey begun; "Done for now", the journey's Needs you row put away while the relay is proven only
+from inside). "Ask" takes its object by name: "Ask Caw", the project
 head's way to tell him new work (his panel on a new thread), and "Ask Caw for a view". "Continue" is acceptable only where the
 next step is already visible in context (microcopy-patterns catalog).
 

@@ -910,8 +910,8 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "continue_session",
-      "Continue another session (a stuck delegate) in a new one, from a summary by a model you choose; the " +
-        "named one is only read. Never this session: if your context is too big, say so. " +
+      "Continue another session (a stuck delegate) in a new one, summarised by a model you pick; " +
+        "its work item moves there; it never runs again. Never this session: if your context is too big, say so. " +
         "The new session answers tool permissions in `target_permission_mode`, this session's own mode when omitted; " +
         "when this session has none (pi) and the target harness has modes, it must be named, or nothing starts.",
       {
@@ -1180,7 +1180,7 @@ export function handoffTools(deps: HandoffDeps) {
         openWorldHint: false,
       }
     ),
-    // A delegate may put it in its parent's panel instead (`to`).
+    // A delegate may hand it to its parent instead (`to`), unopened.
     deps.hasParent
       ? tool(
           artifactCreate.name,
@@ -1198,31 +1198,39 @@ export function handoffTools(deps: HandoffDeps) {
       artifactUpdate.name,
       artifactUpdate.description,
       artifactUpdate.input,
-      async ({ id, statements, ...change }) => {
-        if (statements === undefined) {
-          // A component canvas's states file and its own spec have their own route.
-          const component = (
-            ["args", "story", "about", "edges", "group", "dials"] as const
-          ).some((key) => change[key] !== undefined);
-          return json(
-            await actions.artifactCall(
-              "PATCH",
-              `/${encodeURIComponent(id)}${component ? "/component" : ""}`,
-              change
-            )
-          );
-        }
-        if (Object.values(change).some((value) => value !== undefined)) {
+      async ({ id, statements, ask, ...change }) => {
+        const at = `/${encodeURIComponent(id)}`;
+        const changes = Object.values(change).some(
+          (value) => value !== undefined
+        );
+        if (statements !== undefined && changes) {
           throw new Error(
             "statements revises a decision page alone: pass it without html, patch, elements, delete, mermaid, args or story."
           );
         }
+        // A new ask is checked and written first, so a refused one changes nothing.
+        const asked =
+          ask === undefined
+            ? undefined
+            : await actions.artifactCall("POST", `${at}/ask`, { ask });
+        if (statements === undefined) {
+          if (!changes && asked !== undefined) {
+            return json(asked);
+          }
+          // A component canvas's states file and its own spec have their own route.
+          const component = (
+            ["args", "story", "edges", "group", "dials"] as const
+          ).some((key) => change[key] !== undefined);
+          return json(
+            await actions.artifactCall(
+              "PATCH",
+              `${at}${component ? "/component" : ""}`,
+              change
+            )
+          );
+        }
         return json(
-          await actions.artifactCall(
-            "POST",
-            `/${encodeURIComponent(id)}/statements`,
-            { statements }
-          )
+          await actions.artifactCall("POST", `${at}/statements`, { statements })
         );
       }
     ),
@@ -1460,7 +1468,7 @@ const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
   { prefixes: ["workflow_", "submit_result"], what: "workflows" },
   {
     prefixes: ["artifact_", "comment_", "design_map"],
-    what: "artifacts you show, the person's pins on them; the components and their states on a canvas you build on and the person pins, design_map the library",
+    what: "what you open in the person's panel for them to pick, judge, try or draw on (show skill first), their pins on it; design_map the component library",
   },
   { prefixes: ["memory_"], what: "project memory" },
   { prefixes: ["thread_"], what: "your threads with the person" },

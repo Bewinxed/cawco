@@ -17,9 +17,20 @@
  * - The other email's session sits idle, still running, while its reading
  *   goes unrefreshed for two hours (its time set back: an hour cannot pass
  *   in a probe): it reads stale with that time, on the hub and on its tile.
+ * - The other email's session details (its tab's card) show its own
+ *   account's limit, never another account's on the same machine.
  * - The Team seat's reading, set back the same, runs a turn whose usage
  *   moved nothing (no `rate_limit_event`): the turn confirms it, current
  *   again as of that turn.
+ * - A new session on the other email reports its plan at start (Claude
+ *   Code's initialize): the reading's time stays where it was, since no
+ *   window was read.
+ * - Benched at its limit, the other email's dial says when it last
+ *   reported, not only when it is back.
+ * - The Team seat refused at its limit, moving on (the other email still
+ *   benched): its session moves to the personal plan on its email, and the
+ *   line the hub writes into its transcript names both with their
+ *   organizations, as placement does (core `accountNames`).
  *
  *   bun scripts/probe-kit/run.ts usage-accounts
  */
@@ -27,9 +38,12 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Page } from "playwright-core";
-import type {
-  PlacementPreview,
-  UsageLimitsResponse,
+import {
+  type AccountMove,
+  accountMoveWords,
+  type PlacementPreview,
+  type ProviderForecast,
+  type UsageLimitsResponse,
 } from "../../../packages/core/src";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import {
@@ -84,14 +98,27 @@ const NAMED: Record<Id, string> = {
   [TEAM]: "probe@scratch-fleet.test (Scratch Team)",
   [OTHER]: "other@scratch-fleet.test",
 };
+/** What the usage popover's cells call each account, by its email's first part. */
+const SHORT: Record<Id, string> = {
+  [PERSONAL]: "probe (Scratch Fleet)",
+  [TEAM]: "probe (Scratch Team)",
+  [OTHER]: "other",
+};
 /** How long a reading goes unrefreshed in the stale leg. */
 const AGED_MS = 2 * HOUR_MS;
+/** The accounts the mock refuses as at their usage limit, until {@link LIMITED_UNTIL}. */
+const limited = new Set<Id>();
+/** Past the at-limit policy's wait, so the session moves rather than waits for it. */
+const LIMITED_UNTIL = STARTED + 3 * HOUR_MS;
 
 const accountOf = (request: Seen): Id | undefined =>
   ACCOUNTS.find((id) => request.auth.endsWith(TOKEN[id]));
 
 const respond = (request: Seen): Reply => {
   const id = accountOf(request);
+  if (id && limited.has(id)) {
+    return { everyMs: 5, words: [], refuse: { resetsAt: LIMITED_UNTIL } };
+  }
   const resets = id ? resetsOf(id) : undefined;
   return {
     everyMs: 5,
@@ -318,6 +345,92 @@ const run = async (kit: Kit) => {
     );
   }
 
+  // 3a. Configure → Accounts names each account beside the others
+  // (dashboard accounts/model `nameOf`): the two on one email with their
+  // organizations.
+  await page.goto(`${base}/config/accounts`, { waitUntil: "domcontentloaded" });
+  const listed = await until(
+    "every account's row on Configure → Accounts",
+    () =>
+      page.evaluate(
+        (ids) =>
+          Object.fromEntries(
+            ids.map((id) => [
+              id,
+              document
+                .querySelector(
+                  `a[href="/config/accounts/${id}"] [data-slot="words"]`
+                )
+                ?.textContent?.trim() ?? null,
+            ])
+          ),
+        [...ACCOUNTS]
+      ),
+    (names) => ACCOUNTS.every((id) => names[id] !== null),
+    60_000
+  ).catch((error: unknown) => ({ error: String(error) }));
+  kit.check(
+    "Configure → Accounts names the accounts on a shared email with their organizations",
+    JSON.stringify(listed) === JSON.stringify(NAMED),
+    JSON.stringify({ want: NAMED, got: listed })
+  );
+
+  // 3a'. The usage popover's short names (rings `shownNames`): the two on
+  // one email by their organizations, not by the domain they share.
+  await page.locator('[data-slot="strip"] .strip-hit').first().click();
+  const short = await until(
+    "every account's cell in the usage popover",
+    () =>
+      page.evaluate(
+        (ids) =>
+          Object.fromEntries(
+            ids.map((id) => [
+              id,
+              document
+                .querySelector(`.cell-d[data-account="${id}"] [data-name]`)
+                ?.textContent?.replace(/\s+/g, " ")
+                .trim() ?? null,
+            ])
+          ),
+        [...ACCOUNTS]
+      ),
+    (names) => ACCOUNTS.every((id) => names[id] !== null),
+    60_000
+  ).catch((error: unknown) => ({ error: String(error) }));
+  await page.keyboard.press("Escape");
+  kit.check(
+    "the usage popover tells the accounts on a shared email apart by organization",
+    JSON.stringify(short) === JSON.stringify(SHORT),
+    JSON.stringify({ want: SHORT, got: short })
+  );
+
+  // 3b. The other email's session details: its own account's limit (the
+  // fullest of its windows, 75% used), not the first account signed in on
+  // the machine.
+  await open(
+    page,
+    `${base}/session/${sessions[OTHER]}`,
+    `[data-session-tab="${sessions[OTHER]}"]`,
+    120_000
+  );
+  await page
+    .locator(`[data-session-tab="${sessions[OTHER]}"]`)
+    .filter({ visible: true })
+    .first()
+    .hover();
+  const shownLimit = await page
+    .waitForSelector(".session-details-popover [data-limit-left]", {
+      timeout: 15_000,
+    })
+    .then((node) => node.textContent())
+    .then((text) => text?.replace(/\s+/g, " ").trim() ?? "")
+    .catch((error: unknown) => `none: ${String(error)}`);
+  kit.check(
+    "a session's details show its own account's limit",
+    shownLimit === "25% left",
+    JSON.stringify({ want: "25% left", got: shownLimit })
+  );
+
   // 4. Nothing refreshes the other email's reading for two hours, its
   // session idle but running: stale, as of that time.
   const agedAt = Date.now() - AGED_MS;
@@ -375,6 +488,107 @@ const run = async (kit: Kit) => {
     "the confirmed account's dial is current",
     teamTile !== null && !teamTile.say.startsWith("Hasn’t reported"),
     JSON.stringify(teamTile)
+  );
+
+  // 7. A session's start reports the account's plan (initialize) and no
+  // window: the reading's time stays.
+  const startedAt = Date.now();
+  await fleet.spawn("claude", "Usage plan only", fleet.repo, {
+    account: OTHER,
+  });
+  const reported = await until(
+    "the new session's plan reported (its catalog kept)",
+    () =>
+      fleet.query<{ read_at: number }>(
+        "SELECT read_at FROM account_catalogs WHERE account_id = ?",
+        OTHER
+      )[0],
+    (row) => row.read_at >= startedAt,
+    120_000
+  ).catch(() => undefined);
+  const asked7 = fleet.seen.filter(
+    (one) => one.at >= startedAt && accountOf(one) === OTHER
+  ).length;
+  // Read from the forecast, which every build serves: the reading's time.
+  const seenAt = (
+    await fleet.api<ProviderForecast>(
+      "/api/accounts/forecast?provider=anthropic"
+    )
+  ).accounts.find((one) => one.accountId === OTHER)?.lastSeenAt;
+  kit.check(
+    "a plan reported at a session's start leaves the reading's time where it was",
+    reported !== undefined && asked7 === 0 && seenAt === agedAt,
+    JSON.stringify({
+      reported: reported?.read_at ?? null,
+      modelRequestsSince: asked7,
+      lastSeenAt: seenAt,
+      agedAt,
+    })
+  );
+
+  // 8. Benched at its limit, its dial still says how old its reading is.
+  fleet.write(
+    "INSERT OR REPLACE INTO account_bench (account_id, scope, until) VALUES (?, '', ?)",
+    OTHER,
+    Date.now() + 3 * HOUR_MS
+  );
+  await open(page, `${base}/usage`, `[data-tile][data-account="${OTHER}"]`);
+  const benched = await until(
+    "the other email's tile at its limit",
+    () => tileOf(page, OTHER),
+    (tile) => tile?.say.startsWith("At its limit") === true,
+    30_000
+  ).catch(() => tileOf(page, OTHER));
+  kit.check(
+    "an account at its limit with an old reading says when it last reported",
+    benched?.say.startsWith("At its limit") === true &&
+      benched.say.includes("Last reported 2h"),
+    JSON.stringify(benched)
+  );
+
+  // 9. The Team seat refused at its limit, moving on, the other email still
+  // benched: its session moves to the personal plan on its email, and its
+  // transcript's line names each with its organization.
+  const put = await fetch(`${fleet.base}/api/accounts/routing/anthropic`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      yours: { strategy: "pinned" },
+      delegates: { strategy: "soonest-reset" },
+      atLimit: { move: true, waitMinutes: 15, moveWholeUnderK: 200 },
+    }),
+  });
+  if (!put.ok) {
+    throw new Error(`routing: ${put.status} ${await put.text()}`);
+  }
+  limited.add(TEAM);
+  await fleet.send(sessions[TEAM], "PROBE-USAGE at its limit");
+  const moved = await until(
+    "the Team seat's session moved at its limit",
+    () =>
+      fleet
+        .query<{ move: string }>(
+          "SELECT move FROM limit_events WHERE instance_id = ? ORDER BY at",
+          sessions[TEAM]
+        )
+        .map((row) => JSON.parse(row.move) as AccountMove)
+        .find((move) => move.kind === "moved"),
+    (move) => move !== undefined,
+    180_000
+  ).catch(() => undefined);
+  const words = moved ? accountMoveWords(moved, Date.now()) : undefined;
+  kit.check(
+    "a move at the limit to the account sharing its email names each with its organization",
+    moved?.kind === "moved" &&
+      moved.to.id === PERSONAL &&
+      moved.to.name === NAMED[PERSONAL] &&
+      moved.from.name === NAMED[TEAM] &&
+      words?.line.startsWith(`Moved to ${NAMED[PERSONAL]} · `) === true,
+    JSON.stringify({
+      want: { to: NAMED[PERSONAL], from: NAMED[TEAM] },
+      got: moved?.kind === "moved" ? { to: moved.to, from: moved.from } : moved,
+      words,
+    })
   );
 };
 

@@ -18,6 +18,7 @@ import type {
   DaemonPermissionRequestFrame,
   Envelope,
   FleetHoldings,
+  FleetReportFrame,
   FleetSyncReport,
   FramePayload,
   FrameProvenance,
@@ -109,6 +110,7 @@ import {
   waitingWords,
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { CANVAS_SCREEN_CLOSE, CANVAS_SCREEN_OPEN } from "@cawco/core/canvas";
 import { keepRoomSampled, measureMemoryRoom } from "@cawco/core/heavy-run";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -133,6 +135,11 @@ import {
   closeBrowserDoor,
   forgetBrowserDoor,
 } from "./browser/door";
+import {
+  closeCanvasScreen,
+  closeCanvasScreens,
+  openCanvasScreen,
+} from "./canvas-screen";
 import { carryWorktree, worktreeHeld } from "./carry";
 import { carryRefusal, carrySessions } from "./claude-sessions";
 import { fetchDefaultBranch, hostGit } from "./clone";
@@ -155,6 +162,7 @@ import { type KeeperReading, withKeepers } from "./keepers";
 import { isMachineAgent } from "./machine-agent";
 import { type HostedConfig, hostedEntry, mcpHost } from "./mcp-host";
 import { resolveMcpLauncher } from "./mcp-launcher";
+import { onFleetMcpMoved } from "./mcp-status";
 import { gaugeGroup, gaugeTables } from "./memory";
 import { Outbox } from "./outbox";
 import {
@@ -744,6 +752,7 @@ export class SessionSupervisor {
     this.#adapter("opencode").setCustodyReadiness?.(() =>
       this.harnessCustodyReady("opencode")
     );
+    onFleetMcpMoved(() => this.#reportFleet());
     keeperLimits.on("limit", (message) => this.#limitReached(message));
     // The Mac's readings kept a window deep, so a start reads the room at once.
     keepRoomSampled();
@@ -879,6 +888,10 @@ export class SessionSupervisor {
   readonly #roomWaits = new Map<string, AbortController>();
   /** The fleet MCP heal passes, one session after another ({@link #healFleetMcp}). */
   #healing: Promise<void> = Promise.resolve();
+  /** The machine's fleet syncs and reads, one after another ({@link #fleetTurn}). */
+  #fleetQueue: Promise<unknown> = Promise.resolve();
+  /** A fleet report the hub is owed and not yet read ({@link #reportFleet}). */
+  #fleetReportOwed = false;
   /**
    * The held children taken into custody whose turn is not decided yet: busy
    * until it is, as unknown is ({@link busyNow}).
@@ -964,7 +977,14 @@ export class SessionSupervisor {
       startPreview(options as Parameters<typeof startPreview>[0]),
     [PREVIEW_STOP]: (options) =>
       stopPreview(options as Parameters<typeof stopPreview>[0]),
-    [PREVIEW_WEIGHT]: (dir) => previewWeight(dir),
+    [PREVIEW_WEIGHT]: (dir, path) => previewWeight(dir, path),
+    // A canvas no person's screen shows, drawn by this machine's Chromium (canvas-screen.ts).
+    [CANVAS_SCREEN_OPEN]: (options) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : openCanvasScreen(options as Parameters<typeof openCanvasScreen>[0]),
+    [CANVAS_SCREEN_CLOSE]: (options) =>
+      closeCanvasScreen(options as Parameters<typeof closeCanvasScreen>[0]),
     [AGENT_BUSY]: () => this.busyNow(),
   };
 
@@ -2314,6 +2334,7 @@ export class SessionSupervisor {
    */
   detach(): void {
     stopPreviews();
+    closeCanvasScreens();
     // A stage speaks to this daemon alone (its stdout): the next one starts it again on its next open.
     stopStages();
     for (const instanceId of [...this.#sessions.keys()]) {
@@ -4912,6 +4933,46 @@ export class SessionSupervisor {
     });
   }
 
+  /**
+   * Runs `work` once every fleet sync and read before it has answered: one at
+   * a time on the machine, so no report the hub keeps is older than one it
+   * was sent before it.
+   */
+  #fleetTurn<T>(work: () => Promise<T>): Promise<T> {
+    const next = this.#fleetQueue.then(work, work);
+    this.#fleetQueue = next.catch(() => undefined);
+    return next;
+  }
+
+  /**
+   * The machine's fleet report read again and sent to the hub unasked, when a
+   * harness's reading of a fleet MCP server moved with no fleet change
+   * ({@link onFleetMcpMoved}): the hub's row says what is true now, not what
+   * the last sync met. One is owed at a time; a move heard while it waits its
+   * turn is in the read it makes. Only the machine's agent reports for it.
+   */
+  #reportFleet(): void {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: set below and cleared by the queued read, a later turn
+    if (this.#fleetReportOwed) {
+      return;
+    }
+    this.#fleetReportOwed = true;
+    this.#fleetTurn(async () => {
+      this.#fleetReportOwed = false;
+      if (!(await isMachineAgent())) {
+        return;
+      }
+      const report = await this.#syncFleet(undefined, "fleetStatus");
+      this.emit({
+        verb: "frames",
+        machineId: "",
+        payload: { kind: "fleet_report", report } satisfies FleetReportFrame,
+      });
+    }).catch((error: unknown) =>
+      warn(`the fleet report was not read again: ${errorText(error)}`)
+    );
+  }
+
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every existing fleet report field across harnesses, preserving per-harness ownership
   async #syncFleet(
@@ -5200,15 +5261,20 @@ export class SessionSupervisor {
             "fleet sync skipped: this is not the machine's agent, so machine-wide harness config is left to the agent that is"
           );
         }
-        const report = await this.#syncFleet(
-          args[0] as MachineFleetConfig,
-          "syncFleet"
-        );
+        const config = args[0] as MachineFleetConfig;
+        const report = await this.#fleetTurn(() => {
+          console.info(
+            `[fleet] sync from the hub: ${config.mcp.length} MCP server(s)`
+          );
+          return this.#syncFleet(config, "syncFleet");
+        });
         this.#healFleetMcp([...this.#sessions.keys()]);
         return report;
       }
       if (method === FLEET_STATUS) {
-        return await this.#syncFleet(undefined, "fleetStatus");
+        return await this.#fleetTurn(() =>
+          this.#syncFleet(undefined, "fleetStatus")
+        );
       }
       if (method === READ_FLEET_HOLDINGS) {
         return await this.#fleetHoldings();

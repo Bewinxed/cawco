@@ -1212,18 +1212,41 @@ export const lastErrorKindOf = (error: unknown): LastErrorKind | undefined =>
  * How a session with no process comes back: on its conversation by its key;
  * fresh under the same id when its harness never began one (no key: it never
  * said init), so there is nothing to lose; or not at all when its
- * conversation existed and is gone. The one decision for every revive: the
- * dashboard's (`ensureAlive`) and the hub's wake for a send.
+ * conversation existed and is gone, or a continuation took its work item on
+ * ({@link InstanceRow.continuedInto}): two sessions never work one item in
+ * one workspace. The one decision for every revive: the dashboard's
+ * (`ensureAlive`), the hub's wake for a send, and a relaunch on another
+ * account at a limit.
  */
 export type Relaunch =
   | { kind: "resume"; sessionKey: string }
   | { kind: "fresh" }
   | { kind: "refused"; reason: string };
 
+/** Why a session whose work a continuation took on never runs again. */
+export const continuedWords = (continuedInto: string): string =>
+  `This session was continued in session ${continuedInto.slice(0, 8)}, which carries its work on; it doesn't run again. Write to ${continuedInto.slice(0, 8)}.`;
+
+/**
+ * Where a continued session's work went, as its page says it in its
+ * composer's place (the words before the new session's title, a link to
+ * it), and as the hub refuses a person's message to it: a moved
+ * conversation points onward, it never takes a message on silently.
+ */
+export const CONTINUED_IN = "Continued in";
+
+/** {@link CONTINUED_IN} with the new session's title, as one sentence. */
+export const continuedInWords = (title: string): string =>
+  `${CONTINUED_IN} ${title}`;
+
 export const relaunchOf = (row: {
+  continuedInto?: string | null;
   lastErrorKind?: LastErrorKind | null;
   sessionId: string | null;
 }): Relaunch => {
+  if (row.continuedInto) {
+    return { kind: "refused", reason: continuedWords(row.continuedInto) };
+  }
   if (row.lastErrorKind === "conversation-gone") {
     return { kind: "refused", reason: CLAUDE_CONVERSATION_GONE };
   }
@@ -1290,6 +1313,12 @@ export interface InstanceRow {
    * chose, and the harness runs its model's default.
    */
   chosenEffort?: import("./harness").EffortLevel | null;
+  /**
+   * The session a continuation moved this one's work item to: this one never
+   * runs again ({@link relaunchOf} refuses it), and what is sent to it goes
+   * there. Null on every other session.
+   */
+  continuedInto?: string | null;
   /** When the hub first opened its row: when it was started. */
   createdAt?: string | number | Date | null;
   /** The directory the session was launched in; see `launchDir`. */
@@ -1587,6 +1616,7 @@ export const SERVER_STOPPED_MID_TURN =
  */
 export type FramePayload =
   | import("./frames").FleetMcpFrame
+  | import("./frames").FleetReportFrame
   | import("./frames").PreviewFrame
   | import("./frames").MessageFrame
   | import("./frames").SendFrame
@@ -1647,6 +1677,8 @@ export type FramePayload =
   | import("./browser").BrowserHandedBackFrame
   /** Daemon-originated: the stream relay on the machine, whole, on each change. */
   | import("./stream-relay").RelayFrame
+  /** Hub-originated: the stream relay's journey, whole, on each change. */
+  | import("./stream-relay").RelayJourneyFrame
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;
 
@@ -1713,19 +1745,42 @@ export type ArtifactKind =
 /** An artifact's name: lowercase letters, digits and dashes, like `onboarding`. */
 export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;
 
+/** What the person does on an artifact: the reason it is in their panel. */
+export const ARTIFACT_DOES = ["pick", "judge", "try", "draw"] as const;
+export type ArtifactDoes = (typeof ARTIFACT_DOES)[number];
+/** The ask's length: one line in the panel's head. */
+export const ASK_LIMIT = 160;
+/** Words the owner banned from anything that reaches him. */
+export const ASK_BANNED = /\b(tap|poke)(s|ped|ping)?\b/i;
+/** A path or a file in the ask: the person's words carry neither. */
+export const ASK_PATHLIKE =
+  /(^|[\s(])[\w.-]*\/[\w.-]+\.[a-z]{1,5}\b|\b[\w-]+\.(svelte|tsx?|png|webp|jpe?g|oui|html)\b/i;
+/** Desk captures one page for judging or picking may hold: past it, the page is a catalogue of pictures drawn at a fraction of their size in the panel. */
+export const DESK_CAPTURES_PER_PAGE = 2;
+/** A capture wider than this many pixels is a desk capture: the panel is 600px beside the transcript, 390px on a phone. */
+export const DESK_CAPTURE_WIDTH = 1600;
+
 /** One artifact as the panel's list shows it, newest first. */
 export interface ArtifactSummary {
+  /** The one line the panel's head shows under its name: what the person does here, in their words. Empty on one made before asks were kept. */
+  ask: string;
   createdAt: string;
+  /** What the person does on it. */
+  does: ArtifactDoes;
   id: string;
   kind: ArtifactKind;
   name: string;
   /** Its last promote into the project's folder (`artifact_promote`, the doc's `meta.promoted`); null until one. */
   promoted: ArtifactPromotion | null;
+  /** The person pressed Send on it since the session last revised it or changed its ask. */
+  sent: boolean;
   /** When it was last brought to the front of the panel. */
   shownAt: string | null;
   /** Its latest picture, served at `GET /api/artifacts/:id/thumbnail/:scheme`; null until a screen drew one. */
   thumbnail: ArtifactThumbnail | null;
   updatedAt: string;
+  /** The person has something to do on it now (`artifact_list`'s `waitingOn` person): its row wears a dot. */
+  waiting: boolean;
 }
 
 /**
@@ -1975,6 +2030,24 @@ export const CAWCO_ENV = {
    * scratch fleet) names its own.
    */
   browserGatePort: "CAWCO_BROWSER_GATE_PORT",
+  /**
+   * The stream relay journey's stand-ins (hub relay-journey.ts, agent
+   * browser/relay.ts), each unset on every installed machine; a scratch
+   * fleet names its own so no request leaves the machine: Cloudflare's API
+   * origin (`https://api.cloudflare.com/client/v4`), the page listing
+   * Cloudflare's IPv4 ranges, the DNS server the name check asks
+   * (`host:port`) in place of the system's, the STUN server the agent asks
+   * for its router's address, and the router the agent maps ports on: the
+   * UPnP gateway's descriptor URL in place of the one SSDP finds, and the
+   * NAT-PMP gateway's address in place of the default route's. Either set,
+   * the agent asks only the gateways named.
+   */
+  cloudflareApi: "CAWCO_CLOUDFLARE_API",
+  cloudflareIps: "CAWCO_CLOUDFLARE_IPS",
+  natPmpGateway: "CAWCO_NAT_PMP_GATEWAY",
+  relayDns: "CAWCO_RELAY_DNS",
+  stunServer: "CAWCO_STUN_SERVER",
+  upnpGateway: "CAWCO_UPNP_GATEWAY",
 } as const;
 
 /** One of {@link CAWCO_ENV}'s variable names. */

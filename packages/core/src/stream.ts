@@ -81,12 +81,17 @@ import type { CarrySessionRequest } from "./harness";
  *    one DevTools gate port for every browser, and a browser reserved for a
  *    session's browser tool has no `ports` until it first starts. No page
  *    reads them; a page built for 15 reloads first all the same.
+ * 17: `GET /api/stream-relay` answers the stream relay's journey
+ *    (`RelayAnswer`: `journey` and the page's `domain`), no longer the
+ *    machines that could run it and the relay (`candidates`, `relay`); its
+ *    changes are POST `/api/stream-relay/act`. A page built for 16 would draw
+ *    Settings › Browsers from fields that are gone, so it reloads first.
  *
  * Two things hold across every version, because an older page finds its way
  * out through them: the snapshot is `kind: "instances"`, and it carries
  * `protocol`.
  */
-export const WIRE_PROTOCOL = 16;
+export const WIRE_PROTOCOL = 17;
 
 /**
  * What a session's stream carries: the changes each frame made to its

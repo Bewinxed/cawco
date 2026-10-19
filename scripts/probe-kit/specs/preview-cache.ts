@@ -181,7 +181,13 @@ const probe = async (kit: Kit) => {
 
   asks.set("1", {
     name: CREATE,
-    input: { kind: "preview", name: "vite", port: vitePort },
+    input: {
+      kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      name: "vite",
+      port: vitePort,
+    },
   });
   await fleet.send(session, "PROBE-CALL:1");
   await until("the preview made", () => answered.get("1"), Boolean, 180_000);

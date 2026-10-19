@@ -41,9 +41,9 @@ export interface SeedCard {
 }
 
 export interface SeedPage {
+  /** The panel head's one line: what the person picks here. */
+  ask: string;
   cards: SeedCard[];
-  /** The hero's one sentence. */
-  lede: string;
   name: string;
   title: string;
   /** The session that writes it. */
@@ -61,7 +61,7 @@ export const LANDING: SeedPage = {
   name: "landing",
   title: "Landing page hero",
   writer: "Orchestrate the landing",
-  lede: "What the landing page leads with, before the first section is built.",
+  ask: "Pick what the landing page leads with",
   cards: [
     {
       id: "hero-lead",
@@ -234,7 +234,7 @@ export const PRICING: SeedPage = {
   name: "pricing",
   title: "Price the hosted plan",
   writer: "Price the hosted plan",
-  lede: "How the hosted hub is priced before the waitlist opens.",
+  ask: "Pick how the hosted hub is priced",
   cards: [
     {
       id: "plan-shape",
@@ -358,7 +358,7 @@ export const ONBOARDING: SeedPage = {
   name: "onboarding",
   title: "Shape onboarding",
   writer: "Shape onboarding",
-  lede: "The first ten minutes after the install.",
+  ask: "Pick the first ten minutes after the install",
   cards: [
     {
       id: "first-screen",
@@ -455,8 +455,13 @@ export const pageProgram = (page: SeedPage): string => {
     const name = `card${index + 1}`;
     const options = card.options.map((each, at) => {
       const statement = `${name}o${at + 1}`;
+      // What picking it costs: the card's other answers, given up.
+      const cost = `Gives up ${card.options
+        .filter((other) => other !== each)
+        .map((other) => other.label)
+        .join(" and ")}.`;
       lines.push(
-        `${statement} = Option(${say(each.id)}, ${say(each.label)}, ${say(each.line)}${each.recommended ? ", true" : ""})`
+        `${statement} = Option(${say(each.id)}, ${say(each.label)}, ${say(each.line)}, ${each.recommended ? "true" : "false"}, [], ${say(cost)})`
       );
       return statement;
     });
@@ -483,7 +488,7 @@ export const pageProgram = (page: SeedPage): string => {
     );
   }
   return `${[
-    `root = Decisions(${say(page.title)}, [${top.join(", ")}], ${say(page.lede)})`,
+    `root = Decisions(${say(page.title)}, [${top.join(", ")}])`,
     ...lines,
   ].join("\n")}\n`;
 };
@@ -537,7 +542,13 @@ const publish = async (
     fleet,
     "POST",
     `/api/instances/${writer}/artifacts`,
-    { kind: "page", name: page.name, program: pageProgram(page) }
+    {
+      kind: "page",
+      name: page.name,
+      does: "pick",
+      ask: page.ask,
+      program: pageProgram(page),
+    }
   );
   await hub(fleet, "PATCH", `/api/instances/${writer}/artifacts/${made.id}`, {
     patch: Object.entries(picks).map(([key, value]) => ({

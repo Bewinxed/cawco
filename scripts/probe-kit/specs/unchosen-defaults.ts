@@ -528,6 +528,8 @@ const tabs = async (kit: Kit, fleet: KitFleet, base: string) => {
       name: CREATE,
       input: {
         kind: "page",
+        does: "judge",
+        ask: "Judge this page: pin anything that reads wrong",
         name: heading.toLowerCase(),
         html,
       },

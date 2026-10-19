@@ -92,6 +92,8 @@ const run = async (kit: Kit) => {
   const paged = await fleet.spawn("claude", "Refused once", fleet.repo);
   await fleet.api(`/api/instances/${paged}/artifacts`, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "refused-once",
     html: pageOf("Refused once"),
   });
@@ -147,6 +149,8 @@ const run = async (kit: Kit) => {
   const ported = await fleet.spawn("claude", "Agent away", fleet.repo);
   await fleet.api(`/api/instances/${ported}/artifacts`, {
     kind: "preview",
+    does: "try",
+    ask: "Try this page and say whether it works",
     name: "agent-away",
     port: app.port,
   });

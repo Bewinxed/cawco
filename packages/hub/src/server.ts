@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { hostname as osHostname } from "node:os";
+import { networkInterfaces, hostname as osHostname } from "node:os";
 import { join, posix } from "node:path";
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
@@ -26,6 +26,7 @@ import type {
   FleetHook,
   FleetMcpConfig,
   FleetPlugin,
+  FleetReportFrame,
   FleetSkillMeta,
   FleetSyncReport,
   FleetWatchNotice,
@@ -124,7 +125,7 @@ import {
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
   accountMoveSentence,
-  accountName,
+  accountNameAmong,
   accountProvidersOf,
   agentProblem,
   archiveRefusal,
@@ -200,6 +201,7 @@ import {
   CUSTODY_HELD,
   clockWords,
   contextFitRefusal,
+  continuedInWords,
   DEFAULT_AT_LIMIT,
   delegateAskText,
   deriveTitleFromFirstMessage,
@@ -329,6 +331,11 @@ import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type { BrowserFrame, BrowserHandedBackFrame } from "@cawco/core/browser";
 import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
+import {
+  CANVAS_LIMITS,
+  CANVAS_SCREEN_CLOSE,
+  CANVAS_SCREEN_OPEN,
+} from "@cawco/core/canvas";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
 import { hashFiles } from "@cawco/core/file-hash";
@@ -342,7 +349,12 @@ import {
 import { machineId as hostMachineId } from "@cawco/core/machine-id";
 import { writeMachineKey } from "@cawco/core/machine-key";
 import { type MachinePath, MachinePathRefused } from "@cawco/core/machine-path";
-import { DOWN_WORDS, type FolderWeight } from "@cawco/core/preview-proxy";
+import {
+  DOWN_WORDS,
+  downOf,
+  type FolderWeight,
+  RELAY_HEADER,
+} from "@cawco/core/preview-proxy";
 import { protocolRange } from "@cawco/core/runtime";
 import {
   type DesignMap,
@@ -409,6 +421,7 @@ import {
   type MarksDelivery,
   type MarksOutcome,
   type PageFrom,
+  SHOWN_WAIT_MS,
   type StageAt,
 } from "./artifacts/service";
 import {
@@ -433,8 +446,9 @@ import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
 import { bodyLimitRefusal } from "./body-limits";
 import { briefingsObserve } from "./briefings";
+import { browserStreamRoutes, createBrowserStream } from "./browser-routes";
 import { createBrowserAsks } from "./browser-tools";
-import { browserRoutes, createBrowsers } from "./browsers";
+import { BrowserRefusal, browserRoutes, createBrowsers } from "./browsers";
 import {
   attemptTry,
   type Caw,
@@ -553,7 +567,7 @@ import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
-import { addressOf, type Caller, createHubAuth } from "./hub-auth";
+import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
@@ -656,6 +670,7 @@ import {
   previewFrame,
   previewSourceKey,
   previewTargets,
+  shownArtifact,
   targetsOf,
 } from "./preview";
 import { mintTicket } from "./preview-access";
@@ -705,6 +720,13 @@ import {
 } from "./rebalance";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
+import {
+  askedFrom,
+  browserKey,
+  createRelayJourney,
+  domainOf,
+  relayJourneyRoutes,
+} from "./relay-journey";
 import { createRepoPublish } from "./repo-publish";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
@@ -723,7 +745,7 @@ import { createSshDoor } from "./ssh-door";
 import { createSshTunnels } from "./ssh-tunnels";
 import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
-import { createStreamRelay, streamRelayRoutes } from "./stream-relay";
+import { createStreamRelay } from "./stream-relay";
 import { suggest } from "./suggest";
 import { createTailnetHttps, dashboardRelay } from "./tailnet-https";
 import { createTaskApproval } from "./task-approval";
@@ -2967,6 +2989,40 @@ export const createServer = (
     // else the session's own.
     workspaceOf: (row) => sessionWorkspace(row)?.id ?? row.id,
   });
+  // The person's view of a browser, on the hub's own origin
+  // (browser-routes.ts): relayed to its machine's browser listener.
+  const browserStream = createBrowserStream({
+    artifact: (id) => db.artifacts.get(id),
+    call: (machineId, method, args, timeoutMs) =>
+      callAgent(machineId, method, args, timeoutMs),
+    callerOf: (request) => hubAuth.callerOf(request, null),
+    classify: (header, method, path, address) =>
+      hubAuth.classify(header, method, path, address),
+    keysOf: (machineId) =>
+      db.browsers
+        .list()
+        .filter((row) => row.machineId === machineId)
+        .map((row) => row.key),
+    machineName: (machineId) => machineName(machineId),
+    mint: (userId, ttlMs) => streamRelay.mint(userId, ttlMs),
+    // As a preview's listener is reached (`startListener`): at the address
+    // its agent connected from, or carried over its SSH connection.
+    reach: async (machineId, port) => {
+      const address = registry.address(machineId);
+      if (!address) {
+        throw new BrowserRefusal(
+          503,
+          `${machineName(machineId)} is not connected, so its browser could not be reached. Try again once it is back.`
+        );
+      }
+      return sshTunnels.holds(machineId)
+        ? {
+            address: "127.0.0.1",
+            port: await sshTunnels.carry(machineId, port),
+          }
+        : { address, port };
+    },
+  });
   const browserAsks = createBrowserAsks({
     browserFor: (actor) => browsers.browserFor(actor),
     // Not kept across a restart: the call that waits on it ends with the hub.
@@ -3649,6 +3705,7 @@ export const createServer = (
    * whose launch is on its way ({@link launches}): the send goes behind it.
    */
   const wakesForSend = (row: {
+    continuedInto: string | null;
     id: string;
     lastErrorKind: LastErrorKind | null;
     sessionId: string | null;
@@ -4066,7 +4123,9 @@ export const createServer = (
       return { accountId };
     }
     const account = db.accounts.get(accountId);
-    const named = account ? accountName(account) : accountId;
+    const named = account
+      ? accountNameAmong(account, db.accounts.list())
+      : accountId;
     return {
       refusal: `${named} isn't signed in on ${machine}, so ${session} can't run there. Sign ${named} in on ${machine} in Configure → Accounts, or continue the session on another account.`,
       cause: { kind: "account-signed-out", accountId, machineId },
@@ -4439,6 +4498,17 @@ export const createServer = (
     origin: NeutralOrigin
   ): { gone?: true; reason: string; refusal?: SendRefusal } | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
+    // A person's words to a session a continuation took the work item of
+    // are refused, in the words its page says in its composer's place: they
+    // never go on to the new session unseen ({@link toContinuation}).
+    if (row?.continuedInto && origin.kind === "human") {
+      const [now] = db.getInstancesByIds([continuationNow(row.id)]);
+      return {
+        reason: continuedInWords(
+          now ? sessionName(now) : row.continuedInto.slice(0, 8)
+        ),
+      };
+    }
     if (row?.lastErrorKind === "conversation-gone") {
       return { reason: CLAUDE_CONVERSATION_GONE, gone: true };
     }
@@ -7157,7 +7227,7 @@ export const createServer = (
   /** Why an account's lender cannot lend it now, in a sentence. */
   const lenderAway = (accountId: string, lender: string): string => {
     const account = db.accounts.get(accountId);
-    return `${account ? accountName(account) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which is offline.`;
+    return `${account ? accountNameAmong(account, db.accounts.list()) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which is offline.`;
   };
 
   /**
@@ -7287,7 +7357,7 @@ export const createServer = (
     );
     const account = db.accounts.get(accountId);
     const refused = (why: string) => ({
-      error: `${account ? accountName(account) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which did not lend it: ${why}.`,
+      error: `${account ? accountNameAmong(account, db.accounts.list()) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which did not lend it: ${why}.`,
     });
     switch (lent.kind) {
       case "unanswered":
@@ -7715,12 +7785,113 @@ export const createServer = (
     asked: Envelope<SendPayload>,
     ahead = false
   ): SentMessageRow | undefined => {
-    const envelope = byIdNow(asked);
-    if (toCawThread(envelope)) {
+    const envelope = toContinuation(byIdNow(asked), "refused");
+    if (!envelope || toCawThread(envelope)) {
       return;
     }
     tellForkFirst(envelope);
     return deliverToSession(envelope, ahead);
+  };
+
+  /**
+   * The session `instanceId`'s work goes on in now: the last of its
+   * continuations ({@link retireContinued}), or itself. A chain is followed
+   * to its end; one that loops ends where it started.
+   */
+  const continuationNow = (instanceId: string): string => {
+    const seen = new Set<string>([instanceId]);
+    let now = instanceId;
+    for (;;) {
+      const next = db.getInstancesByIds([now])[0]?.continuedInto;
+      if (!next || seen.has(next)) {
+        return now;
+      }
+      seen.add(next);
+      now = next;
+    }
+  };
+
+  /**
+   * Whether a message is the hub's word to one process about itself: its
+   * keep-alive ping, its carry-on at its account's reset, its filing turn
+   * or `/compact`. Such words go to no other session.
+   */
+  const aboutItsProcess = (message: SentMessage): boolean =>
+    isKeepAlive(message) ||
+    (message.origin.kind === "system" &&
+      (message.origin.name === LIMIT_ORIGIN ||
+        message.origin.name === COMPACTION_ORIGIN));
+
+  /**
+   * THE RULE FOR A CONTINUED SESSION'S MAIL: a send to a session a
+   * continuation took the work item of never reaches it, and never wakes it
+   * (core `relaunchOf` refuses it). It goes to the session its work goes on
+   * in ({@link continuationNow}), from whoever sent it, as `byIdNow` does
+   * for a former id; but the hub's word to its process alone
+   * ({@link aboutItsProcess}) is dropped, as that process is gone. A
+   * person's words sent now (`person: "refused"`) stay addressed to it, and
+   * {@link inputRefusal} refuses them with where its work went, as its page
+   * says in its composer's place: a person's message is never moved to
+   * another session unseen. Only what was queued for it before the move
+   * (`"carried"`, {@link moveOwedSend}) goes on, the person's too, its row
+   * there saying it was replaced. Undefined when dropped; unchanged for any
+   * other session.
+   */
+  const toContinuation = (
+    envelope: Envelope<SendPayload>,
+    person: "refused" | "carried"
+  ): Envelope<SendPayload> | undefined => {
+    const named = envelope.payload.instanceId;
+    const now = continuationNow(named);
+    if (now === named) {
+      return envelope;
+    }
+    const { message } = envelope.payload;
+    if (person === "refused" && message.origin.kind === "human") {
+      return envelope;
+    }
+    if (aboutItsProcess(message)) {
+      console.info(
+        `[continuation] ${named.slice(0, 8)} was continued in ${now.slice(0, 8)}: the hub's ${isKeepAlive(message) ? "keep-alive ping" : `${message.origin.kind === "system" ? message.origin.name : ""} word`} to its process is dropped, as that process never runs again.`
+      );
+      return undefined;
+    }
+    const [row] = db.getInstancesByIds([now]);
+    console.info(
+      `[continuation] A send to ${named.slice(0, 8)} goes to ${now.slice(0, 8)}, the session it was continued in (send ${message.uuid}).`
+    );
+    return {
+      ...envelope,
+      instanceId: now,
+      machineId: row?.machineId ?? envelope.machineId,
+      payload: { ...envelope.payload, instanceId: now },
+    };
+  };
+
+  /**
+   * An owed send to a continued session ({@link toContinuation}), handed on
+   * as the rule says: its record says what replaced it, and the same message
+   * goes to the session the work goes on in under a fresh uuid, behind what
+   * that session was owed; the hub's word to the old process is cancelled.
+   */
+  const moveOwedSend = (send: SentMessageRow): void => {
+    const owed = db.takeOwedSend(send.uuid);
+    if (owed === undefined) {
+      return;
+    }
+    const envelope = JSON.parse(owed) as Envelope<SendPayload>;
+    const moved = toContinuation(envelope, "carried");
+    if (!moved) {
+      changeSend(send, { state: "cancelled" });
+      return;
+    }
+    const uuid = crypto.randomUUID();
+    changeSend(send, { state: "replaced", replacedBy: uuid });
+    const { delivery: _delivery, ...payload } = moved.payload;
+    deliverSend({
+      ...moved,
+      payload: { ...payload, message: { ...payload.message, uuid } },
+    });
   };
 
   /**
@@ -8244,6 +8415,11 @@ export const createServer = (
   /** One owed send, as {@link releaseOwed} hands it over. */
   const releaseOne = (send: SentMessageRow): void => {
     const [row] = db.getInstancesByIds([send.instanceId]);
+    // Owed to a session whose work a continuation took on: it goes there.
+    if (row?.continuedInto) {
+      moveOwedSend(send);
+      return;
+    }
     const agent = row ? registry.agent(row.machineId) : undefined;
     // Kept for a session nothing owed may wake: it waits for a send that may.
     // Handed back by a machine with no process for it: it waits for the
@@ -8869,7 +9045,9 @@ export const createServer = (
       return "the machine's own Claude Code login";
     }
     const account = db.accounts.get(accountId);
-    return account ? accountName(account) : "an account this hub no longer has";
+    return account
+      ? accountNameAmong(account, db.accounts.list())
+      : "an account this hub no longer has";
   };
 
   /** The machine's word on each carry asked of it; one it never gave is a failure with its reason. */
@@ -9302,7 +9480,7 @@ export const createServer = (
     ) {
       return {
         status: 409,
-        error: `${accountName(account)} is already signed in on ${machine} in CawCo; nothing was moved.`,
+        error: `${accountNameAmong(account, db.accounts.list())} is already signed in on ${machine} in CawCo; nothing was moved.`,
       };
     }
     if (
@@ -9312,7 +9490,7 @@ export const createServer = (
     ) {
       return {
         status: 409,
-        error: `Another of ${machine}'s own stores is already moving ${accountName(account)} into CawCo.`,
+        error: `Another of ${machine}'s own stores is already moving ${accountNameAmong(account, db.accounts.list())} into CawCo.`,
       };
     }
     const move: LoginMove = {
@@ -9451,7 +9629,10 @@ export const createServer = (
     identity: AccountIdentity
   ): Account | undefined => {
     if (!identity.orgId) {
-      uncompared(identity, `A new sign-in into ${accountName(account)}`);
+      uncompared(
+        identity,
+        `A new sign-in into ${accountNameAmong(account, db.accounts.list())}`
+      );
       return undefined;
     }
     return db.accounts.byIdentity(account.provider, identity, account.id);
@@ -9499,14 +9680,15 @@ export const createServer = (
         throw unreachable(asked);
     }
     const answer = asked.value;
+    const existingName = accountNameAmong(existing, db.accounts.list());
     if (!answer.ok) {
       return {
-        error: `${machineName(machineId)} signed in as ${identity.email}, already ${accountName(existing)}, but could not make it that account's: ${answer.error ?? "it gave no reason"}`,
+        error: `${machineName(machineId)} signed in as ${identity.email}, already ${existingName}, but could not make it that account's: ${answer.error ?? "it gave no reason"}`,
       };
     }
     const joined = answer.result as AccountJoinedOn;
     console.log(
-      `[accounts] A new sign-in on ${machineName(machineId)} is ${identity.email}, which this hub already has as ${accountName(existing)}, so the two are one account there: ${joined.outcome === "kept" ? `${accountName(existing)}'s login on ${machineName(machineId)} is kept, and the new one is dropped` : `the new login is ${accountName(existing)}'s on ${machineName(machineId)} from now on`}.`
+      `[accounts] A new sign-in on ${machineName(machineId)} is ${identity.email}, which this hub already has as ${existingName}, so the two are one account there: ${joined.outcome === "kept" ? `${existingName}'s login on ${machineName(machineId)} is kept, and the new one is dropped` : `the new login is ${existingName}'s on ${machineName(machineId)} from now on`}.`
     );
     db.accounts.putSignin({
       accountId: existing.id,
@@ -10627,25 +10809,86 @@ export const createServer = (
    * The fleet's stream relay (stream-relay.ts): coturn on a machine with a
    * public address, its secret kept here, its health asked every minute.
    */
+  const relayMachines = () =>
+    db.listAgents().map((agent) => {
+      const seen = registry.address(agent.machineId);
+      return {
+        machineId: agent.machineId,
+        name: machineName(agent.machineId),
+        online: registry.agent(agent.machineId) !== undefined,
+        ...(agent.machineCapabilities
+          ? { capabilities: agent.machineCapabilities }
+          : {}),
+        ...(seen ? { seen } : {}),
+      };
+    });
   const streamRelay = createStreamRelay({
     db: db.streamRelay,
     call: callAgent,
     lifetime,
-    machines: () =>
-      db.listAgents().map((agent) => {
-        const seen = registry.address(agent.machineId);
-        return {
-          machineId: agent.machineId,
-          name: machineName(agent.machineId),
-          online: registry.agent(agent.machineId) !== undefined,
-          ...(agent.machineCapabilities
-            ? { capabilities: agent.machineCapabilities }
-            : {}),
-          ...(seen ? { seen } : {}),
-        };
-      }),
+    machines: relayMachines,
+    changed: () => relayJourney.changed(),
+    cloudflareToken: () => relayJourney.token(),
+    renewed: (expiresAt) =>
+      db.streamRelay.journeyUpdate({ certificateEndsAt: expiresAt }),
   });
   streamRelay.watch();
+  /**
+   * The stream relay's guided journey (relay-journey.ts): every step
+   * computed from its record, the fleet and the relay, and pushed to every
+   * dashboard on each change (`stream_relay.journey`). Its tick starts once
+   * the hub's own machine is read (below).
+   */
+  const relayJourney = createRelayJourney({
+    db: db.streamRelay,
+    relay: streamRelay,
+    call: callAgent,
+    machines: relayMachines,
+    hubMachineId: () => ownMachineIdRead ?? null,
+    lifetime,
+    publish: (journey) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "stream_relay.journey", journey },
+      }),
+  });
+  /** The names and addresses the hub's own machine answers by: a page on one of them came in by no domain. */
+  const hubOwnNames = (): string[] => {
+    const host = osHostname().toLowerCase();
+    const tailnet = tailnetHttps.state().name?.toLowerCase();
+    return [
+      "localhost",
+      host,
+      `${host}.local`,
+      ...(tailnet ? [tailnet, tailnet.split(".")[0] ?? tailnet] : []),
+      ...Object.values(networkInterfaces())
+        .flatMap((addresses) => addresses ?? [])
+        .map((one) => one.address.toLowerCase()),
+    ];
+  };
+  /**
+   * The domain a page last reached CawCo through (every dashboard reads the
+   * journey as it loads): the setup card recommends Set up with it.
+   */
+  let lastRelayDomain: string | null = null;
+  /** Who asks of the relay's journey: the paired device (a browser's own key on a trusted hub), where from, and through what domain. */
+  const relayAsker = (request: Request, socket: string | null) => {
+    const caller = hubAuth.callerOf(request, socket);
+    const agent = request.headers.get("user-agent");
+    const domain = domainOf(request.headers, hubOwnNames());
+    if (domain) {
+      lastRelayDomain = domain;
+    }
+    return {
+      device:
+        caller.kind === "owner" && caller.device
+          ? caller.device
+          : { id: browserKey(agent), name: browserName(agent) },
+      address: askedFrom(request.headers, socket),
+      domain,
+    };
+  };
 
   /**
    * Another checkout of a project's repository: named by hand
@@ -10867,8 +11110,8 @@ export const createServer = (
     );
   };
   /**
-   * A delegate put an artifact in its parent's panel (artifacts/service.ts
-   * `handUp`): the parent hears it once, on the channel the person's picks
+   * A delegate handed its parent an artifact, not opened (artifacts/service.ts
+   * `handOver`): the parent hears it once per hand-off, on the channel the person's picks
    * take, which wakes it as their words do. One the parent didn't take is
    * kept in its transcript as not sent, with why.
    */
@@ -10888,7 +11131,7 @@ export const createServer = (
         const record = sendArtifactEvent(parent, text, [], undefined);
         if (record?.state === "failed") {
           console.warn(
-            `[artifacts] ${artifact.id}: ${parent.id} wasn't told its delegate put it in its panel: ${record.reason ?? "the send failed"}`
+            `[artifacts] ${artifact.id}: ${parent.id} wasn't told its delegate handed it up: ${record.reason ?? "the send failed"}`
           );
         }
       } catch (error) {
@@ -11196,7 +11439,7 @@ export const createServer = (
     // Your pins, replies, resolves and ink go by themselves once quiet.
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
-    // A delegate's artifact in its parent's panel: the parent hears it once.
+    // A delegate's artifact handed to its parent unopened: the parent hears it once.
     handedUp: (parent, maker, artifact) =>
       handArtifactUp(parent, maker, artifact),
     instance: (id) => db.getInstancesByIds([id])[0],
@@ -11216,7 +11459,7 @@ export const createServer = (
         artifact.instanceId,
         artifact.machineId ?? "",
         artifact.source,
-        { id: artifact.id, kind: artifact.kind, name: artifact.name }
+        shownArtifact(artifact)
       );
       if (!opened.ok) {
         return { ok: false, error: opened.error };
@@ -11231,20 +11474,26 @@ export const createServer = (
     sending: (instance, artifact, state) =>
       applySetupPicks(artifact, instance.projectId, state, {
         fleet: (choices) => setFleetChoices(fleetChoices, choices),
-        // The relay's own record says how its start went (Settings › Browsers).
-        relay: (pick) => {
-          db.streamRelay.asked();
-          if (pick === "later") {
-            return;
-          }
-          streamRelay
-            .setup(pick)
+        // Set up opens the relay's journey, and its row stands in Needs you;
+        // Later only answers the card.
+        relay: (pick) =>
+          relayJourney
+            .act(
+              { act: pick },
+              {
+                device: { id: "setup", name: "the setup page" },
+                address: null,
+                // The send carries no page's headers: the domain a page last
+                // reached CawCo through stands for it, for the name's
+                // suggestion.
+                domain: lastRelayDomain,
+              }
+            )
             .catch((error: unknown) =>
               console.warn(
-                `[stream-relay] the setup page's relay on ${machineName(pick.machineId)} did not start: ${error instanceof Error ? error.message : String(error)}`
+                `[relay-journey] the setup page's ${pick} was not taken: ${error instanceof Error ? error.message : String(error)}`
               )
-            );
-        },
+            ),
         // A refusal is an ArtifactRefusal too: the send answers it.
         place: async (projectId, place) => {
           await addProjectPlace(projectId, place.machineId, place.path);
@@ -11256,7 +11505,11 @@ export const createServer = (
     relist: (instanceId) => {
       const target = previewTargets.get(instanceId);
       if (target) {
-        publishPreview(instanceId, "open", target);
+        // Its ask as the row holds it now: an artifact_update may have changed it.
+        const row = db.artifacts.get(target.artifact.id);
+        const now = row ? { ...target, artifact: shownArtifact(row) } : target;
+        previewTargets.set(instanceId, now);
+        publishPreview(instanceId, "open", now);
       }
     },
     // A preview gone holds the workspace it showed no longer.
@@ -11310,6 +11563,125 @@ export const createServer = (
       (await onStage(at, STAGE_WRITE, write)).result as SheetWritten,
     stageComponents: async (at, ask) =>
       (await onStage(at, STAGE_COMPONENTS, ask)).result as DesignMap,
+    // A preview no panel shows, loaded once through a listener of its own
+    // (keyed by no session, so no panel's listener moves), then let go.
+    reachable: async (machineId, source) => {
+      const key = `handed-${crypto.randomUUID()}`;
+      const started = await startListener(
+        key,
+        machineId,
+        source,
+        previewGenerationOf(key)
+      );
+      if (!started.ok) {
+        return { failure: started.down, why: started.error };
+      }
+      const { address, port, token } = started.upstream;
+      const host = address.includes(":") ? `[${address}]` : address;
+      try {
+        const read = await readWithin(SHOWN_WAIT_MS, (signal) =>
+          fetch(`http://${host}:${port}${source.path ?? "/"}`, {
+            // A pane's load: a sleeping stage or served server wakes for it.
+            headers: { [RELAY_HEADER]: token, "sec-fetch-mode": "navigate" },
+            redirect: "manual",
+            signal,
+          })
+        );
+        if (read.kind !== "answered") {
+          return {
+            failure: "machine",
+            why: `its listener didn't answer within ${Math.round(read.after / 1000)} s`,
+          };
+        }
+        const down = downOf(await read.value.text());
+        return down ? { failure: down.down, why: down.why } : null;
+      } catch (error) {
+        return {
+          failure: "machine",
+          why: error instanceof Error ? error.message : String(error),
+        };
+      } finally {
+        detach(
+          callAgent(
+            machineId,
+            PREVIEW_STOP,
+            [{ instanceId: key, token }],
+            BUSY_TIMEOUT_MS
+          ),
+          "handed preview check stop"
+        );
+      }
+    },
+    // A canvas no person's screen shows, drawn headless by the hub machine's
+    // daemon on the canvas's own origin, which answers there on loopback.
+    screen: async (artifact, sync) => {
+      const machineId = await ownMachineId;
+      if (!registry.agent(machineId)) {
+        throw new ArtifactRefusal(
+          503,
+          `The canvas ${artifact.name} wasn't drawn: no CawCo daemon runs on the hub's machine to open it unseen. Start one there, then call again.`
+        );
+      }
+      const token = crypto.randomUUID();
+      const open = {
+        canvas: { id: artifact.id, name: artifact.name, sync },
+        token,
+        url: `${previewListeners.local(artifact.instanceId)}/__cawco/canvas/${artifact.id}/`,
+      };
+      const asked = await callAgent(
+        machineId,
+        CANVAS_SCREEN_OPEN,
+        [open],
+        CANVAS_LIMITS.screenOpenMs
+      );
+      switch (asked.kind) {
+        case "unanswered":
+          if (asked.reason !== "dead") {
+            // It may still open after this gave up: told to close.
+            detach(
+              callAgent(
+                machineId,
+                CANVAS_SCREEN_CLOSE,
+                [{ token }],
+                BUSY_TIMEOUT_MS
+              ),
+              "late canvas screen close"
+            );
+          }
+          throw new ArtifactRefusal(
+            503,
+            `The canvas ${artifact.name} wasn't drawn: the hub's machine didn't open it ${asked.reason === "dead" ? "(its daemon isn't connected)" : `within ${Math.round(asked.after / 1000)} s`}.`
+          );
+        case "answered":
+          break;
+        default:
+          throw unreachable(asked);
+      }
+      if (!asked.value.ok) {
+        throw new ArtifactRefusal(
+          503,
+          `The canvas ${artifact.name} wasn't drawn: ${asked.value.error ?? "the hub's machine couldn't open it."}`
+        );
+      }
+      return {
+        // The same open again holds the page on (agent canvas-screen.ts).
+        hold: () =>
+          detach(
+            callAgent(machineId, CANVAS_SCREEN_OPEN, [open], BUSY_TIMEOUT_MS),
+            "canvas screen hold"
+          ),
+        release: () =>
+          detach(
+            callAgent(
+              machineId,
+              CANVAS_SCREEN_CLOSE,
+              [{ token }],
+              BUSY_TIMEOUT_MS
+            ),
+            "canvas screen close"
+          ),
+      };
+    },
     // A workspace preview's server, run and kept up on the workspace's machine.
     serve: async (machineId, workspace, serve) => {
       const asked = await callAgent(
@@ -11343,12 +11715,12 @@ export const createServer = (
       }
       return answer.result as StageState;
     },
-    // A folder preview's weight, from its folder on the machine that serves it.
-    folderWeight: async (machineId, dir) => {
+    // A folder preview's weight and its start page's desk captures, from its folder on the machine that serves it.
+    folderWeight: async (machineId, dir, path) => {
       const asked = await callAgent(
         machineId,
         PREVIEW_WEIGHT,
-        [dir],
+        [dir, path],
         BUSY_TIMEOUT_MS
       );
       switch (asked.kind) {
@@ -11391,11 +11763,7 @@ export const createServer = (
   const restoreShownPreviews = (): void => {
     for (const { instanceId, artifact } of db.artifacts.shown()) {
       previewTargets.set(instanceId, {
-        artifact: {
-          id: artifact.id,
-          kind: artifact.kind,
-          name: artifact.name,
-        },
+        artifact: shownArtifact(artifact),
         machineId: artifact.machineId ?? "",
         source: artifact.source,
         revision: crypto.randomUUID(),
@@ -11450,6 +11818,8 @@ export const createServer = (
       const made = await artifacts.create(instanceId, {
         kind: "canvas",
         name,
+        does: "draw",
+        ask: "Draw over the diagram",
         mermaid: body.mermaid,
       });
       return Response.json({ id: made.id, name: made.name }, { status: 201 });
@@ -14240,12 +14610,51 @@ export const createServer = (
     // The source's own work item goes on in the new session, whoever asked:
     // its opening is the item's (its row has named the item since its
     // start, {@link spawnTarget}, so it lists finish_item from its first turn).
+    // The source never runs again in that workspace.
     if (source?.workItemId) {
       workItems.continuedIn(source.workItemId, row.targetInstanceId);
+      retireContinued(source.id, row.targetInstanceId);
     }
     adoptChildren(prepared.source.instanceId, row.targetInstanceId);
     sendOpening(ready);
+    // What was owed to the source goes behind the opening ({@link releaseOne}).
+    releaseOwed({ instanceId: prepared.source.instanceId });
     return true;
+  };
+
+  /**
+   * A session whose work item a continuation moved to `to` never runs again
+   * (the item's workspace has one session from here): its row names `to`
+   * ({@link InstanceRow.continuedInto}), so core `relaunchOf` refuses every
+   * wake of it (a send's, a revive's, a relaunch on another account) and
+   * every send to it goes to `to` ({@link toContinuation}); its at-limit
+   * hold and the resume at its reset go, and a move owed at its turn's end;
+   * and its process is stopped, the wake-ups it scheduled inside it with
+   * it. What it was owed goes to `to` once the opening has gone
+   * ({@link releaseOne}). Idempotent: a job resumed after a restart does it
+   * again to the same end.
+   */
+  const retireContinued = (from: string, to: string): void => {
+    const [row] = db.getInstancesByIds([from]);
+    if (!row || from === to) {
+      return;
+    }
+    if (row.continuedInto !== to) {
+      db.patchInstance(from, { continuedInto: to });
+    }
+    atLimit.forget(from);
+    relaunchAtTurnEnd.delete(from);
+    const live = !["stopped", "discarded"].includes(row.status);
+    console.info(
+      `[continuation] ${sessionName(row)} (${from.slice(0, 8)}) was continued in ${to.slice(0, 8)}, which carries its work item on: it never runs again${live ? ", and its process is stopped" : ""}. What is sent to it goes to ${to.slice(0, 8)}.`
+    );
+    if (live) {
+      endSession(from, "stop", {
+        kind: "hub",
+        why: `it was continued in ${to.slice(0, 8)}`,
+      });
+    }
+    publishInstances(row.machineId);
   };
 
   /**
@@ -15812,6 +16221,7 @@ export const createServer = (
     }),
     "own machine id"
   );
+  relayJourney.watch();
 
   /** The fleet content a machine holds on its disk now; nothing when it cannot say. */
   const readHoldings = async (machineId: string): Promise<FleetHoldings> => {
@@ -16047,7 +16457,24 @@ export const createServer = (
     }
   };
 
-  const sendFleetSync = (machineId: string, agent: HubSocket): void => {
+  /** The harnesses installed on a machine that converge the fleet, as its reports say. */
+  const fleetHarnesses = (machineId: string): string =>
+    (
+      db.listAgents().find((row) => row.machineId === machineId)?.harnesses ??
+      []
+    )
+      .filter((report) => report.installed && report.capabilities.fleet)
+      .map((report) => report.harness)
+      .sort()
+      .join(",");
+  /** Each machine's connection a fleet sync last went out on, by its id ({@link sendFleetSync}). */
+  const fleetSyncedLinks = new Map<string, string>();
+
+  const sendFleetSync = (
+    machineId: string,
+    agent: HubSocket,
+    why: string
+  ): void => {
     // Fleet sync converges each harness's own files. The register's sync goes
     // before the machine's harnesses have reported (they follow on its first
     // beat); only a report with no fleet-capable harness is a machine with
@@ -16065,6 +16492,8 @@ export const createServer = (
 
     // Always sent, a fleet with no rows too: it carries the denied tools, and
     // a machine spawns nothing until it has heard them.
+    console.info(`[fleet] sync → ${machineName(machineId)}: ${why}`);
+    fleetSyncedLinks.set(machineId, agent.id);
     pushFleetConfig(machineId, agent, db.fleetConfig());
   };
 
@@ -16405,7 +16834,7 @@ export const createServer = (
       if (!agent) {
         continue;
       }
-      sendFleetSync(machineId, agent);
+      sendFleetSync(machineId, agent, "the fleet changed");
       publishInstances(machineId);
     }
   };
@@ -16737,6 +17166,66 @@ export const createServer = (
     return (placeId) => paths.get(placeId);
   };
 
+  /**
+   * A machine's own account of what it has of the fleet, kept as its
+   * `agents.fleet`: a sync's answer or a status read's, whoever asked, or
+   * one it sent unasked when a reading moved with no fleet change
+   * (`fleet_report`). What the sync carried rides with it (`riding`).
+   */
+  const keepFleetReport = (
+    machineId: string,
+    agent: HubSocket,
+    peeked: FleetSyncReport,
+    riding: RidingChanges | undefined
+  ): void => {
+    // A project-bound hook, MCP server or skill went out once per place; the
+    // hub keeps one state per row, the worst of its places.
+    const pathOf = placePathById();
+    const report = {
+      ...peeked,
+      mcp: foldPlacedStates(peeked.mcp, pathOf) ?? peeked.mcp,
+      ...(peeked.skills
+        ? { skills: foldPlacedStates(peeked.skills, pathOf) }
+        : {}),
+      ...(peeked.hooks
+        ? { hooks: foldPlacedStates(peeked.hooks, pathOf) }
+        : {}),
+      ...(peeked.memoryDocs
+        ? { memoryDocs: foldPlacedStates(peeked.memoryDocs, pathOf) }
+        : {}),
+    };
+    // Compare the machine's persisted content before overwriting its report;
+    // timestamps and insertion order cannot cause a reload.
+    const previous = db
+      .listAgents()
+      .find((row) => row.machineId === machineId)?.fleet;
+    const sameHashes = (
+      before: Record<string, string> = {},
+      after: Record<string, string> = {}
+    ): boolean =>
+      Object.keys(before).length === Object.keys(after).length &&
+      Object.entries(before).every(([key, hash]) => after[key] === hash);
+    const skillsChanged = !sameHashes(
+      previous?.have?.skills,
+      report.have?.skills
+    );
+    const pluginsChanged = !sameHashes(
+      previous?.have?.plugins,
+      report.have?.plugins
+    );
+    const hooksChanged =
+      JSON.stringify(previous?.hooks ?? {}) !==
+      JSON.stringify(report.hooks ?? {});
+    db.setAgentFleet(machineId, report);
+    publishInstances(machineId);
+    refreshSessions(machineId, agent, [
+      ...(pluginsChanged ? ["reloadPlugins"] : []),
+      ...(skillsChanged && !pluginsChanged ? [CONTROL_RELOAD_SKILLS] : []),
+      ...(hooksChanged ? ["reinitialize"] : []),
+    ]);
+    sendMcpChanges(machineId, agent, riding);
+  };
+
   /** Why a fleet row cannot be bound to `projectId`, or nothing when it can (null and left out always can). */
   const boundProblem = (
     projectId: string | null | undefined
@@ -16804,7 +17293,7 @@ export const createServer = (
     ) {
       return;
     }
-    sendFleetSync(machineId, agent);
+    sendFleetSync(machineId, agent, "a place changed");
     publishInstances(machineId);
   });
 
@@ -16819,7 +17308,7 @@ export const createServer = (
     for (const { machineId } of db.listAgents()) {
       const agent = registry.agent(machineId);
       if (agent) {
-        sendFleetSync(machineId, agent);
+        sendFleetSync(machineId, agent, "a project folder moved");
       }
     }
   };
@@ -17162,10 +17651,11 @@ export const createServer = (
       id === CLAUDE_PROVIDER
         ? "Claude"
         : (knownProviders().find((one) => one.id === id)?.name ?? id);
+    const called = accountNameAmong(account, db.accounts.list());
     if (provider !== account.provider) {
       return provider
-        ? `${sessionName(row)} runs on a ${named(provider)} account; ${accountName(account)} is a ${named(account.provider)} account.`
-        : `${sessionName(row)}'s model is no account's, so it can't run on ${accountName(account)}.`;
+        ? `${sessionName(row)} runs on a ${named(provider)} account; ${called} is a ${named(account.provider)} account.`
+        : `${sessionName(row)}'s model is no account's, so it can't run on ${called}.`;
     }
     const signedIn = db.accounts
       .signins()
@@ -17180,7 +17670,7 @@ export const createServer = (
     }
     // An account never signed in has no name of its own yet.
     return account.label || account.email
-      ? `${accountName(account)} isn't signed in on ${machineName(row.machineId)}; sign it in there first.`
+      ? `${called} isn't signed in on ${machineName(row.machineId)}; sign it in there first.`
       : `That ${named(account.provider)} account has never been signed in; sign it in on ${machineName(row.machineId)} first.`;
   };
 
@@ -17236,12 +17726,13 @@ export const createServer = (
     | { refusal: string }
   > => {
     const from = row.accountId ? db.accounts.get(row.accountId) : undefined;
+    const accounts = db.accounts.list();
     const move: AccountMove | null = from
       ? {
           kind: "moved",
           asked: true,
-          from: namedAccount(from),
-          to: namedAccount(account),
+          from: namedAccount(from, accounts),
+          to: namedAccount(account, accounts),
           sameOrganization: cacheCarries(from, account),
           tokens: row.contextTokens,
           window: null,
@@ -17253,7 +17744,7 @@ export const createServer = (
     );
     const title = sessionName(row);
     const fromName = accountWords(row.accountId);
-    const toName = accountName(account);
+    const toName = accountNameAmong(account, db.accounts.list());
     const owe = (words: string) => {
       relaunchAtTurnEnd.set(row.id, { byHand: true, to: account.id, move });
       return { state: "pending" as const, accountId: account.id, why: words };
@@ -17496,7 +17987,7 @@ export const createServer = (
       return false;
     }
     console.info(
-      `[at-limit] ${sessionName(row)}'s turn was refused: ${accountWords(row.accountId)} is at its limit. It already owed a move to ${accountName(to)}, which has room, so it moves there now and carries on there.`
+      `[at-limit] ${sessionName(row)}'s turn was refused: ${accountWords(row.accountId)} is at its limit. It already owed a move to ${accountNameAmong(to, db.accounts.list())}, which has room, so it moves there now and carries on there.`
     );
     relaunchOnAccount(row.id, "limit");
     return true;
@@ -19429,9 +19920,11 @@ export const createServer = (
     },
     fleetChoicesSet: () => db.getSupervisorConfig().choicesSetAt !== null,
     relayOffer: () =>
-      db.streamRelay.read() || db.streamRelay.askedAt() !== null
+      db.streamRelay.read() ||
+      db.streamRelay.journey() ||
+      db.streamRelay.askedAt() !== null
         ? null
-        : streamRelay.answer().candidates,
+        : { domain: lastRelayDomain },
     upstreamAnswered: () => db.upstreamPosts() !== null,
     projectsChanged,
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
@@ -21991,15 +22484,17 @@ export const createServer = (
     if (!to || to.id === from.id) {
       return;
     }
+    const accounts = db.accounts.list();
+    const toName = accountNameAmong(to, accounts);
     console.info(
-      `[rebalance] ${sessionName(row)} moves from ${accountName(from)} to ${accountName(to)} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${accountName(to)} is where placement puts it now. Its conversation is copied there before it starts.`
+      `[rebalance] ${sessionName(row)} moves from ${accountNameAmong(from, accounts)} to ${toName} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${toName} is where placement puts it now. Its conversation is copied there before it starts.`
     );
     relaunchAtTurnEnd.set(row.id, {
       to: to.id,
       move: {
         kind: "moved",
-        from: namedAccount(from),
-        to: namedAccount(to),
+        from: namedAccount(from, accounts),
+        to: namedAccount(to, accounts),
         sameOrganization: cacheCarries(from, to),
         tokens: row.contextTokens,
         window: null,
@@ -22233,7 +22728,7 @@ export const createServer = (
     }
     refusedFailures.set(instanceId, {
       accountId: from.id,
-      words: `${accountName(from)}'s sign-in was refused, so it is signed out on ${machineName(row.machineId)}; ${stays}. Sign it in again in Configure → Accounts.`,
+      words: `${accountNameAmong(from, db.accounts.list())}'s sign-in was refused, so it is signed out on ${machineName(row.machineId)}; ${stays}. Sign it in again in Configure → Accounts.`,
     });
   };
 
@@ -22251,12 +22746,13 @@ export const createServer = (
     if (!(row && from && to) || row.accountId !== from.id) {
       return;
     }
+    const accounts = db.accounts.list();
     relaunchAtTurnEnd.set(row.id, {
       to: to.id,
       move: {
         kind: "moved",
-        from: namedAccount(from),
-        to: namedAccount(to),
+        from: namedAccount(from, accounts),
+        to: namedAccount(to, accounts),
         sameOrganization: cacheCarries(from, to),
         tokens: row.contextTokens,
         window: null,
@@ -22622,8 +23118,11 @@ export const createServer = (
           db.listProjects().some((project) => project.id === id)
         ),
         fleetChoicesRoutes(fleetChoices),
-        streamRelayRoutes(streamRelay),
         browserRoutes(browsers),
+        browserStreamRoutes(browserStream),
+        relayJourneyRoutes(relayJourney, relayAsker, (request, server) =>
+          addressOf(server as Parameters<typeof addressOf>[0], request)
+        ),
         projectFolderRoutes(
           (id) => db.listProjects().some((project) => project.id === id),
           (id) => {
@@ -23787,7 +24286,7 @@ export const createServer = (
             return {
               state: "moved" as const,
               accountId: account.id,
-              why: `${sessionName(row)} already runs on ${accountName(account)}.`,
+              why: `${sessionName(row)} already runs on ${accountNameAmong(account, db.accounts.list())}.`,
             };
           }
           const moved = await moveByHand(row, account);
@@ -24069,11 +24568,8 @@ export const createServer = (
               ? Math.floor(Number(query.limit))
               : undefined;
           // A former id is its session's (the hub's fold of older continuations).
-          const page = await transcripts.page(
-            db.instanceIdOf(params.id),
-            limit,
-            query.before
-          );
+          const id = db.instanceIdOf(params.id);
+          const page = await transcripts.page(id, limit, query.before);
           if ("gone" in page) {
             return status(
               409,
@@ -24081,7 +24577,16 @@ export const createServer = (
             );
           }
           if (!("fault" in page)) {
-            return page;
+            // Where a continued session's work went rides its newest page,
+            // for a first paint and a reader whose board no longer lists it.
+            const now = query.before ? id : continuationNow(id);
+            const [to] = now === id ? [] : db.getInstancesByIds([now]);
+            return to
+              ? {
+                  ...page,
+                  continuedTo: { instanceId: to.id, title: sessionName(to) },
+                }
+              : page;
           }
           switch (page.fault) {
             case "offline":
@@ -25972,7 +26477,7 @@ export const createServer = (
           if (!agent) {
             return status(404, machineFault(body.machineId, "offline"));
           }
-          sendFleetSync(body.machineId, agent);
+          sendFleetSync(body.machineId, agent, "asked for");
           publishInstances(body.machineId);
           return { ok: true };
         }
@@ -26724,13 +27229,14 @@ export const createServer = (
         if (!account) {
           return status(404, `There is no account ${params.id}.`);
         }
+        const named = accountNameAmong(account, db.accounts.list());
         // An id a join removed names the account it became, which is not the
         // one the screen asking made: removing that is never done by its old
         // id.
         if (account.id !== params.id) {
           return status(
             409,
-            `That account's sign-in was already ${accountName(account)}, so the two are one account now, and nothing was removed. To remove ${accountName(account)}, remove it in Configure → Accounts.`
+            `That account's sign-in was already ${named}, so the two are one account now, and nothing was removed. To remove ${named}, remove it in Configure → Accounts.`
           );
         }
         const signins = db.accounts
@@ -26746,7 +27252,7 @@ export const createServer = (
         if (live.length > 0) {
           return status(
             409,
-            `${live.length} session${live.length === 1 ? "" : "s"} still run on ${accountName(account)}; stop them first.`
+            `${live.length} session${live.length === 1 ? "" : "s"} still run on ${named}; stop them first.`
           );
         }
         // Each machine signed in to it signs it out (Claude Code itself for a
@@ -26764,10 +27270,10 @@ export const createServer = (
             409,
             [
               failed.length > 0
-                ? `${failed.join(", ")} did not sign ${accountName(account)} out.`
+                ? `${failed.join(", ")} did not sign ${named} out.`
                 : "",
               silent.length > 0
-                ? `${silent.join("; ")}, so whether ${accountName(account)} was signed out there is not known.`
+                ? `${silent.join("; ")}, so whether ${named} was signed out there is not known.`
                 : "",
               "Try again.",
             ]
@@ -26793,6 +27299,7 @@ export const createServer = (
             return status(404, `There is no account ${params.id}.`);
           }
           const machine = machineName(params.machineId);
+          const named = accountNameAmong(account, db.accounts.list());
           const signin = db.accounts
             .signins()
             .find(
@@ -26801,10 +27308,7 @@ export const createServer = (
                 one.machineId === params.machineId
             );
           if (!signin) {
-            return status(
-              404,
-              `${accountName(account)} is not signed in on ${machine}.`
-            );
+            return status(404, `${named} is not signed in on ${machine}.`);
           }
           const live = db
             .listInstances()
@@ -26817,7 +27321,7 @@ export const createServer = (
           if (live.length > 0) {
             return status(
               409,
-              `${live.length} session${live.length === 1 ? "" : "s"} still run on ${accountName(account)} on ${machine}; stop them first.`
+              `${live.length} session${live.length === 1 ? "" : "s"} still run on ${named} on ${machine}; stop them first.`
             );
           }
           const answer = await forgetOn(account, params.machineId);
@@ -26826,17 +27330,17 @@ export const createServer = (
               return answer.reason === "dead"
                 ? status(
                     409,
-                    `${machine} is offline, so ${accountName(account)} was not signed out there; try again when it is online.`
+                    `${machine} is offline, so ${named} was not signed out there; try again when it is online.`
                   )
                 : status(
                     409,
-                    `${machine} did not answer within ${Math.round(answer.after / 1000)} s, so whether ${accountName(account)} was signed out there is not known. Try again.`
+                    `${machine} did not answer within ${Math.round(answer.after / 1000)} s, so whether ${named} was signed out there is not known. Try again.`
                   );
             case "answered":
               if (!answer.value.ok) {
                 return status(
                   409,
-                  `${machine} did not sign ${accountName(account)} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
+                  `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
                 );
               }
               break;
@@ -27051,7 +27555,7 @@ export const createServer = (
           if (!claude && account.kind !== "oauth") {
             return status(
               400,
-              `${accountName(account)} is a key account: send its key to the machines that use it.`
+              `${accountNameAmong(account, db.accounts.list())} is a key account: send its key to the machines that use it.`
             );
           }
           // The machine's sign-in runs under the id it was asked for, the id
@@ -27193,7 +27697,7 @@ export const createServer = (
           if (account.kind !== "api_key") {
             return status(
               400,
-              `${accountName(account)} signs in with ${account.provider === CLAUDE_PROVIDER ? "Claude Code" : "OAuth"}, not a key.`
+              `${accountNameAmong(account, db.accounts.list())} signs in with ${account.provider === CLAUDE_PROVIDER ? "Claude Code" : "OAuth"}, not a key.`
             );
           }
           const machines = await Promise.all(
@@ -27535,8 +28039,17 @@ export const createServer = (
               // The relay's machine back: a relay that should run starts again
               // (kept as it is when its container runs).
               streamRelay.connected(message.machineId);
-              // A take-over it held is sent again: its gate stays closed.
-              browsers.connected(message.machineId);
+              // Its browsers read from it whole: every row, take-overs
+              // included, is what the machine holds now.
+              browsers
+                .connected(message.machineId)
+                .catch((error: unknown) =>
+                  console.warn(
+                    `[browser] ${machineName(message.machineId)}'s browsers were not read as it registered: ${error instanceof Error ? error.message : String(error)}`
+                  )
+                );
+              browserStream.connected(message.machineId);
+              relayJourney.connected(message.machineId);
               // A question parked by a process that is gone cannot be answered:
               // the reply would arrive at a daemon with no such session. Drop them
               // with the sessions they belonged to, or they replay to every
@@ -28032,6 +28545,7 @@ export const createServer = (
               // or tools runs here, off the part it reads.
               const reported = peekHarnesses(message.payload);
               if (reported) {
+                const convergingBefore = fleetHarnesses(message.machineId);
                 // A report with no word (Claude's, its dirs unanswered) is
                 // filed with the last word kept of that harness; with none
                 // kept, it is not filed, and the harness reads as not
@@ -28070,7 +28584,26 @@ export const createServer = (
                     unread: claudeReport?.unreadAccounts ?? [],
                   });
                 }
-                sendFleetSync(message.machineId, ws);
+                // A connection no sync has gone out on yet is sent one once
+                // its harnesses are known: the register no longer carries
+                // them (aca170f8f), and a sync's content needs none of them,
+                // so one sent already (a fleet change) is that sync. A later
+                // report (Claude's sign-ins read again and changed, one per
+                // harness on a re-announce) syncs only when it moved which
+                // harnesses here converge the fleet: one installed since,
+                // or gone. Any other is no fleet change, and a sync then
+                // started every fleet server in a location again.
+                if (fleetSyncedLinks.get(message.machineId) !== ws.id) {
+                  sendFleetSync(message.machineId, ws, "its harnesses known");
+                } else if (
+                  fleetHarnesses(message.machineId) !== convergingBefore
+                ) {
+                  sendFleetSync(
+                    message.machineId,
+                    ws,
+                    `the harnesses converging the fleet are now ${fleetHarnesses(message.machineId) || "none"}`
+                  );
+                }
               }
               const tools = peekTools(message.payload);
               if (tools.length > 0) {
@@ -28249,6 +28782,19 @@ export const createServer = (
                   message.machineId,
                   message.payload as BrowserFrame
                 );
+                browserStream.heard(
+                  message.machineId,
+                  message.payload as BrowserFrame
+                );
+                break;
+              }
+              // The machine's fleet report, sent unasked when a reading moved
+              // with no fleet change: kept as a sync's answer is.
+              if (kind === "fleet_report") {
+                const { report } = message.payload as FleetReportFrame;
+                if (isFleetReport(report)) {
+                  keepFleetReport(message.machineId, ws, report, undefined);
+                }
                 break;
               }
               // A take-over its machine ended itself: the ask's call answers.
@@ -28923,7 +29469,7 @@ export const createServer = (
                     // from it held it "mismatch" with its own login intact,
                     // since an unchanged reading is never squared again.
                     console.warn(
-                      `[hub] ${message.instanceId} runs on ${accountName(account)} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}; its reading is dropped, and the account's sign-in there is its dir's reading`
+                      `[hub] ${message.instanceId} runs on ${accountNameAmong(account, db.accounts.list())} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}; its reading is dropped, and the account's sign-in there is its dir's reading`
                     );
                     break;
                   }
@@ -29661,64 +30207,8 @@ export const createServer = (
                 const riding = fleetMcpRiding.get(message.requestId);
                 fleetMcpRiding.delete(message.requestId);
                 const peeked = peekFleetReport(message.payload);
-                // A project-bound hook, MCP server or skill went out once per
-                // place; the hub keeps one state per row, the worst of its places.
-                const pathOf = placePathById();
-                const report = peeked
-                  ? {
-                      ...peeked,
-                      mcp: foldPlacedStates(peeked.mcp, pathOf) ?? peeked.mcp,
-                      ...(peeked.skills
-                        ? { skills: foldPlacedStates(peeked.skills, pathOf) }
-                        : {}),
-                      ...(peeked.hooks
-                        ? { hooks: foldPlacedStates(peeked.hooks, pathOf) }
-                        : {}),
-                      ...(peeked.memoryDocs
-                        ? {
-                            memoryDocs: foldPlacedStates(
-                              peeked.memoryDocs,
-                              pathOf
-                            ),
-                          }
-                        : {}),
-                    }
-                  : peeked;
-                if (report) {
-                  // Compare the machine's persisted content before overwriting
-                  // its report; timestamps and insertion order cannot cause a reload.
-                  const previous = db
-                    .listAgents()
-                    .find((row) => row.machineId === message.machineId)?.fleet;
-                  const sameHashes = (
-                    before: Record<string, string> = {},
-                    after: Record<string, string> = {}
-                  ): boolean =>
-                    Object.keys(before).length === Object.keys(after).length &&
-                    Object.entries(before).every(
-                      ([key, hash]) => after[key] === hash
-                    );
-                  const skillsChanged = !sameHashes(
-                    previous?.have?.skills,
-                    report.have?.skills
-                  );
-                  const pluginsChanged = !sameHashes(
-                    previous?.have?.plugins,
-                    report.have?.plugins
-                  );
-                  const hooksChanged =
-                    JSON.stringify(previous?.hooks ?? {}) !==
-                    JSON.stringify(report.hooks ?? {});
-                  db.setAgentFleet(message.machineId, report);
-                  publishInstances(message.machineId);
-                  refreshSessions(message.machineId, ws, [
-                    ...(pluginsChanged ? ["reloadPlugins"] : []),
-                    ...(skillsChanged && !pluginsChanged
-                      ? [CONTROL_RELOAD_SKILLS]
-                      : []),
-                    ...(hooksChanged ? ["reinitialize"] : []),
-                  ]);
-                  sendMcpChanges(message.machineId, ws, riding);
+                if (peeked) {
+                  keepFleetReport(message.machineId, ws, peeked, riding);
                 }
               }
               // A control a route is waiting on: the reply is that request's

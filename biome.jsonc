@@ -41,9 +41,10 @@
   // language's formatter is off too: ultracite's preset turns them on one by one.
   "formatter": { "enabled": false },
   "javascript": {
+    // Bun and HTMLRewriter: Bun's runtime globals (typed by @types/bun).
     // __CAWCO_COMMIT__: the dashboard's build commit, a `define` in
     // apps/dashboard/vite.config.ts.
-    "globals": ["Bun", "__CAWCO_COMMIT__"],
+    "globals": ["Bun", "HTMLRewriter", "__CAWCO_COMMIT__"],
     "formatter": { "enabled": false },
   },
   "json": { "formatter": { "enabled": false } },

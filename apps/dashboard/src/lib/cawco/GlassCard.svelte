@@ -59,7 +59,6 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { DRAWER_QUERY } from "#lib/hooks/is-mobile.svelte.js";
-  import { browser } from "$app/env";
   import { page } from "$app/state";
   import {
     barGlass,
@@ -69,6 +68,7 @@
   } from "./bar-glass.svelte";
   import FilesFace from "./files/FilesFace.svelte";
   import FinderCard from "./find/FinderCard.svelte";
+  import { firstRender } from "./first-render.svelte";
   import CawPanel from "./home/CawPanel.svelte";
   import { liveFeed } from "./home/caw-feed.svelte";
   import { lightbox } from "./lightbox/lightbox-state.svelte";
@@ -77,9 +77,10 @@
   import { FOLDED, GROWN, standsOpen } from "./motion/hang";
   import { cawQuiet } from "./NeedsCaw.svelte";
 
+  /** The first paint, on both sides, has the width cookie's guess (first-render.svelte.ts). */
   const phoneQuery = new MediaQuery(DRAWER_QUERY);
   const phone = $derived(
-    browser ? phoneQuery.current : Boolean(page.data.narrow)
+    firstRender.held ? Boolean(page.data.narrow) : phoneQuery.current
   );
   /**
    * The card asked for. A phone keeps the machines in its sidebar and Files

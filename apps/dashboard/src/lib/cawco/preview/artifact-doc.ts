@@ -34,6 +34,8 @@ export interface ArtifactView extends ArtifactChoices {
   looseInk: number;
   /** The pins, by number. */
   pins: Pin[];
+  /** When the session last changed it, a revision or a new ask (`meta.revisedAt`): a Send after it is unanswered. */
+  revisedAt: string | null;
   /** A sheet's stage, as the hub keeps it (live components): its status and the errors in the modules the sheet imports. */
   stage: StageState | null;
 }
@@ -99,6 +101,7 @@ const viewOf = (doc: Doc): ArtifactView => {
     pageHash: (meta.get("pageHash") as string | undefined) ?? null,
     sentAt: (meta.get("sentAt") as string | undefined) ?? null,
     pins: pins.sort((a, b) => a.number - b.number),
+    revisedAt: (meta.get("revisedAt") as string | undefined) ?? null,
     looseInk,
     stage: (meta.get("stage") as StageState | undefined) ?? null,
   };

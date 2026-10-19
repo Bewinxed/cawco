@@ -14,7 +14,7 @@
   } from "@cawco/core";
   import { readWithin } from "@cawco/core/bounded";
   import { type PreviewMode, previewMode } from "@cawco/core/comments";
-  import { canvasOf } from "@cawco/core/stage";
+  import { STAGE_CLONE_MS, STAGE_READY_MS } from "@cawco/core/stage";
   import { type Snippet, untrack } from "svelte";
   import {
     failureClause,
@@ -46,19 +46,23 @@
     IconPlus,
     IconRefresh,
     IconSend,
+    IconTrash,
     IconTuning,
     IconUndock,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
   import { goto } from "$app/navigation";
+  import AskHere from "../AskHere.svelte";
   import {
     artifactShown,
     createDraftCanvas,
     keepThumbnail,
+    removeArtifact,
     showArtifact,
     verifyArtifact,
     writeSheet,
   } from "../artifact-api";
+  import { Asker, type AskHereRequest } from "../ask-here.svelte";
   import {
     handBack,
     holdStage,
@@ -833,6 +837,21 @@
         return readingLong ? "reading" : "quiet";
     }
   });
+  /**
+   * The head's line under the name (DESIGN.md, Artifact panel): the ask the
+   * session gave it, carried by the panel's frame, so it stands from the
+   * first frame in every state from on its way to failed; once the person's
+   * Send is in and the session has not changed the artifact or its ask since
+   * (the doc's `sentAt` past its `revisedAt`), "Sent to <session>", so
+   * nothing reads as asked of them.
+   */
+  const headLine = $derived(
+    view?.sentAt && (!view.revisedAt || view.sentAt > view.revisedAt)
+      ? artifactWords.sentTo(ownerName)
+      : (artifact?.ask ?? "")
+  );
+  /** Whether the head has room for its line under the name (SideSurface's rule); else the menu says it first. */
+  let lineStands = $state(true);
   /** The page has picks the session has not heard: the head offers to send them. */
   const unsentPicks = $derived(
     !!view &&
@@ -858,8 +877,11 @@
   /** A down stage's own words stand unfolded (Show details). */
   let stageDetails = $state(false);
   const stageDetailsId = `${paneId}-stage-details`;
-  /** What the cover says while the page is on its way; null when nothing is. */
+  /** What the cover says while the page is on its way; null when nothing is, or once it has stood past its time ({@link neverDrawn}). */
   const stageWaiting = $derived.by(() => {
+    if (neverDrawn) {
+      return null;
+    }
     switch (staged?.status) {
       case "starting":
         return served
@@ -877,6 +899,69 @@
   const compileErrors = $derived(
     staged?.status === "live" ? staged.errors : []
   );
+  /**
+   * How long the cover may stand: the time the daemon gives a stage to serve
+   * once started (core `STAGE_READY_MS`), and a place's stage its clone and
+   * install first (`STAGE_CLONE_MS`), counted on this pane's clock from when
+   * it began waiting. A page still on its way past it was never drawn: the
+   * stage's word stopped coming, or the page never compiled, and the pane
+   * says so with the ways out, never an endless cover.
+   */
+  const waitingFor = $derived.by(() => {
+    // A failure the proxy named says its own words (`down`).
+    if (down) {
+      return null;
+    }
+    switch (staged?.status) {
+      case "starting":
+        return STAGE_CLONE_MS + STAGE_READY_MS;
+      case "waking":
+      case "asleep":
+        return STAGE_READY_MS;
+      case "live":
+        return connected || served ? null : STAGE_READY_MS;
+      default:
+        return null;
+    }
+  });
+  let neverDrawn = $state(false);
+  $effect(() => {
+    const budget = waitingFor;
+    // Read so that a Try again (`reload`) or another artifact starts the wait over.
+    if (budget === null || reload < 0 || artifactId === undefined) {
+      neverDrawn = false;
+      return;
+    }
+    const timer = setTimeout(() => {
+      neverDrawn = true;
+    }, budget);
+    return () => {
+      clearTimeout(timer);
+      neverDrawn = false;
+    };
+  });
+  /** What the stage last said of a page never drawn: its own message, else the first compile error's line. */
+  const stageSaid = $derived(
+    staged?.message ?? compileErrors[0]?.message.split("\n")[0] ?? null
+  );
+  /** The never-drawn canvas's Remove: destructive, so asked in place under it (AskHere, The Open Page Rule), as the inspector's Remove is. */
+  const removeAsks = new Asker<AskHereRequest>();
+  function removeShown() {
+    const shown = artifact;
+    if (!shown) {
+      return;
+    }
+    // biome-ignore lint/complexity/noVoid: the question answers itself; a Cancel changes nothing
+    void removeAsks.ask({
+      at: "never-drawn-remove",
+      title: sheetWords.removeTitle(shown.name),
+      body: sheetWords.removeBody,
+      confirmLabel: sheetWords.removeConfirm,
+      pendingLabel: sheetWords.removing,
+      destructive: true,
+      run: () => removeArtifact(instanceId, shown.id),
+    });
+  }
   /*
    * A sheet's inspector (live components spec §5): the chosen story's props
    * as controls, from the sheet its page says (`cawco:sheet`). Opened from
@@ -897,16 +982,6 @@
     store("local", inspectKey, open ? "open" : "shut");
   }
   const isSheet = $derived(artifact?.kind === "component");
-  /**
-   * What the head says under the artifact's name: its description, the one
-   * kind that has one being a component canvas (its `about`); never a path
-   * or a route. A page, a preview and a canvas have none, so nothing.
-   */
-  const description = $derived(
-    isSheet && source && "path" in source && source.path
-      ? (canvasOf(source.path).spec.about ?? "")
-      : ""
-  );
   /**
    * A page or a sheet draws in the dashboard's theme (the overlay's
    * `themed`): its frame's `color-scheme` is that theme too, so a page that
@@ -2255,7 +2330,14 @@
      it), the preview's own controls, Close; the page in the well. -->
 {#snippet artifactTitle()}
   {#if artifact}
-    <ArtifactMenu {instanceId} held={preview?.artifacts} shown={artifact} />
+    <ArtifactMenu
+      {instanceId}
+      held={preview?.artifacts}
+      line={headLine}
+      lineDropped={!lineStands}
+      lineId={`${paneId}-line`}
+      shown={artifact}
+    />
   {/if}
 {/snippet}
 
@@ -2325,10 +2407,12 @@
     items={headItems}
     label="Preview"
     onclose={ownTab ? backToSession : close}
-    subtitle={description}
+    subtitle={headLine}
+    subtitleId={`${paneId}-line`}
     {switcher}
     titleControl={artifact ? artifactTitle : undefined}
     bind:section
+    bind:subtitleStands={lineStands}
     bind:well
   >
     {@render framed()}
@@ -2523,7 +2607,65 @@
       </EmptyState>
     </div>
   {/if}
-  {#if down && staged?.status !== "error"}
+  {#if neverDrawn && staged?.status !== "error"}
+    <!-- On its way past the time its stage is given: never an endless cover. -->
+    <div
+      data-slot="down"
+      class="down"
+      data-never-drawn
+      role="alert"
+      transition:appear
+    >
+      <EmptyState icon={IconAlert} title={sheetWords.neverDrawnTitle}>
+        {#snippet line()}
+          {sheetWords.neverDrawnLine(
+            Math.round((waitingFor ?? STAGE_READY_MS) / 1000)
+          )}
+        {/snippet}
+        {#snippet action()}
+          <div class="down-actions">
+            <Button
+              icon={IconRefresh}
+              label={sheetWords.tryAgain}
+              onclick={retry}
+              pending={retrying}
+              pendingLabel={sheetWords.tryingAgain}
+              size="sm"
+              variant="outline"
+            />
+            <Button
+              icon={IconTrash}
+              label={sheetWords.remove}
+              onclick={removeShown}
+              size="sm"
+              variant="ghost"
+            />
+            {#if stageSaid}
+              <!-- The stage's own last words, folded as the down stage's are. -->
+              <Button
+                data-details
+                aria-controls={stageDetailsId}
+                aria-expanded={stageDetails}
+                label={stageDetails ? "Hide details" : "Show details"}
+                onclick={() => {
+                  stageDetails = !stageDetails;
+                }}
+                size="sm"
+                variant="ghost"
+              />
+            {/if}
+          </div>
+          {#if stageSaid && stageDetails}
+            <p id={stageDetailsId} data-slot="details" class="down-details">
+              {stageSaid}
+            </p>
+          {/if}
+          <AskHere asker={removeAsks} at="never-drawn-remove" />
+        {/snippet}
+      </EmptyState>
+    </div>
+  {/if}
+  {#if down && staged?.status !== "error" && !neverDrawn}
     <!-- What happened, why and the way back, where the page would be; a stage in error says it above. -->
     <div data-slot="down" class="down" role="alert" transition:appear>
       <EmptyState icon={IconAlert} title={downTitle}>

@@ -122,6 +122,10 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
     public var trayWanted = false {
         didSet { if trayWanted != oldValue { syncLift() } }
     }
+    /// What it draws changed: the conversation bound, or what the pane
+    /// published for it (nil once nothing is bound). The dock reads where a
+    /// continued session's work went off it (`continuedIn`).
+    public var onRendered: (SessionComposerBinding?) -> Void = { _ in }
     /// A minimized question's bar stands at the prompts' foot: it takes the
     /// tray row's place and the tray steps aside (Composer.svelte `.asked`,
     /// `.dock.minimized`), so the bar costs the transcript nothing the row
@@ -506,6 +510,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
             syncPrompts([])
             syncPerch(nil, ring: nil)
             renderAction(animated: false)
+            onRendered(nil)
             return
         }
         holdUntil(landing)
@@ -545,6 +550,7 @@ public final class ComposerView: UIView, UITextViewDelegate, UIGestureRecognizer
         if let wheel, !wheel.closing { wheel.heard(source.recall()) }
         // The session's commands may have changed (their details landed): a `/` word being typed shows them.
         if menuWasOpen { syncMenu() }
+        onRendered(source)
     }
 
     /// The draft as the pane set it (restored, sent, an attachment added).

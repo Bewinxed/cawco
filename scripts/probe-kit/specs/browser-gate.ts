@@ -34,9 +34,10 @@
  *   browser's DevTools port and to the runtime's socket are both refused.
  *
  * Between the legs the browser stops and the runtime is hidden, as a
- * runtime going away leaves it: the browser moves to the local host, its
- * container marked to be removed, and once the runtime answers again its
- * removal takes the container and the volume too.
+ * runtime going away leaves it: the browser stays on the container host,
+ * refused with the runtime's name, its container and volume kept. With the
+ * runtime answering again it is removed (container and volume gone), and
+ * made afresh with the runtime hidden it is made on the local host.
  *
  * Run on the host, outside every workspace boundary (it starts two, and a
  * boundary hides the runtime's socket):
@@ -48,9 +49,10 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { GATE_WORDS } from "../../../packages/agent/src/browser/gate";
 import { resolveMcpLauncher } from "../../../packages/agent/src/mcp-launcher";
-import type {
-  BrowserKey,
-  BrowserRow,
+import {
+  type BrowserKey,
+  type BrowserRow,
+  SHIELD_WORDS,
 } from "../../../packages/core/src/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -129,7 +131,7 @@ const startGateHost = (env: Record<string, string>): GateHost => {
 
 const TAG = "PROBE-GATE";
 const MCP_VERSION = "1.11.0";
-const PRIVATE = "The person is using the project's browser privately.";
+const PRIVATE = SHIELD_WORDS;
 const FORM =
   "data:text/html,<title>Form</title><label>Name <input id=q></label>";
 const SHELL_LEGS = ["container", "local"] as const;
@@ -198,12 +200,18 @@ const DELEGATE = /PROBE-GATE-(A|B):/;
 const SELECTED = /(\d+):[^\n]*\[selected\]/;
 const TEXTBOX = /uid=(\S+) textbox/;
 
+/** Where the spec's npx runs: the person's HOME, and an npm cache of this run's own. */
+interface Npx {
+  cache: string;
+  home: string;
+}
+
 /** chrome-devtools-mcp at the gate as workspace `id`. */
 const mcpAs = async (
   port: number,
   id: string,
   token: string,
-  realHome: string
+  npx: Npx
 ): Promise<McpClient> => {
   const sdk =
     "../../../packages/hub/node_modules/@modelcontextprotocol/sdk/dist/esm/client";
@@ -230,11 +238,18 @@ const mcpAs = async (
   const transport = new StdioClientTransport({
     command: launcher.config.command,
     args: launcher.config.args,
-    // npx's cache is the person's, not the fleet's home.
+    // The person's HOME, not the fleet's, and an npm cache of the run's own.
+    // npx holds `<cache>/_npx/<hash>/concurrency.lock` while it reads its
+    // install, on every start, and waits on it with no end; a holder killed
+    // by SIGKILL never removes it, and the next npx waits until it is 60 s
+    // old (npm 11.19.1 libnpmexec with-lock.js `staleThreshold = 60_000`):
+    // the MCP SDK's own 60 s for `initialize`. A shared cache is shared with
+    // every process on the machine that starts this package.
     env: {
       ...(process.env as Record<string, string>),
       ...launcher.config.env,
-      HOME: realHome,
+      HOME: npx.home,
+      npm_config_cache: npx.cache,
     },
     // Kept: a server that exits ("Connection closed") says why only here.
     stderr: "pipe",
@@ -356,12 +371,12 @@ const gateChecks = async (
   port: number,
   host: string,
   who: Record<"A" | "B", { id: string; token: string }>,
-  realHome: string
+  npx: Npx
 ): Promise<void> => {
   const { check } = kit;
   const words = GATE_WORDS;
-  const A = await mcpAs(port, who.A.id, who.A.token, realHome);
-  const B = await mcpAs(port, who.B.id, who.B.token, realHome);
+  const A = await mcpAs(port, who.A.id, who.A.token, npx);
+  const B = await mcpAs(port, who.B.id, who.B.token, npx);
   try {
     const opened = await called(A, "new_page", { url: "https://example.com" });
     const pageId = selected(opened.text);
@@ -578,6 +593,8 @@ const run = async (kit: Kit): Promise<void> => {
   await fleet.accountSignedIn();
 
   const home = fleet.env.HOME as string;
+  // npx's cache for this run alone, gone with the fleet's sandbox (`Npx`).
+  const npx: Npx = { home: realHome, cache: join(fleet.sandbox, "npm") };
   const repo = join(fleet.sandbox, "code");
   await mkdir(repo, { recursive: true });
   await Bun.$`git init -q -b main && echo code > README.md && git -c user.name=O -c user.email=o@probe.test add -A && git -c user.name=O -c user.email=o@probe.test commit -qm 'First commit'`
@@ -711,56 +728,75 @@ const run = async (kit: Kit): Promise<void> => {
       live.host === "container" && ports.devtools > 0,
       JSON.stringify(live)
     );
-    await gateChecks(kit, gateHost, key, gatePort, "container", who, realHome);
+    await gateChecks(kit, gateHost, key, gatePort, "container", who, npx);
     shell.container = { devtools: ports.devtools, socket };
     await shellChecks(kit, "container");
 
-    // The local host: the runtime gone (its containers stop with it), then
-    // hidden. The browser moves; its container and volume are marked to go
-    // once the runtime answers again.
-    await gateHost.call("stop", { key });
-    await gateHost.call("runtime", { hidden: true });
-    const local = (await gateHost.call("start", { key })) as BrowserRow;
-    const localPorts = local.ports ?? { devtools: 0 };
-    const moved = (await gateHost.call("record", { key })) as {
-      containerLeft?: boolean;
-    } | null;
-    kit.check(
-      `local (DOCKER_HOST=unix:///nonexistent): ${key} live on the ${local.host} host behind the same gate on 127.0.0.1:${gatePort}, its container marked to be removed`,
-      local.host === "local" && moved?.containerLeft === true,
-      JSON.stringify({ local, containerLeft: moved?.containerLeft })
-    );
-    await gateChecks(kit, gateHost, key, gatePort, "local", who, realHome);
-    shell.local = { devtools: localPorts.devtools, socket };
-    await shellChecks(kit, "local");
-
-    // The runtime back: the container and volume the move left go with the
-    // browser's removal (a tick or the next start back in a container
-    // removes them the same way).
-    await gateHost.call("runtime", { hidden: false });
-    await gateHost.call("remove", { key });
-    if (!("missing" in runtime)) {
-      const name = `cawco-browser-${key.replace(":", "-")}`;
-      const containers = await runtime.docker.listContainers({
-        all: true,
-        filters: { name: [name] },
-      });
-      const volume = await runtime.docker
-        .getVolume(name)
+    // The runtime gone (its containers stop with it), then hidden: the
+    // container browser stays a container browser, refused with the
+    // runtime's name, its container and volume kept.
+    const boxName = `cawco-browser-${key.replace(":", "-")}`;
+    const inRuntime = async () => ({
+      containers: (
+        await runtime.docker.listContainers({
+          all: true,
+          filters: { name: [boxName] },
+        })
+      ).length,
+      volume: await runtime.docker
+        .getVolume(boxName)
         .inspect()
         .then(
           () => "kept",
           () => "gone"
-        );
-      kit.check(
-        `the runtime back: ${name}'s container and volume are removed with the browser`,
-        containers.length === 0 && volume === "gone",
-        JSON.stringify({
-          containers: containers.map((one) => one.Names),
-          volume,
-        })
-      );
-    }
+        ),
+    });
+    await gateHost.call("stop", { key });
+    await gateHost.call("runtime", { hidden: true });
+    const refused = await gateHost.call("start", { key }).then(
+      (row) => `started: ${JSON.stringify(row)}`,
+      (error: Error) => error.message
+    );
+    const away = (await gateHost.call("record", { key })) as {
+      host?: string;
+      runtimeAway?: boolean;
+      state?: string;
+    } | null;
+    const awayKept = await inRuntime();
+    kit.check(
+      `runtime hidden: ${key} stays on the container host, not live, refused with "isn't answering", its container and volume kept`,
+      refused.includes("isn't answering") &&
+        away?.host === "container" &&
+        away.runtimeAway === true &&
+        away.state !== "live" &&
+        awayKept.containers === 1 &&
+        awayKept.volume === "kept",
+      JSON.stringify({ refused, away, ...awayKept })
+    );
+
+    // Removed while the runtime answers: the container and volume go with it.
+    await gateHost.call("runtime", { hidden: false });
+    await gateHost.call("remove", { key });
+    const removed = await inRuntime();
+    kit.check(
+      `removed with the runtime answering: ${boxName}'s container and volume are gone`,
+      removed.containers === 0 && removed.volume === "gone",
+      JSON.stringify(removed)
+    );
+
+    // The local host: a browser made for the first time with the runtime
+    // hidden is made on the host that answers then.
+    await gateHost.call("runtime", { hidden: true });
+    const local = (await gateHost.call("start", { key })) as BrowserRow;
+    const localPorts = local.ports ?? { devtools: 0 };
+    kit.check(
+      `local (DOCKER_HOST=unix:///nonexistent): ${key}, made afresh, live on the ${local.host} host behind the same gate on 127.0.0.1:${gatePort}`,
+      local.host === "local" && localPorts.devtools > 0,
+      JSON.stringify(local)
+    );
+    await gateChecks(kit, gateHost, key, gatePort, "local", who, npx);
+    shell.local = { devtools: localPorts.devtools, socket };
+    await shellChecks(kit, "local");
   } finally {
     await gateHost
       .call("runtime", { hidden: false })

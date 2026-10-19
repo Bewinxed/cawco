@@ -67,14 +67,35 @@ export const heldSessions = (procs: readonly SessiondProcInfo[]): number =>
   }).length;
 
 /**
- * How long a probe of the endpoint, and the register's own reading of the
- * keepers ({@link SessiondClient.connect}'s default), may take before the
- * agent reads the endpoint as not answering. Our choice: a unix socket on the
- * same machine answers in microseconds, and the ad-hoc path needs a bound
- * before it decides to spawn a replacement. What a session's custody is
- * decided by waits on the keeper's own word instead ({@link keeperEnded}).
+ * How long a probe of the endpoint ({@link SessiondClient.connect}'s default)
+ * may take before the agent reads the endpoint as not answering. Our choice:
+ * a unix socket on the same machine answers in microseconds, and the ad-hoc
+ * path needs a bound before it decides to spawn a replacement. What a
+ * session's custody is decided by waits on the keeper's own word instead
+ * ({@link keeperEnded}), and a reading of what every keeper holds gives each
+ * {@link KEEPER_WELCOME_MS}.
  */
 export const DIAL_TIMEOUT_MS = 2000;
+
+/**
+ * How long a keeper's welcome is waited on before the keeper is read as not
+ * answering: by the watchdog's dials (keeper-watchdog.ts), and by every
+ * reading of what the keepers hold (keepers.ts `withKeepers`). The keeper
+ * writes its welcome in the same turn of its loop as the accept, so a healthy
+ * one answers in microseconds, and a keeper that is merely loaded (a GC
+ * pause, a machine in swap) answers inside ten seconds.
+ *
+ * THE BOUND IS KEPT BY A TIMER IN THIS PROCESS'S LOOP, AND THAT LOOP STALLS
+ * TOO. Under Bun (1.4.3) a timer that came due while the loop was busy runs
+ * before the socket's data is read, so a welcome that arrived at once is not
+ * seen: the dial is "no welcome within" however long the stall ran. With two
+ * seconds, an agent whose loop stalled through them read a retiring keeper as
+ * not answering 67 times in one log (the Mac, 2026-10-19, "no welcome within
+ * 2077 ms" to 3375 ms, the keeper idle in `kevent64`), and each of those
+ * readings of what the keepers hold was not known: the register's custody,
+ * the heartbeat's, and the updater's look at which retiring keeper to remove.
+ */
+export const KEEPER_WELCOME_MS = 10_000;
 
 /**
  * The keeper's connection ended before it answered: the keeper ended (the

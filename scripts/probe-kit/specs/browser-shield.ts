@@ -31,7 +31,11 @@
  *   `gateFor` makes it closed from the record's `takeover`), and the
  *   take-over still hands back as below;
  * - a second ask taken over with no view for two minutes is handed back by
- *   the daemon, and A's tool answers the same shape.
+ *   the daemon, and A's tool answers the same shape;
+ * - on the local leg (the agent's runtime hidden), the container leg's
+ *   browser is still a container browser: not live, its why naming the
+ *   runtime that isn't answering, its volume kept; with the runtime back it
+ *   is live again on the container host by itself, the same volume.
  *
  * Run on the host, outside every workspace boundary (a boundary hides the
  * runtime's socket and the browser's ports):
@@ -178,6 +182,42 @@ const evaluate = async (raw: Raw, session: string, expression: string) =>
     )
   ).result?.result as { value?: unknown } | undefined;
 
+/** Whether `key`'s container volume (its sign-ins) is on the runtime, read from the runtime itself. */
+const volumeOf = async (key: BrowserKey): Promise<"kept" | "gone"> => {
+  const { findRuntime } =
+    await import("../../../packages/agent/src/browser/runtime");
+  const found = await findRuntime();
+  if ("missing" in found) {
+    return "gone";
+  }
+  return found.docker
+    .getVolume(`cawco-browser-${key.replace(":", "-")}`)
+    .inspect()
+    .then(
+      () => "kept" as const,
+      () => "gone" as const
+    );
+};
+
+/** What a page holds now, or undefined while it answers nothing (it is loading). */
+const readPage = async (raw: Raw, session: string) => {
+  const read = await readWithin(5000, () =>
+    evaluate(
+      raw,
+      session,
+      "JSON.stringify({ href: location.href, title: document.title, mark: window.__probeMark ?? null, navigation: performance.getEntriesByType('navigation')[0]?.type ?? null })"
+    )
+  );
+  return read.kind === "answered" && typeof read.value?.value === "string"
+    ? (JSON.parse(read.value.value) as {
+        href: string;
+        mark: string | null;
+        navigation: string | null;
+        title: string;
+      })
+    : undefined;
+};
+
 /** A session's process's own credential (its environment). */
 const credentialOf = async (fleet: KitFleet, id: string): Promise<string> =>
   (await Bun.file(`/proc/${await fleet.sessionPid(id)}/environ`).text())
@@ -284,7 +324,18 @@ const nekoAs = async (key: BrowserKey, as: "admin" | "viewer") => {
     (await fetch(`${base}${path}`, {
       headers: { Authorization: `Bearer ${login.token}` },
     }).then((response) => response.json())) as Record<string, unknown>;
-  return { id: login.id, get };
+  const send = async (path: string, body?: object) => {
+    const response = await fetch(`${base}${path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${login.token}`,
+        ...(body ? { "content-type": "application/json" } : {}),
+      },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    });
+    return { status: response.status, text: await response.text() };
+  };
+  return { id: login.id, get, post: send };
 };
 
 /** The local host's take-over transport on page `targetId`: frames read and a tap sent (check C11). */
@@ -318,7 +369,8 @@ const cdpTransport = async (key: BrowserKey, targetId: string) => {
   return frames;
 };
 
-const leg = async (
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one host's leg of the spec, in the order a person takes it, a check at each step
+async function leg(
   kit: Kit,
   fleet: KitFleet,
   host: "container" | "local",
@@ -326,8 +378,10 @@ const leg = async (
   A: string,
   B: string,
   /** The agent stopped and started again, on the same runtime. */
-  restart: () => Promise<void>
-): Promise<void> => {
+  restart: () => Promise<void>,
+  /** The container leg's browser, on the local leg: it must stay where it ran. */
+  earlier?: BrowserKey
+): Promise<void> {
   const home = fleet.env.HOME as string;
   const doorA = await doorOf(home, A);
   const doorB = await doorOf(home, B);
@@ -335,6 +389,19 @@ const leg = async (
   let rawA = await rawAt(doorA);
   const rawB = await rawAt(doorB);
   const page = await pageAt(rawA, ORIGIN);
+  // The page really loaded from the site: a hand-back's GET goes to it
+  // again, and a browser that cannot reach it says so here, not later.
+  const loaded = await until(
+    `${host}: A's page loaded ${ORIGIN}`,
+    () => readPage(rawA, page.session),
+    (read) => read?.title === "Example Domain",
+    30_000
+  ).catch(() => undefined);
+  kit.check(
+    `${host}: A's page loaded ${ORIGIN} (title "${loaded?.title}")`,
+    loaded?.title === "Example Domain",
+    JSON.stringify(loaded)
+  );
   await evaluate(rawA, page.session, "window.__probeMark = 'typed'");
   await pageAt(rawB, "about:blank");
   const tap = host === "local" ? await pageAt(rawA, TAP_PAGE) : undefined;
@@ -391,8 +458,11 @@ const leg = async (
     JSON.stringify({ taken, cut, refused, notice })
   );
 
+  // The person's neko session: control is given to it, and what it copies is
+  // its own (neko judges each call by the session it comes as).
+  let viewer: Awaited<ReturnType<typeof nekoAs>> | undefined;
   if (host === "container") {
-    const viewer = await nekoAs(key, "viewer");
+    viewer = await nekoAs(key, "viewer");
     await post(fleet, `/api/browsers/${encodeURIComponent(key)}/takeover`, {
       requestId,
       machineId: "scratch-fleet",
@@ -435,38 +505,83 @@ const leg = async (
     JSON.stringify(reopened)
   );
 
+  // The container leg's browser, still held if its hand-back failed, or
+  // asleep if it went: either way never moved to this host under the person.
+  if (earlier) {
+    const { readBrowser } =
+      await import("../../../packages/agent/src/browser/state");
+    const kept = await readBrowser(earlier);
+    const volume = await volumeOf(earlier);
+    kit.check(
+      `${host}: with the runtime hidden, the container leg's browser ${earlier} is still a container browser, ${kept?.state} and not live ("${kept?.why}"), its volume ${volume}`,
+      kept?.host === "container" &&
+        kept.state !== "live" &&
+        kept.runtimeAway === true &&
+        !!kept.why?.includes("isn't answering") &&
+        volume === "kept",
+      JSON.stringify({ host: kept?.host, state: kept?.state, why: kept?.why })
+    );
+  }
+
+  // What the person copied while they held it: the hand-back empties it.
+  const copied =
+    viewer === undefined
+      ? undefined
+      : await viewer.post("/room/clipboard", { text: "probe-secret" });
   const back = await post(
     fleet,
     `/api/browsers/${encodeURIComponent(key)}/handback`,
     { machineId: "scratch-fleet" }
   );
-  rawA = await rawAt(doorA);
+  // Admitted the moment /handback answered: no wait between the two.
+  const admitted = await rawAt(doorA).then(
+    (raw) => ({ raw, refused: null }),
+    (error: unknown) => ({ raw: undefined, refused: String(error) })
+  );
+  kit.check(
+    `${host}: POST /handback answers ${back.status} and A's gate admits at once`,
+    back.status === 200 && !!admitted.raw,
+    JSON.stringify({ back, refused: admitted.refused, copied })
+  );
+  if (!admitted.raw) {
+    return;
+  }
+  rawA = admitted.raw;
   const attached = await rawA.send("Target.attachToTarget", {
     targetId: page.targetId,
     flatten: true,
   });
   const session = attached.result?.sessionId as string;
-  const mark = await evaluate(rawA, session, "window.__probeMark ?? null");
-  const navigation = await evaluate(
-    rawA,
-    session,
-    "performance.getEntriesByType('navigation')[0]?.type"
-  );
+  // Cleared at once, then loading from the site again: read once it settles
+  // (a page still loading answers nothing).
+  const after = await until(
+    `${host}: A's page loaded again after the hand-back`,
+    () => readPage(rawA, session),
+    (read) => !!read && read.href !== "about:blank",
+    90_000
+  ).catch(() => undefined);
   let reset = true;
   let clipboard: unknown = "";
   if (host === "container") {
     const admin = await nekoAs(key, "admin");
     reset = (await admin.get("/room/control")).has_host !== true;
+    // neko serves the clipboard to its host alone: read as the admin hosting
+    // for a moment, then left with no host again.
+    await admin.post("/room/control/take");
+    // neko leaves an empty clipboard's text out (room/clipboard.go,
+    // `Text string \`json:"text,omitempty"\``): absent is empty.
     clipboard = (await admin.get("/room/clipboard")).text ?? "";
+    await admin.post("/room/control/reset");
   }
   kit.check(
     `${host}: POST /handback → control reset, clipboard "", page loaded again by GET, gate open`,
     back.status === 200 &&
       reset &&
       clipboard === "" &&
-      mark?.value === null &&
-      navigation?.value === "navigate",
-    JSON.stringify({ back, reset, clipboard, mark, navigation })
+      after?.mark === null &&
+      after.href.startsWith(ORIGIN) &&
+      after.navigation === "navigate",
+    JSON.stringify({ back, reset, clipboard, after })
   );
   if (tap) {
     const tapAttached = await rawA.send("Target.attachToTarget", {
@@ -509,7 +624,7 @@ const leg = async (
   );
   rawA.socket.close();
   rawB.socket.close();
-};
+}
 
 const run = async (kit: Kit): Promise<void> => {
   const realHome = homedir();
@@ -599,6 +714,7 @@ const run = async (kit: Kit): Promise<void> => {
     180_000
   );
 
+  let containerKey: BrowserKey | undefined;
   for (const host of ["container", "local"] as const) {
     const dockerHost =
       host === "local" ? "unix:///nonexistent" : `unix://${runtime.endpoint}`;
@@ -625,10 +741,45 @@ const run = async (kit: Kit): Promise<void> => {
       projectId: project.id,
     });
     heard.notice = false;
-    await leg(kit, fleet, host, `project:${project.id}`, A, B, async () => {
-      await fleet.stop("agent");
-      await agentOn(dockerHost);
-    });
+    const key: BrowserKey = `project:${project.id}`;
+    await leg(
+      kit,
+      fleet,
+      host,
+      key,
+      A,
+      B,
+      async () => {
+        await fleet.stop("agent");
+        await agentOn(dockerHost);
+      },
+      host === "local" ? containerKey : undefined
+    );
+    containerKey ??= key;
+  }
+  // The runtime back: the container browser starts again by itself, on the
+  // container host, its volume (its sign-ins) the one it had.
+  if (containerKey) {
+    const back = containerKey;
+    await fleet.stop("agent");
+    await agentOn(`unix://${runtime.endpoint}`);
+    const { readBrowser } =
+      await import("../../../packages/agent/src/browser/state");
+    const kept = await until(
+      `${back} live again on the container host`,
+      () => readBrowser(back),
+      (record) => record?.state === "live" && record.host === "container",
+      180_000
+    ).catch(() => undefined);
+    const volume = await volumeOf(back);
+    kit.check(
+      `the runtime back: ${back} is live again on the ${kept?.host} host by itself, its volume ${volume}`,
+      kept?.state === "live" &&
+        kept.host === "container" &&
+        !kept.runtimeAway &&
+        volume === "kept",
+      JSON.stringify({ host: kept?.host, state: kept?.state, why: kept?.why })
+    );
   }
   stand.stop(true);
 };

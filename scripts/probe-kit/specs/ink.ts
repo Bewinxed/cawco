@@ -540,6 +540,8 @@ const run = async (kit: Kit) => {
   const on = await setUp(kit);
   const made = await on.call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "ink",
     html: page(false, true),
   });
@@ -1232,6 +1234,8 @@ const deliveredChecks = async (on: On, frame: Frame) => {
 const canvasChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "canvas",
+    does: "draw",
+    ask: "Draw on this canvas",
     name: "board",
     elements: [
       { type: "rectangle", id: "box", x: 100, y: 100, width: 400, height: 200 },
@@ -1313,6 +1317,8 @@ const reducedChecks = async (on: On) => {
   // The canvas's page is the panel's now; a page made for this check.
   const made = await on.call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "still",
     html: page(false, true),
   });
@@ -1479,6 +1485,8 @@ const marksProposedCut = (frame: Frame, over: { selector: string }[]) =>
 const mapChecks = async (on: On) => {
   const made = await on.call(CREATE, {
     kind: "page",
+    does: "judge",
+    ask: "Judge this page: pin anything that reads wrong",
     name: "test-map",
     html: TEST_MAP,
   });

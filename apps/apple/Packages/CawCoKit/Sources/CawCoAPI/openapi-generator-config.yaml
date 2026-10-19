@@ -13,6 +13,7 @@ typeOverrides:
     AccountKind: OpenEnums.AccountKind
     ActionState: OpenEnums.ActionState
     AgentRowAuth: OpenEnums.AgentRowAuth
+    ArtifactDoes: OpenEnums.ArtifactDoes
     ArtifactKind: OpenEnums.ArtifactKind
     ArtifactStatusWaitingOn: OpenEnums.ArtifactStatusWaitingOn
     AskAnswerBehavior: OpenEnums.AskAnswerBehavior
@@ -35,7 +36,6 @@ typeOverrides:
     BrowserRuntimeKind: OpenEnums.BrowserRuntimeKind
     BrowserState: OpenEnums.BrowserState
     CallerKind: OpenEnums.CallerKind
-    CanvasDialKind: OpenEnums.CanvasDialKind
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource
     CawHarness: OpenEnums.CawHarness
@@ -135,6 +135,8 @@ typeOverrides:
     RelayPortName: OpenEnums.RelayPortName
     RelayProvider: OpenEnums.RelayProvider
     RelayState: OpenEnums.RelayState
+    RelayStepFinding: OpenEnums.RelayStepFinding
+    RelayStepHow: OpenEnums.RelayStepHow
     RestartHoldReason: OpenEnums.RestartHoldReason
     RoutineMadeEventBy: OpenEnums.RoutineMadeEventBy
     RoutineRunState: OpenEnums.RoutineRunState

@@ -2,9 +2,14 @@
 /**
  * The probe kit: every web UI proof, read from the engine, not the picture.
  *
- *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]
- *   bun scripts/probe-kit/run.ts <spec>… [--approve <spec>[:<entry>,…]] [--review <dir>]
+ *   bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>] [--<option> <value>…]
+ *   bun scripts/probe-kit/run.ts <spec>… [--approve <spec>[:<entry>,…]] [--review <dir>] [--<option> <value>…]
  *   bun scripts/probe-kit/run.ts journeys [name…] [--engine chromium|webkit|firefox] [--size phone|tablet|desk]
+ *
+ * Every other `--<option> <value>` is the specs' own, never a spec name: it
+ * stays in `process.argv` for a spec to read (browser-relay's `--machine`
+ * and `--address`, browser-stream's `--address`), and a spec run in a
+ * process of its own is handed it too.
  *
  * The third form runs the user journeys (journeys/suite.ts): each a flow
  * the person does, on every engine and size, with normal and stretched
@@ -66,7 +71,7 @@ const web = args[0] === "web";
 const rest = web ? args.slice(1) : args;
 if (!(web || rest[0]) || rest[0]?.startsWith("--")) {
   console.error(
-    "usage: bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]\n       bun scripts/probe-kit/run.ts <spec>…  (specs in specs/, or in specs/web/)"
+    "usage: bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>] [--<option> <value>…]\n       bun scripts/probe-kit/run.ts <spec>… [--<option> <value>…]  (specs in specs/, or in specs/web/; every other --<option> <value> is the specs' own)"
   );
   process.exit(2);
 }
@@ -96,13 +101,29 @@ if (reviewAt !== -1 && (review === null || review.startsWith("--"))) {
   console.error("--review <dir>: name the folder the review page goes in");
   process.exit(2);
 }
-const named = rest.filter(
-  (one, i) =>
-    one !== "--approve" &&
-    (approveAt === -1 || i !== approveAt + 1) &&
-    one !== "--review" &&
-    (reviewAt === -1 || i !== reviewAt + 1)
-);
+/**
+ * The specs' own options: every `--<option>` but `--approve` and `--review`,
+ * each with the value after it (none when the next is an option too or
+ * there is no next), left in `process.argv` for the specs to read.
+ */
+const options: string[] = [];
+/** Where each of this run's own flags and the specs' options and values stand in `rest`. */
+const taken = new Set<number>();
+for (const [i, one] of rest.entries()) {
+  if (!one.startsWith("--") || taken.has(i)) {
+    continue;
+  }
+  taken.add(i);
+  const value = rest[i + 1];
+  const hasValue = value !== undefined && !value.startsWith("--");
+  if (hasValue) {
+    taken.add(i + 1);
+  }
+  if (one !== "--approve" && one !== "--review") {
+    options.push(one, ...(hasValue ? [value] : []));
+  }
+}
+const named = rest.filter((_, i) => !taken.has(i));
 const specsDir = join(import.meta.dir, "specs");
 const webDir = join(specsDir, "web");
 const listed = (dir: string) =>
@@ -169,6 +190,7 @@ const runOwnHome = async (spec: Spec): Promise<number> => {
       spec.name,
       ...(approve === spec.name && approveArg ? ["--approve", approveArg] : []),
       ...(review === null ? [] : ["--review", review]),
+      ...options,
     ],
     {
       env: { ...env, HOME: home, [OWN_HOME_ENV]: home },

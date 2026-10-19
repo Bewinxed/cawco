@@ -3,8 +3,7 @@ import {
   type AccountBench,
   type AccountReading,
   type AccountSignin,
-  accountName,
-  accountNames,
+  accountNameAmong,
   clockWords,
   type LimitWindow,
   modelScope,
@@ -252,17 +251,14 @@ class Usage {
   readonly #input: PlacementInput;
   readonly #scope: string | null;
 
-  readonly #names: Map<string, string>;
-
   constructor(input: PlacementInput) {
     this.#input = input;
     this.#scope = modelScope(input.model);
-    this.#names = accountNames(input.accounts);
   }
 
-  /** What the account is called beside the others ({@link accountNames}). */
+  /** What the account is called beside the others (core `accountNameAmong`). */
   name = (account: Account): string =>
-    this.#names.get(account.id) ?? accountName(account);
+    accountNameAmong(account, this.#input.accounts);
 
   #window(id: string, kind: string): LimitWindow | undefined {
     const windows =
@@ -802,10 +798,9 @@ export const nextFree = (
 
 export const place = (input: PlacementInput): Placement => {
   const byId = new Map(input.accounts.map((account) => [account.id, account]));
-  const names = accountNames(input.accounts);
   const name = (id: string): string => {
     const account = byId.get(id);
-    return account ? (names.get(account.id) ?? accountName(account)) : id;
+    return account ? accountNameAmong(account, input.accounts) : id;
   };
   const machine = input.machineName ?? input.machineId;
 

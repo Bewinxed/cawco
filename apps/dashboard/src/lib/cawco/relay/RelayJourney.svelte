@@ -9,36 +9,43 @@
    * that one's note and control; every other step is its number and label.
    * The lead line stands only while nothing asks yet.
    *
-   * Four faces, by `view`: `entry`, the take-over's stream place saying why
-   * it didn't connect, whose Set up unfolds the journey in place; `journey`,
-   * the step list; `summary`, the live relay as Settings shows it, with Add a
-   * name while none stands; `done`, Caw's Needs you row once it is live and
-   * proven. Everything it shows arrives as props (the hub's journey record);
-   * what the person presses leaves as `onact`.
+   * Five faces, by `view`: `entry`, the take-over's stream place saying why
+   * it didn't connect, whose Set up unfolds the journey in place; `start`,
+   * Settings › Browsers before anyone set it up, the lead and Set up;
+   * `journey`, the step list; `summary`, the relay once it has gone live, as
+   * Settings shows it, with Add a name while none stands and Stop and Remove
+   * asked in place; `done`, Caw's Needs you row once it is live and proven.
+   * Everything it shows arrives as props (the hub's journey, core
+   * stream-relay.ts); what the person presses leaves as `onact`, whose
+   * refusal stands under the step in the hub's words.
    */
-  import { STREAM_RELAY_WORDS } from "@cawco/core";
+  import {
+    type RelayAct,
+    type RelayChoice,
+    type RelayMachine,
+    type RelayStep,
+    type RelaySummary,
+    STREAM_RELAY_WORDS as words,
+    zoneOf,
+  } from "@cawco/core/stream-relay";
+  import AskHere from "#lib/cawco/AskHere.svelte";
+  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import Field from "#lib/cawco/config/Field.svelte";
+  import { failureWords } from "#lib/cawco/hub-read.js";
   import CopyBox from "#lib/cawco/join/CopyBox.svelte";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
   import { IconError, IconMonitor, IconSuccess } from "#lib/icons.js";
-  import {
-    type RelayAct,
-    type RelayMachine,
-    type RelayStep,
-    type RelaySummary,
-    JOURNEY_WORDS as words,
-    zoneOf,
-  } from "./journey.js";
 
   let {
     view = "journey",
     domain = null,
-    machine,
+    machine = null,
+    candidates = 0,
     steps = [],
     summary = null,
     row = false,
@@ -46,23 +53,45 @@
   }: {
     /** Drawn as Caw's Needs you row: its kind and where under it, as every onboarding row says. */
     row?: boolean;
-    /** Which face: the take-over's entry, the journey's steps, the live relay's summary, or Needs you's ticked row. */
-    view?: "entry" | "journey" | "summary" | "done";
+    /** Which face: the take-over's entry, Settings' Set up, the journey's steps, the live relay's summary, or Needs you's ticked row. */
+    view?: "entry" | "start" | "journey" | "summary" | "done";
     /** The domain the person reached CawCo through, seen through a proxy; null by IP or the tailnet. */
     domain?: string | null;
-    /** The machine the relay runs on. */
-    machine: RelayMachine;
+    /** The machine the relay runs on; null before a pick. */
+    machine?: RelayMachine | null;
+    /** How many machines could run it, for the row's meta before a pick. */
+    candidates?: number;
     /** Every step that applies, in order, with where each stands. */
     steps?: RelayStep[];
     /** The live relay, for `summary` and `done`. */
     summary?: RelaySummary | null;
-    /** What the person pressed: the hub's to act on. */
-    onact?: (act: RelayAct) => void;
+    /** What the person pressed: the hub's to act on; a rejection is its refusal, said under the step. */
+    onact?: (act: RelayAct) => void | Promise<void>;
   } = $props();
 
   /** The entry's Set up was pressed: the journey stands in its place. */
   let entered = $state(false);
   const face = $derived(view === "entry" && entered ? "journey" : view);
+
+  /** The act on its way, by its kind, and the hub's last refusal of one. */
+  let pending = $state<RelayAct["act"] | null>(null);
+  let refusal = $state<string | null>(null);
+  async function run(next: RelayAct): Promise<void> {
+    if (pending) {
+      return;
+    }
+    pending = next.act;
+    refusal = null;
+    try {
+      await onact?.(next);
+    } catch (error) {
+      refusal = failureWords(error);
+    } finally {
+      pending = null;
+    }
+  }
+  const act = (kind: Extract<RelayAct, { act: string }>["act"]) =>
+    run({ act: kind } as RelayAct);
 
   const nameStep = $derived(
     steps.find(
@@ -95,6 +124,7 @@
         return "failed";
       case "checking":
       case "running":
+      case "asking":
         return "working";
       case "waiting":
       case "by-hand":
@@ -134,10 +164,12 @@
   const hasBody = (step: RelayStep): boolean =>
     !(step.step === "runtime" && step.state === "checking");
 
-  /** Let CawCo add it: its token field, opened here or by the record. */
+  /** Let CawCo add it: its token field, opened here or by Cloudflare's refusal. */
   let tokenOpenHere = $state<boolean | null>(null);
-  const tokenOpen = $derived(tokenOpenHere ?? nameStep?.tokenOpen ?? false);
+  const tokenOpen = $derived(tokenOpenHere ?? nameStep?.tokenWhy !== undefined);
   let token = $state("");
+  /** The name typed, where none is known yet. */
+  let typed = $state("");
 
   /** The phone's copy row: one step's body is shown at a time, so one clipboard serves it. */
   const clipboard = new UseClipboard();
@@ -148,28 +180,58 @@
     return clipboard.status === "failure" ? words.copyFailed : label;
   };
 
-  const act = (kind: Exclude<RelayAct, { act: "add-record" }>["act"]) =>
-    onact?.({ act: kind });
+  /** Stop and Remove, asked in place under the summary (DESIGN.md, Asking in the page). */
+  const asker = new Asker<AskHereRequest>();
+  const asking = (at: string): boolean => asker.pending?.at === at;
+  const askStop = (relay: RelaySummary) =>
+    asker.ask({
+      at: "relay-stop",
+      title: words.stopTitle(relay.machine.name),
+      body: words.stopBody,
+      confirmLabel: words.stop,
+      pendingLabel: "Stopping…",
+      destructive: true,
+      run: () => onact?.({ act: "stop" }) ?? Promise.resolve(),
+    });
+  const askRemove = (relay: RelaySummary) =>
+    asker.ask({
+      at: "relay-remove",
+      title: words.removeTitle(relay.machine.name),
+      body: words.removeBody(relay.name),
+      confirmLabel: words.remove,
+      pendingLabel: "Removing…",
+      destructive: true,
+      run: () => onact?.({ act: "remove" }) ?? Promise.resolve(),
+    });
+
+  /** The machine's words, before a pick: none yet. */
+  const machineNow = $derived<RelayMachine>(
+    machine ?? { name: "", address: "", lan: null }
+  );
 
   /** What a ticked step says was done. */
   function doneLabelOf(step: RelayStep): string {
     switch (step.step) {
       case "machine":
-        return words.machineDone(machine);
+        return words.machineDone(machineNow);
       case "name":
         return step.state === "skipped"
           ? words.nameSkipped
           : words.nameDone(step.name);
       case "router":
-        return words.routerDone;
+        return words.routerDone(step.how);
       case "runtime":
         return words.runtimeDone;
       case "certificate":
-        return words.certificateDone(relayName, step.ends ?? "");
+        return words.certificateDone(relayName, step.endsAt ?? Date.now());
       case "start":
-        return words.startDone(machine.name, named);
+        return words.startDone(machineNow.name, named);
       default:
-        return words.proveDone(step.device ?? "", step.at ?? "", named);
+        return words.proveDone(
+          step.device ?? "",
+          step.at ?? Date.now(),
+          step.ports ?? ""
+        );
     }
   }
 
@@ -179,6 +241,8 @@
       return doneLabelOf(step);
     }
     switch (step.step) {
+      case "machine":
+        return words.machine;
       case "name":
         return words.name;
       case "router":
@@ -200,13 +264,25 @@
   function findingOf(step: Extract<RelayStep, { step: "name" }>): string {
     switch (step.finding) {
       case "proxied":
-        return words.nameProxied(step.name, machine.address);
+        return words.nameProxied(step.name, machineNow.address);
       case "elsewhere":
-        return words.nameElsewhere(step.name, step.answers ?? "", machine);
+        return words.nameElsewhere(step.name, step.answers ?? "", machineNow);
       default:
         return words.nameUnresolved(step.name);
     }
   }
+
+  /** Seconds since the hub last asked DNS, on the clock's next tick, while the name is checked. */
+  let now = $state(Date.now());
+  $effect(() => {
+    if (nameStep?.state !== "checking") {
+      return;
+    }
+    const timer = setInterval(() => {
+      now = Date.now();
+    }, 1000);
+    return () => clearInterval(timer);
+  });
 
   /** The state word a screen reader hears before a step's label. */
   const SAID: Record<Mark, string> = {
@@ -218,14 +294,41 @@
   };
 
   /** A live relay with a port that did not answer: said in words, never by tint alone. */
-  const portDown = $derived(summary?.ports.some((port) => !port.up) ?? false);
+  const portDown = $derived(
+    summary?.state === "live" && summary.ports.some((port) => !port.up)
+  );
+  /** The summary's badge: its state in words, and its tint. */
+  const badge = $derived.by((): { said: string; tint: BadgeVariant } => {
+    switch (summary?.state) {
+      case "live":
+        return portDown
+          ? { said: words.portDown, tint: "attn" }
+          : { said: words.live, tint: "done" };
+      case "pulling":
+        return { said: summary.progress ?? words.starting, tint: "live" };
+      case "starting":
+        return { said: words.starting, tint: "live" };
+      case "failed":
+        return { said: words.failed, tint: "fail" };
+      default:
+        return { said: words.stopped, tint: "secondary" };
+    }
+  });
+  /** The relay is pulling or starting: Stop waits, said under the buttons. */
+  const busy = $derived(
+    summary?.state === "pulling" || summary?.state === "starting"
+  );
+
+  /** The words of a copy box, each a unit that never breaks inside: a parenthesis is one ("(DNS only, no proxy)"). */
+  const unitsOf = (text: string): string[] =>
+    text.match(/\([^)]*\)|\S+/g) ?? [text];
 
   /** A step's note: meta, muted; a failure's in the fail ink. */
   const NOTE =
     "min-w-0 text-meta text-(--ink-muted) text-pretty [overflow-wrap:anywhere]";
   const FAIL =
     "min-w-0 text-meta text-(--status-fail-ink) text-pretty [overflow-wrap:anywhere]";
-  /** Needs you's meta line (NeedsCard's `.meta`): meta, muted, one line. */
+  /** Needs you's meta line (NeedsCard's `.meta`): meta, muted, one line, at every width. */
   const META =
     "min-w-0 max-w-full overflow-hidden text-meta text-(--ink-muted) text-ellipsis whitespace-nowrap";
   /** A step's controls: side by side, each the column's width in a narrow card, `space-2` apart. */
@@ -274,9 +377,10 @@
 {/snippet}
 
 <!-- Something to paste elsewhere: the house's copy box in a wide card; in a
-     narrow one the text across the card, wrapping between its words (or
-     clamped to two lines, `clamp`), and Copy on a full-width row of its
-     own, naming what it copies. Copy takes the whole text either way. -->
+     narrow one the text across the card, wrapping between its units (a
+     parenthesis stays whole), or clamped to two lines (`clamp`), and Copy on
+     a full-width row of its own, naming what it copies. Copy takes the whole
+     text, as it reads, either way. -->
 {#snippet copyable(
   label: string,
   text: string,
@@ -295,9 +399,14 @@
       title={text}
       ><span class={clamp ? "line-clamp-2" : "block"} data-slot="copy-words"
         ><span class="sr-only">{label}:{" "}</span
-        >{#each text.split(" ") as word, index (index)}{#if index > 0}{" "}{/if}<span
-            class="inline-block max-w-full [overflow-wrap:anywhere]"
-            >{word}</span
+        >{#each unitsOf(text) as unit, index (index)}{#if index > 0}{" "}{/if}<span
+            class={[
+              "inline-block max-w-full",
+              unit.startsWith("(")
+                ? "whitespace-nowrap"
+                : "[overflow-wrap:anywhere]",
+            ]}
+            data-unit>{unit}</span
           >{/each}</span
       ></code
     >
@@ -333,82 +442,192 @@
       {/if}
     </span>
     <h3 class="min-w-0 text-label text-(--ink-strong) text-balance">
-      {STREAM_RELAY_WORDS.title}
+      {words.title}
     </h3>
   </div>
 {/snippet}
 
-{#snippet nameBody(step: Extract<RelayStep, { step: "name" }>)}
-  {#if step.state === "checking"}
-    <p class={NOTE}>{words.nameChecking(step.name, step.askedAgo)}</p>
-  {:else}
-    <p class={NOTE}>{findingOf(step)}</p>
-    {@render copyable(
-      words.recordLabel,
-      words.record(step.name, machine.address),
-      words.copyRecord,
-      false
-    )}
+{#snippet refused()}
+  {#if refusal}
+    <p class={FAIL} data-relay-refusal role="alert">{refusal}</p>
   {/if}
-  <p class={NOTE}>{words.nameWhy(step.name)}</p>
-  <div class={CONTROLS}>
-    {#if step.state !== "checking" && zone}
+{/snippet}
+
+{#snippet choiceRow(choice: RelayChoice)}
+  <li
+    class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-(--space-3) gap-y-(--space-1) py-(--space-2) @max-md:grid-cols-1 [&+&]:border-t [&+&]:border-(--border-hairline)"
+    data-relay-choice={choice.machineId}
+  >
+    <div class="flex min-w-0 flex-col gap-(--space-1)">
+      <span
+        class="min-w-0 text-label text-(--ink-strong) [overflow-wrap:anywhere]"
+        >{choice.name}</span
+      >
+      <p class="min-w-0 text-meta text-(--ink-muted) [overflow-wrap:anywhere]">
+        <code class="font-mono text-(--ink-strong)">{choice.address}</code
+        >{#if choice.lan}{`, ${words.behindRouter}`}{/if}{#if !choice.online}{` · ${words.offline}`}{/if}
+      </p>
+    </div>
+    <Button
+      class="@max-md:w-full"
+      disabled={pending !== null}
+      label={words.runHere}
+      onclick={() => run({ act: "pick", machineId: choice.machineId })}
+      pending={pending === "pick"}
+      size="sm"
+      variant="outline"
+    />
+  </li>
+{/snippet}
+
+{#snippet machineBody(step: Extract<RelayStep, { step: "machine" }>)}
+  {#if step.state === "none"}
+    <p class={NOTE}>
+      {step.notLinux?.length ? words.noneNotLinux(step.notLinux) : words.none}
+    </p>
+  {:else}
+    <ul
+      aria-label={words.machine}
+      class="m-0 flex min-w-0 list-none flex-col p-0"
+    >
+      {#each step.choices ?? [] as choice (choice.machineId)}
+        {@render choiceRow(choice)}
+      {/each}
+    </ul>
+  {/if}
+{/snippet}
+
+{#snippet nameBody(step: Extract<RelayStep, { step: "name" }>)}
+  {#if step.name === ""}
+    <!-- No domain known: the name typed here. -->
+    <p class={NOTE}>{words.nameWhyNone}</p>
+    <Field id="relay-name" label={words.nameLabel}>
+      <Input
+        autocapitalize="off"
+        autocomplete="off"
+        class="w-full max-w-sm"
+        data-relay-name-field
+        id="relay-name"
+        inputmode="url"
+        placeholder={words.namePlaceholder}
+        spellcheck={false}
+        bind:value={typed}
+      />
+    </Field>
+    <div class={CONTROLS}>
       <Button
-        aria-expanded={tokenOpen}
-        label={words.letCawCoAdd}
-        onclick={() => {
-          tokenOpenHere = !tokenOpen;
-        }}
+        disabled={typed.trim() === "" || pending !== null}
+        label={words.useName}
+        onclick={() => run({ act: "name", name: typed.trim() })}
+        pending={pending === "name"}
+        size="sm"
+      />
+      <Button
+        disabled={pending !== null}
+        label={words.skipName}
+        onclick={() => act("skip-name")}
         size="sm"
         variant="secondary"
       />
-    {/if}
-    <Button
-      label={words.skipName}
-      onclick={() => act("skip-name")}
-      size="sm"
-      variant="secondary"
-    />
-  </div>
-  {#if step.state !== "checking" && zone && tokenOpen}
-    <div class="flex min-w-0 flex-col gap-(--space-2)" in:unfold out:unfold>
-      <Field
-        hint={words.tokenHint(zone)}
-        id="relay-token"
-        label={words.tokenLabel}
-      >
-        <Input
-          autocapitalize="off"
-          autocomplete="off"
-          class="w-full"
-          id="relay-token"
-          spellcheck={false}
-          type="password"
-          bind:value={token}
-        />
-      </Field>
-      <div class={CONTROLS}>
-        <Button
-          disabled={token.trim() === ""}
-          label={words.addRecord}
-          onclick={() => onact?.({ act: "add-record", token: token.trim() })}
-          pendingLabel="Adding…"
-          size="sm"
-        />
-      </div>
     </div>
+  {:else}
+    {#if step.state === "checking"}
+      <p class={NOTE}>
+        {words.nameChecking(
+          step.name,
+          step.askedAt === undefined
+            ? undefined
+            : Math.max(0, Math.round((now - step.askedAt) / 1000))
+        )}
+      </p>
+    {:else}
+      <p class={NOTE}>{findingOf(step)}</p>
+      {@render copyable(
+        words.recordLabel,
+        words.record(step.name, machineNow.address),
+        words.copyRecord,
+        false
+      )}
+    {/if}
+    <p class={NOTE}>{words.nameWhy(step.name)}</p>
+    <div class={CONTROLS}>
+      {#if step.state !== "checking" && zone}
+        <Button
+          aria-expanded={tokenOpen}
+          label={words.letCawCoAdd}
+          onclick={() => {
+            tokenOpenHere = !tokenOpen;
+          }}
+          size="sm"
+          variant="secondary"
+        />
+      {/if}
+      <Button
+        disabled={pending !== null}
+        label={words.skipName}
+        onclick={() => act("skip-name")}
+        size="sm"
+        variant="secondary"
+      />
+    </div>
+    {#if step.state !== "checking" && zone && tokenOpen}
+      <div class="flex min-w-0 flex-col gap-(--space-2)" in:unfold out:unfold>
+        <Field
+          hint={words.tokenHint(zone)}
+          id="relay-token"
+          label={words.tokenLabel}
+        >
+          <Input
+            autocapitalize="off"
+            autocomplete="off"
+            class="w-full"
+            data-relay-token
+            id="relay-token"
+            spellcheck={false}
+            type="password"
+            bind:value={token}
+          />
+        </Field>
+        {#if step.tokenWhy}
+          <p class={FAIL} data-relay-token-why>{step.tokenWhy}</p>
+        {/if}
+        <div class={CONTROLS}>
+          <Button
+            disabled={token.trim() === "" || pending !== null}
+            label={words.addRecord}
+            onclick={() => run({ act: "add-record", token: token.trim() })}
+            pending={pending === "add-record"}
+            pendingLabel={words.addingRecord}
+            size="sm"
+          />
+        </div>
+      </div>
+    {/if}
   {/if}
 {/snippet}
 
 {#snippet stepBody(step: RelayStep)}
-  {#if step.step === "name"}
+  {#if step.step === "machine"}
+    {@render machineBody(step)}
+  {:else if step.step === "name"}
     {@render nameBody(step)}
   {:else if step.step === "router"}
     {#if step.state === "refused"}
       <p class={NOTE}>{words.routerRefused}</p>
       {@render copyable(
         words.forwardsLabel,
-        words.forwards(machine.lan ?? machine.address),
+        words.forwards(
+          machineNow.lan ?? machineNow.address,
+          step.http ?? false
+        ),
+        words.copyForwards,
+        false
+      )}
+    {:else if step.state === "partial"}
+      <p class={NOTE}>{words.routerPartial(step.how ?? "UPnP")}</p>
+      {@render copyable(
+        words.forwardsLabel,
+        words.rangeForward(machineNow.lan ?? machineNow.address),
         words.copyForwards,
         false
       )}
@@ -416,9 +635,10 @@
       <p class={NOTE}>{words.routerAsk}</p>
       <div class={CONTROLS}>
         <Button
+          disabled={pending !== null && pending !== "open-ports"}
           label={words.openPorts}
           onclick={() => act("open-ports")}
-          pending={step.state === "asking"}
+          pending={step.state === "asking" || pending === "open-ports"}
           pendingLabel={words.openingPorts}
           size="sm"
           variant="secondary"
@@ -426,7 +646,7 @@
       </div>
     {/if}
   {:else if step.step === "runtime"}
-    <p class={NOTE}>{words.runtimeNote(machine.name)}</p>
+    <p class={NOTE}>{words.runtimeNote(machineNow.name)}</p>
     {@render copyable(
       words.commandLabel,
       words.runtimeCommand(step.lowest),
@@ -435,11 +655,13 @@
     )}
   {:else if step.step === "certificate"}
     {#if step.state === "failed"}
-      <p class={FAIL}>{words.certificateFailed(relayName, step.why ?? "")}</p>
+      <p class={FAIL}>{step.why}</p>
       <div class={CONTROLS}>
         <Button
+          disabled={pending !== null}
           label={words.retry}
           onclick={() => act("retry")}
+          pending={pending === "retry"}
           size="sm"
           variant="secondary"
         />
@@ -449,28 +671,46 @@
     {/if}
   {:else if step.step === "start"}
     {#if step.state === "failed"}
-      <p class={FAIL}>{step.why}</p>
+      <p class={FAIL}>
+        {#if step.command && step.why?.includes(step.command)}
+          {@const at = step.why.indexOf(step.command)}
+          {step.why.slice(0, at)}<code class="font-mono text-(--ink-strong)"
+            >{step.command}</code
+          >{step.why.slice(at + step.command.length)}
+        {:else}
+          {step.why}
+        {/if}
+      </p>
       <div class={CONTROLS}>
         <Button
+          disabled={pending !== null}
           label={words.startAgain}
           onclick={() => act("start-again")}
+          pending={pending === "start-again"}
           size="sm"
           variant="secondary"
         />
       </div>
     {:else}
-      <p class={NOTE}>{step.progress ?? "Starting…"}</p>
+      <p class={NOTE}>{step.progress ?? words.starting}</p>
     {/if}
   {:else if step.step === "prove"}
     {#if step.state === "checking"}
       <p class={NOTE}>{words.proveChecking}</p>
     {:else if step.state === "inside"}
-      <p class={NOTE}>{words.proveInside(machine.name, named)}</p>
+      <p class={NOTE}>
+        {words.proveInside(
+          step.device ?? "",
+          machineNow.name,
+          step.ports ?? ""
+        )}
+      </p>
       <div class="flex">
         <!-- A ghost's ink starts inside its box: it hangs back by its edge
              and padding so its first letter stands on the note's edge. -->
         <Button
           class="-ms-3"
+          disabled={pending !== null}
           label={words.doneForNow}
           onclick={() => act("done-for-now")}
           size="sm"
@@ -479,14 +719,31 @@
       </div>
     {:else}
       <p class={FAIL}>
-        {step.outside
-          ? words.proveFailedOutside(machine.name)
-          : words.proveFailedInside(machine.name)}
+        {#if step.refused}
+          {words.proveRefused}
+        {:else if step.outside}
+          {words.proveFailedOutside(machineNow.name)}
+        {:else}
+          {words.proveFailedInside(machineNow.name)}
+        {/if}
       </p>
       <div class={CONTROLS}>
+        {#if step.refused}
+          <!-- Another secret than the hub's: the start gives it the hub's. -->
+          <Button
+            disabled={pending !== null}
+            label={words.startAgain}
+            onclick={() => act("start-again")}
+            pending={pending === "start-again"}
+            size="sm"
+            variant="secondary"
+          />
+        {/if}
         <Button
+          disabled={pending !== null}
           label={words.checkAgain}
           onclick={() => act("check-again")}
+          pending={pending === "check-again"}
           size="sm"
           variant="secondary"
         />
@@ -497,7 +754,7 @@
 
 {#snippet journey()}
   <section
-    aria-label={STREAM_RELAY_WORDS.title}
+    aria-label={words.title}
     class="@container flex min-w-0 max-w-[72ch] flex-col gap-(--space-2) text-body"
     data-relay-journey
   >
@@ -536,6 +793,7 @@
                   ? "text-(--ink-muted)"
                   : "text-(--ink-strong)",
               ]}
+              data-slot="step-label"
               >{#if SAID[mark]}<span class="sr-only">{SAID[mark]}{" "}</span
                 >{/if}{labelOf(step)}</span
             >
@@ -546,19 +804,26 @@
                 data-slot="step-body"
               >
                 {@render stepBody(step)}
+                {@render refused()}
               </div>
             {/if}
           </li>
         {/each}
       </ol>
+      {#if open === -1}
+        {@render refused()}
+      {/if}
       {#if row}
-        <p class={META}>{words.rowMeta}</p>
+        <p class={META} data-relay-meta>
+          {words.rowMeta(machine?.name ?? null, candidates)}
+        </p>
       {/if}
       {#if later}
         <div class="flex justify-end">
           <Button
             class="-me-3"
-            label={STREAM_RELAY_WORDS.later}
+            disabled={pending !== null}
+            label={words.later}
             onclick={() => act("later")}
             size="sm"
             variant="ghost"
@@ -574,7 +839,7 @@
        one way on. Set up unfolds the journey here; the browser keeps
        running underneath. -->
   <section
-    aria-label={STREAM_RELAY_WORDS.title}
+    aria-label={words.title}
     class="@container flex min-w-0 max-w-[60ch] flex-col items-start gap-(--space-3)"
     data-relay-entry
   >
@@ -595,13 +860,39 @@
         entered = true;
         act("set-up");
       }}
+      pending={pending === "set-up"}
     />
+    {@render refused()}
+  </section>
+{:else if face === "start"}
+  <!-- Settings › Browsers before anyone set it up: why, and Set up. -->
+  <section
+    aria-label={words.title}
+    class="@container flex min-w-0 max-w-[72ch] flex-col gap-(--space-2)"
+    data-relay-start
+  >
+    {@render head(false)}
+    <div class="{UNDER_TITLE} items-start gap-(--space-3)">
+      <p
+        class="text-body text-(--ink-strong) text-pretty [overflow-wrap:anywhere]"
+      >
+        {domain ? words.leadDomain(domain) : words.leadPlain}
+      </p>
+      <Button
+        class="@max-md:w-full"
+        data-relay-set-up
+        label={words.setUp}
+        onclick={() => act("set-up")}
+        pending={pending === "set-up"}
+      />
+      {@render refused()}
+    </div>
   </section>
 {:else if face === "done" && summary}
   <!-- Needs you's ticked row: the relay's tick, where it is live, and where
        it is seen from now on. -->
   <section
-    aria-label={STREAM_RELAY_WORDS.title}
+    aria-label={words.title}
     class="@container flex min-w-0 max-w-[72ch] flex-col gap-(--space-2)"
     data-relay-done
   >
@@ -613,7 +904,9 @@
         {words.doneRow(summary.name ?? summary.machine.address)}
       </p>
       {#if row}
-        <p class={META}>{words.rowMeta}</p>
+        <p class={META} data-relay-meta>
+          {words.rowMeta(summary.machine.name, candidates)}
+        </p>
       {/if}
       <Button
         class="@max-md:w-full"
@@ -625,14 +918,14 @@
     </div>
   </section>
 {:else if face === "summary" && summary}
-  {@const live = portDown ? words.portDown : words.live}
-  <!-- The live relay, one grid: who and where, with Stop and Remove at the
-       trailing edge (last, under everything, in a narrow card, so its state
-       reads before the destructive control); its ports; then each line with
-       its one action in a trailing column of its own, so those actions
-       stand on one edge at one width. -->
+  <!-- The relay once it has gone live, one grid: who and where, with Stop
+       (or Start relay) and Remove at the trailing edge (last, under
+       everything, in a narrow card, so its state reads before the
+       destructive control); its ports; then each line with its one action in
+       a trailing column of its own, so those actions stand on one edge at
+       one width. -->
   <section
-    aria-label={STREAM_RELAY_WORDS.title}
+    aria-label={words.title}
     class="@container min-w-0 max-w-[72ch]"
     data-relay-summary
   >
@@ -643,13 +936,15 @@
         <div class="flex min-w-0 flex-wrap items-center gap-(--space-2)">
           <span
             class="min-w-0 text-label text-(--ink-strong) [overflow-wrap:anywhere]"
-            >{summary.machine.name}</span
+            data-relay-machine>{summary.machine.name}</span
           >
-          <Badge variant={portDown ? "attn" : "done"}><span>{live}</span></Badge
+          <Badge data-relay-state variant={badge.tint}
+            ><span>{badge.said}</span></Badge
           >
         </div>
         <p
           class="min-w-0 text-meta text-(--ink-muted) [overflow-wrap:anywhere]"
+          data-relay-line
         >
           <code class="font-mono text-(--ink-strong)"
             >{summary.machine.address}</code
@@ -661,47 +956,107 @@
       <div
         class="flex flex-wrap items-center gap-(--space-4) @max-md:order-last @max-md:justify-self-start"
       >
+        {#if summary.state === "stopped" || summary.state === "failed"}
+          <Button
+            data-relay-start-again
+            disabled={pending !== null}
+            label={words.startRelay}
+            onclick={() => act("start")}
+            pending={pending === "start"}
+            size="sm"
+            variant="outline"
+          />
+        {:else}
+          <!-- The machine runs one relay command at a time: a stop sent
+               while it starts would wait out the start. -->
+          <Button
+            aria-describedby={busy ? "relay-stop-wait" : undefined}
+            aria-expanded={asking("relay-stop")}
+            class="@max-md:-ms-3"
+            data-relay-stop
+            disabled={asking("relay-stop") || busy}
+            label={words.stop}
+            onclick={() => askStop(summary)}
+            size="sm"
+            variant="ghost"
+          />
+        {/if}
         <Button
-          class="@max-md:-ms-3"
-          label={STREAM_RELAY_WORDS.stop}
-          onclick={() => act("stop")}
-          size="sm"
-          variant="ghost"
-        />
-        <Button
-          label={STREAM_RELAY_WORDS.remove}
-          onclick={() => act("remove")}
+          aria-expanded={asking("relay-remove")}
+          data-relay-remove
+          disabled={asking("relay-remove")}
+          label={words.remove}
+          onclick={() => askRemove(summary)}
           size="sm"
           variant="destructive"
         />
       </div>
-      <ul
-        aria-label={words.portsLabel}
-        class="col-span-full m-0 flex min-w-0 list-none flex-wrap gap-(--space-2) p-0"
-      >
-        {#each summary.ports as port (port.name)}
-          <li>
-            <Badge variant={port.up ? "done" : "fail"}
-              ><span>{port.name} {port.up ? "up" : "down"}</span></Badge
-            >
-          </li>
+      {#if busy}
+        <p
+          class="col-span-full text-meta text-(--ink-muted) text-pretty"
+          data-relay-wait
+          id="relay-stop-wait"
+        >
+          {words.stopWhileStarting}
+        </p>
+      {/if}
+      {#if summary.ports.length > 0}
+        <ul
+          aria-label={words.portsLabel}
+          class="col-span-full m-0 flex min-w-0 list-none flex-wrap gap-(--space-2) p-0"
+          data-relay-ports
+        >
+          {#each summary.ports as port (port.name)}
+            <li>
+              <Badge
+                data-relay-port={port.name}
+                variant={port.up ? "done" : "fail"}
+                ><span>{port.name} {port.up ? "up" : "down"}</span></Badge
+              >
+            </li>
+          {/each}
+        </ul>
+        {#each summary.ports.filter((port) => port.error) as port (port.name)}
+          <p
+            class="col-span-full min-w-0 text-meta text-(--ink-muted) [overflow-wrap:anywhere]"
+            data-relay-port-error={port.name}
+          >
+            <span class="text-(--ink-strong)">{port.name}:</span>
+            {port.error}
+          </p>
         {/each}
-      </ul>
+      {/if}
+      {#if summary.why}
+        <p class="col-span-full {FAIL}" data-relay-why>
+          {#if summary.whyCommand && summary.why.includes(summary.whyCommand)}
+            {@const at = summary.why.indexOf(summary.whyCommand)}
+            {summary.why.slice(0, at)}<code
+              class="font-mono text-(--ink-strong)">{summary.whyCommand}</code
+            >{summary.why.slice(at + summary.whyCommand.length)}
+          {:else}
+            {summary.why}
+          {/if}
+        </p>
+      {/if}
       <div
         class="col-span-full grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-x-(--space-3) gap-y-(--space-2) @max-md:grid-cols-1 @max-md:justify-items-start"
       >
         <p
           class="min-w-0 text-meta text-(--ink-muted) text-pretty [overflow-wrap:anywhere]"
+          data-relay-proven
         >
-          {#if summary.ends}{words.certificateEnds(
-              summary.ends
+          {#if summary.endsAt}{words.certificateEnds(
+              summary.endsAt
             )}{" · "}{/if}{summary.proven
             ? words.provenBy(summary.proven.device, summary.proven.at)
             : words.notProven}
         </p>
         <Button
+          data-relay-check-again
+          disabled={pending !== null || summary.state !== "live"}
           label={words.checkAgain}
           onclick={() => act("check-again")}
+          pending={pending === "check-again"}
           size="sm"
           variant="outline"
         />
@@ -710,12 +1065,22 @@
             {words.noName}
           </p>
           <Button
+            data-relay-add-name
+            disabled={pending !== null}
             label={words.addName}
             onclick={() => act("add-name")}
+            pending={pending === "add-name"}
             size="sm"
             variant="outline"
           />
         {/if}
+      </div>
+      <!-- Under Stop and Remove in every layout: in a narrow card they move
+           last, and the question they ask moves with them. -->
+      <div class="col-span-full min-w-0 @max-md:order-last">
+        {@render refused()}
+        <AskHere {asker} at="relay-stop" />
+        <AskHere {asker} at="relay-remove" />
       </div>
     </div>
   </section>

@@ -124,6 +124,7 @@ import {
   workspaceCacheDir,
   workspaceCacheEnv,
   workspaceCaches,
+  workspaceClaudeTmpDir,
   workspaceDoorDir,
   workspaceMaestroEnv,
   workspaceMaestroHome,
@@ -220,6 +221,8 @@ import {
 
 /** A running boundary, as a harness uses it. */
 export interface Boundary {
+  /** The temp root its sessions' Claude Code CLIs run with (`CLAUDE_CODE_TMPDIR`, core `workspaceClaudeTmpDir`): written on the host, read inside, so a background task's output is there for the session's shell. */
+  readonly claudeTmp: string;
   /** `exec [--session] [--cwd-out FILE] COMMAND`: runs COMMAND inside the boundary, in the caller's directory; a session's command (`--session`) shows the workspace's notice first ({@link noticeOf}). */
   readonly exec: string;
   /** The PreToolUse hook a claude session runs before each tool call ({@link hookScript}). */
@@ -1141,16 +1144,20 @@ const writeWhole = (
  */
 const armHook = (
   id: string,
-  held: Omit<Held, "hook" | "policy">
+  held: Omit<Held, "claudeTmp" | "hook" | "policy">
 ): Promise<Held> => whileArming(id, () => armHookNow(id, held));
 
 /** {@link armHook}'s writes and starts, counted as {@link arming}. */
 const armHookNow = async (
   id: string,
-  held: Omit<Held, "hook" | "policy">
+  held: Omit<Held, "claudeTmp" | "hook" | "policy">
 ): Promise<Held> => {
   const hook = join(stateDir(id), "hook");
   const policy = workspacePolicyFile(id);
+  // The CLI makes its own `claude-<uid>` in it, 0700, and refuses a root it
+  // does not own; inside the boundary it is read only, as the rest of `ro`.
+  const claudeTmp = workspaceClaudeTmpDir(id);
+  await mkdir(claudeTmp, { recursive: true, mode: 0o700 });
   await writeWhole(
     policy,
     `${JSON.stringify(await workspacePolicy({ id, path: held.path }), null, 2)}\n`,
@@ -1179,7 +1186,7 @@ const armHookNow = async (
   await openGitDoor({ id, path: held.path });
   await openGithubDoor(id);
   await watchHost(id, held);
-  const armed: Held = { ...held, hook, policy };
+  const armed: Held = { ...held, claudeTmp, hook, policy };
   await writeWhole(
     join(stateDir(id), "boundary.json"),
     `${JSON.stringify(armed)}\n`,
@@ -4904,8 +4911,8 @@ const ready = (
  * on the boundary's proxy as every other tool is (`NODE_USE_ENV_PROXY`:
  * node's `fetch` and `http`/`https` read `HTTPS_PROXY` and `NO_PROXY` only
  * with it, and a workspace reaches the network through that proxy alone),
- * its scratch dir as `TMPDIR` (by its short name on macOS, `workspaceTmpDir`),
- * the empty git template, git's own system config
+ * its scratch dir as `TMPDIR` (by its short name on macOS, `workspaceTmpDir`)
+ * and no `CLAUDE_CODE_TMPDIR`, the empty git template, git's own system config
  * ({@link gitSystemConfigOf}), the tool and git doors (hub-git.ts
  * `gitDoorEnv`), and `CAWCO_WORKSPACE`, by which a script tells that it runs
  * inside one; never a key agent's socket ({@link AGENT_SOCKET_ENV}).
@@ -4922,6 +4929,9 @@ const ready = (
  */
 const commandEnv = (id: string, clone: string): string[] => [
   `unset ${AGENT_SOCKET_ENV.join(" ")}`,
+  // The session's CLI temp root, read only in here ({@link Boundary.claudeTmp}):
+  // a Claude Code a command starts takes `TMPDIR`, the scratch dir, instead.
+  "unset CLAUDE_CODE_TMPDIR",
   `for name in $(compgen -e); do case $name in ${FORGE_TOKEN_ENV.join(" | ")}) unset "$name" ;; esac; done`,
   ...Object.entries({
     ...workspaceCacheEnv(),
@@ -5836,7 +5846,7 @@ const launch = async (
       "its sandbox's processes could not be found as it started"
     );
   }
-  const held: Omit<Held, "hook" | "policy"> = {
+  const held: Omit<Held, "claudeTmp" | "hook" | "policy"> = {
     exec: join(stateDir(ref.id), "exec"),
     gen,
     pid: proc.pid,

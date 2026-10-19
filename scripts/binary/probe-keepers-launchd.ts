@@ -404,7 +404,8 @@ try {
   );
 
   // 8. A build's keeper removed (bootout: SIGTERM, its own drain): it removes its own endpoint only.
-  await job.remove();
+  // Empty, it lists no child; launchd has no cgroup to read.
+  await job.remove({ children: [] });
   const goneBuild =
     pid !== undefined && (await until(async () => !isAlive(pid), 15_000));
   step(

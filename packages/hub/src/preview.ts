@@ -56,6 +56,7 @@ import {
   PREVIEW_PORTS,
   PREVIEW_PORTS_TEXT,
 } from "./config";
+import type { ArtifactRow } from "./db/artifacts";
 import type { PreviewsDb } from "./db/previews";
 import { DECISION_ASSETS } from "./decision-program";
 import {
@@ -97,6 +98,16 @@ export interface PreviewTarget {
  * so the board, the panel's frames and the session's own port read it as one.
  */
 export const previewTargets = new Map<string, PreviewTarget>();
+
+/** An artifact as its panel's frame names it: with its ask, the head's line under its name, when it has one. */
+export const shownArtifact = (
+  row: Pick<ArtifactRow, "ask" | "id" | "kind" | "name">
+): PreviewFrame["artifact"] => ({
+  id: row.id,
+  kind: row.kind,
+  name: row.name,
+  ...(row.ask ? { ask: row.ask } : {}),
+});
 
 /**
  * A decision page's Preview of a session's dev-server preview or sheet: its
@@ -1387,6 +1398,24 @@ export function createPreviewListeners(
         return { port, origin, host: new URL(origin).host, ...onTailnet };
       }
       return { port, ...onTailnet };
+    },
+
+    /**
+     * Session `instanceId`'s origin as a process on the hub's own machine
+     * dials it: its own port on the listeners' bind address, loopback for a
+     * wildcard. That listener has no lock in either mode, so no ticket.
+     */
+    local(instanceId: string): string {
+      const port = portOf(instanceId);
+      let host = hostname;
+      if (hostname === "0.0.0.0") {
+        host = "127.0.0.1";
+      } else if (hostname === "::") {
+        host = "[::1]";
+      } else if (hostname.includes(":")) {
+        host = `[${hostname}]`;
+      }
+      return `http://${host}:${port}`;
     },
 
     /**

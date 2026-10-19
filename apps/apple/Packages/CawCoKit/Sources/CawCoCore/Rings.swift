@@ -522,7 +522,8 @@ public enum Rings {
 
     /// A name as the usage popover and strip show it (`ShownName`).
     public struct ShownName: Sendable, Hashable {
-        /// The domain's stem ("@gmail"), or "" when the first part says enough.
+        /// The domain's stem ("@gmail"), its organization (" (Acme)") beside an
+        /// account on the same email, or "" when the first part says enough.
         public let domain: String
         public let local: String
 
@@ -535,7 +536,8 @@ public enum Rings {
     }
 
     /// `shownNames`: the first part, then the domain's stem only where an
-    /// ungrouped account shares that first part with another shown with it.
+    /// ungrouped account shares that first part with another shown with it,
+    /// its organization instead where the other signs in as the same email.
     public static func shownNames(_ accounts: [Account], extra: Account?) -> [String: ShownName] {
         let all = accounts + (extra.map { [$0] } ?? [])
         var count: [String: Int] = [:]
@@ -547,9 +549,15 @@ public enum Rings {
             let local = localOf(r)
             var domain = ""
             if !grouped.contains(r.id), (count[local] ?? 0) > 1, let email = r.email, let at = email.lastIndex(of: "@") {
-                var host = String(email[email.index(after: at)...])
-                if let dot = host.lastIndex(of: ".") { host = String(host[..<dot]) }
-                domain = "@\(host)"
+                let twin = (r.nick ?? "").isEmpty
+                    && all.contains { $0.id != r.id && $0.email?.lowercased() == email.lowercased() }
+                if twin, let org = r.org {
+                    domain = " (\(org))"
+                } else {
+                    var host = String(email[email.index(after: at)...])
+                    if let dot = host.lastIndex(of: ".") { host = String(host[..<dot]) }
+                    domain = "@\(host)"
+                }
             }
             out[r.id] = ShownName(domain: domain, local: local)
         }

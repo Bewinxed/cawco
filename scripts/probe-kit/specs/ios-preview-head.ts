@@ -406,6 +406,8 @@ async function onDevice(
     await Bun.sleep(4000);
     const made = await call(fleet, session, CREATE, {
       kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
       name: NAME,
       html: PAGE,
     });

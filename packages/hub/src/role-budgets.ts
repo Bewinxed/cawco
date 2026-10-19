@@ -256,11 +256,27 @@ import type { Tasks } from "./tasks";
  * delegate 9,792, lead 18,044, web-facing 3,149 measured beside `verify`). Raised
  * deliberately, by that, for the worker, the delegate and the lead;
  * web-facing fits.
+ * 2026-10-19, after it: artifact_create's `to: "parent"` hands up unopened
+ * (the owner's "this just showed up" on a delegate's canvas): its sentence
+ * says the parent opens it with artifact_show and the delegate keeps update
+ * and read, no longer show. About 15 tokens for the delegate (9,807
+ * measured beside `browser_ask`). Raised deliberately, by that; the worker
+ * and the lead have no parent and do not change.
+ * 2026-10-19, after `to: "parent"`: every artifact carries its ask (the
+ * artifact purpose spec, the owner's "any agent trying to use the artifact
+ * tool to show me something actually has something for me to do"):
+ * artifact_create's `does` and `ask` in place of `about`, its description
+ * rewritten around what the person does there and the nothing branch,
+ * artifact_update's `ask`, artifact_list's `does`, `ask` and `sent`, and the
+ * group line's pointer to the `show` skill, each the spec's own words. About
+ * 157 tokens for the worker, the delegate and the lead (worker 27,572,
+ * delegate 9,964, lead 18,201 measured beside `to: "parent"`). Raised
+ * deliberately, by that, for each.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 27_420,
-  delegate: 9800,
-  lead: 18_050,
+  worker: 27_580,
+  delegate: 9970,
+  lead: 18_210,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

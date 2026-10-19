@@ -30,6 +30,18 @@ export const sheetWords = {
   serverDownTitle: (port: number) => `The server on port ${port} isn't running`,
   /** The line under it, in plain words; the server's own words stand under Show details. */
   serverDownLine: "It stopped before it answered. Try again starts it again.",
+  /** Where the page would be, when the stage stood on its way past the time it is given to serve (core `STAGE_READY_MS`) and the canvas never drew. */
+  neverDrawnTitle: "The canvas couldn't be drawn",
+  /** The line under it, in plain words: how long it was given, then the two ways out; the stage's own words stand under Show details. */
+  neverDrawnLine: (seconds: number) =>
+    `The stage never answered within ${seconds}s. Try again starts it again, or remove the canvas.`,
+  /** The way out besides Try again: the canvas leaves the panel, once asked in place. */
+  remove: "Remove",
+  removeTitle: (name: string) => `Remove ${name}?`,
+  removeBody:
+    "It leaves the panel, with its pins. Its states file stays, and the session can open it again.",
+  removeConfirm: "Remove canvas",
+  removing: "Removing…",
   tryAgain: "Try again",
   /** Try again's words while the stage starts again. */
   tryingAgain: "Starting…",

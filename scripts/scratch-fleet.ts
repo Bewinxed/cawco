@@ -764,6 +764,111 @@ function shuffledHex(): string[] {
 }
 
 /**
+ * Every browser the agent whose HOME is `dir` recorded, gone: its container
+ * removed with its volume, its local Chromium stopped. Read from that agent's
+ * own records (agent browser/state.ts, `<HOME>/.local/share/cawco/browsers/
+ * <slug>/record.json`), each for exactly what it names:
+ * - a project's browser by the agent's own `ContainerHost.remove`: the
+ *   containers labelled with its key (a project id this fleet's hub made, so
+ *   no other fleet's) and the volume its record names;
+ * - the machine's browser (`machine:scratch-fleet`, the one machine id every
+ *   scratch fleet has, so two fleets at once share its label) by the
+ *   container id and the volume its own record names, and nothing else;
+ * - a local Chromium by `LocalHost.stop`, which signals it only once its
+ *   recorded identity matches (core signal.ts `identifiedPid`).
+ * Nothing is matched by a name's pattern: the live fleet runs browsers named
+ * the same way on the same runtime. A folder with no records is left as is.
+ */
+async function removeFleetBrowsers(dir: string): Promise<void> {
+  const root = join(dir, ".local", "share", "cawco", "browsers");
+  const names = await readdir(root).catch(() => [] as string[]);
+  if (names.length === 0) {
+    return;
+  }
+  type Record = import("../packages/agent/src/browser/state").BrowserRecord;
+  const records = (
+    await Promise.all(
+      names.map((name) =>
+        readFile(join(root, name, "record.json"), "utf8").then(
+          (text) => JSON.parse(text) as Record,
+          () => undefined
+        )
+      )
+    )
+  ).filter((record): record is Record => !!record?.key);
+  if (records.length === 0) {
+    return;
+  }
+  const { findRuntime } = await import("../packages/agent/src/browser/runtime");
+  const runtime = records.some((one) => one.container)
+    ? await findRuntime()
+    : undefined;
+  for (const record of records) {
+    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
+    const gone = await removeBrowser(record, runtime).catch(
+      (error: unknown) =>
+        `not removed: ${error instanceof Error ? error.message : String(error)}`
+    );
+    if (gone) {
+      console.log(`… browser ${record.key}: ${gone}`);
+    }
+  }
+}
+
+/** One recorded browser removed as {@link removeFleetBrowsers} says; what went, or nothing when there was nothing. */
+async function removeBrowser(
+  record: import("../packages/agent/src/browser/state").BrowserRecord,
+  runtime:
+    | Awaited<
+        ReturnType<
+          typeof import("../packages/agent/src/browser/runtime").findRuntime
+        >
+      >
+    | undefined
+): Promise<string | undefined> {
+  const gone: string[] = [];
+  if (record.local) {
+    const { LocalHost } =
+      await import("../packages/agent/src/browser/local-host");
+    await new LocalHost().stop(record);
+    gone.push("its local Chromium stopped");
+  }
+  if (!record.container) {
+    return gone.join(", ") || undefined;
+  }
+  if (!runtime || "missing" in runtime) {
+    gone.push(
+      `its container not removed: ${runtime && "missing" in runtime ? runtime.missing : "no runtime"}`
+    );
+    return gone.join(", ");
+  }
+  if (record.key.startsWith("project:")) {
+    const { ContainerHost } =
+      await import("../packages/agent/src/browser/container-host");
+    await new ContainerHost(runtime).remove(record);
+    gone.push("its container and volume removed");
+  } else {
+    const absent = (error: unknown) => {
+      if ((error as { statusCode?: number }).statusCode !== 404) {
+        throw error;
+      }
+    };
+    await runtime.docker
+      .getContainer(record.container.id)
+      .remove({ force: true })
+      .catch(absent);
+    await runtime.docker
+      .getVolume(record.container.volume)
+      .remove()
+      .catch(absent);
+    gone.push(
+      `its container ${record.container.id.slice(0, 12)} and volume ${record.container.volume} removed`
+    );
+  }
+  return gone.join(", ") || undefined;
+}
+
+/**
  * The folders one fleet made, each stamped with its owner as it is made, and
  * what its setup started that has to stop with them. They go with the fleet
  * however it ends: `clean`, a setup that throws (`scratchFleet`), this
@@ -850,7 +955,17 @@ class FleetDirs {
     this.#stops.push(stop);
   }
 
-  /** Stops what the setup started and deletes every folder. */
+  /** Every browser this fleet's agents recorded, removed while their records stand ({@link removeFleetBrowsers}). */
+  async removeBrowsers(): Promise<void> {
+    for (const dir of this.dirs) {
+      // biome-ignore lint/performance/noAwaitInLoops: one folder's browsers at a time
+      await removeFleetBrowsers(dir).catch((error: unknown) =>
+        console.log(`… browsers under ${dir} not removed: ${String(error)}`)
+      );
+    }
+  }
+
+  /** Stops what the setup started, removes its browsers and deletes every folder. */
   async remove(): Promise<void> {
     LIVE.delete(this);
     for (const stop of this.#stops.splice(0)) {
@@ -859,6 +974,7 @@ class FleetDirs {
         .then(stop)
         .catch(() => undefined);
     }
+    await this.removeBrowsers();
     for (const dir of this.dirs.splice(0)) {
       // biome-ignore lint/performance/noAwaitInLoops: a handful of dirs
       await rm(dir, { recursive: true, force: true });
@@ -960,10 +1076,15 @@ process.on("exit", removeLive);
 for (const [name, number] of Object.entries(END_SIGNALS)) {
   const signal = name as keyof typeof END_SIGNALS;
   const onSignal = () => {
-    removeLive();
-    if (process.listenerCount(signal) === 1) {
-      process.exit(128 + number);
-    }
+    // The browsers first, while the records that name them stand.
+    Promise.allSettled([...LIVE].map((one) => one.removeBrowsers())).finally(
+      () => {
+        removeLive();
+        if (process.listenerCount(signal) === 1) {
+          process.exit(128 + number);
+        }
+      }
+    );
   };
   process.on(signal, onSignal);
 }
@@ -1059,6 +1180,10 @@ export async function sweepDeadFleets(): Promise<string[]> {
         ) {
           continue;
         }
+        // A fleet that died (a SIGKILL) left its browsers too.
+        await removeFleetBrowsers(dir).catch((error: unknown) =>
+          console.log(`… browsers under ${dir} not removed: ${String(error)}`)
+        );
         await rm(dir, { recursive: true, force: true });
         forgetSessiondLink(dir);
         removed.push(dir);
@@ -1582,15 +1707,21 @@ async function standUp(
   let launches = 0;
   /**
    * Starts `role`, under `wrap` when given ({@link serviceSpawn}), with
-   * `overrides` laid over the fleet's environment.
+   * `overrides` laid over the fleet's environment: a name set to `undefined`
+   * is left out of it.
    */
   const launch = (
     role: Role,
     wrap: string[] = [],
-    overrides: Record<string, string> = {}
+    overrides: Record<string, string | undefined> = {}
   ) => {
     launches += 1;
     const err = join(sandbox, `${role}-${launches}.err`);
+    const laid = Object.fromEntries(
+      Object.entries({ ...env, ...overrides }).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined
+      )
+    );
     const child = serviceSpawn(
       root,
       role,
@@ -1600,8 +1731,7 @@ async function standUp(
         // clone, whose `.opencode` a workspace boundary holds read-only (EROFS).
         cwd: role === "sessiond" ? sandbox : root,
         env: {
-          ...env,
-          ...overrides,
+          ...laid,
           [STAND_INS_ENV]: JSON.stringify(standIns),
           TMPDIR: tmpFor(role),
         },
@@ -2459,6 +2589,8 @@ async function standUp(
       console.log(`… pid ${child.pid} of an added machine stopped`);
     }
     await stop("agent");
+    // Every browser its agents made, now that none can make another.
+    await dirs.removeBrowsers();
     await stop("hub");
     await killSessiond();
     await mock.stop(true);

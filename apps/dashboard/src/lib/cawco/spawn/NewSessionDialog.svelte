@@ -1,7 +1,7 @@
 <script lang="ts">
   import {
     type AccountProvider,
-    accountName,
+    accountNameAmong,
     CLAUDE_PROVIDER,
     contextFitRefusal,
     type EffortLevel,
@@ -489,7 +489,7 @@
         }
         return {
           id: one.id,
-          name: accountName(one),
+          name: accountNameAmong(one, cawco.accounts?.accounts ?? []),
           nick: one.label,
           email: one.email,
           color: `var(--account-${one.hue})`,

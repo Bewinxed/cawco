@@ -124,6 +124,9 @@ const RULES: readonly [string, RegExp, Access][] = [
 const TAKEOVER_ROUTE = /^\/api\/browsers\/[^/]+\/(?:takeover|handback)$/;
 const TAKEOVER_REFUSED = "Only the person takes over";
 
+/** A browser view's routes (browser-routes.ts), where the view's own client sends a Bearer that is no credential of the hub's. */
+const BROWSER_VIEW = /^\/ws\/browser\/[^/]+\/[^/]+\/(?:api(?:\/.*)?|cdp)$/;
+
 /** Machine routes that name a machine: a machine reaches them for itself alone. */
 const OWN_MACHINE: readonly RegExp[] = [
   /^\/api\/binary-updates\/machines\/([^/]+)\/state$/,
@@ -451,10 +454,15 @@ export const createHubAuth = ({
     }
     const authorization = header("authorization");
     if (authorization?.startsWith("Bearer ")) {
-      return {
-        kind: "session",
-        instanceId: session(authorization)?.instanceId ?? null,
-      };
+      const named = session(authorization)?.instanceId;
+      // A browser view's neko client sends a Bearer of its own making, which
+      // the view's routes swap for the viewer's neko session
+      // (browser-routes.ts): there, one that names no session is no
+      // credential, and the request is the one it would be without it. A
+      // session's own credential is that session there as everywhere.
+      if (named || !BROWSER_VIEW.test(path)) {
+        return { kind: "session", instanceId: named ?? null };
+      }
     }
     const token = ownerTokenOf(authorization, header("cookie"));
     const device = token ? deviceOf(token, address) : undefined;

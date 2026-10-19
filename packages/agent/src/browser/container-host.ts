@@ -23,8 +23,9 @@
 import { randomBytes } from "node:crypto";
 import { readWithin } from "@cawco/core/bounded";
 import type { BrowserRelay } from "@cawco/core/browser";
-import { browserSlug } from "@cawco/core/browser";
+import { BROWSER_SCREEN, browserSlug } from "@cawco/core/browser";
 import type { MediaPath } from "@cawco/core/capabilities";
+import { stunServer } from "@cawco/core/stream-relay";
 import type Docker from "dockerode";
 import { ensureImage } from "./image";
 import {
@@ -88,11 +89,12 @@ const nekoEnv = (
   passwords: { admin: string; user: string },
   relay: BrowserRelay | undefined,
   media: MediaPath,
-  addresses: string[]
+  addresses: string[],
+  stun: string
 ): string[] => {
   const port = portsOf(record).media;
   return [
-    "NEKO_DESKTOP_SCREEN=1280x800@30",
+    `NEKO_DESKTOP_SCREEN=${BROWSER_SCREEN.width}x${BROWSER_SCREEN.height}@30`,
     "NEKO_SERVER_BIND=0.0.0.0:8080",
     "NEKO_SERVER_CORS=",
     "NEKO_MEMBER_PROVIDER=multiuser",
@@ -113,12 +115,17 @@ const nekoEnv = (
     // A list, space-separated: viper hands the env's string to cast's
     // ToStringSlice, which splits it with strings.Fields.
     ...(addresses.length ? [`NEKO_WEBRTC_NAT1TO1=${addresses.join(" ")}`] : []),
-    ...(relay
-      ? [
-          `NEKO_WEBRTC_ICESERVERS_BACKEND=${JSON.stringify([relay])}`,
-          "NEKO_WEBRTC_ICESERVERS_FRONTEND=[]",
-        ]
-      : []),
+    // Always named: with neither list set neko gives both
+    // stun.l.google.com:19302 (server/internal/config/webrtc.go, "add default
+    // stun server if none are configured"), a server no one chose. Its own
+    // candidates come from the relay and the fleet's STUN server; each
+    // viewer's list is the hub's, put in the offer it relays
+    // (hub browser-routes.ts), so neko gives none of its own.
+    `NEKO_WEBRTC_ICESERVERS_BACKEND=${JSON.stringify([
+      ...(relay ? [relay] : []),
+      { urls: [stun] },
+    ])}`,
+    "NEKO_WEBRTC_ICESERVERS_FRONTEND=[]",
   ];
 };
 
@@ -206,9 +213,11 @@ export class ContainerHost implements BrowserHost {
     const forwarding = await mediaForwarding(endpoint);
     let { media } = forwarding;
     // The same image, published on the record's ports, the media port
-    // published for what the runtime forwards now, and its relay credential
-    // good for a day more (or no relay asked for): the container as it is. Otherwise a new one on the same volume,
-    // with the credential just minted.
+    // published for what the runtime forwards now, made with the STUN server
+    // named now, and its relay credential good for a day more (or no relay
+    // asked for): the container as it is. Otherwise a new one on the same
+    // volume, with the credential just minted. One made before it named its
+    // STUN server has neko's own default in it, and is made again.
     const relayHolds =
       !options.relay ||
       (record.relayUrls?.join(" ") === options.relay.urls.join(" ") &&
@@ -221,6 +230,7 @@ export class ContainerHost implements BrowserHost {
       kept.ports?.http === published.http &&
       kept.ports?.devtools === published.devtools &&
       kept.ports?.media === published.media &&
+      kept.stun === stunServer() &&
       relayHolds
         ? await this.#docker
             .getContainer(kept.id)
@@ -328,12 +338,20 @@ export class ContainerHost implements BrowserHost {
   ): Promise<NonNullable<BrowserRecord["container"]>> {
     const { http, devtools, media: port } = portsOf(record);
     const passwords = { admin: password(), user: password() };
+    const stun = stunServer();
     const protocols = mediaProtocols(media);
     const created = await this.#docker.createContainer({
       name: containerName(record),
       Image: image,
       Labels: { [BROWSER_LABEL]: record.key },
-      Env: nekoEnv(record, passwords, relay, media, await machineAddresses()),
+      Env: nekoEnv(
+        record,
+        passwords,
+        relay,
+        media,
+        await machineAddresses(),
+        stun
+      ),
       ExposedPorts: {
         "8080/tcp": {},
         "9222/tcp": {},
@@ -368,6 +386,8 @@ export class ContainerHost implements BrowserHost {
       image,
       media,
       ports: { http, devtools, media: port },
+      runtime: { kind: this.#runtime.kind, endpoint: this.#runtime.endpoint },
+      stun,
       volume,
       adminPassword: passwords.admin,
       userPassword: passwords.user,
@@ -424,15 +444,22 @@ export class ContainerHost implements BrowserHost {
   }
 }
 
-/**
- * A neko session token for the browser: the daemon's own as admin, or a
- * viewer's (the hub's, for a person watching). neko answers it in the
- * login's body while its cookie is off.
- */
+/** A neko session token for the browser, as {@link nekoSession} makes it. */
 export const nekoLogin = async (
   record: BrowserRecord,
   as: "admin" | "viewer"
-): Promise<string> => {
+): Promise<string> => (await nekoSession(record, as)).token;
+
+/**
+ * A new neko session for the browser, its id and its token: the daemon's own
+ * as admin, or a viewer's (a person watching through the hub). Each login is
+ * a session of its own (neko's multiuser provider names it `<username>-<uid>`).
+ * neko answers the token in the login's body while its cookie is off.
+ */
+export const nekoSession = async (
+  record: BrowserRecord,
+  as: "admin" | "viewer"
+): Promise<{ id: string; token: string }> => {
   if (!record.container) {
     throw new Error(`${record.key} runs on no container.`);
   }
@@ -460,9 +487,14 @@ export const nekoLogin = async (
       `neko refused the ${as} login (HTTP ${response.status}): ${(await response.text()).trim()}`
     );
   }
-  const { token } = (await response.json()) as { token?: string };
-  if (!token) {
-    throw new Error(`neko answered the ${as} login with no token.`);
+  const { id, token } = (await response.json()) as {
+    id?: string;
+    token?: string;
+  };
+  if (!(id && token)) {
+    throw new Error(
+      `neko answered the ${as} login with no session id or token.`
+    );
   }
-  return token;
+  return { id, token };
 };

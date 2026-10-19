@@ -300,7 +300,13 @@ const run = async (kit: Kit) => {
   const session = await fleet.spawn("claude", "Pins held", fleet.repo);
   const { id } = await fleet.api<{ id: string }>(
     `/api/instances/${session}/artifacts`,
-    { kind: "page", name: "pins-held", html: PAGE }
+    {
+      kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "pins-held",
+      html: PAGE,
+    }
   );
   const at = { base, fleet, id, kit, session };
   const hub = await pinned(at);
@@ -312,7 +318,13 @@ const run = async (kit: Kit) => {
   }
   const none = await fleet.api<{ id: string }>(
     `/api/instances/${session}/artifacts`,
-    { kind: "page", name: "pins-none", html: PAGE }
+    {
+      kind: "page",
+      does: "judge",
+      ask: "Judge this page: pin anything that reads wrong",
+      name: "pins-none",
+      html: PAGE,
+    }
   );
   await nothing({ ...at, id: none.id });
   await rejoined(at);

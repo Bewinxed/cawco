@@ -5,6 +5,7 @@ import type {
   FleetMcpServer,
   FleetPlugin,
   FleetSkillMeta,
+  FleetSyncReport,
   MarketplaceLink,
   MarketplaceRead,
 } from "./fleet";
@@ -48,9 +49,25 @@ export interface FleetMcpFrame {
   servers: FleetMcpServer[];
 }
 
+/**
+ * Machine-originated: the machine's fleet report (what `fleetStatus`
+ * answers), sent unasked when a harness's reading of a fleet MCP server moved
+ * with no fleet change: a server OpenCode held failed connected when CawCo
+ * started it again. The hub keeps it as `agents.fleet`, as it keeps a sync's.
+ */
+export interface FleetReportFrame {
+  instanceId?: undefined;
+  kind: "fleet_report";
+  report: FleetSyncReport;
+}
+
 export interface PreviewFrame {
-  /** The artifact the session's panel shows (Projects spec §5.10). */
-  artifact: { id: string; kind: ArtifactKind; name: string };
+  /**
+   * The artifact the session's panel shows (Projects spec §5.10), with its
+   * ask: the head's line under its name from the first frame, while its
+   * page is still on its way. None on one made before asks were kept.
+   */
+  artifact: { ask?: string; id: string; kind: ArtifactKind; name: string };
   /**
    * Every artifact the session holds, by id, newest first: republished when
    * one is removed, so a panel's open list drops it at once.

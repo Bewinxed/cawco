@@ -316,7 +316,7 @@ enum AccountsProbe {
                 routing.probeRunSave()
                 await until { routing.probeFooter.contains("Saved") || routing.probeRefusal != nil }
                 let held = FleetAccounts.view(hub).flatMap { FleetAccounts.routing($0, provider: FleetAccounts.claude) }
-                say("routing saved", "\(routing.probeFooter) | hub: yours \(held?.yours.strategy ?? "-") delegates \(held?.delegates.strategy ?? "-") wait \(held?.atLimit.waitMinutes ?? -1) order \(FleetAccounts.view(hub).map { FleetAccounts.accounts($0, provider: FleetAccounts.claude).map(FleetAccounts.name) } ?? [])")
+                say("routing saved", "\(routing.probeFooter) | hub: yours \(held?.yours.strategy ?? "-") delegates \(held?.delegates.strategy ?? "-") wait \(held?.atLimit.waitMinutes ?? -1) order \(FleetAccounts.view(hub).map { view in FleetAccounts.accounts(view, provider: FleetAccounts.claude).map { FleetAccounts.name($0, among: view.accounts) } } ?? [])")
                 await until { routing.view.window == nil }
                 await wait(0.6)
             }
