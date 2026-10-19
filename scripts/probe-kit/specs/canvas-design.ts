@@ -194,7 +194,13 @@ interface PageRead {
   bandStripApart: boolean;
   bodyFont: string;
   canvasWell: [string, string];
-  chip: { after: number; h: number; radius: string; edge: number } | null;
+  chip: {
+    after: number;
+    h: number;
+    radius: string;
+    edge: number;
+    fill: [string, string];
+  } | null;
   current: {
     bg: [string, string];
     ink: [string, string];
@@ -311,6 +317,11 @@ async function readCanvas(page: Page): Promise<PageRead> {
         after:
           after.content === "none" ? 0 : Number.parseFloat(after.height) || 0,
         edge: w.__contrast(edge, getComputedStyle(head).backgroundColor),
+        // The option chip's recessed fill (DESIGN.md, Permission gate: "a recessed fill"), never a toggle's pressed step.
+        fill: [
+          w.__rgb(getComputedStyle(chosen).backgroundColor),
+          w.__token("--surface-recess", chosen),
+        ],
       };
     }
     const select = root.querySelector<HTMLSelectElement>(".pick select");
@@ -492,12 +503,13 @@ async function canvasLeg(
   );
   if (phone) {
     kit.check(
-      `5a: ${leg}: the chosen chip is 30px at radius-sm, 44px to a finger, its brand-solid edge 3:1 on the strip`,
+      `5a: ${leg}: the chosen chip is 30px at radius-sm, 44px to a finger, on the option chip's surface-recess, its brand-solid edge 3:1 on the strip`,
       !!read.chip &&
         Math.round(read.chip.h) === 30 &&
         read.chip.radius === "8px" &&
         read.chip.after >= 44 &&
-        read.chip.edge >= 3,
+        read.chip.edge >= 3 &&
+        same(read.chip.fill),
       JSON.stringify(read.chip)
     );
     kit.check(
