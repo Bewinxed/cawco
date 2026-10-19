@@ -180,16 +180,15 @@
   });
 </script>
 
-<!-- literal: 2px -->
 <div
   class="group/relay flex flex-col"
   data-instant={instant || undefined}
   data-relay
-  style:--relay-gap="2px"
+  style:--relay-gap="var(--space-row)"
 >
   <div
     aria-label="Next 5 hours: {label}"
-    class="flex h-space-2 gap-(--relay-gap) overflow-hidden rounded-hair bg-border-control hover-none:h-space-3 coarse:h-space-3 max-[641px]:h-space-3"
+    class="flex h-space-2 gap-(--relay-gap) overflow-hidden rounded-hair bg-border-control hover-none:h-space-3 coarse:h-space-3 max-phone:h-space-3"
     data-relay-bar
     role="img"
   >
@@ -235,15 +234,14 @@
           {/snippet}
         </Tip>
       {:else}
-        <!-- literal: -45deg; a span nobody carries is hatched, the groove's
-             paint over the ground's -->
+        <!-- A span nobody carries is hatched, the groove's paint over the
+             ground's. -->
         <span
           data-stop={seg.key === stopKey || undefined}
           aria-hidden="true"
-          class="min-w-0 shrink basis-0 bg-(image:--hatch) transition-[flex-grow] dur-panel ease-out group-data-instant/relay:transition-off data-stop:border-s data-stop:border-s-ink-strong motion-reduce:transition-off"
+          class="min-w-0 shrink basis-0 hatched transition-[flex-grow] dur-panel ease-out group-data-instant/relay:transition-off data-stop:border-s data-stop:border-s-ink-strong motion-reduce:transition-off"
           data-relay-stop={seg.key === stopKey ? "" : undefined}
           style:flex-grow={seg.ms}
-          style:--hatch={"repeating-linear-gradient(-45deg, var(--border-control) 0 1px, var(--ring-ground, var(--surface-raised)) 1px var(--space-1))"}
         ></span>
       {/if}
     {/each}
@@ -262,16 +260,14 @@
         data-tick={tick.hour}
         style:inset-inline-start={tick.at}
       >
-        <!-- literal: 3px -->
         <span
           data-slot="mark"
-          class="h-(--mark-h) w-px flex-none bg-ink-subtle"
+          class="h-space-1 w-px flex-none bg-ink-subtle"
           data-tick-mark
-          style:--mark-h="3px"
         ></span>
         <span
           data-slot="relay-label"
-          class="mt-px mono-figure whitespace-nowrap"
+          class="mono-figure whitespace-nowrap"
           data-tick-label>{tick.text}</span
         >
       </span>

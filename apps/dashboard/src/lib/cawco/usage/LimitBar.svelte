@@ -79,13 +79,11 @@
     style:--share={shown / 100}
   ></span>
   {#if tick !== null}
-    <!-- literal: -1px -->
     <span
       aria-hidden="true"
-      class="absolute inset-y-0 start-(--tick-at) w-space-row translate-x-(--tick-nudge) bg-(color:--tick-paint)"
+      class="absolute inset-y-0 start-(--tick-at) w-space-row -translate-x-1/2 bg-(color:--tick-paint)"
       style:--at={tick}
       style:--tick-at="calc(var(--at) * 100%)"
-      style:--tick-nudge="-1px"
       style:--tick-paint="var(--row-paint, var(--surface-raised))"
     ></span>
   {/if}

@@ -110,12 +110,9 @@
       <div data-slot="sessions" class="flex flex-col gap-space-row">
         {#each ring.sessions as row (row.id)}
           {@const project = projectOf(row)}
-          <!-- literal: 5px, 8px -->
           <div
             data-slot="session"
-            class="type-meta flex justify-between gap-space-4 rounded-sm bg-surface-raised px-(--pad-x) py-(--pad-y) text-ink-row"
-            style:--pad-x="8px"
-            style:--pad-y="5px"
+            class="type-meta flex justify-between gap-space-4 rounded-sm bg-surface-raised px-space-2 py-space-1 text-ink-row"
           >
             <span data-slot="what" class="min-w-0 truncate"
               >{#if project}
@@ -144,7 +141,6 @@
   figure: TileFigure,
   say: Part[]
 )}
-  <!-- literal: 8px, 50%, 3px -->
   <div
     data-slot="tile"
     class="flex min-w-0 flex-col gap-space-3 rounded-md bg-surface-recess p-space-4 transition-[background-color] dur-fade ease-out data-limit:bg-meter-wash-over motion-reduce:transition-off"
@@ -158,19 +154,14 @@
     <div data-slot="head" class="flex min-w-0 items-center gap-space-2">
       <span
         data-slot="dot"
-        class="size-(--dot) flex-none rounded-(--dot-r) bg-(color:--c)"
+        class="size-space-2 flex-none rounded-pill bg-(color:--c)"
         style:--c={ring.color}
-        style:--dot="8px"
-        style:--dot-r="50%"
       ></span>
       <AccountName account={nameFields(ring)} wrap />
     </div>
     <div data-slot="mark" class="flex items-center gap-space-4">
       <Rings {index} reveal {ring} size={56} />
-      <span
-        class="flex min-w-0 flex-col gap-(--figure-gap)"
-        style:--figure-gap="3px"
-      >
+      <span class="flex min-w-0 flex-col gap-space-row">
         <span
           data-slot="value"
           class="type-title num text-ink-strong data-muted:text-ink-muted"
@@ -178,14 +169,11 @@
             ? true
             : undefined}
           >{#if figure.back}
-            <!-- literal: 0.25em, -0.1em, 0.8em -->
+            <!-- mark-line: a mark set in running text, beside the figure's digits -->
             <span
               aria-hidden="true"
-              class="me-(--glyph-gap) inline-grid align-(--glyph-lift) text-ink-muted"
-              style:--glyph-gap="0.25em"
-              style:--glyph-lift="-0.1em"
-              style:--glyph-size="0.8em"
-              ><IconRefresh class="size-(--glyph-size)" /></span
+              class="me-space-1 inline-grid size-icon-md align-middle text-ink-muted"
+              data-box><IconRefresh class="size-full" /></span
             >
           {/if}
           <Figure text={figure.figure} /></span
@@ -213,12 +201,7 @@
     <div class="flex flex-col gap-space-3" data-slot="skeleton-rows">
       <Skeleton height="figure" width="name" />
       <Skeleton class="h-icon-md w-3/4" />
-      <!-- literal: 15.5rem -->
-      <div
-        data-slot="grid"
-        class="grid grid-cols-(--tiles) gap-space-3"
-        style:--tiles="repeat(auto-fill, minmax(15.5rem, 1fr))"
-      >
+      <div data-slot="grid" class="grid grid-cols-usage-tiles gap-space-3">
         {#each [0, 1, 2] as one (one)}
           <Skeleton class="w-full" height="chart" />
         {/each}
@@ -226,55 +209,36 @@
     </div>
   {:else}
     {#if lead}
-      <!-- literal: 6px -->
-      <div
-        data-slot="lead"
-        class="flex flex-col gap-(--lead-gap)"
-        style:--lead-gap="6px"
-      >
-        <!-- literal: 10px -->
-        <p
-          class="flex flex-wrap items-baseline gap-(--big-gap)"
-          style:--big-gap="10px"
-        >
-          <!-- literal: -0.02em, 0.25em, -0.1em, 0.8em -->
+      <div data-slot="lead" class="flex flex-col gap-space-2">
+        <p class="flex flex-wrap items-baseline gap-space-3">
           <span
             data-slot="num"
-            class="type-kpi num tracking-(--kpi-track) text-ink-strong data-muted:text-ink-muted"
+            class="type-kpi num tracking-title text-ink-strong data-muted:text-ink-muted"
             data-lead-figure
             data-muted={claude?.stale || undefined}
-            style:--kpi-track="-0.02em"
             >{#if lead.back}
+              <!-- mark-line: a mark set in running text, beside the figure's digits -->
               <span
                 aria-hidden="true"
-                class="me-(--glyph-gap) inline-grid align-(--glyph-lift) text-ink-muted"
-                style:--glyph-gap="0.25em"
-                style:--glyph-lift="-0.1em"
-                style:--glyph-size="0.8em"
-                ><IconRefresh class="size-(--glyph-size)" /></span
+                class="me-space-1 inline-grid size-icon-lg align-middle text-ink-muted"
+                data-box><IconRefresh class="size-full" /></span
               >
             {/if}
             <Figure text={lead.figure} /></span
           >
           <span class="type-body text-ink-muted">{lead.of}</span>
         </p>
-        <!-- literal: 60ch -->
         <p
           data-slot="sentence"
-          class="type-body max-w-(--measure) text-ink-row"
+          class="type-body max-w-c-measure-short text-ink-row"
           data-lead
-          style:--measure="60ch"
         >
           <Words parts={lead.say} />
         </p>
       </div>
     {/if}
 
-    <!-- literal: 8px -->
-    <div
-      class="mark-line type-label flex items-center gap-(--provider-gap) text-ink-strong"
-      style:--provider-gap="8px"
-    >
+    <div class="mark-line type-label flex items-center gap-space-2 text-ink-strong">
       <span
         data-slot="glyph"
         aria-hidden="true"
@@ -306,12 +270,7 @@
       {/if}
     </div>
     {#if claude}
-      <!-- literal: 15.5rem -->
-      <div
-        data-slot="grid"
-        class="grid grid-cols-(--tiles) gap-space-3"
-        style:--tiles="repeat(auto-fill, minmax(15.5rem, 1fr))"
-      >
+      <div data-slot="grid" class="grid grid-cols-usage-tiles gap-space-3">
         {#each claude.accounts as ring, i (ring.id)}
           {@render tile(
             ring,
@@ -347,11 +306,7 @@
     {/if}
 
     {#if openCode || (spend && spend.all > 0)}
-      <!-- literal: 8px -->
-      <div
-        class="mark-line type-label flex items-center gap-(--provider-gap) text-ink-strong"
-        style:--provider-gap="8px"
-      >
+      <div class="mark-line type-label flex items-center gap-space-2 text-ink-strong">
         <span
           data-slot="glyph"
           aria-hidden="true"
@@ -361,12 +316,7 @@
         <span data-slot="name">opencode Go</span>
       </div>
       {#if openCode}
-        <!-- literal: 15.5rem -->
-        <div
-          data-slot="grid"
-          class="grid grid-cols-(--tiles) gap-space-3"
-          style:--tiles="repeat(auto-fill, minmax(15.5rem, 1fr))"
-        >
+        <div data-slot="grid" class="grid grid-cols-usage-tiles gap-space-3">
           {@render tile(
             openCode,
             0,
@@ -392,11 +342,3 @@
     {/if}
   {/if}
 </section>
-
-<style>
-  /* residual: foreign-dom */
-  [data-slot="glyph"] :global(svg) {
-    inline-size: 100%;
-    block-size: 100%;
-  }
-</style>

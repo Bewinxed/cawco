@@ -220,23 +220,14 @@
       The spend for {projectName} could not be read: {refused}
     </p>
   {:else if !spend}
-    <!-- literal: 9.5rem -->
-    <div
-      class="grid grid-cols-(--tiles) gap-space-3"
-      style:--tiles="repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr))"
-    >
+    <div class="grid grid-cols-stat-tiles gap-space-3">
       {#each [0, 1, 2, 3, 4] as i (i)}
         <Skeleton class="h-c-stat-h" radius="tile" />
       {/each}
     </div>
     <Skeleton height="chart" radius="card" />
   {:else}
-    <!-- literal: 9.5rem -->
-    <div
-      class="grid grid-cols-(--tiles) gap-space-3"
-      style:--tiles="repeat(auto-fit, minmax(min(100%, 9.5rem), 1fr))"
-      in:appear
-    >
+    <div class="grid grid-cols-stat-tiles gap-space-3" in:appear>
       <StatTile label="Today" value={usd(spend.todayUsd)} />
       <StatTile label="This month" value={usd(spend.monthUsd)} />
       <StatTile
@@ -510,7 +501,7 @@
                   >
                     <a
                       data-slot="name"
-                      class="type-label block truncate text-ink-row no-underline"
+                      class="type-label block truncate text-ink-row no-underline after:absolute after:inset-0"
                       href="/session/thread:{thread.id}"
                       >Thread · {thread.title}</a
                     >
@@ -610,7 +601,7 @@
                   >
                     <a
                       data-slot="name"
-                      class="type-label block truncate text-ink-row no-underline"
+                      class="type-label block truncate text-ink-row no-underline after:absolute after:inset-0"
                       href="/project/{encodeURIComponent(
                         projectId
                       )}?task={attempt.taskId}"
@@ -719,12 +710,3 @@
     {/if}
   {/if}
 </section>
-
-<style>
-  /* residual: pseudo */
-  a[data-slot="name"]::after {
-    position: absolute;
-    inset: 0;
-    content: "";
-  }
-</style>
