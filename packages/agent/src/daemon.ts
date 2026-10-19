@@ -3250,12 +3250,12 @@ export const startDaemon = (rediscover = false) =>
     });
     // The records' watch and tick end with the daemon's scope, and one that
     // is still starting as it ends is stopped the moment it is ready.
-    let stopBrowsers: (() => void) | undefined;
+    let unwatchBrowsers: (() => void) | undefined;
     let browsersEnded = false;
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         browsersEnded = true;
-        stopBrowsers?.();
+        unwatchBrowsers?.();
       })
     );
     yield* Effect.forkScoped(
@@ -3271,7 +3271,7 @@ export const startDaemon = (rediscover = false) =>
           .then(() => watchBrowsers())
           .then(
             (stop) => {
-              stopBrowsers = stop;
+              unwatchBrowsers = stop;
               if (browsersEnded) {
                 stop();
               }
