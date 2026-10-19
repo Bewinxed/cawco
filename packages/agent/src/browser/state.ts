@@ -53,10 +53,10 @@ export interface BrowserRecord {
     volume: string;
   };
   /**
-   * The host it was made on, for good: a browser never moves between hosts,
-   * since its sign-ins are that host's profile (a volume, a local profile
-   * dir). Only a browser made for the first time picks its host from what
-   * answers then.
+   * The host it runs on. A browser made for the first time picks it from
+   * what answers then; one made on the local host moves into a container
+   * once a runtime answers, its sign-ins carried (browsers.ts
+   * `moveIntoContainer`), and a container browser stays one for good.
    */
   host: BrowserHostKind;
   key: BrowserKey;

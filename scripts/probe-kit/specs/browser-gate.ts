@@ -37,25 +37,75 @@
  * runtime going away leaves it: the browser stays on the container host,
  * refused with the runtime's name, its container and volume kept. With the
  * runtime answering again it is removed (container and volume gone), and
- * made afresh with the runtime hidden it is made on the local host.
+ * made afresh with the runtime hidden it is made on the local host. After
+ * the local leg, an httpOnly cookie and a localStorage item are set on the
+ * local host over its DevTools; the runtime answers again, the browser moves
+ * into a container at rest, and both are read back from the container's
+ * Chromium over its own DevTools (never the gate), the local profile gone.
  *
  * Run on the host, outside every workspace boundary (it starts two, and a
  * boundary hides the runtime's socket):
  *
  *   bun scripts/probe-kit/run.ts browser-gate
  */
-import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { CdpLink } from "../../../packages/agent/src/browser/cdp-takeover";
 import { GATE_WORDS } from "../../../packages/agent/src/browser/gate";
 import { resolveMcpLauncher } from "../../../packages/agent/src/mcp-launcher";
 import {
   type BrowserKey,
   type BrowserRow,
+  browserSlug,
   SHIELD_WORDS,
 } from "../../../packages/core/src/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
+
+/**
+ * A page of `link`'s Chromium loaded at `url`, `expression` evaluated there
+ * once the page stands at it (`Page.navigate` answers as the navigation
+ * commits, before the document's context is the one evaluated in), and its
+ * value. A navigation that fails says why.
+ */
+const evaluateAt = async (
+  link: CdpLink,
+  url: string,
+  expression: string
+): Promise<unknown> => {
+  const { targetId } = await link.call("Target.createTarget", {
+    url: "about:blank",
+  });
+  const session = await link.attach(String(targetId));
+  try {
+    const { errorText } = await link.call("Page.navigate", { url }, session);
+    if (errorText) {
+      throw new Error(`${url} did not load: ${String(errorText)}`);
+    }
+    await until(
+      `the page at ${url}`,
+      async () =>
+        (
+          (await link.call(
+            "Runtime.evaluate",
+            { expression: "location.href", returnByValue: true },
+            session
+          )) as { result?: { value?: unknown } }
+        ).result?.value,
+      (href) => href === url,
+      15_000
+    );
+    const { result } = await link.call(
+      "Runtime.evaluate",
+      { expression, returnByValue: true, awaitPromise: true },
+      session
+    );
+    return (result as { value?: unknown } | undefined)?.value;
+  } finally {
+    await link.call("Target.closeTarget", { targetId });
+  }
+};
 
 /** How the gate host prefixes its answers. */
 const HOST_LINE = "GATE-HOST ";
@@ -797,6 +847,101 @@ const run = async (kit: Kit): Promise<void> => {
     await gateChecks(kit, gateHost, key, gatePort, "local", who, npx);
     shell.local = { devtools: localPorts.devtools, socket };
     await shellChecks(kit, "local");
+
+    // The runtime installed: the local browser moves into a container, its
+    // sign-ins carried. A cookie and a localStorage item are set on the local
+    // host over its own DevTools (the daemon's way in, never the gate), and
+    // read back the same way from the container's Chromium.
+    const carried = `carried-${Date.now()}`;
+    const signedIn = await CdpLink.open(
+      `http://127.0.0.1:${localPorts.devtools}`
+    );
+    try {
+      await signedIn.call("Storage.setCookies", {
+        cookies: [
+          {
+            name: "cawco-carried",
+            value: carried,
+            url: "https://example.com/",
+            secure: true,
+            httpOnly: true,
+            expires: Math.floor(Date.now() / 1000) + 86_400,
+          },
+        ],
+      });
+      await evaluateAt(
+        signedIn,
+        "https://example.com/",
+        `localStorage.setItem("cawco-carried", ${JSON.stringify(carried)})`
+      );
+    } finally {
+      signedIn.close();
+    }
+    await gateHost.call("runtime", { hidden: false });
+    const moved = await until(
+      `${key} live on the container host`,
+      async () =>
+        (await gateHost.call("record", { key })) as {
+          container?: { ports?: { devtools?: number } };
+          host?: string;
+          state?: string;
+        } | null,
+      (record) => record?.host === "container" && record.state === "live",
+      300_000
+    ).catch(() => null);
+    const at = moved?.container?.ports?.devtools;
+    let read: { cookie?: unknown; item?: unknown } = {};
+    if (at) {
+      const container = await CdpLink.open(`http://127.0.0.1:${at}`);
+      try {
+        const { cookies } = await container.call("Storage.getCookies");
+        const cookie = (
+          (cookies ?? []) as {
+            name: string;
+            value: string;
+            httpOnly: boolean;
+          }[]
+        ).find((one) => one.name === "cawco-carried");
+        read = {
+          cookie,
+          item: await evaluateAt(
+            container,
+            "https://example.com/",
+            `localStorage.getItem("cawco-carried")`
+          ),
+        };
+      } finally {
+        container.close();
+      }
+    }
+    const profile = join(
+      data,
+      "cawco",
+      "browsers",
+      browserSlug(key),
+      "profile"
+    );
+    const profileGone = await stat(profile).then(
+      () => false,
+      () => true
+    );
+    const cookie = read.cookie as
+      { httpOnly?: boolean; value?: string } | undefined;
+    kit.check(
+      `the runtime back: ${key} moves into a container at rest, its httpOnly cookie and localStorage item read back from the container's Chromium over its own DevTools (127.0.0.1:${at}), and its local profile (${profile}) gone`,
+      moved?.host === "container" &&
+        cookie?.value === carried &&
+        cookie.httpOnly === true &&
+        read.item === carried &&
+        profileGone,
+      JSON.stringify({
+        host: moved?.host,
+        state: moved?.state,
+        cookie,
+        item: read.item,
+        profileGone,
+      })
+    );
   } finally {
     await gateHost
       .call("runtime", { hidden: false })

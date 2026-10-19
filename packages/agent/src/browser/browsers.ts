@@ -1,13 +1,14 @@
 /**
  * The machine's browsers over both hosts (Projects spec §5.11): a container
  * where the machine's runtime answers, a local Chromium where it has none. A
- * browser is made on the host that answers as it is first made, and stays
- * there for good: its sign-ins are that host's (a container's volume, a
- * local profile dir), so it is never moved, and nothing of it is removed
- * because a runtime was absent for a while (a Mac's agent starting before
- * Colima does). A container browser whose runtime does not answer is not
- * live, and says which runtime is away; it starts again by itself once that
- * runtime answers. The runtime is looked for as the agent starts, every
+ * browser is made on the host that answers as it is first made. One made on
+ * the local host moves into a container once a runtime answers, at rest,
+ * its sign-ins carried by cookie and localStorage (sign-ins.ts), its local
+ * profile removed only once the container holds them. A container browser
+ * stays one for good: nothing of it is removed because a runtime was absent
+ * for a while (a Mac's agent starting before Colima does); while its runtime
+ * does not answer it is not live, and says which runtime is away, and it
+ * starts again by itself once that runtime answers. The runtime is looked for as the agent starts, every
  * minute while a browser waits on it, and every 10 minutes while none
  * answers, so a new install is found without a restart. A browser takes its
  * ports as it first starts, not as it is reserved, and stops after 30
@@ -43,6 +44,12 @@ import { ContainerHost, nekoSession, RELAY_RENEW_MS } from "./container-host";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
 import { findRuntime, type Runtime } from "./runtime";
+import {
+  missingSignIns,
+  readSignIns,
+  type SignIns,
+  writeSignIns,
+} from "./sign-ins";
 import {
   allBrowsers,
   type BrowserHost,
@@ -622,7 +629,138 @@ const backFromAway = async (records: BrowserRecord[]): Promise<void> => {
   }
 };
 
-/** One tick: the runtime again when due, every browser's gate, the records against their hosts, those that waited on the runtime started again, the idle ones down, and the frame. */
+/** When each key's last move into a container failed: it is tried again a recheck later. */
+const moveFailed = new Map<BrowserKey, number>();
+
+/** Whether `record` stands still: on the local host, no take-over held, no agent connected, nothing starting it. */
+const atRest = (record: BrowserRecord): boolean =>
+  record.host === "local" &&
+  !record.takeover &&
+  !gateOf(record.key)?.held &&
+  !starting.has(record.key);
+
+/**
+ * The container `into` names made on `container`, `signIns` written into its
+ * Chromium and read back from it, then its record written: the one write
+ * that changes a moved browser's host. Any step failing removes the
+ * container and volume it made, and says why.
+ */
+const intoContainer = async (
+  container: ContainerHost,
+  into: BrowserRecord,
+  signIns: SignIns
+): Promise<void> => {
+  const { key, relay } = into;
+  let made: BrowserRecord | undefined;
+  try {
+    made = await container.start(into, {
+      ...(relay && relayHolds(relay) ? { relay } : {}),
+      progress: (progress) => {
+        starting.set(key, progress);
+        told();
+      },
+    });
+    const at = container.devtoolsUrl(made);
+    await writeSignIns(at, signIns);
+    const missing = await missingSignIns(at, signIns);
+    if (missing.length > 0) {
+      throw new Error(
+        `the container's Chromium does not hold ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? ` and ${missing.length - 3} more` : ""}`
+      );
+    }
+    await writeBrowser({ ...made, state: "live", lastUsedAt: Date.now() });
+    gateFor(made);
+  } catch (error) {
+    await container
+      .remove(made ?? into)
+      .catch((removing: unknown) =>
+        console.warn(
+          `[browser] ${key}: the container made for its move was not removed: ${why(removing)}`
+        )
+      );
+    throw error;
+  }
+};
+
+/**
+ * `key`'s browser, made on the local host while no runtime answered, moved
+ * into a container now that `answering` does, at rest (`atRest`), under its
+ * lock. Its sign-ins carry by cookie and localStorage (sign-ins.ts): read
+ * from the local Chromium (started for it when asleep), which then stops,
+ * since the container takes the same ports; written into the container's
+ * Chromium once it is live; and read back from it. Only then is the record
+ * written, its host changed this once, and the local profile removed. A move
+ * that fails on the way removes the container and volume made for it and
+ * leaves the record as it was, on the local host.
+ */
+const moveIntoContainer = (
+  key: BrowserKey,
+  answering: Runtime
+): Promise<void> =>
+  withBrowser(key, async () => {
+    const record = await readBrowser(key);
+    if (!(record && atRest(record))) {
+      return;
+    }
+    const container = new ContainerHost(answering);
+    starting.set(key, { state: "starting" });
+    told();
+    try {
+      let from: BrowserRecord = await slotted(record);
+      if (!(from.state === "live" && (await local.running(from)))) {
+        from = await local.start(from, { progress: () => undefined });
+      }
+      const signIns = await readSignIns(local.devtoolsUrl(from));
+      await local.stop(from);
+      const { local: _local, why: _why, runtimeAway: _away, ...kept } = from;
+      await intoContainer(
+        container,
+        { ...kept, host: "container", state: "asleep" },
+        signIns
+      );
+      moveFailed.delete(key);
+      const removed = await local.remove(from).then(
+        () => true,
+        (removing: unknown) => {
+          console.warn(
+            `[browser] ${key}: its local profile was not removed after its move: ${why(removing)}`
+          );
+          return false;
+        }
+      );
+      console.info(
+        `[browser] ${key} moved into a container: ${signIns.cookies.length} cookie(s) and ${signIns.storage.length} origin(s)' localStorage carried${removed ? ", its local profile removed" : ""}`
+      );
+    } catch (error) {
+      moveFailed.set(key, Date.now());
+      console.warn(
+        `[browser] ${key} was not moved into a container, and stays on the local host: ${why(error)}`
+      );
+    } finally {
+      starting.delete(key);
+      told();
+    }
+  });
+
+/** Every local browser moved into a container now that `answering` answers, each at rest, a failed one a recheck later. */
+const moveLocals = async (
+  records: BrowserRecord[],
+  answering: Runtime
+): Promise<void> => {
+  const now = Date.now();
+  for (const record of records) {
+    if (
+      !atRest(record) ||
+      now - (moveFailed.get(record.key) ?? 0) < RUNTIME_RECHECK_MS
+    ) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one browser at a time, each under its own lock.
+    await moveIntoContainer(record.key, answering);
+  }
+};
+
+/** One tick: the runtime again when due, every browser's gate, the records against their hosts, those that waited on the runtime started again, the local ones moved into a container once it answers, the idle ones down, and the frame. */
 const tick = async (): Promise<void> => {
   const records = await allBrowsers();
   const waiting = records.some((record) => record.runtimeAway);
@@ -632,8 +770,10 @@ const tick = async (): Promise<void> => {
   }
   await gatesNow();
   await readBack();
-  if (!("missing" in (await browserRuntime()))) {
+  const found = await browserRuntime();
+  if (!("missing" in found)) {
     await backFromAway(await allBrowsers());
+    await moveLocals(await allBrowsers(), found);
   }
   await idleDown();
   await tell();
