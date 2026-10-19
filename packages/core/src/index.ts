@@ -1473,6 +1473,13 @@ export interface WorkItemSummary {
   queued: { owns: string[]; paused: string | null } | null;
   /** The later item of the same tray the reader said took over its work; null otherwise. */
   replacedBy: string | null;
+  /**
+   * While its account's limit (or a refused sign-in) has stopped its
+   * session: "Stopped at A's limit; continues on B", "…; continues at
+   * 15:40" (core `accountsWords.stalled`). It runs no turn until then; null
+   * otherwise.
+   */
+  stalled: string | null;
   state: "starting" | "running" | "done" | "failed" | "cancelled";
   title: string;
   waitReason: string | null;

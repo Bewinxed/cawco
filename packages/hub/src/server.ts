@@ -198,7 +198,6 @@ import {
   clockWords,
   contextFitRefusal,
   DEFAULT_AT_LIMIT,
-  DELEGATE_WORK,
   delegateAskText,
   deriveTitleFromFirstMessage,
   EFFORT_NONE,
@@ -312,7 +311,6 @@ import {
   validateWorkflow,
   WIRE_PROTOCOL,
   WITHDRAW_PERMISSION,
-  WORK_ITEM_ORIGIN,
   WORKSPACE_CREATE_TIMEOUT_MS,
 } from "@cawco/core";
 import {
@@ -421,6 +419,7 @@ import {
   createAtLimit,
   type Kept,
   refusedUntil,
+  type Stall,
 } from "./at-limit";
 import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
@@ -4296,6 +4295,38 @@ export const createServer = (
    * puts its provider's sessions on the move. Set once the controller exists.
    */
   let accountsMoved = (): void => undefined;
+  /**
+   * A session stopped at its account's limit, in words (the at-limit
+   * controller's `stall`), for its tray chip and `delegate_list`. Set once
+   * the controller exists.
+   */
+  let stallOf = (_instanceId: string): Stall | undefined => undefined;
+  /** Every session the controller has stopped at its limit now. Set once it exists. */
+  let stalledNow = (): string[] => [];
+  /** The words each stopped session's work item last went out with ({@link publishStalls}). */
+  const stallsShown = new Map<string, string>();
+  /**
+   * Each work item whose session's stop at its limit began, changed its
+   * words or ended since it last went out goes out again (work-items
+   * `stallChanged`): its tray chip says it at once.
+   */
+  const publishStalls = (): void => {
+    for (const instanceId of new Set([
+      ...stallsShown.keys(),
+      ...stalledNow(),
+    ])) {
+      const words = stallOf(instanceId)?.words;
+      if (words === stallsShown.get(instanceId)) {
+        continue;
+      }
+      if (words === undefined) {
+        stallsShown.delete(instanceId);
+      } else {
+        stallsShown.set(instanceId, words);
+      }
+      workItems.stallChanged(instanceId);
+    }
+  };
   /** What adding an account set moving, newest first, for the Accounts page (core `RebalanceNotice`). */
   const rebalanceNotices: RebalanceNotice[] = [];
   const REBALANCE_NOTICES_KEPT = 20;
@@ -18800,6 +18831,7 @@ export const createServer = (
       }),
     command: runOnMachine,
     machinePaused: (machineId) => machinePause.words(machineId),
+    stalled: (instanceId) => stallOf(instanceId)?.words,
     machineFree: (machineId) => machinePause.free(machineId),
     // The sweep's wake of work asleep asks the same gate every sender does,
     // and leaves a session to the send already on its way to it.
@@ -20014,6 +20046,7 @@ export const createServer = (
     landingWait: (itemId) => workItems.landingWaitOf(itemId),
     machineName,
     machinePaused: (machineId) => machinePause.words(machineId),
+    stalled: (instanceId) => stallOf(instanceId),
     activity: (row) => {
       const state = followupState(row);
       // The same test the cold check makes: warm mid-turn, unmeasured, or unexpired.
@@ -21940,57 +21973,22 @@ export const createServer = (
         .sendsIn(row.id, ["read", "pending", "failed"])
         .filter((send) => !(send.owed || isKeepAlive(send.body)))
         .at(-1)?.body;
-      if (!body?.origin) {
-        return;
-      }
-      const { content } = body.message;
-      return {
-        origin: body.origin,
-        words:
-          typeof content === "string"
-            ? content
-            : content
-                .flatMap((block) => (block.type === "text" ? [block.text] : []))
-                .join("\n"),
-      };
-    },
-    owedFrom: (row) =>
-      db
-        .owedSends({ instanceId: row.id })
-        .map((send) => send.body?.origin ?? { kind: "human" as const }),
-    // The hub's word to a work item, again: the one send path, which keeps it
-    // while anything still holds the session.
-    nudge: (row, words) => {
-      const sent = deliverSend({
-        verb: "send",
-        machineId: row.machineId,
-        instanceId: row.id,
-        payload: {
-          instanceId: row.id,
-          message: {
-            type: "user",
-            uuid: crypto.randomUUID(),
-            message: { role: "user", content: words },
-            parent_tool_use_id: null,
-            origin: { kind: "system", name: WORK_ITEM_ORIGIN },
-          },
-        },
-      });
-      if (sent?.state === "failed") {
-        console.warn(
-          `[at-limit] ${sessionName(row)}: the hub's word to its work item, sent again after its account's reset, did not go: ${sent.reason ?? "the send failed"}.`
-        );
-      }
+      return body?.origin ? { origin: body.origin } : undefined;
     },
     note: noteAtLimit,
     unnote: unnoteAtLimit,
-    // Whatever it decided, what a session it no longer holds was kept goes.
+    // Whatever it decided, what a session it no longer holds was kept goes,
+    // and each work item whose stop at its limit began, moved or ended goes
+    // out again, its chip saying so.
     changed: () => {
       publishInstances("");
       releaseLimitHeld();
+      publishStalls();
     },
   });
   accountsMoved = atLimit.accountsChanged;
+  stallOf = (instanceId) => atLimit.stall(instanceId);
+  stalledNow = () => atLimit.stalled();
 
   /**
    * Who answers the end of a turn of `instanceId` its live launch's Claude
@@ -26537,11 +26535,6 @@ export const createServer = (
               moveWholeUnderK: t.Integer({ minimum: 0 }),
               // Read by nothing; shipped apps still send it (core AtLimit).
               prepareAtPct: t.Optional(t.Integer({ minimum: 0, maximum: 100 })),
-              // An app that has no control for it sends none, and keeps what
-              // was chosen.
-              delegateWork: t.Optional(
-                t.Union(DELEGATE_WORK.map((one) => t.Literal(one)))
-              ),
             }),
           }),
         },
@@ -26582,9 +26575,7 @@ export const createServer = (
               // Kept for the shipped apps that read it (core AtLimit).
               prepareAtPct:
                 body.atLimit.prepareAtPct ?? DEFAULT_AT_LIMIT.prepareAtPct,
-              delegateWork:
-                body.atLimit.delegateWork ??
-                db.accounts.routing(params.provider).atLimit.delegateWork,
+              delegateWork: DEFAULT_AT_LIMIT.delegateWork,
             },
           };
           db.accounts.setRouting(routing);

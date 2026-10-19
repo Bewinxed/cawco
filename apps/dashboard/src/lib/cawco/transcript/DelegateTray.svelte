@@ -555,6 +555,10 @@
     if (chip.item.machinePaused) {
       return chip.item.machinePaused;
     }
+    // Its account's limit stopped it: where or when it continues, by itself.
+    if (chip.item.stalled) {
+      return chip.item.stalled;
+    }
     switch (chip.tone) {
       case "needs":
         return `needs you, ${questionWords(chip.questions)}`;

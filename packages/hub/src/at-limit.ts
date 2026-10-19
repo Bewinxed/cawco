@@ -6,6 +6,7 @@ import {
   type AccountReading,
   type AtLimit,
   accountName,
+  accountsWords,
   clockWords,
   type LimitWindow,
   modelScope,
@@ -13,7 +14,6 @@ import {
   namedAccount,
   type RebalanceNotice,
   type WaitReason,
-  WORK_ITEM_ORIGIN,
   windowWords,
 } from "@cawco/core";
 import { detach } from "@cawco/core/detach";
@@ -63,18 +63,30 @@ import { isLive } from "./work-items";
  *
  * A turn the hub's own word started is not moved for: it asked nothing worth
  * another account, and a stopped session is woken only by a person or its
- * parent. The one exception is the hub's word to a live work item's session
- * (core `WORK_ITEM_ORIGIN`), answered by the routing's `delegateWork` (core
- * `DelegateWork`): sent again once at the reset (`resume`, held meanwhile and
- * never moved), moved as a person's turn is (`move`), or left (`leave`).
+ * parent. A live work item's session is the exception, whoever started its
+ * refused turn (the hub's "still open", the sleep sweep's wake, a wait's
+ * end, a person, its parent): a delegate's work never sits at its limit as
+ * if it ran. It moves to an account with room, else is held until the
+ * earliest reset and carries on then by itself; what it is sent meanwhile
+ * waits at the hub and goes once it runs. While it is stopped, its tray chip
+ * and `delegate_list` say so ({@link stall}).
  */
 
 export type LimitRow = ReturnType<DbShape["getInstancesByIds"]>[number];
 
-/** The message a session's last turn read: who sent it, and its words. */
+/**
+ * A session stopped at its account's limit, as its tray chip and
+ * `delegate_list` say it (core `accountsWords.stalled`): the words, and
+ * when it carries on (epoch ms) when it waits for a reset.
+ */
+export interface Stall {
+  until?: number;
+  words: string;
+}
+
+/** The message a session's last turn read: who sent it. */
 export interface Handed {
   origin: NeutralOrigin;
-  words: string;
 }
 
 /**
@@ -335,11 +347,6 @@ export interface AtLimitPorts {
   /** What adding an account set moving, for the Accounts page. */
   noticed: (notice: RebalanceNotice) => void;
   /**
-   * Sends `row` the hub's word to its work item again (`words`), as that
-   * word goes (core `WORK_ITEM_ORIGIN`), through the one send path.
-   */
-  nudge: (row: LimitRow, words: string) => void;
-  /**
    * Owes `row` a move to `accountId` at its turn's end, or its next start
    * (server.ts `relaunchAtTurnEnd`, the way a person's move mid-turn waits):
    * `move` is the line written once it has moved; `why` says why it waits.
@@ -352,8 +359,6 @@ export interface AtLimitPorts {
   ) => void;
   /** The account each session owing a move, or with a launch on its way, goes to, by session. */
   owed: () => ReadonlyMap<string, string>;
-  /** Who sent each message kept at the hub for `row` until it can take it, oldest first. */
-  owedFrom: (row: LimitRow) => NeutralOrigin[];
   /**
    * The accounts whose sign-in on `row`'s machine a turn proved lately: one
    * ran there within an access token's lifetime. A carry tries these first.
@@ -368,7 +373,7 @@ export interface AtLimitPorts {
   resume: (row: LimitRow, stopped: "limit" | "signin") => void;
   /**
    * What `row`'s last turn read: the newest message it was handed, who sent
-   * it and its words. Undefined when it was handed none.
+   * it. Undefined when it was handed none.
    */
   startedBy: (row: LimitRow) => Handed | undefined;
   /**
@@ -419,6 +424,12 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   const acting = new Set<string>();
   /** Refused sessions still mid-turn on their machine, by when they stop being looked at. */
   const settling = new Map<string, { timer: HubTimer; until: number }>();
+  /**
+   * Sessions stopped at their account's limit and on their way to another
+   * account, being moved now or once their turn ends: the account each
+   * leaves and the one it goes to ({@link stall}).
+   */
+  const towards = new Map<string, { from: Account; to: Account }>();
 
   const readingOf = (accountId: string): AccountReading | undefined =>
     db.accounts.readings().find((one) => one.accountId === accountId);
@@ -524,21 +535,17 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   /**
    * Holds `row` until `until`, the earliest moment an account takes it
    * again; the line is written once per hold, and again when that moment
-   * moves (another account frees sooner, or a reading moved a reset). With
-   * `nudge`, the hub's word to its work item goes again then, and the hold
-   * never moves it ({@link resumeAtReset}).
+   * moves (another account frees sooner, or a reading moved a reset).
    */
   const hold = (
     row: LimitRow,
     current: Account,
-    decision: Extract<AtLimitDecision, { action: "wait" }>,
-    nudge?: string
+    decision: Extract<AtLimitDecision, { action: "wait" }>
   ): void => {
     const held = db.atLimit.hold(row.id);
     db.atLimit.putHold({
       instanceId: row.id,
       accountId: current.id,
-      ...(nudge === undefined ? {} : { nudge }),
       until: decision.until,
     });
     if (held?.until === decision.until) {
@@ -581,129 +588,27 @@ export const createAtLimit = (ports: AtLimitPorts) => {
   };
 
   /**
-   * A refused turn the hub's own word started ({@link noticeTurn}): left
-   * alone, true, unless it was the hub's word to the session's live work
-   * item, which the routing's `delegateWork` answers: sent again once at the
-   * reset (`resume`, true), or answered as a person's turn is (`move`, false:
-   * the caller moves it).
+   * A refused turn the hub's own word started ({@link noticeTurn}), of a
+   * session with no live work item: left alone until a person or its parent
+   * writes. A live work item's session is never left so: its refused turn
+   * is answered as a person's is, whoever started it.
    */
-  const refusedNotice = (
+  const leftAlone = (
     row: LimitRow,
     current: Account,
     word: Handed
   ): boolean => {
-    const work =
-      word.origin.kind === "system" &&
-      word.origin.name === WORK_ITEM_ORIGIN &&
-      liveWork(row);
-    const how = work
-      ? db.accounts.routing(current.provider).atLimit.delegateWork
-      : "leave";
-    if (how === "resume") {
-      resumeAtReset(row, current, word.words);
-      return true;
-    }
-    if (how === "move") {
+    if (liveWork(row)) {
       console.info(
-        `[at-limit] ${ports.named(row)}'s refused turn was the hub's word to its work item, and the routing moves a delegate's work at its limit, so it is answered as a person's turn is.`
+        `[at-limit] ${ports.named(row)}'s refused turn was the hub's own word, and it is a live work item's session, so it is answered as a person's turn is: moved to an account with room, else held until the earliest reset.`
       );
       return false;
     }
     const name = word.origin.kind === "system" ? word.origin.name : undefined;
     console.info(
-      `[at-limit] ${ports.named(row)}'s refused turn was started by the hub's own word (${name ?? "a notice"}), not by a person or its parent, so it isn't moved for it. It stays on ${accountName(current)} until a person or its parent writes to it${work ? ", as the routing leaves a delegate's work at its limit" : ""}.`
+      `[at-limit] ${ports.named(row)}'s refused turn was started by the hub's own word (${name ?? "a notice"}), not by a person or its parent, so it isn't moved for it. It stays on ${accountName(current)} until a person or its parent writes to it.`
     );
     return true;
-  };
-
-  /**
-   * The hub's word to `row`'s live work item, refused at `current`'s limit,
-   * goes again once when that limit resets (core `DelegateWork` `resume`):
-   * held until then with the word kept, its line written once, and never
-   * moved meanwhile ({@link lookAtNudge}). Caw's own work with Caw off stays
-   * ({@link stays}).
-   */
-  const resumeAtReset = (
-    row: LimitRow,
-    current: Account,
-    words: string
-  ): void => {
-    if (stays(row, current)) {
-      return;
-    }
-    const until = holdUntil(row, current, Date.now());
-    hold(row, current, { action: "wait", until, why: "work" }, words);
-    console.info(
-      `[at-limit] ${ports.named(row)}'s turn was the hub's word to its work item, refused at ${accountName(current)}'s limit. The routing carries a delegate's work on after the reset, so it is held on ${accountName(current)}, not moved, and sent that word again at ${clockWords(until)}.`
-    );
-    ports.changed();
-    plan();
-  };
-
-  /**
-   * A work item's session held for its reset with the hub's word kept
-   * ({@link resumeAtReset}). A person's or a session's message kept for it
-   * meanwhile is answered as at any limit, moved or held by the routing
-   * ({@link act}). Otherwise nothing happens before the reset, held again
-   * when a reading moves it; past it, between turns, the hold goes and the
-   * word goes again once: not when its item has ended, and not when the hub
-   * kept another word for it meanwhile (the sleep sweep's wake), which goes
-   * in its place.
-   */
-  const lookAtNudge = async (
-    row: LimitRow,
-    current: Account,
-    held: LimitHold & { nudge: string },
-    now: number
-  ): Promise<void> => {
-    const owed = ports.owedFrom(row);
-    if (owed.some((origin) => origin.kind !== "system")) {
-      console.info(
-        `[at-limit] ${ports.named(row)} is held for ${accountName(current)}'s reset, and a person or a session wrote to it meanwhile, so it is answered as any turn at its limit is.`
-      );
-      await act(row, current);
-      return;
-    }
-    const reset = refusedUntil(
-      db.accounts.bench(now),
-      readingOf(current.id),
-      current.id,
-      row.model,
-      now
-    );
-    if (reset !== null && reset > now) {
-      if (reset !== held.until) {
-        hold(
-          row,
-          current,
-          { action: "wait", until: reset, why: "work" },
-          held.nudge
-        );
-      }
-      return;
-    }
-    if (reset === null && held.until !== null && held.until > now) {
-      return;
-    }
-    if (!(await ports.idle(row))) {
-      return;
-    }
-    db.atLimit.dropHold(row.id);
-    if (!liveWork(row)) {
-      console.info(
-        `[at-limit] ${ports.named(row)}: ${accountName(current)}'s limit has reset, and its work item has ended, so the hub's word to it isn't sent again.`
-      );
-    } else if (owed.length > 0) {
-      console.info(
-        `[at-limit] ${ports.named(row)}: ${accountName(current)}'s limit has reset, so what the hub kept for its work item meanwhile goes now, in place of sending its word again.`
-      );
-    } else {
-      console.info(
-        `[at-limit] ${ports.named(row)}: ${accountName(current)}'s limit has reset, so the hub's word to its work item is sent again, once.`
-      );
-      ports.nudge(row, held.nudge);
-    }
-    ports.changed();
   };
 
   /**
@@ -729,6 +634,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
     if (lifetime.closed() || Date.now() >= until) {
       settling.delete(row.id);
+      towards.delete(row.id);
       console.info(
         `[at-limit] ${ports.named(row)} is still inside a turn ${SETTLE_FOR_MS / 60_000} minutes after ${accountName(current)} refused one, so the hub stops looking: a turn running that long is one ${accountName(current)} took. Its next refused turn is answered when it ends.`
       );
@@ -978,6 +884,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       lifetime.cancel(was.timer);
       settling.delete(row.id);
     }
+    if (target) {
+      towards.set(row.id, { from: current, to: target });
+    }
     console.info(
       `[at-limit] ${ports.named(row)} moves from ${from} to ${to} now, as a person asked: it is between turns and ${to} has room. Its conversation is copied whole and it carries on there.`
     );
@@ -1006,6 +915,10 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       await decideAndMove(row, current, cause);
     } finally {
       acting.delete(row.id);
+      // On its way still only while its turn's end is awaited.
+      if (!settling.has(row.id)) {
+        towards.delete(row.id);
+      }
       ports.changed();
       plan();
     }
@@ -1064,6 +977,8 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (!target) {
       return undefined;
     }
+    towards.set(row.id, { from: current, to: target });
+    ports.changed();
     // Only between turns: never inside a tool round, never over a turn
     // someone started since.
     if (!(await ports.idle(row))) {
@@ -1183,10 +1098,6 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (stays(row, current)) {
       return;
     }
-    if (held.nudge !== undefined) {
-      await lookAtNudge(row, current, { ...held, nudge: held.nudge }, now);
-      return;
-    }
     const ownReset = refusedUntil(
       db.accounts.bench(now),
       readingOf(current.id),
@@ -1261,6 +1172,54 @@ export const createAtLimit = (ports: AtLimitPorts) => {
 
   return {
     /**
+     * `instanceId` stopped at its account's limit, in words, while it is:
+     * on its way to an account with room (now, or once its turn ends), held
+     * until the earliest reset (`until`, epoch ms; its own account's, or
+     * another's that frees first and takes it), or held on a refused sign-in
+     * until an account can take it. Undefined while it runs.
+     */
+    stall(instanceId: string): Stall | undefined {
+      const words = accountsWords.stalled;
+      const held = db.atLimit.hold(instanceId);
+      if (held) {
+        const from = db.accounts.get(held.accountId);
+        const name = from ? accountName(from) : "its account";
+        if (held.until === null) {
+          return { words: words.signedOut(name) };
+        }
+        const last = db.atLimit.events([instanceId]).at(-1)?.move;
+        const frees =
+          last?.kind === "waiting" && last.until === held.until
+            ? last.frees
+            : undefined;
+        const clock = clockWords(held.until);
+        return {
+          words: frees
+            ? words.waitingOn(name, frees.name, clock)
+            : words.waiting(name, clock),
+          until: held.until,
+        };
+      }
+      const moving = towards.get(instanceId);
+      return moving
+        ? {
+            words: words.moving(
+              accountName(moving.from),
+              accountName(moving.to)
+            ),
+          }
+        : undefined;
+    },
+    /** Every session {@link stall} says is stopped now: held, or on its way to another account. */
+    stalled(): string[] {
+      return [
+        ...new Set([
+          ...db.atLimit.holds().map((one) => one.instanceId),
+          ...towards.keys(),
+        ]),
+      ];
+    },
+    /**
      * Whether `instanceId` is in this controller's hands now: held until a
      * reset, looked at again while its refused turn settles, or being
      * moved. What it is told next is this controller's to send.
@@ -1321,11 +1280,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         return;
       }
       const word = ports.startedBy(row);
-      if (
-        word &&
-        noticeTurn(word.origin) &&
-        refusedNotice(row, current, word)
-      ) {
+      if (word && noticeTurn(word.origin) && leftAlone(row, current, word)) {
         return;
       }
       if (!stays(row, current)) {

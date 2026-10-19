@@ -35,7 +35,22 @@ export interface DelegateNode {
   queued: number;
   /** The first line of its last report, or of why it failed. */
   report?: string;
-  state: "starting" | "running" | "waiting" | "done" | "failed" | "cancelled";
+  /**
+   * While its account's limit (or a refused sign-in) has stopped it: "Stopped
+   * at A's limit; continues on B", or "…; continues at 15:40" with `until`
+   * that moment. It runs no turn until then; what is sent to it meanwhile
+   * waits at the hub and goes once it runs.
+   */
+  stalled?: { words: string; until?: string };
+  /** `stalled` while {@link stalled} says so: never `running` at its limit. */
+  state:
+    | "starting"
+    | "running"
+    | "stalled"
+    | "waiting"
+    | "done"
+    | "failed"
+    | "cancelled";
   title: string;
   waitingOn?: { reason: string; until?: string };
   workspaceId: string;
@@ -65,6 +80,10 @@ export interface DelegationTreeDeps {
   plan: (
     instanceId: string
   ) => Promise<{ done: number; total: number } | undefined>;
+  /** The session stopped at its account's limit, in words (at-limit.ts `stall`); undefined while it runs. */
+  stalled: (
+    instanceId: string
+  ) => { words: string; until?: number } | undefined;
 }
 
 const firstLine = (text: string | null): string | undefined =>
@@ -118,6 +137,31 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
     return paused ? { paused } : {};
   };
 
+  /**
+   * A live item whose session its account's limit stopped: `stalled` its
+   * state, with the words; nothing when it runs or the item is over.
+   */
+  const stalledOf = (
+    item: WorkItemRow
+  ): Partial<Pick<DelegateNode, "state" | "stalled">> => {
+    const stall =
+      item.state === "starting" || item.state === "running"
+        ? deps.stalled(item.instanceId)
+        : undefined;
+    if (!stall) {
+      return {};
+    }
+    return {
+      state: "stalled",
+      stalled: {
+        words: stall.words,
+        ...(stall.until === undefined
+          ? {}
+          : { until: new Date(stall.until).toISOString() }),
+      },
+    };
+  };
+
   const nodeOf = async (
     item: WorkItemRow,
     row: KeepAliveRow | undefined,
@@ -159,6 +203,8 @@ export const createDelegationTree = (deps: DelegationTreeDeps) => {
             },
           }
         : {}),
+      // Stopped at its limit is what it is, whatever wait it declared.
+      ...stalledOf(item),
       ...pausedOf(item, row),
       ...(plan && plan.total > 0 ? { plan } : {}),
       ...(report ? { report } : {}),

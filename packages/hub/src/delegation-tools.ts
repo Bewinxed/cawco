@@ -823,7 +823,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate_list",
-      "Your delegation tree: each delegate you started, theirs nested, with its work item's state, last activity, cache warmth, queued messages, what it waits on, and plan progress; and under queued, your delegates still waiting for owned files (state queued), each with when it was queued and the live item and globs holding it; and under held, workspaces whose items ended with unlanded work. Read it before handing off to a delegate or calling one stuck.",
+      "Your delegation tree: each delegate you started, theirs nested, with its work item's state (stalled: its account's limit stopped it; it goes on by itself, as stalled says), last activity, cache warmth, queued messages, what it waits on, and plan progress; under queued, delegates waiting for owned files, with when queued and the live item and globs holding them; under held, workspaces whose items ended with unlanded work. Read it before handing off or calling one stuck.",
       {
         include: z
           .enum(["live", "all"])

@@ -24336,14 +24336,6 @@
                         "minimum": 0,
                         "maximum": 100,
                         "type": "integer"
-                      },
-                      "delegateWork": {
-                        "type": "string",
-                        "enum": [
-                          "resume",
-                          "move",
-                          "leave"
-                        ]
                       }
                     },
                     "required": [
@@ -29897,7 +29889,10 @@
                 "type": "number"
               },
               "delegateWork": {
-                "$ref": "#/components/schemas/DelegateWork"
+                "type": "string",
+                "enum": [
+                  "move"
+                ]
               },
               "move": {
                 "type": "boolean"
@@ -45584,7 +45579,7 @@
         ]
       },
       "WaitReason": {
-        "description": "Why a session at its account's limit waits for the reset rather than\nmoving: it is a fork (it reads its origin's cache, on its origin's\naccount), moving is switched off, no other account has room, the reset\ncomes sooner than re-reading its context elsewhere is worth, or the limit\nrefused the hub's word to a live work item and the routing has that carry\non after the reset ({@link DelegateWork} `resume`).",
+        "description": "Why a session at its account's limit waits for the reset rather than\nmoving: it is a fork (it reads its origin's cache, on its origin's\naccount), moving is switched off, no other account has room, the reset\ncomes sooner than re-reading its context elsewhere is worth. `work` is\nhistory only: lines a hub stored while a delegate's work could be set to\ncarry on after its own account's reset, never moved, still read.",
         "type": "string",
         "enum": [
           "fork",
@@ -47645,6 +47640,13 @@
               "string"
             ]
           },
+          "stalled": {
+            "description": "While its account's limit (or a refused sign-in) has stopped its\nsession: \"Stopped at A's limit; continues on B\", \"…; continues at\n15:40\" (core `accountsWords.stalled`). It runs no turn until then; null\notherwise.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
           "state": {
             "$ref": "#/components/schemas/WorkItemState"
           },
@@ -47677,6 +47679,7 @@
           "machinePaused",
           "parentInstanceId",
           "replacedBy",
+          "stalled",
           "state",
           "title",
           "waitReason",
@@ -49504,11 +49507,15 @@
         ]
       },
       "AtLimit": {
-        "description": "What a running session does when its account hits its limit: wait for the\nreset, or move whole to an account known to have room (the hub's\n`decideAtLimit`). `waitMinutes`: a reset this close is waited for.\n`moveWholeUnderK`: a context under this many thousand tokens moves whole\nand goes on; one of this many or more, moved to another organization\n(whose cache it can't read), also files its open items and is compacted by\nClaude Code's own `/compact` as its first steps there, before anything it\nis owed. `delegateWork`: what a turn the limit refused is answered with\nwhen it was the hub's own word to a live work item's session\n({@link DelegateWork}); every other word of the hub's a limit refused is\nleft until a person or the session's parent writes.",
+        "description": "What a running session does when its account hits its limit: wait for the\nreset, or move whole to an account known to have room (the hub's\n`decideAtLimit`). `waitMinutes`: a reset this close is waited for.\n`moveWholeUnderK`: a context under this many thousand tokens moves whole\nand goes on; one of this many or more, moved to another organization\n(whose cache it can't read), also files its open items and is compacted by\nClaude Code's own `/compact` as its first steps there, before anything it\nis owed. A live work item's session is answered so whoever started its\nrefused turn, the hub's own word to it included; every other word of the\nhub's a limit refused is left until a person or the session's parent\nwrites.",
         "type": "object",
         "properties": {
           "delegateWork": {
-            "$ref": "#/components/schemas/DelegateWork"
+            "description": "Read by nothing: a delegate's work at its limit is answered as any\nsession's is, moved to an account with room or held until the earliest\nreset. Sent as `move`, which is what the hub does, only because the\nTestFlight builds 20261017 and 20261018 require it, which the hub's wire\ncheck holds to (packages/hub/scripts/openapi.ts). It goes in the change\nthat expires them.",
+            "type": "string",
+            "enum": [
+              "move"
+            ]
           },
           "move": {
             "type": "boolean"
@@ -49530,15 +49537,6 @@
           "moveWholeUnderK",
           "prepareAtPct",
           "waitMinutes"
-        ]
-      },
-      "DelegateWork": {
-        "description": "When a delegate's work reaches its account's limit: the hub's word to a\nlive work item's session (\"Your work item is still open\", the sleep\nsweep's wake, a wait's end; core `WORK_ITEM_ORIGIN`) was refused there.\n`resume`: that word is sent again once, when the account's limit resets;\nnothing moves it meanwhile. `move`: it is answered as a person's turn is,\nmoved whole to an account with room by the routing. `leave`: it waits\nuntil a person or its parent writes to it.",
-        "type": "string",
-        "enum": [
-          "leave",
-          "move",
-          "resume"
         ]
       },
       "StrategyChoice": {

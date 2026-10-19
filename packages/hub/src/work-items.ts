@@ -931,6 +931,11 @@ export interface WorkItemDeps {
    * Nothing once every stage of the place sleeps, failed or was never heard.
    */
   readonly stageRuns?: (placeId: string) => string | undefined;
+  /**
+   * "Stopped at A's limit; continues on B" while `instanceId` is stopped at
+   * its account's limit (hub at-limit.ts `stall`); undefined while it runs.
+   */
+  readonly stalled: (instanceId: string) => string | undefined;
   /** A task's title as its project's index has it: a pull request's title. */
   readonly taskTitle?: (
     projectId: string,
@@ -1923,6 +1928,7 @@ export const createWorkItems = ({
   machinePaused,
   modelRefusal,
   online,
+  stalled,
   send,
   sendWakes,
   sessionUrl,
@@ -2181,6 +2187,7 @@ export const createWorkItems = ({
     machinePaused: LIVE.has(item.state)
       ? (pausedWorkspace(item.workspaceId) ?? null)
       : null,
+    stalled: LIVE.has(item.state) ? (stalled(item.instanceId) ?? null) : null,
     queued: null,
     createdAt: item.createdAt.getTime(),
     endedAt: item.endedAt?.getTime() ?? null,
@@ -2246,6 +2253,7 @@ export const createWorkItems = ({
       title: queued.title,
       state: "starting",
       machinePaused: null,
+      stalled: null,
       queued: {
         owns: [...new Set((request.owns ?? []).map(globOf))],
         paused: (machineId && machinePaused(machineId)) || null,
@@ -7504,6 +7512,18 @@ export const createWorkItems = ({
 
     /** One item, as `stop_delegate` and its callers read it. */
     item: (id: string): WorkItemRow | undefined => db.workItem(id),
+
+    /**
+     * `instanceId`'s stop at its account's limit began, changed or ended:
+     * its live item goes out again, its chip saying so.
+     */
+    stallChanged(instanceId: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (item && LIVE.has(item.state)) {
+        publish(summaryOf(item));
+      }
+    },
 
     /** One item as its tray reads it (a tray's Retry answers with it). */
     summary(id: string): WorkItemSummary | undefined {

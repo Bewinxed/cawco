@@ -279,13 +279,21 @@ export interface StrategyChoice {
  * and goes on; one of this many or more, moved to another organization
  * (whose cache it can't read), also files its open items and is compacted by
  * Claude Code's own `/compact` as its first steps there, before anything it
- * is owed. `delegateWork`: what a turn the limit refused is answered with
- * when it was the hub's own word to a live work item's session
- * ({@link DelegateWork}); every other word of the hub's a limit refused is
- * left until a person or the session's parent writes.
+ * is owed. A live work item's session is answered so whoever started its
+ * refused turn, the hub's own word to it included; every other word of the
+ * hub's a limit refused is left until a person or the session's parent
+ * writes.
  */
 export interface AtLimit {
-  delegateWork: DelegateWork;
+  /**
+   * Read by nothing: a delegate's work at its limit is answered as any
+   * session's is, moved to an account with room or held until the earliest
+   * reset. Sent as `move`, which is what the hub does, only because the
+   * TestFlight builds 20261017 and 20261018 require it, which the hub's wire
+   * check holds to (packages/hub/scripts/openapi.ts). It goes in the change
+   * that expires them.
+   */
+  delegateWork: "move";
   move: boolean;
   moveWholeUnderK: number;
   /**
@@ -299,30 +307,12 @@ export interface AtLimit {
   waitMinutes: number;
 }
 
-/**
- * When a delegate's work reaches its account's limit: the hub's word to a
- * live work item's session ("Your work item is still open", the sleep
- * sweep's wake, a wait's end; core `WORK_ITEM_ORIGIN`) was refused there.
- * `resume`: that word is sent again once, when the account's limit resets;
- * nothing moves it meanwhile. `move`: it is answered as a person's turn is,
- * moved whole to an account with room by the routing. `leave`: it waits
- * until a person or its parent writes to it.
- */
-export type DelegateWork = "resume" | "move" | "leave";
-
-/** The {@link DelegateWork} choices, in the order a control offers them. */
-export const DELEGATE_WORK: readonly DelegateWork[] = [
-  "resume",
-  "move",
-  "leave",
-];
-
 export const DEFAULT_AT_LIMIT: AtLimit = {
   move: true,
   waitMinutes: 15,
   moveWholeUnderK: 200,
   prepareAtPct: 90,
-  delegateWork: "resume",
+  delegateWork: "move",
 };
 
 /**
@@ -990,9 +980,9 @@ export const namedAccount = (account: Account): NamedAccount => ({
  * Why a session at its account's limit waits for the reset rather than
  * moving: it is a fork (it reads its origin's cache, on its origin's
  * account), moving is switched off, no other account has room, the reset
- * comes sooner than re-reading its context elsewhere is worth, or the limit
- * refused the hub's word to a live work item and the routing has that carry
- * on after the reset ({@link DelegateWork} `resume`).
+ * comes sooner than re-reading its context elsewhere is worth. `work` is
+ * history only: lines a hub stored while a delegate's work could be set to
+ * carry on after its own account's reset, never moved, still read.
  */
 export type WaitReason = "fork" | "off" | "full" | "soon" | "work";
 

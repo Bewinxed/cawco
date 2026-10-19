@@ -193,7 +193,8 @@ export const COMPACTION_ORIGIN = "compaction";
  * The `system` origin name of the hub's word to a work item's session about
  * its open item (hub work-items.ts): a quiet turn's "still open", the sleep
  * sweep's wake, a declared wait's end. One its account's limit refused is
- * answered by the provider's `atLimit.delegateWork` (core `AtLimit`).
+ * answered as a person's turn is (hub at-limit.ts `turnRefused`): moved to
+ * an account with room, else held until the earliest reset.
  */
 export const WORK_ITEM_ORIGIN = "work-item";
 

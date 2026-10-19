@@ -307,15 +307,24 @@ export const accountsWords = {
     kTokens: "k tokens",
     compacts:
       "It files its open items, then Claude Code’s own /compact runs. Stop either like any turn.",
-    /** The fleet setting for a delegate's work at its limit (core `DelegateWork`), and its choices. */
-    delegateWork: "When a delegate’s work reaches its account’s limit",
-    delegateWorkChoices: {
-      resume: "Carry on after the reset",
-      move: "Move it to an account with room",
-      leave: "Leave it until someone writes",
-    },
     terms:
       "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms",
+  },
+
+  // ── A delegate stopped at its account's limit (DelegateTray, delegate_list) ─
+  stalled: {
+    /** Moving to an account with room, now or once its turn ends. */
+    moving: (from: string, to: string) =>
+      `Stopped at ${from}’s limit; continues on ${to}`,
+    /** No account has room: held until its own account resets at `clock` ("15:40"). */
+    waiting: (from: string, clock: string) =>
+      `Stopped at ${from}’s limit; continues at ${clock}`,
+    /** No account has room now: `on` frees first, at `clock`, and takes it. */
+    waitingOn: (from: string, on: string, clock: string) =>
+      `Stopped at ${from}’s limit; continues on ${on} at ${clock}`,
+    /** Claude Code refused its account's sign-in, and no other account can take it yet. */
+    signedOut: (from: string) =>
+      `Stopped: ${from}’s sign-in was refused; continues once an account can take it`,
   },
 
   // ── The strategy figures (figure.ts) ──────────────────────────────────

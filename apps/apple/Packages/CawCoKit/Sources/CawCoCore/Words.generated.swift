@@ -571,21 +571,32 @@ public enum Words {
 
             public static let compacts = "It files its open items, then Claude Code’s own /compact runs. Stop either like any turn."
 
-            /// The fleet setting for a delegate's work at its limit (core `DelegateWork`), and its choices.
-            public static let delegateWork = "When a delegate’s work reaches its account’s limit"
+            public static let terms = "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms"
 
-            public enum DelegateWorkChoices {
-                public static let resume = "Carry on after the reset"
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["head": head, "move": move, "wait": wait, "minutes": minutes, "over": over, "kTokens": kTokens, "compacts": compacts, "terms": terms]
+        }
 
-                public static let move = "Move it to an account with room"
-
-                public static let leave = "Leave it until someone writes"
-
-                /// Each word by the key it stands under, for a lookup by data value.
-                public static let byKey: [String: String] = ["resume": resume, "move": move, "leave": leave]
+        public enum Stalled {
+            /// Moving to an account with room, now or once its turn ends.
+            public static func moving(from: String, to: String) -> String {
+                "Stopped at \(from)’s limit; continues on \(to)"
             }
 
-            public static let terms = "Moving a conversation between Claude subscriptions is subject to Anthropic’s terms"
+            /// No account has room: held until its own account resets at `clock` ("15:40").
+            public static func waiting(from: String, clock: String) -> String {
+                "Stopped at \(from)’s limit; continues at \(clock)"
+            }
+
+            /// No account has room now: `on` frees first, at `clock`, and takes it.
+            public static func waitingOn(from: String, on: String, clock: String) -> String {
+                "Stopped at \(from)’s limit; continues on \(on) at \(clock)"
+            }
+
+            /// Claude Code refused its account's sign-in, and no other account can take it yet.
+            public static func signedOut(from: String) -> String {
+                "Stopped: \(from)’s sign-in was refused; continues once an account can take it"
+            }
         }
 
         public enum Figure {
@@ -688,7 +699,7 @@ public enum Words {
 
                 public static let prepareAtPct = 90
 
-                public static let delegateWork = "resume"
+                public static let delegateWork = "move"
             }
 
             /// How long the hub waits on a machine's sign-in step: Claude Code printing its link (the agent waits up to 30 s), exchanging a code (up to 60 s), a device code waited for (a minute at a time). A client asks for longer.
