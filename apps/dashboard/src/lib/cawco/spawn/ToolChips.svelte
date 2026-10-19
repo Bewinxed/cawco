@@ -121,11 +121,13 @@
 <!-- The level as plain text, or why there is none: never a picker. -->
 {#snippet effortStatic()}
   {#if effortOff}
+    <!-- Off, it says it cannot be used, as the base meant and never drew
+         (its `.off` cursor lost to the chip's own); static, it is plain. -->
     <span
       data-tool
       data-slot="ns-chip-btn"
       aria-disabled="true"
-      class="ns-chip-btn opacity-55 hover:bg-surface-raised variant-static:hover:bg-surface-recess"
+      class="ns-chip-btn cursor-not-allowed opacity-55 hover:bg-surface-raised variant-static:cursor-default variant-static:hover:bg-surface-recess"
       data-variant={readonly ? "static" : undefined}
       title={effortOff.reason}
     >

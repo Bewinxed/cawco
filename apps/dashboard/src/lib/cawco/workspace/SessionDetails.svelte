@@ -858,15 +858,19 @@
   </div>
   <!-- The action row (SessionFooter's): right-aligned, 8px apart, on the
        body's surface under the meters, parted from them by space alone. -->
-  <!-- literal: 8px -->
+  <!-- literal: 8px, 44px -->
   <div
     data-slot="footer"
     class="flex flex-none items-center justify-end gap-(--footer-gap) px-space-5 py-space-4"
     style:--footer-gap="8px"
+    style:--footer-btn-h="44px"
   >
+    <!-- Under 640px it fills the row at a finger's height. The base meant
+         the same and drew the kit's 28px: its scoped rule tied the kit's
+         at (0,3,0) and the kit's came later. -->
     <button
       data-slot="primary"
-      class="ns-btn cursor-pointer [@media(max-width:640px)]:flex-1"
+      class="ns-btn cursor-pointer [@media(max-width:640px)]:h-(--footer-btn-h) [@media(max-width:640px)]:flex-1"
       data-size="xs"
       data-variant="primary"
       onclick={() => {
