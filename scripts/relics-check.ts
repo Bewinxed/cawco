@@ -65,14 +65,6 @@ const SANCTIONED: readonly {
   {
     file: "apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte",
     kind: "bang",
-    text: /^motion-reduce:sheet-fade$/,
-    reason:
-      "vaul-svelte (1.0.0-next.7, the latest next) ships its slide as unlayered :global rules (components/drawer/drawer.svelte:92, animation-name at four attributes' weight), which outrank any layered utility; only an important utility puts the reduced-motion fade over it",
-    docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
-  },
-  {
-    file: "apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte",
-    kind: "bang",
     text: /^motion-reduce:transition-none$/,
     reason:
       "vaul-svelte writes the drawer's transition inline from script (use-drawer-root.svelte.js:335, helpers.js set() → el.style); only an important declaration outranks an inline style",

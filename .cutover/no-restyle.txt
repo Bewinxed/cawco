@@ -1,0 +1,475 @@
+# shadcn/no-restyle over apps/dashboard/src, grouped by kit part: part → file:line → classes
+total: 783 classes on 52 parts
+
+TableCell: 148 classes at 49 sites
+CollapsibleTrigger: 135 classes at 10 sites
+PopoverTrigger: 89 classes at 10 sites
+TableHead: 57 classes at 34 sites
+Skeleton: 53 classes at 52 sites
+DrawerTrigger: 30 classes at 2 sites
+DropdownMenuTrigger: 30 classes at 5 sites
+TableRow: 24 classes at 11 sites
+Button: 21 classes at 13 sites
+Pane: 21 classes at 3 sites
+Input: 19 classes at 13 sites
+Spinner: 16 classes at 16 sites
+Badge: 15 classes at 10 sites
+Textarea: 9 classes at 8 sites
+Table: 7 classes at 4 sites
+ToggleGroup: 6 classes at 6 sites
+PopoverContent: 6 classes at 4 sites
+TabsContent: 6 classes at 2 sites
+DrawerContent: 6 classes at 4 sites
+DrawerTitle: 6 classes at 6 sites
+ProviderLogo: 5 classes at 5 sites
+TableBody: 5 classes at 5 sites
+SheetTrigger: 5 classes at 1 sites
+DialogTrigger: 5 classes at 1 sites
+AlertDialogTrigger: 5 classes at 1 sites
+DialogTitle: 4 classes at 2 sites
+ContextMenuTrigger: 4 classes at 4 sites
+SidebarMenuButton: 4 classes at 2 sites
+TableHeader: 4 classes at 4 sites
+DialogContent: 4 classes at 1 sites
+DropdownMenuPendingItem: 4 classes at 2 sites
+SelectTrigger: 3 classes at 1 sites
+SidebarMenuSubButton: 2 classes at 2 sites
+SidebarMenuBadge: 2 classes at 2 sites
+DrawerDescription: 2 classes at 2 sites
+ResizableHandle: 2 classes at 1 sites
+Kbd: 2 classes at 2 sites
+Collapsible: 2 classes at 1 sites
+CardContent: 2 classes at 1 sites
+DrawerFooter: 1 classes at 1 sites
+HangCard: 1 classes at 1 sites
+SheetContent: 1 classes at 1 sites
+SheetHeader: 1 classes at 1 sites
+ContextMenuLazy: 1 classes at 1 sites
+Alert: 1 classes at 1 sites
+Tabs: 1 classes at 1 sites
+DialogOverlay: 1 classes at 1 sites
+DropdownMenuLabel: 1 classes at 1 sites
+DropdownMenuItem: 1 classes at 1 sites
+DropdownMenuSubContent: 1 classes at 1 sites
+DropdownMenuContent: 1 classes at 1 sites
+EmptyState: 1 classes at 1 sites
+
+## TableCell (148 classes, 49 sites)
+src/lib/cawco/ToolMatrix.svelte:394 → whitespace-normal
+src/lib/cawco/routines/ActionsTable.svelte:122 → h-c-btn-h-lg num align-middle
+src/lib/cawco/routines/ActionsTable.svelte:133 → h-c-btn-h-lg num align-middle
+src/lib/cawco/routines/ActionsTable.svelte:151 → h-c-btn-h-lg num align-middle
+src/lib/cawco/routines/ActionsTable.svelte:159 → h-c-btn-h-lg num align-middle
+src/lib/cawco/routines/RoutineDetail.svelte:200 → h-c-btn-h-lg num
+src/lib/cawco/routines/RoutineDetail.svelte:213 → h-c-btn-h-lg num
+src/lib/cawco/routines/RoutineDetail.svelte:221 → h-c-btn-h-lg num @max-routines-ledger-399px/routines-ledger:hidden
+src/lib/cawco/routines/RoutineDetail.svelte:229 → h-c-btn-h-lg num
+src/lib/cawco/tasks/TaskTable.svelte:312 → h-c-btn-h-lg text-end @max-decisions-900px:hidden max-phone:@max-decisions-900px:hidden max-phone:h-auto
+src/lib/cawco/tasks/TaskTable.svelte:315 → h-c-btn-h-lg max-phone:block max-phone:h-auto
+src/lib/cawco/tasks/TaskTable.svelte:317 → h-c-btn-h-lg max-phone:block max-phone:h-auto
+src/lib/cawco/tasks/TaskTable.svelte:319 → h-c-btn-h-lg max-phone:hidden max-phone:h-auto
+src/lib/cawco/tasks/TaskTable.svelte:321 → h-c-btn-h-lg text-end max-phone:block max-phone:h-auto
+src/lib/cawco/tasks/TaskTable.svelte:323 → h-c-btn-h-lg max-phone:block max-phone:h-auto
+src/lib/cawco/updates/UpdateTable.svelte:114 → whitespace-normal
+src/lib/cawco/usage/ProjectSpend.svelte:500 → h-c-btn-h-lg max-phone:block max-phone:h-auto
+src/lib/cawco/usage/ProjectSpend.svelte:512 → h-c-btn-h-lg max-phone:block max-phone:h-auto num
+src/lib/cawco/usage/ProjectSpend.svelte:519 → h-c-btn-h-lg max-phone:block max-phone:h-auto num text-end max-phone:text-start
+src/lib/cawco/usage/ProjectSpend.svelte:526 → h-c-btn-h-lg max-phone:block max-phone:h-auto num text-end max-phone:text-start
+src/lib/cawco/usage/ProjectSpend.svelte:539 → h-c-btn-h-lg max-phone:block max-phone:h-auto
+src/lib/cawco/usage/ProjectSpend.svelte:548 → h-c-btn-h-lg max-phone:block max-phone:h-auto
+src/lib/cawco/usage/ProjectSpend.svelte:553 → h-c-btn-h-lg max-phone:block max-phone:h-auto num text-end max-phone:text-start
+src/lib/cawco/usage/ProjectSpend.svelte:559 → h-c-btn-h-lg max-phone:block max-phone:h-auto text-end max-phone:text-start
+src/lib/cawco/usage/ProjectSpend.svelte:600 → h-c-btn-h-lg max-phone:block max-phone:h-auto
+src/lib/cawco/usage/ProjectSpend.svelte:618 → h-c-btn-h-lg max-phone:block max-phone:h-auto num
+src/lib/cawco/usage/ProjectSpend.svelte:627 → h-c-btn-h-lg max-phone:block max-phone:h-auto num text-end max-phone:text-start
+src/lib/cawco/usage/ProjectSpend.svelte:633 → h-c-btn-h-lg max-phone:block max-phone:h-auto text-end max-phone:text-start
+src/lib/cawco/usage/ProjectSpend.svelte:649 → h-c-btn-h-lg max-phone:block max-phone:h-auto
+src/lib/cawco/usage/ProjectSpend.svelte:658 → h-c-btn-h-lg max-phone:block max-phone:h-auto
+src/lib/cawco/usage/ProjectSpend.svelte:663 → h-c-btn-h-lg max-phone:block max-phone:h-auto num text-end max-phone:text-start
+src/lib/cawco/usage/ProjectSpend.svelte:669 → h-c-btn-h-lg max-phone:block max-phone:h-auto text-end max-phone:text-start
+src/lib/cawco/usage/ProjectSpend.svelte:680 → h-c-btn-h-lg max-phone:block max-phone:h-auto
+src/lib/cawco/usage/ProjectSpend.svelte:689 → h-c-btn-h-lg max-phone:block max-phone:h-auto
+src/lib/cawco/usage/ProjectSpend.svelte:694 → h-c-btn-h-lg max-phone:block max-phone:h-auto num text-end max-phone:text-start
+src/lib/cawco/usage/ProjectSpend.svelte:700 → h-c-btn-h-lg max-phone:block max-phone:h-auto text-end max-phone:text-start
+src/lib/cawco/views/ViewRoutines.svelte:1005 → h-c-btn-h-lg
+src/lib/cawco/views/ViewRoutines.svelte:1014 → h-c-btn-h-lg
+src/lib/cawco/views/ViewRoutines.svelte:1030 → h-c-btn-h-lg
+src/lib/cawco/views/ViewRoutines.svelte:1056 → h-c-btn-h-lg
+src/lib/cawco/views/ViewRoutines.svelte:1065 → h-c-btn-h-lg
+src/lib/cawco/views/ViewRoutines.svelte:1082 → h-c-btn-h-lg
+src/lib/cawco/views/ViewRoutines.svelte:722 → h-c-btn-h-lg
+src/lib/cawco/views/ViewRoutines.svelte:734 → h-c-btn-h-lg
+src/lib/cawco/views/ViewRoutines.svelte:777 → h-c-btn-h-lg @max-routines-ledger-34rem/routines-ledger:hidden
+src/lib/cawco/views/ViewRoutines.svelte:790 → h-c-btn-h-lg @max-routines-ledger-34rem/routines-ledger:hidden
+src/lib/cawco/views/ViewRoutines.svelte:803 → h-c-btn-h-lg text-end
+src/lib/cawco/views/openui/ViewTable.svelte:79 → h-c-btn-h-lg
+src/lib/cawco/views/openui/ViewTable.svelte:80 → whitespace-normal
+
+## CollapsibleTrigger (135 classes, 10 sites)
+src/lib/cawco/move/MoveAsk.svelte:28 → mark-line press-tint inline-flex items-center gap-space-1 min-h-space-7 p-0 border-none border-current rounded-xs bg-transparent type-label text-ink-muted cursor-pointer hover:text-ink-strong
+src/lib/cawco/tasks/TaskActivity.svelte:317 → press-tint mark-line flex cursor-pointer items-center gap-space-1 rounded-sm border-none border-current bg-transparent px-0 py-space-1 type-label text-start text-ink-muted
+src/lib/cawco/transcript/Delegate.svelte:430 → rail-line press-tint min-h-c-mark coarse:min-h-c-row-h min-w-0 text-size-label font-medium bg-transparent border-none border-current rounded-xs p-0 text-inherit cursor-pointer text-start transition-[color] dur-control ease-out
+src/lib/cawco/transcript/Peer.svelte:190 → grid place-items-center p-0 border-none border-current bg-transparent text-ink-muted cursor-pointer press-tint
+src/lib/cawco/transcript/Subagent.svelte:83 → rail-line press-tint min-h-c-mark coarse:min-h-c-btn-h-lg min-w-0 text-size-label font-medium bg-transparent border-none border-current rounded-xs p-0 text-inherit cursor-pointer text-start transition-[color] dur-control ease-out
+src/lib/cawco/transcript/SystemLine.svelte:209 → inline-flex bg-transparent border-none border-current p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start rail-line
+src/lib/cawco/transcript/SystemLine.svelte:501 → inline-flex bg-transparent border-none border-current p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line
+src/lib/cawco/views/ViewRoutines.svelte:737 → focus-inset block cursor-pointer border-none border-current bg-transparent p-0 text-start text-inherit after:inset-0
+src/lib/components/features/DirectoryPicker.svelte:182 → mark-line flex items-center gap-1.5 text-meta text-ink-muted transition-colors hover:text-ink-strong
+src/lib/components/features/tool-cards/MemoryBody.svelte:233 → mark-line min-h-(--tx-line) flex items-center gap-space-2 p-0 border-none border-current bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--tx-line-touch)
+
+## PopoverTrigger (89 classes, 10 sites)
+src/lib/cawco/ContextMeter.svelte:104 → mark-line flex h-7 items-center gap-1.5 rounded-sm px-1.5 text-label tabular-nums hover:bg-neutral-2 transition-[background-color,color] duration-(--dur-control) ease-out
+src/lib/cawco/ContextMeter.svelte:105 → text-ink-strong
+src/lib/cawco/ContextMeter.svelte:106 → text-error-9
+src/lib/cawco/ContextMeter.svelte:107 → text-warning-9
+src/lib/cawco/ContextMeter.svelte:109 → text-ink-muted
+src/lib/cawco/UsageMeter.svelte:1124 → press-tint flex h-c-btn-h-lg group-variant-home/strip:h-c-usage-strip-home-h cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover
+src/lib/cawco/config/PickerChip.svelte:50 → inline-flex items-center gap-space-2 h-c-btn-h-sm px-space-3 border border-border-control rounded-sm bg-surface-raised type-label text-ink-strong transition-control hover:bg-surface-hover motion-safe:active:scale-(--press-scale) mark-line
+src/lib/cawco/config/RolloutChip.svelte:120 → mark-line inline-flex h-c-btn-h-xs items-center gap-space-1 rounded-sm bg-surface-recess px-space-2 type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:active:scale-(--press-scale)
+src/lib/cawco/usage/SessionsChip.svelte:177 → pressable h-icon-md cursor-pointer overflow-visible px-space-1 text-ink-row type-meta leading-none num
+src/routes/(app)/motion/overlays/+page.svelte:175 → rounded-sm border border-border-control px-space-3 py-space-2
+
+## TableHead (57 classes, 34 sites)
+src/lib/cawco/ToolMatrix.svelte:305 → h-auto
+src/lib/cawco/ToolMatrix.svelte:314 → h-auto whitespace-normal
+src/lib/cawco/ToolMatrix.svelte:366 → h-auto
+src/lib/cawco/routines/ActionsTable.svelte:102 → h-c-toolbar-ctl
+src/lib/cawco/routines/ActionsTable.svelte:107 → h-c-toolbar-ctl
+src/lib/cawco/routines/ActionsTable.svelte:94 → h-c-toolbar-ctl
+src/lib/cawco/routines/ActionsTable.svelte:97 → h-c-toolbar-ctl
+src/lib/cawco/routines/RoutineDetail.svelte:173 → h-c-toolbar-ctl
+src/lib/cawco/routines/RoutineDetail.svelte:177 → h-c-toolbar-ctl
+src/lib/cawco/routines/RoutineDetail.svelte:181 → h-c-toolbar-ctl @max-routines-ledger-399px/routines-ledger:hidden
+src/lib/cawco/routines/RoutineDetail.svelte:184 → h-c-toolbar-ctl
+src/lib/cawco/tasks/TaskTable.svelte:243 → text-end @max-decisions-900px:hidden
+src/lib/cawco/tasks/TaskTable.svelte:244 → text-end
+src/lib/cawco/updates/UpdateTable.svelte:50 → h-auto
+src/lib/cawco/updates/UpdateTable.svelte:53 → h-auto
+src/lib/cawco/updates/UpdateTable.svelte:56 → h-auto
+src/lib/cawco/updates/UpdateTable.svelte:74 → h-auto
+src/lib/cawco/usage/ProjectSpend.svelte:469 → h-c-toolbar-ctl
+src/lib/cawco/usage/ProjectSpend.svelte:473 → h-c-toolbar-ctl max-phone:hidden
+src/lib/cawco/usage/ProjectSpend.svelte:478 → h-c-toolbar-ctl text-end max-phone:hidden
+src/lib/cawco/usage/ProjectSpend.svelte:484 → h-c-toolbar-ctl text-end max-phone:hidden
+src/lib/cawco/usage/ProjectSpend.svelte:569 → h-c-toolbar-ctl
+src/lib/cawco/usage/ProjectSpend.svelte:573 → h-c-toolbar-ctl max-phone:hidden
+src/lib/cawco/usage/ProjectSpend.svelte:578 → h-c-toolbar-ctl text-end max-phone:hidden
+src/lib/cawco/usage/ProjectSpend.svelte:584 → h-c-toolbar-ctl text-end max-phone:hidden
+src/lib/cawco/views/ViewRoutines.svelte:922 → top-0 bg-surface-band
+src/lib/cawco/views/ViewRoutines.svelte:928 → top-0 bg-surface-band
+src/lib/cawco/views/ViewRoutines.svelte:934 → top-0 bg-surface-band @max-routines-ledger-34rem/routines-ledger:hidden
+src/lib/cawco/views/ViewRoutines.svelte:939 → top-0 bg-surface-band @max-routines-ledger-34rem/routines-ledger:hidden
+src/lib/cawco/views/ViewRoutines.svelte:944 → top-0 bg-surface-band
+src/lib/cawco/views/ViewRoutines.svelte:977 → top-0 bg-surface-band
+src/lib/cawco/views/ViewRoutines.svelte:983 → top-0 bg-surface-band
+src/lib/cawco/views/ViewRoutines.svelte:989 → top-0 bg-surface-band
+src/lib/cawco/views/openui/ViewTable.svelte:66 → h-c-toolbar-ctl
+
+## Skeleton (53 classes, 52 sites)
+src/lib/cawco/Sidebar.svelte:650 → h-icon-sm
+src/lib/cawco/Sidebar.svelte:654 → h-c-btn-h-sm
+src/lib/cawco/config/EditorSkeleton.svelte:41 → h-(--title-h)
+src/lib/cawco/decisions/DecisionPage.svelte:304 → h-space-3
+src/lib/cawco/decisions/PageFrame.svelte:158 → h-space-3
+src/lib/cawco/files/ArtifactCards.svelte:173 → aspect-16/10
+src/lib/cawco/files/ArtifactCards.svelte:174 → h-space-2
+src/lib/cawco/files/FilesList.svelte:704 → size-icon-md
+src/lib/cawco/files/FilesList.svelte:707 → h-space-2
+src/lib/cawco/files/FilesList.svelte:711 → h-space-2
+src/lib/cawco/find/Finder.svelte:741 → h-c-btn-h data-tall:h-c-find-skeleton-tall
+src/lib/cawco/find/Finder.svelte:839 → h-c-btn-h
+src/lib/cawco/find/Finder.svelte:847 → h-c-btn-h
+src/lib/cawco/find/MentionMenu.svelte:146 → h-c-btn-h
+src/lib/cawco/preview/SheetInspector.svelte:233 → h-(--text-label)
+src/lib/cawco/preview/SheetInspector.svelte:234 → h-c-input-h
+src/lib/cawco/project/FolderFile.svelte:83 → h-icon-md
+src/lib/cawco/project/FolderFile.svelte:84 → h-icon-md
+src/lib/cawco/tasks/StagesControl.svelte:208 → h-space-4
+src/lib/cawco/tasks/StagesControl.svelte:209 → h-icon-sm
+src/lib/cawco/tasks/TaskActivity.svelte:300 → h-space-4
+src/lib/cawco/tasks/TaskActivity.svelte:301 → h-space-4
+src/lib/cawco/tasks/TaskOutput.svelte:163 → h-space-4
+src/lib/cawco/tasks/TaskOutput.svelte:164 → h-space-4
+src/lib/cawco/tasks/TaskOutput.svelte:165 → h-space-4
+src/lib/cawco/tasks/TaskPane.svelte:469 → h-c-btn-h-sm
+src/lib/cawco/tasks/TaskPane.svelte:601 → h-icon-md
+src/lib/cawco/tasks/TaskPane.svelte:602 → h-space-4
+src/lib/cawco/tasks/TaskPane.svelte:603 → h-space-4
+src/lib/cawco/tasks/TaskPane.svelte:604 → h-space-4
+src/lib/cawco/transcript/DelegateTail.svelte:416 → h-icon-sm
+src/lib/cawco/transcript/DelegateTail.svelte:422 → h-icon-sm
+src/lib/cawco/transcript/DelegateTail.svelte:428 → h-icon-sm
+src/lib/cawco/transcript/SuggestionChips.svelte:317 → size-full
+src/lib/cawco/transcript/TranscriptSkeleton.svelte:125 → h-space-3
+src/lib/cawco/transcript/TranscriptSkeleton.svelte:130 → h-space-3
+src/lib/cawco/transcript/TranscriptSkeleton.svelte:148 → size-c-row-mark
+src/lib/cawco/transcript/TranscriptSkeleton.svelte:54 → size-c-row-mark
+src/lib/cawco/transcript/TranscriptSkeleton.svelte:89 → size-c-row-mark
+src/lib/cawco/usage/LimitsBlock.svelte:203 → h-icon-md
+src/lib/cawco/usage/ProjectSpend.svelte:225 → h-c-stat-h
+src/lib/components/features/workflows/WorkflowRunView.svelte:252 → h-icon-md
+src/lib/components/features/workflows/WorkflowRunView.svelte:253 → h-space-7
+src/lib/components/features/workflows/WorkflowRunView.svelte:254 → h-space-7
+src/routes/(app)/project/[id]/+page.svelte:2178 → h-space-4
+src/routes/(app)/project/[id]/+page.svelte:2179 → h-c-skeleton-card-h
+src/routes/(app)/project/[id]/+page.svelte:2180 → h-c-skeleton-card-h
+src/routes/(app)/workflows/+page.svelte:171 → h-icon-md
+src/routes/(app)/workflows/+page.svelte:173 → h-icon-lg
+src/routes/(app)/workflows/+page.svelte:175 → h-icon-md
+src/routes/(app)/workflows/+page.svelte:178 → h-icon-md
+src/routes/(app)/workflows/+page.svelte:181 → h-space-8
+
+## DrawerTrigger (30 classes, 2 sites)
+src/lib/cawco/UsageMeter.svelte:1106 → press-tint flex h-c-btn-h-lg group-variant-home/strip:h-c-usage-strip-home-h cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover
+src/routes/(app)/motion/overlays/+page.svelte:140 → rounded-sm border border-border-control px-space-3 py-space-2
+
+## DropdownMenuTrigger (30 classes, 5 sites)
+src/lib/cawco/blocks/BlockPage.svelte:327 → mark-line
+src/lib/cawco/preview/ArtifactMenu.svelte:223 → mark-line min-w-0 type-label text-ink-strong
+src/lib/cawco/side/SideSurface.svelte:423 → mark-line
+src/lib/cawco/transcript/AttachButton.svelte:59 → size-c-composer-field grid place-items-center cursor-pointer rounded-xs border border-border-control hit-edge-hair bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:pressed:scale-(--press-scale) group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs
+src/routes/(app)/motion/overlays/+page.svelte:159 → rounded-sm border border-border-control px-space-3 py-space-2
+
+## TableRow (24 classes, 11 sites)
+src/lib/cawco/ToolMatrix.svelte:302 → align-top
+src/lib/cawco/tasks/TaskTable.svelte:304 → max-phone:grid max-phone:grid-cols-(--row-cols) group-data-pickable/ledger:max-phone:grid-cols-(--row-cols-pick) max-phone:items-center
+src/lib/cawco/updates/UpdateTable.svelte:46 → align-top max-phone:grid max-phone:grid-cols-fluid-auto max-phone:items-center
+src/lib/cawco/updates/UpdateTable.svelte:67 → max-phone:grid max-phone:grid-cols-fluid-auto max-phone:items-center
+src/lib/cawco/usage/ProjectSpend.svelte:467 → max-phone:flex
+src/lib/cawco/usage/ProjectSpend.svelte:495 → max-phone:grid max-phone:grid-cols-(--row-cols)
+src/lib/cawco/usage/ProjectSpend.svelte:534 → max-phone:grid max-phone:grid-cols-(--row-cols)
+src/lib/cawco/usage/ProjectSpend.svelte:567 → max-phone:flex
+src/lib/cawco/usage/ProjectSpend.svelte:595 → max-phone:grid max-phone:grid-cols-(--row-cols)
+src/lib/cawco/usage/ProjectSpend.svelte:644 → max-phone:grid max-phone:grid-cols-(--row-cols)
+src/lib/cawco/usage/ProjectSpend.svelte:675 → max-phone:grid max-phone:grid-cols-(--row-cols)
+
+## Button (21 classes, 13 sites)
+src/lib/cawco/FleetFault.svelte:447 → num
+src/lib/cawco/ModelCombobox.svelte:128 → justify-between
+src/lib/cawco/UsageMeter.svelte:1076 → h-c-btn-h-lg
+src/lib/cawco/config/EditorFooter.svelte:126 → max-phone:hidden
+src/lib/cawco/decisions/DecisionPage.svelte:363 → size-c-composer-field
+src/lib/cawco/decisions/DecisionPage.svelte:377 → h-c-composer-field
+src/lib/cawco/files/FilesList.svelte:796 → -translate-y-1/2 text-ink-muted opacity-0 transition-[opacity] dur-control ease-out group-focus-within/row:opacity-100 group-hover/row:opacity-100 coarse:opacity-100
+src/lib/cawco/project/ProjectHead.svelte:463 → max-phone:hidden
+src/lib/cawco/project/ProjectHead.svelte:470 → max-phone:hidden
+src/lib/cawco/tasks/NewTaskForm.svelte:136 → justify-start
+src/lib/components/features/DirectoryPicker.svelte:233 → justify-start
+src/routes/(app)/project/[id]/+page.svelte:1540 → max-phone:hidden
+src/routes/(app)/project/[id]/+page.svelte:1558 → max-phone:hidden
+
+## Pane (21 classes, 3 sites)
+src/lib/cawco/side/Split.svelte:350 → flex min-h-0 min-w-0 motion-safe:group-data-split-sliding/split:transition-[flex-grow] motion-safe:group-data-split-sliding/split:dur-panel motion-safe:group-data-split-sliding/split:ease-in-out motion-safe:group-data-split-sliding/split:group-data-split-opening/split:ease-drawer
+src/lib/cawco/side/Split.svelte:383 → flex min-h-0 min-w-0 motion-safe:group-data-split-sliding/split:transition-[flex-grow] motion-safe:group-data-split-sliding/split:dur-panel motion-safe:group-data-split-sliding/split:ease-in-out motion-safe:group-data-split-sliding/split:group-data-split-opening/split:ease-drawer
+src/lib/cawco/workspace/PaneGrid.svelte:215 → flex min-h-0 min-w-0 overflow-hidden motion-safe:[[data-grid-group]:has(>[data-pane-resizer][data-active=keyboard])>&]:transition-[flex-grow] motion-safe:[[data-grid-group]:has(>[data-pane-resizer][data-active=keyboard])>&]:dur-control motion-safe:[[data-grid-group]:has(>[data-pane-resizer][data-active=keyboard])>&]:ease-out
+
+## Input (19 classes, 13 sites)
+src/lib/cawco/KeyValueRows.svelte:43 → h-space-8
+src/lib/cawco/KeyValueRows.svelte:54 → h-space-8
+src/lib/cawco/accounts/AccountEditor.svelte:210 → num h-c-btn-h-sm text-center
+src/lib/cawco/accounts/AccountSetup.svelte:857 → h-c-btn-h-sm
+src/lib/cawco/accounts/AtLimitBlock.svelte:72 → num h-c-btn-h-sm text-center
+src/lib/cawco/accounts/AtLimitBlock.svelte:92 → num h-c-btn-h-sm text-center
+src/lib/cawco/accounts/SigninPanel.svelte:75 → h-c-btn-h-sm
+src/lib/cawco/project/ProjectDetails.svelte:840 → h-c-btn-h-sm
+src/lib/cawco/project/ProjectDetails.svelte:964 → h-c-btn-h-sm
+src/lib/cawco/tasks/TodoList.svelte:125 → h-c-btn-h-sm
+src/lib/cawco/tasks/TodoList.svelte:198 → h-c-btn-h-sm
+src/lib/cawco/transcript/DelegateTray.svelte:1404 → h-c-btn-h-sm
+src/lib/cawco/transcript/DelegateTray.svelte:1681 → h-c-btn-h-sm
+
+## Spinner (16 classes, 16 sites)
+src/lib/cawco/ForgetProjectTray.svelte:157 → size-icon-sm
+src/lib/cawco/OlderRows.svelte:238 → size-icon-sm
+src/lib/cawco/SessionRow.svelte:375 → size-icon-sm
+src/lib/cawco/StopTray.svelte:847 → size-icon-md
+src/lib/cawco/ToolMatrix.svelte:134 → size-icon-md
+src/lib/cawco/config/RolloutChip.svelte:141 → size-icon-sm
+src/lib/cawco/config/SectionRow.svelte:210 → size-icon-sm
+src/lib/cawco/config/editors/HookEditor.svelte:977 → size-icon-md
+src/lib/cawco/config/editors/MemoryEditor.svelte:660 → size-icon-md
+src/lib/cawco/config/editors/MemoryEditor.svelte:833 → size-icon-md
+src/lib/cawco/home/UpdateCard.svelte:231 → size-icon-md
+src/lib/cawco/join/JoinedRow.svelte:112 → size-icon-md
+src/lib/cawco/relay/RelayJourney.svelte:368 → size-icon-md
+src/lib/cawco/routines/RunStatus.svelte:56 → size-icon-sm
+src/lib/cawco/tasks/TaskColumn.svelte:162 → size-icon-sm
+src/lib/cawco/tasks/TaskFilterPopover.svelte:142 → size-icon-sm
+
+## Badge (15 classes, 10 sites)
+src/lib/cawco/ToolMatrix.svelte:110 → h-auto
+src/lib/cawco/ToolMatrix.svelte:133 → h-auto
+src/lib/cawco/ToolMatrix.svelte:158 → h-auto cursor-pointer
+src/lib/cawco/ToolMatrix.svelte:225 → h-auto cursor-pointer
+src/lib/cawco/ToolMatrix.svelte:247 → h-auto
+src/lib/cawco/home/WorkTabs.svelte:807 → num pointer-events-none
+src/lib/cawco/tasks/TaskCard.svelte:238 → num
+src/lib/cawco/transcript/MessageRow.svelte:761 → h-auto
+src/lib/cawco/transcript/ToolGroup.svelte:391 → h-auto
+src/lib/cawco/updates/UpdateCell.svelte:33 → h-auto whitespace-normal text-start
+
+## Textarea (9 classes, 8 sites)
+src/lib/cawco/RuleTester.svelte:80 → resize-y
+src/lib/cawco/config/editors/DelegateTypeEditor.svelte:225 → resize-y
+src/lib/cawco/config/editors/HookEditor.svelte:621 → resize-y
+src/lib/cawco/config/editors/HookEditor.svelte:746 → resize-y
+src/lib/cawco/config/editors/RuleEditor.svelte:351 → resize-y
+src/lib/cawco/config/editors/RuleEditor.svelte:433 → resize-y
+src/lib/cawco/config/editors/SubagentEditor.svelte:184 → resize-y
+src/lib/cawco/decisions/DecisionPage.svelte:346 → max-h-c-textarea-max-h min-h-c-composer-field
+
+## Table (7 classes, 4 sites)
+src/lib/cawco/ToolMatrix.svelte:300 → border-collapse text-left
+src/lib/cawco/tasks/TaskTable.svelte:227 → max-phone:block
+src/lib/cawco/updates/UpdateTable.svelte:43 → border-collapse text-start max-phone:block
+src/lib/cawco/usage/ProjectSpend.svelte:461 → max-phone:block
+
+## ToggleGroup (6 classes, 6 sites)
+src/lib/cawco/config/Choice.svelte:24 → flex-wrap
+src/lib/cawco/project/ProjectDetails.svelte:1049 → flex-wrap
+src/lib/cawco/project/ProjectDetails.svelte:1179 → flex-wrap
+src/routes/(app)/config/connections/+page.svelte:685 → flex-wrap
+src/routes/(app)/motion/caw-notices/+page.svelte:395 → flex-wrap
+src/routes/(app)/motion/caw-notices/+page.svelte:415 → flex-wrap
+
+## PopoverContent (6 classes, 4 sites)
+src/lib/cawco/config/PickerChip.svelte:61 → overflow-y-auto
+src/lib/cawco/preview/PreviewPane.svelte:2363 → max-h-(--pin-list-h)
+src/lib/cawco/project/CawThread.svelte:372 → flex max-h-(--lead-max-h) overflow-hidden
+src/lib/cawco/usage/SessionsChip.svelte:193 → overflow-hidden
+
+## TabsContent (6 classes, 2 sites)
+src/lib/cawco/files/FilesList.svelte:472 → flex min-h-0 flex-col
+src/lib/cawco/files/FilesList.svelte:479 → flex min-h-0 flex-col
+
+## DrawerContent (6 classes, 4 sites)
+src/lib/cawco/files/FilesSheet.svelte:90 → h-(--files-drawer-h)
+src/lib/cawco/home/PeekSheet.svelte:47 → vaul-drawer-direction-bottom:h-c-peek-sheet-h
+src/lib/cawco/project/CawFloat.svelte:74 → h-c-sheet-max-h
+src/lib/cawco/spawn/NewSessionDialog.svelte:1817 → flex origin-center flex-col
+
+## DrawerTitle (6 classes, 6 sites)
+src/lib/cawco/home/PeekSheet.svelte:50 → sr-only
+src/lib/cawco/project/CawFloat.svelte:79 → sr-only
+src/lib/cawco/project/ProjectHead.svelte:600 → sr-only
+src/lib/cawco/side/SideSheet.svelte:365 → sr-only
+src/lib/cawco/spawn/NewSessionDialog.svelte:1832 → sr-only
+src/lib/components/features/workflows/WorkflowEditor.svelte:866 → sr-only
+
+## ProviderLogo (5 classes, 5 sites)
+src/lib/cawco/project/ProjectDetails.svelte:1342 → size-icon-sm
+src/lib/cawco/routines/ActionsTable.svelte:127 → size-icon-md
+src/lib/cawco/spawn/ModelSection.svelte:319 → size-icon-md
+src/lib/cawco/spawn/ModelSection.svelte:544 → size-icon-md
+src/lib/cawco/tasks/TaskPane.svelte:524 → size-icon-sm
+
+## TableBody (5 classes, 5 sites)
+src/lib/cawco/tasks/TaskTable.svelte:298 → max-phone:block
+src/lib/cawco/updates/UpdateTable.svelte:62 → max-phone:block
+src/lib/cawco/usage/ProjectSpend.svelte:491 → max-phone:block
+src/lib/cawco/usage/ProjectSpend.svelte:591 → max-phone:block
+src/lib/cawco/usage/ProjectSpend.svelte:640 → max-phone:block
+
+## SheetTrigger (5 classes, 1 sites)
+src/routes/(app)/motion/overlays/+page.svelte:83 → rounded-sm border border-border-control px-space-3 py-space-2
+
+## DialogTrigger (5 classes, 1 sites)
+src/routes/(app)/motion/overlays/+page.svelte:102 → rounded-sm border border-border-control px-space-3 py-space-2
+
+## AlertDialogTrigger (5 classes, 1 sites)
+src/routes/(app)/motion/overlays/+page.svelte:119 → rounded-sm border border-border-control px-space-3 py-space-2
+
+## DialogTitle (4 classes, 2 sites)
+src/lib/cawco/ErrorDialog.svelte:39 → mark-line flex items-center
+src/lib/cawco/spawn/NewSessionDialog.svelte:1877 → sr-only
+
+## ContextMenuTrigger (4 classes, 4 sites)
+src/lib/cawco/FolderMenu.svelte:84 → contents
+src/lib/cawco/MachineMenu.svelte:130 → contents
+src/lib/cawco/PeekPane.svelte:274 → contents
+src/lib/cawco/workspace/PaneTabs.svelte:1623 → contents
+
+## SidebarMenuButton (4 classes, 2 sites)
+src/lib/cawco/Sidebar.svelte:1048 → h-c-btn-h-sm
+src/lib/cawco/Sidebar.svelte:1199 → size-c-btn-h-sm justify-center overflow-visible
+
+## TableHeader (4 classes, 4 sites)
+src/lib/cawco/tasks/TaskTable.svelte:231 → max-phone:hidden
+src/lib/cawco/updates/UpdateTable.svelte:44 → max-phone:hidden
+src/lib/cawco/usage/ProjectSpend.svelte:466 → max-phone:block
+src/lib/cawco/usage/ProjectSpend.svelte:566 → max-phone:block
+
+## DialogContent (4 classes, 1 sites)
+src/lib/components/features/DiffModal.svelte:80 → flex h-full flex-col overflow-hidden
+
+## DropdownMenuPendingItem (4 classes, 2 sites)
+src/routes/(app)/workflows/+page.svelte:101 → min-h-c-top-bar-h flex-wrap
+src/routes/(app)/workflows/+page.svelte:89 → min-h-c-top-bar-h flex-wrap
+
+## SelectTrigger (3 classes, 1 sites)
+src/lib/cawco/project/ViewBar.svelte:147 → group-data-bar:overflow-clip group-data-bar:not-size-sm:h-c-composer-field group-data-bar:size-sm:h-c-composer-field
+
+## SidebarMenuSubButton (2 classes, 2 sites)
+src/lib/cawco/OlderRows.svelte:205 → h-(--older-h)
+src/lib/cawco/Sidebar.svelte:1138 → h-(--row-compact-h)
+
+## SidebarMenuBadge (2 classes, 2 sites)
+src/lib/cawco/Sidebar.svelte:881 → -translate-y-1/2
+src/lib/cawco/Sidebar.svelte:921 → -translate-y-1/2
+
+## DrawerDescription (2 classes, 2 sites)
+src/lib/cawco/home/PeekSheet.svelte:51 → sr-only
+src/lib/components/features/workflows/WorkflowEditor.svelte:867 → sr-only
+
+## ResizableHandle (2 classes, 1 sites)
+src/lib/cawco/side/Split.svelte:368 → group-data-split-expanded/split:after:transform-none data-hidden:hidden
+
+## Kbd (2 classes, 2 sites)
+src/lib/cawco/transcript/Prompt.svelte:779 → num
+src/lib/cawco/transcript/SuggestionChips.svelte:295 → coarse:hidden
+
+## Collapsible (2 classes, 1 sites)
+src/lib/components/features/DirectoryPicker.svelte:180 → flex flex-col
+
+## CardContent (2 classes, 1 sites)
+src/lib/components/features/workflows/WorkflowRunView.svelte:341 → flex flex-col
+
+## DrawerFooter (1 classes, 1 sites)
+src/lib/cawco/AddMachineDialog.svelte:648 → flex-col-reverse
+
+## HangCard (1 classes, 1 sites)
+src/lib/cawco/GlassCard.svelte:476 → data-rehearsing:invisible
+
+## SheetContent (1 classes, 1 sites)
+src/lib/cawco/Shell.svelte:1022 → desk:hidden
+
+## SheetHeader (1 classes, 1 sites)
+src/lib/cawco/Shell.svelte:1031 → sr-only
+
+## ContextMenuLazy (1 classes, 1 sites)
+src/lib/cawco/StoredSessionMenu.svelte:131 → contents
+
+## Alert (1 classes, 1 sites)
+src/lib/cawco/ThreadPane.svelte:1124 → items-center
+
+## Tabs (1 classes, 1 sites)
+src/lib/cawco/files/FilesList.svelte:449 → min-h-0
+
+## DialogOverlay (1 classes, 1 sites)
+src/lib/cawco/lightbox/Lightbox.svelte:227 → data-lightbox-leaving:animate-kit-fade-out
+
+## DropdownMenuLabel (1 classes, 1 sites)
+src/lib/cawco/preview/ArtifactMenu.svelte:241 → wrap-anywhere
+
+## DropdownMenuItem (1 classes, 1 sites)
+src/lib/cawco/preview/ArtifactMenu.svelte:261 → min-h-c-artifact-row-h
+
+## DropdownMenuSubContent (1 classes, 1 sites)
+src/lib/cawco/preview/CanvasView.svelte:94 → w-52
+
+## DropdownMenuContent (1 classes, 1 sites)
+src/lib/cawco/side/SideSurface.svelte:433 → w-56
+
+## EmptyState (1 classes, 1 sites)
+src/lib/cawco/views/ViewRoutines.svelte:854 → items-stretch
+

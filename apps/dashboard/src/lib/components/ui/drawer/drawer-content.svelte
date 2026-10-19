@@ -70,9 +70,8 @@
       /**
        * The sheet fills a host of its own (the preview standing on the
        * composer): the host places it, and the kit leaves its place alone.
-       * It fills the host whole, under the host's z-50 layer, and draws no
-       * surface or grabber of its own (the host draws both); closed, it is
-       * not seen.
+       * It fills the host whole and draws no surface or grabber of its own
+       * (the host draws both); closed, it is not seen.
        */
       hosted?: boolean;
       /** As its root's `modal`: false, the page under it stays live, to a screen reader too. */
@@ -160,12 +159,11 @@
        Its foot keeps the safe area clear, the same for every sheet. Under
        reduced motion it fades in and out over --dur-control instead of
        sliding (DESIGN.md, Sheet: "with reduced motion it fades over
-       120ms"); `!` because vaul's slide is an unlayered global sheet
-       (vaul-svelte drawer.svelte), which no layered utility outranks:
-       https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier -->
+       120ms"); vaul's slide stands in the `vendor` layer under it
+       (vite.config.ts, vendorComponentSheets). -->
   <DrawerPrimitive.Content
     class={cn(
-      "motion-reduce:sheet-fade! group/drawer-content fixed z-50 flex h-auto flex-col bg-transparent p-4 text-ink-strong text-label before:absolute before:inset-2 before:-z-10 before:rounded-[var(--radius-lg)] before:border before:border-border before:bg-[var(--surface-raised)] data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(1rem+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
+      "motion-reduce:sheet-fade group/drawer-content fixed z-50 flex h-auto flex-col bg-transparent p-4 text-ink-strong text-label before:absolute before:inset-2 before:-z-10 before:rounded-[var(--radius-lg)] before:border before:border-border before:bg-[var(--surface-raised)] data-[vaul-drawer-direction=bottom]:inset-x-0 data-[vaul-drawer-direction=top]:inset-x-0 data-[vaul-drawer-direction=left]:inset-y-0 data-[vaul-drawer-direction=right]:inset-y-0 data-[vaul-drawer-direction=top]:top-0 data-[vaul-drawer-direction=right]:right-0 data-[vaul-drawer-direction=left]:left-0 data-[vaul-drawer-direction=top]:mb-24 data-[vaul-drawer-direction=top]:max-h-[80vh] data-[vaul-drawer-direction=left]:w-3/4 data-[vaul-drawer-direction=right]:w-3/4 data-[vaul-drawer-direction=left]:phone:max-w-96 data-[vaul-drawer-direction=right]:phone:max-w-96 data-[vaul-drawer-direction=bottom]:pb-[calc(1rem+var(--safe-bottom))] data-[vaul-drawer-direction=bottom]:before:inset-x-0 data-[vaul-drawer-direction=bottom]:before:bottom-0 data-[vaul-drawer-direction=bottom]:before:rounded-b-none data-[vaul-drawer-direction=bottom]:before:border-x-0 data-[vaul-drawer-direction=bottom]:before:border-b-0",
       drawerContentVariants({ pad, height, look }),
       hosted &&
         "absolute inset-0 z-40 m-0 h-full max-h-none w-full p-0 outline-off before:hidden data-closed:invisible data-[vaul-drawer-direction=bottom]:pb-0",
