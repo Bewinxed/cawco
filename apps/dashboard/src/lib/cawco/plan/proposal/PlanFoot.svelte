@@ -8,7 +8,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconChevronRight, IconPlus } from "#lib/icons.js";
   import Fold from "./Fold.svelte";
-  import type { PlanFixture } from "./fixtures";
+  import type { PlanFixture, Step } from "./fixtures";
   import { useView } from "./view.svelte";
 
   let { plan }: { plan: PlanFixture } = $props();
@@ -16,13 +16,63 @@
   const view = useView();
   const open = $derived(view.opened.has("spec"));
   const uid = $props.id();
+  let adding = $state(false);
+  let draft = $state("");
+
+  /** A new to-do at the plan's foot, told to the task's live attempt. */
+  function add(): void {
+    const words = draft.trim();
+    if (words) {
+      const step: Step = {
+        id: `new-${Date.now()}`,
+        words,
+        short: words,
+        description: "Added by you.",
+        state: "todo",
+      };
+      view.added.push(step);
+      view.tell(step, "added");
+    }
+    draft = "";
+    adding = false;
+  }
 </script>
 
 <div class="foot">
-  <button class="add pressable touch-hit mark-line" type="button">
-    <IconPlus aria-hidden="true" />
-    <span>Add a to-do</span>
-  </button>
+  {#if adding}
+    <form
+      class="new"
+      onsubmit={(event) => {
+        event.preventDefault();
+        add();
+      }}
+    >
+      <label class="sr-only" for="new-{uid}">The new to-do</label>
+      <input
+        bind:value={draft}
+        class="field"
+        id="new-{uid}"
+        onkeydown={(event) => {
+          if (event.key === "Escape") {
+            adding = false;
+          }
+        }}
+        placeholder="What to do"
+      />
+      <Button size="xs" type="submit">Add</Button>
+    </form>
+  {:else}
+    <button
+      class="add pressable touch-hit mark-line"
+      onclick={() => {
+        adding = true;
+      }}
+      type="button"
+    >
+      <IconPlus aria-hidden="true" />
+      <span>Add a to-do</span>
+    </button>
+  {/if}
   <Button class="canvas" label="Open in canvas" size="sm" variant="link" />
 </div>
 <section class="spec">
@@ -57,6 +107,29 @@
 
     & :global(.canvas) {
       padding-inline: 0;
+    }
+  }
+  .new {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+  .field {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    min-block-size: 28px;
+    padding: var(--space-1) var(--space-2);
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    color: var(--ink-strong);
+    font: var(--type-body);
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: -2px;
     }
   }
   .add {
