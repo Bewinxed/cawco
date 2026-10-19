@@ -275,8 +275,7 @@
   }
 </script>
 
-<!-- literal: 8px gap -->
-<section data-slot="model" class="grid gap-(--gap)" style:--gap="8px">
+<section data-slot="model" class="grid gap-space-2">
   {#if !runtime}
     <SectionHeader hue="var(--hue-cyan-500)" icon={Cpu} {label}>
       {#snippet right()}
@@ -295,23 +294,19 @@
       {/snippet}
     </SectionHeader>
   {/if}
-  <!-- literal: rail 40px step (44px on a coarse pointer), 36px radio, 6px padding -->
   <div
     data-slot="picker"
-    class="relative grid rounded-md border border-border-control bg-surface-raised shadow-xs rail-step-(--rail-step-fine) coarse:rail-step-(--rail-step-coarse) data-railed:grid-cols-(--cols)"
+    class="relative grid rounded-md border border-border-control bg-surface-raised shadow-xs rail-step-(--rail-step-fine) coarse:rail-step-(--c-row-h) data-railed:grid-cols-(--cols)"
     data-railed={!runtime || undefined}
     style:--cols="auto minmax(0, 1fr)"
-    style:--rail-gap="calc(var(--rail-step) - var(--rail-radio))"
-    style:--rail-pad="6px"
-    style:--rail-radio="36px"
-    style:--rail-step-coarse="44px"
-    style:--rail-step-fine="40px"
+    style:--rail-gap="calc(var(--rail-step) - var(--c-btn-h))"
+    style:--rail-step-fine="calc(var(--c-btn-h) + var(--space-1))"
   >
     {#if !runtime}
       <Rail
         axis="y"
-        class="grid content-box-start gap-(--rail-gap) hit-gap-x-(--rail-gap) hit-gap-y-(--rail-gap) rounded-l-md border-r border-r-border-hairline bg-surface-recess p-(--rail-pad)"
-        itemClass="ns-in touch-hit press-tint grid size-(--rail-radio) place-items-center"
+        class="grid content-box-start gap-(--rail-gap) hit-gap-x-(--rail-gap) hit-gap-y-(--rail-gap) rounded-s-md border-e border-e-border-hairline bg-surface-recess p-space-2"
+        itemClass="ns-in touch-hit press-tint grid size-c-btn-h place-items-center"
         stagger={30}
         items={railItems}
         label="Harness"
@@ -352,26 +347,20 @@
       </Rail>
     {/if}
     <div data-slot="pick" class="grid min-w-0">
-      <!-- literal: 8px gap, 42px / 44px height, 12px inline padding -->
       <label
         data-slot="search"
-        class="field-underline flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) border-b border-b-border-hairline px-(--pad-x)"
-        style:--gap="8px"
-        style:--h="42px"
-        style:--h-phone="44px"
-        style:--pad-x="12px"
+        class="field-underline flex h-c-row-h items-center gap-space-2 border-b border-b-border-hairline px-space-3"
       >
         <Search
           data-model-section-lead
           class="size-icon-md flex-none text-ink-subtle"
         />
-        <!-- literal: 1.4 line height, 1rem on a phone -->
         <input
           aria-controls={`${uid}-models`}
           aria-label="Search models"
           autocapitalize="off"
           autocorrect="off"
-          class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-(--lh) font-normal text-ink-strong max-phone:text-(length:--fs-phone)"
+          class="h-full min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-body font-normal text-ink-strong"
           id={`${uid}-search`}
           oninput={(event) => {
             query = event.currentTarget.value;
@@ -387,21 +376,17 @@
           }}
           placeholder="Search or paste a model id…"
           spellcheck="false"
-          style:--fs-phone="1rem"
-          style:--lh="1.4"
           value={query}
           {@attach autowidth(() => query)}
         />
         {#if query}
-          <!-- literal: 22px box -->
           <button
             data-slot="clear"
             aria-label="Clear"
-            class="inline-flex size-(--box) cursor-pointer items-center justify-center rounded-xs border-none border-current bg-transparent text-ink-subtle hover:text-ink-strong"
+            class="inline-flex size-space-6 cursor-pointer items-center justify-center rounded-xs border-none border-current bg-transparent text-ink-subtle hover:text-ink-strong"
             onclick={() => {
               query = "";
             }}
-            style:--box="22px"
             type="button"
           >
             <Clear class="size-icon-md" />
@@ -409,25 +394,23 @@
         {/if}
       </label>
 
-      <!-- literal: 300px height, 4px padding -->
       <div
         data-slot="list"
         aria-label={`${harnessName(listHarness)} models`}
-        class="fai-scroll relative grid h-(--h) content-box-start gap-space-row overflow-x-hidden overflow-y-auto p-space-1"
+        class="fai-scroll relative grid h-(--c-model-list-h) content-box-start gap-space-row overflow-x-hidden overflow-y-auto p-space-1"
         id={`${uid}-models`}
         role="listbox"
-        style:--h="300px"
         tabindex="-1"
         bind:this={list}
         {@attach highlight({ rows: "[data-fh]" })}
       >
-        <!-- Every option above the chosen one is a row (46px a step), so the
+        <!-- Every option above the chosen one is a row (a row and its gap a step), so the
              fill travels by its index; it is as tall as the chosen option. -->
         <span
           data-slot="fill"
           aria-hidden="true"
           class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 rounded-sm bg-selected-bg transition-[opacity] dur-control ease-out motion-safe:transition-panel-resize"
-          style:transform={`translateY(calc(${modelIdx} * 46px))`}
+          style:transform={`translateY(calc(${modelIdx} * (var(--c-row-h) + var(--space-row))))`}
           style:height={`${chosenHeight}px`}
           style:opacity={hiOpacity}
         ></span>
@@ -439,15 +422,10 @@
             inert
           >
             {#each swap.leaving as entry, i (entry.id)}
-              <!-- literal: 10px gap, 44px height, 6px 8px padding -->
               <div
                 data-slot="row"
-                class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed border border-transparent bg-transparent"
+                class="group relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed border border-transparent bg-transparent"
                 style:animation={swap.leaveAnim(i)}
-                style:--gap="10px"
-                style:--h="44px"
-                style:--pad-x="8px"
-                style:--pad-y="6px"
               >
                 {@render rowBody(entry)}
               </div>
@@ -457,25 +435,19 @@
         <!-- One slot for the custom row and the empty line, ahead of the rows:
              the one leaving keeps its place while the other fades in. -->
         {#if showCustomRow}
-          <!-- literal: 10px gap, 44px height, 6px 8px padding, 26px tile -->
           <button
             data-slot="row"
-            class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
+            class="group relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint border border-dashed border-neutral-8 bg-surface-raised hover:bg-surface-hover"
             data-fh="1"
             onclick={pickCustom}
-            style:--gap="10px"
-            style:--h="44px"
-            style:--pad-x="8px"
-            style:--pad-y="6px"
             type="button"
             in:crossIn
             out:crossOut
           >
             <span
               data-slot="tile"
-              class="ns-tile size-(--tile)"
-              data-variant="ink"
-              style:--tile="26px"><Code class="size-icon-md" /></span
+              class="ns-tile size-c-mark"
+              data-variant="ink"><Code class="size-icon-md" /></span
             >
             <span data-slot="text" class="min-w-0 flex-1">
               <span
@@ -495,13 +467,9 @@
             >
           </button>
         {:else if noResults}
-          <!-- literal: 6px gap, 22px 12px padding -->
           <div
             data-slot="none"
-            class="type-meta grid place-items-center gap-(--gap) px-(--pad-x) py-(--pad-y) text-center text-pretty text-ink-subtle"
-            style:--gap="6px"
-            style:--pad-x="12px"
-            style:--pad-y="22px"
+            class="type-meta grid place-items-center gap-space-2 px-space-3 py-space-6 text-center text-pretty text-ink-subtle"
             in:crossIn
             out:crossOut
           >
@@ -525,22 +493,16 @@
             style:animation={swap.rowAnim(i)}
             {@attach picked && tools ? chosen : undefined}
           >
-            <!-- literal: 10px gap, 44px height, 6px 8px padding, 12rem basis -->
             <button
               data-slot="row"
               aria-disabled={reason ? true : undefined}
               aria-selected={picked}
-              class="group relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint min-w-0 shrink grow basis-(--basis) border border-transparent bg-transparent"
+              class="group relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm px-space-2 py-space-2 text-start text-ink-strong aria-selected:text-selected-ink disabled:cursor-not-allowed press-tint min-w-0 shrink grow basis-(--c-model-row-basis) border border-transparent bg-transparent"
               data-fh="1"
               data-model={entry.id}
               disabled={Boolean(reason)}
               onclick={() => pick(entry)}
               role="option"
-              style:--basis="12rem"
-              style:--gap="10px"
-              style:--h="44px"
-              style:--pad-x="8px"
-              style:--pad-y="6px"
               type="button"
             >
               {@render rowBody(entry, reason)}
@@ -548,13 +510,9 @@
             {#if picked && tools}
               <!-- The chips' line folds open and shut under the name, so the
                    rows after it glide; the chips glide between rows in it. -->
-              <!-- literal: 44px height, 4px / 6px inline padding, 28px chips -->
               <div
                 data-slot="tools"
-                class="flex h-(--h) flex-none items-center justify-end ps-space-1 pe-(--pe)"
-                style:--chip-h="28px"
-                style:--h="44px"
-                style:--pe="6px"
+                class="flex h-c-row-h flex-none items-center justify-end ps-space-1 pe-space-2"
                 in:line
                 out:line
               >
@@ -578,11 +536,9 @@
 {#snippet rowBody(entry: ModelEntry, reason?: string)}
   {@const provider = providerOf(entry.id)}
   {#if mixedMakers}
-    <!-- literal: 26px tile -->
     <span
       data-slot="tile"
-      class="ns-tile size-(--tile) overflow-hidden group-disabled:opacity-50"
-      style:--tile="26px"
+      class="ns-tile size-c-mark overflow-hidden group-disabled:opacity-50"
     >
       {#if provider}
         <ProviderLogo class="size-icon-md" model={entry.id} size={16} />
@@ -619,11 +575,3 @@
     >
   {/if}
 {/snippet}
-
-<style>
-  /* residual: foreign-dom */
-  [data-slot="tools"] :global(.ns-chip-btn[data-tool]) {
-    height: var(--chip-h);
-    background: var(--surface-raised);
-  }
-</style>
