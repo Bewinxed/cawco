@@ -815,7 +815,6 @@
          the provider's limit is its own unit (usage/ProviderLimit). -->
     <div
       class="flex flex-auto flex-wrap items-center gap-x-space-2 gap-y-space-1"
-      style:--row-paint="var(--surface-raised)"
     >
       {#if percent !== null && stats.totalTokens !== null && stats.maxTokens !== null}
         <span class="flex-none whitespace-nowrap text-ink-muted">Context</span>
@@ -827,7 +826,7 @@
             elapsed={null}
             label="Context"
             reads="used"
-            size={4}
+            size="compact"
             state={fillState(percent)}
             used={percent}
           />
