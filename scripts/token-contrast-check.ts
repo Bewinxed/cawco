@@ -13,8 +13,8 @@
  * `light-dark()`, `color-mix()` and relative `oklch(from …)` as the cascade
  * does. Over that this check only paints: a colour with alpha (a wash, a
  * glyph at its breath floor) is laid over what stands under it, source-over
- * in sRGB as the browser composites, after gamut-mapping each layer into sRGB
- * (WCAG's luminance is defined there).
+ * in sRGB as the browser composites, each layer clipped into sRGB as the
+ * browser clips it (WCAG's luminance is defined there).
  *
  * Each row of PAIRS names the DESIGN.md line or token comment it comes from.
  * A row that fails today is marked `known` with its measured ratio, so it
@@ -36,6 +36,12 @@ type Theme = "light" | "dark";
 type Floor = number | Record<Theme, number>;
 
 interface Pair {
+  /**
+   * What the mark is measured against, when it is not what it is painted
+   * over: a stroke on an edge is painted over its own sheet and read against
+   * the fill beyond it. Painted as `bg` is.
+   */
+  against?: string[];
   /** Painted bottom first: token paths, `color.` taken as read, or raw CSS. */
   bg: string[];
   /** A token path (`color.` taken as read) or raw CSS over the token CSS. */
@@ -110,6 +116,8 @@ const S = {
   identity: "DESIGN.md:573 Project identity; token identity-ink",
   rowOutline: "DESIGN.md:683 Borders are graded; token border-row-outline",
   rim: "DESIGN.md:693 Session tab status rim; token tab-rim-mix-chosen/-idle",
+  recall:
+    "DESIGN.md:870 Recall wheel ('Every row standing in the shape is whole and holds 4.5:1')",
   hairline: "DESIGN.md:709 Needs you / Notices hairline",
   stale: "DESIGN.md:772 relay bar; token account-stale-opacity",
   dial: "DESIGN.md:776 The dial",
@@ -326,7 +334,11 @@ const PAIRS: Pair[] = [
       source: S.duotone,
     },
   ]),
-  // The chosen session tab's rim, its top against the shelf.
+  // The chosen session tab's rim: its stroke over the tab's own sheet, read
+  // against the shelf above its top and against the fills either side of its
+  // sides (its sheet, and a receded neighbour's). Painted so, it measures the
+  // stated 4.1 / 5.7 working and 3.2 / 3.8 idle at the top, 4.5 / 5.0
+  // working and 3.5 / 3.4 idle at the sides.
   ...(
     [
       ["status-live-glyph", "effect.tab-rim-mix-chosen"],
@@ -334,13 +346,49 @@ const PAIRS: Pair[] = [
       ["status-fail-glyph", "effect.tab-rim-mix-chosen"],
       ["ink-muted", "effect.tab-rim-mix-idle"],
     ] as const
-  ).map(([ink, mix]) => ({
-    label: `${ink} rim at ${mix.split(".")[1]} on surface-shelf`,
+  ).flatMap(([ink, mix]) =>
+    (
+      [
+        ["top, against surface-shelf", "surface-shelf"],
+        ["side, against tab-sheet", "tab-sheet"],
+        ["side, against tab-recede-1", "tab-recede-1"],
+      ] as const
+    ).map(([where, against]) => ({
+      label: `${ink} rim at ${mix.split(".")[1]}: ${where}`,
+      fg: ink,
+      fgOpacity: mix,
+      bg: ["tab-sheet"],
+      against: [against],
+      floor: UI,
+      source: S.rim,
+    }))
+  ),
+  // The recall wheel's rows on the grown shape (surface-raised, grown.ts),
+  // the topmost faded furthest: 94% on a wide window, 95.5% on a compact one.
+  ...(
+    [
+      ["ink-strong", "a row's words"],
+      ["ink-muted", "a row's time"],
+    ] as const
+  ).map(([ink, what]) => ({
+    label: `${ink} (${what}) at the top row's 94% on surface-raised`,
     fg: ink,
-    fgOpacity: mix,
-    bg: ["surface-shelf"],
-    floor: UI,
-    source: S.rim,
+    fgOpacity: 0.94,
+    bg: ["surface-raised"],
+    floor: TEXT,
+    source: S.recall,
+  })),
+  ...(
+    [
+      ["selected-ink", "the pick"],
+      ["ink-subtle", "an empty draft's hint"],
+    ] as const
+  ).map(([ink, what]) => ({
+    label: `${ink} (${what}) on surface-raised`,
+    fg: ink,
+    bg: ["surface-raised"],
+    floor: TEXT,
+    source: S.recall,
   })),
   // Accounts: disc, rim and week sector on the border-control track.
   ...ACCOUNTS.flatMap((hue) => [
@@ -429,9 +477,14 @@ function paint(spec: string, mode: string): Color {
   return ev.colourOf(tokenPath(spec), mode, spec);
 }
 
-/** Into sRGB as the screen draws it: gamut-mapped, channels in 0..1. */
+/**
+ * Into sRGB as the screen draws it: each channel clipped to 0..1. Browsers
+ * clip an out-of-gamut colour per channel rather than gamut-map it ("Because
+ * Chrome and Firefox do naive clipping", w3c/csswg-drafts#9449), and so did
+ * the probe that measured the breath floor's 3.13:1 and 3.14:1.
+ */
 const srgb = (c: Color): [number, number, number, number] => {
-  const s = c.to("srgb").toGamut({ space: "srgb" });
+  const s = c.to("srgb");
   const [r, g, b] = s.coords.map((v) =>
     Math.min(1, Math.max(0, Number(v ?? 0)))
   );
@@ -470,23 +523,30 @@ interface Measure {
   ratio: number;
 }
 
-function measure(pair: Pair, theme: Theme): Measure {
-  const mode = MODE[theme];
-  const [first, ...rest] = pair.bg;
+/** A stack of layers, bottom first, painted into one opaque colour. */
+function ground(layers: string[], mode: string, where: string) {
+  const [first, ...rest] = layers;
   if (!first) {
-    throw new Error(`${pair.label}: no ground`);
+    throw new Error(`${where}: no ground`);
   }
   const base = srgb(paint(first, mode));
   if (base[3] < 1) {
-    throw new Error(`${pair.label}: its first ground ${first} is translucent`);
+    throw new Error(`${where}: its first ground ${first} is translucent`);
   }
-  let bg: [number, number, number] = [base[0], base[1], base[2]];
+  let painted: [number, number, number] = [base[0], base[1], base[2]];
   for (const layer of rest) {
-    bg = over(paint(layer, mode), bg);
+    painted = over(paint(layer, mode), painted);
   }
+  return painted;
+}
+
+function measure(pair: Pair, theme: Theme): Measure {
+  const mode = MODE[theme];
+  const under = ground(pair.bg, mode, pair.label);
   const ink = paint(pair.fg, mode).clone();
   ink.alpha = Number(ink.alpha ?? 1) * opacity(pair.fgOpacity, mode);
-  const fg = over(ink, bg);
+  const fg = over(ink, under);
+  const bg = pair.against ? ground(pair.against, mode, pair.label) : under;
   const ratio = Color.contrastWCAG21(
     new Color("srgb", fg),
     new Color("srgb", bg)
