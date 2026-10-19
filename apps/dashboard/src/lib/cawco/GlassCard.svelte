@@ -458,7 +458,17 @@
       const pressedGlass =
         document.activeElement instanceof Element &&
         glass?.contains(document.activeElement);
-      if (!(closedOutside || pressedGlass) && returnTo?.isConnected) {
+      // What the card put away also moved the focus on to somewhere of its
+      // own (Files' ask, into the composer): it stays there.
+      const movedOn =
+        document.activeElement instanceof HTMLElement &&
+        document.activeElement !== document.body &&
+        !content?.contains(document.activeElement) &&
+        !pressedGlass;
+      if (
+        !(closedOutside || pressedGlass || movedOn) &&
+        returnTo?.isConnected
+      ) {
         returnTo.focus({ preventScroll: true });
       }
       closedOutside = false;

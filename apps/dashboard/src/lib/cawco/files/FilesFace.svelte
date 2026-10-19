@@ -18,7 +18,12 @@
   import { toast } from "../toasts.js";
   import { askOpenAt } from "../transcript/open-at.svelte";
   import FilesList from "./FilesList.svelte";
-  import { type AttachmentRow, files, floatPlace } from "./files.svelte";
+  import {
+    type AttachmentRow,
+    askForAPage,
+    files,
+    floatPlace,
+  } from "./files.svelte";
 
   let { onclose }: { onclose: () => void } = $props();
 
@@ -54,6 +59,13 @@
     };
   }
 
+  /** The empty state's ask into the session's composer; Files goes, so the composer has the focus. */
+  function ask() {
+    if (instanceId && askForAPage(instanceId)) {
+      onclose();
+    }
+  }
+
   function show(attachment: AttachmentRow) {
     if (instanceId) {
       askOpenAt(instanceId, attachment.messageId);
@@ -70,6 +82,7 @@
           ? files.picked.id
           : null}
         {instanceId}
+        onask={ask}
         onpick={pick}
         onshow={show}
       />

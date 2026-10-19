@@ -43,6 +43,7 @@ import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { tokenColour } from "../../geom";
 import { scan } from "../../journeys/scan";
 import {
+  COMPOSER,
   type Kit,
   open,
   ROOT,
@@ -293,6 +294,7 @@ const run = async (kit: Kit) => {
   }
 
   await reviewLegs(kit, base, { many, one });
+  await askLegs(kit, base, none);
   for (const theme of THEMES) {
     await desk(kit, base, theme, { many, one, none });
     for (const view of ["phone", "narrowDesk"] as const) {
@@ -1096,6 +1098,134 @@ const reviewLegs = async (
     JSON.stringify(fit)
   );
   await narrow.close();
+};
+
+/** The composer's words, whether it has the focus, and whether the caret stands after the last of them. */
+const composerSaid = (page: Page) =>
+  page.evaluate((selector) => {
+    const field = document.querySelector<HTMLElement>(selector);
+    const selection = getSelection();
+    let caretAtEnd = false;
+    if (
+      field &&
+      selection &&
+      selection.rangeCount > 0 &&
+      selection.isCollapsed
+    ) {
+      const rest = document.createRange();
+      rest.selectNodeContents(field);
+      const at = selection.getRangeAt(0);
+      rest.setStart(at.endContainer, at.endOffset);
+      caretAtEnd = rest.toString() === "";
+    }
+    return {
+      text: field?.textContent ?? null,
+      focused:
+        !!field &&
+        (field === document.activeElement ||
+          field.contains(document.activeElement)),
+      caretAtEnd,
+    };
+  }, COMPOSER);
+
+/** Whether the ask's words stand anywhere on the page outside the composer: a send would put them in the transcript. */
+const sentAnywhere = (page: Page, words: string) =>
+  page.evaluate(
+    ([selector, text]) =>
+      [...document.querySelectorAll<HTMLElement>('[data-slot="pane"]')].some(
+        (pane) => {
+          const copy = pane.cloneNode(true) as HTMLElement;
+          for (const field of copy.querySelectorAll(selector)) {
+            field.closest("form")?.remove();
+          }
+          return copy.textContent?.includes(text) ?? false;
+        }
+      ),
+    [COMPOSER, words] as const
+  );
+
+/** The ask's words (files.svelte.ts ASK_FOR_A_PAGE). */
+const ASK_WORDS = "Make a page that shows what we've done so far";
+
+/**
+ * 23. The Empty Starts Work Rule, a session's own case: Files with nothing
+ * in it offers "Ask Claude Code for a page", shown only once the read has
+ * answered empty; pressed, the words stand in the session's composer with
+ * the caret after them and nothing is sent. On the phone, its touch area
+ * is 44px.
+ */
+const askLegs = async (kit: Kit, base: string, none: string) => {
+  const onDesk = await openSession(kit, base, "desk", "light", none);
+  await onDesk.waitForTimeout(2000);
+  await onDesk.locator("[data-files-control]").click();
+  await onDesk.locator(".kit-pop.files-pop").waitFor();
+  const before = await onDesk.evaluate(() => ({
+    ask:
+      document.querySelector("[data-files-ask]")?.textContent?.trim() ?? null,
+    empty: !!document.querySelector("[data-files-empty]"),
+  }));
+  await onDesk.locator("[data-files-ask]").waitFor({ timeout: 15_000 });
+  const label = (
+    await onDesk.locator("[data-files-ask]").textContent()
+  )?.trim();
+  await onDesk.locator("[data-files-ask]").click();
+  await onDesk
+    .locator(".kit-pop.files-pop[data-state='open']")
+    .waitFor({ state: "detached", timeout: 10_000 })
+    .catch(() => null);
+  await onDesk.waitForTimeout(800);
+  const deskSaid = await composerSaid(onDesk);
+  await onDesk.waitForTimeout(1500);
+  const deskSent = await sentAnywhere(onDesk, ASK_WORDS);
+  kit.check(
+    '23a (onDesk): Files with nothing in it offers "Ask Claude Code for a page" once the read answered; pressed, Files goes, the words stand in the session\'s composer with the focus and the caret after them, and nothing is sent',
+    label === "Ask Claude Code for a page" &&
+      deskSaid.text === ASK_WORDS &&
+      deskSaid.focused &&
+      deskSaid.caretAtEnd &&
+      !deskSent,
+    `before the read ${JSON.stringify(before)}; label ${JSON.stringify(label)}; composer ${JSON.stringify(deskSaid)}; sent ${deskSent}`
+  );
+  await onDesk.close();
+
+  const phone = await openSession(kit, base, "phone", "light", none);
+  await phone.locator('[data-slot="burger"]').click();
+  await phone.locator("[data-sidebar-files]").click();
+  const ask = phone.locator("[data-files-sheet] [data-files-ask]");
+  await ask.waitFor({ timeout: 15_000 });
+  await phone.waitForTimeout(600);
+  const hit = await ask.evaluate((el) => {
+    const after = getComputedStyle(el, "::after");
+    const box = el.getBoundingClientRect();
+    const left = Number.parseFloat(after.left);
+    const right = Number.parseFloat(after.right);
+    const top = Number.parseFloat(after.top);
+    const bottom = Number.parseFloat(after.bottom);
+    return {
+      width: box.width - left - right,
+      height: box.height - top - bottom,
+    };
+  });
+  await ask.click();
+  await phone
+    .locator("[data-files-sheet]")
+    .waitFor({ state: "detached", timeout: 10_000 })
+    .catch(() => null);
+  await phone.waitForTimeout(800);
+  const phoneSaid = await composerSaid(phone);
+  await phone.waitForTimeout(1500);
+  const phoneSent = await sentAnywhere(phone, ASK_WORDS);
+  kit.check(
+    "23b (phone): the ask's touch area is at least 44×44, and pressed, the drawer goes and the words stand in the composer with the focus and the caret after them, nothing sent",
+    hit.width >= 44 &&
+      hit.height >= 44 &&
+      phoneSaid.text === ASK_WORDS &&
+      phoneSaid.focused &&
+      phoneSaid.caretAtEnd &&
+      !phoneSent,
+    `touch area ${JSON.stringify(hit)}; composer ${JSON.stringify(phoneSaid)}; sent ${phoneSent}`
+  );
+  await phone.close();
 };
 
 /** The drawer's legs at 390 and 680, in one theme. */

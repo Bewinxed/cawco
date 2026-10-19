@@ -26,6 +26,7 @@ import { cawco } from "../client.svelte";
 import type { Excerpt } from "../find/find-rows";
 import { failureWords } from "../hub-read";
 import { extensionOf } from "../lightbox/extension";
+import { paneDrafts } from "../transcript/composer-draft.svelte";
 import { speakerName } from "../transcript/speaker";
 
 /** One of a session's lists as Files last read it. */
@@ -281,6 +282,23 @@ export function followFiles(instanceId: string | null): void {
   readAt.set(instanceId, at);
   readArtifacts(instanceId);
   readAttachments(instanceId);
+}
+
+/**
+ * The Empty Starts Work Rule, a session's own case: its Files are filled by
+ * its own agent, so the empty state's one action puts these words in the
+ * session's composer, the caret after them, nothing sent.
+ */
+export const ASK_FOR_A_PAGE = "Make a page that shows what we've done so far";
+
+/** Puts the ask in the session's composer; false when its pane isn't standing. */
+export function askForAPage(instanceId: string): boolean {
+  const draft = paneDrafts.get(instanceId);
+  if (!draft) {
+    return false;
+  }
+  draft.ask(ASK_FOR_A_PAGE);
+  return true;
 }
 
 /* ── Where it stands ──────────────────────────────────────────────── */

@@ -72,7 +72,10 @@
   import TaskPane from "./tasks/TaskPane.svelte";
   import { inLists, threadIdOf, threadTabId } from "./thread-tabs";
   import Composer, { type ComposerAsk } from "./transcript/Composer.svelte";
-  import { ComposerDraft } from "./transcript/composer-draft.svelte";
+  import {
+    ComposerDraft,
+    paneDrafts,
+  } from "./transcript/composer-draft.svelte";
   import FootFade from "./transcript/FootFade.svelte";
   import HeadFade from "./transcript/HeadFade.svelte";
   import { keepDraft } from "./transcript/keep-draft.svelte";
@@ -861,6 +864,17 @@
   // mounted once per conversation (PaneHost keys it by id), so the id is
   // fixed for its life, and the draft is written once more as it closes.
   keepDraft(draft, () => viewId);
+
+  // Reachable from outside the composer while the pane stands (Files' Ask).
+  $effect(() => {
+    const id = viewId;
+    paneDrafts.set(id, draft);
+    return () => {
+      if (paneDrafts.get(id) === draft) {
+        paneDrafts.delete(id);
+      }
+    };
+  });
 
   // A queued message being edited here goes back as it was when the
   // conversation closes: its bubble is whole wherever it is next drawn.

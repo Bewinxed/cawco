@@ -121,6 +121,13 @@ export interface Lift {
   words: string;
 }
 
+/**
+ * Each conversation's composer draft while its pane stands, by its id
+ * (SessionPane registers its own): what reaches a conversation's composer
+ * from outside it.
+ */
+export const paneDrafts = new Map<string, ComposerDraft>();
+
 export class ComposerDraft {
   text = $state("");
   images = $state<PendingImage[]>([]);
@@ -152,6 +159,16 @@ export class ComposerDraft {
    * as they stood.
    */
   pressed = $state<{ place: StarterPlace; text: string } | null>(null);
+
+  /**
+   * Words asked of the session from outside its composer (Files' empty
+   * state, The Empty Starts Work Rule) into the field, the caret after them:
+   * nothing is sent, and they are the person's to edit.
+   */
+  ask(words: string): void {
+    this.text = words;
+    this.focusWanted = true;
+  }
 
   /** A starter's words into the field, the caret after them: nothing is sent. */
   press(words: string, place: StarterPlace): void {

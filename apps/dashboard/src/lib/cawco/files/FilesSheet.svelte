@@ -17,7 +17,7 @@
   import { toast } from "../toasts.js";
   import { askOpenAt } from "../transcript/open-at.svelte";
   import FilesList from "./FilesList.svelte";
-  import { type AttachmentRow, files } from "./files.svelte";
+  import { type AttachmentRow, askForAPage, files } from "./files.svelte";
 
   /**
    * vaul's stops, as shares of the screen's height: the lower, where it
@@ -48,6 +48,14 @@
     }
   }
 
+  /** The empty state's ask into the session's composer; the drawer goes, so the composer has the focus. */
+  function ask() {
+    if (instanceId && askForAPage(instanceId)) {
+      files.returnTo = null;
+      files.sheet = false;
+    }
+  }
+
   function show(attachment: AttachmentRow) {
     if (instanceId) {
       askOpenAt(instanceId, attachment.messageId);
@@ -66,10 +74,20 @@
     class="files-drawer"
     data-files-sheet
     onCloseAutoFocus={(event: Event) => {
+      // The focus moved on by itself (the ask, into the composer): it stays.
       // Opened from the sidebar, which went as it rose: the focus goes back
       // to what invoked the sidebar, the burger.
       const back = files.returnTo;
       files.returnTo = null;
+      const moved = document.activeElement;
+      if (
+        moved instanceof HTMLElement &&
+        moved !== document.body &&
+        !moved.closest("[data-files-sheet]")
+      ) {
+        event.preventDefault();
+        return;
+      }
       if (back?.isConnected) {
         event.preventDefault();
         back.focus();
@@ -85,7 +103,13 @@
     >
       {#if instanceId}
         {#key instanceId}
-          <FilesList {instanceId} onpick={pick} onshow={show} segmented />
+          <FilesList
+            {instanceId}
+            onask={ask}
+            onpick={pick}
+            onshow={show}
+            segmented
+          />
         {/key}
       {/if}
     </div>

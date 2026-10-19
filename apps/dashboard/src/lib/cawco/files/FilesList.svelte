@@ -50,12 +50,14 @@
   } from "#lib/icons.js";
   import { formatAgeShort } from "#lib/utils/time.js";
   import { searchArtifacts } from "../artifact-api";
+  import { cawco } from "../client.svelte";
   import FindField from "../find/FindField.svelte";
   import { excerptParts } from "../find/find-rows";
   import { failureWords } from "../hub-read";
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import { dur } from "../motion/curves.svelte";
   import RowFault from "../RowFault.svelte";
+  import { speakerName } from "../transcript/speaker";
   import ArtifactCards from "./ArtifactCards.svelte";
   import {
     type ArtifactCard,
@@ -73,6 +75,7 @@
     segmented = false,
     onpick,
     onshow,
+    onask,
   }: {
     /** The session whose files these are. */
     instanceId: string;
@@ -84,7 +87,17 @@
     onpick: (artifact: ArtifactSummary) => void;
     /** Show in conversation pressed: the transcript goes to the message. */
     onshow: (attachment: AttachmentRow) => void;
+    /** The empty state's one action pressed: the ask is in the composer. */
+    onask: () => void;
   } = $props();
+
+  /**
+   * The Empty Starts Work Rule, a session's own case: "Ask" takes its
+   * object by name (WORDS.md), the session's agent by its harness.
+   */
+  const askLabel = $derived(
+    `Ask ${speakerName(cawco.session(instanceId)?.harness)} for a page`
+  );
 
   const uid = $props.id();
   let words = $state("");
@@ -356,7 +369,17 @@
       icon={IconFiles}
       line="Pages, canvases, previews and the files you and the agent share collect here."
       title="Nothing here yet"
-    />
+    >
+      {#snippet action()}
+        <Button
+          data-files-ask
+          label={askLabel}
+          onclick={onask}
+          size="sm"
+          variant="outline"
+        />
+      {/snippet}
+    </EmptyState>
   {:else}
     <!-- The finder's own field (FindField), as Jump's. -->
     <div class="files-search" data-files-search>
@@ -497,7 +520,16 @@
       reason="Couldn't search this session's artifacts"
     />
   {:else if artifacts?.length === 0}
-    <p class="files-none">Nothing made yet</p>
+    <div class="files-none files-none-ask">
+      <span>Nothing made yet</span>
+      <Button
+        data-files-ask
+        label={askLabel}
+        onclick={onask}
+        size="xs"
+        variant="ghost"
+      />
+    </div>
   {:else if answered && cards.length === 0}
     <p class="files-none" data-files-none>No artifacts match “{asked}”</p>
   {:else if artifacts || artifactsGhost}
@@ -962,6 +994,13 @@
     color: var(--ink-muted);
     font: var(--type-meta);
     overflow-wrap: anywhere;
+  }
+  /* A region with nothing made offers to ask for it, on the same line,
+     wrapping under the words when the line is short. */
+  .files-none-ask {
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-1) var(--space-2);
   }
   /* A row as it will stand (The Claim Of Nothing Rule: the skeleton at the
      real layout's size). */
