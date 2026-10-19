@@ -1,3 +1,5 @@
+Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, emil-design-eng, transitions-dev, interface-craft, ui-observer.
+
 # Lane L21-cawco-preview-1: ArtifactMenu, CanvasView, LiveDot, PinCard, PinList, PreviewPane
 
 Started from the merge `f5c5024ab`. Deltas A to T applied (S and T win). Every `<style>` block in the six files is gone.
@@ -43,6 +45,9 @@ Started from the merge `f5c5024ab`. Deltas A to T applied (S and T win). Every `
 - fixed: LiveDot.svelte the dot is `size-space-2` (7px) where it was 8px: the ladder's step for a dot.
 - fixed: PreviewPane.svelte:2301 the menu's Comments and Send picks hide their words by `in-form-compact:hidden` inside the head item, where a descendant rule did.
 - fixed: ArtifactMenu.svelte:242 the dropped line's Label keeps its own muted meta look; the old rule never drew.
+
+- fixed: Design Critique (read from the markup, no live render): the head's icon-only mode switch keeps its accessible names and the Comments button its name; hooks `data-head-item`, `data-slot="more"` untouched.
+- gap: Design Critique / ui-observer: layout not verified in a browser (no live session in this lane); the paired shells carry it.
 
 ## Tokens
 - token: --text-input 16px — the phone field floor so iOS Safari does not zoom into the pin's reply field (read as `--field-fs` by the kit Textarea's `pin-field` look); no text step is 16px.
@@ -147,4 +152,4 @@ theme: component preview-modes-labels
 (none)
 
 ## Counts
-theme: 5 · kit-swap: 3 · token: 2 · removed: 21 · fixed: 10 · gap: 4
+theme: 5 · kit-swap: 3 · token: 2 · removed: 21 · fixed: 11 · gap: 5
