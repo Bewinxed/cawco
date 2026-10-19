@@ -1444,7 +1444,7 @@
         data-drop-after={(dropHint.tabIndexIn(leaf.id) === i + 1 &&
           i === tabs.length - 1) ||
           undefined}
-        class="group/tab pane-tab-pads pane-tab-rims relative flex max-w-c-tab-max-w min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:reordering:not-data-following:transition-[translate] motion-safe:reordering:not-data-following:dur-panel motion-safe:reordering:not-data-following:ease-drawer data-drop-before:before:absolute data-drop-before:before:inset-y-space-row data-drop-before:before:-start-space-row data-drop-before:before:z-4 data-drop-before:before:w-space-row data-drop-before:before:rounded-pill data-drop-before:before:bg-ink-strong data-drop-after:after:absolute data-drop-after:after:inset-y-space-row data-drop-after:after:-end-space-row data-drop-after:after:z-4 data-drop-after:after:w-space-row data-drop-after:after:rounded-pill data-drop-after:after:bg-ink-strong"
+        class="group/tab pane-tab-pads pane-tab-rims pane-tab-needs relative flex max-w-c-tab-max-w min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:reordering:not-data-following:transition-[translate] motion-safe:reordering:not-data-following:dur-panel motion-safe:reordering:not-data-following:ease-drawer data-drop-before:before:absolute data-drop-before:before:inset-y-space-row data-drop-before:before:-start-space-row data-drop-before:before:z-4 data-drop-before:before:w-space-row data-drop-before:before:rounded-pill data-drop-before:before:bg-ink-strong data-drop-after:after:absolute data-drop-after:after:inset-y-space-row data-drop-after:after:-end-space-row data-drop-after:after:z-4 data-drop-after:after:w-space-row data-drop-after:after:rounded-pill data-drop-after:after:bg-ink-strong"
         style:--drop-z="calc(var(--stack-top) + 1)"
         data-chosen={chosen ? "" : undefined}
         data-flush={hungFlush(cardHere, menuHere)}
@@ -1782,7 +1782,8 @@
             }}
             side="bottom"
             sideOffset={0}
-            style="--hang-min: {menuMin}px"
+            class="min-w-(--menu-min)"
+            style="--menu-min: max(var(--c-tab-menu-min), {menuMin}px)"
             tab
             bind:joined={
               () => menuHung === tab.id,
@@ -1880,6 +1881,7 @@
       customAnchor={detailAnchor}
       data-safe-bottom
       folded={takeFolded}
+      class="z-60 w-(--hang-width)"
       style={cardPlace ? `--hang-width: ${cardPlace.width}px` : undefined}
       tab
       onCloseAutoFocus={(event) => {

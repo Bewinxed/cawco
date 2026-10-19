@@ -236,11 +236,6 @@ theme: component pane-tabs-hang
 @layer components {
   .kit-pop[data-session-details-popover] {
     display: flex;
-    z-index: 60;
-    width: var(
-      --hang-width,
-      min(var(--c-details-card-w), calc(100vw - 2 * var(--c-screen-margin)))
-    );
     max-height: min(
       var(--c-details-card-max-h),
       var(--bits-popover-content-available-height, var(--c-sheet-max-h))
@@ -248,7 +243,6 @@ theme: component pane-tabs-hang
     overflow: hidden;
     overscroll-behavior: contain;
     padding: 0;
-    outline: none;
 
     @variant max-phone {
       max-height: min(
@@ -257,9 +251,8 @@ theme: component pane-tabs-hang
       );
     }
   }
-  /* The tab's menu hangs on the tab's own surface, as the card's head is, so the two read as one sheet; as wide as the shape needs past the tab's span (`--hang-min`, from menuMin/placeOf). */
+  /* The tab's menu hangs on the tab's own surface, as the card's head is, so the two read as one sheet. Its width floor (`--menu-min`, from menuMin/placeOf) and the card's width and stack are classes PaneTabs gives HangCard (`min-w-(--menu-min)`, `w-(--hang-width)`, `z-60`): the kit's `min-w-48`, `w-72` and `z-50` are utilities, which a components-layer rule cannot outrank. */
   .kit-pop.kit-hang[data-tab-menu] {
-    min-inline-size: max(var(--c-tab-menu-min), var(--hang-min, 0px));
     --hang-surface: var(--surface-recess);
   }
   /* The floating layer rewrites where the card may stand (bits-ui's `--bits-floating-*` on its wrapper, copied onto the card as `--bits-popover-*`) as the card opens and as it follows its tab, a few times in a frame. As inherited custom properties each rewrite restyled everything the card holds: only the card reads them (its max-height), so they stop at its children. */
@@ -300,8 +293,14 @@ theme: component pane-tabs-hang
       transition: transform var(--dur-pop) var(--ease-drawer);
     }
   }
-  /* Parked on you: the label carries the strong ink whether or not it is chosen, so the ask is legible from across the strip. It comes up at the panel's pace, the way the tab's glyph turns. The tab is named by its own attribute (`data-ff-tab`): under a state, Chrome keys an attribute selector to the attribute's name alone, and `[data-slot="ff-tab"]` restyled every `data-slot` in the tab when `data-needs` came or went. */
-  [data-session-tabs] [data-slot="tab"][data-needs] [data-ff-tab] {
+}
+```
+
+theme: utility pane-tab-needs
+```css
+/* Parked on you (`data-needs` on the tab): the label carries the strong ink whether or not it is chosen, so the ask is legible from across the strip. It comes up at the panel's pace, the way the tab's glyph turns. The label is named by its own attribute (`data-ff-tab`): under a state, Chrome keys an attribute selector to the attribute's name alone, and `[data-slot="ff-tab"]` restyled every `data-slot` in the tab when `data-needs` came or went. A utility, so it outranks TabItem's own `text-ink-muted` (utilities layer) by specificity. */
+@utility pane-tab-needs {
+  &[data-needs] [data-ff-tab] {
     color: var(--ink-strong);
 
     @variant motion-safe {
@@ -398,3 +397,14 @@ cross-file hook: apps/dashboard/src/lib/cawco/workspace/PaneDeck.svelte:107 `[da
 gap: apps/dashboard/src/lib/components/ui/button/button.svelte (no line: the variants) the details head's copy-link button (`data-slot="icon-action"`, SessionDetails.svelte:608) and the tab strip's chevron, close and "+" (PaneTabs.svelte:1715, 1748, 1823) are hand-rolled icon buttons — 28px/20px/24px squares with the house hover fill; the kit's Button has no 20px or 28px icon size and its `ghost` corner is 10px, so a swap is not straight — DESIGN.md Buttons: "one button, its looks are variants".
 gap: apps/dashboard/src/lib/components/ui/popover/popover-content.svelte:96 the details card's `z-index: 60` outranks the kit popover's `z-50` so it stands over the shell's top bar; the shell's stack has no scale — DESIGN.md Elevation & Depth: stacking by role, not by number.
 gap: apps/dashboard/src/lib/components/ui/fluid-tabs/Tabs.svelte (the `tabsVariants`) the session strip's host rules (`pane-tabs-strip`: flex row, padding, shelf surface) restyle the kit's Tabs root and TabsList from outside; they belong to a `Tabs variant="strip"` — DESIGN.md Folder tabs.
+
+## Compiled check
+
+Compiled with the repo's `@tailwindcss/node` 4.3.3 (`compile()` over `@import "src/app.css"` plus the blocks above and the lane's `token:` keys, `build([...])` over the lane's new classes). Emitted selectors:
+
+- `.session-details-chips [data-model-chip]`, `.session-details-chips .ns-chip-btn` (+ `@media (width < 640px)` pair), `.session-details-model-pop [data-slot="picker"|"search" input|"list"|"row"]`: utilities layer. They compete with `ns-theme.css`'s `.ns-chip-btn` (`@utility`, `:where(.ns-theme &)`, zero specificity): ours is (0,2,0) in the same layer and wins by specificity.
+- `.pane-tab-needs[data-needs] [data-ff-tab]` (0,3,0): competes with TabItem's `text-ink-muted` (0,1,0) and `in-variant-folder:data-tab-item-selected:text-ink-muted`; wins by specificity, same layer. (A first draft as an `@layer components` rule lost to those utilities; it is a utility now.)
+- `.z-60`, `.w-(--hang-width)`, `.min-w-(--menu-min)`: utilities on HangCard; they compete with the kit's `z-50`, `w-72`, `min-w-48` (same layer, same specificity): `cn()`/tailwind-merge drops the kit's, so only ours is emitted. The card's `.kit-pop[data-session-details-popover]` rule (components layer) keeps only what no utility sets (max-height, flex, padding, overflow).
+- `.project-dock:data-caw-open:grid-cols-(--docked-cols-side)[data-caw-open]` in `@container (width >= 938px)`: after the base `grid-cols-(--docked-cols)` and the `phone:` variants in source order, same specificity; wins at 938px+ as before.
+- `.motion-safe:reordering:not-data-following:dur-panel` → `:where([data-slot="ff-tabs-list"][data-reordering]) > .x:not([data-following])`, `.motion-safe:details-gliding:*:where([data-session-details-popover][data-morph] *)`, `.motion-safe:animate-breath` → `animation: var(--animate-breath)`, `.before:will-change-opacity::before`, `.group-data-open/tdetails:rotate-180`, `.-start-space-row`, `.inset-ring-border-hairline`: no app.css rule competes.
+- `@layer components` blocks (`pane-tabs-strip`, `pane-tabs-hang`, `project-page-foreign`): they compete with `app.css` `.ff-tabs-list` (components layer, (0,1,0)); ours carry `[data-session-tabs][data-slot="tabs"] .ff-tabs-list` (0,4,0) and win by specificity, whatever the order. `@keyframes breath` is emitted by both the theme and app.css:2972 (identical).
