@@ -35,9 +35,12 @@
  * - nothing is written to the console as an error.
  *
  * And once, every frame at 320, the side surface's floor: each state beside
- * its act on one line, the head's count whole.
+ * its act on one line, the head's count whole. On the phone with every
+ * frame at 360, light and dark: the same round-5 reads, and the edited,
+ * commented and live frames pictured.
  *
- * Captures of every state's frame, at 1440 and 390, light and dark, go to
+ * Captures of every state's frame, at 1440 and 390, light and dark (and at
+ * 360 the edited, commented and live), go to
  * `$TMPDIR/caps/`, the clone's `caps/` and `.probe/plan-view/` (the set the
  * branch carries): each frame whole (label, card, the card's own end),
  * every timed run in it held at rest by the Animation domain.
@@ -2547,6 +2550,50 @@ async function checkNarrow(kit: Kit, base: string): Promise<void> {
   }
 }
 
+/** The states a reviewer reads at a small phone's 360 as well as at 390. */
+const AT_360 = ["Edited", "Commented", "Live"] as const;
+
+/**
+ * One way's canvas on the phone with every frame drawn at 360, a small
+ * phone's width, in one scheme: the round-5 reads hold there too, and the
+ * edited, commented and live frames are pictured.
+ */
+async function leg360(
+  kit: Kit,
+  base: string,
+  theme: "light" | "dark",
+  way: Way
+): Promise<void> {
+  const name = `360 ${theme} ${way.label}`;
+  const page = await kit.page("phone", { init: [BRIDGE, HELPERS], theme });
+  await page.goto(
+    `${canvasUrl(base, `${STORIES}/${way.file}.stories.ts`, {
+      name: way.label,
+      dials: DIALS as CanvasSpec["dials"],
+    })}&width=360`
+  );
+  await reportOn(page);
+  checkRound5(kit, name, await readDrawn(page), "phone");
+  const clock = await Clock.on(page);
+  for (const story of AT_360) {
+    const said = await capture(
+      page,
+      clock,
+      `plan-ways-${way.file}-${story}-360-${theme}`,
+      story
+    ).then(
+      (how) => ({ ok: true, how }),
+      (error: unknown) => ({ ok: false, how: String(error).slice(0, 400) })
+    );
+    kit.check(
+      `${name}: the ${story} frame is captured whole and still (${said.ok ? said.how : "failed"})`,
+      said.ok,
+      said.how
+    );
+  }
+  await page.close();
+}
+
 const spec: Spec = {
   name: "plan-ways",
   run: async (kit: Kit) => {
@@ -2559,6 +2606,11 @@ const spec: Spec = {
           for (const way of WAYS) {
             await leg(kit, stage.base, view, theme, way);
           }
+        }
+      }
+      for (const theme of ["light", "dark"] as const) {
+        for (const way of WAYS) {
+          await leg360(kit, stage.base, theme, way);
         }
       }
       kit.note(`captures in ${CAPS.join(" and ")}`);
