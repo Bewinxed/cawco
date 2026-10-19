@@ -160,18 +160,24 @@ export interface Reply {
    * The account's usage as the answer's headers say it, as Anthropic's do on
    * a subscription's request (`anthropic-ratelimit-unified-*`): each window's
    * share used (0–1) and its reset (epoch ms). Claude Code reads them into a
-   * `rate_limit_event` whenever one moves. None: no usage headers.
+   * `rate_limit_event` whenever one moves; `overageIncluded`, the weekly
+   * window of the models whose use spills into usage credits (`7d_oi`),
+   * when the account has one. None: no usage headers.
    */
   limits?: {
     fiveHour: { resetsAt: number; utilization: number };
+    overageIncluded?: { resetsAt: number; utilization: number };
     sevenDay: { resetsAt: number; utilization: number };
   };
   /**
    * The request is refused at its account's usage limit, as Anthropic
    * refuses a subscription past it (429, `rate_limit_error`, the unified
-   * limit headers rejected), until `resetsAt` (epoch ms).
+   * limit headers rejected), until `resetsAt` (epoch ms), on the window
+   * `claim` names (Anthropic's representative claim; the 5-hour when none;
+   * `overage`, the usage-credit budget). `limits`: the account's other
+   * windows the refusal's headers carry as well, short of their limits.
    */
-  refuse?: { resetsAt: number };
+  refuse?: { claim?: LimitClaim; limits?: Reply["limits"]; resetsAt: number };
   tool?: ToolCall;
   /**
    * Several calls in the one message, after its words, as a model calls
@@ -223,13 +229,28 @@ const refusalOf = (reply: Reply, chat: boolean): Response | undefined => {
       { status: reply.deny.status }
     );
   }
-  return reply.refuse && !chat
-    ? limitRefusal(reply.refuse.resetsAt)
-    : undefined;
+  return reply.refuse && !chat ? limitRefusal(reply.refuse) : undefined;
 };
 
-const limitRefusal = (resetsAt: number): Response => {
+/** A window Anthropic's unified limit headers name, as a refusal's representative claim. */
+export type LimitClaim =
+  "five_hour" | "overage" | "seven_day" | "seven_day_overage_included";
+
+/** Each claim's header infix, as Claude Code reads them (its `Ct` table). */
+const CLAIM_HEADER: Record<LimitClaim, string> = {
+  five_hour: "5h",
+  seven_day: "7d",
+  seven_day_overage_included: "7d_oi",
+  overage: "overage",
+};
+
+const limitRefusal = ({
+  claim = "five_hour",
+  limits,
+  resetsAt,
+}: NonNullable<Reply["refuse"]>): Response => {
   const reset = String(Math.ceil(resetsAt / 1000));
+  const window = CLAIM_HEADER[claim];
   return Response.json(
     {
       type: "error",
@@ -242,12 +263,13 @@ const limitRefusal = (resetsAt: number): Response => {
     {
       status: 429,
       headers: {
+        ...limitHeaders(limits),
         "anthropic-ratelimit-unified-status": "rejected",
         "anthropic-ratelimit-unified-reset": reset,
-        "anthropic-ratelimit-unified-representative-claim": "five_hour",
-        "anthropic-ratelimit-unified-5h-status": "rejected",
-        "anthropic-ratelimit-unified-5h-reset": reset,
-        "anthropic-ratelimit-unified-5h-utilization": "1.0",
+        "anthropic-ratelimit-unified-representative-claim": claim,
+        [`anthropic-ratelimit-unified-${window}-status`]: "rejected",
+        [`anthropic-ratelimit-unified-${window}-reset`]: reset,
+        [`anthropic-ratelimit-unified-${window}-utilization`]: "1.0",
         "x-should-retry": "false",
         "request-id": `req_${crypto.randomUUID()}`,
       },
@@ -444,6 +466,17 @@ const limitHeaders = (limits: Reply["limits"]): Record<string, string> => {
       limits.sevenDay.utilization
     ),
     "anthropic-ratelimit-unified-7d-reset": seconds(limits.sevenDay.resetsAt),
+    ...(limits.overageIncluded
+      ? {
+          "anthropic-ratelimit-unified-7d_oi-status": "allowed",
+          "anthropic-ratelimit-unified-7d_oi-utilization": String(
+            limits.overageIncluded.utilization
+          ),
+          "anthropic-ratelimit-unified-7d_oi-reset": seconds(
+            limits.overageIncluded.resetsAt
+          ),
+        }
+      : {}),
   };
 };
 

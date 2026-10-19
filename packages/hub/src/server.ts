@@ -29484,7 +29484,7 @@ export const createServer = (
                   }
                   const info = frame.message.rate_limit_info;
                   if (info) {
-                    noteRateLimit(db, accountId, info);
+                    noteRateLimit(db, accountId, info, row.model);
                     if (info.status === "rejected" && !info.isUsingOverage) {
                       limitRefused.add(message.instanceId);
                     }

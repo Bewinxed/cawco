@@ -661,9 +661,11 @@ export const noteProviderReading = (
 };
 
 /**
- * A `rate_limit_event` from a session on `accountId`: the account's windows
- * move, its overage state with them, and a window that refused a request
- * benches the account (for that model, or for every one) until it resets.
+ * A `rate_limit_event` from a session on `accountId` running `model`: the
+ * account's windows move, its overage state with them, and a window that
+ * refused a request benches the account (for that model, or for every one)
+ * until it resets; a refusal of the usage credits benches it for what the
+ * window that sent the request there covers (core `observedReading`).
  *
  * Every session on the account reports, each from the headers of its own
  * latest response, so events arrive out of order: a session whose last
@@ -676,12 +678,13 @@ export const noteRateLimit = (
   db: DbShape,
   accountId: string,
   info: ObservedRateLimitInfo,
+  model: string | null,
   now = Date.now()
 ): void => {
-  const observed = observedReading(info);
   const held =
     db.accounts.readings().find((one) => one.accountId === accountId)
       ?.windows ?? [];
+  const observed = observedReading(info, { model, held, now });
   const newer = observed.windows.filter(
     (window) =>
       !held.some(

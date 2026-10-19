@@ -54262,6 +54262,21 @@
                   "resetsAt",
                   "utilization"
                 ]
+              },
+              "seven_day_overage_included": {
+                "type": "object",
+                "properties": {
+                  "utilization": {
+                    "type": "number"
+                  },
+                  "resetsAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "resetsAt",
+                  "utilization"
+                ]
               }
             }
           },

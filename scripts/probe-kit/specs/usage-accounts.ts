@@ -31,6 +31,15 @@
  *   benched): its session moves to the personal plan on its email, and the
  *   line the hub writes into its transcript names both with their
  *   organizations, as placement does (core `accountNames`).
+ * - The personal plan's overage-included weekly window (Claude Code's
+ *   `seven_day_overage_included`, the `7d_oi` headers; its "Fable limit")
+ *   reads as its weekly Fable window. A Fable session refused on it benches
+ *   the plan for Fable alone until that window resets; an Opus session then
+ *   refused on its usage credits (the `overage` claim), its 5-hour and week
+ *   short of their limits, benches it for Opus too, until the credits
+ *   refill. Placement still puts a session on another model (Haiku) there,
+ *   and the Haiku session running there takes its turn there, not held or
+ *   moved.
  *
  *   bun scripts/probe-kit/run.ts usage-accounts
  */
@@ -111,33 +120,85 @@ const limited = new Set<Id>();
 /** Past the at-limit policy's wait, so the session moves rather than waits for it. */
 const LIMITED_UNTIL = STARTED + 3 * HOUR_MS;
 
+/** A model in the overage-included models (Claude Code's default list: "Fable", "Fable 5", "Fable 5.1"). */
+const FABLE_MODEL = "claude-fable-5";
+/** The model the probe's sessions run on (scratch-fleet `MODEL.claude`): another model's scope, Haiku. */
+const OTHER_MODEL = "claude-haiku-4-5";
+/** A request on {@link FABLE_MODEL}, by the model its body names. */
+const FABLE_REQUEST = /"model"\s*:\s*"claude-fable/;
+/**
+ * The personal plan's overage-included weekly window (`7d_oi`), once the
+ * Fable leg turns it on: the share it has used, and its reset, two days out.
+ * Its Fable requests are refused on it until then.
+ */
+const fableWeek: { on: boolean; resetsAt: number; used: number } = {
+  on: false,
+  used: 0.6,
+  resetsAt: STARTED + 48 * HOUR_MS,
+};
+
+/** A model whose own weekly window the event does not carry (Opus's), refused on the usage credits. */
+const OPUS_MODEL = "claude-opus-5-5";
+/** A request on {@link OPUS_MODEL}, by the model its body names. */
+const OPUS_REQUEST = /"model"\s*:\s*"claude-opus/;
+/**
+ * The personal plan's usage credits, once the leg spends them: its Opus
+ * requests are refused on them (the `overage` claim) until they refill,
+ * twenty days out, while its 5-hour and week stay short of their limits.
+ */
+const credits: { out: boolean; resetsAt: number } = {
+  out: false,
+  resetsAt: STARTED + 20 * 24 * HOUR_MS,
+};
+
 const accountOf = (request: Seen): Id | undefined =>
   ACCOUNTS.find((id) => request.auth.endsWith(TOKEN[id]));
 
-const respond = (request: Seen): Reply => {
-  const id = accountOf(request);
-  if (id && limited.has(id)) {
-    return { everyMs: 5, words: [], refuse: { resetsAt: LIMITED_UNTIL } };
-  }
-  const resets = id ? resetsOf(id) : undefined;
+/** The usage headers `id`'s answers carry: its 5-hour and week, and its Fable week once that leg turns it on. */
+const usageOf = (id: Id): Reply["limits"] => {
+  const resets = resetsOf(id);
   return {
-    everyMs: 5,
-    words: ["ok"],
-    ...(id && resets
+    fiveHour: { utilization: USED[id].fiveHour, resetsAt: resets.fiveHour },
+    sevenDay: { utilization: USED[id].sevenDay, resetsAt: resets.sevenDay },
+    ...(id === PERSONAL && fableWeek.on
       ? {
-          limits: {
-            fiveHour: {
-              utilization: USED[id].fiveHour,
-              resetsAt: resets.fiveHour,
-            },
-            sevenDay: {
-              utilization: USED[id].sevenDay,
-              resetsAt: resets.sevenDay,
-            },
+          overageIncluded: {
+            utilization: fableWeek.used,
+            resetsAt: fableWeek.resetsAt,
           },
         }
       : {}),
   };
+};
+
+const respond = (request: Seen): Reply => {
+  const id = accountOf(request);
+  if (!id) {
+    return { everyMs: 5, words: ["ok"] };
+  }
+  if (limited.has(id)) {
+    return { everyMs: 5, words: [], refuse: { resetsAt: LIMITED_UNTIL } };
+  }
+  const limits = usageOf(id);
+  if (id === PERSONAL && fableWeek.on && FABLE_REQUEST.test(request.body)) {
+    return {
+      everyMs: 5,
+      words: [],
+      refuse: {
+        claim: "seven_day_overage_included",
+        limits,
+        resetsAt: fableWeek.resetsAt,
+      },
+    };
+  }
+  if (id === PERSONAL && credits.out && OPUS_REQUEST.test(request.body)) {
+    return {
+      everyMs: 5,
+      words: [],
+      refuse: { claim: "overage", limits, resetsAt: credits.resetsAt },
+    };
+  }
+  return { everyMs: 5, words: ["ok"], limits };
 };
 
 /** An account's Claude dir in `home`, signed in with its token as `email` in `organization`. */
@@ -588,6 +649,146 @@ const run = async (kit: Kit) => {
       want: { to: NAMED[PERSONAL], from: NAMED[TEAM] },
       got: moved?.kind === "moved" ? { to: moved.to, from: moved.from } : moved,
       words,
+    })
+  );
+
+  await fableLeg(kit, fleet, sessions[PERSONAL]);
+};
+
+/**
+ * 10. The weekly window of the models that spill into usage credits
+ * (Claude Code's `seven_day_overage_included`, its "Fable limit"): the
+ * personal plan reads it as its weekly Fable window; refused on it, the
+ * plan is spent for Fable alone. Its usage credits refused next on Opus,
+ * whose own week the event does not carry, it is spent for Opus too. A
+ * session on another model (Haiku, `personal`, the plan's own session)
+ * still starts and runs there. The other two accounts are benched, so the
+ * personal plan is the only one with room.
+ */
+const fableLeg = async (kit: Kit, fleet: KitFleet, personal: string) => {
+  fableWeek.on = true;
+  await fleet.send(personal, "PROBE-USAGE the Fable week");
+  const fableKey = "weekly_scoped:Fable";
+  const weekly =
+    (await until(
+      "the personal plan's weekly Fable window",
+      () => limitsOf(fleet, PERSONAL),
+      (read) => percents(read)[fableKey] === fableWeek.used * 100,
+      120_000
+    ).catch(() => undefined)) ??
+    (await limitsOf(fleet, PERSONAL).catch(() => undefined));
+  kit.check(
+    "the overage-included weekly window reads as the account's weekly Fable window",
+    percents(weekly)[fableKey] === fableWeek.used * 100,
+    JSON.stringify({
+      want: { [fableKey]: fableWeek.used * 100 },
+      got: percents(weekly),
+    })
+  );
+
+  const onFable = await fleet.spawn("claude", "Usage Fable", fleet.repo, {
+    account: PERSONAL,
+    model: FABLE_MODEL,
+  });
+  await fleet.send(onFable, "PROBE-USAGE on Fable");
+  const bench = await until(
+    "the personal plan benched by its Fable week's refusal",
+    () =>
+      fleet.query<{ scope: string; until: number }>(
+        "SELECT scope, until FROM account_bench WHERE account_id = ?",
+        PERSONAL
+      ),
+    (rows) => rows.length > 0,
+    180_000
+  ).catch(() => [] as { scope: string; until: number }[]);
+  const [only] = bench;
+  kit.check(
+    "refused on its weekly Fable window, the account is spent for Fable alone, until that window resets",
+    bench.length === 1 &&
+      only?.scope === "Fable" &&
+      Math.abs((only?.until ?? 0) - fableWeek.resetsAt) < 1000,
+    JSON.stringify({
+      want: { scope: "Fable", until: fableWeek.resetsAt },
+      got: bench,
+    })
+  );
+
+  // Its usage credits spent next, on a model whose own week the event does
+  // not carry (Opus), its 5-hour and week short of their limits: the
+  // refused request's model is what the credits held, so Opus alone.
+  credits.out = true;
+  const onOpus = await fleet.spawn("claude", "Usage Opus", fleet.repo, {
+    account: PERSONAL,
+    model: OPUS_MODEL,
+  });
+  await fleet.send(onOpus, "PROBE-USAGE on Opus");
+  const benches = () =>
+    fleet.query<{ scope: string; until: number }>(
+      "SELECT scope, until FROM account_bench WHERE account_id = ? ORDER BY scope",
+      PERSONAL
+    );
+  const both = await until(
+    "the personal plan benched by its credits' refusal",
+    benches,
+    (rows) => rows.some((one) => one.scope !== "Fable"),
+    180_000
+  ).catch(benches);
+  const opus = both.find((one) => one.scope === "Opus");
+  kit.check(
+    "refused on its usage credits on Opus, its 5-hour and week short, the account is spent for Opus too, not for every model",
+    both.length === 2 &&
+      both.some((one) => one.scope === "Fable") &&
+      Math.abs((opus?.until ?? 0) - credits.resetsAt) < 1000,
+    JSON.stringify({
+      want: [
+        { scope: "Fable", until: fableWeek.resetsAt },
+        { scope: "Opus", until: credits.resetsAt },
+      ],
+      got: both,
+    })
+  );
+
+  // A refusal (no account with room) is an answer to check, not the run's end.
+  const forHaiku = await fleet
+    .api<PlacementPreview>(
+      `/api/accounts/placement?harness=claude&machineId=${MACHINE}&model=${OTHER_MODEL}&kind=delegates`
+    )
+    .catch((error: unknown) => ({ accountId: null, refused: String(error) }));
+  kit.check(
+    "a new session on another model is still placed on the account spent for Fable and Opus",
+    forHaiku.accountId === PERSONAL,
+    JSON.stringify({ want: PERSONAL, got: forHaiku })
+  );
+
+  const askedHaiku = Date.now();
+  await fleet.send(personal, "PROBE-USAGE on Haiku still");
+  const ran = await until(
+    "the Haiku session's turn on the personal plan",
+    () =>
+      fleet.seen.find(
+        (one) =>
+          one.at >= askedHaiku &&
+          accountOf(one) === PERSONAL &&
+          one.last.includes("on Haiku still")
+      ),
+    (one) => one !== undefined,
+    120_000
+  ).catch(() => undefined);
+  const [stayed] = fleet.query<{ account_id: string | null }>(
+    "SELECT account_id FROM instances WHERE id = ?",
+    personal
+  );
+  const held = fleet.query<{ instance_id: string }>(
+    "SELECT instance_id FROM limit_holds WHERE instance_id = ?",
+    personal
+  );
+  kit.check(
+    "a running session on another model takes its turn there, not held or moved",
+    ran !== undefined && stayed?.account_id === PERSONAL && held.length === 0,
+    JSON.stringify({
+      ranOn: ran ? accountOf(ran) : null,
+      account: stayed?.account_id ?? null,
+      held: held.length,
     })
   );
 };
