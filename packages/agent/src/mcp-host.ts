@@ -22,10 +22,11 @@
  *   its config's hash, so a session's start starts nothing;
  * - the list methods are answered from the server's last listing, all its
  *   pages, kept the same way, and listed again whenever its process starts;
- * - any other request (`tools/call`, `resources/read`, `prompts/get`, …)
- *   starts the one process when none runs, and goes to it under an id of the
- *   host's own, its answer back to the session that asked under the
- *   session's id.
+ * - a request that needs the server ({@link FORWARDED}: `tools/call`,
+ *   `resources/read`, `prompts/get`, `completion/complete`) starts the one
+ *   process when none runs, and goes to it under an id of the host's own,
+ *   its answer back to the session that asked under the session's id;
+ * - any other method is refused, and starts nothing.
  *
  * Only a config with no listing kept yet starts the process for a handshake:
  * its first session's, once. The process then runs for the machine until
@@ -41,6 +42,30 @@
  * that died without ending it is ended when the next one starts
  * ({@link McpHost.sweep}): leaked `peekaboo mcp` servers once drove the Mac's
  * load to 328.
+ *
+ * What a shared process cannot tell apart is its callers: every session's
+ * call arrives as the host's, from the agent's home, offering no roots. So a
+ * server is shared only when its tools keep nothing per caller and resolve
+ * no path against their working directory. Of the fleet's, as of 2026-10-19:
+ *
+ * - `chrome-devtools` never (the hub refuses it). Each session's process is
+ *   launched through its own browser door (browser/door.ts `throughGate`): a
+ *   `wsEndpoint` and token for its gate id, so its pages land on its
+ *   project's browser and close when it ends. And chrome-devtools-mcp holds
+ *   one browser connection and one selected page for its whole process:
+ *   "Currently, one MCP server instance maps to one Chrome instance"
+ *   (https://github.com/ChromeDevTools/chrome-devtools-mcp/issues/3070), and
+ *   its page tools resolve "via the global `getSelectedPage()`", so two
+ *   callers' `select_page` and `take_screenshot` interleave onto each
+ *   other's page (issue 1019). The browser is shared already; the process
+ *   is what holds the session.
+ * - Maestro's `maestro mcp` (a `java` process) is not: `run`'s `files` and
+ *   `dir` are each `WorkingDirectory.resolve`d (maestro-cli mcp/tools/
+ *   RunTool.kt), against the process's own directory, the agent's home here,
+ *   not the session's checkout.
+ * - Xcode's `mcpbridge` can be: Xcode keeps the state, each tool names its
+ *   window by `tabIdentifier`, and "Permission dialog appears per-process"
+ *   (https://github.com/ndrblinov/xcode-mcp-manager), so one process asks once.
  */
 import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync, readFileSync } from "node:fs";
@@ -80,6 +105,23 @@ const CHANGED: Record<string, string[]> = {
     "resources/templates/list",
   ],
 };
+/**
+ * The requests that need the server itself, at the revision the host speaks
+ * ({@link PROTOCOL_VERSION}): each goes to its process, started for it. Any
+ * other method is refused as a server of that revision refuses one it does
+ * not know (`-32601`), and starts nothing. Claude Code 2.1.302 opens each
+ * connection with `server/discover`, a later revision's, and goes on to
+ * `initialize` when it is refused; carried to the process, it started one
+ * for every session (probe-kit spec `mcp-shared`). The rest of 2025-06-18's
+ * requests need a stream the host does not hold (`resources/subscribe`,
+ * `logging/setLevel`), and {@link quiet} offers neither.
+ */
+const FORWARDED = new Set([
+  "tools/call",
+  "resources/read",
+  "prompts/get",
+  "completion/complete",
+]);
 /** The most pages one listing reads: a cursor that never ends is the server's fault, not a reason to spin. */
 const MOST_PAGES = 100;
 /** The MCP revision the host asks a server for, as the agent's other MCP client does (fleet-mcp-listing.ts). */
@@ -198,6 +240,7 @@ class Child {
   constructor(
     name: string,
     config: HostedConfig,
+    cause: string,
     changed: (method: string) => void
   ) {
     this.#changed = changed;
@@ -237,7 +280,7 @@ class Child {
       this.#pending.clear();
     });
     console.info(
-      `[mcp-host] ${name}: started pid ${pid}: ${config.command} ${(config.args ?? []).join(" ")}`
+      `[mcp-host] ${name}: started pid ${pid} for ${cause}: ${config.command} ${(config.args ?? []).join(" ")}`
     );
   }
 
@@ -413,34 +456,29 @@ class Hosted {
     }
   }
 
-  /** Whether its process runs now. */
-  get running(): boolean {
-    return this.#running !== undefined;
-  }
-
   /** What it said last; when nothing is kept for this config, its process starts to say it. */
   async kept(): Promise<Kept> {
     if (this.#kept) {
       return this.#kept;
     }
-    await this.child();
+    await this.child("a handshake, with no listing kept for its config");
     if (!this.#kept) {
       throw new Error(`The ${this.name} MCP server listed nothing.`);
     }
     return this.#kept;
   }
 
-  /** Its process, started, handshaken and listed when none runs. */
-  child(): Promise<Child> {
-    this.#child ??= this.#start().catch((error: unknown) => {
+  /** Its process, started, handshaken and listed when none runs; `cause` is what asked, for its start's log line. */
+  child(cause: string): Promise<Child> {
+    this.#child ??= this.#start(cause).catch((error: unknown) => {
       this.#child = undefined;
       throw error;
     });
     return this.#child;
   }
 
-  async #start(): Promise<Child> {
-    const child = new Child(this.name, this.config, (method) => {
+  async #start(cause: string): Promise<Child> {
+    const child = new Child(this.name, this.config, cause, (method) => {
       this.#list(child, CHANGED[method] ?? []).catch((error: unknown) =>
         console.warn(`[mcp-host] ${this.name}: listing again failed: ${error}`)
       );
@@ -577,25 +615,40 @@ class Hosted {
             `${this.name} lists no ${list.items}.`
           );
     }
-    const child = await this.child();
+    if (!FORWARDED.has(method)) {
+      return rpcError(
+        id,
+        METHOD_NOT_FOUND,
+        `${method} is not offered: ${this.name} is shared by every session on the machine, through a host that speaks MCP ${PROTOCOL_VERSION}.`
+      );
+    }
+    const child = await this.child(`a session's ${method}`);
     const answered = await child.request(method, message.params, signal);
     return { ...answered, id };
   }
 }
 
 /**
- * Capabilities as a session reads them: no list-changed, since a session
- * holds no stream the host could tell it on (`GET` answers 405), and lists
- * are read again whenever a session asks.
+ * Capabilities as a session reads them: no list-changed, no resource
+ * subscriptions and no logging, since a session holds no stream the host
+ * could tell it on (`GET` answers 405); lists are read again whenever a
+ * session asks.
  */
 const quiet = (capabilities: unknown): Record<string, unknown> => {
   const out: Record<string, unknown> = {};
   for (const [name, value] of Object.entries(
     (capabilities ?? {}) as Record<string, unknown>
   )) {
+    if (name === "logging") {
+      continue;
+    }
     out[name] =
-      value && typeof value === "object" && "listChanged" in value
-        ? { ...(value as Record<string, unknown>), listChanged: false }
+      value && typeof value === "object"
+        ? {
+            ...(value as Record<string, unknown>),
+            ...("listChanged" in value ? { listChanged: false } : {}),
+            ...("subscribe" in value ? { subscribe: false } : {}),
+          }
         : value;
   }
   return out;
@@ -652,13 +705,6 @@ export class McpHost {
         this.#servers.set(name, new Hosted(name, config));
       }
     }
-  }
-
-  /** The names of the shared servers whose process runs now. */
-  running(): string[] {
-    return [...this.#servers.values()]
-      .filter((hosted) => hosted.running)
-      .map((hosted) => hosted.name);
   }
 
   /** Every process this host started, ended: the agent is ending. */

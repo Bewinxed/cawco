@@ -62,7 +62,11 @@ const lastToolResult = (body: string): string => {
 
 /** `hello`: say whether the tool is held; `call`: call it, then keep its answer. */
 const respond = (request: Seen): Reply => {
-  const found = WHO.exec(request.last);
+  // A tool's result is the last user message after a call, so who asked is
+  // the last of the person's words that names them.
+  const found = request.afterTool
+    ? [...request.all.matchAll(new RegExp(WHO, "g"))].at(-1)
+    : WHO.exec(request.last);
   const who = found?.[1];
   if (!(request.tools && who)) {
     return { everyMs: 5, words: ["ok"] };

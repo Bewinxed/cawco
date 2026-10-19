@@ -70,7 +70,8 @@ const run = async (kit: Kit): Promise<void> => {
   ).catch(() => undefined);
   kit.check(
     "the session's transcript says why its start waits, in the heavy-run queue's words",
-    !!line?.includes("this machine's measured room:") && line.includes("✗"),
+    // The queue's words open the sentence after the start's own, capitalised.
+    !!line?.includes("This machine's measured room:") && line.includes("✗"),
     line ?? "no room line"
   );
   const waits = await until(
