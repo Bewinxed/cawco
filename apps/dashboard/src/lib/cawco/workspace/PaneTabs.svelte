@@ -689,6 +689,19 @@
       tab?.querySelector<HTMLElement>('[role="tab"]')?.focus();
     });
   }
+  /**
+   * The tabs an arrow key lands on from `id`'s tab: the one before it and the
+   * one after, round the strip's ends as TabsList's arrows go.
+   */
+  function besideOf(id: string): string[] {
+    const at = tabs.findIndex((one) => one.id === id);
+    const count = tabs.length;
+    if (at < 0 || count < 2) {
+      return [];
+    }
+    const near = [tabs[(at - 1 + count) % count].id, tabs[(at + 1) % count].id];
+    return [...new Set(near)].filter((one) => one !== id);
+  }
   function menuByKey(id: string, event: KeyboardEvent) {
     if (!(
       event.key === "ContextMenu" ||
@@ -1566,16 +1579,31 @@
               href={tab.href}
               label={tab.label}
               onauxclick={(event) => middleClose(tab.id, event)}
-              onblur={() => warm.leave(leaf.id, tab.id)}
+              onblur={() => {
+                warm.leave(leaf.id, tab.id);
+                warm.besides([]);
+              }}
               onclick={(event) => clickTab(tab.id, event)}
-              onfocus={() => {
-                // The arrow keys move focus along the strip before Enter
-                // chooses: the pane is laid out while the focus rests.
+              onfocus={(event) => {
+                // The pane is laid out while the focus rests on its tab.
                 if (!chosen) {
                   warm.reach(leaf.id, tab.id);
                 }
+                // The keyboard's focus: the tabs the next arrow key lands on
+                // are reached for now, ahead of the key that chooses one
+                // (warm.svelte.ts). A pressed tab is focused too, and its
+                // pointer reached for it by hovering: its neighbours stay held.
+                warm.besides(
+                  (event.currentTarget as HTMLElement).matches(":focus-visible")
+                    ? besideOf(tab.id)
+                    : []
+                );
               }}
               onkeydown={(event) => {
+                // A key on a tab the focus already rests on makes it the
+                // keyboard's focus with no focus event (a pressed tab, a
+                // focus a script set): its neighbours are reached for from here.
+                warm.besides(besideOf(tab.id));
                 if (event.key === "ArrowDown" || event.key === " ") {
                   event.preventDefault();
                   event.stopPropagation();

@@ -30,6 +30,11 @@
  * https://trac.webkit.org/changeset/259907/webkit): the page heard it after
  * the switch's frame had begun, and its first frame waited for the next one,
  * 112-134ms after the press (tab-return, 2c and 2e on WebKit).
+ *
+ * The keyboard's reach comes ahead of its key, as a pointer's hover comes
+ * ahead of its press ({@link warm.besides}): while the focus rests on a tab,
+ * the tabs an arrow key lands on next are reached for, so the arrow, which
+ * chooses in its own task (TabsList), finds their previews already let go.
  */
 import { SvelteMap, SvelteSet } from "svelte/reactivity";
 
@@ -55,6 +60,10 @@ const reaching = new Map<string, { cancel: () => void; paneId: string }>();
 const reachedPanes = new SvelteSet<string>();
 /** Each reached pane's wait to be let go once its reach has left it. */
 const unreaching = new Map<string, ReturnType<typeof setTimeout>>();
+/** The tabs an arrow key lands on from the tab the focus rests on (`besides`), never warmed. */
+const besidePanes = new SvelteSet<string>();
+/** The keyboard's reach's wait to end once the focus has left the strip. */
+let unbesiding: ReturnType<typeof setTimeout> | undefined;
 
 /**
  * Runs `then` once the frame in hand has painted, never in its task: a
@@ -95,7 +104,35 @@ export const warm = {
    * the tab still off screen (a drag, a press slid off) leaves it so.
    */
   reached(paneId: string): boolean {
-    return reachedPanes.has(paneId);
+    return reachedPanes.has(paneId) || besidePanes.has(paneId);
+  },
+
+  /**
+   * The keyboard's reach: the tabs an arrow key lands on from the tab the
+   * focus rests on, the one before it and the one after (`paneIds`), are
+   * reached for in place of the last ones, at once; never warmed, as a
+   * warm is laid out again on every word its session streams. None (the
+   * focus has left the strip) ends the reach after `COOL_MS`, as a
+   * pointer's ends; a focus coming back meanwhile takes it over.
+   */
+  besides(paneIds: string[]): void {
+    clearTimeout(unbesiding);
+    unbesiding = undefined;
+    if (paneIds.length === 0) {
+      unbesiding = setTimeout(() => {
+        unbesiding = undefined;
+        besidePanes.clear();
+      }, COOL_MS);
+      return;
+    }
+    for (const id of [...besidePanes]) {
+      if (!paneIds.includes(id)) {
+        besidePanes.delete(id);
+      }
+    }
+    for (const id of paneIds) {
+      besidePanes.add(id);
+    }
   },
 
   /**
