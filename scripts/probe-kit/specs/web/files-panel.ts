@@ -750,11 +750,15 @@ const reviewLegs = async (
         ?.getAnimations()
         .map((one) => one.effect?.getTiming().duration as number) ?? []
   );
-  const fadeMs = Number.parseFloat(
-    await slow.evaluate(() =>
-      getComputedStyle(document.documentElement).getPropertyValue("--dur-fade")
-    )
+  const fadeSaid = await slow.evaluate(() =>
+    getComputedStyle(document.documentElement)
+      .getPropertyValue("--dur-fade")
+      .trim()
   );
+  // A duration as the token is written: "200ms" or "0.2s".
+  const fadeMs = fadeSaid.endsWith("ms")
+    ? Number.parseFloat(fadeSaid)
+    : Number.parseFloat(fadeSaid) * 1000;
   kit.check(
     "13: until the hub answers, Files claims nothing (no count, no nothing-line, no skeleton inside the grace); past the grace the skeleton cards stand in the masonry and the attachment rows; the read arrives over one --dur-fade",
     atOpen.waits === 0 &&
@@ -801,6 +805,9 @@ const reviewLegs = async (
 
   // 15. The masonry in list order; 16. the rings; 17. the focus moves.
   const page = await openSession(kit, base, "desk", "light", ids.many);
+  // The glass's card rehearses its open once, unseen, just after load
+  // (GlassCard): a keyboard open lands after it, as a person's does.
+  await page.waitForTimeout(2000);
   await page.locator("[data-files-control]").focus();
   await page.keyboard.press("Enter");
   await page.locator("[data-files-card]").first().waitFor();
