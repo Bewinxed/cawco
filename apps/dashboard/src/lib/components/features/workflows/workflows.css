@@ -1,16 +1,17 @@
 /*
  * The workflow pages' and every flow canvas's shared sheet, as Tailwind
  * utilities under the names its consumers write (`wf`, `wf-btn`,
- * `wf-row`…), imported by app.css. This sheet won its ties: it loaded after
- * its consumers. So its utilities keep the weight they had (`.wf .wf-btn`,
- * (0,2,0)), over a component's own (0,1,0). Two declarations go to zero, for
- * the one place a component out-weighed the sheet: a wf-btn's display (W1)
- * and its min-height (W4). The rules into elements (headings, fields, the
- * disabled button, Svelte Flow's attribution) stay plain CSS, over every kit
- * utility as they were, with two exclusions so they no longer reach what a
- * shared utility styles (X1, X2), and the attribution under `.svelte-flow`
- * so it still beats @xyflow's own sheet, which now loads after it (X3). The
- * cascade, row by row: .cutover/shared-sheets.md §3.
+ * `wf-row`…), imported by app.css. Its utilities keep the weight they had
+ * (`.wf .wf-btn`, (0,2,0)), over a component's own (0,1,0). Two declarations
+ * go to zero, for the one place a component out-weighs the sheet: a wf-btn's
+ * display (W1) and its min-height (W4). The rules into elements (headings,
+ * fields, the disabled button) sit in `@layer components`, so every utility
+ * (a kit control's own recipe, `wf-check`, `wf-mono`) outranks them by
+ * layer. Svelte Flow's attribution stays unlayered under `.svelte-flow`:
+ * @xyflow's own sheet is unlayered (imported from script), and an unlayered
+ * rule beats every layer, so only an unlayered rule of more weight can
+ * restyle it (https://tailwindcss.com/docs/adding-custom-styles#adding-component-classes
+ * puts third-party styles in `components`, which here would lose).
  */
 @utility wf {
   color: var(--ink-strong);
@@ -18,106 +19,138 @@
   font-weight: var(--weight-body);
   min-width: 0;
 }
-/* foreign-dom */
-.wf h1 {
-  font-size: var(--text-title);
-  font-weight: var(--weight-strong);
-  color: var(--ink-strong);
+
+@layer components {
+  /* foreign-dom */
+  .wf h1 {
+    font-size: var(--text-title);
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
+  }
+  /* foreign-dom */
+  .wf h2,
+  .wf h3 {
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
+  }
+  /* foreign-dom — a check's row is wf-check's, a utility, which wins. */
+  .wf label {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    color: var(--ink-muted);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+  }
+  /* foreign-dom — a mono field's face is wf-mono's, a utility, which wins.
+     Under a finger and on a narrow screen a field is 44px tall; its type
+     floor is app.css's (iOS zooms a field set under 16px). */
+  .wf input:not([type="checkbox"]),
+  .wf select,
+  .wf textarea {
+    min-width: 0;
+    width: 100%;
+    min-height: var(--c-input-h);
+    padding: var(--space-2) var(--space-3);
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    color: var(--ink-strong);
+    font: inherit;
+
+    @variant max-wide {
+      min-height: var(--c-btn-h-lg);
+    }
+    @variant coarse {
+      min-height: var(--c-btn-h-lg);
+    }
+  }
+  /* foreign-dom — a select is one line and never grows, and Safari sizes one
+     to its content whatever `min-height` says (37px for the 44 asked under a
+     finger): its height is set outright. */
+  .wf select {
+    height: var(--c-input-h);
+
+    @variant max-wide {
+      height: var(--c-btn-h-lg);
+    }
+    @variant coarse {
+      height: var(--c-btn-h-lg);
+    }
+  }
+  /* foreign-dom */
+  .wf textarea {
+    resize: vertical;
+    min-height: var(--c-wf-textarea-min);
+  }
+  /* foreign-dom */
+  .wf input[type="checkbox"] {
+    accent-color: var(--brand-solid);
+    width: var(--c-pointer-floor);
+    height: var(--c-pointer-floor);
+  }
+  /* foreign-dom */
+  .wf button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+  /* foreign-dom */
+  .wf pre {
+    font-family: var(--font-mono);
+    font-size: var(--text-label);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
 }
-/* foreign-dom */
-.wf h2 {
-  font-size: var(--text-label);
-  font-weight: var(--weight-strong);
-  color: var(--ink-strong);
-}
-/* foreign-dom */
-.wf h3 {
-  font-size: var(--text-label);
-  font-weight: var(--weight-strong);
-  color: var(--ink-strong);
-}
-/* foreign-dom — X1: a check's row is wf-check's. */
-.wf label {
-  color: var(--ink-muted);
-  font-size: var(--text-label);
-  font-weight: var(--weight-strong);
-}
-.wf label:where(:not(.wf-check)) {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
-}
-/* foreign-dom — X2: a mono field's face is wf-mono's. */
-.wf input:not([type="checkbox"]),
-.wf select,
-.wf textarea {
-  min-width: 0;
-  width: 100%;
-  background: var(--surface-raised);
-  border: 1px solid var(--border-control);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
-  color: var(--ink-strong);
-  min-height: 36px;
-}
-.wf input:not([type="checkbox"]),
-.wf select,
-.wf textarea:where(:not(.wf-mono)) {
-  font: inherit;
-}
-/* foreign-dom — a select is one line and never grows, and Safari sizes one
-   to its content whatever `min-height` says (37px for the 44 asked under a
-   finger): its height is set outright. */
-.wf select {
-  height: 36px;
-}
-/* foreign-dom */
-.wf textarea {
-  resize: vertical;
-  min-height: 90px;
-}
-/* foreign-dom */
-.wf input[type="checkbox"] {
-  accent-color: var(--brand-solid);
-  width: 24px;
-  height: 24px;
-}
-/* foreign-dom — X3: Svelte Flow's attribution on every graph canvas, in the
+
+/* foreign-dom — Svelte Flow's attribution on every graph canvas, in the
    meta role, on the canvas's own ground in the subtle ink (Svelte Flow's
    grey wash and grey link read as a stray box in dark). The link sits in
-   its corner, flush with the clip: its ring goes on its own box. */
+   its corner, flush with the clip: its ring goes on its own box, and it
+   reaches the 24px pointer floor (DESIGN.md, The 24 Pointer Rule). */
 .svelte-flow .svelte-flow__attribution {
   --xy-attribution-background-color: transparent;
   font-size: var(--text-meta);
   font-weight: var(--weight-body);
-}
-.svelte-flow .svelte-flow__attribution a {
-  display: inline-flex;
-  align-items: center;
-  min-height: 24px;
-  color: var(--ink-subtle);
-}
-.svelte-flow .svelte-flow__attribution a:focus-visible {
-  outline-offset: var(--focus-ring-inset);
+
+  & a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--c-pointer-floor);
+    color: var(--ink-subtle);
+
+    &:focus-visible {
+      outline-offset: var(--focus-ring-inset);
+    }
+  }
 }
 
 /* A pressed toggle (the Editor/Program/Runs tabs, the run filters, the
    Steps/Canvas tabs, Select/Pan) is said so only to a screen reader:
    selection rides the surface and the edge, never a hue. A quiet one (the
-   run filters, `data-variant="quiet"`) draws no surface, pressed or not.
-   The press scales as .pressable gives every other compact control. */
+   run filters, `data-variant="quiet"`) draws no surface until hovered, as
+   the kit's ghost (DESIGN.md, Buttons). The press scales as .pressable gives
+   every other compact control; the hover is the kit outline's. */
 @utility wf-btn {
   /* W1, W4: a component's own display and min-height win. */
   :where(.wf) :where(&) {
     display: inline-flex;
-    min-height: 36px;
+    min-height: var(--c-btn-h);
+
+    @variant max-wide {
+      min-height: var(--c-btn-h-lg);
+    }
+    @variant coarse {
+      min-height: var(--c-btn-h-lg);
+    }
   }
   .wf & {
     align-items: center;
     justify-content: center;
     gap: var(--space-2);
     --btn-gap: var(--space-2);
-    --btn-icon: 16px;
+    --btn-icon: var(--icon-md);
     padding: var(--space-2) var(--space-3);
     border-radius: var(--radius-sm);
     border: 1px solid var(--border-control);
@@ -127,34 +160,32 @@
     font-weight: var(--weight-strong);
     cursor: pointer;
     text-decoration: none;
-    transition: transform var(--dur-toggle) var(--ease-out);
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      transform var(--dur-toggle) var(--ease-out);
+
+    @variant max-wide {
+      min-width: var(--c-btn-h-lg);
+    }
+    @variant coarse {
+      min-width: var(--c-btn-h-lg);
+    }
   }
-  @media (prefers-reduced-motion: no-preference) {
+  @variant motion-safe {
     .wf &:active:not(:disabled, [aria-busy="true"]) {
       transform: scale(var(--press-scale));
     }
   }
   .wf &[aria-pressed="true"] {
     background: var(--surface-fill);
-    border-color: var(--border-control);
-    color: var(--ink-strong);
   }
   /* W2 */
   .wf &[data-variant="quiet"] {
     background: transparent;
-    filter: none;
   }
-  @media (hover: hover) {
-    .wf &:hover:not(:disabled) {
-      filter: brightness(0.96);
-    }
-  }
-  @media (max-width: 1023px), (pointer: coarse) {
-    :where(.wf) :where(&) {
-      min-height: 44px;
-    }
-    .wf & {
-      min-width: 44px;
+  @variant can-hover {
+    .wf &:hover:not(:disabled, .wf-primary) {
+      background: var(--surface-hover);
     }
   }
 }
@@ -164,16 +195,11 @@
     background: var(--action-surface);
     border-color: transparent;
   }
-  @media (hover: hover) {
+  @variant can-hover {
     .wf &:not(:disabled):hover {
       background: var(--action-surface-hover);
     }
   }
-}
-/* foreign-dom */
-.wf button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
 }
 @utility wf-row {
   .wf & {
@@ -230,20 +256,13 @@
     overflow-wrap: anywhere;
   }
 }
-/* foreign-dom */
-.wf pre {
-  font-family: var(--font-mono);
-  font-size: var(--text-label);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
 @utility wf-check {
   .wf & {
     display: flex;
     flex-direction: row;
     align-items: center;
     gap: var(--space-2);
-    min-height: 36px;
+    min-height: var(--c-input-h);
   }
 }
 @utility wf-fields {
@@ -251,27 +270,12 @@
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: var(--space-3);
-  }
-  @media (max-width: 1023px), (pointer: coarse) {
-    .wf & {
+
+    @variant max-wide {
       grid-template-columns: minmax(0, 1fr);
     }
-  }
-}
-/* foreign-dom — under a finger and on a narrow screen, fields are 44px tall
-   and set at 16px. */
-@media (max-width: 1023px), (pointer: coarse) {
-  .wf input:not([type="checkbox"]),
-  .wf select,
-  .wf textarea {
-    min-height: 44px;
-  }
-  .wf input:not([type="checkbox"]),
-  .wf select,
-  .wf textarea:where(:not(.wf-mono)) {
-    font-size: 16px;
-  }
-  .wf select {
-    height: 44px;
+    @variant coarse {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
 }
