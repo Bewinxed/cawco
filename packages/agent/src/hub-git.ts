@@ -152,6 +152,8 @@ const LINE_END = 10;
 const CONNECT = /^(stateless-)?connect /;
 /** git's ask for a dry run of the push that follows (gitremote-helpers(7), "option dry-run"). */
 const DRY_RUN = "option dry-run true";
+/** `option dry-run true|false`, either way. */
+const DRY_RUN_OPTION = /^option dry-run (true|false)$/;
 const FORCED = /^\+/;
 
 /** A push command's refspec (`push [+]<src>:<dst>`), its source and destination. */
@@ -411,7 +413,9 @@ const protocolFeed = (
         // biome-ignore lint/performance/noAwaitInLoops: a batch is answered before the next command is read
         await endBatch();
       } else {
-        dryRun ||= line === DRY_RUN;
+        if (DRY_RUN_OPTION.test(line)) {
+          dryRun = line === DRY_RUN;
+        }
         write(`${line}\n`);
         raw = CONNECT.test(line);
       }
@@ -429,12 +433,15 @@ const protocolFeed = (
  * person: each ref's source resolved here to the commit it is at, so the
  * push made once they approve sends exactly these commits, and raised as
  * their ask. Answers what git shows beside each ref; nothing was pushed.
+ * A dry run (`dryRun`) reads the refs the same way and asks nobody: it
+ * answers that the push would wait for the person.
  */
 const holdPush = async (
   ref: WorkspaceRef,
   url: string,
   repo: string,
-  lines: readonly string[]
+  lines: readonly string[],
+  dryRun: boolean
 ): Promise<string> => {
   const what = `git push ${url}`;
   const refs: PushedRef[] = [];
@@ -464,6 +471,9 @@ const holdPush = async (
       return oneLine(askRefusal(what, `${src} is no commit of this clone`));
     }
     refs.push({ sha, dst, force: FORCED.test(line.slice("push ".length)) });
+  }
+  if (dryRun) {
+    return `cawco: \`${what}\` to ${repo} would wait in the owner's Needs you (their choice: Ask me first). This was a dry run: nothing was asked and nothing was posted.`;
   }
   const post: GitPost = { via: "git", url, refs };
   const raised = await raiseUpstreamAsk(ref.id, post, repo, what);
@@ -652,12 +662,18 @@ const doorTarget = (ref: WorkspaceRef, url: string): DoorTarget => {
  * helper protocol itself (gitremote-helpers(7)), for a remote outside the
  * hub or a held push: the remote's refs for `list`, the objects of the
  * named refs for a `fetch` batch, and a line per ref for a `push` batch
- * (`ok <dst>`, or `error <dst> <why>`).
+ * (`ok <dst>`, or `error <dst> <why>`). A push batch under `dryRun` (git's
+ * `option dry-run true`) is judged as the real one is and answered the same
+ * way, and changes nothing: no large file sent, no ref written, nothing
+ * held for the person.
  */
 interface HelperBackend {
   readonly fetch: (names: readonly string[]) => Promise<void>;
   readonly list: (forPush: boolean) => Promise<readonly string[]>;
-  readonly push: (lines: readonly string[]) => Promise<readonly string[]>;
+  readonly push: (
+    lines: readonly string[],
+    dryRun: boolean
+  ) => Promise<readonly string[]>;
 }
 
 /** One git run on the host in the clone, its output whole. */
@@ -756,58 +772,90 @@ const hostBackend = (
       );
     }
   },
-  push: async (lines) => {
+  push: async (lines, dryRun) => {
     if (rule.kind === "hold") {
-      const said = await holdPush(ref, url, rule.repo, lines);
+      const said = await holdPush(ref, url, rule.repo, lines, dryRun);
       return lines.map((line) => `error ${refspecOf(line).dst} ${said}`);
     }
     if (rule.kind === "refuse") {
       return lines.map((line) => `error ${refspecOf(line).dst} ${rule.why}`);
     }
     const specs = lines.map((line) => line.slice("push ".length));
-    const refused = await pushLfs(
-      ref,
-      lines.map((line) => refspecOf(line).src).filter(Boolean),
-      env,
-      origin ? undefined : url
-    );
+    // A dry run sends no large file: the remote's own `--dry-run` answers it.
+    const refused = dryRun
+      ? undefined
+      : await pushLfs(
+          ref,
+          lines.map((line) => refspecOf(line).src).filter(Boolean),
+          env,
+          origin ? undefined : url
+        );
     if (refused) {
       return lines.map((line) => `error ${refspecOf(line).dst} ${refused}`);
     }
     const pushed = await runHostGit(
       ref,
-      ["push", "--porcelain", url, ...specs],
+      ["push", "--porcelain", ...(dryRun ? ["--dry-run"] : []), url, ...specs],
       env
     );
-    const results = new Map<string, string>();
-    for (const line of pushed.out.split("\n")) {
-      const read = PORCELAIN_REF.exec(line);
-      if (read) {
-        const [, flag, dst = "", summary = ""] = read;
-        results.set(
-          dst,
-          flag === "!" ? `error ${dst} ${oneLine(summary)}` : `ok ${dst}`
-        );
-      }
-    }
-    const why = lastSaid(pushed.err, `git push exited ${pushed.code}`);
-    return lines.map((line) => {
-      const { dst } = refspecOf(line);
-      return results.get(dst) ?? `error ${dst} ${oneLine(why)}`;
-    });
+    return pushAnswers(lines, pushed);
   },
 });
 
+/** A `push` batch's answer, a line per ref, from `git push --porcelain`'s run of it. */
+const pushAnswers = (
+  lines: readonly string[],
+  pushed: { code: number; err: string; out: string }
+): string[] => {
+  const results = new Map<string, string>();
+  for (const line of pushed.out.split("\n")) {
+    const read = PORCELAIN_REF.exec(line);
+    if (read) {
+      const [, flag, dst = "", summary = ""] = read;
+      results.set(
+        dst,
+        flag === "!" ? `error ${dst} ${oneLine(summary)}` : `ok ${dst}`
+      );
+    }
+  }
+  const why = lastSaid(pushed.err, `git push exited ${pushed.code}`);
+  return lines.map((line) => {
+    const { dst } = refspecOf(line);
+    return results.get(dst) ?? `error ${dst} ${oneLine(why)}`;
+  });
+};
+
 /**
  * git's remote helper protocol, spoken by the door itself
- * (gitremote-helpers(7)): `capabilities` is answered `fetch` and `push`;
- * `list` and `list for-push` with the backend's refs and a blank line; a
- * batch of `fetch <sha> <name>` lines, ended by a blank one, with a blank
- * line once the objects are here; a batch of `push <refspec>` lines with a
- * line per ref and a blank one. A blank line with no batch open, or git's
- * end of the connection, ends it, once `done` has run (the origin's large
- * files fetched).
+ * (gitremote-helpers(7)): `capabilities` is answered `fetch`, `push` and
+ * `option`; `list` and `list for-push` with the backend's refs and a blank
+ * line; a batch of `fetch <sha> <name>` lines, ended by a blank one, with a
+ * blank line once the objects are here; a batch of `push <refspec>` lines
+ * with a line per ref and a blank one. A blank line with no batch open, or
+ * git's end of the connection, ends it, once `done` has run (the origin's
+ * large files fetched).
+ *
+ * `option <name> <value>` is answered "a single line containing one of ok
+ * (option successfully set), unsupported (option not recognized) or error
+ * <msg>". The door honours `dry-run` alone ("If true, pretend the operation
+ * completed successfully, but don't actually change any repository data"),
+ * kept for the push batches that follow; git's `git push --dry-run` refuses
+ * outright without it ("helper %s does not support dry-run", git's
+ * transport-helper.c). Every other option (`progress` and `verbosity`, sent
+ * on every connection, `followtags`, `atomic`, `push-option`, …) is
+ * `unsupported`, and git decides whether it carries on without it.
  */
+/** The door's answer to git's `option <name> <value>` ({@link serveHelper}), and the dry run it sets; unset, unchanged. */
+const answerOption = (line: string): { dryRun?: boolean; reply: string } => {
+  const dry = DRY_RUN_OPTION.exec(line);
+  if (dry) {
+    return { reply: "ok", dryRun: dry[1] === "true" };
+  }
+  return line.startsWith("option dry-run ")
+    ? { reply: "error dry-run is true or false" }
+    : { reply: "unsupported" };
+};
+
 const serveHelper = (
   socket: Socket,
   rest: Buffer,
@@ -819,6 +867,8 @@ const serveHelper = (
   let batch: string[] = [];
   let chain = Promise.resolve();
   let ended = false;
+  /** git's `option dry-run`, as it last set it. */
+  let dryRun = false;
   const finish = async (): Promise<void> => {
     if (ended) {
       return;
@@ -829,7 +879,11 @@ const serveHelper = (
   };
   const answer = async (line: string): Promise<void> => {
     if (line === "capabilities") {
-      socket.write("fetch\npush\n\n");
+      socket.write("fetch\npush\noption\n\n");
+    } else if (line.startsWith("option ")) {
+      const option = answerOption(line);
+      dryRun = option.dryRun ?? dryRun;
+      socket.write(`${option.reply}\n`);
     } else if (line === "list" || line === "list for-push") {
       const refs = await backend.list(line === "list for-push");
       socket.write(`${refs.map((each) => `${each}\n`).join("")}\n`);
@@ -842,7 +896,7 @@ const serveHelper = (
         await backend.fetch(lines.map((each) => each.split(" ")[2] ?? ""));
         socket.write("\n");
       } else {
-        const results = await backend.push(lines);
+        const results = await backend.push(lines, dryRun);
         socket.write(`${results.map((each) => `${each}\n`).join("")}\n`);
       }
     } else if (line === "") {

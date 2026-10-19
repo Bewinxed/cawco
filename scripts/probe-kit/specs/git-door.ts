@@ -15,8 +15,16 @@
  * Under "Keep agents off other repositories" (the rule names the origin):
  * (a) `git fetch origin` reads the origin through the door;
  * (b) a commit pushed to `origin` lands there, once;
+ * (k) a fetch with an annotated tag to follow works with the options git
+ *     sends the door (traced: `progress`, `verbosity`, `followtags`), each
+ *     answered;
+ * (l) `git push --dry-run origin HEAD:main`, as a landing's push check runs
+ *     it, exits 0 with the ref listed, and origin's main is unchanged;
+ * (m) a dry run of a push that is not a fast-forward is refused with git's
+ *     reason; (n) with `--force` it is ok, and main is still unchanged;
+ * (o) the real push of HEAD to main lands, once;
  * (c) a push to someone/else.git is refused in the guard's words, and that
- *     repository takes no push;
+ *     repository takes no push; (p) its dry run is refused the same way;
  * (d) a push from another repository whose origin is the same URL is
  *     refused: the door serves the workspace's clone alone, and the origin
  *     takes no push;
@@ -25,7 +33,8 @@
  * Under "Ask me first", with a stand-in hub taking the ask:
  * (f) the push to someone/else.git is held: the hub is asked once, for
  *     that repository and that commit, as this machine's git sign-in; git
- *     reads the hub's answer; the repository takes no push;
+ *     reads the hub's answer; the repository takes no push; (q) its dry run
+ *     says it would wait for the owner, and asks nobody;
  * (g) a push over ssh in git's scp-like form under `git@` is held the same
  *     way, for that host's repository, and reaches no network.
  * With "Let agents post upstream" in the rule:
@@ -34,6 +43,8 @@
  * Large files, with the host holding a credential for the loopback host (a
  * git credential store under its HOME) and the clone committing a
  * `.lfsconfig` that names a trap endpoint:
+ * (r) under "Let agents post upstream", a dry run of a commit carrying an
+ *     LFS file is ok and sends nothing: no object, no ref, no push;
  * (i) under "Let agents post upstream", a commit carrying an LFS file pushed
  *     to someone/else.git lands with its object in that repository's own LFS
  *     (`someone/else.git/info/lfs`), sent with the host's credential; the
@@ -62,6 +73,10 @@ const LFS_FILTERS = [
   "-c",
   "filter.lfs.required=true",
 ];
+/** A traced line of an option git sent its helper, or the helper's answer to one (`ok`, `unsupported`, `error …`). */
+const HELPER_OPTION_TRACE =
+  /Debug: Remote helper: (-> option |<- (ok|unsupported|error)\b)/;
+const HELPER_TRACE_HEAD = /^.*Debug: Remote helper: /;
 /** The host's own sign-in on the loopback host, as its git credential store keeps it. */
 const HOST_LOGIN = { user: "host-probe", password: "host-secret" };
 
@@ -135,7 +150,11 @@ const spec: Spec = {
     await openGitDoor(ref);
     const door = gitDoorEnv(id, clone);
     /** git as a guarded workspace's command runs it: the door's helper first on PATH, its config words, its ssh. */
-    const inside = (cwd: string, args: string[]) =>
+    const inside = (
+      cwd: string,
+      args: string[],
+      extra: Record<string, string> = {}
+    ) =>
       Bun.$`git ${args}`
         .cwd(cwd)
         .env({
@@ -147,11 +166,26 @@ const spec: Spec = {
             guardedPushParameters(),
           ].join(" "),
           GIT_TERMINAL_PROMPT: "0",
+          ...extra,
         })
         .quiet()
         .nothrow();
+    /** git's own trace of what it sends its remote helper and what it reads back (transport-helper.c). */
+    const TRACED = { GIT_TRANSPORT_HELPER_DEBUG: "1" };
     const said = (run: { stderr: Buffer; stdout: Buffer }) =>
-      `${run.stdout.toString()}${run.stderr.toString()}`.trim();
+      `${run.stdout.toString()}${run.stderr.toString()}`
+        .split("\n")
+        .filter((line) => !line.startsWith("Debug: "))
+        .join("\n")
+        .trim();
+    /** The options git sent the door in a traced run, each with the door's answer. */
+    const optionsSent = (run: { stderr: Buffer }) =>
+      run.stderr
+        .toString()
+        .split("\n")
+        .filter((line) => HELPER_OPTION_TRACE.test(line))
+        .map((line) => line.replace(HELPER_TRACE_HEAD, ""))
+        .join(" | ");
     const tip = async (repo: string, branch: string) =>
       (
         await Bun.$`git -C ${http.dir(repo)} rev-parse --verify --quiet refs/heads/${branch}`
@@ -159,6 +193,91 @@ const spec: Spec = {
           .nothrow()
           .text()
       ).trim();
+
+    /** (k) to (o): the origin's own fetch and pushes, and the dry runs a landing's push check makes. */
+    const originLegs = async (): Promise<void> => {
+      // (k): an annotated tag beside a new commit, so git asks to follow tags.
+      await Bun.$`git -C ${seed} ${IDENTITY} commit -q --allow-empty -m third && git -C ${seed} ${IDENTITY} tag -a probe-tag -m probe-tag && git -C ${seed} push -q ${originUrl} main probe-tag`.quiet();
+      const fetchedTraced = await inside(clone, ["fetch", "origin"], TRACED);
+      const tracked = (
+        await Bun.$`git -C ${clone} rev-parse refs/remotes/origin/main`.text()
+      ).trim();
+      const tagged = (
+        await Bun.$`git -C ${clone} rev-parse --verify --quiet refs/tags/probe-tag`
+          .quiet()
+          .nothrow()
+          .text()
+      ).trim();
+      check(
+        "(k) a fetch through the door still works with the options git sends, each answered",
+        fetchedTraced.exitCode === 0 &&
+          tracked === (await tip(ORIGIN, "main")) &&
+          tagged !== "",
+        `exit ${fetchedTraced.exitCode}; options ${optionsSent(fetchedTraced) || "none"}; tag ${tagged || "none"}; ${said(fetchedTraced)}`
+      );
+
+      // (l): HEAD a commit on origin's main, as a landing's rebased HEAD is.
+      const ahead = (
+        await Bun.$`git -C ${clone} ${IDENTITY} commit-tree -p refs/remotes/origin/main -m ahead HEAD^{tree}`.text()
+      ).trim();
+      const mainBefore = await tip(ORIGIN, "main");
+      const pushesBefore = http.pushes(ORIGIN);
+      await Bun.$`git -C ${clone} checkout -q --detach ${ahead}`.quiet();
+      const dryFf = await inside(
+        clone,
+        ["push", "--dry-run", "origin", "HEAD:main"],
+        TRACED
+      );
+      check(
+        "(l) git push --dry-run origin HEAD:main through the door exits 0 with the ref listed, and origin's main is unchanged",
+        dryFf.exitCode === 0 &&
+          said(dryFf).includes("HEAD -> main") &&
+          (await tip(ORIGIN, "main")) === mainBefore &&
+          http.pushes(ORIGIN) === pushesBefore,
+        `exit ${dryFf.exitCode}; options ${optionsSent(dryFf) || "none"}; main ${await tip(ORIGIN, "main")} (was ${mainBefore}); pushes ${http.pushes(ORIGIN) - pushesBefore}; ${said(dryFf)}`
+      );
+
+      // (m) and (n): HEAD the clone's own commit, off origin's older main.
+      await Bun.$`git -C ${clone} checkout -q main`.quiet();
+      const dryBehind = await inside(clone, [
+        "push",
+        "--dry-run",
+        "origin",
+        "HEAD:main",
+      ]);
+      check(
+        "(m) a dry run of a push that is not a fast-forward, without --force, is refused with git's reason",
+        dryBehind.exitCode !== 0 &&
+          said(dryBehind).includes("non-fast-forward") &&
+          (await tip(ORIGIN, "main")) === mainBefore,
+        `exit ${dryBehind.exitCode}; ${said(dryBehind)}`
+      );
+      const dryForced = await inside(
+        clone,
+        ["push", "--dry-run", "--force", "origin", "HEAD:main"],
+        TRACED
+      );
+      check(
+        "(n) the same dry run with --force is ok, and origin's main is unchanged",
+        dryForced.exitCode === 0 &&
+          said(dryForced).includes("(forced update)") &&
+          (await tip(ORIGIN, "main")) === mainBefore &&
+          http.pushes(ORIGIN) === pushesBefore,
+        `exit ${dryForced.exitCode}; options ${optionsSent(dryForced) || "none"}; main ${await tip(ORIGIN, "main")}; pushes ${http.pushes(ORIGIN) - pushesBefore}; ${said(dryForced)}`
+      );
+
+      // (o)
+      await Bun.$`git -C ${clone} checkout -q --detach ${ahead}`.quiet();
+      const landed = await inside(clone, ["push", "origin", "HEAD:main"]);
+      await Bun.$`git -C ${clone} checkout -q main`.quiet();
+      check(
+        "(o) a real push of HEAD to main still lands, once",
+        landed.exitCode === 0 &&
+          (await tip(ORIGIN, "main")) === ahead &&
+          http.pushes(ORIGIN) === pushesBefore + 1,
+        `exit ${landed.exitCode}; main ${await tip(ORIGIN, "main")}; ${said(landed)}`
+      );
+    };
 
     try {
       // (a)
@@ -190,6 +309,8 @@ const spec: Spec = {
         `exit ${pushedOwn.exitCode}; ${said(pushedOwn)}`
       );
 
+      await originLegs();
+
       // (c)
       const pushedElse = await inside(clone, [
         "push",
@@ -205,6 +326,21 @@ const spec: Spec = {
           http.pushes(ELSE) === 0 &&
           (await tip(ELSE, "door-else")) === "",
         `exit ${pushedElse.exitCode}; pushes ${http.pushes(ELSE)}; ${said(pushedElse)}`
+      );
+      const dryElse = await inside(clone, [
+        "push",
+        "--dry-run",
+        elseUrl,
+        "HEAD:refs/heads/door-else",
+      ]);
+      check(
+        "(p) under keep off, a dry run of that push is refused in the same words",
+        dryElse.exitCode !== 0 &&
+          said(dryElse).includes(
+            `cawco: \`git push ${elseUrl}\` did not run: it writes to 127.0.0.1/someone/else`
+          ) &&
+          http.pushes(ELSE) === 0,
+        `exit ${dryElse.exitCode}; ${said(dryElse)}`
       );
 
       // (d)
@@ -259,6 +395,21 @@ const spec: Spec = {
           http.pushes(ELSE) === 0 &&
           (await tip(ELSE, "door-held")) === "",
         `exit ${held.exitCode}; asks ${JSON.stringify(asks)}; pushes ${http.pushes(ELSE)}; ${said(held)}`
+      );
+      const dryHeld = await inside(clone, [
+        "push",
+        "--dry-run",
+        elseUrl,
+        "HEAD:refs/heads/door-held-dry",
+      ]);
+      check(
+        "(q) under Ask me first, a dry run of that push says it would wait for the owner, and asks nobody",
+        dryHeld.exitCode !== 0 &&
+          said(dryHeld).includes("would wait in the owner's Needs you") &&
+          asks.length === 1 &&
+          http.pushes(ELSE) === 0 &&
+          (await tip(ELSE, "door-held-dry")) === "",
+        `exit ${dryHeld.exitCode}; asks ${asks.length}; ${said(dryHeld)}`
       );
 
       // (g)
@@ -329,8 +480,27 @@ const spec: Spec = {
       const ELSE_LFS = "someone/else.git";
       const ORIGIN_LFS = "probe/origin.git";
 
-      // (i)
+      // (r)
       const onLfs = await lfsCommit("on.bin");
+      const elsePushes = http.pushes(ELSE);
+      const dryLfs = await inside(clone, [
+        "push",
+        "--dry-run",
+        elseUrl,
+        "HEAD:refs/heads/door-lfs",
+      ]);
+      check(
+        "(r) under Let agents post upstream, a dry run of a commit carrying an LFS file is ok and sends nothing: no object, no ref, no push",
+        dryLfs.exitCode === 0 &&
+          said(dryLfs).includes("HEAD -> door-lfs") &&
+          http.lfs(ELSE_LFS).length === 0 &&
+          http.lfsCalls(ELSE_LFS) === 0 &&
+          http.pushes(ELSE) === elsePushes &&
+          (await tip(ELSE, "door-lfs")) === "",
+        `exit ${dryLfs.exitCode}; else LFS calls ${http.lfsCalls(ELSE_LFS)}; pushes ${http.pushes(ELSE) - elsePushes}; ${said(dryLfs)}`
+      );
+
+      // (i)
       const pushedLfs = await inside(clone, [
         "push",
         elseUrl,
