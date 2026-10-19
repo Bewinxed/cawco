@@ -1,5 +1,16 @@
 # Lane L23-cawco-project-1
 
+## Skills loaded
+defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, interface-craft, ui-observer (emil-design-eng and transitions-dev: no file in the lane has a transition, animation, keyframes or skeleton of its own beyond CawFloat's existing `transition-[opacity,translate]`, left as it was).
+
+better-ui rules followed: one named-property transition (no `all`), no hover styling added, token sizes (c-mark, icon-md) rather than ad-hoc px. better-layout rules followed: `min-height`/`max-height` caps rather than fixed heights, `min(token, calc(100vw - ladder step))` so cards hold at 320px, logical properties kept, no physical left/right added.
+
+## Critique (interface-craft Design Critique, from markup and classes; no bench or stories file renders these five in the workspace, so ui-observer: Not verified)
+fixed: CardFace tile and head now share one token (`c-mark`, the DESIGN.md identity-mark size) instead of two copies of 26px.
+fixed: Caw panel width follows `--c-panel-w`, the token DESIGN.md names for Caw's panel.
+gap: CawThread lead card and CawFloat sheet pass their sizes to kit components (Drawer.Content, Popover.Content) as a `style` string; a `style:--x` directive can't go on a component, so a kit `style`-free size prop would be needed (kit lane).
+gap: FolderFile's mono title face depends on `.folder-file` through SideSurface's `class`-only API (declared contract).
+
 ## Files
 | file | rules moved | residual kinds (1/2/3/4/5) | literals preserved | breakpoint edges | STOPs |
 |---|---|---|---|---|---|
