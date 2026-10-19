@@ -560,6 +560,11 @@ export class Run {
     // would read as this run's evidence.
     await rm(out, { recursive: true, force: true });
     await mkdir(out, { recursive: true });
+    // A fleet whose spec failed keeps its sandbox for reading (its hub's log
+    // and database); the spec's next run removes it (scratch-fleet.ts
+    // `removeKept`). One that passed goes with the spec.
+    const failedBefore = this.failures;
+    const failedHere = () => this.failures > failedBefore;
     const kit: Kit = {
       spec: spec.name,
       approve: approval !== null,
@@ -622,7 +627,7 @@ export class Run {
           (await served)?.child.kill();
           (await servedDev)?.child.kill();
           await fleet.close();
-          await fleet.clean(false);
+          await fleet.clean(failedHere());
         });
         return Object.assign(fleet, {
           dashboard: () => {

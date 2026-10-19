@@ -868,6 +868,45 @@ class FleetDirs {
   }
 }
 
+/**
+ * In a sandbox kept for reading (`clean(true)`): every folder of its fleet's,
+ * the sandbox, its services' HOME and runtime dir. Kept folders are
+ * unstamped, so no sweep takes them ({@link FleetDirs.keep}); the next fleet
+ * of the same name removes them ({@link removeKept}).
+ */
+const KEPT_FILE = ".kept.json";
+
+/**
+ * Removes the sandboxes earlier fleets named `name` kept for reading under
+ * `scratch`, and every folder each says it kept ({@link KEPT_FILE}): a
+ * failed run's evidence stays until the same spec runs again. Answers the
+ * sandboxes removed.
+ */
+async function removeKept(scratch: string, name: string): Promise<string[]> {
+  const removed: string[] = [];
+  for (const entry of await readdir(scratch).catch(() => [] as string[])) {
+    if (!entry.startsWith(`${name}-`)) {
+      continue;
+    }
+    const sandbox = join(scratch, entry);
+    // biome-ignore lint/performance/noAwaitInLoops: one kept sandbox at a time
+    const said = await readFile(join(sandbox, KEPT_FILE), "utf8").catch(
+      () => null
+    );
+    if (said === null) {
+      continue;
+    }
+    const { dirs } = JSON.parse(said) as { dirs: string[] };
+    for (const dir of [...dirs.filter((one) => one !== sandbox), sandbox]) {
+      // biome-ignore lint/performance/noAwaitInLoops: the sandbox, which says the others, goes last
+      await rm(dir, { recursive: true, force: true });
+      forgetSessiondLink(dir);
+    }
+    removed.push(sandbox);
+  }
+  return removed;
+}
+
 /** The fleets of this process whose folders still stand. */
 const LIVE = new Set<FleetDirs>();
 const END_SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
@@ -1153,6 +1192,9 @@ async function standUp(
   const { fleet, homes, scratch, short: shortRoot } = await fleetRoots();
   if (fleet) {
     dirs.clearWhenEmpty(fleet);
+  }
+  for (const gone of await removeKept(scratch, options.name)) {
+    console.log(`… removed the kept sandbox of an earlier run: ${gone}`);
   }
   const sandbox = await dirs.own(
     join(scratch, `${options.name}-${crypto.randomUUID().slice(0, 8)}`)
@@ -2384,6 +2426,12 @@ async function standUp(
   /** Deletes the sandbox, the HOME and the runtime dir beside it (and every added machine's), unless `keep`. */
   const clean = async (keep: boolean) => {
     if (keep) {
+      // Every folder of the fleet's, said in the sandbox, so the next fleet
+      // of this name removes them with it (`removeKept`).
+      await writeFile(
+        join(sandbox, KEPT_FILE),
+        `${JSON.stringify({ dirs: dirs.dirs }, null, 2)}\n`
+      );
       dirs.keep();
       console.log(
         `The sandbox is kept for reading: ${sandbox} (HOME ${home}, runtime dir ${runtime})`
