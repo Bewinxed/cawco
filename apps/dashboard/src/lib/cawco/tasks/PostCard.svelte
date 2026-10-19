@@ -74,26 +74,25 @@
       </TabsList>
     </Tabs>
   {/if}
-  <ol aria-label={parts.length > 1 ? words.thread : words.post} class="parts">
+  <ol aria-label={parts.length > 1 ? words.thread : words.post} class="m-0 flex list-none flex-col gap-space-2 p-0">
     {#each parts as text, index (index)}
       {@const length = postLength(text)}
       <li
         data-slot="post-card-card"
-        class="relative flex flex-col gap-space-2 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3 shadow-tile group-data-compact:px-space-3 group-data-compact:py-space-2 group-data-compact:shadow-none"
+        class="relative flex flex-col gap-space-2 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3 shadow-tile group-data-compact:px-space-3 group-data-compact:py-space-2 group-data-compact:shadow-none not-first:before:absolute not-first:before:start-(--joint-x) not-first:before:bottom-full not-first:before:h-(--joint-reach) not-first:before:w-space-row not-first:before:bg-border-control"
         data-part={index}
+        style:--joint-reach="calc(var(--space-2) + 1px)"
+        style:--joint-x="calc(var(--space-4) + var(--c-mark) / 2 - var(--space-row) / 2)"
       >
         <div
           data-slot="who"
           class="mark-line flex min-w-0 items-center gap-space-2"
         >
-          <!-- literal: 24px, 50% -->
           <span
             data-slot="mark"
             aria-hidden="true"
-            class="grid size-(--mark) flex-none place-items-center rounded-(--mark-r) bg-surface-fill type-meta font-medium text-ink-strong"
-            data-box
-            style:--mark="24px"
-            style:--mark-r="50%">{handle.slice(0, 1).toUpperCase()}</span
+            class="grid size-c-mark flex-none place-items-center rounded-pill bg-surface-fill type-meta font-medium text-ink-strong"
+            data-box>{handle.slice(0, 1).toUpperCase()}</span
           >
           <span
             class="min-w-0 overflow-clip type-label text-ellipsis whitespace-nowrap text-ink-strong"
@@ -115,9 +114,9 @@
           <span
             data-num
             data-slot="count"
-            class="count num"
-            title={words.countTitle}
-            class:over={length > POST_LIMIT}>{length}/{POST_LIMIT}</span
+            class="num self-end type-meta text-ink-muted data-over:text-status-fail-ink"
+            data-over={length > POST_LIMIT || undefined}
+            title={words.countTitle}>{length}/{POST_LIMIT}</span
           >
         {/if}
       </li>
@@ -126,36 +125,32 @@
   {#if !compact && (post.community || post.media)}
     <dl class="m-0 flex flex-col gap-space-1">
       {#if post.community}
-        <div class="fact">
-          <dt>{words.community}</dt>
-          <dd data-slot="name" class="name">{post.community}</dd>
+        <div class="flex flex-col gap-space-row">
+          <dt class="type-meta text-ink-muted">{words.community}</dt>
+          <dd data-slot="name" class="m-0 type-label text-ink-strong">{post.community}</dd>
         </div>
       {/if}
       {#if media.length > 0}
-        <div class="fact">
-          <dt>{words.media}</dt>
+        <div class="flex flex-col gap-space-row">
+          <dt class="type-meta text-ink-muted">{words.media}</dt>
           <!-- mark-line: each media file stands on its own, a picture or a player, beside no words -->
           <dd class="m-0 flex flex-wrap gap-space-2 type-meta text-ink-strong">
             {#each media as file (file)}
               {@const kind = deliverableKind(file)}
               {#if kind === "image"}
-                <!-- literal: 16rem -->
                 <img
                   alt=""
-                  class="max-h-(--max-h) max-w-full rounded-sm"
+                  class="max-h-(--c-post-media-max-h) max-w-full rounded-sm"
                   src={folderRawHref(projectId, file)}
-                  style:--max-h="16rem"
                 />
               {:else if kind === "video"}
                 <!-- svelte-ignore a11y_media_has_caption -->
-                <!-- literal: 16rem -->
                 <!-- biome-ignore lint/a11y/useMediaCaption: a post's media file carries no caption track -->
                 <video
-                  class="max-h-(--max-h) max-w-full rounded-sm"
+                  class="max-h-(--c-post-media-max-h) max-w-full rounded-sm"
                   controls
                   preload="metadata"
                   src={folderRawHref(projectId, file)}
-                  style:--max-h="16rem"
                 ></video>
               {:else}
                 <a href={folderRawHref(projectId, file)} target="_blank"
@@ -166,24 +161,14 @@
           </dd>
         </div>
       {:else if post.media}
-        <div class="fact">
-          <dt>{words.mediaPlan}</dt>
-          <dd data-slot="sentence" class="sentence">{post.media.plan}</dd>
+        <div class="flex flex-col gap-space-row">
+          <dt class="type-meta text-ink-muted">{words.mediaPlan}</dt>
+          <dd
+            data-slot="sentence"
+            class="m-0 type-body text-pretty text-ink-strong"
+          >{post.media.plan}</dd>
         </div>
       {/if}
     </dl>
   {/if}
 </div>
-
-<style>
-  /* residual: pseudo — a thread's parts are joined down their marks' axis. */
-  [data-slot="post-card-card"] + [data-slot="post-card-card"]::before {
-    content: "";
-    position: absolute;
-    inset-block-start: calc(var(--space-2) * -1 - 1px);
-    inset-inline-start: calc(var(--space-4) + var(--space-3));
-    inline-size: 2px;
-    block-size: calc(var(--space-2) + 1px);
-    background: var(--border-control);
-  }
-</style>

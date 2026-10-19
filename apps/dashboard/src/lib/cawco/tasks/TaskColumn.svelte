@@ -82,7 +82,7 @@
 <section
   data-slot="column"
   aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
-  class="group/col flex min-h-0 flex-col gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] dur-control ease-out data-closed:opacity-50 not-kind-you:data-over:bg-surface-hover kind-you:bg-brand-wash inset-ring inset-ring-border-hairline"
+  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] dur-control ease-out data-closed:opacity-50 not-kind-you:data-over:bg-surface-hover kind-you:bg-brand-wash inset-ring inset-ring-border-hairline"
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}
   data-over={over ? "" : undefined}
@@ -125,7 +125,7 @@
       {@const fault = refused?.(task.id) ?? null}
       {@const on = picked?.(task.id) ?? false}
       <li
-        class="group/card data-pickable:relative"
+        class="group/card group/task data-pickable:relative"
         aria-busy={moving?.(task.id) || undefined}
         data-archived={archived || undefined}
         data-flip
@@ -142,7 +142,6 @@
         />
         {#if onpick}
           <!-- The tick stands beside the card, not in it: the card is a link. -->
-          <!-- literal: 1rem -->
           <Checkbox
             data-task-column-pick
             aria-label="Pick {task.id} {task.title}"
@@ -153,7 +152,7 @@
               onpick(task.id, !on, event.shiftKey);
             }}
             reveal="card-pick"
-            style="--pick-top: calc(var(--space-2) + (var(--c-badge-h) - 1rem) / 2)"
+            style="--pick-top: calc(var(--space-2) + (var(--c-badge-h) - var(--icon-md)) / 2)"
           />
         {/if}
         {#if moving?.(task.id)}
@@ -165,38 +164,15 @@
             ></span
           >
         {/if}
-        <RowFault again={fault?.again} reason={fault?.reason} />
+        <RowFault
+          again={fault?.again}
+          data-task-column-fault
+          reason={fault?.reason}
+        />
       </li>
     {/each}
   </ol>
   {#if foot}
-    <div data-slot="foot" class="flex-none">{@render foot()}</div>
+    <div data-slot="foot" data-task-column-foot class="flex-none">{@render foot()}</div>
   {/if}
 </section>
-
-<style>
-  /* residual: foreign-dom — TaskCard's root and head take no class. A dropped
-     card stands where the hand put it, quieter, saying it moves, until the hub
-     answers; a card that can be picked keeps its head's end clear for the tick;
-     a picked card takes the selected wash. The card and its head are named by
-     attributes of their own: under a state, Chrome keys an attribute selector
-     to the attribute's name alone, and `[data-slot="head"]` restyled every
-     `data-slot` in the column. */
-  li[data-moving] > :global(:first-child) {
-    opacity: 0.6;
-  }
-  li[data-pickable] > :global([data-task-card] [data-task-head]) {
-    padding-inline-end: calc(var(--space-4) + var(--space-2));
-  }
-  li[data-picked] > :global([data-task-card]) {
-    background: var(--selected-bg);
-  }
-  li > :global([data-slot="row-fault"]) {
-    --fault-indent: var(--space-2);
-    --fault-end: var(--space-2);
-  }
-  /* residual: foreign-dom — the board's New task button, from NewTaskForm. */
-  [data-slot="foot"] > :global([data-slot="button"]) {
-    inline-size: 100%;
-  }
-</style>
