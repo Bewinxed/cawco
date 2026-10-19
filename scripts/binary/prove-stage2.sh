@@ -2735,8 +2735,11 @@ keeper_children_capped_on() {
   ack=$(keeper_spawn "$c" cg-refused sleep '["3000"]')
   echo "spawn cg-refused: $ack"
   [[ $ack == *'"stage":"failed"'* && $ack == *'"reason":"process-limit: '* ]]
-  # Once the forker and all it started are gone, a child starts again.
-  as_user "$c" kill -KILL "-$forker"
+  # Once the forker and all it started are gone, a child starts again. The group kill goes through the machine's `sh`
+  # (dash), whose builtin reads `-KILL "-$forker"` as the group, never through `podman exec kill`: that runs noble's
+  # procps `kill` (4.0.4-4ubuntu3), which reads `-629` after a signal as options and signals `-9`, the last digit
+  # (`kill(-9, SIGKILL) = -1 ESRCH`), and exits 0, so the forker lived on (nightly be51be0a3, pids.current 136).
+  as_user "$c" sh -c 'kill -KILL "-$1"' sh "$forker"
   wait_until 60 '(( $(as_user "$c" cat "$group/pids.current") <= 2 ))'
   ack=$(keeper_spawn "$c" cg-after sleep '["3000"]')
   echo "spawn cg-after: $ack"
