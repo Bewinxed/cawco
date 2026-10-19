@@ -45,9 +45,16 @@
   class="w-c-board-col-min rounded-md kind-you:bg-brand-wash kind-you:p-space-1"
   data-kind={node.task.kind ?? undefined}
 >
-  <Handle id="flow-in" isConnectable={false} position={ends.in} type="target" />
+  <Handle
+    id="flow-in"
+    class="pointer-events-none size-px min-h-0 min-w-0 border-current border-none bg-transparent"
+    isConnectable={false}
+    position={ends.in}
+    type="target"
+  />
   <Handle
     id="side-in"
+    class="pointer-events-none size-px min-h-0 min-w-0 border-current border-none bg-transparent"
     isConnectable={false}
     position={ends.sideIn}
     type="target"
@@ -61,28 +68,16 @@
   />
   <Handle
     id="flow-out"
+    class="pointer-events-none size-px min-h-0 min-w-0 border-current border-none bg-transparent"
     isConnectable={false}
     position={ends.out}
     type="source"
   />
   <Handle
     id="side-out"
+    class="pointer-events-none size-px min-h-0 min-w-0 border-current border-none bg-transparent"
     isConnectable={false}
     position={ends.sideOut}
     type="source"
   />
 </div>
-
-<style>
-  /* tailwind: Svelte Flow's stylesheet is unlayered, and unlayered rules outrank every layer, utilities included — https://tailwindcss.com/docs/adding-custom-styles#using-css-and-layers */
-  /* residual: foreign-dom */
-  [data-slot="task-node"] :global(.svelte-flow__handle) {
-    inline-size: 1px;
-    block-size: 1px;
-    min-inline-size: 0;
-    min-block-size: 0;
-    border: 0;
-    background: transparent;
-    pointer-events: none;
-  }
-</style>
