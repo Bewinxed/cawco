@@ -1770,6 +1770,18 @@
     }
   });
 
+  /** The mode's glyph and word, for its one-button form. */
+  const MODE_GLYPHS = {
+    interact: IconInteract,
+    comment: IconComment,
+    draw: IconPen,
+  } as const satisfies Record<PreviewMode, unknown>;
+  const MODE_WORDS: Record<PreviewMode, string> = {
+    interact: "Interact",
+    comment: "Comment",
+    draw: "Draw",
+  };
+
   /** Reload: a canvas's stage frame from its address, any other page by a new frame. */
   function reloadPage() {
     if (isCanvas && stage?.frame) {
@@ -1836,6 +1848,7 @@
         key: "mode",
         priority: HEAD_PRIORITY.mode,
         bar: modeBar,
+        compact: modeCompact,
         menu: modeMenu,
         group: true,
       });
@@ -2055,6 +2068,23 @@
       >
     </DropdownMenu.RadioGroup>
   </DropdownMenu.Group>
+{/snippet}
+
+<!-- The mode as one button where the head has no room for its three
+     segments: the chosen mode's glyph, opening the three. -->
+{#snippet modeCompact()}
+  {@const Glyph = MODE_GLYPHS[mode]}
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger
+      aria-label={`Mode: ${MODE_WORDS[mode]}`}
+      title={`Mode: ${MODE_WORDS[mode]} (V, C, D)`}
+    >
+      <Glyph />
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content align="end" class="w-48">
+      {@render modeMenu()}
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
 {/snippet}
 
 {#snippet commentsBar()}

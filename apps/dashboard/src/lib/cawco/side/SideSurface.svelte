@@ -15,7 +15,8 @@
    *
    * A pane that gives its controls as `items` has them stand by the head's
    * priority rule (head.ts): the name keeps its width up to 120px, Close
-   * stands last, and what doesn't fit goes in head order into one More.
+   * stands last, the mode takes its one-button form before it would go,
+   * and what doesn't fit goes in head order into one More.
    *
    * Expanded over the whole split, the card meets its edges: no inset,
    * corner or shadow, and the well's sides go, so a page is drawn at the
@@ -35,7 +36,13 @@
     IconMore,
   } from "#lib/icons.js";
   import { sideExpand } from "./expand";
-  import { HEAD_PRIORITY, type HeadItem, NAME_KEEPS, standing } from "./head";
+  import {
+    HEAD_PRIORITY,
+    type HeadItem,
+    NAME_KEEPS,
+    type Standing,
+    standing,
+  } from "./head";
 
   let {
     label,
@@ -102,13 +109,14 @@
   );
   let head = $state<HTMLElement>();
   let identity = $state<HTMLElement>();
-  /** The controls standing in the head; null until the head is measured: all of them. */
-  let shown = $state<Set<string> | null>(null);
+  /** The controls standing in the head, and how; null until the head is measured: all of them whole. */
+  let shown = $state<Map<string, Standing> | null>(null);
   /** The name's own width, up to {@link NAME_KEEPS}: it gives up no more of it to the controls. */
   let nameKeeps = $state(0);
-  /** Each control's width as last drawn in the head: what a control in More would take back. */
+  /** Each control's width as last drawn in the head, whole (`key`) and in its one-button form (`key:compact`): what a control in More would take back. */
   const widths = new Map<string, number>();
   const stands = (key: string) => shown === null || shown.has(key);
+  const formOf = (key: string): Standing => shown?.get(key) ?? "whole";
   const more = $derived(all.filter((one) => !stands(one.key)));
   const moreCount = $derived(
     more.reduce((sum, one) => sum + (one.count ?? 0), 0)
@@ -145,7 +153,10 @@
       const { width } = one.getBoundingClientRect();
       const item = one.dataset.headItem;
       if (item && !one.hidden) {
-        widths.set(item, width);
+        widths.set(
+          one.dataset.form === "compact" ? `${item}:compact` : item,
+          width
+        );
       } else if (one.dataset.slot === "more") {
         moreWidth = width;
       } else if (!item && one !== name) {
@@ -184,13 +195,17 @@
         key: one.key,
         priority: one.priority,
         width: widths.get(one.key) ?? 0,
+        // Not drawn yet: Close's width, the recipe's glyph alone.
+        ...(one.compact
+          ? { compact: widths.get(`${one.key}:compact`) ?? kept.at(-1) ?? 0 }
+          : {}),
       }))
     );
     const was = shown;
     if (
       !was ||
       next.size !== was.size ||
-      [...next].some((key) => !was.has(key))
+      [...next].some(([key, form]) => was.get(key) !== form)
     ) {
       shown = next;
     }
@@ -282,8 +297,17 @@
     </div>
     {@render actions?.()}
     {#each all as one (one.key)}
-      <div data-head-item={one.key} class="head-item" hidden={!stands(one.key)}>
-        {@render one.bar()}
+      <div
+        data-form={formOf(one.key)}
+        data-head-item={one.key}
+        class="head-item"
+        hidden={!stands(one.key)}
+      >
+        {#if one.compact && formOf(one.key) === "compact"}
+          {@render one.compact()}
+        {:else}
+          {@render one.bar()}
+        {/if}
       </div>
     {/each}
     {#if more.length > 0}

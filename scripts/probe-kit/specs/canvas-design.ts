@@ -29,7 +29,8 @@
  *    Variable"')` and JetBrains Mono's.
  *
  * The panel (the bench) at 390, 523 and 720, light and dark:
- * 8. The name is whole or ellipsed, never under another control; every
+ * 8. (330 too, where the mode stands as one button before it would go.)
+ *    The name is whole or ellipsed, never under another control; every
  *    head control is 44px tall or reaches 44px through its ::after under a
  *    finger; the controls past the head's room stand in More, in head
  *    order; no path line stands under the name.
@@ -197,6 +198,8 @@ interface PageRead {
   faces: { figtree: boolean; mono: boolean };
   footEdge: [string, string];
   hits: { name: string; ok: boolean }[];
+  /** `surface-hover` as drawn: what pressed must not read as. */
+  hover: string;
   pick: {
     edge: [string, string];
     ratio: number;
@@ -204,8 +207,6 @@ interface PageRead {
     h: number;
   } | null;
   pressed: [string, string];
-  /** `surface-hover` as drawn: what pressed must not read as. */
-  hover: string;
   repeats: string[];
   ring: { clear: boolean; style: string; color: [string, string] } | null;
   row: { bg: [string, string]; ink: [string, string] } | null;
@@ -541,6 +542,8 @@ async function canvasLeg(
 
 interface HeadRead {
   bar: { key: string; h: number; after: number }[];
+  /** The head's gap and each child's box (x, width) and form, as drawn. */
+  boxes: string;
   more: string[];
   moreLabel: string;
   name: { whole: boolean; ellipsed: boolean; under: string; width: number };
@@ -585,6 +588,14 @@ async function readHead(page: Page): Promise<HeadRead> {
             after.content === "none" ? 0 : Number.parseFloat(after.height) || 0,
         };
       }),
+      boxes: `gap ${getComputedStyle(head).columnGap}; ${[...head.children]
+        .filter((one) => !(one as HTMLElement).hidden)
+        .map((one) => {
+          const box = one.getBoundingClientRect();
+          const el = one as HTMLElement;
+          return `${el.dataset.headItem ?? el.dataset.slot ?? el.className.split(" ")[0]}${el.dataset.form === "compact" ? "(one button)" : ""} x${Math.round(box.x)} w${Math.round(box.width * 10) / 10} h${Math.round(box.height)}`;
+        })
+        .join(", ")}`,
       moreLabel:
         head.querySelector("[data-slot=more]")?.getAttribute("aria-label") ??
         "",
@@ -678,6 +689,17 @@ async function headLeg(
     read.path === "",
     read.path || "none"
   );
+  kit.note(`head ${leg}: ${read.boxes}`);
+  if (width < 390) {
+    kit.check(
+      `8e: ${leg}: where the mode's segments have no room, it stands as one button before it would go to More`,
+      read.boxes.includes("mode(one button)") &&
+        !read.more.some((one) => one.startsWith("Mode")),
+      `${read.boxes}; More ${read.more.join(" | ")}`
+    );
+    await page.close();
+    return;
+  }
   mkdirSync(CAPS, { recursive: true });
   const name = width < 640 ? String(width) : "desk";
   await page
@@ -702,7 +724,7 @@ const spec: Spec = {
       }
       const bench = await kit.bench();
       for (const theme of only === "page" ? [] : (["light", "dark"] as const)) {
-        for (const width of [390, 523, 720]) {
+        for (const width of [330, 390, 523, 720]) {
           // biome-ignore lint/performance/noAwaitInLoops: one page at a time
           await headLeg(kit, bench, stage, width, theme);
         }
