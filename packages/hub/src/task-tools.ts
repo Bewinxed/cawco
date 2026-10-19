@@ -120,7 +120,12 @@ const attemptFields = (task: TaskLine) => ({
     ? { attemptEnded: task.attempts[0]?.endedHow }
     : {}),
   ...(task.blockedBy.length > 0 ? { blockedBy: task.blockedBy } : {}),
-  ...(task.startProblem ? { startProblem: task.startProblem } : {}),
+  ...(task.startProblem
+    ? {
+        startProblem: task.startProblem,
+        startProblemKind: task.startProblemKind,
+      }
+    : {}),
 });
 
 /** One task as a model reads it in a list: its fields that are set. */

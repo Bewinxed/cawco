@@ -11,7 +11,11 @@
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconClock, IconDownload } from "#lib/icons.js";
+  import {
+    IconError,
+    IconUpdateAvailable,
+    IconUpdateWaits,
+  } from "#lib/icons.js";
   import { type Cell, cellFor, type UpdateMachine } from "./model";
   import { updates } from "./updates.svelte";
 
@@ -47,12 +51,11 @@
         {:else}
           <Badge class={CHIP} variant={cell.fail ? "destructive" : "ghost"}>
             {#if cell.fail}
-              <span class="size-2 shrink-0 rounded-full bg-error" data-box
-              ></span>
+              <IconError class="size-4 shrink-0" />
             {:else if cell.icon === "clock"}
-              <IconClock class="size-4 shrink-0" />
+              <IconUpdateWaits class="size-4 shrink-0" />
             {:else if cell.icon === "download"}
-              <IconDownload class="size-4 shrink-0" />
+              <IconUpdateAvailable class="size-4 shrink-0" />
             {/if}
             <span>{cell.text}</span>
           </Badge>

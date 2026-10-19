@@ -25,7 +25,7 @@
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconAlert, IconMaximize } from "#lib/icons.js";
+  import { IconError, IconMaximize } from "#lib/icons.js";
   import DiffModal from "./DiffModal.svelte";
   import { fileName, languageOf } from "./diff-language";
   import { houseDiff } from "./diff-theme.svelte";
@@ -141,7 +141,7 @@
         in:crossIn
         out:crossOut
       >
-        <IconAlert class="w-5 h-5 shrink-0" />
+        <IconError class="w-5 h-5 shrink-0" />
         <span>The diff did not draw: {failure}</span>
         <Button data-box onclick={retry} size="sm" variant="outline"
           >Retry</Button

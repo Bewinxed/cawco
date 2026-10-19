@@ -25,6 +25,7 @@
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import {
+    IconBlocked,
     IconError,
     IconLock,
     IconNeedsYou,
@@ -127,14 +128,21 @@
       </span>
     {/if}
     {#if flags.startProblem && !flags.live}
-      <!-- Why the hub could not start it, newer than any failure before. -->
+      <!-- Why the hub could not start it, newer than any failure before:
+           it waits on a person or a machine (the blocked mark, attn), or the
+           start was tried and broke (the failure mark, fail). -->
+      {@const broke = flags.startProblemKind === "broke"}
       <Badge
         class="ml-auto"
-        data-start-problem
+        data-start-problem={flags.startProblemKind}
         title={flags.startProblem}
-        variant="fail"
+        variant={broke ? "fail" : "attn"}
       >
-        <IconWarningTriangle aria-hidden="true" />
+        {#if broke}
+          <IconError aria-hidden="true" />
+        {:else}
+          <IconBlocked aria-hidden="true" />
+        {/if}
         <span>Can't start</span>
         <span class="sr-only">{flags.startProblem}</span>
       </Badge>

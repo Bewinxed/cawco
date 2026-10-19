@@ -21,7 +21,7 @@
    */
   import { damagedHubRecordWords } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
-  import { IconNeedsYou, IconNotices } from "#lib/icons.js";
+  import { IconNeedsYouSection, IconNotices } from "#lib/icons.js";
   import RebalanceNotices from "../accounts/RebalanceNotices.svelte";
   import { echoBeat } from "../motion/echo.svelte";
   import { reflow } from "../motion/rows.svelte";
@@ -166,7 +166,7 @@
           data-slot="needs"
           data-caw-panel-glyph
           class="glyph needs"
-          data-box><IconNeedsYou aria-hidden="true" /></span
+          data-box><IconNeedsYouSection aria-hidden="true" /></span
         >
         <span data-slot="title" class="title" id="caw-needs">Needs you</span>
         <span data-slot="count" class="count">{needs.length}</span>

@@ -789,6 +789,7 @@
       liveAttempt: task.liveAttempt,
       queuedStart: task.queuedStart,
       startProblem: task.startProblem,
+      startProblemKind: task.startProblemKind,
     };
     const known = list.tasks.some((each) => each.id === task.id);
     list = {

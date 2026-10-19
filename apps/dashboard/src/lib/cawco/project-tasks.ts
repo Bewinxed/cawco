@@ -209,6 +209,12 @@ interface TaskFlags {
   queuedStart: boolean;
   /** Why the hub could not start an attempt the last time it tried. */
   startProblem: string | null;
+  /**
+   * Its kind, null exactly when `startProblem` is: `waits` when nothing broke
+   * and a person or a machine is awaited, `broke` when the start was tried
+   * and threw (the hub's `StartProblemKind`).
+   */
+  startProblemKind: "waits" | "broke" | null;
 }
 
 /**
@@ -738,6 +744,7 @@ export function flagsOf(task: TaskSummary | TaskView): {
   live: boolean;
   queued: boolean;
   startProblem: string | null;
+  startProblemKind: "waits" | "broke" | null;
   stopped: boolean;
 } {
   return {
@@ -747,6 +754,7 @@ export function flagsOf(task: TaskSummary | TaskView): {
     stopped: task.lastAttemptStopped,
     queued: task.queuedStart,
     startProblem: task.startProblem,
+    startProblemKind: task.startProblemKind,
   };
 }
 

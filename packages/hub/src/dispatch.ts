@@ -120,6 +120,8 @@ import {
   BUDGET,
   hubActor,
   onFrontier,
+  type StartProblem,
+  type StartProblemKind,
   type TaskActor,
   type TaskEvent,
   type TaskMover,
@@ -661,8 +663,8 @@ export const createDispatcher = ({
   const judgements = new Map<string, DispatchJudgement & { hash: string }>();
   /** Attempts being started now, by `project\0task`: their work item is not filed yet. */
   const starting = new Set<string>();
-  /** Why the hub last could not start an attempt at a task, and the file it read then. */
-  const problems = new Map<string, { hash: string; message: string }>();
+  /** Why the hub last could not start an attempt at a task, of which kind, and the file it read then. */
+  const problems = new Map<string, StartProblem & { hash: string }>();
   /** Projects being looked at now, and the ones to look at again after. */
   const looking = new Set<string>();
   const again = new Set<string>();
@@ -773,7 +775,7 @@ export const createDispatcher = ({
       message = `No checkout of ${project.name} is on a machine that is online, so there is nowhere to cut ${task.id}'s workspace. Bring one of its machines online, or add a checkout place on one that is.`;
     }
     if (message) {
-      note(project.id, task, message);
+      note(project.id, task, "waits", message);
       refuse(409, message);
     }
     return {
@@ -787,13 +789,22 @@ export const createDispatcher = ({
     };
   };
 
-  /** Remembers why a start failed, against the task file as it was read. */
+  /**
+   * Remembers why a start failed, and its kind, against the task file as it
+   * was read: `waits` when nothing broke and a person or a machine is
+   * awaited, `broke` when the start was tried and threw.
+   */
   const note = (
     projectId: string,
     task: { hash: string; id: string },
+    kind: StartProblemKind,
     message: string
   ): void => {
-    problems.set(keyOf(projectId, task.id), { hash: task.hash, message });
+    problems.set(keyOf(projectId, task.id), {
+      hash: task.hash,
+      kind,
+      message,
+    });
     console.warn(`[dispatch] ${task.id} in project ${projectId}: ${message}`);
   };
 
@@ -1102,7 +1113,7 @@ export const createDispatcher = ({
       problems.delete(keyOf(project.id, task.id));
       return started;
     } catch (error) {
-      note(project.id, task, failure(error).message);
+      note(project.id, task, "broke", failure(error).message);
       throw error;
     }
   };
@@ -1347,6 +1358,7 @@ export const createDispatcher = ({
         note(
           projectId,
           task,
+          "broke",
           `${task.id} is ready to start, but Caw, who takes the reports of the attempts the hub starts, did not start: ${why}`
         );
       }
@@ -1409,6 +1421,7 @@ export const createDispatcher = ({
       note(
         project.id,
         task,
+        "broke",
         `${how}, but Caw, who takes its report, did not start: ${failure(error).message}`
       );
       return;
@@ -1417,6 +1430,7 @@ export const createDispatcher = ({
       note(
         project.id,
         task,
+        "waits",
         `${how}, but no session can take the attempt's report. ${NO_LEAD}`
       );
     }
@@ -1964,9 +1978,11 @@ export const createDispatcher = ({
     problemOf(
       projectId: string,
       task: { hash: string; id: string }
-    ): string | null {
+    ): StartProblem | null {
       const problem = problems.get(keyOf(projectId, task.id));
-      return problem?.hash === task.hash ? problem.message : null;
+      return problem?.hash === task.hash
+        ? { kind: problem.kind, message: problem.message }
+        : null;
     },
 
     /**

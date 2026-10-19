@@ -3,11 +3,11 @@
   import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import {
-    IconCheck,
-    IconChevronUp,
-    IconDot,
     IconError,
-    IconStop,
+    IconNeedsYou,
+    IconPauseCircle,
+    IconSuccess,
+    IconWorking,
   } from "#lib/icons.js";
 
   let {
@@ -36,12 +36,13 @@
   // A held step waits on its run's supervisor, not the operator: it says so
   // in its own word under the same attention tone.
   const label = $derived(status === "held" ? "held" : labels[tone] || status);
+  // The session status set, one glyph per word (DESIGN.md, Badge).
   const icons = {
-    live: IconDot,
-    attn: IconChevronUp,
-    done: IconCheck,
+    live: IconWorking,
+    attn: IconNeedsYou,
+    done: IconSuccess,
     fail: IconError,
-    idle: IconStop,
+    idle: IconPauseCircle,
   };
   const Glyph = $derived(icons[tone]);
 </script>

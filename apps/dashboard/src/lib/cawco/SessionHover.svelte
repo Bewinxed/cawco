@@ -17,7 +17,7 @@
    */
   import { Portal } from "bits-ui";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
+  import { IconError, IconNeedsYou, IconSuccess } from "#lib/icons.js";
   import { STOPPING_LABEL } from "./activity";
   import { cawco, isFailed, readThread, readTranscript } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
@@ -367,13 +367,13 @@
             {#if tone === "live"}
               <span data-slot="dot" class="dot"></span>
             {:else if tone === "needs"}
-              <IconAsk />
+              <IconNeedsYou />
             {:else if tone === "stopping"}
               <Spinner aria-hidden="true" role="presentation" />
             {:else if tone === "done"}
               <IconSuccess />
             {:else if tone === "failed"}
-              <IconWarningTriangle />
+              <IconError />
             {/if}
           </span>
         </div>

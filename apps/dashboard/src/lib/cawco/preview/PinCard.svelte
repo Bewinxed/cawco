@@ -36,7 +36,7 @@
     IconClose,
     IconLink,
     IconReopen,
-    IconSuccess,
+    IconResolve,
     IconTrash,
   } from "#lib/icons.js";
   import AskHere from "../AskHere.svelte";
@@ -345,7 +345,7 @@
     {:else}
       <Button
         aria-label="Resolve pin"
-        icon={IconSuccess}
+        icon={IconResolve}
         onclick={() => onresolve(true)}
         size="icon-sm"
         title="Resolve pin"

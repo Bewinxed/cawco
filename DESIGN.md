@@ -467,7 +467,7 @@ Motion is continuity, never decoration. Something that exists on both sides of a
 - The frame recesses; content sits raised on it.
 - Figtree for the product, JetBrains Mono for code, paths and IDs, Fredoka 600 for brand display only. Product weights 400 and 500 only.
 - A spacing ladder measured off the reference comps (4, 7, 11, 14, 18, 21, 25, 32), not a 4px grid.
-- Solar bold-duotone icons throughout, linear only for chevrons and arrows.
+- Solar icons: bold-duotone throughout, with two exceptions. Chevrons and arrows are linear. A status mark is solid bold, never duotone: the session status glyph set, every badge icon, and the failure and blocked marks at any size. A duotone icon draws its disc at reduced opacity and its inner mark at full opacity in the same colour, so the mark contrasts only with a half-tint of itself and vanishes at 12px and 16px; a solid disc knocks the mark out in the surface colour, so it reads on both themes.
 - Motion that keeps one object on screen through every change, honours reduced motion everywhere, and exits faster than it enters.
 
 ### Motion grammar
@@ -549,9 +549,9 @@ Warm low-chroma paper and roost neutrals, one coral that means "you act here", a
 ### Tertiary: status
 Four functional hues, each with a 3 / 9 / 11 step: info (blue), warning (yellow), success (olive green) and error. Error sits on crimson (hue 15) so failed never reads as the coral action. Status chips are drawn from them:
 - **Live** (`status-live-bg` / `status-live-ink`): a session mid-turn.
-- **Needs you** (`status-attn-bg` / `status-attn-ink`): a session parked on a human, drawn in spark yellow. It is the one status that asks for a person.
+- **Needs you** (`status-attn-bg` / `status-attn-ink`): a session parked on a human, drawn in spark yellow. It is the one status that asks for a person. It also carries a task the hub cannot start until a person acts (Can't start: bring a machine online, add a checkout place, turn Caw on); nothing has broken, so it is not fail.
 - **Done** (`status-done-bg` / `status-done-ink`): work that finished.
-- **Failed** (`status-fail-bg` / `status-fail-ink`): work that ended badly, in crimson.
+- **Failed** (`status-fail-bg` / `status-fail-ink`): work that ended badly, in crimson. A start that was tried and broke is fail too, with the word Can't start.
 - **Idle** (`status-idle-ink`, no fill): rest is the absence of a chip.
 
 Live, done and fail chips are the hue's 3-step mixed 24% toward its 9-step, with the 11-step mixed 24% toward `neutral-12` as ink. Needs-you has its own spark pair. Every pair clears 4.5:1: live 6.92 / 6.18, attn 8.74 / 7.81, done 5.58 / 5.56, fail 6.36 / 6.92 (light / dark).
@@ -587,7 +587,9 @@ Live, done and fail chips are the hue's 3-step mixed 24% toward its 9-step, with
 
 **The No Indigo Rule.** Indigo is never a brand, action or accent hue. Identity hues span the wheel for telling things apart and are never promoted to a brand role.
 
-**The Glyph, Word, Hue Rule.** Status is never colour alone. The session status reads glyph, then word, then hue (a Solar duotone glyph, then "Working", "Needs you", "Failed", "Idle", "Sleeping", "Stopped" or "Unreachable"). The activity dot changes shape as well as colour: Needs you pings, Unreachable is hollow, Sleeping is a moon. A board chip carries the word inside its tint.
+**The Glyph, Word, Hue Rule.** Status is never colour alone. The session status reads glyph, then word, then hue (a solid Solar bold glyph, then "Working", "Needs you", "Failed", "Idle", "Sleeping", "Stopped" or "Unreachable"). The activity dot changes shape as well as colour: Needs you pings, Unreachable is hollow, Sleeping is a moon. A board chip carries the word inside its tint. Failed and blocked are different glyphs before they are the same hue: danger-circle for work that ended badly, forbidden-circle for work that cannot proceed.
+
+**The failure mark and the blocked mark.** One glyph says something went wrong: Solar `danger-circle`, solid, in the fail pair. It marks failed sessions, failed tasks and attempts, error toasts and error lines, at 12, 16 and 20px, and no x in a circle marks a status anywhere. Blocked is not failed: a task the hub cannot start because nothing has broken (no fitting machine online, no checkout place, no lead to take the report) takes `forbidden-circle`, solid, in the attn pair, with the word Can't start, because a person is what it waits for. A start that was tried and broke (the start threw, Caw did not start) takes `danger-circle` in the fail pair with the same word. The reason stays in the badge's title.
 
 ## Typography
 
@@ -747,7 +749,7 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 - **Needs-you tile:** a real button wrapping the tile. Its hover, chosen (`status-attn-bg` well with attn ink) and pressed fills paint the well, not the card. Pressing it filters the board to the sessions it counts.
 
 ### Badges and state chips
-- **Badge:** 20px, 5px radius, label role, recess surface, no border, 12px icons. The `live`, `attn`, `done` and `fail` variants take their status pairs.
+- **Badge:** 20px, 5px radius, label role, recess surface, no border, 12px solid bold icons (never duotone: at 12px a duotone mark has no contrast with its own disc). The `live`, `attn`, `done` and `fail` variants take their status pairs. A badge's glyph follows its word: refresh-circle Working, hand-shake Needs you, check-circle Done, danger-circle Failed, forbidden-circle Can't start.
 - **Board state pill:** fully round, 24px tall, 10px padding, label weight, status tint with no glyph. Idle drops the tint and the padding. When state changes the tint turns over 280ms on ease-out and the word morphs over 180ms (The Steady Swap Rule).
 - **Work tab count:** the Badge in its tab's status pair, `live` on Working, `done` on Finished and `fail` when anything finished failed, on the chosen tab and the other alike; its numeral in the meta role, in tabular figures. It counts top-level sessions only, never their delegates.
 
@@ -843,7 +845,7 @@ A compact tinted row, never a slab: 10px radius, 10×12px padding, body type, an
 **The Real Wait Rule.** Caw stands in for a wait (loading, reconnecting) only once it has lasted `--dur-wait-grace` (1s; NN/g: no feedback is needed under 1.0s). Until then the area is its plain surface, with no Caw and no line. Once he appears he stays until his enter (his own clip, about 0.8 s) has played, and what arrives waits for that, so he is never cut off mid-entrance. After that what arrives lands at once under its own `--dur-fade` cross-fade and he is gone within `--dur-fade` from any drawing, his still included: he holds the drawing he is on and fades out (opacity to 0, scale to `--leave-scale`, `--ease-out`), so nothing that has arrived sits under a looping Caw. No exit is drawn. A status change is the same leave, then the new status coming in: by its drawn enter, on every drawing of which he is wholly inside the 3.5% action-safe line or not there at all, or where it has none by a fade up from `--leave-scale` over `--dur-pop` on `--ease-out`; nothing waits for a loop to end (assets/mascot/README.md, Contract). Under Reduce Motion he fades over `--dur-fade`, opacity only. Web: SessionSurface's detail area; Apple: `CawWaiting`.
 
 ### Status displays
-- **Session status:** a 16px Solar duotone glyph (refresh-circle for Working, hand-shake for Needs you, close-circle for Failed, pause-circle for Idle and Stopped, moon-sleep for Sleeping, question-circle for Unreachable), then the word in the label role, tinted live, attn or fail where it applies. A new glyph cross-fades in from 0.92 over 120ms, and the word morphs over 180ms. The Working glyph breathes to `--breath-floor` on `--breath` (Live work breathes).
+- **Session status:** a 16px solid Solar bold glyph, never duotone (refresh-circle for Working, hand-shake for Needs you, danger-circle for Failed, pause-circle for Idle and Stopped, moon-sleep for Sleeping, question-circle for Unreachable), then the word in the label role, tinted live, attn or fail where it applies. A new glyph cross-fades in from 0.92 over 120ms, and the word morphs over 180ms. The Working glyph breathes to `--breath-floor` on `--breath` (Live work breathes).
 - **Activity dot:** an 8px dot. Working is info blue and pulses on the 1.2s loop, Needs you is warning amber with a ping ring on the same loop, Idle is muted at 40%, Failed is solid crimson and still, Unreachable is a hollow ring, Sleeping is a moon glyph. The colour moves between states over 280ms; a shape change cross-fades from 0.92 over 120ms.
 - **Task ring:** 16px (12px in a board row), wound from the top as a clock is read, drawn in `currentColor`. With no plan it turns a 30% arc continuously (one turn per 1.2s loop, linear). With a plan, the arc length eases to the share done over 260ms. Finished, it swaps for a success check from 0.6 over 160ms. Nothing planned and nothing running draws nothing.
 - **Thinking indicator:** two 20px marks, a circle and an infinity loop, stacked in one cell and trading places on a three-breath loop (6s), the circle widening and flattening as it fades and the infinity settling out of a narrower, taller shape. Beside them four words ("Thinking", "Moonwalking", "Planning", "Refining") each hold for two breaths of an eight-breath cycle, rising 80% in and out on ease-out, while a band of strong ink crosses each word once a breath. Everything moves by transform and opacity on the compositor. With reduced motion it shows the infinity mark and the first word, still.

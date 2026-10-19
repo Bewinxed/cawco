@@ -10,7 +10,7 @@ import {
   IconLock,
   IconNeedsYou,
   IconSuccess,
-  IconToolQuestion,
+  IconUnreachable,
 } from "#lib/icons.js";
 import { devDebug } from "../dev-debug";
 
@@ -110,7 +110,7 @@ export function readinessLine(
       };
     case "offline":
       return {
-        glyph: IconToolQuestion,
+        glyph: IconUnreachable,
         hue: null,
         rest: "joined, but it's offline now.",
         instruction: "The check runs again when it's back.",

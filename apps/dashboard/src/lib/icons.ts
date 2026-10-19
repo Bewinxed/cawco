@@ -14,8 +14,13 @@ export { default as IconAddLine } from "~icons/solar/add-line-duotone";
 export { default as IconAlignLeft } from "~icons/solar/align-left-bold-duotone";
 /*
  * Glyphs, not marks: the chevrons and arrows stay in Solar's linear cut, as
- * do the local Minus, Plus and Tick above. Every other icon is Solar's
- * bold-duotone cut, one face for the whole product.
+ * do the local Minus, Plus and Tick above. A status mark is Solar's solid
+ * bold cut, never duotone: the session status set, every badge icon, and the
+ * failure and blocked marks (DESIGN.md, The failure mark and the blocked
+ * mark). A duotone disc is its own glyph at half opacity, so its inner mark
+ * contrasts only with a half-tint of itself and vanishes at 12px and 16px.
+ * Every other icon is Solar's bold-duotone cut, one face for the whole
+ * product.
  */
 export { default as IconChevronDown } from "~icons/solar/alt-arrow-down-linear";
 export { default as IconChevronLeft } from "~icons/solar/alt-arrow-left-linear";
@@ -49,7 +54,10 @@ export { default as IconComment } from "~icons/solar/chat-round-dots-bold-duoton
 /** A task review's Transcript chip: the attempt's session, read in place. */
 export { default as IconTranscript } from "~icons/solar/chat-round-line-bold-duotone";
 export { default as IconChat } from "~icons/solar/chat-square-bold-duotone";
-export { default as IconSuccess } from "~icons/solar/check-circle-bold-duotone";
+/** Done: a status mark (Session status, Badge). */
+export { default as IconSuccess } from "~icons/solar/check-circle-bold";
+/** Resolve a pin: an action, not a status. */
+export { default as IconResolve } from "~icons/solar/check-circle-bold-duotone";
 export { default as IconCheck } from "~icons/solar/check-read-bold-duotone";
 export { default as IconToolTodo } from "~icons/solar/checklist-bold-duotone";
 /** A starter that files tasks: its ticks on a half-ink body, as every starter's glyph is (StarterCards). */
@@ -61,8 +69,9 @@ export {
 } from "~icons/solar/clipboard-check-bold-duotone";
 export { default as IconFileTable } from "~icons/solar/clipboard-list-bold-duotone";
 export { default as IconReportFailed } from "~icons/solar/clipboard-remove-bold-duotone";
+/** An update that waits to install: an update cell's badge. */
+export { default as IconUpdateWaits } from "~icons/solar/clock-circle-bold";
 export { default as IconClock } from "~icons/solar/clock-circle-bold-duotone";
-export { default as IconError } from "~icons/solar/close-circle-bold-duotone";
 export { default as IconToolCode } from "~icons/solar/code-2-bold-duotone";
 export { default as IconFileCode } from "~icons/solar/code-file-bold-duotone";
 export {
@@ -77,6 +86,8 @@ export {
   default as IconInteract,
   default as IconToolScreen,
 } from "~icons/solar/cursor-bold-duotone";
+/** The failure mark: something went wrong (failed, errored, broke). */
+export { default as IconError } from "~icons/solar/danger-circle-bold";
 export { default as IconAlert } from "~icons/solar/danger-circle-bold-duotone";
 export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bold-duotone";
 // A new thread: a conversation of two. Its full-weight marks are as large as
@@ -88,6 +99,8 @@ export {
   default as IconToolRead,
 } from "~icons/solar/document-text-bold-duotone";
 export { default as IconDollar } from "~icons/solar/dollar-bold-duotone";
+/** An update that is available to install: an update cell's badge. */
+export { default as IconUpdateAvailable } from "~icons/solar/download-bold";
 export { default as IconDownload } from "~icons/solar/download-bold-duotone";
 export { default as IconEye } from "~icons/solar/eye-bold-duotone";
 export { default as IconEyeClosed } from "~icons/solar/eye-closed-bold-duotone";
@@ -98,6 +111,8 @@ export { default as IconFire } from "~icons/solar/fire-bold-duotone";
 export { default as IconFiles } from "~icons/solar/folder-2-bold-duotone";
 export { default as IconFolder } from "~icons/solar/folder-bold-duotone";
 export { default as IconToolFiles } from "~icons/solar/folder-with-files-bold-duotone";
+/** The blocked mark: a task the hub cannot start until a person acts (Can't start). */
+export { default as IconBlocked } from "~icons/solar/forbidden-circle-bold";
 export { default as IconImage } from "~icons/solar/gallery-bold-duotone";
 export {
   default as IconAgent,
@@ -110,7 +125,9 @@ export {
 /** A release's Improved section (ReleaseNotes). */
 export { default as IconGraphUp } from "~icons/solar/graph-up-bold-duotone";
 /** A person is asked for: the Needs-you glyph (DESIGN.md, Session status). */
-export { default as IconNeedsYou } from "~icons/solar/hand-shake-bold-duotone";
+export { default as IconNeedsYou } from "~icons/solar/hand-shake-bold";
+/** Caw's Needs you section head, beside the Notices bell: a section glyph, not a status mark. */
+export { default as IconNeedsYouSection } from "~icons/solar/hand-shake-bold-duotone";
 /** A post a task made (`*.post.json`). */
 export { default as IconPost } from "~icons/solar/hashtag-square-bold-duotone";
 export { default as IconHistory } from "~icons/solar/history-bold-duotone";
@@ -140,10 +157,11 @@ export { default as IconMic } from "~icons/solar/microphone-bold-duotone";
 export { default as IconZoomIn } from "~icons/solar/minimalistic-magnifer-zoom-in-bold-duotone";
 export { default as IconMinimize } from "~icons/solar/minimize-bold-duotone";
 /** A routine that has not run yet, or a run that ended without an outcome (cancelled, skipped, denied): the neutral status. */
-export { default as IconMinusCircle } from "~icons/solar/minus-circle-bold-duotone";
+export { default as IconMinusCircle } from "~icons/solar/minus-circle-bold";
 export { default as IconMonitor } from "~icons/solar/monitor-bold-duotone";
 export { default as IconMoon } from "~icons/solar/moon-bold-duotone";
-export { default as IconMoonSleep } from "~icons/solar/moon-sleep-bold-duotone";
+/** Sleeping: the session status glyph. */
+export { default as IconMoonSleep } from "~icons/solar/moon-sleep-bold";
 export { default as IconAudio } from "~icons/solar/music-note-bold-duotone";
 export { default as IconToolNotebook } from "~icons/solar/notebook-bold-duotone";
 export { default as IconFileLog } from "~icons/solar/notes-bold-duotone";
@@ -153,8 +171,8 @@ export { default as IconPalette } from "~icons/solar/pallete-2-bold-duotone";
 export { default as IconPaperclip } from "~icons/solar/paperclip-bold-duotone";
 /** Caw holds still while his lead works (the sidebar's motion switch). */
 export { default as IconPause } from "~icons/solar/pause-bold-duotone";
-/** A paused routine's state glyph. */
-export { default as IconPauseCircle } from "~icons/solar/pause-circle-bold-duotone";
+/** Idle, Stopped, Paused: the quiet status glyph (a session, a step, a routine). */
+export { default as IconPauseCircle } from "~icons/solar/pause-circle-bold";
 export { default as IconToolEdit } from "~icons/solar/pen-2-bold-duotone";
 /** A pen: a draft starter's glyph. */
 export { default as IconPen } from "~icons/solar/pen-bold-duotone";
@@ -174,17 +192,17 @@ export { default as IconPlain } from "~icons/solar/plain-bold-duotone";
 export { default as IconPlanet } from "~icons/solar/planet-bold-duotone";
 export { default as IconPlay } from "~icons/solar/play-bold-duotone";
 export { default as IconToolMcp } from "~icons/solar/plug-circle-bold-duotone";
+/** Unreachable: the session status glyph, and a machine that went offline. */
+export { default as IconUnreachable } from "~icons/solar/question-circle-bold";
 export {
   default as IconAsk,
   default as IconToolQuestion,
 } from "~icons/solar/question-circle-bold-duotone";
-export { default as IconDot } from "~icons/solar/record-circle-bold-duotone";
 export { default as IconRefresh } from "~icons/solar/refresh-bold-duotone";
-/** Working: the session status glyph (DESIGN.md, Session status); and a starter that refreshes something, on its half-ink body (StarterCards). */
-export {
-  default as IconRenew,
-  default as IconWorking,
-} from "~icons/solar/refresh-circle-bold-duotone";
+/** Working: the session status glyph (DESIGN.md, Session status). */
+export { default as IconWorking } from "~icons/solar/refresh-circle-bold";
+/** A starter that refreshes something, on its half-ink body (StarterCards). */
+export { default as IconRenew } from "~icons/solar/refresh-circle-bold-duotone";
 /** Reopen a resolved pin. */
 export { default as IconReopen } from "~icons/solar/restart-bold-duotone";
 /*

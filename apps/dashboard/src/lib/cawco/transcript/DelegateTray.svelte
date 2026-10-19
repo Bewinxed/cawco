@@ -37,13 +37,13 @@
   import { Input } from "#lib/components/ui/input/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
-    IconAsk,
     IconChevronDown,
     IconClose,
+    IconError,
     IconExternal,
-    IconStop,
+    IconNeedsYou,
+    IconPauseCircle,
     IconSuccess,
-    IconWarningTriangle,
   } from "#lib/icons.js";
   import {
     cawco,
@@ -1161,13 +1161,13 @@
       style:animation-delay="-{Date.now() % 2000}ms"
     ></span>
   {:else if tone === "asked" || tone === "needs"}
-    <IconAsk />
+    <IconNeedsYou />
   {:else if tone === "done"}
     <IconSuccess />
   {:else if tone === "failed"}
-    <IconWarningTriangle />
+    <IconError />
   {:else}
-    <IconStop />
+    <IconPauseCircle />
   {/if}
 {/snippet}
 
@@ -1475,7 +1475,7 @@
             bind:offsetWidth={countWidth}
           >
             <span data-slot="slot" aria-hidden="true" class="slot" data-box
-              ><IconWarningTriangle /></span
+              ><IconError /></span
             >
             <span data-slot="num" class="num">{failures.length} failed</span>
           </button>

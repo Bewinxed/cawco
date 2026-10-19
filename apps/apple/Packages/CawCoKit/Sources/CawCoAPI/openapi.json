@@ -34760,6 +34760,10 @@
               "string"
             ]
           },
+          "startProblemKind": {
+            "$ref": "#/components/schemas/TaskSummaryStartProblemKind",
+            "description": "What kind of trouble `startProblem` is; null exactly when it is."
+          },
           "createdAt": {
             "description": "When the commit that first added its file landed, ms epoch.",
             "type": "number"
@@ -35298,6 +35302,10 @@
               "null",
               "string"
             ]
+          },
+          "startProblemKind": {
+            "$ref": "#/components/schemas/TaskSummaryStartProblemKind",
+            "description": "What kind of trouble `startProblem` is; null exactly when it is."
           },
           "createdAt": {
             "description": "When the commit that first added its file landed, ms epoch.",
@@ -58431,6 +58439,13 @@
           "routine",
           "session",
           "you"
+        ]
+      },
+      "TaskSummaryStartProblemKind": {
+        "type": "string",
+        "enum": [
+          "broke",
+          "waits"
         ]
       },
       "TranscriptBlockState": {

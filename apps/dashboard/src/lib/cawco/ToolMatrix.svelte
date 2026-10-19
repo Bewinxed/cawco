@@ -15,10 +15,10 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
-    IconCheck,
     IconExternal,
     IconLaptop,
     IconServer,
+    IconSuccess,
     IconTerminal,
   } from "#lib/icons.js";
   import { didntAnswer, type Machine } from "./client.svelte";
@@ -109,7 +109,7 @@
   {#if shown === "installed"}
     <span class="flex items-center gap-[var(--space-1)]">
       <Badge class="{CHIP} text-success" variant="ghost">
-        <IconCheck class="size-4 shrink-0" />
+        <IconSuccess class="size-4 shrink-0" />
         <span data-slot="num" class="num font-mono"
           >{toolStatus?.version ?? "—"}</span
         >

@@ -171,6 +171,7 @@ typeOverrides:
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState
+    TaskSummaryStartProblemKind: OpenEnums.TaskSummaryStartProblemKind
     ThreadStatus: OpenEnums.ThreadStatus
     ToolPlatform: OpenEnums.ToolPlatform
     ToolState: OpenEnums.ToolState

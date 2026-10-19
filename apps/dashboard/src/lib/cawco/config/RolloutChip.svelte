@@ -22,12 +22,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import {
-    IconCheck,
-    IconInfo,
-    IconRefresh,
-    IconWarningTriangle,
-  } from "#lib/icons.js";
+  import { IconError, IconInfo, IconRefresh, IconSuccess } from "#lib/icons.js";
   import type { Machine } from "../client.svelte";
   import FleetFault from "../FleetFault.svelte";
   import { syncFleet } from "../fleet";
@@ -127,8 +122,8 @@
       data-box
       data-glyph={glyph}
     >
-      <IconWarningTriangle data-for="fail" />
-      <IconCheck data-for="done" />
+      <IconError data-for="fail" />
+      <IconSuccess data-for="done" />
       <Spinner aria-hidden="true" data-for="busy" role="presentation" />
     </span>
     <!-- A machine catching up ticks the count over rather than swapping it. -->
@@ -160,11 +155,9 @@
           >
             {#snippet trailing()}
               {#if item?.state === "failed"}
-                <span data-slot="mark" class="mark fail"
-                  ><IconWarningTriangle /></span
-                >
+                <span data-slot="mark" class="mark fail"><IconError /></span>
               {:else if item?.state === "applied"}
-                <span data-slot="mark" class="mark"><IconCheck /></span>
+                <span data-slot="mark" class="mark"><IconSuccess /></span>
               {:else}
                 {@const syncing = asked[machine.machineId] === true}
                 <button
@@ -212,7 +205,7 @@
             role="alert"
             in:appear
           >
-            <span class="mark-cell"><IconWarningTriangle /></span>
+            <span class="mark-cell"><IconError /></span>
             <span>{refused[machine.machineId]}</span>
           </p>
         {/if}

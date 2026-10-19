@@ -297,6 +297,22 @@ export interface TaskFlags {
   queuedStart: boolean;
   /** Why the hub could not start an attempt the last time it tried, while the task is unchanged since. */
   startProblem: string | null;
+  /** What kind of trouble `startProblem` is; null exactly when it is. */
+  startProblemKind: StartProblemKind | null;
+}
+
+/**
+ * Why the hub could not start an attempt, by kind. `waits`: nothing broke,
+ * and a person or a machine is awaited (no fitting machine online, no
+ * checkout place, no session to take the report). `broke`: the start was
+ * tried and threw, or Caw, who takes the report, did not start.
+ */
+export type StartProblemKind = "waits" | "broke";
+
+/** Why the hub last could not start an attempt at a task, and of which kind. */
+export interface StartProblem {
+  kind: StartProblemKind;
+  message: string;
 }
 
 /**
@@ -437,7 +453,7 @@ export interface TaskStore {
   readonly startProblem?: (
     projectId: string,
     task: { hash: string; id: string }
-  ) => string | null;
+  ) => StartProblem | null;
   /** The indexed tasks that wait for a task (db `taskWaiters`). */
   readonly waiters: (
     projectId: string,
@@ -1591,6 +1607,7 @@ export const createTasks = (store: TaskStore) => {
       seen.add(id);
       return done(end.duplicateOf, seen);
     };
+    const problem = store.startProblem?.(projectId, task) ?? null;
     return {
       attempts,
       liveAttempt: attempts.some((attempt) => isLive(attempt.state)),
@@ -1598,7 +1615,8 @@ export const createTasks = (store: TaskStore) => {
       lastAttemptFailed: last?.state === "failed" && open,
       lastAttemptStopped: last?.state === "cancelled" && open,
       queuedStart: queued.has(task.id),
-      startProblem: store.startProblem?.(projectId, task) ?? null,
+      startProblem: problem?.message ?? null,
+      startProblemKind: problem?.kind ?? null,
     };
   };
   /**

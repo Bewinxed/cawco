@@ -151,6 +151,7 @@
           stopped: false,
           queued: false,
           startProblem: null,
+          startProblemKind: null,
           blockedBy: [] as string[],
         };
   });

@@ -40,7 +40,7 @@
     IconClose,
     IconError,
     IconNeedsYou,
-    IconStop,
+    IconPauseCircle,
     IconSuccess,
     IconTick,
   } from "#lib/icons.js";
@@ -185,7 +185,7 @@
     active: Spinner as Component,
     ahead: "dot",
     failed: IconError,
-    stopped: IconStop,
+    stopped: IconPauseCircle,
     asking: IconNeedsYou,
   };
   const STATUS: Record<Phase, StepStatus> = {

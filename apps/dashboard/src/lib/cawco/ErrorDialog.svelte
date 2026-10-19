@@ -9,7 +9,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Dialog from "#lib/components/ui/dialog/index.js";
-  import { IconAlert, IconCheck, IconCopy } from "#lib/icons.js";
+  import { IconCheck, IconCopy, IconError } from "#lib/icons.js";
   import { copyToClipboard } from "./copy";
   import { dur } from "./motion/curves.svelte";
 
@@ -37,7 +37,7 @@
     <div class="flex flex-col gap-6">
       <Dialog.Header>
         <Dialog.Title class="mark-line flex items-center gap-2">
-          <IconAlert class="size-4 shrink-0 text-destructive" />
+          <IconError class="size-4 shrink-0 text-destructive" />
           <span>{title}</span>
         </Dialog.Title>
       </Dialog.Header>
