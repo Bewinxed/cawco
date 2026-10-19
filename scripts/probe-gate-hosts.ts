@@ -133,6 +133,7 @@ for (const level of ["log", "info", "warn"] as const) {
 interface Item {
   content?: unknown;
   role?: string;
+  tool_calls?: { function?: { arguments?: string } }[];
 }
 interface Tool {
   function?: {
@@ -221,9 +222,13 @@ const answer = (
 };
 /** The page new_page selected, in its answer as JSON (a line ends at a JSON-escaped newline). */
 const SELECTED_PAGE = /(\d+): [^\\"]*\[selected\]/;
-/** A namespace path as code mode's `execute` description writes it: `tools["x"]` or `tools.x`, nested or not. */
-const TOOLS_PATH = /(tools(?:\[[^\]]+\]|\.[A-Za-z_$][\w$]*)+)/;
-const SCREENSHOT_TOOL = /\.take_screenshot$/;
+/** take_screenshot's namespace path as code mode writes it: `tools["x"]` or `tools.x`, nested or not, then the tool. */
+const SCREENSHOT_PATH =
+  /(tools(?:\["[^"]+"\]|\.[A-Za-z_$][\w$]*)*?)(?:\.take_screenshot|\["take_screenshot"\])/;
+/** Where 2.0.29's Code Mode catalog (`Xl`/`Yi`) starts listing. */
+const CATALOG = "## Available tools";
+/** A Code Mode `search` call, as 2.0.29 names its input (`search({ query })`, synchronous). */
+const SEARCH_CALL = "search({ query: ";
 const HOLD = /HOLD (\S+)/;
 const PI_LINE = /\[pi\] .* relaunched between turns/;
 const GATE_LINE = /\[opencode\] gate: .* relaunched from gate form/;
@@ -264,22 +269,95 @@ const argsFor = (tool: Tool, values: Record<string, string>) =>
     Object.entries(values).filter(([name]) => paramsOf(tool).includes(name))
   );
 /**
- * The namespace path whose tools hold `take_screenshot`, as `execute`'s
- * description lists them: the path on the tool's own line, else the last
- * namespace named above it.
+ * The namespace path whose tools hold `take_screenshot`, as the text a
+ * model reads names it: a catalog line's signature, or a `search` result
+ * (its JSON's escaped quotes read back as quotes). 2.0.29's `execute`
+ * says "Call tools through `tools` using only exact paths and signatures
+ * from the catalog … preserve bracket notation".
  */
-const screenshotPathOf = (description: string): string | undefined => {
-  let namespace: string | undefined;
-  for (const line of description.split("\n")) {
-    const named = line.match(TOOLS_PATH)?.[1];
-    if (line.includes("take_screenshot")) {
-      return named?.replace(SCREENSHOT_TOOL, "") ?? namespace;
-    }
-    if (named) {
-      namespace = named;
-    }
+const screenshotPathOf = (text: string): string | undefined =>
+  text.replaceAll('\\"', '"').match(SCREENSHOT_PATH)?.[1];
+/**
+ * The Code Mode catalog the request carries, wherever 2.0.29 put it (the
+ * newest message holding `## Available tools`, of any role); none when the
+ * request has none.
+ */
+const catalogOf = (items: Item[]): string | undefined =>
+  items
+    .map((one) => textOf(one.content))
+    .findLast((one) => one.includes(CATALOG))
+    ?.split(CATALOG)
+    .at(-1);
+/** `execute`'s one input, as its schema names it. */
+const programKeyOf = (execute: Tool["function"]) =>
+  execute?.parameters?.required?.[0] ??
+  Object.keys(execute?.parameters?.properties ?? {})[0];
+/**
+ * The capture, through the namespace at `path`: through the gate the
+ * workspace sees its own pages alone, so it opens one and captures it by
+ * the id new_page selected.
+ */
+const captureCall = (key: string, path: string, shot: string) =>
+  answer("", {
+    name: "execute",
+    args: {
+      [key]: [
+        `const opened = await ${path}.new_page({ url: "about:blank" });`,
+        String.raw`const pageId = Number(JSON.stringify(opened).match(/(\d+): [^\\"]*\[selected\]/)?.[1]);`,
+        `return await ${path}.take_screenshot({ filePath: ${JSON.stringify(shot)}, pageId });`,
+      ].join("\n"),
+    },
+  });
+/** Whether the last assistant turn ran `search` (its program, as the request echoes it). */
+const searched = (items: Item[]) =>
+  items
+    .findLast((one) => one.role === "assistant")
+    ?.tool_calls?.some((call) =>
+      call.function?.arguments?.includes(SEARCH_CALL)
+    ) ?? false;
+/**
+ * A `SHOT` turn under OpenCode's code mode, as a model takes it: MCP tools
+ * are reached only through `execute`, by the path the catalog lists, else
+ * by the path a `search` program returns (2.0.29: "The catalog is partial.
+ * Inside `execute`, use `search(...)` to find a tool, then call it by the
+ * `path` in the result").
+ */
+const shotCall = (
+  body: { messages?: Item[]; tools?: Tool[] },
+  shot: string
+) => {
+  const items = body.messages ?? [];
+  const execute = (body.tools ?? []).find(
+    (one) => one.function?.name === "execute"
+  )?.function;
+  const key = programKeyOf(execute);
+  const names = (body.tools ?? []).map((one) => one.function?.name).join(", ");
+  if (!key) {
+    return answer(`no execute tool among: ${names}`);
   }
+  if (items.at(-1)?.role === "tool") {
+    const found = textOf(items.at(-1)?.content);
+    const path = searched(items) ? screenshotPathOf(found) : undefined;
+    return path
+      ? captureCall(key, path, shot)
+      : answer(`tool said: ${found.slice(0, 2000)}`);
+  }
+  const catalog = catalogOf(items);
+  if (!loggedCatalog) {
+    loggedCatalog = true;
+    console.log(
+      `[gate-probe] code-mode request: keys ${Object.keys(body).join(", ")}; roles ${items.map((one) => one.role).join(", ")}; catalog:\n${catalog ?? "(none in any message)"}`
+    );
+  }
+  const path = screenshotPathOf(catalog ?? "");
+  return path
+    ? captureCall(key, path, shot)
+    : answer("", {
+        name: "execute",
+        args: { [key]: `return ${SEARCH_CALL}"take_screenshot" });` },
+      });
 };
+let loggedCatalog = false;
 /** A turn's `BOUNDED`, `LONG` or `READ`, as the tools it offers take it; none for any other. */
 const shellOrReadCall = (
   text: string,
@@ -329,6 +407,10 @@ const mock = Bun.serve({
     if (body.model === "title-mock") {
       return answer("A title");
     }
+    const shot = text.match(SHOT)?.[1];
+    if (shot) {
+      return shotCall(body, shot);
+    }
     if (toolTurn) {
       return answer(
         `tool said: ${textOf(items.at(-1)?.content).slice(0, 400)}`
@@ -341,35 +423,6 @@ const mock = Bun.serve({
     const shellOrRead = shellOrReadCall(text, body.tools ?? []);
     if (shellOrRead) {
       return shellOrRead;
-    }
-    const shot = text.match(SHOT)?.[1];
-    if (shot) {
-      // OpenCode's code mode: MCP tools are reached through one `execute`
-      // tool running a program, its description listing each server's
-      // namespace and its tools; the path is read from it, never assumed.
-      const execute = (body.tools ?? []).find(
-        (one) => one.function?.name === "execute"
-      )?.function;
-      const path = screenshotPathOf(execute?.description ?? "");
-      const key =
-        execute?.parameters?.required?.[0] ??
-        Object.keys(execute?.parameters?.properties ?? {})[0];
-      // Through the gate the workspace sees its own pages alone: it opens
-      // one, and captures it by the id new_page selected.
-      return path && key
-        ? answer("", {
-            name: "execute",
-            args: {
-              [key]: [
-                `const opened = await ${path}.new_page({ url: "about:blank" });`,
-                String.raw`const pageId = Number(JSON.stringify(opened).match(/(\d+): [^\\"]*\[selected\]/)?.[1]);`,
-                `return await ${path}.take_screenshot({ filePath: ${JSON.stringify(shot)}, pageId });`,
-              ].join("\n"),
-            },
-          })
-        : answer(
-            `no take_screenshot among: ${execute?.description?.slice(0, 2000) ?? tools.join(", ")}`
-          );
     }
     return answer("ok");
   },
@@ -513,11 +566,20 @@ const workspaceAt = async (id: string, dir: string) => {
     join(state, JUDGE_SCRIPT)
   );
   const exec = join(state, "exec");
-  // The probe's boundary runner: it tags the command's environment with its
-  // workspace, so a command's output says which boundary ran it.
+  // The probe's boundary runner, on the real one's contract (boundary.ts
+  // `execScript`: `exec [--session] [--cwd-out FILE] COMMAND`, FILE getting
+  // the directory COMMAND ended in): it tags the command's environment with
+  // its workspace, so a command's output says which boundary ran it.
   await Bun.write(
     exec,
-    `#!/bin/sh\nCAWCO_PROBE_BOUNDARY=${id} exec /bin/sh -c "$1"\n`
+    [
+      "#!/bin/sh",
+      'if [ "$1" = --session ]; then shift; fi',
+      "cwd_out=",
+      'if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi',
+      `CAWCO_PROBE_BOUNDARY=${id} /bin/sh -c "$1\nstatus=\\$?; pwd -P > \\"\\$0\\"; exit \\$status" "\${cwd_out:-/dev/null}"`,
+      "",
+    ].join("\n")
   );
   await chmod(exec, 0o755);
   const record = {
@@ -978,6 +1040,7 @@ try {
       inScratch: ocShot,
       outside: ocOutside,
       inTmp: ocTmp,
+      codeMode: said.find((line) => line.includes("code-mode request")),
       lastAnswers: back.frames
         .filter((frame) => frame.type === "assistant")
         .slice(-2)
