@@ -3,7 +3,9 @@
  * machine's networks:
  *
  * 1. The first hub holds a `cawco[-<n>].local` name: `/health` reports it,
- *    and an mDNS query for it answers with this machine's own addresses.
+ *    and an mDNS query for it answers with addresses of the interfaces
+ *    lan-interfaces.ts picks (and loopback's, the query being this
+ *    machine's own): never a container bridge's or a VPN tunnel's.
  * 2. A second hub started beside it probes, finds that name answered and
  *    holds the next one (`cawco.local` → `cawco-2.local`, RFC 6762 §8), its
  *    own query answering too. Never one name for two hubs.
@@ -13,9 +15,11 @@
  * 4. Each hub's Connect a machine list (`/api/join`) carries
  *    "On this network · http://<held name>:<port>".
  * 5. A device on the LAN is answered with the LAN's addresses alone (RFC
- *    6762 §14). A third hub runs in a network of its own (bwrap: a user and
- *    network namespace) holding `lan0` (192.168.77.1/24, the default route's
- *    network), `lan1` on another network (192.168.88.1/24), and `br9`
+ *    6762 §14). A third hub runs in a network of its own (`unshare
+ *    --map-root-user --net`: a user and network namespace whose root may
+ *    configure its interfaces, unshare(1)) holding `lan0` (192.168.77.1/24,
+ *    the default route's network), `lan1` on another network
+ *    (192.168.88.1/24), and `br9`
  *    (10.89.77.1/24), a bridge whose one port is a veth, as Podman's and
  *    Docker's are. The hub listens on `::`, so AAAA records answer too. A
  *    device at 192.168.77.2 on `lan0` asks for `cawco.local` (A and AAAA)
@@ -37,6 +41,7 @@ import { join } from "node:path";
 import makeMdns from "multicast-dns";
 import { browseMdns } from "../../../packages/agent/src/discovery";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { lanInterfaces } from "../../../packages/hub/src/lan-interfaces";
 import { freePortRange, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -53,14 +58,30 @@ interface Health {
 /** The number a held name carries: `cawco.local` is the first. */
 const numberOf = (name: string): number => Number(HELD.exec(name)?.[1] ?? 1);
 
-/** Every non-loopback address this machine has, which a hub answers with. */
-const ownAddresses = (): Set<string> =>
-  new Set(
-    Object.values(networkInterfaces())
-      .flat()
-      .filter((entry) => entry && !entry.internal)
-      .map((entry) => entry?.address.split("%")[0] ?? "")
-  );
+/**
+ * Each of this machine's addresses, with the interface holding it and
+ * whether a hub may answer with it: the interfaces lan-interfaces.ts picks,
+ * and loopback, which answers this machine's own questions.
+ */
+const answerable = async () => {
+  const shared = await lanInterfaces();
+  const holder = new Map<string, string>();
+  const allowed = new Set<string>();
+  const lan = new Set<string>();
+  for (const [name, entries] of Object.entries(networkInterfaces())) {
+    for (const entry of entries ?? []) {
+      const address = entry.address.split("%")[0] ?? "";
+      holder.set(address, name);
+      if (entry.internal || shared.includes(name)) {
+        allowed.add(address);
+      }
+      if (shared.includes(name)) {
+        lan.add(address);
+      }
+    }
+  }
+  return { shared, holder, allowed, lan };
+};
 
 interface Srv {
   port: number;
@@ -200,32 +221,28 @@ const lanLeg = async (
   env: Record<string, string>,
   sandbox: string
 ): Promise<void> => {
-  const bwrap = Bun.which("bwrap");
+  const unshare = Bun.which("unshare");
   kit.check(
-    "5: the host has bwrap, to give a hub a network of its own",
-    bwrap !== null,
-    "bwrap is not on PATH"
+    "5: the host has unshare, to give a hub a network of its own",
+    unshare !== null,
+    unshare ?? "unshare is not on PATH"
   );
-  if (!bwrap) {
+  if (!unshare) {
     return;
   }
   const dir = join(sandbox, "lan-leg");
   mkdirSync(dir, { recursive: true });
   const box = Bun.spawn(
     [
-      bwrap,
-      "--dev-bind",
-      "/",
-      "/",
-      "--unshare-user",
-      "--unshare-net",
-      "--uid",
-      "0",
-      "--gid",
-      "0",
-      "--cap-add",
-      "ALL",
-      "--die-with-parent",
+      // Root of a user namespace of its own, so `ip link add` may run in
+      // its network; its own PID namespace, so --kill-child takes the hub
+      // and the device with the shell when the spec gives up (unshare(1)).
+      unshare,
+      "--map-root-user",
+      "--net",
+      "--pid",
+      "--mount-proc",
+      "--kill-child",
       "--",
       "sh",
       "-c",
@@ -289,17 +306,19 @@ const lanLeg = async (
 };
 
 const spec: Spec = {
-  host: "leg 5 makes a user and network namespace (bwrap), and legs 1-4 announce on the machine's own interfaces",
+  host: "leg 5 makes a user and network namespace (unshare), and legs 1-4 announce on the machine's own interfaces",
   name: "hub-local-name",
   run: async (kit: Kit) => {
     const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
     // mDNS on, and every interface bound: a loopback hub announces nothing.
     const announcing = { CAWCO_NO_MDNS: "0", HOST: "0.0.0.0" };
-    const own = ownAddresses();
+    const own = await answerable();
     kit.check(
-      "this machine has an interface besides loopback to announce on",
-      own.size > 0,
-      [...own].join(", ") || "loopback only: run this on the host"
+      "lan-interfaces.ts picks an interface here that other devices share",
+      own.lan.size > 0,
+      own.shared.length > 0
+        ? `${own.shared.join(", ")}: ${[...own.lan].join(", ")}`
+        : "none: loopback only, run this on the host"
     );
 
     const heldBy = (base: string) =>
@@ -362,10 +381,17 @@ const spec: Spec = {
         }))
       );
       for (const { name, port, answered, listed } of hubs) {
+        const named = (ips: string[]) =>
+          ips
+            .map(
+              (ip) => `${ip} (${own.holder.get(ip) ?? "not this machine's"})`
+            )
+            .join(", ");
+        const foreign = answered.filter((ip) => !own.allowed.has(ip));
         kit.check(
-          `an mDNS query for ${name} answers with this machine's own addresses`,
-          answered.length > 0 && answered.every((ip) => own.has(ip)),
-          answered.join(", ") || "no answer"
+          `an mDNS query for ${name} answers with the shared LAN's addresses (${own.shared.join(", ")}) and loopback's alone, never a bridge's or a tunnel's`,
+          answered.some((ip) => own.lan.has(ip)) && foreign.length === 0,
+          `heard ${named(answered) || "nothing"}; not the shared LAN's: ${named(foreign) || "none"}`
         );
         // 3. Its service points at the name it holds.
         kit.check(
