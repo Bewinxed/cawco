@@ -40,11 +40,9 @@
   </p>
   <!-- The signature move: the program sits in a recessed well inside a raised
        card, not flat on the page. -->
-  <!-- literal: 320px -->
   <div
     data-slot="code"
-    class="mx-space-5 mt-space-4 mb-space-5 min-h-(--code-min) min-w-0 flex-1 rounded-md bg-surface-raised p-space-2 shadow-tile max-wide:mx-space-4"
-    style:--code-min="320px"
+    class="mx-space-5 mt-space-4 mb-space-5 min-h-(--c-wf-code-min-h) min-w-0 flex-1 rounded-md bg-surface-raised p-space-2 shadow-tile max-wide:mx-space-4"
   >
     <CodeView
       {editable}
@@ -57,12 +55,10 @@
   {#if origin === "code"}
     <!-- The count and the all-clear cross-fade in one grid cell; problems
          come and go the house way (motion/rows). -->
-    <!-- literal: 30dvh -->
     <section
       aria-label="Problems"
-      class="wf-stack max-h-(--problems-max) gap-space-2 overflow-y-auto border-t border-t-border-hairline bg-surface-raised px-space-5 pt-space-4 pb-space-5 max-wide:px-space-4"
+      class="wf-stack max-h-(--c-wf-scroll-max-h) gap-space-2 overflow-y-auto border-t border-t-border-hairline bg-surface-raised px-space-5 pt-space-4 pb-space-5 max-wide:px-space-4"
       data-flip
-      style:--problems-max="30dvh"
       {@attach reflow()}
     >
       <div data-slot="head" class="grid">

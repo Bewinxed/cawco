@@ -50,13 +50,11 @@
      the glyph cross-fades in its cell and the label morphs in place. In a
      `reflow` list (the rail, the board's queue) the chip still pops in and
      out as a whole (motion/rows). -->
-<!-- literal: 3px -->
 <span
-  class="mark-line type-label inline-flex items-center gap-space-1 rounded-pill bg-(color:--chip-bg) px-space-2 py-(--pad-y) whitespace-nowrap text-(color:--chip-ink) transition-[background-color,color] dur-panel ease-out"
+  class="mark-line type-label inline-flex items-center gap-space-1 rounded-pill bg-(color:--chip-bg) px-space-2 py-space-1 whitespace-nowrap text-(color:--chip-ink) transition-[background-color,color] dur-panel ease-out"
   data-flip="pop"
   style:--chip-bg="var(--status-{tone}-bg)"
   style:--chip-ink="var(--status-{tone}-ink)"
-  style:--pad-y="3px"
   ><span data-slot="glyph" aria-hidden="true" class="grid" data-box
     >{#key tone}
       <span class="col-start-1 row-start-1 grid" transition:crossIn
