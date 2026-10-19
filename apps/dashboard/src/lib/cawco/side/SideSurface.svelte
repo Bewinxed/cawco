@@ -222,14 +222,27 @@
 
   /** Which controls stand, from the head's room and what each was drawn at. */
   function fit(): void {
+    measureFit()?.();
+  }
+
+  /**
+   * The head measured as it is laid out now: answers the write that stands
+   * its name, line and controls by that measure, for the caller to make
+   * when nothing it watches is being delivered.
+   */
+  function measureFit(): (() => void) | null {
     if (!(head && identity)) {
-      return;
+      return null;
     }
-    nameKeeps = nameWidth(identity);
+    const keeps = nameWidth(identity);
     const line = identity.querySelector<HTMLElement>('[data-slot="subtitle"]');
-    subtitleStands = !line || identity.clientWidth >= lineNeeds(line);
+    const lineFits = !line || identity.clientWidth >= lineNeeds(line);
+    const name = () => {
+      nameKeeps = keeps;
+      subtitleStands = lineFits;
+    };
     if (all.length === 0) {
-      return;
+      return name;
     }
     const { gap, room } = roomOf(head);
     const { kept } = drawnWidths(head, identity);
@@ -240,7 +253,7 @@
     const next = standing(
       room,
       gap,
-      [...kept, nameKeeps + nameMargins(identity)],
+      [...kept, keeps + nameMargins(identity)],
       { glyph: moreGlyph, counted: widths.get("more:counted") ?? moreGlyph },
       all.map((one) => ({
         key: one.key,
@@ -255,19 +268,28 @@
       // The pane's width: the card's, the head's box inside it.
       head.clientWidth >= WORDS_FROM
     );
-    const was = shown;
-    if (
-      !was ||
-      next.size !== was.size ||
-      [...next].some(([key, form]) => was.get(key) !== form)
-    ) {
-      shown = next;
-    }
+    return () => {
+      name();
+      const was = shown;
+      if (
+        !was ||
+        next.size !== was.size ||
+        [...next].some(([key, form]) => was.get(key) !== form)
+      ) {
+        shown = next;
+      }
+    };
   }
 
   // The head, the name and every control re-fit as any of them changes size;
   // with no `items`, the name alone is measured, so it keeps its width
-  // beside a pane's `actions` too.
+  // beside a pane's `actions` too. Measured in the observer's callback, where
+  // layout is fresh, and written in the next frame's callbacks: the write
+  // resizes the very boxes watched here (the name's min width, a control
+  // hidden or drawn compact, More coming in), and made inside the delivery
+  // it was reported to this observer again at a depth the delivery had
+  // passed ("ResizeObserver loop completed with undelivered notifications").
+  // That frame's layout then reports what the write changed, once.
   $effect(() => {
     const el = head;
     // Read so a pane's items arriving re-observes its controls.
@@ -275,7 +297,17 @@
     if (!el) {
       return;
     }
-    const seen = new ResizeObserver(() => fit());
+    let write: (() => void) | null = null;
+    let frame = 0;
+    const seen = new ResizeObserver(() => {
+      write = measureFit();
+      if (!frame) {
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          write?.();
+        });
+      }
+    });
     seen.observe(el);
     if (identity) {
       seen.observe(identity);
@@ -285,7 +317,10 @@
     )) {
       seen.observe(child);
     }
-    return () => seen.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      seen.disconnect();
+    };
   });
   // A new line is measured as it comes, once it is drawn.
   $effect(() => {

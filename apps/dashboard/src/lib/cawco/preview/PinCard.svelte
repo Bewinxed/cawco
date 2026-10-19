@@ -165,7 +165,11 @@
   // When the head and the foot alone outgrow the card, the thread keeps
   // its whole height and the card scrolls, the field kept in view while
   // writing: the thread stays readable above the field instead of
-  // shrinking to nothing.
+  // shrinking to nothing. Measured in the observer's callback and written in
+  // the next frame's callbacks: the card scrolling (or no longer) can take a
+  // scrollbar's width from the head and the foot watched here, and written
+  // inside the delivery that resize was reported again at a depth the
+  // delivery had passed (a ResizeObserver loop).
   $effect(() => {
     if (!(card && head && foot)) {
       return;
@@ -173,21 +177,32 @@
     const holder = card;
     const top = head;
     const bottom = foot;
+    let measured = false;
+    let frame = 0;
     const measure = () => {
       const style = getComputedStyle(holder);
       const gap = Number.parseFloat(style.rowGap) || 0;
       const edges =
         (Number.parseFloat(style.paddingTop) || 0) +
         (Number.parseFloat(style.paddingBottom) || 0);
-      squeezed =
+      measured =
         top.offsetHeight + bottom.offsetHeight + 2 * gap + edges >
         holder.clientHeight + 1;
+      if (!frame) {
+        frame = requestAnimationFrame(() => {
+          frame = 0;
+          squeezed = measured;
+        });
+      }
     };
     const watch = new ResizeObserver(measure);
     for (const part of [holder, top, bottom]) {
       watch.observe(part);
     }
-    return () => watch.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      watch.disconnect();
+    };
   });
 
   // A press outside the card closes it; one in a modal layer over

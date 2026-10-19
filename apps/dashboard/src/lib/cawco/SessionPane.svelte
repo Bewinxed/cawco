@@ -144,9 +144,25 @@
    * the group's composer sits over exactly that much.
    */
   let previewShare = $state(0);
-  const phone = $derived(paneWidth > 0 && paneWidth < 900);
+  /**
+   * The pane's width as the layout below reads it: the bound width, taken in
+   * the next frame's callbacks. The binding hears it in a ResizeObserver
+   * callback; read there, a pane crossing 900px swapped the split for the
+   * sheet inside that delivery, and the panes it mounted were observed at a
+   * depth the delivery had passed ("ResizeObserver loop completed with
+   * undelivered notifications").
+   */
+  let laidWidth = $state(0);
+  $effect(() => {
+    const width = paneWidth;
+    const frame = requestAnimationFrame(() => {
+      laidWidth = width;
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+  const phone = $derived(laidWidth > 0 && laidWidth < 900);
   /** The side surface is the bottom drawer, not the split (layoutPolicy.sideDrawer). */
-  const drawer = $derived(layoutPolicy.sideDrawer(paneWidth));
+  const drawer = $derived(layoutPolicy.sideDrawer(laidWidth));
   let side = $state<ReturnType<typeof SideSplit>>();
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */
   let parkedRoom = $state(0);
