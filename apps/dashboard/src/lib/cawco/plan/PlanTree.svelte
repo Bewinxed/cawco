@@ -85,15 +85,14 @@
     data-status={status}
   >
     {#if status === "completed"}
-      <IconTick class="size-icon-md text-status-done-glyph" />
+      <IconTick
+        class="size-icon-md text-status-done-glyph motion-safe:animate-plan-tick motion-safe:tick-draw"
+      />
     {:else}
-      <!-- literal: 50% -->
       <span
         data-plan-pane-live={status === "in_progress" || undefined}
         data-slot="dot"
-        class="size-(--status-dot-size) rounded-(--dot-r) shadow-(--dot-ring) data-plan-pane-live:shadow-none data-plan-pane-live:bg-status-live-glyph"
-        style:--dot-r="50%"
-        style:--dot-ring="inset 0 0 0 1px var(--ink-subtle)"
+        class="size-(--status-dot-size) rounded-pill inset-ring inset-ring-ink-subtle data-plan-pane-live:inset-ring-0 data-plan-pane-live:bg-status-live-glyph motion-safe:data-plan-pane-live:animate-breath"
       ></span>
     {/if}
   </span>
@@ -137,40 +136,3 @@
 {/snippet}
 
 {@render tree(nodes, false)}
-
-<style>
-  /* residual: keyframes */
-  /* Done: the house tick (Tick.svelte, its 1.5 stroke), drawn along its
-     stroke as it lands. */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="plan-mark"][data-status="completed"] :global(path) {
-      stroke-dasharray: 20;
-      animation: plan-tick var(--dur-toggle) var(--ease-out) both;
-    }
-  }
-  @keyframes plan-tick {
-    from {
-      stroke-dashoffset: 20;
-    }
-    to {
-      stroke-dashoffset: 0;
-    }
-  }
-  /* To come: an open ring; under way: the live dot, the house's size and
-     ink (TreeMark's): it breathes on the house's breath. */
-  .dot {
-    inline-size: var(--status-dot-size);
-    block-size: var(--status-dot-size);
-    border-radius: 50%;
-    box-shadow: inset 0 0 0 1px var(--ink-subtle);
-  }
-  .dot.live {
-    box-shadow: none;
-    background: var(--status-live-glyph);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .dot.live {
-      animation: breath var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-</style>

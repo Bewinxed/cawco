@@ -86,16 +86,14 @@
 
 <!-- The parts, flat on the surface: a heading, then what it names. -->
 {#snippet body()}
-  <!-- literal: 72ch -->
   <div
     data-sheet={sheet || undefined}
     data-plan-pane-expanded={!!expand?.expanded || undefined}
     data-slot="body"
     class={[
-      "kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y pbs-space-1 pbe-space-4 flex flex-col gap-space-2 data-sheet:pbs-space-3 data-sheet:pbe-0 data-sheet:mask-(--sheet-fade) data-plan-pane-expanded:w-full data-plan-pane-expanded:max-w-(--measure) data-plan-pane-expanded:mx-auto",
+      "kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y pbs-space-1 pbe-space-4 flex flex-col gap-space-2 data-sheet:pbs-space-3 data-sheet:pbe-0 data-sheet:mask-(--sheet-fade) data-plan-pane-expanded:w-full data-plan-pane-expanded:max-w-(--c-plan-measure) data-plan-pane-expanded:mx-auto",
       sheet && "kit-sheet-scroll",
     ]}
-    style:--measure="72ch"
     style:--more-px="0"
     style:--sheet-fade={sheet
       ? "linear-gradient(to bottom, var(--mask-opaque) calc(100% - var(--fade-end)), transparent)"

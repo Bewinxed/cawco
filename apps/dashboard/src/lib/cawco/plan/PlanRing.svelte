@@ -27,7 +27,7 @@
   data-slot="plan-ring"
   aria-label={planWords.ringLabel(done, total)}
   aria-pressed={open}
-  class="kit-tray-chip touch-hit text-ink-muted aria-pressed:text-ink-strong"
+  class="kit-tray-chip touch-hit text-ink-muted aria-pressed:text-ink-strong aria-pressed:before:bg-surface-pressed"
   onclick={onopen}
   type="button"
 >
@@ -40,20 +40,3 @@
     <span>{planWords.plan}</span>
   {/if}
 </button>
-
-<style>
-  .plan-ring {
-    color: var(--ink-muted);
-  }
-  .plan-ring[aria-pressed="true"] {
-    color: var(--ink-strong);
-
-    /* The kit Toggle's on state: by day a step past the hover. */
-    &::before {
-      background-color: var(--surface-pressed);
-    }
-  }
-  .num {
-    font-variant-numeric: tabular-nums;
-  }
-</style>

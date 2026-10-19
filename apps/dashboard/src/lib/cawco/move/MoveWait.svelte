@@ -405,15 +405,11 @@
   const cancellable = $derived(waiting && job.stage !== "start");
 </script>
 
-<!-- literal: 560px, 128px, 96px -->
 <div
   data-slot="wait"
   class="group/wait flex flex-col items-center justify-center gap-space-5 flex-auto min-h-0 overflow-y-auto py-space-8 px-space-6 bg-surface-recess data-phone:justify-start data-phone:pbs-space-6 data-phone:px-space-4 data-phone:pbe-(--wait-pad-end)"
   data-move={job.id}
   data-phone={phone || undefined}
-  style:--col-w="min(560px, 100%)"
-  style:--caw-min-h="128px"
-  style:--caw-min-h-phone="96px"
   style:--wait-pad-end="calc(var(--space-4) + env(safe-area-inset-bottom))"
 >
   <!-- A stopped move has no Caw and no room for him: its column starts at
@@ -421,7 +417,7 @@
   <div
     data-move-wait-empty={!cawThere || undefined}
     data-gone={job.stage === "cancelled" || undefined}
-    class="grid place-items-center min-h-(--caw-min-h) group-data-phone/wait:min-h-(--caw-min-h-phone) data-move-wait-empty:invisible data-gone:hidden"
+    class="grid place-items-center min-h-(--c-move-wait-caw-h) group-data-phone/wait:min-h-(--c-move-wait-caw-h-phone) data-move-wait-empty:invisible data-gone:hidden"
   >
     {#if cawThere}
       <Caw
@@ -440,7 +436,7 @@
   </div>
 
   {#if columnShown}
-    <div data-slot="column" class="grid gap-space-3 w-(--col-w)" in:crossIn>
+    <div data-slot="column" class="grid gap-space-3 w-full max-w-(--c-move-wait-col-w)" in:crossIn>
       <ThinkingSteps>
         {#each rows as row, index (row.step)}
           <div
@@ -484,10 +480,9 @@
                    the stage, and its row would repeat the bar above. -->
               {#if row.step === "lfs" && row.phase === "active" && job.lfsFile && (job.lfs?.files ?? 0) > 1}
                 {@const file = job.lfsFile}
-                <!-- literal: 96px -->
                 <div
                   class="grid grid-cols-(--file-cols) items-center gap-space-2"
-                  style:--file-cols="minmax(0, 1fr) 96px auto"
+                  style:--file-cols="minmax(0, 1fr) var(--c-move-wait-file-bar-w) auto"
                   in:unfold
                   out:unfold
                 >
@@ -614,7 +609,7 @@
          the glyph column, the foot's whole width on a phone (design 2g). -->
     <div
       data-slot="foot"
-      class="flex flex-col items-start gap-space-1 w-(--col-w) group-data-phone/wait:mbs-auto"
+      class="flex flex-col items-start gap-space-1 w-full max-w-(--c-move-wait-col-w) group-data-phone/wait:mbs-auto"
     >
       {#if cancellable}
         <Button
@@ -641,30 +636,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  /* The glyph says where each step stands, in its status ink. The glyph is
-     named by its own attribute: as `data-phase` moves, Chrome keys an
-     attribute selector to the attribute's name alone, and
-     `[data-slot="thinking-step-icon"]` restyled every `data-slot` in the row. */
-  [data-slot="row"][data-phase="done"] :global([data-thinking-step-icon]) {
-    color: var(--status-done-glyph);
-  }
-  [data-slot="row"][data-phase="active"] :global([data-thinking-step-icon]) {
-    color: var(--ink-strong);
-  }
-  [data-slot="row"][data-phase="failed"] :global([data-thinking-step-icon]) {
-    color: var(--status-fail-glyph);
-  }
-  [data-slot="row"][data-phase="asking"] :global([data-thinking-step-icon]) {
-    color: var(--status-attn-glyph);
-  }
-  [data-slot="row"][data-phase="stopped"] :global([data-thinking-step-icon]) {
-    color: var(--ink-muted);
-  }
-  /* The step's label wraps, never truncates. */
-  [data-slot="row"] :global([data-slot="thinking-step-label"]) {
-    overflow-wrap: anywhere;
-  }
-</style>
