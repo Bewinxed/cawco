@@ -27,15 +27,20 @@
   /** A receiver's name mid-sentence: "this session" in lower case. */
   const named = (who: string) =>
     who === "This session" ? "this session" : who;
+  /**
+   * One short line (WORDS.md's readout register): who has it, said once.
+   * A comment's answer stands on the step's thread under its author's
+   * name, so the line names no one twice.
+   */
   const said = $derived.by(() => {
-    const also = ack.also ? ` · ${ack.also.toLowerCase()} heard it` : "";
     if (ack.phase === "sent") {
       return `${told} sent to ${named(ack.to)}`;
     }
-    // A comment's answer stands on the step's thread, once.
-    return ack.phase === "replied" && ack.change === "commented"
-      ? `Answered by ${named(ack.to)} on the thread${also}`
-      : `Seen by ${named(ack.to)}${also}`;
+    if (ack.phase === "replied" && ack.change === "commented") {
+      return "Answered on the thread";
+    }
+    const also = ack.also ? ` and ${named(ack.also)}` : "";
+    return `Seen by ${named(ack.to)}${also}`;
   });
 </script>
 
@@ -89,6 +94,7 @@
   .said {
     min-inline-size: 0;
     overflow-wrap: anywhere;
+    text-wrap: balance;
   }
   .reply {
     margin: 0;
