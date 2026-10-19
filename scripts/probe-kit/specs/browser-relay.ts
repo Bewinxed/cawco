@@ -23,7 +23,8 @@
  * lowest port the relay needs (obelisk: rootless Podman, 1024), the start
  * fails with the sysctl sentence and no container is made; the rest is then
  * run against coturn started by this spec with the relay's own arguments, its
- * second plain port moved from 443 to 3479, and says so on each line.
+ * second plain port moved from 443 to a port free at run time, outside the
+ * hub's preview ports, and says so on each line.
  *
  * Run on the host, outside every workspace boundary (a boundary hides the
  * runtime's socket), on the machine named, with the address a viewer reaches
@@ -32,6 +33,8 @@
  *   bun scripts/probe-kit/run.ts browser-relay --machine <name> --address <a> [--hostname <dns name>]
  */
 import { randomBytes } from "node:crypto";
+import { createSocket } from "node:dgram";
+import { type AddressInfo, createServer } from "node:net";
 import { hostname as machineHostname } from "node:os";
 import { connect as tlsConnect } from "node:tls";
 import { connect, getPublicIP } from "turn-server";
@@ -40,13 +43,14 @@ import type {
   RelayFailure,
   RelayStartArgs,
 } from "../../../packages/core/src/stream-relay";
-import { STREAM_RELAY_PORTS } from "../../../packages/core/src/stream-relay";
+import {
+  isStreamRelayPort,
+  STREAM_RELAY_PORTS,
+} from "../../../packages/core/src/stream-relay";
 import type { Kit, Spec } from "../kit";
 
 type Relay = typeof import("../../../packages/agent/src/browser/relay");
 
-/** Where this spec's own coturn listens instead of 443, where 443 is refused. */
-const MOVED_ALT = 3479;
 const PROBE_CONTAINER = "cawco-relay-probe";
 const TURN_MS = 8000;
 /** A private peer `denied-peer-ip` must refuse. */
@@ -140,6 +144,51 @@ const turn = (
       finish(socket);
     }, TURN_MS);
   });
+
+/** A port the OS hands out on `proto` for port 0, released again; `want` asks for that one instead. */
+const bindPort = (
+  proto: "tcp" | "udp",
+  want = 0
+): Promise<number | undefined> =>
+  new Promise((resolve) => {
+    if (proto === "tcp") {
+      const server = createServer();
+      server.once("error", () => resolve(undefined));
+      server.listen({ port: want, host: "0.0.0.0", exclusive: true }, () => {
+        const { port } = server.address() as AddressInfo;
+        server.close(() => resolve(port));
+      });
+      return;
+    }
+    const socket = createSocket("udp4");
+    socket.once("error", () => {
+      socket.close();
+      resolve(undefined);
+    });
+    socket.bind({ port: want, address: "0.0.0.0", exclusive: true }, () => {
+      const { port } = socket.address();
+      socket.close(() => resolve(port));
+    });
+  });
+
+/**
+ * Where this spec's own coturn listens instead of 443, where 443 is refused:
+ * a port free on TCP and UDP at run time, outside the hub's preview ports and
+ * the relay's own; `tries` more ports are asked for when one is not.
+ */
+const freeAltPort = async (tries = 20): Promise<number | undefined> => {
+  if (tries === 0) {
+    return;
+  }
+  const { PREVIEW_PORTS } = await import("../../../packages/hub/src/config");
+  const port = await bindPort("tcp");
+  const usable =
+    port !== undefined &&
+    !isStreamRelayPort(port) &&
+    (port < PREVIEW_PORTS.first || port > PREVIEW_PORTS.last) &&
+    (await bindPort("udp", port)) === port;
+  return usable ? port : freeAltPort(tries - 1);
+};
 
 /** One STUN binding over `url`: answered, or why not. */
 const binding = (url: string): Promise<string> =>
@@ -251,7 +300,7 @@ const relayLegs = async (
 /**
  * Where the runtime may not bind 443: the relay's start refused with the
  * sysctl sentence before any container, then coturn on the relay's own
- * arguments with its second plain port on {@link MOVED_ALT}.
+ * arguments with its second plain port on a free port {@link freeAltPort} picks.
  */
 const refusedLegs = async (
   kit: Kit,
@@ -285,16 +334,26 @@ const refusedLegs = async (
       !made,
     `container ${relay.RELAY_CONTAINER} ${made ? "exists" : "absent"}`
   );
-  const where = ` (443 refused here: coturn started by this spec with the relay's arguments, its second plain port on ${MOVED_ALT})`;
+  const alt = await freeAltPort();
+  if (
+    !kit.check(
+      `a stand-in for 443 free on UDP and TCP, outside the hub's preview ports and the relay's: ${alt ?? "none found"}`,
+      alt !== undefined
+    ) ||
+    alt === undefined
+  ) {
+    return;
+  }
+  const where = ` (443 refused here: coturn started by this spec with the relay's arguments, its second plain port on ${alt})`;
   const held = await relay.heldPorts([
     { proto: "udp", port: 3478 },
     { proto: "tcp", port: 3478 },
-    { proto: "udp", port: MOVED_ALT },
-    { proto: "tcp", port: MOVED_ALT },
+    { proto: "udp", port: alt },
+    { proto: "tcp", port: alt },
   ]);
   if (
     !kit.check(
-      `UDP and TCP 3478 and ${MOVED_ALT} free for this spec's coturn: ${held.map((one) => one.said).join("; ") || "all free"}`,
+      `UDP and TCP 3478 and ${alt} free for this spec's coturn: ${held.map((one) => one.said).join("; ") || "all free"}`,
       held.length === 0
     )
   ) {
@@ -313,9 +372,7 @@ const refusedLegs = async (
   const cmd = relay
     .coturnArgs(args, false)
     .map((arg) =>
-      arg === "--alt-listening-port=443"
-        ? `--alt-listening-port=${MOVED_ALT}`
-        : arg
+      arg === "--alt-listening-port=443" ? `--alt-listening-port=${alt}` : arg
     );
   const container = await docker.createContainer({
     name: PROBE_CONTAINER,
@@ -332,9 +389,7 @@ const refusedLegs = async (
     const answers = {
       "udp 3478": await binding(`stun:${host}:3478?transport=udp`),
       "tcp 3478": await binding(`stun:${host}:3478?transport=tcp`),
-      [`tcp ${MOVED_ALT}`]: await binding(
-        `stun:${host}:${MOVED_ALT}?transport=tcp`
-      ),
+      [`tcp ${alt}`]: await binding(`stun:${host}:${alt}?transport=tcp`),
     };
     kit.check(
       `STUN binding answered on ${Object.entries(answers)
@@ -343,7 +398,7 @@ const refusedLegs = async (
       Object.values(answers).every((answer) => answer.startsWith("up")),
       JSON.stringify(answers)
     );
-    await turnChecks(kit, args, MOVED_ALT, where);
+    await turnChecks(kit, args, alt, where);
   } finally {
     await container.remove({ force: true }).catch(() => undefined);
   }
