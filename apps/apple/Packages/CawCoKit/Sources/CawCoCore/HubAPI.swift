@@ -33,6 +33,7 @@ public struct HubAPI: Sendable {
         public func remove(_ input: Operations.DeleteApiConnectionsByName.Input) async throws -> Operations.DeleteApiConnectionsByName.Output { try await client.deleteApiConnectionsByName(input) }
         public func setKey(_ input: Operations.PutApiConnectionsByNameKey.Input) async throws -> Operations.PutApiConnectionsByNameKey.Output { try await client.putApiConnectionsByNameKey(input) }
         public func signIn(_ input: Operations.PostApiConnectionsByNameSignIn.Input) async throws -> Operations.PostApiConnectionsByNameSignIn.Output { try await client.postApiConnectionsByNameSignIn(input) }
+        public func setApp(_ input: Operations.PutApiConnectionsByNameApp.Input) async throws -> Operations.PutApiConnectionsByNameApp.Output { try await client.putApiConnectionsByNameApp(input) }
     }
 
     /// Configure › Spend (routes/config/spend): what reaching a project's budget does where the project sets nothing of its own.

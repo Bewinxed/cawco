@@ -53,6 +53,39 @@ public final class FleetConnections {
         return name
     }
 
+    /// An app connection's registration (connections/+page.svelte `appBody`):
+    /// a GitHub App's ids and private key, or a Linear app's client.
+    public enum AppRegistration: Sendable, Equatable {
+        case github(appId: String, installationId: String, privateKey: String)
+        case linear(clientId: String, clientSecret: String)
+    }
+
+    /// The app's registration, emptied from the fields the moment the hub holds it.
+    public func setApp(_ name: String, _ app: AppRegistration) async throws {
+        typealias Body = Operations.PutApiConnectionsByNameApp.Input.Body.JsonPayload
+        let body: Body = switch app {
+        case let .github(appId, installationId, privateKey):
+            Body(value1: .init(appId: appId, installationId: installationId, privateKey: privateKey), value2: nil)
+        case let .linear(clientId, clientSecret):
+            Body(value1: nil, value2: .init(clientId: clientId, clientSecret: clientSecret))
+        }
+        let output = try await hub.api.connections.setApp(.init(path: .init(name: name), body: .json(body)))
+        guard case .ok = output else { throw await TaskRefusal.reading(output) }
+        await read()
+    }
+
+    /// Where a Linear app's sign-in comes back: the URL its settings in Linear
+    /// must list (connections/+page.svelte `callbackUrl`), on the dashboard's address.
+    public func callbackURL() async throws -> String {
+        let dashboard = try await hub.dashboardAddress()
+        var origin = URLComponents()
+        origin.scheme = dashboard.scheme
+        origin.host = dashboard.host
+        origin.port = dashboard.port
+        origin.path = "/api/connections/oauth/callback"
+        return origin.string ?? ""
+    }
+
     /// The key, emptied from the field the moment the hub holds it.
     public func setKey(_ name: String, key: String) async throws {
         let output = try await hub.api.connections.setKey(.init(path: .init(name: name), body: .json(.init(key: key))))

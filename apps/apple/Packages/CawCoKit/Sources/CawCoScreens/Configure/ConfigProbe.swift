@@ -250,6 +250,18 @@ enum ConfigProbe {
             try? await Task.sleep(for: .seconds(1))
             say("connections saved", AccountsProbe.texts(in: connections.view).joined(separator: " | "))
             await capture("connections-saved", shell)
+            // Linear's app way: the callback URL its settings must list, then its client's fields.
+            try? await Task.sleep(for: .seconds(1))
+            say("connections linear app", connections.probeOpen(service: "linear", way: "Linear app"))
+            await capture("connections-linear-app", shell)
+            connections.probeCloseForm()
+            // A GitHub App, its registration typed in the form: the hub holds it, sealed.
+            if let key = ids["appkey"].flatMap({ Data(base64Encoded: $0) }).flatMap({ String(data: $0, encoding: .utf8) }) {
+                connections.probeAddApp(service: "github", account: "probe app", app: .github(appId: "424242", installationId: "4242", privateKey: key))
+                await until(60) { connections.probeRow("github-probe-app")?.app != nil && !connections.probeAdding }
+                try? await Task.sleep(for: .seconds(1))
+                say("connections app", AccountsProbe.texts(in: connections.view).joined(separator: " | "))
+            }
         }
 
         // Skills: a skill a machine has, adopted into the fleet; then switched off.

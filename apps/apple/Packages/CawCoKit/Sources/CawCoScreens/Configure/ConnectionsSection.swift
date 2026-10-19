@@ -7,10 +7,14 @@ import UIKit
 /// Configure › Connections (routes/config/connections/+page.svelte): one row
 /// per signed-in outside service, led by the service's mark, with the
 /// account it signs in as and its state (both the hub's word), and which
-/// projects may use it. A row that is not signed in carries its way in:
-/// Sign in (OAuth, in the platform's sign-in browser, the row turning signed
-/// in when the hub says so) or Set key (a field under the row, emptied the
-/// moment the hub has the key). Its ⋯ holds Projects…, a checklist that
+/// projects may use it. Signing in to a service picks one of its ways (core
+/// `CONNECTION_SERVICES`): a key, an app's registration (a GitHub App's ids
+/// and private key, a Linear app's client), or the service's own sign-in. A
+/// row that is not signed in carries its way in: Set app (its registration
+/// under the row), Sign in (OAuth, or a Linear app once set, in the
+/// platform's sign-in browser, the row turning signed in when the hub says
+/// so) or Set key (a field under the row, emptied the moment the hub has the
+/// key). Its ⋯ holds Projects…, a checklist that
 /// stays open while you tick, and Remove, which goes through at once with
 /// Undo in its toast. With no connection yet, signing in is the person's,
 /// so the page says so, and each card signs in to one service.
@@ -31,6 +35,9 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
     /// The row whose key field is open.
     private var keying: String?
     private var keyFields: [String: KeyAsk] = [:]
+    /// The row whose app's registration is open under it.
+    private var appFor: String?
+    private var appForms: [String: RowAppForm] = [:]
     private var removing: String?
 
     override init(section: ConfigSection, context: ShellContext) {
@@ -71,13 +78,37 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
 
         form.isHidden = true
         form.onCancel = { [weak self] in self?.form.close() }
-        form.onSubmit = { [weak self] service, way, account, key in self?.add(service, way: way, account: account, key: key) }
+        form.onSubmit = { [weak self] service, way, account, key, app in self?.add(service, way: way, account: account, key: key, app: app) }
         setContent([form, empty, list])
     }
 
     override func viewIsAppearing(_ animated: Bool) {
         super.viewIsAppearing(animated)
         Task { await store.read() }
+        // Where a Linear app's sign-in comes back: its settings must list it.
+        Task { [weak self] in
+            guard let self, let url = try? await store.callbackURL() else { return }
+            form.setCallback(url)
+            callback = url
+        }
+    }
+
+    /// Where a Linear app's sign-in comes back, once the hub has said its dashboard's address.
+    private var callback = ""
+
+    /// A row whose app is not set yet, or a GitHub App, which a new key replaces (`needsApp`).
+    private func needsApp(_ row: ConnectionView) -> Bool {
+        row.auth == .app && (row.app == nil || row.app?.value1 != nil)
+    }
+
+    /// A row that signs in through the service's page: OAuth, or a Linear app once set (`signsIn`).
+    private func signsIn(_ row: ConnectionView) -> Bool {
+        row.auth == .oauth || (row.auth == .app && row.app?.value2 != nil)
+    }
+
+    /// A way that signs in through a page of the service's own, in the sign-in browser (`signsInByPage`).
+    private static func signsInByPage(_ service: String, _ way: Words.Connections.Way) -> Bool {
+        way.auth == "oauth" || (way.auth == "app" && service == "linear")
     }
 
     override func viewDidDisappear(_ animated: Bool) {
@@ -128,8 +159,10 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
                 self?.toggle(name, project: project.id)
             }
         })
+        // An app's ⋯ also sets its app (`Set app…`).
+        let setApp = row.auth == .app ? [RowAction(label: Words.Connections.setApp, glyph: .toolMcp) { [weak self] in self?.openApp(name) }] : []
         view.show(name: service, meta: row.account, mark: mark,
-                  actions: [RowAction(label: Words.Connections.remove, glyph: .trash, destructive: true, disabled: removing == name) { [weak self] in
+                  actions: setApp + [RowAction(label: Words.Connections.remove, glyph: .trash, destructive: true, disabled: removing == name) { [weak self] in
                       self?.remove(row)
                   }],
                   lead: [projects], note: note(row))
@@ -151,7 +184,9 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
             chips.accessibilityLabel = "\(Words.Connections.projectsMayUse) \(names.joined(separator: ", "))"
             trailing.append(chips)
         }
-        if row.state != .signedIn, row.auth == .oauth {
+        if row.state != .signedIn, needsApp(row), appFor != name {
+            trailing.append(KitButton.make(Words.Connections.setAppNow, variant: .outline, height: .sm) { [weak self] in self?.openApp(name) })
+        } else if row.state != .signedIn, signsIn(row) {
             let pending = signing.contains(name)
             let button = KitButton.make(pending ? Words.Connections.signingIn : Words.Connections.signIn, variant: .outline, height: .sm) { [weak self] in
                 self?.signIn(row)
@@ -167,7 +202,18 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
         }
         view.setTrailing(trailing)
 
-        if keying == name {
+        if appFor == name {
+            let ask = appForms[name] ?? RowAppForm(service: row.service.lowercased(), label: service)
+            appForms[name] = ask
+            ask.fields.setCallback(callback)
+            ask.onSave = { [weak self] app in self?.saveApp(row, app) }
+            ask.onCancel = { [weak self] in
+                self?.appFor = nil
+                self?.appForms[name] = nil
+                self?.requestRefresh()
+            }
+            view.setBelow([ask])
+        } else if keying == name {
             let ask = keyFields[name] ?? KeyAsk(label: Words.Connections.rowKey(service: service, account: row.account))
             keyFields[name] = ask
             ask.onSave = { [weak self] key in self?.saveKey(name, key: key) }
@@ -180,6 +226,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
             DispatchQueue.main.async { ask.focus() }
         } else {
             keyFields[name] = nil
+            appForms[name] = nil
             view.setBelow([])
         }
     }
@@ -188,7 +235,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
     private func note(_ row: ConnectionView) -> RowNote? {
         if signing.contains(row.name) { return RowNote(text: Words.Connections.signingInTab(service: label(row)), tone: .busy) }
         if let problem = problems[row.name] { return RowNote(text: problem, tone: .fail) }
-        let saidByButton = [Words.Connections.saidSignIn, Words.Connections.saidSetKey, Words.Connections.saidUnderWay]
+        let saidByButton = [Words.Connections.saidSignIn, Words.Connections.saidSetKey, Words.Connections.saidSetApp, Words.Connections.saidUnderWay]
         if row.state != .signedIn, let reason = row.reason, !saidByButton.contains(reason) { return RowNote(text: reason, tone: .fail) }
         return nil
     }
@@ -198,9 +245,30 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
     func probeAdd(service name: String, account: String, key: String) {
         guard let service = Words.Connections.services.first(where: { $0.service == name }) else { return }
         startAdding(service)
-        guard let way = ConnectionForm.firstWay(service) else { return }
-        add(service, way: way, account: account, key: key)
+        guard let way = service.ways.first(where: { $0.auth == "bearer" }) else { return }
+        add(service, way: way, account: account, key: key, app: nil)
     }
+
+    /// A service's app way picked in the form, its registration typed, then sent.
+    func probeAddApp(service name: String, account: String, app: FleetConnections.AppRegistration) {
+        guard let service = Words.Connections.services.first(where: { $0.service == name }),
+              let way = service.ways.first(where: { $0.auth == "app" }) else { return }
+        startAdding(service)
+        form.probePick(way.label)
+        form.probeFillApp(app)
+        add(service, way: way, account: account, key: "", app: app)
+    }
+
+    /// The form opened on a service with one of its ways picked, as it then reads.
+    func probeOpen(service name: String, way label: String) -> String {
+        guard let service = Words.Connections.services.first(where: { $0.service == name }) else { return "no service" }
+        startAdding(service)
+        form.probePick(label)
+        form.layoutIfNeeded()
+        return AccountsProbe.texts(in: form).joined(separator: " | ")
+    }
+
+    func probeCloseForm() { form.close() }
 
     var probeAdding: Bool { form.pending }
     func probeRow(_ name: String) -> ConnectionView? { store.rows?.first { $0.name == name } }
@@ -214,7 +282,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
     }
 
     /// The account's words, then its way in: the row exists once the hub has it, and what follows is said on it.
-    private func add(_ service: Words.Connections.Service, way: Words.Connections.Way, account: String, key: String) {
+    private func add(_ service: Words.Connections.Service, way: Words.Connections.Way, account: String, key: String, app: FleetConnections.AppRegistration?) {
         form.pending = true
         Task { @MainActor [weak self] in
             guard let self else { return }
@@ -228,15 +296,49 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
             }
             form.pending = false
             form.close()
-            if way.auth == "oauth" {
-                guard let row = store.rows?.first(where: { $0.name == name }) else { return }
+            // What follows the row's making: its key or its app, said on the row when refused.
+            var ready = true
+            do {
+                if way.auth == "bearer" { try await store.setKey(name, key: key) }
+                if way.auth == "app", let app { try await store.setApp(name, app) }
+            } catch {
+                problems[name] = ThreadsStore.failureWords(error)
+                ready = false
+            }
+            if ready, Self.signsInByPage(service.service, way), let row = store.rows?.first(where: { $0.name == name }) {
                 signIn(row)
                 return
             }
+            requestRefresh()
+        }
+    }
+
+    private func openApp(_ name: String) {
+        appFor = name
+        appForms[name] = nil
+        requestRefresh()
+    }
+
+    /// The row's app set; a Linear app then signs in, through Linear's own page.
+    private func saveApp(_ row: ConnectionView, _ app: FleetConnections.AppRegistration) {
+        let name = row.name
+        problems[name] = nil
+        appForms[name]?.pending = true
+        Task { @MainActor [weak self] in
+            guard let self else { return }
             do {
-                try await store.setKey(name, key: key)
+                try await store.setApp(name, app)
+                appFor = nil
+                appForms[name] = nil
             } catch {
+                appForms[name]?.pending = false
                 problems[name] = ThreadsStore.failureWords(error)
+                requestRefresh()
+                return
+            }
+            if case .linear = app, let next = store.rows?.first(where: { $0.name == name }) {
+                signIn(next)
+                return
             }
             requestRefresh()
         }
@@ -407,7 +509,7 @@ private final class ServiceCard: UIControl {
 /// Sign in; on the recess, `space-4` in.
 private final class ConnectionForm: UIView {
     var onCancel: () -> Void = {}
-    var onSubmit: (Words.Connections.Service, Words.Connections.Way, String, String) -> Void = { _, _, _, _ in }
+    var onSubmit: (Words.Connections.Service, Words.Connections.Way, String, String, FleetConnections.AppRegistration?) -> Void = { _, _, _, _, _ in }
     var pending = false { didSet { draw() } }
     var problem: String? { didSet { draw() } }
 
@@ -422,6 +524,11 @@ private final class ConnectionForm: UIView {
     private var keyField: ConfigField!
     private let refusal = metaLine(ink: Palette.statusFailInk)
     private var submit: UIButton!
+    /// "Signs in with": the service's ways, when it has more than one, and what the picked one is for.
+    private let wayChoice = ChoiceField(label: Words.Connections.signsInWith)
+    private var wayField: ConfigField!
+    private let waySays = metaLine()
+    private let app = AppFields()
 
     init() {
         super.init(frame: .zero)
@@ -436,11 +543,14 @@ private final class ConnectionForm: UIView {
         accountField.say(hint: Words.Connections.accountHint)
         key.isSecureTextEntry = true
         keyField = ConfigField(label: "", control: key)
+        wayField = ConfigField(label: Words.Connections.signsInWith, control: wayChoice)
+        wayChoice.onChange = { [weak self] label in self?.pick(label) }
+        app.onChange = { [weak self] in self?.draw() }
         let cancel = KitButton.make(Words.Connections.cancel, variant: .ghost, height: .sm) { [weak self] in self?.onCancel() }
         submit = KitButton.make(Words.Connections.signIn, variant: .action, height: .sm) { [weak self] in self?.send() }
         let buttons = UIStackView(arrangedSubviews: [UIView(), cancel, submit])
         buttons.spacing = Space.space2
-        let column = UIStackView(arrangedSubviews: [head, accountField, keyField, refusal, buttons])
+        let column = UIStackView(arrangedSubviews: [head, wayField, waySays, accountField, keyField, app, refusal, buttons])
         column.axis = .vertical
         column.spacing = Space.space3
         column.translatesAutoresizingMaskIntoConstraints = false
@@ -473,23 +583,53 @@ private final class ConnectionForm: UIView {
         accessibilityLabel = title.text
         accountField.setLabel(Words.Connections.account(service: next.label))
         keyField.setLabel(Words.Connections.key(service: next.label))
-        way = Self.firstWay(next)
-        keyField.say(hint: way?.key)
-        keyField.isHidden = way?.auth != "bearer"
+        way = next.ways.first
+        wayField.isHidden = next.ways.count <= 1
+        waySays.isHidden = next.ways.count <= 1
+        wayChoice.set(next.ways.map { ($0.label, $0.label) }, value: way?.label ?? "")
+        app.show(service: next.service)
+        drawWay()
         fold(self, open: true)
         draw()
         // A field that opens on a press takes the next keystroke.
         DispatchQueue.main.async { self.account.becomeFirstResponder() }
     }
 
-    /// The first of a service's ways the form signs in with: a key or the service's own page.
-    static func firstWay(_ service: Words.Connections.Service) -> Words.Connections.Way? {
-        service.ways.first { $0.auth != "app" }
+    #if DEBUG
+    func probePick(_ label: String) {
+        guard let service, let at = service.ways.firstIndex(where: { $0.label == label }) else { return }
+        wayChoice.set(service.ways.map { ($0.label, $0.label) }, value: service.ways[at].label)
+        pick(label)
+    }
+
+    func probeFillApp(_ registration: FleetConnections.AppRegistration) { app.probeFill(registration) }
+    #endif
+
+    /// A way picked by its label.
+    private func pick(_ label: String) {
+        guard let next = service?.ways.first(where: { $0.label == label }) else { return }
+        way = next
+        drawWay()
+    }
+
+    /// What the picked way asks for: a key, an app's registration, or nothing (the service's own page).
+    private func drawWay() {
+        waySays.text = way?.says
+        keyField.say(hint: way?.key)
+        keyField.isHidden = way?.auth != "bearer"
+        app.isHidden = way?.auth != "app"
+        draw()
+    }
+
+    /// Where a Linear app's sign-in comes back, said over its fields.
+    func setCallback(_ url: String) {
+        app.setCallback(url)
     }
 
     func close() {
         service = nil
         key.text = ""
+        app.clear()
         endEditing(true)
         fold(self, open: false)
     }
@@ -497,12 +637,16 @@ private final class ConnectionForm: UIView {
     private var filled: Bool {
         guard let service else { return false }
         let named = !(account.text ?? "").trimmingCharacters(in: .whitespaces).isEmpty
-        return way?.auth == "bearer" ? named && !(key.text ?? "").isEmpty : named
+        return switch way?.auth {
+        case "bearer": named && !(key.text ?? "").isEmpty
+        case "app": named && app.registration != nil
+        default: named
+        }
     }
 
     private func send() {
         guard let service, let way, filled, !pending else { return }
-        onSubmit(service, way, account.text ?? "", key.text ?? "")
+        onSubmit(service, way, account.text ?? "", key.text ?? "", way.auth == "app" ? app.registration : nil)
     }
 
     private func draw() {
@@ -560,5 +704,192 @@ private final class KeyAsk: UIStackView {
         KitButton.setTitle(pending ? Words.Connections.saving : Words.Connections.saveKey, of: save, variant: .action, height: .xs)
         save.configuration?.showsActivityIndicator = pending
         save.isEnabled = !pending
+    }
+}
+
+/// A secret typed in the kit's field with its eye (`secret`): shown in the
+/// clear while the eye is pressed open, named for what it shows or hides.
+private final class SecretField: UIStackView {
+    var onChange: () -> Void = {}
+    let field = KitField(mono: true)
+    private let eye: KitGhostButton
+    private let what: String
+
+    var text: String {
+        get { field.text ?? "" }
+        set { field.text = newValue }
+    }
+
+    init(label: String) {
+        what = label.lowercased()
+        eye = KitGhostButton(.eye, label: Words.Connections.showSecret(what: label.lowercased()))
+        super.init(frame: .zero)
+        spacing = Space.space2
+        alignment = .center
+        field.isSecureTextEntry = true
+        field.autocorrectionType = .no
+        field.autocapitalizationType = .none
+        field.accessibilityLabel = label
+        field.addAction(UIAction { [weak self] _ in self?.onChange() }, for: .editingChanged)
+        eye.addAction(UIAction { [weak self] _ in self?.toggle() }, for: .primaryActionTriggered)
+        eye.accessibilityTraits.insert(.button)
+        addArrangedSubview(field)
+        addArrangedSubview(eye)
+    }
+
+    @available(*, unavailable)
+    required init(coder _: NSCoder) {
+        fatalError("SecretField is built in code")
+    }
+
+    private func toggle() {
+        field.isSecureTextEntry.toggle()
+        let shown = !field.isSecureTextEntry
+        eye.configuration?.image = (shown ? Glyph.eyeClosed : Glyph.eye).image.resized(to: Size.iconMd)
+        eye.accessibilityLabel = shown ? Words.Connections.hideSecret(what: what) : Words.Connections.showSecret(what: what)
+        eye.accessibilityValue = shown ? Words.Connections.hideSecret(what: what) : nil
+    }
+
+    func clear() {
+        field.text = ""
+        if !field.isSecureTextEntry { toggle() }
+    }
+}
+
+/// An app's registration (`appFields`): a GitHub App's App ID, Installation ID
+/// and private key; or, for a Linear app, the callback URL its settings must
+/// list, then its client ID and client secret. The hub keeps the secrets sealed.
+private final class AppFields: UIStackView {
+    var onChange: () -> Void = {}
+    private(set) var service = ""
+    private let appId = KitField(mono: true)
+    private let installationId = KitField(mono: true)
+    private let privateKey = SecretField(label: Words.Connections.privateKey)
+    private let callback = KitLabel(TypeScale.typeCode.with(points: TypeScale.textMeta), ink: Palette.inkStrong, lines: 0)
+    private let clientId = KitField(mono: true)
+    private let clientSecret = SecretField(label: Words.Connections.clientSecret)
+    private var github: [UIView] = []
+    private var linear: [UIView] = []
+
+    init() {
+        super.init(frame: .zero)
+        axis = .vertical
+        spacing = Space.space3
+        for field in [appId, installationId] {
+            field.keyboardType = .numberPad
+            field.addAction(UIAction { [weak self] _ in self?.onChange() }, for: .editingChanged)
+        }
+        clientId.autocorrectionType = .no
+        clientId.autocapitalizationType = .none
+        clientId.addAction(UIAction { [weak self] _ in self?.onChange() }, for: .editingChanged)
+        for secret in [privateKey, clientSecret] { secret.onChange = { [weak self] in self?.onChange() } }
+        let appIdField = ConfigField(label: Words.Connections.appId, control: appId)
+        appIdField.say(hint: Words.Connections.appIdHint)
+        let installationField = ConfigField(label: Words.Connections.installationId, control: installationId)
+        installationField.say(hint: Words.Connections.installationIdHint)
+        let keyField = ConfigField(label: Words.Connections.privateKey, control: privateKey)
+        keyField.say(hint: Words.Connections.privateKeyHint)
+        github = [appIdField, installationField, keyField]
+        callback.lineBreakMode = .byCharWrapping
+        let callbackLine = UIStackView(arrangedSubviews: [metaLine(Words.Connections.callbackLine), callback])
+        callbackLine.axis = .vertical
+        callbackLine.spacing = Space.space1
+        let clientIdField = ConfigField(label: Words.Connections.clientId, control: clientId)
+        clientIdField.say(hint: Words.Connections.clientIdHint)
+        let secretField = ConfigField(label: Words.Connections.clientSecret, control: clientSecret)
+        secretField.say(hint: Words.Connections.clientSecretHint)
+        linear = [callbackLine, clientIdField, secretField]
+        (github + linear).forEach(addArrangedSubview)
+    }
+
+    @available(*, unavailable)
+    required init(coder _: NSCoder) {
+        fatalError("AppFields is built in code")
+    }
+
+    /// The fields of `service`'s app, empty.
+    func show(service next: String) {
+        service = next
+        clear()
+        for part in github { part.isHidden = next != "github" }
+        for part in linear { part.isHidden = next == "github" }
+    }
+
+    /// Where a Linear app's sign-in comes back, as the hub's dashboard names it.
+    func setCallback(_ url: String) {
+        callback.text = url
+    }
+
+    /// What was typed, once every field holds something.
+    var registration: FleetConnections.AppRegistration? {
+        let trimmed = { (text: String?) in (text ?? "").trimmingCharacters(in: .whitespacesAndNewlines) }
+        if service == "github" {
+            let (id, installation, key) = (trimmed(appId.text), trimmed(installationId.text), privateKey.text)
+            return id.isEmpty || installation.isEmpty || key.isEmpty ? nil : .github(appId: id, installationId: installation, privateKey: key)
+        }
+        let (client, secret) = (trimmed(clientId.text), clientSecret.text)
+        return client.isEmpty || secret.isEmpty ? nil : .linear(clientId: client, clientSecret: secret)
+    }
+
+    func clear() {
+        for field in [appId, installationId, clientId] { field.text = "" }
+        privateKey.clear()
+        clientSecret.clear()
+    }
+
+    #if DEBUG
+    func probeFill(_ app: FleetConnections.AppRegistration) {
+        switch app {
+        case let .github(id, installation, key):
+            appId.text = id
+            installationId.text = installation
+            privateKey.text = key
+        case let .linear(client, secret):
+            clientId.text = client
+            clientSecret.text = secret
+        }
+        onChange()
+    }
+    #endif
+}
+
+/// A row's app, set under it (`.row-app`): its registration's fields, then
+/// Cancel and Save app; a Linear app signs in once it is set.
+private final class RowAppForm: UIStackView {
+    var onSave: (FleetConnections.AppRegistration) -> Void = { _ in }
+    var onCancel: () -> Void = {}
+    var pending = false { didSet { draw() } }
+    let fields = AppFields()
+    private var save: UIButton!
+
+    init(service: String, label: String) {
+        super.init(frame: .zero)
+        axis = .vertical
+        spacing = Space.space3
+        accessibilityLabel = Words.Connections.appOf(row: label)
+        accessibilityContainerType = .semanticGroup
+        fields.show(service: service)
+        fields.onChange = { [weak self] in self?.draw() }
+        let cancel = KitButton.make(Words.Connections.cancel, variant: .ghost, height: .xs) { [weak self] in self?.onCancel() }
+        save = KitButton.make(Words.Connections.saveApp, variant: .action, height: .xs) { [weak self] in
+            guard let self, let app = fields.registration, !pending else { return }
+            onSave(app)
+        }
+        let buttons = UIStackView(arrangedSubviews: [UIView(), cancel, save])
+        buttons.spacing = Space.space2
+        addArrangedSubview(fields)
+        addArrangedSubview(buttons)
+        draw()
+    }
+
+    @available(*, unavailable)
+    required init(coder _: NSCoder) {
+        fatalError("RowAppForm is built in code")
+    }
+
+    private func draw() {
+        KitButton.setTitle(pending ? Words.Connections.saving : Words.Connections.saveApp, of: save, variant: .action, height: .xs)
+        save.configuration?.showsActivityIndicator = pending
+        save.isEnabled = fields.registration != nil && !pending
     }
 }

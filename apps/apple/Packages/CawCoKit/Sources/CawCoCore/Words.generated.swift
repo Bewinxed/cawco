@@ -1772,6 +1772,52 @@ public enum Words {
 
         public static let saidUnderWay = "A sign-in is under way."
 
+        /// The way a service signs in with, picked when it has more than one.
+        public static let signsInWith = "Signs in with"
+
+        /// An app connection's registration: a GitHub App's ids and key, or a Linear app's client.
+        public static let setApp = "Set app…"
+
+        /// A row's own button for an app not yet set.
+        public static let setAppNow = "Set app"
+
+        public static let saveApp = "Save app"
+
+        public static func appOf(row: String) -> String {
+            "\(row) app"
+        }
+
+        public static let appId = "App ID"
+
+        public static let appIdHint = "On the GitHub App's settings page: its App ID, or its client ID."
+
+        public static let installationId = "Installation ID"
+
+        public static let installationIdHint = "The number at the end of the installation's settings URL."
+
+        public static let privateKey = "Private key"
+
+        public static let privateKeyHint = "The .pem file's text, from Generate a private key. The hub keeps it sealed."
+
+        public static let callbackLine = "Add this callback URL to the app in Linear:"
+
+        public static let clientId = "Client ID"
+
+        public static let clientIdHint = "On the app's page in Linear's settings."
+
+        public static let clientSecret = "Client secret"
+
+        public static let clientSecretHint = "The hub keeps it sealed."
+
+        /// A secret field's eye, named for what it shows or hides (its label, lower-cased).
+        public static func showSecret(what: String) -> String {
+            "Show the \(what)"
+        }
+
+        public static func hideSecret(what: String) -> String {
+            "Hide the \(what)"
+        }
+
         /// The row's ⋯, and Projects…'s checklist.
         public static let projects = "Projects…"
 

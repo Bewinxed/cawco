@@ -198,7 +198,7 @@ public enum FleetMemory {
         switch output {
         case let .ok(ok):
             let set = try ok.body.json
-            return path == main ? set.content : set.docs?.first { $0.path == path }?.content
+            return path == main ? set.content : set.docs.first { $0.path == path }?.content
         case .noContent:
             return nil
         default:

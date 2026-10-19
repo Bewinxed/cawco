@@ -554,8 +554,8 @@
       <InputGroup.Addon align="inline-end">
         <InputGroup.Button
           aria-label={revealed[id]
-            ? `Hide the ${label.toLowerCase()}`
-            : `Show the ${label.toLowerCase()}`}
+            ? words.hideSecret(label.toLowerCase())
+            : words.showSecret(label.toLowerCase())}
           aria-pressed={revealed[id] ?? false}
           onclick={() => {
             revealed[id] = !revealed[id];
@@ -577,11 +577,7 @@
      Linear app's client id and secret with the callback its settings list. -->
 {#snippet appFields(service: string, draft: AppDraft, at: string)}
   {#if service === "github"}
-    <Field
-      hint="On the GitHub App's settings page: its App ID, or its client ID."
-      id="{at}-app-id"
-      label="App ID"
-    >
+    <Field hint={words.appIdHint} id="{at}-app-id" label={words.appId}>
       <Input
         autocomplete="off"
         id="{at}-app-id"
@@ -592,9 +588,9 @@
       />
     </Field>
     <Field
-      hint="The number at the end of the installation's settings URL."
+      hint={words.installationIdHint}
       id="{at}-installation"
-      label="Installation ID"
+      label={words.installationId}
     >
       <Input
         autocomplete="off"
@@ -607,21 +603,17 @@
     </Field>
     {@render secret(
       `${at}-private-key`,
-      "Private key",
-      "The .pem file's text, from Generate a private key. The hub keeps it sealed.",
+      words.privateKey,
+      words.privateKeyHint,
       draft,
       "privateKey"
     )}
   {:else}
     <p data-slot="callback" class="callback">
-      <span>Add this callback URL to the app in Linear:</span>
+      <span>{words.callbackLine}</span>
       <code class="callback-url">{callbackUrl}</code>
     </p>
-    <Field
-      hint="On the app's page in Linear's settings."
-      id="{at}-client-id"
-      label="Client ID"
-    >
+    <Field hint={words.clientIdHint} id="{at}-client-id" label={words.clientId}>
       <Input
         autocomplete="off"
         id="{at}-client-id"
@@ -632,8 +624,8 @@
     </Field>
     {@render secret(
       `${at}-client-secret`,
-      "Client secret",
-      "The hub keeps it sealed.",
+      words.clientSecret,
+      words.clientSecretHint,
       draft,
       "clientSecret"
     )}
@@ -656,7 +648,7 @@
     </p>
     {#if service.ways.length > 1}
       <div data-slot="way" class="way">
-        <p class="way-label" id="connection-way">Signs in with</p>
+        <p class="way-label" id="connection-way">{words.signsInWith}</p>
         <ToggleGroup.Root
           aria-labelledby="connection-way"
           class="ways"
@@ -788,7 +780,7 @@
             ...(row.auth === "app"
               ? [
                   {
-                    label: "Set app…",
+                    label: words.setApp,
                     icon: IconConnection,
                     onselect: () => {
                       rowApp = emptyApp();
@@ -820,7 +812,7 @@
             {#if appFor === row.name}
               <form
                 data-slot="row-app"
-                aria-label="{labelOf(row)} app"
+                aria-label={words.appOf(labelOf(row))}
                 class="row-app"
                 onsubmit={(event) => {
                   event.preventDefault();
@@ -837,7 +829,7 @@
                   <Button
                     class="pressable"
                     disabled={appPending}
-                    label="Cancel"
+                    label={words.cancel}
                     onclick={() => {
                       appFor = null;
                       rowApp = emptyApp();
@@ -847,9 +839,9 @@
                   />
                   <Button
                     class="pressable"
-                    label="Save app"
+                    label={words.saveApp}
                     pending={appPending}
-                    pendingLabel="Saving…"
+                    pendingLabel={words.saving}
                     size="xs"
                     type="submit"
                   />
@@ -921,7 +913,7 @@
             {#if row.state !== "signed-in" && needsApp(row) && appFor !== row.name}
               <Button
                 class="pressable"
-                label="Set app"
+                label={words.setAppNow}
                 onclick={() => {
                   rowApp = emptyApp();
                   appFor = row.name;

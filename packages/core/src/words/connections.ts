@@ -44,6 +44,30 @@ export const connectionsWords = {
   saidSetKey: "Set its key.",
   saidSetApp: "Set its app.",
   saidUnderWay: "A sign-in is under way.",
+  /** The way a service signs in with, picked when it has more than one. */
+  signsInWith: "Signs in with",
+  /** An app connection's registration: a GitHub App's ids and key, or a Linear app's client. */
+  setApp: "Set app…",
+  /** A row's own button for an app not yet set. */
+  setAppNow: "Set app",
+  saveApp: "Save app",
+  appOf: (row: string) => `${row} app`,
+  appId: "App ID",
+  appIdHint: "On the GitHub App's settings page: its App ID, or its client ID.",
+  installationId: "Installation ID",
+  installationIdHint:
+    "The number at the end of the installation's settings URL.",
+  privateKey: "Private key",
+  privateKeyHint:
+    "The .pem file's text, from Generate a private key. The hub keeps it sealed.",
+  callbackLine: "Add this callback URL to the app in Linear:",
+  clientId: "Client ID",
+  clientIdHint: "On the app's page in Linear's settings.",
+  clientSecret: "Client secret",
+  clientSecretHint: "The hub keeps it sealed.",
+  /** A secret field's eye, named for what it shows or hides (its label, lower-cased). */
+  showSecret: (what: string) => `Show the ${what}`,
+  hideSecret: (what: string) => `Hide the ${what}`,
   /** The row's ⋯, and Projects…'s checklist. */
   projects: "Projects…",
   remove: "Remove",

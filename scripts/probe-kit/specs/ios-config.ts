@@ -34,6 +34,7 @@
  * `PROBE_DEVICE=iPhone` (or `iPad`) runs one device.
  */
 // biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: each device's steps are read in order.
+import { generateKeyPairSync } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -64,6 +65,8 @@ const SKILL = "probe-skill";
 const TYPE = "probe-type";
 const SERVER = "probe-mcp";
 const CONNECTION = "github-probe";
+/** The GitHub App the probe registers through the form's app way. */
+const APP_CONNECTION = "github-probe-app";
 const DOC = "probe/notes.md";
 /** A file in the project's `delegates/` that makes no type, and what the hub says of it (project-delegate-types.ts). */
 const BROKEN_TYPE = "delegates/broken.md";
@@ -77,6 +80,14 @@ const LABEL_BOX = /'([^']*)'\[\d+,\d+ (\d+)×(\d+)\]/g;
 /** `mcp reach`: a touch just above the row's ⋯, and its switch, went to that control. */
 const MORE_REACHED = /more \S+ \d+pt above→itself/;
 const SWITCH_REACHED = /switch \S+ \d+pt above→itself/;
+/** A GitHub App's private key, real so the hub's own check takes it, base64 for the launch argument. */
+const APP_KEY = Buffer.from(
+  generateKeyPairSync("rsa", {
+    modulusLength: 2048,
+    privateKeyEncoding: { type: "pkcs8", format: "pem" },
+    publicKeyEncoding: { type: "spki", format: "pem" },
+  }).privateKey
+).toString("base64");
 const SECTIONS = [
   "spend",
   "delegate-types",
@@ -216,6 +227,7 @@ async function run(kit: Kit): Promise<void> {
     await http("DELETE", `/api/delegate-types/${TYPE}`);
     await http("DELETE", `/api/fleet/mcp/${SERVER}`);
     await http("DELETE", `/api/connections/${CONNECTION}`);
+    await http("DELETE", `/api/connections/${APP_CONNECTION}`);
     await http("DELETE", "/api/fleet/memory/docs", { path: DOC });
     // Deleting the fleet's skill takes it off the machines too: once the
     // machine has let it go, it is written there again, to be adopted anew.
@@ -298,7 +310,11 @@ async function run(kit: Kit): Promise<void> {
           }
         })().catch(() => undefined);
         await Bun.sleep(1500);
-        const ids = [`project=${projectId}`, `skill=${SKILL}`].join(",");
+        const ids = [
+          `project=${projectId}`,
+          `skill=${SKILL}`,
+          `appkey=${APP_KEY}`,
+        ].join(",");
         await sh(
           `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${fleet.base} -config-probe -config-probe-ids ${ids} -config-probe-capture http://127.0.0.1:${server.port}/ >/dev/null`
         );
@@ -394,6 +410,34 @@ async function run(kit: Kit): Promise<void> {
           `hub ${JSON.stringify(connection ?? null)}; app ${said("connections saved").slice(0, 300)}`
         );
         const skill = read.skills.find((one) => one.name === SKILL);
+        const appRows = await fleet.api<{
+          connections: {
+            app?: { appId?: string; installationId?: string; service: string };
+            auth: string;
+            name: string;
+          }[];
+        }>("/api/connections");
+        const appRow = appRows.connections.find(
+          (one) => one.name === APP_CONNECTION
+        );
+        kit.check(
+          `${at}: Connections: a GitHub App registered through the form's app way, which the hub holds`,
+          appRow?.auth === "app" &&
+            appRow.app?.service === "github" &&
+            appRow.app.appId === "424242" &&
+            appRow.app.installationId === "4242",
+          `hub ${JSON.stringify(appRow ?? null)}; app ${said("connections app").slice(0, 200)}`
+        );
+        const linearApp = said("connections linear app");
+        kit.check(
+          `${at}: Connections: Linear's app way names the callback URL its settings list, then its client's fields`,
+          linearApp.includes("Signs in with") &&
+            linearApp.includes("Add this callback URL to the app in Linear:") &&
+            linearApp.includes("/api/connections/oauth/callback") &&
+            linearApp.includes("Client ID") &&
+            linearApp.includes("Client secret"),
+          linearApp.slice(0, 400)
+        );
         kit.check(
           `${at}: Skills: the machine's skill adopted from On each machine, then switched off`,
           skill?.enabled === false,
