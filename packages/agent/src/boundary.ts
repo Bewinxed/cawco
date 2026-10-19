@@ -8,7 +8,9 @@
  * - Linux: one @anthropic-ai/sandbox-runtime (srt) sandbox per workspace,
  *   hosted by `boundary-host.ts` in library mode. Inside it a command reads
  *   nothing in the home dir but what the policy reads back, writes only the
- *   clone, its scratch dir and the workspaces' cache, sees and signals only
+ *   clone, its scratch dir and the workspaces' cache (a write anywhere else,
+ *   the read-denied home dir, `/tmp` and `/run` among them, fails at once
+ *   with EROFS: `srtSettings` in boundary-policy.ts), sees and signals only
  *   the workspace's processes (its own pid namespace), and reaches the
  *   network only through srt's proxy: any public host, none of the owner's
  *   machines. Every host socket is out of sight.
@@ -2466,7 +2468,27 @@ const hostScript = (): string =>
     ? runtimeExecutable("srt/host.js")
     : join(import.meta.dir, "boundary-host.ts");
 
-/** What the host script holds, for the form: a change to it is a change of form. */
+/**
+ * What the host script runs, for the form: a change to it is a change of
+ * form. A build's script bundles srt; a checkout's imports it, so srt's
+ * module that writes the sandbox's mounts is read beside it (the repository's
+ * patch makes each read-denied dir read-only there, `patches/`).
+ */
+const readHostText = async (host: string): Promise<string> => {
+  if (standalone) {
+    return await Bun.file(host).text();
+  }
+  const srt = dirname(
+    Bun.resolveSync("@anthropic-ai/sandbox-runtime", dirname(host))
+  );
+  const texts = await Promise.all(
+    [host, join(srt, "sandbox", "linux-sandbox-utils.js")].map((file) =>
+      Bun.file(file).text()
+    )
+  );
+  return texts.join("\0");
+};
+
 let hostText: Promise<string> | undefined;
 
 /** How a workspace's boundary of one generation starts in this build, and the form that names it. */
@@ -2594,7 +2616,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
   const srtTmp = srtTmpOf(id, gen);
   const settings = `${JSON.stringify(srtSettings(policy, { rg: ripgrep(), srtTmp }), null, 2)}\n`;
   const host = hostScript();
-  hostText ??= Bun.file(host).text();
+  hostText ??= readHostText(host);
   // What the host makes in the clone before each sandbox, so srt binds
   // each deny path onto itself and leaves nothing on the host
   // (`cloneDenies`), and guards for the sandbox's whole life.

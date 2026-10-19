@@ -76,6 +76,15 @@ export interface SrtPlace {
  * loopback services (REPORT.md §5l). A dev server a command starts is reached
  * inside the sandbox's own network namespace.
  *
+ * Every read-denied dir (the home dir, `/tmp`, `/run`) is an empty tmpfs that
+ * srt mounts and the repository's patch of srt remounts read-only once what
+ * is bound back into it is in place (`patches/`, srt #149): a write there fails
+ * at once with EROFS naming its path, never lands in the sandbox's memory to
+ * vanish with it. What a command writes is the policy's `allowWrite` alone:
+ * the clone, its scratch dir (`TMPDIR`, its XDG config, data and state homes)
+ * and the workspaces' cache (every tool's cache, `XDG_CACHE_HOME`,
+ * `XDG_RUNTIME_DIR`).
+ *
  * Besides the policy:
  * - `/tmp` is read-denied: the host's `/tmp` holds other sessions' files and
  *   sockets; a command's `TMPDIR` is its scratch dir. srt cannot give a

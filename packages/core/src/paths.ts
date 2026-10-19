@@ -1113,8 +1113,8 @@ export const workspaceCacheEnv = (): Record<string, string> => {
  * the runtime dir only when the user owns it and other users cannot write to
  * it (crates/fs/src/secure_temp_lock.rs `xdg_runtime_dir`), so it is never
  * made group-writable. Without it a boundary had no lock dir it shared: on
- * Linux `/run` and `/tmp` are each an empty tmpfs of the boundary's own, so
- * each workspace locked the shared store alone; a runtime dir the boundary
+ * Linux `/run` and `/tmp` are each an empty read-only tmpfs of the
+ * boundary's own (boundary-policy.ts `srtSettings`); a runtime dir the boundary
  * shows read-only (the scratch fleet's, under home) failed every install
  * ("Failed to open the store operation lock at \"pnpm-store-operation-locks\":
  * Read-only file system"); and on macOS Seatbelt refuses writes to `/tmp`.
