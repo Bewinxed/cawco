@@ -1,3 +1,6 @@
+Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, interface-craft, ui-observer (emil-design-eng and transitions-dev not loaded: no motion in these files).
+better-layout followed: logical properties, ladder spacing, min-w-0 on text items, min-h/basis over fixed height, kit touch-hit. better-ui followed: pressable 0.96 press, token shadows, outer md over inner sm radii, 12/16/20 icons.
+
 # Lane L09-cawco-blocks: blocks, canvas stages, join
 
 Start: `cawco/cutover-merge` at f5c5024ab. Deltas A–T applied.
