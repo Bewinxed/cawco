@@ -195,36 +195,56 @@ function gridOf(args: { selector: string; grid: number }) {
     }
     return false;
   };
+  /** Draws anything where it stands: a background, a border, a shadow, an image or words, and is neither hidden nor transparent, here or in what holds it. */
+  const paints = (el: Element) => {
+    if (
+      !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })
+    ) {
+      return false;
+    }
+    const style = getComputedStyle(el);
+    return (
+      rgba(style.backgroundColor)[3] !== 0 ||
+      style.backgroundImage !== "none" ||
+      style.borderStyle !== "none" ||
+      style.boxShadow !== "none" ||
+      el instanceof SVGElement ||
+      el instanceof HTMLImageElement ||
+      el instanceof HTMLCanvasElement ||
+      onText(el)
+    );
+  };
+  /** The painting boxes of `els`, each with where it stands on the page. */
+  const boxesOf = (els: Element[]) =>
+    els.filter(paints).map((el) => ({ el, box: el.getBoundingClientRect() }));
+  const boxAt = (
+    boxes: { el: Element; box: DOMRect }[],
+    x: number,
+    y: number
+  ) =>
+    boxes.find(
+      ({ box }) =>
+        x >= box.left && x < box.right && y >= box.top && y < box.bottom
+    )?.el ?? null;
   /**
    * What the body paints that hit-testing passes through: `pointer-events:
-   * none` and inert boxes (HTML's inert is hit-tested as if it had none)
-   * that draw anything, a background, a border, an image or words. A point
-   * on one is not read: the hit is under it.
+   * none` and inert boxes (HTML's inert is hit-tested as if it had none). A
+   * point on one is not read: the hit is under it.
    */
-  const unhit = [...body.querySelectorAll("*")]
-    .filter(
+  const unhit = boxesOf(
+    [...body.querySelectorAll("*")].filter(
       (el) =>
         el.closest("[inert]") !== null ||
         getComputedStyle(el).pointerEvents === "none"
     )
-    .filter((el) => {
-      const style = getComputedStyle(el);
-      return (
-        style.visibility === "visible" &&
-        (rgba(style.backgroundColor)[3] !== 0 ||
-          style.backgroundImage !== "none" ||
-          style.borderStyle !== "none" ||
-          el instanceof SVGElement ||
-          el instanceof HTMLImageElement ||
-          el instanceof HTMLCanvasElement ||
-          onText(el))
-      );
-    })
-    .map((el) => el.getBoundingClientRect());
-  const underUnhit = (x: number, y: number) =>
-    unhit.some(
-      (box) => x >= box.left && x < box.right && y >= box.top && y < box.bottom
-    );
+  );
+  /**
+   * What the canvas's chrome paints (stage-host canvas chrome.ts: one shadow
+   * host over the whole page, above everything, that hit-testing passes
+   * where its parts don't take the pointer). A point under one is covered.
+   */
+  const chrome = document.getElementById("cawco-chrome")?.shadowRoot;
+  const over = chrome ? boxesOf([...chrome.querySelectorAll("*")]) : [];
   /** The flat colour under a hit: the nearest box out from it with an opaque background and no image; null where that can't be told. */
   const paintedAt = (hit: Element): [number, number, number] | null => {
     if (mixed(hit)) {
@@ -256,12 +276,20 @@ function gridOf(args: { selector: string; grid: number }) {
     const x = ((rect.width - 4) * ((at % args.grid) + 0.5)) / args.grid + 2;
     const y =
       ((rect.height - 4) * (Math.floor(at / args.grid) + 0.5)) / args.grid + 2;
+    const chromed = boxAt(over, rect.left + x, rect.top + y);
+    if (chromed) {
+      covered.push(
+        `(${Math.round(x)},${Math.round(y)}) is the canvas chrome's ${name(chromed)}`
+      );
+      continue;
+    }
     const hit = document.elementFromPoint(rect.left + x, rect.top + y);
     if (hit && body.contains(hit)) {
       const page = { x: rect.left + x, y: rect.top + y };
       points.push({
         page,
-        rgb: onText(hit) || underUnhit(page.x, page.y) ? null : paintedAt(hit),
+        rgb:
+          onText(hit) || boxAt(unhit, page.x, page.y) ? null : paintedAt(hit),
         x,
         y,
       });
