@@ -13,12 +13,18 @@
 import type { ThreadSaid } from "./threads";
 
 /**
- * The pages that hold blocks: the four tabs every project has. A custom
+ * The pages that hold blocks: the five tabs every project has. A custom
  * view is placed on one of these, never on a tab that comes and goes with
  * what the tasks draw (Canvas, Calendar, Made), where it would vanish with
  * the tab.
  */
-export const BLOCK_PAGES = ["board", "table", "pipeline", "routines"] as const;
+export const BLOCK_PAGES = [
+  "board",
+  "table",
+  "pipeline",
+  "routines",
+  "memory",
+] as const;
 export type BlockPage = (typeof BLOCK_PAGES)[number];
 
 /** Each page as its tab names it. */
@@ -27,6 +33,7 @@ export const BLOCK_PAGE_TITLES: Record<BlockPage, string> = {
   table: "Table",
   pipeline: "Pipeline",
   routines: "Routines",
+  memory: "Memory",
 };
 
 export const BLOCK_WIDTHS = ["narrow", "wide"] as const;
@@ -63,7 +70,8 @@ export interface BuiltInBlock {
  * Each page's own blocks, in their own order: what a page the person has
  * not arranged lays out, and what the hub counts a proposed block's place
  * among when it is kept. A task view's page holds the view; the Routines
- * page its three parts.
+ * page its three parts; the Memory page its pipeline's three (Inbox, Facts,
+ * In briefs).
  */
 export const BLOCK_BUILT_INS: Record<BlockPage, BuiltInBlock[]> = {
   board: [{ block: "board", width: "wide" }],
@@ -73,6 +81,11 @@ export const BLOCK_BUILT_INS: Record<BlockPage, BuiltInBlock[]> = {
     { block: "routines", width: "narrow" },
     { block: "sources", width: "narrow" },
     { block: "actions", width: "narrow" },
+  ],
+  memory: [
+    { block: "inbox", width: "narrow" },
+    { block: "facts", width: "narrow" },
+    { block: "briefs", width: "narrow" },
   ],
 };
 

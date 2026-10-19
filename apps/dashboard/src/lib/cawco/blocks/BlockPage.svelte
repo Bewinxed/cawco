@@ -1,11 +1,14 @@
 <script lang="ts" module>
   import type { Component, Snippet } from "svelte";
+  import type { RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import type { BlockBody } from "./Block.svelte";
 
   /** What a page knows of one block it can hold: its face and its body. */
   export interface BlockItem {
     /** The head's own action, before its ⋯. */
     action?: Snippet;
+    /** The page's acts on the block, first in its ⋯. */
+    actions?: RowAction[];
     /**
      * Drawn alone, with no frame, while it is the page's only block: a task
      * view's page shows the view as it always has until a view joins it.
@@ -232,6 +235,7 @@
 {#snippet frame(place: BlockPlace, item: BlockItem, index: number)}
   <Block
     action={item.action}
+    actions={item.actions}
     body={item.body}
     card={item.card}
     {columns}

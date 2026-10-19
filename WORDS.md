@@ -182,6 +182,15 @@ it actually means.
 | A change to AGENTS.md or a knowledge file, shown as its diff, that the person approves or rejects: the curator's, or one Caw asked about; and a delegate type Caw wrote | **proposal** | A Needs you item, and a card where it was made (Caw's thread, the curator's run): Approve applies it, Deny rejects it and archives its notes. | "suggestion", "PR", "decision page" |
 | One of a project's own settings Caw changes himself, each noted in his thread: a connection granted to it, its GitHub repository linked or made and published, where its work lands. One he asks about, and every publish, is an Approve/Deny card in his thread first | **project setting** | "Caw changed this project's settings"; the push "Project setting" under the project; "Publish this project to a private GitHub repository, owner/name". | "config", "preference", "permission" |
 | Your words straight into AGENTS.md, no model in between: a Caw thread message that opens with "Make a note:" | **Make a note** | "Make a note: deploys go out on Fridays." | "remember this", "save to memory" |
+| The curator's run asked for now, not at its schedule: it sorts the inbox | **Curate inbox** (the button) | Inbox's head on the Memory view. | "Consolidate", "Sync memory", "Run curator" |
+| A knowledge file rewritten shorter by the curator, proposed for your approval: asked of a file past its size | **Fold file** (the button) / **fold** (verb) | A file's ⋯ on the Memory view; "Fold deploy?" | "compact", "summarize", "compress" |
+| The curator's proposal of a new set of knowledge files, offered past 25 | **Reshape knowledge** (the button) / **reshape** (verb) | The Knowledge block's ⋯. | "reorganize", "restructure" |
+| A proposal moving a file's lines no brief carried for 90 days into `knowledge/archive/` | **Archive unused lines** (the button) | A file's ⋯ and the Knowledge block's ⋯. | "prune", "clean up", "delete old" |
+| An inbox note, or one of your notes in AGENTS.md, taken out by you: kept in the notes archive or the project's history | **Withdraw note** (the button) / **withdraw** (verb) | A note's ⋯. | "delete note", "discard" |
+| The Memory view's block of the briefs that carried knowledge lines, newest first | **In briefs** | The Memory view's third block. | "usage", "context log" |
+| A knowledge file's sections: the lines that hold now, the lines that held until a day, and two lines that hold for one period and disagree | **Current** / **Formerly** / **Conflict** | A file's card on the Memory view. | "active", "history", "outdated", "contradiction" |
+| A knowledge line you settled yourself, standing above whatever the notes say | **ruling** | The mark beside a line. | "override", "pinned" |
+| Jev is off: the curator sorts every note on its run, so each waits for it | **Jev off** | Inbox's head on the Memory view. | "AI off", "sorting disabled" |
 | One shell command or file edit Caw makes himself, in his place, each decided by the hub before it runs: let run, put to you on an Approve card, or refused. Each is a note in his thread: what ran and its exit, what he edited, what was refused and why, what you denied. A refusal ends with what to do instead: "file a task" (a history-moving git command in a shared checkout, an edit past docs, config and assets or past 5 files), "delegate the rest" (past 20 calls in one wake) | **Caw's call** | "Caw · ran \`git init\`", "Caw · edited docs/setup.md", "Caw · refused \`git stash\`", "Caw · you denied \`rm notes.txt\`". | "command" alone (an approved action is one too), "tool use" in copy |
 | A project's preset of harness, model, effort, skills, tools and budget that a delegate runs as | **delegate type** | `delegates/writer.md`; the type picker. | "persona", "agent", "profile" |
 | One exact tool call you approved, run once by the hub at its time | **approved action** | "Posts at 12:30" rows; approval cards. | "scheduled post" as the general term, "automation" |
@@ -284,7 +293,7 @@ Every button parses as **[Verb] + [Object]** and stays comprehensible with surro
 Allowlisted imperative verbs for the gate: *Start, Create, Add, Save, Cancel, Delete, Remove,
 Approve, Deny, Allow, Deny, Reconnect, Retry, Export, Filter, Manage, Open, Stop, Interrupt, Send,
 Attach, Refresh, Install, Fetch, Restore, Redirect, Skip, Switch, Check, Configure, Copy, Draw, Dock, Undock, Annotate,
-Comment, Illustrate, Erase, Done, Admit, Require, Ask, Use*, and the phrasal *Take over*, *Hand back*, *Set up*
+Comment, Illustrate, Erase, Done, Admit, Require, Ask, Use, Curate, Fold, Reshape, Archive, Withdraw*, and the phrasal *Take over*, *Hand back*, *Set up*
 and *Done for now* (each [Verb]+[Object] read as one act: the browser; "Set up the stream relay", the
 relay's journey begun; "Done for now", the journey's Needs you row put away while the relay is proven only
 from inside). "Ask" takes its object by name: "Ask Caw", the project

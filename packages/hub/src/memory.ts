@@ -81,7 +81,7 @@
  *   Purging a session (deleting its transcript) withdraws every note it
  *   wrote the same way.
  * - **Make a note** (the person's): straight to AGENTS.md as a diff commit,
- *   from a hub route or a Caw thread message that opens with "Make a note:".
+ *   from a Caw thread message that opens with "Make a note:".
  * - **Brief context** (dispatch.ts): AGENTS.md, then the fact lines a task
  *   needs, whole, with their dates and sources, within the brief's budget.
  *   Code greps the task's words over the lines (and takes every line of the
@@ -102,6 +102,7 @@ import {
   frontMatterBlock,
   type InstanceRow,
   MEMORY_PROPOSAL_TOOL,
+  memoryHref,
   type NeutralMessage,
   type NeutralOrigin,
   type PermissionResult,
@@ -113,7 +114,7 @@ import type {
   JevChoiceAnswer,
   JevQuestion,
 } from "@cawco/core/workflow-program";
-import { Elysia, status, t } from "elysia";
+import { Elysia, status } from "elysia";
 import { z } from "zod";
 import { tool } from "./admin-tools";
 import { MEMORY_ARCHIVE_DAYS, MEMORY_FILE_CHARS } from "./config";
@@ -180,7 +181,7 @@ import { isRoutineParent } from "./work-items";
 export const AGENTS_FILE = "AGENTS.md";
 const MEMORY_DIR = "memory";
 export const INBOX_DIR = "memory/inbox";
-const ARCHIVE_DIR = "memory/archive";
+export const ARCHIVE_DIR = "memory/archive";
 const PROPOSALS_DIR = "memory/proposals";
 
 /** The longest note an agent writes, and the longest "Make a note". */
@@ -197,7 +198,7 @@ export const INBOX_MARK = 20;
 /** Notes one curator run reads, oldest first; the rest wait for the next. */
 const RUN_NOTES = 60;
 /** What one brief carries of all its context together; each file's share is the file budget (config.ts). */
-const CONTEXT_CHARS = 24_000;
+export const CONTEXT_CHARS = 24_000;
 /** What Jev reads of AGENTS.md as what is known. */
 const JEV_KNOWN = 20_000;
 /**
@@ -229,7 +230,7 @@ const BEARS = 0.5;
  * {@link RESHAPE_BELOW} a reshape never merges files ({@link checkReshapeFloor}).
  */
 export const RESHAPE_ABOVE = 25;
-const RESHAPE_BELOW = 15;
+export const RESHAPE_BELOW = 15;
 const RESHAPE_TOWARD = "15 to 25";
 /** How far up its delegation chain a session's routine run is looked for. */
 const ANCESTRY = 12;
@@ -669,7 +670,7 @@ const renderNote = (note: Note): string =>
     "",
   ].join("\n");
 
-const parseNote = (path: string, content: string): Note | undefined => {
+export const parseNote = (path: string, content: string): Note | undefined => {
   const block = frontMatterBlock(content);
   if (!block) {
     return;
@@ -736,7 +737,7 @@ export const fileOr = async (
 };
 
 /** Every file under `knowledge/`, by path, with its words. */
-const knowledgeOf = async (
+export const knowledgeOf = async (
   projectId: string
 ): Promise<{ content: string; path: string }[]> => {
   let listing: Awaited<ReturnType<typeof listFolder>>;
@@ -783,7 +784,10 @@ export const inboxNotes = (projectId: string): Promise<Note[]> =>
   notesIn(projectId, INBOX_DIR);
 
 /** The notes in one of memory/'s folders, oldest first. */
-const notesIn = async (projectId: string, dir: string): Promise<Note[]> => {
+export const notesIn = async (
+  projectId: string,
+  dir: string
+): Promise<Note[]> => {
   const names = (await folderFileNames(projectId, dir))
     .filter((name) => name.endsWith(".md"))
     .sort();
@@ -818,13 +822,16 @@ export interface Proposal {
    * What the hub proposed it as, when its rejection says something to
    * remember: an `archive` rejected keeps its lines as used now; a `rewrite`
    * of a prose file rejected is not proposed again until the file changes.
+   * A `retire` moves lines whose `until` has come under Formerly.
    */
-  kind?: "archive" | "rewrite";
+  kind?: "archive" | "rewrite" | "retire";
   /** The inbox notes it comes from. */
   notes: string[];
   projectId: string;
   /** The proposing session. */
   session: string;
+  /** Jev's clear sorts it carries: each note and the line it bears on (the Memory view's chips). */
+  sorts?: ProposalSort[];
   /** Caw's thread it was asked in; none for the curator's, which is its session's. */
   threadId?: string;
   time: string;
@@ -834,6 +841,51 @@ export interface Proposal {
   /** A withdrawal's note: approved, it leaves for the archive, `withdrawn`. */
   withdraws?: string;
 }
+
+/** One of Jev's clear sorts a proposal carries: the note, how it bears, and on which line of which file. */
+export interface ProposalSort {
+  line: number;
+  note: string;
+  path: string;
+  sort: "corroborates" | "changes" | "conflicts";
+}
+
+/**
+ * Where a memory proposal is read whole: its project's Memory view, the
+ * fact file it changes open beside it (an archive's own fact file; AGENTS.md
+ * as the person's notes), landed on its card. None for a delegate type.
+ */
+const proposalOpen = (proposal: Proposal): string | undefined => {
+  if (proposal.files.some((one) => one.path.startsWith(DELEGATES_DIR))) {
+    return;
+  }
+  const paths = proposal.files.map((one) =>
+    one.path.startsWith(`${KNOWLEDGE_ARCHIVE}/`)
+      ? `${KNOWLEDGE_DIR}/${one.path.slice(KNOWLEDGE_ARCHIVE.length + 1)}`
+      : one.path
+  );
+  const file =
+    paths.find((path) => isFactFile(path)) ??
+    paths.find((path) => path === AGENTS_FILE) ??
+    null;
+  return memoryHref(proposal.projectId, { file, proposal: proposal.id });
+};
+
+/** A proposal as its card's input: its files, the notes it cites, why, and where it is read whole. */
+export const proposalInput = (
+  proposal: Proposal,
+  projectName: string
+): Record<string, unknown> => {
+  const open = proposalOpen(proposal);
+  return {
+    files: proposal.files,
+    notes: proposal.notes,
+    why: proposal.why,
+    project: projectName,
+    projectId: proposal.projectId,
+    ...(open ? { open } : {}),
+  };
+};
 
 /** Whether a kept proposal file reads as one (its files whole). */
 const wholeProposal = (parsed: Proposal): boolean =>
@@ -851,7 +903,7 @@ const wholeProposal = (parsed: Proposal): boolean =>
 const pathsOf = (proposal: Proposal): string =>
   proposal.files.map((file) => file.path).join(", ");
 
-const proposalsOf = async (projectId: string): Promise<Proposal[]> => {
+export const proposalsOf = async (projectId: string): Promise<Proposal[]> => {
   const names = (await folderFileNames(projectId, PROPOSALS_DIR))
     .filter((name) => name.endsWith(".json"))
     .sort();
@@ -1044,6 +1096,7 @@ const reasonOf = (raw: string): string => {
 };
 
 const LEADING_SLASHES = /^\/+/;
+const MD = /\.md$/;
 
 /**
  * What a project's fact files cannot say yet, in the hub's log: each line
@@ -1317,6 +1370,51 @@ const checkFacts = (
     checkWholeLines(before, after, archive);
     checkReshapeFloor(facts, standing);
   }
+};
+
+/** One of the person's notes in AGENTS.md's `## Notes`: its words, and the file lines it takes (1-based, inclusive). */
+export interface PersonsNote {
+  first: number;
+  last: number;
+  text: string;
+}
+
+/**
+ * The person's notes in AGENTS.md's `## Notes`, in order: each list item
+ * with the lines it continues onto (withNote writes them so), each
+ * paragraph one too.
+ */
+export const personsNoteItems = (agents: string): PersonsNote[] => {
+  const lines = agents.split("\n");
+  const heading = lines.findIndex((each) => each.trim() === "## Notes");
+  if (heading < 0) {
+    return [];
+  }
+  const items: PersonsNote[] = [];
+  let open: PersonsNote | undefined;
+  for (let at = heading + 1; at < lines.length; at += 1) {
+    const raw = lines[at] ?? "";
+    if (raw.startsWith("## ")) {
+      break;
+    }
+    if (raw.trim() === "") {
+      open = undefined;
+      continue;
+    }
+    const item = raw.startsWith("- ") || raw.startsWith("* ");
+    if (open && !item) {
+      open.text = `${open.text} ${raw.trim()}`;
+      open.last = at + 1;
+      continue;
+    }
+    open = {
+      first: at + 1,
+      last: at + 1,
+      text: item ? raw.slice(2).trim() : raw.trim(),
+    };
+    items.push(open);
+  }
+  return items;
 };
 
 /** AGENTS.md's `## Notes`: the person's own notes ("Make a note"), as they stand. */
@@ -1657,6 +1755,26 @@ const wholeFiles = (
 };
 
 /**
+ * What a brief carries whole before its fact lines (AGENTS.md, then the brand
+ * kit files its task names), and the room those leave for fact lines: what
+ * `contextFor` builds, and what the Memory view measures a brief's lines
+ * against.
+ */
+export const briefWhole = (
+  agents: string,
+  knowledge: { content: string; path: string }[],
+  named: ReadonlySet<string>
+): { parts: string[]; room: number } =>
+  wholeFiles(
+    [
+      { path: AGENTS_FILE, content: agents.trim() },
+      ...knowledge.filter(
+        (file) => BRAND.test(file.path) && named.has(file.path)
+      ),
+    ].filter((file) => file.content !== "")
+  );
+
+/**
  * The lines a brief admits from `queue`, in order, whole, until `room` is
  * spent, no file past its budget; a Conflict line with every line of its
  * group. By file, and how many lines were left out.
@@ -1743,6 +1861,8 @@ export interface MemoryDeps {
   readonly settle: (requestId: string) => void;
   /** The thread a project's Caw's turn answers (caw.ts `askThread`); undefined for any other session. */
   readonly threadOf: (actor: InstanceRow) => string | undefined;
+  /** A brief carried fact lines of the project: its Memory view reads again. */
+  readonly used: (projectId: string) => void;
   readonly watch: TurnWatch;
 }
 
@@ -1754,6 +1874,7 @@ export const createMemory = ({
   park,
   settle,
   threadOf,
+  used,
   watch,
 }: MemoryDeps) => {
   /** Open proposals, by id: the project each is in. */
@@ -2119,6 +2240,7 @@ export const createMemory = ({
         content: string;
         notes: string[];
         said: string[];
+        sorts: ProposalSort[];
       }
     >();
     const taken = new Set<string>();
@@ -2147,6 +2269,7 @@ export const createMemory = ({
         content,
         notes: [],
         said: [],
+        sorts: [],
       };
       try {
         const sorted = sortedEdit(at.content, fact, sort, each);
@@ -2158,6 +2281,7 @@ export const createMemory = ({
       }
       at.notes.push(each.id);
       at.said.push(`${each.id} ${sort} ${fact.path}:${fact.line}`);
+      at.sorts.push({ note: each.id, sort, path: fact.path, line: fact.line });
       edits.set(fact.path, at);
       taken.add(each.id);
     }
@@ -2194,6 +2318,7 @@ export const createMemory = ({
           ],
           base: head?.sha ?? "",
           notes: edit.notes,
+          sorts: edit.sorts,
           why: `Jev's sort: ${edit.said.join("; ")}`.slice(0, WHY_LIMIT),
           by: JEV.name,
           session: "",
@@ -2300,6 +2425,7 @@ export const createMemory = ({
           notes: [],
           why: `${retired.length} line${retired.length === 1 ? "" : "s"} of ${file.path} reached ${retired.length === 1 ? "its" : "their"} \`until\` and move${retired.length === 1 ? "s" : ""} under Formerly`,
           by: HUB.name,
+          kind: "retire",
           session: "",
           time: at.toISOString(),
         },
@@ -2433,7 +2559,8 @@ export const createMemory = ({
    * and the run fails with them.
    */
   const curatorBrief = async (
-    projectId: string
+    projectId: string,
+    ask?: CuratorAsk
   ): Promise<
     { kind: "none"; reason: string } | { kind: "run"; text: string }
   > => {
@@ -2483,13 +2610,16 @@ export const createMemory = ({
     await proposeConversions(project, factFiles, touched);
     await proposeRetirements(project, factFiles, touched);
     await proposeArchives(project, factFiles, touched);
+    const foldAsked = ask && "fold" in ask ? ask.fold : null;
     const fold = factFiles.filter(
       (file) =>
-        file.content.length > MEMORY_FILE_CHARS &&
+        (file.content.length > MEMORY_FILE_CHARS || file.path === foldAsked) &&
         !touched.has(file.path) &&
         !isProse(file)
     );
-    const reshape = factFiles.length > RESHAPE_ABOVE;
+    const reshape =
+      factFiles.length > RESHAPE_ABOVE ||
+      (ask !== undefined && "reshape" in ask);
     if (left.length === 0 && fold.length === 0 && !reshape) {
       return {
         kind: "none",
@@ -2509,6 +2639,7 @@ export const createMemory = ({
         notes: left,
         related: paired.related,
         reshape,
+        asked: ask,
         sortOf,
       }),
     };
@@ -2519,6 +2650,8 @@ export const createMemory = ({
     project: ProjectRow,
     given: {
       agents: string;
+      /** What the person asked this run for, from the Memory view. */
+      asked?: CuratorAsk;
       files: FactFile[];
       fold: FactFile[];
       jev: boolean;
@@ -2566,15 +2699,7 @@ export const createMemory = ({
         : "knowledge/ holds no fact files yet.";
     const factFileCount = given.files.filter((file) => !isProse(file)).length;
     const asks = [
-      ...given.fold.map(
-        (file) =>
-          `- Fold ${file.path}: ${file.content.length} characters, past its budget of ${MEMORY_FILE_CHARS}. Shorten or drop its \`Why:\` lines, the least recently \`used\` first, a ruling's last; every fact line, its parenthesis and every Formerly line stay word for word. Cite no notes.`
-      ),
-      ...(given.reshape
-        ? [
-            `- Reshape knowledge/: ${given.files.length} fact files, past ${RESHAPE_ABOVE}. Propose one change moving lines whole, never reworded, toward ${RESHAPE_TOWARD} focused files, each with a first line saying what it holds.`,
-          ]
-        : []),
+      ...askedOf(given.fold, given.files.length, given.reshape, given.asked),
       `- Judge each fact file against its first line: when its facts fall under two descriptions, propose one reshape splitting it in two, each line moved whole with its \`Why:\`, each file's first line saying what it holds. Cite no notes.${factFileCount < RESHAPE_BELOW ? ` With ${factFileCount} fact files, under ${RESHAPE_BELOW}, a reshape only splits; it never merges files.` : ""}`,
     ];
     const unreadable = given.files
@@ -2616,12 +2741,7 @@ export const createMemory = ({
       )
         ? DELEGATE_TYPE_PROPOSAL_TOOL
         : MEMORY_PROPOSAL_TOOL,
-      input: {
-        files: proposal.files,
-        notes: proposal.notes,
-        why: proposal.why,
-        project: projectName,
-      },
+      input: proposalInput(proposal, projectName),
       memoryProposal: proposal.id,
       projectId: proposal.projectId,
       proposer: `${proposal.by} · ${projectName}`,
@@ -3325,6 +3445,105 @@ export const createMemory = ({
     return { path: AGENTS_FILE, sha: written.sha, changed: written.changed };
   };
 
+  /**
+   * The person withdraws one of their own notes from AGENTS.md's `## Notes`
+   * (the Memory view's Your notes): its lines leave the file as their
+   * commit; git keeps it. Refused when the section holds no such note.
+   */
+  const withdrawYours = async (projectId: string, text: string) => {
+    projectOf(projectId);
+    const words = text.trim();
+    const before = await fileOr(projectId, AGENTS_FILE);
+    const item =
+      personsNoteItems(before).find((each) => each.text === words) ??
+      refuse(
+        404,
+        "AGENTS.md's notes hold no such note; it may be gone already."
+      );
+    const lines = before.split("\n");
+    lines.splice(item.first - 1, item.last - item.first + 1);
+    const after = lines.join("\n").replace(/\n{3,}/g, "\n\n");
+    const written = await writeFolderFile(projectId, AGENTS_FILE, after, {
+      author: YOU,
+      message: "AGENTS.md: withdraw a note of yours",
+    });
+    folderChanged(projectId);
+    console.log(
+      `[memory] ${projectId}: you withdrew a note of AGENTS.md at ${written.sha.slice(0, 9)}`
+    );
+    return { path: AGENTS_FILE, sha: written.sha };
+  };
+
+  /**
+   * Archive unused, asked by the person (the Memory view): every current
+   * line unused past the archive's days proposed moved to
+   * `knowledge/archive/`, for one fact file or every one no open proposal
+   * touches, as the curator's run would. The proposals made, by id; refused
+   * in words when there is none to make.
+   */
+  const archiveUnused = async (
+    projectId: string,
+    path: string | undefined
+  ): Promise<{ proposals: string[] }> => {
+    const project = projectOf(projectId);
+    const files = (await factFilesOf(projectId)).filter(
+      (file) => !isProse(file) && (path === undefined || file.path === path)
+    );
+    const name = path ? (path.split("/").at(-1) ?? path).replace(MD, "") : "";
+    if (path !== undefined && files.length === 0) {
+      refuse(404, `${path} is no fact file of this project.`);
+    }
+    const standing = await proposalsOf(projectId);
+    const touched = new Set(
+      standing.flatMap((proposal) => proposal.files.map((file) => file.path))
+    );
+    if (path !== undefined && touched.has(path)) {
+      refuse(
+        409,
+        `A change to ${name} waits for your answer; answer it first.`
+      );
+    }
+    const made = await proposeArchives(project, files, touched);
+    if (made === 0) {
+      refuse(
+        409,
+        path === undefined
+          ? `No line has gone unused for ${MEMORY_ARCHIVE_DAYS} days.`
+          : `No line of ${name} has gone unused for ${MEMORY_ARCHIVE_DAYS} days.`
+      );
+    }
+    const was = new Set(standing.map((proposal) => proposal.id));
+    return {
+      proposals: (await proposalsOf(projectId))
+        .map((proposal) => proposal.id)
+        .filter((id) => !was.has(id)),
+    };
+  };
+
+  /**
+   * Whether the curator may be asked for a fold of `path` now: a fact file
+   * of the project no open proposal changes. Refused in words otherwise.
+   */
+  const foldable = async (projectId: string, path: string): Promise<void> => {
+    projectOf(projectId);
+    const file = (await factFilesOf(projectId)).find(
+      (each) => each.path === path
+    );
+    if (!file || isProse(file)) {
+      refuse(404, `${path} is no fact file of this project.`);
+    }
+    if (
+      (await proposalsOf(projectId)).some((proposal) =>
+        proposal.files.some((each) => each.path === path)
+      )
+    ) {
+      refuse(
+        409,
+        `A change to ${path} waits for your answer; answer it first.`
+      );
+    }
+  };
+
   // --- what a brief carries --------------------------------------------------------------
 
   /**
@@ -3468,16 +3687,10 @@ export const createMemory = ({
       briefShortlist(factFiles, task, named),
       proseShortlist(factFiles, task, named)
     );
-    const whole = wholeFiles(
-      [
-        {
-          path: AGENTS_FILE,
-          content: (await fileOr(projectId, AGENTS_FILE)).trim(),
-        },
-        ...knowledge.filter(
-          (file) => BRAND.test(file.path) && named.has(file.path)
-        ),
-      ].filter((file) => file.content !== "")
+    const whole = briefWhole(
+      await fileOr(projectId, AGENTS_FILE),
+      knowledge,
+      named
     );
     const { admitted, left } = admitLines(
       [
@@ -3495,6 +3708,20 @@ export const createMemory = ({
         facts.map((fact) => fact.key),
         now
       );
+    }
+    if (admitted.size > 0) {
+      db.memoryFacts.carried(
+        projectId,
+        { taskId: task.id, title: task.title, at: now, room: whole.room },
+        [...admitted].flatMap(([path, facts]) =>
+          facts.map((fact) => ({
+            path,
+            key: fact.key,
+            chars: fact.raw.length + 1,
+          }))
+        )
+      );
+      used(projectId);
     }
     const parts = [
       ...whole.parts,
@@ -3606,6 +3833,9 @@ export const createMemory = ({
     curatorBrief,
     contextFor,
     withdraw,
+    withdrawYours,
+    archiveUnused,
+    foldable,
     purged,
     start,
 
@@ -3721,6 +3951,9 @@ export const createMemory = ({
 
 export type Memory = ReturnType<typeof createMemory>;
 
+/** What the person asks a curator run for, from the Memory view: a fold of one fact file, or a reshape. */
+export type CuratorAsk = { fold: string } | { reshape: true };
+
 /** Every memory tool, by name. */
 export const MEMORY_TOOLS: ReadonlySet<string> = new Set([
   "memory_note",
@@ -3738,37 +3971,50 @@ const refusalAnswer = (error: unknown) => {
 };
 
 /**
- * The person's own memory acts outside a Caw thread: "Make a note" straight
- * into AGENTS.md, and withdrawing a note, which proposes retiring the facts
- * that rest on it alone in the same card.
+ * The person's own memory act outside a Caw thread: withdrawing a note,
+ * which proposes retiring the facts that rest on it alone in the same card.
+ * "Make a note" is a Caw thread message (caw.ts `noteInAgents`), its one
+ * path.
  */
 export const memoryRoutes = (memory: Memory) =>
-  new Elysia()
-    .post(
-      "/api/projects/:id/memory/notes",
-      {
-        body: t.Object({ text: t.String({ maxLength: NOTE_LIMIT }) }),
-        detail: { hide: true },
-      },
-      async ({ params, body }) => {
-        try {
-          return await memory.makeNote(params.id, body.text);
-        } catch (error) {
-          return refusalAnswer(error);
-        }
+  new Elysia().post(
+    "/api/projects/:id/memory/notes/:note/withdraw",
+    { detail: { hide: true } },
+    async ({ params }) => {
+      try {
+        return await memory.withdraw(params.id, params.note);
+      } catch (error) {
+        return refusalAnswer(error);
       }
-    )
-    .post(
-      "/api/projects/:id/memory/notes/:note/withdraw",
-      { detail: { hide: true } },
-      async ({ params }) => {
-        try {
-          return await memory.withdraw(params.id, params.note);
-        } catch (error) {
-          return refusalAnswer(error);
-        }
-      }
-    );
+    }
+  );
 
-/** What opens a Caw thread message that is the person's note, not words to Caw. */
-export const MAKE_A_NOTE = /^make a note\s*:\s*/i;
+/**
+ * The fold and reshape a curator run is asked for: a file past its budget,
+ * or one the person asked to fold (the Memory view); knowledge/ past its
+ * files, or the person's asked reshape.
+ */
+const askedOf = (
+  fold: FactFile[],
+  files: number,
+  reshape: boolean,
+  asked: CuratorAsk | undefined
+): string[] => {
+  const foldAsked = asked && "fold" in asked ? asked.fold : null;
+  const reshapeAsked = asked !== undefined && "reshape" in asked;
+  const why = (file: FactFile): string =>
+    file.path === foldAsked
+      ? `and the person asked for its fold (its budget is ${MEMORY_FILE_CHARS})`
+      : `past its budget of ${MEMORY_FILE_CHARS}`;
+  return [
+    ...fold.map(
+      (file) =>
+        `- Fold ${file.path}: ${file.content.length} characters, ${why(file)}. Shorten or drop its \`Why:\` lines, the least recently \`used\` first, a ruling's last; every fact line, its parenthesis and every Formerly line stay word for word. Cite no notes.`
+    ),
+    ...(reshape
+      ? [
+          `- Reshape knowledge/: ${files} fact files, ${reshapeAsked && files <= RESHAPE_ABOVE ? "and the person asked for a reshape" : `past ${RESHAPE_ABOVE}`}. Propose one change moving lines whole, never reworded, toward ${RESHAPE_TOWARD} focused files, each with a first line saying what it holds.`,
+        ]
+      : []),
+  ];
+};

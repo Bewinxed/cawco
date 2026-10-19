@@ -1,0 +1,6 @@
+{
+  "now": "2026-10-19T12:00:00.000Z",
+  "project": "cockpit",
+  "projectId": "fixture-cockpit",
+  "problem": "The hub couldn't be reached: the tunnel answered 502 Bad Gateway."
+}

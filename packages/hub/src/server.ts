@@ -621,6 +621,7 @@ import {
   placesHolding,
   sessionInstructions,
 } from "./memory-scopes";
+import { memoryViewRoutes } from "./memory-view";
 import { createMoves, MoveAway, MoveRefused } from "./moves";
 import { createNoticesSeen } from "./notices";
 import {
@@ -19699,6 +19700,30 @@ export const createServer = (
         payload: { kind: "blocks.changed", projectId },
       }),
   });
+  /**
+   * Every dashboard showing a project's Memory view reads it again
+   * (`memory.changed`, memory-view.ts): a commit to its memory, a brief
+   * that carried its fact lines. A burst (a curator run's commits) is told
+   * once per {@link MEMORY_TOLD_MS}.
+   */
+  const MEMORY_TOLD_MS = 400;
+  const memoryTelling = new Map<string, ReturnType<typeof setTimeout>>();
+  const memoryChanged = (projectId: string): void => {
+    if (memoryTelling.has(projectId)) {
+      return;
+    }
+    memoryTelling.set(
+      projectId,
+      setTimeout(() => {
+        memoryTelling.delete(projectId);
+        registry.broadcast({
+          verb: "frames",
+          machineId: "hub",
+          payload: { kind: "memory.changed", projectId },
+        });
+      }, MEMORY_TOLD_MS)
+    );
+  };
   // A project's memory (memory.ts): the agents' inbox, its curator's
   // proposals as your asks, and "Make a note" into AGENTS.md.
   const projectMemory = createMemory({
@@ -19709,7 +19734,11 @@ export const createServer = (
       ensure: (projectId) => routines.ensureCurator(projectId),
       inboxPassed: (projectId) => routines.inboxPassed(projectId),
     }),
-    folderChanged: (projectId) => tasks.touched(projectId),
+    folderChanged: (projectId) => {
+      tasks.touched(projectId);
+      memoryChanged(projectId);
+    },
+    used: memoryChanged,
     // Caw is made further down; his thread is read only once a call runs.
     notice: (projectId, threadId, note) => {
       lead?.notice(projectId, threadId, note);
@@ -20646,7 +20675,8 @@ export const createServer = (
   const routines = createRoutines({
     caw,
     // A curator run's inbox, sorted first (memory.ts).
-    curatorBrief: (projectId) => projectMemory.curatorBrief(projectId),
+    curatorBrief: (projectId, ask) =>
+      projectMemory.curatorBrief(projectId, ask),
     db,
     lifetime,
     anyOnline: () => onlineMachines().length > 0,
@@ -23068,6 +23098,7 @@ export const createServer = (
         cawRoutes(caw),
         phoneRequestRoutes(jevTasks),
         memoryRoutes(projectMemory),
+        memoryViewRoutes({ db, memory: projectMemory, routines }),
         routineRoutes(routines),
         connectionRoutes(connections),
         trackerRoutes(trackers),

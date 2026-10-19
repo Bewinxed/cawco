@@ -4392,6 +4392,134 @@
       },
       "$description": "The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and \"23h ago\", or \"Tomorrow 13:30\", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say."
     },
+    "c-memory-mark": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4,
+        "unit": "px"
+      },
+      "$description": "One line's mark in a memory file's line run (the Memory view's Knowledge row and file card): 4px wide, one per line in file order; Current filled in ink-muted, Formerly a hollow ink-subtle ring (3:1 or more as a non-text mark), Conflict and a line not read in their status glyph hues."
+    },
+    "c-memory-mark-gap": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "The pitch between a memory line run's marks, and between the run and its size meter under it."
+    },
+    "c-memory-spark-bar": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "One day's bar in a fact file's 14-day use sparkline (the Memory view's Used column)."
+    },
+    "c-memory-spark-gap": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1,
+        "unit": "px"
+      },
+      "$description": "The pitch between a use sparkline's day bars: fourteen bars and their gaps stand 41px wide."
+    },
+    "c-memory-spark-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
+      "$description": "A use sparkline's height: its busiest day's bar; a day no brief used it stands at 1px, the baseline."
+    },
+    "c-memory-meter-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "The Memory view's thin meters: a fact file's size against the fold's threshold, a brief's characters against the busiest brief listed."
+    },
+    "c-memory-lines-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 11,
+        "unit": "rem"
+      },
+      "$description": "The Memory view's Knowledge ledger's Lines column on a wide ledger: a line run of 24 marks (24 \u00d7 (c-memory-mark + c-memory-mark-gap) \u2212 c-memory-mark-gap = 142px), space-2, and a three-digit count in tabular meta (about 22px): 172px inside 176, so every row's sparkline starts on one edge."
+    },
+    "c-memory-age-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 3.5,
+        "unit": "rem"
+      },
+      "$description": "The Memory view's Knowledge ledger's Changed column: \"120d ago\" or \"just now\" at most, in tabular meta, set to the row's end."
+    },
+    "c-memory-used-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4.5,
+        "unit": "rem"
+      },
+      "$description": "The Memory view's Knowledge ledger's Used column: its 41px sparkline under a head of \"USED 14D\" in caps label, one width for every row."
+    },
+    "c-memory-spark-base": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1,
+        "unit": "px"
+      },
+      "$description": "A use sparkline's baseline: a day no brief used the file stands this tall, so the fourteen days read as a strip."
+    },
+    "c-memory-band-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      },
+      "$description": "The Memory view's Knowledge ledger's column band: one caps label line over the columns, a row's head."
+    },
+    "c-memory-why-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "rem"
+      },
+      "$description": "A memory proposal's why line's least width beside its kind before it wraps under it."
+    },
+    "c-memory-field-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 30,
+        "unit": "rem"
+      },
+      "$description": "The empty Memory page's act: Make a note over Caw's composer, one measure under the empty state's line."
+    },
+    "c-block-knowledge": {
+      "$type": "dimension",
+      "$value": {
+        "value": 34,
+        "unit": "rem"
+      },
+      "$description": "The Memory page's Knowledge block's measure: the fewest columns that hold it are two of a 1440 window's four (BlockPage spans ceil(measure \u00f7 column), so it stays under two 278px columns). From 35rem its ledger stands in columns, the name keeping 10rem beside the row's 70px of padding, gap and \u22ef, Lines (c-memory-lines-w), Used (c-memory-used-w), Changed (c-memory-age-w) and their two 12px gaps (160 + 70 + 176 + 72 + 56 + 24 = 558px); two of those columns and their gap are 577px."
+    },
+    "c-memory-sources-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 20,
+        "unit": "rem"
+      },
+      "$description": "The popover listing a knowledge line's source notes: a note's first line and who and when, one measure; never wider than the window less its margins."
+    },
+    "c-underline-offset": {
+      "$type": "dimension",
+      "$value": {
+        "value": 3,
+        "unit": "px"
+      },
+      "$description": "A dotted underline's drop under its words (a chip that opens a list, as a fact's sources): clear of the descenders."
+    },
     "c-grid-4": {
       "$type": "dimension",
       "$value": {
@@ -4407,6 +4535,14 @@
         "unit": "rem"
       },
       "$description": "The page width from which a project page's blocks stand on two columns (a 1024 window: a 750px page, 366px columns); under it, one column in the person's order."
+    },
+    "c-block-memory": {
+      "$type": "dimension",
+      "$value": {
+        "value": 17,
+        "unit": "rem"
+      },
+      "$description": "The Memory page's Inbox and In briefs blocks' measure: 17rem (272px), inside one column of a 1440 window's four, so Inbox, Knowledge (c-block-knowledge, two columns) and In briefs stand side by side as the pipeline runs."
     },
     "c-block-routines": {
       "$type": "dimension",

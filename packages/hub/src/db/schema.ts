@@ -4001,6 +4001,45 @@ export const factUses = sqliteTable(
 );
 
 /**
+ * Each fact line a task's brief carried (memory.ts `contextFor`), one row per
+ * brief and line: what the Memory view's 14-day use sparklines, a line's
+ * briefs and a brief's share of the room it had for them are read from
+ * (memory-view.ts).
+ * `fact_uses` keeps only a line's last use.
+ */
+export const briefFactUses = sqliteTable(
+  "brief_fact_uses",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    taskId: text("task_id").notNull(),
+    /** The task's title as the brief was made. */
+    title: text("title").notNull(),
+    /** When the brief was made: one time for every line it carried. */
+    at: timestamp("at").notNull(),
+    /** `knowledge/<topic>.md`. */
+    path: text("path").notNull(),
+    /** The fact's words, hashed (memory-facts.ts `factKey`). */
+    key: text("key").notNull(),
+    /** Characters the line took in the brief. */
+    chars: integer("chars").notNull(),
+    /**
+     * The room the brief had for fact lines (memory.ts `briefWhole`): its
+     * budget less what it carried whole before them (AGENTS.md, the brand kit
+     * files its task named). One number for every line the brief carried.
+     */
+    room: integer("room").notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.projectId, table.taskId, table.at, table.path, table.key],
+    }),
+    index("brief_fact_uses_project_at").on(table.projectId, table.at),
+  ]
+);
+
+/**
  * A knowledge file's prose the person declined to have rewritten as fact
  * lines (memory.ts `proposeConversions`), by the hash of the words declined:
  * its rewrite is proposed again only once the file says something else.

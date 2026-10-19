@@ -631,15 +631,11 @@ try {
     throw new Error(`the fleet's choices were not set: ${choices.text}`);
   }
 
-  // ── (d) Make a note: the route, then a Caw thread message ──────────────
+  // ── (d) Make a note: a Caw thread message, the one path ───────────────
   await section("d: Make a note writes AGENTS.md directly", async () => {
-    const routed = await http(
-      "POST",
-      `/api/projects/${projectId}/memory/notes`,
-      {
-        text: "Release notes are written in the present tense.",
-      }
-    );
+    const routed = await http("POST", `/api/projects/${projectId}/threads`, {
+      body: "Make a note: Release notes are written in the present tense.",
+    });
     const threaded = await http("POST", `/api/projects/${projectId}/threads`, {
       body: "Make a note: Screenshots go in assets/screens.",
     });

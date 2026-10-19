@@ -55,6 +55,8 @@ export * from "./invariant";
 // Adding a machine: the join routes' shapes and the install script's step
 // prefix, which `cawco binary-install agent` prints and the hub reads back off SSH output.
 export * from "./join";
+// A project's memory as its Memory view reads it: the hub's page, files and notes.
+export * from "./memory-view";
 // Moving a project to a machine without a checkout of it: the hub-owned job,
 // its estimate and request, and the hub ↔ machine controls that run its steps.
 export * from "./move";
@@ -1642,6 +1644,7 @@ export type FramePayload =
   | import("./frames").TasksChangedFrame
   | import("./frames").DecisionsChangedFrame
   | import("./frames").BlocksChangedFrame
+  | import("./frames").MemoryChangedFrame
   | import("./starters").StartersChangedFrame
   | import("./frames").ProjectsChangedFrame
   /** Hub-originated: the hub restarts for an update now, and is back within a deadline. */

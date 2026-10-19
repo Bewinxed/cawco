@@ -1,0 +1,2884 @@
+{
+  "page": {
+    "now": 1792411200000,
+    "jev": true,
+    "thresholds": {
+      "archiveDays": 90,
+      "budgetChars": 24000,
+      "fileChars": 8000,
+      "reshapeAbove": 25
+    },
+    "curator": {
+      "routineId": "r-curator",
+      "enabled": true,
+      "cron": "0 6 * * *",
+      "timeZone": "UTC",
+      "nextSlot": 1792476000000,
+      "last": {
+        "state": "ended",
+        "outcome": "delivered",
+        "reason": null,
+        "startedAt": 1792396800000,
+        "endedAt": 1792397040000,
+        "href": "/session/i-curator-run"
+      }
+    },
+    "inbox": [
+      {
+        "id": "n-20261019-100000-a1b2c3",
+        "text": "The hub's preview ports are picked outside the kernel's ephemeral range, so a preview never fails to bind after a restart.",
+        "author": "Fix the iOS crash loop",
+        "at": 1792404000000,
+        "since": null,
+        "proposal": null,
+        "sort": null
+      },
+      {
+        "id": "n-20261019-090000-b2c3d4",
+        "text": "Maestro runs need a Mac workspace with the simulator booted before the flow starts.",
+        "author": "Build Mobbin search",
+        "at": 1792400400000,
+        "since": null,
+        "proposal": null,
+        "sort": null
+      },
+      {
+        "id": "n-20261019-070000-c3d4e5",
+        "text": "Jev off: the curator sorts every note on its run, so a note waits for the next one.",
+        "author": "Orchestrate cockpit",
+        "at": 1792393200000,
+        "since": null,
+        "proposal": null,
+        "sort": null
+      }
+    ],
+    "files": [
+      {
+        "path": "knowledge/deploy.md",
+        "name": "deploy",
+        "description": "Deploy: how the hub and its previews go out.",
+        "prose": false,
+        "current": 4,
+        "formerly": 1,
+        "conflicts": 1,
+        "unreadable": 1,
+        "marks": [
+          "current",
+          "current",
+          "current",
+          "current",
+          "unreadable",
+          "conflict",
+          "conflict",
+          "formerly"
+        ],
+        "chars": 1234,
+        "changedAt": 1792238400000,
+        "uses14": [0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 2, 3],
+        "usedAt": 1792407600000,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/apple.md",
+        "name": "apple",
+        "description": "Apple: building and running the iOS app.",
+        "prose": false,
+        "current": 2,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 1,
+        "marks": ["current", "current", "unreadable"],
+        "chars": 324,
+        "changedAt": 1791201600000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/boundary.md",
+        "name": "boundary",
+        "description": "Boundary: what a workspace's commands can reach.",
+        "prose": false,
+        "current": 3,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current", "current", "current"],
+        "chars": 431,
+        "changedAt": 1791633600000,
+        "uses14": [0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 2],
+        "usedAt": 1792396800000,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/memory.md",
+        "name": "memory",
+        "description": "Memory: how the project keeps what it learns.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 149,
+        "changedAt": 1792324800000,
+        "uses14": [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1],
+        "usedAt": 1792393200000,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/auth.md",
+        "name": "auth",
+        "description": "Auth: what the project keeps about auth.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 161,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/billing.md",
+        "name": "billing",
+        "description": "Billing: what the project keeps about billing.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 173,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/cache.md",
+        "name": "cache",
+        "description": "Cache: what the project keeps about cache.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 165,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/caw.md",
+        "name": "caw",
+        "description": "Caw: the project's lead.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 141,
+        "changedAt": 1788782400000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/cli.md",
+        "name": "cli",
+        "description": "Cli: what the project keeps about cli.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 157,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/config.md",
+        "name": "config",
+        "description": "Config: what the project keeps about config.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 169,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/dashboard.md",
+        "name": "dashboard",
+        "description": "Dashboard: what the project keeps about dashboard.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 181,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/db.md",
+        "name": "db",
+        "description": "Db: what the project keeps about db.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 153,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/dns.md",
+        "name": "dns",
+        "description": "Dns: what the project keeps about dns.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 157,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/docs.md",
+        "name": "docs",
+        "description": "Docs: what the project keeps about docs.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 161,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/email.md",
+        "name": "email",
+        "description": "Email: what the project keeps about email.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 165,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/fonts.md",
+        "name": "fonts",
+        "description": "Fonts: what the project keeps about fonts.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 165,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/forge.md",
+        "name": "forge",
+        "description": "Forge: what the project keeps about forge.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 165,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/git.md",
+        "name": "git",
+        "description": "Git: what the project keeps about git.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 157,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/hooks.md",
+        "name": "hooks",
+        "description": "Hooks: what the project keeps about hooks.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 165,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/i18n.md",
+        "name": "i18n",
+        "description": "I18n: what the project keeps about i18n.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 161,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/ios.md",
+        "name": "ios",
+        "description": "iOS: the app's own rules.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 126,
+        "changedAt": 1788782400000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/jev.md",
+        "name": "jev",
+        "description": "Jev: what the project keeps about jev.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 157,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/logs.md",
+        "name": "logs",
+        "description": "Logs: what the project keeps about logs.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 161,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/mcp.md",
+        "name": "mcp",
+        "description": "Mcp: what the project keeps about mcp.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 157,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/mdns.md",
+        "name": "mdns",
+        "description": "Mdns: what the project keeps about mdns.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 161,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/pairing.md",
+        "name": "pairing",
+        "description": "Pairing: what the project keeps about pairing.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 173,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/push.md",
+        "name": "push",
+        "description": "Push: what the project keeps about push.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 161,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/relay.md",
+        "name": "relay",
+        "description": "Relay: what the project keeps about relay.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 165,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/routines.md",
+        "name": "routines",
+        "description": "Routines: what runs on its own.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 159,
+        "changedAt": 1790596800000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/search.md",
+        "name": "search",
+        "description": "Search: what the project keeps about search.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 169,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/skills.md",
+        "name": "skills",
+        "description": "Skills: what the project keeps about skills.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 169,
+        "changedAt": 1788264000000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      }
+    ],
+    "yours": {
+      "count": 5,
+      "changedAt": 1792324800000
+    },
+    "archive": [
+      {
+        "path": "knowledge/archive/deploy.md",
+        "lines": 3
+      }
+    ],
+    "briefs": [
+      {
+        "taskId": "t-41",
+        "title": "Fix the iOS crash loop",
+        "at": 1792407600000,
+        "lines": 1,
+        "chars": 130,
+        "room": 23614,
+        "share": 0.005505208774455831
+      },
+      {
+        "taskId": "t-38",
+        "title": "Build Mobbin search",
+        "at": 1792396800000,
+        "lines": 4,
+        "chars": 758,
+        "room": 23614,
+        "share": 0.03209960193105785
+      },
+      {
+        "taskId": "t-36",
+        "title": "Orchestrate cockpit",
+        "at": 1792393200000,
+        "lines": 5,
+        "chars": 854,
+        "room": 23614,
+        "share": 0.03616498687219446
+      },
+      {
+        "taskId": "t-30",
+        "title": "Research live browsers",
+        "at": 1792317600000,
+        "lines": 2,
+        "chars": 268,
+        "room": 23614,
+        "share": 0.011349199627339714
+      },
+      {
+        "taskId": "t-33",
+        "title": "Preview tool rework",
+        "at": 1792314000000,
+        "lines": 4,
+        "chars": 724,
+        "room": 23614,
+        "share": 0.03065977809773863
+      },
+      {
+        "taskId": "t-25",
+        "title": "Wire the curator's run",
+        "at": 1792141200000,
+        "lines": 5,
+        "chars": 860,
+        "room": 23614,
+        "share": 0.0364190734310155
+      },
+      {
+        "taskId": "t-26",
+        "title": "Purge a session's notes",
+        "at": 1792054800000,
+        "lines": 3,
+        "chars": 614,
+        "room": 23614,
+        "share": 0.026001524519352927
+      },
+      {
+        "taskId": "t-27",
+        "title": "Fold deploy",
+        "at": 1791882000000,
+        "lines": 6,
+        "chars": 979,
+        "room": 23614,
+        "share": 0.04145845684763276
+      },
+      {
+        "taskId": "t-28",
+        "title": "Reshape knowledge",
+        "at": 1791795600000,
+        "lines": 3,
+        "chars": 370,
+        "room": 23614,
+        "share": 0.015668671127297366
+      },
+      {
+        "taskId": "t-29",
+        "title": "Archive unused lines",
+        "at": 1791536400000,
+        "lines": 2,
+        "chars": 503,
+        "room": 23614,
+        "share": 0.021300923181163715
+      },
+      {
+        "taskId": "t-30",
+        "title": "Read the memory route",
+        "at": 1791363600000,
+        "lines": 4,
+        "chars": 752,
+        "room": 23614,
+        "share": 0.03184551537223681
+      }
+    ],
+    "proposals": []
+  },
+  "problem": null,
+  "files": {
+    "AGENTS.md": {
+      "kind": "notes",
+      "path": "AGENTS.md",
+      "name": "Your notes",
+      "changedAt": 1792324800000,
+      "notes": [
+        {
+          "text": "Previews bind on the hub's address only, never the machine's tailnet address.",
+          "at": 1792324800000
+        },
+        {
+          "text": "The scratch hub's ports are picked outside the kernel's ephemeral range.",
+          "at": 1792238400000
+        },
+        {
+          "text": "No unit tests; proof is build, lint, type-check and the live check.",
+          "at": 1791028800000
+        },
+        {
+          "text": "Every user-facing string comes from WORDS.md.",
+          "at": 1789905600000
+        },
+        {
+          "text": "Design tokens come from design/tokens/cawco.resolver.json.",
+          "at": 1789214400000
+        }
+      ]
+    },
+    "knowledge/apple.md": {
+      "kind": "facts",
+      "path": "knowledge/apple.md",
+      "name": "apple",
+      "description": "Apple: building and running the iOS app.",
+      "content": "Apple: building and running the iOS app.\n\n- The iOS build runs on the Mac in the fleet (since 2026-09-30, from n-20260930-090000-d0e1f2, used 2026-10-05)\n- Maestro flows need a Mac workspace with the simulator booted (since 2026-09-30, from n-20260930-090000-d0e1f2, used 2026-10-05)\n- the simulator (since 2026-09-30 from)\n",
+      "prose": false,
+      "chars": 324,
+      "changedAt": 1791201600000,
+      "marks": ["current", "current", "unreadable"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [
+        {
+          "line": 5,
+          "text": "- the simulator (since 2026-09-30 from)",
+          "why": "`since` is not a date (YYYY-MM-DD): \"2026-09-30 from\""
+        }
+      ],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The iOS build runs on the Mac in the fleet",
+          "key": "3b24ce9305a7a6de",
+          "since": "2026-09-30",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260930-090000-d0e1f2",
+              "author": "Build the iOS app",
+              "at": 1790758800000,
+              "text": "The iOS build runs on the Mac in the fleet.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        },
+        {
+          "line": 4,
+          "section": "current",
+          "text": "Maestro flows need a Mac workspace with the simulator booted",
+          "key": "44bda307ffee8e5a",
+          "since": "2026-09-30",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260930-090000-d0e1f2",
+              "author": "Build the iOS app",
+              "at": 1790758800000,
+              "text": "The iOS build runs on the Mac in the fleet.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/archive/deploy.md": {
+      "kind": "facts",
+      "path": "knowledge/archive/deploy.md",
+      "name": "deploy",
+      "description": "Archived facts of knowledge/deploy.md: moved out whole, with their dates and sources.",
+      "content": "Archived facts of knowledge/deploy.md: moved out whole, with their dates and sources.\n\n## Archived 2026-10-01: unused for 90 days\n\n- Deploys went out with make deploy (since 2026-05-01, from n-20260901-090000-e1f2a3)\n- The staging database reset every night (since 2026-05-01, from n-20260901-090000-e1f2a3)\n- The changelog lived in CHANGES.md (since 2026-05-01, from n-20260901-090000-e1f2a3)\n",
+      "prose": false,
+      "chars": 394,
+      "changedAt": 1790856000000,
+      "marks": ["current", "current", "current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 5,
+          "section": "current",
+          "text": "Deploys went out with make deploy",
+          "key": "958f3c65fd75e279",
+          "since": "2026-05-01",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        },
+        {
+          "line": 6,
+          "section": "current",
+          "text": "The staging database reset every night",
+          "key": "2deea9734c11cc22",
+          "since": "2026-05-01",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        },
+        {
+          "line": 7,
+          "section": "current",
+          "text": "The changelog lived in CHANGES.md",
+          "key": "59c219545b7242fb",
+          "since": "2026-05-01",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/auth.md": {
+      "kind": "facts",
+      "path": "knowledge/auth.md",
+      "name": "auth",
+      "description": "Auth: what the project keeps about auth.",
+      "content": "Auth: what the project keeps about auth.\n\n- The auth module's settings live in config/auth.ts (since 2026-08-10, from n-20260901-090000-e1f2a3, used 2026-08-10)\n",
+      "prose": false,
+      "chars": 161,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The auth module's settings live in config/auth.ts",
+          "key": "efacb0f51cfa7363",
+          "since": "2026-08-10",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/billing.md": {
+      "kind": "facts",
+      "path": "knowledge/billing.md",
+      "name": "billing",
+      "description": "Billing: what the project keeps about billing.",
+      "content": "Billing: what the project keeps about billing.\n\n- The billing module's settings live in config/billing.ts (since 2026-09-11, from n-20260901-090000-e1f2a3, used 2026-09-11)\n",
+      "prose": false,
+      "chars": 173,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The billing module's settings live in config/billing.ts",
+          "key": "2fe6eb6f11ebd74c",
+          "since": "2026-09-11",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/boundary.md": {
+      "kind": "facts",
+      "path": "knowledge/boundary.md",
+      "name": "boundary",
+      "description": "Boundary: what a workspace's commands can reach.",
+      "content": "Boundary: what a workspace's commands can reach.\n\n- A workspace writes only its own clone, $TMPDIR and the package cache (since 2026-10-09, from n-20261009-090000-c9d0e1, used 2026-10-19)\n- No namespace starts inside a workspace boundary (since 2026-10-09, from n-20261009-090000-c9d0e1, used 2026-10-18)\n- Public hosts are reachable; the owner's machines are not (since 2026-10-09, from n-20261009-090000-c9d0e1, used 2026-10-15)\n",
+      "prose": false,
+      "chars": 431,
+      "changedAt": 1791633600000,
+      "marks": ["current", "current", "current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 2],
+      "usedAt": 1792396800000,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "A workspace writes only its own clone, $TMPDIR and the package cache",
+          "key": "414a88763fef83cb",
+          "since": "2026-10-09",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261009-090000-c9d0e1",
+              "author": "Orchestrate cockpit",
+              "at": 1791536400000,
+              "text": "A workspace writes only its own clone, TMPDIR and the package cache.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792396800000,
+              "taskId": "t-38",
+              "title": "Build Mobbin search"
+            },
+            {
+              "at": 1792393200000,
+              "taskId": "t-36",
+              "title": "Orchestrate cockpit"
+            },
+            {
+              "at": 1792317600000,
+              "taskId": "t-30",
+              "title": "Research live browsers"
+            },
+            {
+              "at": 1792141200000,
+              "taskId": "t-25",
+              "title": "Wire the curator's run"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            },
+            {
+              "at": 1791795600000,
+              "taskId": "t-28",
+              "title": "Reshape knowledge"
+            },
+            {
+              "at": 1791363600000,
+              "taskId": "t-30",
+              "title": "Read the memory route"
+            }
+          ]
+        },
+        {
+          "line": 4,
+          "section": "current",
+          "text": "No namespace starts inside a workspace boundary",
+          "key": "a6300b9ca1755c08",
+          "since": "2026-10-09",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261009-090000-c9d0e1",
+              "author": "Orchestrate cockpit",
+              "at": 1791536400000,
+              "text": "A workspace writes only its own clone, TMPDIR and the package cache.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792396800000,
+              "taskId": "t-38",
+              "title": "Build Mobbin search"
+            },
+            {
+              "at": 1792141200000,
+              "taskId": "t-25",
+              "title": "Wire the curator's run"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            }
+          ]
+        },
+        {
+          "line": 5,
+          "section": "current",
+          "text": "Public hosts are reachable; the owner's machines are not",
+          "key": "e5825361520effe8",
+          "since": "2026-10-09",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261009-090000-c9d0e1",
+              "author": "Orchestrate cockpit",
+              "at": 1791536400000,
+              "text": "A workspace writes only its own clone, TMPDIR and the package cache.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/cache.md": {
+      "kind": "facts",
+      "path": "knowledge/cache.md",
+      "name": "cache",
+      "description": "Cache: what the project keeps about cache.",
+      "content": "Cache: what the project keeps about cache.\n\n- The cache module's settings live in config/cache.ts (since 2026-08-12, from n-20260901-090000-e1f2a3, used 2026-08-12)\n",
+      "prose": false,
+      "chars": 165,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The cache module's settings live in config/cache.ts",
+          "key": "a1de53269d51a5e9",
+          "since": "2026-08-12",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/caw.md": {
+      "kind": "facts",
+      "path": "knowledge/caw.md",
+      "name": "caw",
+      "description": "Caw: the project's lead.",
+      "content": "Caw: the project's lead.\n\n- Caw's thread is where a project's work starts (since 2026-09-05, from n-20260901-090000-e1f2a3, used 2026-09-05)\n",
+      "prose": false,
+      "chars": 141,
+      "changedAt": 1788782400000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "Caw's thread is where a project's work starts",
+          "key": "1839e7e2a8dd56d3",
+          "since": "2026-09-05",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/cli.md": {
+      "kind": "facts",
+      "path": "knowledge/cli.md",
+      "name": "cli",
+      "description": "Cli: what the project keeps about cli.",
+      "content": "Cli: what the project keeps about cli.\n\n- The cli module's settings live in config/cli.ts (since 2026-09-13, from n-20260901-090000-e1f2a3, used 2026-09-13)\n",
+      "prose": false,
+      "chars": 157,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The cli module's settings live in config/cli.ts",
+          "key": "3f80366c02b85bba",
+          "since": "2026-09-13",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/config.md": {
+      "kind": "facts",
+      "path": "knowledge/config.md",
+      "name": "config",
+      "description": "Config: what the project keeps about config.",
+      "content": "Config: what the project keeps about config.\n\n- The config module's settings live in config/config.ts (since 2026-08-14, from n-20260901-090000-e1f2a3, used 2026-08-14)\n",
+      "prose": false,
+      "chars": 169,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The config module's settings live in config/config.ts",
+          "key": "78891904789c1d48",
+          "since": "2026-08-14",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/dashboard.md": {
+      "kind": "facts",
+      "path": "knowledge/dashboard.md",
+      "name": "dashboard",
+      "description": "Dashboard: what the project keeps about dashboard.",
+      "content": "Dashboard: what the project keeps about dashboard.\n\n- The dashboard module's settings live in config/dashboard.ts (since 2026-09-15, from n-20260901-090000-e1f2a3, used 2026-09-15)\n",
+      "prose": false,
+      "chars": 181,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The dashboard module's settings live in config/dashboard.ts",
+          "key": "528c0f6f1f6bef2a",
+          "since": "2026-09-15",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/db.md": {
+      "kind": "facts",
+      "path": "knowledge/db.md",
+      "name": "db",
+      "description": "Db: what the project keeps about db.",
+      "content": "Db: what the project keeps about db.\n\n- The db module's settings live in config/db.ts (since 2026-08-16, from n-20260901-090000-e1f2a3, used 2026-08-16)\n",
+      "prose": false,
+      "chars": 153,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The db module's settings live in config/db.ts",
+          "key": "3c2a70d3117bb1c4",
+          "since": "2026-08-16",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/deploy.md": {
+      "kind": "facts",
+      "path": "knowledge/deploy.md",
+      "name": "deploy",
+      "description": "Deploy: how the hub and its previews go out.",
+      "content": "Deploy: how the hub and its previews go out.\n\n- Preview ports are picked outside the kernel's ephemeral range (ruling 2026-10-19)\n  Why: a bind refused for its address said so\n- A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone (since 2026-10-17, from n-20261017-100000-a7b8c9 n-20261017-110000-b8c9d0, used 2026-10-19)\n- The scratch hub listens on 127.0.0.1 only (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-18)\n- Releases are cut from main every Tuesday (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-16)\n- the hub (since, from)\n\n## Conflict\n\n- Previews bind on the hub's address only (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-13)\n- Previews bind on the machine's tailnet address (since 2026-10-11, from n-20261011-090000-e5f6a7 n-20261017-090000-f6a7b8, used 2026-10-16)\n\n## Formerly\n\n- The scratch hub's ports came from the ephemeral range (since 2026-10-02, until 2026-10-19, from n-20261003-090000-d4e5f6, replaced by n-20261019-100000-a1b2c3)\n",
+      "prose": false,
+      "chars": 1234,
+      "changedAt": 1792238400000,
+      "marks": [
+        "current",
+        "current",
+        "current",
+        "current",
+        "unreadable",
+        "conflict",
+        "conflict",
+        "formerly"
+      ],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 2, 3],
+      "usedAt": 1792407600000,
+      "proposals": [],
+      "unreadable": [
+        {
+          "line": 8,
+          "text": "- the hub (since, from)",
+          "why": "`since` is not a date (YYYY-MM-DD): \"\""
+        }
+      ],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "Preview ports are picked outside the kernel's ephemeral range",
+          "key": "3af68ed6bcf3917d",
+          "since": "2026-10-19",
+          "until": null,
+          "ruling": "2026-10-19",
+          "why": "a bind refused for its address said so",
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [],
+          "uses": [
+            {
+              "at": 1792407600000,
+              "taskId": "t-41",
+              "title": "Fix the iOS crash loop"
+            },
+            {
+              "at": 1792396800000,
+              "taskId": "t-38",
+              "title": "Build Mobbin search"
+            },
+            {
+              "at": 1792393200000,
+              "taskId": "t-36",
+              "title": "Orchestrate cockpit"
+            },
+            {
+              "at": 1792317600000,
+              "taskId": "t-30",
+              "title": "Research live browsers"
+            },
+            {
+              "at": 1792314000000,
+              "taskId": "t-33",
+              "title": "Preview tool rework"
+            },
+            {
+              "at": 1792141200000,
+              "taskId": "t-25",
+              "title": "Wire the curator's run"
+            },
+            {
+              "at": 1792054800000,
+              "taskId": "t-26",
+              "title": "Purge a session's notes"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            },
+            {
+              "at": 1791795600000,
+              "taskId": "t-28",
+              "title": "Reshape knowledge"
+            },
+            {
+              "at": 1791536400000,
+              "taskId": "t-29",
+              "title": "Archive unused lines"
+            },
+            {
+              "at": 1791363600000,
+              "taskId": "t-30",
+              "title": "Read the memory route"
+            }
+          ]
+        },
+        {
+          "line": 5,
+          "section": "current",
+          "text": "A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone",
+          "key": "503742499b43d7db",
+          "since": "2026-10-17",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261017-100000-a7b8c9",
+              "author": "Fix the iOS crash loop",
+              "at": 1792231200000,
+              "text": "A start republishes the runtime files whose bytes changed.",
+              "where": "archive"
+            },
+            {
+              "id": "n-20261017-110000-b8c9d0",
+              "author": "Ship the hub",
+              "at": 1792234800000,
+              "text": "Runtime files are republished on start when they changed.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792396800000,
+              "taskId": "t-38",
+              "title": "Build Mobbin search"
+            },
+            {
+              "at": 1792393200000,
+              "taskId": "t-36",
+              "title": "Orchestrate cockpit"
+            },
+            {
+              "at": 1792314000000,
+              "taskId": "t-33",
+              "title": "Preview tool rework"
+            },
+            {
+              "at": 1792141200000,
+              "taskId": "t-25",
+              "title": "Wire the curator's run"
+            },
+            {
+              "at": 1792054800000,
+              "taskId": "t-26",
+              "title": "Purge a session's notes"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            },
+            {
+              "at": 1791536400000,
+              "taskId": "t-29",
+              "title": "Archive unused lines"
+            },
+            {
+              "at": 1791363600000,
+              "taskId": "t-30",
+              "title": "Read the memory route"
+            }
+          ]
+        },
+        {
+          "line": 6,
+          "section": "current",
+          "text": "The scratch hub listens on 127.0.0.1 only",
+          "key": "9d6c995313d0da8a",
+          "since": "2026-10-03",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261003-090000-d4e5f6",
+              "author": "Ship the hub",
+              "at": 1791018000000,
+              "text": "The scratch hub listens on 127.0.0.1 only.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792393200000,
+              "taskId": "t-36",
+              "title": "Orchestrate cockpit"
+            },
+            {
+              "at": 1792314000000,
+              "taskId": "t-33",
+              "title": "Preview tool rework"
+            },
+            {
+              "at": 1792054800000,
+              "taskId": "t-26",
+              "title": "Purge a session's notes"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            },
+            {
+              "at": 1791363600000,
+              "taskId": "t-30",
+              "title": "Read the memory route"
+            }
+          ]
+        },
+        {
+          "line": 7,
+          "section": "current",
+          "text": "Releases are cut from main every Tuesday",
+          "key": "5162ef9a553d6cae",
+          "since": "2026-10-03",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261003-090000-d4e5f6",
+              "author": "Ship the hub",
+              "at": 1791018000000,
+              "text": "The scratch hub listens on 127.0.0.1 only.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792314000000,
+              "taskId": "t-33",
+              "title": "Preview tool rework"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            }
+          ]
+        },
+        {
+          "line": 12,
+          "section": "conflict",
+          "text": "Previews bind on the hub's address only",
+          "key": "ec8d50eb17669e87",
+          "since": "2026-10-03",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": 1,
+          "from": [
+            {
+              "id": "n-20261003-090000-d4e5f6",
+              "author": "Ship the hub",
+              "at": 1791018000000,
+              "text": "The scratch hub listens on 127.0.0.1 only.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        },
+        {
+          "line": 13,
+          "section": "conflict",
+          "text": "Previews bind on the machine's tailnet address",
+          "key": "20911092d15e5788",
+          "since": "2026-10-11",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": 1,
+          "from": [
+            {
+              "id": "n-20261011-090000-e5f6a7",
+              "author": "Preview tool rework",
+              "at": 1791709200000,
+              "text": "Previews bind on the machine's tailnet address.",
+              "where": "archive"
+            },
+            {
+              "id": "n-20261017-090000-f6a7b8",
+              "author": "Research live browsers",
+              "at": 1792227600000,
+              "text": "Previews bind on the tailnet address the machine reports.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        },
+        {
+          "line": 17,
+          "section": "formerly",
+          "text": "The scratch hub's ports came from the ephemeral range",
+          "key": "7d9174bbbb1b47ee",
+          "since": "2026-10-02",
+          "until": "2026-10-19",
+          "ruling": null,
+          "why": null,
+          "replacedBy": "n-20261019-100000-a1b2c3",
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261003-090000-d4e5f6",
+              "author": "Ship the hub",
+              "at": 1791018000000,
+              "text": "The scratch hub listens on 127.0.0.1 only.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/dns.md": {
+      "kind": "facts",
+      "path": "knowledge/dns.md",
+      "name": "dns",
+      "description": "Dns: what the project keeps about dns.",
+      "content": "Dns: what the project keeps about dns.\n\n- The dns module's settings live in config/dns.ts (since 2026-09-17, from n-20260901-090000-e1f2a3, used 2026-09-17)\n",
+      "prose": false,
+      "chars": 157,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The dns module's settings live in config/dns.ts",
+          "key": "8d6fe17b0838306f",
+          "since": "2026-09-17",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/docs.md": {
+      "kind": "facts",
+      "path": "knowledge/docs.md",
+      "name": "docs",
+      "description": "Docs: what the project keeps about docs.",
+      "content": "Docs: what the project keeps about docs.\n\n- The docs module's settings live in config/docs.ts (since 2026-08-18, from n-20260901-090000-e1f2a3, used 2026-08-18)\n",
+      "prose": false,
+      "chars": 161,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The docs module's settings live in config/docs.ts",
+          "key": "fd6be9532366f6d7",
+          "since": "2026-08-18",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/email.md": {
+      "kind": "facts",
+      "path": "knowledge/email.md",
+      "name": "email",
+      "description": "Email: what the project keeps about email.",
+      "content": "Email: what the project keeps about email.\n\n- The email module's settings live in config/email.ts (since 2026-09-10, from n-20260901-090000-e1f2a3, used 2026-09-10)\n",
+      "prose": false,
+      "chars": 165,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The email module's settings live in config/email.ts",
+          "key": "e6d126f01cc2aa2f",
+          "since": "2026-09-10",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/fonts.md": {
+      "kind": "facts",
+      "path": "knowledge/fonts.md",
+      "name": "fonts",
+      "description": "Fonts: what the project keeps about fonts.",
+      "content": "Fonts: what the project keeps about fonts.\n\n- The fonts module's settings live in config/fonts.ts (since 2026-09-12, from n-20260901-090000-e1f2a3, used 2026-09-12)\n",
+      "prose": false,
+      "chars": 165,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The fonts module's settings live in config/fonts.ts",
+          "key": "a4d56596f798caf5",
+          "since": "2026-09-12",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/forge.md": {
+      "kind": "facts",
+      "path": "knowledge/forge.md",
+      "name": "forge",
+      "description": "Forge: what the project keeps about forge.",
+      "content": "Forge: what the project keeps about forge.\n\n- The forge module's settings live in config/forge.ts (since 2026-08-11, from n-20260901-090000-e1f2a3, used 2026-08-11)\n",
+      "prose": false,
+      "chars": 165,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The forge module's settings live in config/forge.ts",
+          "key": "f18ae31bae0997d8",
+          "since": "2026-08-11",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/git.md": {
+      "kind": "facts",
+      "path": "knowledge/git.md",
+      "name": "git",
+      "description": "Git: what the project keeps about git.",
+      "content": "Git: what the project keeps about git.\n\n- The git module's settings live in config/git.ts (since 2026-08-13, from n-20260901-090000-e1f2a3, used 2026-08-13)\n",
+      "prose": false,
+      "chars": 157,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The git module's settings live in config/git.ts",
+          "key": "e664b6a8f050388f",
+          "since": "2026-08-13",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/hooks.md": {
+      "kind": "facts",
+      "path": "knowledge/hooks.md",
+      "name": "hooks",
+      "description": "Hooks: what the project keeps about hooks.",
+      "content": "Hooks: what the project keeps about hooks.\n\n- The hooks module's settings live in config/hooks.ts (since 2026-09-14, from n-20260901-090000-e1f2a3, used 2026-09-14)\n",
+      "prose": false,
+      "chars": 165,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The hooks module's settings live in config/hooks.ts",
+          "key": "a04cdce9efe3859e",
+          "since": "2026-09-14",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/i18n.md": {
+      "kind": "facts",
+      "path": "knowledge/i18n.md",
+      "name": "i18n",
+      "description": "I18n: what the project keeps about i18n.",
+      "content": "I18n: what the project keeps about i18n.\n\n- The i18n module's settings live in config/i18n.ts (since 2026-08-15, from n-20260901-090000-e1f2a3, used 2026-08-15)\n",
+      "prose": false,
+      "chars": 161,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The i18n module's settings live in config/i18n.ts",
+          "key": "6f3c23acaa1c53f5",
+          "since": "2026-08-15",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/ios.md": {
+      "kind": "facts",
+      "path": "knowledge/ios.md",
+      "name": "ios",
+      "description": "iOS: the app's own rules.",
+      "content": "iOS: the app's own rules.\n\n- Push answers carry no content (since 2026-09-05, from n-20260901-090000-e1f2a3, used 2026-09-05)\n",
+      "prose": false,
+      "chars": 126,
+      "changedAt": 1788782400000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "Push answers carry no content",
+          "key": "c284e6c945d397c3",
+          "since": "2026-09-05",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/jev.md": {
+      "kind": "facts",
+      "path": "knowledge/jev.md",
+      "name": "jev",
+      "description": "Jev: what the project keeps about jev.",
+      "content": "Jev: what the project keeps about jev.\n\n- The jev module's settings live in config/jev.ts (since 2026-09-16, from n-20260901-090000-e1f2a3, used 2026-09-16)\n",
+      "prose": false,
+      "chars": 157,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The jev module's settings live in config/jev.ts",
+          "key": "f77dc25d46dbd38f",
+          "since": "2026-09-16",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/logs.md": {
+      "kind": "facts",
+      "path": "knowledge/logs.md",
+      "name": "logs",
+      "description": "Logs: what the project keeps about logs.",
+      "content": "Logs: what the project keeps about logs.\n\n- The logs module's settings live in config/logs.ts (since 2026-08-17, from n-20260901-090000-e1f2a3, used 2026-08-17)\n",
+      "prose": false,
+      "chars": 161,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The logs module's settings live in config/logs.ts",
+          "key": "f7aa65da51099bc6",
+          "since": "2026-08-17",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/mcp.md": {
+      "kind": "facts",
+      "path": "knowledge/mcp.md",
+      "name": "mcp",
+      "description": "Mcp: what the project keeps about mcp.",
+      "content": "Mcp: what the project keeps about mcp.\n\n- The mcp module's settings live in config/mcp.ts (since 2026-08-10, from n-20260901-090000-e1f2a3, used 2026-08-10)\n",
+      "prose": false,
+      "chars": 157,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The mcp module's settings live in config/mcp.ts",
+          "key": "49c428db7de85131",
+          "since": "2026-08-10",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/mdns.md": {
+      "kind": "facts",
+      "path": "knowledge/mdns.md",
+      "name": "mdns",
+      "description": "Mdns: what the project keeps about mdns.",
+      "content": "Mdns: what the project keeps about mdns.\n\n- The mdns module's settings live in config/mdns.ts (since 2026-09-18, from n-20260901-090000-e1f2a3, used 2026-09-18)\n",
+      "prose": false,
+      "chars": 161,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The mdns module's settings live in config/mdns.ts",
+          "key": "36002e805d072b54",
+          "since": "2026-09-18",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/memory.md": {
+      "kind": "facts",
+      "path": "knowledge/memory.md",
+      "name": "memory",
+      "description": "Memory: how the project keeps what it learns.",
+      "content": "Memory: how the project keeps what it learns.\n\n- A fold never rewords a fact line (since 2026-10-18, from n-20260901-090000-e1f2a3, used 2026-10-18)\n",
+      "prose": false,
+      "chars": 149,
+      "changedAt": 1792324800000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1],
+      "usedAt": 1792393200000,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "A fold never rewords a fact line",
+          "key": "d87817cd13372a1c",
+          "since": "2026-10-18",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792393200000,
+              "taskId": "t-36",
+              "title": "Orchestrate cockpit"
+            },
+            {
+              "at": 1792141200000,
+              "taskId": "t-25",
+              "title": "Wire the curator's run"
+            },
+            {
+              "at": 1791795600000,
+              "taskId": "t-28",
+              "title": "Reshape knowledge"
+            }
+          ]
+        }
+      ]
+    },
+    "knowledge/pairing.md": {
+      "kind": "facts",
+      "path": "knowledge/pairing.md",
+      "name": "pairing",
+      "description": "Pairing: what the project keeps about pairing.",
+      "content": "Pairing: what the project keeps about pairing.\n\n- The pairing module's settings live in config/pairing.ts (since 2026-09-11, from n-20260901-090000-e1f2a3, used 2026-09-11)\n",
+      "prose": false,
+      "chars": 173,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The pairing module's settings live in config/pairing.ts",
+          "key": "5408dccc02f22466",
+          "since": "2026-09-11",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/push.md": {
+      "kind": "facts",
+      "path": "knowledge/push.md",
+      "name": "push",
+      "description": "Push: what the project keeps about push.",
+      "content": "Push: what the project keeps about push.\n\n- The push module's settings live in config/push.ts (since 2026-08-12, from n-20260901-090000-e1f2a3, used 2026-08-12)\n",
+      "prose": false,
+      "chars": 161,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The push module's settings live in config/push.ts",
+          "key": "1b865dea7d85b899",
+          "since": "2026-08-12",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/relay.md": {
+      "kind": "facts",
+      "path": "knowledge/relay.md",
+      "name": "relay",
+      "description": "Relay: what the project keeps about relay.",
+      "content": "Relay: what the project keeps about relay.\n\n- The relay module's settings live in config/relay.ts (since 2026-09-13, from n-20260901-090000-e1f2a3, used 2026-09-13)\n",
+      "prose": false,
+      "chars": 165,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The relay module's settings live in config/relay.ts",
+          "key": "ab1625ab998d4105",
+          "since": "2026-09-13",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/routines.md": {
+      "kind": "facts",
+      "path": "knowledge/routines.md",
+      "name": "routines",
+      "description": "Routines: what runs on its own.",
+      "content": "Routines: what runs on its own.\n\n- The memory curator runs daily at 06:00 in the hub's zone (since 2026-08-01, from n-20260901-090000-e1f2a3, used 2026-08-01)\n",
+      "prose": false,
+      "chars": 159,
+      "changedAt": 1790596800000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The memory curator runs daily at 06:00 in the hub's zone",
+          "key": "ffc142401bd87680",
+          "since": "2026-08-01",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/search.md": {
+      "kind": "facts",
+      "path": "knowledge/search.md",
+      "name": "search",
+      "description": "Search: what the project keeps about search.",
+      "content": "Search: what the project keeps about search.\n\n- The search module's settings live in config/search.ts (since 2026-08-14, from n-20260901-090000-e1f2a3, used 2026-08-14)\n",
+      "prose": false,
+      "chars": 169,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The search module's settings live in config/search.ts",
+          "key": "b9c98ac34de57658",
+          "since": "2026-08-14",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/skills.md": {
+      "kind": "facts",
+      "path": "knowledge/skills.md",
+      "name": "skills",
+      "description": "Skills: what the project keeps about skills.",
+      "content": "Skills: what the project keeps about skills.\n\n- The skills module's settings live in config/skills.ts (since 2026-09-15, from n-20260901-090000-e1f2a3, used 2026-09-15)\n",
+      "prose": false,
+      "chars": 169,
+      "changedAt": 1788264000000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The skills module's settings live in config/skills.ts",
+          "key": "1f8701c840816778",
+          "since": "2026-09-15",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    }
+  },
+  "histories": {
+    "AGENTS.md": [
+      {
+        "sha": "34c2f7b59f84f684000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-18T12:00:00.000Z",
+        "message": "AGENTS.md: changed"
+      }
+    ],
+    "knowledge/apple.md": [
+      {
+        "sha": "7bd5f5ea76d9881c000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-05T12:00:00.000Z",
+        "message": "knowledge/apple.md: changed"
+      }
+    ],
+    "knowledge/archive/deploy.md": [
+      {
+        "sha": "ac2a5114f4c9bc74000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-01T12:00:00.000Z",
+        "message": "knowledge/archive/deploy.md: changed"
+      }
+    ],
+    "knowledge/auth.md": [
+      {
+        "sha": "dc35f421ea1211cb000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/auth.md: changed"
+      }
+    ],
+    "knowledge/billing.md": [
+      {
+        "sha": "d3a0a0d65069efb9000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/billing.md: changed"
+      }
+    ],
+    "knowledge/boundary.md": [
+      {
+        "sha": "a2a8b0a4d25efb91000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-10T12:00:00.000Z",
+        "message": "knowledge/boundary.md: changed"
+      }
+    ],
+    "knowledge/cache.md": [
+      {
+        "sha": "fbc1c390cc426ec4000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/cache.md: changed"
+      }
+    ],
+    "knowledge/caw.md": [
+      {
+        "sha": "6b939d47eb172c74000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-07T12:00:00.000Z",
+        "message": "knowledge/caw.md: changed"
+      }
+    ],
+    "knowledge/cli.md": [
+      {
+        "sha": "4040cc39281de3b3000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/cli.md: changed"
+      }
+    ],
+    "knowledge/config.md": [
+      {
+        "sha": "3edfeb96e893849d000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/config.md: changed"
+      }
+    ],
+    "knowledge/dashboard.md": [
+      {
+        "sha": "647c470efb55b713000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/dashboard.md: changed"
+      }
+    ],
+    "knowledge/db.md": [
+      {
+        "sha": "d63c18d292749f62000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/db.md: changed"
+      }
+    ],
+    "knowledge/deploy.md": [
+      {
+        "sha": "563a9b00cd4d8c6a000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-17T12:00:00.000Z",
+        "message": "knowledge/deploy.md: changed"
+      }
+    ],
+    "knowledge/dns.md": [
+      {
+        "sha": "bd72c317add469f1000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/dns.md: changed"
+      }
+    ],
+    "knowledge/docs.md": [
+      {
+        "sha": "810ca73665744003000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/docs.md: changed"
+      }
+    ],
+    "knowledge/email.md": [
+      {
+        "sha": "64ffe058ed2480a8000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/email.md: changed"
+      }
+    ],
+    "knowledge/fonts.md": [
+      {
+        "sha": "e41871f53e537cde000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/fonts.md: changed"
+      }
+    ],
+    "knowledge/forge.md": [
+      {
+        "sha": "4112e5887d8e1dae000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/forge.md: changed"
+      }
+    ],
+    "knowledge/git.md": [
+      {
+        "sha": "9b832dc19280a4e9000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/git.md: changed"
+      }
+    ],
+    "knowledge/hooks.md": [
+      {
+        "sha": "fed87799184fb405000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/hooks.md: changed"
+      }
+    ],
+    "knowledge/i18n.md": [
+      {
+        "sha": "3ef5aca3b2b707bb000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/i18n.md: changed"
+      }
+    ],
+    "knowledge/ios.md": [
+      {
+        "sha": "44910238737f6a47000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-07T12:00:00.000Z",
+        "message": "knowledge/ios.md: changed"
+      }
+    ],
+    "knowledge/jev.md": [
+      {
+        "sha": "90b311a0b53bd11b000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/jev.md: changed"
+      }
+    ],
+    "knowledge/logs.md": [
+      {
+        "sha": "5ddc12977388b225000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/logs.md: changed"
+      }
+    ],
+    "knowledge/mcp.md": [
+      {
+        "sha": "3198f043376c0c86000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/mcp.md: changed"
+      }
+    ],
+    "knowledge/mdns.md": [
+      {
+        "sha": "d6e8971f3094fe3c000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/mdns.md: changed"
+      }
+    ],
+    "knowledge/memory.md": [
+      {
+        "sha": "9636965def6f0f07000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-18T12:00:00.000Z",
+        "message": "knowledge/memory.md: changed"
+      }
+    ],
+    "knowledge/pairing.md": [
+      {
+        "sha": "843e94f4e19ba37c000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/pairing.md: changed"
+      }
+    ],
+    "knowledge/push.md": [
+      {
+        "sha": "f9af4a771a366b1f000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/push.md: changed"
+      }
+    ],
+    "knowledge/relay.md": [
+      {
+        "sha": "a9f2dc68111af4e0000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/relay.md: changed"
+      }
+    ],
+    "knowledge/routines.md": [
+      {
+        "sha": "9c62b4f0d0f4d969000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-28T12:00:00.000Z",
+        "message": "knowledge/routines.md: changed"
+      }
+    ],
+    "knowledge/search.md": [
+      {
+        "sha": "9e045e7fb7a8b7e5000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/search.md: changed"
+      }
+    ],
+    "knowledge/skills.md": [
+      {
+        "sha": "0ff450b9ecf64933000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-01T12:00:00.000Z",
+        "message": "knowledge/skills.md: changed"
+      }
+    ]
+  },
+  "asks": {}
+}

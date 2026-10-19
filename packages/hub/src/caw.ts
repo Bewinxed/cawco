@@ -72,6 +72,7 @@ import {
   handoffMarker,
   type InstanceRow,
   type ItemEnd,
+  MAKE_A_NOTE,
   type NeutralOrigin,
   type PermissionMode,
   type PermissionRequestFrame,
@@ -117,7 +118,7 @@ import type {
 import type { Origin, WorkOrigin } from "./db/schema";
 import { inboxText } from "./ingress";
 import { mediaBase64, storeImage } from "./media";
-import { MAKE_A_NOTE, personsTier, ROUTINE_ORIGIN } from "./memory";
+import { personsTier, ROUTINE_ORIGIN } from "./memory";
 import { VIEW_PROMPT } from "./openui";
 import type { Caps } from "./project-caps";
 import {

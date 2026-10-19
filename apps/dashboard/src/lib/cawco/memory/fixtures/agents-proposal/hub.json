@@ -1,0 +1,8 @@
+{
+  "now": "2026-10-19T12:00:00.000Z",
+  "project": "cockpit",
+  "projectId": "fixture-cockpit",
+  "jev": true,
+  "curator": null,
+  "changed": { "AGENTS.md": "2026-10-18T09:00:00.000Z" }
+}

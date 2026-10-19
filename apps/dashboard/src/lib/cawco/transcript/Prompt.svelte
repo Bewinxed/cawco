@@ -16,7 +16,7 @@
     UserAnswers,
     UserQuestion,
   } from "@cawco/core";
-  import { askerLine, questionsOf } from "@cawco/core";
+  import { askerLine, memoryViewWords, questionsOf } from "@cawco/core";
   /**
    * The one human-in-the-loop surface, held in the composer's grown shape
    * (Composer, grown.ts): a permission gate (a measurably-symmetric Approve /
@@ -1073,6 +1073,14 @@
          iOS; secrets in the fields are already hidden. -->
     <div data-slot="body" class="body part" style:--part="1">
       <p data-slot="lede" class="lede summary">{presentation.summary}</p>
+      {#if presentation.open}
+        <!-- A memory proposal: its file on the project's Memory view, read before answering. -->
+        <a
+          data-slot="open-in"
+          class="open-in touch-hit pointer-hit"
+          href={presentation.open}>{memoryViewWords.openInMemory}</a
+        >
+      {/if}
       {#if presentation.detail}
         <p data-slot="detail" class="detail">{presentation.detail}</p>
       {/if}
@@ -1179,6 +1187,11 @@
 </section>
 
 <style>
+  /* A memory proposal's way to its file, under the summary. */
+  .open-in {
+    font: var(--type-meta);
+    color: var(--link-ink);
+  }
   /* The grown shape is the surface (Composer draws it): the card is what
      stands in it, its title on top, its foot on the pill's top edge, and a
      long ask scrolls between the two. As tall as the room over the pill

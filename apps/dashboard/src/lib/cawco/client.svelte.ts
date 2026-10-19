@@ -1080,6 +1080,12 @@ const state = $state({
    */
   blocksChanged: {} as Record<string, number>,
   /**
+   * How many times each project's memory has changed since this page
+   * connected (`memory.changed` frames): its Memory view reads it again
+   * when it moves.
+   */
+  memoryChanged: {} as Record<string, number>,
+  /**
    * Each project's starters for each place as the hub last wrote them while
    * this page was connected (`starters.changed` frames), by
    * `<place>:<project id>`: newer than the set its stages read carried.
@@ -3312,6 +3318,12 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "blocks.changed") {
     state.blocksChanged[frame.projectId] =
       (state.blocksChanged[frame.projectId] ?? 0) + 1;
+    return;
+  }
+
+  if (frame.kind === "memory.changed") {
+    state.memoryChanged[frame.projectId] =
+      (state.memoryChanged[frame.projectId] ?? 0) + 1;
     return;
   }
 
@@ -8762,6 +8774,9 @@ export const cawco = {
   /** A count that moves each time the project's arrangement of blocks changes (`blocks.changed`). */
   blocksChangedOf: (projectId: string): number =>
     state.blocksChanged[projectId] ?? 0,
+  /** A count that moves each time the project's memory changes (`memory.changed`). */
+  memoryChangedOf: (projectId: string): number =>
+    state.memoryChanged[projectId] ?? 0,
   /**
    * The project's starters for a place: the set the hub last sent while
    * this page was connected, else `read`, the set its stages read carried.

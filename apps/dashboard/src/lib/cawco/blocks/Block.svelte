@@ -7,7 +7,8 @@
    *   action and its ⋯. The head is the drag handle (block-dnd): a mouse or
    *   pen drags it, a phone lifts it after a held press; it tints on press.
    *   44px tall under a coarse pointer.
-   * - **The ⋯** (the kit menu): Move up, Move down; Narrow or Wide, which on
+   * - **The ⋯** (the kit menu): the page's own acts on the block first
+   *   (`actions`), then Move up, Move down; Narrow or Wide, which on
    *   one column still sets the desk's ("On wider screens"); Hide; and for a
    *   custom view, Show as a tab.
    * - **Body:** the block's content, as its card or bare (a view or a board
@@ -22,6 +23,7 @@
    */
   import { type BlockWidth, blocksWords as words } from "@cawco/core";
   import type { Component, Snippet } from "svelte";
+  import type { RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -48,6 +50,7 @@
     glyph: Glyph,
     meta,
     action,
+    actions = [],
     children,
     width,
     span,
@@ -75,6 +78,8 @@
     meta?: Snippet;
     /** The block's own action, before its ⋯. */
     action?: Snippet;
+    /** The page's acts on the block, first in its ⋯: no second ⋯ in its head. */
+    actions?: RowAction[];
     children: Snippet;
     width: BlockWidth;
     /** The grid's columns it takes. */
@@ -146,6 +151,21 @@
           <IconMore />
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" class="w-auto min-w-48">
+          {#each actions as act (act.label)}
+            <DropdownMenu.Item
+              disabled={act.disabled}
+              onSelect={act.onselect}
+              variant={act.destructive ? "destructive" : "default"}
+            >
+              {#if act.icon}
+                <act.icon data-box />
+              {/if}
+              <span>{act.label}</span>
+            </DropdownMenu.Item>
+          {/each}
+          {#if actions.length > 0}
+            <DropdownMenu.Separator />
+          {/if}
           <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
             <IconArrowUp />
             <span>{words.moveUp}</span>
@@ -206,6 +226,8 @@
 <style>
   .block {
     --block-head-h: var(--c-btn-h-sm);
+    /* Its width is its own: what stands in its head and body answers it, not the window's. */
+    container: block / inline-size;
     position: relative;
     display: flex;
     flex-direction: column;

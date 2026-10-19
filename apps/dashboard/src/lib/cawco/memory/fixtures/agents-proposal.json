@@ -1,0 +1,102 @@
+{
+  "page": {
+    "now": 1792411200000,
+    "jev": true,
+    "thresholds": {
+      "archiveDays": 90,
+      "budgetChars": 24000,
+      "fileChars": 8000,
+      "reshapeAbove": 25
+    },
+    "curator": null,
+    "inbox": [],
+    "files": [],
+    "yours": {
+      "count": 0,
+      "changedAt": 1792314000000
+    },
+    "archive": [],
+    "briefs": [],
+    "proposals": [
+      {
+        "id": "p-20261019-110000-2c3d4e",
+        "kind": "change",
+        "by": "Caw",
+        "why": "Caw asked: the preview rule belongs where every session reads it.",
+        "notes": [],
+        "files": ["AGENTS.md"],
+        "sorts": [],
+        "time": 1792407600000
+      }
+    ]
+  },
+  "problem": null,
+  "files": {
+    "AGENTS.md": {
+      "kind": "notes",
+      "path": "AGENTS.md",
+      "name": "Your notes",
+      "changedAt": 1792314000000,
+      "notes": []
+    }
+  },
+  "histories": {
+    "AGENTS.md": [
+      {
+        "sha": "998d335aaf5a526a000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-18T09:00:00.000Z",
+        "message": "AGENTS.md: changed"
+      }
+    ]
+  },
+  "asks": {
+    "p-20261019-110000-2c3d4e": {
+      "heard": 0,
+      "input": {
+        "files": [
+          {
+            "path": "AGENTS.md",
+            "before": "# cockpit\n\nHow this project is worked on.\n",
+            "content": "# cockpit\n\nHow this project is worked on.\n\nEvery preview binds on the hub's address; the scratch hub never binds a tailnet address.\n"
+          }
+        ],
+        "notes": [],
+        "why": "Caw asked: the preview rule belongs where every session reads it.",
+        "project": "cockpit",
+        "projectId": "fixture-cockpit",
+        "open": "/project/fixture-cockpit?view=memory&file=AGENTS.md&proposal=p-20261019-110000-2c3d4e"
+      },
+      "instanceId": "p-20261019-110000-2c3d4e",
+      "requestId": "p-20261019-110000-2c3d4e",
+      "raisedAt": 1792407600000,
+      "toolName": "mcp__cawco__memory_propose",
+      "presentation": {
+        "asker": "Caw",
+        "project": "cockpit",
+        "summary": "Change AGENTS.md",
+        "detail": "2 lines added",
+        "changes": [
+          {
+            "path": "AGENTS.md",
+            "before": "# cockpit\n\nHow this project is worked on.\n",
+            "after": "# cockpit\n\nHow this project is worked on.\n\nEvery preview binds on the hub's address; the scratch hub never binds a tailnet address.\n",
+            "added": 2,
+            "removed": 0
+          }
+        ],
+        "open": "/project/fixture-cockpit?view=memory&file=AGENTS.md&proposal=p-20261019-110000-2c3d4e",
+        "fields": [
+          {
+            "key": "why",
+            "value": "Caw asked: the preview rule belongs where every session reads it."
+          },
+          {
+            "key": "projectId",
+            "value": "fixture-cockpit"
+          }
+        ]
+      }
+    }
+  }
+}

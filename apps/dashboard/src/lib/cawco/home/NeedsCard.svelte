@@ -43,6 +43,7 @@
    * dashboard to open.
    */
   import {
+    memoryViewWords,
     pairingWords,
     questionsOf,
     type TailnetHttps,
@@ -780,6 +781,18 @@
     {:else}
       <span data-slot="meta" class="meta">{meta}</span>
     {/if}
+    {#if item.kind === "ask" && item.request.presentation.open}
+      <!-- A memory proposal: its file on the project's Memory view, read before answering. -->
+      <a
+        data-slot="open-in"
+        class="open-in touch-hit pointer-hit"
+        href={item.request.presentation.open}
+        onclick={(event) => {
+          event.stopPropagation();
+          onchoose?.();
+        }}>{memoryViewWords.openInMemory}</a
+      >
+    {/if}
     {#if item.kind === "ask" && answerable}
       <div data-slot="peers" class="peers">
         {#if answerRefused}
@@ -1187,6 +1200,15 @@
      holds still, so neither is made the more inviting. On a finger the gap
      opens (The 44 Touch Rule), the separation the rule's opposite ends
      gave a rushed thumb. */
+  /* A memory proposal's way to its file, under its title, above the row's opener. */
+  .open-in {
+    position: relative;
+    z-index: 1;
+    grid-column: 2 / 4;
+    justify-self: start;
+    font: var(--type-meta);
+    color: var(--link-ink);
+  }
   .peers {
     position: relative;
     grid-row: 4;

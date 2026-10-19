@@ -53,6 +53,12 @@ export interface PermissionPresentation {
   /** The rest of the input worth reading, secrets hidden. What the summary and the diffs already say is left out. */
   fields: PermissionField[];
   /**
+   * Where the ask's subject is read whole, as a link under its title: a
+   * memory proposal's file on its project's Memory view ("Open in memory").
+   * Absent for every other ask.
+   */
+  open?: string;
+  /**
    * A post to another person's repository held for the person: Needs you
    * names it by its own title (a comment's, its body's first line) over
    * where it goes (`owner/repo#12`). Absent for any other ask.
@@ -1107,8 +1113,9 @@ function memoryProposal(input: Record<string, unknown>): Presented {
     summary,
     detail: statWords(stat),
     changes: made.map((each) => each.change),
+    ...(typeof input.open === "string" ? { open: input.open } : {}),
     fields: [
-      ...fieldsOf(input, ["files", "notes", "project"]),
+      ...fieldsOf(input, ["files", "notes", "project", "open"]),
       ...(notes.length > 0
         ? [{ key: "from notes", value: notes.join(", ") }]
         : []),

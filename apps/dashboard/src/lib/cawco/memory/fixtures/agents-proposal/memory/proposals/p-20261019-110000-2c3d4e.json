@@ -1,0 +1,17 @@
+{
+  "id": "p-20261019-110000-2c3d4e",
+  "projectId": "fixture-cockpit",
+  "base": "",
+  "by": "Caw",
+  "files": [
+    {
+      "path": "AGENTS.md",
+      "before": "# cockpit\n\nHow this project is worked on.\n",
+      "content": "# cockpit\n\nHow this project is worked on.\n\nEvery preview binds on the hub's address; the scratch hub never binds a tailnet address.\n"
+    }
+  ],
+  "notes": [],
+  "why": "Caw asked: the preview rule belongs where every session reads it.",
+  "session": "",
+  "time": "2026-10-19T11:00:00.000Z"
+}

@@ -33,6 +33,7 @@
     type BlockPage as BlockPageId,
     blocksWords,
     madeWords,
+    memoryViewWords,
     type ProjectView,
     viewOfBlock,
     viewsWords,
@@ -62,6 +63,11 @@
     unreachable,
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
+  import MemoryFile from "#lib/cawco/memory/MemoryFile.svelte";
+  import {
+    LiveMemory,
+    memoryAsksOf,
+  } from "#lib/cawco/memory/memory-source.svelte.js";
   import {
     crossIn,
     crossOut,
@@ -130,6 +136,7 @@
   } from "#lib/cawco/views/ViewCalendar.svelte";
   import ViewCanvas from "#lib/cawco/views/ViewCanvas.svelte";
   import ViewMade from "#lib/cawco/views/ViewMade.svelte";
+  import ViewMemory from "#lib/cawco/views/ViewMemory.svelte";
   import ViewOpenUi from "#lib/cawco/views/ViewOpenUi.svelte";
   import ViewPipeline from "#lib/cawco/views/ViewPipeline.svelte";
   import ViewRoutines from "#lib/cawco/views/ViewRoutines.svelte";
@@ -222,6 +229,18 @@
   const openFile = $derived(
     (page.shallow?.url ?? page.url).searchParams.get("file")
   );
+  /** The folder's file asked for raw (Open raw on the Memory view): the folder's own card, not memory's. */
+  const openRaw = $derived(
+    (page.shallow?.url ?? page.url).searchParams.get("raw") === "1"
+  );
+  /** The memory proposal a link lands on (`?proposal=`, a proposal card's Open in memory). */
+  const landingProposal = $derived(
+    (page.shallow?.url ?? page.url).searchParams.get("proposal")
+  );
+  /** A memory file opened from its row's History: its commits stand open. */
+  const openHistory = $derived(
+    (page.shallow?.url ?? page.url).searchParams.get("history") === "1"
+  );
   let needsOnly = $state(false);
   let adding = $state(false);
   /** Moves the hub has not answered yet: the card already stands in its new column. */
@@ -252,8 +271,20 @@
   const needsYou = $derived(
     tasks.filter((task) => waitsOnYou(projectId, task))
   );
+  /** The project's memory (memory-source.svelte.ts): the Memory tab's page and file card. */
+  const memory = new LiveMemory(() => projectId);
+  /** Memory proposals waiting on you: the Memory tab's number, and the Needs-you chip's share. */
+  const memoryWaiting = $derived(memoryAsksOf(projectId).length);
+  /**
+   * What the Needs-you chip counts and narrows, per tab: on Memory its
+   * proposals, elsewhere the tasks that wait (a proposal never empties the
+   * board).
+   */
+  const needsCount = $derived.by(() =>
+    current === "memory" ? memoryWaiting : needsYou.length
+  );
   /** The filter holds only while something needs you. */
-  const filtering = $derived(needsOnly && needsYou.length > 0);
+  const filtering = $derived(needsOnly && needsCount > 0);
   /** What narrows every view of the tasks, kept in the URL (task-filter). */
   let filter = $state<TaskFilter>(filterOf(page.url.searchParams));
   const narrowed = $derived(activeCount(filter));
@@ -457,6 +488,8 @@
     { value: "routines", label: "Routines", draft: false },
     // The project's decision pages, always: an empty one starts Caw on one.
     { value: "decisions", label: "Decisions", draft: false },
+    // The project's memory, always: notes in, facts sorted, briefs carrying them.
+    { value: "memory", label: memoryViewWords.tab, draft: false },
     // The task graph, while the tasks draw one (an edge between two).
     ...(taskEdges(tasks).length > 0
       ? [{ value: "canvas", label: "Canvas", draft: false }]
@@ -481,7 +514,9 @@
   const barViews = $derived(
     tabs.map((each) => ({
       ...each,
-      count: each.value === "decisions" ? decisions.waiting : 0,
+      count:
+        (each.value === "decisions" ? decisions.waiting : 0) +
+        (each.value === "memory" ? memoryWaiting : 0),
     }))
   );
   let tab = $derived(data.view);
@@ -670,6 +705,28 @@
       shallow: true,
       replace: true,
       state: {},
+    });
+  }
+
+  /**
+   * A memory file opens as a folder file does (beside the view on a desk,
+   * its own page under 900px), read as memory on the Memory view.
+   */
+  function openMemoryFile(path: string, history = false) {
+    const href = `${hrefOf(null, "memory", {}, path)}${history ? "&history=1" : ""}`;
+    if (phone) {
+      goto(href, { shallow: true, state: { fileOpened: true } });
+    } else {
+      goto(href, { shallow: true, replace: true, state: page.state });
+    }
+  }
+  /** Open raw: the folder's own card for the file, as it holds it. */
+  function openRawFile(path: string) {
+    const href = `${hrefOf(null, "memory", {}, path)}&raw=1`;
+    goto(href, {
+      shallow: true,
+      replace: !phone,
+      state: phone ? { fileOpened: true } : page.state,
     });
   }
 
@@ -1114,6 +1171,7 @@
   const framed = $derived(
     isBlockPage(current) &&
       current !== "routines" &&
+      current !== "memory" &&
       blocks.placesOf(current).length > 1
   );
 
@@ -1350,6 +1408,7 @@
     list === null &&
       !shown.startsWith("view:") &&
       shown !== "routines" &&
+      shown !== "memory" &&
       shown !== "decisions"
   );
   const unreadStages = $derived(
@@ -1383,7 +1442,7 @@
   );
   /** Something stands after the tabs: the hairline marks where it starts. */
   const trailing = $derived(
-    needsYou.length > 0 ||
+    needsCount > 0 ||
       strippedNewTask ||
       canTalk ||
       (filterHere && (hosted || narrowed > 0))
@@ -1400,7 +1459,8 @@
           canTalk &&
           !adding &&
           !current.startsWith("view:") &&
-          current !== "routines"
+          current !== "routines" &&
+          current !== "memory"
   );
   /** What the pane holds, as its layout reads it: a decision page or the graph fills it. */
   const paneView = $derived.by(() => {
@@ -1478,6 +1538,11 @@
                 <span data-slot="tab-num" class="tab-num"
                   >{decisions.waiting}</span
                 >
+              {:else if each.value === "memory" && memoryWaiting > 0}
+                <!-- What waits on you, in the attention ink (report 1 §1). -->
+                <span data-slot="tab-num" class="tab-num" data-attn
+                  >{memoryWaiting}</span
+                >
               {/if}
             {/snippet}
           </TabItem>
@@ -1488,10 +1553,10 @@
       <!-- Under 640px New task and Ask Caw are in the head's ⋯: the rule
            stands only while Needs you follows it there. -->
       <span
-        data-wide={needsYou.length === 0 || undefined}
+        data-wide={needsCount === 0 || undefined}
         aria-hidden="true"
         class="rule"
-        class:wide={needsYou.length === 0}
+        class:wide={needsCount === 0}
       ></span>
     {/if}
     <div class="trail">
@@ -1507,9 +1572,9 @@
           tasks={[...tasks, ...archived]}
         />
       {/if}
-      {#if needsYou.length > 0}
+      {#if needsCount > 0}
         <NeedsYouChip
-          count={needsYou.length}
+          count={needsCount}
           on={filtering}
           ontoggle={() => {
             needsOnly = !filtering;
@@ -1730,6 +1795,21 @@
       starters={routineStarters}
       viewItems={viewItemsOf("routines")}
     />
+  {:else if value === "memory" && project}
+    <!-- The project's memory: a page of blocks, its files opening beside it. -->
+    <ViewMemory
+      {blocks}
+      landing={landingProposal}
+      narrow={filtering}
+      onhistory={(path) => openMemoryFile(path, true)}
+      onopen={openMemoryFile}
+      onraw={openRawFile}
+      openPath={openFile}
+      project={{ id: project.id, name: project.name }}
+      source={memory}
+      taskHref={(id) => hrefOf(id)}
+      viewItems={viewItemsOf("memory")}
+    />
   {:else if value === "decisions"}
     <DecisionsView
       {canTalk}
@@ -1885,13 +1965,25 @@
           <!-- A phone: the folder's file is its own page, with Back to the view. -->
           <div data-slot="project-page" class="project-page task-only">
             {#key openFile}
-              <FolderFile
-                backLabel={project.name}
-                onclose={closeFile}
-                page
-                path={openFile}
-                {projectId}
-              />
+              {#if current === "memory" && !openRaw}
+                <MemoryFile
+                  backLabel={project.name}
+                  onclose={closeFile}
+                  onraw={openRawFile}
+                  page
+                  path={openFile}
+                  showHistory={openHistory}
+                  source={memory}
+                />
+              {:else}
+                <FolderFile
+                  backLabel={project.name}
+                  onclose={closeFile}
+                  page
+                  path={openFile}
+                  {projectId}
+                />
+              {/if}
             {/key}
           </div>
         {:else if phone && openTask && stages}
@@ -2003,7 +2095,7 @@
             {#if !hosted}
               <ViewBar
                 {current}
-                needs={needsYou.length}
+                needs={needsCount}
                 needsOn={filtering}
                 onchoose={choose}
                 onnewsession={() => lead.newThread()}
@@ -2042,8 +2134,18 @@
 
 {#snippet sideCard()}
   {#if sideHeld && "file" in sideHeld}
-    {#key sideHeld.file}
-      <FolderFile onclose={closeFile} path={sideHeld.file} {projectId} />
+    {#key `${sideHeld.file}:${openRaw}`}
+      {#if current === "memory" && !openRaw}
+        <MemoryFile
+          onclose={closeFile}
+          onraw={openRawFile}
+          path={sideHeld.file}
+          showHistory={openHistory}
+          source={memory}
+        />
+      {:else}
+        <FolderFile onclose={closeFile} path={sideHeld.file} {projectId} />
+      {/if}
     {/key}
   {:else if sideHeld && stages}
     <TaskPane
@@ -2352,6 +2454,10 @@
     font: var(--type-meta);
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
+  }
+  /* The Memory tab's: proposals waiting on you, in the attention ink. */
+  .strip :global(.tab-num[data-attn]) {
+    color: var(--status-attn-ink);
   }
   .view-pane {
     display: flex;

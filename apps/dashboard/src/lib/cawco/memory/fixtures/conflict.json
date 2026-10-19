@@ -1,0 +1,1205 @@
+{
+  "page": {
+    "now": 1792411200000,
+    "jev": true,
+    "thresholds": {
+      "archiveDays": 90,
+      "budgetChars": 24000,
+      "fileChars": 8000,
+      "reshapeAbove": 25
+    },
+    "curator": {
+      "routineId": "r-curator",
+      "enabled": true,
+      "cron": "0 6 * * *",
+      "timeZone": "UTC",
+      "nextSlot": 1792476000000,
+      "last": {
+        "state": "ended",
+        "outcome": "delivered",
+        "reason": null,
+        "startedAt": 1792396800000,
+        "endedAt": 1792397040000,
+        "href": "/session/i-curator-run"
+      }
+    },
+    "inbox": [
+      {
+        "id": "n-20261019-090000-b2c3d4",
+        "text": "Maestro runs need a Mac workspace with the simulator booted before the flow starts.",
+        "author": "Build Mobbin search",
+        "at": 1792400400000,
+        "since": null,
+        "proposal": null,
+        "sort": null
+      },
+      {
+        "id": "n-20261019-070000-c3d4e5",
+        "text": "Jev off: the curator sorts every note on its run, so a note waits for the next one.",
+        "author": "Orchestrate cockpit",
+        "at": 1792393200000,
+        "since": null,
+        "proposal": null,
+        "sort": null
+      }
+    ],
+    "files": [
+      {
+        "path": "knowledge/deploy.md",
+        "name": "deploy",
+        "description": "Deploy: how the hub and its previews go out.",
+        "prose": false,
+        "current": 4,
+        "formerly": 1,
+        "conflicts": 1,
+        "unreadable": 0,
+        "marks": [
+          "current",
+          "current",
+          "current",
+          "current",
+          "conflict",
+          "conflict",
+          "formerly"
+        ],
+        "chars": 1210,
+        "changedAt": 1792238400000,
+        "uses14": [0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 2, 3],
+        "usedAt": 1792407600000,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/boundary.md",
+        "name": "boundary",
+        "description": "Boundary: what a workspace's commands can reach.",
+        "prose": false,
+        "current": 3,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current", "current", "current"],
+        "chars": 431,
+        "changedAt": 1791633600000,
+        "uses14": [0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 2],
+        "usedAt": 1792396800000,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/memory.md",
+        "name": "memory",
+        "description": "Memory: how the project keeps what it learns.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 149,
+        "changedAt": 1792324800000,
+        "uses14": [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1],
+        "usedAt": 1792393200000,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/apple.md",
+        "name": "apple",
+        "description": "Apple: building and running the iOS app.",
+        "prose": false,
+        "current": 2,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current", "current"],
+        "chars": 284,
+        "changedAt": 1791201600000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/caw.md",
+        "name": "caw",
+        "description": "Caw: the project's lead.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 141,
+        "changedAt": 1788782400000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/ios.md",
+        "name": "ios",
+        "description": "iOS: the app's own rules.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 126,
+        "changedAt": 1788782400000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      },
+      {
+        "path": "knowledge/routines.md",
+        "name": "routines",
+        "description": "Routines: what runs on its own.",
+        "prose": false,
+        "current": 1,
+        "formerly": 0,
+        "conflicts": 0,
+        "unreadable": 0,
+        "marks": ["current"],
+        "chars": 159,
+        "changedAt": 1790596800000,
+        "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+        "usedAt": null,
+        "proposals": []
+      }
+    ],
+    "yours": {
+      "count": 5,
+      "changedAt": 1792324800000
+    },
+    "archive": [
+      {
+        "path": "knowledge/archive/deploy.md",
+        "lines": 3
+      }
+    ],
+    "briefs": [
+      {
+        "taskId": "t-41",
+        "title": "Fix the iOS crash loop",
+        "at": 1792407600000,
+        "lines": 1,
+        "chars": 130,
+        "room": 23614,
+        "share": 0.005505208774455831
+      },
+      {
+        "taskId": "t-38",
+        "title": "Build Mobbin search",
+        "at": 1792396800000,
+        "lines": 4,
+        "chars": 758,
+        "room": 23614,
+        "share": 0.03209960193105785
+      },
+      {
+        "taskId": "t-36",
+        "title": "Orchestrate cockpit",
+        "at": 1792393200000,
+        "lines": 5,
+        "chars": 854,
+        "room": 23614,
+        "share": 0.03616498687219446
+      },
+      {
+        "taskId": "t-30",
+        "title": "Research live browsers",
+        "at": 1792317600000,
+        "lines": 2,
+        "chars": 268,
+        "room": 23614,
+        "share": 0.011349199627339714
+      },
+      {
+        "taskId": "t-33",
+        "title": "Preview tool rework",
+        "at": 1792314000000,
+        "lines": 4,
+        "chars": 724,
+        "room": 23614,
+        "share": 0.03065977809773863
+      },
+      {
+        "taskId": "t-25",
+        "title": "Wire the curator's run",
+        "at": 1792141200000,
+        "lines": 5,
+        "chars": 860,
+        "room": 23614,
+        "share": 0.0364190734310155
+      },
+      {
+        "taskId": "t-26",
+        "title": "Purge a session's notes",
+        "at": 1792054800000,
+        "lines": 3,
+        "chars": 614,
+        "room": 23614,
+        "share": 0.026001524519352927
+      },
+      {
+        "taskId": "t-27",
+        "title": "Fold deploy",
+        "at": 1791882000000,
+        "lines": 6,
+        "chars": 979,
+        "room": 23614,
+        "share": 0.04145845684763276
+      },
+      {
+        "taskId": "t-28",
+        "title": "Reshape knowledge",
+        "at": 1791795600000,
+        "lines": 3,
+        "chars": 370,
+        "room": 23614,
+        "share": 0.015668671127297366
+      },
+      {
+        "taskId": "t-29",
+        "title": "Archive unused lines",
+        "at": 1791536400000,
+        "lines": 2,
+        "chars": 503,
+        "room": 23614,
+        "share": 0.021300923181163715
+      },
+      {
+        "taskId": "t-30",
+        "title": "Read the memory route",
+        "at": 1791363600000,
+        "lines": 4,
+        "chars": 752,
+        "room": 23614,
+        "share": 0.03184551537223681
+      }
+    ],
+    "proposals": []
+  },
+  "problem": null,
+  "files": {
+    "AGENTS.md": {
+      "kind": "notes",
+      "path": "AGENTS.md",
+      "name": "Your notes",
+      "changedAt": 1792324800000,
+      "notes": [
+        {
+          "text": "Previews bind on the hub's address only, never the machine's tailnet address.",
+          "at": 1792324800000
+        },
+        {
+          "text": "The scratch hub's ports are picked outside the kernel's ephemeral range.",
+          "at": 1792238400000
+        },
+        {
+          "text": "No unit tests; proof is build, lint, type-check and the live check.",
+          "at": 1791028800000
+        },
+        {
+          "text": "Every user-facing string comes from WORDS.md.",
+          "at": 1789905600000
+        },
+        {
+          "text": "Design tokens come from design/tokens/cawco.resolver.json.",
+          "at": 1789214400000
+        }
+      ]
+    },
+    "knowledge/apple.md": {
+      "kind": "facts",
+      "path": "knowledge/apple.md",
+      "name": "apple",
+      "description": "Apple: building and running the iOS app.",
+      "content": "Apple: building and running the iOS app.\n\n- The iOS build runs on the Mac in the fleet (since 2026-09-30, from n-20260930-090000-d0e1f2, used 2026-10-05)\n- Maestro flows need a Mac workspace with the simulator booted (since 2026-09-30, from n-20260930-090000-d0e1f2, used 2026-10-05)\n",
+      "prose": false,
+      "chars": 284,
+      "changedAt": 1791201600000,
+      "marks": ["current", "current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The iOS build runs on the Mac in the fleet",
+          "key": "3b24ce9305a7a6de",
+          "since": "2026-09-30",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260930-090000-d0e1f2",
+              "author": "Build the iOS app",
+              "at": 1790758800000,
+              "text": "The iOS build runs on the Mac in the fleet.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        },
+        {
+          "line": 4,
+          "section": "current",
+          "text": "Maestro flows need a Mac workspace with the simulator booted",
+          "key": "44bda307ffee8e5a",
+          "since": "2026-09-30",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260930-090000-d0e1f2",
+              "author": "Build the iOS app",
+              "at": 1790758800000,
+              "text": "The iOS build runs on the Mac in the fleet.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/archive/deploy.md": {
+      "kind": "facts",
+      "path": "knowledge/archive/deploy.md",
+      "name": "deploy",
+      "description": "Archived facts of knowledge/deploy.md: moved out whole, with their dates and sources.",
+      "content": "Archived facts of knowledge/deploy.md: moved out whole, with their dates and sources.\n\n## Archived 2026-10-01: unused for 90 days\n\n- Deploys went out with make deploy (since 2026-05-01, from n-20260901-090000-e1f2a3)\n- The staging database reset every night (since 2026-05-01, from n-20260901-090000-e1f2a3)\n- The changelog lived in CHANGES.md (since 2026-05-01, from n-20260901-090000-e1f2a3)\n",
+      "prose": false,
+      "chars": 394,
+      "changedAt": 1790856000000,
+      "marks": ["current", "current", "current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 5,
+          "section": "current",
+          "text": "Deploys went out with make deploy",
+          "key": "958f3c65fd75e279",
+          "since": "2026-05-01",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        },
+        {
+          "line": 6,
+          "section": "current",
+          "text": "The staging database reset every night",
+          "key": "2deea9734c11cc22",
+          "since": "2026-05-01",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        },
+        {
+          "line": 7,
+          "section": "current",
+          "text": "The changelog lived in CHANGES.md",
+          "key": "59c219545b7242fb",
+          "since": "2026-05-01",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/boundary.md": {
+      "kind": "facts",
+      "path": "knowledge/boundary.md",
+      "name": "boundary",
+      "description": "Boundary: what a workspace's commands can reach.",
+      "content": "Boundary: what a workspace's commands can reach.\n\n- A workspace writes only its own clone, $TMPDIR and the package cache (since 2026-10-09, from n-20261009-090000-c9d0e1, used 2026-10-19)\n- No namespace starts inside a workspace boundary (since 2026-10-09, from n-20261009-090000-c9d0e1, used 2026-10-18)\n- Public hosts are reachable; the owner's machines are not (since 2026-10-09, from n-20261009-090000-c9d0e1, used 2026-10-15)\n",
+      "prose": false,
+      "chars": 431,
+      "changedAt": 1791633600000,
+      "marks": ["current", "current", "current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 1, 0, 0, 0, 0, 1, 1, 0, 0, 1, 0, 1, 2],
+      "usedAt": 1792396800000,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "A workspace writes only its own clone, $TMPDIR and the package cache",
+          "key": "414a88763fef83cb",
+          "since": "2026-10-09",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261009-090000-c9d0e1",
+              "author": "Orchestrate cockpit",
+              "at": 1791536400000,
+              "text": "A workspace writes only its own clone, TMPDIR and the package cache.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792396800000,
+              "taskId": "t-38",
+              "title": "Build Mobbin search"
+            },
+            {
+              "at": 1792393200000,
+              "taskId": "t-36",
+              "title": "Orchestrate cockpit"
+            },
+            {
+              "at": 1792317600000,
+              "taskId": "t-30",
+              "title": "Research live browsers"
+            },
+            {
+              "at": 1792141200000,
+              "taskId": "t-25",
+              "title": "Wire the curator's run"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            },
+            {
+              "at": 1791795600000,
+              "taskId": "t-28",
+              "title": "Reshape knowledge"
+            },
+            {
+              "at": 1791363600000,
+              "taskId": "t-30",
+              "title": "Read the memory route"
+            }
+          ]
+        },
+        {
+          "line": 4,
+          "section": "current",
+          "text": "No namespace starts inside a workspace boundary",
+          "key": "a6300b9ca1755c08",
+          "since": "2026-10-09",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261009-090000-c9d0e1",
+              "author": "Orchestrate cockpit",
+              "at": 1791536400000,
+              "text": "A workspace writes only its own clone, TMPDIR and the package cache.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792396800000,
+              "taskId": "t-38",
+              "title": "Build Mobbin search"
+            },
+            {
+              "at": 1792141200000,
+              "taskId": "t-25",
+              "title": "Wire the curator's run"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            }
+          ]
+        },
+        {
+          "line": 5,
+          "section": "current",
+          "text": "Public hosts are reachable; the owner's machines are not",
+          "key": "e5825361520effe8",
+          "since": "2026-10-09",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261009-090000-c9d0e1",
+              "author": "Orchestrate cockpit",
+              "at": 1791536400000,
+              "text": "A workspace writes only its own clone, TMPDIR and the package cache.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/caw.md": {
+      "kind": "facts",
+      "path": "knowledge/caw.md",
+      "name": "caw",
+      "description": "Caw: the project's lead.",
+      "content": "Caw: the project's lead.\n\n- Caw's thread is where a project's work starts (since 2026-09-05, from n-20260901-090000-e1f2a3, used 2026-09-05)\n",
+      "prose": false,
+      "chars": 141,
+      "changedAt": 1788782400000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "Caw's thread is where a project's work starts",
+          "key": "1839e7e2a8dd56d3",
+          "since": "2026-09-05",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/deploy.md": {
+      "kind": "facts",
+      "path": "knowledge/deploy.md",
+      "name": "deploy",
+      "description": "Deploy: how the hub and its previews go out.",
+      "content": "Deploy: how the hub and its previews go out.\n\n- Preview ports are picked outside the kernel's ephemeral range (ruling 2026-10-19)\n  Why: a bind refused for its address said so\n- A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone (since 2026-10-17, from n-20261017-100000-a7b8c9 n-20261017-110000-b8c9d0, used 2026-10-19)\n- The scratch hub listens on 127.0.0.1 only (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-18)\n- Releases are cut from main every Tuesday (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-16)\n\n## Conflict\n\n- Previews bind on the hub's address only (since 2026-10-03, from n-20261003-090000-d4e5f6, used 2026-10-13)\n- Previews bind on the machine's tailnet address (since 2026-10-11, from n-20261011-090000-e5f6a7 n-20261017-090000-f6a7b8, used 2026-10-16)\n\n## Formerly\n\n- The scratch hub's ports came from the ephemeral range (since 2026-10-02, until 2026-10-19, from n-20261003-090000-d4e5f6, replaced by n-20261019-100000-a1b2c3)\n",
+      "prose": false,
+      "chars": 1210,
+      "changedAt": 1792238400000,
+      "marks": [
+        "current",
+        "current",
+        "current",
+        "current",
+        "conflict",
+        "conflict",
+        "formerly"
+      ],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 1, 0, 1, 0, 0, 1, 1, 0, 1, 1, 0, 2, 3],
+      "usedAt": 1792407600000,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "Preview ports are picked outside the kernel's ephemeral range",
+          "key": "3af68ed6bcf3917d",
+          "since": "2026-10-19",
+          "until": null,
+          "ruling": "2026-10-19",
+          "why": "a bind refused for its address said so",
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [],
+          "uses": [
+            {
+              "at": 1792407600000,
+              "taskId": "t-41",
+              "title": "Fix the iOS crash loop"
+            },
+            {
+              "at": 1792396800000,
+              "taskId": "t-38",
+              "title": "Build Mobbin search"
+            },
+            {
+              "at": 1792393200000,
+              "taskId": "t-36",
+              "title": "Orchestrate cockpit"
+            },
+            {
+              "at": 1792317600000,
+              "taskId": "t-30",
+              "title": "Research live browsers"
+            },
+            {
+              "at": 1792314000000,
+              "taskId": "t-33",
+              "title": "Preview tool rework"
+            },
+            {
+              "at": 1792141200000,
+              "taskId": "t-25",
+              "title": "Wire the curator's run"
+            },
+            {
+              "at": 1792054800000,
+              "taskId": "t-26",
+              "title": "Purge a session's notes"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            },
+            {
+              "at": 1791795600000,
+              "taskId": "t-28",
+              "title": "Reshape knowledge"
+            },
+            {
+              "at": 1791536400000,
+              "taskId": "t-29",
+              "title": "Archive unused lines"
+            },
+            {
+              "at": 1791363600000,
+              "taskId": "t-30",
+              "title": "Read the memory route"
+            }
+          ]
+        },
+        {
+          "line": 5,
+          "section": "current",
+          "text": "A start republishes every runtime file whose bytes changed since the last start, so a dashboard reload after an update reads the new bundle, the agent's sessions keep their old one until they restart, and a stale service worker never serves the previous build's chunks to anyone",
+          "key": "503742499b43d7db",
+          "since": "2026-10-17",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261017-100000-a7b8c9",
+              "author": "Fix the iOS crash loop",
+              "at": 1792231200000,
+              "text": "A start republishes the runtime files whose bytes changed.",
+              "where": "archive"
+            },
+            {
+              "id": "n-20261017-110000-b8c9d0",
+              "author": "Ship the hub",
+              "at": 1792234800000,
+              "text": "Runtime files are republished on start when they changed.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792396800000,
+              "taskId": "t-38",
+              "title": "Build Mobbin search"
+            },
+            {
+              "at": 1792393200000,
+              "taskId": "t-36",
+              "title": "Orchestrate cockpit"
+            },
+            {
+              "at": 1792314000000,
+              "taskId": "t-33",
+              "title": "Preview tool rework"
+            },
+            {
+              "at": 1792141200000,
+              "taskId": "t-25",
+              "title": "Wire the curator's run"
+            },
+            {
+              "at": 1792054800000,
+              "taskId": "t-26",
+              "title": "Purge a session's notes"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            },
+            {
+              "at": 1791536400000,
+              "taskId": "t-29",
+              "title": "Archive unused lines"
+            },
+            {
+              "at": 1791363600000,
+              "taskId": "t-30",
+              "title": "Read the memory route"
+            }
+          ]
+        },
+        {
+          "line": 6,
+          "section": "current",
+          "text": "The scratch hub listens on 127.0.0.1 only",
+          "key": "9d6c995313d0da8a",
+          "since": "2026-10-03",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261003-090000-d4e5f6",
+              "author": "Ship the hub",
+              "at": 1791018000000,
+              "text": "The scratch hub listens on 127.0.0.1 only.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792393200000,
+              "taskId": "t-36",
+              "title": "Orchestrate cockpit"
+            },
+            {
+              "at": 1792314000000,
+              "taskId": "t-33",
+              "title": "Preview tool rework"
+            },
+            {
+              "at": 1792054800000,
+              "taskId": "t-26",
+              "title": "Purge a session's notes"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            },
+            {
+              "at": 1791363600000,
+              "taskId": "t-30",
+              "title": "Read the memory route"
+            }
+          ]
+        },
+        {
+          "line": 7,
+          "section": "current",
+          "text": "Releases are cut from main every Tuesday",
+          "key": "5162ef9a553d6cae",
+          "since": "2026-10-03",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261003-090000-d4e5f6",
+              "author": "Ship the hub",
+              "at": 1791018000000,
+              "text": "The scratch hub listens on 127.0.0.1 only.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792314000000,
+              "taskId": "t-33",
+              "title": "Preview tool rework"
+            },
+            {
+              "at": 1791882000000,
+              "taskId": "t-27",
+              "title": "Fold deploy"
+            }
+          ]
+        },
+        {
+          "line": 11,
+          "section": "conflict",
+          "text": "Previews bind on the hub's address only",
+          "key": "ec8d50eb17669e87",
+          "since": "2026-10-03",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": 1,
+          "from": [
+            {
+              "id": "n-20261003-090000-d4e5f6",
+              "author": "Ship the hub",
+              "at": 1791018000000,
+              "text": "The scratch hub listens on 127.0.0.1 only.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        },
+        {
+          "line": 12,
+          "section": "conflict",
+          "text": "Previews bind on the machine's tailnet address",
+          "key": "20911092d15e5788",
+          "since": "2026-10-11",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": 1,
+          "from": [
+            {
+              "id": "n-20261011-090000-e5f6a7",
+              "author": "Preview tool rework",
+              "at": 1791709200000,
+              "text": "Previews bind on the machine's tailnet address.",
+              "where": "archive"
+            },
+            {
+              "id": "n-20261017-090000-f6a7b8",
+              "author": "Research live browsers",
+              "at": 1792227600000,
+              "text": "Previews bind on the tailnet address the machine reports.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        },
+        {
+          "line": 16,
+          "section": "formerly",
+          "text": "The scratch hub's ports came from the ephemeral range",
+          "key": "7d9174bbbb1b47ee",
+          "since": "2026-10-02",
+          "until": "2026-10-19",
+          "ruling": null,
+          "why": null,
+          "replacedBy": "n-20261019-100000-a1b2c3",
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20261003-090000-d4e5f6",
+              "author": "Ship the hub",
+              "at": 1791018000000,
+              "text": "The scratch hub listens on 127.0.0.1 only.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/ios.md": {
+      "kind": "facts",
+      "path": "knowledge/ios.md",
+      "name": "ios",
+      "description": "iOS: the app's own rules.",
+      "content": "iOS: the app's own rules.\n\n- Push answers carry no content (since 2026-09-05, from n-20260901-090000-e1f2a3, used 2026-09-05)\n",
+      "prose": false,
+      "chars": 126,
+      "changedAt": 1788782400000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "Push answers carry no content",
+          "key": "c284e6c945d397c3",
+          "since": "2026-09-05",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    },
+    "knowledge/memory.md": {
+      "kind": "facts",
+      "path": "knowledge/memory.md",
+      "name": "memory",
+      "description": "Memory: how the project keeps what it learns.",
+      "content": "Memory: how the project keeps what it learns.\n\n- A fold never rewords a fact line (since 2026-10-18, from n-20260901-090000-e1f2a3, used 2026-10-18)\n",
+      "prose": false,
+      "chars": 149,
+      "changedAt": 1792324800000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 1],
+      "usedAt": 1792393200000,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "A fold never rewords a fact line",
+          "key": "d87817cd13372a1c",
+          "since": "2026-10-18",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": [
+            {
+              "at": 1792393200000,
+              "taskId": "t-36",
+              "title": "Orchestrate cockpit"
+            },
+            {
+              "at": 1792141200000,
+              "taskId": "t-25",
+              "title": "Wire the curator's run"
+            },
+            {
+              "at": 1791795600000,
+              "taskId": "t-28",
+              "title": "Reshape knowledge"
+            }
+          ]
+        }
+      ]
+    },
+    "knowledge/routines.md": {
+      "kind": "facts",
+      "path": "knowledge/routines.md",
+      "name": "routines",
+      "description": "Routines: what runs on its own.",
+      "content": "Routines: what runs on its own.\n\n- The memory curator runs daily at 06:00 in the hub's zone (since 2026-08-01, from n-20260901-090000-e1f2a3, used 2026-08-01)\n",
+      "prose": false,
+      "chars": 159,
+      "changedAt": 1790596800000,
+      "marks": ["current"],
+      "thresholds": {
+        "archiveDays": 90,
+        "budgetChars": 24000,
+        "fileChars": 8000,
+        "reshapeAbove": 25
+      },
+      "uses14": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+      "usedAt": null,
+      "proposals": [],
+      "unreadable": [],
+      "facts": [
+        {
+          "line": 3,
+          "section": "current",
+          "text": "The memory curator runs daily at 06:00 in the hub's zone",
+          "key": "ffc142401bd87680",
+          "since": "2026-08-01",
+          "until": null,
+          "ruling": null,
+          "why": null,
+          "replacedBy": null,
+          "conflictGroup": null,
+          "from": [
+            {
+              "id": "n-20260901-090000-e1f2a3",
+              "author": "Set up the project",
+              "at": 1788253200000,
+              "text": "Early project facts.",
+              "where": "archive"
+            }
+          ],
+          "uses": []
+        }
+      ]
+    }
+  },
+  "histories": {
+    "AGENTS.md": [
+      {
+        "sha": "34c2f7b59f84f684000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-18T12:00:00.000Z",
+        "message": "AGENTS.md: changed"
+      }
+    ],
+    "knowledge/apple.md": [
+      {
+        "sha": "7bd5f5ea76d9881c000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-05T12:00:00.000Z",
+        "message": "knowledge/apple.md: changed"
+      }
+    ],
+    "knowledge/archive/deploy.md": [
+      {
+        "sha": "ac2a5114f4c9bc74000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-01T12:00:00.000Z",
+        "message": "knowledge/archive/deploy.md: changed"
+      }
+    ],
+    "knowledge/boundary.md": [
+      {
+        "sha": "a2a8b0a4d25efb91000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-10T12:00:00.000Z",
+        "message": "knowledge/boundary.md: changed"
+      }
+    ],
+    "knowledge/caw.md": [
+      {
+        "sha": "6b939d47eb172c74000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-07T12:00:00.000Z",
+        "message": "knowledge/caw.md: changed"
+      }
+    ],
+    "knowledge/deploy.md": [
+      {
+        "sha": "563a9b00cd4d8c6a000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-17T12:00:00.000Z",
+        "message": "knowledge/deploy.md: changed"
+      }
+    ],
+    "knowledge/ios.md": [
+      {
+        "sha": "44910238737f6a47000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-07T12:00:00.000Z",
+        "message": "knowledge/ios.md: changed"
+      }
+    ],
+    "knowledge/memory.md": [
+      {
+        "sha": "9636965def6f0f07000000000000000000000000",
+        "author": "You",
+        "date": "2026-10-18T12:00:00.000Z",
+        "message": "knowledge/memory.md: changed"
+      }
+    ],
+    "knowledge/routines.md": [
+      {
+        "sha": "9c62b4f0d0f4d969000000000000000000000000",
+        "author": "You",
+        "date": "2026-09-28T12:00:00.000Z",
+        "message": "knowledge/routines.md: changed"
+      }
+    ]
+  },
+  "asks": {}
+}

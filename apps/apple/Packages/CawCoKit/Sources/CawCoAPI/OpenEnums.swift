@@ -873,6 +873,7 @@ public enum OpenEnums {
     /// `#/components/schemas/BlockPage`.
     public enum BlockPage: OpenEnum {
         case board
+        case memory
         case pipeline
         case routines
         case table
@@ -882,6 +883,7 @@ public enum OpenEnums {
         public init(rawValue: String) {
             switch rawValue {
             case "board": self = .board
+            case "memory": self = .memory
             case "pipeline": self = .pipeline
             case "routines": self = .routines
             case "table": self = .table
@@ -892,6 +894,7 @@ public enum OpenEnums {
         public var rawValue: String {
             switch self {
             case .board: "board"
+            case .memory: "memory"
             case .pipeline: "pipeline"
             case .routines: "routines"
             case .table: "table"
@@ -903,7 +906,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.board, .pipeline, .routines, .table]
+        public static let allCases: [Self] = [.board, .memory, .pipeline, .routines, .table]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

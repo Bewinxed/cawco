@@ -632,10 +632,44 @@ public enum Size {
     public static let cRowH: Double = 44
     /// The routines ledger's Last run and Next run columns, one width for both: a 12px status glyph and "23h ago", or "Tomorrow 13:30", in meta with the ledger row's 11px either side. Fixed, so every row's times start on one edge whatever they say.
     public static let cRoutineTimeW: Double = 144
+    /// One line's mark in a memory file's line run (the Memory view's Knowledge row and file card): 4px wide, one per line in file order; Current filled in ink-muted, Formerly a hollow ink-subtle ring (3:1 or more as a non-text mark), Conflict and a line not read in their status glyph hues.
+    public static let cMemoryMark: Double = 4
+    /// The pitch between a memory line run's marks, and between the run and its size meter under it.
+    public static let cMemoryMarkGap: Double = 2
+    /// One day's bar in a fact file's 14-day use sparkline (the Memory view's Used column).
+    public static let cMemorySparkBar: Double = 2
+    /// The pitch between a use sparkline's day bars: fourteen bars and their gaps stand 41px wide.
+    public static let cMemorySparkGap: Double = 1
+    /// A use sparkline's height: its busiest day's bar; a day no brief used it stands at 1px, the baseline.
+    public static let cMemorySparkH: Double = 12
+    /// The Memory view's thin meters: a fact file's size against the fold's threshold, a brief's characters against the busiest brief listed.
+    public static let cMemoryMeterH: Double = 2
+    /// The Memory view's Knowledge ledger's Lines column on a wide ledger: a line run of 24 marks (24 × (c-memory-mark + c-memory-mark-gap) − c-memory-mark-gap = 142px), space-2, and a three-digit count in tabular meta (about 22px): 172px inside 176, so every row's sparkline starts on one edge.
+    public static let cMemoryLinesW: Double = 176
+    /// The Memory view's Knowledge ledger's Changed column: "120d ago" or "just now" at most, in tabular meta, set to the row's end.
+    public static let cMemoryAgeW: Double = 56
+    /// The Memory view's Knowledge ledger's Used column: its 41px sparkline under a head of "USED 14D" in caps label, one width for every row.
+    public static let cMemoryUsedW: Double = 72
+    /// A use sparkline's baseline: a day no brief used the file stands this tall, so the fourteen days read as a strip.
+    public static let cMemorySparkBase: Double = 1
+    /// The Memory view's Knowledge ledger's column band: one caps label line over the columns, a row's head.
+    public static let cMemoryBandH: Double = 32
+    /// A memory proposal's why line's least width beside its kind before it wraps under it.
+    public static let cMemoryWhyMin: Double = 192
+    /// The empty Memory page's act: Make a note over Caw's composer, one measure under the empty state's line.
+    public static let cMemoryFieldW: Double = 480
+    /// The Memory page's Knowledge block's measure: the fewest columns that hold it are two of a 1440 window's four (BlockPage spans ceil(measure ÷ column), so it stays under two 278px columns). From 35rem its ledger stands in columns, the name keeping 10rem beside the row's 70px of padding, gap and ⋯, Lines (c-memory-lines-w), Used (c-memory-used-w), Changed (c-memory-age-w) and their two 12px gaps (160 + 70 + 176 + 72 + 56 + 24 = 558px); two of those columns and their gap are 577px.
+    public static let cBlockKnowledge: Double = 544
+    /// The popover listing a knowledge line's source notes: a note's first line and who and when, one measure; never wider than the window less its margins.
+    public static let cMemorySourcesW: Double = 320
+    /// A dotted underline's drop under its words (a chip that opens a list, as a fact's sources): clear of the descenders.
+    public static let cUnderlineOffset: Double = 3
     /// The page width from which a project page's blocks stand on four columns (a 1440 window with the rail: a 1166px page, 278px columns).
     public static let cGrid4: Double = 960
     /// The page width from which a project page's blocks stand on two columns (a 1024 window: a 750px page, 366px columns); under it, one column in the person's order.
     public static let cGrid2: Double = 736
+    /// The Memory page's Inbox and In briefs blocks' measure: 17rem (272px), inside one column of a 1440 window's four, so Inbox, Knowledge (c-block-knowledge, two columns) and In briefs stand side by side as the pipeline runs.
+    public static let cBlockMemory: Double = 272
     /// The Routines block's measure: the width from which its ledger keeps Last run and Next run in their own fixed columns (its container query). A narrow block takes the fewest columns that hold its measure, the row at most.
     public static let cBlockRoutines: Double = 544
     /// The Event sources and Approved actions blocks' measure (46ch of label): a row's mark, its name at 24ch and its one trailing fact.
