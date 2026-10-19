@@ -1,3 +1,4 @@
+import "@cawco/core/no-huge-pages";
 import { detach } from "@cawco/core/detach";
 import { Effect, Layer } from "effect";
 import { buildInfo } from "./build";

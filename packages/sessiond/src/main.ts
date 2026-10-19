@@ -9,6 +9,7 @@
  * whenever its job restarts it. Its handover publishes it the first time.
  */
 
+import "@cawco/core/no-huge-pages";
 import { basename, dirname, join } from "node:path";
 import { readKeeperVersion } from "@cawco/core/binary-installation";
 import { detach } from "@cawco/core/detach";
