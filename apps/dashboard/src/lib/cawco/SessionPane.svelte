@@ -633,9 +633,9 @@
 
   /**
    * The placeholder, as a function of what stands in the area: over the
-   * history still on its way, and over a transcript not yet drawn. Its
-   * leaving fades over --dur-control on top of rows already in place, which
-   * is the cross-fade, and nothing under it moves.
+   * history still on its way, and over a transcript not yet drawn. It goes
+   * at once as the rows are drawn, never faded over them (the markup's
+   * comment at the veil says why; DESIGN.md, The Claim Of Nothing Rule).
    */
   const veiled = $derived(!(prestart || namedState) && (waiting || !shown));
   // Hidden while veiled, the pane is still laid out, so its transcript can
