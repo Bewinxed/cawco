@@ -59,6 +59,7 @@ import {
   type DesignMap,
   type DesignQuery,
   type DesignThumb,
+  type FrameRender,
   type Found,
   HEALTH_PATH,
   type PageError,
@@ -713,11 +714,31 @@ const reports = new Map<
   }
 >();
 
-/** Keeps what a canvas page posted (its body, unchecked until here): each section under its file. */
+/** A frame across draws of one states file: its story, its state, its scheme and its form. */
+const frameId = (frame: FrameRender): string =>
+  `${frame.story}|${frame.interaction}|${frame.scheme}|${frame.form}`;
+
+/**
+ * Keeps what a canvas page posted (its body, unchecked until here): each
+ * section under its file. A frame the page did not show (`unshown`: a
+ * phone's canvas shows one frame at a time) keeps the frame the last draw
+ * of the same content recorded, so a phone looking never drops what a desk
+ * saw from the map's counts.
+ */
 function keepReport(body: unknown): void {
   const report = body as Partial<RenderReport> | null;
   for (const section of report?.sections ?? []) {
     if (typeof section?.file === "string" && storyFile(section.file)) {
+      // A frame this page did not show (a phone's, one at a time) keeps what an earlier draw of the same content saw.
+      const kept = reports.get(section.file);
+      const seen =
+        kept?.section.hash === section.hash
+          ? new Map(
+              kept.section.frames
+                .filter((frame) => frame.state !== "unshown")
+                .map((frame) => [frameId(frame), frame])
+            )
+          : null;
       reports.set(section.file, {
         at:
           typeof report?.at === "string" ? report.at : new Date().toISOString(),
@@ -725,9 +746,14 @@ function keepReport(body: unknown): void {
         errors: (report?.page?.errors ?? []).map(sourced),
         section: {
           ...section,
-          frames: section.frames.map((frame) =>
-            frame.error ? { ...frame, error: sourced(frame.error) } : frame
-          ),
+          frames: section.frames.map((frame) => {
+            if (frame.state === "unshown") {
+              return seen?.get(frameId(frame)) ?? frame;
+            }
+            return frame.error
+              ? { ...frame, error: sourced(frame.error) }
+              : frame;
+          }),
           moves: section.moves.map((move) =>
             move.error ? { ...move, error: sourced(move.error) } : move
           ),

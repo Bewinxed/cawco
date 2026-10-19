@@ -36,7 +36,9 @@
  * 11. At 1440 and 390, light and dark: both schemes drawn side by side; a
  *     phone shows one frame with its state strip, and a step plays the move;
  *     the phone's report says the frame it shows `drawn` and every other
- *     `unshown`, never `empty`.
+ *     `unshown`, never `empty`; after it, the stage still keeps every frame
+ *     drawn and the design map still counts them (an unshown frame keeps
+ *     the desk's draw of the same content).
  * 12. No console errors (the throwing story's page aside).
  * 13. With no panel open, the daemon's render (stage-render.ts) draws the
  *     canvas in the machine's own Chromium through a bridge socket shaped
@@ -78,6 +80,7 @@ import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import { renderCanvas } from "../../../packages/agent/src/stage-render";
 import type {
   CanvasSpec,
+  DesignMap,
   FrameRender,
   RenderReport,
 } from "../../../packages/core/src/stage";
@@ -640,6 +643,29 @@ async function views(kit: Kit, stage: Stage): Promise<void> {
           (one) => one.endsWith(":drawn") || one.endsWith(":unshown")
         ),
       states.join(", ")
+    );
+    // What the stage keeps and the design map counts after the phone looked: the desk's draw of the same content still stands.
+    const kept = (await (
+      await fetch(
+        `${stage.base}/__cawco/report?file=${encodeURIComponent("src/Pairing.stories.js")}`
+      )
+    ).json()) as RenderReport;
+    const mapped = (await (
+      await fetch(
+        `${stage.base}/__cawco/components?component=${encodeURIComponent("src/Pairing.svelte")}`
+      )
+    ).json()) as DesignMap;
+    const card = mapped.components[0];
+    const keptStates = framesOf(kept).map(
+      (one) => `${one.story}/${one.interaction}:${one.state}`
+    );
+    kit.check(
+      `11e: after the 390 view (${theme}) the stage still keeps every Pairing frame drawn and the design map still counts them drawn (an unshown frame keeps the desk's draw of the same content)`,
+      keptStates.length > 0 &&
+        keptStates.every((one) => one.endsWith(":drawn")) &&
+        card?.drawn === keptStates.length &&
+        (card?.stories ?? []).every((one) => one.drawn),
+      `kept ${keptStates.join(", ")}; design map ${card?.name} drawn ${card?.drawn}, stories ${JSON.stringify(card?.stories?.map((one) => `${one.name}:${one.drawn}`))}`
     );
     const shown = await phone.evaluate(() => ({
       phone: document.documentElement.hasAttribute("data-cawco-phone"),
