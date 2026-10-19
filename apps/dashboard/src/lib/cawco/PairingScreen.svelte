@@ -36,7 +36,7 @@
 
 <main
   data-slot="pairing"
-  class="flex min-h-dvh flex-col items-center justify-center gap-space-4 bg-(--background) px-space-5 py-space-8"
+  class="flex min-h-dvh flex-col items-center justify-center gap-space-4 bg-surface-page px-space-5 py-space-8"
 >
   <div
     data-slot="caw-80"

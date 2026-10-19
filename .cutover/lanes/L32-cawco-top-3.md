@@ -28,11 +28,12 @@ token: --c-pairing-line 26rem — the pairing page's line measure (PairingScreen
 token: --c-rule-note-measure 72ch — a rule's activity note and row facts measure (RuleActivity); a text measure, no ladder step
 
 ## Gaps
-gap: apps/dashboard/src/lib/cawco/PairingScreen.svelte:39 `bg-(--background)` reads the raw page variable rather than `bg-surface-page` — I left it because the two may not be the same colour; DESIGN.md names the page surface a token
 gap: apps/dashboard/src/lib/cawco/PeekPane.svelte:288 `overflow-clip text-ellipsis whitespace-nowrap` is `truncate` with clip instead of hidden; not proven scar, left
 
 ## fixed
 fixed: apps/dashboard/src/lib/cawco/PairingScreen.svelte `min-h-dvh` — a page-high pane uses the dynamic viewport so a phone toolbar never covers its bottom (better-layout)
+
+fixed: apps/dashboard/src/lib/cawco/PairingScreen.svelte:39 `bg-(--background)` → `bg-surface-page` — the page surface is the role token (tokens.css `--surface-page: var(--background)`)
 
 ## Theme additions
 theme: component msg-prose
