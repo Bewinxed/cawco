@@ -489,38 +489,30 @@
          onto a second row the strip does not show (it stays in the strip's
          label and the popover), rather than Claude's answer being cut: one
          row of cells, 34px (the first line, 3px, the caption). -->
-    <!-- literal: 34px; 3px; 6px; 14px, 3px -->
     <span
-      class="flex h-(--strip-row) min-w-0 flex-1 flex-wrap gap-x-space-2 overflow-clip group-variant-home/strip:gap-x-space-6"
-      style:--cell-gap="3px"
-      style:--l1-gap="6px"
-      style:--mark-r="3px"
-      style:--mark-side="14px"
-      style:--strip-row="34px"
+      class="flex h-c-usage-strip-row min-w-0 flex-1 flex-wrap gap-x-space-2 overflow-clip group-variant-home/strip:gap-x-space-6"
     >
       {#if claude}
         <span
-          class="flex h-(--strip-row) flex-auto flex-col justify-center gap-(--cell-gap)"
+          class="flex h-c-usage-strip-row flex-auto flex-col justify-center gap-space-1"
           data-cell="claude"
         >
           <span
-            class="flex h-icon-md min-w-0 items-center gap-(--l1-gap) whitespace-nowrap"
+            class="flex h-icon-md min-w-0 items-center gap-space-2 whitespace-nowrap"
           >
             <span
               data-slot="mark"
               aria-hidden="true"
-              class="inline-flex size-(--mark-side) flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
-              ><ClaudeIcon /></span
+              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs"
+              ><ClaudeIcon class="size-full" /></span
             >
             <!-- The marks are the part of line 1 that gives: they ask for a
                  slot each and shrink to one mark's width, the marks closing
                  up inside (slotAt), so the Claude mark and the digits always
                  stand whole inside the cells' clip. -->
-            <!-- literal: 16px -->
             <span
-              class="relative h-icon-md min-w-(--mark-min) shrink grow-0"
+              class="relative h-icon-md min-w-icon-md shrink grow-0"
               data-strip-marks
-              style:--mark-min="16px"
               style:flex-basis="{claude.accounts.length * SLOT - 4}px"
               {@attach roomFor}
             >
@@ -540,13 +532,11 @@
               {#if stripMore > 0}
                 <!-- The rest, counted: the popover shows every one. "+N":
                      the accounts past what stands a slot apart, in meta. -->
-                <!-- literal: 16px -->
                 <span
                   data-slot="slot"
                   data-more
-                  class="absolute top-0 grid h-icon-md min-w-(--mark-min) place-items-center type-meta leading-(--more-lh) num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
+                  class="absolute top-0 grid h-icon-md min-w-icon-md place-items-center type-meta num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
                   data-strip-more
-                  style:--more-lh="16px"
                   style:inset-inline-start={slotAt(
                     stripMarks.length,
                     stripMarks.length + 1
@@ -565,12 +555,10 @@
             {/if}
             <!-- The strip's time: its line here, the figure face on its own
                  span (`mono-figure`). -->
-            <!-- literal: 16px -->
             <span
-              class="flex-none font-body text-size-label leading-(--digits-lh) font-medium num text-ink-strong data-muted:text-ink-muted"
+              class="flex-none font-body text-size-label leading-(--icon-md) font-medium num text-ink-strong data-muted:text-ink-muted"
               data-muted={claude.stale !== null || undefined}
               data-strip-digits
-              style:--digits-lh="16px"
               ><span class="mono-figure"
                 ><Figure text={stop?.figure ?? ""} /></span
               ></span
@@ -580,28 +568,26 @@
                may break anywhere, so it never holds the cell wider than the
                marks and digits: only when the rail cannot fit it at all does
                it end in an ellipsis. -->
-          <!-- literal: 15px -->
           <span
-            class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+            class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-(--c-usage-cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
             data-next={claude.next?.id}
             data-strip-caption
-            style:--cap-lh="15px"
             ><Words parts={caption(claude, now, nameOf)} /></span
           >
         </span>
       {/if}
       {#if openCode}
         <span
-          class="flex h-(--strip-row) flex-none flex-col justify-center gap-(--cell-gap)"
+          class="flex h-c-usage-strip-row flex-none flex-col justify-center gap-space-1"
           data-cell="opencode"
         >
           <span
-            class="flex h-icon-md min-w-0 items-center gap-(--l1-gap) whitespace-nowrap"
+            class="flex h-icon-md min-w-0 items-center gap-space-2 whitespace-nowrap"
           >
             <span
               data-slot="mark"
               aria-hidden="true"
-              class="inline-flex size-(--mark-side) flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
+              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs [&_svg]:size-full"
               ><OpenCodeLogo /></span
             >
             <Rings reveal ring={openCode} size={16} />
@@ -615,24 +601,20 @@
                 ><IconRefresh class="size-icon-sm" /></span
               >
             {/if}
-            <!-- literal: 16px -->
             <span
-              class="flex-none font-body text-size-label leading-(--digits-lh) font-medium num text-ink-strong"
+              class="flex-none font-body text-size-label leading-(--icon-md) font-medium num text-ink-strong"
               data-strip-go-time
-              style:--digits-lh="16px"
               ><span class="mono-figure"
                 ><Figure text={goTime?.figure ?? ""} /></span
               ></span
             >
           </span>
           {#if goWeek !== null}
-            <!-- literal: 15px -->
             <!-- mark-line: one clamped line of text; the week ring stands in
                  it on vertical-align: middle, the x-height's middle -->
             <span
-              class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-(--cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+              class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-(--c-usage-cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
               data-strip-go-week
-              style:--cap-lh="15px"
               ><WeekMark ring={openCode} />
               <span class="mono-figure">{goWeek}%</span></span
             >
@@ -660,12 +642,10 @@
   <span class="col-1 row-span-2 row-start-1 grid self-center">
     <Tip anchor={rowOf(ring.id)} label={tip} {side} tap title={shown}>
       {#snippet children(props)}
-        <!-- literal: 50% -->
         <button
           {...props}
           aria-label="{shown}: {tip}"
-          class="grid cursor-help rounded-(--tip-round) border-none border-current bg-transparent p-0"
-          style:--tip-round="50%"
+          class="grid cursor-help rounded-pill border-none border-current bg-transparent p-0"
           data-dial-tip
           data-stale-ring={ring.state === "stale" ? "" : undefined}
           type="button"
@@ -728,13 +708,11 @@
     <span class="col-4 row-2 grid self-center" data-week-mark
       ><WeekMark {ring} /></span
     >
-    <!-- literal: 4ch -->
     <span
       class="col-5 row-2 justify-self-box-end type-meta whitespace-nowrap text-ink-muted"
       data-week
-      ><span
-        class="mono-figure inline-block min-w-(--pct-min) text-end"
-        style:--pct-min="4ch">{week}%</span
+      ><span class="mono-figure inline-block min-w-c-usage-pct-w text-end"
+        >{week}%</span
       ></span
     >
   {/if}
@@ -795,13 +773,12 @@
        relay band stands for, while that band is hovered or open, the hover
        wash; each of those washes is also the ground the notch takes
        (`--ring-ground`). (`cell-d` is the hook rowOf reads.) -->
-  <!-- literal: span 5; auto auto -->
   <!-- biome-ignore lint/a11y/useSemanticElements: a cell is a labelled group of figures and marks, not a form; a fieldset would draw a form's frame and legend -->
   <div
     data-slot="cell-d"
     {...props}
     aria-label={cellLabel(ring, c, shown)}
-    class="relative col-(--cell-span) grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
+    class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
     data-account={ring.id}
     data-bind={ring.bind}
     data-carrying={(c !== null && ring.id === c.carry?.id) || undefined}
@@ -811,7 +788,6 @@
     data-lit={ring.id === lit || undefined}
     role="group"
     style:--cell-rows="auto auto"
-    style:--cell-span="span 5"
     style:--ring-ground={groundOf(ring)}
   >
     {@render dial(ring, c, shown, side)}
@@ -824,12 +800,11 @@
       class="col-span-3 col-start-3 row-1 flex h-auto min-w-0 items-center gap-space-1 whitespace-normal"
     >
       {#if go}
-        <!-- literal: 3px -->
         <span
           data-slot="mark"
           aria-hidden="true"
-          class="inline-flex size-icon-md flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
-          style:--mark-r="3px"><OpenCodeLogo /></span
+          class="inline-flex size-icon-md flex-none overflow-hidden rounded-xs [&_svg]:size-full"
+          ><OpenCodeLogo /></span
         >
       {/if}
       <!-- The name strong, the domain's stem (where it is needed) quiet
@@ -871,23 +846,17 @@
        its collision padding), less the popover's 1px edge above and below:
        the head and the foot stand still, and the accounts between them
        scroll. The sheet: as the popover, the controls at the touch floor. -->
-  <!-- literal: 12px 14px 10px; 4px 18px 12px; 10px 12px; 6px; 8px, 10px, 12px; 40px -->
   <div
     class={[
       "flex flex-col",
       sheet ? "max-h-none min-h-0 flex-auto" : "max-h-(--pop-max)",
     ]}
-    style:--mark-r="3px"
-    style:--mark-side="14px"
-    style:--note-gap="6px"
     style:--pop-max="calc(var(--bits-popover-content-available-height) - 2px)"
     style:--ring-ground="var(--surface-raised)"
-    style:--pop-edge="12px"
-    style:--pop-step="10px"
     {@attach morph()}
   >
     {#if !(shown || gap) && notes.length === 0}
-      <p class="px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted">
+      <p class="p-space-3 type-meta text-ink-muted">
         {empty}
       </p>
     {/if}
@@ -896,8 +865,8 @@
         class={[
           "flex flex-none flex-col gap-space-2",
           sheet
-            ? "px-space-5 pt-space-1 pb-(--pop-edge)"
-            : "px-space-4 pt-(--pop-edge) pb-(--pop-step)",
+            ? "px-space-5 pt-space-1 pb-space-3"
+            : "px-space-4 py-space-3",
         ]}
         data-pop-head
       >
@@ -908,8 +877,8 @@
             <span
               data-slot="mark"
               aria-hidden="true"
-              class="inline-flex size-(--mark-side) flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
-              data-box><ClaudeIcon /></span
+              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs"
+              data-box><ClaudeIcon class="size-full" /></span
             >
             <span>Claude</span>
           </h3>
@@ -921,7 +890,6 @@
               <!-- Nothing can carry you now: the refresh mark before when an
                    account is back, as the Usage page's lead draws it: Solar
                    duotone, at the figure's cap height, muted. -->
-              <!-- literal: 0.25em; -0.1em; 0.8em -->
               <span
                 data-num
                 {...props}
@@ -930,15 +898,12 @@
                 data-muted={claude.stale !== null || undefined}
                 data-stop-kpi
                 role="img"
-                style:--kpi-glyph="0.8em"
-                style:--kpi-glyph-drop="-0.1em"
-                style:--kpi-glyph-gap="0.25em"
                 >{#if stop?.back}
                   <span
                     aria-hidden="true"
-                    class="me-(--kpi-glyph-gap) inline-grid align-(--kpi-glyph-drop) text-ink-muted"
+                    class="me-space-1 inline-grid align-middle text-ink-muted"
                     data-stop-back
-                    ><IconRefresh class="size-(--kpi-glyph)" /></span
+                    ><IconRefresh class="size-icon-md" /></span
                   >
                 {/if}
                 <Figure text={stop?.figure ?? ""} /></span
@@ -966,27 +931,23 @@
          the head, a hairline. -->
     <div
       class={[
-        "kit-edge-fade-block min-h-0 flex-auto overflow-y-auto overscroll-contain",
+        "kit-edge-fade-block relative min-h-0 flex-auto overflow-y-auto overscroll-contain",
         sheet && "kit-sheet-scroll",
         claude && "border-t border-t-border-hairline",
       ]}
       data-accounts
       data-flyover-scope
-      style:--fade-len="40px"
       {@attach reflow()}
       {@attach wholeRows}
     >
       {#if claude}
         <!-- Claude's accounts: the wall, space-3 under the head's
              hairline. -->
-        <!-- literal: 8px; 10px, 12px -->
         <div
           data-slot="group"
-          class="group flex flex-col gap-space-3 px-(--group-pad-x) pt-space-3 pb-(--group-pad-y)"
+          class="group flex flex-col gap-space-3 px-space-3 pt-space-3 pb-space-2"
           data-burn={claude.burn}
           data-burn-week={claude.burnWeek}
-          style:--group-pad-x={sheet ? "12px" : "10px"}
-          style:--group-pad-y="8px"
         >
           <!-- One grid for the whole wall, so every dial, every text start
                and every week's end stands on one x down it. An organization
@@ -1003,23 +964,21 @@
                over its accounts: meta, no chrome of its own, across the
                wall, starting on the dials' start edge. Every block after the
                first stands the same space-3 from the one before. -->
-          <!-- literal: repeat(2, auto 12px minmax(0, 1fr) 10px auto) -->
           <div
             data-slot="wall"
-            class="grid grid-cols-(--wall-cols) gap-space-1 [&>[data-slot=block]+[data-slot=block]>h4]:mt-(--org-gap)"
+            class="grid grid-cols-(--wall-cols) gap-space-1"
             data-flyover-span
-            style:--org-gap="calc(var(--space-3) - var(--space-1))"
-            style:--wall-cols="repeat(2, auto 12px minmax(0, 1fr) 10px auto)"
+            style:--wall-cols="repeat(2, auto var(--icon-sm) minmax(0, 1fr) var(--icon-sm) auto)"
           >
             {#each wall as block (block.org ?? "")}
               <div
                 data-slot="block"
-                class="contents"
+                class="group/block contents"
                 data-org-group={block.org ?? ""}
               >
                 {#if block.head}
                   <h4
-                    class="col-span-full px-space-1 pt-0 pb-space-row type-meta text-ink-muted"
+                    class="col-span-full px-space-1 pt-0 pb-space-row type-meta text-ink-muted group-not-first/block:mt-space-2"
                     data-flyover-edge
                     data-org-head
                   >
@@ -1041,8 +1000,7 @@
                      the whole popover, edge to edge, as a section's edge
                      is: `border: 0`, then its top edge. -->
                 <hr
-                  class="col-span-full mx-(--seam-pull) my-space-1 border-t border-t-border-hairline border-r-none border-b-none border-l-none"
-                  style:--seam-pull="calc(-1 * var(--group-pad-x))"
+                  class="col-span-full my-space-1 h-0 border-none before:absolute before:inset-x-0 before:border-t before:border-t-border-hairline"
                 />
                 {@render cell(openCode, null, sideFor())}
               </div>
@@ -1054,19 +1012,15 @@
         <!-- The Go plan: a cell of the same recipe on the wall's first
              column, named by its provider; the hairline before it parts it
              from Claude's. -->
-        <!-- literal: 6px; 8px; 10px, 12px -->
         <section
           data-slot="group"
-          class="group flex flex-col gap-(--note-gap) px-(--group-pad-x) py-(--group-pad-y)"
-          style:--group-pad-x={sheet ? "12px" : "10px"}
-          style:--group-pad-y="8px"
+          class="group flex flex-col gap-space-2 px-space-3 py-space-2"
         >
-          <!-- literal: repeat(2, auto 12px minmax(0, 1fr) 10px auto) -->
           <div
             data-slot="wall"
             class="grid grid-cols-(--wall-cols) gap-space-1"
             data-flyover-span
-            style:--wall-cols="repeat(2, auto 12px minmax(0, 1fr) 10px auto)"
+            style:--wall-cols="repeat(2, auto var(--icon-sm) minmax(0, 1fr) var(--icon-sm) auto)"
           >
             {@render cell(openCode, null, sideFor())}
           </div>
@@ -1076,14 +1030,14 @@
         <!-- Claude's gap: the whole why the strip's line stands for, and
              the sign-in that fixes it when one does. -->
         <div
-          class="flex flex-col items-start gap-space-2 px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted"
+          class="flex flex-col items-start gap-space-2 p-space-3 type-meta text-ink-muted"
         >
-          <p class="mark-line flex items-center gap-(--note-gap)">
+          <p class="mark-line flex items-center gap-space-2">
             <span
               data-slot="mark"
               aria-hidden="true"
-              class="inline-flex size-(--mark-side) flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
-              data-box><ClaudeIcon /></span
+              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs"
+              data-box><ClaudeIcon class="size-full" /></span
             >
             <span>{gap.reason}</span>
           </p>
@@ -1104,30 +1058,28 @@
              A hairline parts it from the group, the gap or the note before
              it. -->
         <p
-          class="mark-line flex items-center gap-(--note-gap) px-(--pop-edge) py-(--pop-step) type-meta text-ink-muted not-first:border-t not-first:border-t-border-hairline"
+          class="mark-line flex items-center gap-space-2 p-space-3 type-meta text-ink-muted not-first:border-t not-first:border-t-border-hairline"
         >
           <span
             data-slot="mark"
             aria-hidden="true"
-            class="inline-flex size-(--mark-side) flex-none overflow-hidden rounded-(--mark-r) [&_svg]:size-full"
+            class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs [&_svg]:size-full"
             data-box><Mark /></span
           >
           <span>{note.text}</span>
         </p>
       {/each}
     </div>
-    <!-- literal: 10px (--pop-step); 44px -->
     <div
       data-slot="foot"
-      class="flex-none border-t border-t-border-hairline px-space-4 py-(--pop-step)"
+      class="flex-none border-t border-t-border-hairline px-space-4 py-space-3"
       data-pop-foot
     >
       <Button
-        class={sheet ? "h-(--foot-touch) w-full" : undefined}
+        class={sheet ? "h-c-btn-h-lg w-full" : undefined}
         href="/usage"
         label="Open usage"
         size="sm"
-        style={sheet ? "--foot-touch: 44px;" : undefined}
         variant="outline"
       />
     </div>
@@ -1139,7 +1091,6 @@
      control, one height whatever it says (`data-strip-hit`, which the
      usage-relay bench finds it by); under the pointer or open it paints its
      own ground, and the dials' reserve notch takes it (`ring-ground-*`). -->
-<!-- literal: 44px, 56px -->
 <div
   data-slot="strip"
   class="group/strip relative w-full min-w-0 rounded-sm bg-(--ring-ground) variant-home:rounded-md"
@@ -1148,7 +1099,6 @@
   style:--strip-ground={variant === "home"
     ? "var(--surface-raised)"
     : undefined}
-  style:--strip-hit-h={variant === "home" ? "56px" : "44px"}
 >
   {#if touch.current}
     <!-- On touch every account rises in the house sheet, as a tab's details
@@ -1156,7 +1106,7 @@
     <Drawer.Root bind:open>
       <Drawer.Trigger
         aria-label={triggerLabel}
-        class="press-tint touch-hit flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover"
+        class="press-tint touch-hit flex h-c-btn-h-lg group-variant-home/strip:h-c-usage-strip-home-h w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover"
         data-strip-hit
         onkeydown={keyed}
         onpointerdown={pressed}
@@ -1174,14 +1124,13 @@
     <Popover.Root bind:open>
       <Popover.Trigger
         aria-label={triggerLabel}
-        class="press-tint flex h-(--strip-hit-h) w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover"
+        class="press-tint flex h-c-btn-h-lg group-variant-home/strip:h-c-usage-strip-home-h w-full cursor-pointer items-center rounded-sm border-none border-current bg-transparent px-space-3 py-0 text-start text-ink-strong transition-[background-color] dur-control ease-out group-variant-home/strip:rounded-md group-variant-home/strip:px-space-4 hover:bg-surface-hover hover:ring-ground-surface-hover aria-expanded:bg-surface-hover aria-expanded:ring-ground-surface-hover state-open:bg-surface-hover state-open:ring-ground-surface-hover"
         data-strip-hit
         onkeydown={keyed}
         onpointerdown={pressed}
       >
         {@render face()}
       </Popover.Trigger>
-      <!-- literal: 100vw, 16px -->
       <Popover.Content
         align="start"
         class="w-(--usage-pop-w)"
@@ -1192,7 +1141,7 @@
         pad="none"
         side="top"
         sideOffset={6}
-        style="--usage-pop-w: min(var(--c-panel-w), calc(100vw - 16px));"
+        style="--usage-pop-w: min(var(--c-panel-w), calc(100vw - 2 * var(--space-2)));"
       >
         {@render limits(false)}
       </Popover.Content>

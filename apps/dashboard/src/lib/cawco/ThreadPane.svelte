@@ -813,7 +813,7 @@
   {#if why}
     {@const line = notWokenLine(why)}
     <RowFault
-      class="not-woken"
+      class="fault-ink-muted"
       again={retryable === id ? () => wakeAgain(id) : undefined}
       againPending="Waking Caw…"
       data-not-woken={why.reason}
@@ -843,7 +843,7 @@
     {#if filed.length > 0}
       <!-- What the cards are, in the kit's meta line over them. -->
       <p
-        class="mt-0 mx-0 mb-space-2 type-meta text-ink-muted"
+        class="mt-0 mx-0 mb-space-2 type-meta text-ink-muted motion-safe:data-arrive:animate-filed-rise motion-reduce:data-arrive:animate-filed-fade"
         data-arrive={live || undefined}
         data-tasks-head
       >
@@ -854,21 +854,17 @@
            tallest in the block, whatever it has to say; a task's needs take
            only their own track (`auto`, empty for a task that needs
            nothing). -->
-      <!-- literal: 14rem -->
       <ul
         class="grid grid-cols-(--task-cols) auto-rows-(--task-rows) gap-x-space-2 gap-y-0 m-0 p-0 list-none"
-        style:--task-cols="repeat(auto-fill, minmax(14rem, 1fr))"
+        style:--task-cols="repeat(auto-fill, minmax(var(--c-filed-task-w), 1fr))"
         style:--task-rows="1fr auto"
       >
         {#each filed as task, at (task.id)}
-          <!-- literal: 74ch -->
           <li
             data-slot="filed-task"
-            class="grid row-start-(--task-span) grid-rows-subgrid min-w-0"
-            style:--task-span="span 2"
-            style:--needs-w="74ch"
+            class="grid row-span-2 grid-rows-subgrid min-w-0 arrive-delay has-needs-stack:col-span-full has-needs-stack:max-w-c-measure motion-safe:data-arrive:animate-filed-rise motion-reduce:data-arrive:animate-filed-fade"
             data-arrive={live || undefined}
-            style:animation-delay={live ? `${(at + 1) * step}ms` : undefined}
+            style:--arrive-delay={live ? `${(at + 1) * step}ms` : undefined}
           >
             <TaskCard
               href={taskHref(task.id)}
@@ -956,12 +952,10 @@
     class="relative flex flex-col flex-auto min-h-0 overflow-hidden isolate timeline-scope-transcript-head"
   >
     {#if readProblem}
-      <!-- literal: 60ch -->
       <p
-        class="m-0 ms-(--problem-ms) max-w-(--problem-w) py-space-6 type-body text-ink-muted max-desk:ms-space-3"
+        class="m-0 ms-(--problem-ms) max-w-c-measure-short py-space-6 type-body text-ink-muted max-desk:ms-space-3"
         role="alert"
         style:--problem-ms="calc((100% - var(--c-composer-w)) / 2)"
-        style:--problem-w="60ch"
         in:crossIn
       >
         The thread could not be read: {readProblem}
@@ -975,6 +969,7 @@
            mark) stays under the foot fade as it scrolls past the composer. -->
       <div
         class="flex flex-auto flex-col min-h-0 px-(--hero-px) pb-(--composer-clearance) overflow-y-auto isolate max-desk:px-space-3"
+        data-slot="thread-hero"
         data-thread-hero
         style:--hero-px="calc((100% - var(--c-composer-w)) / 2)"
         in:crossIn
@@ -1163,63 +1158,3 @@
     />
   {/if}
 {/snippet}
-
-<style>
-  /* residual: foreign-dom — DOM the children draw. A thread has no tool
-     rail: its rows are messages and event lines, so the rail's column is
-     the rows' own edge (app.css .tx-columns, as it is on a narrow screen)
-     and the answered question's card stands on it. */
-  [data-slot="thread-pane-state"] :global(.tx-columns) {
-    --x-rail: 0px;
-  }
-  /* A not-woken note's reason and Try again under its title, at the text
-     column (SystemLine `.note.unread`): muted, since nothing failed. */
-  [data-slot="thread-pane-state"] :global(.not-woken) {
-    --fault-ink: var(--ink-muted);
-  }
-  /* The hero's starters fill the column (EmptyState's action cell). */
-  [data-thread-hero] :global(.kit-empty-action) {
-    align-self: stretch;
-  }
-  /* A task's card and what it needs of you, each a step above the next
-     (TaskCard and TaskNeedsFor take no class). */
-  [data-slot="filed-task"] > :global([data-task-card]) {
-    margin-block-end: var(--space-2);
-  }
-  [data-slot="filed-task"] > :global([data-slot="task-needs-for-needs-for"]) {
-    margin-block-end: var(--space-2);
-  }
-  /* A task that needs you takes the row: its card, then what it needs and
-     the way to act, collapsed to the deliverable's first lines (TaskNeeds'
-     stack, inside TaskNeedsFor). */
-  [data-slot="filed-task"]:has(:global([data-slot="task-needs-needs-stack"])) {
-    grid-column: 1 / -1;
-    max-inline-size: var(--needs-w);
-  }
-  /* A reply's filed tasks, landing while the thread is open: the head line
-     first, then each card, uncovered top to bottom on one clock (design
-     f2640f55 §2): a fade from nothing and, motion allowed, a rise from
-     --pop-rise, over --dur-pop on --ease-out, each card from its own start
-     (its inline animation-delay). Held at its start until then
-     (`backwards`); done, it leaves the card as it is. */
-  /* residual: keyframes */
-  [data-arrive] {
-    animation: filed-fade var(--dur-pop) var(--ease-out) backwards;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    [data-arrive] {
-      animation-name: filed-rise;
-    }
-  }
-  @keyframes filed-fade {
-    from {
-      opacity: 0;
-    }
-  }
-  @keyframes filed-rise {
-    from {
-      opacity: 0;
-      translate: 0 var(--pop-rise);
-    }
-  }
-</style>

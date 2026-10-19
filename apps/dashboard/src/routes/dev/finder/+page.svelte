@@ -97,11 +97,9 @@
   });
 </script>
 
-<!-- literal: 100dvh -->
 <div
-  class="relative flex h-(--bench-h) flex-col bg-(--background) type-body text-ink-strong"
+  class="relative flex h-dvh flex-col bg-surface-page type-body text-ink-strong"
   data-phone={phone || undefined}
-  style:--bench-h="100dvh"
 >
   {#if !phone}
     <header
@@ -127,12 +125,10 @@
         <li class="py-space-2 type-code whitespace-pre-wrap">{text}</li>
       {/each}
     </ol>
-    <!-- literal: 34px -->
     <div
       data-slot="composer"
-      class="relative mx-auto flex w-(--composer-w) flex-none items-end gap-space-2 rounded-lg border border-border-control bg-surface-raised py-space-2 pr-space-2 pl-space-3 shadow-tile"
+      class="relative mx-auto flex w-full max-w-c-composer-w flex-none items-end gap-space-2 rounded-lg border border-border-control bg-surface-raised py-space-2 pr-space-2 pl-space-3 shadow-tile"
       data-composer
-      style:--composer-w="min(100%, var(--c-composer-w))"
     >
       <MentionField
         bind:this={mentionField}
@@ -144,16 +140,14 @@
       />
       <div data-slot="controls" class="flex gap-space-1">
         <button
-          class="h-(--btn-h) rounded-xs border border-border-control bg-surface-raised px-space-3 type-label text-ink-strong"
-          style:--btn-h="34px"
+          class="h-c-btn-h rounded-xs border border-border-control bg-surface-raised px-space-3 type-label text-ink-strong"
           type="button">Attach</button
         >
         <button
           data-slot="send"
-          class="h-(--btn-h) rounded-xs border-none border-current bg-action-solid px-space-3 type-label text-on-action"
+          class="h-c-btn-h rounded-xs border-none border-current bg-action-solid px-space-3 type-label text-on-action"
           data-send
           onclick={() => send(message)}
-          style:--btn-h="34px"
           type="button">Send</button
         >
       </div>
@@ -176,15 +170,13 @@
         class="fixed inset-0 z-20 flex flex-col bg-surface-raised pt-space-2"
         data-finder-card
       >
-        <!-- literal: 36px, 5px -->
         <div
-          class="mx-auto mb-space-2 h-(--grabber-h) w-(--grabber-w) flex-none rounded-pill bg-border-control"
+          class="mx-auto mb-space-2 h-space-1 w-space-8 flex-none rounded-pill bg-border-control"
           aria-hidden="true"
-          style:--grabber-h="5px"
-          style:--grabber-w="36px"
         ></div>
         <Finder
           bind:field
+          class="flex-1"
           {finder}
           onclose={hide}
           onmachine={machine}
@@ -195,7 +187,6 @@
       </div>
     {:else}
       <!-- The glass's card, as it hangs: right-aligned under the bar, the page live under it. -->
-      <!-- literal: 100dvh, 24px -->
       <div
         data-slot="finder-page-card"
         class="absolute end-0 top-c-top-bar-h z-20 flex max-h-(--card-max-h) w-c-find-w flex-col overflow-hidden rounded-b-lg border border-border-control border-t-none bg-surface-raised shadow-overlay-hung"
@@ -203,7 +194,7 @@
         role="dialog"
         aria-label="Jump"
         aria-modal="false"
-        style:--card-max-h="calc(100dvh - var(--c-top-bar-h) - 24px)"
+        style:--card-max-h="calc(100dvh - var(--c-top-bar-h) - var(--space-6))"
       >
         <Finder
           bind:field
@@ -217,10 +208,3 @@
     {/if}
   {/if}
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  [data-slot="sheet"] > :global([data-slot="finder"]) {
-    flex: 1;
-  }
-</style>

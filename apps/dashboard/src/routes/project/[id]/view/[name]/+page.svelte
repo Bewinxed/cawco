@@ -80,9 +80,8 @@
 <svelte:head><title>{stageLabel(name)} · CawCo</title></svelte:head>
 
 <main
-  class="min-h-(--min-h) bg-surface-recess pt-space-4 pr-(--pad-right) pb-(--pad-bottom) pl-(--pad-left)"
+  class="min-h-dvh bg-surface-recess pt-space-4 pr-(--pad-right) pb-(--pad-bottom) pl-(--pad-left)"
   data-view-alone={name}
-  style:--min-h="100dvh"
   style:--pad-bottom="max(var(--space-4), var(--safe-bottom))"
   style:--pad-left="max(var(--space-4), env(safe-area-inset-left))"
   style:--pad-right="max(var(--space-4), env(safe-area-inset-right))"
