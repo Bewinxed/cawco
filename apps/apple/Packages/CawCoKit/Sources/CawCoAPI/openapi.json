@@ -36005,6 +36005,10 @@
               ]
             }
           },
+          "held": {
+            "description": "Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show.",
+            "type": "string"
+          },
           "hint": {
             "description": "A component canvas's next reads, one line.",
             "type": "string"
@@ -36882,7 +36886,7 @@
             "type": "string"
           },
           "waitingOn": {
-            "description": "Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it by a delegate and not opened yet).",
+            "description": "Whose move it is: the person's (shown and not opened since it changed, or a decision page's picks not made or not sent), the session's (sent picks, a canvas's changes unread, or handed to it or changed by a delegate and not opened yet).",
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/ArtifactStatusWaitingOn"
@@ -36966,6 +36970,10 @@
               "file",
               "lines"
             ]
+          },
+          "held": {
+            "description": "Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show.",
+            "type": "string"
           },
           "id": {
             "type": "string"
@@ -37254,6 +37262,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "held": {
+            "description": "Your change waits as this next version: your parent had opened the artifact, and their panel keeps the version they opened until they call artifact_show.",
+            "type": "string"
           },
           "id": {
             "type": "string"

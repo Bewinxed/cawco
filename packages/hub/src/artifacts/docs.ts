@@ -19,6 +19,7 @@ import {
   applyUpdate,
   Doc,
   encodeStateAsUpdate,
+  encodeStateVector,
   type Array as YArray,
   type YEvent,
   Map as YMap,
@@ -74,9 +75,18 @@ export interface ArtifactDocs {
   doc: (id: string) => Doc;
   /** The artifact was removed: every joined client's socket is ended and its doc let go. */
   drop: (id: string) => void;
+  /** Artifact `to`'s doc made a copy of `from`'s whole, as one update of `to`'s, by the hub: a held next version's start. */
+  fork: (from: string, to: string) => void;
   /** Starts sending `client` every update another makes. */
   join: (id: string, client: ArtifactClient) => Doc;
   leave: (id: string, client: ArtifactClient) => void;
+  /**
+   * What `from`'s doc holds that `to`'s does not, applied to `to`'s as one
+   * transaction made by `origin`: a held next version merged into its
+   * artifact. `from` forked from `to`, so what changed on `to` since (the
+   * person's picks) stays beside it.
+   */
+  merge: (from: string, to: string, origin: ChangeOrigin) => void;
   /**
    * Hears every person's change to an artifact's marks: a transaction from a
    * joined client that changed its `pins` or `ink` (service.ts
@@ -257,6 +267,19 @@ export const createArtifactDocs = (deps: {
         client.close();
       }
       entry.doc.destroy();
+    },
+    fork: (from, to) => {
+      const whole = encodeStateAsUpdate(load(from).doc);
+      const { doc } = load(to);
+      doc.transact(() => applyUpdate(doc, whole), "hub");
+    },
+    merge: (from, to, origin) => {
+      const { doc } = load(to);
+      const missing = encodeStateAsUpdate(
+        load(from).doc,
+        encodeStateVector(doc)
+      );
+      doc.transact(() => applyUpdate(doc, missing), origin);
     },
     join: (id, client) => {
       const entry = load(id);

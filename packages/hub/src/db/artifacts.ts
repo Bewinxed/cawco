@@ -1,6 +1,17 @@
 import type { PreviewSource } from "@cawco/core";
 import { isPlace } from "@cawco/core/workspace-policy";
-import { and, asc, count, desc, eq, gt, gte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  desc,
+  eq,
+  gt,
+  gte,
+  isNull,
+  or,
+  sql,
+} from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import {
   artifactChanges,
@@ -126,7 +137,9 @@ export interface ArtifactsDb {
   readonly compact: (id: string, snapshot: Uint8Array) => void;
   readonly create: (row: ArtifactRow) => ArtifactRow;
   readonly get: (id: string) => ArtifactRow | undefined;
-  /** A session's artifacts, newest first. */
+  /** The next version held for artifact `id` (`heldFor`), if one waits. */
+  readonly heldOf: (id: string) => ArtifactRow | undefined;
+  /** A session's artifacts, newest first; never a held next version, as no list below holds one. */
   readonly ofInstance: (instanceId: string) => ArtifactRow[];
   /** A project's artifacts, any of its sessions', newest first. */
   readonly ofProject: (projectId: string) => ArtifactRow[];
@@ -135,6 +148,7 @@ export interface ArtifactsDb {
    * preview naming it (`source.workspace`), or a folder preview of its clone
    * or a folder inside it on its machine. Every session's shown preview
    * (shown_previews) is one of these rows, so this covers what panels show.
+   * A held next version is one too: a server it shows stays up for it.
    */
   readonly previewing: (workspace: {
     id: string;
@@ -209,7 +223,8 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
         and(
           eq(artifacts.instanceId, instanceId),
           eq(artifacts.kind, kind),
-          eq(artifacts.name, name)
+          eq(artifacts.name, name),
+          isNull(artifacts.heldFor)
         )
       )
       .get();
@@ -241,11 +256,21 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
     const row = db.select().from(artifacts).where(eq(artifacts.id, id)).get();
     return row && artifactOf(row);
   },
+  heldOf: (id) => {
+    const row = db
+      .select()
+      .from(artifacts)
+      .where(eq(artifacts.heldFor, id))
+      .get();
+    return row && artifactOf(row);
+  },
   ofInstance: (instanceId) =>
     db
       .select()
       .from(artifacts)
-      .where(eq(artifacts.instanceId, instanceId))
+      .where(
+        and(eq(artifacts.instanceId, instanceId), isNull(artifacts.heldFor))
+      )
       .orderBy(desc(artifacts.createdAt))
       .all()
       .map(artifactOf),
@@ -253,7 +278,7 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
     db
       .select()
       .from(artifacts)
-      .where(eq(artifacts.projectId, projectId))
+      .where(and(eq(artifacts.projectId, projectId), isNull(artifacts.heldFor)))
       .orderBy(desc(artifacts.createdAt))
       .all()
       .map(artifactOf),
@@ -303,7 +328,7 @@ export const artifactsDb = (db: BunSQLiteDatabase): ArtifactsDb => ({
     db
       .select()
       .from(artifacts)
-      .where(gte(artifacts.updatedAt, at))
+      .where(and(gte(artifacts.updatedAt, at), isNull(artifacts.heldFor)))
       .all()
       .map(artifactOf),
   unshow: (instanceId) => {

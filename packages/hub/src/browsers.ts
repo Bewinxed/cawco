@@ -164,6 +164,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       id: crypto.randomUUID(),
       instanceId: instance.id,
       madeBy: null,
+      heldFor: null,
       projectId: instance.projectId ?? null,
       kind: "browser",
       name: BROWSER_ARTIFACT_NAME,

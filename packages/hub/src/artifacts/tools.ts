@@ -220,7 +220,7 @@ export const artifactCreate = {
 export const artifactCreateToParent = {
   description:
     ' to: "parent" hands it to your parent unopened: they are told once per hand-off, open it in their panel with artifact_show, and get its picks and pins. ' +
-    "You keep update and read.",
+    "You keep update and read; once they have opened it, your changes wait as its next version (held) until their artifact_show.",
   input: { to: z.literal("parent").optional() },
 };
 

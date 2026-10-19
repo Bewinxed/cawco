@@ -10725,6 +10725,29 @@ export const createServer = (
     decisionsChanged(projectId);
   };
 
+  /** Page `name`'s source kept in its project's folder ({@link keepInFolder}): a program's, else its HTML. */
+  const keepPage = (
+    row: InstanceRow,
+    name: string,
+    page: { html: string; program?: string }
+  ): Promise<PageRefusal | undefined> => {
+    const folder = `decisions/${name}`;
+    return page.program === undefined
+      ? keepInFolder(
+          row,
+          name,
+          { path: `${folder}/index.html`, content: page.html },
+          `${folder}/${PROGRAM_FILE}`
+        )
+      : keepInFolder(
+          row,
+          name,
+          { path: `${folder}/${PROGRAM_FILE}`, content: page.program },
+          `${folder}/index.html`
+        );
+  };
+
+  /** A page built from `from`, its project's folder untouched ({@link keptArtifactPage} keeps it there). */
   const buildArtifactPage = async (
     row: InstanceRow,
     name: string,
@@ -10740,15 +10763,7 @@ export const createServer = (
       const built = await buildProgram(program.text, (file) =>
         programImage(row, file, program)
       );
-      const refused = await keepInFolder(
-        row,
-        name,
-        { path: `${folder}/${PROGRAM_FILE}`, content: built.program },
-        `${folder}/index.html`
-      );
-      return refused
-        ? { status: refused.code, refused: refused.refused }
-        : { html: built.html, program: built };
+      return { html: built.html, program: built };
     }
     if ("program" in from) {
       return { status: 400, refused: "A program is required." };
@@ -10761,15 +10776,29 @@ export const createServer = (
     if ("problem" in built) {
       return { status: 422, refused: built.problem };
     }
-    const refused = await keepInFolder(
-      row,
-      name,
-      { path: `${folder}/index.html`, content: built.html },
-      `${folder}/${PROGRAM_FILE}`
-    );
-    return refused
-      ? { status: refused.code, refused: refused.refused }
-      : { html: built.html };
+    return { html: built.html };
+  };
+
+  /**
+   * A page built (artifacts/service.ts `ArtifactServiceDeps.page`), kept in
+   * its project's folder when `keep`: a maker's next version held for its
+   * parent is kept there when the parent opens it.
+   */
+  const keptArtifactPage = async (
+    row: InstanceRow,
+    name: string,
+    from: PageFrom,
+    keep: boolean
+  ): Promise<BuiltArtifactPage> => {
+    const built = await buildArtifactPage(row, name, from);
+    if ("refused" in built || !keep) {
+      return built;
+    }
+    const refused = await keepPage(row, name, {
+      html: built.html,
+      ...(built.program ? { program: built.program.program } : {}),
+    });
+    return refused ? { status: refused.code, refused: refused.refused } : built;
   };
 
   /**
@@ -11118,13 +11147,15 @@ export const createServer = (
   const handArtifactUp: ArtifactServiceDeps["handedUp"] = async (
     parent,
     maker,
-    artifact
+    artifact,
+    next
   ) => {
     const text = artifactHandedNotice({
       from: sessionName(maker),
       id: artifact.id,
       kind: artifact.kind,
       name: artifact.name,
+      next: next?.id,
     });
     await artifactInOrder(`${artifact.id}:handed`, () => {
       try {
@@ -11440,8 +11471,8 @@ export const createServer = (
     deliverMarks: (instance, artifact, delivery) =>
       deliverArtifactMarks(instance, artifact, delivery),
     // A delegate's artifact handed to its parent unopened: the parent hears it once.
-    handedUp: (parent, maker, artifact) =>
-      handArtifactUp(parent, maker, artifact),
+    handedUp: (parent, maker, artifact, next) =>
+      handArtifactUp(parent, maker, artifact, next),
     instance: (id) => db.getInstancesByIds([id])[0],
     ended: (instance) =>
       !!inputRefusal(instance.id, { kind: "system", name: ARTIFACT_ORIGIN }),
@@ -11470,7 +11501,11 @@ export const createServer = (
       return { ok: true, revision: opened.frame.revision };
     },
     personShown: (instanceId) => personShown.get(instanceId),
-    page: buildArtifactPage,
+    page: keptArtifactPage,
+    keepPage: async (instance, name, page) => {
+      const refused = await keepPage(instance, name, page);
+      return refused && { status: refused.code, refused: refused.refused };
+    },
     sending: (instance, artifact, state) =>
       applySetupPicks(artifact, instance.projectId, state, {
         fleet: (choices) => setFleetChoices(fleetChoices, choices),

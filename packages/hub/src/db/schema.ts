@@ -3580,6 +3580,15 @@ export const artifacts = sqliteTable(
     madeBy: text("made_by").references(() => instances.id, {
       onDelete: "set null",
     }),
+    /**
+     * The artifact this row is the next version of: a maker's change to an
+     * artifact that stands in its parent's panel, held here unseen until the
+     * parent's artifact_show merges it in and drops this row (artifacts
+     * service.ts `holdNext`). No list holds it; null for every artifact.
+     */
+    heldFor: text("held_for").references((): AnySQLiteColumn => artifacts.id, {
+      onDelete: "cascade",
+    }),
     /** The session's project when it made it; a page there is also written to `decisions/<name>/`. */
     projectId: text("project_id"),
     kind: text("kind").$type<import("@cawco/core").ArtifactKind>().notNull(),
@@ -3636,11 +3645,11 @@ export const artifacts = sqliteTable(
   },
   (table) => [
     index("artifacts_instance").on(table.instanceId, table.createdAt),
-    uniqueIndex("artifacts_instance_name").on(
-      table.instanceId,
-      table.kind,
-      table.name
-    ),
+    // A held next version shares its artifact's name.
+    uniqueIndex("artifacts_instance_name")
+      .on(table.instanceId, table.kind, table.name)
+      .where(sql`${table.heldFor} is null`),
+    uniqueIndex("artifacts_held_for").on(table.heldFor),
   ]
 );
 
