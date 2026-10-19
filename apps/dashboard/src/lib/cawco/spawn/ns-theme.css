@@ -15,8 +15,9 @@
  * order they won in. One declaration keeps weight, because it beats
  * something other than the sheet: the drawer card's font and colour (E1).
  * Rules into DOM no utility names sit in
- * `@layer components`, and three carve-outs for the kit's controls in
- * `@layer utilities` (K1–K3). The cascade, row by row:
+ * `@layer components`, where every kit control's own utilities outrank
+ * them: a kit Button, Input or trigger in the dialog draws its own recipe
+ * (DESIGN.md, Buttons; Inputs and fields). The cascade, row by row:
  * .cutover/shared-sheets.md §3.
  */
 @utility ns-theme {
@@ -52,7 +53,7 @@
     font: inherit;
     color: inherit;
     transition: var(--transition-control);
-    @media (prefers-reduced-motion: no-preference) {
+    @variant motion-safe {
       transition:
         var(--transition-control),
         transform var(--dur-toggle) var(--ease-out);
@@ -60,8 +61,8 @@
   }
   /* foreign-dom — a button scales on press; a list row, a folder and a
      segment take .press-tint (app.css) instead and are left out here. */
-  @media (prefers-reduced-motion: no-preference) {
-    .ns-theme button:not(.press-tint, :disabled, [aria-busy="true"]):active {
+  .ns-theme button:not(.press-tint, :disabled, [aria-busy="true"]):active {
+    @variant motion-safe {
       transform: scale(var(--press-scale));
     }
   }
@@ -70,9 +71,10 @@
   .ns-theme [contenteditable] {
     font-family: var(--font-body);
   }
-  /* foreign-dom */
+  /* foreign-dom — DESIGN.md, Inputs and fields: "muted placeholder", the
+     kit Input's own. */
   .ns-theme input::placeholder {
-    color: var(--ink-subtle);
+    color: var(--ink-muted);
   }
   /* foreign-dom */
   .ns-theme .ns-tile svg {
@@ -80,58 +82,26 @@
   }
   /* foreign-dom */
   .ns-theme .ns-chip-btn > svg {
-    width: 16px;
-    height: 16px;
+    width: var(--icon-md);
+    height: var(--icon-md);
     flex: none;
   }
   /* foreign-dom — bits-ui's floating wrapper glides with a morphing surface,
      marked while the surface morphs (NsPopoverGroup `data-ns-morph`). */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-bits-floating-content-wrapper][data-ns-morph] {
+  [data-bits-floating-content-wrapper][data-ns-morph] {
+    @variant motion-safe {
       transition: transform var(--dur-pop) var(--ease-drawer);
-    }
-  }
-}
-
-@layer utilities {
-  /* foreign-dom — K1: the kit's own controls (Button, CopyButton,
-     InputGroup.Button, a Collapsible trigger) inherit the surface's font and
-     ink as every button here does, over the kit's own type and ink; a
-     component's hover (`hover:`, (0,2,0)) still wins. */
-  .ns-theme
-    button:where([data-slot="button"], [data-slot="collapsible-trigger"]) {
-    font: inherit;
-    color: inherit;
-    transition: var(--transition-control);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        var(--transition-control),
-        transform var(--dur-toggle) var(--ease-out);
-    }
-  }
-  /* foreign-dom — K2: the kit Input's placeholder in the subtle ink. */
-  .ns-theme
-    input:where(
-      [data-slot="input"],
-      [data-slot="input-group-control"]
-    )::placeholder {
-    color: var(--ink-subtle);
-  }
-  /* foreign-dom — K3: on a phone every button in a popover is 44px tall. */
-  @media (max-width: 640px) {
-    .ns-theme.ns-pop button {
-      min-height: 44px;
     }
   }
 }
 
 @utility fai-comb {
   :where(.ns-theme &) {
-    height: 14px;
+    height: var(--space-4);
     background-image: repeating-linear-gradient(
       to right,
       var(--neutral-5) 0 1px,
-      transparent 1px 6px
+      transparent 1px var(--c-comb-pitch)
     );
     background-repeat: no-repeat;
     background-size: 100% 100%;
@@ -144,8 +114,8 @@
     scrollbar-color: var(--neutral-5) transparent;
   }
   :where(.ns-theme &)::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: var(--c-scrollbar-thin);
+    height: var(--c-scrollbar-thin);
   }
   :where(.ns-theme &)::-webkit-scrollbar-thumb {
     background: var(--neutral-5);
@@ -221,7 +191,7 @@
    row's own style once landed: held with `both`, it kept a disabled row (a
    harness tab not installed, Rail's 0.45) at full opacity. */
 @utility ns-in {
-  @media (prefers-reduced-motion: no-preference) {
+  @variant motion-safe {
     :where(.ns-theme &) {
       animation: ns-in var(--ns-row-ms) var(--ease-out) backwards;
       animation-delay: var(--delay, 0ms);
@@ -230,7 +200,7 @@
 }
 
 @utility ns-check {
-  @media (prefers-reduced-motion: no-preference) {
+  @variant motion-safe {
     :where(.ns-theme &) {
       animation: ns-check var(--ns-check-ms) var(--ease-out) both;
     }
@@ -238,7 +208,7 @@
 }
 
 @utility ns-panel {
-  @media (prefers-reduced-motion: no-preference) {
+  @variant motion-safe {
     :where(.ns-theme &) {
       animation: ns-panel var(--dur-fade) var(--ease-out) both;
     }
@@ -247,20 +217,21 @@
 
 /* DS Button (§5.1): `data-size="sm"` / `"xs"` (a button at chip scale, for
    actions that sit among chips), `data-variant="primary"`. A disabled
-   button keeps its own colour pair and only fades. */
+   button keeps its own colour pair and only fades. Its sizes are the kit
+   Button's (DESIGN.md, Buttons); at chip scale it is a chip's height. */
 @utility ns-btn {
   :where(.ns-theme &) {
     --hit-edge: 1px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    --btn-gap: 8px;
-    --btn-icon: 16px;
-    height: 36px;
-    padding: 0 14px;
+    gap: var(--c-btn-gap);
+    --btn-gap: var(--c-btn-gap);
+    --btn-icon: var(--icon-md);
+    height: var(--c-btn-h);
+    padding: 0 var(--space-4);
     font: var(--weight-strong) var(--text-body) / 1 var(--font-body);
-    letter-spacing: -0.01em;
+    letter-spacing: var(--track-title);
     border: 1px solid var(--border-control);
     border-radius: var(--radius-md);
     background: var(--surface-raised);
@@ -269,10 +240,10 @@
     white-space: nowrap;
   }
   :where(.ns-theme &[data-size="sm"]) {
-    gap: 7px;
-    --btn-gap: 7px;
-    height: 30px;
-    padding: 0 11px;
+    gap: var(--space-2);
+    --btn-gap: var(--space-2);
+    height: var(--c-btn-h-sm);
+    padding: 0 var(--space-3);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
   }
@@ -283,16 +254,16 @@
   }
   :where(.ns-theme &:disabled) {
     cursor: not-allowed;
-    opacity: 0.55;
+    opacity: 0.5;
   }
   :where(.ns-theme &[data-size="xs"]) {
-    gap: 6px;
-    height: 28px;
-    padding: 0 8px;
+    gap: var(--space-2);
+    height: var(--c-btn-h-sm);
+    padding: 0 var(--space-2);
     font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
     border-radius: var(--radius-sm);
   }
-  @media (hover: hover) {
+  @variant can-hover {
     :where(.ns-theme &:not(:disabled):hover) {
       background: var(--surface-hover);
     }
@@ -313,9 +284,9 @@
   :where(.ns-theme &) {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
-    height: 30px;
-    padding: 0 8px;
+    gap: var(--space-2);
+    height: var(--c-btn-h-sm);
+    padding: 0 var(--space-2);
     background: var(--surface-raised);
     border: 1px solid var(--border-control);
     border-radius: var(--radius-sm);
@@ -328,7 +299,7 @@
       background-color var(--ns-chip-ms) var(--ease-out),
       border-color var(--ns-chip-ms) var(--ease-out),
       color var(--ns-chip-ms) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
+    @variant motion-safe {
       transition:
         background-color var(--ns-chip-ms) var(--ease-out),
         border-color var(--ns-chip-ms) var(--ease-out),
@@ -336,8 +307,10 @@
         transform var(--dur-toggle) var(--ease-out);
     }
   }
-  @media (hover: hover) {
-    :where(.ns-theme &:hover) {
+  /* A static chip has no hover (DESIGN.md, New-session dialog), so only a
+     chip that can change takes one. */
+  @variant can-hover {
+    :where(.ns-theme &:not([data-variant="static"]):hover) {
       background: var(--surface-hover);
     }
   }
@@ -346,14 +319,9 @@
     border-color: var(--border-hairline);
     cursor: default;
   }
-  @media (hover: hover) {
-    :where(.ns-theme &[data-variant="static"]:hover) {
-      background: var(--surface-recess);
-    }
-  }
   :where(.ns-theme & > svg[data-slot="chevron"]) {
-    width: 12px;
-    height: 12px;
+    width: var(--icon-sm);
+    height: var(--icon-sm);
     color: var(--ink-subtle);
   }
   :where(.ns-theme & [data-slot="chip-label"]) {
@@ -374,15 +342,23 @@
    frame the content exists, while gliding between siblings keeps the
    content open and never replays it. A group's surface (`data-morph`) also
    tweens its width. The permission rows never wrap, so their popover takes
-   the rows' width. */
+   the rows' width. Its rows are menu items, 44px tall on touch (DESIGN.md,
+   The 44 Touch Rule); a kit Button in it keeps its drawn size and reaches
+   44px through its own `touch-hit`. */
 @utility ns-pop {
   :where(.ns-theme&) {
     z-index: 90;
     position: relative;
-    width: min(var(--ns-pop-width, 320px), calc(100vw - 32px));
-    max-height: min(440px, var(--bits-popover-content-available-height));
+    width: min(
+      var(--ns-pop-width, var(--c-pop-w)),
+      calc(100vw - var(--space-8))
+    );
+    max-height: min(
+      var(--c-pop-max-h),
+      var(--bits-popover-content-available-height)
+    );
     overflow: auto;
-    padding: 6px;
+    padding: var(--space-2);
     display: grid;
     /* Content never outgrows the surface: a wide row shrinks rather than overflows. */
     grid-template-columns: minmax(0, 1fr);
@@ -398,36 +374,41 @@
     translate: 0 0;
     transform-origin: var(--bits-popover-content-transform-origin, top left);
     transition: opacity var(--dur-pop) var(--ease-drawer);
-    @media (prefers-reduced-motion: no-preference) {
+    @variant motion-safe {
       transition:
         opacity var(--dur-pop) var(--ease-drawer),
         scale var(--dur-pop) var(--ease-drawer),
         translate var(--dur-pop) var(--ease-drawer);
     }
   }
-  @media (max-width: 640px) {
+  /* DESIGN.md, Breakpoints: under 640px a popover widens to the viewport
+     less the screen's margins. */
+  @variant max-phone {
     :where(.ns-theme&) {
-      width: calc(100vw - 24px);
+      width: calc(100vw - 2 * var(--c-screen-margin));
       max-height: min(
-        420px,
+        var(--c-pop-max-h-phone),
         55dvh,
         var(--bits-popover-content-available-height, 55dvh)
       );
     }
   }
-  @media (prefers-reduced-motion: no-preference) {
+  @variant coarse {
+    :where(.ns-theme&) :where(button:not([data-slot="button"])) {
+      min-height: var(--c-nav-h);
+    }
+  }
+  @variant motion-safe {
     :where(.ns-theme&[data-state="closed"]) {
       animation: ns-pop-out var(--dur-exit) var(--ease-out) both;
     }
-  }
-  @media (prefers-reduced-motion: no-preference) {
     :where(.ns-theme&[data-state="open"]) {
       animation: ns-pop-in var(--dur-pop) var(--ease-drawer) both;
     }
   }
   :where(.ns-theme&[data-morph]) {
     transition: opacity var(--dur-pop) var(--ease-drawer);
-    @media (prefers-reduced-motion: no-preference) {
+    @variant motion-safe {
       transition:
         opacity var(--dur-pop) var(--ease-drawer),
         scale var(--dur-pop) var(--ease-drawer),
@@ -437,13 +418,16 @@
   }
   :where(.ns-theme&:has([data-slot="perms"][data-embedded="true"])) {
     width: max-content;
-    max-width: calc(100vw - 32px);
+    max-width: calc(100vw - var(--space-8));
   }
   /* NsPopover's `fit`: its content's width, `width` at the least. */
   :where(.ns-theme&[data-fit]) {
     width: max-content;
-    min-width: min(var(--ns-pop-width, 320px), calc(100vw - 24px));
-    max-width: calc(100vw - 24px);
+    min-width: min(
+      var(--ns-pop-width, var(--c-pop-w)),
+      calc(100vw - 2 * var(--c-screen-margin))
+    );
+    max-width: calc(100vw - 2 * var(--c-screen-margin));
     max-height: none;
     overflow: visible;
   }
@@ -479,8 +463,8 @@
 @utility ns-morph {
   :where(.ns-pop &) {
     overflow: clip;
-    overflow-clip-margin: 4px;
-    @media (prefers-reduced-motion: no-preference) {
+    overflow-clip-margin: var(--space-1);
+    @variant motion-safe {
       transition: height var(--dur-pop) var(--ease-drawer);
     }
   }

@@ -16,14 +16,39 @@ const settings = {
     note: "DESIGN.md is law; theme keys are src/lib/tokens/theme.css.",
   },
 };
-/** The house's own classes a kit component may carry: plan D10. */
-const HOUSE = [
-  "num",
-  "touch-hit",
-  "pointer-hit",
-  "mark-line",
-  "focus-inset",
-  "press-tint",
+/**
+ * What a caller may write on a kit part: where it stands, never how it
+ * looks. Every look (colour, type, padding, radius, border, shadow,
+ * transition, a press) is a variant of the part itself
+ * (src/lib/components/ui), so the same role draws the same everywhere
+ * (DESIGN.md, Components). Entries are shadcn/lint class groups or class
+ * names ("Class group … Values in that group", "Class or pattern … An exact
+ * class or wildcard pattern",
+ * https://github.com/shadcn-ui/lint/blob/main/docs/rules.md#contracts).
+ * `layout` is not used: that category also holds display, overflow, cursor,
+ * whitespace, transforms and text alignment, which change a part's look.
+ */
+const PLACEMENT = [
+  // Its margin, from the parts beside it.
+  ...["m", "mx", "my", "ms", "me", "mbs", "mbe", "mt", "mr", "mb", "ml"],
+  // Its share of a flex row or a grid, and its place in the track.
+  ...["basis", "grow", "shrink", "order", "flex-1", "flex-auto", "flex-none"],
+  ...["flex-initial", "align-self", "justify-self", "place-self"],
+  ...["self-box-*", "justify-self-box-*"],
+  ...["col-start-end", "col-start", "col-end"],
+  ...["row-start-end", "row-start", "row-end"],
+  // Its position and inset in its container, and its stacking.
+  ...["position", "inset", "inset-x", "inset-y", "start", "end"],
+  ...["inset-bs", "inset-be", "top", "right", "bottom", "left", "z"],
+  // Its width constraints.
+  ...["w", "min-w", "max-w", "inline-size", "min-inline-size"],
+  "max-inline-size",
+  // Markers that style nothing themselves: a group or peer named for a
+  // descendant or sibling to read (`peer` is no class group, so shadcn/lint
+  // warns once that it matches by name: `peer` and `peer/<name>`), and the
+  // hit areas, a transparent box round the part that draws nothing
+  // (DESIGN.md, The 44 Touch Rule, The 24 Pointer Rule).
+  ...["group", "peer", "touch-hit", "pointer-hit"],
 ];
 const rules = {
   // Two states that can hold together never leave their winner to Tailwind's
@@ -46,54 +71,9 @@ const rules = {
   // import graph" (https://github.com/shadcn-ui/lint/blob/main/docs/rules/no-unknown-classes.md).
   "shadcn/no-unknown-classes": ["error", { allow: ["nodrag", "nopan"] }],
   "shadcn/require-static-classes": "error",
-  "shadcn/no-restyle": [
-    "error",
-    {
-      allow: ["layout", ...HOUSE],
-      // A contract sets the policy for the components it matches
-      // ("You can give components different rules",
-      // https://github.com/shadcn-ui/lint/blob/main/docs/rules/no-restyle.md).
-      contracts: [
-        {
-          // The kit's triggers and paneforge's Pane draw nothing of their
-          // own: each renders the caller's element (bits-ui's trigger, the
-          // pane's box) and adds only its data-slot (and `touch-hit`), so
-          // the classes on it are that element's look, not a restyle of
-          // the kit's. A class the grammar cannot classify is named.
-          pattern:
-            "^(CollapsibleTrigger|PopoverTrigger|DrawerTrigger|DropdownMenuTrigger|SheetTrigger|DialogTrigger|AlertDialogTrigger|Pane)$",
-          allow: [
-            "layout",
-            "color",
-            "typography",
-            "spacing",
-            "shape",
-            "effects",
-            "motion",
-            ...HOUSE,
-            "pressable",
-            "rail-line",
-            "transition-control",
-            "type-*",
-            "dur-*",
-            "p-*",
-            "px-*",
-            "py-*",
-            "gap-*",
-            "h-*",
-            "min-w-*",
-            "min-h-*",
-            // app.css's exact-keyword alignments (`start` as written, where
-            // Tailwind's `*-start` writes flex-start): layout.
-            "items-box-*",
-            "self-box-*",
-            "justify-self-box-*",
-            "content-box-*",
-          ],
-        },
-      ],
-    },
-  ],
+  // One policy for every kit part, the triggers and paneforge's Pane
+  // included: a trigger's look is a variant of the trigger.
+  "shadcn/no-restyle": ["error", { allow: PLACEMENT }],
 };
 export default defineConfig([
   {
@@ -301,7 +281,7 @@ export default defineConfig([
   // bundles this folder alone (Bun with bun-plugin-svelte, no Tailwind) into
   // the page the hub serves, drawn by the decision-page kit's page.css
   // (packages/hub/skills/decision-page/kit/page.css) and each renderer's own
-  // <style>. Its `dp`, `dp-*`, `on` and `solo` classes are page.css's: "Allow
+  // scoped styles. Its `dp`, `dp-*`, `on` and `solo` classes are page.css's: "Allow
   // classes supplied by CSS outside the theme's import graph"
   // (https://github.com/shadcn-ui/lint/blob/main/docs/rules/no-unknown-classes.md).
   // Its inline values come from the program's props (a meter's share, a
