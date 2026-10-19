@@ -14,10 +14,13 @@
  * item and retires its workspace while the spec looks), and the spec closes
  * the boundary:
  *
- * - the shell reads the background task's output after its notice (before
- *   the fix the CLI wrote it under the host's `/tmp`, which the boundary
- *   hides: "No such file or directory"; agent claude.ts `sessionEnv`,
- *   core paths.ts `workspaceClaudeTmpDir`);
+ * - the background task's completion notice names its output file under the
+ *   workspace's ro claude-tmp, and the shell reads it after the notice
+ *   (before the fix the CLI wrote it under its agent's temp dir, the host's
+ *   `/tmp` on the owner's machine, which the boundary hides: "No such file or
+ *   directory"; agent claude.ts `sessionEnv`, core paths.ts
+ *   `workspaceClaudeTmpDir`). The agent and sessiond run without the fleet's
+ *   `CLAUDE_CODE_TMPDIR`, so the CLI's comes from the harness alone;
  * - a write to `~/.cache/cawco-orchestrator/probe-x`, under the read-denied
  *   home dir, by Node's fs under bun (whose error names the path, where
  *   Ubuntu's uutils `mkdir` says only "mkdir: Read-only file system"), fails
@@ -114,6 +117,8 @@ const BG_STARTED = "Command running in background";
 const BG_OUTPUT_FILE = /<output-file>([^<]+)<\/output-file>/;
 /** Each line of the output file as the session's shell reads it, after this. */
 const BG_LINE = "READ> ";
+/** The fleet's own `CLAUDE_CODE_TMPDIR` left out of a service's environment. */
+const NO_CLAUDE_TMP = { CLAUDE_CODE_TMPDIR: undefined };
 
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
@@ -177,9 +182,31 @@ const after = (said: string, marker: string): string | undefined =>
 const outputOf = (said: string): string =>
   said.slice(said.indexOf("HOME-WRITE:"), said.indexOf(END) + END.length);
 
-/** The background task's output, as the session's shell read it after the CLI's completion notice. */
-const checkBackgroundRead = (kit: Kit, said: string): void => {
+/**
+ * The background task's output, as the session's shell read it after the
+ * CLI's completion notice, in the workspace's ro claude-tmp (core paths.ts
+ * `workspaceClaudeTmpDir`, under the fleet's HOME, not this process's).
+ */
+const checkBackgroundRead = (
+  kit: Kit,
+  said: string,
+  home: string,
+  workspaceId: string
+): void => {
   const outputFile = BG_OUTPUT_FILE.exec(said)?.[1];
+  const claudeTmp = join(
+    home,
+    ".cawco",
+    "workspaces",
+    workspaceId,
+    "ro",
+    "claude-tmp"
+  );
+  kit.check(
+    "the CLI's completion notice names an output file under the workspace's ro claude-tmp",
+    outputFile?.startsWith(`${claudeTmp}/`) === true,
+    `notice named ${outputFile ?? "no output file"}; the workspace's claude-tmp: ${claudeTmp}`
+  );
   const exit = after(said, "BG-READ:");
   const read = said
     .split("\n")
@@ -206,12 +233,16 @@ const run = async (kit: Kit) => {
     return;
   }
   const fleet = await kit.fleet(respond);
-  fleet.launch("sessiond");
+  // The session's CLI gets its temp root from the agent's claude harness
+  // alone, as on the owner's machine, whose agent runs with none: the fleet
+  // sets one for every service (scratch-fleet.ts `claudeTmp`), which the
+  // agent would hand the CLI before the fix, and the leg would pass unfixed.
+  fleet.launch("sessiond", [], NO_CLAUDE_TMP);
   await fleet.sessiondUp();
   fleet.launch("hub");
   await fleet.hubUp();
   fleet.fileAccount();
-  fleet.launch("agent");
+  fleet.launch("agent", [], NO_CLAUDE_TMP);
   await fleet.agentUp();
   await fleet.accountSignedIn();
   const home = fleet.env.HOME as string;
@@ -335,7 +366,7 @@ const run = async (kit: Kit) => {
     after(said, "COMMITTED:") === "0" && subject === COMMIT_SUBJECT,
     `exit ${after(said, "COMMITTED:")}; the clone's last commit on the host: ${JSON.stringify(subject)}`
   );
-  checkBackgroundRead(kit, said);
+  checkBackgroundRead(kit, said, home, started.workspaceId);
   const runtime = after(said, "BUNX-RUNTIME:");
   kit.check(
     "bunx --bun runs a #!/usr/bin/env node bin under Bun, which reads process.versions.bun",

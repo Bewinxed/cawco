@@ -1707,15 +1707,21 @@ async function standUp(
   let launches = 0;
   /**
    * Starts `role`, under `wrap` when given ({@link serviceSpawn}), with
-   * `overrides` laid over the fleet's environment.
+   * `overrides` laid over the fleet's environment: a name set to `undefined`
+   * is left out of it.
    */
   const launch = (
     role: Role,
     wrap: string[] = [],
-    overrides: Record<string, string> = {}
+    overrides: Record<string, string | undefined> = {}
   ) => {
     launches += 1;
     const err = join(sandbox, `${role}-${launches}.err`);
+    const laid = Object.fromEntries(
+      Object.entries({ ...env, ...overrides }).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined
+      )
+    );
     const child = serviceSpawn(
       root,
       role,
@@ -1725,8 +1731,7 @@ async function standUp(
         // clone, whose `.opencode` a workspace boundary holds read-only (EROFS).
         cwd: role === "sessiond" ? sandbox : root,
         env: {
-          ...env,
-          ...overrides,
+          ...laid,
           [STAND_INS_ENV]: JSON.stringify(standIns),
           TMPDIR: tmpFor(role),
         },
