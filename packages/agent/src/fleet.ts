@@ -22,7 +22,6 @@ import type {
   FleetHook,
   FleetItemState,
   FleetMcpConfig,
-  FleetMcpServer,
   FleetMemory,
   FleetMemoryDoc,
   FleetPlacedMemoryDoc,
@@ -64,6 +63,7 @@ import {
   machineDenyList,
   readFleetDenials,
 } from "./denied-tools";
+import { readFleetMcpSet } from "./fleet-mcp-set";
 import { expandHome } from "./fs";
 import { readMcpRuntime } from "./mcp-status";
 import { noRepositoryAt } from "./stand-ins";
@@ -187,7 +187,18 @@ interface Sidecar {
    * lists that name.
    */
   marketplaces: string[];
-  mcp: string[];
+  /**
+   * The fleet's servers CawCo wrote into `.claude.json` files, from before
+   * sessions took them through the SDK (fleet-mcp-set.ts): what the one
+   * cleanup ({@link dropWrittenMcp}) takes back out of the person's files.
+   * Absent once it has.
+   */
+  mcp?: string[];
+  /**
+   * The names of the fleet's servers and the keys of the placed copies the
+   * last sync handed sessions: what a later sync reports removed.
+   */
+  mcpServers: string[];
   /** The hash cawco last wrote to `~/.claude/CLAUDE.md`; absent = unmanaged. */
   memory?: string;
   /**
@@ -197,11 +208,12 @@ interface Sidecar {
    */
   memoryDocs: Record<string, string>;
   /**
-   * A project's MCP servers cawco placed here, by `<name>@<place id>`: the
-   * folder whose `.claude.json` map it went into, and the name, so a place
-   * that goes is taken back out of that folder's map and no other.
+   * A project's MCP servers CawCo placed into a folder's map in
+   * `.claude.json`, by `<name>@<place id>`, from before sessions took them
+   * through the SDK: taken back out by the same cleanup as `mcp`. Absent
+   * once it has.
    */
-  placedMcp: Record<string, PlacedRecord>;
+  placedMcp?: Record<string, PlacedRecord>;
   /**
    * A project's memory documents cawco placed here, by `<path>@<place id>`
    * (`name` is the path), with the hash written to
@@ -276,7 +288,8 @@ const writeJson = (path: string, value: unknown): Promise<void> =>
 const readSidecar = async (): Promise<Sidecar> => {
   const stored = await readJson<Partial<Sidecar>>(SIDECAR);
   return {
-    mcp: stored?.mcp ?? [],
+    ...(stored?.mcp ? { mcp: stored.mcp } : {}),
+    mcpServers: stored?.mcpServers ?? [],
     marketplaces: stored?.marketplaces ?? [],
     hubOnlyMarketplaces: stored?.hubOnlyMarketplaces ?? [],
     plugins: stored?.plugins ?? [],
@@ -291,7 +304,7 @@ const readSidecar = async (): Promise<Sidecar> => {
     ...(stored?.deniedTools ? { deniedTools: stored.deniedTools } : {}),
     ...(stored?.cawcoTodos ? { cawcoTodos: true } : {}),
     hooks: stored?.hooks ?? {},
-    placedMcp: stored?.placedMcp ?? {},
+    ...(stored?.placedMcp ? { placedMcp: stored.placedMcp } : {}),
     placedMemory: stored?.placedMemory ?? {},
     placedSkills: stored?.placedSkills ?? {},
   };
@@ -304,12 +317,6 @@ interface Problem {
   cause: FleetFaultCause;
   detail: string;
 }
-
-/** A row that failed for `problem`. */
-const failedOf = (problem: Problem): FleetItemState => ({
-  state: "failed",
-  ...problem,
-});
 
 /** The file, or why it could not be read. Missing is a machine with nothing in it. */
 const readClaudeJson = async (
@@ -334,179 +341,133 @@ const mcpServersOf = (root: ClaudeJson): Record<string, unknown> => ({
   ...((root.mcpServers as Record<string, unknown> | undefined) ?? {}),
 });
 
-/**
- * Merges the fleet's servers into one `.claude.json`: what cawco now manages
- * goes in, what it managed and no longer does comes out. Every other key in
- * the file, and every server the sidecar does not name, comes back out
- * exactly as it went in. Answers why it could not, or nothing.
- */
-const mergeFleetMcp = async (
-  path: string,
-  wanted: FleetMcpServer[],
-  managed: string[]
-): Promise<Problem | undefined> => {
-  const file = await readClaudeJson(path);
-  // Nothing is written over a file that cannot be read: the rest of it is the
-  // user's own, and a rewrite from an empty root would take it with them.
-  if (!file.ok) {
-    return { cause: file.cause, detail: file.detail };
-  }
-  const servers = mcpServersOf(file.root);
-  for (const server of wanted) {
-    // The shared launcher preparation admits only runnable machine configs.
-    servers[server.name] = server.config;
-  }
-  const names = wanted.map((server) => server.name);
-  for (const name of managed.filter((one) => !names.includes(one))) {
-    delete servers[name];
-  }
-  try {
-    if (JSON.stringify(mcpServersOf(file.root)) !== JSON.stringify(servers)) {
-      await writeJson(path, { ...file.root, mcpServers: servers });
-    }
-  } catch (error) {
-    return {
-      cause: "unwritable",
-      detail: `could not write ${path}: ${tail(said(error))}`,
-    };
-  }
-  return undefined;
-};
-
-/**
- * Merges the fleet's servers into `~/.claude.json` and every account dir's
- * own `.claude.json` (where an account's Claude Code reads them), and answers
- * with the names cawco now manages. The report is the machine's own file's.
- */
-const syncMcp = async (
-  desired: FleetMcpServer[],
-  managed: string[],
-  report: FleetSyncReport["mcp"]
-): Promise<string[]> => {
-  const wanted = desired.filter((server) => server.enabled);
-  const problem = await mergeFleetMcp(CLAUDE_JSON, wanted, managed);
-  if (problem) {
-    for (const server of wanted) {
-      report[server.name] = failedOf(problem);
-    }
-    return managed;
-  }
-  for (const path of accountClaudeJsons()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one account's file at a time, each written whole
-    const failed = await mergeFleetMcp(path, wanted, managed);
-    if (failed) {
-      console.warn(`[fleet] ${failed.detail}`);
-    }
-  }
-
-  const names = wanted.map((server) => server.name);
-  const gone = managed.filter((name) => !names.includes(name));
-  Object.assign(report, await readMcpRuntime(names));
-  for (const name of gone) {
-    report[name] = { state: "removed" };
-  }
-  return names;
-};
-
 /** A placed copy's key in the sidecar and the report: `<name>@<place id>`. */
 const placedKey = (row: { name: string; placeId?: string }): string =>
   `${row.name}@${row.placeId ?? ""}`;
 
+/** The sidecar the agent kept before CawCo was named CawCo, which named the servers it wrote then. */
+const LEGACY_SIDECAR = userLayerPath("cockpit-fleet.json");
+
 /**
- * One `.claude.json`'s per-folder maps (`projects["<cwd>"].mcpServers`, the
- * map Claude Code keeps per checkout and git never sees) with a project's
- * placed servers in and the ones cawco placed before and no longer does out.
- * Every other key of the file, of each folder's entry and of its map comes
- * back out as it went in. Answers why it could not, or nothing.
+ * The fleet's servers taken back out of every `.claude.json` CawCo wrote
+ * them into (`~/.claude.json` and each account's), once: sessions take them
+ * through the SDK now (fleet-mcp-set.ts), and the person's own `claude`
+ * loads only what he configured. Out go the names the sidecar says CawCo
+ * wrote (`mcp`), the ones the agent's sidecar named before CawCo was
+ * renamed ({@link LEGACY_SIDECAR}), which no later sidecar carried, and the
+ * fleet's own names now, whose entries a merge overwrote with the fleet's
+ * whatever was there; and each placed copy from its folder's map
+ * (`placedMcp`). Every other key of each file comes back out as it went in.
+ * Answers whether every file was cleaned: one that could not be read or
+ * written is tried again at the next sync.
  */
-const mergePlacedMcp = async (
+const dropWrittenMcp = async (
+  managed: Sidecar,
+  fleetNames: readonly string[]
+): Promise<boolean> => {
+  const legacy = await readJson<{ mcp?: string[] }>(LEGACY_SIDECAR);
+  if (!(managed.mcp || managed.placedMcp || legacy)) {
+    return true;
+  }
+  const names = new Set([
+    ...(managed.mcp ?? []),
+    ...(legacy?.mcp ?? []),
+    ...fleetNames,
+  ]);
+  const placed = Object.values(managed.placedMcp ?? {});
+  const results = await Promise.all(
+    [CLAUDE_JSON, ...accountClaudeJsons()].map((path) =>
+      dropWrittenMcpFrom(path, names, placed)
+    )
+  );
+  if (!results.every(Boolean)) {
+    return false;
+  }
+  await rm(LEGACY_SIDECAR, { force: true });
+  return true;
+};
+
+/** {@link dropWrittenMcp} for one file: `names` out of its user scope, each of `placed` out of its folder's map. */
+const dropWrittenMcpFrom = async (
   path: string,
-  wanted: FleetMcpServer[],
-  managed: Sidecar["placedMcp"]
-): Promise<Problem | undefined> => {
+  names: ReadonlySet<string>,
+  placed: readonly PlacedRecord[]
+): Promise<boolean> => {
   const file = await readClaudeJson(path);
   if (!file.ok) {
-    return { cause: file.cause, detail: file.detail };
+    console.warn(
+      `[fleet] the fleet's MCP servers stay in ${path} until it reads: ${file.detail}`
+    );
+    return false;
   }
-  const before = JSON.stringify(file.root.projects ?? {});
+  const servers = mcpServersOf(file.root);
   const projects = {
     ...((file.root.projects as
       Record<string, Record<string, unknown>> | undefined) ?? {}),
   };
-  const serversAt = (cwd: string): Record<string, unknown> => {
-    const entry = { ...(projects[cwd] ?? {}) };
-    const servers = {
-      ...((entry.mcpServers as Record<string, unknown> | undefined) ?? {}),
-    };
-    projects[cwd] = { ...entry, mcpServers: servers };
-    return servers;
-  };
-  const kept = new Set(wanted.map(placedKey));
-  const still = new Set(wanted.map((row) => `${row.cwd}\0${row.name}`));
-  for (const [key, { cwd, name }] of Object.entries(managed)) {
-    if (!(kept.has(key) || still.has(`${cwd}\0${name}`)) && projects[cwd]) {
-      delete serversAt(cwd)[name];
+  const gone = [...names].filter((name) => name in servers);
+  for (const name of gone) {
+    delete servers[name];
+  }
+  for (const { cwd, name } of placed) {
+    const map = projects[cwd]?.mcpServers as
+      Record<string, unknown> | undefined;
+    if (map && name in map) {
+      const { [name]: _gone, ...rest } = map;
+      projects[cwd] = { ...projects[cwd], mcpServers: rest };
+      gone.push(`${name} at ${cwd}`);
     }
   }
-  for (const server of wanted) {
-    serversAt(server.cwd as string)[server.name] = server.config;
-  }
-  if (JSON.stringify(projects) === before) {
-    return undefined;
+  if (gone.length === 0) {
+    return true;
   }
   try {
-    await writeJson(path, { ...file.root, projects });
+    await writeJson(path, {
+      ...file.root,
+      ...(file.root.mcpServers === undefined ? {} : { mcpServers: servers }),
+      ...(file.root.projects === undefined ? {} : { projects }),
+    });
   } catch (error) {
-    return {
-      cause: "unwritable",
-      detail: `could not write ${path}: ${tail(said(error))}`,
-    };
+    console.warn(
+      `[fleet] the fleet's MCP servers stay in ${path} until it can be written: ${tail(said(error))}`
+    );
+    return false;
   }
-  return undefined;
+  console.info(
+    `[fleet] the fleet's MCP servers are out of ${path}: ${gone.join(", ")}`
+  );
+  return true;
 };
 
 /**
- * A project's MCP servers, placed at each of its checkouts and workspaces on
- * this machine (`FleetConfig.placedMcp`), into `~/.claude.json` and every
- * account dir's, as the fleet's own servers go. Reported under
- * `<name>@<place id>`; answers what cawco now manages.
+ * The fleet's MCP servers and placed copies, as every session takes them
+ * (fleet-mcp-set.ts), read by Claude Code itself: each server's state is its
+ * verdict on connecting ({@link readMcpRuntime}), a placed copy is applied
+ * once it is in the set, and what the last sync handed sessions and this one
+ * does not is removed. Answers what this sync hands them.
  */
-const syncPlacedMcp = async (
-  desired: FleetMcpServer[],
-  managed: Sidecar["placedMcp"],
+const reportMcp = async (
+  config: MachineFleetConfig,
+  managed: Sidecar,
   report: FleetSyncReport["mcp"]
-): Promise<Sidecar["placedMcp"]> => {
-  const wanted = desired.filter(
-    (server) => server.enabled && server.cwd && server.placeId
+): Promise<string[]> => {
+  const servers = Object.fromEntries(
+    config.mcp.filter((row) => row.enabled).map((row) => [row.name, row.config])
   );
-  const problem = await mergePlacedMcp(CLAUDE_JSON, wanted, managed);
-  if (problem) {
-    for (const server of wanted) {
-      report[placedKey(server)] = failedOf(problem);
-    }
-    return managed;
+  const placed = config.placedMcp
+    .filter((row) => row.enabled && row.cwd && row.placeId)
+    .map(placedKey);
+  Object.assign(report, await readMcpRuntime(servers));
+  for (const key of placed) {
+    report[key] = { state: "applied" };
   }
-  for (const path of accountClaudeJsons()) {
-    // biome-ignore lint/performance/noAwaitInLoops: one account's file at a time, each written whole
-    const failed = await mergePlacedMcp(path, wanted, managed);
-    if (failed) {
-      console.warn(`[fleet] ${failed.detail}`);
-    }
-  }
-  const placed: Sidecar["placedMcp"] = {};
-  for (const server of wanted) {
-    placed[placedKey(server)] = {
-      cwd: server.cwd as string,
-      name: server.name,
-    };
-    report[placedKey(server)] = { state: "applied" };
-  }
-  for (const key of Object.keys(managed)) {
-    if (!placed[key]) {
-      report[key] = { state: "removed" };
+  const handed = [...Object.keys(servers), ...placed];
+  for (const name of managed.mcpServers) {
+    if (!handed.includes(name)) {
+      report[name] = { state: "removed" };
     }
   }
-  return placed;
+  return handed;
 };
 
 /**
@@ -2739,12 +2700,11 @@ const converge = async (
     at: Date.now(),
   };
 
-  const mcp = await syncMcp(config.mcp, managed.mcp, report.mcp);
-  const placedMcp = await syncPlacedMcp(
-    config.placedMcp,
-    managed.placedMcp,
-    report.mcp
+  const cleaned = await dropWrittenMcp(
+    managed,
+    config.mcp.map((row) => row.name)
   );
+  const mcpServers = await reportMcp(config, managed, report.mcp);
   const installed = await syncPlugins(config, managed, report);
   const skills = await syncSkillFiles(
     config.skills,
@@ -2776,7 +2736,14 @@ const converge = async (
   const deniedBefore =
     before.kind === "known" ? machineDenyList(before.denials) : [];
   await writeJson(SIDECAR, {
-    mcp,
+    // Kept until every file the fleet's servers were written into is clean.
+    ...(cleaned
+      ? {}
+      : {
+          ...(managed.mcp ? { mcp: managed.mcp } : {}),
+          ...(managed.placedMcp ? { placedMcp: managed.placedMcp } : {}),
+        }),
+    mcpServers,
     ...installed,
     skills,
     deniedTools: config.deniedTools,
@@ -2784,7 +2751,6 @@ const converge = async (
     ...(memory ? { memory } : {}),
     memoryDocs,
     hooks,
-    placedMcp,
     placedMemory,
     placedSkills,
   } satisfies Sidecar);
@@ -2864,22 +2830,12 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     at: Date.now(),
   };
 
-  report.mcp = await readMcpRuntime(managed.mcp);
-  // A project's placed servers: still in their folder's map.
-  const claudeJson = await readClaudeJson();
-  const projects = claudeJson.ok
-    ? ((claudeJson.root.projects as
-        Record<string, { mcpServers?: Record<string, unknown> }> | undefined) ??
-      {})
-    : {};
-  for (const [key, { cwd, name }] of Object.entries(managed.placedMcp)) {
-    report.mcp[key] = projects[cwd]?.mcpServers?.[name]
-      ? { state: "applied" }
-      : {
-          state: "failed",
-          cause: "absent",
-          detail: `not in ${CLAUDE_JSON} for ${cwd}`,
-        };
+  // The set every session takes (fleet-mcp-set.ts), read by Claude Code;
+  // a placed copy in it is one each session in its folder takes.
+  const set = await readFleetMcpSet();
+  report.mcp = await readMcpRuntime(set.servers);
+  for (const key of Object.keys(set.placed)) {
+    report.mcp[key] = { state: "applied" };
   }
   for (const name of managed.marketplaces) {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
@@ -3096,7 +3052,8 @@ export function mergeMcp(
         name,
         scope,
         config: config as FleetMcpConfig,
-        // CawCo only ever writes the user scope, so only that one can be ours.
+        // CawCo wrote only the user scope, and only before sessions took the
+        // fleet's servers through the SDK: what its cleanup has yet to take out.
         managed: scope === "user" && managed.includes(name),
         ...(nearer ? { shadowedBy: nearer.scope } : {}),
       });
@@ -3285,7 +3242,7 @@ export const inspectConfig = async (
         { scope: "project", servers: project },
         { scope: "user", servers: mcpServersOf(root) },
       ],
-      managed.mcp
+      managed.mcp ?? []
     ),
     skills: await discoverSkills(cwd, managed),
     plugins: Object.entries(installed.plugins ?? {})

@@ -110,7 +110,6 @@ import {
   accountIds,
   claudeConfigDirs,
   claudeHome,
-  configDirClaudeJson,
   projectSlug,
   sessionConfigDir,
 } from "@cawco/core/paths";
@@ -168,6 +167,7 @@ import {
   syncFleetConfig,
 } from "../fleet";
 import { proxiedFleetMcpUrl, proxiedToolCount } from "../fleet-mcp-listing";
+import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
 import { sessionGitEnv } from "../git-credential";
 import {
   type Harness,
@@ -1408,12 +1408,19 @@ const outcomeLine = ({ name, kind, status, tools, error }: FleetMcpOutcome) =>
   `${name} ${kind}: ${status}${tools === undefined ? "" : ` (${tools} tools)`}${error ? ` — ${error}` : ""}`;
 
 /**
- * How a session takes fleet MCP changes (`ClaudeSession.#takeFleetMcp`):
- * - `dynamic`, the whole set `setMcpServers` is to hold, each as the files
- *   have it: the servers it holds now that the files still name, a server
- *   the session lacks, and a config-file one whose dialled config changed;
- * - `leaving`, config-file servers the files no longer name, with the config
- *   the session holds: named once in `setMcpServers`, then left out;
+ * How a session takes fleet MCP changes (`ClaudeSession.#takeFleetMcp`).
+ * `setMcpServers` governs only the servers it has been sent (CLI 2.1.302: a
+ * server the launch or a config file gave stays whatever a call leaves out;
+ * one a call named is replaced by the next call that names it, and dropped
+ * by the next that leaves it out), so the plan tells the fleet servers this
+ * session named in it (`owned`: every one since it started) from any it
+ * holds otherwise, as a session started before the fleet's servers left the
+ * config files does:
+ * - `dynamic`, the whole set `setMcpServers` is to hold, each as the fleet
+ *   has it: the owned servers the fleet still names, a server the session
+ *   lacks, and one held otherwise whose dialled config changed;
+ * - `leaving`, servers held otherwise the fleet no longer names, with the
+ *   config the session holds: named once in `setMcpServers`, then left out;
  * - `redial`, servers kept on the config they have, dialled again;
  * - `kept`, servers left as they are, with why.
  */
@@ -1421,14 +1428,13 @@ const planFleetMcp = (
   changes: readonly FleetMcpChange[],
   configured: Record<string, McpServerConfig>,
   before: readonly McpServerStatus[],
-  launch: ReadonlySet<string>
+  launch: ReadonlySet<string>,
+  owned: ReadonlySet<string>
 ) => {
   const held = new Map(before.map((server) => [server.name, server]));
   const dynamic = new Map(
     before.flatMap((server) =>
-      server.scope === "dynamic" &&
-      !launch.has(server.name) &&
-      configured[server.name]
+      owned.has(server.name) && configured[server.name]
         ? [[server.name, configured[server.name]] as const]
         : []
     )
@@ -1439,7 +1445,7 @@ const planFleetMcp = (
   for (const { name, kind } of changes) {
     const step: FleetMcpStep = launch.has(name)
       ? { do: "keep", why: "launched with this session" }
-      : fleetMcpStep(kind, configured[name], held.get(name));
+      : fleetMcpStep(kind, configured[name], held.get(name), owned.has(name));
     if (step.do === "keep") {
       kept.set(name, step.why);
     } else if (step.do === "leave") {
@@ -1462,19 +1468,20 @@ type FleetMcpStep =
   | { do: "set"; config: McpServerConfig; redial: boolean }
   | { do: "hold"; redial: boolean };
 
-/** What one change asks of one server a session holds (`has`) or lacks, the files wanting `wanted`. */
+/** What one change asks of one server a session holds (`has`) or lacks, the fleet wanting `wanted`; `owned`: named in `setMcpServers` before. */
 const fleetMcpStep = (
   kind: FleetMcpChange["kind"],
   wanted: McpServerConfig | undefined,
-  has: McpServerStatus | undefined
+  has: McpServerStatus | undefined,
+  owned: boolean
 ): FleetMcpStep => {
   const again =
     kind === "signed-in" ||
     kind === "signed-out" ||
     (has !== undefined && has.status !== "connected");
   if (!wanted) {
-    if (!has || has.scope === "dynamic") {
-      // Not here, or `setMcpServers` holds it and drops it with the files.
+    if (!has || owned) {
+      // Not here, or `setMcpServers` holds it and drops it with the fleet.
       return { do: "hold", redial: false };
     }
     return has.config
@@ -1484,7 +1491,7 @@ const fleetMcpStep = (
   if (has?.status === "disabled") {
     return { do: "keep", why: "turned off in this session" };
   }
-  if (!has || has.scope === "dynamic") {
+  if (!has || owned) {
     return { do: "set", config: wanted, redial: has !== undefined && again };
   }
   if (kind === "config" || dialed(has.config) !== dialed(wanted)) {
@@ -1544,93 +1551,64 @@ const withInstructions = (
 };
 
 /**
- * The MCP servers a session starting in `workdir` would read: the user scope
- * of `claudeJson`, and its folder's own map over that (where a project's
- * placed servers go).
+ * The fleet's MCP servers a session in `workdir` loads, from the set the
+ * machine's fleet sync wrote (fleet-mcp-set.ts; in no file the person's own
+ * `claude` reads): the fleet's own, a project's placed copies over them, and
+ * the fleet's chrome-devtools through the session's browser gate
+ * ({@link throughGate}), so no session's browser tool starts a Chromium of
+ * its own. A session whose door could not be made loads no chrome-devtools,
+ * and `denied` denies its tools: chrome-devtools-mcp reaches for a browser
+ * only at a tool's call.
  */
-const configuredMcp = async (
-  claudeJson: string,
-  workdir: string
-): Promise<Record<string, McpServerConfig>> => {
-  let root: {
-    mcpServers?: Record<string, McpServerConfig>;
-    projects?: Record<string, { mcpServers?: Record<string, McpServerConfig> }>;
-  };
-  try {
-    root = JSON.parse(await readFile(claudeJson, "utf8"));
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-      throw error;
-    }
-    root = {};
-  }
-  const projects = root.projects ?? {};
-  let folder: string | undefined;
-  for (let dir = workdir; ; dir = dirname(dir)) {
-    if (projects[dir]) {
-      folder = dir;
-      break;
-    }
-    if (dirname(dir) === dir) {
-      break;
-    }
-  }
-  return {
-    ...root.mcpServers,
-    ...(folder ? projects[folder]?.mcpServers : {}),
-  };
-};
-
-/**
- * The fleet's chrome-devtools as this session launches it: the entry its
- * config files hold, through its browser's gate ({@link throughGate}). The
- * launch's server takes the place of the config files' one of that name, so
- * no session's browser tool starts a Chromium of its own. A session whose
- * door could not be made launches with that tool denied: chrome-devtools-mcp
- * reaches for a browser only at a tool's call. Nothing when the files hold
- * no local chrome-devtools.
- */
-const gatedBrowserMcp = async (
+const fleetMcpFor = async (
   ctx: HarnessContext,
-  claudeJson: string
-): Promise<{
-  disallowedTools?: string[];
-  mcpServers?: Record<string, McpServerConfig>;
-}> => {
-  const entry: McpServerConfig | undefined = (
-    await configuredMcp(claudeJson, ctx.cwd)
-  )[CHROME_DEVTOOLS];
-  if (!(entry && "command" in entry)) {
-    return {};
+  workdir: string
+): Promise<{ denied: string[]; servers: Record<string, McpServerConfig> }> => {
+  const { [CHROME_DEVTOOLS]: browser, ...servers } = fleetMcpAt(
+    await readFleetMcpSet(),
+    workdir
+  );
+  if (!(browser && "command" in browser)) {
+    return {
+      servers: browser ? { ...servers, [CHROME_DEVTOOLS]: browser } : servers,
+      denied: [],
+    };
   }
   const door = await ctx.browserDoor?.().catch((error: unknown) => {
     console.warn(
-      `[claude] ${ctx.instanceId}: its browser's door could not be made, so it launches without chrome-devtools: ${error instanceof Error ? error.message : String(error)}`
+      `[claude] ${ctx.instanceId}: its browser's door could not be made, so it loads no chrome-devtools: ${error instanceof Error ? error.message : String(error)}`
     );
   });
   return door
     ? {
-        mcpServers: {
+        servers: {
+          ...servers,
           [CHROME_DEVTOOLS]: {
-            ...entry,
-            args: throughGate(entry.args ?? [], door),
+            ...browser,
+            args: throughGate(browser.args ?? [], door),
           },
         },
+        denied: [],
       }
-    : { disallowedTools: [`mcp__${CHROME_DEVTOOLS}`] };
+    : { servers, denied: [`mcp__${CHROME_DEVTOOLS}`] };
 };
 
 /**
  * The caller's options a session launches with: its account's config dir in
- * its env, and the fleet's chrome-devtools through its browser's gate
- * ({@link gatedBrowserMcp}). A fenced session reads no config file's server,
- * so it launches none.
+ * its env, and the tools of a chrome-devtools it cannot take denied. Answers
+ * the fleet's MCP servers ({@link fleetMcpFor}) it takes as it starts, apart
+ * from the launch's: `ClaudeSession` sets them through `setMcpServers`. A
+ * caller's server keeps a name it shares with one of the fleet's. A fenced
+ * session takes no fleet server.
  */
 const launchOptions = async (
   spec: SpawnPayload,
   ctx: HarnessContext,
   account: string | undefined
-): Promise<Record<string, unknown>> => {
+): Promise<{
+  fleet: Record<string, McpServerConfig>;
+  options: Record<string, unknown>;
+}> => {
   const options = spec.options as
     | {
         disallowedTools?: string[];
@@ -1647,21 +1625,21 @@ const launchOptions = async (
           CLAUDE_SECURESTORAGE_CONFIG_DIR: undefined,
         }),
   };
-  const browser =
+  const fleet =
     spec.fence === true
-      ? {}
-      : await gatedBrowserMcp(
-          ctx,
-          configDirClaudeJson(sessionEnv(env, ctx).CLAUDE_CONFIG_DIR)
-        );
+      ? { servers: {}, denied: [] }
+      : await fleetMcpFor(ctx, ctx.cwd);
   return {
-    ...options,
-    env,
-    mcpServers: { ...options?.mcpServers, ...browser.mcpServers },
-    disallowedTools: [
-      ...(options?.disallowedTools ?? []),
-      ...(browser.disallowedTools ?? []),
-    ],
+    fleet: Object.fromEntries(
+      Object.entries(fleet.servers).filter(
+        ([name]) => !options?.mcpServers?.[name]
+      )
+    ),
+    options: {
+      ...options,
+      env,
+      disallowedTools: [...(options?.disallowedTools ?? []), ...fleet.denied],
+    },
   };
 };
 
@@ -1876,13 +1854,19 @@ class ClaudeSession implements HarnessSession {
   #lastRequestAt: number | undefined;
   /** The permission mode: the one it started (or was adopted) with, each `setPermissionMode`, and the CLI's own word. */
   readonly #mode: SessionMode;
-  /** The MCP servers it was launched with (CawCo's, a caller's): the CLI's own to keep, never changed by a fleet change. */
+  /** The MCP servers it was launched with that are not the fleet's (CawCo's, a caller's): the CLI's own to keep, never changed by a fleet change. */
   readonly #launchMcp: ReadonlySet<string>;
+  /**
+   * The fleet servers it has named in `setMcpServers`, which the next call
+   * drops by leaving them out ({@link planFleetMcp}). None at a spawn: its
+   * fleet servers came with the launch. Unknown at an attach, where the
+   * agent before may have named any: then every server that is neither
+   * CawCo's nor a caller's is taken for one.
+   */
+  #ownedMcp: Set<string> | undefined;
   /** Launched with CawCo's MCP server alone ({@link SpawnPayload.fence}): it takes no fleet server. */
   readonly #fence: boolean;
   readonly #workdir: string;
-  /** The `.claude.json` its CLI reads: its account's, or the machine's. */
-  readonly #claudeJson: string;
   /** The config dir its CLI runs in (`CLAUDE_CONFIG_DIR`): its account's, or none for the machine's own. */
   readonly #configDir: string | undefined;
   /** One fleet MCP change taken at a time, in the order they came. */
@@ -1916,11 +1900,14 @@ class ClaudeSession implements HarnessSession {
       fence,
       instructions = [],
       conversationKept,
+      fleetMcp,
     }: {
       lead: boolean;
       fence: boolean;
       instructions?: readonly SessionInstruction[];
       conversationKept?: () => Promise<boolean>;
+      /** The fleet's servers it takes as it starts ({@link fleetMcpFor}); none for an attach, which starts nothing. */
+      fleetMcp?: Record<string, McpServerConfig>;
     },
     /**
      * The sessiond connection this session's CLI child lives under: `spawn()`
@@ -1952,6 +1939,7 @@ class ClaudeSession implements HarnessSession {
     this.#boundaryHook = workspaceHook(ctx.boundary);
     const mcpServers = sessionMcpServers(instanceId, ctx, options, fence);
     this.#launchMcp = new Set(Object.keys(mcpServers));
+    this.#ownedMcp = fleetMcp ? new Set(Object.keys(fleetMcp)) : undefined;
     this.#fence = fence;
     this.#workdir = workdir;
     const env = sessionEnv(
@@ -1959,7 +1947,6 @@ class ClaudeSession implements HarnessSession {
         ?.env,
       ctx
     );
-    this.#claudeJson = configDirClaudeJson(env.CLAUDE_CONFIG_DIR);
     this.#configDir = env.CLAUDE_CONFIG_DIR;
     this.#sessiond = sessiond;
     this.#stored = persistSession !== false;
@@ -2164,6 +2151,7 @@ class ClaudeSession implements HarnessSession {
     });
 
     this.#handle = handle;
+    this.#startFleetMcp(fleetMcp);
 
     // Load skills natively: push /skill messages into the input stream before
     // any user prompt. The SDK handles them as slash commands — same as the
@@ -3159,33 +3147,57 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * The MCP servers a session starting here now would read
-   * ({@link configuredMcp}). The fleet sync has written both scopes before a
-   * change reaches the session.
+   * The fleet's MCP servers the session takes as it starts, through
+   * `setMcpServers`, never the launch: a server the launch passed stays
+   * running beside the one a later call names under its name, and keeps its
+   * tool calls (CLI 2.1.302: `setMcpServers({a: <new>})` on a launched `a`
+   * started a second process and left the first alive, while one a call named
+   * is replaced and dropped). Each fleet change takes its turn after this.
    */
-  #configuredMcp(): Promise<Record<string, McpServerConfig>> {
-    return configuredMcp(this.#claudeJson, this.#workdir);
+  #startFleetMcp(fleetMcp: Record<string, McpServerConfig> | undefined): void {
+    if (!fleetMcp || Object.keys(fleetMcp).length === 0) {
+      return;
+    }
+    this.#fleetMcp = this.#handle.setMcpServers(fleetMcp).then(
+      ({ errors }) => {
+        for (const [name, error] of Object.entries(errors)) {
+          console.warn(
+            `[claude] ${this.instanceId}: fleet MCP ${name} did not connect: ${error}`
+          );
+        }
+      },
+      (error: unknown) =>
+        console.warn(
+          `[claude] ${this.instanceId}: the fleet's MCP servers were not set: ${error instanceof Error ? error.message : String(error)}`
+        )
+    );
+  }
+
+  /** The fleet's MCP servers a session starting here now would load ({@link fleetMcpFor}). */
+  async #configuredMcp(): Promise<Record<string, McpServerConfig>> {
+    return (await fleetMcpFor(this.#ctx, this.#workdir)).servers;
   }
 
   /**
-   * Fleet MCP servers changed at the hub, and this machine's files say so:
-   * the session takes each change in place, with no new session. Measured on
-   * CLI 2.1.296 against a scratch config dir (MCP hot-reload probe,
-   * 2026-10-14):
+   * Fleet MCP servers changed at the hub, and this machine's fleet set says
+   * so (fleet-mcp-set.ts): the session takes each change in place, with no
+   * new session. Measured on CLI 2.1.296, and for `setMcpServers` again on
+   * 2.1.302 against a scratch config dir:
    * - `reconnectMcpServer` dials a server the session already holds with the
-   *   config it read at launch: a sign-in or sign-out at the hub is that.
-   * - A server the session never read is "Server not found" to both
+   *   config it holds: a sign-in or sign-out at the hub is that.
+   * - A server the session never held is "Server not found" to both
    *   `reconnectMcpServer` and `toggleMcpServer`; `setMcpServers` connects
-   *   it. The set it governs is only its own: the launch's servers
-   *   (CawCo's) stay whatever it is sent, and an unchanged config in it is
-   *   no change at all.
-   * - A server named in `setMcpServers` takes the place of the config-file
-   *   one of that name, and is gone when left out of the next call. That is
-   *   how a config-file server leaves, and how one whose config changed is
-   *   dialled again on its new config (`reconnectMcpServer` keeps the old).
-   *   `toggleMcpServer(name, false)` would write the name into the folder's
-   *   `disabledMcpServers` in `.claude.json`, turning the server off for every
-   *   later session there, so it is never used.
+   *   it.
+   * - `setMcpServers` governs the servers it has been sent: a launch's server
+   *   stays whatever a call leaves out (`setMcpServers({})` answered
+   *   `removed: []`), until a call names it; from then on a call that leaves
+   *   it out drops it. That is how a launch's fleet server leaves, and how
+   *   one whose config changed is dialled again on its new config. A config
+   *   sent again unchanged is no change at all (its process ran on), though
+   *   the answer lists it as `added`.
+   * - `toggleMcpServer(name, false)` writes the name into the folder's
+   *   `disabledMcpServers` in `.claude.json`, turning the server off for
+   *   every later session there, so it is never used.
    * A server the person turned off in this session stays off. Answers what
    * each named server reads afterwards, and says it on the machine's log.
    */
@@ -3205,11 +3217,22 @@ class ClaudeSession implements HarnessSession {
       };
     }
     const configured = await this.#configuredMcp();
+    const before = await this.#handle.mcpServerStatus();
+    // At an attach, the agent before may have named any server that is
+    // neither CawCo's nor a caller's: each is taken for one it named.
+    const owned =
+      this.#ownedMcp ??
+      new Set(
+        before
+          .filter((server) => !this.#launchMcp.has(server.name))
+          .map((server) => server.name)
+      );
     const plan = planFleetMcp(
       changes,
       configured,
-      await this.#handle.mcpServerStatus(),
-      this.#launchMcp
+      before,
+      this.#launchMcp,
+      owned
     );
     const errors: Record<string, string> = {};
     if (Object.keys(plan.leaving).length > 0) {
@@ -3221,9 +3244,15 @@ class ClaudeSession implements HarnessSession {
     const set = await this.#handle.setMcpServers(
       Object.fromEntries(plan.dynamic)
     );
+    this.#ownedMcp = new Set(plan.dynamic.keys());
     Object.assign(errors, set.errors);
-    for (const name of set.added) {
-      plan.redial.delete(name);
+    // A server sent on a new config was dialled on it; one sent unchanged
+    // was not, though `added` lists it too.
+    const held = new Map(before.map((server) => [server.name, server]));
+    for (const [name, config] of plan.dynamic) {
+      if (dialed(held.get(name)?.config) !== dialed(config)) {
+        plan.redial.delete(name);
+      }
     }
     for (const name of plan.redial) {
       try {
@@ -4121,11 +4150,12 @@ export class ClaudeHarness implements Harness {
     // and does not hold a move for a turn's end that a session held at its
     // limit never reaches.
     await keepWakeups(ctx.instanceId, { all: 0, once: 0 });
+    const launch = await launchOptions(spec, ctx, account);
     return new ClaudeSession(
       ctx.instanceId,
       ctx,
       ctx.cwd,
-      await launchOptions(spec, ctx, account),
+      launch.options,
       spec.permissionMode,
       spec.model,
       spec.effort,
@@ -4139,6 +4169,7 @@ export class ClaudeHarness implements Harness {
         fence: spec.fence === true,
         instructions: spec.instructions ?? [],
         ...(conversationKept ? { conversationKept } : {}),
+        fleetMcp: launch.fleet,
       },
       { client, procId: procIdFor("claude", ctx.instanceId), executable }
     );
