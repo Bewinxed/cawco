@@ -14,7 +14,7 @@ import { mkdir } from "node:fs/promises";
 import { join, relative } from "node:path";
 import type { BrowserContext, Page, Request } from "playwright-core";
 import { heavySlot } from "../../lib/heavy-run";
-import { until } from "../../scratch-fleet";
+import { MACHINE, until } from "../../scratch-fleet";
 import {
   type Attach,
   player,
@@ -239,6 +239,37 @@ const gaveUp = new Set<string>();
  * them on, a fixed stretch at a time, so a script's motion is where the
  * same stretch puts it on every run (the `/motion/` benches' loops).
  */
+/** What {@link rememberSpawn} keeps: the scene's machine, and Claude on Opus 5.5 in the default mode. */
+const SPAWN_REMEMBERED = {
+  machine: MACHINE,
+  prefs: {
+    effort: null,
+    harness: "claude",
+    model: "claude-opus-5-5",
+    permissionMode: "default",
+  },
+};
+
+/** In the page, before its scripts: the spawn choices remembered, unless the page holds its own. */
+function rememberSpawn(remembered: typeof SPAWN_REMEMBERED): void {
+  try {
+    if (localStorage.getItem("cawco-spawn-machine") === null) {
+      localStorage.setItem(
+        "cawco-spawn-machine",
+        JSON.stringify(remembered.machine)
+      );
+    }
+    if (localStorage.getItem("cawco-spawn-prefs") === null) {
+      localStorage.setItem(
+        "cawco-spawn-prefs",
+        JSON.stringify(remembered.prefs)
+      );
+    }
+  } catch {
+    // No storage (a sandboxed frame): nothing to remember into.
+  }
+}
+
 export async function passPage(
   kit: Kit,
   pass: Pass,
@@ -258,6 +289,13 @@ export async function passPage(
   }
   await page.context().addInitScript(installReader, PROPS);
   await page.context().addInitScript(markHydrated);
+  // A person who has started sessions here before: New Session opens on the
+  // machine, harness, model and mode they last started one with
+  // (spawnPrefs.svelte.ts `cawco-spawn-machine`, `cawco-spawn-prefs`), as the
+  // acts expect of it. With none remembered it opens on nothing chosen (main
+  // 250867629, a4826726a): no machine, so no folder to browse, no account
+  // and no effort to pick. What a state writes there itself stands.
+  await page.context().addInitScript(rememberSpawn, SPAWN_REMEMBERED);
   // Every page focused, as a person's one window is: two passes side by side
   // share one browser, where only one page would hold its focus, and what
   // styles itself on focus (an editor's active line) read either way.

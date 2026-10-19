@@ -38,7 +38,7 @@
  * by the tool results the conversation holds since (artifacts.ts's shape).
  */
 import { createHash } from "node:crypto";
-import { mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CLAUDE_DIR_NAME,
@@ -1142,17 +1142,19 @@ async function startMove(fleet: KitFleet): Promise<void> {
 let trayDocs: McpOauthMock | null = null;
 
 /**
- * What the hub must hear before it starts: Jev's stand-in (jev-mock.ts, on
- * `CAWCO_TYPESAFE_URL`), which the scene turns on for the Caw project's
- * starters, and caw-dock.ts's short starters pace (1.5 s quiet, 5 s gap);
+ * What the hub must hear before it starts: Jev's stand-in (jev-mock.ts, as
+ * `fleet.standIns.typesafeUrl`, scripts/stand-ins), which the scene turns on
+ * for the Caw project's starters, and caw-dock.ts's short starters pace (1.5 s
+ * quiet, 5 s gap, `fleet.standIns.startersPace`): the hub reads neither from
+ * its environment (f5e496c1d);
  * and, beside it, the MCP server the scene signs the hub in to
  * (mcp-oauth-mock.ts), which the hub reads whenever it likes. Returns their
  * stop.
  */
 export function sceneHub(fleet: KitFleet): () => void {
   const jev = jevMock();
-  fleet.env.CAWCO_TYPESAFE_URL = jev.url;
-  fleet.env.CAWCO_STARTERS_PACE = "1500/5000";
+  fleet.standIns.typesafeUrl = jev.url;
+  fleet.standIns.startersPace = { quiet: 1500, gap: 5000 };
   const mcp = mcpOauthMock();
   trayDocs = mcp;
   return () => {
@@ -2161,6 +2163,27 @@ export async function seedScene(
   // started there in a project asks to move the project first (New
   // session's Move & start).
   bench = await fleet.launchMachine(BENCH_MACHINE);
+  // The second account signed in there too, as on the first machine: the
+  // first is at its limit (above), and New session starts only on an
+  // account with room on the machine it runs on ("No account this session
+  // may run on has room for it now"), so without it the move's Move & start
+  // stood disabled.
+  await cp(
+    secondDir,
+    join(bench.home, ".cawco", "accounts", SECOND_ACCOUNT, "claude"),
+    { recursive: true }
+  );
+  await until(
+    "the second account signed in on the second machine",
+    () =>
+      fleet.query<{ state: string }>(
+        "SELECT state FROM account_signins WHERE account_id = ? AND machine_id = ?",
+        SECOND_ACCOUNT,
+        BENCH_MACHINE
+      )[0]?.state,
+    (state) => state === "signed-in",
+    180_000
+  );
   // Last of all, two turns still going while the walk reads them, a piece
   // every SLOW_MS for longer than the walk lasts. The TODO session's turn
   // ends on the rule's phrase, so the rule answers it, and its answer to

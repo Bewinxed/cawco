@@ -502,16 +502,48 @@ const toOtherMachine = async (page: Page) => {
   await page.keyboard.press("Escape");
 };
 
+/**
+ * Caw's seat, when his panel stands open. A project page opens on him as
+ * the person last left him there, else while its board is empty
+ * (caw-lead.svelte.ts `arrive`, kept in local storage): a state after the
+ * one that opened him, or a project with nothing on its board, finds him
+ * open, and a press on his seat would put him away.
+ */
+const CAW_SEAT_OPEN = '[data-slot="caw-seat"][aria-expanded="true"]';
+
+/** Caw's panel open: his seat pressed, unless he stands open already. */
+const openCaw = async (page: Page) => {
+  if ((await page.locator(CAW_SEAT_OPEN).count()) === 0) {
+    await press(CAW_SEAT)(page);
+  }
+  await page.locator(CAW_SEAT_OPEN).first().waitFor({ state: "attached" });
+};
+
+/**
+ * Caw's panel put away where it stands over the page: on a phone it is a
+ * bottom sheet (CawFloat's drawer) that takes every press, and Escape puts
+ * it away. Beside the page (docked) it covers nothing, and stays.
+ */
+const cawSheetAway = async (page: Page) => {
+  // The sheet is a dialog named by its title, "Caw, lead of <project>".
+  const sheet = page.getByRole("dialog", { name: CAW_SEAT });
+  if ((await sheet.count()) > 0) {
+    await page.keyboard.press("Escape");
+    await sheet.waitFor({ state: "detached" });
+  }
+};
+
 /** The project's ⋯ menu, then its row named `item`. */
 const fromMore = (item: string) => async (page: Page) => {
+  await cawSheetAway(page);
   await press(MORE_FOR_CAWCO)(page);
   await page.getByRole("menuitem", { name: item }).click();
 };
 
-/** Caw's seat on the project page, then `then` in his thread. */
+/** Caw's panel on the project page, then `then` in his thread. */
 const inCawThread =
   (then: (page: Page) => Promise<unknown>) => async (page: Page) => {
-    await press(CAW_SEAT)(page);
+    await openCaw(page);
     await then(page);
   };
 
@@ -599,27 +631,42 @@ const browseTo = async (page: Page) => {
       .waitFor();
   }
 };
-/** The DEBUG fault a page reads once as it loads (debug-fault.ts), and the region of it that throws: the composer's `/` menu. */
-const DEBUG_FAULT = "cawco-debug-fault";
-const MENU_FAULT = "composer-menu";
-
 /**
- * The composer's `/` menu throwing while it renders, on a page loaded with
- * the DEBUG fault named: the composer's boundary holds it, and the composer
- * stands as its failure line (RegionBoundary). The page reads the key once,
- * as it loads; it is forgotten again at once, so no later load reads it.
+ * A pane whose tabs name one conversation twice, as a layout this browser
+ * kept (workspace.svelte.ts reads `cawco-workspace` as the page loads, and
+ * keeps any tree that parses): the tabs' keyed list throws as it is first
+ * built, the tabs' boundary holds it, and the strip stands as its failure
+ * line (RegionBoundary) while the page works on. Built, not updated: a
+ * doubled answer that lands after the page is up (the hub's projects, tried
+ * first) throws past every boundary and takes the page with it. (The DEBUG
+ * fault the composer's `/` menu was failed by went with main's f5e496c1d.)
  */
-const composerFails = async (page: Page) => {
+const tabsFail = async (page: Page, scene: Scene) => {
+  const tab = scene.chips;
+  // Two panes, one over the other: the desk's bar hosts the top row's tabs
+  // outside every boundary (Shell `barLeaves`), so the doubled strip is the
+  // lower pane's, drawn in its pane, and the focused one, so a phone shows it.
+  const top = {
+    t: "l",
+    id: "probe-top",
+    tabs: [scene.permission],
+    active: scene.permission,
+  };
+  const doubled = { t: "l", id: "probe-doubled", tabs: [tab, tab], active: tab };
+  const root = {
+    t: "b",
+    id: "probe-split",
+    dir: "v",
+    sizes: [50, 50],
+    kids: [top, doubled],
+  };
   await reloadedWith((p) =>
-    p.evaluate(([key, region]) => localStorage.setItem(key, region), [
-      DEBUG_FAULT,
-      MENU_FAULT,
-    ] as const)
+    p.evaluate(
+      (kept) => localStorage.setItem("cawco-workspace", JSON.stringify(kept)),
+      { v: 1, root, focusedLeaf: doubled.id, ctx: {} }
+    )
   )(page);
-  await page.evaluate((key) => localStorage.removeItem(key), DEBUG_FAULT);
-  await page.locator(COMPOSER_FIELD).first().click();
-  await page.keyboard.type("/");
-  await page.locator("[data-region-failed=composer]").first().waitFor();
+  await page.locator("[data-region-failed]").first().waitFor({ state: "attached" });
 };
 
 /** What the transcript says while it catches up (CatchUp's words). */
@@ -1239,9 +1286,16 @@ export const SURFACES: Surface[] = [
     route: (s) => `/project/${s.project}`,
     states: [
       { name: "rest", root: "body" },
-      { name: "more-menu", act: press(MORE_FOR_CAWCO), root: LAYER },
+      {
+        name: "more-menu",
+        act: async (page) => {
+          await cawSheetAway(page);
+          await press(MORE_FOR_CAWCO)(page);
+        },
+        root: LAYER,
+      },
       // Caw's seat: his thread beside the board.
-      { name: "caw", act: press(CAW_SEAT), root: "body" },
+      { name: "caw", act: openCaw, root: "body" },
       // The note pasted in his thread, opened in the lightbox's document view.
       {
         name: "caw-note",
@@ -1464,7 +1518,7 @@ export const SURFACES: Surface[] = [
     route: (s) => `/project/${s.tray}`,
     states: [
       { name: "rest", root: "body" },
-      { name: "panel", act: press(CAW_SEAT), root: "body" },
+      { name: "panel", act: openCaw, root: "body" },
       // No decision page yet: Caw in the view, his starters under him.
       {
         name: "decisions",
@@ -1708,12 +1762,12 @@ export const SURFACES: Surface[] = [
     states: [{ name: "inspect", act: inspectSheet, root: "body" }],
   },
   {
-    // A part of the page that throws while it renders: the composer, its
-    // `/` menu failing, stands as its failure line and the rest works on.
+    // A part of the page that throws while it renders: the tabs, their
+    // list failing, stand as their failure line and the rest works on.
     name: "region-failed",
     serve: "built",
     route: (s) => `/session/${s.chips}`,
-    states: [{ name: "composer", act: composerFails, root: "body" }],
+    states: [{ name: "tabs", act: tabsFail, root: "body" }],
   },
   {
     // A tab switched to with more to draw than it built: "Catching up…"
