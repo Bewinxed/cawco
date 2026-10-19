@@ -43,7 +43,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { isAlive, listedPid, type Pid, signal } from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { type KeeperJob, KeeperKept, keeperJob } from "./keeper-jobs";
-import { dialKeeper } from "./sessiond-client";
+import { dialKeeper, KEEPER_WELCOME_MS } from "./sessiond-client";
 
 /**
  * How often the keeper is dialled. Ours: a dial is one local socket open,
@@ -51,15 +51,6 @@ import { dialKeeper } from "./sessiond-client";
  * enough that the wedge is ended within minutes of it starting.
  */
 export const KEEPER_PROBE_MS = 60_000;
-
-/**
- * How long one dial waits for the welcome. Five times the two seconds every
- * other dial of the keeper allows (`DIAL_TIMEOUT_MS`): the keeper writes the welcome in the
- * same turn of its loop as the accept, so a healthy one answers in
- * microseconds, and a keeper that is merely loaded (a GC pause, a machine in
- * swap) answers inside ten seconds.
- */
-export const KEEPER_WELCOME_MS = 10_000;
 
 /**
  * Dials in a row without a welcome, from the same live keeper, before it is

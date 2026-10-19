@@ -15,7 +15,11 @@ import {
   machineEndpoint,
 } from "@cawco/core/keepers";
 import type { SessiondProcInfo } from "@cawco/core/sessiond";
-import { ensureSessiond, SessiondClient } from "./sessiond-client";
+import {
+  ensureSessiond,
+  KEEPER_WELCOME_MS,
+  SessiondClient,
+} from "./sessiond-client";
 
 /** A dial that found no keeper there: a file left by one that is gone, or none at all. */
 const NOBODY_THERE = new Set(["ECONNREFUSED", "ENOENT"]);
@@ -346,8 +350,8 @@ export interface KeeperConnection {
  * A fresh connection to every keeper there, the current one first, for one
  * reading; each is closed once `use` has finished. An endpoint nothing answers
  * on is a keeper that is gone, and is left out; one that is there and gives
- * no welcome in time, or ends before it, makes the reading unknown
- * ({@link notKnown}), never a keeper read as holding nothing.
+ * no welcome within {@link KEEPER_WELCOME_MS}, or ends before it, makes the
+ * reading unknown ({@link notKnown}), never a keeper read as holding nothing.
  */
 export async function withKeepers<T>(
   use: (keepers: KeeperConnection[]) => Promise<T>
@@ -356,7 +360,7 @@ export async function withKeepers<T>(
   const settled = await Promise.allSettled(
     found.map(async (one) => ({
       ...one,
-      read: await SessiondClient.connect(one.endpoint),
+      read: await SessiondClient.connect(one.endpoint, KEEPER_WELCOME_MS),
     }))
   );
   const keepers: KeeperConnection[] = [];
