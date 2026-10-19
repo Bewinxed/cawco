@@ -530,9 +530,10 @@ const run = async (kit: Kit): Promise<void> => {
 
   /**
    * A session outside any workspace makes its own door as it launches; the
-   * hub deletes the session (stopped, then `DELETE /api/instances/:id`), and
-   * the stop that delete owes its machine carries `forget`: the door's folder
-   * is gone within the agent's next tick.
+   * person stops it, then deletes it, as the dashboard has them. The delete
+   * owes the machine a stop of its own carrying `forget`, which the agent
+   * takes for a session already ended: the door's folder is gone, and the
+   * row with it, within the agent's next tick.
    */
   const forgotten = async (): Promise<void> => {
     const id = await fleet.spawn("claude", "Cutover forgotten", ours.repo, {
@@ -542,16 +543,26 @@ const run = async (kit: Kit): Promise<void> => {
     const folder = door ? dirname(door.config) : undefined;
     const made = folder ? await exists(folder) : false;
     await fleet.stopSession(id);
-    await until(
+    const stopped = await until(
       "the session to stop",
       () => fleet.instance(id)?.status,
       (status) => status === "stopped",
       120_000
-    ).catch(() => undefined);
-    const deleted = await fetch(`${fleet.base}/api/instances/${id}`, {
-      method: "DELETE",
-    });
-    const said = `${deleted.status} ${await deleted.text()}`;
+    ).catch(() => fleet.instance(id)?.status);
+    // The hub refuses while its last reading of the machine still has the
+    // process: the person tries again, as the dashboard's Delete does.
+    const said = await until(
+      "the hub to take the delete",
+      async () => {
+        const answer = await fetch(`${fleet.base}/api/instances/${id}`, {
+          method: "DELETE",
+        });
+        const text = `${answer.status} ${await answer.text()}`;
+        return text.includes("still running") ? undefined : text;
+      },
+      Boolean,
+      60_000
+    ).catch(() => "409 still running after 60 s");
     const gone = folder
       ? await until(
           "the session's door folder to go",
@@ -560,10 +571,20 @@ const run = async (kit: Kit): Promise<void> => {
           70_000
         ).catch(() => false)
       : false;
+    const dropped = await until(
+      "the session's row to go",
+      () => fleet.instance(id) === undefined,
+      Boolean,
+      70_000
+    ).catch(() => false);
     kit.check(
-      `a session outside any workspace made its door (${folder}), the hub deleted the session (${said}), and the folder is gone within the agent's next tick`,
-      made && deleted.ok && gone && fleet.instance(id) === undefined,
-      JSON.stringify({ made, said, gone, row: fleet.instance(id) })
+      `a session outside any workspace made its door (${folder}), was stopped (${stopped}) then deleted (${said}), and its door folder and row are gone within the agent's next tick`,
+      made &&
+        stopped === "stopped" &&
+        said.startsWith("200") &&
+        gone &&
+        dropped,
+      JSON.stringify({ made, stopped, said, gone, row: fleet.instance(id) })
     );
   };
 

@@ -220,7 +220,15 @@ export const createSessionLifecycle = (ports: {
     instanceId: string,
     intent: SessionEndIntent
   ): void => {
+    const before = ports.db.ownedInstance(instanceId)?.endIntent;
     const row = ports.db.endInstance(instanceId, intent);
+    // A new end (a delete of a stopped session) is owed its own stop, which
+    // tells the machine what the end is (`forget`): the last stop's delivery
+    // stands for the end it was sent for alone.
+    if (row && row.endIntent !== before) {
+      delivering.delete(instanceId);
+      issued.delete(instanceId);
+    }
     if (row) {
       ports.changed(
         row.machineId,

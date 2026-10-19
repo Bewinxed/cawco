@@ -407,6 +407,28 @@ await Bun.write(
   })
 );
 
+// ── The machine's first fleet sync ──────────────────────────────────────
+// A fleet with nothing in it, converged by the agent's own sync before any
+// spawn: it writes the sidecar a spawn reads the fleet's denials from
+// (denied-tools.ts `resolvedFleetDenials`), so no spawn waits for a hub
+// this probe does not run.
+const { syncFleetConfig } = await import("../packages/agent/src/fleet");
+await syncFleetConfig({
+  cawcoTodos: false,
+  deniedTools: [],
+  hooks: [],
+  hubOnlyMarketplaces: [],
+  marketplaces: [],
+  mcp: [],
+  memory: null,
+  placedMcp: [],
+  placedMemory: [],
+  placedSkills: [],
+  pluginPayloads: [],
+  plugins: [],
+  skills: [],
+});
+
 // ── The workspaces: each a clone, its policy, judge and boundary record ─
 // Each clone is a `git clone --shared` of this repository, as a delegate's
 // workspace is cut.
