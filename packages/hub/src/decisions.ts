@@ -44,6 +44,7 @@ import {
   type DecisionSent,
   type DecisionState,
   type DecisionsList,
+  type DecisionsShape,
   type DecisionWriter,
   decidedOf,
   type GraphCard,
@@ -298,6 +299,12 @@ interface PageArtifact {
 }
 
 /** One task as the record reads it: its id, its title and the card it names. */
+/** A project folder's reads: the names in a folder, and a file's text. */
+interface FolderReads {
+  names: (projectId: string, path: string) => Promise<string[]>;
+  text: (projectId: string, path: string) => Promise<string | undefined>;
+}
+
 interface DecidedTask {
   card: string;
   id: string;
@@ -331,6 +338,12 @@ export interface DecisionsDeps {
     meta: PageArtifact["meta"];
     state: Record<string, ChoiceEntry>;
   };
+  /**
+   * The same two reads of a folder that may not be made yet: nothing while
+   * it is not there, and never a mkdir, git or commit to make it. What
+   * measures a project's shape off any request reads with.
+   */
+  peek: FolderReads;
   /** Keeps the person's places of a page's cards on the graph in its artifact's state, by card id. */
   place: (artifactId: string, places: Record<string, GraphPlace>) => void;
   /** A decision page artifact's program; undefined for an HTML page. */
@@ -560,27 +573,23 @@ const keptIn = async (
 
 /**
  * A page's decisions form a graph: one names another in `after`, or stands
- * in a Section. The one rule for the list's `graph` and the project row's
- * `decisionsGraphed`.
+ * in a Section. The one rule for the list's `graph` and its shape's.
  */
 const formsGraph = (
   cards: readonly { after: string[]; section: string | null }[]
 ) => cards.some((card) => card.after.length > 0 || card.section !== null);
 
-/** A project's decisions as its row tells them: whether they form a graph, and how many pages the list holds. */
-export interface DecisionsShape {
-  graphed: boolean;
-  pages: number;
-}
-
 export const createDecisions = (deps: DecisionsDeps) => {
   /**
-   * Each project's decisions as last listed, their shape alone: whether they
-   * form a graph and how many pages the list holds. What its row says before
-   * the Decisions tab reads them (`decisionsGraphed`, `decisionPages`), so
-   * the tab's skeleton stands where its list will.
+   * Each project's decisions as last listed or measured, their shape alone:
+   * whether they form a graph and how many pages the list holds. What the
+   * hub says of them before the Decisions tab reads them (`shapes`), so the
+   * tab's skeleton stands where its list will. A project not measured yet,
+   * or whose measure failed, is absent.
    */
   const shapeBy = new Map<string, DecisionsShape>();
+  /** The reads that make the folder on first use, as every request's. */
+  const made: FolderReads = { names: deps.folderNames, text: deps.folderText };
 
   const known = (projectId: string) => {
     if (!deps.projectExists(projectId)) {
@@ -590,7 +599,8 @@ export const createDecisions = (deps: DecisionsDeps) => {
 
   /** Each page name with its newest artifact, and the folder's built pages beside them. */
   const pageNames = async (
-    projectId: string
+    projectId: string,
+    reads: FolderReads = made
   ): Promise<{ artifact: ArtifactRow | null; name: string }[]> => {
     const byName = new Map<string, ArtifactRow | null>();
     for (const row of deps.artifacts(projectId)) {
@@ -598,10 +608,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
         byName.set(row.name, row);
       }
     }
-    for (const name of await deps.folderNames(projectId, "decisions")) {
+    for (const name of await reads.names(projectId, "decisions")) {
       if (NAME.test(name) && !byName.has(name)) {
         // biome-ignore lint/performance/noAwaitInLoops: a project holds a handful of pages; read one at a time
-        const kept = await keptIn(deps.folderText, projectId, name);
+        const kept = await keptIn(reads.text, projectId, name);
         if (kept !== undefined) {
           byName.set(name, null);
         }
@@ -612,9 +622,10 @@ export const createDecisions = (deps: DecisionsDeps) => {
 
   const readRecord = async (
     projectId: string,
-    name: string
+    name: string,
+    reads: FolderReads = made
   ): Promise<StoredRecord | null> => {
-    const text = await deps.folderText(projectId, recordPath(name));
+    const text = await reads.text(projectId, recordPath(name));
     if (text === undefined) {
       return null;
     }
@@ -666,20 +677,21 @@ export const createDecisions = (deps: DecisionsDeps) => {
   const pageOf = async (
     projectId: string,
     name: string,
-    artifact: ArtifactRow | null
+    artifact: ArtifactRow | null,
+    reads: FolderReads = made
   ): Promise<ReadPage> => {
     const program =
       (artifact ? deps.program(artifact.id) : undefined) ??
       (artifact?.kind === "page" && (await deps.builtPage(artifact.id))
         ? undefined
-        : await deps.folderText(projectId, programPath(name)));
+        : await reads.text(projectId, programPath(name)));
     if (program !== undefined) {
       const { title, cards, sections } = readKept(program);
       return { title, cards, sections };
     }
     const html =
       (artifact ? await deps.builtPage(artifact.id) : undefined) ??
-      (await deps.folderText(projectId, builtPath(name)));
+      (await reads.text(projectId, builtPath(name)));
     return html ? await readPage(html) : { title: name, cards: [] };
   };
 
@@ -864,40 +876,48 @@ export const createDecisions = (deps: DecisionsDeps) => {
       return { pages, graph, problems };
     },
 
-    /**
-     * The project's decisions' shape, as its last list said; else read now
-     * from its pages' cards and records alone (no tasks), by the list's own
-     * rules (`formsGraph`, `decisionPage`). A page that does not read counts
-     * for nothing, as in the list.
-     */
-    async shape(projectId: string): Promise<DecisionsShape> {
-      const kept = shapeBy.get(projectId);
-      if (kept) {
-        return kept;
-      }
-      if (!deps.projectExists(projectId)) {
-        return { graphed: false, pages: 0 };
-      }
-      const shape: DecisionsShape = { graphed: false, pages: 0 };
-      for (const { name, artifact } of await pageNames(projectId)) {
-        try {
-          // biome-ignore lint/performance/noAwaitInLoops: one page's program and record at a time keeps the folder's reads small
-          const page = await pageOf(projectId, name, artifact);
-          if (decisionPage(page, await readRecord(projectId, name))) {
-            shape.pages += 1;
-            shape.graphed ||= formsGraph(page.cards);
-          }
-        } catch {
-          // A page that does not read is not in the list either.
-        }
-      }
-      shapeBy.set(projectId, shape);
-      return shape;
+    /** Every project's shape the hub holds now: none waits on a read. */
+    shapes(): Record<string, DecisionsShape> {
+      return Object.fromEntries(shapeBy);
     },
 
-    /** Its decisions changed: the next row reads them again. */
-    forget(projectId: string): void {
+    /**
+     * Measures the project's shape again, off any request (its decisions
+     * changed, the hub started): from its pages' cards and records alone (no
+     * tasks), by the list's own rules (`formsGraph`, `decisionPage`), through
+     * reads that never make its folder (a project with none has no pages). A
+     * page that does not read counts for nothing, as in the list. A measure
+     * that fails leaves the shape absent, so the next one tries again. Its
+     * shape, or undefined.
+     */
+    async measure(projectId: string): Promise<DecisionsShape | undefined> {
       shapeBy.delete(projectId);
+      try {
+        if (!deps.projectExists(projectId)) {
+          return undefined;
+        }
+        const shape: DecisionsShape = { graphed: false, pages: 0 };
+        for (const { name, artifact } of await pageNames(
+          projectId,
+          deps.peek
+        )) {
+          try {
+            // biome-ignore lint/performance/noAwaitInLoops: one page's program and record at a time keeps the folder's reads small
+            const page = await pageOf(projectId, name, artifact, deps.peek);
+            const record = await readRecord(projectId, name, deps.peek);
+            if (decisionPage(page, record)) {
+              shape.pages += 1;
+              shape.graphed ||= formsGraph(page.cards);
+            }
+          } catch {
+            // A page that does not read is not in the list either.
+          }
+        }
+        shapeBy.set(projectId, shape);
+        return shape;
+      } catch {
+        return undefined;
+      }
     },
 
     /** One page: its summary, its record (each card's tasks as filed now) and its last send. */
@@ -1196,6 +1216,10 @@ const refused = (error: unknown) => {
 /** The Decisions tab's routes, under `/api/projects/:id/decisions`. */
 export const decisionRoutes = (decisions: Decisions) =>
   new Elysia()
+    // Every project's shape the hub holds (decisions.ts `measure`): what the
+    // Decisions tab's skeleton stands as before its list is read. Read from
+    // memory, so it never waits on a folder; a project not measured is absent.
+    .get("/api/decisions/shapes", () => decisions.shapes())
     .get("/api/projects/:id/decisions", async ({ params }) => {
       try {
         return await decisions.list(params.id);

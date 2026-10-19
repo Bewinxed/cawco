@@ -10,6 +10,7 @@
  * reach, so each transition asks `motionOk` itself; without it a transition
  * keeps its opacity and drops its travel.
  */
+import type { Attachment } from "svelte/attachments";
 import { MediaQuery } from "svelte/reactivity";
 import type { TransitionConfig } from "svelte/transition";
 
@@ -147,8 +148,22 @@ export const ease = (name: `--ease-${string}`): string => rootToken(name);
  * where the one before it stood, seen or not, instead of waiting the grace
  * again. Past the grace it is negative, so the fade-in is already done.
  */
-export const graceLeft = (since: number): string =>
+const graceLeft = (since: number): string =>
   `calc(var(--dur-wait-grace) - ${Math.round(performance.now() - since)}ms)`;
+
+/**
+ * Hands what it is attached to the wait it carries on: `--wait-grace-left`
+ * from `since` (`performance.now()`; null: a wait of its own), reckoned once,
+ * as it is drawn, and inherited by every kit skeleton inside. Reckoned again
+ * later it would bring a fade already under way forward.
+ */
+export const carriesWait =
+  (since: number | null): Attachment<HTMLElement> =>
+  (node) => {
+    if (since !== null && !node.style.getPropertyValue("--wait-grace-left")) {
+      node.style.setProperty("--wait-grace-left", graceLeft(since));
+    }
+  };
 export const popScale = (): number =>
   Number.parseFloat(rootToken("--pop-scale"));
 /** `--pop-rise` in px: how far a small entrance travels. */

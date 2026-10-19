@@ -25,6 +25,17 @@ export class ProjectDecisions {
     this.#project = project;
   }
 
+  /**
+   * The decisions form a graph: the list's word once read, the hub's
+   * measured shape before (`decisionShapeOf`), so `?mode=graph` stands the
+   * graph's skeleton from the start. Unmeasured, they do not.
+   */
+  get graphed(): boolean {
+    return this.list
+      ? this.list.graph
+      : cawco.decisionShapeOf(this.#project())?.graphed === true;
+  }
+
   /** Pages still waiting for picks: the tab's trail. */
   get waiting(): number {
     return (
@@ -44,14 +55,11 @@ export class ProjectDecisions {
       if (ticket === this.#reads && projectId === this.#project()) {
         this.list = list;
         this.problem = null;
-        // The hub's newest word on the list's shape: the project's row says it on.
-        const row = cawco.projects.find((one) => one.id === projectId);
-        if (row && row.decisionsGraphed !== list.graph) {
-          row.decisionsGraphed = list.graph;
-        }
-        if (row && row.decisionPages !== list.pages.length) {
-          row.decisionPages = list.pages.length;
-        }
+        // The hub's newest word on the list's shape: its skeleton stands so next time.
+        cawco.setDecisionShape(projectId, {
+          graphed: list.graph,
+          pages: list.pages.length,
+        });
       }
     } catch (error) {
       if (ticket === this.#reads && projectId === this.#project()) {

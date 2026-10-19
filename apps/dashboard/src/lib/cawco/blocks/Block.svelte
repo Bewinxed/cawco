@@ -107,13 +107,35 @@
     ontab: () => void;
   } = $props();
 
-  /** Reports the body's height as it settles and changes. */
+  /** How long the body's height holds still before it is told. */
+  const SETTLE_MS = 300;
+  /**
+   * Tells the body's height once it has settled: after it holds still for
+   * {@link SETTLE_MS}, and as the body goes, never on every resize.
+   */
   const sized =
     (tell: (height: number) => void): Attachment<HTMLElement> =>
     (node) => {
-      const watch = new ResizeObserver(() => tell(node.offsetHeight));
+      let height: number | null = null;
+      let told: number | null = null;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const flush = () => {
+        clearTimeout(timer);
+        if (height !== null && height !== told) {
+          told = height;
+          tell(height);
+        }
+      };
+      const watch = new ResizeObserver(() => {
+        height = node.offsetHeight;
+        clearTimeout(timer);
+        timer = setTimeout(flush, SETTLE_MS);
+      });
       watch.observe(node);
-      return () => watch.disconnect();
+      return () => {
+        watch.disconnect();
+        flush();
+      };
     };
 
   const over = $derived(drag.over?.block === id ? drag.over.edge : null);
@@ -132,6 +154,7 @@
   data-body={body}
   data-dragging={drag.dragging === id ? "" : undefined}
   data-flip
+  data-reading={reading || undefined}
   data-span={span}
   style:grid-column="span {span}"
   {@attach !reading && dropOnBlock(drag, () => ({ block: id, columns, page }))}
@@ -149,68 +172,64 @@
     {#if meta && !reading}
       <span data-slot="meta" class="meta" data-box>{@render meta()}</span>
     {/if}
-    <span
-      data-slot="tools"
-      class="tools"
-      data-block-tools
-      data-box
-      hidden={reading}
-    >
-      {@render action?.()}
-      <DropdownMenu.Root>
-        <DropdownMenu.Trigger
-          aria-label={words.more(title)}
-          class="{buttonVariants({
-            variant: 'ghost',
-            size: 'icon-sm',
-          })} touch-hit"
-        >
-          <IconMore />
-        </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" class="w-auto min-w-48">
-          <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
-            <IconArrowUp />
-            <span>{words.moveUp}</span>
-          </DropdownMenu.Item>
-          <DropdownMenu.Item disabled={last} onSelect={() => onmove(1)}>
-            <IconArrowDown />
-            <span>{words.moveDown}</span>
-          </DropdownMenu.Item>
-          {#if !wideOnly}
-            <DropdownMenu.Separator />
-            <DropdownMenu.RadioGroup
-              onValueChange={(next) => onwidth(next as BlockWidth)}
-              value={width}
-            >
-              <DropdownMenu.RadioItem value="narrow"
-                >{words.narrow}</DropdownMenu.RadioItem
+    {#if !reading}
+      <span data-slot="tools" class="tools" data-block-tools data-box>
+        {@render action?.()}
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger
+            aria-label={words.more(title)}
+            class="{buttonVariants({
+              variant: 'ghost',
+              size: 'icon-sm',
+            })} touch-hit"
+          >
+            <IconMore />
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Content align="end" class="w-auto min-w-48">
+            <DropdownMenu.Item disabled={first} onSelect={() => onmove(-1)}>
+              <IconArrowUp />
+              <span>{words.moveUp}</span>
+            </DropdownMenu.Item>
+            <DropdownMenu.Item disabled={last} onSelect={() => onmove(1)}>
+              <IconArrowDown />
+              <span>{words.moveDown}</span>
+            </DropdownMenu.Item>
+            {#if !wideOnly}
+              <DropdownMenu.Separator />
+              <DropdownMenu.RadioGroup
+                onValueChange={(next) => onwidth(next as BlockWidth)}
+                value={width}
               >
-              <DropdownMenu.RadioItem value="wide"
-                >{words.wide}</DropdownMenu.RadioItem
-              >
-            </DropdownMenu.RadioGroup>
-            {#if columns === 1}
-              <p class="aside">{words.widerScreens}</p>
+                <DropdownMenu.RadioItem value="narrow"
+                  >{words.narrow}</DropdownMenu.RadioItem
+                >
+                <DropdownMenu.RadioItem value="wide"
+                  >{words.wide}</DropdownMenu.RadioItem
+                >
+              </DropdownMenu.RadioGroup>
+              {#if columns === 1}
+                <p class="aside">{words.widerScreens}</p>
+              {/if}
             {/if}
-          {/if}
-          {#if hideable || view}
-            <DropdownMenu.Separator />
-          {/if}
-          {#if hideable}
-            <DropdownMenu.Item onSelect={onhide}>
-              <IconEyeClosed />
-              <span>{words.hide}</span>
-            </DropdownMenu.Item>
-          {/if}
-          {#if view}
-            <DropdownMenu.Item onSelect={ontab}>
-              <IconWindow />
-              <span>{words.showAsTab}</span>
-            </DropdownMenu.Item>
-          {/if}
-        </DropdownMenu.Content>
-      </DropdownMenu.Root>
-    </span>
+            {#if hideable || view}
+              <DropdownMenu.Separator />
+            {/if}
+            {#if hideable}
+              <DropdownMenu.Item onSelect={onhide}>
+                <IconEyeClosed />
+                <span>{words.hide}</span>
+              </DropdownMenu.Item>
+            {/if}
+            {#if view}
+              <DropdownMenu.Item onSelect={ontab}>
+                <IconWindow />
+                <span>{words.showAsTab}</span>
+              </DropdownMenu.Item>
+            {/if}
+          </DropdownMenu.Content>
+        </DropdownMenu.Root>
+      </span>
+    {/if}
   </header>
   <div
     data-card={card || undefined}
@@ -245,6 +264,11 @@
     border-radius: var(--radius-md);
     cursor: grab;
     user-select: none;
+
+    /* Its page still read: nothing to drag yet. */
+    .block[data-reading] & {
+      cursor: default;
+    }
     -webkit-user-select: none;
     -webkit-touch-callout: none;
   }

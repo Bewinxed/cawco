@@ -38,6 +38,16 @@ const departures = new Map<string, Departure>();
 /** A departure waits this long for its destination to mount. */
 const TTL = 1200;
 
+/**
+ * Something under `key` has departed and waits for its destination: what
+ * arrives holding it lands by its flight (`land`), so the arrival around it
+ * does not fade it in too.
+ */
+export const departing = (key: string): boolean => {
+  const from = departures.get(key);
+  return !!from && performance.now() - from.at <= from.ttl;
+};
+
 export function depart(
   source: HTMLElement,
   by: Departure["by"] = "click"

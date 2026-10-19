@@ -1027,17 +1027,17 @@
   {:else if page === null}
     <div
       aria-busy="true"
-      aria-label="Reading routines"
+      aria-label={words.reading}
       class="routines-view"
       data-routines-reading
       role="status"
       out:crossOut
     >
-      <BlockPage {blocks} {items} page="routines" reading />
+      <BlockPage {blocks} {items} kept page="routines" reading />
     </div>
   {:else}
     <div class="routines-view" data-routines-read in:crossIn>
-      <BlockPage {blocks} {items} page="routines" />
+      <BlockPage {blocks} {items} kept page="routines" />
     </div>
   {/if}
 </div>

@@ -32,7 +32,7 @@
   import ChevronRight from "~icons/solar/alt-arrow-right-linear";
   import NeedsYou from "~icons/solar/hand-shake-bold-duotone";
   import Server from "~icons/solar/server-bold-duotone";
-  import { crossIn, crossOut } from "../motion/curves.svelte";
+  import { carriesWait, crossIn, crossOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import Segmented from "../spawn/Segmented.svelte";
   import FindField from "./FindField.svelte";
@@ -276,7 +276,7 @@
     | { t: "goto"; key: string; result: FindResult }
     | { t: "acts"; key: string; result: FindResult }
     | { t: "fold"; key: string; entry: Fold }
-    | { t: "skeleton"; key: string; tall: boolean }
+    | { t: "skeleton"; key: string; tall: boolean; since: number | null }
     | { t: "nothing"; key: string };
   /** A section: what stands at its head, then its units (a row and what hangs from it). */
   interface Section {
@@ -301,9 +301,15 @@
     }
     return unit;
   };
-  const skeletons = (section: string, n: number, tall = false): Item[][] =>
+  /** `since`: when the wait it stands for began, carried on (`carriesWait`). */
+  const skeletons = (
+    section: string,
+    n: number,
+    since: number | null,
+    tall = false
+  ): Item[][] =>
     Array.from({ length: n }, (_, i) => [
-      { t: "skeleton", key: `skeleton:${section}:${i}`, tall },
+      { t: "skeleton", key: `skeleton:${section}:${i}`, tall, since },
     ]);
 
   function doorway(): Section[] {
@@ -330,7 +336,9 @@
         key: "loading",
         lead: [],
         units:
-          namesWaiting && nameRows.length === 0 ? skeletons("names", 3) : [],
+          namesWaiting && nameRows.length === 0
+            ? skeletons("names", 3, finder.namesWaitFrom)
+            : [],
       },
     ];
   }
@@ -352,7 +360,7 @@
     };
     let nameUnits = nameRows.map((r) => rowUnit(r, "names"));
     if (nameUnits.length === 0 && namesWaiting) {
-      nameUnits = skeletons("names", 2);
+      nameUnits = skeletons("names", 2, finder.namesWaitFrom);
     }
     const said: Section = { key: "said", lead: [], units: [] };
     if (saidShown) {
@@ -369,7 +377,7 @@
       }
       said.units = saidRows.map((r) => rowUnit(r, "said"));
       if (said.units.length === 0 && everyWaiting) {
-        said.units = skeletons("said", 2, true);
+        said.units = skeletons("said", 2, finder.everyWaitFrom, true);
       }
     }
     return [goTo, { key: "names", lead: [], units: nameUnits }, said];
@@ -690,6 +698,7 @@
       <Skeleton
         data-tall={item.tall || undefined}
         class={item.tall ? "skeleton-row tall" : "skeleton-row"}
+        {@attach carriesWait(item.since)}
       />
     </div>
   {:else if item.t === "nothing"}

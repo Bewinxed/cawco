@@ -688,16 +688,36 @@ const asText = (bytes: Uint8Array): string | undefined => {
   }
 };
 
+/**
+ * The folder's root for a read that must never make it: the root while it
+ * is there, else undefined. No mkdir, no git, no turn: what reads a project's
+ * shape off any request (decisions.ts `shape`) reads this way.
+ */
+const rootIfThere = async (projectId: string): Promise<string | undefined> => {
+  const root = projectRoot(projectId);
+  return (await exists(root)) ? root : undefined;
+};
+
 /** One text file, whole: up to {@link FOLDER_FILE_LIMIT}; a binary file is refused. */
 export const readFolderFile = async (
   projectId: string,
   rawPath: string
-): Promise<FolderFile> => {
-  const rel = folderPath(rawPath);
+): Promise<FolderFile> =>
+  fileIn(await forReading(projectId), folderPath(rawPath));
+
+/** {@link readFolderFile} of a folder that may not be made yet: undefined while it is not there. */
+export const readFolderFileIfThere = async (
+  projectId: string,
+  rawPath: string
+): Promise<FolderFile | undefined> => {
+  const root = await rootIfThere(projectId);
+  return root ? fileIn(root, folderPath(rawPath)) : undefined;
+};
+
+const fileIn = async (root: string, rel: string): Promise<FolderFile> => {
   if (!rel) {
     throw new FolderRefusal(400, "Name a file to read, like AGENTS.md.");
   }
-  const root = await forReading(projectId);
   const real = await readable(root, rel);
   const info = await stat(real).catch(notFound(rel));
   if (info.isDirectory()) {
@@ -1389,16 +1409,25 @@ export const folderHistory = async (
 export const folderFileNames = async (
   projectId: string,
   rawDir: string
+): Promise<string[]> =>
+  namesIn(await forReading(projectId), folderPath(rawDir));
+
+/** {@link folderFileNames} of a folder that may not be made yet: none while it is not there. */
+export const folderFileNamesIfThere = async (
+  projectId: string,
+  rawDir: string
 ): Promise<string[]> => {
-  const rel = folderPath(rawDir);
-  const root = await forReading(projectId);
-  return await readdir(await readable(root, rel)).catch((error: unknown) => {
+  const root = await rootIfThere(projectId);
+  return root ? namesIn(root, folderPath(rawDir)) : [];
+};
+
+const namesIn = async (root: string, rel: string): Promise<string[]> =>
+  await readdir(await readable(root, rel)).catch((error: unknown) => {
     if (isMissing(error)) {
       return [];
     }
     throw error;
   });
-};
 
 /** One commit as the folder's log pass reads it: shared by every path it touched. */
 export interface FolderLogCommit {
@@ -1597,7 +1626,7 @@ const applyChange = (
   line: string,
   made: FolderLogCommit
 ): void => {
-  const [kind = "", from = "", to] = line.split("\t");
+  const [kind = "", from, to] = line.split("\t");
   if (!from) {
     return;
   }

@@ -784,6 +784,8 @@ export interface DecisionsChangedFrame {
    */
   kind: "decisions.changed";
   projectId: string;
+  /** Its shape measured again (DecisionsShape); absent when the measure failed. */
+  shape?: { graphed: boolean; pages: number };
 }
 
 export interface BlocksChangedFrame {

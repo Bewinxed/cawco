@@ -9,7 +9,7 @@
   import { findArtifact, showArtifact } from "../../artifact-api";
   import { cawco } from "../../client.svelte";
   import { failureWords as message } from "../../hub-read";
-  import { crossIn, crossOutWith, graceLeft } from "../../motion/curves.svelte";
+  import { crossIn, crossOutWith } from "../../motion/curves.svelte";
   import PreviewPane from "../../preview/PreviewPane.svelte";
   import RowFault from "../../RowFault.svelte";
 
@@ -74,13 +74,8 @@
   {#if problem}
     <div class="arrived" in:crossIn><RowFault reason={problem} /></div>
   {:else if staged && drawn}
-    <div
-      class="arrived"
-      data-artifact-stage-arrived
-      style:--wait-grace-left={graceLeft(since)}
-      in:crossIn
-    >
-      <PreviewPane inset instanceId={staged.instanceId} />
+    <div class="arrived" data-artifact-stage-arrived in:crossIn>
+      <PreviewPane inset instanceId={staged.instanceId} waitingSince={since} />
     </div>
   {:else}
     <div

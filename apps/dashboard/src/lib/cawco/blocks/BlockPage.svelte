@@ -74,6 +74,7 @@
     blocks,
     items,
     reading = false,
+    kept = false,
   }: {
     page: BlockPage;
     blocks: ProjectBlocks;
@@ -83,9 +84,14 @@
      * The page's data is still being read (The Claim Of Nothing Rule): every
      * block stands where and as wide as it will, its head without what it
      * counts or does, its body skeleton rows at the height it last stood at
-     * here (kept-bodies.ts), else a ledger's band and three rows.
+     * here when `kept`, else a ledger's band and three rows.
      */
     reading?: boolean;
+    /**
+     * Each block's body height is kept (kept-bodies.ts) for the page's own
+     * `reading` skeleton to stand at: a page that reads its data (Routines).
+     */
+    kept?: boolean;
   } = $props();
 
   /** The skeleton rows a block's body holds while its page is read. */
@@ -243,6 +249,7 @@
 </script>
 
 {#snippet frame(place: BlockPlace, item: BlockItem, index: number)}
+  {@const project = blocks.projectId}
   <Block
     action={item.action}
     body={item.body}
@@ -263,9 +270,9 @@
         void blocks.unplace(item.view);
       }
     }}
-    onbody={reading
-      ? undefined
-      : (height) => keepBody(blocks.projectId, page, place.block, height)}
+    onbody={kept && !reading
+      ? (height) => keepBody(project, page, place.block, height)
+      : undefined}
     onwidth={(width) => setWidth(place, width)}
     {page}
     {reading}
@@ -277,7 +284,7 @@
     wideOnly={item.wideOnly ?? false}
   >
     {#if reading}
-      {@render readingBody(keptBody(blocks.projectId, page, place.block))}
+      {@render readingBody(kept ? keptBody(project, page, place.block) : null)}
     {:else}
       {@render item.content(place.block)}
     {/if}
@@ -304,7 +311,7 @@
 {#if lone}
   {@const only = places[0]?.block ?? ""}
   {#if reading}
-    {@render readingBody(keptBody(blocks.projectId, page, only))}
+    {@render readingBody(kept ? keptBody(blocks.projectId, page, only) : null)}
   {:else}
     {@render items[only]?.content(only)}
   {/if}

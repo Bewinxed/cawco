@@ -63,6 +63,9 @@ export const decisionsWords = {
   others: (count: number) =>
     `${count} other ${count === 1 ? "option" : "options"}`,
   hideOthers: "Hide other options",
+  /** The list, and the graph, being read. */
+  reading: "Reading decision pages",
+  readingGraph: "Reading the decision graph",
   /** The list could not be read. */
   unavailable: "Decisions are not available",
   unavailableLine: (project: string, problem: string) =>

@@ -98,6 +98,19 @@ export interface DecisionsList {
   problems: string[];
 }
 
+/**
+ * A project's decisions before the Decisions tab reads them (hub
+ * decisions.ts `measure`, `GET /api/decisions/shapes`, the
+ * `decisions.changed` frame): what its skeleton stands as, by the list's
+ * own rules.
+ */
+export interface DecisionsShape {
+  /** They form a graph, as {@link DecisionsList.graph} says. */
+  graphed: boolean;
+  /** How many pages the list holds. */
+  pages: number;
+}
+
 /** One card of a decided page's record. */
 export interface RecordCard {
   /** Options picked, by id; empty when it was left open. */

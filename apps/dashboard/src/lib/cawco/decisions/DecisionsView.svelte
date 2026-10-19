@@ -13,18 +13,19 @@
   import { decisionsWords as words } from "@cawco/core";
   import type { DecisionGraph as Graph } from "@cawco/core/decisions";
   import { untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import type { TransitionConfig } from "svelte/transition";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import {
+    carriesWait,
     crossIn,
     crossOut,
-    graceLeft,
     motionOk,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { ListSwap } from "#lib/cawco/motion/list-swap.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import { depart } from "#lib/cawco/motion/share.svelte.js";
+  import { depart, departing } from "#lib/cawco/motion/share.svelte.js";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
@@ -100,38 +101,35 @@
 
   const list = $derived(decisions.list);
   const pages = $derived(list?.pages ?? []);
-  const graphed = $derived(!!list?.graph);
+  /**
+   * The project's decisions as the hub measured them (`decisionShapeOf`):
+   * what the tab stands as before its list is read (The Claim Of Nothing
+   * Rule). Unmeasured, nothing of it stands: no tiles, no segment's room.
+   */
+  const shape = $derived(cawco.decisionShapeOf(projectId));
+  const graphed = $derived(decisions.graphed);
   /** List or graph: the graph only while the decisions form one. */
   const view = $derived<DecisionsMode>(graphed ? mode : "list");
   const shown = $derived(page ? `page:${page}` : view);
   const empty = $derived(list !== null && pages.length === 0);
-
-  /**
-   * The List | Graph segment's room above the list, while the decisions
-   * form a graph: the list's word once read, the project's row before
-   * (`decisionsGraphed`), so the tiles' skeleton stands where the tiles
-   * will (The Claim Of Nothing Rule).
-   */
-  const row = $derived(cawco.projects.find((one) => one.id === projectId));
-  /**
-   * When the list's wait began (it went unread): a tile counted in after
-   * (the project's row read later) carries that wait on rather than waiting
-   * the grace again (`graceLeft`).
-   */
-  let opened = performance.now();
-  const unread = $derived(list === null);
-  $effect.pre(() => {
-    if (unread) {
-      opened = performance.now();
-    }
-  });
-  const underSeg = $derived(
-    !page && (list ? list.graph : (row?.decisionsGraphed ?? false))
-  );
-  /** A tile's skeleton for each page the list will hold, as the project's row counts them. */
+  /** The List | Graph segment's room above the list, while the decisions form a graph. */
+  const underSeg = $derived(!page && graphed);
+  /** A tile's skeleton for each page the measured shape counts. */
   const readingTiles = $derived(
-    Array.from({ length: row?.decisionPages ?? 0 }, (_, i) => i)
+    shape ? Array.from({ length: shape.pages }, (_, i) => i) : []
   );
+  /**
+   * When the list's wait began: the reading grid's own arrival. A tile
+   * counted in after it (the shapes read later) carries that wait on rather
+   * than waiting the grace again (`carriesWait`).
+   */
+  let waitFrom = performance.now();
+  const waitBegins: Attachment = () => {
+    waitFrom = performance.now();
+  };
+  /** Caw's empty state arriving: one cross-fade, unless Caw lands into it by his flight, which is its arrival. */
+  const cawArrives = (node: Element, flying: boolean): TransitionConfig =>
+    flying ? { duration: 0 } : crossIn(node);
 
   // --- the swap ------------------------------------------------------------------------
 
@@ -273,7 +271,7 @@
           {:else if !graphProblem}
             <div
               aria-busy="true"
-              aria-label="Reading the decision graph"
+              aria-label={words.readingGraph}
               class="graph-place"
               data-decisions-reading="graph"
               role="status"
@@ -283,7 +281,7 @@
             </div>
           {/if}
         {:else if decisions.problem && !list}
-          <div class="state">
+          <div class="state" in:crossIn>
             <EmptyState
               icon={IconDecisions}
               line={words.unavailableLine(projectName, decisions.problem)}
@@ -297,7 +295,14 @@
             </EmptyState>
           </div>
         {:else if empty && canTalk}
-          <div data-slot="caw-empty" class="state caw-empty">
+          <!-- Caw flying in from his seat lands by his flight (share `land`):
+               the state around him fades in only when he is not on his way. -->
+          {@const flying = departing(`caw:${projectId}`)}
+          <div
+            data-slot="caw-empty"
+            class="state caw-empty"
+            in:cawArrives={flying}
+          >
             <EmptyState line={words.emptyCaw} title={words.empty}>
               {#snippet mark()}
                 <div
@@ -320,7 +325,7 @@
             </EmptyState>
           </div>
         {:else if empty}
-          <div class="state">
+          <div class="state" in:crossIn>
             <EmptyState
               icon={IconDecisions}
               line={words.emptySession}
@@ -351,21 +356,22 @@
               {/each}
             </div>
           {:else}
-            <!-- A tile at a tile's size for each page the project's row
-                 counts, in the grid's own columns, while the list is read;
-                 the list takes their place in one cross-fade. -->
+            <!-- A tile at a tile's size for each page the hub measured, in
+                 the grid's own columns, while the list is read; the list
+                 takes their place in one cross-fade. -->
             <div
               aria-busy="true"
-              aria-label="Reading decision pages"
+              aria-label={words.reading}
               class="grid"
               data-decisions-reading="list"
               role="status"
               out:crossOut
+              {@attach waitBegins}
             >
               {#each readingTiles as slot (slot)}
                 <Skeleton
                   class="tile-reading"
-                  style="--wait-grace-left: {graceLeft(opened)}"
+                  {@attach carriesWait(waitFrom)}
                 />
               {/each}
             </div>
@@ -439,12 +445,14 @@
     flex: 1 1 auto;
   }
   /* A tile's own height (DecisionTile): its padding, the head's row at the
-     pill's height (24px), the figure's line in meta type, the writer's line
-     at its mark's lead slot (TreeMark, 18px) or its meta line if taller, the
+     pill's height (--c-pill-h), the figure's line in meta type, the
+     writer's line at its mark's lead slot (TreeMark, --c-row-mark) or its
+     meta line if taller, the
      tile's gap between them. */
   .grid :global(.tile-reading) {
     block-size: calc(
-      var(--space-5) * 2 + 24px + var(--space-2) * 2 + 1lh + max(1lh, 18px)
+      var(--space-5) * 2 + var(--c-pill-h) + var(--space-2) * 2 + 1lh +
+        max(1lh, var(--c-row-mark))
     );
     border-radius: var(--radius-lg);
     font: var(--type-meta);

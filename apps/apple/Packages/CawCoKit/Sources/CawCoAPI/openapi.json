@@ -6962,6 +6962,23 @@
         }
       }
     },
+    "/api/decisions/shapes": {
+      "get": {
+        "operationId": "getApiDecisionsShapes",
+        "responses": {
+          "200": {
+            "description": "getApiDecisionsShapes 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiDecisionsShapes200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/decisions": {
       "get": {
         "parameters": [
@@ -26538,6 +26555,9 @@
           }
         ]
       },
+      "getApiDecisionsShapes200": {
+        "type": "object"
+      },
       "putApiProjectsByIdDecisionsGraph200": {
         "type": "object",
         "properties": {
@@ -29453,12 +29473,6 @@
             "cap": {
               "$ref": "#/components/schemas/ProjectCap"
             },
-            "decisionPages": {
-              "type": "number"
-            },
-            "decisionsGraphed": {
-              "type": "boolean"
-            },
             "places": {
               "type": "array",
               "items": {
@@ -29623,8 +29637,6 @@
             "cawHarness",
             "cawModel",
             "createdAt",
-            "decisionPages",
-            "decisionsGraphed",
             "dispatch",
             "id",
             "lands",
@@ -56415,6 +56427,22 @@
           },
           "projectId": {
             "type": "string"
+          },
+          "shape": {
+            "description": "Its shape measured again (DecisionsShape); absent when the measure failed.",
+            "type": "object",
+            "properties": {
+              "graphed": {
+                "type": "boolean"
+              },
+              "pages": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "graphed",
+              "pages"
+            ]
           }
         },
         "required": [

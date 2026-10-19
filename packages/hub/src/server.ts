@@ -686,10 +686,12 @@ import {
   YOU as FOLDER_YOU,
   FolderRefusal,
   folderFileNames,
+  folderFileNamesIfThere,
   listFolder,
   projectFolderRoutes,
   projectRoot,
   readFolderFile,
+  readFolderFileIfThere,
   trashProjectFolder,
 } from "./project-folder";
 import { type MergeDeps, mergeSameRemote } from "./project-merge";
@@ -11284,13 +11286,19 @@ export const createServer = (
       projectId,
       lifetime.after(DECISIONS_TOLD_MS, () => {
         decisionsTelling.delete(projectId);
-        // Its row's `decisionsGraphed` is listed again on its next read.
-        decisions.forget(projectId);
-        registry.broadcast({
-          verb: "frames",
-          machineId: "hub",
-          payload: { kind: "decisions.changed", projectId },
-        });
+        // Its shape measured again first (decisions.ts `measure`, off any
+        // request), so the frame carries it: absent when the measure failed.
+        decisions.measure(projectId).then((shape) =>
+          registry.broadcast({
+            verb: "frames",
+            machineId: "hub",
+            payload: {
+              kind: "decisions.changed",
+              projectId,
+              ...(shape ? { shape } : {}),
+            },
+          })
+        );
       })
     );
   };
@@ -11506,10 +11514,14 @@ export const createServer = (
         publishPreview(instanceId, "open", now);
       }
     },
-    // A preview gone holds the workspace it showed no longer.
+    // A preview gone holds the workspace it showed no longer; a page gone
+    // moves its project's Decisions tab, and its shape is measured again.
     removed: (row) => {
       if (row.kind === "preview" && row.machineId) {
         workItems.settleShown(row.machineId);
+      }
+      if (row.kind === "page" && row.projectId) {
+        decisionsChanged(row.projectId);
       }
     },
     previewAddress: (instanceId) => {
@@ -20185,6 +20197,19 @@ export const createServer = (
     },
     folderText,
     folderNames: (projectId, path) => folderFileNames(projectId, path),
+    peek: {
+      names: (projectId, path) => folderFileNamesIfThere(projectId, path),
+      text: async (projectId, path) => {
+        try {
+          return (await readFolderFileIfThere(projectId, path))?.content;
+        } catch (error) {
+          if (error instanceof FolderRefusal && error.status === 404) {
+            return;
+          }
+          throw error;
+        }
+      },
+    },
     instance: (id) => db.getInstancesByIds([id])[0],
     page: (artifactId) => {
       const doc = artifactDocs.doc(artifactId);
@@ -20264,6 +20289,25 @@ export const createServer = (
     },
   });
   tasks.listen((event) => decisions.tasksChanged(event.projectId));
+  // Each project's decisions measured once as the hub starts, one at a time
+  // and off any request (decisions.ts `measure`), so the Decisions tab's
+  // skeleton has a shape to stand as. A hub closing meanwhile ends it.
+  const measureAll = async () => {
+    for (const project of db.listProjects()) {
+      if (lifetime.closed()) {
+        return;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one project's folder at a time keeps the start light
+      await decisions.measure(project.id);
+    }
+  };
+  lifetime.after(0, () => {
+    measureAll().catch((error: unknown) => {
+      console.error(
+        `[hub] measuring the projects' decisions stopped: ${error instanceof Error ? error.message : String(error)}`
+      );
+    });
+  });
   // "Make this a project": offered once to a plain session that outgrew
   // itself, at a turn's end or a delegate's spawn (project-offers.ts).
   const projectOffers = createProjectOffers({
@@ -26458,22 +26502,11 @@ export const createServer = (
       // Each row spread into a fresh object, not the named `ProjectRow`: the
       // native app's client types a project by this route's own schema
       // (`GetApiProjects200Payload`), which a named row would rename.
-      // `decisionsGraphed` and `decisionPages`: whether its decisions form a
-      // graph and how many pages its list holds (decisions.ts `shape`), so
-      // the Decisions tab's skeleton stands where its list will before the
-      // tab reads them.
       .get("/api/projects", () =>
-        Promise.all(
-          db.listProjects().map(async (project) => {
-            const shape = await decisions.shape(project.id);
-            return {
-              ...projectOut(project),
-              cap: caps.capOf(project),
-              decisionPages: shape.pages,
-              decisionsGraphed: shape.graphed,
-            };
-          })
-        )
+        db.listProjects().map((project) => ({
+          ...projectOut(project),
+          cap: caps.capOf(project),
+        }))
       )
       // One repository is one project: a folder whose remote a project
       // already has joins it as a checkout place (`placeAdded`), and the

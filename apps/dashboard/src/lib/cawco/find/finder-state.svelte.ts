@@ -146,7 +146,7 @@ export function within(time: TimeWord | null, at: number | null, now: number) {
   return at >= startOfDay(now, 6);
 }
 
-/** An answer's state, for one set of words. */
+/** An answer's state, for one set of words; `since`, when an ask went out, is `performance.now()`. */
 export type Answer<T> =
   | { state: "idle" }
   | { state: "asking"; for: string; since: number }
@@ -219,6 +219,20 @@ export class FinderState {
   /** A machines ask in flight while the last answer stays drawn. */
   #pendingEvery = $state<{ for: string; since: number } | null>(null);
   everywherePending = $derived(this.#pendingEvery);
+  /**
+   * When the names' wait began (`performance.now()`), while one is out: a
+   * skeleton standing for it carries that wait on (`carriesWait`), so rows let
+   * go at the grace are not followed by a second grace.
+   */
+  namesWaitFrom = $derived(
+    this.#pendingNames?.since ??
+      (this.names.state === "asking" ? this.names.since : null)
+  );
+  /** When the machines' wait began, while one is out (as {@link namesWaitFrom}). */
+  everyWaitFrom = $derived(
+    this.#pendingEvery?.since ??
+      (this.everywhere.state === "asking" ? this.everywhere.since : null)
+  );
 
   #namesAsk = 0;
   #everyAsk = 0;
@@ -552,14 +566,14 @@ export class FinderState {
     if (this.names.state === "ok") {
       // The last answer stays drawn (shownNameRows) while this one is asked,
       // for as long as the wait grace.
-      this.#pendingNames = { for: key, since: Date.now(), late: false };
+      this.#pendingNames = { for: key, since: performance.now(), late: false };
       setTimeout(() => {
         if (n === this.#namesAsk && this.#pendingNames) {
           this.#pendingNames = { ...this.#pendingNames, late: true };
         }
       }, GRACE_MS);
     } else {
-      this.names = { state: "asking", for: key, since: Date.now() };
+      this.names = { state: "asking", for: key, since: performance.now() };
     }
     const asked = await findNames(words, { limit: 20, signal: abort.signal });
     if (asked.kind === "superseded" || n !== this.#namesAsk) {
@@ -582,9 +596,9 @@ export class FinderState {
     const key = this.#key(true);
     const words = this.asked;
     if (this.everywhere.state === "ok") {
-      this.#pendingEvery = { for: key, since: Date.now() };
+      this.#pendingEvery = { for: key, since: performance.now() };
     } else {
-      this.everywhere = { state: "asking", for: key, since: Date.now() };
+      this.everywhere = { state: "asking", for: key, since: performance.now() };
     }
     const asked = await findEverywhere(words, {
       limit: 20,

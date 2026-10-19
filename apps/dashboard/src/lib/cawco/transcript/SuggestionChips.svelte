@@ -309,12 +309,6 @@
         oklch(from var(--surface-recess) l c h / 0)
       );
     }
-    /* Only an answer on its way: the row comes with its shimmer, once the
-       wait has outlasted its grace (as the kit's skeleton does). */
-    &:has(.shimmer):not(:has(.chip, .fail)) {
-      animation: kit-fade-in var(--dur-fade) var(--ease-out)
-        var(--dur-wait-grace) both;
-    }
   }
 
   .track {

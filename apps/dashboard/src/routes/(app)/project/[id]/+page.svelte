@@ -63,6 +63,7 @@
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import {
+    carriesWait,
     crossIn,
     crossOut,
     dur,
@@ -306,12 +307,16 @@
       navigating.to?.params?.id !== projectId
   );
   let reading = $state(false);
+  /** When that wait began: the board's skeleton carries it on (`carriesWait`), never waiting the grace twice. */
+  let readingFrom = 0;
   $effect(() => {
     if (!leavingFor) {
       reading = false;
       return;
     }
+    const began = performance.now();
     const grace = setTimeout(() => {
+      readingFrom = began;
       reading = true;
     }, dur("--dur-wait-grace"));
     return () => clearTimeout(grace);
@@ -1411,7 +1416,7 @@
     if (decisionPage) {
       return "decisions-page";
     }
-    return decisionMode === "graph" && decisions.list?.graph
+    return decisionMode === "graph" && decisions.graphed
       ? "decisions-graph"
       : "decisions";
   });
@@ -2070,7 +2075,15 @@
     {#if reading}
       <!-- The board at its real layout, its columns standing empty: the
              next project's read cross-fades in over it. -->
-      <div aria-hidden="true" class="board-skeleton" out:crossOut>
+      <!-- Past the wait's grace already (its timer): the skeleton carries
+           that wait on, seen at once, never waiting the grace again. -->
+      <div
+        aria-hidden="true"
+        class="board-skeleton"
+        data-board-reading
+        {@attach carriesWait(readingFrom)}
+        out:crossOut
+      >
         {#each stageList.filter((stage) => stage.kind !== "dropped") as stage (stage.name)}
           <div class="skeleton-column">
             <Skeleton class="h-3.5 w-3/5" />

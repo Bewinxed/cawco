@@ -135,7 +135,28 @@ export const watchSwaps = (page: Page, sites: SwapSite[]) =>
         });
       }
     };
-    new MutationObserver(look).observe(document, {
+    // Every node holding a kit skeleton taken out of the document, and when:
+    // a skeleton put back starts its fade, and its grace, over.
+    const moves: string[] = [];
+    (window as unknown as { probeMoves: string[] }).probeMoves = moves;
+    const named = (node: Element) =>
+      `${node.tagName.toLowerCase()}${node.getAttribute("data-slot") ? `[${node.getAttribute("data-slot")}]` : ""}.${[...node.classList].filter((one) => !one.startsWith("svelte-")).join(".")}`;
+    new MutationObserver((records) => {
+      for (const record of records) {
+        for (const gone of record.removedNodes) {
+          if (
+            gone instanceof Element &&
+            (gone.matches(".kit-skeleton") ||
+              gone.querySelector(".kit-skeleton"))
+          ) {
+            moves.push(
+              `${Math.round(performance.now())} out ${named(gone)} from ${record.target instanceof Element ? named(record.target) : "?"}`
+            );
+          }
+        }
+      }
+      look();
+    }).observe(document, {
       childList: true,
       subtree: true,
     });
@@ -176,8 +197,31 @@ const sample = (page: Page, site: SwapSite, at: number) =>
         seen: bones.filter((bone) =>
           bone.checkVisibility({ opacityProperty: true })
         ).length,
+        // The first bone's fade: its delay and when it began, from the
+        // skeleton's birth, and whether it is the node seen before.
+        fade: (() => {
+          const bone = bones[0] as
+            (HTMLElement & { probeSeen?: true }) | undefined;
+          const run = bone
+            ?.getAnimations()
+            .find((one) => one instanceof CSSAnimation);
+          const again = !!bone?.probeSeen;
+          if (bone) {
+            bone.probeSeen = true;
+          }
+          return run
+            ? {
+                delay: getComputedStyle(bone as Element).animationDelay,
+                began: Math.round(Number(run.startTime ?? 0) - born),
+                again,
+              }
+            : null;
+        })(),
         box: r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null,
         empties: s.empty ? document.querySelectorAll(s.empty).length : 0,
+        born: Math.round(born),
+        moves:
+          (window as unknown as { probeMoves?: string[] }).probeMoves ?? [],
       };
     },
     { site, at }

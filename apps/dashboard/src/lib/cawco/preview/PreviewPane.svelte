@@ -70,7 +70,7 @@
     type Stage,
   } from "../canvas/stage.svelte";
   import { resolveSessionTitle } from "../links";
-  import { appear, dur } from "../motion/curves.svelte";
+  import { appear, carriesWait, dur } from "../motion/curves.svelte";
   import { closeInto } from "../motion/share.svelte";
   import { watchInput } from "../reload.svelte";
   import { runShellShortcut } from "../shell-shortcut";
@@ -126,6 +126,7 @@
     ownTab = false,
     inset = false,
     onScreen = true,
+    waitingSince,
   }: {
     instanceId: string;
     /**
@@ -145,6 +146,13 @@
      * width, with no Open in new tab, and Close back to the session.
      */
     ownTab?: boolean;
+    /**
+     * When the wait its host began for it (`performance.now()`): the
+     * artifact's tab, a task's stage. Its cover's line carries that wait on
+     * (`carriesWait`) rather than waiting the grace again; nothing else in
+     * the pane is handed it.
+     */
+    waitingSince?: number;
     /**
      * The preview is another session's than the conversation beside it (a
      * thread shows its project's lead's): its states name that session, as
@@ -2500,6 +2508,7 @@
       data-slot="cover"
       aria-hidden={stageWaiting ? undefined : "true"}
       class="cover"
+      {@attach carriesWait(waitingSince ?? null)}
       class:ready={(loaded || standing !== null) && !stageWaiting}
       role={stageWaiting ? "status" : undefined}
     >

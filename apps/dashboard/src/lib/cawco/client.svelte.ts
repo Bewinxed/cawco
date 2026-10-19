@@ -122,6 +122,7 @@ import {
   WIRE_PROTOCOL,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { DecisionsShape } from "@cawco/core/decisions";
 import type { UpstreamPosts } from "@cawco/core/upstream-guard";
 import { UPSTREAM_POST_TOOL } from "@cawco/core/upstream-post";
 import { announcingParts, clientLine } from "@cawco/core/wire";
@@ -286,19 +287,6 @@ export interface ProjectRow {
   /** Made with Caw: its Caw is on. */
   caw: boolean;
   createdAt: string;
-  /**
-   * How many pages its Decisions list holds (hub decisions.ts `shape`): the
-   * tiles its skeleton stands before the tab reads them. A list read
-   * answers it anew (ProjectDecisions).
-   */
-  decisionPages: number;
-  /**
-   * Its decisions form a graph (hub decisions.ts `shape`): the Decisions
-   * tab's list stands under the List | Graph segment's room, its skeleton
-   * too, before the tab reads them. A list read answers it anew
-   * (ProjectDecisions).
-   */
-  decisionsGraphed: boolean;
   id: string;
   /** Where its attempts land when their task says nothing. */
   lands: LandsMode;
@@ -1086,6 +1074,13 @@ const state = $state({
    * again when it moves.
    */
   decisionsChanged: {} as Record<string, number>,
+  /**
+   * Each project's decisions as the hub measured them, before the Decisions
+   * tab reads them (`GET /api/decisions/shapes`, then `decisions.changed`
+   * frames and the tab's own reads): what its skeleton stands as. A project
+   * the hub has not measured is absent, and its skeleton does not stand.
+   */
+  decisionShapes: {} as Record<string, DecisionsShape>,
   /**
    * How many times each project's arrangement of blocks has changed since
    * this page connected (`blocks.changed` frames): its pages read it again
@@ -2377,6 +2372,22 @@ function patchInstances(upserts: InstanceRow[], removed: string[]): void {
   }
 }
 
+/** The hub's word on a project's decisions: kept, or let go when it has none. */
+function setDecisionShape(
+  projectId: string,
+  shape: DecisionsShape | undefined
+): void {
+  const was = state.decisionShapes[projectId];
+  if (shape) {
+    if (!(was && equal(was, shape))) {
+      state.decisionShapes[projectId] = shape;
+    }
+  } else if (was) {
+    const { [projectId]: _gone, ...rest } = state.decisionShapes;
+    state.decisionShapes = rest;
+  }
+}
+
 /** Replaces both limits maps with the hub's word — a full snapshot, not a patch. */
 function adoptUsageLimits(
   readings: Pick<UsageLimitsResponse, "claude" | "openCodeGo">
@@ -2757,23 +2768,35 @@ async function refresh(): Promise<boolean> {
   readThreads();
   // What the socket says about asks from here on is newer than the read.
   const readFrom = askHeard;
-  const [machines, rows, projects, pending, handoffs, usage, continuations] =
-    await Promise.all([
-      load<Machine[]>("/api/agents"),
-      load<InstanceRow[]>("/api/instances"),
-      load<ProjectRow[]>("/api/projects"),
-      load<Envelope<FramePayload>[]>("/api/pending"),
-      // Read on connect, not only broadcast on change: a dashboard opened after
-      // a hand-off went out has missed every broadcast it will ever get.
-      load<Record<string, { from: string; at: number }>>("/api/handoffs"),
-      // Same reason: a dashboard opened between reports has missed the frames.
-      load<UsageLimitsResponse>("/api/usage/limits"),
-      // Same reason: a continuation that moved while this tab was away.
-      load<ContinuationJob[]>("/api/continuations"),
-    ]);
+  const [
+    machines,
+    rows,
+    projects,
+    pending,
+    shapes,
+    handoffs,
+    usage,
+    continuations,
+  ] = await Promise.all([
+    load<Machine[]>("/api/agents"),
+    load<InstanceRow[]>("/api/instances"),
+    load<ProjectRow[]>("/api/projects"),
+    load<Envelope<FramePayload>[]>("/api/pending"),
+    load<Record<string, DecisionsShape>>("/api/decisions/shapes"),
+    // Read on connect, not only broadcast on change: a dashboard opened after
+    // a hand-off went out has missed every broadcast it will ever get.
+    load<Record<string, { from: string; at: number }>>("/api/handoffs"),
+    // Same reason: a dashboard opened between reports has missed the frames.
+    load<UsageLimitsResponse>("/api/usage/limits"),
+    // Same reason: a continuation that moved while this tab was away.
+    load<ContinuationJob[]>("/api/continuations"),
+  ]);
 
   if (handoffs && !equal(state.handoffs, handoffs)) {
     state.handoffs = handoffs;
+  }
+  if (shapes) {
+    state.decisionShapes = shapes;
   }
   if (continuations) {
     adoptContinuations(continuations);
@@ -3319,6 +3342,7 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "decisions.changed") {
     state.decisionsChanged[frame.projectId] =
       (state.decisionsChanged[frame.projectId] ?? 0) + 1;
+    setDecisionShape(frame.projectId, frame.shape);
     return;
   }
 
@@ -8776,6 +8800,12 @@ export const cawco = {
   /** A count that moves each time the project's decision pages change (`decisions.changed`). */
   decisionsChangedOf: (projectId: string): number =>
     state.decisionsChanged[projectId] ?? 0,
+  /** The project's decisions as the hub last measured or listed them; undefined while it has not. */
+  decisionShapeOf: (projectId: string): DecisionsShape | undefined =>
+    state.decisionShapes[projectId],
+  /** A list read's word on the project's decisions (ProjectDecisions). */
+  setDecisionShape: (projectId: string, shape: DecisionsShape | undefined) =>
+    setDecisionShape(projectId, shape),
   /** A count that moves each time the project's arrangement of blocks changes (`blocks.changed`). */
   blocksChangedOf: (projectId: string): number =>
     state.blocksChanged[projectId] ?? 0,

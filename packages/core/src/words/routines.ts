@@ -114,7 +114,8 @@ export const routinesWords = {
   /** The repository's GitHub poller, before it knows its repository. */
   theRepository: "The repository",
 
-  // The page unread.
+  // The page being read, then unread.
+  reading: "Reading routines",
   unavailable: "Routines are not available",
   unavailableLine: (project: string, problem: string) =>
     `The routines for ${project} could not be read: ${problem} Nothing was changed.`,

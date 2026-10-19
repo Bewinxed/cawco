@@ -8,11 +8,7 @@
   import { findArtifact, showArtifact } from "#lib/cawco/artifact-api.js";
   import CanvasStages from "#lib/cawco/canvas/CanvasStages.svelte";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import {
-    crossIn,
-    crossOutWith,
-    graceLeft,
-  } from "#lib/cawco/motion/curves.svelte.js";
+  import { crossIn, crossOutWith } from "#lib/cawco/motion/curves.svelte.js";
   import Overlays from "#lib/cawco/Overlays.svelte";
   import { ArtifactSession } from "#lib/cawco/preview/artifact-session.svelte.js";
   import PreviewPane from "#lib/cawco/preview/PreviewPane.svelte";
@@ -121,13 +117,12 @@
         {/snippet}
       </EmptyState>
     {:else if found && shown === "open"}
-      <div
-        class="arrived"
-        data-artifact-arrived
-        style:--wait-grace-left={graceLeft(since)}
-        in:crossIn
-      >
-        <PreviewPane instanceId={found.instanceId} ownTab />
+      <div class="arrived" data-artifact-arrived in:crossIn>
+        <PreviewPane
+          instanceId={found.instanceId}
+          ownTab
+          waitingSince={since}
+        />
       </div>
     {:else if found && shown === "closed"}
       {@const instanceId = found.instanceId}

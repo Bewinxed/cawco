@@ -12,9 +12,9 @@
   import { decisionsWords, PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
   import { untrack } from "svelte";
   import {
+    carriesWait,
     crossIn,
     crossOut,
-    graceLeft,
   } from "#lib/cawco/motion/curves.svelte.js";
   import { enterPage, pageSource } from "#lib/cawco/preview/page-source.js";
   import { theme } from "#lib/theme.svelte.js";
@@ -182,7 +182,7 @@
     aria-hidden="true"
     class="opening"
     data-page-frame-opening
-    style:--wait-grace-left={graceLeft(since)}
+    {@attach carriesWait(since)}
     out:crossOut
   >
     <span

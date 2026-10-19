@@ -1312,6 +1312,11 @@ public enum Words {
 
         public static let hideOthers = "Hide other options"
 
+        /// The list, and the graph, being read.
+        public static let reading = "Reading decision pages"
+
+        public static let readingGraph = "Reading the decision graph"
+
         /// The list could not be read.
         public static let unavailable = "Decisions are not available"
 
@@ -1525,6 +1530,8 @@ public enum Words {
 
         /// The repository's GitHub poller, before it knows its repository.
         public static let theRepository = "The repository"
+
+        public static let reading = "Reading routines"
 
         public static let unavailable = "Routines are not available"
 
