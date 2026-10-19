@@ -345,6 +345,7 @@ const single = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
               fontSize: getComputedStyle(field).fontSize,
             }
           : null,
+      hint: hint?.textContent?.replace(/\s+/g, " ").trim() ?? null,
       hintWrap: hint ? getComputedStyle(hint).textWrapStyle : null,
       /** The hint's last line: how many words, and which (`pretty` keeps a lone word off it). */
       lastLineWords: (() => {
@@ -371,8 +372,12 @@ const single = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
     };
   }, row);
   kit.check(
-    `${leg.name} one machine: its name, its address, no pick button, the DNS name field under it (its hint text-wrap pretty, its last line "${read.lastLineWords?.line}", no word alone), Start relay`,
-    read.text.includes(one.name) &&
+    `${leg.name} one machine: its name, its address, no pick button, the DNS name field under it (its hint text-wrap pretty, its last line "${read.lastLineWords?.line}", no word alone, saying port 80 must reach the machine for the certificate), Start relay`,
+    read.hint === STREAM_RELAY_WORDS.hostnameHint &&
+      read.hint.includes(
+        "Port 80 must reach it while the certificate is issued and renewed."
+      ) &&
+      read.text.includes(one.name) &&
       read.text.includes(one.address) &&
       read.picks === 0 &&
       read.hintWrap === "pretty" &&

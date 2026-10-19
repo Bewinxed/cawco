@@ -261,7 +261,7 @@ export const STREAM_RELAY_WORDS = {
   picked: "Picked",
   hostnameLabel: "DNS name (optional)",
   hostnameHint:
-    "A name pointing at this machine lets the relay answer over TLS on 443, which networks that allow only real HTTPS need. Without one it answers plain on 443.",
+    "A name pointing at this machine lets the relay answer over TLS on 443, which networks that allow only real HTTPS need. Without one it answers plain on 443. Port 80 must reach it while the certificate is issued and renewed.",
   start: "Start relay",
   stop: "Stop relay",
   remove: "Remove relay",
