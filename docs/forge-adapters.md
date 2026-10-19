@@ -340,7 +340,7 @@ request, on Gitea a pull request.
 - Probe kit: `forge-adapters` (runs anywhere: GitHub and GitLab every leg,
   Gitea its pushes, refusal and held card; (g) an ambiguous `forge_post`
   refused, asking for the URL; (p) the GitHub poller through Octokit against
-  a stand-in, `github-poll.ts`), `git-door` (k: a workspace whose project
+  a stand-in, `github-poll.ts`), `git-door` (s: a workspace whose project
   lets agents post holds no forge token in its commands' environment or its
   files, and its gh's post is made, or held, by the GitHub door, through the
   workspace's real executor and runner, `workspace-gh.ts`) and

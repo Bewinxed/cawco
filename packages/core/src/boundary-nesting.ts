@@ -20,6 +20,7 @@
  * macOS meets the same case by another rule: Seatbelt never nests
  * ({@link nestedSeatbeltRefusal}), and there is no host change for it.
  */
+import { hostEnvironment } from "./session-env";
 
 /** The AppArmor profile that strips capabilities beneath bwrap. */
 export const NESTED_BOUNDARY_PROFILE = "/etc/apparmor.d/bwrap-userns-restrict";
@@ -86,7 +87,12 @@ export const nestedSeatbeltRefusal = (
 ): string | undefined => {
   const tried = Bun.spawnSync(
     [sandboxExec, "-p", "(version 1)(allow default)", "/usr/bin/true"],
-    { stdin: "ignore", stdout: "ignore", stderr: "pipe" }
+    {
+      env: hostEnvironment(),
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "pipe",
+    }
   );
   return tried.exitCode !== 0 &&
     tried.stderr.toString().includes(SEATBELT_REFUSED)

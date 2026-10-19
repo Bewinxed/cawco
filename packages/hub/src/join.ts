@@ -48,6 +48,7 @@ import { detach } from "@cawco/core/detach";
 import { generateInstallScript } from "@cawco/core/install-script";
 import { LineSplitter } from "@cawco/core/lines";
 import { RELEASE_PUBLIC_KEY } from "@cawco/core/release-key";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { Elysia, t } from "elysia";
 import { DB_PATH, HUB_PORT } from "./config";
 import type { HubLifetimeShape } from "./lifetime";
@@ -75,6 +76,7 @@ const output = async (
 ): Promise<string | undefined> => {
   const ran = await readWithin(ms, async (signal) => {
     const child = Bun.spawn(argv, {
+      env: hostEnvironment(),
       stdout: "pipe",
       stderr: "ignore",
       stdin: "ignore",

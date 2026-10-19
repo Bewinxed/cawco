@@ -26,6 +26,7 @@ import { homedir, networkInterfaces, platform } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
 import type { MediaPath } from "@cawco/core/capabilities";
+import { hostEnvironment } from "@cawco/core/session-env";
 import {
   isDamagedRecord,
   readRecord,
@@ -372,7 +373,12 @@ const procBinds = async (proto: "udp" | "tcp", port: number) => {
 const netstatBinds = async (proto: "udp" | "tcp", port: number) => {
   const argv = ["netstat", "-an", "-p", proto];
   const read = await readWithin(READ_MS, async (signal) => {
-    const child = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe", signal });
+    const child = Bun.spawn(argv, {
+      env: hostEnvironment(),
+      stdout: "pipe",
+      stderr: "pipe",
+      signal,
+    });
     return await Promise.all([
       new Response(child.stdout).text(),
       new Response(child.stderr).text(),

@@ -62,6 +62,7 @@ import {
 import { machineId } from "@cawco/core/machine-id";
 import { verifyManifest } from "@cawco/core/release-manifest";
 import { runtimeVersion } from "@cawco/core/runtime";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import { leaveRetiringKeepers } from "./boundary";
 import {
@@ -1093,7 +1094,9 @@ export class BinaryUpdater {
     try {
       await writeStateFile(archive, bytes);
       // On macOS the signed CawCo Agent.app, exactly as the release signed it.
-      await Bun.$`mkdir -p ${work} && tar -xzf ${archive} -C ${work} ${ARCHIVE_ENTRY}`.quiet();
+      await Bun.$`mkdir -p ${work} && tar -xzf ${archive} -C ${work} ${ARCHIVE_ENTRY}`
+        .env(hostEnvironment())
+        .quiet();
       const binary = join(work, EXECUTABLE_IN_VERSION);
       const extracted = await Bun.file(binary).bytes();
       if (
@@ -1105,7 +1108,7 @@ export class BinaryUpdater {
           "The extracted binary does not match the signed manifest"
         );
       }
-      await Bun.$`chmod 700 ${binary}`.quiet();
+      await Bun.$`chmod 700 ${binary}`.env(hostEnvironment()).quiet();
       await writeJsonAtomic(join(work, "release.json"), manifest);
       await writeJsonAtomic(join(work, "release.signature.json"), {
         signature: release.signature,

@@ -14,6 +14,7 @@ import { dirname, join } from "node:path";
 import type { BrowserRelay } from "@cawco/core/browser";
 import { bootId, processStart } from "@cawco/core/process-identity";
 import { standalone } from "@cawco/core/runtime";
+import { hostEnvironment } from "@cawco/core/session-env";
 import {
   identifiedPid,
   isAlive,
@@ -220,7 +221,7 @@ export class LocalHost implements BrowserHost {
         "--window-size=1280,800",
         "about:blank",
       ],
-      { detached: true, stdio: ["ignore", log, log] }
+      { detached: true, env: hostEnvironment(), stdio: ["ignore", log, log] }
     );
     closeSync(log);
     child.unref();

@@ -47,6 +47,7 @@ import { readWithin } from "@cawco/core/bounded";
 import { detach } from "@cawco/core/detach";
 import { LineSplitter } from "@cawco/core/lines";
 import { darwinSocketRoot } from "@cawco/core/paths";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { DB_PATH } from "./config";
 import type { SshMachineRow, SshMachinesDb } from "./db/ssh-machines";
 import type { HubLifetimeShape, HubTimer } from "./lifetime";
@@ -264,6 +265,7 @@ const control = async (
 ): Promise<Answer | null> => {
   const ran = await readWithin(CONTROL_MS, async (signal) => {
     const child = Bun.spawn(argv, {
+      env: hostEnvironment(),
       stdin: stdin === undefined ? "ignore" : new TextEncoder().encode(stdin),
       stdout: "pipe",
       stderr: "pipe",
@@ -322,7 +324,13 @@ const master = (
       "--",
       row.target,
     ],
-    { stdin: "ignore", stdout: "ignore", stderr: "pipe", detached: true }
+    {
+      env: hostEnvironment(),
+      stdin: "ignore",
+      stdout: "ignore",
+      stderr: "pipe",
+      detached: true,
+    }
   );
 
 /** One command on the machine over the master at `path`: `sh -c` and one single-quoted word, as join.ts runs its own. */

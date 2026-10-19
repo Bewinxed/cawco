@@ -898,6 +898,7 @@ const headOnOrigin = async (
 /** A folder's size on disk in bytes (`du -sk`), 0 when it cannot be read. */
 const sizeOf = async (path: string): Promise<number> => {
   const du = Bun.spawn(["du", "-sk", path], {
+    env: hostEnvironment(),
     stdout: "pipe",
     stderr: "ignore",
   });
@@ -969,7 +970,7 @@ const cacheOfClone = async (clone: string): Promise<string[]> => {
           "-",
           join(derived, build, "info.plist"),
         ],
-        { stdout: "pipe", stderr: "ignore" }
+        { env: hostEnvironment(), stdout: "pipe", stderr: "ignore" }
       );
       const [named] = await Promise.all([
         new Response(plutil.stdout).text(),

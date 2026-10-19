@@ -16,6 +16,7 @@ import {
 } from "@cawco/core/binary-installation";
 import { readWithin } from "@cawco/core/bounded";
 import { failureSentence } from "@cawco/core/cli-failure";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { type PinMove, pinMoveWords, putOnPins } from "./tools";
 
 interface PinRecord {
@@ -102,7 +103,7 @@ export async function runBinaryPins(
   const ran = await readWithin(PINS_MS, async (signal) => {
     const child = Bun.spawn(
       [versionExecutable(from), "binary-pins", ...(back ? ["back", back] : [])],
-      { stdout: "pipe", stderr: "pipe", signal }
+      { env: hostEnvironment(), stdout: "pipe", stderr: "pipe", signal }
     );
     const [out, err, code] = await Promise.all([
       new Response(child.stdout).text(),

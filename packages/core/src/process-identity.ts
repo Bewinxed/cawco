@@ -19,6 +19,7 @@
 import { dlopen, FFIType } from "bun:ffi";
 import { readFileSync } from "node:fs";
 import { readdir, readFile, readlink } from "node:fs/promises";
+import { hostEnvironment } from "./session-env";
 
 // ── macOS: libSystem ─────────────────────────────────────────────────────
 
@@ -940,6 +941,7 @@ export async function bootId(): Promise<string | undefined> {
     }
   }
   const ran = Bun.spawn(["sysctl", "-n", "kern.boottime"], {
+    env: hostEnvironment(),
     stdout: "pipe",
     stderr: "ignore",
   });
@@ -985,16 +987,10 @@ const PROC_NET_FIELDS = /\s+/;
  */
 export async function listeningPorts(pid: number): Promise<number[]> {
   if (process.platform !== "linux") {
-    const ran = Bun.spawnSync([
-      "lsof",
-      "-nP",
-      "-a",
-      "-p",
-      String(pid),
-      "-iTCP",
-      "-sTCP:LISTEN",
-      "-Fn",
-    ]);
+    const ran = Bun.spawnSync(
+      ["lsof", "-nP", "-a", "-p", String(pid), "-iTCP", "-sTCP:LISTEN", "-Fn"],
+      { env: hostEnvironment() }
+    );
     return [
       ...new Set(
         ran.stdout

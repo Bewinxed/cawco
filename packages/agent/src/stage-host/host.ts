@@ -46,6 +46,7 @@ import {
 import type { IncomingMessage, Server, ServerResponse } from "node:http";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathToFileURL } from "node:url";
+import { hostEnvironment } from "@cawco/core/session-env";
 import {
   AS_PAGE,
   CANVAS_PATH,
@@ -1204,6 +1205,7 @@ async function formatted(
   if (biome) {
     const ran = spawnSync(biome, ["format", `--stdin-file-path=${abs}`], {
       cwd: root,
+      env: hostEnvironment(),
       input: code,
       encoding: "utf8",
     });

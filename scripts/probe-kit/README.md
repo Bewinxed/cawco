@@ -110,6 +110,20 @@ Every other spec (a web spec on the built dashboard, a fleet spec that
 spawns sessions without delegating) runs inside a workspace, and its
 delegate quotes the run's output in its report.
 
+## A spec with its own git and HOME
+
+A spec that stands up its own git repositories, doors or forge sign-ins
+under a HOME of its own says so with `ownHome` (its reason), and `run.ts`
+runs it in a process of its own: a scratch HOME set as that process starts,
+and none of an enclosing workspace's git or gh settings (`GIT_CONFIG_*`,
+`CAWCO_GIT_*`, `GIT_SSH_COMMAND`, `GIT_LFS_SKIP_PUSH`, `GIT_TEMPLATE_DIR`,
+`GH_CONFIG_DIR`, kit.ts `ENCLOSING_GIT_ENV`). Bun's `os.homedir()` reads HOME
+once, as the process starts, so a HOME a spec sets later moves nothing
+CawCo's paths read; and a workspace's `pushInsteadOf` would send the spec's
+own setup pushes through that workspace's git door. So `git-door` and
+`forge-adapters` run as `bun scripts/probe-kit/run.ts <spec>` alike inside a
+workspace and on the host, with no wrapper.
+
 ## Files a delegate cannot read
 
 Logs, journal excerpts and transcripts a spec's delegate needs go in the

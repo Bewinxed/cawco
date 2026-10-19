@@ -1,5 +1,5 @@
 /**
- * The git-door spec's leg (k): a workspace whose project lets agents post
+ * The git-door spec's leg (s): a workspace whose project lets agents post
  * upstream holds no forge token, and its `gh` posts through the
  * workspace's GitHub door (agent github-door.ts), decided there by the
  * project's rule as every door decides (core `decideWrite`).
@@ -13,7 +13,7 @@
  * reached by the door's own requests to api.github.com, which this process
  * hands it.
  *
- * (k) Under "Let agents post upstream":
+ * (s) Under "Let agents post upstream":
  *     - with no token in the caller's environment, and with the caller's
  *       `GH_TOKEN`, a command's environment carries no forge's token
  *       variable, and its gh's config is the door's;
@@ -134,7 +134,7 @@ export const workspaceGhLeg = async (
   ).executorUnsandboxed;
   if (!stand) {
     kit.check(
-      "(k) a workspace's executor runs on the host for this leg",
+      "(s) a workspace's executor runs on the host for this leg",
       false,
       "this build's boundary.ts exports no executorUnsandboxed"
     );
@@ -183,7 +183,7 @@ export const workspaceGhLeg = async (
     const door = (said: string) =>
       said.includes("GHCONFIG=") && said.includes("http_unix_socket");
     kit.check(
-      "(k) under Let agents post upstream, a command's environment carries no forge token, the caller's GH_TOKEN included, and its gh's config is the door's",
+      "(s) under Let agents post upstream, a command's environment carries no forge token, the caller's GH_TOKEN included, and its gh's config is the door's",
       !(
         FORGE_VARS.test(bare) ||
         FORGE_VARS.test(withCaller) ||
@@ -205,7 +205,7 @@ export const workspaceGhLeg = async (
       HOST_TOKEN
     );
     kit.check(
-      "(k) no file in the workspace's dirs holds the host's gh token",
+      "(s) no file in the workspace's dirs holds the host's gh token",
       files.length === 0,
       `holding it: ${files.join(", ") || "none"}`
     );
@@ -213,7 +213,7 @@ export const workspaceGhLeg = async (
       (each) => each.repo === "someone/else" && each.title === "Probe made"
     );
     kit.check(
-      "(k) under Let agents post upstream, gh's issue on someone/else is made by the door: the stand-in takes it once, signed with the host's token",
+      "(s) under Let agents post upstream, gh's issue on someone/else is made by the door: the stand-in takes it once, signed with the host's token",
       made.includes("GHEXIT=0") &&
         issues.length === 1 &&
         issues[0]?.token === HOST_TOKEN,
@@ -225,7 +225,7 @@ export const workspaceGhLeg = async (
     const held = await run(POST("Probe held"));
     const ask = at.asks[asked];
     kit.check(
-      "(k) under Ask me first, the same post is held by the door: one ask for github.com/someone/else, and GitHub takes nothing",
+      "(s) under Ask me first, the same post is held by the door: one ask for github.com/someone/else, and GitHub takes nothing",
       at.asks.length === asked + 1 &&
         ask?.repo === "github.com/someone/else" &&
         ask.post?.via === "http" &&

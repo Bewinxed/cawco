@@ -16,6 +16,7 @@ import {
   launchdJobs,
   launchdProgram,
 } from "@cawco/core/launchd";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 
 /** How long a launched helper has to take its lock; one that holds none after it has gone. */
@@ -72,7 +73,7 @@ export async function launchHelper(
         ...forwarded.map(([key, value]) => `--setenv=${key}=${value}`),
         ...argv,
       ],
-      { stdout: "pipe", stderr: "pipe" }
+      { env: hostEnvironment(), stdout: "pipe", stderr: "pipe" }
     );
     if ((await child.exited) !== 0) {
       throw new Error(
@@ -99,7 +100,7 @@ export async function launchHelper(
   );
   const child = Bun.spawn(
     ["launchctl", "bootstrap", `gui/${process.getuid?.()}`, plist],
-    { stdout: "pipe", stderr: "pipe" }
+    { env: hostEnvironment(), stdout: "pipe", stderr: "pipe" }
   );
   if ((await child.exited) !== 0) {
     throw new Error(
@@ -166,7 +167,7 @@ export async function removeFinishedHelpers(): Promise<void> {
       }
       await Bun.spawn(
         ["launchctl", "bootout", `gui/${process.getuid?.()}/${label}`],
-        { stdout: "ignore", stderr: "ignore" }
+        { env: hostEnvironment(), stdout: "ignore", stderr: "ignore" }
       ).exited;
       await rm(path, { force: true });
       await forgetLaunchdStart(label);

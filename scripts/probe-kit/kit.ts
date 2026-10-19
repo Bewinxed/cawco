@@ -165,8 +165,29 @@ export interface Spec {
   host?: string;
   /** The spec's name: its file's, its baselines' folder. */
   name: string;
+  /**
+   * Why the spec stands up its own git and HOME, when it does: it runs in a
+   * process of its own (run.ts {@link OWN_HOME_ENV}), with a scratch HOME set
+   * as that process starts (Bun's `os.homedir()` reads HOME once, at start,
+   * and never a HOME set later) and none of an enclosing workspace's git or
+   * gh settings, which would send its own setup pushes through that
+   * workspace's git door.
+   */
+  ownHome?: string;
   run: (kit: Kit) => Promise<void>;
 }
+
+/** Set on the process run.ts starts for an {@link Spec.ownHome} spec: its scratch HOME. */
+export const OWN_HOME_ENV = "CAWCO_PROBE_OWN_HOME";
+
+/**
+ * The variables of an enclosing workspace's git and gh an
+ * {@link Spec.ownHome} spec runs without: its git config words
+ * (`GIT_CONFIG_*`, with `pushInsteadOf` to the workspace's door), the door's
+ * own (`CAWCO_GIT_*`), its ssh, LFS and template settings, and gh's config dir.
+ */
+export const ENCLOSING_GIT_ENV =
+  /^(?:GIT_CONFIG_\w+|CAWCO_GIT_\w+|GIT_SSH_COMMAND|GIT_LFS_SKIP_PUSH|GIT_TEMPLATE_DIR|GH_CONFIG_DIR)$/;
 
 /**
  * Why a spec cannot start a boundary of its own where this run is: inside a

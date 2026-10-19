@@ -35,6 +35,7 @@ import {
   USER_LAYER_FILES,
   userLayerPath,
 } from "@cawco/core/paths";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { idle } from "./auth";
 import { retireConfigDir } from "./claude-sessions";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
@@ -407,6 +408,7 @@ const serviceOf = (configDir: string | undefined): string =>
 const keychainHolds = async (service: string): Promise<boolean> => {
   const read =
     await Bun.$`security find-generic-password -a ${keychainUser()} -s ${service}`
+      .env(hostEnvironment())
       .quiet()
       .nothrow();
   return read.exitCode === 0;

@@ -52,6 +52,8 @@ const giteaMcpDir = async (): Promise<string> => {
 
 const spec: Spec = {
   name: "forge-adapters-gitea",
+  ownHome:
+    "it signs tea in under its own HOME and pushes to a Gitea stand-in with the host's git",
   host: "the host runs gitea-mcp only from where no workspace writes (agent host-gh.ts hostProgram), and inside a workspace every place a command can write is one",
   async run(kit) {
     const dir = await giteaMcpDir();

@@ -55,7 +55,7 @@
  *     is still never called.
  * The workspace's gh (workspace-gh.ts, through the workspace's real
  * executor and runner, on the host):
- * (k) under "Let agents post upstream" no forge token is in a command's
+ * (s) under "Let agents post upstream" no forge token is in a command's
  *     environment, the caller's GH_TOKEN included, nor in any file of the
  *     workspace's, and gh's post is made by the GitHub door with the host's
  *     token; under "Ask me first" the door holds it for the person.
@@ -89,6 +89,8 @@ const HOST_LOGIN = { user: "host-probe", password: "host-secret" };
 
 const spec: Spec = {
   name: "git-door",
+  ownHome:
+    "it serves bare repositories and opens a workspace's doors under its own HOME, and pushes to them with the host's git",
   async run(kit) {
     const { check } = kit;
     const scratch = join(
@@ -566,7 +568,7 @@ const spec: Spec = {
         `held exit ${heldLfs.exitCode}; sent while held ${sentWhileHeld - elseObjects.length}; made ${JSON.stringify(made)}; else LFS ${JSON.stringify(afterApproval)}; trap calls ${http.lfsCalls("trap")}`
       );
 
-      // (k)
+      // (s)
       await workspaceGhLeg(kit, {
         asks,
         clone,

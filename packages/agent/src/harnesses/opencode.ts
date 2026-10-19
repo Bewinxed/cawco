@@ -72,6 +72,7 @@ import {
   workspaceStateDir,
   xdgDataHome,
 } from "@cawco/core/paths";
+import { hostEnvironment } from "@cawco/core/session-env";
 import type { ProcSpec } from "@cawco/core/sessiond";
 import { writeStateFile } from "@cawco/core/state-file";
 import type {
@@ -1676,7 +1677,10 @@ export class OpencodeHarness implements Harness {
             `${OPENCODE_BIN} not found: CawCo runs OpenCode ${OPENCODE_VERSION} (${await installAdviceText("opencode")})`
           );
         }
-        const ran = await Bun.$`${binary} --version`.quiet().nothrow();
+        const ran = await Bun.$`${binary} --version`
+          .env(hostEnvironment())
+          .quiet()
+          .nothrow();
         const version = versionOf(ran.stdout.toString());
         sawTool("opencode", version ?? "unsaid");
         if (ran.exitCode !== 0 || !version) {

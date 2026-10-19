@@ -1,5 +1,6 @@
 import { platform } from "node:os";
 import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { keychainLocked, loginKeychainPath } from "./login-keychain";
 
 /**
@@ -71,6 +72,7 @@ export const unlockKeychain = async (password: string): Promise<void> => {
   const lockedBefore = keychainLocked(keychain);
   const unlocked =
     await Bun.$`security unlock-keychain -p ${password} ${keychain}`
+      .env(hostEnvironment())
       .quiet()
       .nothrow();
   // The keychain's own lock state says whether it opened (login-keychain.ts,

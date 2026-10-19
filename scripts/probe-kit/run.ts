@@ -12,7 +12,10 @@
  *
  * The second form runs one spec of its own in `specs/<spec>.ts`, beside the
  * web specs: a feature's probe (`artifacts`), on the same kit. A name found
- * only in `specs/web/` runs as that web spec.
+ * only in `specs/web/` runs as that web spec. One that stands up its own git
+ * and HOME (`ownHome`) runs in a process of its own, a scratch HOME set as
+ * it starts and no enclosing workspace's git settings, so it runs alike in
+ * a workspace and on the host.
  *
  * Serves the dashboard as each spec needs it, once per run: the dev server
  * for the `/motion/` benches, the built dashboard (`vite preview`, built
@@ -40,7 +43,8 @@
  * what drawing alone decides. Runtime cadence (long tasks, painted frames)
  * is frames.ts.
  */
-import { existsSync, readdirSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ensureDeps } from "../lib/deps";
 import type { Approval, Spec } from "./kit";
@@ -48,7 +52,7 @@ import type { Approval, Spec } from "./kit";
 // The dependencies first (lib/deps.ts): the kit and the fleet load after them.
 await ensureDeps();
 const { sweepDeadFleets } = await import("../scratch-fleet");
-const { Run } = await import("./kit");
+const { ENCLOSING_GIT_ENV, OWN_HOME_ENV, Run } = await import("./kit");
 
 const args = process.argv.slice(2);
 // The user journeys (journeys/suite.ts): every engine, every size, both data sets.
@@ -126,6 +130,30 @@ if (unknown.length > 0) {
   process.exit(2);
 }
 const chosen = named.length > 0 ? named : all;
+
+// A spec of its own that stands up its own git and HOME (kit.ts
+// `Spec.ownHome`) runs in a process of its own: a scratch HOME set as it
+// starts, and none of an enclosing workspace's git or gh settings. Its
+// output and exit are this run's.
+if (kind !== "web" && own && !process.env[OWN_HOME_ENV]) {
+  const spec = (await import(own)).default as Spec;
+  if (spec.ownHome) {
+    const home = mkdtempSync(join(tmpdir(), `probe-${spec.name}-`));
+    const env = Object.fromEntries(
+      Object.entries(process.env).filter(
+        (entry): entry is [string, string] =>
+          entry[1] !== undefined && !ENCLOSING_GIT_ENV.test(entry[0])
+      )
+    );
+    const child = Bun.spawn([process.execPath, import.meta.path, ...args], {
+      env: { ...env, HOME: home, [OWN_HOME_ENV]: home },
+      stdio: ["inherit", "inherit", "inherit"],
+    });
+    const code = await child.exited;
+    rmSync(home, { recursive: true, force: true });
+    process.exit(code);
+  }
+}
 
 const started = performance.now();
 // Folders of scratch fleets that died before they cleaned up (a SIGKILL), out

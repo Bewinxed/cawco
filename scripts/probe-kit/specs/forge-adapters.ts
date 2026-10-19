@@ -21,6 +21,8 @@ import type { Spec } from "../kit";
 
 const spec: Spec = {
   name: "forge-adapters",
+  ownHome:
+    "it signs gh, glab and tea in under its own HOME and pushes to forge stand-ins with the host's git",
   async run(kit) {
     // Each forge on a HOME of its own: the stand-ins share the loopback's
     // name, and a project's remote names no port.

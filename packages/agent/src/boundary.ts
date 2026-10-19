@@ -151,6 +151,7 @@ import {
   runtimeVersion,
   standalone,
 } from "@cawco/core/runtime";
+import { hostEnvironment } from "@cawco/core/session-env";
 import type { ProcSpec } from "@cawco/core/sessiond";
 import { listedPid, type Pid, signal as signalPid } from "@cawco/core/signal";
 import {
@@ -457,6 +458,7 @@ const HEX = /^[0-9a-f]+$/;
 const socketAddress = async (id: string, socket: string): Promise<string> => {
   const packed =
     await Bun.$`${PERL} -MSocket -e ${'print unpack("H*", pack_sockaddr_un($ARGV[0]))'} ${socket}`
+      .env(hostEnvironment())
       .quiet()
       .nothrow();
   const address = packed.stdout.toString();
@@ -4697,6 +4699,7 @@ const linkedFiles = async (
 ): Promise<{ inode: string; file: string }[]> => {
   const listed =
     await Bun.$`/usr/bin/find ${root} -xdev -type f -links +1 -printf ${"%D %i %p\\0"}`
+      .env(hostEnvironment())
       .quiet()
       .nothrow();
   return listed.stdout
@@ -5020,7 +5023,10 @@ const launch = async (
     await writeWhole(path, content, mode ?? 0o644);
   }
   const fifo = fifoOf(ref.id, gen);
-  const made = await Bun.$`/usr/bin/mkfifo ${fifo}`.quiet().nothrow();
+  const made = await Bun.$`/usr/bin/mkfifo ${fifo}`
+    .env(hostEnvironment())
+    .quiet()
+    .nothrow();
   if (made.exitCode !== 0) {
     throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
   }

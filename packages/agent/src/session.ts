@@ -108,6 +108,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { SAFE_GIT, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import { hostEnvironment } from "@cawco/core/session-env";
 import {
   processLimitSentence,
   SESSIOND_PROCESS_LIMIT,
@@ -4452,7 +4453,7 @@ export class SessionSupervisor {
       return target;
     }
 
-    await Bun.$`mkdir -p ${parent}`.quiet();
+    await Bun.$`mkdir -p ${parent}`.env(hostEnvironment()).quiet();
     const cloned = await hostGit(parent, [
       "clone",
       "--single-branch",

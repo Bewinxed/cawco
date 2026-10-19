@@ -17,6 +17,7 @@ import type {
 } from "@cawco/core";
 import { CONTROL_MODEL_CATALOG, CONTROL_PI_DEFAULT_MODEL } from "@cawco/core";
 import { piAgentDir, piMemoryFile, piSkillsDir } from "@cawco/core/paths";
+import { hostEnvironment } from "@cawco/core/session-env";
 import type {
   ImageContent,
   Model,
@@ -707,7 +708,7 @@ export class PiProfile {
     }
     const path = await piSessionPath(sessionKey, dir);
     if (path) {
-      await Bun.$`rm -f ${path}`.quiet().nothrow();
+      await Bun.$`rm -f ${path}`.env(hostEnvironment()).quiet().nothrow();
     }
   }
   dispose(): Promise<void> {

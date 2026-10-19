@@ -75,6 +75,7 @@ import {
   xdgDataHome,
 } from "./paths";
 import { SAFE_GIT_ENV, safeGitArgv } from "./safe-git";
+import { hostEnvironment } from "./session-env";
 import { DamagedRecord, readRecord } from "./state-file";
 import {
   type Policy,
@@ -330,7 +331,7 @@ const findIn = (
     execFile(
       "find",
       [root, "-mindepth", "1", ...expression],
-      { encoding: "utf8", maxBuffer: FIND_OUTPUT_MAX },
+      { encoding: "utf8", env: hostEnvironment(), maxBuffer: FIND_OUTPUT_MAX },
       (error, out) => {
         if (error && error.code !== 1) {
           fail(

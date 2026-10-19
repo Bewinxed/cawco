@@ -6,6 +6,7 @@ import {
   readEnv,
 } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import { hostEnvironment } from "@cawco/core/session-env";
 import { Bonjour, type Service } from "bonjour-service";
 import { readConfig, writeConfig } from "./config";
 
@@ -217,6 +218,7 @@ export const tailscaleCandidates = async (
     return [];
   }
   const status = await Bun.$`${binary} status --json`
+    .env(hostEnvironment())
     .quiet()
     .json()
     .catch(() => undefined);

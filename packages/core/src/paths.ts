@@ -18,6 +18,7 @@ import {
   CLAUDE_JSON_NAME,
   TREE_STORE_DIR,
 } from "./claude-dirs";
+import { hostEnvironment } from "./session-env";
 import { sessiondEndpoint } from "./sessiond";
 
 /**
@@ -899,7 +900,10 @@ export const darwinDeveloperBundle = async (): Promise<string[]> => {
   if (process.platform !== "darwin") {
     return [];
   }
-  const selected = await Bun.$`/usr/bin/xcode-select -p`.quiet().nothrow();
+  const selected = await Bun.$`/usr/bin/xcode-select -p`
+    .env(hostEnvironment())
+    .quiet()
+    .nothrow();
   const developer = selected.stdout.toString().trim();
   const at = developer.lastIndexOf(".app/");
   return selected.exitCode === 0 && at > 0
@@ -916,7 +920,11 @@ export const darwinUserDirs = async (): Promise<string[]> =>
   process.platform === "darwin"
     ? await Promise.all(
         ["DARWIN_USER_TEMP_DIR", "DARWIN_USER_CACHE_DIR"].map(async (name) => {
-          const path = (await Bun.$`getconf ${name}`.quiet()).text().trim();
+          const path = (
+            await Bun.$`getconf ${name}`.env(hostEnvironment()).quiet()
+          )
+            .text()
+            .trim();
           if (!path.startsWith("/")) {
             throw new Error(`getconf ${name} did not return an absolute path`);
           }
