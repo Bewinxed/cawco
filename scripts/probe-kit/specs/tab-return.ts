@@ -126,8 +126,6 @@ const LANDED_MS = 1500;
  * slower machine still has room. The parent's call (tab-return, 2026-10-19).
  */
 const REACH_TASK_MS = 12;
-/** The change the task that warms a pane schedules on it (PaneLeaf `.pane-settling`): how the reach task is found. */
-const WARM_CHANGE = /pane-settling/;
 /** A press this soon after the reach comes while the warm pane's rows are still staged (Transcript `parkRows`). */
 const PRESS_IN_STAGING_MS = 40;
 /** An interaction's length in `inputsOf`'s line. */
@@ -181,8 +179,8 @@ interface Back {
   traced: boolean;
   /**
    * The reach task itself, CPU ms: the longer of the task that warms the
-   * pane (the one scheduling its `.pane-settling`, warm.svelte.ts) and the
-   * frame after it that first lays the pane out; NaN when no warm was traced.
+   * pane (`markWarm`) and the frame after it that first lays the pane out;
+   * NaN when no warm was traced.
    */
   warmTask: number;
   /** That task said whole, as `reachWhat`. */
@@ -816,14 +814,48 @@ const costOf = (page: Page) =>
   page.evaluate(() => (window as unknown as { __cost: Cost }).__cost);
 
 /**
- * The reach task among the tasks before the press: the longer of the one
- * that warms the pane (scheduling its `.pane-settling`, warm.svelte.ts) and
- * the first after it that restyles, the frame that lays the pane out.
+ * Marks `two-pane:warm:0` in the task that warms pane `pane` (PaneLeaf
+ * `data-pane-settling` set, warm.svelte.ts): an attribute observer's
+ * callback runs in the microtasks of the task whose change it reports.
  */
-function reachTaskOf(tasks: MainTask[]): MainTask | null {
-  const at = tasks.findIndex((task) =>
-    task.scheduled.some(([what]) => WARM_CHANGE.test(what))
-  );
+function markWarm(page: Page, pane: string): Promise<void> {
+  return page.evaluate((id) => {
+    const w = window as unknown as { __warmWatch?: MutationObserver };
+    w.__warmWatch?.disconnect();
+    const box = document.querySelector(
+      `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
+    );
+    if (!box) {
+      return;
+    }
+    const watch = new MutationObserver(() => {
+      if (box.hasAttribute("data-pane-settling")) {
+        performance.mark("two-pane:warm:0");
+        watch.disconnect();
+      }
+    });
+    w.__warmWatch = watch;
+    watch.observe(box, {
+      attributes: true,
+      attributeFilter: ["data-pane-settling"],
+    });
+  }, pane);
+}
+
+/**
+ * The reach task among the tasks before the press: the longer of the one
+ * that warms the pane (holding the `two-pane:warm:0` mark `markWarm` makes,
+ * trace clock `warmAt`) and the first after it that restyles, the frame
+ * that lays the pane out.
+ */
+function reachTaskOf(
+  tasks: MainTask[],
+  warmAt: number | undefined
+): MainTask | null {
+  const at =
+    warmAt === undefined
+      ? -1
+      : tasks.findIndex((task) => task.at <= warmAt && warmAt <= task.end);
   if (at < 0) {
     return null;
   }
@@ -847,6 +879,7 @@ async function measureBack(
   const point = await pointAt(page, input, id);
   const held = await census(page);
   const sizesBefore = await itemSizesOf(page, id);
+  await markWarm(page, id);
   let reachEpoch = 0;
   let skippedAtPress = 0;
   await page.evaluate(() => {
@@ -944,7 +977,7 @@ async function measureBack(
   const longest = longestOf(own);
   const beforePress = own.filter((task) => task.at < madeMark);
   const reach = longestOf(beforePress);
-  const warmed = reachTaskOf(beforePress);
+  const warmed = reachTaskOf(beforePress, markAt("two-pane:warm:0"));
   /** A task said whole: what it ran, when, its CPU and restyle, what scheduled it, its sampled stacks. */
   const taskLine = (task: MainTask) =>
     `${task.ran}, ${Math.round((task.at - madeMark) / 1000)}ms after the press: ${task.cpu.toFixed(1)}ms of CPU, ${task.restyled} elements in ${Math.round(task.styleMs)}ms of style; scheduled by ${
