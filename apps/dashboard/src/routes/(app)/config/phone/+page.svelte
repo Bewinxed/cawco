@@ -216,7 +216,7 @@
             <Button
               label="Remove"
               onclick={() => forget(device)}
-              class="max-phone:col-start-2 max-phone:row-start-1"
+              class="max-phone:col-start-2 max-phone:row-span-2 max-phone:row-start-1"
               size="sm"
               variant="ghost"
             />
