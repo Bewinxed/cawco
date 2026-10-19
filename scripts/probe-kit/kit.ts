@@ -827,9 +827,15 @@ export async function settle(page: Page, ms = 150): Promise<void> {
             return `${what} on ${target?.tagName.toLowerCase()}${name}`;
           })
       );
-      throw new Error(
-        `animations never landed within ${landed.after} ms: ${stuck.slice(0, 6).join("; ")}`
-      );
+      // The wait awaited the runs going when it began: one paused since
+      // never settles its promise, and a busy machine can answer late, yet
+      // nothing is moving now. Only a run still going never landed.
+      if (stuck.length > 0) {
+        throw new Error(
+          `animations never landed within ${landed.after} ms: ${stuck.slice(0, 6).join("; ")}`
+        );
+      }
+      break;
     }
     default: {
       const unhandled: never = landed;
