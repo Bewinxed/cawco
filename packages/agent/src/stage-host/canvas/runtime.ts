@@ -20,6 +20,7 @@
 import { readWithin } from "@cawco/core/bounded";
 import {
   type AnimationRead,
+  CANVAS_EMBED_SIZE,
   CANVAS_PLAN_ID,
   type CanvasSpec,
   FORMS,
@@ -320,6 +321,16 @@ export function boot(options: BootOptions): void {
    * stays the panel's own page's (chrome `asCard`).
    */
   const card = params.get("by") === "map";
+  /**
+   * A decision page's Preview (`by=embed`): a second page of a canvas that
+   * draws only the stories `story` names (every story when it names none),
+   * at rest, one under another in the page's own flow at their own size,
+   * each as wide as its form up to the embed's width, with none of the
+   * canvas's chrome; it never posts, and tells the page holding it how tall
+   * it stands (`cawco:embed-size`), so the frame is as tall as it.
+   */
+  const embed = params.get("by") === "embed";
+  const named = new Set(params.getAll("story"));
   const view = viewOf(params);
   const base = location.pathname.slice(
     0,
@@ -336,6 +347,7 @@ export function boot(options: BootOptions): void {
   let moved: Record<string, [number, number]> = {};
 
   document.documentElement.classList.add("cawco-canvas-page");
+  document.documentElement.classList.toggle("cawco-embed", embed);
   const canvas = document.getElementById("cawco-canvas") as HTMLElement;
   const world = document.createElement("div");
   world.className = "cawco-world";
@@ -587,6 +599,14 @@ export function boot(options: BootOptions): void {
 
   const sectionOf = (file: string) => sections.find((one) => one.file === file);
 
+  /** Whether the page draws story `name`: an embed only the ones it names, any other page every one. */
+  const drawsStory = (name: string): boolean =>
+    named.size === 0 || named.has(name);
+
+  /** The stories a section draws, in its file's order. */
+  const storiesOf = (section: Section): Story[] =>
+    (section.mod?.SHEET.stories ?? []).filter((one) => drawsStory(one.name));
+
   /** The columns a section's stories take, from the view. */
   const slotsOf = (): { scheme: Column["scheme"]; width: WidthSlot }[] => {
     let schemes: Column["scheme"][] = [
@@ -685,7 +705,7 @@ export function boot(options: BootOptions): void {
   /** The grid place of a frame: its story's row, its column's place among the section's columns. */
   function placeFrame(frame: Frame): void {
     const { section } = frame;
-    const stories = section.mod?.SHEET.stories ?? [];
+    const stories = storiesOf(section);
     const row = stories.findIndex((one) => one.name === frame.story.name) + 2;
     const columns = columnsOfSection(section);
     const at =
@@ -833,7 +853,9 @@ export function boot(options: BootOptions): void {
     body.style.backgroundColor = ground.background;
     body.style.color = ground.color;
     const width = widthOf(story, column.width);
-    body.style.width = width === null ? "" : `${width}px`;
+    // An embed's frame is as wide as its form where the embed holds it, else the embed's own width: the component at its own size, never scaled.
+    const across = embed ? `min(${width}px, 100%)` : `${width}px`;
+    body.style.width = width === null ? "" : across;
     for (const states of Object.values(FORCED)) {
       for (const state of states) {
         body.classList.remove(allClass(state));
@@ -899,7 +921,8 @@ export function boot(options: BootOptions): void {
 
   /** Each story's columns, from its rest frame: frames made for each, frames of columns it no longer reaches taken down. */
   async function columnsFor(section: Section): Promise<void> {
-    if (!section.mod) {
+    // An embed shows each story at rest only.
+    if (!section.mod || embed) {
       return;
     }
     await frameTick();
@@ -930,7 +953,7 @@ export function boot(options: BootOptions): void {
 
   /** The section's frames as its stories and columns say: new ones mounted, gone ones taken down. */
   function syncFrames(section: Section): void {
-    const stories = section.mod?.SHEET.stories ?? [];
+    const stories = storiesOf(section);
     const wanted = new Set<string>();
     for (const story of stories) {
       const reached = section.interactions.get(story.name) ?? ["rest"];
@@ -996,13 +1019,32 @@ export function boot(options: BootOptions): void {
     }
     syncFrames(section);
     said(section);
-    quietly(
-      columnsFor(section).then(() => {
-        quietly(probeAll(section));
-        quietly(playAll(section));
-      })
-    );
+    if (embed) {
+      unnamedIn(section);
+    } else {
+      quietly(
+        columnsFor(section).then(() => {
+          quietly(probeAll(section));
+          quietly(playAll(section));
+        })
+      );
+    }
     later();
+  }
+
+  /** An embed's stories its states file doesn't have: said in the section's place, in words. */
+  function unnamedIn(section: Section): void {
+    const have = new Set(section.mod?.SHEET.stories.map((one) => one.name));
+    const missing = [...named].filter((name) => !have.has(name));
+    if (missing.length === 0) {
+      return;
+    }
+    const line = document.createElement("p");
+    line.className = "cawco-section-failed-line cawco-ui";
+    line.setAttribute("role", "alert");
+    line.textContent = `${section.name} has no ${missing.length === 1 ? "story" : "stories"} named ${missing.join(", ")}.`;
+    section.head.after(line);
+    section.standIns = [line];
   }
 
   /** Takes a far section's frames down; its module and its last report stay. */
@@ -1113,7 +1155,9 @@ export function boot(options: BootOptions): void {
   );
   for (const section of sections) {
     near.observe(section.el);
-    if (!sweeping) {
+    // An embed never sleeps a section: its page scrolls it in and out of
+    // view, and nothing would wake it (pump passes a section asleep).
+    if (!(sweeping || embed)) {
       far.observe(section.el);
     }
   }
@@ -1134,6 +1178,21 @@ export function boot(options: BootOptions): void {
     }
     later();
   }
+
+  /**
+   * An animation brought to its end: `finish()` throws on one that never
+   * ends (an `infinite` loop, a working dot's pulse; Web Animations,
+   * "finishing an animation": an infinite effect end is an
+   * InvalidStateError), and the throw ended the whole sweep, so a loop is
+   * cancelled instead.
+   */
+  const land = (one: Animation): void => {
+    if (one.effect?.getComputedTiming().endTime === Number.POSITIVE_INFINITY) {
+      one.cancel();
+    } else {
+      one.finish();
+    }
+  };
 
   /** One story mounted in the rig, each of its interactions forced and released: the delta and the transitions each fires. */
   async function probe(
@@ -1169,7 +1228,7 @@ export function boot(options: BootOptions): void {
         const fired = body.getAnimations({ subtree: true });
         const animations = fired.map((one) => readAnimation(one, t0));
         for (const one of fired) {
-          one.finish();
+          land(one);
         }
         const changed = deltaOf(before, snapshot(body), root);
         for (const state of FORCED[interaction]) {
@@ -1177,7 +1236,7 @@ export function boot(options: BootOptions): void {
         }
         await frameTick();
         for (const one of body.getAnimations({ subtree: true })) {
-          one.finish();
+          land(one);
         }
         result.delta.set(interaction, { animations, changed });
       }
@@ -1493,7 +1552,7 @@ export function boot(options: BootOptions): void {
       fit();
     }
     try {
-      if (!card) {
+      if (!(card || embed)) {
         await fetch(new URL("rendered", location.href), {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -1512,7 +1571,10 @@ export function boot(options: BootOptions): void {
 
   const zoom = { x: 0, y: 0, z: 1 };
   const place = () => {
-    world.style.transform = `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.z})`;
+    // An embed stands in the page's own flow: it never pans or zooms.
+    world.style.transform = embed
+      ? ""
+      : `translate(${zoom.x}px, ${zoom.y}px) scale(${zoom.z})`;
     chrome.where();
   };
   const ZOOM_MIN = 0.1;
@@ -1527,6 +1589,10 @@ export function boot(options: BootOptions): void {
   canvas.addEventListener(
     "wheel",
     (event) => {
+      // An embed's wheel scrolls the page holding it.
+      if (embed) {
+        return;
+      }
       event.preventDefault();
       letGo();
       if (event.ctrlKey || event.metaKey) {
@@ -1570,7 +1636,7 @@ export function boot(options: BootOptions): void {
     id: number;
   } | null = null;
   canvas.addEventListener("pointerdown", (event) => {
-    if (event.button !== 0 && event.button !== 1) {
+    if (embed || (event.button !== 0 && event.button !== 1)) {
       return;
     }
     const label = (event.target as Element).closest?.(".cawco-frame-label");
@@ -2180,6 +2246,13 @@ export function boot(options: BootOptions): void {
   new ResizeObserver(() => {
     drawEdges();
     later();
+    if (embed) {
+      // The page holding an embed (a decision page's Preview) makes its frame this tall: the frames whole, no inner scroll.
+      window.parent.postMessage(
+        { type: CANVAS_EMBED_SIZE, height: Math.ceil(world.offsetHeight) },
+        "*"
+      );
+    }
   }).observe(world);
 
   /* --- Pictures: a frame posed, settled and read for its picture --------- */
@@ -2358,14 +2431,23 @@ export function boot(options: BootOptions): void {
   };
   // Each section stands in its place until it draws, now every column's rule is defined; its load waits on the observer's first callback.
   for (const section of sections) {
-    standIn(section, plans[section.file]?.stories ?? []);
+    standIn(
+      section,
+      (plans[section.file]?.stories ?? []).filter((one) => drawsStory(one.name))
+    );
   }
   window.__cawcoCanvas = canvasState;
   if (card) {
     chrome.asCard();
   }
-  zoom.x = WORLD_INSET.x;
-  zoom.y = WORLD_INSET.y;
+  if (embed) {
+    chrome.asEmbed();
+    // Its stories load now, not on the observer's first callback: a frame off the page's screen gets no rendering steps until it is scrolled to, and its module is fetched and mounted meanwhile.
+    quietly(pump());
+  } else {
+    zoom.x = WORLD_INSET.x;
+    zoom.y = WORLD_INSET.y;
+  }
   place();
   chrome.layout();
 }

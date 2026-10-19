@@ -232,29 +232,29 @@ a {
 
 /* Options: every [data-option] inside a [data-cawco-choice]. The bridge sets
    data-cawco-picked and aria-pressed on the ones the hub keeps as picked. */
-/* Every row one height (The Peer Rule): options stacked on a phone stand as
-   tall as the tallest, as the ones side by side in a row already do, so a
-   Recommended tag never makes its option the bigger one. */
+/* Every option as tall as its own content: options side by side are peers,
+   each chip as tall as the row's tallest chip, and an option's media never
+   stretches another option's chip; stacked on a phone, each stands at its
+   own height. */
 .dp-opts {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
-  grid-auto-rows: 1fr;
   gap: var(--space-2);
 }
 /* A program page's option cell: the chip (the pick), then the option's own
-   media under it, outside the pick, live to the pointer. The chip fills
-   what the media leaves, so chips stay peers in a row. */
+   media under it, outside the pick, live to the pointer. The two rows are
+   the grid's own (subgrid), so the chips of a row share one track and the
+   media theirs. */
 .dp-optcell {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-2);
+  display: grid;
+  grid-row: span 2;
+  grid-template-rows: subgrid;
   min-inline-size: 0;
 }
 .dp-optmedia {
   min-inline-size: 0;
 }
 .dp-opt {
-  flex: 1 1 auto;
   font: inherit;
   text-align: left;
   cursor: pointer;
@@ -313,14 +313,25 @@ a {
 .dp-opt .dp-cost {
   font-size: var(--text-meta);
 }
+/* Recommended, first in its option, over the label: the badge (DESIGN.md,
+   Badges and state chips), so the option's line under the label reads as
+   its reason. */
 .dp-opt .dp-tag {
   align-self: flex-start;
-  font-size: var(--text-meta);
-  border: 1px solid var(--border-hairline);
+  display: inline-flex;
+  align-items: center;
+  block-size: var(--c-badge-h);
+  padding-inline: var(--space-1);
+  margin-block-end: var(--space-1);
   border-radius: var(--radius-xs);
-  padding: 0 var(--space-1);
-  margin-top: 2px;
-  color: var(--ink-muted);
+  background: var(--surface-recess);
+  color: var(--ink-strong);
+  font: var(--type-label);
+  line-height: 1;
+  white-space: nowrap;
+}
+.dp-opt[data-cawco-picked] .dp-tag {
+  background: var(--surface-raised);
 }
 /* A picked option (DESIGN.md, option chips): the coral edge, a recessed
    fill and the keycap filled vermilion with a white digit; its words keep
@@ -350,17 +361,23 @@ a {
 }
 .dp-note textarea {
   font: inherit;
+  min-block-size: var(--c-btn-h);
   color: var(--ink-strong);
   background: var(--surface-page);
   border: 1px solid var(--border-control);
   border-radius: var(--radius-md);
   padding: var(--space-2) var(--space-3);
   resize: vertical;
-  min-height: 2.6em;
 }
+.dp-note textarea::placeholder {
+  color: var(--ink-subtle);
+  opacity: 1;
+}
+/* The 44 Touch Rule: under a finger the note stands 44px tall. */
 @media (pointer: coarse) {
   .dp-note textarea {
     font-size: 16px;
+    min-block-size: var(--c-btn-h-lg);
   }
 }
 
@@ -374,6 +391,7 @@ a {
 }
 .dp-send {
   font: inherit;
+  min-block-size: var(--c-btn-h);
   font-weight: var(--weight-strong);
   cursor: pointer;
   border: 0;
@@ -392,4 +410,10 @@ a {
 .dp-send:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
+}
+/* The 44 Touch Rule: under a finger Send picks is the lg button, 44px tall. */
+@media (pointer: coarse) {
+  .dp-send {
+    min-block-size: var(--c-btn-h-lg);
+  }
 }

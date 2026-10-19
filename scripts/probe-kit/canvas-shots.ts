@@ -31,7 +31,7 @@
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import type { Page } from "playwright-core";
+import type { ElementHandle, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import {
   FramePictureRefusal,
@@ -50,8 +50,8 @@ export interface Shot {
   path: string;
   scheme: Theme;
   story: string;
-  /** The column's width: the frame's `data-cawco-width`. */
-  width: number;
+  /** The column's width: the frame's `data-cawco-width` (`own` where the story takes its own form, as an embed's frames do). */
+  width: number | "own";
 }
 
 /** What one capture showed, and what was wrong with it. */
@@ -495,6 +495,169 @@ async function shootOne(page: Page, shot: Shot): Promise<ShotRead> {
       matched: `${match.hit}/${match.read}`,
     },
   };
+}
+
+/**
+ * Each frame an embedded canvas shows (a decision page's Preview: the canvas
+ * page by=embed, in a frame of `page`), shot where the person sees it: its
+ * body scrolled into the window, settled (the canvas's own `settled`), read
+ * from the DOM in its own frame as a posed frame is (whose it is, its
+ * scheme, nothing over it, every point its body's), its part in the window
+ * shot from the page, and its pixels read back (not one colour, its DOM's
+ * paint). Each png goes to `dir`, named for its story and `scheme`.
+ */
+export async function shootEmbedded(
+  page: Page,
+  embed: ElementHandle,
+  scheme: Theme,
+  dir: string
+): Promise<ShotRead[]> {
+  const frame = await embed.contentFrame();
+  if (!frame) {
+    return [];
+  }
+  const shown = await frame.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLElement>(
+        '.cawco-frame[data-cawco-interaction="rest"]'
+      ),
+    ].map((one) => ({
+      file: one.dataset.cawcoFile ?? "",
+      story: one.dataset.cawcoStory ?? "",
+      width: one.dataset.cawcoWidth ?? "",
+      key: one.dataset.cawcoKey ?? "",
+    }))
+  );
+  const reads: ShotRead[] = [];
+  for (const one of shown) {
+    const shot: Shot = {
+      file: one.file,
+      story: one.story,
+      scheme,
+      width: one.width === "own" ? "own" : Number(one.width),
+      path: `${dir}/${one.file.split("/").at(-1)?.replace(".stories.ts", "")}-${one.story}-${scheme}.png`,
+    };
+    const selector = frameSelector(shot);
+    const blank: ShotRead = {
+      ...shot,
+      drawn: "",
+      faults: [],
+      hash: "",
+      label: "",
+      stats: { width: 0, height: 0, top: 0, matched: "0/0" },
+    };
+    // biome-ignore lint/performance/noAwaitInLoops: one frame in the window at a time
+    await frame.evaluate(
+      (sel) =>
+        document
+          .querySelector(`${sel} > .cawco-frame-body`)
+          ?.scrollIntoView({ block: "start" }),
+      selector
+    );
+    const settled = await frame
+      .waitForFunction(
+        (key) =>
+          (
+            globalThis as unknown as {
+              __cawcoCanvas?: { settled: (one: string) => boolean };
+            }
+          ).__cawcoCanvas?.settled(key) === true,
+        one.key,
+        { timeout: POSE_MS, polling: 100 }
+      )
+      .then(
+        () => true,
+        () => false
+      );
+    const seen = await frame.evaluate(identityOf, {
+      selector,
+      holds: null,
+    });
+    if (!seen) {
+      reads.push({ ...blank, faults: ["the frame left the page"] });
+      continue;
+    }
+    const grid = await frame.evaluate(gridOf, { selector, grid: GRID });
+    const faults = [
+      ...faultsOf(shot, seen, grid, await frame.evaluate(astrayOf, selector)),
+      ...(settled ? [] : [`not settled in ${POSE_MS / 1000} s`]),
+    ];
+    const at = await embed.boundingBox();
+    const body = await frame.evaluate((sel) => {
+      const r = document
+        .querySelector(`${sel} > .cawco-frame-body`)
+        ?.getBoundingClientRect();
+      return r ? { x: r.x, y: r.y, w: r.width, h: r.height } : null;
+    }, selector);
+    const view = page.viewportSize() ?? { width: 0, height: 0 };
+    if (!(at && body)) {
+      reads.push({
+        ...blank,
+        label: seen.label,
+        faults: [...faults, "no box"],
+      });
+      continue;
+    }
+    // Its part in the window, on whole CSS px (as Playwright takes a clip).
+    const left = Math.ceil(Math.max(0, at.x, at.x + body.x));
+    const top = Math.ceil(Math.max(0, at.y, at.y + body.y));
+    const right = Math.floor(
+      Math.min(view.width, at.x + at.width, at.x + body.x + body.w)
+    );
+    const bottom = Math.floor(
+      Math.min(view.height, at.y + at.height, at.y + body.y + body.h)
+    );
+    if (right - left < 8 || bottom - top < 8) {
+      reads.push({
+        ...blank,
+        label: seen.label,
+        faults: [...faults, "not in the window once scrolled to"],
+      });
+      continue;
+    }
+    const clip = { x: left, y: top, width: right - left, height: bottom - top };
+    const bytes = await page.screenshot({ clip, animations: "allow" });
+    await mkdir(dirname(shot.path), { recursive: true });
+    await writeFile(shot.path, bytes);
+    const png = PNG.sync.read(bytes);
+    const share = topShareOf(png);
+    if (share >= UNIFORM) {
+      faults.push(`one colour: ${(share * 100).toFixed(2)}% of it`);
+    }
+    // The grid's points, from the embed's own window to the page's, those in the shot alone.
+    const points = grid.points
+      .map((point) => ({
+        ...point,
+        page: { x: at.x + point.page.x, y: at.y + point.page.y },
+      }))
+      .filter(
+        (point) =>
+          point.page.x >= left &&
+          point.page.x < right &&
+          point.page.y >= top &&
+          point.page.y < bottom
+      );
+    const match = matchedOf(png, clip, png.width / clip.width, points);
+    if (match.read === 0 || match.hit < match.read * MATCH_SHARE) {
+      faults.push(
+        `the picture is not its DOM's paint: ${match.hit} of ${match.read} points match (${match.misses.join("; ")})`
+      );
+    }
+    reads.push({
+      ...shot,
+      faults,
+      drawn: createHash("md5").update(seen.drawn).digest("hex"),
+      hash: createHash("md5").update(bytes).digest("hex"),
+      label: seen.label,
+      stats: {
+        width: png.width,
+        height: png.height,
+        top: Math.round(share * 1000) / 1000,
+        matched: `${match.hit}/${match.read}`,
+      },
+    });
+  }
+  return reads;
 }
 
 /**

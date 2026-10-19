@@ -47,6 +47,8 @@
     "./machine-key": "./src/machine-key.ts",
     "./choices": "./src/choices.ts",
     "./decisions": "./src/decisions.ts",
+    "./words/decisions": "./src/words/decisions.ts",
+    "./words/routines": "./src/words/routines.ts",
     "./canvas": "./src/canvas.ts",
     "./ink": "./src/ink.ts",
     "./shapes": "./src/shapes.ts",

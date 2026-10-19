@@ -309,13 +309,19 @@
           },
           "caption": {
             "type": "string"
+          },
+          "stories": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
           }
         },
         "required": [
           "artifact"
         ],
         "additionalProperties": false,
-        "description": "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet."
+        "description": "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet. A component canvas shows the component alone, each story at its own size up to the card's width."
       },
       "Text": {
         "type": "object",

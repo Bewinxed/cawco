@@ -12,6 +12,7 @@
  * A workspace preview's server ({@link ServeSpec}) runs on the same
  * supervision, and its preview's doc keeps its state the same way.
  */
+import { PREVIEW_ENTER_PATH } from "./frames";
 
 /**
  * Where a stage serves a component canvas: `?file=<states file, from the
@@ -48,6 +49,39 @@ export const sectionName = (
   title?.split("/").at(-1)?.trim() ||
   component ||
   (file.split("/").at(-1) ?? file).replace(STORIES_EXT, "");
+
+/**
+ * A canvas page embedded in a decision page's Preview (`by=embed`, and a
+ * `story` per story it shows): the message it posts to the page holding it,
+ * `{ type, height }` in CSS px, so its frame is as tall as its frames.
+ */
+export const CANVAS_EMBED_SIZE = "cawco:embed-size";
+
+/**
+ * A component canvas's address (`embed`, as the hub answers it in a
+ * decision page's media) drawn as a Preview: `by=embed`, a `story` per name
+ * in `stories` (none: every story). Through host mode's way in, the place it
+ * sends the frame on to (`next`) carries them.
+ */
+export const canvasEmbedUrl = (
+  embed: string,
+  stories: readonly string[]
+): string => {
+  const url = new URL(embed);
+  const enter = url.pathname === PREVIEW_ENTER_PATH;
+  const place = enter
+    ? new URL(url.searchParams.get("next") ?? "/", url.origin)
+    : url;
+  place.searchParams.set("by", "embed");
+  place.searchParams.delete("story");
+  for (const one of stories) {
+    place.searchParams.append("story", one);
+  }
+  if (enter) {
+    url.searchParams.set("next", `${place.pathname}${place.search}`);
+  }
+  return url.href;
+};
 
 /** The id of the canvas page's `<script type="application/json">` holding each states file's {@link SectionPlan}, by file. */
 export const CANVAS_PLAN_ID = "cawco-plan";
