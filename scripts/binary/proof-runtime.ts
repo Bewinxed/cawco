@@ -234,7 +234,22 @@ if (verb === "proof-stack") {
     sections: [],
     unnamed: [],
   };
-  const page = `<!doctype html><div class="cawco-frame" data-cawco-story="Proof" data-cawco-interaction="rest" data-cawco-key="proof"><div class="cawco-frame-body" style="width:120px;height:40px;background:#c33">proof</div></div><script>globalThis.__cawcoCanvas={go(){},reports:1,swept:true}</script>`;
+  // The canvas's picture answers (stage-host canvas runtime.ts `CanvasState`), for one frame standing whole at its own size.
+  const page = `<!doctype html><body style="margin:0"><div id="cawco-canvas" style="position:fixed;inset:0"><div class="cawco-frame" data-cawco-story="Proof" data-cawco-interaction="rest" data-cawco-key="proof"><div class="cawco-frame-body" style="width:120px;height:40px;background:#c33">proof</div></div></div><script>
+const body = () => document.querySelector(".cawco-frame-body");
+globalThis.__cawcoCanvas = {
+  reports: 1,
+  swept: true,
+  frameNamed: async (name) => name === "Proof" ? { key: "proof" } : { refused: "No story " + name + "." },
+  lacks: () => ({ w: 0, h: 0 }),
+  pose: () => ({ w: 0, h: 0 }),
+  settled: () => document.fonts.status === "loaded",
+  picture: () => {
+    const rect = body().getBoundingClientRect();
+    return { rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height }, own: { w: body().offsetWidth, h: body().offsetHeight }, scale: devicePixelRatio, whole: true, view: "the proof's page" };
+  },
+};
+</script></body>`;
   const stage = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
