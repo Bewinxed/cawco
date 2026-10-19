@@ -715,11 +715,13 @@ function readPage() {
       .map((one) => one.textContent?.trim() ?? "")
       .filter(Boolean),
     sideways: document.documentElement.scrollWidth - window.innerWidth,
-    // Each diagram's groups (Mermaid's clusters): their left edges, in px.
-    groups: [...document.querySelectorAll(".dp-card .diagram svg")].map((svg) =>
-      [...svg.querySelectorAll("g.cluster > rect")].map(
-        (box) => Math.round(box.getBoundingClientRect().left * 10) / 10
-      )
+    // A Mermaid subgraph is drawn by Pele as g.pele-cluster; the drawing is
+    // the figure's .draw (its other svgs are the figure's own controls).
+    groups: [...document.querySelectorAll(".dp-card .diagram .draw")].map(
+      (draw) =>
+        [...draw.querySelectorAll("g.pele-cluster > rect")].map(
+          (box) => Math.round(box.getBoundingClientRect().left * 10) / 10
+        )
     ),
   };
 }
@@ -935,6 +937,16 @@ const spec: Spec = {
             );
             await page.evaluate(() => window.scrollTo(0, 0));
             await page.evaluate(() => document.fonts.ready);
+            // A diagram draws lazily (Pele loads on its own): read the page
+            // once every diagram has its nodes.
+            await page.waitForFunction(
+              () =>
+                [...document.querySelectorAll(".dp-card .diagram .draw")].every(
+                  (draw) => draw.querySelector("g.pele-node")
+                ),
+              null,
+              { timeout: 30_000 }
+            );
             await settle(page, 600);
             const said = await page.evaluate(readPage);
             const controls = await page.evaluate(readControls);
@@ -955,8 +967,12 @@ const spec: Spec = {
                 ),
               JSON.stringify(said.cards)
             );
+            // A diagram whose groups weren't found fails too: an empty read
+            // proves nothing (this page's one diagram has three groups).
             const staggered = said.groups.filter(
-              (lefts) => Math.max(...lefts) - Math.min(...lefts) > 1
+              (lefts) =>
+                lefts.length === 0 ||
+                Math.max(...lefts) - Math.min(...lefts) > 1
             );
             kit.check(
               `${one.name} ${leg}: each diagram's groups stand on one left edge, within 1px (${said.groups.map((lefts) => lefts.join("/")).join("; ") || "no diagram"})`,
