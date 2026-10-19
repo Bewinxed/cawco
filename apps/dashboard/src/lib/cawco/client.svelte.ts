@@ -82,6 +82,11 @@ import type {
   SupportedCommands,
   TailnetHttps,
   ThreadMessage,
+  RelayAct,
+  RelayAnswer,
+  RelayJourneyView,
+  RelayProofReport,
+  RelayTry,
   ThreadRead,
   ThreadSaid,
   ThreadSummary,
@@ -1174,6 +1179,16 @@ const state = $state({
   tailnetHttps: undefined as TailnetHttps | undefined,
   /** Its step was taken while this page stood: the row ticks for {@link TAILNET_TICK_MS}, then leaves. */
   tailnetTicked: false,
+  /**
+   * The stream relay's journey (`GET /api/stream-relay`, then each
+   * `stream_relay.journey` frame): Needs you shows its row while it asks,
+   * Settings › Browsers its card or its summary; undefined until read.
+   */
+  relayJourney: undefined as RelayJourneyView | undefined,
+  /** The domain this page reached CawCo through, as the hub saw it (null by IP, the tailnet, a name of the hub's). */
+  relayDomain: null as string | null,
+  /** It went live and was proven from outside while this page stood: the row ticks until the next open. */
+  relayTicked: false,
   /**
    * Each Claude account's own limits, by account id — folded in from the
    * `kind: 'usage'` frame so the pill updates live rather than polling
@@ -2723,6 +2738,8 @@ async function refresh(): Promise<boolean> {
   readFleetUpstream();
   // HTTPS on the tailnet name: Needs you shows its step while one stands.
   readTailnetHttps();
+  // The stream relay's journey: Needs you's row and Settings › Browsers.
+  readRelayJourney().catch(() => undefined);
   // Every project's threads, for the rail; frames keep them from here.
   readThreads();
   // What the socket says about asks from here on is newer than the read.
@@ -3242,6 +3259,12 @@ function handleFrame(frame: FramePayload): void {
   // The fleet's upstream answer, given anywhere: Needs you stops asking.
   if (frame.kind === "fleet.upstream") {
     state.fleetUpstream = frame.upstream;
+    return;
+  }
+
+  // The stream relay's journey moved: every place that draws it follows.
+  if (frame.kind === "stream_relay.journey") {
+    keepRelayJourney(frame.journey);
     return;
   }
 
@@ -6090,6 +6113,46 @@ async function readTailnetHttps(): Promise<void> {
   }
 }
 
+/** The journey as the hub has it now, and whether it ticked while this page stood (asking, then done). */
+function keepRelayJourney(journey: RelayJourneyView): void {
+  const before = state.relayJourney;
+  state.relayJourney = journey;
+  if (before?.asks && !journey.asks && journey.done) {
+    state.relayTicked = true;
+  }
+}
+
+/** The stream relay's journey as the hub has it now, with this page's domain; a failed read throws its words. */
+export async function readRelayJourney(): Promise<void> {
+  const read = await askHub<RelayAnswer>("/api/stream-relay");
+  state.relayDomain = read.domain;
+  keepRelayJourney(read.journey);
+}
+
+/** One act on the stream relay's journey: the hub's answer kept, its refusal thrown in its words. */
+export async function actOnRelay(act: RelayAct): Promise<void> {
+  const answered = await askHub<RelayAnswer>(
+    "/api/stream-relay/act",
+    json("POST", act)
+  );
+  state.relayDomain = answered.domain;
+  keepRelayJourney(answered.journey);
+}
+
+/** What this screen's proof found, told to the hub, and its answer kept. */
+export async function reportRelayProof(report: RelayProofReport): Promise<void> {
+  const answered = await askHub<RelayAnswer>(
+    "/api/stream-relay/proof",
+    json("POST", report)
+  );
+  keepRelayJourney(answered.journey);
+}
+
+/** A 60 s credential for this screen's proof of the relay. */
+export function relayTry(): Promise<RelayTry> {
+  return askHub<RelayTry>("/api/stream-relay/try");
+}
+
 /** The fleet's upstream answer, as the hub holds it now. */
 async function readFleetUpstream(): Promise<void> {
   const read = await load<{ upstream: UpstreamPosts | null }>(
@@ -8777,6 +8840,18 @@ export const cawco = {
   /** Its step was taken while this page stood, a moment ago: the row ticks. */
   get tailnetTicked(): boolean {
     return state.tailnetTicked;
+  },
+  /** The stream relay's journey, as the hub has it; undefined until read. */
+  get relayJourney(): RelayJourneyView | undefined {
+    return state.relayJourney;
+  },
+  /** The domain this page reached CawCo through, as the hub saw it; null by IP, the tailnet or a name of the hub's. */
+  get relayDomain(): string | null {
+    return state.relayDomain;
+  },
+  /** The relay went live and was proven from outside while this page stood: its row ticks. */
+  get relayTicked(): boolean {
+    return state.relayTicked;
   },
   /** The ask a permission requestId belongs to, whichever delegate raised it. */
   delegateAskOf: (requestId: string): DelegateAskEvent | null => {

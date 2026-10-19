@@ -36,6 +36,13 @@ const CAWCO_HEADER = "x-cawco-";
  */
 const RANGE_HEADERS = ["accept-ranges", "content-range", "content-length"];
 const PARTIAL_CONTENT = 206;
+/** What a proxy in front adds to the browser's request, carried to the hub as it came. */
+const PROXY_HEADERS = [
+  "x-forwarded-proto",
+  "x-forwarded-for",
+  "cf-connecting-ip",
+  "cf-ray",
+];
 
 /**
  * The hub's HTTP origin, derived from CAWCO_HUB_URL. That variable is a
@@ -109,6 +116,16 @@ async function proxyToHub(
         [PAGE_ORIGIN_HEADER]: publicOrigin(Object.fromEntries(request.headers))
           .origin,
         ...(clientAddress && { "X-Cawco-Client-Address": clientAddress }),
+        // A proxy in front's own words (a TLS terminator's scheme, Cloudflare's
+        // client address and ray): the hub reads from them that the page
+        // came through a domain, and the address it asked from (hub
+        // relay-journey.ts `domainOf`, `askedFrom`).
+        ...Object.fromEntries(
+          PROXY_HEADERS.flatMap((name) => {
+            const value = request.headers.get(name);
+            return value === null ? [] : [[name, value]];
+          })
+        ),
         ...(fileName && { "X-File-Name": fileName }),
         ...(range && { Range: range }),
       },

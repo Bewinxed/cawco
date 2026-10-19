@@ -33,6 +33,9 @@
    * the same row with its risk as its line and its two options as the
    * peers; it opens nothing, and leaves once the hub has the answer.
    *
+   * The stream relay's journey is the journey's own card (RelayJourney,
+   * `row`), drawn whole in the row's place.
+   *
    * HTTPS on the tailnet is an onboarding row of the same kind: one line,
    * then every step on the path in order, each with its control (Tailscale's
    * DNS page to open, its command to copy, the docs) and its own tick as the
@@ -53,6 +56,12 @@
     upstreamPostsWords,
   } from "@cawco/core/upstream-guard";
   import { failureWords } from "#lib/cawco/hub-read.js";
+  import RelayJourney from "#lib/cawco/relay/RelayJourney.svelte";
+  import {
+    actOnRelayCard,
+    proveOnStart,
+    stepsHere,
+  } from "#lib/cawco/relay/relay.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
@@ -109,8 +118,19 @@
     onchoose: () => void;
   } = $props();
 
+  // The relay's start ticked while its row stands: this screen proves it.
+  $effect(() => {
+    if (item.kind === "relay") {
+      proveOnStart(item.journey);
+    }
+  });
+
   const href = $derived.by(() => {
-    if (item.kind === "choice" || item.kind === "tailnet") {
+    if (
+      item.kind === "choice" ||
+      item.kind === "tailnet" ||
+      item.kind === "relay"
+    ) {
       return;
     }
     if (item.kind !== "ask") {
@@ -137,6 +157,8 @@
         return item.done
           ? tailnetWords.done(item.tailnet.dashboard ?? "")
           : tailnetWords.lead;
+      case "relay":
+        return "";
       case "pairing":
         return pairingWords.asks(item.request.userCode);
       case "admission":
@@ -254,6 +276,8 @@
         return "Onboarding · each project can change it";
       case "tailnet":
         return tailnetWords.meta(item.tailnet.host);
+      case "relay":
+        return "";
       case "pairing":
         return item.place ? `Pairing · ${item.place}` : "Pairing";
       case "admission":
@@ -470,6 +494,29 @@
   }
 </script>
 
+{#if item.kind === "relay"}
+  <!-- The stream relay's journey: its own card, drawn as Needs you's row
+       (its title, the steps, the onboarding meta line), the same card
+       Settings › Browsers draws from the same journey. -->
+  <div
+    data-slot="row"
+    class="relay-row"
+    data-kind="relay"
+    data-share="pane:{item.key}"
+    data-stale={stale || undefined}
+  >
+    <RelayJourney
+      candidates={item.journey.candidates}
+      domain={cawco.relayDomain}
+      machine={item.journey.machine}
+      onact={actOnRelayCard}
+      row
+      steps={stepsHere(item.journey.steps)}
+      summary={item.journey.summary}
+      view={item.done ? "done" : "journey"}
+    />
+  </div>
+{:else}
 <!-- mark-line: a grid whose first row is the mark line; its words take
      .mark-text, centred on the lead (the rows under it hold other things) -->
 <div
@@ -906,8 +953,18 @@
     </div>
   {/if}
 </div>
+{/if}
 
 <style>
+  /* The relay's card stands in the row's box: its padding and corner, so
+     its title's mark stands in the panel's one leading column. */
+  .relay-row {
+    padding: var(--space-2) var(--space-3);
+    border-radius: var(--radius-sm);
+  }
+  .relay-row[data-stale] {
+    opacity: 0.55;
+  }
   /* The session's mark leading on the title's line; the title and its wait;
      what it wants, two lines at most; then the kind and where; a
      permission's peers under them. */

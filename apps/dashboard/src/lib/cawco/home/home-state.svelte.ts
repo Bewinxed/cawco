@@ -18,6 +18,7 @@ import type {
   NeutralSessionInfo,
   PairingRequest,
   ProjectCap,
+  RelayJourneyView,
   TailnetHttps,
   WaitingMachine,
   WorkflowRun,
@@ -27,6 +28,7 @@ import {
   machineLabel,
   projectsFor,
   questionsOf,
+  STREAM_RELAY_WORDS,
   tailnetWords,
   topsIn,
 } from "@cawco/core";
@@ -395,6 +397,23 @@ export interface TailnetItem {
 }
 
 /**
+ * The stream relay's guided journey (hub relay-journey.ts), while it asks:
+ * set up from Caw's setup card, Settings › Browsers or a take-over through a
+ * domain, and not yet live and proven from outside, nor put away with Later
+ * or Done for now. Drawn as the journey's card itself (RelayJourney `row`);
+ * once proven while this page stood, its tick, until the next open.
+ */
+export interface RelayItem {
+  done: boolean;
+  journey: RelayJourneyView;
+  key: string;
+  kind: "relay";
+  place: string;
+  raisedAt: undefined;
+  title: string;
+}
+
+/**
  * A device asking to pair (hub hub-auth.ts): approved here, it runs the
  * fleet as you. Its code is the one on that device's screen.
  */
@@ -449,6 +468,7 @@ export type NeedsItem =
   | WatchItem
   | ChoiceItem
   | TailnetItem
+  | RelayItem
   | PairingItem
   | AdmissionItem
   | TaskItem;
@@ -1128,6 +1148,22 @@ class Home {
             },
           ]
         : [];
+    // The stream relay's journey: its row while it asks, its tick a moment after.
+    const journey = cawco.relayJourney;
+    const relaying: NeedsItem[] =
+      journey && (journey.asks || (journey.done && cawco.relayTicked))
+        ? [
+            {
+              kind: "relay",
+              key: "relay:journey",
+              journey,
+              done: !journey.asks && journey.done,
+              title: STREAM_RELAY_WORDS.title,
+              place: "Onboarding",
+              raisedAt: undefined,
+            },
+          ]
+        : [];
     // Devices asking to pair and machines waiting to be admitted
     // (hub-auth.svelte.ts): answered here or in Configure › Devices.
     const pairings: NeedsItem[] = hubAuth.requests.map((request) => ({
@@ -1171,6 +1207,7 @@ class Home {
       ...watched,
       ...unanswered,
       ...secured,
+      ...relaying,
       ...pairings,
       ...admissions,
       ...waitingTasks,
