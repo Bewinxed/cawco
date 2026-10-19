@@ -4,19 +4,47 @@
   content up to most of the window: an animated mockup in HTML, say. A dev
   server's preview or a sheet stands on an origin of its own the hub opened
   for it (hub server.ts `embedAt`), named in the page's media, at the shape
-  of a screen. One the hub no longer holds says so in words.
+  of a screen. A component canvas draws the stories its `stories` names (every
+  one when it names none) as the component alone, at their own size, and
+  says how tall it stands, so its frame is as tall as it. One the hub no
+  longer holds says so in words.
 -->
 <script lang="ts">
+  import { CANVAS_EMBED_SIZE, canvasEmbedUrl } from "@cawco/core/stage";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { served } from "./page.svelte.js";
 
-  let { props }: OpenUIRenderProps<{ artifact: unknown; caption?: unknown }> =
-    $props();
+  let {
+    props,
+  }: OpenUIRenderProps<{
+    artifact: unknown;
+    caption?: unknown;
+    stories?: unknown;
+  }> = $props();
   const id = $derived(String(props.artifact ?? ""));
   const held = $derived(served.media[id]);
+  const stories = $derived(
+    Array.isArray(props.stories) ? props.stories.map(String) : []
+  );
   let frame = $state<HTMLIFrameElement>();
   let tall = $state<number | null>(null);
   let watch: ResizeObserver | undefined;
+
+  /** A component canvas's own height, as it says it (agent canvas runtime `by=embed`): its frame is as tall. */
+  $effect(() => {
+    const heard = (event: MessageEvent) => {
+      const said = event.data as { height?: unknown; type?: unknown } | null;
+      if (
+        event.source === frame?.contentWindow &&
+        said?.type === CANVAS_EMBED_SIZE &&
+        typeof said.height === "number"
+      ) {
+        tall = said.height;
+      }
+    };
+    addEventListener("message", heard);
+    return () => removeEventListener("message", heard);
+  });
 
   function sized() {
     watch?.disconnect();
@@ -71,6 +99,8 @@
     if (!embed) {
       return;
     }
+    const address =
+      held?.kind === "component" ? canvasEmbedUrl(embed, stories) : embed;
     let gone = false;
     const after = setTimeout(() => {
       slow = true;
@@ -85,7 +115,7 @@
         );
         if (ok) {
           if (!gone) {
-            ready = embed;
+            ready = address;
           }
           return;
         }
@@ -125,7 +155,13 @@
     ></iframe>
   {:else if held?.embed}
     {#if ready}
-      <iframe class="frame screen" src={ready} title={held.name}></iframe>
+      <iframe
+        bind:this={frame}
+        class={["frame", tall === null ? "screen" : "drawn"]}
+        src={ready}
+        style:block-size={tall === null ? undefined : `${tall}px`}
+        title={held.name}
+      ></iframe>
     {/if}
     <!-- The live region stands from the start; its words come only once the wait has lasted. -->
     <p class="gone" role="status">{waitLine}</p>
@@ -155,6 +191,11 @@
   .screen {
     aspect-ratio: 16 / 10;
     max-block-size: 80vb;
+  }
+  /* A component canvas that said its height: as tall as its frames; the page scrolls past it. */
+  .drawn {
+    min-block-size: 0;
+    max-block-size: none;
   }
   .gone {
     color: var(--ink-muted);

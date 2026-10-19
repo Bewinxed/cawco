@@ -122,10 +122,16 @@ export const decisionLibrary = <C>(
   );
   const Preview = define(
     "Preview",
-    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet.",
+    "Another artifact of yours live in a frame: a page (an animated mockup in HTML, say), a dev server's preview, or a sheet. A component canvas shows the component alone, each story at its own size up to the card's width.",
     z.object({
       artifact: z.string().describe("Its id."),
       caption,
+      stories: z
+        .array(z.string())
+        .optional()
+        .describe(
+          'A component canvas\'s stories to show, by their export names, like ["Review", "PhoneReview"]; every story when left out.'
+        ),
     })
   );
   const Dials = define(
