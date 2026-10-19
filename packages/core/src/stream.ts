@@ -331,6 +331,13 @@ export interface RegisterAckPayload {
   /** Per instance id: an instance with no mark follows from head. */
   ingested: Record<string, IngestMark>;
   /**
+   * Every instance id this hub has a row for on the machine, whatever its
+   * state. The machine removes what it kept for any other session to be
+   * reattached (its browser door, agent browser/door.ts
+   * `sweepBrowserDoors`): a session forgotten while the machine was away.
+   */
+  instances: string[];
+  /**
    * The machine's credential for the hub's git remote (`/git/…`, HTTP Basic
    * `<machineId>:<credential>`), minted for this connection and replaced on
    * the next. The machine keeps it in memory only and hands it to git per

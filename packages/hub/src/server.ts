@@ -1475,6 +1475,7 @@ const registerAck = (
   delivered: Record<string, DeliveryMark>,
   unknownAccounts: string[] | undefined,
   sessions: CarrySessionRequest[],
+  instances: string[],
   machineCredential: string,
   sessionLimits: SessionLimits,
   upstream: UpstreamRules,
@@ -1497,6 +1498,7 @@ const registerAck = (
     previewPorts: PREVIEW_PORTS,
     ...(unknownAccounts ? { unknownAccounts } : {}),
     sessions,
+    instances,
   },
 });
 
@@ -27295,6 +27297,9 @@ export const createServer = (
                   streams.deliveredFor(peekInstances(message.payload)),
                   unknownAccountsOf(message.machineId, message.payload),
                   claudeSessionsOn(message.machineId),
+                  // Every session this hub has on the machine: what it kept
+                  // for any other goes.
+                  db.sessionOwnership(message.machineId).map((row) => row.id),
                   // This connection's credential for the hub's git remote;
                   // the one its last connection held stops working.
                   machineCredentials.mint(message.machineId),

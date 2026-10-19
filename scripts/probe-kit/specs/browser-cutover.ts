@@ -25,6 +25,9 @@
  *   then does the browser take ports;
  * - a session outside any workspace whose row the hub deletes has its door
  *   folder (token, config, project) removed within the agent's next tick;
+ * - after the agent's welcome, a door folder of a session the hub has no
+ *   row for is gone, a workspace's folder stays, and a session that browsed
+ *   before the agent restarted browses on;
  * - each session's door was made in at most 200 ms (the agent's
  *   `[browser] <id>'s door … made in N ms` lines), so a spawn grows by no
  *   more than that.
@@ -34,7 +37,7 @@
  *
  *   bun scripts/probe-kit/run.ts browser-cutover
  */
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { BrowserKey } from "../../../packages/core/src/browser";
@@ -58,9 +61,11 @@ const DOOR_LINE =
   /\[browser\] (\S+)'s door to (\S+) at (\S+), made in (\d+) ms/g;
 
 /** What each session's tools answered, in order, by who it is (`A1`, `B2`…). */
-const results: Record<string, string[]> = {};
+const results: Partial<Record<string, string[]>> = {};
 /** Whose final list waits for whose page: A and B each wait for the other. */
 const partner: Record<string, string> = {};
+/** A session whose second call waits for this: the agent restarted under it. */
+const heldUntil: Record<string, Promise<void>> = {};
 
 /** A tool result's content as text: a string, or its text parts joined. */
 const textOf = (content: unknown): string => {
@@ -127,6 +132,10 @@ const respond = async (request: Seen): Promise<Reply> => {
   const next = steps[done.length];
   if (!next) {
     return { everyMs: 5, words: ["done"] };
+  }
+  const held = heldUntil[who];
+  if (done.length === 1 && held) {
+    await held;
   }
   const other = partner[who];
   if (done.length === 3 && other) {
@@ -558,6 +567,73 @@ const run = async (kit: Kit): Promise<void> => {
     );
   };
 
+  /**
+   * The welcome's sweep: while the agent is stopped, a door folder of a
+   * session the hub has no row for and a workspace-shaped folder are left in
+   * the workspaces dir; the agent starts, and once its welcome is read the
+   * stray door is gone, the workspace's folder stays, and a session that
+   * browsed before the restart browses on through its own door.
+   */
+  const welcomeSwept = async (): Promise<void> => {
+    const E = "E3";
+    let restarted: () => void = () => undefined;
+    heldUntil[E] = new Promise<void>((resolve) => {
+      restarted = resolve;
+    });
+    const live = await fleet.spawn("claude", "Cutover live", ours.repo, {
+      projectId: ours.id,
+    });
+    await fleet.send(live, `${TAG}-${E}: browse.`);
+    await until(
+      `${E}'s first browser call`,
+      () => results[E]?.length,
+      (count) => count >= 1,
+      300_000
+    ).catch(() => undefined);
+    await fleet.stop("agent");
+    const workspaces = join(fleet.env.HOME as string, ".cawco", "workspaces");
+    const stray = join(workspaces, `stray-${crypto.randomUUID()}`);
+    const workspace = join(workspaces, `kept-${crypto.randomUUID()}`);
+    await mkdir(stray, { recursive: true });
+    await mkdir(workspace, { recursive: true });
+    await writeFile(join(stray, "browser-token"), "stray\n");
+    await writeFile(join(stray, "browser-mcp.json"), "{}\n");
+    await writeFile(join(workspace, "browser-token"), "kept\n");
+    await writeFile(
+      join(workspace, "create.json"),
+      // A clone that is not there: the agent's scans pass it by.
+      `${JSON.stringify({ path: join(fleet.sandbox, "no-clone") })}\n`
+    );
+    await agentOn("unix:///nonexistent");
+    const strayGone = await until(
+      "the stray door folder to go after the welcome",
+      async () => !(await exists(stray)),
+      Boolean,
+      30_000
+    ).catch(() => false);
+    const workspaceKept =
+      (await exists(join(workspace, "browser-token"))) &&
+      (await exists(join(workspace, "create.json")));
+    restarted();
+    await until(
+      `${E}'s calls after the restart`,
+      () => results[E]?.length,
+      (count) => count >= 4,
+      300_000
+    ).catch(() => undefined);
+    const after = results[E]?.[3] ?? "";
+    kit.check(
+      "after the agent's welcome the stray door folder is gone, the workspace's folder stays, and a live session's next list_pages answers through its door",
+      strayGone &&
+        workspaceKept &&
+        after.includes(`who=${E}`) &&
+        !CALL_FAILED.test(after),
+      JSON.stringify({ strayGone, workspaceKept, after: after.slice(0, 300) })
+    );
+    await fleet.stopSession(live);
+    await rm(workspace, { recursive: true, force: true });
+  };
+
   try {
     process.env.DOCKER_HOST = `unix://${runtime.endpoint}`;
     await leg(1, "container");
@@ -571,6 +647,7 @@ const run = async (kit: Kit): Promise<void> => {
     await agentOn("unix:///nonexistent");
     await leg(2, "local");
     await forgotten();
+    await welcomeSwept();
   } finally {
     await fleet.stop("agent").catch(() => undefined);
     process.env.DOCKER_HOST = `unix://${runtime.endpoint}`;

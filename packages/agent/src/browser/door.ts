@@ -22,11 +22,15 @@
  * wakes the browser as a tool first connects, which chrome-devtools-mcp does
  * at its first tool call, not as it starts.
  */
-import { readFile, rm, rmdir, stat } from "node:fs/promises";
+import { readdir, readFile, rm, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { browserGatePort } from "@cawco/core/browser";
 import { machineId } from "@cawco/core/machine-id";
-import { workspaceProjectFile, workspaceStateDir } from "@cawco/core/paths";
+import {
+  workspaceProjectFile,
+  workspaceStateDir,
+  workspacesDir,
+} from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import { setProject } from "../boundary";
 import { reserveBrowser } from "./browsers";
@@ -106,8 +110,11 @@ const WORKSPACE_RECORDS = ["create.json", "boundary.json", "place.json"];
  * pages closed on every browser of the machine, then its token, config and
  * project, and its folder once nothing else is in it. A workspace's door goes
  * with its workspace, so a folder holding a workspace's records is left.
+ * Whether the folder went.
  */
-export const forgetBrowserDoor = async (instanceId: string): Promise<void> => {
+export const forgetBrowserDoor = async (
+  instanceId: string
+): Promise<boolean> => {
   const dir = workspaceStateDir(instanceId);
   const workspace = await Promise.all(
     WORKSPACE_RECORDS.map((name) =>
@@ -118,7 +125,7 @@ export const forgetBrowserDoor = async (instanceId: string): Promise<void> => {
     )
   );
   if (workspace.some(Boolean)) {
-    return;
+    return false;
   }
   try {
     await closeWorkspaceBrowsers(instanceId);
@@ -131,6 +138,7 @@ export const forgetBrowserDoor = async (instanceId: string): Promise<void> => {
     );
     await rmdir(dir);
     console.info(`[browser] ${instanceId}'s door is gone with its session`);
+    return true;
   } catch (error) {
     const { code } = error as NodeJS.ErrnoException;
     if (code !== "ENOENT" && code !== "ENOTEMPTY") {
@@ -138,6 +146,70 @@ export const forgetBrowserDoor = async (instanceId: string): Promise<void> => {
         `[browser] ${instanceId}'s door was not let go: ${String(error)}`
       );
     }
+    return false;
+  }
+};
+
+/**
+ * The doors of sessions the hub no longer has on this machine, removed as
+ * its welcome names every one it has (`RegisterAckPayload.instances`): a
+ * session forgotten while the machine was away, or forgotten with no stop
+ * sent (a fold, a session its machine reported gone). Each by
+ * {@link forgetBrowserDoor}, which leaves a workspace's folder alone. A door
+ * made since the welcome came is a session the welcome could not name yet,
+ * and stays. A welcome naming no list is a wire error: nothing is swept.
+ */
+export const sweepBrowserDoors = (welcome: unknown): void => {
+  const named = (welcome as { instances?: unknown } | undefined)?.instances;
+  if (!(Array.isArray(named) && named.every((id) => typeof id === "string"))) {
+    console.warn(
+      "[browser] the hub's welcome names no instances, a wire error: it is refused, and no browser door is swept"
+    );
+    return;
+  }
+  sweepDoors(new Set<string>(named), Date.now()).catch((error: unknown) =>
+    console.warn(
+      `[browser] the welcome's door sweep failed: ${error instanceof Error ? error.message : String(error)}`
+    )
+  );
+};
+
+/** A file's stat, or undefined when it is not there. */
+const statOf = (file: string) => stat(file).catch(() => undefined);
+
+/** Every door folder under the workspaces dir not named in `kept` and made before `since`, let go. */
+const sweepDoors = async (
+  kept: ReadonlySet<string>,
+  since: number
+): Promise<void> => {
+  let ids: string[] = [];
+  try {
+    ids = await readdir(workspacesDir());
+  } catch {
+    return;
+  }
+  let gone = 0;
+  for (const id of ids) {
+    if (kept.has(id)) {
+      continue;
+    }
+    // biome-ignore lint/performance/noAwaitInLoops: one folder at a time, each judged by its own files.
+    const marks = await Promise.all([
+      statOf(gateTokenFile(id)),
+      statOf(join(workspaceStateDir(id), GATE_CONFIG_NAME)),
+    ]);
+    const door = marks.filter((mark) => mark !== undefined);
+    if (door.length === 0 || door.some((mark) => mark.mtimeMs >= since)) {
+      continue;
+    }
+    if (await forgetBrowserDoor(id)) {
+      gone += 1;
+    }
+  }
+  if (gone > 0) {
+    console.info(
+      `[browser] ${gone} door folder(s) of sessions this hub no longer has on the machine are gone`
+    );
   }
 };
 

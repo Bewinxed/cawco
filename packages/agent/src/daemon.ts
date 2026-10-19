@@ -145,6 +145,7 @@ import {
   stopBrowser,
   watchBrowsers,
 } from "./browser/browsers";
+import { sweepBrowserDoors } from "./browser/door";
 import {
   removeRelay,
   renewRelay,
@@ -2481,6 +2482,8 @@ const attach = (
         const spawns = heldSpawns.splice(0);
         takeCustody(envelope.payload, spawns);
         sweepAccounts(envelope.payload as RegisterAckPayload);
+        // The welcome read whole: the doors of sessions it no longer has go.
+        sweepBrowserDoors(envelope.payload);
         return true;
       }
       if (envelope.verb !== "spawn") {
