@@ -1393,7 +1393,7 @@ const roundThree = async (
               one.showRight <= one.clipper.right + 0.5)))
     );
     // Files' card, drawn round the regions: its trailing edge and its inline-end padding.
-    const card = await page.evaluate(() => {
+    const filesCard = await page.evaluate(() => {
       const pop = document.querySelector<HTMLElement>(".kit-pop.files-pop");
       if (!pop) {
         return null;
@@ -1420,7 +1420,7 @@ const roundThree = async (
           showRight: one.showRight,
           clipper: one.clipper ?? "none: every ancestor's overflow is visible",
         }))
-      )}; Files' card ${JSON.stringify(card)}`
+      )}; Files' card ${JSON.stringify(filesCard)}`
     );
     await page.close();
   }
