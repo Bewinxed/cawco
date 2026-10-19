@@ -176,18 +176,30 @@ export const decisionLibrary = <C>(
   );
   const Option = define(
     "Option",
-    "One answer to a decision: what the person gets, in a few words.",
+    "One answer to a decision, in a few words.",
     z.object({
       id: z.string().describe("Lowercase, never changed."),
       label: z.string(),
-      line: z.string().optional().describe("What it means, in one line."),
-      recommended: z.boolean().optional().describe("Your recommendation."),
-      media: z.array(media).optional().describe("Shown inside the option."),
+      line: z
+        .string()
+        .optional()
+        .describe("What it gets the person, in one line."),
+      recommended: z
+        .boolean()
+        .optional()
+        .describe("Your one recommendation on the card."),
+      media: z
+        .array(media)
+        .optional()
+        .describe(
+          "Its design, drawn live under its pick, which the person can operate."
+        ),
+      cost: z.string().optional().describe("What it costs them, in one line."),
     })
   );
   const Decision = define(
     "Decision",
-    "One question the person picks on: a card with its options, a note, and a state line.",
+    "One question the person picks on: a card with its options and a note. Once picked it folds to one line.",
     z.object({
       id: z
         .string()
@@ -197,7 +209,7 @@ export const decisionLibrary = <C>(
       why: z
         .string()
         .optional()
-        .describe("Why it is asked; what happens today."),
+        .describe("Why you recommend the option you marked, in one sentence."),
       media: z
         .array(z.union([media, Dials.ref]))
         .optional()
@@ -259,17 +271,17 @@ export const decisionLibrary = <C>(
 
 /** One page, as the prompt shows it: two decisions, a diagram, an edge. */
 const EXAMPLE = `root = Decisions("Price the hosted plan", [shape, trial], "Two choices before the pricing page is built.")
-shape = Decision("shape", "What does a customer pay for?", [seat, machine], "Today: one price for everyone.")
-seat = Option("seat", "Per seat", "Each person on the team.")
-machine = Option("machine", "Per machine", "Each machine that joins the fleet.", true)
-trial = Decision("trial", "How long is the trial?", [week, month], "The call to action names it.", [path], ["shape"])
-week = Option("week", "A week")
-month = Option("month", "A month", "Thirty days, then pay.")
+shape = Decision("shape", "What does a customer pay for?", [seat, machine], "A machine is what the fleet costs to run.")
+seat = Option("seat", "Per seat", "Each person on the team pays.", false, [], "A solo builder with five machines pays once.")
+machine = Option("machine", "Per machine", "Each machine that joins the fleet pays.", true, [], "A team on one machine pays once.")
+trial = Decision("trial", "How long is the trial?", [week, month], "A month covers a whole project.", [path], ["shape"])
+week = Option("week", "A week", "People decide fast.", false, [], "Too short to finish a real project.")
+month = Option("month", "A month", "Thirty days, then pay.", true, [], "Revenue starts a month later.")
 path = Diagram("flowchart LR\\nSign up --> Trial --> Pay", "Where a trial leads")`;
 
 /** One revision, as the prompt shows it: a reworded decision and a new option, merged by name. */
-const EDIT = `trial = Decision("trial", "How long is the free trial?", [week, month, quarter], "The call to action names it.", [path], ["shape"])
-quarter = Option("quarter", "A quarter")`;
+const EDIT = `trial = Decision("trial", "How long is the free trial?", [week, month, quarter], "A month covers a whole project.", [path], ["shape"])
+quarter = Option("quarter", "A quarter", "Time for a team to settle in.", false, [], "A season of hosting unpaid.")`;
 
 /**
  * What the prompt is generated with: no tools, no bindings, no built-in
@@ -285,8 +297,8 @@ export const decisionPromptOptions = (): PromptOptions => ({
   editMode: true,
   examples: [EXAMPLE, EDIT],
   additionalRules: [
-    "Every Decision has 2 to 5 Options with your recommendation marked. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.",
-    "Put media where the reader needs it: in an Option's media, in a Decision's media (between its why and its options), or between decisions.",
+    "Every Decision asks one question in plain words and has 2 to 5 Options, each with its line (what it gets) and its cost; exactly one is recommended, and the Decision's why says why. Order decisions so each comes after those it depends on. Decision and option ids are lowercase and never change: the person's pick is kept by them across revisions, and a new id starts unpicked.",
+    "Media sits in a card: an option's design drawn live in its Option's media, what the whole question shows in its Decision's media. No legends, no size or id captions.",
     "after names what a decision depends on, and a Section groups decisions; both draw the project's decision graph. Leave them out when the decisions stand alone.",
     "Plain words everywhere: no URLs or markup. Canvas and Preview name an artifact by its id; Image names a file.",
   ],
