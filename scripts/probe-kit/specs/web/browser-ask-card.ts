@@ -25,12 +25,18 @@
  * In Caw's panel (the bar's Needs you, opened as a person opens it), the
  * ask's row: a browser request, Deny then Take over at the row's trailing
  * edge, both filled and tinted (each its own), `--space-2` apart, opening to
- * `--space-4` on a coarse pointer.
+ * `--space-4` on a coarse pointer. Where the home page shows the session's
+ * composer with its card up (the desk), the card stays whole and still as
+ * the panel opens (DESIGN: it "arrives once … and is then completely
+ * still"): no transition or animation begins on it, its rects do not move,
+ * its title and peers stand at full opacity untransformed, nothing stands
+ * over it, and its surface (the grown shape) is its own rect.
  *
  * Every state at every width is swept for overflow and overlap: each text
  * element inside its container and the viewport, and no two text elements
  * overlapping; the sweep's total must be zero. A capture of each goes to
- * `.probe/browser-ask-card/`.
+ * `.probe/browser-ask-card/`, once every finite animation on the page has
+ * landed.
  *
  *   bun scripts/probe-kit/run.ts web browser-ask-card
  */
@@ -348,7 +354,127 @@ const pageWithAsk = async (
   return { page, posted, sent, release: () => release() };
 };
 
+/**
+ * The composer's card as the engine draws it, with Caw's panel open: its
+ * rect; its title's, Take over's and Deny's computed opacity (their own,
+ * and through every ancestor), transform and rect; what stands topmost over
+ * it at a grid of its points; its surface (the grown shape's halo and drop,
+ * Composer) and its clip; every run on it not finished; and how many
+ * transitions and animations began on it since {@link countCardRuns}. Null
+ * where no card is on the page.
+ */
+const cardDrawn = () => {
+  const card = document.querySelector<HTMLElement>('[data-slot="ask"]');
+  if (!card) {
+    return null;
+  }
+  const runs = window
+    .kitRuns()
+    .filter((run) => {
+      const target = (run.effect as KeyframeEffect | null)?.target;
+      return run.playState !== "finished" && !!target && card.contains(target);
+    })
+    .map((run) => {
+      const target = (run.effect as KeyframeEffect | null)?.target;
+      let { name } = run.constructor;
+      if (run instanceof CSSAnimation) {
+        name = `animation ${run.animationName}`;
+      } else if (run instanceof CSSTransition) {
+        name = `transition ${run.transitionProperty}`;
+      }
+      return `${name} on ${target?.getAttribute("data-slot") ?? target?.tagName.toLowerCase()} (${run.playState} at ${Math.round(Number(run.currentTime ?? 0))})`;
+    });
+  const part = (selector: string) => {
+    const node = card?.querySelector<HTMLElement>(selector);
+    if (!node) {
+      return null;
+    }
+    let through = 1;
+    for (let at: HTMLElement | null = node; at; at = at.parentElement) {
+      through *= Number(getComputedStyle(at).opacity);
+    }
+    const style = getComputedStyle(node);
+    const r = node.getBoundingClientRect();
+    return {
+      opacity: style.opacity,
+      through: Math.round(through * 1000) / 1000,
+      transform: style.transform,
+      rect: [r.left, r.top, r.right, r.bottom].map(Math.round),
+    };
+  };
+  const box = card.getBoundingClientRect();
+  // What is topmost over the card, at a grid of its points: the card's own,
+  // or what stands over it.
+  const over: string[] = [];
+  for (const fy of [0.1, 0.5, 0.9]) {
+    for (const fx of [0.05, 0.25, 0.5, 0.75, 0.95]) {
+      const x = box.left + box.width * fx;
+      const y = box.top + box.height * fy;
+      const hit = document.elementFromPoint(x, y);
+      if (hit && !card.contains(hit)) {
+        const host = hit.closest("[data-slot], [data-glass-card-frame]");
+        over.push(
+          `${Math.round(x)},${Math.round(y)}: ${hit.tagName.toLowerCase()}.${String(hit.className).split(" ")[0]} in ${host?.getAttribute("data-slot") ?? host?.getAttribute("data-glass-card-frame") ?? "-"}`
+        );
+      }
+    }
+  }
+  const frame = document
+    .querySelector("[data-glass-card-frame]")
+    ?.getBoundingClientRect();
+  const surfaces = [
+    ...document.querySelectorAll<HTMLElement>(
+      '[data-slot="grown-halo"], .grown-drop'
+    ),
+  ].map((node) => {
+    const r = node.getBoundingClientRect();
+    const style = getComputedStyle(node);
+    return {
+      what: node.className,
+      rect: [r.left, r.top, r.right, r.bottom].map(Math.round),
+      opacity: style.opacity,
+      visibility: style.visibility,
+    };
+  });
+  return {
+    rect: [box.left, box.top, box.right, box.bottom].map(Math.round),
+    title: part('[data-slot="title"]'),
+    take: part("[data-browser-take]"),
+    deny: part("[data-browser-deny]"),
+    over,
+    panel: frame
+      ? [frame.left, frame.top, frame.right, frame.bottom].map(Math.round)
+      : null,
+    surfaces,
+    clipped: card.style.clipPath !== "",
+    runs,
+    began: (window as unknown as { __cardBegan?: number }).__cardBegan ?? 0,
+  };
+};
+
+/**
+ * Counts every transition and animation that begins on the composer's card
+ * from now on (`__cardBegan`, read by {@link cardDrawn}): a card that
+ * arrives again begins its parts' transitions again.
+ */
+const countCardRuns = () => {
+  const box = window as unknown as { __cardBegan?: number };
+  box.__cardBegan = 0;
+  const count = (event: Event) => {
+    if (
+      event.target instanceof Element &&
+      event.target.closest('[data-slot="ask"]')
+    ) {
+      box.__cardBegan = (box.__cardBegan ?? 0) + 1;
+    }
+  };
+  document.addEventListener("transitionrun", count, true);
+  document.addEventListener("animationstart", count, true);
+};
+
+/** Each capture once every finite animation on the page has landed. */
 const capture = async (page: Page, file: string): Promise<void> => {
+  await settle(page);
   await mkdir(CAPTURES, { recursive: true });
   await page.screenshot({ path: join(CAPTURES, file) });
 };
@@ -569,7 +695,7 @@ async function taking(
   kit.check(
     `${name}: a refused take-over reads "${words}" and the peers do not move`,
     words ===
-      `Couldn't take over. ${REFUSAL} The agent is still waiting; Take over tries again.` &&
+      `Couldn't take over. ${REFUSAL} The agent is still waiting; try Take over again.` &&
       !!before &&
       !!after &&
       same(before.take, after.take) &&
@@ -623,7 +749,21 @@ async function needs(
     `probe-browser-ask-needs-${name}`
   );
   await open(page, `${base}/`, "button[data-needs-caw]", 90_000);
+  // A composer's card already up on the page (the desk's session pane) is
+  // read before the panel opens, and every run that begins on it counted.
+  const cardShown = await page
+    .locator(`${CARD} [data-browser-take]`)
+    .waitFor({ timeout: 5000 })
+    .then(
+      () => true,
+      () => false
+    );
+  if (cardShown) {
+    await page.waitForTimeout(1000);
+  }
   await settle(page);
+  const cardBefore = await page.evaluate(cardDrawn);
+  await page.evaluate(countCardRuns);
   await page.locator("button[data-needs-caw]").click();
   const approve = page.locator("[data-glass-card-frame] [data-approve]");
   await approve.waitFor();
@@ -712,9 +852,57 @@ async function needs(
   await page
     .locator("[data-probe-row]")
     .screenshot({ path: join(CAPTURES, `${name}-needs-row.png`) });
+  await settle(page);
+  cardStaysWhole(kit, name, cardBefore, await page.evaluate(cardDrawn));
   await capture(page, `${name}-needs.png`);
   await page.close();
 }
+
+/**
+ * The composer's card with Caw's panel open, against the card before it
+ * opened (DESIGN: it "arrives once … and is then completely still"): no
+ * transition or animation began on it, its rect and its title's and peers'
+ * rects unchanged, each of them at full opacity through every ancestor and
+ * untransformed, nothing standing over it, its surface its own rect, and
+ * nothing running on it.
+ */
+const cardStaysWhole = (
+  kit: Kit,
+  name: string,
+  before: ReturnType<typeof cardDrawn>,
+  after: ReturnType<typeof cardDrawn>
+): void => {
+  if (!(before || after)) {
+    kit.note(
+      `${name} Needs you: no composer card on the home page at this width`
+    );
+    return;
+  }
+  const parts = after ? [after.title, after.take, after.deny] : [];
+  const sameRect = (a?: number[] | null, b?: number[] | null) =>
+    !!a && !!b && a.every((v, i) => Math.abs(v - (b[i] ?? Number.NaN)) <= 1);
+  kit.check(
+    `${name} Needs you: the composer's card stays whole and still with the panel open (no run began on it, rects unchanged, title and both peers at full opacity, nothing over it, its surface its own rect)`,
+    !!before &&
+      !!after &&
+      after.began === 0 &&
+      after.runs.length === 0 &&
+      sameRect(before.rect, after.rect) &&
+      sameRect(before.title?.rect, after.title?.rect) &&
+      sameRect(before.take?.rect, after.take?.rect) &&
+      sameRect(before.deny?.rect, after.deny?.rect) &&
+      parts.every((part) => part?.through === 1 && part.transform === "none") &&
+      after.over.length === 0 &&
+      after.surfaces.length > 0 &&
+      after.surfaces.every(
+        (surface) =>
+          sameRect(surface.rect, after.rect) &&
+          surface.opacity === "1" &&
+          surface.visibility === "visible"
+      ),
+    JSON.stringify({ before, after })
+  );
+};
 
 const respond = (): Reply => ({ everyMs: 5, words: ["ok"] });
 

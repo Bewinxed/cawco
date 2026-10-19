@@ -125,7 +125,7 @@
     } catch (error) {
       // What happened, why (the hub's own sentence), and what is safe and
       // comes next (WORDS, the error formula). The button is free again.
-      takeRefused = `Couldn't take over. ${error instanceof Error ? error.message : String(error)} The agent is still waiting; Take over tries again.`;
+      takeRefused = `Couldn't take over. ${error instanceof Error ? error.message : String(error)} The agent is still waiting; try Take over again.`;
       pressed = null;
     }
   }
