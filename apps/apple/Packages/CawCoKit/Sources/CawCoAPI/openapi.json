@@ -5146,6 +5146,131 @@
         }
       }
     },
+    "/api/instances/{id}/artifacts/search": {
+      "get": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "maxLength": 200,
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiInstancesByIdArtifactsSearch",
+        "responses": {
+          "200": {
+            "description": "getApiInstancesByIdArtifactsSearch 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiInstancesByIdArtifactsSearch200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiInstancesByIdArtifactsSearch 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/instances/{id}/artifacts/{artifact}/thumbnail": {
+      "put": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "light": {
+                    "maxLength": 4194304,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "dark": {
+                    "maxLength": 4194304,
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "single": {
+                    "type": "boolean"
+                  }
+                },
+                "required": [
+                  "light",
+                  "dark",
+                  "single"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "putApiInstancesByIdArtifactsByArtifactThumbnail",
+        "responses": {
+          "200": {
+            "description": "putApiInstancesByIdArtifactsByArtifactThumbnail 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ArtifactThumbnail"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "putApiInstancesByIdArtifactsByArtifactThumbnail 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/artifacts/status": {
       "get": {
         "parameters": [
@@ -6688,6 +6813,56 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiArtifactsByArtifact200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/artifacts/{artifact}/thumbnail/{scheme}": {
+      "get": {
+        "parameters": [
+          {
+            "name": "artifact",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "scheme",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "light",
+                "dark"
+              ]
+            }
+          }
+        ],
+        "operationId": "getApiArtifactsByArtifactThumbnailByScheme",
+        "responses": {
+          "200": {
+            "description": "getApiArtifactsByArtifactThumbnailByScheme 200",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiArtifactsByArtifactThumbnailByScheme 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -26027,6 +26202,12 @@
           "$ref": "#/components/schemas/ArtifactSummary"
         }
       },
+      "getApiInstancesByIdArtifactsSearch200": {
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/ArtifactHit"
+        }
+      },
       "getApiInstancesByIdArtifactsStatus200": {
         "type": "array",
         "items": {
@@ -34927,6 +35108,10 @@
               "string"
             ]
           },
+          "thumbnail": {
+            "description": "Its latest picture, served at `GET /api/artifacts/:id/thumbnail/:scheme`; null until a screen drew one.",
+            "$ref": "#/components/schemas/ArtifactThumbnail"
+          },
           "updatedAt": {
             "type": "string"
           }
@@ -34964,6 +35149,32 @@
         "required": [
           "at",
           "commit"
+        ]
+      },
+      "ArtifactThumbnail": {
+        "description": "An artifact's latest picture: a page's or preview's thumbnail as the\ndashboard's pane took it (both schemes, or one when the page draws the\nsame in both), a canvas's own picture. `at` changes with every new one.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "string"
+          },
+          "height": {
+            "description": "Its pixels, as its PNG says: the card is laid out at its shape before it loads.",
+            "type": "number"
+          },
+          "single": {
+            "description": "The page draws the same in both schemes: `light` is its one picture.",
+            "type": "boolean"
+          },
+          "width": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "at",
+          "height",
+          "single",
+          "width"
         ]
       },
       "Created": {
@@ -35790,6 +36001,25 @@
           "files",
           "js",
           "wasm"
+        ]
+      },
+      "ArtifactHit": {
+        "description": "One of a session's artifacts a Files search matched\n(`GET /api/instances/:id/artifacts/search`), best first: what matched,\nand where the words on its page did, the words around the first hit with\neach hit between 「 and 」 (the finder's excerpt).",
+        "type": "object",
+        "properties": {
+          "excerpt": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "excerpt",
+          "id"
         ]
       },
       "ArtifactStatus": {
