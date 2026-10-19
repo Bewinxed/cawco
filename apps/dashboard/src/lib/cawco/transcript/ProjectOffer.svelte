@@ -59,18 +59,14 @@
 {#if joined && !offer}
   <!-- The answer, where the question stood: what it joined, the way there,
        and a way to put the card away. -->
-  <!-- literal: 8px -->
   <section
     aria-label={offerWords.joinedLabel}
-    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-hairline"
+    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-hairline motion-safe:animate-offer-settle"
     data-offer={instanceId}
     role="status"
-    style:--settle="8px"
   >
-    <!-- literal: 1 1 24ch -->
     <p
-      class="mark-line flex items-center gap-space-2 min-w-0 flex-(--line-flex) text-size-body font-normal leading-body text-ink-strong"
-      style:--line-flex="1 1 24ch"
+      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-c-offer-line text-size-body font-normal leading-body text-ink-strong"
     >
       <IconFolder
         data-project-offer-glyph
@@ -81,35 +77,28 @@
     </p>
     <div data-slot="actions" class="flex gap-space-2 ms-auto">
       <Button
-        class="h-space-8 coarse:h-(--btn-h-coarse)"
         fit="prompt"
-        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         href="/project/{encodeURIComponent(joined.project.id)}"
+        size="sm"
         variant="outline">{offerWords.openProject(joined.project.name)}</Button
       >
       <Button
         aria-label={offerWords.putAway}
-        class="h-space-8 coarse:h-(--btn-h-coarse)"
-        fit="prompt"
-        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         icon={IconClose}
         onclick={() => dismissProjectJoin(instanceId)}
+        size="icon-sm"
         variant="ghost"
       />
     </div>
   </section>
 {:else if offer}
-  <!-- literal: 8px -->
   <section
     aria-label={offerWords.offerLabel}
-    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-hairline"
+    class="flex flex-wrap items-center justify-between gap-y-space-2 gap-x-space-3 border border-border-control rounded-lg bg-surface-raised p-space-3 shadow-hairline motion-safe:animate-offer-settle"
     data-offer={instanceId}
-    style:--settle="8px"
   >
-    <!-- literal: 1 1 24ch -->
     <p
-      class="mark-line flex items-center gap-space-2 min-w-0 flex-(--line-flex) text-size-body font-normal leading-body text-ink-strong"
-      style:--line-flex="1 1 24ch"
+      class="mark-line flex items-center gap-space-2 min-w-0 grow shrink basis-c-offer-line text-size-body font-normal leading-body text-ink-strong"
     >
       <IconFolder
         data-project-offer-glyph
@@ -120,19 +109,16 @@
     </p>
     <div data-slot="actions" class="flex gap-space-2 ms-auto">
       <Button
-        class="h-space-8 coarse:h-(--btn-h-coarse)"
         fit="prompt"
-        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         disabled={pending !== null}
         label={offerWords.notNow}
         onclick={() => answer("dismiss")}
         pending={pending === "dismiss"}
+        size="sm"
         variant="ghost"
       />
       <Button
-        class="h-space-8 coarse:h-(--btn-h-coarse)"
         fit="prompt"
-        style="--btn-gap: var(--space-2); --btn-icon: var(--icon-sm); --btn-h-coarse: 44px"
         disabled={pending !== null}
         failed={!!refused}
         icon={IconFolder}
@@ -140,24 +126,10 @@
         onclick={() => answer("accept")}
         pending={pending === "accept"}
         pendingLabel={offerWords.makingProject}
+        size="sm"
       />
     </div>
     <RowFault data-project-offer-refused class="basis-full" reason={refused} />
   </section>
 {/if}
 
-<style>
-  /* residual: keyframes */
-  @keyframes offer-settle {
-    from {
-      opacity: 0;
-      translate: 0 var(--settle);
-    }
-  }
-  [data-offer] {
-    @media (prefers-reduced-motion: no-preference) {
-      animation: offer-settle calc(var(--dur-control) * 2) var(--ease-out)
-        backwards;
-    }
-  }
-</style>

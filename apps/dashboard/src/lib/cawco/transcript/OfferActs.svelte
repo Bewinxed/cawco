@@ -22,34 +22,21 @@
   } = $props();
 </script>
 
-<div class={["offer", className]} {...rest}>
+<div
+  data-slot="offer-acts"
+  class={[
+    "flex flex-wrap items-center gap-space-2 mt-space-2",
+    className,
+  ]}
+  {...rest}
+>
   {#if said}
-    <span class="said">{said}</span>
+    <span class="text-size-meta font-normal text-ink-muted">{said}</span>
   {/if}
   {@render children?.()}
   {#if problem}
-    <p class="problem">{problem}</p>
+    <p class="basis-full text-size-meta font-normal text-status-fail-ink">
+      {problem}
+    </p>
   {/if}
 </div>
-
-<style>
-  .offer {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-    margin-block-start: var(--space-2);
-  }
-  .said {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-  }
-  .problem {
-    flex-basis: 100%;
-    margin: 0;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--status-fail-ink);
-  }
-</style>
