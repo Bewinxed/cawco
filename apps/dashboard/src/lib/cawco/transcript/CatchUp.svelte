@@ -22,23 +22,11 @@
   in:rise={"--dur-panel"}
   out:rise={"--dur-exit"}
 >
-  <!-- literal: 6px, 50% -->
+  <!-- The one thing that moves, and only for a reader who has not asked for
+       less: the dot beats on --breath. Still, the tag's presence carries it. -->
   <span
     aria-hidden="true"
-    class="size-(--dot) flex-none rounded-(--dot-r) bg-status-live-ink"
+    class="size-space-2 flex-none rounded-pill bg-status-live-ink motion-safe:animate-breath"
     data-slot="beat"
-    style:--dot="6px"
-    style:--dot-r="50%"
   ></span>Catching up…
 </div>
-
-<style>
-  /* residual: keyframes */
-  /* The one thing that moves, and only for a reader who has not asked for
-     less: the dot beats on --breath. Still, the tag's presence carries it. */
-  [data-slot="beat"] {
-    @media (prefers-reduced-motion: no-preference) {
-      animation: breath var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-</style>
