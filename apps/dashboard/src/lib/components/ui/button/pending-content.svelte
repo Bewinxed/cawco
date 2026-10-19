@@ -250,18 +250,15 @@
           >{pendingLabel}</span
         >
       {:else if swapsLabel}
-        <!-- literal: blur(2px) (the wording that steps out goes soft) -->
-        <span
-          class="inline-grid justify-items-start"
-          data-slot="words"
-          style:--words-blur="blur(2px)"
+        <!-- The wording that steps out goes soft (DESIGN.md, Buttons: Pending). -->
+        <span class="inline-grid justify-items-start" data-slot="words"
           ><span
             aria-hidden={pending || undefined}
-            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:filter-(--words-blur)"
+            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
             data-active={!pending}><MorphText text={label} /></span
           ><span
             aria-hidden={!pending || undefined}
-            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:filter-(--words-blur)"
+            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
             data-active={pending}>{pendingLabel}</span
           ></span
         >
@@ -270,12 +267,10 @@
       {/if}</span
     >
     {#if reason}
-      <!-- literal: 32ch -->
       <span
-        class="type-meta block max-w-(--measure) text-status-fail-ink whitespace-normal wrap-anywhere"
+        class="type-meta block max-w-(--c-pending-reason-w) text-status-fail-ink whitespace-normal wrap-anywhere"
         data-reason
         role="alert"
-        style:--measure="32ch"
         transition:unfold>{reason}</span
       >
     {/if}</span
