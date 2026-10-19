@@ -96,6 +96,7 @@ async function sweep(page: Page, file: string, theme: string): Promise<void> {
         return (
           rest.length > 0 &&
           rest.every((frame) =>
+            // biome-ignore lint/performance/useTopLevelRegex: this runs in the page, which sees none of the module's scope
             /^(drawn|failed|empty)/.test(
               frame.querySelector(".cawco-frame-status")?.textContent?.trim() ??
                 ""
