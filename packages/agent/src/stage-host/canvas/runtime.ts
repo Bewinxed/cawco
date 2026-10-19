@@ -1637,15 +1637,24 @@ export function boot(options: BootOptions): void {
    * person's own pan or zoom lets it go. While it is held, it is shown again
    * as its box changes (its component mounting, the faces arriving, the
    * scheme re-dressing it), so where it stands never depends on when.
+   * Shown on the next frame, never inside the observer's own delivery:
+   * `show` names the frame in the canvas's head (`chrome.current`), which
+   * can resize the canvas it watches, and a write in the callback was a
+   * ResizeObserver loop the page reported as its error on a phone.
    */
   let held: { key: string; el: HTMLElement } | null = null;
+  let reshow = 0;
   const holding = new ResizeObserver(() => {
-    if (held?.el.isConnected) {
-      show(held.key, held.el, false);
-    }
+    cancelAnimationFrame(reshow);
+    reshow = requestAnimationFrame(() => {
+      if (held?.el.isConnected) {
+        show(held.key, held.el, false);
+      }
+    });
   });
   const letGo = () => {
     held = null;
+    cancelAnimationFrame(reshow);
     holding.disconnect();
   };
 
