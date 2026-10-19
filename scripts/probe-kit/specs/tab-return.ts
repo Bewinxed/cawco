@@ -28,7 +28,12 @@
  *    a Chromium that does not isolate the preview's site run it: c (as a),
  *    e (hidden `HELD_MS`, held: no animation frame or timer of the page's
  *    runs), d (as b). The kept returns, a, c and e, are read again on
- *    WebKit, without a trace.
+ *    WebKit, without a trace, each a person's press: c and e the pointer's,
+ *    and f (as c) the strip's arrow key, whose reach and choice are one key.
+ * 3. A session with nothing said yet (the preview's, the light ones') shown
+ *    in turn, on Chromium and on WebKit: its blank state, never a skeleton
+ *    (a skeleton that never went kept its pane laid out and its sweep
+ *    running); then all put away, every loop in their panes held.
  *
  * Each Chromium return is a pointer's switch, as two-pane-perf's `point`
  * makes it (the pointer comes onto the tab, rests `REACH_MS`, presses),
@@ -37,9 +42,10 @@
  * and `AFTER_READY_MS` past it for a reloaded preview), on a CPU `SLOWER`
  * times slower; the style and layout passes and elements restyled from the
  * input to the frame that shows the pane (`workOf`); the press's
- * interaction by Event Timing. A WebKit return is the tab's click. Each
- * return is a leg gated on the spec's own CPU pressure (`quietLeg`). Every
- * number is written to `numbers.json`.
+ * interaction by Event Timing. A WebKit return is a person's press
+ * (`pressBack`), timed by the event's own stamp, with the dashboard's first
+ * animation frames after it. Each return is a leg gated on the spec's own
+ * CPU pressure (`quietLeg`). Every number is written to `numbers.json`.
  *
  * The busy session streams as the spec lets it: once seeded, its live turns
  * run only while the busy tab is away (one per `TURN_MS` of the absence) and
@@ -47,8 +53,10 @@
  * run, on any tree, is shown the same turns at the same points; each return
  * says how many elements the page put in from the reach on (`inserted`). A
  * return to the preview says when the pane reached into its frame to post
- * (`watchPosts`), when its release reached the page, the page's own long
- * tasks before its first frame, and that frame.
+ * (`watchPosts`, from the reach on), when its release reached the page, the
+ * page's own long tasks before its first frame, and that frame. While a
+ * busy tab is away, its turns running, every loop in a pane off screen is
+ * read (`hiddenLoopsOf`).
  *
  * Asserted per Chromium return: its interaction under `INPUT_MS`, and,
  * for a busy or kept return, its longest task within two frames' budget
@@ -58,7 +66,9 @@
  * the page go and loaded it again. Asserted per kept return, on every
  * engine: the page is the document it was (no reload), held off screen
  * (none of its animation frames or timers ran), and its first animation
- * frame after the press comes within `BACK_MS`.
+ * frame after the press comes within `BACK_MS`. Asserted in leg 3: each
+ * silent session's blank state and no skeleton; and wherever the loops off
+ * screen are read, none running.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one return at a time, as a person makes them
 import { cp, mkdir, writeFile } from "node:fs/promises";
@@ -128,6 +138,8 @@ const LANDED_MS = 1500;
 const REACH_TASK_MS = 12;
 /** Transcript's `ROW_ESTIMATE`: virtua's size for a row it has not measured, px. */
 const ROW_ESTIMATE = 21;
+/** How long leg 3 shows each silent session before reading its pane: its read has long landed. */
+const SILENT_MS = 5000;
 /** A press this soon after the reach comes while the warm pane's rows are still staged (Transcript `parkRows`). */
 const PRESS_IN_STAGING_MS = 40;
 /** An interaction's length in `inputsOf`'s line. */
@@ -141,6 +153,8 @@ const RIVE = join(
 interface Back {
   /** What other renderers' main threads (an out-of-process preview's) ran in the second after the press, by event. */
   elsewhere: string;
+  /** The dashboard's first animation frames after the press, ms after it (WebKit's, read on its own clock); empty where the trace reads them. */
+  frames: number[];
   /** Every task of `HEAVY_MS` or more from the reach on: when after the press, what it ran, its CPU and what it restyled. */
   heavy: string;
   /** A busy return: its list's heights at the landing (`heightsOf`). */
@@ -171,6 +185,8 @@ interface Back {
   psi: string;
   /** The longest task between the reach and the press, CPU ms. */
   reach: number;
+  /** When the pointer came onto the tab or the focus did, epoch ms. */
+  reachAt: number;
   /** That task said whole: what it ran, its restyle, the changes that scheduled it and its sampled stacks. */
   reachWhat: string;
   scene: string;
@@ -229,6 +245,8 @@ interface Clock {
 interface PageBack {
   /** From the press to its first animation frame after it, ms; null when none came. */
   firstTickMs: number | null;
+  /** The dashboard's first animation frames after the press, ms after it; empty where unread. */
+  frames: number[];
   /** Frame and timer requests any of its scripts made while its tab was off screen (held, each waits); NaN when its page was gone. */
   hiddenCalls: number;
   /** Its animation frames and interval ticks while its tab was off screen; NaN when its page was gone. */
@@ -238,8 +256,10 @@ interface PageBack {
   longAfter: [number, number][];
   /** Its own long animation frames in the same span, each said whole (when after the press, its length, its rendering and style shares, its scripts). */
   longFramesAfter: string[];
-  /** From the press to the pane's first reach into the frame to post (`watchPosts`), ms; null where unread (WebKit) or none came. */
+  /** From the press to the pane's first reach into the frame to post after it, ms; null when none came. */
   postMs: number | null;
+  /** The pane's reaches into the frame to post (`watchPosts`) from the reach on, ms after the press (negative: before it); the first is its release. */
+  posts: number[];
   /** From the press to the pane's `cawco:release` reaching the page, ms; null when none came after the press. */
   releaseMs: number | null;
   /** Its document was replaced, or gone: the return loaded it again. */
@@ -308,7 +328,8 @@ function pageBack(
   hidden: Clock | null,
   after: Clock | null,
   pressAt: number,
-  posts: number[]
+  posts: number[],
+  { frames, reachAt }: { frames: number[]; reachAt: number }
 ): PageBack {
   const posted = posts.find((at) => at >= pressAt);
   const kept = !!(before && hidden && hidden.born === before.born);
@@ -329,6 +350,11 @@ function pageBack(
         ? Math.round(after.releasedAt - pressAt)
         : null,
     postMs: posted === undefined ? null : Math.round(posted - pressAt),
+    posts: posts
+      .filter((at) => at >= reachAt && at <= pressAt + WINDOW_MS)
+      .slice(0, 6)
+      .map((at) => Math.round(at - pressAt)),
+    frames,
     // An observer buffered and live can say a task twice: each once, by its start.
     longAfter: [
       ...new Map(
@@ -354,7 +380,7 @@ function pageBack(
 }
 
 const pageLine = (back: PageBack) =>
-  `its page ${back.reloaded ? "loaded again" : "kept"}; off screen ${back.hiddenTicks} animation frames and ${back.hiddenTimers} interval ticks, ${back.hiddenCalls} frame and timer requests; the pane reached into its frame ${back.postMs === null ? "unread" : `${back.postMs}ms after the press`}; its release reached it ${back.releaseMs === null ? "never" : `${back.releaseMs}ms after the press`}; its own long tasks before its first frame ${back.longAfter.map(([at, ms]) => `${ms}ms at ${at}ms`).join(", ") || "none"}, its long frames ${back.longFramesAfter.join("; ") || "none"}; its first animation frame ${back.firstTickMs === null ? "never came" : `${back.firstTickMs}ms after the press`}`;
+  `its page ${back.reloaded ? "loaded again" : "kept"}; off screen ${back.hiddenTicks} animation frames and ${back.hiddenTimers} interval ticks, ${back.hiddenCalls} frame and timer requests; the pane reached into its frame ${back.postMs === null ? "never after the press" : `${back.postMs}ms after the press`} (from the reach on: ${back.posts.map((ms) => `${ms}ms`).join(", ") || "none"}); the dashboard's frames ${back.frames.length > 0 ? `${back.frames.map((ms) => `${ms}ms`).join(", ")} after the press` : "read off the trace"}; its release reached it ${back.releaseMs === null ? "never" : `${back.releaseMs}ms after the press`}; its own long tasks before its first frame ${back.longAfter.map(([at, ms]) => `${ms}ms at ${at}ms`).join(", ") || "none"}, its long frames ${back.longFramesAfter.join("; ") || "none"}; its first animation frame ${back.firstTickMs === null ? "never came" : `${back.firstTickMs}ms after the press`}`;
 
 /**
  * The heavy page: Rive's runtime and its wasm (compiled and instantiated at
@@ -535,14 +561,22 @@ async function pointAt(page: Page, input: CDPSession, id: string) {
   };
 }
 
-/** A switch nobody measures: the tab's own click, the pointer parked off the strip. */
+/**
+ * A switch nobody measures: the tab's own click, the pointer parked off the
+ * strip. A tab already chosen is left as it is: its click opens its details
+ * (PaneTabs `clickTab`), which stood pinned over every leg after.
+ */
 async function away(page: Page, id: string): Promise<void> {
   await page.mouse.move(0, 0);
   await page
     .locator(`[data-session-tab="${id}"]`)
     .filter({ visible: true })
     .first()
-    .evaluate((el) => (el as HTMLElement).click());
+    .evaluate((el) => {
+      if (el.getAttribute("aria-selected") !== "true") {
+        (el as HTMLElement).click();
+      }
+    });
 }
 
 /**
@@ -870,6 +904,60 @@ function landingOf(page: Page, pane: string): Promise<string> {
     [SCROLLER, pane] as const
   );
 }
+
+/**
+ * Every animation in a pane off screen, put away (PaneLeaf
+ * `data-pane-hidden`) or laid out unseen (`data-pane-settling`: drawing its
+ * first picture, or warm), by its play state and whether it runs on an
+ * element or its `::before`/`::after`.
+ */
+const hiddenLoopsOf = (page: Page) =>
+  page.evaluate(() => {
+    const panes = [
+      ...document.querySelectorAll<HTMLElement>(
+        '[data-slot="pane"][data-pane-hidden], [data-slot="pane"][data-pane-settling]'
+      ),
+    ];
+    const unseen = (pane: HTMLElement) =>
+      pane.hasAttribute("data-pane-settling");
+    /** A loop said: its pane, the slot it stands in, its element and its keyframes. */
+    const named = (loop: Animation, effect: KeyframeEffect, el: Element) =>
+      `${(el.closest("[data-pane]") as HTMLElement | null)?.dataset.pane?.slice(0, 8)} ${el.parentElement?.closest("[data-slot]")?.getAttribute("data-slot") ?? ""} ${el.localName}.${[...el.classList].slice(0, 2).join(".")}${effect.pseudoElement ?? ""} ${(loop as CSSAnimation).animationName ?? "script"}`;
+    const runs = document.getAnimations().flatMap((loop) => {
+      const effect = loop.effect as KeyframeEffect | null;
+      const el = effect?.target;
+      return effect && el && panes.some((one) => one.contains(el))
+        ? [{ loop, effect, el }]
+        : [];
+    });
+    const running = runs.filter(({ loop }) => loop.playState === "running");
+    const pseudo = runs.filter(({ effect }) => effect.pseudoElement).length;
+    const laidOut = panes.filter(unseen).length;
+    const where = running
+      .slice(0, 4)
+      .map(({ loop, effect, el }) => named(loop, effect, el));
+    return {
+      running: running.length,
+      paused: runs.length - running.length,
+      panes: panes.length,
+      line: `${runs.length} animations in ${panes.length} panes off screen (${panes.length - laidOut} put away, ${laidOut} laid out unseen): ${running.length} running, ${runs.length - running.length} paused; ${runs.length - pseudo} on elements, ${pseudo} on ::before/::after${where.length > 0 ? ` (running: ${where.join(", ")})` : ""}`,
+    };
+  });
+
+/**
+ * Pane `pane` as it stands: whether it says nothing has been said there
+ * (SessionPane's blank state) and how many transcript skeletons stand in it.
+ */
+const silentStateOf = (page: Page, pane: string) =>
+  page.evaluate((id) => {
+    const box = document.querySelector<HTMLElement>(
+      `[data-slot="pane"][data-pane="${CSS.escape(id)}"]`
+    );
+    return {
+      blank: !!box?.textContent?.includes("Nothing has been said here yet"),
+      skeletons: box?.querySelectorAll("[data-skeleton]").length ?? -1,
+    };
+  }, pane);
 
 /** The dashboard's reaches into a preview's frame (`watchPosts`), epoch ms. */
 const postsOf = (page: Page) =>
@@ -1263,10 +1351,12 @@ async function measureBack(
     : Number.NaN;
   return {
     held,
+    frames: [],
     inserted,
     input: press ?? "none reported",
     inputMs,
     pressAt: origin + madeAt,
+    reachAt: reachEpoch,
     elsewhere:
       main
         .elsewhere(madeMark, madeMark + ELSEWHERE_MS * 1000)
@@ -1325,22 +1415,120 @@ async function measureBack(
   };
 }
 
-/** One return to `id` on WebKit, which has no trace: the tab's click, timed by the dashboard's clock, and the window after it. */
-async function clickBack(
+/**
+ * In the dashboard's own document: the next press (a pointer's or a key's),
+ * when it came by the event's own stamp (epoch ms), and the dashboard's
+ * first animation frames after it.
+ */
+function armPress(): void {
+  const w = window as unknown as {
+    __press: number;
+    __pressFrames: number[];
+    __pressOff?: () => void;
+  };
+  w.__pressOff?.();
+  w.__press = 0;
+  w.__pressFrames = [];
+  const look = () => {
+    w.__pressFrames.push(performance.timeOrigin + performance.now());
+    if (w.__pressFrames.length < 4) {
+      requestAnimationFrame(look);
+    }
+  };
+  const pressed = (event: Event) => {
+    if (w.__press) {
+      return;
+    }
+    const now = performance.now();
+    // The event's stamp, unless this engine's is on another clock.
+    const stamp =
+      event.timeStamp > 0 && event.timeStamp <= now ? event.timeStamp : now;
+    w.__press = performance.timeOrigin + stamp;
+    requestAnimationFrame(look);
+  };
+  addEventListener("pointerdown", pressed, true);
+  addEventListener("keydown", pressed, true);
+  w.__pressOff = () => {
+    removeEventListener("pointerdown", pressed, true);
+    removeEventListener("keydown", pressed, true);
+  };
+}
+
+/** What `armPress` read: the press, epoch ms, and the dashboard's frames after it. */
+const pressOf = (page: Page) =>
+  page.evaluate(() => {
+    const w = window as unknown as {
+      __press: number;
+      __pressFrames: number[];
+      __pressOff?: () => void;
+    };
+    w.__pressOff?.();
+    return { at: w.__press, frames: [...w.__pressFrames] };
+  });
+
+/**
+ * One return to `id` on WebKit, which has no trace: a person's press, timed
+ * by the dashboard's clock, and the window after it. `pointer`: the pointer
+ * comes onto the tab, rests `REACH_MS`, presses; `keyboard`: the focus rests
+ * on the chosen tab before it as long, and the arrow moves onto it and
+ * chooses it, in one key (TabsList `onkeydown`).
+ */
+async function pressBack(
   page: Page,
   id: string,
+  how: "pointer" | "keyboard",
   waitFor?: () => Promise<boolean>
 ): Promise<Read> {
-  const pressAt = await page
+  const tab = page
     .locator(`[data-session-tab="${id}"]`)
     .filter({ visible: true })
-    .first()
-    .evaluate((el) => {
-      const at = performance.timeOrigin + performance.now();
-      (el as HTMLElement).click();
-      return at;
-    });
+    .first();
+  await tab.scrollIntoViewIfNeeded();
+  const box = await tab.boundingBox();
+  if (!box) {
+    throw new Error("tab-return: a tab to switch to has no box");
+  }
+  await page.evaluate(armPress);
+  const reachAt = await page.evaluate(
+    () => performance.timeOrigin + performance.now()
+  );
+  if (how === "pointer") {
+    await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+    await page.waitForTimeout(REACH_MS);
+    await page.mouse.down();
+    await page.mouse.up();
+  } else {
+    // The strip's own keys (TabsList): the focus on the chosen tab before
+    // it, where a Tab into the strip lands, then the arrow that moves the
+    // focus onto it and chooses it.
+    const strip = page
+      .locator('[role="tab"][data-session-tab]')
+      .filter({ visible: true });
+    const ids = await strip.evaluateAll((tabs) =>
+      tabs.map((one) => one.getAttribute("data-session-tab"))
+    );
+    const at = ids.indexOf(id);
+    if (at < 1) {
+      throw new Error("tab-return: a keyboard return needs a tab before it");
+    }
+    await strip.nth(at - 1).focus();
+    await page.waitForTimeout(REACH_MS);
+    const focused = await page.evaluate(() =>
+      document.activeElement?.getAttribute("data-session-tab")
+    );
+    if (focused !== ids[at - 1]) {
+      throw new Error(
+        `tab-return: the focus is not on the tab before it (${focused ?? "elsewhere"})`
+      );
+    }
+    await page.keyboard.press("ArrowRight");
+  }
   await page.waitForTimeout(WINDOW_MS);
+  const press = await pressOf(page);
+  if (!press.at) {
+    throw new Error(`tab-return: the ${how}'s press never reached the page`);
+  }
+  const pressAt = press.at;
   if (waitFor) {
     const began = Date.now();
     while (!(await waitFor()) && Date.now() - began < READY_MS) {
@@ -1360,12 +1548,14 @@ async function clickBack(
   return {
     held: "not read",
     heavy: "not traced",
-    input: "a click, not traced",
+    frames: press.frames.map((at) => Math.round(at - pressAt)),
+    input: `a ${how}'s press, not traced`,
     inputMs: 0,
     inserted: 0,
     longest: 0,
-    longestWhat: `not traced; the dashboard's thread stood still at most ${Math.round(worstMs)}ms, ${Math.round(worstAt - pressAt)}ms after the press (its longest timer gap)`,
+    longestWhat: `not traced; the dashboard's thread stood still at most ${Math.round(worstMs)}ms, ${Math.round(worstAt - pressAt)}ms after the press (its longest timer gap; every gap over 50ms: ${gaps.map(([at, ms]) => `${Math.round(ms)}ms at ${Math.round(at - pressAt)}ms`).join(", ") || "none"})`,
     pressAt,
+    reachAt,
     elsewhere: "not traced",
     reach: 0,
     reachWhat: "not traced",
@@ -1418,6 +1608,33 @@ function checkStaging(kit: Kit, back: Back): void {
     back.warmTask <= REACH_TASK_MS,
     back.warmWhat.slice(0, 600)
   );
+}
+
+/** Each read of the loops in panes off screen (`hiddenLoopsOf`), by the leg it was read in. */
+type LoopRead = { scene: string } & Awaited<ReturnType<typeof hiddenLoopsOf>>;
+/** Leg 3's readings: each silent session's pane once shown (`silentStateOf`). */
+type SilentRead = { scene: string } & Awaited<ReturnType<typeof silentStateOf>>;
+
+/** Leg 3's silent sessions each show their blank state and no skeleton; every read of the loops off screen finds none running. */
+function checkQuiet(
+  kit: Kit,
+  silentReads: SilentRead[],
+  loopReads: LoopRead[]
+): void {
+  for (const read of silentReads) {
+    kit.check(
+      `${read.scene}: its blank state stands, never a skeleton`,
+      read.blank && read.skeletons === 0,
+      `${read.blank ? "its blank state stands" : "no blank state"}, ${read.skeletons} skeletons in its pane`
+    );
+  }
+  for (const read of loopReads) {
+    kit.check(
+      `${read.scene}: every animation in a pane off screen is held (none running)`,
+      read.running === 0,
+      read.line
+    );
+  }
 }
 
 const run = async (kit: Kit) => {
@@ -1477,7 +1694,7 @@ const run = async (kit: Kit) => {
     const page = await kit.page(
       "desk",
       engine === "webkit"
-        ? { engine: "webkit", init: [watchGaps] }
+        ? { engine: "webkit", init: [watchGaps, watchPosts] }
         : {
             init: [watchCost, watchPosts, watchSizes],
             oneProcess: engine === "one-process",
@@ -1546,6 +1763,31 @@ const run = async (kit: Kit) => {
   );
 
   const backs: Back[] = [];
+  const loopReads: LoopRead[] = [];
+  const silentReads: SilentRead[] = [];
+  /**
+   * Leg 3: each session with nothing said yet (the preview's, the light
+   * ones') shown in turn for `SILENT_MS`: its blank state stands, and no
+   * skeleton; then all put away, every loop in their panes held.
+   */
+  const silentLeg = async (on: Desk, engine: string) => {
+    for (const [i, id] of [previewed, ...lights].entries()) {
+      await away(on.page, id);
+      await on.page.waitForTimeout(SILENT_MS);
+      const state = await silentStateOf(on.page, id);
+      const said = `3 (${engine}): silent session ${i + 1} shown ${SILENT_MS / 1000}s`;
+      silentReads.push({ scene: said, ...state });
+      kit.note(
+        `${said}: ${state.blank ? "its blank state stands" : "no blank state"}, ${state.skeletons} skeletons in its pane`
+      );
+    }
+    await away(on.page, front);
+    await on.page.waitForTimeout(SETTLE_MS);
+    loopReads.push({
+      scene: `3 (${engine}): the silent sessions put away`,
+      ...(await hiddenLoopsOf(on.page)),
+    });
+  };
   /**
    * One return to `to`: a busy tab's, a kept preview's (the quiet tab in
    * front for `absence`), or a preview's past the bound (`pastBound`). A
@@ -1558,7 +1800,8 @@ const run = async (kit: Kit) => {
     to: string,
     kind: Back["kind"],
     absence = SHORT_MS,
-    rest = REACH_MS
+    rest = REACH_MS,
+    how: "pointer" | "keyboard" = "pointer"
   ) => {
     const { page, input, ready } = on;
     const got: { read?: Read; page?: PageBack } = {};
@@ -1576,6 +1819,8 @@ const run = async (kit: Kit) => {
         // Away from the busy tab, its session runs the absence's turns, landed before the return.
         if (turns > 0) {
           await scene.release(turns);
+          // Its session still answering, every loop in a pane off screen is held.
+          loopReads.push({ scene: name, ...(await hiddenLoopsOf(page)) });
           await page.waitForTimeout(LANDED_MS);
         }
         await page.waitForTimeout(Math.max(0, absence - (Date.now() - began)));
@@ -1584,14 +1829,15 @@ const run = async (kit: Kit) => {
       const waitFor = kind === "past" ? ready : undefined;
       got.read = input
         ? await measureBack(page, input, to, waitFor, rest)
-        : await clickBack(page, to, waitFor);
+        : await pressBack(page, to, how, waitFor);
       if (kind !== "busy") {
         got.page = pageBack(
           before,
           hidden,
           await clockOf(page, to),
           got.read.pressAt,
-          await postsOf(page)
+          await postsOf(page),
+          got.read
         );
       }
     });
@@ -1644,6 +1890,7 @@ const run = async (kit: Kit) => {
       "kept"
     );
     await leg(isolated, "2b: preview, back past the bound", previewed, "past");
+    await silentLeg(isolated, "Chromium");
     await isolated.page.close();
     // Scene 2 again with the preview's page on the dashboard's own thread:
     // every WebKit, and Chromium where it does not isolate the preview's site.
@@ -1710,6 +1957,16 @@ const run = async (kit: Kit) => {
       "kept",
       HELD_MS
     );
+    await leg(
+      webkit,
+      `2f (WebKit): preview, back after ${SHORT_MS / 1000}s by the keyboard (kept, held)`,
+      previewed,
+      "kept",
+      SHORT_MS,
+      REACH_MS,
+      "keyboard"
+    );
+    await silentLeg(webkit, "WebKit");
   };
   // TAB_RETURN_LEGS=busy: scene 1 alone, its busy returns.
   if (process.env.TAB_RETURN_LEGS === "busy") {
@@ -1760,6 +2017,7 @@ const run = async (kit: Kit) => {
       );
     }
   }
+  checkQuiet(kit, silentReads, loopReads);
 };
 
 const spec: Spec = { name: "tab-return", run };
