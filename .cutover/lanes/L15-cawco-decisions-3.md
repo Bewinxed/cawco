@@ -38,3 +38,8 @@ none
 none
 
 fixed: none
+
+## Design critique (interface-craft, from markup and CSS against DESIGN.md)
+fixed: Diagram.svelte, Preview.svelte, Section.svelte dead or duplicate declarations removed (see Removed)
+gap: Preview.svelte:149 `min-block-size: 12rem` and `max-block-size: 80vb` are real frame dimensions with no `--c-*` token — and this bundle has no Tailwind to read one through
+gap: ui-observer not run: no bench or stories file renders the decision host in this workspace, so rendered layout is Not verified
