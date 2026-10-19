@@ -35,9 +35,11 @@ const PAYLOAD =
 const KEYS: Record<string, string> = {
   Waiting: PAYLOAD,
   WaitingRipple: PAYLOAD,
+  WaitingSweep: PAYLOAD,
   LastMinute: PAYLOAD,
   Scanner: PAYLOAD,
   ScanMatched: PAYLOAD,
+  ScanMatchedAsk: PAYLOAD,
 };
 const READY = '[data-cawco-story="NeedsYou"] [data-slot="row"]';
 

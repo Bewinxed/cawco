@@ -1,5 +1,7 @@
 <script lang="ts" module>
   export type ScanStopName = "idle" | "matched" | "nomatch";
+  /** What a matched scan does: approve at once, or show the code and ask. */
+  export type ScanDoes = "approve" | "ask";
 </script>
 
 <script lang="ts">
@@ -8,17 +10,17 @@
    * phone's width, at rest in the stop's phase, and the control that plays
    * T9 (open, match, approve) or T10 (no match). The sheet slides in over
    * dur-panel on ease-drawer and leaves over dur-exit, as the kit's sheets
-   * do. Preview only.
+   * do. What a scan does is picked on the decision page. Preview only.
    */
   import { onDestroy, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import IconPlay from "~icons/solar/play-bold-duotone";
   import { dur } from "../../motion/curves.svelte";
   import ScanSheet, { type ScanPhase } from "../ScanSheet.svelte";
-  import PickSwitch from "./PickSwitch.svelte";
-  import { FIXTURE, picks, timeline, verification } from "./picks.svelte";
+  import { FIXTURE, timeline, verification } from "./fixture";
 
-  let { stop }: { stop: ScanStopName } = $props();
+  let { stop, scan = "approve" }: { stop: ScanStopName; scan?: ScanDoes } =
+    $props();
 
   const rest = (): { code: string | null; phase: ScanPhase } => {
     switch (stop) {
@@ -83,7 +85,7 @@
       steps.after(dur("--dur-panel") + dur("--dur-hold"), () => {
         phase = "matched";
         ({ code } = FIXTURE);
-        if (picks.scan === "approve") {
+        if (scan === "approve") {
           steps.after(landed(), approve);
         }
       });
@@ -123,30 +125,13 @@
         size="xs"
         variant="secondary"
       />
-      {#if stop === "matched"}
-        <PickSwitch
-          choice="scan-does"
-          onchange={(value) => {
-            picks.scan = value;
-          }}
-          options={[
-            {
-              value: "approve",
-              label: "A scan approves at once (recommended)",
-            },
-            { value: "ask", label: "A scan shows the code, then asks" },
-          ]}
-          question="What a scan does"
-          value={picks.scan}
-        />
-      {/if}
     </div>
   {/if}
   <div class="phone">
     <div class="slide" data-open={open || undefined}>
       {#key run}
         <ScanSheet
-          ask={picks.scan === "ask"}
+          ask={scan === "ask"}
           {code}
           device={FIXTURE.device}
           onapprove={approve}

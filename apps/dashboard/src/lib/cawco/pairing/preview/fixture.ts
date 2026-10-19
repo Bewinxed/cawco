@@ -1,9 +1,7 @@
 /**
- * The pairing sheet's open choice the scanner plays (what a scan does),
- * and its fixtures. Preview only; the build takes the owner's picks and
- * this goes with the sheet's harness.
+ * The pairing sheet's fixtures and its stops' storyboard timer. Preview
+ * only; it goes with the sheet's harness once the owner's picks are built.
  */
-export const picks = $state<{ scan: "approve" | "ask" }>({ scan: "approve" });
 
 /** The fixture: the hub, the code its waiting browser shows, and another fleet's. */
 export const FIXTURE = {

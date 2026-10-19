@@ -30,12 +30,13 @@
    *              Caw is loading
    *   arrive     the dots shuffle and lock (PairingQr) while the letters
    *              type in on the same beat; then the key waits
-   *   waiting    a light sweeps the card's edge and the dots glint under
-   *              it; no countdown until the last minute, when it appears
-   *              and the light warms; Caw is ready
-   *   checking   (the phone scanned it) the light stops, the key steps
-   *              back, the letters pulse, the line asks to compare; Caw
-   *              points to them (needs-you)
+   *   waiting    the card pings (or rings ripple from the head, or a light
+   *              rides its edge: the take); no countdown until the last
+   *              minute, when it appears and the ring warms; Caw is ready
+   *   checking   (the phone scanned it) the key steps back and a spinner
+   *              runs the card's edge for the handshake, the letters
+   *              pulse, the line asks to compare; Caw points to them
+   *              (needs-you)
    *   approved   the key pours into the head (or flies up to Caw), Caw
    *              plays done, the card folds away (morph), and the
    *              dashboard opens: the screen never sits here
@@ -48,14 +49,17 @@
    *   failed     no key and no boxes: Caw (needs-you), why in one line,
    *              Try again, and the hub's own words under Show details
    *
-   * Every place opens and closes through morph(), so what is under it moves
-   * with it and nothing jumps. Without motion, every beat is a fade.
+   * The key's places open and close through unfold (motion/fold): the
+   * height folds with a fade over dur-exit (dur-pop open), so what is under
+   * it slides and nothing jumps; morph() cannot, as it never tweens to or
+   * from nothing. Without motion, every beat is a fade.
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { Button } from "#lib/components/ui/button/index.js";
   import Caw, { type CawStatus } from "../home/Caw.svelte";
   import { dur } from "../motion/curves.svelte";
+  import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
   import OtpCells, { type OtpTone } from "./OtpCells.svelte";
   import PairingQr, { type QrAct, type QrWait } from "./PairingQr.svelte";
@@ -67,7 +71,7 @@
     now,
     payload,
     leaving = false,
-    wait = "sweep",
+    wait = "ping",
     approved = "swallow",
     expired = "park",
     caw = true,
@@ -382,9 +386,9 @@
       </Swap>
     </div>
 
-    <div data-slot="qr-place" class="place" {@attach morph()}>
+    <div data-slot="qr-place" class="place">
       {#if card}
-        <div class="slot">
+        <div class="slot" transition:unfold>
           <PairingQr
             {act}
             payload={kind === "asking" || kind === "failed" ? null : payload}
@@ -395,9 +399,9 @@
       {/if}
     </div>
 
-    <div data-slot="cells-place" class="place cells" {@attach morph()}>
+    <div data-slot="cells-place" class="place cells">
       {#if cells}
-        <div class="slot">
+        <div class="slot" transition:unfold>
           <OtpCells
             code={kind === "asking" || kind === "failed" ? null : code}
             {falling}
