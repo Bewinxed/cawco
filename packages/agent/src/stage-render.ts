@@ -25,11 +25,14 @@ import {
 } from "@cawco/core/stage";
 import type { Socket, TCPSocketListener } from "bun";
 import { browserExecutable, chromiumSandboxed } from "./capabilities";
+import { findFrame, framePicture, poseFrame } from "./frame-picture";
 
 /** How long a render may take, page load to the last section's report. */
 const RENDER_WAIT_MS = STAGE_RENDER_MS;
 /** The quiet a page keeps after its last report before it is read. Ours: the canvas posts 200 ms after its last change. */
 const SETTLE_MS = 600;
+/** The window a render opens in: the desk's. A frame its canvas can't hold whole at its own size grows it (frame-picture.ts `poseFrame`). */
+const VIEWPORT = { width: 1440, height: 900 };
 
 /** Why a render can't run on this machine, in the words a tool answers. */
 export class RenderRefusal extends Error {}
@@ -38,6 +41,7 @@ export class RenderRefusal extends Error {}
 export interface RenderState {
   interaction?: Interaction;
   scheme?: "light" | "dark";
+  /** Its story's name, or `file:Story` where two of the canvas's states files name one story alike. */
   story: string;
   width?: number;
 }
@@ -161,7 +165,6 @@ const pageUrl = (origin: string, ask: RenderAsk): string => {
 /** What the page itself says once every section has been drawn: its newest report. */
 interface CanvasOnPage {
   __cawcoCanvas?: {
-    go: (key: string) => void;
     reports: number;
     swept: boolean;
   };
@@ -197,7 +200,7 @@ export async function renderCanvas(
   });
   try {
     const page = await browser.newPage({
-      viewport: { width: 1440, height: 900 },
+      viewport: VIEWPORT,
       colorScheme: ask.state?.scheme ?? "light",
     });
     await page.goto(pageUrl(origin, ask), { timeout: RENDER_WAIT_MS });
@@ -231,24 +234,11 @@ export async function renderCanvas(
         png: (await page.screenshot()).toString("base64"),
       };
     }
-    const frame = page
-      .locator(
-        `.cawco-frame[data-cawco-story="${state.story}"][data-cawco-interaction="${state.interaction ?? "rest"}"]`
-      )
-      .first();
-    const key = await frame.getAttribute("data-cawco-key");
-    if (key) {
-      await page.evaluate(
-        (one) => (globalThis as unknown as CanvasOnPage).__cawcoCanvas?.go(one),
-        key
-      );
-      await page.waitForTimeout(SETTLE_MS);
-    }
+    const key = await findFrame(page, state.story, state.interaction);
+    await poseFrame(page, key, RENDER_WAIT_MS);
     return {
       report,
-      png: (await frame.locator(".cawco-frame-body").screenshot()).toString(
-        "base64"
-      ),
+      png: (await framePicture(page, key)).png.toString("base64"),
     };
   } finally {
     await browser.close().catch(() => undefined);

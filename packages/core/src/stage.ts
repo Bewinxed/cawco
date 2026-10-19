@@ -187,6 +187,24 @@ export interface RenderReport {
   unnamed: string[];
 }
 
+/**
+ * A frame's body as it stands on its canvas's page, read for its picture:
+ * what the canvas answers (stage-host canvas runtime.ts `picture`) and the
+ * agent's frame-picture.ts holds a picture to.
+ */
+export interface FramePictureRead {
+  /** Its own CSS size, before any transform. */
+  own: { h: number; w: number };
+  /** Its box on the page, CSS px. */
+  rect: { h: number; w: number; x: number; y: number };
+  /** Device pixels per CSS px. */
+  scale: number;
+  /** Where the canvas stands, in words, for a refusal. */
+  view: string;
+  /** Whether it stands whole in the canvas and the window. */
+  whole: boolean;
+}
+
 /** A layout edge an agent declares between two frames (by story, `file:Story` when the canvas has several sections). */
 export interface CanvasEdge {
   from: string;

@@ -10,17 +10,19 @@
  * light ones, whole groups of stories one picture, 18 uniform files).
  *
  * Each shot, in the page that holds its frame:
- *  1. the world at zoom 1, the viewport grown until the frame fits the
- *     canvas, and the frame brought to the middle by the canvas's own `go`;
- *  2. its animations landed (`settle`), its fonts and images loaded;
- *  3. read from the DOM before shooting: the frame's story, file, width and
- *     scheme are the ones named, its body stands whole inside the canvas
- *     and the viewport at its own width (zoom 1), and every point of a grid
- *     over it hits the frame's own body, so nothing (the chrome, a label,
- *     another frame) covers it;
- *  4. shot by its body's rect alone, and its pixels read back: not one
- *     colour, and at the grid's points the colour its DOM paints there, in
- *     its scheme (the body's `color-scheme`).
+ *  1. posed, settled and pictured by agent frame-picture.ts, the one path
+ *     every picture of a frame takes (the daemon's render too): the window
+ *     grown by the room the canvas lacks, the frame at its own size whatever
+ *     the window's width, its fonts and animations settled, its body's own
+ *     rect shot, refused unless whole in the canvas and its CSS size times
+ *     the device's scale (a refusal is this shot's fault);
+ *  2. read from the DOM before shooting: the frame's story, file, width and
+ *     scheme are the ones named, every part of it (shadow roots too) draws
+ *     in its scheme, it holds what the shot asks, its images loaded, and
+ *     every point of a grid over it hits its own body, so nothing (the
+ *     chrome, a label, another frame) covers it;
+ *  3. its pixels read back: not one colour, and at the grid's points the
+ *     colour its DOM paints there.
  * Over the set: no light file is byte-identical to its dark twin, and no
  * two files are byte-identical. A shot that fails any of these fails the
  * leg `checkShots` names.
@@ -30,7 +32,12 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import type { Page } from "playwright-core";
 import { PNG } from "pngjs";
-import { type Kit, settle, type Theme } from "./kit";
+import {
+  FramePictureRefusal,
+  framePicture,
+  poseFrame,
+} from "../../packages/agent/src/frame-picture";
+import type { Kit, Theme } from "./kit";
 
 /** One frame to capture, and where its png goes. */
 export interface Shot {
@@ -57,8 +64,8 @@ export interface ShotRead extends Shot {
   stats: { height: number; matched: string; top: number; width: number };
 }
 
-/** The canvas leaves this much room round a frame it shows (runtime.ts `WORLD_INSET`, both sides). */
-const ROOM = { x: 48, y: 32 };
+/** How long a frame may take to have its room and settle. */
+const POSE_MS = 10_000;
 /** Points per side of the grid each shot is hit-tested and colour-read on. */
 const GRID = 5;
 /** A pixel matches its DOM's paint within this much per channel (antialiasing, a shadow's edge). */
@@ -72,23 +79,9 @@ const UNIFORM = 0.99;
 const frameSelector = (shot: Omit<Shot, "path">) =>
   `.cawco-frame[data-cawco-file="${shot.file}"][data-cawco-story="${shot.story}"][data-cawco-width="${shot.width}"][data-cawco-scheme="${shot.scheme}"][data-cawco-interaction="rest"]`;
 
-/** The frame's key and boxes, its canvas's and the viewport's. */
-type Layout = NonNullable<ReturnType<typeof layoutOf>>;
-
-/** The frame's key and boxes, its canvas's and the viewport's, in the page. */
-function layoutOf(selector: string) {
-  const frame = document.querySelector<HTMLElement>(selector);
-  const canvas = document.getElementById("cawco-canvas");
-  if (!(frame && canvas)) {
-    return null;
-  }
-  return {
-    key: frame.dataset.cawcoKey ?? "",
-    frame: { w: frame.offsetWidth, h: frame.offsetHeight },
-    canvas: { w: canvas.clientWidth, h: canvas.clientHeight },
-    viewport: { w: innerWidth, h: innerHeight },
-  };
-}
+/** The frame's key, in the page. */
+const keyOf = (selector: string): string | null =>
+  document.querySelector<HTMLElement>(selector)?.dataset.cawcoKey ?? null;
 
 interface Painted {
   /** The colour the DOM paints at the point, 0–255 sRGB, or null where it can't be told (an image, a gradient, text on it). */
@@ -100,24 +93,13 @@ interface Painted {
 /** What `identityOf` read. */
 type Seen = NonNullable<ReturnType<typeof identityOf>>;
 
-/** What the DOM says of the frame before it is shot: whose it is, where it stands, whether it is loaded. In the page. */
+/** What the DOM says of the posed frame before it is shot: whose it is, its scheme, what it holds, whether its images loaded. In the page. */
 function identityOf(args: { selector: string; holds: string | null }) {
   const frame = document.querySelector<HTMLElement>(args.selector);
   const body = frame?.querySelector<HTMLElement>(":scope > .cawco-frame-body");
-  const canvas = document.getElementById("cawco-canvas");
-  if (!(frame && body && canvas)) {
+  if (!(frame && body)) {
     return null;
   }
-  const rect = body.getBoundingClientRect();
-  const room = canvas.getBoundingClientRect();
-  const within = (
-    inner: DOMRect,
-    outer: { bottom: number; right: number; left: number; top: number }
-  ) =>
-    inner.left >= outer.left - 0.5 &&
-    inner.top >= outer.top - 0.5 &&
-    inner.right <= outer.right + 0.5 &&
-    inner.bottom <= outer.bottom + 0.5;
   return {
     story: frame.dataset.cawcoStory ?? "",
     file: frame.dataset.cawcoFile ?? "",
@@ -125,12 +107,6 @@ function identityOf(args: { selector: string; holds: string | null }) {
     scheme: frame.dataset.cawcoScheme ?? "",
     colorScheme: getComputedStyle(body).colorScheme,
     label: frame.querySelector(".cawco-frame-words")?.textContent?.trim() ?? "",
-    rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
-    own: { w: body.offsetWidth, h: body.offsetHeight },
-    inside:
-      within(rect, room) &&
-      within(rect, { left: 0, top: 0, right: innerWidth, bottom: innerHeight }),
-    fontsLoaded: document.fonts.status === "loaded",
     held: args.holds === null || body.querySelector(args.holds) !== null,
     unloaded: [...body.querySelectorAll("img")]
       .filter((img) => !(img.complete && img.naturalWidth > 0))
@@ -291,46 +267,6 @@ function matchedOf(
   return { hit, read: read.length, misses };
 }
 
-/**
- * Brings the frame whole into the canvas at zoom 1 by the canvas's own
- * `go`, the viewport grown by whatever room the canvas lacks, and waits for
- * it to settle: its animations landed, its fonts loaded.
- */
-async function placeFrame(page: Page, layout: Layout): Promise<void> {
-  const need = { w: layout.frame.w + ROOM.x, h: layout.frame.h + ROOM.y };
-  const lackW = need.w - layout.canvas.w;
-  const lackH = need.h - layout.canvas.h;
-  if (lackW > 0 || lackH > 0) {
-    await page.setViewportSize({
-      width: layout.viewport.w + Math.max(0, Math.ceil(lackW)),
-      height: layout.viewport.h + Math.max(0, Math.ceil(lackH)),
-    });
-    // `go` centres the frame in the canvas as wide as it is when called:
-    // the canvas has its room first, or the frame is centred in the old one.
-    await page
-      .waitForFunction(
-        (room) => {
-          const canvas = document.getElementById("cawco-canvas");
-          return (
-            !!canvas &&
-            canvas.clientWidth >= room.w &&
-            canvas.clientHeight >= room.h
-          );
-        },
-        need,
-        { timeout: 5000 }
-      )
-      .catch(() => undefined);
-  }
-  await page.evaluate((key) => {
-    (
-      window as unknown as { __cawcoCanvas: { go: (k: string) => void } }
-    ).__cawcoCanvas.go(key);
-  }, layout.key);
-  await settle(page, 50);
-  await page.evaluate(() => document.fonts.ready.then(() => undefined));
-}
-
 /** What the DOM, read before the shot, says is wrong with it. */
 function faultsOf(
   shot: Shot,
@@ -348,19 +284,10 @@ function faultsOf(
     ],
     [astray.length > 0, `parts drawn in another scheme: ${astray.join("; ")}`],
     [
-      Math.abs(seen.rect.w - seen.own.w) > 0.5,
-      `drawn ${seen.rect.w.toFixed(1)} wide for its own ${seen.own.w} (zoom not 1)`,
-    ],
-    [
-      !seen.inside,
-      `not whole inside the canvas and viewport: ${JSON.stringify(seen.rect)}`,
-    ],
-    [
       grid.covered.length > 0,
       `covered: ${grid.covered.slice(0, 3).join("; ")}`,
     ],
     [!seen.held, `holds no ${shot.holds} when shot`],
-    [!seen.fontsLoaded, "fonts still loading"],
     [
       seen.unloaded.length > 0,
       `images not loaded: ${seen.unloaded.join(", ")}`,
@@ -369,12 +296,20 @@ function faultsOf(
   return rules.filter(([broken]) => broken).map(([, words]) => words);
 }
 
-/** One frame shot: placed, read from the DOM, captured by its body's rect, its pixels read back. */
-async function shootOne(
-  page: Page,
-  shot: Shot,
-  scale: number
-): Promise<ShotRead> {
+/** A refusal's words, for a shot's faults; anything else is no refusal and goes on up. */
+const refused = (error: unknown): string => {
+  if (error instanceof FramePictureRefusal) {
+    return error.message;
+  }
+  throw error;
+};
+
+/**
+ * One frame shot: posed and settled and pictured by agent frame-picture.ts
+ * (every picture of a frame's one path, its refusals this shot's faults),
+ * read from the DOM before, its pixels read back after.
+ */
+async function shootOne(page: Page, shot: Shot): Promise<ShotRead> {
   const selector = frameSelector(shot);
   const blank: ShotRead = {
     ...shot,
@@ -383,11 +318,17 @@ async function shootOne(
     label: "",
     stats: { width: 0, height: 0, top: 0, matched: "0/0" },
   };
-  const layout = await page.evaluate(layoutOf, selector);
-  if (!layout) {
+  const key = await page.evaluate(keyOf, selector);
+  if (!key) {
     return { ...blank, faults: ["no such frame on the canvas"] };
   }
-  await placeFrame(page, layout);
+  const posed = await poseFrame(page, key, POSE_MS).then(
+    () => null,
+    (error: unknown) => refused(error)
+  );
+  if (posed) {
+    return { ...blank, faults: [posed] };
+  }
   const seen = await page.evaluate(identityOf, {
     selector,
     holds: shot.holds ?? null,
@@ -402,24 +343,20 @@ async function shootOne(
     grid,
     await page.evaluate(astrayOf, selector)
   );
-  const buffer = await page.screenshot({
-    clip: {
-      x: seen.rect.x,
-      y: seen.rect.y,
-      width: seen.rect.w,
-      height: seen.rect.h,
-    },
-    animations: "disabled",
-    caret: "hide",
-  });
+  const picture = await framePicture(page, key).catch((error: unknown) =>
+    refused(error)
+  );
+  if (typeof picture === "string") {
+    return { ...blank, label: seen.label, faults: [...faults, picture] };
+  }
   await mkdir(dirname(shot.path), { recursive: true });
-  await writeFile(shot.path, buffer);
-  const png = PNG.sync.read(buffer);
+  await writeFile(shot.path, picture.png);
+  const png = PNG.sync.read(picture.png);
   const top = topShareOf(png);
   if (top >= UNIFORM) {
     faults.push(`one colour: ${(top * 100).toFixed(2)}% of it`);
   }
-  const match = matchedOf(png, scale, grid.points);
+  const match = matchedOf(png, picture.read.scale, grid.points);
   if (match.read === 0 || match.hit < match.read * MATCH_SHARE) {
     faults.push(
       `the picture is not its DOM's paint: ${match.hit} of ${match.read} points match (${match.misses.join("; ")})`
@@ -428,7 +365,7 @@ async function shootOne(
   return {
     ...shot,
     faults,
-    hash: createHash("md5").update(buffer).digest("hex"),
+    hash: createHash("md5").update(picture.png).digest("hex"),
     label: seen.label,
     stats: {
       width: png.width,
@@ -449,16 +386,10 @@ export async function shootFrames(
   page: Page,
   shots: Shot[]
 ): Promise<ShotRead[]> {
-  await page.evaluate(() => {
-    (
-      window as unknown as { __cawcoCanvas: { setView: (v: object) => void } }
-    ).__cawcoCanvas.setView({ zoom: 1 });
-  });
-  const scale = await page.evaluate(() => devicePixelRatio);
   const reads: ShotRead[] = [];
   for (const shot of shots) {
     // biome-ignore lint/performance/noAwaitInLoops: one frame on screen at a time
-    reads.push(await shootOne(page, shot, scale));
+    reads.push(await shootOne(page, shot));
   }
   return reads;
 }
