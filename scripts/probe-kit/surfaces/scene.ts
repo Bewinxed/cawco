@@ -38,12 +38,13 @@
  * by the tool results the conversation holds since (artifacts.ts's shape).
  */
 import { createHash } from "node:crypto";
-import { cp, mkdir, writeFile } from "node:fs/promises";
+import { cp, mkdir, truncate, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   CLAUDE_DIR_NAME,
   CLAUDE_JSON_NAME,
 } from "../../../packages/core/src/claude-dirs";
+import { LARGE_FILE_BYTES } from "../../../packages/core/src/move";
 import { seedDecisions } from "../../decisions-preview/seed";
 import type { Machine, Reply, Seen } from "../../scratch-fleet";
 import { ACCOUNT, MACHINE, until } from "../../scratch-fleet";
@@ -612,7 +613,12 @@ const plans = (repo: string): Record<string, Step[]> => ({
     {
       tool: {
         name: ARTIFACT_CREATE,
-        input: { kind: "sheet", name: "chip-card", file: CARD_SHEET },
+        input: {
+          kind: "component",
+          name: "chip-card",
+          file: CARD_SHEET,
+          about: "The chip card's two stories, each prop a control.",
+        },
       },
     },
     {
@@ -1073,11 +1079,17 @@ const MOVE_TITLE = "Move the sketches";
 const MOVE_ASK_MS = 120_000;
 
 /**
- * A project whose folder is no git repository, moved to the second online
+ * A project with a big file not yet committed, moved to the second online
  * machine as a delegate's or the API's move is, with no yes from New
- * session: the move's first step asks for it (`git init` first), on its
+ * session: the move's first step asks for it (the file to LFS first), on its
  * session's row (moves.ts `askId`), and waits there. Its session is the
  * scene's `moving`.
+ *
+ * The project is made from a plain folder, which the hub makes a repository
+ * off the request (hub place-repo.ts); the big file lands after that first
+ * commit, so it stays uncommitted, as moves.ts `needsApproval` reads one. It
+ * is sparse: its size is all the move's inspection reads (agent move.ts
+ * `sizes`).
  */
 async function startMove(fleet: KitFleet): Promise<void> {
   if (!seeded) {
@@ -1095,6 +1107,17 @@ async function startMove(fleet: KitFleet): Promise<void> {
     cwd: place,
     caw: false,
   });
+  await until(
+    "the sketches made a repository",
+    () =>
+      Bun.spawnSync(["git", "-C", place, "rev-parse", "-q", "--verify", "HEAD"])
+        .success || undefined,
+    () => true,
+    MOVE_ASK_MS
+  );
+  const sketch = join(place, "chip-tray.psd");
+  await writeFile(sketch, "");
+  await truncate(sketch, LARGE_FILE_BYTES);
   const response = await fetch(
     `${fleet.base}/api/projects/${project.id}/moves`,
     {
@@ -1102,7 +1125,11 @@ async function startMove(fleet: KitFleet): Promise<void> {
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         machineId: BENCH_MACHINE,
-        spawn: { harness: "claude", title: MOVE_TITLE },
+        spawn: {
+          harness: "claude",
+          permissionMode: "bypassPermissions",
+          title: MOVE_TITLE,
+        },
         prompt: "Read the sketches' README.",
       }),
     }
@@ -2278,8 +2305,8 @@ export async function seedScene(
  * stories, each package at the dashboard's version; a session that hands
  * the card to a delegate, which links the dashboard's packages into its
  * clone (`linkPackages`) and makes the card's sheet (`artifact_create`,
- * kind sheet), which starts its stage, then hands in. Its scene names the
- * sheet (`sheet`) and the session (`shower`).
+ * kind component, with its about), which starts its stage, then hands in.
+ * Its scene names the sheet (`sheet`) and the session (`shower`).
  */
 export async function seedSheet(
   kit: Kit,
@@ -2342,7 +2369,7 @@ export async function seedSheet(
     "the delegate's sheet filed",
     () =>
       fleet.query<{ id: string }>(
-        "SELECT id FROM artifacts WHERE kind = 'sheet'"
+        "SELECT id FROM artifacts WHERE kind = 'component'"
       )[0]?.id,
     Boolean,
     300_000
