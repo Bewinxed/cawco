@@ -36,6 +36,17 @@ export class ProjectDecisions {
       : cawco.decisionShapeOf(this.#project())?.graphed === true;
   }
 
+  /**
+   * Whether the decisions are a graph is known: the list is read (or its
+   * read failed), or the hub's measured shapes are (`decisionShapesRead`).
+   * Until then the tab stands neither the list's skeleton nor the graph's.
+   */
+  get known(): boolean {
+    return (
+      this.list !== null || this.problem !== null || cawco.decisionShapesRead
+    );
+  }
+
   /** Pages still waiting for picks: the tab's trail. */
   get waiting(): number {
     return (

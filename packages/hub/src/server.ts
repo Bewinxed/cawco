@@ -687,6 +687,7 @@ import {
   FolderRefusal,
   folderFileNames,
   folderFileNamesIfThere,
+  hasProjectFolder,
   listFolder,
   projectFolderRoutes,
   projectRoot,
@@ -19727,13 +19728,15 @@ export const createServer = (
   // A project made from a template before the hub recorded which one is
   // known by its stages.md (stages.ts `templateOf`: kinds and moves, through
   // renames), so its starter skills reach it. A tie is left to Apply template.
+  // A project with no folder has no stages.md to know it by, and booting
+  // never makes one (reading stages.md would).
   const recordTemplates = async (): Promise<void> => {
     let found = false;
     for (const project of db.listProjects()) {
-      if (project.template) {
+      // biome-ignore lint/performance/noAwaitInLoops: one project's folder at a time, once per boot
+      if (project.template || !(await hasProjectFolder(project.id))) {
         continue;
       }
-      // biome-ignore lint/performance/noAwaitInLoops: one project's folder at a time, once per boot
       const view = await tasks.stages(project.id).catch(() => undefined);
       if (!(view?.source === "file" && view.problems.length === 0)) {
         continue;

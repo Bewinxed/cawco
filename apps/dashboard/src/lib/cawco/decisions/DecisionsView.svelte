@@ -13,7 +13,6 @@
   import { decisionsWords as words } from "@cawco/core";
   import type { DecisionGraph as Graph } from "@cawco/core/decisions";
   import { untrack } from "svelte";
-  import type { Attachment } from "svelte/attachments";
   import type { TransitionConfig } from "svelte/transition";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -110,7 +109,13 @@
   const graphed = $derived(decisions.graphed);
   /** List or graph: the graph only while the decisions form one. */
   const view = $derived<DecisionsMode>(graphed ? mode : "list");
-  const shown = $derived(page ? `page:${page}` : view);
+  /** What stands: null while whether it is a graph is not known yet (`known`), so no skeleton is guessed. */
+  const shown = $derived.by(() => {
+    if (page) {
+      return `page:${page}`;
+    }
+    return decisions.known ? view : null;
+  });
   const empty = $derived(list !== null && pages.length === 0);
   /** The List | Graph segment's room above the list, while the decisions form a graph. */
   const underSeg = $derived(!page && graphed);
@@ -119,14 +124,11 @@
     shape ? Array.from({ length: shape.pages }, (_, i) => i) : []
   );
   /**
-   * When the list's wait began: the reading grid's own arrival. A tile
-   * counted in after it (the shapes read later) carries that wait on rather
+   * When the tab's wait began: its opening. A skeleton that stands after it
+   * (the shapes read later, a tile counted in) carries that wait on rather
    * than waiting the grace again (`carriesWait`).
    */
-  let waitFrom = performance.now();
-  const waitBegins: Attachment = () => {
-    waitFrom = performance.now();
-  };
+  const waitFrom = performance.now();
   /** Caw's empty state arriving: one cross-fade, unless Caw lands into it by his flight, which is its arrival. */
   const cawArrives = (node: Element, flying: boolean): TransitionConfig =>
     flying ? { duration: 0 } : crossIn(node);
@@ -145,7 +147,11 @@
   $effect.pre(() => {
     const next = shown;
     if (next !== was) {
-      untrack(() => swap.swap([], order(next) >= order(was) ? 1 : -1));
+      // The first view to stand once known arrives as itself, not as a swap.
+      const from = was;
+      if (next !== null && from !== null) {
+        untrack(() => swap.swap([], order(next) >= order(from) ? 1 : -1));
+      }
       was = next;
     }
   });
@@ -237,147 +243,151 @@
   {/if}
   <div class="dswap">
     {#key shown}
-      <div
-        class={["dview", underSeg && "under-seg"]}
-        out:leave
-        style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
-      >
-        {#if page}
-          <DecisionPage
-            {card}
-            hrefOf={taskHref}
-            name={page}
-            {now}
-            onback={back}
-            {onopentask}
-            {projectId}
-            summary={pages.find((each) => each.name === page)}
-            {taskOf}
-          />
-        {:else if view === "graph"}
-          {#if graphProblem}
-            <p class="problem" role="alert">{graphProblem}</p>
-          {/if}
-          <!-- The graph's own box while it is read, then the graph in one
+      {#if shown !== null}
+        <div
+          class={["dview", underSeg && "under-seg"]}
+          out:leave
+          style="animation:{swap.rowAnim(0, ListSwap.leaveEnd(0))}"
+        >
+          {#if page}
+            <DecisionPage
+              {card}
+              hrefOf={taskHref}
+              name={page}
+              {now}
+              onback={back}
+              {onopentask}
+              {projectId}
+              summary={pages.find((each) => each.name === page)}
+              {taskOf}
+            />
+          {:else if view === "graph"}
+            {#if graphProblem}
+              <p class="problem" role="alert">{graphProblem}</p>
+            {/if}
+            <!-- The graph's own box while it is read, then the graph in one
                cross-fade (crossOut, crossIn). -->
-          {#if graph}
-            <div class="graph-place" data-decisions-graph-read in:crossIn>
-              <DecisionGraph
-                {graph}
-                onopen={(name, at) => go({ page: name, card: at })}
-                onplace={place}
-              />
-            </div>
-          {:else if !graphProblem}
-            <div
-              aria-busy="true"
-              aria-label={words.readingGraph}
-              class="graph-place"
-              data-decisions-reading="graph"
-              role="status"
-              out:crossOut
-            >
-              <Skeleton class="graph-reading" />
-            </div>
-          {/if}
-        {:else if decisions.problem && !list}
-          <div class="state" in:crossIn>
-            <EmptyState
-              icon={IconDecisions}
-              line={words.unavailableLine(projectName, decisions.problem)}
-              title={words.unavailable}
-            >
-              {#snippet action()}
-                <Button onclick={() => decisions.read()} variant="outline"
-                  >{words.retry}</Button
-                >
-              {/snippet}
-            </EmptyState>
-          </div>
-        {:else if empty && canTalk}
-          <!-- Caw flying in from his seat lands by his flight (share `land`):
-               the state around him fades in only when he is not on his way. -->
-          {@const flying = departing(`caw:${projectId}`)}
-          <div
-            data-slot="caw-empty"
-            class="state caw-empty"
-            in:cawArrives={flying}
-          >
-            <EmptyState line={words.emptyCaw} title={words.empty}>
-              {#snippet mark()}
-                <div
-                  data-slot="caw-80"
-                  class="caw-80"
-                  data-share="caw:{projectId}"
-                  out:sitDown|global
-                >
-                  <CawSeat {lead} {projectId} {projectName} size={80} />
-                </div>
-              {/snippet}
-              {#snippet action()}
-                <!-- The ask is a starter: it opens his panel with its words
-                     in his composer, nothing sent. -->
-                <StarterCards
-                  onpick={(text) => lead.ask(text, "decisions")}
-                  {starters}
+            {#if graph}
+              <div class="graph-place" data-decisions-graph-read in:crossIn>
+                <DecisionGraph
+                  {graph}
+                  onopen={(name, at) => go({ page: name, card: at })}
+                  onplace={place}
                 />
-              {/snippet}
-            </EmptyState>
-          </div>
-        {:else if empty}
-          <div class="state" in:crossIn>
-            <EmptyState
-              icon={IconDecisions}
-              line={words.emptySession}
-              title={words.empty}
-            >
-              {#snippet action()}
-                <Button
-                  onclick={() => newSession({ projectId })}
-                  variant="outline">{words.newSession}</Button
-                >
-              {/snippet}
-            </EmptyState>
-          </div>
-        {:else}
-          {#if list}
-            <!-- A page published while the list is open arrives as rows do
-                 (motion/rows); the tiles it moves slide to their places. -->
-            <div data-slot="grid" class="grid" in:crossIn {@attach reflow()}>
-              {#each pages as each (each.name)}
-                <div class="cell" data-flip>
-                  <DecisionTile
-                    href={hrefOf({ page: each.name, card: null })}
-                    {now}
-                    onopen={open}
-                    page={each}
-                  />
-                </div>
-              {/each}
-            </div>
-          {:else}
-            <!-- A tile at a tile's size for each page the hub measured, in
-                 the grid's own columns, while the list is read; the list
-                 takes their place in one cross-fade. -->
-            <div
-              aria-busy="true"
-              aria-label={words.reading}
-              class="grid"
-              data-decisions-reading="list"
-              role="status"
-              out:crossOut
-              {@attach waitBegins}
-            >
-              {#each readingTiles as slot (slot)}
+              </div>
+            {:else if !graphProblem}
+              <div
+                aria-busy="true"
+                aria-label={words.readingGraph}
+                class="graph-place"
+                data-decisions-reading="graph"
+                role="status"
+                out:crossOut
+              >
                 <Skeleton
-                  class="tile-reading"
+                  class="graph-reading"
                   {@attach carriesWait(waitFrom)}
                 />
-              {/each}
+              </div>
+            {/if}
+          {:else if decisions.problem && !list}
+            <div class="state" in:crossIn>
+              <EmptyState
+                icon={IconDecisions}
+                line={words.unavailableLine(projectName, decisions.problem)}
+                title={words.unavailable}
+              >
+                {#snippet action()}
+                  <Button onclick={() => decisions.read()} variant="outline"
+                    >{words.retry}</Button
+                  >
+                {/snippet}
+              </EmptyState>
             </div>
+          {:else if empty && canTalk}
+            <!-- Caw flying in from his seat lands by his flight (share `land`):
+               the state around him fades in only when he is not on his way. -->
+            {@const flying = departing(`caw:${projectId}`)}
+            <div
+              data-slot="caw-empty"
+              class="state caw-empty"
+              in:cawArrives={flying}
+            >
+              <EmptyState line={words.emptyCaw} title={words.empty}>
+                {#snippet mark()}
+                  <div
+                    data-slot="caw-80"
+                    class="caw-80"
+                    data-share="caw:{projectId}"
+                    out:sitDown|global
+                  >
+                    <CawSeat {lead} {projectId} {projectName} size={80} />
+                  </div>
+                {/snippet}
+                {#snippet action()}
+                  <!-- The ask is a starter: it opens his panel with its words
+                     in his composer, nothing sent. -->
+                  <StarterCards
+                    onpick={(text) => lead.ask(text, "decisions")}
+                    {starters}
+                  />
+                {/snippet}
+              </EmptyState>
+            </div>
+          {:else if empty}
+            <div class="state" in:crossIn>
+              <EmptyState
+                icon={IconDecisions}
+                line={words.emptySession}
+                title={words.empty}
+              >
+                {#snippet action()}
+                  <Button
+                    onclick={() => newSession({ projectId })}
+                    variant="outline">{words.newSession}</Button
+                  >
+                {/snippet}
+              </EmptyState>
+            </div>
+          {:else}
+            {#if list}
+              <!-- A page published while the list is open arrives as rows do
+                 (motion/rows); the tiles it moves slide to their places. -->
+              <div data-slot="grid" class="grid" in:crossIn {@attach reflow()}>
+                {#each pages as each (each.name)}
+                  <div class="cell" data-flip>
+                    <DecisionTile
+                      href={hrefOf({ page: each.name, card: null })}
+                      {now}
+                      onopen={open}
+                      page={each}
+                    />
+                  </div>
+                {/each}
+              </div>
+            {:else}
+              <!-- A tile at a tile's size for each page the hub measured, in
+                 the grid's own columns, while the list is read; the list
+                 takes their place in one cross-fade. -->
+              <div
+                aria-busy="true"
+                aria-label={words.reading}
+                class="grid"
+                data-decisions-reading="list"
+                role="status"
+                out:crossOut
+              >
+                {#each readingTiles as slot (slot)}
+                  <Skeleton
+                    class="tile-reading"
+                    {@attach carriesWait(waitFrom)}
+                  />
+                {/each}
+              </div>
+            {/if}
           {/if}
-        {/if}
-      </div>
+        </div>
+      {/if}
     {/key}
   </div>
 </div>

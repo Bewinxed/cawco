@@ -148,21 +148,42 @@ export const ease = (name: `--ease-${string}`): string => rootToken(name);
  * where the one before it stood, seen or not, instead of waiting the grace
  * again. Past the grace it is negative, so the fade-in is already done.
  */
-const graceLeft = (since: number): string =>
-  `calc(var(--dur-wait-grace) - ${Math.round(performance.now() - since)}ms)`;
+const graceLeft = (waited: number): string =>
+  `calc(var(--dur-wait-grace) - ${waited}ms)`;
 
 /**
  * Hands what it is attached to the wait it carries on: `--wait-grace-left`
  * from `since` (`performance.now()`; null: a wait of its own), reckoned once,
  * as it is drawn, and inherited by every kit skeleton inside. Reckoned again
  * later it would bring a fade already under way forward.
+ *
+ * A CSS animation's delay counts from when its style first resolves, which
+ * a busy page (a cold load hydrating) puts off past the reckoning: so a frame
+ * on, each fade under it that took this delay is started at the reckoning
+ * instead, and begins at `since` + the grace however late its style came.
  */
 export const carriesWait =
   (since: number | null): Attachment<HTMLElement> =>
   (node) => {
-    if (since !== null && !node.style.getPropertyValue("--wait-grace-left")) {
-      node.style.setProperty("--wait-grace-left", graceLeft(since));
+    if (since === null || node.style.getPropertyValue("--wait-grace-left")) {
+      return;
     }
+    const reckoned = performance.now();
+    const waited = Math.round(reckoned - since);
+    node.style.setProperty("--wait-grace-left", graceLeft(waited));
+    const left = dur("--dur-wait-grace") - waited;
+    const frame = requestAnimationFrame(() => {
+      for (const run of node.getAnimations({ subtree: true })) {
+        if (
+          run instanceof CSSAnimation &&
+          run.animationName === "kit-fade-in" &&
+          Math.abs(Number(run.effect?.getTiming().delay) - left) < 1
+        ) {
+          run.startTime = reckoned;
+        }
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   };
 export const popScale = (): number =>
   Number.parseFloat(rootToken("--pop-scale"));

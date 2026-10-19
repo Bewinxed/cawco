@@ -1082,6 +1082,12 @@ const state = $state({
    */
   decisionShapes: {} as Record<string, DecisionsShape>,
   /**
+   * The first read of `decisionShapes` has settled, answered or not: until
+   * then no project's shape is known either way, and the Decisions tab
+   * stands no skeleton rather than guess the list's.
+   */
+  decisionShapesRead: false,
+  /**
    * How many times each project's arrangement of blocks has changed since
    * this page connected (`blocks.changed` frames): its pages read it again
    * when it moves.
@@ -2798,6 +2804,7 @@ async function refresh(): Promise<boolean> {
   if (shapes) {
     state.decisionShapes = shapes;
   }
+  state.decisionShapesRead = true;
   if (continuations) {
     adoptContinuations(continuations);
   }
@@ -8803,6 +8810,10 @@ export const cawco = {
   /** The project's decisions as the hub last measured or listed them; undefined while it has not. */
   decisionShapeOf: (projectId: string): DecisionsShape | undefined =>
     state.decisionShapes[projectId],
+  /** The first read of the measured shapes has settled (`decisionShapeOf` is the hub's word from here). */
+  get decisionShapesRead() {
+    return state.decisionShapesRead;
+  },
   /** A list read's word on the project's decisions (ProjectDecisions). */
   setDecisionShape: (projectId: string, shape: DecisionsShape | undefined) =>
     setDecisionShape(projectId, shape),

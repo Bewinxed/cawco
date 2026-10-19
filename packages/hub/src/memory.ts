@@ -165,6 +165,7 @@ import {
   folderFileNames,
   folderHistory,
   folderPath,
+  hasProjectFolder,
   listFolder,
   readFolderFile,
   refused,
@@ -3577,11 +3578,18 @@ export const createMemory = ({
     return rewritten.length;
   };
 
-  /** Every open proposal, parked again as the hub starts: the person's asks outlive it. */
+  /**
+   * Every open proposal, parked again as the hub starts: the person's asks
+   * outlive it. A project with no folder has none, and starting never makes
+   * one (reading its proposals would).
+   */
   const start = async (): Promise<void> => {
     await Promise.all(
       db.listProjects().map(async (project) => {
         try {
+          if (!(await hasProjectFolder(project.id))) {
+            return;
+          }
           await convertOneFileProposals(project);
           for (const proposal of await proposalsOf(project.id)) {
             parkProposal(proposal);
