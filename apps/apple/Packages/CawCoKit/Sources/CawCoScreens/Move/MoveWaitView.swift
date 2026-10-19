@@ -516,7 +516,7 @@ private final class StepRow: UIView {
         case .active: KitSpinner(side: 16, tint: Palette.inkStrong)
         case .ahead: Self.dot()
         case .failed: GlyphView(.failed, size: 16, tint: Palette.statusFailGlyph)
-        case .stopped: GlyphView(.stop, size: 16, tint: Palette.inkMuted)
+        case .stopped: GlyphView(.pause, size: 16, tint: Palette.inkMuted)
         case .asking: GlyphView(.attention, size: 16, tint: Palette.statusAttnGlyph)
         }
         let old = cell.subviews

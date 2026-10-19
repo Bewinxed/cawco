@@ -63,8 +63,8 @@
   import {
     IconArrowUpRight,
     IconChevronRight,
+    IconError,
     IconSuccess,
-    IconWarningTriangle,
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import AccountName from "./AccountName.svelte";
@@ -682,9 +682,9 @@
               <div data-slot="controls" class="controls">
                 <DevicePanel flow={device} machine={name} {online} />
               </div>
-              <span class={["st", "mark-line", state === "mismatch" && "warn"]}>
+              <span class={["st", "mark-line", state === "mismatch" && "fail"]}>
                 {#if !done && state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" /><span
+                  <IconError aria-hidden="true" /><span
                     >{words.someoneElse}</span
                   >
                 {:else if !online}
@@ -704,14 +704,14 @@
                   "st",
                   "mark-line",
                   done && "ok",
-                  state === "mismatch" && "warn",
+                  state === "mismatch" && "fail",
                 ]}
               >
                 {#if done}
                   <IconSuccess aria-hidden="true" /><span>{words.signedIn}</span
                   >
                 {:else if paste.phase === "mismatch" || state === "mismatch"}
-                  <IconWarningTriangle aria-hidden="true" /><span
+                  <IconError aria-hidden="true" /><span
                     >{words.someoneElse}</span
                   >
                 {:else if !online}
@@ -1162,8 +1162,8 @@
   .st.ok {
     color: var(--status-done-ink);
   }
-  .st.warn {
-    color: var(--status-attn-ink);
+  .st.fail {
+    color: var(--status-fail-ink);
   }
   .st :global(svg) {
     width: 14px;

@@ -5,14 +5,19 @@
    * name, and the chevron (HIG's disclosure indicator for a drill-in row) in
    * one fixed trailing column, the whole row one link to the account. The
    * provider's mark is the group header's alone. A second line only when
-   * something is wrong, in the attention ink behind the warning glyph; it
+   * something is wrong, in the attention ink behind the warning glyph (the
+   * fail ink behind the failure mark when a sign-in went wrong); it
    * tints in and its words morph as the problem changes (the board state
    * pill's recipe). Opening it, the name flies into the account page's title
    * (motion/share).
    */
   import { type Account, accountsWords as words } from "@cawco/core";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
-  import { IconChevronRight, IconWarningTriangle } from "#lib/icons.js";
+  import {
+    IconChevronRight,
+    IconError,
+    IconWarningTriangle,
+  } from "#lib/icons.js";
   import { hueVar, nameOf, problemOf } from "./model.svelte";
 
   let { account }: { account: Account } = $props();
@@ -38,9 +43,13 @@
       ></span
     >
     {#if problem}
-      <span class="problem mark-line" data-flip>
-        <IconWarningTriangle aria-hidden="true" />
-        <span><MorphText text={problem} /></span>
+      <span class="problem mark-line" data-broke={problem.broke} data-flip>
+        {#if problem.broke}
+          <IconError aria-hidden="true" />
+        {:else}
+          <IconWarningTriangle aria-hidden="true" />
+        {/if}
+        <span><MorphText text={problem.text} /></span>
       </span>
     {/if}
     <span data-slot="chev" aria-hidden="true" class="chev"
@@ -115,6 +124,9 @@
     font: var(--type-meta);
     color: var(--status-attn-ink);
     transition: color var(--dur-panel) var(--ease-out);
+  }
+  .problem[data-broke="true"] {
+    color: var(--status-fail-ink);
   }
   .problem :global(svg) {
     flex: none;

@@ -177,9 +177,12 @@ export function signinState(
  * What is wrong with an account, in its row's one line, or null: a machine
  * signed it in as somebody else, it is signed in nowhere, or an online
  * machine that runs its harnesses doesn't have it. An offline machine is
- * not a problem.
+ * not a problem. `broke` when a sign-in went wrong (it landed on somebody
+ * else and was signed out again): the failure mark, not the warning's.
  */
-export function problemOf(account: Account): string | null {
+export function problemOf(
+  account: Account
+): { broke: boolean; text: string } | null {
   const signins = (cawco.accounts?.signins ?? []).filter(
     (one) => one.accountId === account.id
   );
@@ -189,10 +192,13 @@ export function problemOf(account: Account): string | null {
       signinState(signins, account.id, machine.machineId) === "mismatch"
   );
   if (someoneElse) {
-    return words.problem.someoneElse(machineName(someoneElse));
+    return {
+      broke: true,
+      text: words.problem.someoneElse(machineName(someoneElse)),
+    };
   }
   if (!signins.some((one) => one.state === "signed-in")) {
-    return words.problem.nowhere;
+    return { broke: false, text: words.problem.nowhere };
   }
   const missing = online.filter(
     (machine) =>
@@ -201,7 +207,10 @@ export function problemOf(account: Account): string | null {
   if (missing.length === 0) {
     return null;
   }
-  return words.problem.missingOn(machineName(missing[0]), missing.length - 1);
+  return {
+    broke: false,
+    text: words.problem.missingOn(machineName(missing[0]), missing.length - 1),
+  };
 }
 
 /** A store a login moved from, by the harness that kept it. */

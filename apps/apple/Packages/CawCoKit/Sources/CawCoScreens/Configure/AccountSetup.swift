@@ -1051,7 +1051,7 @@ final class SetupMachineRow: UIStackView {
     private let top = UIStackView()
     /// The row's refusal (`.row-problem`) and its sign-in as someone else (`.row-warn`).
     private let problem = metaLine(ink: Palette.statusFailInk)
-    private let warn = metaLine(ink: Palette.statusAttnInk)
+    private let warn = metaLine(ink: Palette.statusFailInk)
     private let name: String
     private var wide: Bool?
 
@@ -1141,9 +1141,10 @@ final class SetupMachineRow: UIStackView {
             : !online && !done ? Words.Accounts.Setup.offline : nil
         state.text = words
         state.isHidden = words == nil
-        state.ink = done ? Palette.statusDoneInk : mismatch ? Palette.statusAttnInk : Palette.inkMuted
-        stateGlyph.glyph = done ? .passed : .warning
-        stateGlyph.tintColor = done ? Palette.statusDoneGlyph : Palette.statusAttnInk
+        // A sign-in that landed on somebody else went wrong: the failure mark.
+        state.ink = done ? Palette.statusDoneInk : mismatch ? Palette.statusFailInk : Palette.inkMuted
+        stateGlyph.glyph = done ? .passed : .failed
+        stateGlyph.tintColor = done ? Palette.statusDoneGlyph : Palette.statusFailInk
         stateGlyph.isHidden = !(done && flow != nil) && !(mismatch && !done)
         signIn?.isHidden = done || mismatch || !online || asked
         if let flow, let pasteControls {

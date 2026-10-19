@@ -2,7 +2,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "#lib/components/ui/alert/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  import { IconWarningTriangle } from "#lib/icons.js";
+  import { IconError } from "#lib/icons.js";
   /**
    * An editor before its row is read: the editor's own frame, footer and
    * all, standing at the height that editor settled at last time (cards),
@@ -42,7 +42,7 @@
   {/snippet}
   {#if problem}
     <Alert.Root variant="destructive">
-      <IconWarningTriangle />
+      <IconError />
       <Alert.Description>{problem}</Alert.Description>
     </Alert.Root>
   {/if}

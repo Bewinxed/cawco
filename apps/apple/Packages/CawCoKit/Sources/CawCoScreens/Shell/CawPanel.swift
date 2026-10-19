@@ -157,7 +157,7 @@ final class CawPanel: GlassContent {
         #endif
         for view in list.arrangedSubviews { view.removeFromSuperview() }
         if !needs.isEmpty {
-            list.addArrangedSubview(Self.head("Needs you", count: needs.count, glyph: .attention, tint: Palette.statusAttnGlyph))
+            list.addArrangedSubview(Self.head("Needs you", count: needs.count, glyph: .attentionSection, tint: Palette.statusAttnGlyph))
             for item in needs {
                 let row = NeedRow(item, now: now, sent: answers.sent[item.id], live: live)
                 row.onChoose = { [weak self] in
@@ -794,7 +794,7 @@ private final class NoticeRow: UIView {
                 // The failure glyph before the title (UpdateCard `.title`).
                 var parts: [UIView] = [title]
                 if notice.failed {
-                    let glyph = GlyphView(.alert, size: Size.iconMd, tint: Palette.statusFailGlyph)
+                    let glyph = GlyphView(.failed, size: Size.iconMd, tint: Palette.statusFailGlyph)
                     glyph.setContentHuggingPriority(.required, for: .horizontal)
                     parts.insert(glyph, at: 0)
                 }

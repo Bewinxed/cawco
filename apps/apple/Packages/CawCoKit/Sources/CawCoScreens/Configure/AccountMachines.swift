@@ -18,7 +18,7 @@ final class PastePanel: UIStackView, UITextFieldDelegate {
     private let field = KitField(placeholder: Words.Accounts.Signin.codePlaceholder)
     private lazy var doneButton = KitButton.make(Words.Accounts.Signin.done, variant: .action, height: .sm) { [weak self] in self?.submit() }
     private let problem = metaLine(ink: Palette.statusFailInk)
-    private let warn = metaLine(ink: Palette.statusAttnInk)
+    private let warn = metaLine(ink: Palette.statusFailInk)
     private let got = SignedInLine()
     private var drawnPhase: PasteSignin.Phase?
 
@@ -144,7 +144,7 @@ final class DevicePanel: UIStackView {
     private lazy var link = KitButton.make(Words.Accounts.Signin.openLink, glyph: .external, variant: .outline, height: .sm) { [weak self] in self?.openLink() }
     private lazy var start = KitButton.make(Words.Accounts.Device.start, variant: .outline, height: .sm) { [weak self] in self?.begin() }
     private let line = metaLine()
-    private let warn = metaLine(ink: Palette.statusAttnInk)
+    private let warn = metaLine(ink: Palette.statusFailInk)
     private let problem = metaLine(ink: Palette.statusFailInk)
     private let got = SignedInLine()
     private let buttons = UIStackView()
@@ -688,7 +688,7 @@ final class AccountMachineRow: UIStackView {
     var onSignOut: (() -> Void)?
     private let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
     private let state = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-    private let stateGlyph = GlyphView(.warning, size: 12, tint: Palette.statusAttnInk)
+    private let stateGlyph = GlyphView(.failed, size: 12, tint: Palette.statusFailInk)
     private let spinner = KitSpinner(side: 12)
     private lazy var action = KitButton.make(Words.Accounts.Machines.signIn, variant: .outline, height: .sm) { [weak self] in self?.onAction?() }
     private var menu: UIButton?
@@ -749,7 +749,7 @@ final class AccountMachineRow: UIStackView {
         let said = Words.Accounts.Machines.State.byKey[shown]
         let words = signingOut ? Words.Accounts.Machines.signingOut : said
         state.text = words
-        state.ink = shown == "mismatch" && !signingOut ? Palette.statusAttnInk : Palette.inkMuted
+        state.ink = shown == "mismatch" && !signingOut ? Palette.statusFailInk : Palette.inkMuted
         state.isHidden = words == nil
         stateGlyph.isHidden = shown != "mismatch" || signingOut
         spinner.isHidden = !signingOut

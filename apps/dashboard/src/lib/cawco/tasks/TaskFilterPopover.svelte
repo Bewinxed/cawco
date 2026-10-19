@@ -24,9 +24,9 @@
   import {
     IconChevronDown,
     IconClose,
+    IconError,
     IconFilter,
     IconPlus,
-    IconWarningTriangle,
   } from "#lib/icons.js";
   import { activeCount, NO_FILTER, type TaskFilter } from "./task-filter.js";
   import type { TaskFind } from "./task-find.svelte.js";
@@ -103,7 +103,7 @@
           variant={active > 0 ? "secondary" : "ghost"}
         >
           {#if find.problem}
-            <IconWarningTriangle data-find-problem="" />
+            <IconError data-find-problem="" />
           {:else}
             <IconFilter />
           {/if}

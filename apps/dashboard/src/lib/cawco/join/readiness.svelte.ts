@@ -6,8 +6,8 @@
  */
 import type { Component } from "svelte";
 import {
-  IconInfo,
-  IconLock,
+  IconInfoMark,
+  IconLocked,
   IconNeedsYou,
   IconSuccess,
   IconUnreachable,
@@ -38,7 +38,7 @@ export type ReadinessKind = Readiness["kind"];
 export type ReadinessHue = "done" | "attn" | null;
 
 export interface ReadinessLine {
-  /** A Solar duotone glyph, or the spinner while a check outlasts its grace. */
+  /** A solid Solar bold status glyph, or the spinner while a check outlasts its grace. */
   glyph: Component | "spinner";
   hue: ReadinessHue;
   /** What the Mac needs done there, in muted meta under the sentence. */
@@ -103,7 +103,7 @@ export function readinessLine(
       };
     case "locked":
       return {
-        glyph: IconLock,
+        glyph: IconLocked,
         hue: null,
         rest: "joined. Its screen is locked.",
         instruction: "Unlock the Mac to see what to allow.",
@@ -117,7 +117,7 @@ export function readinessLine(
       };
     case "no-xcode":
       return {
-        glyph: IconInfo,
+        glyph: IconInfoMark,
         hue: null,
         rest: "joined. It has no Xcode.",
         instruction:

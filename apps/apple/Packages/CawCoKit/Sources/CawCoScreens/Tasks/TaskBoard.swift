@@ -26,13 +26,18 @@ private final class TaskDrag: NSObject {
 // MARK: Card
 
 /// One task on the board: its id, its title, and only what it has to say
-/// past that — an attempt running or failed, a wait on you, what it waits
-/// on, its to-dos and labels. A task with nothing to say is two lines.
+/// past that — an attempt running or failed, a start the hub could not make
+/// (Can't start: the blocked mark in attn while it waits on a person or a
+/// machine, the failure mark in fail when the start broke), a wait on you,
+/// what it waits on, its to-dos and labels. A task with nothing to say is
+/// two lines.
 final class TaskCardView: UIControl {
     private(set) var task: TaskSummary?
     private let idLabel = KitLabel(TaskCardView.mono, ink: Palette.inkSubtle)
     private let problemGlyph = GlyphView(.warning, size: Size.iconSm, tint: Palette.inkMuted)
     private let failed = KitBadge("Failed", variant: .fail, glyph: .failed)
+    private let cantStartWaits = KitBadge("Can't start", variant: .attn, glyph: .blocked)
+    private let cantStartBroke = KitBadge("Can't start", variant: .fail, glyph: .failed)
     private let titleLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkRow, lines: 2)
     private let liveFoot = UIStackView()
     private let liveDot = UIView()
@@ -51,7 +56,7 @@ final class TaskCardView: UIControl {
         layer.cornerCurve = .continuous
         boxShadow = Shadow.shadowTile
 
-        let head = UIStackView(arrangedSubviews: [idLabel, problemGlyph, UIView(), failed])
+        let head = UIStackView(arrangedSubviews: [idLabel, problemGlyph, UIView(), cantStartWaits, cantStartBroke, failed])
         head.spacing = Space.space1
         head.alignment = .center
         head.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cBadgeH).isActive = true
@@ -95,7 +100,14 @@ final class TaskCardView: UIControl {
         task = next
         idLabel.text = next.id
         problemGlyph.isHidden = next.problem == nil
-        failed.isHidden = !(next.lastAttemptFailed && !next.liveAttempt)
+        // Why the hub could not start it, newer than any failure before; the
+        // hub's reason is what VoiceOver reads after the word.
+        let cantStart = next.startProblem != nil && !next.liveAttempt
+        let broke = next.startProblemKind == .broke
+        cantStartWaits.isHidden = !(cantStart && !broke)
+        cantStartBroke.isHidden = !(cantStart && broke)
+        for badge in [cantStartWaits, cantStartBroke] { badge.accessibilityValue = next.startProblem }
+        failed.isHidden = cantStart || !(next.lastAttemptFailed && !next.liveAttempt)
         titleLabel.text = next.title
 
         let you = next.kind == .you

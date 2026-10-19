@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { IconMapPoint, IconWarningTriangle } from "#lib/icons.js";
+  import { IconError, IconMapPoint } from "#lib/icons.js";
   /**
    * Any route that fails, or any path nothing answers, lands here inside the
    * shell: the rail stays, and one action goes back to the sessions.
@@ -20,7 +20,7 @@
 
 <div class="page">
   <EmptyState
-    icon={missing ? IconMapPoint : IconWarningTriangle}
+    icon={missing ? IconMapPoint : IconError}
     line={missing
       ? `Nothing is at ${page.url.pathname}.`
       : `${page.error?.message}`}

@@ -12,7 +12,7 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { IconWarningTriangle } from "#lib/icons.js";
+  import { IconError } from "#lib/icons.js";
   import { replaceState } from "$app/navigation";
   import { page } from "$app/state";
 
@@ -52,11 +52,7 @@
 
 <div class="page">
   {#if failure}
-    <EmptyState
-      icon={IconWarningTriangle}
-      line={failure}
-      title="Sign-in didn't finish"
-    >
+    <EmptyState icon={IconError} line={failure} title="Sign-in didn't finish">
       {#snippet action()}
         <Button href="/config/mcp" label="Back to MCP servers" />
       {/snippet}

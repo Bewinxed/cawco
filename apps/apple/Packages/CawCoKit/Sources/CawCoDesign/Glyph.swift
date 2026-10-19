@@ -3,7 +3,11 @@ import UIKit
 /// The web dashboard's glyphs: Solar bold duotone, and the few it draws itself
 /// (Resources/Icons.xcassets, written by apps/apple/scripts/icons.ts). Each
 /// is a template image, so it takes the tint it is drawn in; the duotone's
-/// second tone is its own opacity.
+/// second tone is its own opacity. A status mark is Solar's solid bold cut,
+/// never duotone (DESIGN.md, The failure mark and the blocked mark): a
+/// duotone's inner mark stands only on a half-tint of itself and vanishes at
+/// 16pt and below; a solid disc knocks it out in the surface. Where the web
+/// draws a glyph both as a status and as something else, each has its case.
 public enum Glyph: String, CaseIterable, Sendable {
     case ghost = "ghost-smile-bold-duotone"
     case rocket = "rocket-2-bold-duotone"
@@ -17,7 +21,10 @@ public enum Glyph: String, CaseIterable, Sendable {
     case fire = "fire-bold-duotone"
     case palette = "pallete-2-bold-duotone"
     case sparkles = "magic-stick-3-bold-duotone"
-    case attention = "hand-shake-bold-duotone"
+    /// Needs you: a status mark.
+    case attention = "hand-shake-bold"
+    /// Caw's Needs you section head, beside the Notices bell: not a status.
+    case attentionSection = "hand-shake-bold-duotone"
     case warning = "danger-triangle-bold-duotone"
     case structure = "structure-bold-duotone"
     case structureOn = "structure-bold"
@@ -25,7 +32,10 @@ public enum Glyph: String, CaseIterable, Sendable {
     case search = "magnifer-bold-duotone"
     case zoomIn = "minimalistic-magnifer-zoom-in-bold-duotone"
     case server = "server-2-bold-duotone"
-    case failed = "close-circle-bold-duotone"
+    /// The failure mark: something went wrong (failed, errored, broke).
+    case failed = "danger-circle-bold"
+    /// The blocked mark: a task the hub can't start until a person acts.
+    case blocked = "forbidden-circle-bold"
     case archive = "archive-down-minimlistic-bold-duotone"
     // The transcript's (apps/dashboard/src/lib/icons.ts).
     case user = "user-bold-duotone"
@@ -44,6 +54,8 @@ public enum Glyph: String, CaseIterable, Sendable {
     case toolTodo = "checklist-bold-duotone"
     case toolNotebook = "notebook-bold-duotone"
     case ask = "question-circle-bold-duotone"
+    /// Unreachable: the session status mark.
+    case unreachable = "question-circle-bold"
     case toolGeneric = "sledgehammer-bold-duotone"
     case info = "info-circle-bold-duotone"
     case stop = "stop-bold-duotone"
@@ -69,10 +81,13 @@ public enum Glyph: String, CaseIterable, Sendable {
     case copy = "copy-bold-duotone"
     case chevronBold = "alt-arrow-right-bold-duotone"
     // The session screen's chrome.
-    case passed = "check-circle-bold-duotone"
-    case sleeping = "moon-sleep-bold-duotone"
-    case pause = "pause-circle-bold-duotone"
-    case working = "refresh-circle-bold-duotone"
+    // The session status set: solid marks.
+    case passed = "check-circle-bold"
+    case sleeping = "moon-sleep-bold"
+    case pause = "pause-circle-bold"
+    case working = "refresh-circle-bold"
+    /// A tick that picks or resolves (a picker's row, a pin's Resolve): not a status.
+    case checkCircle = "check-circle-bold-duotone"
     case arrowUp = "arrow-up-linear"
     case chevronDown = "alt-arrow-down-linear"
     case chevronLeft = "alt-arrow-left-linear"
@@ -144,6 +159,10 @@ public enum Glyph: String, CaseIterable, Sendable {
     /// Spend's (IconDollar).
     case dollar = "dollar-bold-duotone"
     case clock = "clock-circle-bold-duotone"
+    /// An update that waits to install: an update cell's status mark.
+    case updateWaits = "clock-circle-bold"
+    /// An update available to install: an update cell's status mark.
+    case updateAvailable = "download-bold"
     case graphUp = "graph-up-bold-duotone"
     case bug = "bug-bold-duotone"
     /// StopTray.svelte's `Away`: a session whose machine is away stops when it is back.
@@ -174,7 +193,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     case columns = "widget-2-bold-duotone" // IconColumns
     case rulerPen = "ruler-cross-pen-bold-duotone" // IconRulerPen
     case mic = "microphone-bold-duotone" // IconMic
-    case minusCircle = "minus-circle-bold-duotone" // IconMinusCircle
+    case minusCircle = "minus-circle-bold" // IconMinusCircle: a status mark
     case shop = "shop-bold-duotone" // IconShop
     case history = "history-bold-duotone" // IconHistory
 

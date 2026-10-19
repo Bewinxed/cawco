@@ -99,7 +99,7 @@ final class RolloutChip: UIButton {
         let rollout = Rollout.of(scope, name: name, machines: hub.fleet.machines)
         let total = rollout.landings.count
         let refused = rollout.refused
-        let glyph: Glyph? = syncing ? .working : refused > 0 ? .warning : (total > 0 && rollout.applied == total ? .check : nil)
+        let glyph: Glyph? = syncing ? .working : refused > 0 ? .failed : (total > 0 && rollout.applied == total ? .passed : nil)
         let ink = refused > 0 ? Palette.statusFailInk : Palette.inkMuted
         var config = UIButton.Configuration.plain()
         config.contentInsets = .init(top: 0, leading: 8, bottom: 0, trailing: 8)
@@ -130,7 +130,7 @@ final class RolloutChip: UIButton {
             case "failed":
                 let fault = FleetFault(origin: .machine, scope: scope, key: scope == .memory ? "" : name, machineId: machine.machineId,
                                        harness: nil, detail: landing.detail, cause: .of(landing.detail))
-                return UIAction(title: machine.name, subtitle: subtitle, image: Glyph.warning.image.resized(to: 16)) { [weak self] _ in
+                return UIAction(title: machine.name, subtitle: subtitle, image: Glyph.failed.image.resized(to: 16)) { [weak self] _ in
                     self?.openFault?(FaultGroup([fault]))
                 }
             case "applied":

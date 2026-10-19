@@ -1,3 +1,4 @@
+import CawCoAPI
 import CawCoCore
 import CawCoDesign
 import CawCoTranscript
@@ -1090,7 +1091,7 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
         stack.spacing = Space.space1
         stack.setCustomSpacing(Space.space2, after: stack.arrangedSubviews[0])
         stack.accessibilityIdentifier = "task-sessions"
-        if let problem = task.startProblem { stack.addArrangedSubview(Self.problemLabel(problem)) }
+        if let problem = task.startProblem { stack.addArrangedSubview(Self.cantStart(problem, kind: task.startProblemKind)) }
         for attempt in task.attempts {
             let word = TaskWords.attemptWord(attempt.state)
             let (variant, status): (KitBadge.Variant, MarkStatus) = switch word {
@@ -1322,6 +1323,29 @@ final class TaskSheetController: UIViewController, UICollectionViewDelegate {
     /// `toLocaleString` (month short, day, hour, minute): "Oct 13 at 11:15 AM".
     static func timestamp(_ ms: Double) -> String {
         Date(timeIntervalSince1970: ms / 1000).formatted(.dateTime.month(.abbreviated).day().hour().minute().locale(Locale(identifier: "en_US")))
+    }
+
+    /// Why the hub could not start an attempt (TaskCard.svelte's Can't start):
+    /// the word in a badge, then the hub's reason. It waits on a person or a
+    /// machine: the blocked mark in the attn pair. The start was tried and
+    /// broke: the failure mark in the fail pair (DESIGN.md, The failure mark
+    /// and the blocked mark), as the board's card draws it.
+    static func cantStart(_ message: String, kind: OpenEnums.TaskSummaryStartProblemKind?) -> UIView {
+        let broke = kind == .broke
+        let (variant, glyph, ink): (KitBadge.Variant, Glyph, UIColor) = broke
+            ? (.fail, .failed, Palette.statusFailInk)
+            : (.attn, .blocked, Palette.statusAttnInk)
+        let badge = KitBadge("Can't start", variant: variant, glyph: glyph)
+        badge.accessibilityIdentifier = "task-cant-start"
+        let head = UIStackView(arrangedSubviews: [badge, UIView()])
+        head.alignment = .center
+        let reason = KitLabel(TypeScale.typeMeta, ink: ink, lines: 0)
+        reason.text = message
+        reason.accessibilityTraits = .staticText
+        let column = UIStackView(arrangedSubviews: [head, reason])
+        column.axis = .vertical
+        column.spacing = Space.space1
+        return column
     }
 
     static func problemLabel(_ text: String? = nil) -> KitLabel {

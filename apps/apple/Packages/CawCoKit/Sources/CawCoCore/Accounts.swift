@@ -266,21 +266,29 @@ public enum FleetAccounts {
         signins.first { $0.accountId == account && $0.machineId == machine }?.state ?? "signed-out"
     }
 
+    /// What is wrong with an account, in its row's one line.
+    public struct Problem: Equatable, Sendable {
+        public let text: String
+        /// A sign-in went wrong (it landed on somebody else and was signed out
+        /// again): the failure mark, not the warning's.
+        public let broke: Bool
+    }
+
     /// What is wrong with an account, in its row's one line, or nil: a machine
     /// signed it in as somebody else, it is signed in nowhere, or an online
     /// machine that runs its harnesses doesn't have it. An offline machine is
     /// not a problem.
     @MainActor
-    public static func problem(_ account: Account, view: View, hub: HubConnection) -> String? {
+    public static func problem(_ account: Account, view: View, hub: HubConnection) -> Problem? {
         let mine = view.signins.filter { $0.accountId == account.id }
         let online = machines(for: account.provider, hub: hub).filter(Self.online)
         if let other = online.first(where: { state(mine, account: account.id, machine: $0.machineId) == "mismatch" }) {
-            return Words.Accounts.Problem.someoneElse(machine: other.name)
+            return Problem(text: Words.Accounts.Problem.someoneElse(machine: other.name), broke: true)
         }
-        if !mine.contains(where: { $0.state == "signed-in" }) { return Words.Accounts.Problem.nowhere }
+        if !mine.contains(where: { $0.state == "signed-in" }) { return Problem(text: Words.Accounts.Problem.nowhere, broke: false) }
         let missing = online.filter { state(mine, account: account.id, machine: $0.machineId) != "signed-in" }
         guard let first = missing.first else { return nil }
-        return Words.Accounts.Problem.missingOn(machine: first.name, others: missing.count - 1)
+        return Problem(text: Words.Accounts.Problem.missingOn(machine: first.name, others: missing.count - 1), broke: false)
     }
 
     /// The accounts the Accounts row flags: one a machine signed in as

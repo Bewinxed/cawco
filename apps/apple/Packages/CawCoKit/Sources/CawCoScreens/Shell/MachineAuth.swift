@@ -83,7 +83,11 @@ final class MachineAuthStatusView: UIStackView {
 
     func answered(_ state: Components.Schemas.AuthState, said: AuthSaid) {
         let ok = state == .authenticated
-        let glyph = GlyphView(ok ? .passed : .warning, size: 36, tint: ok ? Palette.success : Palette.warning)
+        // Its logins still can't be read: something went wrong (the failure
+        // mark). No account signed in is a person's to fix (the warning's).
+        let broke = state == .unreadableCredentials
+        let glyph = GlyphView(ok ? .passed : broke ? .failed : .warning, size: 36,
+                              tint: ok ? Palette.success : broke ? Palette.error : Palette.warning)
         setMark(glyph)
         // mark-in: from a quarter size, over durPop.
         if !UIAccessibility.isReduceMotionEnabled {

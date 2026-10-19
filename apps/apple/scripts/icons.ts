@@ -1,5 +1,6 @@
 // Writes CawCoDesign's icon asset catalog from the icons the web dashboard
-// draws, so both clients show the same glyphs: Solar bold duotone from the
+// draws, so both clients show the same glyphs: Solar bold duotone (and the
+// solid bold cut for a status mark) from the
 // dashboard's own @iconify-json/solar, and the dashboard's hand-drawn glyphs
 // (apps/dashboard/src/lib/components/icons/{Close,Tick,Plus}.svelte and the
 // OS marks in apps/dashboard/src/lib/cawco/OsMark.svelte).
@@ -33,7 +34,7 @@ const SOLAR_ICONS = [
   "pallete-2-bold-duotone",
   "magic-stick-3-bold-duotone",
   // The home's chrome.
-  "hand-shake-bold-duotone",
+  "hand-shake-bold-duotone", // Caw's Needs you section head (IconNeedsYouSection)
   "danger-triangle-bold-duotone",
   "structure-bold-duotone",
   "structure-bold",
@@ -42,7 +43,6 @@ const SOLAR_ICONS = [
   // The lightbox's zoom (Lightbox.svelte `IconZoomIn`).
   "minimalistic-magnifer-zoom-in-bold-duotone",
   "server-2-bold-duotone",
-  "close-circle-bold-duotone",
   "archive-down-minimlistic-bold-duotone",
   // The transcript (apps/dashboard/src/lib/icons.ts names, beside each).
   "user-bold-duotone", // IconUser
@@ -90,11 +90,20 @@ const SOLAR_ICONS = [
   "arrow-up-linear", // IconArrowUp: the "needs you" pill
   "alt-arrow-down-linear", // IconChevronDown
   "alt-arrow-left-linear", // IconChevronLeft
-  // SessionStatus.svelte's glyphs not listed above.
-  "check-circle-bold-duotone", // Passed, Done; IconSuccess
-  "moon-sleep-bold-duotone", // Sleeping
-  "pause-circle-bold-duotone", // Idle, Stopped, Stored
-  "refresh-circle-bold-duotone", // Working
+  // The status marks: Solar's solid bold cut, never duotone (DESIGN.md, The
+  // failure mark and the blocked mark), the session status set among them.
+  "danger-circle-bold", // IconError: Failed
+  "forbidden-circle-bold", // IconBlocked: Can't start, waits
+  "hand-shake-bold", // IconNeedsYou: Needs you
+  "check-circle-bold", // IconSuccess: Passed, Done
+  "moon-sleep-bold", // IconMoonSleep: Sleeping
+  "pause-circle-bold", // IconPauseCircle: Idle, Stopped, Stored
+  "refresh-circle-bold", // IconWorking: Working
+  "question-circle-bold", // IconUnreachable: Unreachable
+  "minus-circle-bold", // IconMinusCircle: a run that never ran, skipped or stopped
+  "clock-circle-bold", // IconUpdateWaits: an update that waits to install
+  "download-bold", // IconUpdateAvailable: an update available to install
+  "check-circle-bold-duotone", // IconResolve: a picker's tick, a pin's Resolve
   // The shell: bar, sidebar, projects, machines, jump, panes.
   "alt-arrow-up-linear", // IconChevronUp
   "arrow-right-linear", // IconArrowRight
@@ -178,7 +187,6 @@ const SOLAR_ICONS = [
   "widget-2-bold-duotone", // IconColumns
   "ruler-cross-pen-bold-duotone", // IconRulerPen
   "microphone-bold-duotone", // IconMic
-  "minus-circle-bold-duotone", // IconMinusCircle: a run that never ran, skipped or stopped
   "shop-bold-duotone", // IconShop: Configure › Skills' marketplaces
   "history-bold-duotone", // IconHistory: a skill's previous versions
 ];

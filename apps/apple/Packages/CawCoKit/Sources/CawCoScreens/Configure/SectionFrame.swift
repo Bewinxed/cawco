@@ -185,7 +185,7 @@ class ConfigSectionController: ObservedViewController {
         guard isViewLoaded else { return }
         problemSlot.arrangedSubviews.forEach { $0.removeFromSuperview() }
         if let problem {
-            problemSlot.addArrangedSubview(KitAlert(problem, tone: .destructive, glyph: .warning))
+            problemSlot.addArrangedSubview(KitAlert(problem, tone: .destructive, glyph: .failed))
         }
         let showRows = ready
         skeleton.isHidden = showRows || problem != nil

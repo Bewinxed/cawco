@@ -20,13 +20,14 @@
  *    so the mark's contrast is the badge's ground against its ink (the
  *    glyph's computed colour), for the attn and fail pairs, light and dark:
  *    at least 3:1 (non-text).
- * 6. Ink: the inner mark of the 12px badge glyph (the "!" bar, the slash's
+ * 6. Ink: the inner mark of the 16px badge glyph (the "!" bar, the slash's
  *    gap) at 1× and 2×, as drawn: its width in device px along a row
  *    through it, each pixel counted by how far it stands from the ink
  *    toward the ground; the slash's perpendicular width is that over √2.
- *    Held to one device px of ground at 2×. At 1× it is reported: Solar
- *    draws both marks 1.5 units wide on its 24-unit grid, 0.75px at 12px,
- *    so no 1× screen gives them a whole pixel.
+ *    Solar draws both marks 1.5 of 24 units, so 16px gives one device px at
+ *    1× (DESIGN.md, Badge): each is held to that (0.95 for antialiasing's
+ *    rounding), and its most ground-like pixel is reported, since a 1px
+ *    mark that falls between two pixels reads at half strength in each.
  *
  *   bun scripts/probe-kit/run.ts status-marks
  */
@@ -149,23 +150,10 @@ const innerMark = async (
   ground: Rgb,
   atY: number
 ) => {
-  const pad = 2;
-  // A clip is in the document's coordinates; the box is the view's.
-  const scroll = await page.evaluate(() => ({ x: scrollX, y: scrollY }));
-  const mark = {
-    box: {
-      left: seen.box.left + scroll.x,
-      right: seen.box.right + scroll.x,
-      top: seen.box.top + scroll.y,
-      bottom: seen.box.bottom + scroll.y,
-    },
-  };
-  const raster = await capture(page, {
-    x: mark.box.left - pad,
-    y: mark.box.top - pad,
-    width: mark.box.right - mark.box.left + pad * 2,
-    height: mark.box.bottom - mark.box.top + pad * 2,
-  });
+  // The whole view, as the screen draws it: the mark was just scrolled to
+  // its middle, so its box (the view's coordinates) lies inside the capture.
+  const mark = seen;
+  const raster = await capture(page);
   const y = Math.round(
     dy(raster, mark.box.top + (mark.box.bottom - mark.box.top) * atY)
   );
@@ -422,11 +410,7 @@ const checkInk = async (
     );
     const width = diagonal ? ink.width / Math.SQRT2 : ink.width;
     const line = `6 (${scheme}, ${scale}×): ${name} at ${(read.mark.box.right - read.mark.box.left).toFixed(0)}px: ${width.toFixed(2)} device px of ground wide${diagonal ? " (perpendicular)" : ""}, its most ground-like pixel ${(ink.peak * 100).toFixed(0)}% ground`;
-    if (scale === 1) {
-      kit.note(`${line} (reported)`);
-    } else {
-      kit.check(`${line} (at least 1 device px)`, width >= 1);
-    }
+    kit.check(`${line} (one device px or more)`, width >= 0.95);
   }
 };
 

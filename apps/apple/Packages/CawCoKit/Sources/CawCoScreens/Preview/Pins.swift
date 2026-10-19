@@ -516,7 +516,7 @@ final class PinCard: UIView, UITextViewDelegate {
         closeRoom.widthAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
         closeRoom.heightAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
         liveMark.isHidden = true
-        resolveButton = KitButton.make("", glyph: .passed, variant: .ghost, height: .sm) { [weak self] in
+        resolveButton = KitButton.make("", glyph: .checkCircle, variant: .ghost, height: .sm) { [weak self] in
             guard let self else { return }
             onResolve(!resolved)
         }
@@ -662,7 +662,7 @@ final class PinCard: UIView, UITextViewDelegate {
         problem.isHidden = said == nil
         resolveButton.accessibilityLabel = pin.resolved ? "Reopen pin" : "Resolve pin"
         resolveButton.toolTip = resolveButton.accessibilityLabel
-        resolveButton.configuration?.image = (pin.resolved ? Glyph.reopen : Glyph.passed).image.resized(to: Size.iconMd)
+        resolveButton.configuration?.image = (pin.resolved ? Glyph.reopen : Glyph.checkCircle).image.resized(to: Size.iconMd)
         replyButton.configuration?.showsActivityIndicator = replying
         paintReply()
         // A new pin's card takes the keyboard: the person tapped to say something.

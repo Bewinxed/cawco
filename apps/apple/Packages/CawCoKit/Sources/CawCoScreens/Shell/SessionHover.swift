@@ -287,13 +287,13 @@ final class SessionHover: NSObject {
             inner = dot
             box.accessibilityLabel = "Working"
         case .needs:
-            inner = GlyphView(.ask, size: 16, tint: Palette.statusAttnInk)
+            inner = GlyphView(.attention, size: 16, tint: Palette.statusAttnInk)
             box.accessibilityLabel = "Needs you"
         case .done:
             inner = GlyphView(.passed, size: 16, tint: Palette.statusDoneInk)
             box.accessibilityLabel = "Finished"
         case .failed:
-            inner = GlyphView(.warning, size: 16, tint: Palette.statusFailInk)
+            inner = GlyphView(.failed, size: 16, tint: Palette.statusFailInk)
             box.accessibilityLabel = "Failed"
         case .stopping:
             // In flight until its machine confirms, as the web's card spins (SessionHover.svelte).

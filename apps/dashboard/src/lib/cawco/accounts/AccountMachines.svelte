@@ -21,7 +21,7 @@
   import NsPopover from "#lib/cawco/spawn/NsPopover.svelte";
   import NsPopoverGroup from "#lib/cawco/spawn/NsPopoverGroup.svelte";
   import { buttonVariants } from "#lib/components/ui/button/index.js";
-  import { IconLogout, IconWarningTriangle } from "#lib/icons.js";
+  import { IconError, IconLogout } from "#lib/icons.js";
   import "../spawn/ns-theme.css";
   import DevicePanel from "./DevicePanel.svelte";
   import { DeviceFlow } from "./device.svelte";
@@ -124,7 +124,7 @@
           {#if shown !== "signed-in"}
             <span class="state mark-line" data-state={shown}>
               {#if shown === "mismatch"}
-                <IconWarningTriangle aria-hidden="true" />
+                <IconError aria-hidden="true" />
               {/if}
               <span>{WORDS[shown]}</span>
             </span>
@@ -245,7 +245,7 @@
     transition: color var(--dur-panel) var(--ease-out);
   }
   .state[data-state="mismatch"] {
-    color: var(--status-attn-ink);
+    color: var(--status-fail-ink);
   }
   .state :global(svg) {
     flex: none;

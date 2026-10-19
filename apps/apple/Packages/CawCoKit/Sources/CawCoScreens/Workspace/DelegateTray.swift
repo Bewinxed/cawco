@@ -1062,12 +1062,12 @@ final class TraySlot: UIView {
             let box = UIView(frame: CGRect(x: 0, y: 0, width: 16, height: 16))
             box.addSubview(dot)
             made = box
-        case .asked: made = GlyphView(.ask, size: 16, tint: Palette.inkMuted)
+        case .asked: made = GlyphView(.attention, size: 16, tint: Palette.inkMuted)
         // A chip's own ink carries the question; in the panel it is the attention ink.
-        case .needs: made = GlyphView(.ask, size: 16, tint: Palette.statusAttnInk)
+        case .needs: made = GlyphView(.attention, size: 16, tint: Palette.statusAttnInk)
         case .done: made = GlyphView(.passed, size: 16, tint: Palette.statusDoneInk)
-        case .failed: made = GlyphView(.warning, size: 16, tint: Palette.statusFailInk)
-        case .cancelled: made = GlyphView(.stop, size: 16, tint: Palette.inkMuted)
+        case .failed: made = GlyphView(.failed, size: 16, tint: Palette.statusFailInk)
+        case .cancelled: made = GlyphView(.pause, size: 16, tint: Palette.inkMuted)
         }
         made.translatesAutoresizingMaskIntoConstraints = true
         made.frame = CGRect(x: 0, y: 0, width: 16, height: 16)

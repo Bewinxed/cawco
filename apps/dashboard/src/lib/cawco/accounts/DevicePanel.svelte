@@ -14,7 +14,7 @@
   import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { CopyButton } from "#lib/components/ui/copy-button/index.js";
-  import { IconArrowUpRight, IconWarningTriangle } from "#lib/icons.js";
+  import { IconArrowUpRight, IconError } from "#lib/icons.js";
   import Check from "./Check.svelte";
   import type { DeviceFlow } from "./device.svelte";
 
@@ -126,9 +126,8 @@
     {:else if flow.phase === "expired"}
       <p class="line">{words.expired}</p>
     {:else if flow.phase === "mismatch"}
-      <p class="warn mark-line" role="alert">
-        <span class="mark-cell"><IconWarningTriangle aria-hidden="true" /></span
-        >
+      <p class="fail mark-line" role="alert">
+        <span class="mark-cell"><IconError aria-hidden="true" /></span>
         <span>{words.mismatch(machine, flow.email)}</span>
       </p>
     {/if}
@@ -173,7 +172,7 @@
   }
   .line,
   .error,
-  .warn,
+  .fail,
   .got {
     font: var(--type-meta);
     color: var(--ink-muted);
@@ -184,13 +183,13 @@
   .error {
     color: var(--status-fail-ink);
   }
-  .warn {
+  .fail {
     display: flex;
     align-items: flex-start;
     gap: var(--space-1);
-    color: var(--status-attn-ink);
+    color: var(--status-fail-ink);
   }
-  .warn :global(svg) {
+  .fail :global(svg) {
     flex: none;
     width: 12px;
     height: 12px;

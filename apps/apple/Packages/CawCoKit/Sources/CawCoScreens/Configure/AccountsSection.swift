@@ -40,7 +40,7 @@ final class AccountsSectionController: ConfigSectionController {
         let groupsNow = FleetAccounts.groups(view, hub: hub)
         let lines = groupsNow.flatMap { group in
             ["group \(group.provider) \(group.name)"] + group.accounts.map { account in
-                "\(account.id) \(account.hue) \(rowName(account, view)) \(FleetAccounts.problem(account, view: view, hub: hub) ?? "")"
+                "\(account.id) \(account.hue) \(rowName(account, view)) \(FleetAccounts.problem(account, view: view, hub: hub)?.text ?? "")"
             }
         }
         guard lines != drawn else { return }
@@ -159,11 +159,12 @@ final class AccountsSectionController: ConfigSectionController {
 /// under a hairline, its colour as a 10pt dot, its name, and the chevron in
 /// one fixed trailing column, the whole row one press to the account. A
 /// second line only when something is wrong, in the attention ink behind the
-/// warning glyph. A press tints the row and moves nothing.
+/// warning glyph (the fail ink behind the failure mark when a sign-in went
+/// wrong). A press tints the row and moves nothing.
 final class AccountRow: UIControl {
     private let problemLabel = KitLabel(TypeScale.typeMeta, ink: Palette.statusAttnInk, lines: 0)
 
-    init(name: String, hue: String, problem: String?) {
+    init(name: String, hue: String, problem: FleetAccounts.Problem?) {
         super.init(frame: .zero)
         let dot = UIView()
         dot.backgroundColor = AccountInk.color(hue)
@@ -178,8 +179,10 @@ final class AccountRow: UIControl {
         top.alignment = .center
         label.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         label.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        problemLabel.text = problem
-        let warn = GlyphView(.warning, size: 12, tint: Palette.statusAttnInk)
+        problemLabel.text = problem?.text
+        let ink = problem?.broke == true ? Palette.statusFailInk : Palette.statusAttnInk
+        problemLabel.ink = ink
+        let warn = GlyphView(problem?.broke == true ? .failed : .warning, size: 12, tint: ink)
         let line = UIStackView(arrangedSubviews: [warn, problemLabel])
         line.spacing = Space.space1
         line.alignment = .center
@@ -212,7 +215,7 @@ final class AccountRow: UIControl {
         isAccessibilityElement = true
         accessibilityTraits = .button
         accessibilityLabel = name
-        accessibilityValue = problem
+        accessibilityValue = problem?.text
     }
 
     @available(*, unavailable)

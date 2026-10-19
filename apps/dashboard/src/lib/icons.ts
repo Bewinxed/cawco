@@ -134,6 +134,8 @@ export { default as IconHistory } from "~icons/solar/history-bold-duotone";
 /** A routine turning itself off soon unless kept. */
 export { default as IconHourglass } from "~icons/solar/hourglass-bold-duotone";
 export { default as IconHandoff } from "~icons/solar/inbox-in-bold-duotone";
+/** A status that informs and asks nothing (a Mac with no Xcode): the solid mark. */
+export { default as IconInfoMark } from "~icons/solar/info-circle-bold";
 export { default as IconInfo } from "~icons/solar/info-circle-bold-duotone";
 export { default as IconKey } from "~icons/solar/key-bold-duotone";
 export { default as IconLaptop } from "~icons/solar/laptop-minimalistic-bold-duotone";
@@ -142,6 +144,8 @@ export { default as IconLeaf } from "~icons/solar/leaf-bold-duotone";
 /** A connection: Configure › Connections' rail glyph, and a row whose service has no mark. */
 export { default as IconConnection } from "~icons/solar/link-bold-duotone";
 export { default as IconLink } from "~icons/solar/link-minimalistic-2-bold-duotone";
+/** A Mac whose screen is locked: the joined row's status mark, solid. */
+export { default as IconLocked } from "~icons/solar/lock-keyhole-minimalistic-bold";
 /** Waits on another task that has not landed. */
 export { default as IconLock } from "~icons/solar/lock-keyhole-minimalistic-bold-duotone";
 export { default as IconLogout } from "~icons/solar/logout-2-bold-duotone";

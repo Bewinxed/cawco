@@ -389,7 +389,8 @@ public final class KitBadge: UIView {
         }
     }
 
-    /// `glyph`: the icon a badge leads with (`[&>svg]:size-3`, `gap-1`).
+    /// `glyph`: the icon a badge leads with (`[&>svg]:size-4`, `gap-1`): a
+    /// solid status mark at 16pt, the row size, never 12pt (DESIGN.md, Badge).
     public init(_ text: String, variant: Variant = .plain, glyph: Glyph? = nil) {
         self.variant = variant
         super.init(frame: .zero)
@@ -403,7 +404,7 @@ public final class KitBadge: UIView {
         row.spacing = Space.space1
         row.alignment = .center
         if let glyph {
-            let mark = GlyphView(glyph, size: 12, tint: pair.ink)
+            let mark = GlyphView(glyph, size: Size.iconMd, tint: pair.ink)
             self.mark = mark
             row.insertArrangedSubview(mark, at: 0)
         }

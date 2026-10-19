@@ -9,7 +9,7 @@
   import { appear } from "#lib/cawco/motion/curves.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
-  import { IconArrowUpRight, IconWarningTriangle } from "#lib/icons.js";
+  import { IconArrowUpRight, IconError } from "#lib/icons.js";
   import Check from "./Check.svelte";
   import type { SigninFlow } from "./signin.svelte";
 
@@ -108,8 +108,8 @@
       >
     </p>
   {:else if flow.phase === "mismatch"}
-    <p class="warn mark-line" role="alert" in:appear>
-      <span class="mark-cell"><IconWarningTriangle /></span>
+    <p class="fail mark-line" role="alert" in:appear>
+      <span class="mark-cell"><IconError /></span>
       <span>{words.mismatch(machine, flow.email, expected)}</span>
     </p>
   {/if}
@@ -133,7 +133,7 @@
   }
   .error,
   .got,
-  .warn {
+  .fail {
     display: flex;
     align-items: flex-start;
     gap: var(--space-2);
@@ -145,14 +145,14 @@
     white-space: pre-line;
     overflow-wrap: anywhere;
   }
-  .warn {
-    color: var(--status-attn-ink);
+  .fail {
+    color: var(--status-fail-ink);
   }
   .got b {
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
   }
-  .warn :global(svg) {
+  .fail :global(svg) {
     flex: none;
     width: 14px;
     height: 14px;

@@ -1,23 +1,21 @@
 /**
- * Connect a machine's joined row (join/JoinedRow): its status glyph reads as
- * a mark on a disc in both schemes. Each Solar duotone glyph is two layers in
- * one ink, the disc (the layer with an `opacity`) and the strokes over it.
- * Three ratios hold 3:1 or more: the strokes on the recess, the disc on the
- * recess, and the strokes on the disc. At 0.81 the disc held 3:1 on the
- * recess, but the strokes on it fell to 1.79:1 by day and 1.47:1 at night,
- * so the glyph read as a solid circle.
+ * Connect a machine's joined row (join/JoinedRow): its status glyph is a
+ * status mark, so it is Solar's solid bold cut in every state, never
+ * duotone (DESIGN.md, The Solar Duotone Rule; The failure mark and the
+ * blocked mark): no layer of the glyph is drawn below full opacity, and its
+ * ink holds 3:1 or more on the row's recess in both schemes. The inner mark
+ * is the recess itself, knocked out of the disc, so it holds the same ratio.
  *
  * Every state that draws a glyph, on the real dialog (the /motion/
- * mac-readiness bench). Each layer's computed fill and opacity and the row's
- * computed background are rasterised through a canvas to the sRGB the page
- * draws; the disc is its fill at its opacity over the recess.
+ * mac-readiness bench). The glyph's computed fill and the row's computed
+ * background are rasterised through a canvas to the sRGB the page draws.
  *
  *   bun scripts/probe-kit/run.ts web joined-glyph
  */
 import type { Kit, Spec } from "../../kit";
 import { open, settle, THEMES } from "../../kit";
 
-/** The bench's states that draw a duotone glyph (checking draws the spinner). */
+/** The bench's states that draw a glyph (checking draws the spinner). */
 const STATES = [
   "not-mac",
   "ready",
@@ -31,10 +29,11 @@ const STATES = [
 
 const ROW = '[role="status"][data-readiness]';
 
-interface Layers {
-  disc: { fill: string; opacity: number; rgb: number[] };
+interface Drawn {
+  ink: { fill: string; rgb: number[] };
+  /** Any layer drawn below full opacity: a duotone's half disc. */
+  layered: boolean;
   recess: { color: string; rgb: number[] };
-  strokes: { fill: string; rgb: number[] };
 }
 
 /** The relative luminance's contrast ratio (WCAG 2) of two sRGB colours. */
@@ -69,7 +68,7 @@ const spec: Spec = {
           `${ROW}[data-readiness="${state}"] [data-slot="glyph"] svg`
         );
         await settle(page);
-        const layers = await page.evaluate((row): Layers | null => {
+        const drawn = await page.evaluate((row): Drawn | null => {
           const rgb = (value: string) => {
             const canvas = document.createElement("canvas");
             canvas.width = 1;
@@ -85,56 +84,39 @@ const spec: Spec = {
           const root = document.querySelector(row);
           // Inside the joined row the one glyph is JoinedRow's slot.
           const svg = root?.querySelector('[data-slot="glyph"] svg');
-          const disc = svg?.querySelector("[opacity]");
-          const stroke = [...(svg?.querySelectorAll("path") ?? [])].find(
-            (path) => !path.closest("[opacity]")
-          );
-          if (!(root && disc && stroke)) {
+          const path = svg?.querySelector("path");
+          if (!(root && svg && path)) {
             return null;
           }
-          const recess = getComputedStyle(root).backgroundColor;
-          const discStyle = getComputedStyle(disc);
-          const strokeFill = getComputedStyle(stroke).fill;
+          const { backgroundColor: recess } = getComputedStyle(root);
+          const { fill } = getComputedStyle(path);
           return {
+            layered: [...svg.querySelectorAll("*")].some(
+              (el) => Number(getComputedStyle(el).opacity) < 1
+            ),
+            ink: { fill, rgb: rgb(fill) },
             recess: { color: recess, rgb: rgb(recess) },
-            disc: {
-              fill: discStyle.fill,
-              opacity: Number(discStyle.opacity),
-              rgb: rgb(discStyle.fill),
-            },
-            strokes: { fill: strokeFill, rgb: rgb(strokeFill) },
           };
         }, ROW);
-        if (!layers) {
+        if (!drawn) {
           pass = false;
-          rows.push({ state, missing: "row, disc or strokes" });
+          rows.push({ state, missing: "row or glyph" });
           continue;
         }
-        const { recess, disc, strokes } = layers;
-        const drawn = disc.rgb.map(
-          (c, i) => disc.opacity * c + (1 - disc.opacity) * (recess.rgb[i] ?? 0)
-        );
-        const strokesOnRecess = ratio(strokes.rgb, recess.rgb);
-        const discOnRecess = ratio(drawn, recess.rgb);
-        const strokesOnDisc = ratio(strokes.rgb, drawn);
+        const { ink, recess, layered } = drawn;
+        const inkOnRecess = ratio(ink.rgb, recess.rgb);
         const opaque = recess.rgb[3] === 255;
-        pass &&=
-          opaque &&
-          strokesOnRecess >= 3 &&
-          discOnRecess >= 3 &&
-          strokesOnDisc >= 3;
+        pass &&= opaque && !layered && inkOnRecess >= 3;
         rows.push({
           state,
           recess: recess.color,
-          strokes: strokes.fill,
-          disc: `${disc.fill} @ ${disc.opacity}`,
-          strokesOnRecess: r2(strokesOnRecess),
-          discOnRecess: r2(discOnRecess),
-          strokesOnDisc: r2(strokesOnDisc),
+          ink: ink.fill,
+          layered,
+          inkOnRecess: r2(inkOnRecess),
         });
       }
       kit.check(
-        `${theme}: every joined-row glyph is a mark on a disc: its strokes 3:1 or more on the recess, its disc (fill at its opacity over the recess) 3:1 or more on the recess, and its strokes 3:1 or more on the disc`,
+        `${theme}: every joined-row glyph is solid (no layer below full opacity) and its ink holds 3:1 or more on the recess`,
         pass,
         `\n${rows.map((row) => `    ${JSON.stringify(row)}`).join("\n")}`
       );

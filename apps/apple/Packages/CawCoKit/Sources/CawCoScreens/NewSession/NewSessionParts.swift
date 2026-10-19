@@ -428,7 +428,7 @@ final class NsComb: UIView {
 /// tints it. 8pt in, 6pt above and below, at least `height` tall, at
 /// `--radius-sm`.
 final class NsRow: UIControl {
-    private let check = GlyphView(.passed, size: 16, tint: Palette.inkStrong)
+    private let check = GlyphView(.checkCircle, size: 16, tint: Palette.inkStrong)
     private let fills: Bool
     /// Chosen, and said so to assistive technology (the web row's `aria-pressed`).
     var chosen = false {

@@ -44,7 +44,7 @@
   import { land } from "#lib/cawco/motion/share.svelte.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
-  import { IconCheck, IconWarningTriangle } from "#lib/icons.js";
+  import { IconCheck, IconError } from "#lib/icons.js";
   import RowMenu, { type RowAction } from "./RowMenu.svelte";
 
   let {
@@ -186,7 +186,7 @@
             {#if note.tone === "busy"}
               <Spinner aria-hidden="true" />
             {:else if note.tone === "fail"}
-              <IconWarningTriangle />
+              <IconError />
             {:else}
               <IconCheck />
             {/if}

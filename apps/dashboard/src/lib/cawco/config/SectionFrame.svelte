@@ -17,7 +17,7 @@
   import { morph } from "#lib/cawco/motion/morph.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "#lib/components/ui/alert/index.js";
-  import { IconWarningTriangle } from "#lib/icons.js";
+  import { IconError } from "#lib/icons.js";
   import { page } from "$app/state";
   import { cawco } from "../client.svelte";
   import { type Cards, rememberCard } from "./cards";
@@ -90,7 +90,7 @@
 
 {#snippet fault(text: string)}
   <Alert.Root variant="destructive">
-    <IconWarningTriangle />
+    <IconError />
     <Alert.Description>{text}</Alert.Description>
   </Alert.Root>
 {/snippet}

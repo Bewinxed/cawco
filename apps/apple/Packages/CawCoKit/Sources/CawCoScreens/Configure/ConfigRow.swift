@@ -300,7 +300,7 @@ final class ConfigRow: UIStackView {
         noteRow.accessibilityTraits = note.tone == .fail ? .staticText : .updatesFrequently
         let mark: UIView = switch note.tone {
         case .busy: KitSpinner(side: 12)
-        case .fail: GlyphView(.warning, size: 12, tint: Palette.statusFailInk)
+        case .fail: GlyphView(.failed, size: 12, tint: Palette.statusFailInk)
         case .done: GlyphView(.check, size: 12, tint: Palette.inkMuted)
         }
         noteMark.arrangedSubviews.forEach { $0.removeFromSuperview() }

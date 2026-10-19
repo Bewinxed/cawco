@@ -40,7 +40,7 @@ public final class SessionStatusView: UIView {
         public static let needsYou = Face(label: "Needs you", glyph: .attention, tone: .attention)
         public static let held = Face(label: "Held", glyph: .attention, tone: .attention)
         public static let failed = Face(label: "Failed", glyph: .failed, tone: .failed)
-        public static let unreachable = Face(label: "Unreachable", glyph: .ask, tone: .quiet)
+        public static let unreachable = Face(label: "Unreachable", glyph: .unreachable, tone: .quiet)
         public static let sleeping = Face(label: "Sleeping", glyph: .sleeping, tone: .quiet)
         /// Its end is recorded and its machine has not confirmed the process gone.
         public static let stopping = Face(label: "Stopping…", glyph: .pause, tone: .quiet)

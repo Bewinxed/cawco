@@ -2,7 +2,7 @@
   import type { AuthState } from "@cawco/core";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
-  import { IconSuccess, IconWarningTriangle } from "#lib/icons.js";
+  import { IconError, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
   import { crossIn, crossOut } from "./motion/curves.svelte";
 
   /**
@@ -41,6 +41,20 @@
   const ok = $derived(
     outcome.kind === "done" && outcome.state === "authenticated"
   );
+  /**
+   * Its logins still can't be read: something went wrong (the failure
+   * mark). No account signed in is a person's to fix (the warning's).
+   */
+  const broke = $derived(
+    outcome.kind === "done" && outcome.state === "unreadable-credentials"
+  );
+  /** The mark's ink: done, failed, or a person's to fix. */
+  const tone = $derived.by(() => {
+    if (ok) {
+      return "text-success";
+    }
+    return broke ? "text-error" : "text-warning";
+  });
 </script>
 
 <!-- One stable box: the wait and the answer cross-fade in place. The tile
@@ -76,13 +90,11 @@
       {:else if answer}
         <!-- mark-line: a column; the mark stands above the title -->
         <div class="flex flex-col gap-[var(--space-2)]" role="status">
-          <span
-            data-slot="mark"
-            data-enter
-            class="mark enter {ok ? 'text-success' : 'text-warning'}"
-          >
+          <span data-slot="mark" data-enter class="mark enter {tone}">
             {#if ok}
               <IconSuccess class="size-9" />
+            {:else if broke}
+              <IconError class="size-9" />
             {:else}
               <IconWarningTriangle class="size-9" />
             {/if}

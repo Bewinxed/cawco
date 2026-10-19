@@ -552,9 +552,10 @@ private final class UpdateCellView: UIStackView {
     private var machineName = ""
 
     private let lead = UIStackView()
-    private let glyph = GlyphView(.clock, size: 16, tint: Palette.inkStrong)
+    private let glyph = GlyphView(.updateWaits, size: 16, tint: Palette.inkStrong)
     private let spinner = KitSpinner(side: 16)
-    private let failDot = UIView()
+    /// A failed update's mark: the failure mark, in the fail ink (UpdateCell.svelte).
+    private let failMark = GlyphView(.failed, size: 16, tint: Palette.statusFailInk)
     private let words = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong, lines: 0)
     private let meta = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     private let buttons = UIStackView()
@@ -565,15 +566,11 @@ private final class UpdateCellView: UIStackView {
         super.init(frame: .zero)
         axis = .vertical
         spacing = 4
-        failDot.translatesAutoresizingMaskIntoConstraints = false
-        failDot.layer.cornerRadius = 4
-        failDot.backgroundColor = Palette.statusFailGlyph
-        NSLayoutConstraint.activate([failDot.widthAnchor.constraint(equalToConstant: 8), failDot.heightAnchor.constraint(equalToConstant: 8)])
         lead.spacing = Space.space2
         lead.alignment = .center
         lead.isLayoutMarginsRelativeArrangement = true
         lead.layer.cornerRadius = Radius.radiusXs
-        for part in [failDot, glyph, spinner, words] { lead.addArrangedSubview(part) }
+        for part in [failMark, glyph, spinner, words] { lead.addArrangedSubview(part) }
         words.accessibilityTraits = .updatesFrequently
         buttons.spacing = Space.space1
         buttons.alignment = .center
@@ -609,10 +606,10 @@ private final class UpdateCellView: UIStackView {
         words.ink = cell.fail ? Palette.statusFailInk : cell.plain ? Palette.inkMuted : Palette.inkStrong
         lead.backgroundColor = cell.fail && !asking ? Palette.statusFailBg : .clear
         lead.directionalLayoutMargins = cell.fail && !asking ? .init(top: 4, leading: 8, bottom: 4, trailing: 8) : .zero
-        failDot.isHidden = !cell.fail || asking
+        failMark.isHidden = !cell.fail || asking
         spinner.isHidden = icon != .spinner
         glyph.isHidden = icon != .clock && icon != .download
-        glyph.glyph = icon == .download ? .download : .clock
+        glyph.glyph = icon == .download ? .updateAvailable : .updateWaits
         lead.isHidden = text.isEmpty
         meta.text = asking || cancelling ? nil : cell.meta
         meta.isHidden = meta.text == nil

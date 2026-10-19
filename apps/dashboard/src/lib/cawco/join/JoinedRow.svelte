@@ -101,7 +101,7 @@
           class:done={line.hue === "done"}
         >
           {#if Glyph}
-            <Glyph aria-hidden="true" class="duo size-4" />
+            <Glyph aria-hidden="true" class="size-4" />
           {:else}
             <Spinner aria-hidden="true" class="size-4" role="presentation" />
           {/if}
@@ -140,19 +140,15 @@
     column-gap: 10px;
     min-width: 0;
   }
-  /* The glyph is the row's status signal, a mark on a disc: its disc (the
-     duotone's second layer, at the status-glyph opacity) holds 3:1 on the
-     recess, and its strokes hold 3:1 on the disc, in both themes. The two
-     need the ink at about 9:1 on the recess, which the hue glyph inks miss by
-     day, so a hue takes its status ink (the spinner keeps its own track). */
+  /* The glyph is the row's status signal, a solid status mark: its inner
+     mark is the recess knocked out of the disc, so the ink's own 3:1 on the
+     recess is the mark's, in both themes. A hue takes its status ink (the
+     spinner keeps its own track). */
   .glyph {
     display: flex;
     align-items: center;
     height: calc(var(--text-body) * 1.45);
     color: var(--ink-strong);
-  }
-  .glyph :global(svg.duo [opacity]) {
-    opacity: var(--glyph-duo-status-opacity);
   }
   .glyph.done {
     color: var(--status-done-ink);
