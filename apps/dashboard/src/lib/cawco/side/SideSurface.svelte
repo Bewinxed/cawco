@@ -167,30 +167,44 @@
     return { kept, moreWidth };
   }
 
-  /** The name's own width with its inset, up to {@link NAME_KEEPS}. */
+  /** The name's box at its lead's own width, up to {@link NAME_KEEPS}: its inset and ring room around it. */
   function nameWidth(name: HTMLElement): number {
     const lead = name.firstElementChild;
+    const style = getComputedStyle(name);
     const pad =
-      Number.parseFloat(getComputedStyle(name).paddingInlineStart) || 0;
+      (Number.parseFloat(style.paddingInlineStart) || 0) +
+      (Number.parseFloat(style.paddingInlineEnd) || 0);
     const own = lead
       ? lead.getBoundingClientRect().width + runsPast(lead) + pad
       : 0;
     return Math.ceil(Math.min(own, NAME_KEEPS + pad));
   }
 
+  /** The name's margins (they take its ring room back): what it adds to the head beside its box. */
+  function nameMargins(name: HTMLElement): number {
+    const style = getComputedStyle(name);
+    return (
+      (Number.parseFloat(style.marginInlineStart) || 0) +
+      (Number.parseFloat(style.marginInlineEnd) || 0)
+    );
+  }
+
   /** Which controls stand, from the head's room and what each was drawn at. */
   function fit(): void {
-    if (!(head && identity && all.length > 0)) {
+    if (!(head && identity)) {
+      return;
+    }
+    nameKeeps = nameWidth(identity);
+    if (all.length === 0) {
       return;
     }
     const { gap, room } = roomOf(head);
     const { kept, moreWidth } = drawnWidths(head, identity);
-    nameKeeps = nameWidth(identity);
     // More is Close's recipe, its glyph alone, until it stands to be read.
     const next = standing(
       room,
       gap,
-      [...kept, nameKeeps],
+      [...kept, nameKeeps + nameMargins(identity)],
       moreWidth || (kept.at(-1) ?? 0),
       all.map((one) => ({
         key: one.key,
@@ -212,10 +226,14 @@
     }
   }
 
-  // The head, the name and every control re-fit as any of them changes size.
+  // The head, the name and every control re-fit as any of them changes size;
+  // with no `items`, the name alone is measured, so it keeps its width
+  // beside a pane's `actions` too.
   $effect(() => {
     const el = head;
-    if (!(el && all.length > 0)) {
+    // Read so a pane's items arriving re-observes its controls.
+    const _count = all.length;
+    if (!el) {
       return;
     }
     const seen = new ResizeObserver(() => fit());
@@ -282,7 +300,7 @@
       {@render switcher()}
     {/if}
     <div
-      style:min-inline-size={all.length > 0 ? `${nameKeeps}px` : undefined}
+      style:min-inline-size="{nameKeeps}px"
       class="identity"
       class:controlled={!!titleControl}
       bind:this={identity}
@@ -409,21 +427,42 @@
   }
   /* The header's first thing, the switch or the title, stands on the
      well's edge, with or without the switch. After the switch, a gap. */
+  /* The name keeps its own width up to NAME_KEEPS (`min-inline-size`, set
+     from its lead as drawn), beside `items` and `actions` alike, so the
+     actions never draw over it; past that only the name's own box gives,
+     its trailing text cut with an ellipsis inside it. Each child stands at
+     its own width, never wider than the group. */
   .identity {
+    /* The title's text stands where the controls' text does: their inset. */
+    --inset: var(--space-2);
     flex: 1;
     min-width: 0;
     display: flex;
     flex-direction: column;
-    /* The title's text stands where the controls' text does: their inset. */
-    padding-inline-start: var(--space-2);
+    align-items: flex-start;
+    /* Whatever the name holds is cut at its own box, never drawn under the
+       actions; the box reaches a focus ring's width (2px + 2px offset) past
+       the name on every side, the margin taking it back, so a title
+       control's ring is not cut. */
+    overflow: hidden;
+    margin: calc(-1 * var(--space-1));
+    padding: var(--space-1);
+    padding-inline-start: calc(var(--inset) + var(--space-1));
+
+    & > * {
+      max-inline-size: 100%;
+    }
   }
   .side-head:has(:global([role="tablist"])) .identity {
-    padding-inline-start: var(--space-1);
+    --inset: var(--space-1);
   }
   /* A title control's own padding is its text's inset, as the controls'. */
   .identity.controlled {
-    align-items: flex-start;
-    padding-inline-start: 0;
+    --inset: 0px;
+  }
+  /* A pane's own `actions` keep their width: the name gives, not they. */
+  .side-head > :global(:is(button, a)) {
+    flex: none;
   }
   .title,
   .subtitle {
@@ -439,10 +478,8 @@
     color: var(--ink-strong);
     font: var(--type-label);
   }
-  /* What is on show, described: the meta role, never past the head's room
-     (a title control's column sets its children at their own width). */
+  /* What is on show, described: the meta role. */
   .subtitle {
-    max-inline-size: 100%;
     color: var(--ink-muted);
     font: var(--type-meta);
   }

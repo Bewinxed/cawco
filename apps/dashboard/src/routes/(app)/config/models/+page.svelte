@@ -600,14 +600,8 @@
   }
   /* Finishing the connection: the dot breathes while the hub works. */
   .pulse {
-    opacity: 0.6;
     @media (prefers-reduced-motion: no-preference) {
-      animation: breathe var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes breathe {
-    50% {
-      opacity: 0.2;
+      animation: breath var(--breath) var(--ease-in-out) infinite;
     }
   }
   /* Fleet watch's limits: read-only facts, one per line, in the note's face. */

@@ -177,8 +177,7 @@
     }
   }
   /* To come: an open ring; under way: the live dot, the house's size and
-     ink (TreeMark's), at full strength: it breathes in scale, never fading
-     below its contrast. */
+     ink (TreeMark's): it breathes on the house's breath. */
   .dot {
     inline-size: var(--status-dot-size);
     block-size: var(--status-dot-size);
@@ -191,12 +190,7 @@
   }
   @media (prefers-reduced-motion: no-preference) {
     .dot.live {
-      animation: plan-breath var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes plan-breath {
-    50% {
-      scale: 0.7;
+      animation: breath var(--breath) var(--ease-in-out) infinite;
     }
   }
 </style>

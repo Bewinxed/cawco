@@ -51,12 +51,7 @@
     background: var(--status-live-ink);
 
     @media (prefers-reduced-motion: no-preference) {
-      animation: beat var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes beat {
-    50% {
-      opacity: 0.3;
+      animation: breath var(--breath) var(--ease-in-out) infinite;
     }
   }
 </style>

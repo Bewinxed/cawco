@@ -5225,6 +5225,11 @@
       "$value": 0.45,
       "$description": "A working session's echo as it leaves the tile."
     },
+    "breath-floor": {
+      "$type": "number",
+      "$value": 0.75,
+      "$description": "The opacity live work breathes down to, half a breath in (the shared `breath` keyframes). The lowest at which the status-live glyph holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well. By day 0.75 (recess-deep the floor, 3.17:1; raised 3.64:1); at night 0.56 (raised the floor, 3.14:1)."
+    },
     "glyph-duo-status-opacity": {
       "$type": "number",
       "$value": 0.57,

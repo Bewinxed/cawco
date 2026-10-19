@@ -175,13 +175,7 @@
   }
   @media (prefers-reduced-motion: no-preference) {
     .breathes {
-      animation: find-breathe var(--breath) var(--ease-in-out) infinite
-        alternate;
-    }
-  }
-  @keyframes find-breathe {
-    to {
-      opacity: 0.45;
+      animation: breath var(--breath) var(--ease-in-out) infinite;
     }
   }
 

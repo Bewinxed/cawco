@@ -1300,7 +1300,7 @@
   /* Asked, not yet answered: the thumb breathes on the live-work loop. */
   .value :global(.kit-segmented.lands[data-pending] .kit-thumb),
   .value :global(.kit-segmented.trackers[data-pending] .kit-thumb) {
-    animation: details-breath var(--breath) var(--ease-in-out) infinite;
+    animation: breath var(--breath) var(--ease-in-out) infinite;
   }
   /* The binding's form: its connection and its repository or team, then Use. */
   .bind {
@@ -1389,11 +1389,6 @@
   .bound :global(svg) {
     inline-size: var(--icon-sm);
     block-size: var(--icon-sm);
-  }
-  @keyframes -global-details-breath {
-    50% {
-      opacity: 0.45;
-    }
   }
   /* Landing checks: one entry per step, in gate.md's order; every line
      wraps, a command or path breaking anywhere rather than overflowing. */

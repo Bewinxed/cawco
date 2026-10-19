@@ -1562,6 +1562,10 @@
     "glyph-duo-status-opacity": {
       "$type": "number",
       "$value": 0.46
+    },
+    "breath-floor": {
+      "$type": "number",
+      "$value": 0.56
     }
   },
   "shadow": {

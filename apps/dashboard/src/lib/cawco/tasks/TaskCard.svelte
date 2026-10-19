@@ -293,7 +293,7 @@
   }
   @media (prefers-reduced-motion: no-preference) {
     .dot.live {
-      animation: pulse var(--breath) var(--ease-in-out) infinite;
+      animation: breath var(--breath) var(--ease-in-out) infinite;
     }
   }
   .live-foot :global(.attn) {
