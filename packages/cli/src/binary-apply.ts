@@ -487,7 +487,7 @@ async function handOverKeeper(to: string): Promise<KeeperMove> {
     }
     return {
       outcome: "failed",
-      error: `The session keeper of ${to} did not start: ${message(error)}`,
+      error: `${to}'s process that keeps this machine's sessions running did not start: ${message(error)}`,
     };
   }
   await say(

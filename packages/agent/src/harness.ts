@@ -87,7 +87,7 @@ export class KeeperRefused extends Error {
   readonly reason: string;
   constructor(procId: string, reason: string, pid?: number) {
     super(
-      `This session's process could not be reached: the machine's session keeper refused its input (${reason}).`
+      `This session's process could not be reached: the process that keeps this machine's sessions running refused its input (${reason}).`
     );
     this.procId = procId;
     this.reason = reason;

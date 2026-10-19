@@ -175,18 +175,18 @@ const heldBy = (kept: readonly KeptProcess[]): string =>
   `${kept.length === 1 ? "a process" : `${kept.length} processes`} CawCo didn't start (${kept.map(processWords).join("; ")})`;
 
 /**
- * A keeper handover still under way, in words: `Session keeper handing over:
+ * A hand-over still under way, in words: `3 sessions still running on
  * 3 sessions left on nightly 2229`, or, for a keeper whose unit holds a
  * process CawCo didn't start, what keeps it and what lets it go. Empty when
  * no earlier keeper holds anything. Nothing waits on it: new sessions start
- * on the current keeper.
+ * on the current build.
  */
 const handingOver = (u: BinaryUpdateState): string =>
   (u.retiringKeepers ?? [])
     .map((keeper) =>
       keeper.kept
-        ? `The session keeper of ${displayVersion(keeper.version)} is held by ${heldBy(keeper.kept)}. Its hand-over finishes once ${keeper.kept.length === 1 ? "that process ends" : "they end"}.`
-        : `Session keeper handing over: ${plural(keeper.sessions, "session")} left on ${displayVersion(keeper.version)}`
+        ? `${displayVersion(keeper.version)} is still running: ${heldBy(keeper.kept)} ${keeper.kept.length === 1 ? "runs" : "run"} inside it, and CawCo doesn't end ${keeper.kept.length === 1 ? "a process" : "processes"} it didn't start. ${displayVersion(keeper.version)} ends once ${keeper.kept.length === 1 ? "that process ends" : "they end"}.`
+        : `${plural(keeper.sessions, "session")} still running on ${displayVersion(keeper.version)}`
     )
     .join(" · ");
 
@@ -212,11 +212,11 @@ export function cellFor(
   return u.sessiondKept ? keptCell(u.sessiondKept) : phaseCell(u, policy);
 }
 
-/** Row 13: the current session keeper isn't answering, and isn't restarted while processes CawCo didn't start hold it. */
+/** Row 13: the current sessiond isn't answering, and isn't restarted while processes CawCo didn't start hold it. */
 const keptCell = (kept: readonly KeptProcess[]): Cell => ({
   ...EMPTY(13),
   fail: true,
-  text: `The session keeper isn't answering, so no session starts there. It's held by ${heldBy(kept)}. Handoff: end ${kept.length === 1 ? "it" : "them"}, and CawCo restarts the keeper.`,
+  text: `No session can start on this machine: the process that keeps its sessions running stopped answering. CawCo can't restart it while ${heldBy(kept)}, which it didn't start, ${kept.length === 1 ? "runs" : "run"} inside it. Handoff: end ${kept.length === 1 ? "that process" : "them"}. The restart follows, and sessions start again.`,
 });
 
 /** Rows 3 to 12: the cell by the update's phase. */
@@ -317,7 +317,7 @@ export function runningOf(machine: UpdateMachine): string {
   return machine.build?.commit ? machine.build.commit.slice(0, 7) : "—";
 }
 
-/** Machines waiting on the operator: a failed update, a session keeper kept from its restart, or (auto-update off) one to install. */
+/** Machines waiting on the operator: a failed update, a sessiond kept from its restart, or (auto-update off) one to install. */
 export function attention(
   machines: UpdateMachine[],
   policy: BinaryUpdatePolicy
@@ -470,7 +470,7 @@ export const keeperRestartId = (machineId: string, at: number): string =>
   `keeper:${machineId}:${at}`;
 
 /**
- * 8. A machine's session keeper stopped answering and the agent restarted it,
+ * 8. A machine's sessiond stopped answering and the agent restarted it,
  * or, an earlier build's keeper still holding sessions after a handover,
  * removed it (agent keeper-watchdog.ts). Every session it held ended with it,
  * which is why it is said even though nothing is left to do.
@@ -494,14 +494,14 @@ function keeperRestarted({ input, machines, name }: Ctx): Notice | null {
     acks: [keeperRestartId(machine.machineId, restart.at)],
     kind: 8,
     title: restart.retiring
-      ? `An earlier session keeper on ${name(machine)} was removed`
-      : `The session keeper on ${name(machine)} was restarted`,
+      ? `An earlier build on ${name(machine)} was removed`
+      : `CawCo restarted the process that keeps ${name(machine)}'s sessions running`,
     failed: true,
     lines: [
       {
         state: "plain",
         text: restart.retiring
-          ? `${silent}. It was the keeper of an earlier build, still holding sessions after an update; new sessions were already starting on the current keeper, and still do.`
+          ? `${silent}. It was still running from before the update, holding the sessions started on it. New sessions were already starting on the current build, and still do.`
           : `${silent}, so no session could start there. It was restarted and sessions start there again.`,
       },
       {

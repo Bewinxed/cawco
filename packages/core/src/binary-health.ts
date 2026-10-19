@@ -25,7 +25,7 @@ interface HealthBody {
 }
 interface AgentRow {
   build?: { startedAt?: number; version?: string };
-  /** The agent's read of its session keeper at its last register (`SessionCustody` in core). */
+  /** The agent's read of its sessiond at its last register (`SessionCustody` in core). */
   custody?: { state?: string };
   machineId: string;
   status: string;
@@ -100,7 +100,7 @@ export async function probeHealth(options: {
   agentStartedAfterMs?: number;
   installation: Pick<BinaryInstallation, "dashboardUrl" | "hubUrl" | "role">;
   machineId: string;
-  /** The agent's row must report that it holds its session keeper connection. */
+  /** The agent's row must report that it holds its sessiond connection. */
   requireCustody?: boolean;
   sinceMs: number;
   version: string;
@@ -205,7 +205,7 @@ async function probeAgentRow(options: {
     return `this machine's agent is not registered with the hub on the new build (${seen}; ${asked.said})`;
   }
   if (options.requireCustody && row.custody?.state !== "available") {
-    return `this machine's agent does not hold its session keeper connection (custody ${row.custody?.state ?? "unreported"})`;
+    return `this machine's agent isn't connected to the process that keeps its sessions running (its row says ${row.custody?.state ?? "nothing about that connection"})`;
   }
   return undefined;
 }

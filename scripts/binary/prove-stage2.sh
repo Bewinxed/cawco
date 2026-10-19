@@ -1782,7 +1782,7 @@ handover_on_joined_machine() {
   wait_until 180 '[[ "$(kept_of $jid "'"$old"'")" == "'"$planted"'" ]]'
   row=$(update_row "$jid")
   echo "update row: $row"
-  [[ "$row" == *"is held by a process CawCo didn't start (sleep, pid $planted)"* && "$row" != *"handing over"* ]] || { echo "ASSERTION FAILED: the Update cell does not say what keeps the keeper before"; return 1; }
+  [[ "$row" == *"is still running: a process CawCo didn't start (sleep, pid $planted) runs inside it"* && "${row,,}" != *"keeper"* && "${row,,}" != *"sessiond"* && "${row,,}" != *"custody"* && "$row" != *"handing over"* ]] || { echo "ASSERTION FAILED: the Update cell does not say what keeps the keeper before"; return 1; }
   [[ "$(keeper_pid "$joinerc" "$oldunit")" == "$oldpid" ]] || { echo "ASSERTION FAILED: the keeper before was stopped with a process CawCo did not start in its unit"; return 1; }
   as_user "$joinerc" test -e "/home/cawco/.config/systemd/user/$oldunit"
   as_user "$joinerc" kill "$planted"
