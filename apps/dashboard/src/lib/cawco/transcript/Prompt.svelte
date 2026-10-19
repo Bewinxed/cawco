@@ -54,6 +54,7 @@
     permissionAnswer,
   } from "../client.svelte";
   import { hubRefusal } from "../hub-read";
+  import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
   import { questionAnswer, questionDismissal } from "../question";
 
@@ -122,7 +123,9 @@
         throw await hubRefusal(response);
       }
     } catch (error) {
-      takeRefused = `Couldn't take over. ${error instanceof Error ? error.message : String(error)}`;
+      // What happened, why (the hub's own sentence), and what is safe and
+      // comes next (WORDS, the error formula). The button is free again.
+      takeRefused = `Couldn't take over. ${error instanceof Error ? error.message : String(error)} The agent is still waiting; Take over tries again.`;
       pressed = null;
     }
   }
@@ -819,8 +822,7 @@
         <code
           data-slot="browser-origin"
           class="min-w-0 [font:var(--type-code)] text-(--ink-strong) [overflow-wrap:break-word]"
-          >{#each browserAsk.origin.split(".") as label, at (at)}{label}{#if at < browserAsk.origin.split(".").length - 1}.<wbr
-              />{/if}{/each}</code
+          ><OriginText origin={browserAsk.origin} /></code
         >
       </p>
       <!-- The question card's "Other": its chip and its line, side by side
@@ -867,8 +869,7 @@
       <!-- What the answer reaches, before the person commits to it: the
            permission card's own line for that. -->
       <p data-slot="detail" class="detail">
-        Agents in this project can't see or use the browser until you hand it
-        back.
+        No agent can see or use this browser until you hand it back.
       </p>
     </div>
     <div data-slot="foot" class="foot part" style:--part="2">
@@ -883,7 +884,7 @@
           class={grant}
           data-browser-take
           disabled={disabledOf("allow")}
-          failed={failedOf("allow")}
+          failed={takeRefused !== null}
           icon={IconInteract}
           label="Take over"
           onclick={takeOver}

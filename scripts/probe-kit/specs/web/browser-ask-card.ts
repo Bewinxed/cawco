@@ -7,7 +7,8 @@
  *
  * - the title "Browser request from <asker>", the reason as a question's
  *   text (the body's weight, not the summary's), the origin alone on its
- *   line in code type, broken only after its dots, and the one consequence
+ *   line in code type, each label on one line (broken only after its
+ *   dots), and the one consequence
  *   line in the permission card's detail slot;
  * - Take over and Deny at the row's two ends, at least 44px apart and never
  *   less than `--space-8`, their fills computed equal, each in its own
@@ -63,7 +64,7 @@ const REASONS = {
 const ORIGIN =
   "https://dashboard.payments-provider-with-a-long-name.example.com";
 const CONSEQUENCE =
-  "Agents in this project can't see or use the browser until you hand it back.";
+  "No agent can see or use this browser until you hand it back.";
 const REFUSAL = "The browser did not start.";
 const CAPTURES = join(ROOT, ".probe", "browser-ask-card");
 const CARD = '[data-slot="ask"]';
@@ -143,20 +144,22 @@ const measure = () => {
   const originStyle = getComputedStyle(origin);
   const ledeStyle = getComputedStyle(lede);
   const detailStyle = getComputedStyle(detail);
-  // Every line the origin drew, by where it broke: only after a dot.
-  const range = document.createRange();
-  range.selectNodeContents(origin);
-  const lines = [...range.getClientRects()].length;
+  // Each dot-separated label on one line: broken only after a dot.
+  const labelLines = [
+    ...origin.querySelectorAll<HTMLElement>("[data-origin-label]"),
+  ].map(
+    (label) =>
+      new Set([...label.getClientRects()].map((r) => Math.round(r.top))).size
+  );
   const text = origin.textContent ?? "";
   return {
     title: card.querySelector('[data-slot="title"]')?.textContent?.trim() ?? "",
     reason: lede.textContent?.trim() ?? "",
     origin: text,
     meta: meta.textContent?.replace(/\s+/g, "").trim() ?? "",
-    breaks: origin.querySelectorAll("wbr").length,
+    originLabels: labelLines.length,
+    labelsWhole: labelLines.every((lines) => lines === 1),
     dots: text.split(".").length - 1,
-    originLines: lines,
-    originWrap: originStyle.overflowWrap,
     ledeWeight: ledeStyle.fontWeight,
     ledeSize: ledeStyle.fontSize,
     detail: detail.textContent?.replace(/\s+/g, " ").trim() ?? "",
@@ -391,11 +394,11 @@ async function rest(
     JSON.stringify({ weight: card.ledeWeight, size: card.ledeSize })
   );
   kit.check(
-    `${label}: the origin in code type (${card.originFace.family.split(",")[0]} ${card.originFace.size}), breaking only after its dots (${card.breaks} breaks for ${card.dots} dots, ${card.originLines} line(s), overflow-wrap ${card.originWrap})`,
+    `${label}: the origin in code type (${card.originFace.family.split(",")[0]} ${card.originFace.size}), each of its ${card.originLabels} labels on one line (broken only after its ${card.dots} dots)`,
     card.originFace.family === card.codeFace.family &&
       card.originFace.size === card.codeFace.size &&
-      card.breaks === card.dots &&
-      card.originWrap === "break-word",
+      card.originLabels === card.dots + 1 &&
+      card.labelsWhole,
     JSON.stringify({ origin: card.originFace, code: card.codeFace })
   );
   kit.check(
@@ -524,15 +527,49 @@ async function taking(
   );
   await cardUp(refused.page, base, id);
   const before = await refused.page.evaluate(measure);
+  // Watched from the press through the check's hold: a refused take-over
+  // never raises the success check.
+  const ticked = refused.page.evaluate(
+    () =>
+      new Promise<boolean>((resolve) => {
+        const began = performance.now();
+        let seen = false;
+        const look = () => {
+          const button = document.querySelector(
+            '[data-slot="ask"] [data-browser-take]'
+          );
+          const cell = button?.querySelector(".kit-tick")?.parentElement;
+          if (
+            cell?.getAttribute("data-active") === "true" &&
+            getComputedStyle(cell).opacity !== "0"
+          ) {
+            seen = true;
+          }
+          if (performance.now() - began > 2000) {
+            resolve(seen);
+            return;
+          }
+          requestAnimationFrame(look);
+        };
+        look();
+      })
+  );
   await refused.page.locator(`${CARD} [data-browser-take]`).click();
   const line = refused.page.locator(`${CARD} [data-slot="refused"]`);
   await line.waitFor();
+  const tickSeen = await ticked;
+  kit.check(
+    `${name}: a refused take-over draws no success check on Take over (watched for 2 s from the press)`,
+    !tickSeen,
+    String(tickSeen)
+  );
   await settle(refused.page);
   const after = await refused.page.evaluate(measure);
   const words = (await line.textContent())?.trim() ?? "";
   kit.check(
     `${name}: a refused take-over reads "${words}" and the peers do not move`,
-    words === `Couldn't take over. ${REFUSAL}` &&
+    words ===
+      `Couldn't take over. ${REFUSAL} The agent is still waiting; Take over tries again.` &&
       !!before &&
       !!after &&
       same(before.take, after.take) &&
@@ -622,6 +659,12 @@ async function needs(
         .querySelector('[data-slot="meta"]')
         ?.textContent?.replace(/\s+/g, " ")
         .trim() ?? "";
+    const origin = item.querySelector<HTMLElement>(
+      '[data-slot="needs-origin"]'
+    );
+    const labels = origin
+      ? [...origin.querySelectorAll<HTMLElement>("[data-origin-label]")]
+      : [];
     return {
       take: take.textContent?.replace(/\s+/g, " ").trim() ?? "",
       deny: deny.textContent?.replace(/\s+/g, " ").trim() ?? "",
@@ -633,8 +676,22 @@ async function needs(
       coarse: matchMedia("(pointer: coarse)").matches,
       space2: space("--space-2"),
       space4: space("--space-4"),
+      origin: origin?.textContent ?? "",
+      originFamily: origin ? getComputedStyle(origin).fontFamily : "",
+      labelsWhole: labels.every(
+        (label) =>
+          new Set([...label.getClientRects()].map((r) => Math.round(r.top)))
+            .size === 1
+      ),
     };
   });
+  kit.check(
+    `${name} Needs you: the row names the site, ${row?.origin}, in code type (${row?.originFamily.split(",")[0]}), each label on one line`,
+    row?.origin === ORIGIN &&
+      row.originFamily.includes("Mono") &&
+      row.labelsWhole,
+    JSON.stringify({ origin: row?.origin, family: row?.originFamily })
+  );
   const want = row?.coarse ? row.space4 : row?.space2;
   kit.check(
     `${name} Needs you: a browser ask, Deny then Take over at the row's trailing edge (${row?.trailing}px in), filled and each tinted (${row?.fills.join(" / ")}), ${row?.gap}px apart (${row?.coarse ? "--space-4 on a coarse pointer" : "--space-2"})`,

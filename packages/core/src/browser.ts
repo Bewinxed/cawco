@@ -200,7 +200,7 @@ export const browserMount = (key: BrowserKey): string =>
  * and the line the project's other sessions are told (hub browsers.ts).
  */
 export const SHIELD_WORDS =
-  "The person is using the project's browser privately; your browser tool answers again when they hand back.";
+  "The person is using this browser privately; your browser tool answers again when they hand back.";
 
 /** How long a take-over stands with no view open before the daemon hands it back itself. */
 export const TAKEOVER_UNWATCHED_MS = 2 * 60_000;

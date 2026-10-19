@@ -89,6 +89,7 @@
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
   import CopyBox from "../join/CopyBox.svelte";
   import { conversationHref } from "../links";
+  import OriginText from "../OriginText.svelte";
   import OsMark from "../OsMark.svelte";
   import SessionMark from "../SessionMark.svelte";
   import { cawOf } from "../session-status";
@@ -566,6 +567,16 @@
          already says where it goes. -->
     <code class="cmd"
       >{item.request.presentation.command.trim().split("\n")[0]}</code
+    >
+  {/if}
+  {#if item.kind === "ask" && item.request.browserAsk}
+    <!-- Where the person will be typing, in the line a command stands in:
+         the page's origin whole (never cut, as a command's line is: the
+         domain is at its end), broken only after its dots. -->
+    <code
+      data-slot="needs-origin"
+      class="cmd [overflow-wrap:break-word]! whitespace-normal!"
+      ><OriginText origin={item.request.browserAsk.origin} /></code
     >
   {/if}
   {#if item.kind === "ask"}

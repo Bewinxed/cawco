@@ -48,9 +48,10 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { GATE_WORDS } from "../../../packages/agent/src/browser/gate";
 import { resolveMcpLauncher } from "../../../packages/agent/src/mcp-launcher";
-import type {
-  BrowserKey,
-  BrowserRow,
+import {
+  type BrowserKey,
+  type BrowserRow,
+  SHIELD_WORDS,
 } from "../../../packages/core/src/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -129,7 +130,7 @@ const startGateHost = (env: Record<string, string>): GateHost => {
 
 const TAG = "PROBE-GATE";
 const MCP_VERSION = "1.11.0";
-const PRIVATE = "The person is using the project's browser privately.";
+const PRIVATE = SHIELD_WORDS;
 const FORM =
   "data:text/html,<title>Form</title><label>Name <input id=q></label>";
 const SHELL_LEGS = ["container", "local"] as const;
