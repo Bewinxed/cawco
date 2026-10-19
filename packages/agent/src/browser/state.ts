@@ -9,7 +9,8 @@
  * CLI act on the same file, so neither needs the other running. A record
  * holds neko's passwords, so the dirs are 0700 and the record 0600.
  */
-import { mkdir, readdir, rm } from "node:fs/promises";
+import { randomBytes } from "node:crypto";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer } from "node:net";
 import { join } from "node:path";
 import { readWithin } from "@cawco/core/bounded";
@@ -114,6 +115,48 @@ export type Progress = Pick<BrowserRow, "state" | "progress">;
 
 /** Every browser's dir. */
 export const browsersDir = (): string => join(cawcoDataDir(), "browsers");
+
+/** The file in a browsers dir naming the agent that keeps them. */
+const OWNER_FILE = "owner";
+
+/**
+ * This agent's mark on what it makes on a container runtime (its containers'
+ * and volumes' names and owner label, container-host.ts): a random id kept
+ * in its browsers dir beside the records, made once (an exclusive create, so
+ * the daemon and `cawco browser` agree on it). A machine's id is every
+ * agent's on it (core machine-id.ts hashes `/etc/machine-id` or the Mac's
+ * IOPlatformUUID with the host's name), so two agents of one machine on one
+ * runtime (two users of a rootful Docker, two scratch fleets) keep the same
+ * keys; their owners are their own.
+ */
+export const browserOwner = async (): Promise<string> => {
+  const kept = await keptBrowserOwner(browsersDir());
+  if (kept) {
+    return kept;
+  }
+  await mkdir(browsersDir(), { recursive: true, mode: 0o700 });
+  const made = randomBytes(6).toString("hex");
+  try {
+    await writeFile(join(browsersDir(), OWNER_FILE), `${made}\n`, {
+      flag: "wx",
+      mode: 0o600,
+    });
+    return made;
+  } catch (error) {
+    const first = await keptBrowserOwner(browsersDir());
+    if ((error as { code?: string }).code === "EEXIST" && first) {
+      return first;
+    }
+    throw error;
+  }
+};
+
+/** The owner the browsers dir `dir` names, or undefined while its agent has made none. */
+export const keptBrowserOwner = async (
+  dir: string
+): Promise<string | undefined> =>
+  (await readFile(join(dir, OWNER_FILE), "utf8").catch(() => "")).trim() ||
+  undefined;
 
 /** One browser's dir. */
 export const browserDir = (key: BrowserKey): string =>

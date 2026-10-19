@@ -797,29 +797,49 @@ function shuffledHex(): string[] {
 }
 
 /**
- * Every browser the agent whose HOME is `dir` recorded, gone: its containers
- * removed with their volumes, then its local Chromium stopped. Read from that
- * agent's own records (agent browser/state.ts, `<HOME>/.local/share/cawco/
- * browsers/<slug>/record.json`), each key for exactly what it names:
- * - a project's browser by the agent's own `ContainerHost.removeLabelled`:
- *   every container and volume labelled `dev.cawco.browser=<key>` (a project
- *   id this fleet's hub made, so no other fleet's), whatever host its record
- *   names, so a move into a container the agent's stop cut short leaves
- *   nothing behind;
- * - the machine's browser (`machine:scratch-fleet`, the one machine id every
- *   scratch fleet has, so two fleets at once share its label) by the
- *   container id and the volume its own record names, and nothing else;
- * - a local Chromium by `LocalHost.stop`, which signals it only once its
- *   recorded identity matches (core signal.ts `identifiedPid`).
- * Nothing is matched by a name's pattern: the live fleet runs browsers named
- * the same way on the same runtime. A folder with no records is left as is.
+ * Every browser the agent whose HOME is `dir` made, gone: everything on the
+ * runtime labelled with that agent's owner (agent browser/state.ts
+ * `browserOwner`, kept in `<HOME>/.local/share/cawco/browsers/owner`),
+ * containers and then volumes, by the label alone, whatever its records say
+ * (a move into a container the agent's stop cut short among them); then the
+ * local Chromium each record names, stopped by `LocalHost.stop`, which
+ * signals it only once its recorded identity matches (core signal.ts
+ * `identifiedPid`). The owner is the fleet agent's own, so nothing another
+ * fleet or the live fleet made is touched, though every agent of the machine
+ * shares its machine id. Nothing is matched by a name's pattern. A folder
+ * with no records and no owner is left as is.
  */
 async function removeFleetBrowsers(dir: string): Promise<void> {
   const root = join(dir, ".local", "share", "cawco", "browsers");
-  const names = await readdir(root).catch(() => [] as string[]);
-  if (names.length === 0) {
-    return;
+  const { keptBrowserOwner } =
+    await import("../packages/agent/src/browser/state");
+  const owner = await keptBrowserOwner(root);
+  if (owner) {
+    const { findRuntime } =
+      await import("../packages/agent/src/browser/runtime");
+    const runtime = await findRuntime();
+    if ("missing" in runtime) {
+      console.log(
+        `… browsers of owner ${owner}: not looked for: ${runtime.missing}`
+      );
+    } else {
+      const { ownedBy, removeOwned } =
+        await import("../packages/agent/src/browser/container-host");
+      await removeOwned(runtime.docker, owner).catch((error: unknown) =>
+        console.log(
+          `… browsers of owner ${owner}: not removed: ${error instanceof Error ? error.message : String(error)}`
+        )
+      );
+      // Read again: what is still labelled with the owner is said, never hidden.
+      const left = await ownedBy(runtime.docker, owner);
+      console.log(
+        left.containers.length + left.volumes.length === 0
+          ? `… browsers of owner ${owner}: every container and volume labelled dev.cawco.browser.owner=${owner} removed, none left`
+          : `… browsers of owner ${owner}: ${left.containers.length} container(s) and ${left.volumes.length} volume(s) labelled dev.cawco.browser.owner=${owner} still left`
+      );
+    }
   }
+  const names = await readdir(root).catch(() => [] as string[]);
   type Record = import("../packages/agent/src/browser/state").BrowserRecord;
   const records = (
     await Promise.all(
@@ -830,89 +850,18 @@ async function removeFleetBrowsers(dir: string): Promise<void> {
         )
       )
     )
-  ).filter((record): record is Record => !!record?.key);
-  if (records.length === 0) {
-    return;
-  }
-  const { findRuntime } = await import("../packages/agent/src/browser/runtime");
-  const runtime = records.some(
-    (one) => one.container || one.key.startsWith("project:")
-  )
-    ? await findRuntime()
-    : undefined;
+  ).filter((record): record is Record => !!record?.local);
+  const { LocalHost } =
+    await import("../packages/agent/src/browser/local-host");
   for (const record of records) {
     // biome-ignore lint/performance/noAwaitInLoops: one browser at a time
-    const gone = await removeBrowser(record, runtime).catch(
+    const gone = await new LocalHost().stop(record).then(
+      () => "its local Chromium stopped",
       (error: unknown) =>
-        `not removed: ${error instanceof Error ? error.message : String(error)}`
+        `its local Chromium not stopped: ${error instanceof Error ? error.message : String(error)}`
     );
-    if (gone) {
-      console.log(`… browser ${record.key}: ${gone}`);
-    }
+    console.log(`… browser ${record.key}: ${gone}`);
   }
-}
-
-/** One recorded browser removed as {@link removeFleetBrowsers} says; what went, or nothing when there was nothing. */
-async function removeBrowser(
-  record: import("../packages/agent/src/browser/state").BrowserRecord,
-  runtime:
-    | Awaited<
-        ReturnType<
-          typeof import("../packages/agent/src/browser/runtime").findRuntime
-        >
-      >
-    | undefined
-): Promise<string | undefined> {
-  const gone: string[] = [];
-  const project = record.key.startsWith("project:");
-  if (project || record.container) {
-    if (!runtime || "missing" in runtime) {
-      gone.push(
-        `its containers not looked for: ${runtime && "missing" in runtime ? runtime.missing : "no runtime"}`
-      );
-    } else if (project) {
-      const { ContainerHost } =
-        await import("../packages/agent/src/browser/container-host");
-      await new ContainerHost(runtime).removeLabelled(record.key);
-      // Read again: what is still labelled with the key is said, never hidden.
-      const label = { label: [`dev.cawco.browser=${record.key}`] };
-      const containers = await runtime.docker.listContainers({
-        all: true,
-        filters: label,
-      });
-      const { Volumes } = await runtime.docker.listVolumes({ filters: label });
-      const left = containers.length + (Volumes ?? []).length;
-      gone.push(
-        left === 0
-          ? `every container and volume labelled dev.cawco.browser=${record.key} removed, none left`
-          : `${containers.length} container(s) and ${(Volumes ?? []).length} volume(s) labelled dev.cawco.browser=${record.key} still left`
-      );
-    } else if (record.container) {
-      const absent = (error: unknown) => {
-        if ((error as { statusCode?: number }).statusCode !== 404) {
-          throw error;
-        }
-      };
-      await runtime.docker
-        .getContainer(record.container.id)
-        .remove({ force: true })
-        .catch(absent);
-      await runtime.docker
-        .getVolume(record.container.volume)
-        .remove()
-        .catch(absent);
-      gone.push(
-        `its container ${record.container.id.slice(0, 12)} and volume ${record.container.volume} removed`
-      );
-    }
-  }
-  if (record.local) {
-    const { LocalHost } =
-      await import("../packages/agent/src/browser/local-host");
-    await new LocalHost().stop(record);
-    gone.push("its local Chromium stopped");
-  }
-  return gone.join(", ") || undefined;
 }
 
 /**

@@ -1,7 +1,11 @@
 /**
  * The container host: a browser as a neko container (our image, built on
  * the machine) with its Chromium profile on a named volume of its own,
- * `cawco-browser-<slug>`, so a project's sign-ins outlive the container.
+ * `cawco-browser-<owner>-<slug>`, so a project's sign-ins outlive the
+ * container. Its container and volume carry two labels: its key, and the
+ * agent whose records keep it (state.ts `browserOwner`). Every agent of a
+ * machine has the machine's id, so a machine browser's key is theirs alike;
+ * on one runtime each finds, makes and removes its own alone.
  * neko's HTTP and Chromium's DevTools are published on 127.0.0.1 alone; the
  * media port, UDP and TCP, on every address, advertised with the machine's
  * own addresses so a screen on the LAN or the tailnet connects directly.
@@ -40,6 +44,7 @@ import type { Runtime } from "./runtime";
 import {
   type BrowserHost,
   type BrowserRecord,
+  browserOwner,
   httpAnswers,
   type Progress,
   portsOf,
@@ -50,6 +55,9 @@ const IMAGE = "cawco-browser";
 
 /** The label every browser container and volume carries: its key. */
 export const BROWSER_LABEL = "dev.cawco.browser";
+
+/** The label naming the agent whose records keep a browser's container and volume (state.ts `browserOwner`). */
+export const OWNER_LABEL = "dev.cawco.browser.owner";
 
 /** How long a container has to answer once started. */
 const LIVE_MS = 90_000;
@@ -79,9 +87,87 @@ const PROFILE = {
 
 const password = (): string => randomBytes(24).toString("base64url");
 
-/** The container's name on the runtime. */
-const containerName = (record: BrowserRecord): string =>
-  `cawco-browser-${browserSlug(record.key)}`;
+/** A browser's container and volume name on the runtime: its owner's and its key's. */
+const nameOf = (owner: string, key: BrowserKey): string =>
+  `cawco-browser-${owner}-${browserSlug(key)}`;
+
+/** The labels a browser's container and volume carry. */
+const labelsOf = (owner: string, key: BrowserKey): Record<string, string> => ({
+  [BROWSER_LABEL]: key,
+  [OWNER_LABEL]: owner,
+});
+
+/** The runtime's not-found answer, taken as gone. */
+const absent = (error: unknown): void => {
+  if ((error as { statusCode?: number }).statusCode !== 404) {
+    throw error;
+  }
+};
+
+/**
+ * What `owner` holds on `docker`, for `key` alone when it is named: its
+ * containers' ids and its volumes' names. The runtime filters on the one
+ * owner label, and the key is matched here, so no runtime's way of combining
+ * two label filters decides what is found.
+ */
+export const ownedBy = async (
+  docker: Docker,
+  owner: string,
+  key?: BrowserKey
+): Promise<{ containers: string[]; volumes: string[] }> => {
+  const filters = { label: [`${OWNER_LABEL}=${owner}`] };
+  const ours = (labels: Record<string, string> | undefined) =>
+    key === undefined || labels?.[BROWSER_LABEL] === key;
+  const containers = await docker.listContainers({ all: true, filters });
+  const { Volumes } = await docker.listVolumes({ filters });
+  return {
+    containers: containers
+      .filter((one) => ours(one.Labels))
+      .map((one) => one.Id),
+    volumes: (Volumes ?? [])
+      .filter((one) => ours(one.Labels))
+      .map((one) => one.Name),
+  };
+};
+
+/** Removes the containers {@link ownedBy} names, and the ids in `also`, keeping every volume. */
+const removeContainers = async (
+  docker: Docker,
+  owner: string,
+  key: BrowserKey,
+  also: (string | undefined)[] = []
+): Promise<void> => {
+  const { containers } = await ownedBy(docker, owner, key);
+  const ids = new Set([
+    ...containers,
+    ...also.filter((id): id is string => !!id),
+  ]);
+  await Promise.all(
+    [...ids].map((id) =>
+      docker.getContainer(id).remove({ force: true }).catch(absent)
+    )
+  );
+};
+
+/**
+ * Removes everything {@link ownedBy} names, containers first (a volume in
+ * use cannot go): an agent's own browsers on a runtime, by its label alone.
+ */
+export const removeOwned = async (
+  docker: Docker,
+  owner: string,
+  key?: BrowserKey
+): Promise<void> => {
+  const { containers, volumes } = await ownedBy(docker, owner, key);
+  await Promise.all(
+    containers.map((id) =>
+      docker.getContainer(id).remove({ force: true }).catch(absent)
+    )
+  );
+  await Promise.all(
+    volumes.map((name) => docker.getVolume(name).remove().catch(absent))
+  );
+};
 
 /** The env neko starts with. */
 const nekoEnv = (
@@ -195,20 +281,9 @@ export class ContainerHost implements BrowserHost {
       })
     );
     options.progress({ state: "starting" });
-    const volume = containerName(record);
-    await this.#docker
-      .getVolume(volume)
-      .inspect()
-      .catch(async (error: unknown) => {
-        if (!notFound(error)) {
-          throw error;
-        }
-        await this.#docker.createVolume({
-          Name: volume,
-          Labels: { [BROWSER_LABEL]: record.key },
-        });
-      });
+    const owner = await browserOwner();
     const kept = record.container;
+    const volume = await this.#volumeFor(record, owner);
     const { endpoint } = this.#runtime;
     const forwarding = await mediaForwarding(endpoint);
     let { media } = forwarding;
@@ -262,13 +337,14 @@ export class ContainerHost implements BrowserHost {
     for (;;) {
       if (!container) {
         // biome-ignore lint/performance/noAwaitInLoops: each round waits on the container it made.
-        await this.#removeContainer(record.key);
+        await removeContainers(this.#docker, owner, record.key, [kept?.id]);
         container = await this.#create(
           record,
           image,
           volume,
           options.relay,
-          media
+          media,
+          owner
         );
       }
       await this.#live(container.id, ports);
@@ -329,21 +405,40 @@ export class ContainerHost implements BrowserHost {
     );
   }
 
+  /** The volume `record` names (its sign-ins), or one made for it now, named and labelled for `owner`. */
+  async #volumeFor(record: BrowserRecord, owner: string): Promise<string> {
+    const volume = record.container?.volume ?? nameOf(owner, record.key);
+    await this.#docker
+      .getVolume(volume)
+      .inspect()
+      .catch(async (error: unknown) => {
+        if (!notFound(error)) {
+          throw error;
+        }
+        await this.#docker.createVolume({
+          Name: volume,
+          Labels: labelsOf(owner, record.key),
+        });
+      });
+    return volume;
+  }
+
   async #create(
     record: BrowserRecord,
     image: string,
     volume: string,
     relay: BrowserRelay | undefined,
-    media: MediaPath
+    media: MediaPath,
+    owner: string
   ): Promise<NonNullable<BrowserRecord["container"]>> {
     const { http, devtools, media: port } = portsOf(record);
     const passwords = { admin: password(), user: password() };
     const stun = stunServer();
     const protocols = mediaProtocols(media);
     const created = await this.#docker.createContainer({
-      name: containerName(record),
+      name: nameOf(owner, record.key),
       Image: image,
-      Labels: { [BROWSER_LABEL]: record.key },
+      Labels: labelsOf(owner, record.key),
       Env: nekoEnv(
         record,
         passwords,
@@ -394,27 +489,6 @@ export class ContainerHost implements BrowserHost {
     };
   }
 
-  async #removeContainer(key: BrowserKey): Promise<void> {
-    const named = await this.#docker
-      .listContainers({
-        all: true,
-        filters: { label: [`${BROWSER_LABEL}=${key}`] },
-      })
-      .catch(() => []);
-    await Promise.all(
-      named.map((one) =>
-        this.#docker
-          .getContainer(one.Id)
-          .remove({ force: true })
-          .catch((error: unknown) => {
-            if (!notFound(error)) {
-              throw error;
-            }
-          })
-      )
-    );
-  }
-
   async stop(record: BrowserRecord): Promise<void> {
     if (!record.container) {
       return;
@@ -432,40 +506,24 @@ export class ContainerHost implements BrowserHost {
   }
 
   /**
-   * Every container and then every volume this runtime holds labelled with
-   * `key`, removed, whatever any record says: what a move into a container
-   * cut short left (the agent stopped, or was killed, before the record's
-   * one write). Matched by the label alone, never by a name's pattern.
+   * Every container and then every volume this agent holds on the runtime
+   * for `key` (both labels, {@link ownedBy}), removed, whatever any record
+   * says: what a move into a container cut short left (the agent stopped,
+   * or was killed, before the record's one write).
    */
   async removeLabelled(key: BrowserKey): Promise<void> {
-    await this.#removeContainer(key);
-    const { Volumes } = await this.#docker.listVolumes({
-      filters: { label: [`${BROWSER_LABEL}=${key}`] },
-    });
-    await Promise.all(
-      (Volumes ?? []).map((volume) =>
-        this.#docker
-          .getVolume(volume.Name)
-          .remove()
-          .catch((error: unknown) => {
-            if (!notFound(error)) {
-              throw error;
-            }
-          })
-      )
-    );
+    await removeOwned(this.#docker, await browserOwner(), key);
   }
 
   async remove(record: BrowserRecord): Promise<void> {
-    await this.#removeContainer(record.key);
+    const owner = await browserOwner();
+    await removeContainers(this.#docker, owner, record.key, [
+      record.container?.id,
+    ]);
     await this.#docker
-      .getVolume(record.container?.volume ?? containerName(record))
+      .getVolume(record.container?.volume ?? nameOf(owner, record.key))
       .remove()
-      .catch((error: unknown) => {
-        if (!notFound(error)) {
-          throw error;
-        }
-      });
+      .catch(absent);
   }
 }
 

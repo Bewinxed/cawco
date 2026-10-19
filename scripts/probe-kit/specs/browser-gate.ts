@@ -52,7 +52,13 @@ import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { CdpLink } from "../../../packages/agent/src/browser/cdp-takeover";
+import {
+  BROWSER_LABEL,
+  OWNER_LABEL,
+  ownedBy,
+} from "../../../packages/agent/src/browser/container-host";
 import { GATE_WORDS } from "../../../packages/agent/src/browser/gate";
+import { keptBrowserOwner } from "../../../packages/agent/src/browser/state";
 import {
   type BrowserKey,
   type BrowserRow,
@@ -470,6 +476,36 @@ const upgradeAnswer = async (port: number, id: string, token: string) => {
   return { status: response.status, text: await response.text() };
 };
 
+/**
+ * The container leg's container is its agent's alone on the runtime: named
+ * for the agent's owner (kept in its browsers dir under `data`) and its key,
+ * and labelled with both, so another agent of the machine (another fleet,
+ * the live one) never finds or removes it.
+ */
+const ownerCheck = async (
+  kit: Kit,
+  gateHost: GateHost,
+  docker: import("../../../packages/agent/src/browser/runtime").Runtime["docker"],
+  data: string,
+  key: BrowserKey
+): Promise<void> => {
+  const owner = await keptBrowserOwner(join(data, "cawco", "browsers"));
+  const id = (
+    (await gateHost.call("record", { key })) as {
+      container?: { id?: string };
+    } | null
+  )?.container?.id;
+  const made = id ? await docker.getContainer(id).inspect() : undefined;
+  kit.check(
+    `container: ${key}'s container is named for its agent's owner ${owner} and its key, and labelled with both`,
+    !!owner &&
+      made?.Name === `/cawco-browser-${owner}-${browserSlug(key)}` &&
+      made.Config.Labels[BROWSER_LABEL] === key &&
+      made.Config.Labels[OWNER_LABEL] === owner,
+    JSON.stringify({ owner, name: made?.Name, labels: made?.Config.Labels })
+  );
+};
+
 /** One host's gate checks, A and B through chrome-devtools-mcp and raw CDP. */
 const gateChecks = async (
   kit: Kit,
@@ -864,6 +900,7 @@ const run = async (kit: Kit): Promise<void> => {
       live.host === "container" && ports.devtools > 0,
       JSON.stringify(live)
     );
+    await ownerCheck(kit, gateHost, runtime.docker, data, key);
     await gateChecks(kit, gateHost, key, gatePort, "container", who, entry);
     shell.container = { devtools: ports.devtools, socket };
     await shellChecks(kit, "container");
@@ -871,22 +908,19 @@ const run = async (kit: Kit): Promise<void> => {
     // The runtime gone (its containers stop with it), then hidden: the
     // container browser stays a container browser, refused with the
     // runtime's name, its container and volume kept.
-    const boxName = `cawco-browser-${key.replace(":", "-")}`;
-    const inRuntime = async () => ({
-      containers: (
-        await runtime.docker.listContainers({
-          all: true,
-          filters: { name: [boxName] },
-        })
-      ).length,
-      volume: await runtime.docker
-        .getVolume(boxName)
-        .inspect()
-        .then(
-          () => "kept",
-          () => "gone"
-        ),
-    });
+    // What the gate host's agent holds on the runtime for `key`, by its
+    // owner label (container-host.ts `ownedBy`), never by a name.
+    const owned = async () => {
+      const owner = await keptBrowserOwner(join(data, "cawco", "browsers"));
+      const held = owner
+        ? await ownedBy(runtime.docker, owner, key)
+        : { containers: [], volumes: [] };
+      return {
+        owner,
+        containers: held.containers.length,
+        volumes: held.volumes.length,
+      };
+    };
     await gateHost.call("stop", { key });
     await gateHost.call("runtime", { hidden: true });
     const refused = await gateHost.call("start", { key }).then(
@@ -898,7 +932,7 @@ const run = async (kit: Kit): Promise<void> => {
       runtimeAway?: boolean;
       state?: string;
     } | null;
-    const awayKept = await inRuntime();
+    const awayKept = await owned();
     kit.check(
       `runtime hidden: ${key} stays on the container host, not live, refused with "isn't answering", its container and volume kept`,
       refused.includes("isn't answering") &&
@@ -906,17 +940,17 @@ const run = async (kit: Kit): Promise<void> => {
         away.runtimeAway === true &&
         away.state !== "live" &&
         awayKept.containers === 1 &&
-        awayKept.volume === "kept",
+        awayKept.volumes === 1,
       JSON.stringify({ refused, away, ...awayKept })
     );
 
     // Removed while the runtime answers: the container and volume go with it.
     await gateHost.call("runtime", { hidden: false });
     await gateHost.call("remove", { key });
-    const removed = await inRuntime();
+    const removed = await owned();
     kit.check(
-      `removed with the runtime answering: ${boxName}'s container and volume are gone`,
-      removed.containers === 0 && removed.volume === "gone",
+      `removed with the runtime answering: ${key}'s container and volume (owner ${removed.owner}) are gone`,
+      removed.containers === 0 && removed.volumes === 0,
       JSON.stringify(removed)
     );
 
@@ -969,15 +1003,6 @@ const run = async (kit: Kit): Promise<void> => {
     // A move cut short: the runtime back, and the agent stopped once the
     // move's container stands and before the record's one write. Its stop
     // aborts the move, whose failure path removes what it made.
-    const labelled = async () => {
-      const label = { label: [`dev.cawco.browser=${key}`] };
-      const containers = await runtime.docker.listContainers({
-        all: true,
-        filters: label,
-      });
-      const { Volumes } = await runtime.docker.listVolumes({ filters: label });
-      return { containers: containers.length, volumes: (Volumes ?? []).length };
-    };
     await gateHost.call("runtime", { hidden: false });
     const cut = await until(
       `the move's container for ${key}, before its record is written`,
@@ -988,14 +1013,14 @@ const run = async (kit: Kit): Promise<void> => {
         if (record?.host !== "local") {
           return "written";
         }
-        return (await labelled()).containers > 0 ? "standing" : undefined;
+        return (await owned()).containers > 0 ? "standing" : undefined;
       },
       Boolean,
       300_000
     ).catch(() => "never");
     gateHost.end();
     const exit = await gateHost.exited;
-    const afterStop = await labelled();
+    const afterStop = await owned();
     const stillLocal = (
       (await readFile(
         join(data, "cawco", "browsers", browserSlug(key), "record.json"),
@@ -1070,7 +1095,7 @@ const run = async (kit: Kit): Promise<void> => {
       () => false,
       () => true
     );
-    const afterMove = await labelled();
+    const afterMove = await owned();
     const cookie = read.cookie as
       { httpOnly?: boolean; value?: string } | undefined;
     kit.check(

@@ -182,16 +182,18 @@ const evaluate = async (raw: Raw, session: string, expression: string) =>
     )
   ).result?.result as { value?: unknown } | undefined;
 
-/** Whether `key`'s container volume (its sign-ins) is on the runtime, read from the runtime itself. */
-const volumeOf = async (key: BrowserKey): Promise<"kept" | "gone"> => {
+/** Whether the volume a container record names (its sign-ins) is on the runtime, read from the runtime itself. */
+const volumeOf = async (
+  volume: string | undefined
+): Promise<"kept" | "gone"> => {
   const { findRuntime } =
     await import("../../../packages/agent/src/browser/runtime");
   const found = await findRuntime();
-  if ("missing" in found) {
+  if ("missing" in found || !volume) {
     return "gone";
   }
   return found.docker
-    .getVolume(`cawco-browser-${key.replace(":", "-")}`)
+    .getVolume(volume)
     .inspect()
     .then(
       () => "kept" as const,
@@ -511,7 +513,7 @@ async function leg(
     const { readBrowser } =
       await import("../../../packages/agent/src/browser/state");
     const kept = await readBrowser(earlier);
-    const volume = await volumeOf(earlier);
+    const volume = await volumeOf(kept?.container?.volume);
     kit.check(
       `${host}: with the runtime hidden, the container leg's browser ${earlier} is still a container browser, ${kept?.state} and not live ("${kept?.why}"), its volume ${volume}`,
       kept?.host === "container" &&
@@ -770,7 +772,7 @@ const run = async (kit: Kit): Promise<void> => {
       (record) => record?.state === "live" && record.host === "container",
       180_000
     ).catch(() => undefined);
-    const volume = await volumeOf(back);
+    const volume = await volumeOf(kept?.container?.volume);
     kit.check(
       `the runtime back: ${back} is live again on the ${kept?.host} host by itself, its volume ${volume}`,
       kept?.state === "live" &&
