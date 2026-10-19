@@ -17,15 +17,12 @@
   } = $props();
 </script>
 
-<!-- literal: 8px -->
 <div
   data-slot="head"
-  class="flex items-center justify-between gap-(--gap) data-wrap:flex-wrap"
+  class="flex items-center justify-between gap-space-2 data-wrap:flex-wrap"
   data-wrap={wrap || undefined}
-  style:--gap="8px"
 >
-  <!-- literal: 8px -->
-  <div class="flex items-center gap-(--gap)" style:--gap="8px">
+  <div class="mark-line flex items-center gap-space-2">
     <Icon class="size-icon-md flex-none" style={`color:${hue}`} />
     <span class="type-label">{label}</span>
   </div>

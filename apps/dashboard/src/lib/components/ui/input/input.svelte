@@ -3,13 +3,20 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks, each as they drew it: the mono face for what is
-      typed exactly (a path, a command, a key), a text size, tight pads for
-      a short figure, and how wide it may run. */
+      typed exactly (a path, a command, a key), a text size, the small
+      control height beside an `sm` select or button, tight pads for a short
+      figure, the placeholder's ink, and how wide it may run. */
   export const inputVariants = tv({
     variants: {
       face: { mono: "font-mono" },
       text: { meta: "text-meta", label: "text-label", title: "text-title" },
+      /** `sm`: the 30px small control, level with an `sm` NativeSelect or
+          Button in the same row. */
+      size: { sm: "h-c-btn-h-sm" },
       pad: { tight: "px-space-2" },
+      /** `subtle`: the placeholder in the subtle ink, as every field on the
+          new-session surface draws it (ns-theme's K2). */
+      placeholderInk: { subtle: "placeholder:text-ink-subtle" },
       measure: {
         shrink: "min-w-0",
         "cap-sm": "max-w-64",
@@ -33,7 +40,7 @@
   type InputType = Exclude<HTMLInputTypeAttribute, "file">;
 
   type Props = WithElementRef<
-    Omit<HTMLInputAttributes, "type"> &
+    Omit<HTMLInputAttributes, "type" | "size"> &
       InputLooks &
       (
         | { type: "file"; files?: FileList }
@@ -49,31 +56,35 @@
     class: className,
     face,
     text,
+    size,
     pad,
+    placeholderInk,
     measure,
     flex,
     "data-slot": dataSlot = "input",
     ...restProps
   }: Props = $props();
-  const looks = $derived(inputVariants({ face, text, pad, measure, flex }));
+  const looks = $derived(
+    inputVariants({ face, text, size, pad, placeholderInk, measure, flex })
+  );
+  /** The field's own look, the same for a file picker and a text field. */
+  const field = [
+    "rounded-md shadow-xs transition-control",
+    "h-c-input-h w-full min-w-0 border border-border-control",
+    "bg-surface-raised px-3 text-ink-strong",
+    "text-body file:inline-flex file:h-7",
+    "file:border-0 file:bg-transparent file:font-medium",
+    "file:text-ink-strong file:text-label",
+    "placeholder:text-ink-muted",
+    "disabled:pointer-events-none disabled:cursor-not-allowed",
+    "disabled:opacity-50 aria-invalid:border-error-9",
+    "dark:aria-invalid:border-error-9/50",
+  ];
 </script>
 
 {#if type === "file"}
   <input
-    class={cn(
-      "rounded-md shadow-xs [transition:var(--transition-control)]",
-      "h-9 w-full min-w-0 border border-[var(--border-control)]",
-      "bg-[var(--surface-raised)] px-3 text-[var(--ink-strong)]",
-      "text-body file:inline-flex file:h-7",
-      "file:border-0 file:bg-transparent file:font-medium",
-      "file:text-ink-strong file:text-label",
-      "placeholder:text-ink-muted",
-      "disabled:pointer-events-none disabled:cursor-not-allowed",
-      "disabled:opacity-50 aria-invalid:border-error-9",
-      "dark:aria-invalid:border-error-9/50",
-      looks,
-      className
-    )}
+    class={cn(field, looks, className)}
     data-slot={dataSlot}
     type="file"
     bind:this={ref}
@@ -83,20 +94,7 @@
   />
 {:else}
   <input
-    class={cn(
-      "rounded-md shadow-xs [transition:var(--transition-control)]",
-      "h-9 w-full min-w-0 border border-[var(--border-control)]",
-      "bg-[var(--surface-raised)] px-3 text-[var(--ink-strong)]",
-      "text-body file:inline-flex file:h-7",
-      "file:border-0 file:bg-transparent file:font-medium",
-      "file:text-ink-strong file:text-label",
-      "placeholder:text-ink-muted",
-      "disabled:pointer-events-none disabled:cursor-not-allowed",
-      "disabled:opacity-50 aria-invalid:border-error-9",
-      "dark:aria-invalid:border-error-9/50",
-      looks,
-      className
-    )}
+    class={cn(field, looks, className)}
     data-slot={dataSlot}
     {type}
     bind:this={ref}

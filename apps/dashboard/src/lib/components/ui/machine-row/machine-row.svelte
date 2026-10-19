@@ -28,12 +28,10 @@
   } = $props();
 </script>
 
-<!-- literal: 26px -->
 <span
   data-slot="tile"
-  class="inline-flex size-(--tile) flex-none items-center justify-center rounded-sm bg-surface-raised shadow-tile data-ink:bg-ink-solid data-ink:text-on-ink data-ink:shadow-none"
+  class="inline-flex size-c-mark flex-none items-center justify-center rounded-sm bg-surface-raised shadow-tile data-ink:bg-ink-solid data-ink:text-on-ink data-ink:shadow-none"
   data-ink={ink || undefined}
-  style:--tile="26px"
   style:color={ink ? undefined : hue}
   ><Icon class="size-icon-md flex-none" /></span
 >
@@ -41,19 +39,16 @@
   <span data-slot="name" class="type-label block truncate text-ink-strong"
     >{name}</span
   >
-  <!-- literal: 6px -->
   <span
     data-slot="meta"
-    class="type-meta mark-line flex items-center gap-(--meta-gap) text-ink-subtle"
-    style:--meta-gap="6px"
-    ><!-- literal: 6px --><span
+    class="type-meta mark-line flex items-center gap-space-2 text-ink-subtle"
+    ><span
       data-slot="dot"
       data-machine-row-away={presence === "away" || undefined}
-      class="size-(--dot) flex-none rounded-pill bg-neutral-8 data-is-away:bg-hue-orange-500 not-data-is-away:data-is-online:bg-hue-green-500"
+      class="size-(--status-dot-size) flex-none rounded-pill bg-presence-off data-is-away:bg-presence-away not-data-is-away:data-is-online:bg-presence-online"
       data-box
       data-is-away={presence === "away" || undefined}
       data-is-online={presence === "online" || undefined}
-      style:--dot="6px"
     ></span><span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
       >{meta}</span
     ></span
