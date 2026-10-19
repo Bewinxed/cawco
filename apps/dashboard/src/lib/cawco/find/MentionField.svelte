@@ -731,9 +731,6 @@
   {/if}
 {/if}
 
-<!-- literal: 34px, 200px, 16px; the chips' 6px, 15px and 22px (the
-     composer's field gives the chips the same to its autosize twin, a copy
-     of this box without its inline style) -->
 <div
   data-slot="editor"
   data-mention-field-empty={empty || undefined}
@@ -742,15 +739,9 @@
   bind:this={editor}
   data-phone={phone || undefined}
   class={[
-    "relative min-h-(--editor-min-h) max-h-(--editor-max-h) overflow-y-auto py-space-2 type-body text-(length:--editor-fs) leading-ui text-ink-strong caret-brand-solid whitespace-pre-wrap wrap-anywhere no-scrollbar outline-off",
+    "relative min-h-c-composer-field max-h-(--c-mention-field-max-h) overflow-y-auto py-space-2 type-body leading-ui text-ink-strong caret-brand-solid whitespace-pre-wrap wrap-anywhere no-scrollbar outline-off data-mention-field-empty:before:content-placeholder data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-subtle data-mention-field-empty:before:pointer-events-none",
     className,
   ]}
-  style:--editor-min-h="34px"
-  style:--editor-max-h="200px"
-  style:--editor-fs="16px"
-  style:--mention-chip-pad-end="6px"
-  style:--mention-chip-size="15px"
-  style:--mention-chip-leading="22px"
   aria-activedescendant={mention.open && mention.active
     ? `${menuId}-${mention.active.kind}:${mention.active.id}`
     : rest["aria-activedescendant"]}
@@ -786,96 +777,15 @@
   <!-- DESIGN.md, Tooltip: solid ink, never coral; fades and settles from
        0.96. The handle is the code role's face, size, weight and leading,
        its ligatures as the role's shorthand left them. -->
-  <!-- literal: 320px, 6px, 10px, -50%, calc(-100% - 8px) -->
   <div
     data-slot="tip"
-    class="fixed z-60 grid gap-space-row max-w-(--tip-max-w) py-(--tip-pad-y) px-(--tip-pad-x) rounded-sm bg-ink-solid text-on-ink type-meta translate-x-(--tip-shift-x) translate-y-(--tip-shift-y) pointer-events-none"
+    class="fixed z-60 grid gap-space-row max-w-(--c-tip-max-w) py-space-2 px-space-3 rounded-sm bg-ink-solid text-on-ink type-meta -translate-x-1/2 translate-y-(--tip-shift-y) pointer-events-none animate-kit-tip-fade motion-safe:animate-mention-tip-in"
     role="tooltip"
     style:left={`${tip.x}px`}
     style:top={`${tip.y}px`}
-    style:--tip-max-w="320px"
-    style:--tip-pad-y="6px"
-    style:--tip-pad-x="10px"
-    style:--tip-shift-x="-50%"
-    style:--tip-shift-y="calc(-100% - 8px)"
+    style:--tip-shift-y="calc(-100% - var(--space-2))"
   >
     <span>{tip.text}</span>
     <span class="type-code opacity-80">{tip.handle}</span>
   </div>
 {/if}
-
-<style>
-  [data-slot="editor"] {
-    /* residual: pseudo */
-    /* The hint stands out of the text's flow, so the caret stands at the
-       line's start under it. */
-    &[data-mention-field-empty]::before {
-      content: attr(data-placeholder);
-      position: absolute;
-      color: var(--ink-subtle);
-      pointer-events: none;
-    }
-  }
-
-  /* residual: foreign-dom — the chips and their glyphs are made by the
-     script (chipShape), never by the markup; their literals are the
-     editor's custom properties */
-  /* The chip: a recessed badge holding the kind's glyph and the title. */
-  [data-slot="editor"] :global([data-mention-chip]) {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    max-inline-size: 100%;
-    margin-inline: 1px;
-    padding: 0 var(--mention-chip-pad-end) 0 var(--space-1);
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    box-shadow: inset 0 0 0 1px var(--border-hairline);
-    font: var(--type-label);
-    font-size: var(--mention-chip-size);
-    line-height: var(--mention-chip-leading);
-    color: var(--ink-strong);
-    vertical-align: baseline;
-    white-space: nowrap;
-    cursor: default;
-    user-select: all;
-  }
-  [data-slot="editor"] :global(.mention-glyph) {
-    display: inline-grid;
-    place-items: center;
-    color: var(--status-idle-glyph);
-
-    & :global(svg) {
-      inline-size: var(--icon-md);
-      block-size: var(--icon-md);
-    }
-  }
-  [data-slot="editor"]
-    :global([data-mention-chip][data-tone="live"] .mention-glyph) {
-    color: var(--status-live-glyph);
-  }
-  [data-slot="editor"]
-    :global([data-mention-chip][data-tone="attn"] .mention-glyph) {
-    color: var(--status-attn-glyph);
-  }
-  [data-slot="editor"]
-    :global([data-mention-chip][data-tone="fail"] .mention-glyph) {
-    color: var(--status-fail-glyph);
-  }
-
-  /* residual: keyframes */
-  [data-slot="tip"] {
-    animation: kit-tip-fade 140ms var(--ease-out);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="tip"] {
-      animation: mention-tip-in 140ms var(--ease-out);
-    }
-  }
-  @keyframes mention-tip-in {
-    from {
-      opacity: 0;
-      scale: 0.96;
-    }
-  }
-</style>
