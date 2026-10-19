@@ -53,7 +53,6 @@
     "@typescript/native": "npm:typescript@~7.0.2",
     "axe-core": "^4.14.0",
     "bits-ui": "^2.19.5",
-    "drizzle-orm": "^0.45.3",
     "multicast-dns": "7.2.5",
     "pixelmatch": "^8.0.0",
     "playwright-core": "^1.64.1",

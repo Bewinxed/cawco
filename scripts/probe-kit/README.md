@@ -7,11 +7,12 @@ the clock (`anim.ts`), regressions by pixel diff against an approved baseline
 
 ```sh
 bun scripts/probe-kit/run.ts web [spec…] [--approve <spec>[:<entry>,…]] [--review <dir>]   # specs/web/
-bun scripts/probe-kit/run.ts <spec>                                                        # specs/<spec>.ts
+bun scripts/probe-kit/run.ts <spec>…                                                       # specs/<spec>.ts, each in order
 ```
 
 Each assertion prints `PASS <spec>: …` or `FAIL <spec>: …`; the run ends with
-`ALL PASS` or `N FAILED` and exits 0 only when every assertion passed. A spec
+one line over every spec it ran, `ALL PASS (N specs, …)` or `N FAILED: <spec>, …`,
+and exits 0 only when every assertion passed. A spec
 that needs a hub gets a scratch fleet (`kit.fleet`, `scripts/scratch-fleet.ts`):
 a real hub, agent and sessiond with their own HOME, against a mock model.
 
