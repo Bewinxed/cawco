@@ -14,14 +14,17 @@
  *
  * 0. First, H runs a command in the foreground that listens on nothing and
  *    runs {@link FG_SECONDS} s (`sh -c 'sleep …; exit 7'`). While it runs,
- *    its boundary is given an older form and the agent restarts, as a
- *    binary-apply does (on 2026-10-19 a leaf's probe run, kf-2, exited 137
- *    with "workspace 9874eeaf…'s boundary stopped while this command ran").
- *    The command finishes with its own exit code, 7, in the boundary it
- *    started in: its tool result reads `FG-STATUS-7` and not the executor's
- *    "boundary stopped" line, and the agent's log says the boundary was kept
- *    while its work ran (agent boundary.ts `commandsIn`, the executor's own
- *    mark).
+ *    its boundary's record of what it started with
+ *    (`boundaries/<gen>/policy.json`) is removed, as a boundary a build
+ *    before the record started has none, and the agent restarts on an older
+ *    form, as the upgrade does. On 2026-10-19 the install of 4343 over 4303
+ *    stopped 20 such boundaries "as its access narrowed … (what its boundary
+ *    started with is not on record)", leaf 3b8e7144's probe run kf-2 among
+ *    them, cut off with exit 137. The command finishes with its own exit
+ *    code, 7, in the boundary it started in (`FG-STATUS-7`, not the
+ *    executor's "boundary stopped" line); the agent's log says it cannot
+ *    compare the grant and keeps the boundary while its work runs
+ *    (agent boundary.ts `compareGrant`), and no line says "not on record".
  *
  * H then starts `setsid nohup sh -c 'while :; do date +%s >> beat; sleep 2; done'`
  * in its clone and ends its turn in a wait, its item live. Its boundary is
@@ -53,14 +56,21 @@
  *   bun scripts/probe-kit/run.ts boundary-handover
  */
 import { existsSync } from "node:fs";
-import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  readFile,
+  realpath,
+  rename,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { join } from "node:path";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const WAIT = "mcp__cawco__wait_item";
-/** How long round 0's foreground command runs: past an agent restart and its start-up pass. */
+/** How long a round 0 foreground command runs: past an agent restart and its start-up pass. */
 const FG_SECONDS = 90;
 /** Round 0's command: a marker in the clone as it starts, then a foreground wait on no port, its status said by the shell around it. */
 const FOREGROUND = [
@@ -69,10 +79,14 @@ const FOREGROUND = [
   `echo "FG-""STATUS-$?"`,
 ].join("; ");
 const FG_STATUS = /FG-STATUS-(\d+)/;
-/** The executor's line for a command cut off by its boundary's end (agent boundary.ts `execScript`). */
-const CUT_OFF = "boundary stopped while this command ran";
 /** The account round 0's restart adds, apart from round 1's, so each restart is a form change of its own. */
 const FG_ACCOUNT = "acct-probe-older-form-fg";
+/** The executor's line for a command cut off by its boundary's end (agent boundary.ts `execScript`). */
+const CUT_OFF = "boundary stopped while this command ran";
+/** How the agent says it keeps a boundary whose grant it cannot compare (boundary.ts `ensure`, `compareGrant`). */
+const UNKNOWN_GRANT_LINE = "grant cannot be compared with this build's policy";
+/** How main's agent said it stopped one with no record (boundary.ts `narrowing`, before `compareGrant`). */
+const NOT_ON_RECORD = "not on record";
 const TAG = /PROBE-BEAT-(?:CHECK-|NARROW-|AGAIN-)?H:/;
 /** The loop's beat, `sleep 2`: a read of the heartbeat that must see it grow waits more than one. */
 const BEAT_GAP_MS = 5000;
@@ -325,7 +339,10 @@ const run = async (kit: Kit) => {
   const waiting = await until(
     "H's heartbeat started and its item waiting",
     item,
-    (row) => row?.state === "running" && row.wait_until !== null,
+    (row) =>
+      row?.state === "running" &&
+      row.wait_until !== null &&
+      fleet.seen.some((one) => STARTED.test(one.all)),
     300_000
   ).catch(item);
   const first = fleet.seen.find((one) => STARTED.test(one.all));
@@ -397,10 +414,21 @@ const run = async (kit: Kit) => {
   });
 };
 
+/** H's boundary's generation dir, where its record of what it started with lies (agent boundary.ts `grantedOf`). */
+const generationOf = async (home: string, id: string): Promise<string> => {
+  const state = join(home, ".cawco", "workspaces", id);
+  const held = JSON.parse(
+    await readFile(join(state, "boundary.json"), "utf8").catch(() => "{}")
+  ) as { gen?: string };
+  return join(state, "boundaries", held.gen ?? "unread");
+};
+
 /**
  * 0: H's foreground command, listening on nothing, runs across an agent
- * restart that gives its boundary an older form, and finishes with its own
- * exit code ({@link FOREGROUND}).
+ * restart that gives its boundary an older form, its record of what it
+ * started with (`policy.json` in its generation dir) removed first, as a
+ * boundary a build before the record started has none; it finishes with its
+ * own exit code ({@link FOREGROUND}).
  */
 const foregroundAcross = async (
   kit: Kit,
@@ -424,6 +452,9 @@ const foregroundAcross = async (
     Boolean,
     240_000
   ).catch(() => false);
+  const file = join(await generationOf(home, id), "policy.json");
+  const record = existsSync(file) ? `removed (${file})` : `not there (${file})`;
+  await rm(file, { force: true });
   const restartAt = Date.now();
   if (started) {
     await olderFormRestart(fleet, home, id, FG_ACCOUNT);
@@ -433,28 +464,32 @@ const foregroundAcross = async (
     "H's foreground command's result",
     () =>
       fleet.seen.find(
-        (one) => FG_STATUS.test(one.all) || one.all.includes(CUT_OFF)
+        (one) => FG_STATUS.test(one.last) || one.last.includes(CUT_OFF)
       ),
     Boolean,
     (FG_SECONDS + 120) * 1000
   ).catch(() => undefined);
-  const said = result?.all ?? "";
+  const said = result?.last ?? "";
   const lines = (await fleet.logs("agent"))
     .split("\n")
     .filter((line) => line.includes(id));
   kit.note(`0: the agent's lines for H's workspace:\n${lines.join("\n")}`);
   kit.check(
-    `0: H's foreground command, listening on nothing, ran across an agent restart that gave its boundary an older form (${Math.round(restarted / 1000)} s into its ${FG_SECONDS} s), and finished with its own exit code`,
+    `0: H's foreground command, listening on nothing, ran across an agent restart that gave its boundary an older form with its record of what it started with ${record}, ${Math.round(restarted / 1000)} s into its ${FG_SECONDS} s, and finished with its own exit code`,
     started &&
       restarted < FG_SECONDS * 1000 &&
       FG_STATUS.exec(said)?.[1] === "7" &&
       !said.includes(CUT_OFF),
-    `started: ${started}; ${result ? `its result: ${said.slice(said.lastIndexOf("touch fg.started")).slice(0, 400)}` : "no result"}`
+    `started: ${started}; ${result ? `its result: ${said.slice(0, 400)}` : "no result"}; ${lines.find((line) => line.includes(NOT_ON_RECORD)) ?? "no line says not on record"}`
   );
   kit.check(
-    "0: the agent's log says it kept the boundary as it was while its work ran",
-    lines.some((line) => line.includes("is kept as it is while its work")),
-    lines.find((line) => line.includes("is kept as it is")) ?? "no kept line"
+    "0: the agent's log says it cannot compare the boundary's grant and keeps it while its work runs, and stops nothing as not on record",
+    lines.some((line) => line.includes(UNKNOWN_GRANT_LINE)) &&
+      !lines.some((line) => line.includes(NOT_ON_RECORD)),
+    lines.find(
+      (line) =>
+        line.includes(UNKNOWN_GRANT_LINE) || line.includes(NOT_ON_RECORD)
+    ) ?? "no such line"
   );
 };
 

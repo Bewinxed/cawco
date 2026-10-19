@@ -1243,7 +1243,12 @@ const rearmOne = async (id: string): Promise<boolean> => {
   const form = await formOf(ref).catch(
     said("its boundary's form could not be checked")
   );
-  const stale = form !== undefined && held.form !== form;
+  // An older form, or a grant this build cannot compare with its policy
+  // ({@link compareGrant}): ensured now, so it is handed over once idle.
+  const stale =
+    form !== undefined &&
+    (held.form !== form ||
+      (await unknownGrant(ref, held).catch(() => undefined)) !== undefined);
   if (stale && (await running(id, held))) {
     // Handed over now, behind the gate: a command waits at the gate and runs
     // through the new boundary rather than through one of another form.
@@ -2087,9 +2092,22 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
       return runs;
     }
   }
-  // One of an older form, or one a retiring keeper holds, is handed over to
-  // one of this build's form on the current keeper.
-  if (held.form !== (await formOf(ref)) || holder.epoch !== client.epoch) {
+  // One of an older form, one a retiring keeper holds, or one whose grant
+  // this build cannot compare with its policy ({@link compareGrant}) is
+  // handed over to one of this build's form on the current keeper, as soon
+  // as nothing runs in it.
+  const unknown = await unknownGrant(ref, held);
+  if (unknown && saidUnknown.get(ref.id) !== held.pid) {
+    saidUnknown.set(ref.id, held.pid);
+    console.info(
+      `[workspace] ${ref.id}: its boundary ${held.pid}'s grant cannot be compared with this build's policy (${unknown}), so it is not stopped as narrowed: it is kept as it is while its work runs, and handed over once that ends`
+    );
+  }
+  if (
+    unknown ||
+    held.form !== (await formOf(ref)) ||
+    holder.epoch !== client.epoch
+  ) {
     return replaceOlder(client, ref, held, owed);
   }
   forgetStale(ref.id);
@@ -2098,11 +2116,16 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   return armHook(ref.id, held);
 };
 
+/** The boundary each workspace's unknown grant was last said for ({@link ensure}): said once per boundary. */
+const saidUnknown = new Map<string, number>();
+
 /**
  * {@link ensure} for workspace `ref`'s running boundary `held`, of an older
- * form or on a retiring keeper: handed over to one of this build's form on
- * the current keeper, or, until it can be, armed as it is.
+ * form, on a retiring keeper, or whose grant is not comparable ({@link
+ * compareGrant}): handed over to one of this build's form on the current
+ * keeper, or, until it can be, armed as it is.
  */
+
 const replaceOlder = async (
   client: SessiondClient,
   ref: WorkspaceRef,
@@ -3252,19 +3275,54 @@ const pathsOf = (value: unknown): string[] | undefined =>
     : undefined;
 
 /**
- * How policy `now` narrows `was`, the policy a boundary started with
- * ({@link grantedOf}), each in words; none when it widens it or leaves it as
- * it was. Read off the policy's own fields, whatever they are: each pair of
- * lists named `allow<X>` and `deny<X>` narrows when a path one of its lists
- * names was let through before and is not now ({@link letThrough}); any
- * other field narrows when it changed at all (a flag, a path), as no name
- * says which way. With no record, what the boundary grants is not known, so
- * it narrows.
+ * How a boundary's recorded grant ({@link grantedOf}) stands against the
+ * policy `now`: comparable, with how it narrows ({@link narrowing}), or not
+ * comparable, with why. NOT COMPARABLE IS NO NARROWING: a record that is
+ * missing, unreadable, or of another set of fields than this build's policy
+ * (a build before the record, or one that added or dropped a field) says
+ * nothing about which way access moved, so the boundary is never stopped for
+ * it with a command in it; it is kept while its work runs and handed over
+ * once that ends ({@link ensure}), and its replacement starts with this
+ * build's record. On 2026-10-19 the install of the build that introduced the
+ * record stopped 20 running boundaries as "narrowed (what its boundary
+ * started with is not on record)", a leaf's probe run among them, cut off
+ * with exit 137.
  */
-const narrowing = (was: Policy | undefined, now: Policy): string[] => {
+type Grant =
+  | { readonly kind: "comparable"; readonly narrowed: readonly string[] }
+  | { readonly kind: "unknown"; readonly why: string };
+
+const compareGrant = (was: Policy | undefined, now: Policy): Grant => {
   if (!was) {
-    return ["what its boundary started with is not on record"];
+    return {
+      kind: "unknown",
+      why: "what it started with is not on record (a build before the record started it, or its record cannot be read)",
+    };
   }
+  const fieldsOf = (policy: Policy) => Object.keys(policy).sort().join(", ");
+  if (fieldsOf(was) !== fieldsOf(now)) {
+    return {
+      kind: "unknown",
+      why: `its record names the fields ${fieldsOf(was)}, and this build's policy ${fieldsOf(now)}`,
+    };
+  }
+  return { kind: "comparable", narrowed: narrowing(was, now) };
+};
+
+/** The reasons a grant narrowed; none when it is not comparable ({@link compareGrant}). */
+const narrowedBy = (grant: Grant): readonly string[] =>
+  grant.kind === "comparable" ? grant.narrowed : [];
+
+/**
+ * How policy `now` narrows `was`, the policy a boundary started with
+ * ({@link grantedOf}), the two of one set of fields ({@link compareGrant}),
+ * each in words; none when it widens it or leaves it as it was. Read off the
+ * policy's own fields, whatever they are: each pair of lists named
+ * `allow<X>` and `deny<X>` narrows when a path one of its lists names was let
+ * through before and is not now ({@link letThrough}); any other field narrows
+ * when it changed at all (a flag, a path), as no name says which way.
+ */
+const narrowing = (was: Policy, now: Policy): string[] => {
   const before: Record<string, unknown> = { ...was };
   const after: Record<string, unknown> = { ...now };
   const fields = [
@@ -3428,18 +3486,22 @@ interface Narrowed {
  * Which generations of workspace `ref`, its current boundary `held` and each
  * older one still beside it ({@link Retiring}), grant what the workspace's
  * policy as it stands no longer does ({@link narrowing}); undefined when none
- * does.
+ * does. One whose grant is not comparable is none of them ({@link
+ * compareGrant}).
  */
 const narrowedGenerations = async (
   ref: WorkspaceRef,
   held: Pick<Held, "gen">
 ): Promise<Narrowed | undefined> => {
   const now = await workspacePolicy(ref);
-  const current = narrowing(await grantedPolicy(ref.id, held.gen), now);
-  const older: { boundary: Retiring; why: string[] }[] = [];
+  const current = narrowedBy(
+    compareGrant(await grantedPolicy(ref.id, held.gen), now)
+  );
+  const older: { boundary: Retiring; why: readonly string[] }[] = [];
   for (const boundary of await readRetiring(ref.id)) {
     // biome-ignore lint/performance/noAwaitInLoops: one small record read per older generation
-    const why = narrowing(await grantedPolicy(ref.id, boundary.gen), now);
+    const granted = await grantedPolicy(ref.id, boundary.gen);
+    const why = narrowedBy(compareGrant(granted, now));
     if (why.length > 0) {
       older.push({ boundary, why });
     }
@@ -3447,6 +3509,18 @@ const narrowedGenerations = async (
   return current.length > 0 || older.length > 0
     ? { current, older }
     : undefined;
+};
+
+/** Why workspace `ref`'s current boundary `held`'s grant is not comparable with its policy now ({@link compareGrant}); nothing when it is. */
+const unknownGrant = async (
+  ref: WorkspaceRef,
+  held: Pick<Held, "gen">
+): Promise<string | undefined> => {
+  const grant = compareGrant(
+    await grantedPolicy(ref.id, held.gen),
+    await workspacePolicy(ref)
+  );
+  return grant.kind === "unknown" ? grant.why : undefined;
 };
 
 /**

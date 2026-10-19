@@ -203,10 +203,13 @@ orchestrate() {
   done
   free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
   (( free_gb >= 25 )) || { echo "only ${free_gb}G is free where $out is; the proof needs 25G (each rig's machines are vfs copies of the image; a full disk made podman fail with 'database or disk is full' in an earlier run)" >&2; exit 2; }
-  # A heavy run: one of the machine's slots (scripts/lib/heavy-run.ts) for this shell's whole life, its cleanup included.
+  # A heavy run (scripts/lib/heavy-run.ts) for this shell's whole life, its cleanup included, admitted for its own peak:
+  # 18 GiB, from obelisk's journal on 2026-10-19, "cawco-nightly-7c34d9be6.service: Consumed 15min 31.083s CPU time
+  # over 8min 33.717s wall clock time, 17.2G memory peak", a release whose run held a whole stage 2. Under
+  # scripts/release.ts it takes nothing of its own (CAWCO_HEAVY_RUN_HELD: the release's admission holds it).
   # shellcheck source=../lib/heavy-run.sh
   source "$here/../lib/heavy-run.sh"
-  heavy_run bash "$0" "$@"
+  CAWCO_HEAVY_PEAK_GIB=18 heavy_run bash "$0" "$@"
   STARTED=$SECONDS
   mkdir -p "$out/tmp" "$out/shared" "$out/feeds" "$out/rigs" "$out/logs" "$out/images"
   orchestrator_done() {

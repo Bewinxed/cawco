@@ -52,6 +52,12 @@
  * peak" on obelisk, on top of the probes and gates holding every slot, and a
  * probe's Chromium in the window lost its browser.
  *
+ * A run that needs more slots than come free together is never kept out for
+ * good by smaller runs coming and going: once it has waited 15 minutes it
+ * holds a reservation ({@link Reservation}), and each slot that frees goes
+ * to it until it has its count, every other run but a landing gate's waiting
+ * behind it.
+ *
  * The machines a heavy run brings up for itself (stage 2's rig machines,
  * `CAWCO_HEAVY_ADMITTED` set in their image) are inside its admission: their
  * session starts wait on no reading of the host's memory ({@link
@@ -261,6 +267,14 @@ const ROOM_POLL_MS = 3000;
  * the same tick the room comes back, each admitted on the same reading.
  */
 const ADMIT_SPACING_MS = 10_000;
+/**
+ * How long a run waits before it holds a reservation ({@link Reservation}):
+ * 15 minutes, `CAWCO_HEAVY_RESERVE_AFTER_S` to scale it for a proof. The
+ * usual aging reservation of batch schedulers (SLURM's backfill reserves for
+ * the job at the head of the queue); the number is the operator's call.
+ */
+const RESERVE_AFTER_MS = 15 * 60_000;
+const RESERVE_AFTER_ENV = "CAWCO_HEAVY_RESERVE_AFTER_S";
 const SLOT_FILE = /^slot-(\d+)$/;
 const GIB = 1024 ** 3;
 
@@ -788,7 +802,7 @@ export const heavyWhere = (): string => {
  * of either is said again.
  */
 interface Behind {
-  kind: "slots" | "spacing" | "room" | "gate";
+  kind: "slots" | "spacing" | "room" | "gate" | "reserved" | "reserving";
   ticket?: string;
   words: string;
 }
@@ -800,14 +814,19 @@ interface Ticket {
 }
 
 /**
- * The tickets held in `dir`, oldest first, read under the gate's lock. One
- * whose lock is free has lost its holder, and is deleted. `mine`, this
- * process's own, is not opened again.
+ * The tickets held in `dir` (a gate's, else those `file` names: the
+ * reservations), oldest first, read under the gate's lock. One whose lock is
+ * free has lost its holder, and is deleted. `mine`, this process's own, is
+ * not opened again.
  */
-const liveTickets = (dir: string, mine: string | undefined): string[] => {
+const liveTickets = (
+  dir: string,
+  mine: string | undefined,
+  file: RegExp = TICKET_FILE
+): string[] => {
   const live: string[] = [];
   const names = readdirSync(dir)
-    .filter((name) => TICKET_FILE.test(name))
+    .filter((name) => file.test(name))
     .sort();
   for (const name of names) {
     if (name === mine) {
@@ -892,6 +911,158 @@ const gateAhead = (
   };
 };
 
+/** A reservation: `reserve-<since, ms, 15 digits>-<pid>`, so names sort in the order they were taken. */
+const RESERVE_FILE = /^reserve-(\d{15})-\d+$/;
+
+/**
+ * A RUN THAT HAS WAITED {@link RESERVE_AFTER_MS} HOLDS A RESERVATION: a
+ * `reserve-…` file it holds `flock(2)` on, made under the gate's lock. While
+ * it holds the oldest one, each slot that frees goes to it, held from then
+ * on, until it has its count, and every other run but a landing gate's waits
+ * behind it; then it starts, its reservation given up. Until then, runs
+ * that need fewer slots start beside it as they fit. A reservation whose
+ * holder ended (a SIGKILL included) is unlocked, and the next look deletes it.
+ */
+interface Reservation {
+  fd: number;
+  /** The slots it holds so far. */
+  fds: number[];
+  name: string;
+  since: number;
+}
+
+/** What a reservation's file says of it, for a run waiting behind it to name. */
+type ReservedRecord = Written & { got: number; units: number };
+
+/** A reservation for `holder`, made and locked under the gate's lock; nothing when another run holds the gate this tick. */
+const takeReservation = (
+  dir: string,
+  holder: HeavyHolder,
+  units: number
+): Reservation | undefined => {
+  const gate = openLockFile(join(dir, "gate"), true);
+  if (!tryLock(gate)) {
+    closeSync(gate);
+    return;
+  }
+  try {
+    const last = liveTickets(dir, undefined, RESERVE_FILE).at(-1);
+    const after = last ? Number(RESERVE_FILE.exec(last)?.[1] ?? 0) + 1 : 0;
+    const since = Math.max(Date.now(), after);
+    const name = `reserve-${String(since).padStart(15, "0")}-${process.pid}`;
+    const fd = openLockFile(join(dir, name), true);
+    if (!tryLock(fd)) {
+      closeSync(fd);
+      return;
+    }
+    const reservation = { fd, fds: [], name, since };
+    sayReserved(reservation, holder, units);
+    return reservation;
+  } finally {
+    unlock(gate);
+  }
+};
+
+/** Writes what `reservation` holds into its file. */
+const sayReserved = (
+  reservation: Reservation,
+  holder: HeavyHolder,
+  units: number
+): void => {
+  const record: ReservedRecord = {
+    ...holder,
+    since: reservation.since,
+    got: reservation.fds.length,
+    units,
+  };
+  ftruncateSync(reservation.fd, 0);
+  writeSync(reservation.fd, JSON.stringify(record), 0);
+};
+
+/** A reservation given up: its run started, or it is gone. Its slots go too unless `keep`. */
+const dropReservation = (
+  dir: string,
+  reservation: Reservation,
+  keep: boolean
+): void => {
+  try {
+    unlinkSync(join(dir, reservation.name));
+  } catch {
+    // A look under the gate deleted it already.
+  }
+  unlock(reservation.fd);
+  if (!keep) {
+    for (const fd of reservation.fds) {
+      unlock(fd);
+    }
+  }
+};
+
+const clock = (at: number): string => new Date(at).toISOString();
+
+/**
+ * The reservation a run waits behind, read under the gate's lock: the oldest
+ * held, when it is not this run's own; nothing when none is held, or this
+ * run's is the oldest.
+ */
+const reservationAhead = (
+  dir: string,
+  mine: string | undefined
+): Behind | undefined => {
+  const [first] = liveTickets(dir, mine, RESERVE_FILE);
+  if (first === undefined || first === mine) {
+    return;
+  }
+  const record = readHolder(join(dir, first)) as ReservedRecord | undefined;
+  return {
+    kind: "reserved",
+    ticket: first,
+    words: `a run that has waited holds a reservation since ${record ? clock(record.since) : "a moment ago"}, ${record?.got ?? 0} of its ${record?.units ?? "?"} heavy-run slots so far, and each slot that frees goes to it first: ${describe(join(dir, first))}`,
+  };
+};
+
+/**
+ * One look at the slots for the run holding the oldest reservation: every
+ * free slot taken into it, up to its count. Its slots once it has them all;
+ * else what it holds so far, said with when its reservation started.
+ */
+const reserveMore = (
+  dir: string,
+  count: number,
+  units: number,
+  holder: HeavyHolder,
+  reservation: Reservation
+): { fds: number[] } | { behind: Behind } => {
+  const { free } = lookAtSlots(dir, count, units - reservation.fds.length);
+  if (free.length > 0) {
+    const record = JSON.stringify({ ...holder, since: Date.now() });
+    for (const fd of free) {
+      ftruncateSync(fd, 0);
+      writeSync(fd, record, 0);
+    }
+    reservation.fds.push(...free);
+    sayReserved(reservation, holder, units);
+  }
+  if (reservation.fds.length >= units) {
+    return { fds: reservation.fds };
+  }
+  return {
+    behind: {
+      kind: "reserving",
+      ticket: String(reservation.fds.length),
+      words: `this run has waited ${Math.round((Date.now() - reservation.since) / 60_000 + reserveAfter() / 60_000)} min, so it holds a reservation since ${clock(reservation.since)}: each heavy-run slot that frees goes to it, and it holds ${reservation.fds.length} of its ${units} so far`,
+    },
+  };
+};
+
+/** How long a run waits before it holds a reservation ({@link RESERVE_AFTER_MS}). */
+const reserveAfter = (): number => {
+  const raw = process.env[RESERVE_AFTER_ENV];
+  return raw === undefined || raw === ""
+    ? RESERVE_AFTER_MS
+    : threshold(RESERVE_AFTER_ENV, 0) * 1000;
+};
+
 /**
  * The slots in `dir` as they stand, under the gate's lock: the paths of those
  * held, every `slot-<i>` file counted, those at i ≥ `count` from a larger
@@ -934,14 +1105,16 @@ const lookAtSlots = (
  * fit under `count`, so the slots held never come to more than the runs
  * holding them were admitted for. While a landing gate's ticket is held,
  * slots go only to the oldest ticket's run (`ticket`, this run's own when it
- * is a gate's).
+ * is a gate's); then, while a reservation is held, only to the oldest
+ * reservation's run (`reservation`, this run's own when it holds one).
  */
 const tryTake = (
   dir: string,
   count: number,
   units: number,
   holder: HeavyHolder,
-  ticket: string | undefined
+  ticket: string | undefined,
+  reservation: Reservation | undefined
 ): { fds: number[] } | { behind?: Behind } => {
   const gate = openLockFile(join(dir, "gate"), true);
   if (!tryLock(gate)) {
@@ -949,9 +1122,14 @@ const tryTake = (
     return {};
   }
   try {
-    const ahead = gateAhead(dir, ticket);
+    const ahead =
+      gateAhead(dir, ticket) ??
+      (ticket ? undefined : reservationAhead(dir, reservation?.name));
     if (ahead) {
       return { behind: ahead };
+    }
+    if (reservation) {
+      return reserveMore(dir, count, units, holder, reservation);
     }
     const { held, free } = lookAtSlots(dir, count, units);
     if (free.length < units || held.length + units > count) {
@@ -1075,39 +1253,86 @@ async function waitForSlot(
   ticket: string | undefined,
   { say, gone }: { say: (line: string) => void; gone: () => boolean }
 ): Promise<HeavyTaken | undefined> {
-  let said: string | undefined;
-  let room: Room | undefined;
-  let measuredAt = 0;
-  for (;;) {
-    if (!room || Date.now() - measuredAt >= ROOM_POLL_MS) {
-      room = measureRoom(holder.peak);
-      measuredAt = Date.now();
-    }
-    let behind: Behind | undefined;
-    if (room.ok) {
-      const look = tryTake(dir, count, units, holder, ticket);
-      if ("fds" in look) {
-        if (said) {
-          say(`${QUEUE_MARKER} held heavy`);
-        }
-        return { fds: look.fds, waited: said !== undefined };
+  const wait: Waiting = { began: Date.now(), measuredAt: 0 };
+  try {
+    for (;;) {
+      const taken = lookOnce(dir, count, units, holder, ticket, wait, say);
+      if (taken) {
+        return taken;
       }
-      ({ behind } = look);
-    } else {
-      behind = { kind: "room", words: room.words };
+      // biome-ignore lint/performance/noAwaitInLoops: one look per tick, until a slot and the room are both there
+      await Bun.sleep(wait.room?.ok ? POLL_MS : ROOM_POLL_MS);
+      if (gone()) {
+        return;
+      }
     }
-    const saying = behind && `${behind.kind} ${behind.ticket ?? ""}`;
-    if (behind && saying !== said) {
-      said = saying;
-      say(`${QUEUE_MARKER} wait heavy: ${behind.words}`);
-    }
-    // biome-ignore lint/performance/noAwaitInLoops: one look per tick, until a slot and the room are both there
-    await Bun.sleep(room.ok ? POLL_MS : ROOM_POLL_MS);
-    if (gone()) {
-      return;
+  } finally {
+    // Gone before its count: its reservation and the slots it held so far go.
+    if (wait.reservation) {
+      dropReservation(dir, wait.reservation, false);
     }
   }
 }
+
+/** What a run's wait has seen so far ({@link waitForSlot}). */
+interface Waiting {
+  began: number;
+  measuredAt: number;
+  reservation?: Reservation;
+  room?: Room;
+  /** What holds the run, as last said. */
+  said?: string;
+}
+
+/**
+ * One look of {@link waitForSlot}: the room measured again every {@link
+ * ROOM_POLL_MS}, a reservation taken once the run has waited {@link
+ * reserveAfter} (a landing gate's run goes first already, and takes none),
+ * then the slots looked at while the machine has room. Its slots once taken;
+ * else nothing, what holds it said once per change.
+ */
+const lookOnce = (
+  dir: string,
+  count: number,
+  units: number,
+  holder: HeavyHolder,
+  ticket: string | undefined,
+  wait: Waiting,
+  say: (line: string) => void
+): HeavyTaken | undefined => {
+  if (!wait.room || Date.now() - wait.measuredAt >= ROOM_POLL_MS) {
+    wait.room = measureRoom(holder.peak);
+    wait.measuredAt = Date.now();
+  }
+  if (
+    !(wait.reservation || ticket) &&
+    Date.now() - wait.began >= reserveAfter()
+  ) {
+    wait.reservation = takeReservation(dir, holder, units);
+  }
+  let behind: Behind | undefined;
+  if (wait.room.ok) {
+    const look = tryTake(dir, count, units, holder, ticket, wait.reservation);
+    if ("fds" in look) {
+      if (wait.reservation) {
+        dropReservation(dir, wait.reservation, true);
+        wait.reservation = undefined;
+      }
+      if (wait.said) {
+        say(`${QUEUE_MARKER} held heavy`);
+      }
+      return { fds: look.fds, waited: wait.said !== undefined };
+    }
+    ({ behind } = look);
+  } else {
+    behind = { kind: "room", words: wait.room.words };
+  }
+  const saying = behind && `${behind.kind} ${behind.ticket ?? ""}`;
+  if (behind && saying !== wait.said) {
+    wait.said = saying;
+    say(`${QUEUE_MARKER} wait heavy: ${behind.words}`);
+  }
+};
 
 /** Lets a run's taken slots go. */
 export const releaseHeavySlot = (taken: Pick<HeavyTaken, "fds">): void => {
