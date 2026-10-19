@@ -213,8 +213,6 @@ export const accountsWords = {
     next: "Continue",
     save: "Save account",
     openAccounts: "Open Accounts",
-    /** Opens an account the sign-in joined into. */
-    openAccount: "Open account",
     chooseFirst: "Choose a provider first.",
     search: "Search providers",
     /** The picker's two groups, by how an account signs in. */
@@ -245,8 +243,6 @@ export const accountsWords = {
     setUp: (first: string, second: string) =>
       `${first} and ${second} are set up`,
     withMoves: (line: string) => `${line} · Moves at the limit`,
-    /** A sign-in came out as an account that already exists, naming it. */
-    joined: (name: string) => `${name} is already an account here.`,
   },
 
   // ── A provider's routing (RoutingEditor, StrategyPicker, OrderList) ───

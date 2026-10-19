@@ -419,9 +419,6 @@ public enum Words {
 
             public static let openAccounts = "Open Accounts"
 
-            /// Opens an account the sign-in joined into.
-            public static let openAccount = "Open account"
-
             public static let chooseFirst = "Choose a provider first."
 
             public static let search = "Search providers"
@@ -484,11 +481,6 @@ public enum Words {
 
             public static func withMoves(line: String) -> String {
                 "\(line) · Moves at the limit"
-            }
-
-            /// A sign-in came out as an account that already exists, naming it.
-            public static func joined(name: String) -> String {
-                "\(name) is already an account here."
             }
         }
 

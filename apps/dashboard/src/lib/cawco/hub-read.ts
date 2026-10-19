@@ -151,6 +151,12 @@ function parsed(text: string): {
 /** A sentence's closing stop, dropped so the hub's words sit inside ours. */
 const FINAL_STOP = /\.$/;
 
+/**
+ * Longer than this, the hub's words are not a reason a person reads in a
+ * line: a stack, a dump, a page of markup. Our choice: two lines of a toast.
+ */
+const REASON_LIMIT = 160;
+
 /** Markup or a JSON dump, not prose: a reason never starts so. */
 const NOT_PROSE = /^[<{[]/;
 
@@ -163,19 +169,18 @@ const ERROR_LABEL = /^[A-Za-z]*(?:[Ee]rror|[Ee]xception):\s*/;
 
 /**
  * The hub's words as a reason a person reads, without its closing stop:
- * their first line whole, a thrown error's label taken off, when it is prose;
- * null for anything else (markup, a dump, a page, nothing). A hub refusal is
- * written copy and can legitimately run past any line limit: the html branch
- * and `NOT_PROSE` already keep a proxy page or a dump out, so nothing here
- * discards the hub's words for being long. Whole, not cut to its first
- * sentence: core's refusals say what happened and then what to do
- * ("That's only part of the code. Copy all of it from the sign-in page, then
- * paste it again."), and the second sentence is the person's way on.
+ * their first line whole, a thrown error's label taken off, when it is short
+ * prose; null for anything else (markup, a dump, a page, nothing). Whole,
+ * not cut to its first sentence: core's refusals say what happened and then
+ * what to do ("That's only part of the code. Copy all of it from the sign-in
+ * page, then paste it again."), and the second sentence is the person's way on.
  */
 function sentenceOf(said: string | undefined): string | null {
   const line = (said ?? "").split("\n", 1)[0].trim().replace(ERROR_LABEL, "");
   const sentence = line.replace(FINAL_STOP, "");
-  return sentence.length > 0 && !NOT_PROSE.test(sentence)
+  return sentence.length > 0 &&
+    sentence.length <= REASON_LIMIT &&
+    !NOT_PROSE.test(sentence)
     ? `${sentence[0].toUpperCase()}${sentence.slice(1)}`
     : null;
 }
