@@ -32,7 +32,7 @@ import type {
   BrowserRuntime,
   BrowserStartArgs,
 } from "@cawco/core/browser";
-import { isBrowserKey } from "@cawco/core/browser";
+import { isBrowserKey, SHIELD_WORDS } from "@cawco/core/browser";
 import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { ContainerHost, RELAY_RENEW_MS } from "./container-host";
 import { gateOf, listenGates, servedGates, serveGate, stopGate } from "./gate";
@@ -225,11 +225,18 @@ const gateFor = (record: BrowserRecord): void => {
     return;
   }
   const { key } = record;
-  serveGate({
+  const made = !gateOf(key);
+  const gate = serveGate({
     key,
     devtools: (wake) => devtoolsOf(key, wake),
     used: () => used(key),
   });
+  // A gate made while the person holds the browser (the daemon restarted
+  // mid-take-over, its record read back) starts closed, as the shield
+  // closed it: no agent connects until the hand-back opens it.
+  if (made && record.takeover) {
+    gate.closeAll(SHIELD_WORDS);
+  }
 };
 
 /** Every record's gate served, and the gate of a browser no record keeps any more stopped. */

@@ -3101,16 +3101,18 @@ export const startDaemon = (rediscover = false) =>
     });
     yield* Effect.forkScoped(
       Effect.promise(() =>
-        // The take-overs held before a restart close their gates as the
-        // registry serves them, before any agent connects.
-        Promise.all([
-          restoreShields().catch((error: unknown) =>
+        // The take-overs held before a restart are held again first (their
+        // gates start closed as the registry makes them, browsers.ts
+        // `gateFor`), so a browser the registry then reads back as stopped
+        // has its take-over released and its gate opened.
+        restoreShields()
+          .catch((error: unknown) =>
             console.warn(`[browser] take-overs not restored: ${String(error)}`)
-          ),
-          watchBrowsers().catch((error: unknown) =>
+          )
+          .then(() => watchBrowsers())
+          .catch((error: unknown) =>
             console.warn(`[browser] not watched: ${String(error)}`)
-          ),
-        ])
+          )
       )
     );
     // The fleet's stream relay, when this machine runs it (browser/relay.ts):

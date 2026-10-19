@@ -26,6 +26,10 @@
  *   page loaded again by GET (a mark A left on it is gone, its navigation a
  *   `navigate`), the gate open to A again; A's tool answers
  *   `{"outcome":"handed_back","origin":"https://example.com"}`;
+ * - the agent restarted mid-take-over: its gate's first answer, as soon as
+ *   it listens again, is 423 with the shield's sentence (browsers.ts
+ *   `gateFor` makes it closed from the record's `takeover`), and the
+ *   take-over still hands back as below;
  * - a second ask taken over with no view for two minutes is handed back by
  *   the daemon, and A's tool answers the same shape.
  *
@@ -39,15 +43,17 @@ import { mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
-import type { BrowserKey } from "../../../packages/core/src/browser";
+import {
+  type BrowserKey,
+  SHIELD_WORDS,
+} from "../../../packages/core/src/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const MCP_VERSION = "1.11.0";
 const ORIGIN = "https://example.com";
 const REASON = "Sign in to Example so I can read the page behind it.";
-const SHIELD =
-  "The person is using the project's browser privately; your browser tool answers again when they hand back.";
+const SHIELD = SHIELD_WORDS;
 const ONLY_THE_PERSON = "Only the person takes over";
 const HANDED_BACK = JSON.stringify({
   outcome: "handed_back",
@@ -318,7 +324,9 @@ const leg = async (
   host: "container" | "local",
   key: BrowserKey,
   A: string,
-  B: string
+  B: string,
+  /** The agent stopped and started again, on the same runtime. */
+  restart: () => Promise<void>
 ): Promise<void> => {
   const home = fleet.env.HOME as string;
   const doorA = await doorOf(home, A);
@@ -407,6 +415,25 @@ const leg = async (
       JSON.stringify(frames.slice(0, 3))
     );
   }
+
+  // The daemon restarted mid-take-over: the gate it makes again is closed
+  // from its very first answer, before the hub sends the shield again.
+  await restart();
+  const reopened = await until(
+    "the gate answers again",
+    // Refused while the agent is still starting: no answer yet.
+    async () =>
+      (await Promise.allSettled([upgradeAnswer(doorB)]))
+        .map((one) => (one.status === "fulfilled" ? one.value : undefined))
+        .at(0),
+    (answer) => answer !== undefined,
+    120_000
+  ).catch(() => undefined);
+  kit.check(
+    `${host}: the agent restarted mid-take-over: its gate's first answer is ${reopened?.status} "${reopened?.text}"`,
+    reopened?.status === 423 && reopened.text === SHIELD,
+    JSON.stringify(reopened)
+  );
 
   const back = await post(
     fleet,
@@ -573,10 +600,12 @@ const run = async (kit: Kit): Promise<void> => {
   );
 
   for (const host of ["container", "local"] as const) {
+    const dockerHost =
+      host === "local" ? "unix:///nonexistent" : `unix://${runtime.endpoint}`;
     if (host === "local") {
       // The runtime hidden: the agent again, its browsers local from here.
       await fleet.stop("agent");
-      await agentOn("unix:///nonexistent");
+      await agentOn(dockerHost);
     }
     const repo = join(fleet.sandbox, `shield-${host}`);
     await mkdir(repo, { recursive: true });
@@ -596,7 +625,10 @@ const run = async (kit: Kit): Promise<void> => {
       projectId: project.id,
     });
     heard.notice = false;
-    await leg(kit, fleet, host, `project:${project.id}`, A, B);
+    await leg(kit, fleet, host, `project:${project.id}`, A, B, async () => {
+      await fleet.stop("agent");
+      await agentOn(dockerHost);
+    });
   }
   stand.stop(true);
 };

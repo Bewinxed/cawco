@@ -27,6 +27,7 @@ import {
   type BrowserRow,
   type BrowserShieldArgs,
   isBrowserKey,
+  SHIELD_WORDS,
   TAKEOVER_UNWATCHED_MS,
 } from "@cawco/core/browser";
 import { readRecord, writeStateFile } from "@cawco/core/state-file";
@@ -48,10 +49,6 @@ import {
   withBrowser,
   writeBrowser,
 } from "./state";
-
-/** What every agent's browser tool is told while the person holds the browser. */
-export const SHIELD_WORDS =
-  "The person is using the project's browser privately; your browser tool answers again when they hand back.";
 
 /** How often a take-over's views are counted against {@link TAKEOVER_UNWATCHED_MS}. */
 const WATCH_MS = 5000;
@@ -488,51 +485,42 @@ const tellHub = (
   });
 };
 
-/** How long the daemon looks for a held browser's gate as it starts. */
-const RESTORE_MS = 60_000;
-
 /**
  * The daemon starting: every browser its records say is taken over is held
- * again, its gate closed from the moment the registry serves it, until the
- * hub sends the shield again or the person hands back. A browser that
- * stopped meanwhile has its take-over forgotten.
+ * again (its `shield.json`, else what its record's `takeover` says), until
+ * the hub sends the shield again or the person hands back. Its gate starts
+ * closed: the registry closes a gate it makes for a record that holds a
+ * take-over (browsers.ts `gateFor`). A browser that stopped meanwhile has
+ * its take-over forgotten.
  */
 export const restoreShields = async (): Promise<void> => {
-  const records = await allBrowsers();
   const keys: BrowserKey[] = [];
-  for (const record of records) {
+  for (const record of await allBrowsers()) {
     // biome-ignore lint/performance/noAwaitInLoops: one browser's dir at a time.
     const kept = await keptOf(record.key);
-    if (!(record.takeover && kept)) {
+    if (!record.takeover) {
       if (kept) {
         await rm(shieldFile(record.key), { force: true });
       }
       continue;
     }
-    held.set(record.key, { ...kept, unwatchedSince: Date.now() });
+    const { by, since, requestId } = record.takeover;
+    held.set(record.key, {
+      since,
+      ...(by ? { workspaceId: by } : {}),
+      ...(requestId ? { requestId } : {}),
+      ...kept,
+      hubViewers: 0,
+      unwatchedSince: Date.now(),
+    });
     keys.push(record.key);
   }
   if (keys.length === 0) {
     return;
   }
   console.info(
-    `[browser] held privately across the restart, gates closed: ${keys.join(", ")}`
+    `[browser] held privately across the restart: ${keys.join(", ")}`
   );
-  // The registry serves each gate at its first tick (browsers.ts); each is
-  // closed on the turn it appears, before a connection's token is read.
-  const until = Date.now() + RESTORE_MS;
-  const waiting = new Set(keys);
-  while (waiting.size > 0 && Date.now() < until) {
-    for (const key of waiting) {
-      const gate = gateOf(key);
-      if (gate) {
-        gate.closeAll(SHIELD_WORDS);
-        waiting.delete(key);
-      }
-    }
-    // biome-ignore lint/performance/noAwaitInLoops: one event-loop turn between looks.
-    await new Promise((resolve) => setImmediate(resolve));
-  }
   // The local host's view of each, at its front page again.
   await Promise.all(
     keys.map(async (key) => {

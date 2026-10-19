@@ -32,6 +32,7 @@ import {
   type BrowserRow,
   type BrowserShieldArgs,
   isBrowserKey,
+  SHIELD_WORDS,
 } from "@cawco/core/browser";
 import { Elysia, t } from "elysia";
 import type { BrowserAsks } from "./browser-tools";
@@ -41,10 +42,6 @@ import type { RelayCall } from "./stream-relay";
 
 /** What a browser artifact is called in a panel. */
 export const BROWSER_ARTIFACT_NAME = "browser";
-
-/** What every other live session of the project is told as the person takes over. */
-export const TAKEOVER_NOTICE =
-  "The person is using the project's browser privately; your browser tool answers again when they hand back.";
 
 /** How long a take-over, a start or a stop has on its machine: a start may build the image first. */
 const CALL_MS = 15 * 60_000;
@@ -241,7 +238,7 @@ export const createBrowsers = (deps: BrowsersDeps) => {
       : null;
     for (const peer of deps.liveSessions(machineId, projectId)) {
       if (peer.id !== asker) {
-        deps.tell(peer.id, TAKEOVER_NOTICE);
+        deps.tell(peer.id, SHIELD_WORDS);
       }
     }
   };
