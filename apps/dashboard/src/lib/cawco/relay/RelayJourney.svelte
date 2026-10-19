@@ -1073,7 +1073,9 @@
           />
         {/if}
       </div>
-      <div class="col-span-full min-w-0">
+      <!-- Under Stop and Remove in every layout: in a narrow card they move
+           last, and the question they ask moves with them. -->
+      <div class="col-span-full min-w-0 @max-md:order-last">
         {@render refused()}
         <AskHere {asker} at="relay-stop" />
         <AskHere {asker} at="relay-remove" />

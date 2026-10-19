@@ -10836,6 +10836,7 @@ export const createServer = (
     call: callAgent,
     machines: relayMachines,
     hubMachineId: () => ownMachineIdRead ?? null,
+    lifetime,
     publish: (journey) =>
       registry.broadcast({
         verb: "frames",
@@ -11473,7 +11474,10 @@ export const createServer = (
               {
                 device: { id: "setup", name: "the setup page" },
                 address: null,
-                domain: null,
+                // The send carries no page's headers: the domain a page last
+                // reached CawCo through stands for it, for the name's
+                // suggestion.
+                domain: lastRelayDomain,
               }
             )
             .catch((error: unknown) =>

@@ -1097,7 +1097,22 @@ const run = async (kit: Kit): Promise<void> => {
       .getByRole("button", { name: words.remove })
       .last()
       .click();
-    await page.waitForSelector("[data-relay-set-up]", { timeout: 60_000 });
+    await page
+      .waitForSelector("[data-stream-relay] [data-relay-set-up]", {
+        timeout: 60_000,
+      })
+      .catch(async (error: unknown) => {
+        const tile = await page.evaluate(
+          () =>
+            document
+              .querySelector('section[data-ask="relay-remove"]')
+              ?.textContent?.trim() ?? null
+        );
+        throw new Error(
+          `Settings did not offer Set up after Remove: the ask reads ${JSON.stringify(tile)}; the journey reads ${JSON.stringify((await journeyOf(fleet)).journey)}; the relay row ${JSON.stringify(fleet.query("SELECT state, machine_id FROM stream_relay"))}`,
+          { cause: error }
+        );
+      });
     const removed = await journeyOf(fleet);
     kit.check(
       `Remove relay, asked in place: the agent unmapped the router (${gateway.actions.filter((one) => one.startsWith("DeletePortMapping")).length} deletes, ${gateway.table.size} left), the journey is gone, and Settings offers Set up`,

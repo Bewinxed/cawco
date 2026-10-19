@@ -245,10 +245,18 @@ const journeyLeg = async (
   const page = await look(kit, base, leg, journeying, "[data-relay-journey]");
   const read = await page.evaluate(() => {
     const steps = [
-      ...document.querySelectorAll("[data-relay-journey] li[data-step]"),
+      ...document.querySelectorAll(
+        "[data-stream-relay] [data-relay-journey] li[data-step]"
+      ),
     ];
-    const opened = document.querySelector("[data-relay-journey] li[data-open]");
-    const units = [...document.querySelectorAll<HTMLElement>("[data-unit]")]
+    const opened = document.querySelector(
+      "[data-stream-relay] [data-relay-journey] li[data-open]"
+    );
+    const units = [
+      ...document.querySelectorAll<HTMLElement>(
+        "[data-stream-relay] [data-unit]"
+      ),
+    ]
       .filter((unit) => unit.offsetParent !== null)
       .map((unit) => ({
         text: unit.textContent,
@@ -267,23 +275,47 @@ const journeyLeg = async (
       open: opened?.getAttribute("data-step"),
       words: opened?.textContent?.replace(/\s+/g, " ").trim() ?? "",
       units,
-      later: [...document.querySelectorAll("[data-relay-journey] button")].some(
-        (button) => button.textContent?.trim() === "Later"
-      ),
+      later: (() => {
+        const later = [
+          ...document.querySelectorAll<HTMLElement>(
+            "[data-stream-relay] [data-relay-journey] button"
+          ),
+        ].find((button) => button.textContent?.trim() === "Later");
+        const card = document
+          .querySelector("[data-stream-relay] [data-relay-journey]")
+          ?.getBoundingClientRect();
+        if (!(later && card)) {
+          return null;
+        }
+        const style = getComputedStyle(later);
+        const box = later.getBoundingClientRect();
+        // The ghost hangs its padding past the card's edge, so its ink ends on it.
+        return {
+          hang: Math.round(box.right - card.right),
+          ink: Math.round(
+            box.right -
+              Number.parseFloat(style.paddingInlineEnd) -
+              Number.parseFloat(style.borderInlineEndWidth) -
+              card.right
+          ),
+        };
+      })(),
     };
   });
   const scroll = await sideways(page);
   kit.check(
-    `${leg.name} the journey standing on the name: steps ${read.steps.join(", ")}, the name open with its finding, Let CawCo add it and Skip the name, and Later; nothing sideways`,
+    `${leg.name} the journey standing on the name: steps ${read.steps.join(", ")}, the name open with its finding, Let CawCo add it and Skip the name, and Later, its ink on the card's edge (${read.later?.ink}px off, its box hanging ${read.later?.hang}px past it); the page scrolls nothing sideways`,
     read.steps.join() ===
       "machine,name,router,runtime,certificate,start,prove" &&
       read.open === "name" &&
       read.words.includes(words.nameUnresolved(NAME)) &&
       read.words.includes(words.letCawCoAdd) &&
       read.words.includes(words.skipName) &&
-      read.later &&
+      read.later !== null &&
+      Math.abs(read.later.ink) <= 1 &&
       scroll.page <= 0 &&
-      scroll.section === 0,
+      // Past the section's box only by the ghost's own hang, its ink on the edge.
+      (scroll.section ?? 0) <= Math.max(0, read.later.hang),
     JSON.stringify({ read, scroll })
   );
   if (leg.view === "phone") {
@@ -291,7 +323,10 @@ const journeyLeg = async (
     const paren = read.units.find(
       (unit) => unit.text === "(DNS only, no proxy)"
     );
-    await page.getByRole("button", { name: words.copyRecord }).click();
+    await page
+      .locator("[data-stream-relay]")
+      .getByRole("button", { name: words.copyRecord })
+      .click();
     const copied = await page.evaluate(
       () => (window as unknown as { copied: string | null }).copied
     );
@@ -549,8 +584,8 @@ const dark = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
       journey: journeying,
       ready: "[data-relay-journey]",
       words: [
-        '[data-step="name"] [data-slot="step-label"]',
-        '[data-step="name"] [data-slot="step-body"] p',
+        '[data-stream-relay] [data-step="name"] [data-slot="step-label"]',
+        '[data-stream-relay] [data-step="name"] [data-slot="step-body"] p',
       ],
     },
     {

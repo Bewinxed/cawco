@@ -71,6 +71,7 @@ import type {
   StoredRelay,
   StreamRelayDb,
 } from "./db/stream-relay";
+import type { HubLifetimeShape } from "./lifetime";
 import {
   candidateOf,
   type RelayCall,
@@ -108,6 +109,8 @@ export interface RelayJourneyDeps {
   db: StreamRelayDb;
   /** The hub's own machine, listed first when two or more machines could run the relay. */
   hubMachineId: () => string | null;
+  /** The hub's lifetime: the tick runs on it. */
+  lifetime: HubLifetimeShape;
   machines: () => RelayFleetMachine[];
   /** The view changed: every dashboard hears it. */
   publish: (view: RelayJourneyView) => void;
@@ -126,7 +129,7 @@ export interface RelayJourney {
   /** A credential for this screen's proof; a refusal while the relay is not live. */
   try: (asker: RelayAsker) => RelayTry;
   view: () => RelayJourneyView;
-  /** The tick; the returned function ends it. */
+  /** The tick, on the hub's lifetime (lifetime.ts); the returned function ends it. */
   watch: () => () => void;
 }
 
@@ -430,6 +433,8 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   let fleetProvedAt = 0;
   let published = "";
   let refreshing = false;
+  /** Remove relay is under way: nothing begins by itself until the journey is gone with it. */
+  let removing = false;
 
   const machineName = (machineId: string): string =>
     deps.machines().find((one) => one.machineId === machineId)?.name ??
@@ -874,7 +879,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   /** One look at everything: what it can do by itself now is begun, and the view sent when it changed. */
   const refresh = (): void => {
     const journey = db.journey();
-    if (!journey) {
+    if (!journey || removing) {
       publish();
       return;
     }
@@ -1105,11 +1110,18 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     start: (journey) => startAgain(journey),
     stop: () => relay.stop(),
     remove: async () => {
-      await relay.remove();
-      db.journeyForget();
-      nameCheck = null;
-      tokenWhy = undefined;
-      lowRead = null;
+      // The relay's record goes first, and a look in between would find the
+      // journey standing with no relay and start it again.
+      removing = true;
+      try {
+        await relay.remove();
+        db.journeyForget();
+        nameCheck = null;
+        tokenWhy = undefined;
+        lowRead = null;
+      } finally {
+        removing = false;
+      }
     },
     // This screen proves it itself (the dashboard's `proveRelayHere`).
     "check-again": () => undefined,
@@ -1216,9 +1228,8 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     },
     watch: () => {
       tick();
-      const timer = setInterval(tick, TICK_MS);
-      timer.unref();
-      return () => clearInterval(timer);
+      const timer = deps.lifetime.every(TICK_MS, tick);
+      return () => deps.lifetime.cancel(timer);
     },
   };
 };

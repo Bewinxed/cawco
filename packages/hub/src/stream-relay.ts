@@ -279,7 +279,7 @@ export interface StreamRelay {
   setup: (setup: RelaySetup) => Promise<void>;
   start: () => Promise<void>;
   stop: () => Promise<void>;
-  /** The health and renewal timers; the returned function ends them. */
+  /** The health and renewal timers, on the hub's lifetime (lifetime.ts); the returned function ends them. */
   watch: () => () => void;
 }
 
