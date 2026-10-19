@@ -72,6 +72,13 @@ export const answeredWithOriginal = (
     : result;
 };
 
+/** Who asked, as an ask's head names it, and the project it works in. */
+interface Asker {
+  asker: string;
+  project?: string;
+  projectId?: string;
+}
+
 export const createAskPresenter = (
   db: DbShape,
   delegateTypes: DelegateTypesShape
@@ -84,12 +91,21 @@ export const createAskPresenter = (
    */
   const askerOf = (
     instanceId: string | undefined,
-    payload: { proposer?: unknown; workflowRunId?: unknown }
-  ): { asker: string; project?: string } => {
-    // A memory proposal (memory.ts) is no session's: it names who proposed
-    // it and its project ("Memory curator · cawco").
+    payload: {
+      projectId?: unknown;
+      proposer?: unknown;
+      workflowRunId?: unknown;
+    }
+  ): Asker => {
+    // A memory or design proposal (memory.ts, design-system.ts) is no
+    // session's: it names who proposed it, and its project by the ask's.
     if (typeof payload.proposer === "string") {
-      return { asker: payload.proposer };
+      return {
+        asker: payload.proposer,
+        ...projectOf(
+          typeof payload.projectId === "string" ? payload.projectId : null
+        ),
+      };
     }
     const [row] = instanceId ? db.getInstancesByIds([instanceId]) : [];
     if (row) {
@@ -108,12 +124,17 @@ export const createAskPresenter = (
   /** A session as an ask names it: Caw for a project's lead, else as the board does; with its project. */
   const sessionAsker = (
     row: ReturnType<DbShape["getInstancesByIds"]>[number]
-  ): { asker: string; project?: string } => {
-    const project = row.projectId ? db.project(row.projectId)?.name : undefined;
-    return {
-      asker: row.role === "lead" ? "Caw" : boardTitle(row),
-      ...(project ? { project } : {}),
-    };
+  ): Asker => ({
+    asker: row.role === "lead" ? "Caw" : boardTitle(row),
+    ...projectOf(row.projectId),
+  });
+
+  /** A project the hub keeps, by its name and id; nothing for none. */
+  const projectOf = (
+    id: string | null | undefined
+  ): { project?: string; projectId?: string } => {
+    const project = id ? db.project(id)?.name : undefined;
+    return project && id ? { project, projectId: id } : {};
   };
 
   /** A workflow run's workflow, by name. */
@@ -195,6 +216,13 @@ export const createAskPresenter = (
 
   const projectName = (id: string): string | undefined => db.project(id)?.name;
 
+  /** The delegate types whose `skills` or `connections` name `name`, by name. */
+  const namedBy = (field: "skills" | "connections", name: string): string[] =>
+    delegateTypes
+      .list()
+      .filter((type) => (type[field] ?? []).includes(name))
+      .map((type) => type.name);
+
   const memory = (path: string | null): string | undefined =>
     path === null
       ? db.getFleetMemory()?.content
@@ -203,6 +231,7 @@ export const createAskPresenter = (
   /** Stamps the ask's presentation onto its payload, read from what the hub holds now. */
   return (envelope: Envelope): void => {
     const payload = envelope.payload as PermissionRequestFrame & {
+      projectId?: unknown;
       proposer?: unknown;
       sourceFacts?: SourceFacts;
       workflowRunId?: unknown;
@@ -211,6 +240,7 @@ export const createAskPresenter = (
       ...askerOf(envelope.instanceId ?? payload.instanceId, payload),
       memory,
       current,
+      namedBy,
       projectName,
       ...(payload.sourceFacts ? { source: payload.sourceFacts } : {}),
     });

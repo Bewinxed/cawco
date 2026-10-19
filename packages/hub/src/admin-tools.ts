@@ -146,9 +146,10 @@ const marketplaceAction = async (
 /** Every write's reason, which the person reads first on the approval (admin-asks.ts `askRefusal`). */
 const reason = z
   .string()
+  .trim()
+  .min(1)
   .max(300)
-  .optional()
-  .describe("Required: one sentence on why, for which task.");
+  .describe("One sentence on why, for which task.");
 
 /** What a memory write answers: the hash to write against next, when it landed, and the size kept; never the text back. */
 const keptMemory = (

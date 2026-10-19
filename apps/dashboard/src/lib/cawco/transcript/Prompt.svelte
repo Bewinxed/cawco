@@ -8,15 +8,31 @@
    * composer that renders the stack should not have to know the rule.
    */
   const claimants = $state<symbol[]>([]);
+
+  /**
+   * An ask answered or gone, as the card keeps it in the conversation: the
+   * answer, when it was given, and for an approved removal how long the
+   * hub's trash can still put it back (hub db/trash.ts) and whether it did.
+   */
+  export interface PromptDecided {
+    /** When it was answered or withdrawn (ISO). */
+    at: string;
+    outcome: "approved" | "denied" | "withdrawn";
+    /** The hub put the removed thing back. */
+    restored?: boolean;
+    /** An approved removal: Undo stands until this moment (ms epoch). */
+    undoUntil?: number;
+  }
 </script>
 
 <script lang="ts">
   import type {
+    PermissionConsequence,
     PermissionResult,
     UserAnswers,
     UserQuestion,
   } from "@cawco/core";
-  import { askerLine, questionsOf } from "@cawco/core";
+  import { askerLine, askHref, questionsOf } from "@cawco/core";
   /**
    * The one human-in-the-loop surface, held in the composer's grown shape
    * (Composer, grown.ts): a permission gate (a measurably-symmetric Approve /
@@ -30,31 +46,36 @@
    * as the shape grows (`shown`), and sink back as it folds.
    */
   import { ToggleGroup } from "bits-ui";
-  import { onMount, tick, untrack } from "svelte";
+  import { type Component, onMount, tick, untrack } from "svelte";
   import DiffView from "#lib/components/features/DiffView.svelte";
+  import { kindFamily } from "#lib/components/features/tool-cards/descriptors.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import {
+    IconAgent,
+    IconAlert,
+    IconArrowUpRight,
     IconAsk,
     IconCheck,
     IconChevronDown,
     IconClose,
+    IconDocument,
+    IconFolder,
     IconGlobe,
+    IconHistory,
     IconInteract,
+    IconLayers,
+    IconSettings,
     IconShield,
     IconTick,
   } from "#lib/icons.js";
   import { isTyping } from "#lib/utils/typing.js";
-  import {
-    cawco,
-    commandRecord,
-    isStale,
-    type PendingPermission,
-    permissionAnswer,
-  } from "../client.svelte";
+  import type { PendingPermission } from "../client.svelte";
+  import CawMark from "../home/CawMark.svelte";
   import { hubRefusal } from "../hub-read";
   import OriginText from "../OriginText.svelte";
+  import { permissionAnswer } from "../permission-answer";
   import { suggestedRule } from "../permission-summary";
   import { questionAnswer, questionDismissal } from "../question";
 
@@ -62,9 +83,17 @@
     request,
     onanswer,
     asker = "the agent",
+    askerHref,
     place = null,
     shown = false,
     onminimize,
+    offline = false,
+    reachable = true,
+    refusalOf = () => null,
+    answering = null,
+    decided = null,
+    onundo,
+    acknowledge = false,
   }: {
     /**
      * Folds a question down to its bar over the composer, answering nothing
@@ -73,6 +102,22 @@
      */
     onminimize?: () => void;
     request: PendingPermission;
+    /** The asking session's page, when the card stands anywhere but its own composer. */
+    askerHref?: string;
+    /** The session's machine is offline: the ask stands, its answer waits. */
+    offline?: boolean;
+    /** An answer can reach the daemon that asked: the hub is live, and its machine. */
+    reachable?: boolean;
+    /** The hub's reason for refusing the answer that went out as this command ("" when it gave none); null while it hasn't. */
+    refusalOf?: (commandId: string) => string | null;
+    /** An answer of this kind already out when the card comes up. */
+    answering?: "allow" | "deny" | null;
+    /** The ask's outcome, once there is one: the card stays as the record of it. */
+    decided?: PromptDecided | null;
+    /** Puts an approved removal back from the hub's trash: null when it did, else the hub's words. */
+    onundo?: () => Promise<string | null>;
+    /** Approve waits until each consequence of a removal is ticked. */
+    acknowledge?: boolean;
     /** Where this ask stands among the ones waiting ("2 of 3"); none when it is alone. */
     place?: { at: number; of: number } | null;
     /** Whether what stands in the shape is up: the shape has grown to hold it. */
@@ -174,8 +219,108 @@
         : null)
   );
   const presentation = $derived(request.presentation);
-  /** Who asks and where: "Caw · cockpit". */
+  /** Who asks and where: "Caw · cockpit", the card's name for a screen reader. */
   const who = $derived(askerLine(presentation));
+  const subject = $derived(presentation.subject);
+  /** The glyph and ink of the grant line's tool family: they sort, the words say. */
+  const family = $derived(kindFamily(subject.family));
+  const projectHref = $derived(
+    presentation.projectId ? askHref.project(presentation.projectId) : undefined
+  );
+  /** A removal: its consequences stand where the count line would. */
+  const removal = $derived(presentation.consequences.length > 0);
+
+  /** Each consequence row's mark (core `PermissionConsequence.glyph`). */
+  const CONSEQUENCE_GLYPHS: Record<PermissionConsequence["glyph"], Component> =
+    {
+      loads: IconLayers,
+      named: IconAgent,
+      settings: IconSettings,
+      lines: IconDocument,
+      projects: IconFolder,
+      trash: IconHistory,
+      permanent: IconAlert,
+    };
+
+  /** Each consequence ticked, for the acknowledgement gate. */
+  let ticked = $state<boolean[]>([]);
+  const acknowledged = $derived(
+    !acknowledge ||
+      presentation.consequences.every((_, at) => ticked[at] === true)
+  );
+
+  /** A name with three or more path segments, as its folders and its last two: ["projects/a/", "b/c.md"]. */
+  const pathParts = (name: string): [string, string] => {
+    const segments = name.split("/");
+    if (segments.length < 3 || name.includes("://")) {
+      return ["", name];
+    }
+    const cut = segments.length - 2;
+    return [
+      `${segments.slice(0, cut).join("/")}/`,
+      segments.slice(cut).join("/"),
+    ];
+  };
+
+  /** A link to a page of this app, or out to the web in a new tab. */
+  const away = (href: string) => href.startsWith("https://");
+
+  /**
+   * The decided foot comes in over the live one only when the answer
+   * arrives with the card on screen; a card drawn decided is simply so.
+   */
+  const decidedAtMount = untrack(() => !!decided);
+  /** The Approve/Deny row has faded out, or was never drawn. */
+  let choiceGone = $state(untrack(() => !!decided));
+  $effect(() => {
+    if (!decided) {
+      choiceGone = false;
+    }
+  });
+
+  /** Undo stands until the hub's window closes, then leaves. */
+  let undoOpen = $state(false);
+  $effect(() => {
+    const until = decided?.undoUntil;
+    if (!(until && decided?.outcome === "approved" && !decided.restored)) {
+      undoOpen = false;
+      return;
+    }
+    const left = until - Date.now();
+    undoOpen = left > 0;
+    if (left <= 0) {
+      return;
+    }
+    const closes = setTimeout(() => {
+      undoOpen = false;
+    }, left);
+    return () => clearTimeout(closes);
+  });
+  let undoing = $state(false);
+  let undoRefused = $state<string | null>(null);
+  let restoredHere = $state(false);
+  const restored = $derived(!!decided?.restored || restoredHere);
+
+  async function undo(): Promise<void> {
+    if (!onundo || undoing) {
+      return;
+    }
+    undoing = true;
+    undoRefused = null;
+    const refusal = await onundo();
+    undoing = false;
+    if (refusal === null) {
+      restoredHere = true;
+      undoOpen = false;
+      return;
+    }
+    undoRefused = refusal;
+  }
+
+  const CLOCK = new Intl.DateTimeFormat(undefined, {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 
   /**
    * The command under the reason: one line until opened, so the sentence
@@ -184,15 +329,7 @@
    */
   // Open from the start when the session gave no reason: then the command is
   // all there is to read. The card is keyed by its ask, so this is per ask.
-  let commandOpen = $state(
-    untrack(
-      () =>
-        !(
-          typeof request.input.description === "string" &&
-          request.input.description.trim()
-        )
-    )
-  );
+  let commandOpen = $state(untrack(() => !request.presentation.reason));
   let commandLine = $state<HTMLElement | null>(null);
   let commandClipped = $state(false);
   const command = $derived(presentation.command ?? null);
@@ -491,34 +628,33 @@
   // label morphing to what it is doing) while its peers dim, until the gate
   // leaves; refused, it stops and the reason sits under the buttons.
   type Choice = "allow" | "deny" | "always" | "answer";
-  let pressed = $state<Choice | null>(null);
-  const row = $derived(cawco.instanceIndex.byId.get(request.instanceId));
-  /** The session's machine is offline: the ask stands, its answer waits. */
-  const offline = $derived(row ? isStale(row) : false);
-  /** An answer can reach the daemon that asked: the hub is live, and its machine. */
-  const reachable = $derived(cawco.hub === "connected" && !offline);
-  const answerable = $derived(pressed === null && reachable);
+  let pressed = $state<Choice | null>(untrack(() => answering));
+  const answerable = $derived(pressed === null && reachable && !decided);
 
   /**
    * The command this card's answer went out as. The card reads its OWN id
    * rather than the newest permission answer on the session: several cards can
    * be parked at once and they all answer in the same kind, so the newest one
-   * belongs to whichever card was clicked last, not to this one.
+   * belongs to whichever card was clicked last, not to this one. A card that
+   * came up with its answer already out (`answering`) reads it under its own
+   * request id.
    */
-  let commandId = $state<string | null>(null);
-  const record = $derived(commandId ? commandRecord(commandId) : null);
+  let commandId = $state<string | null>(
+    untrack(() => (answering ? request.requestId : null))
+  );
   /** What the answer was refused with, once the tracker has called it off. */
   const refused = $derived.by(() => {
-    if (record?.stage !== "failed") {
+    const reason = commandId ? refusalOf(commandId) : null;
+    if (reason === null) {
       return null;
     }
-    return record.reason
-      ? `Couldn't send that answer. ${record.reason}`
+    return reason
+      ? `Couldn't send that answer. ${reason}`
       : "Couldn't send that answer.";
   });
 
   function answer(kind: "allow" | "deny" | "always"): void {
-    if (!answerable) {
+    if (!answerable || (kind === "allow" && !acknowledged)) {
       return;
     }
     pressed = kind;
@@ -795,6 +931,30 @@
   </h2>
 {/snippet}
 
+<!-- A thing the ask names: a link chip to its page (the kit's option chip,
+     an arrow at its end) where it has one, else its name as words. A chip
+     only navigates; it never answers, folds or opens anything over the card.
+     A path gives way from its folders first, so its last two segments stay
+     in view. -->
+{#snippet chip(name: string, href: string | undefined, role: string)}
+  {#if href}
+    {@const [head, tail] = pathParts(name)}
+    <a
+      data-chip={role}
+      data-slot="chip"
+      class="kit-chip link-chip {role}"
+      {href}
+      rel={away(href) ? "noopener" : undefined}
+      target={away(href) ? "_blank" : undefined}
+      >{#if head}<span class="chip-words head">{head}</span>{/if}<span
+        class="chip-words">{tail}</span
+      ><IconArrowUpRight /></a
+    >
+  {:else}
+    <span data-chip={role} data-slot="chip" class="inert {role}">{name}</span>
+  {/if}
+{/snippet}
+
 <section
   data-prompt-shown={shown || undefined}
   data-slot="hitl"
@@ -1066,15 +1226,122 @@
       {@render wait()}
     </div>
   {:else}
-    {@render title(who)}
+    <!-- Who asks and where: Caw's face, the asker and its project, each a
+         link to its page where it has one and the card is live. -->
+    <h2 data-slot="head" class="head part mark-line" style:--part="0">
+      <span data-slot="caw" aria-hidden="true" class="caw" data-box>
+        {#key decided ? "rest" : "needs"}
+          <CawMark size={18} status={decided ? "ready" : "needs-you"} />
+        {/key}
+      </span>
+      {@render chip(
+        presentation.asker,
+        decided ? undefined : askerHref,
+        "asker"
+      )}
+      {#if presentation.project}
+        <span class="in">in</span>
+        {@render chip(
+          presentation.project,
+          decided ? undefined : projectHref,
+          "project"
+        )}
+      {/if}
+      {#if decided}
+        <time data-slot="clock" class="clock" datetime={decided.at}
+          >{CLOCK.format(new Date(decided.at))}</time
+        >
+      {:else if place && place.of > 1}
+        <Kbd data-num class="place num" data-box>{place.at} of {place.of}</Kbd>
+      {/if}
+    </h2>
     <!-- What will happen and why, then the command or the change itself: a
          grant is made on what runs, never on a sentence about it alone. The
          words are the hub's (core permission-presentation.ts), the same on
          iOS; secrets in the fields are already hidden. -->
     <div data-slot="body" class="body part" style:--part="1">
-      <p data-slot="lede" class="lede summary">{presentation.summary}</p>
-      {#if presentation.detail}
-        <p data-slot="detail" class="detail">{presentation.detail}</p>
+      <p data-slot="grant" class="grant mark-line">
+        <span aria-hidden="true" class="mark-cell family {family.color}"
+          ><family.icon /></span
+        >
+        <!-- mark-line: the target's chip is set in the running words, on their middle -->
+        <span data-slot="grant-words" class="grant-words"
+          >{subject.verb}{#if subject.kind}{" "}{subject.kind}{/if}{#if subject.target}{" "}{@render chip(
+              subject.target.name,
+              decided ? undefined : subject.target.href,
+              "target"
+            )}{/if}{#if subject.tail}{" "}{subject.tail
+              .text}{#if subject.tail.target}{" "}{@render chip(
+                subject.tail.target.name,
+                decided ? undefined : subject.tail.target.href,
+                "target"
+              )}{/if}{/if}</span
+        >
+      </p>
+      {#if presentation.reason}
+        <p data-slot="reason" class="reason">{presentation.reason}</p>
+      {/if}
+      {#if presentation.caution}
+        <p data-slot="caution" class="caution">{presentation.caution}</p>
+      {/if}
+      {#if presentation.count.length > 0}
+        <!-- mark-line: badges set in the running words of the count line -->
+        <p data-slot="count" class="count">
+          {#each presentation.count as part, i (i)}{#if "badge" in part}<span
+                data-slot="badge"
+                class="badge">{part.badge}</span
+              >{:else if "sep" in part}<span class="sep"
+                ><span class="sr-only">{part.sep.trim()}</span>{" "}</span
+              >{:else}{part.text}{/if}{/each}
+        </p>
+      {/if}
+      {#if removal}
+        <div data-slot="after" class="after">
+          <p class="after-head">After this:</p>
+          <ul class="consequences">
+            {#each presentation.consequences as row, i (i)}
+              {@const Glyph = CONSEQUENCE_GLYPHS[row.glyph]}
+              <li
+                data-slot="consequence"
+                class={[
+                  "consequence mark-line",
+                  { serious: row.glyph === "permanent" },
+                ]}
+              >
+                {#if acknowledge && !decided}
+                  <label class="tick mark-line" data-box>
+                    <input
+                      data-box
+                      class="tick-box"
+                      type="checkbox"
+                      bind:checked={ticked[i]}
+                    />
+                    <span class="consequence-words">{row.text}</span>
+                  </label>
+                {:else}
+                  <span
+                    aria-hidden="true"
+                    class="mark-cell glyph {row.glyph === 'trash' ||
+                    row.glyph === 'permanent'
+                      ? ''
+                      : family.color}"><Glyph /></span
+                  >
+                  {#if row.href && !decided}
+                    <a
+                      class="consequence-words link"
+                      href={row.href}
+                      rel={away(row.href) ? "noopener" : undefined}
+                      target={away(row.href) ? "_blank" : undefined}
+                      >{row.text}</a
+                    >
+                  {:else}
+                    <span class="consequence-words">{row.text}</span>
+                  {/if}
+                {/if}
+              </li>
+            {/each}
+          </ul>
+        </div>
       {/if}
       {#if command}
         <div class="cmd" class:open={commandOpen}>
@@ -1113,46 +1380,124 @@
           {/each}
         </div>
       {/if}
-      {#if presentation.fields.length > 0}
-        <dl class="fields">
-          {#each presentation.fields as field, i (`${i}:${field.key}`)}
+      {#if presentation.changed.length + presentation.fields.length > 0}
+        <!-- Each setting once: what it holds now in muted ink, what it will
+             hold in strong; then the facts that are no change. -->
+        <dl data-slot="well" class="well">
+          {#each presentation.changed as setting, i (`c${i}:${setting.key}`)}
+            <div data-slot="prompt-field" class="field">
+              <dt class="k">{setting.key}</dt>
+              <dd class="v">
+                {#if setting.before !== undefined}<span
+                    class={["was", { none: setting.before === "nothing" }]}
+                    >{setting.before}</span
+                  ><span class="to"
+                    ><span aria-hidden="true">→</span><span class="sr-only"
+                      >becomes</span
+                    ></span
+                  >{/if}<span
+                  class={["now", { none: setting.after === "nothing" }]}
+                  >{setting.after}</span
+                >
+              </dd>
+            </div>
+          {/each}
+          {#each presentation.fields as field, i (`f${i}:${field.key}`)}
             <div data-slot="prompt-field" class="field">
               <dt class="k">{field.key}</dt>
-              <dd class="v">{field.value}</dd>
+              <dd class="v"><span class="now">{field.value}</span></dd>
             </div>
           {/each}
         </dl>
       {/if}
     </div>
     <div data-slot="foot" class="foot part" style:--part="2">
-      <div data-slot="choice" class="choice">
-        <Button
-          class={grant}
-          data-prompt-grant={grant}
-          disabled={disabledOf("allow")}
-          failed={failedOf("allow")}
-          icon={IconTick}
-          label="Approve"
-          onclick={() => answer("allow")}
-          pending={pendingOf("allow")}
-          pendingLabel="Approving…"
-          variant="secondary"
-        />
-        <Button
-          class={refuse}
-          data-prompt-refuse={refuse}
-          disabled={disabledOf("deny")}
-          failed={failedOf("deny")}
-          icon={IconClose}
-          label="Deny"
-          onclick={() => answer("deny")}
-          pending={pendingOf("deny")}
-          pendingLabel="Denying…"
-          variant="secondary"
-        />
+      <!-- The answer row, and once answered, the answer in its place: the
+           decided mark comes in over the row as the row goes. -->
+      <div class={["answer", { cross: !decidedAtMount }]}>
+        {#if !choiceGone}
+          <div
+            data-slot="choice"
+            class={["choice", { leaving: !!decided }]}
+            inert={!!decided}
+            ontransitionend={(event) => {
+              if (decided && event.target === event.currentTarget) {
+                choiceGone = true;
+              }
+            }}
+          >
+            <Button
+              class={grant}
+              data-prompt-grant={grant}
+              disabled={disabledOf("allow") || !acknowledged}
+              failed={failedOf("allow")}
+              icon={IconTick}
+              label="Approve"
+              onclick={() => answer("allow")}
+              pending={pendingOf("allow")}
+              pendingLabel="Approving…"
+              variant="secondary"
+            />
+            <Button
+              class={refuse}
+              data-prompt-refuse={refuse}
+              disabled={disabledOf("deny")}
+              failed={failedOf("deny")}
+              icon={IconClose}
+              label="Deny"
+              onclick={() => answer("deny")}
+              pending={pendingOf("deny")}
+              pendingLabel="Denying…"
+              variant="secondary"
+            />
+          </div>
+        {/if}
+        {#if decided}
+          <div data-slot="decided" class="decided mark-line" role="status">
+            {#if decided.outcome === "withdrawn"}
+              <p class="withdrawn">Permission request withdrawn</p>
+            {:else if decided.outcome === "denied"}
+              <span class="mark fail mark-line" data-box
+                ><IconClose /><span>Denied</span></span
+              >
+            {:else if restored}
+              <span class="mark done mark-line" data-box
+                ><IconHistory /><span>Restored</span></span
+              >
+            {:else}
+              <span class="mark done mark-line" data-box
+                ><IconTick /><span>{removal ? "Removed" : "Approved"}</span
+                ></span
+              >
+              {#if undoOpen && onundo}
+                <Button
+                  class={btnBase}
+                  data-box
+                  data-slot="undo"
+                  disabled={undoing}
+                  icon={IconHistory}
+                  label="Undo"
+                  onclick={undo}
+                  pending={undoing}
+                  pendingLabel="Restoring…"
+                  variant="outline"
+                />
+              {/if}
+            {/if}
+          </div>
+        {/if}
       </div>
-      {@render wait()}
-      {#if rule}
+      {#if decided}
+        {#if undoRefused}
+          <p data-slot="undo-refused" class="wait refused" role="status">
+            {undoRefused}
+          </p>
+        {/if}
+      {:else}
+        <p data-slot="bound" class="bound">{presentation.bound}</p>
+        {@render wait()}
+      {/if}
+      {#if rule && !decided}
         <div class="widen">
           <p>
             This would allow <span class="mono">{rule.full}</span> for
@@ -1188,6 +1533,292 @@
     flex-direction: column;
     max-block-size: var(--ask-max, none);
     padding: var(--space-3) var(--space-3) var(--space-2);
+  }
+  /* The card sizes its own parts: the settings well turns into a grid
+     only where the card itself has room for it. */
+  .hitl {
+    container: ask / inline-size;
+  }
+
+  /* The head: Caw's face, who asks and where. The asker gives way first
+     (The Truncate Inside Rule); the place or the clock keeps its words. */
+  .head {
+    flex-wrap: nowrap;
+    min-inline-size: 0;
+  }
+  .caw {
+    display: inline-grid;
+    place-items: center;
+    flex: none;
+  }
+  .in {
+    flex: none;
+    font-weight: var(--weight-body);
+    color: var(--ink-muted);
+  }
+  .head > :global(.asker) {
+    flex: 0 1 auto;
+    min-inline-size: 0;
+  }
+  .head > :global(.project) {
+    flex: 0 1 auto;
+    min-inline-size: min(12ch, 100%);
+  }
+  .head > :global(.inert) {
+    overflow: clip;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .clock {
+    flex: none;
+    margin-inline-start: auto;
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* A link chip: the kit's option chip as a control that goes somewhere,
+     an arrow at its end. It tints under a hovering pointer and presses to
+     the house scale (The Press Rule); its words clip inside it. */
+  .link-chip {
+    min-inline-size: 0;
+    text-decoration: none;
+    vertical-align: middle;
+    gap: 0;
+
+    & > :global(svg) {
+      flex: none;
+      margin-inline-start: var(--space-1);
+      inline-size: var(--icon-sm);
+      block-size: var(--icon-sm);
+      color: var(--ink-muted);
+    }
+    @media (hover: hover) {
+      &:hover {
+        background: var(--surface-hover);
+      }
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        background-color var(--dur-control) var(--ease-out),
+        scale var(--dur-toggle) var(--ease-out);
+
+      &:active {
+        scale: var(--press-scale);
+      }
+    }
+  }
+  .chip-words {
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    overflow: clip;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    /* The folders give way long before the last two segments do. */
+    &.head {
+      flex-shrink: 100;
+    }
+  }
+  /* Inside the scrolling body the ring sits on the chip's own edge (The
+     One Ring Rule). */
+  .body .link-chip:focus-visible {
+    outline-offset: var(--focus-ring-inset);
+  }
+
+  /* The grant line: the family's glyph, then what will happen to what, in
+     the title's weight. The target's chip stands in the words. */
+  .grant {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    margin-block-end: var(--space-1);
+    font-size: var(--text-body);
+    font-weight: var(--weight-strong);
+    line-height: var(--leading-body);
+    color: var(--ink-strong);
+    max-inline-size: 72ch;
+
+    & .family :global(svg) {
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+    }
+  }
+  .grant-words {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+
+    & > :global(.link-chip) {
+      max-inline-size: 100%;
+      margin-block: calc(var(--space-1) / 2);
+    }
+  }
+  /* The agent's reason, its own words, read as a sentence. */
+  .reason {
+    margin-block-end: var(--space-1);
+    max-inline-size: 72ch;
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
+    line-height: var(--leading-body);
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+  .caution {
+    margin-block-end: var(--space-1);
+    max-inline-size: 72ch;
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
+    color: var(--ink-strong);
+    text-wrap: pretty;
+  }
+  /* How much changes, the keys as badges (DESIGN.md Badge: 20px, the xs
+     radius, recess surface, no border). */
+  .count {
+    margin-block-end: var(--space-2);
+    font-size: var(--text-label);
+    font-weight: var(--weight-body);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    vertical-align: middle;
+    max-inline-size: 100%;
+    min-block-size: 20px;
+    margin-block: calc(var(--space-1) / 2);
+    padding-inline: var(--space-2);
+    border-radius: var(--radius-xs);
+    background: var(--surface-recess);
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
+
+  /* A removal's consequences, one sentence each, the glyph hung on the
+     first line so a wrapped line never runs under it. */
+  .after {
+    margin-block-end: var(--space-2);
+  }
+  .after-head {
+    margin-block-end: var(--space-1);
+    font-size: var(--text-label);
+    color: var(--ink-muted);
+  }
+  .consequences {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+  }
+  .consequence {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+    color: var(--ink-strong);
+
+    & .glyph :global(svg) {
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+    }
+    &.serious {
+      font-weight: var(--weight-strong);
+    }
+  }
+  .consequence-words {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+
+    &.link {
+      color: var(--brand-ink);
+      text-decoration: underline;
+      text-underline-offset: 0.2em;
+    }
+  }
+  .tick {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    cursor: pointer;
+  }
+  .tick-box {
+    flex: none;
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+    margin-block-start: calc((1lh - var(--icon-md)) / 2);
+    accent-color: var(--brand-solid);
+  }
+
+  /* The bound under the answer row: what approving covers, what it does
+     not widen (WORDS.md, Permission). */
+  .bound {
+    margin-block-start: var(--space-2);
+    max-inline-size: 72ch;
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    color: var(--ink-muted);
+    text-wrap: pretty;
+  }
+
+  /* The answer row and the decided mark share one cell, so the one comes
+     in where the other goes (The Fast Exit Rule: the row leaves sooner). */
+  .answer {
+    display: grid;
+    margin-block-start: var(--space-2);
+
+    & > * {
+      grid-area: 1 / 1;
+    }
+  }
+  .choice.leaving {
+    opacity: 0;
+    transition: opacity var(--dur-exit) var(--ease-out);
+  }
+  .decided {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--space-2);
+  }
+  .cross .decided {
+    transition: opacity var(--dur-fade) var(--ease-out);
+
+    @starting-style {
+      opacity: 0;
+    }
+  }
+  .mark {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-block-size: 20px;
+    padding-inline: var(--space-2);
+    border-radius: var(--radius-xs);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+
+    & :global(svg) {
+      inline-size: var(--icon-sm);
+      block-size: var(--icon-sm);
+    }
+    &.done {
+      background: var(--status-done-bg);
+      color: var(--status-done-ink);
+    }
+    &.fail {
+      background: var(--status-fail-bg);
+      color: var(--status-fail-ink);
+    }
+  }
+  .withdrawn {
+    font-size: var(--text-meta);
+    color: var(--ink-muted);
   }
   /* Every box sizes to the card: the body, and what stands in it, may
      shrink below its words' longest run, which then wraps (`overflow-wrap`
@@ -1362,19 +1993,6 @@
     rotate: 180deg;
   }
 
-  /* What will happen, in the title's weight: the line the grant is made on. */
-  .summary {
-    font-weight: var(--weight-strong);
-    margin-block-end: var(--space-1);
-    overflow-wrap: anywhere;
-  }
-  /* How much it changes and where, under it. */
-  .detail {
-    font-size: var(--text-label);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    margin-block-end: var(--space-2);
-  }
   /* The change itself, open: each diff stands to the token's share of the
      screen and scrolls inside it, so the answer row stays in reach. */
   .changes {
@@ -1383,9 +2001,10 @@
     gap: var(--space-2);
     margin-block-end: var(--space-2);
   }
-  /* The rest of the input, shown rather than disclosed: each field's name
-     over its value, values that run long scrolling in place. */
-  .fields {
+  /* The settings, shown rather than disclosed: each key over its value,
+     side by side where the card has room. Before in muted ink, after in
+     strong; the card's own scroll is the one scroller. */
+  .well {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
@@ -1399,21 +2018,41 @@
     flex-direction: column;
     gap: var(--space-1);
     min-inline-size: 0;
+
+    @container ask (inline-size >= 560px) {
+      display: grid;
+      grid-template-columns: 12ch minmax(0, 1fr);
+      gap: var(--space-3);
+    }
   }
   .field .k {
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     color: var(--ink-muted);
+    overflow-wrap: anywhere;
   }
   .field .v {
     margin: 0;
-    max-block-size: 200px;
-    overflow: auto;
+    min-inline-size: 0;
     font-family: var(--font-mono);
     font-size: var(--text-meta);
-    color: var(--ink-strong);
     white-space: pre-wrap;
-    word-break: break-word;
+    overflow-wrap: anywhere;
+  }
+  .was {
+    color: var(--ink-muted);
+  }
+  .to {
+    margin-inline: var(--space-1);
+    color: var(--ink-muted);
+  }
+  .now {
+    color: var(--ink-strong);
+  }
+  .was.none,
+  .now.none {
+    font-family: var(--font-body);
+    color: var(--ink-muted);
   }
   /* JOURNEY §Triage: the full row width sits between grant and refusal. At
      --space-2 the two sat 7px apart, close enough that a hand aiming at
@@ -1424,7 +2063,6 @@
     display: flex;
     justify-content: space-between;
     gap: var(--space-8);
-    margin-block-start: var(--space-2);
   }
   .choice > :global(*) {
     flex: 0 0 auto;

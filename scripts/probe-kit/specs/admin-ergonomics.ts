@@ -23,8 +23,8 @@
  *    the call answers a hash and the size, and no content.
  * 4. An admin_skills_write install with no reason is refused, and nothing
  *    is parked for the person.
- * 5. An install with a reason: its pending approval reads the reason first
- *    ("why") and the source's age and stars.
+ * 5. An install with a reason: its pending approval reads the reason under
+ *    the grant line, and the source's age and stars as count-line badges.
  * 6. An MCP server's scope change, every machine to one project: its pending
  *    approval reads the scope before → after with the project's name, where
  *    it loads before → after, and the reason; the unchanged command is not
@@ -34,6 +34,7 @@
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { PermissionPresentation } from "../../../packages/core/src/permission-presentation";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec, settle } from "../kit";
 import { docOf, type On, pageFrame, screenBox } from "./ink";
@@ -71,12 +72,7 @@ interface Ask {
   instanceId: string;
   machineId: string;
   payload: {
-    presentation?: {
-      changes: { after: string; before: string }[];
-      detail?: string;
-      fields: { key: string; value: string }[];
-      summary: string;
-    };
+    presentation?: PermissionPresentation;
     toolName?: string;
   };
   requestId: string;
@@ -95,6 +91,14 @@ interface Status {
 
 const field = (ask: Ask | undefined, key: string) =>
   ask?.payload.presentation?.fields.find((one) => one.key === key)?.value;
+/** A setting the write moves, before and after. */
+const setting = (ask: Ask | undefined, key: string) =>
+  ask?.payload.presentation?.changed.find((one) => one.key === key);
+/** The count line's badges. */
+const badges = (ask: Ask | undefined) =>
+  (ask?.payload.presentation?.count ?? []).flatMap((part) =>
+    "badge" in part ? [part.badge] : []
+  );
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
@@ -353,14 +357,12 @@ const run = async (kit: Kit) => {
     },
     false
   );
-  const fields5 = install.ask?.payload.presentation?.fields ?? [];
   kit.check(
-    "5: an install's approval reads the reason first, then the source's age and stars",
-    fields5[0]?.key === "why" &&
-      fields5[0].value === why &&
-      (field(install.ask, "age") ?? "").startsWith("Created ") &&
-      field(install.ask, "stars") !== undefined &&
-      // The summary names the source; it is not said twice.
+    "5: an install's approval reads the reason under the grant line, then the source's age and stars as badges",
+    install.ask?.payload.presentation?.reason === why &&
+      badges(install.ask).some((one) => one.startsWith("created ")) &&
+      badges(install.ask).some((one) => one.endsWith(" stars")) &&
+      // The grant line names the source; it is not said twice.
       field(install.ask, "from") === undefined &&
       (install.ask?.payload.presentation?.summary ?? "").includes(SKILL_SOURCE),
     JSON.stringify(install.ask?.payload.presentation)
@@ -388,13 +390,17 @@ const run = async (kit: Kit) => {
   const shown6 = scoped.ask?.payload.presentation;
   kit.check(
     "6: a scope change's approval reads the scope before → after by the project's name, where it loads, and the reason; not the unchanged command",
-    field(scoped.ask, "why") === scoping &&
-      field(scoped.ask, "scope") ===
-        `every machine → ${PROJECT} project only` &&
-      field(scoped.ask, "loads in") ===
-        `sessions in ${PROJECT} (was: every session)` &&
-      field(scoped.ask, "command") === undefined &&
-      !JSON.stringify(shown6?.fields ?? []).includes(project.id) &&
+    shown6?.reason === scoping &&
+      setting(scoped.ask, "scope")?.before === "every machine" &&
+      setting(scoped.ask, "scope")?.after === `${PROJECT} project only` &&
+      (shown6?.detail ?? "").includes(
+        `loads in sessions in ${PROJECT}, was every session`
+      ) &&
+      setting(scoped.ask, "command") === undefined &&
+      !JSON.stringify([
+        ...(shown6?.fields ?? []),
+        ...(shown6?.changed ?? []),
+      ]).includes(project.id) &&
       shown6?.summary === `Change MCP server ${MCP_NAME}`,
     JSON.stringify(shown6)
   );

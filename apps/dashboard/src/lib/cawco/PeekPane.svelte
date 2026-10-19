@@ -62,8 +62,6 @@
     isStale,
     openSession,
     type PendingPermission,
-    type PermissionAnswer,
-    permissionAnswer,
     readTranscript,
     refreshContext,
     setPeeked,
@@ -73,6 +71,7 @@
   import { conversationHref } from "./links";
   import { echoBeat } from "./motion/echo.svelte";
   import OsMark from "./OsMark.svelte";
+  import { type PermissionAnswer, permissionAnswer } from "./permission-answer";
   import { plainMarkdown, plainStreaming } from "./plain-markdown";
   import { planProgress } from "./plan/PlanPane.svelte";
   import PlanTree, { stepsTree, todosTree } from "./plan/PlanTree.svelte";

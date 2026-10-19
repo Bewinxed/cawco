@@ -272,6 +272,12 @@ import type { Tasks } from "./tasks";
  * 157 tokens for the worker, the delegate and the lead (worker 27,572,
  * delegate 9,964, lead 18,201 measured beside `to: "parent"`). Raised
  * deliberately, by that, for each.
+ * 2026-10-19, after that: every `admin_*_write`'s `reason` required, as its
+ * description always said and the approval card now reads it under the
+ * grant line (approval card, report 1 finding 1). Its description is
+ * shorter than it was, but each write's schema now lists it as required:
+ * 29 tokens for the worker (MEASURED measured beside `does` and `ask`), the
+ * only role that lists them. Raised deliberately, by that.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_580,

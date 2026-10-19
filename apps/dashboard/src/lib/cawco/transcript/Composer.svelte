@@ -52,7 +52,7 @@
 </script>
 
 <script lang="ts">
-  import { type AvailableCommand, questionsOf } from "@cawco/core";
+  import { type AvailableCommand, askHref, questionsOf } from "@cawco/core";
   /**
    * The floating composer — a lifted shell holding the text input, the attach
    * and send controls. A parked permission or question is the composer
@@ -101,6 +101,8 @@
   import { handBack, stages } from "../canvas/stage.svelte";
   import {
     cawco,
+    commandRecord,
+    isStale,
     readOlderPage,
     replaceQueued,
     type SendExtras,
@@ -2585,6 +2587,18 @@
 
   /** The ask the shape holds: it trails `ask` while one changes into the next. */
   let drawnAsk = $state<ComposerAsk | null>(null);
+  /** The asking session's machine is offline: the ask stands, its answer waits. */
+  const askOffline = $derived.by(() => {
+    const row = drawnAsk
+      ? cawco.instanceIndex.byId.get(drawnAsk.request.instanceId)
+      : undefined;
+    return row ? isStale(row) : false;
+  });
+  /** The hub's reason for refusing an answer's command, once the tracker has called it off. */
+  const answerRefusal = (commandId: string): string | null => {
+    const record = commandRecord(commandId);
+    return record?.stage === "failed" ? (record.reason ?? "") : null;
+  };
   /** The composer is an ask, from its growth until its fold has landed. */
   const askOpen = $derived(!!drawnAsk);
   /** Grown, or growing, into an ask: what stands over the pill steps aside. */
@@ -3197,7 +3211,13 @@
           {#key drawnAsk.request.requestId}
             <Prompt
               asker={drawnAsk.asker}
+              askerHref={drawnAsk.request.instanceId === recallOf
+                ? undefined
+                : askHref.session(drawnAsk.request.instanceId)}
+              offline={askOffline}
               onanswer={drawnAsk.onanswer}
+              reachable={cawco.hub === "connected" && !askOffline}
+              refusalOf={answerRefusal}
               onminimize={askQuestions ? minimizeAsk : undefined}
               place={askPlace}
               request={drawnAsk.request}

@@ -2624,7 +2624,8 @@ export const createMemory = ({
       },
       memoryProposal: proposal.id,
       projectId: proposal.projectId,
-      proposer: `${proposal.by} · ${projectName}`,
+      // Its project is the ask's (`projectId`): the card's head names it.
+      proposer: proposal.by,
       raisedAt: new Date(proposal.time).getTime(),
       // Where it was made: Caw's thread, or the curator run's session. One
       // Caw proposed before proposals kept their thread has neither, nor do
