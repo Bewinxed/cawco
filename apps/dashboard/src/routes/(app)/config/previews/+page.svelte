@@ -92,20 +92,13 @@
   ready={settings !== null}
   title={section.label}
 >
-  <!-- literal: 72ch -->
-  <!-- literal: 8px -->
-  <div
-    data-slot="group"
-    class="flex flex-col gap-(--group-gap)"
-    style:--group-gap="8px"
-    style:--note-measure="72ch"
-  >
-    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+  <div data-slot="group" class="flex flex-col gap-space-2">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       A previewed app runs on an origin of its own, so it never shares the
       dashboard's storage or sign-ins. Every open preview moves to the new
       address once this is saved.
     </p>
-    <p data-slot="note" class="type-meta max-w-(--note-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       On a computer running CawCo, open <code class="font-mono text-ink-strong"
         >http://localhost:3455</code
       >; previews there run in their own process on Chrome, Edge and Brave.
@@ -155,16 +148,13 @@
       <!-- What the names need before Save, where the operator sets them. -->
       <div class="flex flex-col gap-space-2">
         <p class="type-label text-ink-strong">Before you save</p>
-        <p
-          data-slot="note"
-          class="type-meta max-w-(--note-measure) text-ink-muted"
-        >
+        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
           Every name the pattern makes has to reach the hub's port {firstPort}.
           Behind Cloudflare, with the dashboard on a tunnel already:
         </p>
         <ol
           data-slot="note"
-          class="type-meta flex max-w-(--note-measure) flex-col gap-space-1 ps-space-5 text-ink-muted list-decimal"
+          class="type-meta flex max-w-c-measure flex-col gap-space-1 ps-space-5 text-ink-muted list-decimal"
         >
           {#if byPort}
             <li>
@@ -224,19 +214,13 @@
             </li>
           {/if}
         </ol>
-        <p
-          data-slot="note"
-          class="type-meta max-w-(--note-measure) text-ink-muted"
-        >
+        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
           Leave these names out of Cloudflare Access, or any sign-in in front of
           them. The hub locks them itself: a name opens only for the dashboard
           and the app, which ask the hub for a pass, and answers anyone else
           with 401.
         </p>
-        <p
-          data-slot="note"
-          class="type-meta max-w-(--note-measure) text-ink-muted"
-        >
+        <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
           Without Cloudflare: point the pattern's names ({byPort
             ? "one per port"
             : "a wildcard"}) at the hub, or at a proxy that sends them to port
