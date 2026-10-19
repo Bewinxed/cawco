@@ -12,7 +12,7 @@ import UIKit
 
 /// tsk-3's numbered pin as the app draws it (PinDisc.svelte): a 20pt disc
 /// in `action-solid`, its number in `on-action` in the label role; at 40%
-/// once resolved; recessed in the moved tray.
+/// once resolved; recessed once its element is gone.
 final class PinDisc: UIView {
     private let number = KitLabel(TypeScale.typeLabel, ink: Palette.onAction)
 
@@ -42,7 +42,7 @@ final class PinDisc: UIView {
         number.text = "\(pin.label)"
         backgroundColor = pin.moved ? Palette.surfaceFill : Palette.actionSolid
         number.ink = pin.moved ? Palette.inkMuted : Palette.onAction
-        alpha = pin.resolved && !pin.moved ? 0.4 : 1
+        alpha = pin.resolved ? 0.4 : 1
     }
 }
 
@@ -75,12 +75,44 @@ private func liveDot() -> Dot {
 /// The Comments panel's content, floating over the page from the head's
 /// Comments (PinList.svelte): its head (Comments, Close), Open and Resolved
 /// as a segmented filter over 44pt rows, each the pin's disc, what it stands
-/// on and its thread's last line; the pins whose element is gone wait in the
-/// moved tray at the end, each with Place again, which pins it anew with the
-/// next tap on the page.
+/// on and its thread's last line. A pin whose element is gone stays under its
+/// own tab, its disc recessed and Place again in its row, which pins it anew
+/// with the next tap on the page, so each tab counts every pin the hub holds
+/// in it, the count drawn only above 0 (The Earned Count Rule). Until the
+/// pins are read nothing is counted or claimed empty (The Claim Of Nothing
+/// Rule): its plain surface inside `durWaitGrace` (The Real Wait Rule), then
+/// skeleton rows at the rows' size, which the first read replaces in one
+/// cross-fade; or the read's fault on the rows' line, with Try again.
 final class PinListController: UIViewController {
+    /// Whether the pins are read yet (PinList.svelte's `hold`).
+    enum Hold: Equatable {
+        /// Read under way, inside the wait's grace: nothing drawn.
+        case quiet
+        /// Read under way past the grace: skeleton rows.
+        case reading
+        case ready
+        /// The read failed, and why, as its own sentence.
+        case failed(String)
+    }
+
     var onOpen: (String) -> Void = { _ in }
     var onPlace: (String) -> Void = { _ in }
+    /// Try again after the pins couldn't be read.
+    var onRetry: () -> Void = {}
+    /// Whether the pins are read yet; the first read crosses in over the skeleton.
+    var hold: Hold = .quiet {
+        didSet {
+            guard hold != oldValue, isViewLoaded else { return }
+            // One cross-fade, opacity only, so it stands under Reduce Motion too.
+            if oldValue == .reading, hold == .ready {
+                UIView.transition(with: scroll, duration: Motion.durControl, options: [.transitionCrossDissolve, .allowUserInteraction]) {
+                    self.render()
+                }
+            } else {
+                render()
+            }
+        }
+    }
     /// Its head's Close.
     var onClose: () -> Void = {}
     /// Floating on its own (the kit's popover), it names itself beside Close; set before it loads.
@@ -88,16 +120,22 @@ final class PinListController: UIViewController {
     private(set) var pins: [Pin] = []
     /// The moved pin a tap on the page is placing again.
     var placing: String?
+    /// Floating (the kit's popover), the most height it may take: it fits its
+    /// content again whenever that changes (the read landing over the
+    /// skeleton, a pin added), up to this, past which its rows scroll.
+    var fitsWithin: Double?
 
-    private let filter = KitSegmented(["Open 0", "Resolved 0"], selected: 0)
+    private let filter = KitSegmented(["Open", "Resolved"], selected: 0)
     /// What the filter's list says when it holds no pin (PinList.svelte `.empty`).
     private let empty = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
     /// The head's Close, while it has a head.
     private var closeControl: UIView?
     private let scroll = UIScrollView()
     private let rows = UIStackView()
-    private let movedRows = UIStackView()
-    private let moved = UIStackView()
+    /// Skeleton rows at the rows' size while the pins are read past the grace.
+    private let loading = UIStackView()
+    /// The read's fault, on the rows' line.
+    private let fault = UIStackView()
     private var resolvedShown: Bool { filter.selectedIndex == 1 }
     var scroller: UIScrollView { scroll }
 
@@ -106,27 +144,21 @@ final class PinListController: UIViewController {
         filter.accessibilityLabel = "Which pins"
         filter.addAction(UIAction { [weak self] _ in self?.render() }, for: .valueChanged)
         rows.axis = .vertical
-        movedRows.axis = .vertical
-        let head = UIStackView(arrangedSubviews: [GlyphView(.mapPoint, size: Size.iconMd, tint: Palette.inkMuted), {
-            let word = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
-            word.text = "Moved"
-            word.accessibilityTraits = .header
-            return word
-        }()])
-        head.spacing = Space.space1
-        head.alignment = .center
-        head.isLayoutMarginsRelativeArrangement = true
-        head.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space1, leading: Space.space2, bottom: Space.space1, trailing: Space.space2)
-        moved.axis = .vertical
-        moved.addArrangedSubview(head)
-        moved.addArrangedSubview(movedRows)
+        loading.axis = .vertical
+        for _ in 0 ..< 3 { loading.addArrangedSubview(SkeletonPinRow()) }
+        loading.isAccessibilityElement = true
+        loading.accessibilityLabel = Words.Artifacts.readingComments
+        loading.accessibilityTraits = .updatesFrequently
+        fault.axis = .vertical
+        fault.isLayoutMarginsRelativeArrangement = true
+        fault.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space2, bottom: Space.space2, trailing: Space.space2)
         let filterRow = UIStackView(arrangedSubviews: [filter, UIView()])
         filterRow.isLayoutMarginsRelativeArrangement = true
         filterRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space1, leading: 0, bottom: Space.space1, trailing: 0)
         let emptyRow = UIStackView(arrangedSubviews: [empty])
         emptyRow.isLayoutMarginsRelativeArrangement = true
         emptyRow.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space3, leading: Space.space2, bottom: Space.space3, trailing: Space.space2)
-        var parts: [UIView] = [filterRow, rows, emptyRow, moved]
+        var parts: [UIView] = [filterRow, loading, fault, rows, emptyRow]
         if heading {
             let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
             title.text = "Comments"
@@ -189,43 +221,71 @@ final class PinListController: UIViewController {
     private func probeLine() {
         guard view.window != nil else { return }
         view.layoutIfNeeded()
-        let placed = pins.filter { !$0.moved }
         let shown = rows.arrangedSubviews.compactMap { $0 as? PinRow }
+        let away = rows.arrangedSubviews.compactMap { $0 as? MovedRow }.map { "\($0.number)" }.joined(separator: ";")
         // Where a tap puts the panel away: its head's Close.
         let scrim = closeControl.map(PreviewProbe.centre) ?? "none"
-        PreviewProbe.say("preview list open=\(placed.count { !$0.resolved }) resolved=\(placed.count(where: \.resolved)) moved=\(pins.count(where: \.moved)) filter=\(resolvedShown ? "resolved" : "open")@\(PreviewProbe.centre(filter)) rows=\(shown.map { "\($0.number)@\(PreviewProbe.centre($0))" }.joined(separator: ";")) live=\(shown.filter(\.live).map { "\($0.number)" }.joined(separator: ";")) scrim=\(scrim)")
+        PreviewProbe.say("preview list open=\(pins.count { !$0.resolved }) resolved=\(pins.count(where: \.resolved)) moved=\(pins.count(where: \.moved)) filter=\(resolvedShown ? "resolved" : "open")@\(PreviewProbe.centre(filter)) rows=\(shown.map { "\($0.number)@\(PreviewProbe.centre($0))" }.joined(separator: ";")) live=\(shown.filter(\.live).map { "\($0.number)" }.joined(separator: ";")) scrim=\(scrim) movedRows=\(away) hold=\(holdName)")
+    }
+
+    /// The hold's name, for the probe's line.
+    private var holdName: String {
+        switch hold {
+        case .quiet: "quiet"
+        case .reading: "reading"
+        case .ready: "ready"
+        case .failed: "failed"
+        }
     }
     #endif
 
+    /// Its height fitted to what it holds now, at the width it was given, up to `fitsWithin`.
+    func fit() {
+        guard let limit = fitsWithin, preferredContentSize.width > 0 else { return }
+        let width = preferredContentSize.width
+        let fits = Double(view.systemLayoutSizeFitting(CGSize(width: width, height: 0),
+                                                       withHorizontalFittingPriority: .required,
+                                                       verticalFittingPriority: .fittingSizeLevel).height)
+        let size = CGSize(width: width, height: Swift.min(fits, limit))
+        if preferredContentSize != size { preferredContentSize = size }
+    }
+
     /// The filter a focused pin stands in (PinList.svelte: J and K never land on a hidden row).
     func reveal(_ id: String) {
-        guard let pin = pins.first(where: { $0.id == id }), !pin.moved else { return }
+        guard let pin = pins.first(where: { $0.id == id }) else { return }
         filter.select(pin.resolved ? 1 : 0)
         render()
     }
 
     private func render() {
-        let placed = pins.filter { !$0.moved }
-        let open = placed.filter { !$0.resolved }
-        let resolved = placed.filter(\.resolved)
-        let away = pins.filter(\.moved)
-        filter.setTitle("Open \(open.count)", at: 0)
-        filter.setTitle("Resolved \(resolved.count)", at: 1)
-        for row in rows.arrangedSubviews + movedRows.arrangedSubviews { row.removeFromSuperview() }
+        let open = pins.filter { !$0.resolved }
+        let resolved = pins.filter(\.resolved)
+        let ready = hold == .ready
+        // Each count only once read, and only above 0 (The Earned Count Rule).
+        filter.setTitle(ready && !open.isEmpty ? "Open \(open.count)" : "Open", at: 0)
+        filter.setTitle(ready && !resolved.isEmpty ? "Resolved \(resolved.count)" : "Resolved", at: 1)
+        for row in rows.arrangedSubviews + fault.arrangedSubviews { row.removeFromSuperview() }
+        loading.isHidden = hold != .reading
+        if case let .failed(why) = hold {
+            fault.addArrangedSubview(RowFault(Words.Artifacts.commentsNotRead(why: why)) { [weak self] in self?.onRetry() })
+        }
+        fault.isHidden = fault.arrangedSubviews.isEmpty
         let shown = resolvedShown ? resolved : open
         empty.text = resolvedShown
             ? "No resolved comments. A pin you resolve leaves the page and waits here."
             : "No open comments. Choose Comment, then tap the page to pin one."
-        empty.superview?.isHidden = !shown.isEmpty
-        for pin in shown {
-            let row = PinRow(pin, live: live.contains(pin.id))
-            row.addAction(UIAction { [weak self] _ in self?.onOpen(pin.id) }, for: .touchUpInside)
-            rows.addArrangedSubview(row)
+        // Nothing is claimed empty before the pins are read (The Claim Of Nothing Rule).
+        empty.superview?.isHidden = !(ready && shown.isEmpty)
+        for pin in ready ? shown : [] {
+            if pin.moved {
+                rows.addArrangedSubview(MovedRow(pin, placing: placing == pin.id) { [weak self] in self?.onPlace(pin.id) })
+            } else {
+                let row = PinRow(pin, live: live.contains(pin.id))
+                row.addAction(UIAction { [weak self] _ in self?.onOpen(pin.id) }, for: .touchUpInside)
+                rows.addArrangedSubview(row)
+            }
         }
-        for pin in away {
-            movedRows.addArrangedSubview(MovedRow(pin, placing: placing == pin.id) { [weak self] in self?.onPlace(pin.id) })
-        }
-        moved.isHidden = away.isEmpty
+        fit()
         #if DEBUG
         probeLine()
         #endif
@@ -280,17 +340,21 @@ private final class PinRow: UIControl {
     }
 }
 
-/// A pin in the moved tray (PinList.svelte `.moved-row`): its recessed disc,
-/// what it stood on, that its element is gone, and Place again (`sm` outline).
+/// A pin whose element is gone, under its own tab (PinList.svelte
+/// `.moved-row`): its recessed disc, what it stood on, that its element is
+/// gone, and Place again (`sm` outline).
 private final class MovedRow: UIView {
+    let number: Int
+
     init(_ pin: Pin, placing: Bool, place: @escaping () -> Void) {
+        number = pin.label
         super.init(frame: .zero)
         let disc = PinDisc()
         disc.show(pin)
         let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
         name.text = pin.name
         let gone = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-        gone.text = "Its element is gone from the page"
+        gone.text = Words.Artifacts.pinElementGone
         let again = KitButton.make("Place again", variant: .outline, height: .sm, action: place)
         again.isSelected = placing
         again.accessibilityTraits.insert(placing ? .selected : [])
@@ -312,6 +376,43 @@ private final class MovedRow: UIView {
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("MovedRow is built in code") }
+}
+
+/// A pin row's skeleton (PinList.svelte `.skeleton-row`), at its size: the
+/// disc, the name's line in the label role's height and the last line's in
+/// meta's.
+private final class SkeletonPinRow: UIView {
+    init() {
+        super.init(frame: .zero)
+        let disc = SkeletonView(height: Size.cPin)
+        disc.layer.cornerRadius = Size.cPin / 2
+        disc.widthAnchor.constraint(equalToConstant: Size.cPin).isActive = true
+        let name = SkeletonView(height: TypeScale.typeLabel.points)
+        name.layer.cornerRadius = Radius.radiusXs
+        let last = SkeletonView(height: TypeScale.typeMeta.points)
+        last.layer.cornerRadius = Radius.radiusXs
+        let lines = UIStackView(arrangedSubviews: [name, last])
+        lines.axis = .vertical
+        lines.alignment = .leading
+        lines.spacing = Space.space1
+        name.widthAnchor.constraint(equalTo: lines.widthAnchor, multiplier: 0.6).isActive = true
+        last.widthAnchor.constraint(equalTo: lines.widthAnchor, multiplier: 0.85).isActive = true
+        let row = UIStackView(arrangedSubviews: [disc, lines])
+        row.spacing = Space.space2
+        row.alignment = .center
+        row.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(row)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(greaterThanOrEqualToConstant: Size.cArtifactRowH),
+            row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Space.space2),
+            row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Space.space2),
+            row.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        isAccessibilityElement = false
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) { fatalError("SkeletonPinRow is built in code") }
 }
 
 // MARK: The card

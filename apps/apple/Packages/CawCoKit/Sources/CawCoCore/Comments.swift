@@ -111,8 +111,8 @@ public struct ArtifactComments: Sendable, Equatable {
     /// An artifact with no pins and nothing unsent, until the hub is read.
     public static let empty = ArtifactComments(pins: [], unsentPicks: 0, sentAt: nil)
 
-    /// Open pins on the page: the Pins button's badge.
-    public var open: Int { pins.count { !$0.moved && !$0.resolved } }
+    /// Open pins, a moved one too, as the hub counts them: the list's Open tab and the head's badge.
+    public var open: Int { pins.count { !$0.resolved } }
 
     /// The pins the agent is working on (PreviewPane.svelte `live`): while
     /// the session works, the open pins the last delivery carried, the pin

@@ -160,13 +160,19 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     // The pins (Projects spec §5.7; tsk-3).
     private var comments: ArtifactComments = .empty
-    /// The open pins More's count says and the head's fit makes room for.
+    /// The open pins the head counts (Comments' badge, More's and its menu)
+    /// and its fit makes room for: 0 until they are read, so a count not
+    /// read yet is never drawn.
     private var openPins: Int {
         #if DEBUG
         if let probeOpen { return probeOpen }
         #endif
-        return comments.open
+        return pinsHold == .ready ? comments.open : 0
     }
+    /// Whether this artifact's pins are read yet: until they are, nothing is counted or claimed empty.
+    private var pinsHold: PinListController.Hold = .quiet
+    /// Turns a read still under way past `durWaitGrace` into the list's skeleton (The Real Wait Rule).
+    private var pinsGrace: Task<Void, Never>?
     private var reading = false
     private var readAgain = false
     private let card = PinCard()
@@ -888,9 +894,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     /// More's own words, and Comments' open count on it while it holds Comments.
     private func paintMore() {
-        // As on Comments: the count stands always, 0 too.
+        // As on Comments: the count only once read and above 0 (The Earned Count Rule).
         // Run on every layout: each is written only when it changed, as a label's words lay the head out again.
-        let holds = overflowed.contains(.comments)
+        let holds = overflowed.contains(.comments) && openPins > 0
         let count = "\(openPins)"
         if moreBadge.text != count { moreBadge.text = count }
         if moreBadge.isHidden == holds { moreBadge.isHidden = !holds }
@@ -943,7 +949,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 return nil
             case .comments:
                 let action = UIAction(title: "Comments", image: Glyph.chat.image) { [weak self] _ in self?.openList() }
-                action.subtitle = "\(comments.open) open"
+                if openPins > 0 { action.subtitle = "\(openPins) open" }
                 return action
             case .reload:
                 let action = UIAction(title: "Reload", image: Glyph.refresh.image) { [weak self] _ in self?.reload() }
@@ -1117,6 +1123,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             comments = .empty
             closeCard()
             list?.dismiss(animated: true)
+            readPins()
             paintPins()
             refresh()
             adoptSheet(frame)
@@ -1724,14 +1731,22 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             #endif
             do {
                 let read = try await hub.comments(on: artifact, in: instanceId)
-                if artifact == artifactId { adopt(read) }
+                if artifact == artifactId {
+                    held(.ready)
+                    adopt(read)
+                }
                 if failureOf == "pins" { clearFailure() }
             } catch {
                 #if DEBUG
                 PreviewProbe.say("preview refresh failed: \(error.localizedDescription)")
                 #endif
                 if artifact == artifactId {
-                    failed("Couldn't read the pins: \(error.localizedDescription)", of: "pins")
+                    if pinsHold == .ready {
+                        failed("Couldn't read the pins: \(error.localizedDescription)", of: "pins")
+                    } else {
+                        // Never read: said once, in the list, with Try again (WORDS.md).
+                        held(.failed(Self.sentence(error.localizedDescription)))
+                    }
                 }
             }
             reading = false
@@ -1740,6 +1755,34 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 refresh()
             }
         }
+    }
+
+    /// A read of this artifact's pins begins: nothing drawn inside the wait's
+    /// grace, then the list's skeleton (The Real Wait Rule).
+    private func readPins() {
+        pinsGrace?.cancel()
+        held(.quiet)
+        pinsGrace = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Motion.durWaitGrace))
+            guard !Task.isCancelled, let self, pinsHold == .quiet else { return }
+            held(.reading)
+        }
+    }
+
+    /// Where the pins' read stands, told to the list and the head.
+    private func held(_ hold: PinListController.Hold) {
+        if hold != .quiet, hold != .reading { pinsGrace?.cancel() }
+        guard hold != pinsHold else { return }
+        pinsHold = hold
+        list?.hold = hold
+        paintPins()
+    }
+
+    /// `text` as a sentence of its own, ending in its mark.
+    private static func sentence(_ text: String) -> String {
+        let said = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let last = said.last else { return "The hub didn't answer." }
+        return ".!?".contains(last) ? said : "\(said)."
     }
 
     private func adopt(_ read: ArtifactComments) {
@@ -1792,11 +1835,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The head's Comments, its badge the open pins (PreviewPane.svelte `.comments`), and Send picks.
     private func paintPins() {
         guard isViewLoaded else { return }
-        // The open count stands always, 0 too, one `--btn-gap` after the word (or the glyph alone on a narrow pane).
-        pinsBadge.text = "\(comments.open)"
+        // The open count only once read and above 0 (The Earned Count Rule), one
+        // `--btn-gap` after the word (or the glyph alone on a narrow pane).
+        let counted = openPins > 0
+        pinsBadge.text = "\(openPins)"
+        pinsBadge.isHidden = !counted
         KitButton.setTitle(narrow ? "" : "Comments", of: pinsButton, variant: .ghost, height: .sm)
-        pinsButton.accessibilityLabel = "Comments, \(comments.open) open\(pinsShown ? "" : ", pins hidden")"
-        let badge = pinsBadge.intrinsicContentSize.width + Space.space1
+        pinsButton.accessibilityLabel = "Comments\(counted ? ", \(openPins) open" : "")\(pinsShown ? "" : ", pins hidden")"
+        let badge = counted ? pinsBadge.intrinsicContentSize.width + Space.space1 : 0
         pinsButton.configuration?.contentInsets.trailing = Space.space2 + badge
         paintSend()
     }
@@ -1839,7 +1885,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let content = PinListController()
         content.heading = true
         content.placing = placing
+        content.hold = pinsHold
         content.show(comments.pins, live: live)
+        content.onRetry = { [weak self] in
+            self?.readPins()
+            self?.refresh()
+        }
         content.onOpen = { [weak self, weak content] id in
             content?.dismiss(animated: true)
             self?.openCard(id)
@@ -1856,10 +1907,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let share: Double = roomWidth * Size.cPinListShare
         let width: Double = Swift.min(Swift.max(share, Size.cPinListMin), Size.cPinListMax, roomWidth - gutter * 2)
         content.loadViewIfNeeded()
-        let fits = Double(content.view.systemLayoutSizeFitting(CGSize(width: width, height: 0),
-                                                               withHorizontalFittingPriority: .required,
-                                                               verticalFittingPriority: .fittingSizeLevel).height)
-        content.preferredContentSize = CGSize(width: width, height: Swift.min(fits, roomHeight - gutter * 2))
+        content.preferredContentSize = CGSize(width: width, height: 0)
+        content.fitsWithin = roomHeight - gutter * 2
+        content.fit()
         KitPopover.present(content, from: well, rect: CGRect(x: roomWidth - gutter, y: 0, width: 0, height: 0), in: self,
                            align: .end, side: .bottom, offset: gutter, passthrough: [web!])
         if let focusedPin { content.reveal(focusedPin) }
@@ -2350,7 +2400,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let sendWords = sendButton.accessibilityLabel ?? "?"
         let grab = grabArea.isHidden ? "none" : centre(grabber)
         let page = web.convert(web.bounds, to: nil)
-        return "preview head comment=\(words)@\(toggle) mode=\(mode.rawValue) draw=\(segmentCentre(2)) pins=\(comments.open)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
+        return "preview head comment=\(words)@\(toggle) mode=\(mode.rawValue) draw=\(segmentCentre(2)) pins=\(openPins)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
     }
 
     /// The centre of the mode's segment at `index` in the window: the segmented's width in three.
@@ -2397,9 +2447,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var laidLeft = 0.0
     /// What the first fit stood, when More held Comments' count and the second one was taken; nil otherwise.
     private var laidFirst: Set<HeadItem>?
-    /// The open pins the head is laid out for, in place of the hub's read.
+    /// The open pins the head is counted and laid out for, in place of the hub's read.
     var probeOpen: Int? {
-        didSet { view.setNeedsLayout() }
+        // Comments' badge takes the count, and its paint lays the head out again.
+        didSet { paintPins() }
     }
 
     /// The panel as a component canvas's, its page holding picks: the
