@@ -1019,7 +1019,7 @@
            (--rail-sheet-close-room). -->
       <Sheet.Content
         data-rail-sheet
-        class="w-c-rail-sheet-w desk:hidden"
+        class="w-(--c-rail-sheet-w) desk:hidden"
         pad="none"
         onCloseAutoFocus={(event) => {
           if (barGlass.open === "jump") {
@@ -1254,7 +1254,10 @@
                   }}
                   type="button"
                 >
-                  <IconSearch aria-hidden="true" />
+                  <IconSearch
+                    aria-hidden="true"
+                    class="size-icon-md text-ink-muted"
+                  />
                 </button>
               {/snippet}
             </Tip>

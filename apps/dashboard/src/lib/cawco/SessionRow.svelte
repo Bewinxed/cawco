@@ -393,7 +393,7 @@
   >
     <span
       data-slot="num"
-      class="num mark-line flex items-center min-h-space-5 whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-selected-ink group-data-compact/session-row:justify-end group-data-compact/session-row:w-c-trail-col"
+      class="num mark-line flex items-center min-h-space-5 whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-selected-ink group-data-compact/session-row:justify-end group-data-compact/session-row:w-(--c-trail-col)"
       title={pending ?? hint}
     >
       {#if compact && (pending || renaming !== null)}

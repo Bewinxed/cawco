@@ -266,10 +266,9 @@
             {#if result}
               <pre
                 data-slot="result"
-                class="m-0 max-h-c-run-result-max self-stretch overflow-auto rounded-xs bg-surface-recess px-space-3 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong data-err:text-status-fail-ink"
+                class="m-0 max-h-(--c-run-result-max) self-stretch overflow-auto rounded-xs bg-surface-recess px-space-3 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong data-err:text-status-fail-ink"
                 data-branch-item
-                data-err={!!step.failure || undefined}
-                >{result}</pre>
+                data-err={!!step.failure || undefined}>{result}</pre>
             {/if}
             {#if more}
               <div data-slot="more" data-branch-item>
