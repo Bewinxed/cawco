@@ -401,7 +401,7 @@ shadcn variant: apps/dashboard/src/lib/cawco/workspace/PaneTabs.svelte:1734 data
 
 contract: apps/dashboard/src/lib/components/ui/fluid-tabs/TabsList.svelte:1108 data-scrollable | PaneTabs.svelte (the `pane-tabs-strip` rules select `.ff-tabs-list[data-scrollable]`) | TabsList sets `data-scrollable` on the track (integration moves `scrollable` from a class to the attribute, and app.css:793)
 
-contract: workspace/SessionDetails.svelte:829 passes size="compact" (L41 LimitBar role); the `--row-paint` it set (:817) is dropped, LimitBar falls back to that paint
+contract: workspace/SessionDetails.svelte:832 passes size="compact" (L41 LimitBar role); the `--row-paint` it set (:820) is dropped, LimitBar falls back to that paint
 
 cross-file hook: apps/dashboard/src/lib/cawco/workspace/PaneDeck.svelte:107 `[data-pane-lift]` stays a data attribute the lift is named by; no other file selects it.
 
