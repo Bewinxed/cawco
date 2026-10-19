@@ -131,6 +131,21 @@ if (unknown.length > 0) {
   );
   process.exit(2);
 }
+// Every name is a spec before anything runs: a module with no default export
+// is a helper, not one to run.
+const specs = new Map<string, Spec>();
+for (const name of chosen) {
+  // biome-ignore lint/performance/noAwaitInLoops: each module read once, in the order named
+  const spec = (await import(pathOf(name) as string)).default as
+    Spec | undefined;
+  if (spec === undefined) {
+    console.error(
+      `${name} is not a spec (no default export): pick a spec from scripts/probe-kit/specs`
+    );
+    process.exit(2);
+  }
+  specs.set(name, spec);
+}
 
 /**
  * A spec of its own that stands up its own git and HOME (kit.ts
@@ -179,9 +194,9 @@ const run = new Run();
 const failedSpecs: string[] = [];
 try {
   for (const name of chosen) {
-    // biome-ignore lint/performance/noAwaitInLoops: one spec at a time, each with the machine to itself
-    const spec = (await import(pathOf(name) as string)).default as Spec;
+    const spec = specs.get(name) as Spec;
     if (spec.ownHome && !process.env[OWN_HOME_ENV]) {
+      // biome-ignore lint/performance/noAwaitInLoops: specs run one at a time, in the order named
       const code = await runOwnHome(spec);
       if (code === 3) {
         run.onHost.push(spec.name);
