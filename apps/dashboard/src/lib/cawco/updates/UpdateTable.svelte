@@ -37,17 +37,13 @@
     {/snippet}
   </EmptyState>
 {:else}
-  <!-- literal: inset 0 0 0 1px var(--border-hairline) -->
-  <!-- literal: minmax(0, 1fr) auto -->
   <div
-    class="overflow-x-auto rounded-md bg-surface-raised shadow-(--matrix-ring)"
-    style:--matrix-ring="inset 0 0 0 1px var(--border-hairline)"
-    style:--phone-cols="minmax(0, 1fr) auto"
+    class="overflow-x-auto rounded-md bg-surface-raised inset-ring inset-ring-border-hairline"
   >
-    <Table.Root class="border-collapse text-left max-phone:block">
+    <Table.Root class="border-collapse text-start max-phone:block">
       <Table.Header class="max-phone:hidden">
         <Table.Row
-          class="align-top max-phone:grid max-phone:grid-cols-(--phone-cols) max-phone:items-center"
+          class="align-top max-phone:grid max-phone:grid-cols-fill-auto max-phone:items-center"
           variant="stacks-ruled"
         >
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
@@ -68,7 +64,7 @@
           {@const os = machineOs(machine.os)}
           {@const online = isOnline(machine)}
           <Table.Row
-            class="max-phone:grid max-phone:grid-cols-(--phone-cols) max-phone:items-center"
+            class="max-phone:grid max-phone:grid-cols-fill-auto max-phone:items-center"
             inactive={!online}
             variant="stacks-ruled"
           >
@@ -91,9 +87,9 @@
                       >{machineLabel(machine.hostname)}</span
                     >
                     <span
-                      class="size-2 shrink-0 rounded-full {online
-                        ? 'bg-success-9'
-                        : 'bg-ink-muted/40'}"
+                      class="size-(--status-dot-size) shrink-0 rounded-pill {online
+                        ? 'bg-presence-online'
+                        : 'bg-presence-off'}"
                     ></span>
                   </span>
                   <span class="text-label text-ink-muted"

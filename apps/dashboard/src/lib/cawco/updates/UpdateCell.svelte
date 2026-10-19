@@ -37,14 +37,14 @@
   {#key cell.row}
     <div
       data-slot="swap"
-      class="flex flex-wrap items-center gap-space-2 type-label"
+      class="flex flex-wrap items-center gap-space-2 type-label motion-safe:animate-cell-swap motion-reduce:animate-cell-fade"
     >
       {#if cell.plain}
         <span class="type-meta text-ink-muted">{cell.text}</span>
       {:else if cell.text}
         {#if cell.icon === "spinner"}
           <span class="mark-line inline-flex items-center gap-space-2">
-            <Spinner class="size-icon-md shrink-0" tone="muted" />
+            <Spinner class="shrink-0" tone="muted" />
             <span data-slot="words">{cell.text}</span>
           </span>
         {:else}
@@ -54,7 +54,9 @@
             variant={cell.fail ? "destructive" : "ghost"}
           >
             {#if cell.fail}
-              <span class="size-2 shrink-0 rounded-full bg-error-9" data-box
+              <span
+                class="size-(--status-dot-size) shrink-0 rounded-pill bg-error-9"
+                data-box
               ></span>
             {:else if cell.icon === "clock"}
               <IconClock class="size-icon-md shrink-0" />
@@ -110,35 +112,10 @@
     </div>
   {/key}
   {#if reading && cell.buttons.includes("error")}
-    <!-- literal: 10rem -->
     <pre
-      class="mx-0 mt-space-2 mb-0 max-h-(--said-max) overflow-auto rounded-xs border border-border-well bg-surface-well p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
-      style:--said-max="10rem"
+      class="mx-0 mt-space-2 mb-0 max-h-c-update-said-h overflow-auto rounded-xs border border-border-well bg-surface-well p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
       transition:unfold>{machine.binaryUpdate?.error ??
         "The machine did not say why."}</pre>
   {/if}
   <RowFault again={refused?.again} reason={refused?.reason} />
 </div>
-
-<style>
-  /* residual: keyframes */
-  [data-slot="swap"] {
-    @media (prefers-reduced-motion: no-preference) {
-      animation: swap-in var(--dur-control) var(--ease-out);
-    }
-    @media (prefers-reduced-motion: reduce) {
-      animation: fade-in var(--dur-control) var(--ease-out);
-    }
-  }
-  @keyframes swap-in {
-    from {
-      opacity: 0;
-      scale: var(--pop-scale);
-    }
-  }
-  @keyframes fade-in {
-    from {
-      opacity: 0;
-    }
-  }
-</style>

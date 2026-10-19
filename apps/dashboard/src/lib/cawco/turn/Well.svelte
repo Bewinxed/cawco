@@ -31,99 +31,27 @@
   } = $props();
 </script>
 
+<!-- The surface and its edge are painted by ::before, under the words, so a
+     part can open without clipping the words landing in it; ::after is the
+     hairline from the message above, drawn by the LOWER message across the
+     text column on the pixel row the part above leaves for its edge. The box
+     is the same for every part, so a part becoming the last, or no longer
+     the last, repaints and never reflows. A later message opens its top and
+     starts its surface on that same pixel row; another message following
+     drops the bottom edge and corners; words lifted into the composer fold
+     the well away with them. -->
 <div
   data-slot="well"
   data-runs-on={runsOn || undefined}
   data-grouped={grouped || undefined}
   data-lifted={lifted || undefined}
   class={[
-    "relative isolate flow-root ms-(--well-x) py-(--well-pad-block) px-(--pad) motion-safe:transition-[padding-block] motion-safe:dur-panel motion-safe:ease-drawer not-data-lifted:data-grouped:pbs-space-2 data-lifted:py-0 data-lifted:pbs-0",
+    "relative isolate flow-root ms-(--well-x) px-(--pad) py-space-2 data-lifted:py-0 motion-safe:transition-[padding-block] motion-safe:dur-panel motion-safe:ease-drawer",
+    "before:absolute before:inset-0 before:-z-1 before:rounded-well-r before:border before:border-well-edge before:bg-surface-recess-deep motion-safe:before:transition-well-surface theme-flip:before:transition-none data-grouped:before:-inset-bs-px data-grouped:before:border-bs-0 data-grouped:before:rounded-ss-none data-grouped:before:rounded-se-none data-runs-on:before:border-be-transparent data-runs-on:before:rounded-ee-none data-runs-on:before:rounded-es-none data-lifted:before:opacity-0",
+    "after:absolute after:inset-x-(--pad) after:-inset-bs-px after:h-px after:bg-seam after:opacity-0 motion-safe:after:transition-[opacity] motion-safe:after:dur-pop motion-safe:after:ease-out theme-flip:after:transition-none not-data-lifted:data-grouped:after:opacity-100 data-lifted:after:opacity-0",
     extra,
   ]}
-  style:--well-pad-block="calc(var(--space-2) + 1px)"
   {...rest}
 >
   {@render children()}
 </div>
-
-<style>
-  /* The surface and its edge are painted by ::before, under the words, so a
-     part can open without clipping the words landing in it; ::after is the
-     hairline from the message above. The box is the same for every part, so
-     a part becoming the last, or no longer the last, repaints and never
-     reflows. */
-  /* residual: pseudo */
-  [data-slot="well"]::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border: 1px solid var(--well-edge);
-    border-radius: var(--well-r);
-    background: var(--surface-recess-deep);
-
-    /* A run growing or shrinking: the edge and corners follow. */
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        border-color var(--dur-pop) var(--ease-out),
-        border-radius var(--dur-pop) var(--ease-out),
-        opacity var(--dur-panel) var(--ease-drawer);
-    }
-  }
-  /* Drawn by the LOWER message, across the text column only, on the pixel
-     row the part above leaves for its edge. Painted by the row below, it is
-     painted last. */
-  [data-slot="well"]::after {
-    content: "";
-    position: absolute;
-    inset-inline: var(--pad);
-    inset-block-start: -1px;
-    block-size: 1px;
-    background: var(--seam);
-    opacity: 0;
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: opacity var(--dur-pop) var(--ease-out);
-    }
-  }
-  /* A later message: open at the top, the hairline over the part above's
-     bottom edge. Its surface starts on the pixel row the part above leaves
-     for its edge, as the hairline does. */
-  [data-slot="well"][data-grouped]::before {
-    inset-block-start: -1px;
-    border-block-start-width: 0;
-    border-start-start-radius: 0;
-    border-start-end-radius: 0;
-  }
-  [data-slot="well"][data-grouped]::after {
-    opacity: 1;
-  }
-  /* Its words lifted into the composer, the well folds away with them. */
-  [data-slot="well"][data-lifted]::before,
-  [data-slot="well"][data-lifted]::after {
-    opacity: 0;
-  }
-  /* Another message follows: no bottom edge or corners. */
-  [data-slot="well"][data-runs-on]::before {
-    border-block-end-color: transparent;
-    border-end-start-radius: 0;
-    border-end-end-radius: 0;
-  }
-  /* A theme switch is one cross-fade of the whole page (theme.svelte.ts):
-     the well's edge does not fade on its own under it. */
-  :global(:root.theme-flip) [data-slot="well"]::before,
-  :global(:root.theme-flip) [data-slot="well"]::after {
-    transition: none !important;
-  }
-
-  /* residual: foreign-dom */
-  /* The words run to the well's edge, not the prose measure. */
-  [data-slot="well"] :global([data-slot="msg"]) {
-    max-inline-size: none;
-  }
-  /* The well is the deepest step, so a code span lifts to the raised
-     surface instead of vanishing into it. */
-  [data-slot="well"] :global([data-slot="msg"] code) {
-    background: var(--surface-raised);
-  }
-</style>

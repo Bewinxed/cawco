@@ -72,15 +72,13 @@
 <!-- With its mark the line is a mark line (app.css): the name and the clock
      stand on the mark's middle. Grouped it has no mark, and its clock keeps
      its own line box in the body's first line. -->
-<!-- literal: 9ch -->
 <h2
   data-turn-who
   data-grouped={grouped || undefined}
   class={[
-    "flex items-center gap-space-2 text-size-label text-ink-muted font-medium mb-space-2 data-grouped:float-end data-grouped:justify-end data-grouped:text-size-meta data-grouped:min-w-(--who-clock-w) data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",
+    "flex items-center gap-space-2 text-size-label text-ink-muted font-medium mb-space-2 data-grouped:float-end data-grouped:justify-end data-grouped:text-size-meta data-grouped:min-w-c-turn-clock-w data-grouped:min-h-(--who-line-h) data-grouped:mb-0 data-grouped:ms-space-3",
     !grouped && "mark-line",
   ]}
-  style:--who-clock-w="9ch"
   style:--who-line-h="calc(var(--text-body) * var(--leading-body))"
 >
   {#if grouped}
@@ -129,19 +127,8 @@
     <time
       data-slot="when"
       data-after-note={note || undefined}
-      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 group-[:hover]/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out data-after-note:ms-0"
+      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out data-after-note:ms-0"
       datetime={validAt.toISOString()}>{clock}</time
     >
   {/if}
 </h2>
-
-<style>
-  /* residual: foreign-dom */
-  /* A pane's own face (a snippet this file does not render) sits in the
-     mark's box at the icon step. */
-  [data-slot="dot"][data-face] :global(svg) {
-    display: block;
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-</style>
