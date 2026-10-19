@@ -473,7 +473,7 @@
   data-row={rowKey}
   bind:this={node}
   style:--rail-head={continues ? "var(--rail-body)" : undefined}
-  style:--rail-gap={continues ? "0px" : undefined}
+  style:--rail-gap={continues ? "0" : undefined}
 >
   {@render children(ticket)}
 </div>
