@@ -997,6 +997,21 @@ export function boot(options: BootOptions): void {
     later();
   }
 
+  /**
+   * An animation brought to its end: `finish()` throws on one that never
+   * ends (an `infinite` loop, a working dot's pulse; Web Animations,
+   * "finishing an animation": an infinite effect end is an
+   * InvalidStateError), and the throw ended the whole sweep, so a loop is
+   * cancelled instead.
+   */
+  const land = (one: Animation): void => {
+    if (one.effect?.getComputedTiming().endTime === Number.POSITIVE_INFINITY) {
+      one.cancel();
+    } else {
+      one.finish();
+    }
+  };
+
   /** One story mounted in the rig, each of its interactions forced and released: the delta and the transitions each fires. */
   async function probe(
     section: Section,
@@ -1031,7 +1046,7 @@ export function boot(options: BootOptions): void {
         const fired = body.getAnimations({ subtree: true });
         const animations = fired.map((one) => readAnimation(one, t0));
         for (const one of fired) {
-          one.finish();
+          land(one);
         }
         const changed = deltaOf(before, snapshot(body), root);
         for (const state of FORCED[interaction]) {
@@ -1039,7 +1054,7 @@ export function boot(options: BootOptions): void {
         }
         await frameTick();
         for (const one of body.getAnimations({ subtree: true })) {
-          one.finish();
+          land(one);
         }
         result.delta.set(interaction, { animations, changed });
       }
