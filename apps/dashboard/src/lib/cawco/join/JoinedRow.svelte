@@ -92,11 +92,9 @@
 >
   <div class="grid min-w-0">
     {#key said}
-      <!-- literal: 10px -->
       <div
-        class="col-start-1 row-start-1 grid min-w-0 grid-cols-(--columns) gap-x-(--gap)"
+        class="col-start-1 row-start-1 grid min-w-0 grid-cols-(--columns) gap-x-space-3"
         style:--columns="auto minmax(0, 1fr)"
-        style:--gap="10px"
         transition:fade={{ duration: dur("--dur-fade") }}
       >
         <span
@@ -104,11 +102,10 @@
           data-joined-row-done={line.hue === "done" || undefined}
           data-done={line.hue === "done" || undefined}
           data-attn={line.hue === "attn" || undefined}
-          class="flex h-(--glyph-h) items-center text-ink-strong data-attn:text-status-attn-ink not-data-attn:data-done:text-status-done-ink"
-          style:--glyph-h="calc(var(--text-body) * 1.45)"
+          class="flex h-lh items-center text-body text-ink-strong data-attn:text-status-attn-ink not-data-attn:data-done:text-status-done-ink"
         >
           {#if Glyph}
-            <Glyph aria-hidden="true" class="duo size-icon-md" />
+            <Glyph aria-hidden="true" class="size-icon-md" data-duo />
           {:else}
             <Spinner
               aria-hidden="true"
@@ -146,10 +143,3 @@
     {/key}
   </div>
 </Alert.Root>
-
-<style>
-  /* residual: foreign-dom — the glyph component's duotone layers */
-  [data-slot="glyph"] :global(svg.duo [opacity]) {
-    opacity: var(--glyph-duo-status-opacity);
-  }
-</style>

@@ -186,7 +186,9 @@
               >
             </DropdownMenu.RadioGroup>
             {#if columns === 1}
-              <p class="aside">{words.widerScreens}</p>
+              <p class="m-0 px-space-3 pb-space-1 type-meta text-ink-muted">
+                {words.widerScreens}
+              </p>
             {/if}
           {/if}
           {#if hideable || view}
@@ -224,40 +226,11 @@
     <span
       data-slot="drop"
       aria-hidden="true"
-      class="pointer-events-none absolute z-2 rounded-hair bg-brand-solid edge-bottom:inset-x-0 edge-bottom:bottom-(--drop-off) edge-bottom:h-c-block-drop-line edge-left:inset-y-0 edge-left:start-(--drop-off) edge-left:w-c-block-drop-line edge-right:inset-y-0 edge-right:end-(--drop-off) edge-right:w-c-block-drop-line edge-top:inset-x-0 edge-top:top-(--drop-off) edge-top:h-c-block-drop-line"
+      class="pointer-events-none absolute z-2 rounded-hair bg-brand-solid before:absolute before:size-c-block-drop-dot before:rounded-pill before:bg-brand-solid edge-bottom:inset-x-0 edge-bottom:bottom-(--drop-off) edge-bottom:h-c-block-drop-line edge-bottom:before:start-(--dot-out) edge-bottom:before:top-(--dot-mid) edge-left:inset-y-0 edge-left:start-(--drop-off) edge-left:w-c-block-drop-line edge-left:before:start-(--dot-mid) edge-left:before:top-(--dot-out) edge-right:inset-y-0 edge-right:end-(--drop-off) edge-right:w-c-block-drop-line edge-right:before:start-(--dot-mid) edge-right:before:top-(--dot-out) edge-top:inset-x-0 edge-top:top-(--drop-off) edge-top:h-c-block-drop-line edge-top:before:start-(--dot-out) edge-top:before:top-(--dot-mid)"
       data-edge={over}
       style:--drop-off={"calc(var(--space-group) / -2 - var(--c-block-drop-line) / 2)"}
+      style:--dot-mid={"calc((var(--c-block-drop-line) - var(--c-block-drop-dot)) / 2)"}
+      style:--dot-out={"calc(var(--c-block-drop-dot) / -2)"}
     ></span>
   {/if}
 </section>
-
-<style>
-  /* residual: foreign-dom */
-  [data-slot="glyph"] :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  /* residual: pseudo */
-  [data-slot="drop"]::before {
-    position: absolute;
-    inline-size: var(--c-block-drop-dot);
-    block-size: var(--c-block-drop-dot);
-    border-radius: 50%;
-    background: var(--brand-solid);
-    content: "";
-  }
-  /* residual: pseudo */
-  [data-slot="drop"]:is([data-edge="top"], [data-edge="bottom"])::before {
-    inset-block-start: calc(
-      (var(--c-block-drop-line) - var(--c-block-drop-dot)) / 2
-    );
-    inset-inline-start: calc(var(--c-block-drop-dot) / -2);
-  }
-  /* residual: pseudo */
-  [data-slot="drop"]:is([data-edge="left"], [data-edge="right"])::before {
-    inset-block-start: calc(var(--c-block-drop-dot) / -2);
-    inset-inline-start: calc(
-      (var(--c-block-drop-line) - var(--c-block-drop-dot)) / 2
-    );
-  }
-</style>
