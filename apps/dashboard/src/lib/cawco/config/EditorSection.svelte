@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * One part of an editor: a divider, a header with its hued icon and an
-   * optional control on the right, then the fields 8px apart.
+   * optional control on the right, then the fields a step apart.
    */
   import type { Component, Snippet } from "svelte";
   import { SectionHeader } from "#lib/components/ui/section-header/index.js";
@@ -21,11 +21,9 @@
   } = $props();
 </script>
 
-<!-- literal: 8px -->
 <section
   data-slot="section"
-  class="flex flex-col gap-(--section-gap) min-w-0 pt-space-5 border-t border-t-border-hairline"
-  style:--section-gap="8px"
+  class="flex flex-col gap-space-2 min-w-0 pt-space-5 border-t border-t-border-hairline"
 >
   <SectionHeader {hue} {icon} {label} {right} wrap />
   {@render children()}

@@ -127,16 +127,13 @@
   </Popover.Trigger>
   <Popover.Content
     align="end"
-    class="w-(--pop-w) max-w-(--pop-max)"
+    class="w-c-panel-w max-w-(--bits-popover-content-available-width)"
     gap="form"
     pad="form"
-    style="--pop-w: 380px; --pop-max: calc(100vw - 2rem)"
     bind:ref={surface}
   >
-    <!-- literal: 12px -->
     <form
-      class="flex flex-col gap-(--form-gap)"
-      style:--form-gap="12px"
+      class="flex flex-col gap-space-3"
       onsubmit={(event) => {
         event.preventDefault();
         if (ready && !busy) {
@@ -174,7 +171,7 @@
       >
         {#snippet hint()}
           {words.landsIn}
-          <span class="font-mono"
+          <span class="font-(family-name:--font-mono)"
             >{project
               ? projectClaudeRelative("skills", skillName || "name")
               : userLayerLabel("skills", skillName || "name")}</span
@@ -210,12 +207,15 @@
         />
       </div>
       {#if choices.length > 0}
-        <div class="choices" transition:unfold>
-          <span data-slot="note" class="note">{words.severalSkills}</span>
+        <div
+          class="flex flex-col max-h-(--c-choice-list-max-h) overflow-y-auto"
+          transition:unfold
+        >
+          <span data-slot="note" class="type-meta text-ink-muted">{words.severalSkills}</span>
           {#each choices as choice (choice)}
             <button
               data-slot="choice"
-              class="kit-item px-(--choice-pad) text-left font-(family-name:--font-mono) text-size-meta text-ink-strong focus-inset"
+              class="kit-item px-space-3 text-start font-(family-name:--font-mono) text-size-meta text-ink-strong focus-inset"
               disabled={busy}
               onclick={() => choose(choice)}
               type="button"

@@ -30,12 +30,9 @@
   } = $props();
 </script>
 
-<!-- literal: 6px, 72ch -->
 <div
   data-slot="field-field"
-  class="flex flex-col gap-(--field-gap) min-w-0"
-  style:--field-gap="6px"
-  style:--measure="72ch"
+  class="flex flex-col gap-space-2 min-w-0"
 >
   <label data-field-label class="type-meta text-ink-muted" for={id}
     >{label}</label
@@ -45,27 +42,27 @@
     <div class="relative flex flex-col" in:unfold out:unfold {@attach morph()}>
       {#if problem}
         <span
-          class="max-w-(--measure) type-meta text-status-fail-ink"
+          class="max-w-(--c-field-hint-measure) type-meta text-status-fail-ink"
           in:crossIn
           out:crossOut>{problem}</span
         >
       {:else if warn}
         <span
-          class="max-w-(--measure) type-meta text-status-attn-ink"
+          class="max-w-(--c-field-hint-measure) type-meta text-status-attn-ink"
           in:crossIn
           out:crossOut>{@render warn()}</span
         >
       {:else if typeof hint === "string"}
         <span
           data-slot="hint"
-          class="max-w-(--measure) type-meta text-pretty text-ink-muted"
+          class="max-w-(--c-field-hint-measure) type-meta text-pretty text-ink-muted"
           in:crossIn
           out:crossOut>{hint}</span
         >
       {:else if hint}
         <span
           data-slot="hint"
-          class="max-w-(--measure) type-meta text-pretty text-ink-muted"
+          class="max-w-(--c-field-hint-measure) type-meta text-pretty text-ink-muted"
           in:crossIn
           out:crossOut>{@render hint()}</span
         >

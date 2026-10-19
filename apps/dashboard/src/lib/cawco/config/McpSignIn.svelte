@@ -62,7 +62,7 @@
 
 {#if server.auth?.mode === "oauth"}
   {#if signedIn}
-    <span class="state" role="status">{words.signedIn}</span>
+    <span class="type-meta text-ink-muted" role="status">{words.signedIn}</span>
   {:else}
     <Button
       disabled={!server.enabled}
