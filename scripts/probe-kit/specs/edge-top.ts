@@ -484,7 +484,8 @@ const machinesLeg = async (
       : "Machines";
   kit.check(
     `machines desk ${theme}, ${machines} joined: the number is ${num}, the name "${label}"${machines > 0 ? "" : ", a plain item"}`,
-    said.num === num &&
+    !!said &&
+      said.num === num &&
       // Above 0 the name may go on to say what needs attention.
       (machines > 0 ? said.label.startsWith(label) : said.label === label) &&
       (machines > 0 || said.pad === "0px"),
