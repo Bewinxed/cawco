@@ -22,6 +22,13 @@
  * g. Every role is listed `find`; it loads upfront for the orchestrator and
  *    Caw, and a delegate's instructions point to it first; nobody is listed
  *    `memory_recall`.
+ * h. A made-up password the person typed into a session comes back
+ *    `[redacted]` in find's concise and detailed answers and in `around`
+ *    (secret-filter.ts).
+ * i. A session the person purges (its transcript deleted from the
+ *    dashboard) is no hit of an agent's find.
+ * j. `before` keeps the evidence at or before its day: a thread's message
+ *    of September comes back, October's does not.
  *
  *   bun scripts/probe-kit/run.ts find-tool
  */
@@ -32,17 +39,23 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const WORD = "zebrafish";
+/** A made-up password, password-shaped (secret-filter.ts `passwordShaped`): never a real one. */
+const PASSWORD = "Zq7!vRt9Lm";
 const SAY = {
   one: "PROBE-FIND-ONE say hello",
   two: `PROBE-FIND-TWO did the ${WORD} marmalade build pass?`,
   three: "PROBE-FIND-THREE thanks, note it",
   other: `PROBE-FIND-OTHER the ${WORD} lives in the other project too`,
+  secret: `PROBE-FIND-SECRET my sudo password is ${PASSWORD} on the narwhal box.`,
+  purge: "PROBE-FIND-PURGE the axolotl plan is off.",
 } as const;
 const REPLY = {
   one: "Hello, ready when you are.",
   two: `The ${WORD} build passed after the quokka lattice fix.`,
   three: "Noted beside the walrus checklist.",
   other: `Other project ${WORD} noted.`,
+  secret: "Understood, the narwhal box.",
+  purge: "The axolotl plan is off, noted.",
 } as const;
 /** The deferred groups' first line, as delegation-tools.ts writes it for `find`. */
 const POINTER =
@@ -56,7 +69,14 @@ const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Find probe");
   }
-  for (const key of ["one", "two", "three", "other"] as const) {
+  for (const key of [
+    "one",
+    "two",
+    "three",
+    "other",
+    "secret",
+    "purge",
+  ] as const) {
     if (request.last.includes(SAY[key])) {
       return text(REPLY[key]);
     }
@@ -520,6 +540,158 @@ const listingLegs = async (kit: Kit, probe: Probe, seeded: Seeded) => {
   );
 };
 
+/** A session in the find probe's own project that says `words` once, answered. */
+const talkOnce = async (probe: Probe, title: string, words: string) => {
+  const { fleet } = probe;
+  const talker = await probe.session(title, probe.mine);
+  await fleet.send(talker.id, words);
+  await until(
+    `${title}'s reply`,
+    () =>
+      fleet.seen.some((request) => request.last.includes(words)) &&
+      fleet.instance(talker.id)?.turn_open_at === null,
+    Boolean,
+    60_000
+  ).catch(() => false);
+  return talker;
+};
+
+/** Whether the engine (the dashboard's Find) holds `id` for `q` yet: the machine's index read its words. */
+const indexed = (probe: Probe, q: string, id: string, what: string) =>
+  until(
+    what,
+    () => probe.engine(q),
+    (answer) => answer.results.some((result) => result.id === id),
+    120_000
+  ).catch(() => undefined);
+
+/** h: the person's typed password, through every answer find gives an agent. */
+const secretLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
+  const talker = await talkOnce(probe, "Narwhal box", SAY.secret);
+  await indexed(probe, "narwhal", talker.id, "the narwhal turn in /api/find");
+  const concise = await probe.find(seeded.orchestrator, {
+    query: "narwhal sudo",
+    project: "all",
+  });
+  const detailed = await probe.find(seeded.orchestrator, {
+    query: "narwhal sudo",
+    project: "all",
+    response_format: "detailed",
+  });
+  const hit = concise.answer.hits?.find((each) => each.id === talker.id);
+  const around = hit?.ref
+    ? await probe.find(seeded.orchestrator, { around: hit.ref })
+    : undefined;
+  const answers = { concise, detailed, around };
+  const clean = (called: Called | undefined) =>
+    called !== undefined &&
+    !called.refused &&
+    called.text.includes("[redacted]") &&
+    !called.text.includes(PASSWORD);
+  kit.check(
+    "h: a password the person typed comes back [redacted] in find's concise, detailed and around answers",
+    clean(concise) && clean(detailed) && clean(around),
+    Object.entries(answers)
+      .map(([name, called]) => `${name}: ${said(called)}`)
+      .join("\n")
+  );
+};
+
+/** i: a purged session, from the dashboard, is no hit of an agent's find. */
+const purgeLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
+  const { fleet } = probe;
+  const talker = await talkOnce(probe, "Axolotl plan", SAY.purge);
+  await indexed(probe, "axolotl", talker.id, "the axolotl turn in /api/find");
+  const before = await probe.find(seeded.orchestrator, {
+    query: "axolotl",
+    project: "all",
+  });
+  const [row] = fleet.query<{ cwd: string; session_id: string | null }>(
+    "SELECT session_id, cwd FROM instances WHERE id = ?",
+    talker.id
+  );
+  const requestId = crypto.randomUUID();
+  await fleet.post({
+    verb: "control",
+    machineId: MACHINE,
+    requestId,
+    payload: {
+      requestId,
+      method: "deleteSession",
+      args: [row?.session_id ?? "", { dir: row?.cwd }],
+      harness: "claude",
+    },
+  });
+  const after = await until(
+    "the purged session gone from an agent's find",
+    () => probe.find(seeded.orchestrator, { query: "axolotl", project: "all" }),
+    (called) =>
+      !(
+        called.refused ||
+        (called.answer.hits ?? []).some(
+          (hit) =>
+            hit.id === talker.id || hit.id.endsWith(`:${row?.session_id ?? ""}`)
+        )
+      ),
+    30_000
+  ).catch(() => undefined);
+  kit.check(
+    "i: a session the person purged is no hit of an agent's find",
+    (before.answer.hits ?? []).some((hit) => hit.id === talker.id) &&
+      after !== undefined,
+    `before ${said(before)}\nafter ${after ? said(after) : "still found after 30 s"}`
+  );
+};
+
+/** j: `before` keeps a thread's September message, not its October one. */
+const beforeLeg = async (kit: Kit, probe: Probe, seeded: Seeded) => {
+  const { fleet, mine } = probe;
+  const threadId = crypto.randomUUID();
+  const at = Date.parse("2026-09-01T09:00:00Z");
+  fleet.write(
+    "INSERT INTO project_threads (id, project_id, title, setup, created_at, updated_at) VALUES (?, ?, ?, 0, ?, ?)",
+    threadId,
+    mine.id,
+    "Okapi questions",
+    at,
+    Date.parse("2026-10-10T09:00:00Z")
+  );
+  for (const [words, when] of [
+    ["The okapi cache was on in September.", "2026-09-01T09:00:00Z"],
+    ["The okapi cache went off in October.", "2026-10-10T09:00:00Z"],
+  ] as const) {
+    fleet.write(
+      "INSERT INTO thread_messages (id, thread_id, author, body, created_at) VALUES (?, ?, 'you', ?, ?)",
+      crypto.randomUUID(),
+      threadId,
+      words,
+      Date.parse(when)
+    );
+  }
+  const ask = (more: object) =>
+    probe.find(seeded.orchestrator, {
+      query: "okapi cache",
+      project: "all",
+      kinds: ["thread"],
+      response_format: "detailed",
+      ...more,
+    });
+  const asOf = await until(
+    "the okapi thread in an agent's find",
+    () => ask({ before: "2026-09-30" }),
+    (called) => called.text.includes("okapi"),
+    20_000
+  ).catch(() => undefined);
+  const now = await ask({});
+  kit.check(
+    "j: before keeps the evidence at or before its day: September's message, not October's",
+    Boolean(asOf?.text.includes("September")) &&
+      !asOf?.text.includes("October") &&
+      now.text.includes("October"),
+    `before 2026-09-30: ${said(asOf)}\nunbounded: ${said(now)}`
+  );
+};
+
 const run = async (kit: Kit) => {
   const probe = await standUp(kit);
   const seeded = await seed(probe);
@@ -530,6 +702,9 @@ const run = async (kit: Kit) => {
   await refusalLegs(kit, probe, seeded);
   await boundLeg(kit, probe, seeded, [all, ...turns, ...pages, ...scopes]);
   await listingLegs(kit, probe, seeded);
+  await secretLeg(kit, probe, seeded);
+  await purgeLeg(kit, probe, seeded);
+  await beforeLeg(kit, probe, seeded);
 };
 
 export default { name: "find-tool", run } satisfies Spec;

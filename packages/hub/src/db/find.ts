@@ -17,6 +17,7 @@ import {
   instances,
   projectTaskLabels,
   projectTasks,
+  purgedSessions,
   routineRuns,
   routines,
   sessionPlans,
@@ -111,6 +112,10 @@ export interface FindDb {
   readonly lookedAt: () => Map<string, number>;
   /** Each session's plan step under way, by session. */
   readonly planSteps: () => Map<string, string>;
+  /** The person purged these sessions of `machineId` (their harness session ids) now. */
+  readonly purge: (machineId: string, sessionIds: string[]) => void;
+  /** Every purged session, as `machineId:sessionId` (find.ts `purgedKey`). */
+  readonly purged: () => Set<string>;
   /** Every work item's result, for those ended after `after` (ms epoch): the commits and diffstat its report names. */
   readonly results: (
     after: number
@@ -147,6 +152,26 @@ const findable = () =>
 const ID_PREFIX = /^[0-9a-f-]+$/;
 
 export const findDb = (db: BunSQLiteDatabase): FindDb => ({
+  purge: (machineId, sessionIds) => {
+    if (sessionIds.length === 0) {
+      return;
+    }
+    const purgedAt = new Date();
+    db.insert(purgedSessions)
+      .values(
+        sessionIds.map((sessionId) => ({ machineId, sessionId, purgedAt }))
+      )
+      .onConflictDoNothing()
+      .run();
+  },
+  purged: () =>
+    new Set(
+      db
+        .select()
+        .from(purgedSessions)
+        .all()
+        .map((row) => `${row.machineId}:${row.sessionId}`)
+    ),
   artifacts: () =>
     db
       .select({

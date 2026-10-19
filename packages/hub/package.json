@@ -27,6 +27,8 @@
     "@octokit/auth-app": "8.3.1",
     "@octokit/rest": "22.0.1",
     "@openuidev/lang-core": "1.0.1",
+    "@secretlint/core": "^13.0.7",
+    "@secretlint/secretlint-rule-preset-recommend": "^13.0.7",
     "ajv": "^8.20.0",
     "ajv-formats": "^3.0.1",
     "colorjs.io": "^0.7.1",

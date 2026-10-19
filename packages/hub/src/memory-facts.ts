@@ -3,10 +3,13 @@
  * in `knowledge/<topic>.md`, read and changed as words, no index.
  *
  * A fact file's first line with words is its description. Then each fact is
- * one dated, sourced line:
+ * one dated, sourced line, with at most one indented `Why:` line under it
+ * (the advisor's grounding: why it holds, where it was seen):
  *
  * ```
  * - <fact> (since <date>, from <note ids>, used <date>)
+ *   Why: <grounding>
+ * - <the person's word> (ruling <date>)
  * ## Conflict
  * - <one side> (since <date>, from <note ids>, used <date>)
  * - <the other side> (since <date>, from <note ids>, used <date>)
@@ -18,10 +21,20 @@
  *   states (memory_note's `since`); git's commit is when CawCo learned it.
  * - `from`: the inbox notes it rests on. A withdrawn note takes every fact
  *   resting on it alone with it (memory.ts `withdraw`).
+ * - `ruling`: the person's own word, with its date, in place of `since` and
+ *   `from`: it rests on no note. Written only by the person (memory.ts
+ *   `checkFacts`): re-grounding a line in a card's diff before approving it.
+ *   A ruling never folds, never retires when a note is withdrawn, and is
+ *   never archived for disuse; its `until` passing still retires it.
  * - `used`: the last time a brief carried it or a note corroborated it,
  *   written only inside a diff proposed anyway (memory.ts `stampUses`).
- * - `until`: a known end; on a Formerly line, when the line above it began.
- * - `replaced by`: on a Formerly line, the note whose fact took its place.
+ * - `until`: a known end; on a Formerly line, when the line above it began,
+ *   or the known end that retired it ({@link retiredByUntil}).
+ * - `replaced by`: on a Formerly line, the note whose fact took its place;
+ *   none on a line its `until` retired.
+ *
+ * A fact keeps at most one Formerly line: a second replacement moves the
+ * older to `knowledge/archive/<topic>.md` ({@link overflow}).
  *
  * `## Conflict` holds both sides of a same-period disagreement, each group
  * of lines its own (a blank line between groups); no model settles one. A
@@ -48,6 +61,8 @@ const TRAILING_SPACE = /\s+$/;
 const SOURCE =
   /^(n-\d{8}-\d{6}-[0-9a-f]{6}|knowledge\/\S+\.md \(before facts\))(?:\s+|$)/;
 const HEADING = /^#{1,6}\s+(.*)$/;
+/** A fact's grounding: indented under its line. */
+const WHY = /^\s+Why:\s*(.*\S)\s*$/;
 const SPACES = /\s+/g;
 const FIELD_SPLIT = /\s*,\s*/;
 
@@ -65,12 +80,17 @@ export interface FactLine {
   path: string;
   raw: string;
   replacedBy: string | null;
+  /** The person's own word: its date; the line rests on no note (`from` is empty). */
+  ruling: string | null;
   section: FactSection;
+  /** When it became true: a ruling's date for a ruling. */
   since: string;
   /** The fact's words, without its parenthesis. */
   text: string;
   until: string | null;
   used: string | null;
+  /** Its grounding, the `Why:` line under it, without the mark. */
+  why: string | null;
 }
 
 /** A line of a fact file that does not read as one: where, what, and why. */
@@ -113,6 +133,7 @@ export const factKey = (text: string): string =>
 interface Fields {
   from: string[];
   replacedBy: string | null;
+  ruling: string | null;
   since: string;
   until: string | null;
   used: string | null;
@@ -125,7 +146,12 @@ const readField = (
 ): string | undefined => {
   const [word = "", ...rest] = part.split(" ");
   const value = rest.join(" ").trim();
-  if (word === "since" || word === "until" || word === "used") {
+  if (
+    word === "since" ||
+    word === "until" ||
+    word === "used" ||
+    word === "ruling"
+  ) {
     if (!validDay(value)) {
       return `\`${word}\` is not a date (YYYY-MM-DD): "${value}"`;
     }
@@ -148,7 +174,7 @@ const readField = (
     fields.replacedBy = id;
     return;
   }
-  return `"${part}" is not since, until, from, used or replaced by`;
+  return `"${part}" is not since, until, from, used, ruling or replaced by`;
 };
 
 /** A file's prose as a source: what its lines rested on before they were fact lines. */
@@ -178,19 +204,23 @@ const fieldsOf = (inside: string): Fields | string => {
       return why;
     }
   }
-  if (!fields.since) {
-    return "it has no `since`";
-  }
-  if (!fields.from) {
-    return "it has no `from`";
-  }
-  return {
-    since: fields.since,
-    from: fields.from,
+  const rest = {
     until: fields.until ?? null,
     used: fields.used ?? null,
     replacedBy: fields.replacedBy ?? null,
   };
+  if (fields.ruling) {
+    return fields.since || fields.from
+      ? "a ruling is the person's word, dated by itself: `ruling <date>` in place of `since` and `from`"
+      : { ...rest, since: fields.ruling, ruling: fields.ruling, from: [] };
+  }
+  if (!fields.since) {
+    return "it has no `since` (or `ruling`)";
+  }
+  if (!fields.from) {
+    return "it has no `from`";
+  }
+  return { ...rest, since: fields.since, from: fields.from, ruling: null };
 };
 
 /** The section a heading opens: Formerly, Conflict, or (any other) current facts. */
@@ -240,72 +270,143 @@ const readFactLine = (
   if (typeof fields === "string") {
     return fields;
   }
-  if (section === "formerly" && !(fields.until && fields.replacedBy)) {
-    return "a Formerly line needs `until` and `replaced by`";
+  if (section === "formerly" && !fields.until) {
+    return "a Formerly line needs `until`";
   }
   return { fields, text: fact.text };
+};
+
+/**
+ * A `Why:` line, `raw` at `index`: the grounding of `under`, the fact on the
+ * line just before; with none there, a line that does not read.
+ */
+const ground = (
+  path: string,
+  index: number,
+  raw: string,
+  why: string,
+  under: FactLine | undefined
+): Unreadable | undefined => {
+  if (!under) {
+    return {
+      path,
+      line: index + 1,
+      text: raw,
+      why: "a `Why:` line goes right under its fact line, one per fact",
+    };
+  }
+  under.why = why;
+  under.raw = `${under.raw}\n${raw}`;
 };
 
 /** Every fact line of a file, its description, and the lines that do not read. */
 export const parseFactFile = (path: string, content: string): FactFile => {
   const lines = content.split("\n");
-  const facts: FactLine[] = [];
-  const unreadable: Unreadable[] = [];
   const first = lines.findIndex((line) => line.trim() !== "");
-  let section: FactSection = "current";
-  let group = 0;
-  /** Whether the line before was a Conflict line of the group open now. */
-  let grouped = false;
+  const read: Reading = {
+    path,
+    facts: [],
+    unreadable: [],
+    section: "current",
+    group: 0,
+    grouped: false,
+    ungrounded: undefined,
+  };
   for (const [index, raw] of lines.entries()) {
-    const heading = index > first ? HEADING.exec(raw) : null;
-    if (index <= first || raw.trim() === "" || heading) {
-      section = heading ? sectionNamed(heading[1] ?? "") : section;
-      grouped = false;
-      continue;
-    }
-    const read = readFactLine(raw, section);
-    if (typeof read === "string") {
-      unreadable.push({ path, line: index + 1, text: raw, why: read });
-      continue;
-    }
-    group += section === "conflict" && !grouped ? 1 : 0;
-    grouped = section === "conflict";
-    facts.push({
-      path,
-      line: index + 1,
-      raw,
-      text: read.text,
-      key: factKey(read.text),
-      section,
-      conflictGroup: section === "conflict" ? group : null,
-      ...read.fields,
-    });
+    readLine(read, raw, index, index <= first);
   }
   return {
     path,
     content,
     description: first >= 0 ? (lines[first] ?? "").trim() : "",
-    facts,
-    unreadable,
+    facts: read.facts,
+    unreadable: read.unreadable,
   };
 };
 
-/** A fact as its line writes it. */
+/** A fact file part read: what {@link readLine} carries from line to line. */
+interface Reading {
+  facts: FactLine[];
+  group: number;
+  /** Whether the line before was a Conflict line of the group open now. */
+  grouped: boolean;
+  path: string;
+  section: FactSection;
+  /** The fact on the line just before, while it has no grounding yet. */
+  ungrounded: FactLine | undefined;
+  unreadable: Unreadable[];
+}
+
+/** One line of a fact file into `read`: its description and what comes before it (`head`), a heading, a `Why:`, a fact, or a line that does not read. */
+const readLine = (
+  read: Reading,
+  raw: string,
+  index: number,
+  head: boolean
+): void => {
+  const heading = head ? null : HEADING.exec(raw);
+  const grounding = head ? null : WHY.exec(raw);
+  const under = read.ungrounded;
+  read.ungrounded = undefined;
+  if (grounding) {
+    const bad = ground(read.path, index, raw, grounding[1] ?? "", under);
+    read.unreadable.push(...(bad ? [bad] : []));
+    return;
+  }
+  if (head || raw.trim() === "" || heading) {
+    read.section = heading ? sectionNamed(heading[1] ?? "") : read.section;
+    read.grouped = false;
+    return;
+  }
+  const { section } = read;
+  const line = readFactLine(raw, section);
+  if (typeof line === "string") {
+    read.unreadable.push({
+      path: read.path,
+      line: index + 1,
+      text: raw,
+      why: line,
+    });
+    return;
+  }
+  read.group += section === "conflict" && !read.grouped ? 1 : 0;
+  read.grouped = section === "conflict";
+  const fact: FactLine = {
+    path: read.path,
+    line: index + 1,
+    raw,
+    text: line.text,
+    key: factKey(line.text),
+    section,
+    conflictGroup: section === "conflict" ? read.group : null,
+    why: null,
+    ...line.fields,
+  };
+  read.facts.push(fact);
+  read.ungrounded = fact;
+};
+
+/** A fact as its file writes it: its line, and its `Why:` line under it when it has one. */
 export const renderFact = (fact: {
   from: string[];
   replacedBy?: string | null;
+  ruling?: string | null;
   since: string;
   text: string;
   until?: string | null;
   used?: string | null;
+  why?: string | null;
 }): string =>
   `- ${fact.text.trim()} (${[
-    `since ${fact.since}`,
+    ...(fact.ruling ? [`ruling ${fact.ruling}`] : [`since ${fact.since}`]),
     ...(fact.until ? [`until ${fact.until}`] : []),
-    `from ${[...new Set(fact.from)].join(" ")}`,
+    ...(fact.ruling ? [] : [`from ${[...new Set(fact.from)].join(" ")}`]),
     ...(fact.used ? [`used ${fact.used}`] : []),
     ...(fact.replacedBy ? [`replaced by ${fact.replacedBy}`] : []),
-  ].join(", ")})`;
+  ].join(", ")})${fact.why ? `\n  Why: ${fact.why.trim()}` : ""}`;
+
+/** The lines a fact takes in its file: its own, and its `Why:` line. */
+const spanOf = (fact: FactLine): number => (fact.why === null ? 1 : 2);
 
 // --- words --------------------------------------------------------------------
 
@@ -353,6 +454,15 @@ export const grepScore = (query: Set<string>, text: string): number => {
 // --- changes to a file -----------------------------------------------------------
 
 const linesOf = (content: string): string[] => content.split("\n");
+
+/** `lines` with `fact`'s lines (its own and its `Why:`) replaced by `next` as rendered: one fact in place of another. */
+const put = (
+  lines: string[],
+  fact: FactLine,
+  next: Parameters<typeof renderFact>[0]
+): void => {
+  lines.splice(fact.line - 1, spanOf(fact), ...renderFact(next).split("\n"));
+};
 const joined = (lines: string[]): string => {
   const text = lines.join("\n").replace(/\n{3,}/g, "\n\n");
   return text.endsWith("\n") ? text : `${text}\n`;
@@ -410,8 +520,9 @@ const addToSection = (
   raws: string[],
   path: string
 ): string[] => {
-  const heading = headingAt(lines, name);
-  const next = [...lines];
+  // One string per file line: a fact moved in carries its Why: line.
+  const next = lines.join("\n").split("\n");
+  const heading = headingAt(next, name);
   if (heading < 0) {
     // A new section, written whole: a blank line, its heading, a blank
     // line, its lines; Conflict before Formerly.
@@ -431,14 +542,22 @@ const addToSection = (
             sinceIn(path, a).localeCompare(sinceIn(path, b))
           )
         : raws;
-    next.splice(Math.min(at, next.length), 0, "", title, "", ...ordered, "");
+    next.splice(
+      Math.min(at, next.length),
+      0,
+      "",
+      title,
+      "",
+      ...ordered.flatMap((raw) => raw.split("\n")),
+      ""
+    );
     return next;
   }
   let end = sectionEnd(next, heading);
   if (name === "conflict") {
     // A group of its own: a blank line from the group before it.
-    const block = end > heading + 1 ? ["", ...raws] : raws;
-    next.splice(end, 0, ...block);
+    const block = raws.flatMap((raw) => raw.split("\n"));
+    next.splice(end, 0, ...(end > heading + 1 ? ["", ...block] : block));
     return next;
   }
   for (const raw of raws) {
@@ -451,7 +570,7 @@ const addToSection = (
         fact.line - 1 > heading
     );
     end = sectionEnd(next, heading);
-    next.splice(later ? later.line - 1 : end, 0, raw);
+    next.splice(later ? later.line - 1 : end, 0, ...raw.split("\n"));
   }
   return next;
 };
@@ -479,7 +598,7 @@ export const corroborate = (
     findFact(file, key, ["current", "conflict"]) ??
     failEdit(path, key, "corroborate");
   const lines = linesOf(content);
-  lines[fact.line - 1] = renderFact({
+  put(lines, fact, {
     ...fact,
     from: [...fact.from, note.id],
     used: fact.used && fact.used > note.day ? fact.used : note.day,
@@ -508,7 +627,7 @@ export const change = (
     findFact(file, key, ["current"]) ?? failEdit(path, key, "change");
   const lines = linesOf(content);
   if (note.since >= fact.since) {
-    lines[fact.line - 1] = renderFact({
+    put(lines, fact, {
       text: note.text,
       since: note.since,
       from: [note.id],
@@ -520,10 +639,9 @@ export const change = (
         "formerly",
         [
           renderFact({
-            text: fact.text,
-            since: fact.since,
+            ...fact,
             until: note.since,
-            from: fact.from,
+            used: null,
             replacedBy: note.id,
           }),
         ],
@@ -543,7 +661,7 @@ export const change = (
     before.until &&
     before.until > note.since
   ) {
-    lines[before.line - 1] = renderFact({
+    put(lines, before, {
       ...before,
       until: note.since,
       replacedBy: note.id,
@@ -578,7 +696,7 @@ export const conflict = (
   const fact =
     findFact(file, key, ["current"]) ?? failEdit(path, key, "set in conflict");
   const lines = linesOf(content);
-  lines.splice(fact.line - 1, 1);
+  lines.splice(fact.line - 1, spanOf(fact));
   return joined(
     addToSection(
       lines,
@@ -625,10 +743,12 @@ export const withoutSource = (
     }
     if (fact.from.length === 1) {
       retired.push(fact.raw);
-      gone.add(fact.line - 1);
+      for (let at = 0; at < spanOf(fact); at += 1) {
+        gone.add(fact.line - 1 + at);
+      }
     } else {
       trimmed += 1;
-      lines[fact.line - 1] = renderFact({
+      put(lines, fact, {
         ...fact,
         from: fact.from.filter((id) => id !== noteId),
       });
@@ -641,9 +761,13 @@ export const withoutSource = (
   };
 };
 
-/** The file without the lines at `numbers` (1-based): what an archive moves out. */
-export const withoutLines = (content: string, numbers: number[]): string => {
-  const gone = new Set(numbers.map((line) => line - 1));
+/** The file without `facts`, each with its `Why:` line: what an archive or a retirement moves out. */
+export const withoutFacts = (content: string, facts: FactLine[]): string => {
+  const gone = new Set(
+    facts.flatMap((fact) =>
+      Array.from({ length: spanOf(fact) }, (_, at) => fact.line - 1 + at)
+    )
+  );
   return joined(linesOf(content).filter((_, index) => !gone.has(index)));
 };
 
@@ -662,7 +786,7 @@ export const withUses = (
     }
     const day = usedOn(fact.key);
     if (day && (!fact.used || day > fact.used)) {
-      lines[fact.line - 1] = renderFact({ ...fact, used: day });
+      put(lines, fact, { ...fact, used: day });
       changed = true;
     }
   }
@@ -681,7 +805,7 @@ export const withLearned = (
     (fact) => fact.section !== "formerly" && !fact.used
   );
   for (const fact of bare) {
-    lines[fact.line - 1] = renderFact({ ...fact, used: day });
+    put(lines, fact, { ...fact, used: day });
   }
   return bare.length > 0 ? joined(lines) : content;
 };
@@ -738,9 +862,69 @@ export const historyOf = (file: FactFile, fact: FactLine): FactLine[] => {
 };
 
 /**
+ * A fact keeps at most one Formerly line (the advisor's "a second
+ * supersession moves the older Formerly to the archive"): every older one
+ * of `key`'s current line leaves the file, for its archive in the same
+ * proposal. The file as it is otherwise.
+ */
+export const overflow = (
+  path: string,
+  content: string,
+  key: string
+): { archived: string[]; content: string } => {
+  const file = parseFactFile(path, content);
+  const fact = findFact(file, key, ["current"]);
+  const older = fact
+    ? historyOf(file, fact)
+        .filter((each) => each.section === "formerly")
+        .sort((a, b) => b.since.localeCompare(a.since))
+        .slice(1)
+        .sort((a, b) => a.line - b.line)
+    : [];
+  return older.length > 0
+    ? {
+        content: withoutFacts(content, older),
+        archived: older.map((each) => each.raw),
+      }
+    : { content, archived: [] };
+};
+
+/**
+ * Every current line whose `until` has come by `today` (a known end, the
+ * advisor's "Retire on `until` passing") moved under `## Formerly` with its
+ * window and grounding, a ruling as well; the file, and the lines moved.
+ * Nothing to decide: the line's own date says it no longer holds.
+ */
+export const retiredByUntil = (
+  path: string,
+  content: string,
+  today: string
+): { content: string; retired: FactLine[] } => {
+  const file = parseFactFile(path, content);
+  const retired = file.facts.filter(
+    (fact) => fact.section === "current" && fact.until && fact.until <= today
+  );
+  if (retired.length === 0) {
+    return { content, retired };
+  }
+  return {
+    content: joined(
+      addToSection(
+        linesOf(withoutFacts(content, retired)),
+        "formerly",
+        retired.map((fact) => renderFact({ ...fact, used: null })),
+        path
+      )
+    ),
+    retired,
+  };
+};
+
+/**
  * The current lines of a file unused for `days` before `today`, each with
  * its history: what the archive moves out. Conflict lines stay until the
- * person settles them.
+ * person settles them; a ruling, the person's word, is never archived for
+ * disuse.
  */
 export const unusedFacts = (
   file: FactFile,
@@ -754,7 +938,9 @@ export const unusedFacts = (
   return file.facts
     .filter(
       (fact) =>
-        fact.section === "current" && lastUse(fact, recorded(fact)) < cutoff
+        fact.section === "current" &&
+        fact.ruling === null &&
+        lastUse(fact, recorded(fact)) < cutoff
     )
     .map((fact) => historyOf(file, fact));
 };

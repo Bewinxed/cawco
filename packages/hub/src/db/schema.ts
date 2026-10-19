@@ -3825,6 +3825,24 @@ export const declinedRewrites = sqliteTable(
 );
 
 /**
+ * Each session the person purged (its transcript deleted, from the
+ * dashboard), by its machine and harness session id: what an agent's `find`
+ * leaves out (find.ts `FindWhere.unpurged`), since the machine's transcript
+ * index keeps the words it read. No foreign key: the hub's row for the
+ * session goes with the purge, and a machine removed later leaves its
+ * purges standing.
+ */
+export const purgedSessions = sqliteTable(
+  "purged_sessions",
+  {
+    machineId: text("machine_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    purgedAt: timestamp("purged_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.machineId, table.sessionId] })]
+);
+
+/**
  * What became of one of Caw's shell or edit calls (lead-gate.ts): `asked`
  * while it waits on your Approve card, `ran` once it was let run (its exit
  * once its result came), `refused` by the hub's rules, `denied` by you.

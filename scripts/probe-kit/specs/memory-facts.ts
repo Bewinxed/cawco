@@ -40,6 +40,23 @@
  * card is made; a brief keeps grep's order; a withdrawal still retires and
  * keeps. (What past sessions said is `find`'s: probe-kit spec `find-tool`.)
  *
+ * The memory audit's legs (cockpit-1fea49b2#af39ccbe), Jev off:
+ * 1. A made-up password typed into a note is committed `[redacted]`, the
+ *    note marked secret (secret-filter.ts).
+ * 2. Purging a session (its transcript deleted from the dashboard) proposes
+ *    withdrawing its note: one card retires the fact resting on it alone.
+ * 3. A ruling survives a withdrawal (the person re-grounds the fact as a
+ *    ruling in the card's diff before approving) and disuse (a ruling from
+ *    2025 is proposed for no archive).
+ * 4. A fold that rewords a line is refused, and the curator's change to
+ *    AGENTS.md's `## Notes` (the person's) is refused.
+ * 5. A second replacement moves the older Formerly line to the archive, in
+ *    Jev's same card (checked in b and c).
+ * 6. A current line whose `until` has passed is proposed under Formerly as
+ *    the curator's run starts.
+ * 7. Below 15 fact files a reshape that merges files is refused, a split is
+ *    proposed; the curator's brief asks it to judge two descriptions.
+ *
  *   bun scripts/probe-kit/run.ts memory-facts
  */
 import { createHash } from "node:crypto";
@@ -49,6 +66,8 @@ import type { Kit, Spec } from "../kit";
 
 const NOTE = "mcp__cawco__memory_note";
 const PROPOSE = "mcp__cawco__memory_propose";
+/** A made-up password, password-shaped (secret-filter.ts `passwordShaped`): never a real one. */
+const PASSWORD = "Zq7!vRt9Lm";
 
 /** The notes the facts first rest on, in the archive; and the notes Jev sorts. */
 const ID = {
@@ -391,11 +410,56 @@ const standUp = async (kit: Kit, jevUrl: string) => {
     );
     return notes.find((note) => note.content.includes(words));
   };
+  /** A session in the project, its credential read from its process. */
+  const session = async (title: string) => {
+    const id = await fleet.spawn("claude", title, fleet.workdir, {
+      projectId,
+    });
+    const environ = await Bun.file(
+      `/proc/${await fleet.sessionPid(id)}/environ`
+    ).text();
+    const credential =
+      environ
+        .split("\0")
+        .find((line) => line.startsWith("CAWCO_SESSION_CREDENTIAL="))
+        ?.slice("CAWCO_SESSION_CREDENTIAL=".length) ?? "";
+    return { id, credential };
+  };
+  /** One tool call through the hub's REST door, as `as`: refused or not, and its words. */
+  const callTool = async (
+    as: { credential: string; id: string },
+    name: string,
+    args: object
+  ) => {
+    const response = await fetch(`${fleet.base}/api/delegation/call/${as.id}`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: `Bearer ${as.credential}`,
+      },
+      body: JSON.stringify({ name, arguments: args }),
+    });
+    const raw = await response.text();
+    try {
+      const result = JSON.parse(raw) as {
+        content?: { text?: string }[];
+        isError?: boolean;
+      };
+      return {
+        refused: !response.ok || result.isError === true,
+        text: (result.content ?? []).map((block) => block.text ?? "").join(""),
+      };
+    } catch {
+      return { refused: true, text: `${response.status} ${raw}` };
+    }
+  };
   return {
     fleet,
     projectId,
     put,
     read,
+    session,
+    tool: callTool,
     proposals,
     answer,
     approve,
@@ -528,13 +592,21 @@ const sortLegs = async (kit: Kit, probe: Probe, backfillId: string) => {
       at(RELEASE) < formerly,
     deploys
   );
+  const archive = await probe.read("knowledge/archive/deploys.md");
   kit.check(
-    "c: a backfilled older fact slots under Formerly by its since, before the line that replaced it",
-    lineWith(BACKFILL) ===
-      `- ${BACKFILL} (since 2026-09-01, until 2026-10-01, from ${backfillId}, replaced by ${ID.ship})` &&
-      at(BACKFILL) > formerly &&
-      at(BACKFILL) < at(SHIP),
-    deploys
+    "c: a backfilled older fact slots into the line's history by its since, closed where the line that replaced it began",
+    archive.includes(
+      `- ${BACKFILL} (since 2026-09-01, until 2026-10-01, from ${backfillId}, replaced by ${ID.ship})`
+    ),
+    `archive:\n${archive}\n${deploys}`
+  );
+  kit.check(
+    "5: a second replacement keeps one Formerly line and moves the older to knowledge/archive/, in the same card",
+    at(BACKFILL) < 0 &&
+      at(SHIP) > formerly &&
+      pathsOf(card).includes("knowledge/archive/deploys.md") &&
+      archive.includes(BACKFILL),
+    `card files ${JSON.stringify(pathsOf(card))}\n${deploys}\narchive:\n${archive}`
   );
   kit.check(
     "d: a same-period conflict keeps both lines under Conflict, each with its sources",
@@ -911,8 +983,8 @@ const offLegs = async (kit: Kit, probe: Probe, talkerId: string) => {
     talkerId
   );
   kit.check(
-    "Jev off: a brief carries the lines grep finds, the backfilled one Jev left out too",
-    [RELEASE, BACKFILL, SHIP, LIMIT_100].every((line) =>
+    "Jev off: a brief carries the lines grep finds, the Formerly one Jev left out too",
+    [RELEASE, SHIP, LIMIT_100].every((line) =>
       brief.carried.has(keyOf(line))
     ) &&
       (await fleet.logs("hub")).includes(
@@ -923,7 +995,7 @@ const offLegs = async (kit: Kit, probe: Probe, talkerId: string) => {
   if (brief.written) {
     kit.check(
       "Jev off: the brief says its facts are in grep's order",
-      brief.words.includes("Jev is off") && brief.words.includes(BACKFILL),
+      brief.words.includes("Jev is off") && brief.words.includes(SHIP),
       brief.words.slice(0, 1600)
     );
   }
@@ -936,6 +1008,325 @@ const offLegs = async (kit: Kit, probe: Probe, talkerId: string) => {
       after.includes(LIMIT_100),
     `${route.status} ${JSON.stringify(pathsOf(card))}\n${after}`
   );
+};
+
+interface Caller {
+  credential: string;
+  id: string;
+}
+
+const NOTED_ID = /"id":"(n-[^"]+)"/;
+
+/** The card that appears after `before` (a set of request ids) whose files include `path`. */
+const newCard = (
+  probe: Probe,
+  before: Set<string>,
+  path: string,
+  what: string
+) =>
+  until(
+    what,
+    async () =>
+      (await probe.proposals()).find(
+        (ask) => !before.has(ask.requestId) && pathsOf(ask).includes(path)
+      ),
+    Boolean,
+    20_000
+  ).catch(() => undefined);
+
+const requestIds = async (probe: Probe) =>
+  new Set((await probe.proposals()).map((ask) => ask.requestId));
+
+/** 1: a password typed into a note is committed redacted, the note marked secret. */
+const noteSecretLeg = async (kit: Kit, probe: Probe, writer: Caller) => {
+  const said = await probe.tool(writer, "memory_note", {
+    text: `The build box's sudo password is ${PASSWORD}, as the person typed it.`,
+  });
+  const note = await until(
+    "the password note in the inbox",
+    () => probe.inboxNote("build box's sudo password"),
+    Boolean,
+    20_000
+  ).catch(() => undefined);
+  kit.check(
+    "1: a made-up password typed in a note is committed as [redacted], the note marked secret",
+    Boolean(
+      note?.content.includes("[redacted]") &&
+      !note.content.includes(PASSWORD) &&
+      note.content.includes("verdict: secret")
+    ),
+    `memory_note: ${said.text}\n${note?.content ?? "no note"}`
+  );
+};
+
+const PURGED_FACT = "The purge probe cache lives in /var/cache/purge-probe.";
+
+/** 2: purging a session proposes withdrawing its note, retiring the fact resting on it alone. */
+const purgeLeg = async (kit: Kit, probe: Probe) => {
+  const { fleet } = probe;
+  const writer = await probe.session("Purge source");
+  await fleet.send(writer.id, "PROBE-FACTS-PURGE hello");
+  await until(
+    "the purge source's first turn",
+    () => fleet.instance(writer.id)?.turn_open_at === null,
+    Boolean,
+    60_000
+  ).catch(() => false);
+  const written = await probe.tool(writer, "memory_note", {
+    text: PURGED_FACT,
+  });
+  const id = NOTED_ID.exec(written.text)?.[1] ?? "";
+  const today = new Date().toISOString().slice(0, 10);
+  await probe.put(
+    "knowledge/purge.md",
+    `Purge: what a purged session left.\n\n- ${PURGED_FACT} (since ${today}, from ${id})\n`
+  );
+  const [row] = fleet.query<{ cwd: string; session_id: string | null }>(
+    "SELECT session_id, cwd FROM instances WHERE id = ?",
+    writer.id
+  );
+  const before = await requestIds(probe);
+  const requestId = crypto.randomUUID();
+  await fleet.post({
+    verb: "control",
+    machineId: MACHINE,
+    requestId,
+    payload: {
+      requestId,
+      method: "deleteSession",
+      args: [row?.session_id ?? "", { dir: row?.cwd }],
+      harness: "claude",
+    },
+  });
+  const card = await newCard(
+    probe,
+    before,
+    "knowledge/purge.md",
+    "the purged session's withdrawal card"
+  );
+  kit.check(
+    "2: purging a session proposes withdrawing its note: one card retires the fact resting on it alone",
+    Boolean(id) &&
+      card !== undefined &&
+      pathsOf(card).includes("knowledge/archive/purge.md") &&
+      !(
+        card.payload.input.files?.find(
+          (file) => file.path === "knowledge/purge.md"
+        )?.content ?? PURGED_FACT
+      ).includes(PURGED_FACT),
+    `note ${written.text}\nsession ${row?.session_id}\ncard ${JSON.stringify(card?.payload.input.files)}`
+  );
+};
+
+const RULINGS_PATH = "knowledge/rulings.md";
+const RULED = "Releases need the person's sign-off.";
+const WARMED = "The probe cache is warmed nightly.";
+const WARMED_ID = "n-20261004-090000-f1f1f1";
+
+/** 3: a ruling survives the withdrawal of a fact's only note (re-grounded in the card's diff) and disuse. */
+const rulingLeg = async (kit: Kit, probe: Probe) => {
+  const today = new Date().toISOString().slice(0, 10);
+  await probe.put(
+    `memory/archive/${WARMED_ID}.md`,
+    noteFile(WARMED_ID, WARMED, timeOf(WARMED_ID))
+  );
+  await probe.put(
+    RULINGS_PATH,
+    `Rulings: the person's word.\n\n- ${RULED} (ruling 2025-01-01)\n- ${WARMED} (since 2026-10-04, from ${WARMED_ID})\n`
+  );
+  const before = await requestIds(probe);
+  await fetch(
+    `${probe.fleet.base}/api/projects/${probe.projectId}/memory/notes/${WARMED_ID}/withdraw`,
+    { method: "POST" }
+  );
+  const card = await newCard(
+    probe,
+    before,
+    RULINGS_PATH,
+    "the withdrawal card"
+  );
+  const proposed =
+    card?.payload.input.files?.find((file) => file.path === RULINGS_PATH)
+      ?.content ?? "";
+  // The person re-grounds the fact as their own word before approving.
+  const edited = proposed.replace(
+    `- ${RULED} (ruling 2025-01-01)`,
+    `- ${RULED} (ruling 2025-01-01)\n- ${WARMED} (ruling ${today})`
+  );
+  if (card) {
+    await probe.answer(card, {
+      behavior: "allow",
+      updatedInput: { edits: [{ path: RULINGS_PATH, content: edited }] },
+    });
+  }
+  const after = await until(
+    `${RULINGS_PATH} as approved`,
+    () => probe.read(RULINGS_PATH),
+    (content) => !content.includes(WARMED_ID),
+    20_000
+  ).catch(() => "(not approved)");
+  const disuse = await requestIds(probe);
+  await probe.curatorRun().catch(() => undefined);
+  const archived = await newCard(
+    probe,
+    disuse,
+    RULINGS_PATH,
+    "no archive card for the rulings"
+  );
+  kit.check(
+    "3: a ruling survives a withdrawal (re-grounded in the card's diff) and disuse (a 2025 ruling is proposed for no archive)",
+    after.includes(`- ${RULED} (ruling 2025-01-01)`) &&
+      after.includes(`- ${WARMED} (ruling ${today})`) &&
+      archived === undefined,
+    `${after}\narchive card: ${JSON.stringify(archived?.payload.input.files?.map((file) => file.path))}`
+  );
+};
+
+/** 4: a fold that rewords a line is refused; so is the curator's change to AGENTS.md's ## Notes. */
+const foldLeg = async (kit: Kit, probe: Probe, curator: Caller) => {
+  const deploys = await probe.read(DEPLOYS_PATH);
+  const reworded = deploys.replace(
+    RELEASE,
+    "Releases ship with `bun run release`."
+  );
+  const fold = await probe.tool(curator, "memory_propose", {
+    files: [{ path: DEPLOYS_PATH, content: reworded }],
+    notes: [],
+    why: "Fold knowledge/deploys.md",
+  });
+  const cited = "n-20261014-090000-c0c0c5";
+  await probe.put(
+    "AGENTS.md",
+    "# Agents\n\n## Notes\n\n- The person's own note.\n"
+  );
+  await probe.put(
+    `memory/inbox/${cited}.md`,
+    noteFile(cited, "Builds run on the big box.", timeOf(cited))
+  );
+  const notes = await probe.tool(curator, "memory_propose", {
+    files: [
+      {
+        path: "AGENTS.md",
+        content:
+          "# Agents\n\nBuilds run on the big box.\n\n## Notes\n\n- An agent's rewording of the note.\n",
+      },
+    ],
+    notes: [cited],
+    why: "Builds run on the big box",
+  });
+  kit.check(
+    "4: a fold proposal that rewords a fact line is refused; the curator's change to AGENTS.md's ## Notes is refused",
+    fold.refused &&
+      fold.text.includes("fold") &&
+      notes.refused &&
+      notes.text.includes("## Notes"),
+    `fold: ${fold.text}\nnotes: ${notes.text}`
+  );
+};
+
+const KEYS_PATH = "knowledge/keys.md";
+const KEY_FACT = "The staging key is k1.";
+
+/** 6: a current line whose until has passed is proposed under Formerly as the curator's run starts. */
+const untilLeg = async (kit: Kit, probe: Probe) => {
+  await probe.put(
+    KEYS_PATH,
+    `Keys: when they rotate.\n\n- ${KEY_FACT} (since 2026-10-01, until 2026-10-02, from n-20261001-110000-a2a2a2)\n`
+  );
+  const before = await requestIds(probe);
+  await probe.curatorRun().catch(() => undefined);
+  const card = await newCard(probe, before, KEYS_PATH, "the retirement card");
+  const content =
+    card?.payload.input.files?.find((file) => file.path === KEYS_PATH)
+      ?.content ?? "";
+  const lines = content.split("\n");
+  kit.check(
+    "6: a current line whose until has passed is proposed under Formerly, with its window",
+    lines.indexOf("## Formerly") >= 0 &&
+      lines.indexOf(
+        `- ${KEY_FACT} (since 2026-10-01, until 2026-10-02, from n-20261001-110000-a2a2a2)`
+      ) > lines.indexOf("## Formerly"),
+    `card by ${card?.payload.proposer}:\n${content}`
+  );
+};
+
+/** 7: below 15 fact files a merging reshape is refused and a split is proposed; the curator's brief asks for the two-description judgment. */
+const reshapeLeg = async (kit: Kit, probe: Probe, curator: Caller) => {
+  const queue =
+    "- The alpha queue drains hourly. (since 2026-10-05, from n-20261005-090000-a3a3a3)";
+  const bucket =
+    "- The beta bucket is private. (since 2026-10-05, from n-20261005-090000-b3b3b3)";
+  const job =
+    "- The gamma job runs daily. (since 2026-10-05, from n-20261005-090000-c3c3c3)";
+  await probe.put(
+    "knowledge/alpha.md",
+    `Alpha: the queue.\n\n${queue}\n${bucket}\n`
+  );
+  await probe.put("knowledge/gamma.md", `Gamma: the job.\n\n${job}\n`);
+  const merge = await probe.tool(curator, "memory_propose", {
+    files: [
+      {
+        path: "knowledge/alpha.md",
+        content: `Alpha: the queue and the job.\n\n${queue}\n${bucket}\n${job}\n`,
+      },
+      { path: "knowledge/gamma.md", content: "" },
+    ],
+    notes: [],
+    why: "Reshape: merge gamma into alpha",
+  });
+  const split = await probe.tool(curator, "memory_propose", {
+    files: [
+      {
+        path: "knowledge/alpha.md",
+        content: `Alpha: the queue.\n\n${queue}\n`,
+      },
+      {
+        path: "knowledge/beta.md",
+        content: `Beta: the bucket.\n\n${bucket}\n`,
+      },
+    ],
+    notes: [],
+    why: "Reshape: alpha's facts fall under two descriptions",
+  });
+  kit.check(
+    "7: below 15 fact files a reshape that merges files is refused, and one that splits a two-description file is proposed",
+    merge.refused && merge.text.includes("only splits") && !split.refused,
+    `merge: ${merge.text}\nsplit: ${split.text}`
+  );
+  const [brief] = probe.fleet.query<{ brief: string }>(
+    "SELECT w.brief FROM routine_runs r JOIN work_items w ON w.id = r.work_item_id WHERE r.routine_id = (SELECT id FROM routines WHERE project_id = ? AND target = 'curator') ORDER BY r.started_at DESC LIMIT 1",
+    probe.projectId
+  );
+  if (brief) {
+    kit.check(
+      "7: the curator's brief asks it to judge whether a file's facts fall under two descriptions",
+      brief.brief.includes("fall under two descriptions"),
+      brief.brief.slice(
+        Math.max(0, brief.brief.indexOf("## What the files ask")),
+        1200
+      )
+    );
+  } else {
+    kit.note(
+      "7: the curator's brief is checked only where its run starts a session"
+    );
+  }
+};
+
+/** The memory audit's legs, Jev off. */
+const auditLegs = async (kit: Kit, probe: Probe) => {
+  const writer = await probe.session("Note writer");
+  await noteSecretLeg(kit, probe, writer);
+  await purgeLeg(kit, probe);
+  await rulingLeg(kit, probe);
+  const curator = await probe.session("Curator stand-in");
+  probe.fleet.write(
+    "UPDATE instances SET role = 'curator' WHERE id = ?",
+    curator.id
+  );
+  await foldLeg(kit, probe, curator);
+  await untilLeg(kit, probe);
+  await reshapeLeg(kit, probe, curator);
 };
 
 const run = async (kit: Kit) => {
@@ -957,6 +1348,7 @@ const run = async (kit: Kit) => {
     await briefLeg(kit, probe, talkerId);
     await restartLeg(kit, probe);
     await offLegs(kit, probe, talkerId);
+    await auditLegs(kit, probe);
   } finally {
     jev.stop();
   }

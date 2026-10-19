@@ -3,8 +3,9 @@
  * agent looking for anything a person or agent said or made searches it the
  * way the person does, through the same engine, in one call; it never greps
  * transcript files or queries the database for text. The words, kinds and
- * `by` are the engine's own; `project`, `machine` and `since` narrow the same
- * ranking (find.ts `FindWhere`). `around` reads a hit's neighbouring turns
+ * `by` are the engine's own; `project`, `machine`, `since` and `before`
+ * narrow the same ranking (find.ts `FindWhere`) before it pages; `before` is
+ * past.dev's `queryTimestamp`, evidence at or before that day. `around` reads a hit's neighbouring turns
  * from its session's stored transcript or its thread, so reading a hit needs
  * no second tool.
  *
@@ -16,6 +17,14 @@
  * beside ids ("return both the human-readable name and the technical ID"),
  * every answer bounded under Claude Code's 25,000-token cap, and refusals
  * that name what was wrong and give one correct call.
+ *
+ * Every text it answers an agent with (a hit's title, excerpts, purpose and
+ * report; every turn, detailed or `around`) passes the secret filter
+ * (secret-filter.ts) before it is cut to length, so a password a person
+ * typed into a chat comes back `[redacted]`. A session the person purged
+ * (its transcript deleted) is no hit: the engine leaves it out for an agent
+ * (find.ts `FindWhere.unpurged`), though a machine's index still holds its
+ * words.
  */
 import {
   FIND_KINDS,
@@ -39,6 +48,7 @@ import {
 } from "./find";
 import { boardTitle } from "./labels";
 import { roleOf } from "./roles";
+import { redactSecrets } from "./secret-filter";
 import type { HistoryRead } from "./transcripts";
 
 export const FIND_TOOL = "find";
@@ -101,6 +111,7 @@ const INPUT = {
     .describe('A name or id; "all" for every project.'),
   machine: z.string().optional().describe("A name or id: only sessions on it."),
   since: z.string().optional().describe("YYYY-MM-DD."),
+  before: z.string().optional().describe("YYYY-MM-DD: nothing later."),
   by: z.enum(BY).optional().describe("Who said them."),
   limit: z
     .number()
@@ -120,7 +131,7 @@ const SCHEMA = z.object(INPUT);
 export type FindInput = z.infer<typeof SCHEMA>;
 
 const DESCRIPTION =
-  "Find anything said or made across the fleet, as the dashboard's Find does: session names, what any transcript says, Caw threads, tasks, routines, artifacts, decisions, commits, files; best first, each hit dated with an excerpt and id. Use it before reading transcripts, files or the database for what was said or made. A delegate searches its own project unless project says otherwise.";
+  "Find anything said or made across the fleet, as the dashboard's Find does: session names, what any transcript says, Caw threads, tasks, routines, artifacts, decisions, commits, files; best first, each hit dated with an excerpt and id. Use it before reading transcripts, files or the database for what was said or made, or known by a date (before). A delegate searches its own project unless project says otherwise.";
 
 /** A refusal: what was wrong, and one call that works. */
 export class FindToolRefusal extends Error {}
@@ -383,12 +394,11 @@ interface NoTurns {
   why: string;
 }
 
-/** One stored entry as a turn: `here` marks the centre, which shows a tool's output too; null for no turn. */
+/** One stored entry as a turn, its words whole: `here` marks the centre, which shows a tool's output too; null for no turn. */
 const turnOf = (
   stored: Stored,
   index: number,
   centre: number,
-  chars: number,
   id: string
 ): Turn | null => {
   const entry = stored.entries[index] as SessionMessage;
@@ -406,7 +416,7 @@ const turnOf = (
   return {
     who: entryWho(entry, stored.records),
     when: whenOf(entry.timestamp ? Date.parse(entry.timestamp) : null),
-    text: clip(said, chars),
+    text: said,
     ref: `${id}${REF_MARK}${entry.uuid}`,
     ...(here ? { here: true as const } : {}),
   };
@@ -421,7 +431,6 @@ const walk = (
   centre: number,
   step: -1 | 1,
   side: number,
-  chars: number,
   id: string
 ): { more: boolean; turns: Turn[] } => {
   const turns: Turn[] = [];
@@ -431,7 +440,7 @@ const walk = (
     at >= 0 && at < stored.entries.length && turns.length < side;
     at += step
   ) {
-    const turn = turnOf(stored, at, centre, chars, id);
+    const turn = turnOf(stored, at, centre, id);
     if (turn) {
       turns.push(turn);
     }
@@ -444,8 +453,7 @@ const storedTurns = (
   stored: Stored,
   id: string,
   docId: string | undefined,
-  side: number,
-  chars: number
+  side: number
 ): TurnsRead | NoTurns => {
   const centre = docId
     ? stored.entries.findIndex((entry) => isRecord(entry, docId))
@@ -455,9 +463,9 @@ const storedTurns = (
       why: `${docId} is not in session ${id}'s stored transcript now; pass "${id}" for its latest turns`,
     };
   }
-  const before = walk(stored, centre, -1, side, chars, id);
-  const after = walk(stored, centre, 1, side, chars, id);
-  const here = turnOf(stored, centre, centre, chars, id);
+  const before = walk(stored, centre, -1, side, id);
+  const after = walk(stored, centre, 1, side, id);
+  const here = turnOf(stored, centre, centre, id);
   return {
     turns: [...before.turns.reverse(), ...(here ? [here] : []), ...after.turns],
     earlier: before.more,
@@ -477,8 +485,7 @@ const threadTurnsOf = (
   messages: ReturnType<FindToolDeps["threadMessages"]>,
   threadId: string,
   messageId: string | undefined,
-  side: number,
-  chars: number
+  side: number
 ): TurnsRead | NoTurns => {
   const centre = messageId
     ? messages.findIndex((message) => message.id === messageId)
@@ -494,10 +501,7 @@ const threadTurnsOf = (
     turns: messages.slice(from, to).map((message, offset): Turn => ({
       who: THREAD_WHO[message.author] ?? message.author,
       when: whenOf(message.at.getTime()),
-      text: clip(
-        [message.noteTitle, message.body].filter(Boolean).join(": "),
-        chars
-      ),
+      text: [message.noteTitle, message.body].filter(Boolean).join(": "),
       ref: `${threadId}${REF_MARK}${message.id}`,
       ...(from + offset === centre ? { here: true as const } : {}),
     })),
@@ -505,6 +509,92 @@ const threadTurnsOf = (
     later: to < messages.length,
   };
 };
+
+/** A turn's time (`when`, the minute in UTC) as ms epoch; null for none. */
+const turnAt = (turn: Turn): number | null =>
+  turn.when ? Date.parse(turn.when.replace(" ", "T")) : null;
+
+/**
+ * Turns as an agent reads them: each turn's words through the secret
+ * filter, then cut to `chars`; with `before` (ms epoch), only the turns
+ * said by then.
+ */
+const told = async (
+  read: TurnsRead | NoTurns,
+  chars: number,
+  before?: number
+): Promise<TurnsRead | NoTurns> =>
+  "why" in read
+    ? read
+    : {
+        ...read,
+        turns: await Promise.all(
+          read.turns
+            .filter((turn) => {
+              const at = turnAt(turn);
+              return before === undefined || (at !== null && at <= before);
+            })
+            .map(async (turn) => ({
+              ...turn,
+              text: clip(await redactSecrets(turn.text), chars),
+            }))
+        ),
+      };
+
+/** A string field's words through the secret filter; absent stays absent. */
+const redacted = async <Value extends string | null | undefined>(
+  value: Value
+): Promise<Value> =>
+  (typeof value === "string" ? await redactSecrets(value) : value) as Value;
+
+/**
+ * A hit's words as an agent reads them: its title, every moment's excerpt,
+ * what it was for and its last word, through the secret filter before any
+ * is cut to length.
+ */
+const redactedResult = async (result: FindResult): Promise<FindResult> => {
+  const title = await redactSecrets(result.title);
+  switch (result.kind) {
+    case "conversation":
+      return {
+        ...result,
+        title,
+        purpose: await redacted(result.purpose),
+        lastReport: result.lastReport
+          ? {
+              ...result.lastReport,
+              headline: await redactSecrets(result.lastReport.headline),
+            }
+          : null,
+        moments: await redactedMoments(result.moments),
+      };
+    case "thread":
+      return {
+        ...result,
+        title,
+        moments: await redactedMoments(result.moments),
+      };
+    case "commit":
+    case "file":
+      return { ...result, title, what: await redacted(result.what) };
+    case "routine":
+      return {
+        ...result,
+        title,
+        lastOutcome: await redacted(result.lastOutcome),
+      };
+    default:
+      return { ...result, title };
+  }
+};
+
+const redactedMoments = (moments: FindMoment[]): Promise<FindMoment[]> =>
+  Promise.all(
+    moments.map(async (moment) => ({
+      ...moment,
+      excerpt: await redactSecrets(moment.excerpt),
+    }))
+  );
 
 /** A name or id among `things`, or the refusal listing them with one call that works. */
 const pick = (
@@ -529,20 +619,24 @@ const pick = (
 const exampleWith = (input: FindInput, field: string, value: string) =>
   `{"query": "${clip(input.query ?? "deploy", 40)}", "${field}": "${value}"}`;
 
-/** `since` read as ms epoch, or the refusal. */
-const sinceOf = (input: FindInput): number | undefined => {
-  if (input.since === undefined) {
+const DAY_MS = 86_400_000;
+
+/** A day field (`since`, `before`) read as its day's first ms epoch, or the refusal. */
+const dayOf = (
+  input: FindInput,
+  field: "since" | "before"
+): number | undefined => {
+  const day = input[field];
+  if (day === undefined) {
     return;
   }
-  const since = DAY.test(input.since)
-    ? Date.parse(`${input.since}T00:00:00Z`)
-    : Number.NaN;
-  if (Number.isNaN(since)) {
+  const at = DAY.test(day) ? Date.parse(`${day}T00:00:00Z`) : Number.NaN;
+  if (Number.isNaN(at)) {
     throw new FindToolRefusal(
-      `since is "${input.since}": give a day as YYYY-MM-DD. Example: ${exampleWith(input, "since", "2026-10-01")}`
+      `${field} is "${day}": give a day as YYYY-MM-DD. Example: ${exampleWith(input, field, "2026-10-01")}`
     );
   }
-  return since;
+  return at;
 };
 
 /** The machines that did not answer, or answered short, in words. */
@@ -673,12 +767,16 @@ export const createFindTool = (deps: FindToolDeps) => {
             machines,
             exampleWith(input, "machine", machines[0]?.name ?? "")
           );
-    const since = sinceOf(input);
+    const since = dayOf(input, "since");
+    // Evidence at or before the day: its last millisecond is the last kept.
+    const before = dayOf(input, "before");
     return {
       where: {
+        unpurged: true as const,
         ...(projectId ? { projectId } : {}),
         ...(machineId ? { machineId } : {}),
         ...(since === undefined ? {} : { since }),
+        ...(before === undefined ? {} : { before: before + DAY_MS - 1 }),
       },
       scoped,
     };
@@ -703,32 +801,35 @@ export const createFindTool = (deps: FindToolDeps) => {
       : { why: `session ${id} has no stored turns` };
   };
 
-  /** A conversation's turns around `docId`, its latest without one. */
+  /** A conversation's turns around `docId`, its latest without one, as an agent reads them ({@link told}). */
   const conversationTurns = async (
     id: string,
     sessionKey: string,
     docId: string | undefined,
     side: number,
-    chars: number
+    chars: number,
+    before?: number
   ): Promise<TurnsRead | NoTurns> => {
     const stored = await storedOf(id, sessionKey);
-    return "why" in stored
-      ? stored
-      : storedTurns(stored, id, docId, side, chars);
+    return await told(
+      "why" in stored ? stored : storedTurns(stored, id, docId, side),
+      chars,
+      before
+    );
   };
 
+  /** A thread's messages around `messageId`, as an agent reads them ({@link told}). */
   const threadTurns = (
     threadId: string,
     messageId: string | undefined,
     side: number,
-    chars: number
+    chars: number,
+    before?: number
   ) =>
-    threadTurnsOf(
-      deps.threadMessages(threadId),
-      threadId,
-      messageId,
-      side,
-      chars
+    told(
+      threadTurnsOf(deps.threadMessages(threadId), threadId, messageId, side),
+      chars,
+      before
     );
 
   const projectWords = (projectId: string | null | undefined) => {
@@ -770,7 +871,7 @@ export const createFindTool = (deps: FindToolDeps) => {
           where: projectWords(thread.projectId) ?? "",
         },
         read: (docId: string | undefined, side: number, chars: number) =>
-          Promise.resolve(threadTurns(id, docId, side, chars)),
+          threadTurns(id, docId, side, chars),
       };
     }
     const [machineId, sessionId, ...rest] = id.split(":");
@@ -810,7 +911,10 @@ export const createFindTool = (deps: FindToolDeps) => {
       .filter(Boolean)
       .join(" and ");
     return {
-      around: target.header,
+      around: {
+        ...target.header,
+        title: await redactSecrets(target.header.title),
+      },
       turns: read.turns,
       ...(more
         ? {
@@ -820,12 +924,18 @@ export const createFindTool = (deps: FindToolDeps) => {
     };
   };
 
-  /** A detailed hit's turn either side of its best moment, when its transcript reads in time. */
-  const neighboursOf = async (result: FindResult) => {
+  /** A detailed hit's turn either side of its best moment, when its transcript reads in time; with `before`, only those said by then. */
+  const neighboursOf = async (result: FindResult, before?: number) => {
     const [best] = momentsOf(result);
     let read: TurnsRead | NoTurns | undefined;
     if (best && result.kind === "thread") {
-      read = threadTurns(result.id, best.docId, 1, NEIGHBOUR_CHARS);
+      read = await threadTurns(
+        result.id,
+        best.docId,
+        1,
+        NEIGHBOUR_CHARS,
+        before
+      );
     } else if (best && result.kind === "conversation") {
       const key = result.instanceId ?? result.sessionId;
       read = key
@@ -834,7 +944,8 @@ export const createFindTool = (deps: FindToolDeps) => {
             key,
             best.docId,
             1,
-            NEIGHBOUR_CHARS
+            NEIGHBOUR_CHARS,
+            before
           )
         : undefined;
     }
@@ -842,9 +953,11 @@ export const createFindTool = (deps: FindToolDeps) => {
   };
 
   /** A detailed page's hits, the first {@link NEIGHBOURED_HITS} with their neighbouring turns. */
-  const withNeighbours = async (results: FindResult[]) => {
+  const withNeighbours = async (results: FindResult[], before?: number) => {
     const turns = await Promise.all(
-      results.slice(0, NEIGHBOURED_HITS).map((result) => neighboursOf(result))
+      results
+        .slice(0, NEIGHBOURED_HITS)
+        .map((result) => neighboursOf(result, before))
     );
     return results.map((result, index) => {
       const beside = turns[index];
@@ -868,10 +981,11 @@ export const createFindTool = (deps: FindToolDeps) => {
       ...(input.kinds?.length ? { kinds: input.kinds as FindKind[] } : {}),
       ...(input.by ? { author: AUTHOR[input.by] } : {}),
     });
+    const results = await Promise.all(page.results.map(redactedResult));
     const hits = bounded(
       input.response_format === "detailed"
-        ? await withNeighbours(page.results)
-        : page.results.map(hitOf)
+        ? await withNeighbours(results, where.before)
+        : results.map(hitOf)
     );
     const end = offset + hits.length;
     const hasMore = end < page.total;

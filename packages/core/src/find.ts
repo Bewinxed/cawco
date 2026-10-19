@@ -14,6 +14,13 @@ export type TranscriptAuthor = "owner" | "agent" | "report" | "injected";
 export interface TranscriptQuery {
   /** Only words by this author: `owner` is "said by me". */
   author?: TranscriptAuthor;
+  /**
+   * Only words said at or before this ISO time (past.dev's `queryTimestamp`):
+   * an agent's `find` with `before` asks for them alone, so earlier evidence
+   * is not cut by later matches ranked above it. Words with no time are left
+   * out.
+   */
+  before?: string;
   /** How many conversations to answer with. */
   limit?: number;
   /**

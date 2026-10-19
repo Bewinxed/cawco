@@ -16678,8 +16678,11 @@ export const createServer = (
     try {
       // A memory proposal (memory.ts): applied or rejected here, its ask
       // settled once that is done; one that no longer applies stays parked.
+      // It reads the person's own answer: the files they edited in the
+      // card's diff (`updatedInput.edits`) are theirs, the proposal itself
+      // the hub's kept file, never the client's copy.
       if (projectMemory.owns(requestId)) {
-        await projectMemory.answer(requestId, result);
+        await projectMemory.answer(requestId, answer);
         if (receipt.outcome !== "answered") {
           throw new Error("That request is no longer pending.");
         }
@@ -17415,6 +17418,18 @@ export const createServer = (
       const rows = db
         .sessionOwnership(message.machineId)
         .filter((row) => row.sessionId === deleted);
+      // The person purges the session: an agent's find no longer answers
+      // with it, and every note it wrote is proposed withdrawn (memory.ts
+      // `purged`), whether or not the hub held it.
+      db.find.purge(message.machineId, [deleted]);
+      for (const row of rows) {
+        if (row.projectId) {
+          detach(
+            projectMemory.purged(row.projectId, row.id),
+            `memory: notes of purged session ${row.id}`
+          );
+        }
+      }
       if (rows.length > 0) {
         for (const row of rows) {
           endSession(row.id, "delete-transcript", { kind: "person" });
@@ -19202,6 +19217,7 @@ export const createServer = (
   // every machine's transcripts, under one ranking.
   const find = createFind({
     db,
+    purged: () => db.find.purged(),
     refreshInstances: refreshBoard,
     online: (machineId) => registry.agent(machineId) !== undefined,
     needsYou: () =>

@@ -237,11 +237,17 @@ import type { Tasks } from "./tasks";
  * no description their names already give. About 329 tokens for the worker
  * and the delegate (worker 27,142, delegate 9,520 measured beside
  * `find`). Raised deliberately, by that, for both.
+ * 2026-10-19, after that: `find`'s `before` (YYYY-MM-DD, evidence at or
+ * before that day: past.dev's `queryTimestamp`), the memory audit's dated
+ * recall moved onto find; its description names the dated branch in four
+ * words. About 28 tokens for the worker, the delegate and the lead (worker
+ * 27,170, delegate 9,549, lead 17,794 measured beside
+ * `forge_post`). Raised deliberately, by that, for each.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 27_150,
-  delegate: 9530,
-  lead: 17_780,
+  worker: 27_180,
+  delegate: 9560,
+  lead: 17_810,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,

@@ -1758,6 +1758,13 @@
       "when": 1792387754616,
       "tag": "0258_prose_gone",
       "breakpoints": true
+    },
+    {
+      "idx": 259,
+      "version": "6",
+      "when": 1792400000000,
+      "tag": "0259_purged_sessions",
+      "breakpoints": true
     }
   ]
 }

@@ -224,6 +224,7 @@ export class TranscriptSearchService {
       limit,
       ...(options?.author ? { author: options.author } : {}),
       ...(options?.sessions ? { sessions: options.sessions } : {}),
+      ...(options?.before ? { before: options.before } : {}),
     });
     return {
       conversations,

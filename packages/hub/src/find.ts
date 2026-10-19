@@ -124,13 +124,25 @@ export const WAITING_DAYS = 14;
  * What a find narrows to, beside its words and kinds: what an agent's `find`
  * (find-tool.ts) asks for. A project or a machine keeps the results that are
  * in it (a machine: the sessions on it, and the machine); `since` keeps what
- * moved since then, a conversation's or thread's moments the ones said since.
+ * moved since then, a conversation's or thread's moments the ones said since;
+ * `before` keeps the evidence at or before it (past.dev's `queryTimestamp`:
+ * "Evidence that occurred at or before that instant is eligible, and later
+ * evidence is out of scope"), a conversation's or thread's moments said by
+ * then, anything else only when nothing about it moved after.
  */
 export interface FindWhere {
+  /** ms epoch, the last instant kept. */
+  before?: number;
   machineId?: string;
   projectId?: string;
   /** ms epoch. */
   since?: number;
+  /**
+   * An agent's find: a session the person purged (its transcript deleted,
+   * db `purged_sessions`) is no result, though its machine's index may still
+   * hold its words. The dashboard's Find, the person's, does not ask this.
+   */
+  unpurged?: true;
 }
 
 /** What a page of a find is asked for. */
@@ -146,9 +158,36 @@ export interface FindRequest {
   where?: FindWhere;
 }
 
+/** A purged session's key in {@link FindDeps.purged}: its machine and harness session id. */
+export const purgedKey = (machineId: string, sessionId: string): string =>
+  `${machineId}:${sessionId}`;
+
+/** Whether `at` (ms epoch, null for no time) falls in `where`'s window. */
+const inWindow = (at: number | null, where: FindWhere): boolean =>
+  (where.since === undefined || at === null || at >= where.since) &&
+  (where.before === undefined || (at !== null && at <= where.before));
+
+/** Whether `where` leaves `result` out as a session the person purged. */
+const purgedOut = (
+  result: FindResult,
+  where: FindWhere,
+  purged: ReadonlySet<string>
+): boolean =>
+  where.unpurged === true &&
+  result.kind === "conversation" &&
+  result.sessionId !== null &&
+  purged.has(purgedKey(result.machine.id, result.sessionId));
+
 /** `result` as `where` keeps it, or null when `where` leaves it out. */
-const within = (result: FindResult, where: FindWhere): FindResult | null => {
-  if (where.projectId && result.project?.id !== where.projectId) {
+const within = (
+  result: FindResult,
+  where: FindWhere,
+  purged: ReadonlySet<string>
+): FindResult | null => {
+  if (
+    (where.projectId && result.project?.id !== where.projectId) ||
+    purgedOut(result, where, purged)
+  ) {
     return null;
   }
   if (where.machineId) {
@@ -162,24 +201,21 @@ const within = (result: FindResult, where: FindWhere): FindResult | null => {
       return null;
     }
   }
-  const { since } = where;
-  if (since === undefined) {
+  if (where.since === undefined && where.before === undefined) {
     return result;
   }
+  const moved = result.lastActivity ?? 0;
   if (result.kind === "conversation" || result.kind === "thread") {
-    const moments = result.moments.filter(
-      (moment) => moment.at === null || moment.at >= since
+    const moments = result.moments.filter((moment) =>
+      inWindow(moment.at, where)
     );
     const byWords = result.matched.some((field) => field !== "transcript");
-    if (
-      moments.length > 0 ||
-      (byWords && (result.lastActivity ?? 0) >= since)
-    ) {
+    if (moments.length > 0 || (byWords && inWindow(moved, where))) {
       return { ...result, moments };
     }
     return null;
   }
-  return (result.lastActivity ?? 0) >= since ? result : null;
+  return inWindow(moved, where) ? result : null;
 };
 
 /**
@@ -219,6 +255,8 @@ export interface FindDeps {
   needsYou: () => ReadonlySet<string>;
   /** Whether the hub holds `machineId`'s socket now. */
   online: (machineId: string) => boolean;
+  /** Every session the person purged, by {@link purgedKey}: what an agent's find leaves out. */
+  purged: () => ReadonlySet<string>;
   /** Runs the instance change log, which hands the changed ids to {@link Find.instancesChanged}. */
   refreshInstances: () => void;
   /** A project's stages by name, each with its kind, as its stages.md reads (tasks.ts `stages`). */
@@ -1061,6 +1099,9 @@ export const createFind = (deps: FindDeps) => {
           ...(where?.projectId
             ? { sessions: sessionsOn(machine.machineId) }
             : {}),
+          ...(where?.before === undefined
+            ? {}
+            : { before: new Date(where.before).toISOString() }),
         })
       )
     );
@@ -1084,9 +1125,10 @@ export const createFind = (deps: FindDeps) => {
     const askTranscripts =
       request.transcripts && query.words.join("").length >= 2;
     const { where } = request;
+    const purged = where?.unpurged ? deps.purged() : new Set<string>();
     const kept = (results: Iterable<FindResult>): FindResult[] =>
       where
-        ? [...results].flatMap((result) => within(result, where) ?? [])
+        ? [...results].flatMap((result) => within(result, where, purged) ?? [])
         : [...results];
     if (!askTranscripts) {
       return {

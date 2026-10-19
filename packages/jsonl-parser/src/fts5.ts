@@ -168,6 +168,8 @@ export interface SearchOptions {
   author?: DocAuthor;
   /** Only documents of these conversations, by session id. */
   sessions?: readonly string[];
+  /** Only documents written at or before this ISO time; one with no time is left out. */
+  before?: string;
 }
 
 /** One place in a conversation that matched: where to open it, and why it matched. */
@@ -776,6 +778,12 @@ export class TranscriptIndex {
       }
       filters += " AND d.session IN (SELECT value FROM json_each(?))";
       params.push(JSON.stringify(ids));
+    }
+    if (options.before !== undefined) {
+      // Filtered after the FTS match, as the author is; ISO times compare
+      // as text.
+      filters += " AND d.ts <= ?";
+      params.push(options.before);
     }
     const ranked = this.#rankedPasses(whole, typing, filters, params, limit);
     const described = this.#described(ranked.map((row) => row.id));
