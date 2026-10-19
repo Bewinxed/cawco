@@ -7,7 +7,8 @@
  *  1. Inside `--dur-wait-grace` nothing skeleton-like is seen: at grace −
  *     100 ms (from the skeleton's own birth) every kit skeleton in it has a
  *     computed opacity of 0; past grace + `--dur-fade` + 50 ms every one
- *     stands seen (`checkVisibility({ opacityProperty: true })`).
+ *     stands seen (`checkVisibility({ opacityProperty: true })`), and by
+ *     +400 ms every one is whole.
  *  2. The skeleton's outer box is the content's: the same inline start and
  *     size within 2 px, and the same block size within `pitch` (2 px, or a
  *     list's documented row pitch where the count of rows is the read's).
@@ -203,22 +204,26 @@ export async function proveSwap(
   const control = await tokenMs(page, "--dur-control");
   const inside = await sample(page, site, grace - 100);
   const past = await sample(page, site, grace + fade + 50);
+  // Whole once its fade has had room: a style resolved a few frames after
+  // the insertion (a loaded machine) starts the fade that much later.
+  const whole = await sample(page, site, grace + fade + 400);
   kit.check(
-    `${site.name}: nothing seen inside --dur-wait-grace (${grace} ms), the skeleton seen past it and --dur-fade (${fade} ms)`,
+    `${site.name}: nothing seen inside --dur-wait-grace (${grace} ms), every bone seen past it and --dur-fade (${fade} ms), whole by +400 ms`,
     inside.stands &&
       inside.bones > 0 &&
       inside.seen === 0 &&
       inside.opacities.every((one) => one === 0) &&
       past.stands &&
       past.seen === past.bones &&
-      // Faded in, give or take the frame a bone is drawn after its container.
-      past.opacities.every((one) => one >= 0.9),
-    `at grace − 100: ${JSON.stringify(inside)}; at grace + fade + 50: ${JSON.stringify(past)}`
+      past.opacities.every((one) => one > 0) &&
+      whole.stands &&
+      whole.opacities.every((one) => one >= 0.99),
+    `at grace − 100: ${JSON.stringify(inside)}; at grace + fade + 50: ${JSON.stringify(past)}; at grace + fade + 400: ${JSON.stringify(whole.opacities)}`
   );
   kit.check(
     `${site.name}: no empty state while the read is held`,
-    inside.empties === 0 && past.empties === 0,
-    `empties ${inside.empties} then ${past.empties} (${site.empty ?? "none named"})`
+    inside.empties === 0 && past.empties === 0 && whole.empties === 0,
+    `empties ${inside.empties}, ${past.empties}, then ${whole.empties} (${site.empty ?? "none named"})`
   );
   const { box: was } = past;
   await held.release();
