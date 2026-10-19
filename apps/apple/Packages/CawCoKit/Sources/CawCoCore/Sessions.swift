@@ -24,6 +24,10 @@ public final class SessionTranscript {
     public internal(set) var tail: Components.Schemas.TranscriptTail?
     public internal(set) var facts: Components.Schemas.TranscriptFacts?
     public internal(set) var location: Components.Schemas.TranscriptWhere?
+    /// The session a continuation took this one's work item on in, by its id
+    /// and title, as its newest page said (`TranscriptPage.continuedTo`):
+    /// what its screen reads before the board lists the rows, and after.
+    public internal(set) var continuedTo: (instanceId: String, title: String)?
     /// Where the page older than `blocks` begins: the `before` the hub named,
     /// or nil once the conversation's start is in hand.
     public internal(set) var cursor: String?
@@ -546,6 +550,7 @@ public final class SessionsStore {
                 settleLocal(transcript)
                 transcript.tail = page.tail
                 transcript.facts = page.facts
+                transcript.continuedTo = page.continuedTo.map { ($0.instanceId, $0.title) }
                 transcript.location = page._where
                 transcript.cursor = whole.cursor
                 // A new newest page is a new read: an older page still on its

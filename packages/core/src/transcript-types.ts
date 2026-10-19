@@ -375,6 +375,13 @@ export interface TranscriptPage {
   blocks: TranscriptBlock[];
   /** The branches whose Task call is on this page, each with its blocks. */
   branches: TranscriptPageBranch[];
+  /**
+   * Newest page only: the session a continuation took this one's work item
+   * on in (`InstanceRow.continuedInto`, followed to the last), by its id and
+   * title: its page says where the work went in its composer's place, from
+   * its first paint and for a reader whose board no longer lists either row.
+   */
+  continuedTo?: { instanceId: string; title: string };
   /** Pass as `before` for the page older than this; null at the conversation's start. */
   cursor: string | null;
   /** Newest page only: what the session has said about itself. */

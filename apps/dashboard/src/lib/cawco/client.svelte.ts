@@ -549,6 +549,13 @@ export interface SessionState {
   contextError: string | null;
   /** A `getContextUsage` call is out; the meter keeps its last number meanwhile. */
   contextPending: boolean;
+  /**
+   * The session a continuation took this one's work item on in, by its id
+   * and title, as its newest page said (core `TranscriptPage.continuedTo`):
+   * what its pane reads on its first paint and when the board no longer
+   * lists its row. Null on every other.
+   */
+  continuedTo: { instanceId: string; title: string } | null;
   /** The main loop's tool in flight, cleared by its result or the turn's end. */
   currentTool: ToolGlance | null;
   /**
@@ -1328,6 +1335,7 @@ export function blankSession(instanceId: string): SessionState {
     queued: [],
     rev: 0,
     cursor: null,
+    continuedTo: null,
     records: {},
     local: [],
     notes: [],
@@ -1904,6 +1912,7 @@ function adoptTranscriptPage(
     target.sessionId = where.sessionKey;
   }
   seesCompaction(page);
+  target.continuedTo = page.continuedTo ?? null;
   target.blocks = page.blocks.map((block) => take(target, block, "blocks"));
   target.queued = (page.queued ?? []).map((block) =>
     take(target, block, "queued")

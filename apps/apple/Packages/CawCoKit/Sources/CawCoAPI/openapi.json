@@ -31606,6 +31606,22 @@
               "$ref": "#/components/schemas/TranscriptPageBranch"
             }
           },
+          "continuedTo": {
+            "description": "Newest page only: the session a continuation took this one's work item\non in (`InstanceRow.continuedInto`, followed to the last), by its id and\ntitle: its page says where the work went in its composer's place, from\nits first paint and for a reader whose board no longer lists either row.",
+            "type": "object",
+            "properties": {
+              "instanceId": {
+                "type": "string"
+              },
+              "title": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instanceId",
+              "title"
+            ]
+          },
           "cursor": {
             "description": "Pass as `before` for the page older than this; null at the conversation's start.",
             "type": [

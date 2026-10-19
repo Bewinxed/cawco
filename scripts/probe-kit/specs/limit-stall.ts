@@ -804,7 +804,8 @@ const personAfter = async (
           link: link?.textContent?.trim(),
         };
       }, target),
-    (now) => !!now.link,
+    // Its title, not its id: the line as it settles, whatever drew first.
+    (now) => now.link === title,
     30_000
   ).catch(() => undefined);
   kit.check(

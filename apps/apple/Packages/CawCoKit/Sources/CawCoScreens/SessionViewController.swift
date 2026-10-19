@@ -368,10 +368,13 @@ final class SessionViewController: ObservedViewController {
     /// (SessionPane.svelte `continuedTo`): this one never runs again, so its
     /// composer's place says where the work went, a link to it.
     private func continuedIn() -> ContinuedIn? {
-        guard let next = hub.fleet.byId[sessionId]?.session?.continuedInto else { return nil }
-        let row = hub.fleet.byId[next]
-        let title = row.map { Naming.sessionTitle(title: $0.title, cwd: $0.cwd, id: $0.id) } ?? String(next.prefix(8))
-        return ContinuedIn(title: title) { [weak self] in self?.onOpenSession(next) }
+        // The rows while the board lists them; else its newest page's word.
+        if let next = hub.fleet.byId[sessionId]?.session?.continuedInto, let row = hub.fleet.byId[next] {
+            let title = Naming.sessionTitle(title: row.title, cwd: row.cwd, id: row.id)
+            return ContinuedIn(title: title) { [weak self] in self?.onOpenSession(next) }
+        }
+        guard let said = transcript.continuedTo else { return nil }
+        return ContinuedIn(title: said.title) { [weak self] in self?.onOpenSession(said.instanceId) }
     }
 
     // MARK: An ask standing alone (SessionPane.svelte `askAlone`)

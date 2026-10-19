@@ -24396,11 +24396,8 @@ export const createServer = (
               ? Math.floor(Number(query.limit))
               : undefined;
           // A former id is its session's (the hub's fold of older continuations).
-          const page = await transcripts.page(
-            db.instanceIdOf(params.id),
-            limit,
-            query.before
-          );
+          const id = db.instanceIdOf(params.id);
+          const page = await transcripts.page(id, limit, query.before);
           if ("gone" in page) {
             return status(
               409,
@@ -24408,7 +24405,16 @@ export const createServer = (
             );
           }
           if (!("fault" in page)) {
-            return page;
+            // Where a continued session's work went rides its newest page,
+            // for a first paint and a reader whose board no longer lists it.
+            const now = query.before ? id : continuationNow(id);
+            const [to] = now === id ? [] : db.getInstancesByIds([now]);
+            return to
+              ? {
+                  ...page,
+                  continuedTo: { instanceId: to.id, title: sessionName(to) },
+                }
+              : page;
           }
           switch (page.fault) {
             case "offline":

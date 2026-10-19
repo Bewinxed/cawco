@@ -241,6 +241,7 @@ export type TokenSize =
   | "type.track-display"
   | "type.track-title"
   | "type.track-caps"
+  | "type.underline-offset"
   | "space.space-1"
   | "space.space-2"
   | "space.space-3"

@@ -540,14 +540,16 @@
    * hub refuses a person's message to it in the same words.
    */
   const continuedTo = $derived.by((): { id: string; title: string } | null => {
+    // The rows while the board lists them; else its newest page's word.
     const next = cawco.instances.find(
       (one) => one.id === viewId
     )?.continuedInto;
-    if (!next) {
-      return null;
+    const to = next && cawco.instances.find((one) => one.id === next);
+    if (to) {
+      return { id: to.id, title: instanceTitle(to) };
     }
-    const to = cawco.instances.find((one) => one.id === next);
-    return { id: next, title: to ? instanceTitle(to) : next.slice(0, 8) };
+    const said = session?.continuedTo;
+    return said ? { id: said.instanceId, title: said.title } : null;
   });
 
   /**
@@ -1259,11 +1261,9 @@
                  before any group composer exists, draws one here. -->
         {#if continuedTo}
           <p class="readonly continued" in:crossIn out:crossOut>
-            <span class="shrink-0 whitespace-nowrap">{CONTINUED_IN}</span>
-            <a
-              class="touch-hit pointer-hit min-w-0 text-link underline-offset-4 hover:underline"
-              href={rowHref(continuedTo.id)}
-              ><span class="block truncate">{continuedTo.title}</span></a
+            <span>{CONTINUED_IN}</span>
+            <a class="touch-hit pointer-hit" href={rowHref(continuedTo.id)}
+              ><span>{continuedTo.title}</span></a
             >
           </p>
         {:else if !fault && (unaddressable || readOnly)}
@@ -1334,8 +1334,28 @@
   .continued {
     display: flex;
     justify-content: center;
-    gap: 0.25em;
+    gap: var(--space-1);
     max-inline-size: 100%;
+  }
+  .continued > span {
+    flex: none;
+    white-space: nowrap;
+  }
+  .continued a {
+    min-inline-size: 0;
+    color: var(--link-ink);
+    text-underline-offset: var(--underline-offset);
+  }
+  @media (hover: hover) {
+    .continued a:hover {
+      text-decoration: underline;
+    }
+  }
+  .continued a > span {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
 
   .pane {
