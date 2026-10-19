@@ -26,10 +26,18 @@
  * a rootfs of the host's `/usr` read only. The child then stays, as a session
  * does. The keeper is then retired as an agent's update retires one: its
  * job's `remove()`, given the live children its register lists. The stopping
- * process (this spec) has the user bus out of its reach
- * (`DBUS_SESSION_BUS_ADDRESS` naming no socket; `systemctl --user` reaches
- * the manager on its private socket all the same), so no stop path can move
- * a process into a transient unit (0 proves the rig).
+ * process (this spec) has the user bus out of its reach, so no stop path
+ * can move a process into a transient unit, while the stop itself still
+ * reaches the manager (0 proves the rig). systemd 259's sources: `busctl
+ * --user` takes its address from `secure_getenv("DBUS_SESSION_BUS_ADDRESS")`
+ * and only without one from `$XDG_RUNTIME_DIR/bus` (sd-bus.c
+ * `bus_set_address_user`); `systemctl --user` dials
+ * `unix:path=$XDG_RUNTIME_DIR/systemd/private` (bus-util.c
+ * `bus_connect_user_systemd`), falling back to the session bus only "if
+ * DBUS_SESSION_BUS_ADDRESS is set and XDG_RUNTIME_DIR isn't". So the spec
+ * sets `DBUS_SESSION_BUS_ADDRESS` to a socket that is not there. (A
+ * workspace's boundary hides the whole of `/run/user/<uid>`, the private
+ * socket too: there the stop could not run at all.)
  *
  * - inherited: the child is given the unit's own `INVOCATION_ID`, as a
  *   session started by a keeper before session-env.ts dropped it had.

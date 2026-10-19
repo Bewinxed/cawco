@@ -37,6 +37,7 @@ import type { Dirent } from "node:fs";
 import { readdir, readFile, rm } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type { KeptProcess } from "@cawco/core/binary-updates";
 import { type KeeperName, keeperService } from "@cawco/core/keepers";
 import {
   forgetLaunchdStart,
@@ -98,18 +99,11 @@ const CGROUP_ROOT = "/sys/fs/cgroup";
 export type UnitStop =
   { readonly force: true } | { readonly children: readonly number[] };
 
-/** A process in a keeper's unit that is neither the keeper nor in the tree of a child it lists. */
-export interface Foreign {
-  /** Its command line, from `/proc/<pid>/cmdline`. */
-  command: string;
-  pid: number;
-}
-
 /** A keeper's stop refused: its unit holds processes CawCo did not start. Its message names each one. */
 export class KeeperKept extends Error {
-  readonly foreign: readonly Foreign[];
+  readonly foreign: readonly KeptProcess[];
 
-  constructor(unit: string, foreign: readonly Foreign[]) {
+  constructor(unit: string, foreign: readonly KeptProcess[]) {
     super(
       `${unit} is kept, not stopped: it holds ${foreign.length === 1 ? "1 process" : `${foreign.length} processes`} that neither the keeper nor one of its sessions runs: ${foreign.map(({ pid, command }) => `pid ${pid} (${command})`).join(", ")}`
     );
@@ -156,7 +150,7 @@ const pidsUnder = async (dir: string): Promise<number[]> => {
 export async function foreignIn(
   unit: string,
   children: readonly number[]
-): Promise<Foreign[]> {
+): Promise<KeptProcess[]> {
   const shown = await must([
     "systemctl",
     "--user",
@@ -233,7 +227,7 @@ export interface KeeperJob {
    * children its register lists ({@link foreignIn}); none on macOS, where
    * there are no cgroups.
    */
-  readonly foreign: (children: readonly number[]) => Promise<Foreign[]>;
+  readonly foreign: (children: readonly number[]) => Promise<KeptProcess[]>;
   /** Its name in the service manager, for a log line: `systemd (--user cawco-sessiond-x.service)`. */
   readonly name: string;
   /** Its main process as the service manager knows it, or none when it is not running. */

@@ -30,8 +30,17 @@ export interface Ran {
   out: string;
 }
 
+/**
+ * Runs `argv` with this process's environment as it is now: Bun.spawn with
+ * no `env` passes the one the process started with, and a spec that sets a
+ * variable for what it runs (keeper-stop-container's bus) must be heard.
+ */
 export const run = async (argv: string[]): Promise<Ran> => {
-  const child = Bun.spawn(argv, { stdout: "pipe", stderr: "pipe" });
+  const child = Bun.spawn(argv, {
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env },
+  });
   const [out, err, code] = await Promise.all([
     new Response(child.stdout).text(),
     new Response(child.stderr).text(),

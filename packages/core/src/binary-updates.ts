@@ -240,8 +240,21 @@ export function mergeHolds(
     .map(([reason, ids]) => ({ reason, ids: [...ids] }));
 }
 
+/**
+ * A process in a session keeper's unit that neither the keeper nor one of
+ * its sessions runs: while one is there, the keeper is not stopped (agent
+ * keeper-jobs.ts), and the next look after it ends stops it.
+ */
+export interface KeptProcess {
+  /** Its command line, from `/proc/<pid>/cmdline`. */
+  command: string;
+  pid: number;
+}
+
 /** A keeper of an earlier build still holding sessions while the current one takes every new start. */
 export interface RetiringKeeper {
+  /** Processes in its unit CawCo did not start, while they keep it from going: its hand-over finishes once they end. */
+  kept?: KeptProcess[];
   /** Its sessions, and any other process it holds (a workspace's boundary, an OpenCode server). */
   sessions: number;
   /** Its build. */
@@ -305,6 +318,13 @@ export interface BinaryUpdateState {
    * holds has ended or gone to sleep. Absent when there is none.
    */
   retiringKeepers?: RetiringKeeper[];
+  /**
+   * The current session keeper stopped answering, and the watchdog does not
+   * restart it while its unit holds these processes CawCo did not start: no
+   * session starts on the machine until they end, and the next look after
+   * that restarts it. Absent while it answers.
+   */
+  sessiondKept?: KeptProcess[];
   /** The build of the current session keeper, the one every new session starts on: the `keeper` link. */
   sessiondVersion?: string;
   /** When anything in this state last changed. Not an identity for anything. */

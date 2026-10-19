@@ -3020,6 +3020,11 @@ export const startDaemon = (rediscover = false) =>
             await updater.noteKeeperRestart(restart);
           }
         },
+        kept: async (version, current, held, holding) => {
+          if (await readInstallation()) {
+            await updater.noteKeeperKept(version, current, held, holding);
+          }
+        },
       });
       watchdog.start();
       yield* Effect.addFinalizer(() => Effect.sync(() => watchdog.stop()));

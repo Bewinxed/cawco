@@ -44512,6 +44512,13 @@
               "$ref": "#/components/schemas/RetiringKeeper"
             }
           },
+          "sessiondKept": {
+            "description": "The current session keeper stopped answering, and the watchdog does not\nrestart it while its unit holds these processes CawCo did not start: no\nsession starts on the machine until they end, and the next look after\nthat restarts it. Absent while it answers.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KeptProcess"
+            }
+          },
           "sessiondVersion": {
             "description": "The build of the current session keeper, the one every new session starts on: the `keeper` link.",
             "type": "string"
@@ -44622,6 +44629,13 @@
         "description": "A keeper of an earlier build still holding sessions while the current one takes every new start.",
         "type": "object",
         "properties": {
+          "kept": {
+            "description": "Processes in its unit CawCo did not start, while they keep it from going: its hand-over finishes once they end.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/KeptProcess"
+            }
+          },
           "sessions": {
             "description": "Its sessions, and any other process it holds (a workspace's boundary, an OpenCode server).",
             "type": "number"
@@ -44634,6 +44648,23 @@
         "required": [
           "sessions",
           "version"
+        ]
+      },
+      "KeptProcess": {
+        "description": "A process in a session keeper's unit that neither the keeper nor one of\nits sessions runs: while one is there, the keeper is not stopped (agent\nkeeper-jobs.ts), and the next look after it ends stops it.",
+        "type": "object",
+        "properties": {
+          "command": {
+            "description": "Its command line, from `/proc/<pid>/cmdline`.",
+            "type": "string"
+          },
+          "pid": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "command",
+          "pid"
         ]
       },
       "BuildInfo": {

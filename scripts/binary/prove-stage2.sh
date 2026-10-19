@@ -707,6 +707,32 @@ phase() { hub_api /api/binary-updates/machines | json "d => d.machines['$1']?.ph
 field() { hub_api /api/binary-updates/machines | json "d => d.machines['$1']?.$2"; }
 # The keepers of earlier builds still holding something on a machine, as its update state says: `<build>:<held> ...`.
 retiring() { hub_api /api/binary-updates/machines | json "d => (d.machines['$1']?.retiringKeepers ?? []).map(k => k.version + ':' + k.sessions).join(' ')"; }
+# The pids that keep machine $1's retiring keeper of build $2, as its update state says (`retiringKeepers[].kept`).
+kept_of() { hub_api /api/binary-updates/machines | json "d => (d.machines['$1']?.retiringKeepers ?? []).find(k => k.version === '$2')?.kept?.map(p => p.pid).join(' ')"; }
+# Machine $1's Update cell, in the words the dashboard draws it with (apps/dashboard updates/model.ts `cellFor`).
+update_row() {
+  hub_api /api/binary-updates/machines | bun -e "const { cellFor } = await import('$here/../../apps/dashboard/src/lib/cawco/updates/model.ts'); const d = JSON.parse(await Bun.stdin.text()); console.log(cellFor({ machineId: '$1', hostname: '$1', status: 'online', binaryUpdate: d.machines['$1'] }, { autoUpdate: true, channel: 'stable' }).text)"
+}
+# A process CawCo did not start, put into the cgroup of keeper pid $2 on machine $1, as podman left conmon in a keeper's
+# unit for a session that carried its INVOCATION_ID: `sleep 86400`, started in a scope of its own and then moved, its
+# parent outside every keeper's tree. Prints its pid. systemd-run is told not to expand `$` (systemd-run(1)
+# --expand-environment: "Disabling variable expansion is useful if the specified command includes or may include a $
+# sign").
+plant_in_unit() {
+  put_executable "$1" /home/cawco/cawco-plant.sh <<'PLANT'
+#!/bin/sh
+set -eu
+group=$(sed -n 's/^0:://p' "/proc/$1/cgroup")
+rm -f /home/cawco/cawco-planted.pid
+nohup systemd-run --user --scope --quiet --collect --expand-environment=no --unit="cawco-planted-$1" -- sh -c 'echo $$ > /home/cawco/cawco-planted.pid; exec sleep 86400' > /dev/null 2>&1 < /dev/null &
+i=0
+until [ -s /home/cawco/cawco-planted.pid ]; do i=$((i + 1)); [ "$i" -lt 100 ] || exit 1; sleep 0.1; done
+pid=$(cat /home/cawco/cawco-planted.pid)
+echo "$pid" > "/sys/fs/cgroup$group/cgroup.procs"
+echo "$pid"
+PLANT
+  as_user "$1" /home/cawco/cawco-plant.sh "$2"
+}
 wait_until() {
   local seconds=$1; shift
   local end=$((SECONDS + seconds))
@@ -903,7 +929,7 @@ stub_when_staged() { as_user "$hubc" sh -c 'rm -f /tmp/stub.done; sh /shared/kee
 # (binary-update.ts `#drain` → `#tellHub`), before any helper starts.
 settled() { [[ "$(phase "$1")" =~ ^(none|available|installed|failed|failed-rolled-back|waiting-for-channel|waiting-sessions)$ ]]; }
 export PROOF_RUNNER
-export -f diagnose as_user put_executable user_exec proof_runner run_script need_hub hub_api api_on now_ms json jsonl machine_id build_version phase field retiring wait_until use_feed \
+export -f diagnose as_user put_executable user_exec proof_runner run_script need_hub hub_api api_on now_ms json jsonl machine_id build_version phase field retiring kept_of update_row plant_in_unit wait_until use_feed \
   put_policy learn install_now_request spawn_child watch_install watched_ids start_session start_loop keeper_list keeper_lists \
   child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running \
   start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children \
@@ -1742,11 +1768,24 @@ handover_on_joined_machine() {
   stop_session "$jid" "$id"
   wait_until 60 '! as_user "$joinerc" kill -0 "'"$pid"'" 2> /dev/null'
   wait_until 60 '[[ "$(retiring $jid)" == "'"$old"':2" ]]'
-  # The other two end; the keeper before then goes by itself, its process, unit and endpoint, and the new keeper's
-  # session runs on.
+  # A process CawCo did not start, in the keeper before's unit. The other two sessions end: the keeper before is kept,
+  # the same process with its unit, its update state names the process, and the machine's Update cell says what keeps
+  # it, never "handing over". The process ends: the keeper before then goes by itself, its process, unit and endpoint,
+  # and the new keeper's session runs on.
+  local planted row
+  planted=$(plant_in_unit "$joinerc" "$oldpid")
+  [[ -n $planted ]] || { echo "ASSERTION FAILED: no process was planted in $oldunit"; return 1; }
+  echo "planted in $oldunit: $planted"
   for pid in $(tail -n +2 "$rigdir/handover-before.txt" | awk '{print $2}'); do
     as_user "$joinerc" kill "$pid"
   done
+  wait_until 180 '[[ "$(kept_of $jid "'"$old"'")" == "'"$planted"'" ]]'
+  row=$(update_row "$jid")
+  echo "update row: $row"
+  [[ "$row" == *"is held by a process CawCo didn't start (sleep, pid $planted)"* && "$row" != *"handing over"* ]] || { echo "ASSERTION FAILED: the Update cell does not say what keeps the keeper before"; return 1; }
+  [[ "$(keeper_pid "$joinerc" "$oldunit")" == "$oldpid" ]] || { echo "ASSERTION FAILED: the keeper before was stopped with a process CawCo did not start in its unit"; return 1; }
+  as_user "$joinerc" test -e "/home/cawco/.config/systemd/user/$oldunit"
+  as_user "$joinerc" kill "$planted"
   wait_until 180 '! as_user "$joinerc" kill -0 "'"$oldpid"'" 2> /dev/null'
   wait_until 60 'as_user "$joinerc" test ! -e "/home/cawco/.config/systemd/user/'"$oldunit"'"'
   wait_until 60 'as_user "$joinerc" test ! -e "/run/user/1000/cawco/'"$oldend"'"'
@@ -1765,7 +1804,7 @@ export -f env_is_clean handover_on_joined_machine
 rig_handover() {
   fleet base "$BASE" "hub joiner" "hub joiner"
   setup_done
-  check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once (carrying only the CAWCO_* its tools read), the old sessions run on and answer through an agent restart, and the old keeper goes when they end; the hub's machine keeps the build its trial would restore until the trial is confirmed" handover_on_joined_machine 1200
+  check "a joined machine installs a build with sessions on its keeper: the new keeper takes a new session at once (carrying only the CAWCO_* its tools read), the old sessions run on and answer through an agent restart, the old keeper is kept while its unit holds a process CawCo did not start (its update state and Update cell name it) and goes once that ends; the hub's machine keeps the build its trial would restore until the trial is confirmed" handover_on_joined_machine 1200
   check "every message sent to a session on the joined machine while the hub's machine and then the joined machine update, the hub restarting under some, reaches the session once the machine is back, once each" update_sends_delivered 600
   check "the joined machine's Claude account reads signed in all through its update, though its Claude Code answers auth status past the agent's bound" update_signin_kept 600
 }

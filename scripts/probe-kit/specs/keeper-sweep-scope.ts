@@ -59,11 +59,7 @@ const AFTER_SWEEP_MS = 5000;
 const textOf = (file: string): Promise<string> =>
   readFile(file, "utf8").catch(() => "");
 
-/**
- * The live process whose pid `file` holds, or undefined while it holds none:
- * `echo $$ > file` makes the file before it writes the pid, so a file that
- * is there may still be empty.
- */
+/** The live process whose pid `file` holds, or undefined while it holds none. */
 const pidIn = async (file: string): Promise<number | undefined> => {
   const pid = Number((await textOf(file)).trim());
   return pid > 0 && (await startedAt(pid)) !== undefined ? pid : undefined;
@@ -102,7 +98,9 @@ const spec: Spec = {
       const moved = `trap 'echo TERM >> "$1"' TERM; echo $$ > "$0"; while :; do sleep 1; done`;
       const kept = `echo $$ > "$0"; while :; do sleep 1; done`;
       const script = [
-        `systemd-run --user --scope --quiet --collect --unit=${quoted(scope)} -- /bin/sh -c ${quoted(moved)} ${quoted(movedPid)} ${quoted(termFile)} &`,
+        // systemd-run expands `$` in its arguments by default ("Use \"$$\" to pass a literal dollar
+        // sign", systemd.service(5)): the shell's `$$` would reach it as `$`.
+        `systemd-run --user --scope --quiet --collect --expand-environment=no --unit=${quoted(scope)} -- /bin/sh -c ${quoted(moved)} ${quoted(movedPid)} ${quoted(termFile)} &`,
         `/bin/sh -c ${quoted(kept)} ${quoted(keptPid)} &`,
         "read line",
         "exit 0",

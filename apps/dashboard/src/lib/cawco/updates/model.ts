@@ -7,6 +7,7 @@ import {
   type BinaryUpdatePolicy,
   type BinaryUpdateState,
   holdPhrases,
+  type KeptProcess,
   RESTART_WAIT_CAP_MS,
 } from "@cawco/core/binary-updates";
 
@@ -163,16 +164,29 @@ const channelName = (channel: BinaryUpdatePolicy["channel"]): string =>
 const words = (...parts: string[]): string =>
   parts.filter((part) => part !== "").join(" ");
 
+/** A kept process as a row names it, in parentheses after the words: its program, without its path or arguments, and its pid. */
+const processWords = ({ command, pid }: KeptProcess): string => {
+  const [program = ""] = command.split(" ");
+  return `${program.slice(program.lastIndexOf("/") + 1)}, pid ${pid}`;
+};
+
+/** What holds a keeper, in words: `a process CawCo didn't start (conmon, pid 1234)`, `2 processes … (conmon, pid 1234; sleep, pid 88)`. */
+const heldBy = (kept: readonly KeptProcess[]): string =>
+  `${kept.length === 1 ? "a process" : `${kept.length} processes`} CawCo didn't start (${kept.map(processWords).join("; ")})`;
+
 /**
  * A keeper handover still under way, in words: `Session keeper handing over:
- * 3 sessions left on nightly 2229`. Empty when no earlier keeper holds
- * anything. Nothing waits on it: new sessions start on the current keeper.
+ * 3 sessions left on nightly 2229`, or, for a keeper whose unit holds a
+ * process CawCo didn't start, what keeps it and what lets it go. Empty when
+ * no earlier keeper holds anything. Nothing waits on it: new sessions start
+ * on the current keeper.
  */
 const handingOver = (u: BinaryUpdateState): string =>
   (u.retiringKeepers ?? [])
-    .map(
-      (keeper) =>
-        `Session keeper handing over: ${plural(keeper.sessions, "session")} left on ${displayVersion(keeper.version)}`
+    .map((keeper) =>
+      keeper.kept
+        ? `The session keeper of ${displayVersion(keeper.version)} is held by ${heldBy(keeper.kept)}. Its hand-over finishes once ${keeper.kept.length === 1 ? "that process ends" : "they end"}.`
+        : `Session keeper handing over: ${plural(keeper.sessions, "session")} left on ${displayVersion(keeper.version)}`
     )
     .join(" · ");
 
@@ -195,6 +209,18 @@ export function cellFor(
   if (!u) {
     return { ...EMPTY(2), plain: true, text: "Runs from source" };
   }
+  return u.sessiondKept ? keptCell(u.sessiondKept) : phaseCell(u, policy);
+}
+
+/** Row 13: the current session keeper isn't answering, and isn't restarted while processes CawCo didn't start hold it. */
+const keptCell = (kept: readonly KeptProcess[]): Cell => ({
+  ...EMPTY(13),
+  fail: true,
+  text: `The session keeper isn't answering, so no session starts there. It's held by ${heldBy(kept)}. Handoff: end ${kept.length === 1 ? "it" : "them"}, and CawCo restarts the keeper.`,
+});
+
+/** Rows 3 to 12: the cell by the update's phase. */
+function phaseCell(u: BinaryUpdateState, policy: BinaryUpdatePolicy): Cell {
   const v = u.availableVersion ? displayVersion(u.availableVersion) : "";
   const cur = displayVersion(u.installedVersion);
   switch (u.phase) {
@@ -291,14 +317,16 @@ export function runningOf(machine: UpdateMachine): string {
   return machine.build?.commit ? machine.build.commit.slice(0, 7) : "—";
 }
 
-/** Machines waiting on the operator: a failed update, or (auto-update off) one to install. */
+/** Machines waiting on the operator: a failed update, a session keeper kept from its restart, or (auto-update off) one to install. */
 export function attention(
   machines: UpdateMachine[],
   policy: BinaryUpdatePolicy
 ): number {
   return machines.filter((machine) => {
     const { row } = cellFor(machine, policy);
-    return row === 3 || row === 4 || (row === 11 && !policy.autoUpdate);
+    return (
+      row === 3 || row === 4 || row === 13 || (row === 11 && !policy.autoUpdate)
+    );
   }).length;
 }
 
