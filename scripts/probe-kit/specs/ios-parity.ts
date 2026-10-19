@@ -8,7 +8,7 @@
  * against the mock model, a stand-in Cawrier): a project; per device a
  * worker session that notes a fact, then the project's memory curator run,
  * whose turn proposes a knowledge file citing it; a second machine, gone
- * offline. The built app on an iPhone 16 Pro and an iPad Pro 11-inch (M4),
+ * offline. The built app on an iPhone 16 Pro and an iPad Pro 13-inch (M4),
  * iOS 18.5, each in a mac-slot.sh slot of its own, with `-parity-probe`
  * (ParityProbe.swift), whose log lines are read here:
  *
@@ -20,8 +20,9 @@
  * (b) a pane opened on the proposal's own id moves to that session;
  * (c) Approve in that composer answers it: it leaves the hub's pending
  *     asks, the composer and Caw's panel;
- * (r) iPad: the rail's session row carries the session's menu, and Delete
- *     transcript asks under that rail row, pends, and deletes the session;
+ * (r) iPad: the rail's column stands beside the page; its session row
+ *     carries the session's menu, and Delete transcript asks under that
+ *     rail row, pends, and deletes the session;
  * (m) the gone machine's keychain unlock opens under its row, the hub's
  *     refusal of the password said in it; the hub's refusal of an install
  *     stands under the same row with Try again; nothing presented;
@@ -75,7 +76,10 @@ const DEVICES = [
   {
     tag: "iPad",
     wide: true,
-    type: "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4-8GB",
+    // 1032pt wide in portrait, over the rail's 900pt breakpoint (DESIGN.md
+    // "Breakpoints"): its rail stands beside the page. The 11-inch's 834pt
+    // is under it, where the rail is the burger's sheet.
+    type: "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-13-inch-M4-8GB",
   },
 ];
 const NOTE = "mcp__cawco__memory_note";
@@ -881,6 +885,14 @@ async function run(kit: Kit): Promise<void> {
       );
 
       if (device.wide) {
+        expect(
+          "r: the rail's column stands beside the page, over the rail's breakpoint",
+          "rail column",
+          worker,
+          "beside: yes",
+          "display mode oneBesideSecondary",
+          "rail in window: yes"
+        );
         expect(
           "r: the rail's session row carries the session's menu",
           "rail menu",

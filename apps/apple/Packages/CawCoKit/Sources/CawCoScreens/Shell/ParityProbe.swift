@@ -15,8 +15,9 @@ import UIKit
 ///    session's composer; a pane opened on the proposal's own id moves
 ///    there; Approve in that composer answers it, and Caw's panel lists it
 ///    no longer;
-/// 2. on a wide screen, the rail's session row carries the session's menu,
-///    and Delete transcript asks under that row, in the page, then deletes;
+/// 2. where the rail's column stands beside the page (over the rail's 900pt
+///    breakpoint), the rail's session row carries the session's menu, and
+///    Delete transcript asks under that row, in the page, then deletes;
 /// 3. a machine's keychain unlock opens under its row, and the hub's refusal
 ///    of an install stands under that row too, nothing presented over the page;
 ///
@@ -265,8 +266,12 @@ enum ParityProbe {
         await wait(2)
         paneSay("answered in its origin")
 
-        // 2. The rail's session menu, on a wide screen.
-        if let del = ids["del"], !shell.probeCompact {
+        // 2. The rail's session menu, where the rail's column stands beside
+        // the page: over the rail's breakpoint, not merely a regular width.
+        if let del = ids["del"] {
+            log.notice("rail column [\(del, privacy: .public)] \(shell.probeRailState, privacy: .public)")
+        }
+        if let del = ids["del"], shell.probeRailBeside {
             let rail = shell.probeRail
             await until(30) { rail.probeRow(del) != nil }
             func railSay(_ step: String) {
