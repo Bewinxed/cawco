@@ -1,6 +1,6 @@
 # Lane L17-cawco-find
 
-Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, interface-craft, ui-observer. (No transition/animation `in:`/`out:` change by this lane beyond keyframe names, so emil-design-eng/transitions-dev were not loaded.)
+Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, interface-craft, ui-observer, emil-design-eng, transitions-dev (the files carry `transition:`/`in:`/`out:` and keyframes). Motion check: the tip's entry is 140ms (`--dur-menu`) on `--ease-out`, scale from `--press-scale` (never 0), reduced motion keeps the opacity fade only; the breath is the shared `breath` keyframes; no keyboard action animates here.
 better-ui rules followed: transition only named properties; press scale via `--press-scale`; hover only under the `hover:` variant (fine pointers); overscroll contain on scrollers; motion gated by `motion-safe:`.
 better-layout rules followed: min-height not height where text grows; `min-w-0` on flex text; logical properties (`ps-`/`pe-`); phone targets 44px; no fixed widths on text.
 
