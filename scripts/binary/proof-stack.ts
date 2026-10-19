@@ -254,6 +254,19 @@ try {
   }
   console.log("cross-origin form refused with 403");
   await exec("proof-worker");
+  // The packages the binary runs from their published trees, and pi's
+  // workers by the names pi gives them (proof-runtime.ts).
+  await exec("proof-playwright");
+  await exec("proof-pi");
+  // pi-tui loads its clipboard helper only when DISPLAY is set, and the
+  // helper reads the X display: the leg needs one, which a proof container
+  // has none of (prove-stage1.sh's images carry no X server).
+  if (process.env.DISPLAY) {
+    await exec("proof-pi-clipboard");
+  } else {
+    console.log("pi-tui clipboard leg skipped: no DISPLAY on this machine");
+  }
+  console.log("playwright-core, photon-node and pi ran from the binary");
   await exec("proof-migration-check");
   await exec("proof-custody-start");
   // A CawCo account the machine signs in to as it registers again below, as

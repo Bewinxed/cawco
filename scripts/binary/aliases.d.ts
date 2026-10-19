@@ -16,5 +16,9 @@ declare module "cawco:proof-pi" {
 /** pi-tui's package entry, in proof builds only (scripts/build-binary.ts). */
 declare module "cawco:proof-pi-tui" {
   export function getNativeClipboard():
-    { getText: unknown; getImage: unknown } | undefined;
+    | {
+        getText: () => Promise<string | null | undefined>;
+        getImage: unknown;
+      }
+    | undefined;
 }

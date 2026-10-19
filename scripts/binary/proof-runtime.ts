@@ -291,12 +291,10 @@ globalThis.__cawcoCanvas = {
 } else if (verb === "proof-pi") {
   // pi's runtime as pi's own code runs it in the binary: config.js names
   // the codemode worker, image-resize.js spawns the resize worker by the
-  // name pi's Bun binary gives it, that worker loads photon-node from the
-  // published tree, and pi-tui finds its native helper beside its module
-  // (scripts/build-binary.ts, the binary's root).
+  // name pi's Bun binary gives it, and that worker loads photon-node from
+  // the published tree (scripts/build-binary.ts, the binary's root).
   const { getCodemodeWorkerSpecifier } = await import("cawco:pi-config");
   const { resizeImage } = await import("cawco:proof-pi");
-  const { getNativeClipboard } = await import("cawco:proof-pi-tui");
   const { publishedPackage } =
     await import("../../packages/core/src/published-package");
   publishedPackage("photon-node");
@@ -370,13 +368,25 @@ globalThis.__cawcoCanvas = {
   console.log(
     `pi's codemode worker ${codemode} ran its main: ${crash.message}`
   );
+} else if (verb === "proof-pi-clipboard") {
+  // pi-tui's native clipboard helper, found where its own lookup looks
+  // (/$bunfs/root/native/…, scripts/build-binary.ts) and loaded, then its
+  // read called as pi's clipboard.js calls it. pi-tui loads the helper only
+  // when DISPLAY is set (native-platform.js `getNativeClipboard`), so this
+  // runs only on a machine with a display. What the read answers is said,
+  // not judged: an empty clipboard and an unreachable display both answer
+  // nothing.
+  const { getNativeClipboard } = await import("cawco:proof-pi-tui");
   const clipboard = getNativeClipboard();
-  if (typeof clipboard?.getText !== "function") {
+  if (!clipboard) {
     throw new Error(
       `pi-tui found no native clipboard helper (DISPLAY=${process.env.DISPLAY})`
     );
   }
-  console.log("pi-tui loaded its native clipboard helper");
+  const text = await clipboard.getText();
+  console.log(
+    `pi-tui loaded its native clipboard helper; its read of DISPLAY ${process.env.DISPLAY} answered ${text === undefined ? "undefined" : JSON.stringify(text)}`
+  );
 } else if (verb === "proof-child") {
   process.stdin.resume();
   process.stdin.on("data", (chunk) => process.stdout.write(chunk));
