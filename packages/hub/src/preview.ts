@@ -1051,8 +1051,14 @@ export function createPreviewListeners(
     try {
       Bun.serve({ hostname, port, fetch: () => new Response(null) }).stop(true);
       return true;
-    } catch {
-      return false;
+    } catch (thrown) {
+      // Held: another socket has the port. Any other refusal is the bind
+      // address's, which no other port avoids: said as itself, never as
+      // every preview port taken.
+      if ((thrown as { code?: unknown }).code === "EADDRINUSE") {
+        return false;
+      }
+      throw portRefused(port, thrown);
     }
   };
 

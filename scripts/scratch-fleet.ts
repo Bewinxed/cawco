@@ -16,6 +16,7 @@ import { Database } from "bun:sqlite";
 import {
   existsSync,
   mkdirSync,
+  readFileSync,
   realpathSync,
   renameSync,
   rmdirSync,
@@ -246,17 +247,81 @@ const limitRefusal = (resetsAt: number): Response => {
 
 export const delay = (ms: number) => Bun.sleep(ms);
 
+/** Runs of whitespace, as `ss` lays its columns out. */
+const SPACES = /\s+/;
+
 /** How many preview ports a scratch hub gets: one per session that shows a preview or a canvas. */
 export const PREVIEW_PORTS = 12;
 
+/** Where `freePortRange` picks from, `[LOW, HIGH)`, outside the kernel's ephemeral ports. */
+const PORT_RANGE_LOW = 20_000;
+const PORT_RANGE_HIGH = 60_000;
+
+/**
+ * The kernel's ephemeral ports, as it says them: those every `connect()`
+ * and every bind to port 0 in the fleet's network takes its local port from
+ * (Linux `ip_local_port_range`, macOS `net.inet.ip.portrange`).
+ */
+function ephemeralPorts(): { first: number; last: number } {
+  const said =
+    platform() === "darwin"
+      ? new TextDecoder().decode(
+          Bun.spawnSync([
+            "sysctl",
+            "-n",
+            "net.inet.ip.portrange.first",
+            "net.inet.ip.portrange.last",
+          ]).stdout
+        )
+      : readFileSync("/proc/sys/net/ipv4/ip_local_port_range", "utf8");
+  const [first, last] = said.trim().split(SPACES).map(Number);
+  if (!(Number.isInteger(first) && Number.isInteger(last) && first <= last)) {
+    throw new Error(`the kernel's ephemeral port range reads "${said.trim()}"`);
+  }
+  return { first, last };
+}
+
+/**
+ * A random first port for `count` consecutive ports in `[PORT_RANGE_LOW,
+ * PORT_RANGE_HIGH)`, none of them an ephemeral port (`ephemeralPorts`).
+ */
+function firstOutsideEphemeral(count: number): number {
+  const ephemeral = ephemeralPorts();
+  // Each stretch of first ports whose whole run stays clear of the range.
+  const stretches = [
+    [PORT_RANGE_LOW, Math.min(PORT_RANGE_HIGH, ephemeral.first) - count],
+    [Math.max(PORT_RANGE_LOW, ephemeral.last + 1), PORT_RANGE_HIGH - count],
+  ].filter(([from, to]) => to >= from);
+  const total = stretches.reduce((all, [from, to]) => all + to - from + 1, 0);
+  if (total === 0) {
+    throw new Error(
+      `no ${count} consecutive ports in ${PORT_RANGE_LOW}-${PORT_RANGE_HIGH - 1} outside the ephemeral ports ${ephemeral.first}-${ephemeral.last}`
+    );
+  }
+  let at = Math.floor(Math.random() * total);
+  for (const [from, to] of stretches) {
+    if (at <= to - from) {
+      return from + at;
+    }
+    at -= to - from + 1;
+  }
+  return stretches[0][0];
+}
+
 /**
  * `count` consecutive ports nothing listens on, as `first-last` (the hub's
- * `CAWCO_PREVIEW_PORTS`): a random run high in the range, each port opened
- * and closed to see it is free, again from another start if one is not.
+ * `CAWCO_PREVIEW_PORTS`): a random run, each port opened and closed to see
+ * it is free, again from another start if one is not.
+ *
+ * Never among the kernel's ephemeral ports (`ephemeralPorts`). The ports are
+ * closed again before the hub binds them, and in that window any outgoing
+ * connection of the fleet's (the dashboard's, a harness's, the kit's own)
+ * can be given one of them as its local port, which the hub then cannot
+ * bind: a run picked there could leave a scratch hub's previews refused.
  */
 export async function freePortRange(count: number): Promise<string> {
   for (let tries = 0; tries < 50; tries += 1) {
-    const first = 20_000 + Math.floor(Math.random() * 40_000);
+    const first = firstOutsideEphemeral(count);
     const opened: ReturnType<typeof Bun.serve>[] = [];
     try {
       for (let port = first; port < first + count; port += 1) {
@@ -1640,6 +1705,41 @@ async function standUp(
     socket?.close();
     socket = undefined;
   };
+  /**
+   * Who holds the fleet's preview ports (`previewPorts`): every socket on
+   * one of them as a local port, by state and process (`ss`), and the
+   * ports the hub's database keeps for its sessions. Said with a 503 that
+   * found every preview port taken (`api`), whose run then removes its
+   * sandbox.
+   */
+  const previewPortsHeld = async (): Promise<string> => {
+    const [first, last] = previewPorts.split("-").map(Number);
+    const ss = Bun.spawnSync(["ss", "-Htanp", "state", "all"]);
+    const sockets = new TextDecoder()
+      .decode(ss.stdout)
+      .split("\n")
+      .filter((line) => {
+        const local = line.trim().split(SPACES)[3] ?? "";
+        const port = Number(local.slice(local.lastIndexOf(":") + 1));
+        return port >= first && port <= last;
+      });
+    let kept: string;
+    try {
+      const held = new Database(dbPath, { readonly: true })
+        .query("select instance_id, port from preview_ports")
+        .all() as { instance_id: string; port: number }[];
+      kept =
+        held.map((row) => `${row.instance_id} ${row.port}`).join(", ") ||
+        "none";
+    } catch (error) {
+      kept = `unread (${String(error)})`;
+    }
+    const said = (await logs("hub").catch(() => ""))
+      .split("\n")
+      .filter((line) => line.includes("[preview]"))
+      .slice(-20);
+    return `Sockets on ${previewPorts} (ss -tanp, state all): ${sockets.length}\n${sockets.join("\n") || "(none)"}\nThe hub's kept preview ports: ${kept}\nThe hub's last [preview] lines: ${said.length}\n${said.join("\n") || "(none)"}`;
+  };
   const api = async <T>(path: string, body?: unknown): Promise<T> => {
     const read = await readWithin(30_000, async (signal) => {
       const response = await fetch(`${base}${path}`, {
@@ -1653,7 +1753,11 @@ async function standUp(
       });
       const text = await response.text();
       if (!response.ok) {
-        throw new Error(`${path}: ${response.status} ${text}`);
+        const held =
+          response.status === 503 && text.includes("Every preview port")
+            ? `\n${await previewPortsHeld()}`
+            : "";
+        throw new Error(`${path}: ${response.status} ${text}${held}`);
       }
       return JSON.parse(text) as T;
     });
@@ -2296,6 +2400,8 @@ async function standUp(
     hub,
     /** The port the hub says its dashboard is on (`CAWCO_DASHBOARD_PORT`): the kit serves the built dashboard there. */
     dashboardPort,
+    /** The hub's preview ports (`CAWCO_PREVIEW_PORTS`), as `first-last`: picked outside the kernel's ephemeral ports (`freePortRange`). */
+    previewPorts,
     /** The dashboard's loopback port the hub names to every agent (`CAWCO_LOCAL_DASHBOARD_PORT`). */
     localDashboardPort,
     sandbox,

@@ -71,6 +71,8 @@
  * screen are read, none running.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one return at a time, as a person makes them
+
+import { readFileSync } from "node:fs";
 import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CDPSession, Frame, Page } from "playwright-core";
@@ -136,6 +138,8 @@ const LANDED_MS = 1500;
  * slower machine still has room. The parent's call (tab-return, 2026-10-19).
  */
 const REACH_TASK_MS = 12;
+/** A run of whitespace, as the kernel's port range file separates its two ports. */
+const SPACE_RUN = /\s+/;
 /** Transcript's `ROW_ESTIMATE`: virtua's size for a row it has not measured, px. */
 const ROW_ESTIMATE = 21;
 /** How long leg 3 shows each silent session before reading its pane: its read has long landed. */
@@ -1672,6 +1676,16 @@ const run = async (kit: Kit) => {
       html: `<!doctype html><html><head><meta charset="utf-8"><title>${name}</title></head><body><p>${name}</p></body></html>`,
     });
     lights.push(light);
+  }
+  // TAB_RETURN_LEGS=setup: the fleet and its five sessions, every preview
+  // and page given its port, and no more.
+  if (process.env.TAB_RETURN_LEGS === "setup") {
+    kit.check(
+      "setup: the five sessions are made, each preview and page given its port",
+      true,
+      `quiet ${front}, busy ${busy}, heavy ${previewed}, lights ${lights.join(", ")}; preview ports ${fleet.previewPorts}, the kernel's ephemeral ports ${readFileSync("/proc/sys/net/ipv4/ip_local_port_range", "utf8").trim().replace(SPACE_RUN, "-")}`
+    );
+    return;
   }
   await until(
     `${SEED} calls in the busy session`,
