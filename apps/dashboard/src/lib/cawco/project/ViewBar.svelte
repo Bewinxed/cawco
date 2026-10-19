@@ -126,13 +126,11 @@
   class="absolute inset-x-space-3 bottom-(--off-bottom) z-20 phone:hidden"
   style:--off-bottom="calc(var(--space-4) + var(--safe-bottom))"
 >
-  <!-- literal: 10px -->
   <div
     data-slot="view-bar"
-    class="group kit-dock-shell flex items-center gap-space-2 p-c-composer-inset hit-gap-x-space-2 coarse:gap-(--coarse-gap) coarse:hit-gap-x-(--coarse-gap)"
+    class="group kit-dock-shell flex items-center gap-space-2 p-c-composer-inset hit-gap-x-space-2 coarse:gap-space-3 coarse:hit-gap-x-space-3"
     data-bar
     style:--bar-control-radius="calc(var(--radius-lg) - var(--c-composer-inset))"
-    style:--coarse-gap="10px"
     bind:this={shell}
   >
     <Select.Root
@@ -207,25 +205,3 @@
     </button>
   </div>
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  /* The word gives way to the chevron while the width runs; a name longer
-     than the bar has room for ends in an ellipsis (the list and the pill's
-     name say it whole). */
-  [data-slot="view-bar"] > :global([data-slot="select-trigger"] > .mark-text) {
-    position: relative;
-    min-inline-size: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  /* The filter's glyph and count, at the bar's control height. */
-  [data-slot="view-bar"] > :global([data-filter-trigger]) {
-    flex: none;
-    min-inline-size: var(--c-composer-field);
-    inline-size: auto;
-    block-size: var(--c-composer-field);
-    border-radius: var(--bar-control-radius);
-  }
-</style>
