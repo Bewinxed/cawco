@@ -394,19 +394,24 @@ const summaryLeg = async (
     const remove = document
       .querySelector<HTMLElement>("[data-relay-remove]")
       ?.getBoundingClientRect();
-    return stop && remove
-      ? {
-          apart: Math.round(remove.left - stop.right),
-          space4: Number.parseFloat(
-            getComputedStyle(document.documentElement).getPropertyValue(
-              "--space-4"
-            )
-          ),
-        }
-      : null;
+    if (!(stop && remove)) {
+      return null;
+    }
+    // Side by side on one line, or Remove wrapped under Stop where the
+    // row is too narrow for both labels: the gap on that axis.
+    const wrapped = remove.top >= stop.bottom;
+    return {
+      wrapped,
+      apart: Math.round(
+        wrapped ? remove.top - stop.bottom : remove.left - stop.right
+      ),
+      space4: Number.parseFloat(
+        getComputedStyle(document.documentElement).getPropertyValue("--space-4")
+      ),
+    };
   });
   kit.check(
-    `${leg.name} Stop relay and the destructive Remove relay stand --space-4 apart (${gap?.apart}px)`,
+    `${leg.name} Stop and the destructive Remove stand --space-4 apart (${gap?.apart}px, ${gap?.wrapped ? "Remove wrapped under Stop" : "side by side"})`,
     gap !== null && gap.apart === gap.space4,
     JSON.stringify(gap)
   );
@@ -716,7 +721,7 @@ const focus = async (kit: Kit, base: string, leg: (typeof LEGS)[number]) => {
 
 /** A relay failure's first clause: what happened, up to its first colon or its first parenthesis. */
 const HAPPENED =
-  /^(?:The relay(?:'s certificate[^:]*?)? (?:could not start|was not renewed)[^:]*:|Let's Encrypt did not issue a certificate for \S+ \(|The certificate for \S+ was not issued:|certbot did not finish within \d+ s\.)/;
+  /^(?:The stream relay(?:'s certificate[^:]*?)? (?:could not start|was not renewed)[^:]*:|Let's Encrypt did not issue a certificate for \S+ \(|The certificate for \S+ was not issued:|certbot did not finish within \d+ s\.)/;
 /** The verb its fix opens with. */
 const FIX =
   /\b(?:Run|Install|Free|Give|Point|Check|Start|Try|Pick|Issue|Add)\b/;
