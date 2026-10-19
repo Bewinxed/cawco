@@ -395,16 +395,6 @@ const CONFIG_SETTLE_TIMEOUT_MS = 90_000;
  */
 const RECOVERY_RETRY_BUDGET_MS = 120_000;
 
-/** The generations a recovery round asked, as a custody line names them. */
-const generationsAsked = async (round: RecoveryRound): Promise<string> => {
-  const asked = await round.generations.catch(() => [] as ServerIdentity[]);
-  return asked.length > 0 ? asked.map(generationName).join(", ") : "none live";
-};
-
-/** One server generation, as a custody line names it. */
-const generationName = (identity: ServerIdentity): string =>
-  `${identity.procId}/${identity.pid} at ${identity.url}`;
-
 /** How long before a directory's deferred release is tried again. Ours: a held turn or a recovery is over in minutes, not seconds. */
 const DIRECTORY_RELEASE_RETRY_MS = 30_000;
 
@@ -2115,7 +2105,7 @@ export class OpencodeHarness implements Harness {
     if (!client) {
       if (isV1(identity) || identity.password === undefined) {
         throw new Error(
-          `OpenCode generation ${identity.procId} is a 1.x server: 2.0's client cannot reach it.`
+          "An OpenCode server on this machine is an older version (1.x) that CawCo can't reach. CawCo ends it once nothing runs on it and starts the current version in its place; try again then."
         );
       }
       client = opencodeClient({
@@ -3138,7 +3128,7 @@ export class OpencodeHarness implements Harness {
   #adopt(slot: ServerSlot, identity: ServerIdentity): OpencodeClient {
     if (isV1(identity) || identity.password === undefined) {
       throw new Error(
-        `OpenCode generation ${identity.procId} is a 1.x server: 2.0's client cannot reach it.`
+        "An OpenCode server on this machine is an older version (1.x) that CawCo can't reach. CawCo ends it once nothing runs on it and starts the current version in its place; try again then."
       );
     }
     const dropWhenGone = async (
@@ -4076,7 +4066,9 @@ export class OpencodeHarness implements Harness {
       // Positive idle receipt precedes resource release.
       const after = await active(client);
       if (sessionKey in after) {
-        throw new Error(`OpenCode turn ${sessionKey} has not ended`);
+        throw new Error(
+          "This session didn't end: OpenCode still runs its turn after it was interrupted. End it again."
+        );
       }
       for (const [id, session] of this.#sessions) {
         if (id === instanceId && session.sessionId === sessionKey) {
@@ -4099,7 +4091,9 @@ export class OpencodeHarness implements Harness {
       }
     }
     if (this.#operationsPending()) {
-      throw new Error("OpenCode ownership changed during its end reading.");
+      throw new Error(
+        "This session didn't end: this machine's OpenCode servers changed while CawCo was ending it. End it again."
+      );
     }
   }
 
@@ -4123,12 +4117,12 @@ export class OpencodeHarness implements Harness {
       )
     ) {
       throw new Error(
-        "OpenCode runner reading is incomplete: no complete recorded generation custody."
+        "CawCo couldn't read which sessions OpenCode runs on this machine: an OpenCode server is running that CawCo has no record of. Try again."
       );
     }
     if (generations.length > 0 && this.#operationsPending()) {
       throw new Error(
-        "OpenCode runner reading is incomplete while ownership operations are pending."
+        "CawCo couldn't read which sessions OpenCode runs on this machine while its OpenCode servers are changing. Try again in a moment."
       );
     }
     return generations;
@@ -4224,7 +4218,9 @@ export class OpencodeHarness implements Harness {
       })
     );
     if (this.#operationsPending()) {
-      throw new Error("OpenCode ownership changed during its runner reading.");
+      throw new Error(
+        "CawCo couldn't read which sessions OpenCode runs on this machine: its OpenCode servers changed during the reading. Try again."
+      );
     }
     return { count: unclaimed.size, readStartedAt };
   }
@@ -4305,7 +4301,7 @@ export class OpencodeHarness implements Harness {
         if (Date.now() >= deadline && !(error instanceof ReattachUnanswered)) {
           await this.#decideFailed(spec, round);
           throw new ReattachFailed(
-            `OpenCode could not be reached to reattach session ${spec.resume?.sessionKey ?? ctx.instanceId} within ${RECOVERY_RETRY_BUDGET_MS / 1000} s on generation ${await generationsAsked(round)}: ${errorText(error)}`,
+            `CawCo couldn't take this session back after a restart: OpenCode didn't answer within ${RECOVERY_RETRY_BUDGET_MS / 1000} s (${errorText(error)}). Start it again.`,
             { cause: error }
           );
         }
@@ -4372,21 +4368,21 @@ export class OpencodeHarness implements Harness {
       const busy = states.filter((state) => state.running);
       if (busy.length > 1) {
         throw new HarnessRecoveryRefused(
-          `OpenCode session ${resume.sessionKey} is running in multiple generations: ${busy.map(({ identity: owner }) => generationName(owner)).join(", ")}. Interrupt the duplicate runner explicitly before resuming; no runner was replaced.`
+          `CawCo didn't take this session back after a restart: its conversation is running on ${busy.length} OpenCode servers at once, and CawCo stops none of them by itself. Stop the session, then start it again.`
         );
       }
       if (busy.length === 0) {
         for (const generation of states) {
           if (generation.state.kind === "refused") {
             throw new ReattachFailed(
-              `OpenCode session ${resume.sessionKey} cannot be reattached on generation ${generationName(generation.identity)}: ${generation.state.reason}`
+              `CawCo couldn't take this session back after a restart: its OpenCode server refused it (${generation.state.reason}). Start it again.`
             );
           }
         }
         for (const generation of states) {
           if (generation.state.kind === "unreachable") {
             throw new Error(
-              `OpenCode generation ${generation.identity.procId} is temporarily unreachable: ${generation.state.reason}`
+              `its OpenCode server isn't reachable: ${generation.state.reason}`
             );
           }
           if (generation.state.kind === "unanswered") {
@@ -4424,9 +4420,7 @@ export class OpencodeHarness implements Harness {
             })
           : undefined);
       if (!chosen) {
-        throw new Error(
-          "OpenCode has no live active generation for idle recovery."
-        );
+        throw new Error("no OpenCode server is running for it");
       }
       const { identity, running } = chosen;
       const server = this.#clientForGeneration(identity);
@@ -4443,7 +4437,7 @@ export class OpencodeHarness implements Harness {
           throw error;
         }
         throw new ReattachFailed(
-          `OpenCode generation ${generationName(identity)} refused session ${resume.sessionKey}: ${errorText(error)}`,
+          `CawCo couldn't take this session back after a restart: its OpenCode server refused it (${errorText(error)}). Start it again.`,
           { cause: error }
         );
       }
