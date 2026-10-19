@@ -175,17 +175,43 @@ async function canvasFaces(): Promise<{
   return { css: rules.join("\n"), files };
 }
 
+/** One bundler message in words, with its place in the source when it has one. */
+const logSaid = (log: unknown): string => {
+  const one = log as Partial<BuildMessage>;
+  const at = one.position
+    ? `${one.position.file}:${one.position.line}:${one.position.column}: `
+    : "";
+  return `${at}${one.message ?? String(log)}`;
+};
+
+/**
+ * `Bun.build` for one bundle. A failed build throws an AggregateError whose
+ * whole message is "Bundle failed" (no stack; the bundler's messages are on
+ * its `errors` alone): it is said again naming the bundle and each message
+ * with its file, line and column.
+ */
+async function bundled(
+  what: string,
+  config: Bun.BuildConfig
+): Promise<Bun.BuildOutput> {
+  try {
+    return await Bun.build(config);
+  } catch (error) {
+    const logs = error instanceof AggregateError ? error.errors : [error];
+    throw new Error(`${what}'s build failed: ${logs.map(logSaid).join("; ")}`, {
+      cause: error,
+    });
+  }
+}
+
 /** The canvas's browser runtime (canvas/runtime.ts), bundled: an ES module the stage serves as `cawco:stage/runtime.js`. */
 async function canvasRuntime(): Promise<string> {
-  const result = await Bun.build({
+  const result = await bundled("The canvas runtime", {
     entrypoints: [CANVAS],
     target: "browser",
     format: "esm",
     minify: true,
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "The canvas runtime's build failed");
-  }
   await refuseSchemeLowering("The stage's canvas runtime", result.outputs);
   return await (result.outputs[0] as Bun.BuildArtifact).text();
 }
@@ -199,7 +225,7 @@ export async function buildStageHost(): Promise<string> {
     readFile(join(DIALKIT, "styles.css"), "utf8"),
     canvasFaces(),
   ]);
-  const result = await Bun.build({
+  const result = await bundled("The stage host", {
     entrypoints: [HOST],
     target: "node",
     format: "esm",
@@ -217,9 +243,6 @@ export async function buildStageHost(): Promise<string> {
       __CANVAS_FACE_FILES__: JSON.stringify(faces.files),
     },
   });
-  if (!result.success) {
-    throw new AggregateError(result.logs, "The stage host's build failed");
-  }
   await refuseSchemeLowering("The stage host", result.outputs);
   return await (result.outputs[0] as Bun.BuildArtifact).text();
 }
