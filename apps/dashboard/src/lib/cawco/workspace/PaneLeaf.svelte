@@ -384,7 +384,7 @@
     data-pane-leaf-shown={railShown || undefined}
     data-slot="rail"
     aria-hidden="true"
-    class="pointer-events-none absolute inset-y-0 left-0 z-2 w-space-row bg-ink-muted opacity-0 data-pane-leaf-shown:opacity-50 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
+    class="pointer-events-none absolute inset-y-0 start-0 z-2 w-space-row bg-ink-muted opacity-0 data-pane-leaf-shown:opacity-50 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
   ></span>
 
   {#if !hosted}
@@ -514,7 +514,7 @@
     <div
       data-slot="dock"
       data-pane-leaf-away={lent.transcriptShare === 0 || undefined}
-      class="pointer-events-none absolute inset-y-0 left-0 z-1 data-pane-leaf-away:invisible"
+      class="pointer-events-none absolute inset-y-0 start-0 z-1 data-pane-leaf-away:invisible"
       inert={lent.transcriptShare === 0}
       style:width="{lent.transcriptShare * 100}%"
     >

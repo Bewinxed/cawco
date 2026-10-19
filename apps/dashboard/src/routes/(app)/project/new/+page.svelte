@@ -164,10 +164,8 @@
   <title>New project &middot; CawCo</title>
 </svelte:head>
 
-<!-- literal: 72rem, 80px -->
 <main
-  class="mx-auto flex w-full max-w-(--measure) flex-col items-center gap-space-8 px-space-6 pt-(--pad-top) pb-space-8 max-phone:gap-space-6 max-phone:px-space-4 max-phone:pt-space-7 max-phone:pb-space-6"
-  style:--measure="72rem"
+  class="mx-auto flex w-full max-w-c-new-project-w flex-col items-center gap-space-8 px-space-6 pt-(--pad-top) pb-space-8 max-phone:gap-space-6 max-phone:px-space-4 max-phone:pt-space-7 max-phone:pb-space-6"
   style:--pad-top="calc(var(--space-8) * 2)"
 >
   <!-- His slot goes with him when he peeks over a card, and comes back
@@ -178,11 +176,12 @@
     {@attach morph()}
   >
     {#if caw === "page"}
+      <!-- His slot holds his height whether or not he is drawn: `c-caw-hero`
+           is `CAW_SIZE`; keep them equal. -->
       <div
         data-slot="caw-80"
-        class="grid min-h-(--caw-min) place-items-center"
+        class="grid min-h-c-caw-hero place-items-center"
         data-share={made ? `caw:${made}` : undefined}
-        style:--caw-min="80px"
       >
         <Caw ongone={gone} present={!leaving} size={CAW_SIZE} status="ready" />
       </div>

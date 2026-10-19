@@ -45,14 +45,13 @@
      there; the deck writes the fingers' travel inline and clears it after. -->
 <!-- The ground the lifted cards float over. Pinch belongs to nobody here;
      two fingers are the deck's. -->
-<!-- Parked by delta. The 12px is `GAP` in deck.svelte.ts; keep them equal. -->
-<!-- literal: 12px -->
+<!-- Parked by delta. `--c-deck-gap` is `GAP` in deck.svelte.ts; keep them equal. -->
 <div
   data-lifted={deck.lifted || undefined}
   class="group/deck relative min-h-0 min-w-0 flex-auto touch-pan-x touch-pan-y overflow-hidden bg-surface-recess"
-  style:--park-up="translate3d(0, calc(-100% - 12px), 0)"
+  style:--park-up="translate3d(0, calc(-100% - var(--c-deck-gap)), 0)"
   style:--park-here="translate3d(0, 0, 0)"
-  style:--park-down="translate3d(0, calc(100% + 12px), 0)"
+  style:--park-down="translate3d(0, calc(100% + var(--c-deck-gap)), 0)"
   use:deck.action
 >
   {#each workspace.leaves as leaf, index (leaf.id)}
@@ -86,7 +85,15 @@
       inert={!focused}
       data-card-hidden={Math.abs(delta) > 1 || undefined}
     >
-      <!-- Two timings, one each way. The pick-up rides the entry curve,
+      <!-- The lift's shadow rides its `::before`, on its own layer at a
+           constant radius: it only fades (will-change: opacity), at the
+           set-down's timing at rest and the pick-up's while lifted; no
+           transition under reduced motion. The lift is named by its own
+           attribute: under `data-lifted`, Chrome keys an attribute selector
+           to the attribute's name alone, and `[data-slot="lift"]` restyled
+           every `data-slot` in the deck.
+
+           Two timings, one each way. The pick-up rides the entry curve,
            quick and masked by the fingers already moving; the set-down is
            the eye's, so it takes the toggle curve at the base duration —
            symmetric, and long enough that the card is seen arriving. The
@@ -97,7 +104,7 @@
            reduced motion, not none: the fades stay, the movement goes. -->
       <div
         data-pane-lift
-        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:dur-panel motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:dur-pick-up motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-off"
+        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:dur-panel motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:dur-pick-up motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-off before:pointer-events-none before:absolute before:inset-0 before:rounded-lg before:opacity-0 before:shadow-overlay before:transition-[opacity] before:dur-panel before:ease-in-out before:will-change-opacity group-data-lifted/deck:before:opacity-100 group-data-lifted/deck:before:dur-pick-up group-data-lifted/deck:before:ease-out motion-reduce:before:transition-off"
         style:--lift-rest="scale(1)"
         style:--lift-up="scale(var(--press-scale))"
       >
@@ -116,27 +123,16 @@
   <!-- The fades are on wrappers: the dots' own opacity is the lift's and
        the focus's, and a fade written over it would flash them in. -->
   {#if workspace.leaves.length > 1}
-    <!-- literal: 50%, -50% -->
     <div
       aria-hidden="true"
-      class="pointer-events-none absolute top-(--dots-top) right-space-3 z-5 translate-y-(--dots-shift) opacity-0 transition-[opacity] dur-control ease-out group-data-lifted/deck:opacity-100"
-      style:--dots-top="50%"
-      style:--dots-shift="-50%"
+      class="pointer-events-none absolute top-1/2 right-space-3 z-5 -translate-y-1/2 opacity-0 transition-[opacity] dur-control ease-out group-data-lifted/deck:opacity-100"
     >
-      <!-- literal: 6px -->
-      <div
-        class="flex flex-col gap-(--dots-gap)"
-        style:--dots-gap="6px"
-        transition:fadeDots
-      >
+      <div class="flex flex-col gap-space-2" transition:fadeDots>
         {#each workspace.leaves as leaf (leaf.id)}
           <span class="flex" transition:fadeDots>
-            <!-- literal: 6px, 18px -->
             <span
               data-slot="dot"
-              class="size-(--dot) rounded-pill bg-ink-muted opacity-50 transition-[height,opacity] dur-toggle ease-out data-dot-on:h-(--dot-on) data-dot-on:bg-ink-strong data-dot-on:opacity-100 motion-reduce:transition-[opacity] motion-reduce:dur-toggle"
-              style:--dot="6px"
-              style:--dot-on="18px"
+              class="size-space-2 rounded-pill bg-ink-muted opacity-50 transition-[height,opacity] dur-toggle ease-out data-dot-on:h-space-5 data-dot-on:bg-ink-strong data-dot-on:opacity-100 motion-reduce:transition-[opacity] motion-reduce:dur-toggle"
               data-dot-on={leaf.id === workspace.focusedLeafId || undefined}
             ></span>
           </span>
@@ -145,33 +141,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* residual: pseudo — the lift's shadow, on its own layer at a constant
-     radius: it only fades (will-change: opacity), at the set-down's timing
-     at rest and the pick-up's while lifted; no transition under reduced
-     motion. The lift is named by its own attribute: under `data-lifted`,
-     Chrome keys an attribute selector to the attribute's name alone, and
-     `[data-slot="lift"]` restyled every `data-slot` in the deck. */
-  [data-pane-lift]::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-overlay);
-    opacity: 0;
-    will-change: opacity;
-    transition: opacity var(--dur-panel) var(--ease-in-out);
-    pointer-events: none;
-  }
-  [data-lifted] [data-pane-lift]::before {
-    opacity: 1;
-    transition: opacity calc(var(--dur-panel) * 0.6) var(--ease-out);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    [data-pane-lift]::before,
-    [data-lifted] [data-pane-lift]::before {
-      transition: none;
-    }
-  }
-</style>

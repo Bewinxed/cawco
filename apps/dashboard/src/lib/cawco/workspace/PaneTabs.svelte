@@ -60,6 +60,7 @@
     TabsList,
     type TabsTravel,
   } from "#lib/components/ui/fluid-tabs/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -1402,16 +1403,12 @@
 </script>
 
 <!-- `''` when the board is showing: a value no segment carries, so nothing
-     is drawn as chosen. Its literals ride custom properties the strip's
-     rules below read (a tab's height and inner pad, the coarse pointer's
-     reach past the track, the phone fade's run, an uncapped fade). -->
-<!-- literal: 12px, 32px, 10px, 16px, 100vw -->
+     is drawn as chosen. -->
 <Tabs
   data-session-tabs
   boxes={servedBoxes}
   data-hosted={hosted || undefined}
   data-strip={leaf.id}
-  style="--strip-px: 12px; --strip-item-rest: 32px; --strip-reach: 10px; --strip-fade: 16px; --strip-uncapped: 100vw"
   onValueChange={(id) => workspace.activate(id, leaf.id)}
   {travel}
   value={leaf.active ?? ""}
@@ -1448,7 +1445,7 @@
         data-drop-after={(dropHint.tabIndexIn(leaf.id) === i + 1 &&
           i === tabs.length - 1) ||
           undefined}
-        class="group/tab pane-tab-pads pane-tab-rims relative flex max-w-c-tab-max-w min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:[.ff-tabs-list[data-reordering]>&]:not-data-following:transition-[translate] motion-safe:[.ff-tabs-list[data-reordering]>&]:not-data-following:dur-panel motion-safe:[.ff-tabs-list[data-reordering]>&]:not-data-following:ease-drawer"
+        class="group/tab pane-tab-pads pane-tab-rims pane-tab-needs relative flex max-w-c-tab-max-w min-w-0 flex-none touch-pan-x data-drop-after:z-(--drop-z) data-drop-before:z-(--drop-z) motion-safe:reordering:not-data-following:transition-[translate] motion-safe:reordering:not-data-following:dur-panel motion-safe:reordering:not-data-following:ease-drawer data-drop-before:before:absolute data-drop-before:before:inset-y-space-row data-drop-before:before:-start-space-row data-drop-before:before:z-4 data-drop-before:before:w-space-row data-drop-before:before:rounded-pill data-drop-before:before:bg-ink-strong data-drop-after:after:absolute data-drop-after:after:inset-y-space-row data-drop-after:after:-end-space-row data-drop-after:after:z-4 data-drop-after:after:w-space-row data-drop-after:after:rounded-pill data-drop-after:after:bg-ink-strong"
         style:--drop-z="calc(var(--stack-top) + 1)"
         data-chosen={chosen ? "" : undefined}
         data-flush={hungFlush(cardHere, menuHere)}
@@ -1685,7 +1682,7 @@
                      the icon if the rim is there"; "desktop has icons
                      mobile not"); the tab's label says the status in words
                      either way. -->
-                <span class="max-[900px]:hidden">
+                <span class="max-desk:hidden">
                   {#if isThreadTab(tab.id)}
                     <!-- A thread's mark is Caw, at what the thread is doing. -->
                     <CawFace size={18} status={threadFace(tab.id)} />
@@ -1715,30 +1712,35 @@
                        no chevron: a long press opens the tab's menu (Session
                        details first), and a tap on the chosen tab its
                        details. -->
-                  <!-- literal: 20px, 24px -->
-                  <button
-                    data-slot="tdetails"
-                    aria-hidden="true"
-                    class="touch-hit pointer-hit pressable grid h-(--tdetails-h) w-(--tdetails-w) flex-none cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent text-ink-muted hover:bg-surface-fill data-idle:scale-(--pop-scale) data-idle:opacity-0 max-[900px]:hidden motion-safe:transition-[opacity,scale] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease) motion-safe:in-data-ride:transition-off motion-reduce:in-data-ride:transition-off"
-                    style:--hit-gap-x="var(--space-1)"
-                    style:--tdetails-w="20px"
-                    style:--tdetails-h="24px"
+                  <span
+                    class="group/tdetails flex flex-none data-idle:scale-(--pop-scale) data-idle:opacity-0 max-desk:hidden motion-safe:transition-[opacity,scale] motion-safe:duration-(--choose-dur) motion-safe:ease-(--choose-ease) motion-safe:in-data-ride:transition-off motion-reduce:in-data-ride:transition-off"
                     data-idle={!chosen || undefined}
                     data-open={chosen && detailsOpen && detailId === tab.id
                       ? ""
                       : undefined}
-                    onclick={(event) => {
-                      if (chosen) {
-                        clickTab(tab.id, event);
-                      } else {
-                        workspace.activate(tab.id, leaf.id);
-                      }
-                    }}
-                    tabindex="-1"
-                    type="button"
                   >
-                    <IconChevronDown />
-                  </button>
+                    <Button
+                      data-slot="tdetails"
+                      aria-hidden="true"
+                      class="pointer-hit"
+                      style="--hit-gap-x: var(--space-1)"
+                      onclick={(event) => {
+                        if (chosen) {
+                          clickTab(tab.id, event);
+                        } else {
+                          workspace.activate(tab.id, leaf.id);
+                        }
+                      }}
+                      size="icon-xs"
+                      tabindex={-1}
+                      tone="muted"
+                      variant="ghost"
+                    >
+                      <IconChevronDown
+                        class="group-data-open/tdetails:rotate-180 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out"
+                      />
+                    </Button>
+                  </span>
                 {/if}
                 <!-- A mouse's close. A finger's is in the tab's options,
                      held or pulled down from the tab, and the phone's row
@@ -1749,25 +1751,26 @@
                      stands 2px inside its 20px box. A finger closes a tab
                      from its options (owner: "remove the x make it close on
                      hold menu then close"). -->
-                <!-- literal: 20px -->
-                <button
-                  data-slot="tclose"
-                  aria-hidden="true"
-                  class="touch-hit pointer-hit pressable ms-space-row grid size-(--tcontrol) flex-none cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted hover:bg-surface-fill hover:text-ink-strong motion-safe:transition-[background-color,color,transform] motion-safe:dur-control motion-safe:ease-out motion-safe:active:transform-(--tpress) max-[900px]:hidden coarse:hidden"
-                  style:--hit-gap-x="var(--space-1)"
-                  style:--tcontrol="20px"
-                  style:--tpress="scale(var(--press-scale))"
-                  onauxclick={(event) => middleClose(tab.id, event)}
-                  onclick={() => {
-                    closeDetails();
-                    workspace.close(tab.id);
-                  }}
-                  onmousedown={middleDown}
-                  tabindex="-1"
-                  type="button"
-                >
-                  <IconClose />
-                </button>
+                <span class="ms-space-row flex flex-none max-desk:hidden coarse:hidden">
+                  <Button
+                    data-slot="tclose"
+                    aria-hidden="true"
+                    class="pointer-hit"
+                    style="--hit-gap-x: var(--space-1)"
+                    onauxclick={(event) => middleClose(tab.id, event)}
+                    onclick={() => {
+                      closeDetails();
+                      workspace.close(tab.id);
+                    }}
+                    onmousedown={middleDown}
+                    size="icon-xs"
+                    tabindex={-1}
+                    tone="quiet"
+                    variant="ghost"
+                  >
+                    <IconClose />
+                  </Button>
+                </span>
               {/snippet}
             </TabItem>
           </ContextMenu.Trigger>
@@ -1790,7 +1793,8 @@
             }}
             side="bottom"
             sideOffset={0}
-            style="--hang-min: {menuMin}px; --menu-min: max(12rem, var(--hang-min, 0px))"
+            class="min-w-(--menu-min)"
+            style="--menu-min: max(var(--c-tab-menu-min), {menuMin}px)"
             tab
             bind:joined={
               () => menuHung === tab.id,
@@ -1823,30 +1827,29 @@
     <Tooltip.Root bind:open={newTip}>
       <Tooltip.Trigger>
         {#snippet child({ props })}
-          <!-- literal: 20px -->
-          <button
+          <Button
             {...props}
             aria-busy={starting || undefined}
             aria-describedby={refused ? refusedId : undefined}
             aria-label="New session"
             data-tnew
-            class="touch-hit pointer-hit pressable grid size-(--tcontrol) flex-none cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted hover:bg-surface-fill not-data-refused:hover:text-ink-strong data-refused:text-status-fail-glyph motion-safe:transition-[background-color,color,transform] motion-safe:dur-control motion-safe:ease-out motion-safe:active:transform-(--tpress)"
-            style:--tcontrol="20px"
-            style:--tpress="scale(var(--press-scale))"
+            class="group/new pointer-hit"
             data-refused={refused ? "" : undefined}
             onclick={() => {
               if (!starting) {
                 startHere();
               }
             }}
-            type="button"
+            size="icon-xs"
+            tone="quiet"
+            variant="ghost"
           >
             {#if starting}
               <Spinner aria-label="Starting a session" />
             {:else}
-              <IconAddLine />
+              <IconAddLine class="group-data-refused/new:text-status-fail-glyph" />
             {/if}
-          </button>
+          </Button>
         {/snippet}
       </Tooltip.Trigger>
       <!-- 8px clear of the viewport's edges, as every tooltip (Tip). -->
@@ -1891,9 +1894,8 @@
       customAnchor={detailAnchor}
       data-safe-bottom
       folded={takeFolded}
-      style="--details-w: min(416px, calc(100vw - 24px)); --details-max-h: min(760px, var(--bits-popover-content-available-height, 85dvh)); --details-max-h-phone: min(calc(100dvh - var(--c-top-bar-h) - 24px - var(--safe-bottom)), var(--bits-popover-content-available-height, 85dvh)){cardPlace
-        ? `; --hang-width: ${cardPlace.width}px`
-        : ''}"
+      class="z-60 w-(--hang-width)"
+      style={cardPlace ? `--hang-width: ${cardPlace.width}px` : undefined}
       tab
       onCloseAutoFocus={(event) => {
         event.preventDefault();
@@ -1935,7 +1937,7 @@
     >
       <div
         data-slot="details-morph"
-        class="max-h-inherit w-full overflow-hidden motion-safe:in-[[data-session-details-popover][data-morph]]:transition-[height] motion-safe:in-[[data-session-details-popover][data-morph]]:dur-pop motion-safe:in-[[data-session-details-popover][data-morph]]:ease-drawer"
+        class="max-h-inherit w-full overflow-hidden motion-safe:details-gliding:transition-[height] motion-safe:details-gliding:dur-pop motion-safe:details-gliding:ease-drawer"
         style:height={detailsHeight ? `${detailsHeight}px` : undefined}
       >
         <div
@@ -1957,351 +1959,3 @@
     </HangCard>
   </Popover.Portal>
 </Popover.Root>
-
-<style>
-  /* residual: foreign-dom — the details card's own box (HangCard's
-     portalled bits-ui content, `data-session-details-popover`), its sizes
-     set on the card (`--details-*`, the HangCard's style). */
-  /* The card is a HangCard on its tab (`tab`): one silhouette with it, its
-     outline, its cast and its open and close the component's. Its content
-     runs edge to edge; its head is its tab's surface. Its width is where
-     it is placed (`placeOf`): 416px, the screen less its margins at most.
-     A phone's card stands a margin in from each side, under its tab, and
-     holds clear of the screen's foot. */
-  /* css-scope: the details card, HangCard's portalled content, found by its data hook */
-  :global(.kit-pop[data-session-details-popover]) {
-    display: flex;
-    z-index: 60;
-    width: var(--hang-width, var(--details-w));
-    max-height: var(--details-max-h);
-    overflow: hidden;
-    overscroll-behavior: contain;
-    padding: 0;
-    outline: none;
-
-    @media (max-width: 640px) {
-      max-height: var(--details-max-h-phone);
-    }
-  }
-  /* residual: foreign-dom — the strip's host rules on the kit's Tabs root
-     (`data-session-tabs`, `data-hosted`) and on TabsList's track (app.css
-     `.ff-tabs-list`): they override the track's size ladder and outrank its
-     folder padding by selector. Their literals ride the Tabs root's
-     custom properties (`--strip-*`). */
-  /* The session track scrolls sideways, and a scroll container clips on both
-     axes; its transparent padding grows into an equal negative margin on a
-     coarse pointer, so the controls' touch areas above and below the 32px
-     tabs sit inside its clip and nothing moves. The root's data-slot is
-     in the selector to outrank the component's own folder padding at any
-     stylesheet order: dev draws the first paint with the sheets in another
-     order than the build, and a tie would flip once the page hydrates. */
-  :global([data-session-tabs][data-slot="tabs"] .ff-tabs-list.scrollable) {
-    @media (pointer: coarse) {
-      padding-block: calc(var(--pad) + var(--strip-reach)) var(--strip-reach);
-      margin-block: calc(-1 * var(--strip-reach));
-    }
-  }
-  /* ── The row ──────────────────────────────────────────────────────
-     Folder tabs stand on a shelf: a hairline in the row's own bottom
-     pixel, so the chosen tab's sheet — which ends on that same pixel —
-     covers it and runs on into the header below. In a group the row is
-     the group's own; hosted, it fills the top bar and the bar draws the
-     shelf. (A tab switch is not a navigation at all — the segment
-     simply slides.) */
-  :global([data-session-tabs]) {
-    /* A tab's height, its inner pad (`--strip-px`, on the root) and its
-       flared foot's room at the track's end, shared by the track and the
-       "+" after it (`.strip-new`). */
-    --strip-item: var(--strip-item-rest);
-    --strip-flare: var(--radius-sm);
-    display: flex;
-    align-items: flex-end;
-    flex: 0 0 auto;
-    min-inline-size: 0;
-    padding-block: var(--space-1) 0;
-    padding-inline: var(--space-7) var(--space-4);
-    /* The shelf: two steps below the transcript, one below an unchosen
-       tab, so the chosen tab — in the transcript's own surface — reads as
-       the page it opens. */
-    background: var(--surface-shelf);
-
-    /* The tab controls' touch areas reach 6px past the row's bottom edge:
-       on a coarse pointer the row stacks above the transcript beneath it. */
-    @media (pointer: coarse) {
-      position: relative;
-      z-index: 1;
-    }
-  }
-  :global([data-session-tabs][data-hosted]) {
-    flex: 1 1 0;
-    align-self: stretch;
-    padding: 0;
-    background: none;
-  }
-  @container leaf (width <= 620px) {
-    :global([data-session-tabs]:not([data-hosted])) {
-      padding-inline-start: var(--space-4);
-    }
-  }
-  /* On a phone this row is the app's only bar (Shell, `.top.floating`): the
-     bar's height, and its two ends left to the sidebar toggle and to Caw's
-     glass (Shell). The toggle's glyph stands c-bar-phone-edge in, and the
-     strip starts where the glyph ends, so a scrolled tab never draws under
-     it; the track's own flare of room puts the first tab a flare further
-     in, and a chosen first tab's foot spreads into that room whole. Caw's
-     glass (`c-bar-caw-glass-phone` across) is flush with the other edge,
-     and the strip stops c-bar-phone-gap short of it, so the tabs scroll
-     between them and never under. */
-  @media (width < 900px) {
-    :global([data-session-tabs]:not([data-hosted])) {
-      --strip-item: var(--c-tab-row-h);
-      --strip-flare: var(--radius-lg);
-      min-block-size: var(--c-top-bar-h);
-      padding-block-start: 0;
-      padding-inline: calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph))
-        calc(var(--c-bar-phone-gap) + var(--c-bar-caw-glass-phone));
-    }
-  }
-
-  /* The strip takes one step taller than the component's default in a
-     bar with room, with the component's own text size and a tighter
-     horizontal pad. The shape and the sheet are the component's. The
-     data-slot outranks the component's defaults by specificity, not by
-     which stylesheet comes last. The hover ghost lifts an unchosen tab's
-     card (surface-recess-deep, by day surface-hover's own step) toward
-     the chosen sheet's surface; by night it is the hover step. */
-  :global([data-session-tabs][data-slot="tabs"] .ff-tabs-list) {
-    --px: var(--strip-px);
-    --text: var(--text-label);
-    --item: var(--strip-item);
-    /* The chosen tab's sheet: the transcript's head dissolves into the same
-       token (HeadFade), so the two are one fill at the shelf's line. */
-    --sheet: var(--tab-sheet);
-    --tab-hover: light-dark(var(--surface-recess), var(--surface-hover));
-    /* The status rim's stroke (`tab-rim-width`, a plain px number), drawn
-       on each tab's own path (TabItem). */
-    --rim-w: var(--tab-rim-width);
-
-    @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
-      --rim-w: 1;
-    }
-  }
-  /* The phone's row: tabs a row's height tall, standing on the bar's
-     floor, and the strip's ends fading over a short run so a tab slides
-     under the toggle and Caw rather than being cut. The strip runs up to
-     the bar's top, so the pad above the tabs is inside its clip and their
-     rims' glow is not cut off. Its tabs take a rounder top than the
-     desktop's, the next radius up (owner: "round the tabs more on
-     mobile"), and their flared foot follows it; they still overlap by the
-     desktop's 8px. Where tabs run past an end, that end fades on an
-     eased curve, so a tab dissolves into the bar rather than being cut:
-     the start over 24px, transparent for its first 6, so a sliver of a
-     tab scrolled past it never shows beside the toggle; the end over 16px.
-     At rest the strip's start does not fade, so a first tab is drawn
-     whole, its foot and all. A chosen tab is brought clear of both fades
-     (TabsList `inView`). */
-  @media (width < 900px) {
-    :global(
-      [data-session-tabs]:not([data-hosted])[data-slot="tabs"]
-        .ff-tabs-list.scrollable
-    ) {
-      --item: var(--strip-item);
-      --pad: 0px;
-      --fade-len: var(--strip-fade);
-      --edge-room-start: calc(var(--fade-len) * 1.5);
-      --radius: var(--radius-lg);
-      --overlap: var(--radius-sm);
-      padding-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
-      margin-block-start: 0;
-      /* Each end's fade cut short at a tab drawn chosen (TabsList
-         `--fade-cap-start`/`--fade-cap-end`): the start's runs 1.5 of
-         its length. */
-      --fade-run-start: min(
-        var(--fade-start),
-        calc(var(--fade-cap-start, var(--strip-uncapped)) / 1.5)
-      );
-      --fade-run-end: min(
-        var(--fade-end),
-        var(--fade-cap-end, var(--strip-uncapped))
-      );
-      mask-image: linear-gradient(
-        to right,
-        transparent,
-        transparent calc(var(--fade-run-start) * 0.375),
-        var(--mask-opaque-a15) calc(var(--fade-run-start) * 0.75),
-        var(--mask-opaque-a60) calc(var(--fade-run-start) * 1.125),
-        var(--mask-opaque) calc(var(--fade-run-start) * 1.5),
-        var(--mask-opaque) calc(100% - var(--fade-run-end)),
-        var(--mask-opaque-a90) calc(100% - var(--fade-run-end) * 0.75),
-        var(--mask-opaque-a50) calc(100% - var(--fade-run-end) * 0.5),
-        var(--mask-opaque-a10) calc(100% - var(--fade-run-end) * 0.25),
-        transparent
-      );
-    }
-  }
-
-  /* ── The status rim, on every width ───────────────────────────────
-     Each tab's rim wears its session's status (`data-tone`, the rail's
-     scale) on the tab's whole outline at one weight, 1.5px: across the
-     top, round both shoulders, down both sloped sides, and at the foot out
-     round the flare to the shelf's line on every side in front of its
-     neighbour (owner: "A curved foot on inactive tabs: their sides curve
-     out at the base like the chosen tab's"), with a soft glow following
-     the outline at half its strength. The desk keeps its status glyph
-     before the title as well (owner: "desktop and mobile should all have
-     rims, desktop has icons mobile not").
-
-     Only the chosen tab wears its rim whole. An unchosen tab wears a
-     subtler one (`tab-rim-mix-subtle`) when its session is anything but
-     idle, and none at all when it is idle: no top, sides, feet or glow
-     (owner: the other tabs have no rim "unless they are active, then they
-     should have a more subtle rim", "or any other status").
-
-     It is the tab's own path stroked (TabItem `.fold`): one outline with
-     its sheet, in the tone (`--rim-ink`, `TONE_INK`), at the tone's
-     strength by how chosen the tab is (`--rim-rest` to `--rim-full` by the kit's
-     `--pick`, on the choice's clock), each foot narrowing to a point on
-     the shelf and its last `tab-rim-taper` px fading out to nothing, so a
-     rim never stops on a hard cut (owner: "the rim should
-     taper-progress-fade at the very edges"). Each tab is a stack at its
-     rank (TabsList), so where two tabs overlap the front one covers the
-     other's side, rim and all, as one folder over another. Increase
-     Contrast and Reduce Transparency draw a solid 1px outline and no
-     glow, on every tab that wears a rim. (The rule that writes the
-     strengths is in the residuals at the end.) */
-
-  /* ── The tab its card or its menu hangs from ─────────────────────
-     While its card or its menu stands drawn out of it (`data-hung`) a tab
-     and its hang are one silhouette (HangCard `tab`, motion/hang-shape):
-     one outline over both, drawn by the hang's outline layer, so the tab
-     draws no rim of its own then (TabItem `hung`) and its sheet stops
-     where the outline's stroke is centred. Its sheet is the hang's head
-     surface, whether it is chosen or not, so the tab and the hang under
-     it are one fill across the shelf; and it stands over every other tab
-     (TabsList), both feet flared but where its hang stands flush with its
-     flank (TabItem `flush`, the flank running straight on into the hang's
-     side). Its rim's ink and strength (`--hang-rim`) is the outline's
-     across the tab, running into the hang's edge down its flanks. (Its
-     rule is in the residuals at the end.) */
-  /* residual: foreign-dom — the tab's menu (HangCard's portalled
-     context-menu content, `data-tab-menu`), its width floor set on the menu
-     (`--menu-min`). The menu hanging from its tab is on the tab's own
-     surface, as the card's head is, so the two read as one sheet; and it is
-     as wide as the shape needs past the tab's span (`menuMin`, `placeOf`). */
-  :global(.kit-pop.kit-hang[data-tab-menu]) {
-    min-inline-size: var(--menu-min);
-    --hang-surface: var(--surface-recess);
-  }
-
-  /* residual: foreign-dom — the details card (HangCard's bits-ui content
-     and floating wrapper) and the tab's box (TabItem), which other files
-     render. The floating layer rewrites where the card may stand (bits-ui's
-     `--bits-floating-*` on its wrapper, copied onto the card as
-     `--bits-popover-*`) as the card opens and as it follows its tab, a few
-     times in a frame. As custom properties they were inherited by
-     everything the card holds, and each rewrite restyled all of it. Only
-     the card reads them (its `max-height`): they stop at its children,
-     which hold values of their own that no rewrite changes. */
-  /* css-scope: the same details card's children */
-  :global(.kit-pop[data-session-details-popover] > *) {
-    --bits-floating-transform-origin: initial;
-    --bits-floating-available-width: initial;
-    --bits-floating-available-height: initial;
-    --bits-floating-anchor-width: initial;
-    --bits-floating-anchor-height: initial;
-    --bits-popover-content-transform-origin: initial;
-    --bits-popover-content-available-width: initial;
-    --bits-popover-content-available-height: initial;
-    --bits-popover-anchor-width: initial;
-    --bits-popover-anchor-height: initial;
-  }
-  /* A tab's rim's ink at the strength it wears it now: the one outline's
-     ink across the tab while a hang stands drawn out of it (HangCard).
-     Read off the tab alone, so it stays there: inherited, its value moving
-     with `--pick` restyled every element under the tab each frame of a
-     choice. */
-  @property --hang-rim {
-    syntax: "*";
-    inherits: false;
-  }
-  [data-slot="tab"] :global([data-slot="ff-tab"]) {
-    --hang-rim: color-mix(
-      in oklab,
-      var(--rim-ink)
-        calc(
-          (
-              var(--rim-rest) + (var(--rim-full) - var(--rim-rest)) *
-                var(--pick)
-            ) *
-            100%
-        ),
-      var(--border-control)
-    );
-  }
-  /* A pinned card follows its tab as the strip scrolls, frame by frame: its
-     wrapper moves on its own layer, so each step is the compositor's, not a
-     repaint of the card. The glide to another tab: the wrapper's move and
-     the card's height together; the outline follows them frame by frame
-     (HangCard). */
-  /* css-scope: bits-ui's floating wrapper, only while it holds the details card (`data-session-details`, set by this file) */
-  :global([data-bits-floating-content-wrapper][data-session-details]) {
-    will-change: transform;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    /* css-scope: the same wrapper, while the card glides between tabs (`data-details-morph`, set by this file) */
-    :global([data-bits-floating-content-wrapper][data-details-morph]) {
-      transition: transform var(--dur-pop) var(--ease-drawer);
-    }
-  }
-  /* Parked on you: the label carries the strong ink whether or not it is
-     chosen, so the ask is legible from across the strip. It comes up at
-     the panel's pace, the way the tab's glyph turns. The tab is named by its
-     own attribute (`data-ff-tab`): under a state, Chrome keys an attribute
-     selector to the attribute's name alone, and `[data-slot="ff-tab"]`
-     restyled every `data-slot` in the tab when `data-needs` came or went. */
-  [data-slot="tab"][data-needs] :global([data-ff-tab]) {
-    color: var(--ink-strong);
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: color var(--dur-panel) var(--ease-out);
-    }
-  }
-  /* The chevron's and the close's glyphs, and the "+"'s (icon components);
-     the chevron turns over while its card is open. */
-  [data-slot="tdetails"] :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-out);
-    }
-  }
-  [data-slot="tclose"] :global(svg),
-  [data-tnew] :global(svg) {
-    display: block;
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-  [data-slot="tdetails"][data-open] :global(svg) {
-    transform: rotate(180deg);
-  }
-
-  /* residual: pseudo — where a drop would land: a 2px rule in the gap, on
-     the near side. */
-  [data-slot="tab"][data-drop-before]::before,
-  [data-slot="tab"][data-drop-after]::after {
-    content: "";
-    position: absolute;
-    inset-block: 2px;
-    inline-size: 2px;
-    border-radius: var(--radius-pill);
-    background: var(--ink-strong);
-    z-index: 4;
-  }
-  [data-slot="tab"][data-drop-before]::before {
-    inset-inline-start: -2px;
-  }
-  [data-slot="tab"][data-drop-after]::after {
-    inset-inline-end: -2px;
-  }
-</style>
