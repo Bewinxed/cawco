@@ -93,23 +93,19 @@
          over --dur-control while the words stay put. -->
     <div
       data-slot="grid"
-      class="relative grid max-h-40 overflow-y-auto rounded-sm bg-surface-page font-mono text-label leading-relaxed"
+      class="relative grid max-h-40 overflow-y-auto rounded-sm bg-surface-page font-(family-name:--font-mono) text-label leading-relaxed"
     >
-      <!-- literal: 12px -->
       <p
         data-slot="layer"
-        class="col-start-1 row-start-1 p-(--layer-pad) wrap-break-word whitespace-pre-wrap"
-        style:--layer-pad="12px"
+        class="col-start-1 row-start-1 p-space-3 wrap-break-word whitespace-pre-wrap"
       >
         {sample}
       </p>
       {#key marked}
-        <!-- literal: 12px -->
         <p
           data-slot="layer"
           aria-hidden="true"
-          class="col-start-1 row-start-1 p-(--layer-pad) wrap-break-word whitespace-pre-wrap text-transparent"
-          style:--layer-pad="12px"
+          class="col-start-1 row-start-1 p-space-3 wrap-break-word whitespace-pre-wrap text-transparent"
           in:crossIn
           out:crossOut
         >

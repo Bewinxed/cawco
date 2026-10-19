@@ -48,11 +48,9 @@
   );
 </script>
 
-<!-- literal: 72ch -->
 <p
   data-slot="note"
-  class="max-w-(--measure) type-meta text-ink-muted"
-  style:--measure="72ch"
+  class="max-w-(--c-rule-note-measure) type-meta text-ink-muted"
 >
   Sessions see the reply but never this rule's history, so this is the only
   place it is visible.
@@ -61,30 +59,20 @@
 <!-- Rows that arrive, leave or move (a catch coming in, Show all) go
      through reflow: uncovered and faded in, closed and faded out, what
      follows sliding (motion/rows.svelte.ts). -->
-<!-- literal: 8px -->
-<div
-  data-slot="activity"
-  class="flex flex-col gap-(--activity-gap)"
-  style:--activity-gap="8px"
-  {@attach reflow()}
->
+<div data-slot="activity" class="flex flex-col gap-space-2" {@attach reflow()}>
   {#if loading}
-    <!-- literal: 72ch -->
     <p
       data-slot="note"
-      class="max-w-(--measure) type-meta text-ink-muted"
-      style:--measure="72ch"
+      class="max-w-(--c-rule-note-measure) type-meta text-ink-muted"
     >
       Loading…
     </p>
   {:else if failed}
     <p class="type-meta text-status-attn-ink" role="alert">{failed}</p>
   {:else if rows.length === 0}
-    <!-- literal: 72ch -->
     <p
       data-slot="note"
-      class="max-w-(--measure) type-meta text-ink-muted"
-      style:--measure="72ch"
+      class="max-w-(--c-rule-note-measure) type-meta text-ink-muted"
     >
       It has not caught anything yet. Nothing to see is the good outcome.
     </p>
@@ -98,25 +86,18 @@
     {/if}
     <ul data-slot="list" class="m-0 flex list-none flex-col gap-space-row p-0">
       {#each visible as row (row.instanceId)}
-        <!-- literal: 8px, 10px -->
         <li
           data-slot="entry"
-          class="flex flex-col gap-space-1 rounded-sm bg-surface-recess px-(--entry-pad-x) py-(--entry-pad-y)"
+          class="flex flex-col gap-space-1 rounded-sm bg-surface-recess px-space-3 py-space-2"
           data-flip
-          style:--entry-pad-x="10px"
-          style:--entry-pad-y="8px"
         >
-          <!-- literal: 8px -->
           <div
             data-slot="top"
-            class="flex flex-wrap items-baseline justify-between gap-(--top-gap)"
-            style:--top-gap="8px"
+            class="flex flex-wrap items-baseline justify-between gap-space-2"
           >
-            <!-- literal: 8px -->
             <span
               data-slot="where"
-              class="flex min-w-0 items-baseline gap-(--where-gap)"
-              style:--where-gap="8px"
+              class="flex min-w-0 items-baseline gap-space-2"
             >
               <span
                 data-slot="path"
@@ -124,17 +105,14 @@
                 >{row.where}</span
               >
               {#if row.harness}
-                <!-- literal: 72ch -->
                 <span
-                  class="max-w-(--measure) type-meta text-ink-muted"
-                  style:--measure="72ch">{row.harness}</span
+                  class="max-w-(--c-rule-note-measure) type-meta text-ink-muted"
+                  >{row.harness}</span
                 >
               {/if}
             </span>
-            <!-- literal: 72ch -->
             <span
-              class="max-w-(--measure) type-meta text-ink-muted"
-              style:--measure="72ch"
+              class="max-w-(--c-rule-note-measure) type-meta text-ink-muted"
             >
               {times(row.totalFires)}, last {since(row.lastFiredAt)}
             </span>

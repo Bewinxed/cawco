@@ -301,7 +301,7 @@
                    leaf is what tells two checkouts apart. -->
               <span
                 data-slot="cwd"
-                class="dir-rtl min-w-0 truncate font-mono"
+                class="dir-rtl min-w-0 truncate font-(family-name:--font-mono)"
                 title={cwd}
               >
                 <bdi>{cwd}</bdi>
@@ -372,7 +372,7 @@
         <span class="shrink-0">{tool.name}</span>
         <span class="shrink-0">·</span>
         <span
-          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-mono"
+          class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono)"
           >{tool.glance}</span
         >
       </span>
@@ -416,7 +416,7 @@
         <!-- What runs, under why: Approve here is made on the command. -->
         <code
           data-slot="block"
-          class="block truncate whitespace-pre border-l-2 border-border-hairline ps-2 font-mono text-meta text-ink-muted"
+          class="block truncate whitespace-pre border-l-2 border-border-hairline ps-2 font-(family-name:--font-mono) text-meta text-ink-muted"
           >{request.presentation.command.trim().split("\n")[0]}</code
         >
       {/if}
@@ -525,7 +525,9 @@
               >
               {#if glanceOf(message)}
                 <span class="shrink-0">·</span>
-                <span class="truncate font-mono">{glanceOf(message)}</span>
+                <span class="truncate font-(family-name:--font-mono)"
+                  >{glanceOf(message)}</span
+                >
               {/if}
             </p>
           {:else if message.type === "user"}
@@ -554,10 +556,8 @@
         {#if session?.streaming}
           <p class="text-body wrap-break-word whitespace-pre-wrap">
             {streamed}
-            <!-- literal: 3px -->
             <span
-              class="inline-block h-icon-md w-(--caret) rounded-xs bg-action-solid/60 align-text-bottom"
-              style:--caret="3px"
+              class="inline-block h-icon-md w-space-1 rounded-xs bg-action-solid/60 align-text-bottom"
             ></span>
           </p>
         {/if}

@@ -34,26 +34,18 @@
   );
 </script>
 
-<!-- literal: 100dvh -->
 <main
   data-slot="pairing"
-  class="flex min-h-(--page-min) flex-col items-center justify-center gap-space-4 bg-(--background) px-space-5 py-space-8"
-  style:--page-min="100dvh"
+  class="flex min-h-dvh flex-col items-center justify-center gap-space-4 bg-surface-page px-space-5 py-space-8"
 >
-  <!-- literal: 80px -->
   <div
     data-slot="caw-80"
-    class="grid min-h-(--caw-min) place-items-center"
-    style:--caw-min="80px"
+    class="grid min-h-(--caw-size) place-items-center"
+    style:--caw-size="{CAW_SIZE}px"
   >
     <Caw next={["ready", "idle"]} size={CAW_SIZE} status="idle" />
   </div>
-  <!-- literal: 34rem -->
-  <div
-    data-slot="body"
-    class="relative w-full max-w-(--body-measure)"
-    style:--body-measure="34rem"
-  >
+  <div data-slot="body" class="relative w-full max-w-(--c-pairing-w)">
     {#key stage.kind}
       <div
         data-slot="words"
@@ -68,10 +60,8 @@
           >
             Pair this browser
           </h1>
-          <!-- literal: 26rem -->
           <p
-            class="m-0 max-w-(--line-measure) type-body text-center text-pretty text-ink-muted"
-            style:--line-measure="26rem"
+            class="m-0 max-w-(--c-pairing-line) type-body text-center text-pretty text-ink-muted"
           >
             This hub requires paired devices. Approve this code on a paired
             device, in Needs you or Configure › Devices.
@@ -99,10 +89,8 @@
           >
             Pairing was denied
           </h1>
-          <!-- literal: 26rem -->
           <p
-            class="m-0 max-w-(--line-measure) type-body text-center text-pretty text-ink-muted"
-            style:--line-measure="26rem"
+            class="m-0 max-w-(--c-pairing-line) type-body text-center text-pretty text-ink-muted"
           >
             A paired device denied this browser. If that was a mistake, start
             again and approve the new code.
@@ -115,10 +103,8 @@
           >
             The code expired
           </h1>
-          <!-- literal: 26rem -->
           <p
-            class="m-0 max-w-(--line-measure) type-body text-center text-pretty text-ink-muted"
-            style:--line-measure="26rem"
+            class="m-0 max-w-(--c-pairing-line) type-body text-center text-pretty text-ink-muted"
           >
             Nobody approved it within 10 minutes. Start again for a new code.
           </p>
@@ -142,11 +128,9 @@
           >
             Pair this browser
           </h1>
-          <!-- literal: 26rem -->
           <p
             aria-live="polite"
-            class="m-0 max-w-(--line-measure) type-body text-center text-pretty text-ink-muted"
-            style:--line-measure="26rem"
+            class="m-0 max-w-(--c-pairing-line) type-body text-center text-pretty text-ink-muted"
           >
             Asking the hub for a code…
           </p>
