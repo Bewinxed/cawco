@@ -316,24 +316,24 @@ removed: AttachmentChips.svelte:(buttons) `[&:hover]:` arbitrary variants — `h
 removed: CompactionDivider.svelte, AccountMoveDivider.svelte: `--cols` grid track custom property — a `flex-1 min-w-0` row
 
 ## fixed
-fixed: AttachmentChips.svelte:58 the row's dock states (pointer, drawing stack, asking fade) live on the row itself, read from the dock group; Composer's `<style>` no longer reaches into another component's root
+fixed: AttachmentChips.svelte:59 the row's dock states (pointer, drawing stack, asking fade) live on the row itself, read from the dock group; Composer's `<style>` no longer reaches into another component's root
 fixed: AttachButton.svelte:59 the recall deck's card edge is `group-inert/ctrls:` on Attach itself, not a selector from Composer
 fixed: Delegate.svelte:567 the live beat breathes as `animate-breath` under `motion-safe:` (DESIGN.md, Live work breathes) instead of the global `.breathe` class
 fixed: CompactionDivider.svelte:301 the failure line's rail is `border-s-2 border-status-fail-ink` (logical, one element) in place of a gradient background painted with a physical left position
 fixed: Delegate.svelte:429 head floors are the tokens `min-h-c-mark` and `coarse:min-h-c-row-h` (26px/44px literals before)
 
 ## Gaps
-gap: Subagent.svelte:84 its `[data-bhead]` carries no flex/floor/typography utilities, so Delegate keeps `delegate-nested-head`; once it does, delete that component — DESIGN.md Components: one head recipe
-gap: MentionField.svelte:751 its chip sizes are literals (6px/15px/22px) mirrored by Composer for the autosize twin; both read the three `--c-mention-chip-*` tokens after integration
+gap (owner: L38): Subagent.svelte:84 its `[data-bhead]` carries no flex/floor/typography utilities, so Delegate keeps `delegate-nested-head`; once it does, delete that component — DESIGN.md Components: one head recipe
+gap (owner: integration): MentionField.svelte:751 its chip sizes are literals (6px/15px/22px) mirrored by Composer for the autosize twin; both read the three `--c-mention-chip-*` tokens after integration
 gap: lift.svelte.ts and grown.ts build elements with class names (`lift-copy`, `grown-halo`, `grown-drop`); their looks are theme components until those scripts put utilities on them
 gap: components/ui/command/command-item.svelte, command-list.svelte, command-group.svelte (needs a `menu="composer"` variant) — Composer.svelte:3399 styles those parts through `[&_[data-slot=command-…]]:` descendant variants
 gap: components/ui/button/button.svelte (needs a `reveal="coarse"` variant) — Composer.svelte:3266 reaches the Keep-it Button through `[&_[data-keep]]:`
-gap: find/MentionField.svelte (its root needs `min-h`/`max-h`/`text`/`py` through its own props) — Composer.svelte:3468 sets them through `[&>[data-editor]]:`
+gap (owner: integration): find/MentionField.svelte (its root needs `min-h`/`max-h`/`text`/`py` through its own props) — Composer.svelte:3468 sets them through `[&>[data-editor]]:`
 gap: components/ui (no Chip/Badge variant for picture + name + remove) — AttachmentChips.svelte:112 hand-rolls the chip
-note: AttachmentChips.svelte:58 `coarse:p-space-3 coarse:-m-space-2` is not a cancelled offset: the row is a scroller (`overflow-y-auto`) and clips the remove buttons' touch areas, so on a finger it takes one ladder step of padding into an equal margin; layout-neutral by construction
+note: AttachmentChips.svelte:59 `coarse:p-space-3 coarse:-m-space-2` is the full-bleed scroller idiom, not a cancelled offset: the row scrolls (`overflow-y-auto`), so the padding is room inside the scroll clip for the remove buttons' touch areas and the equal negative margin gives the layout that room back
 
 ## Design Critique (interface-craft, from markup against DESIGN.md)
 - Hierarchy: dividers read as hairline + one meta-role line; unchanged, the flex arms keep the word centred when the arms are equal (`flex-1` on a zero basis).
-- Dot sizes follow the ladder: 8→7, 6→7 (space-2), 5→4 (space-1). fixed: they are marks on the scale, not hand-kept numbers; the 5→4 beat dot is the smallest and breathes, so it keeps its cue by motion plus hue.
+- Dots by role: fixed: CatchUp.svelte:29 (the catch-up dot, "a live dot beats beside" the floating tag, DESIGN.md Floating tags), Delegate.svelte:567 (the delegate's live beat) and the ask dot in Delegate.svelte's asks register are status dots and take `size-(--status-dot-size)` (6px; theme.css has no spacing key for it), not a ladder step. The account dot in AccountMoveDivider.svelte:124 is the account's hue mark with no named role or size; it takes the ladder step `size-space-2` (8→7).
 - Touch: `touch-hit` on the delegate head and jump link replaces nothing; the coarse floor is `c-row-h`, so a finger gets the same 44px row as before.
 - ui-observer: Not verified — no `/motion` bench or story renders these components in this workspace, and the lane's rules forbid probes; layout facts (flex arms, border-s rail, calc paddings) are from the markup only.

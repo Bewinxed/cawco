@@ -48,9 +48,10 @@
        while the canvas stands, it stands in the grown shape over the field,
        above its surface; while an ask holds the composer it steps aside with
        the rest. -->
-  <!-- The row scrolls, so on a coarse pointer it takes one step more padding
-       (space-2) into an equal negative margin: the remove buttons' touch
-       areas fit inside its clip, nothing moves. -->
+  <!-- Full-bleed scroller: the row scrolls, so on a coarse pointer it takes
+       one step more padding (space-2) into an equal negative margin. The
+       padding is room inside the scroll clip for the remove buttons' touch
+       areas; the margin gives the layout that room back, so nothing moves. -->
   <div
     data-atts
     style:--hit-gap-x="var(--space-2)"
