@@ -18,6 +18,7 @@ file · what moved · residual · literals
 ## Removed
 removed: NewSessionDialog.svelte:1851 `motion-reduce:animate-none! motion-reduce:transition-off!` on the scrim — the entrance/exit now sit under `motion-safe:`, so nothing runs under reduced motion for the bang to beat
 removed: NewSessionDialog.svelte:1860 the same two bangs on the card — same reason
+removed: NewSessionDialog.svelte (old `<style>`) `body[data-session-sheet] [data-vaul-overlay][data-state="closed"]` exit timing — the drawer's scrim is `.kit-scrim` (app.css:1790), whose closed state already runs `kit-fade-out var(--dur-exit) var(--ease-out)`; the rule duplicated it
 removed: ModelSection.svelte (old `<style>`) `[data-slot="tools"] :global(.ns-chip-btn[data-tool]) { height: var(--chip-h); background: var(--surface-raised) }` — the chip is 30px on a raised ground by `ns-chip-btn` already; the 28px override only shrank it inside the row
 removed: ModelSection.svelte `max-phone:text-(length:--fs-phone)` + `--fs-phone: 1rem` on the search input, and the same on both LocationSection inputs — app.css already floors every field at 16px under a phone/coarse pointer
 removed: EffortPips.svelte `h-(--h)` 56px/64px and `data-embedded:h-auto` — a fixed height propping the box; it is now as tall as the 30/38px track plus its padding
@@ -36,7 +37,6 @@ token: --c-folder-list-max-h 196px — the folder browser's list cap (five 36px 
 
 ## Gaps
 gap: ui/drawer/drawer-content.svelte `look.new-session` carries `motion-reduce:animate-none! motion-reduce:transition-none!` — a bang in the kit — Delta T
-gap: vaul's sheet exit (see Theme additions, `ns-vaul-scrim-exit`): vaul injects its own unlayered animation on the overlay; `@layer components` may lose to it, in which case the scrim keeps vaul's 500ms leave on a phone. Needs a look at integration compare.
 gap: EffortPips.svelte `--knob-shadow` and LocationSection `--browse-shadow` hold `inset 0 0 0 1px var(--neutral-8), var(--shadow-raised)` as a style value — one shadow token for the "lifted block with neutral-8 edge" recipe is missing (DESIGN.md, Effort chip)
 
 ## fixed
@@ -99,18 +99,6 @@ theme: animate ns-scrim-out
   }
 }
 ```
-theme: component ns-vaul-scrim-exit
-```css
-@layer components {
-  @media (max-width: 640px) {
-    body[data-session-sheet] [data-vaul-overlay][data-state="closed"] {
-      animation-duration: var(--dur-exit);
-      animation-timing-function: var(--ease-out);
-    }
-  }
-}
-```
-
 ## Kit swaps
 none
 
@@ -125,4 +113,4 @@ none
 - Design Critique (interface-craft, vs DESIGN.md, from markup): fixed: touch rows reach c-row-h 44px; fixed: ladder spacing; gap: effort knob inner edge shadow has no token (above); no other findings.
 - Ladder ties taken: 6px→space-2 (7), 8→space-2, 10→space-3 (11), 12→space-3, 24→space-7 (25), 22→space-6 (21), 1px gap→space-row; rows 34/36/40/42/48→c-btn-h / c-row-h (44) per DESIGN's 44px row pitch.
 - Breakpoints: `max-phone:` (639) replaces the old 640 edge in the Segmented rows; the dialog's phone exit no longer needs a query (the drawer renders only under `(max-width: 640px)`).
-- Counts: theme 6, kit-swap 0, token 5, removed 10, fixed 9, gap 3.
+- Counts: theme 5, kit-swap 0, token 5, removed 11, fixed 9, gap 2.
