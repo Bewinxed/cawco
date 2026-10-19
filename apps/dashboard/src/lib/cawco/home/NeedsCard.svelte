@@ -535,9 +535,10 @@
     </span>
   {/if}
   <span data-slot="want" class="want">{want}</span>
-  {#if item.kind === "ask" && item.request.presentation.command}
+  {#if item.kind === "ask" && item.request.presentation.command && !item.request.presentation.post}
     <!-- What runs, under why: its first line, so Approve here is made on
-         the command as much as on the card. -->
+         the command as much as on the card. A held post's target line
+         already says where it goes. -->
     <code class="cmd"
       >{item.request.presentation.command.trim().split("\n")[0]}</code
     >
@@ -560,7 +561,14 @@
         </span>
         <span data-slot="dot" aria-hidden="true" class="dot">·</span>
       {/if}
-      <span>{item.isQuestion ? "Question" : "Permission"}</span>
+      <!-- A held post names the session that asked; its title is the row's. -->
+      {#if item.request.presentation.post && item.request.presentation.asker}
+        <span data-slot="asker" class="asker"
+          >{item.request.presentation.asker}</span
+        >
+      {:else}
+        <span>{item.isQuestion ? "Question" : "Permission"}</span>
+      {/if}
       <span data-slot="dot" aria-hidden="true" class="dot">·</span>
       <span data-slot="machine" class="machine mark-line" data-box>
         <OsMark class="mark" os={item.machine.os} />
@@ -1059,6 +1067,13 @@
   .project-name {
     font: var(--type-label);
     color: var(--ink-strong);
+  }
+  /* A session's name gives way as the machine's does. */
+  .asker {
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    overflow: clip;
+    text-overflow: ellipsis;
   }
   .machine-name {
     min-inline-size: 0;

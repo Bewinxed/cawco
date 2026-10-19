@@ -169,6 +169,12 @@ export interface UpstreamAskInput {
   readonly kind: string;
   /** `host/owner/repo`. */
   readonly repo: string;
+  /**
+   * Where it goes as Needs you names it: `owner/repo` (the host too, off
+   * GitHub), with `#n` for the issue or pull request a comment, a review or
+   * an edit is on.
+   */
+  readonly target: string;
   readonly title?: string;
 }
 
@@ -204,7 +210,7 @@ const HEADS = /^refs\/heads\//;
 /** A forge write's kind and its one line, as the card says them. */
 const forgeDescribed = (
   post: ForgePost
-): Omit<UpstreamAskInput, "account" | "repo"> => {
+): Omit<UpstreamAskInput, "account" | "repo" | "target"> => {
   const forge = FORGE_NAMES[post.forge];
   const { write } = post;
   switch (write.op) {
@@ -302,7 +308,7 @@ const mutationOf = (text: string | undefined): string | undefined => {
 
 const httpDescribed = (
   post: HttpPost
-): Omit<UpstreamAskInput, "account" | "repo"> => {
+): Omit<UpstreamAskInput, "account" | "repo" | "target"> => {
   const graphql = post.path.replace(TRAILING_SLASHES, "") === "/graphql";
   const mutation = graphql ? mutationOf(post.body) : undefined;
   const kind = graphql
@@ -328,7 +334,7 @@ const MCP_KINDS: Readonly<Record<string, string>> = {
 
 const mcpDescribed = (
   post: McpPost
-): Omit<UpstreamAskInput, "account" | "repo"> => {
+): Omit<UpstreamAskInput, "account" | "repo" | "target"> => {
   const { title, body, method } = post.args;
   const issue = method === "update" ? "issue edit" : "issue";
   const kind =
@@ -352,7 +358,7 @@ export const describePost = (
   repo: string,
   account: string
 ): UpstreamAskInput => {
-  let described: Omit<UpstreamAskInput, "account" | "repo">;
+  let described: Omit<UpstreamAskInput, "account" | "repo" | "target">;
   switch (post.via) {
     case "http":
       described = httpDescribed(post);
@@ -373,7 +379,41 @@ export const describePost = (
     default:
       described = mcpDescribed(post);
   }
-  return { repo, account, ...described };
+  const number = numberOf(post);
+  const path = repo.startsWith(GITHUB_HOST)
+    ? repo.slice(GITHUB_HOST.length)
+    : repo;
+  return {
+    repo,
+    account,
+    target: number === undefined ? path : `${path}#${number}`,
+    ...described,
+  };
+};
+
+/** A repository on GitHub is named without its host. */
+const GITHUB_HOST = "github.com/";
+/** A REST path's issue or pull request: `/issues/12`, `/pulls/12/reviews`. */
+const REST_NUMBER = /\/(?:issues|pulls)\/(\d+)(?:\/|$)/;
+/** A GitHub connection tool's issue or pull request, by the argument it names it with. */
+const MCP_NUMBER_ARGS = ["issue_number", "pullNumber", "pull_number"] as const;
+
+/** The issue or pull request a post is on; undefined for a post that makes one, or a push. */
+const numberOf = (post: UpstreamPost): number | undefined => {
+  switch (post.via) {
+    case "forge":
+      return post.write.op === "comment" ? post.write.number : undefined;
+    case "http": {
+      const found = REST_NUMBER.exec(post.path)?.[1];
+      return found === undefined ? undefined : Number(found);
+    }
+    case "mcp":
+      return MCP_NUMBER_ARGS.map((key) => post.args[key]).find(
+        (value): value is number => Number.isInteger(value)
+      );
+    default:
+      return undefined;
+  }
 };
 
 /** One post as it is compared with another: two asks for the same post are one. */

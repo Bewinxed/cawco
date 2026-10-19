@@ -272,7 +272,7 @@ export function span(ms: number): string {
 /* ── Shapes ────────────────────────────────────────────────────────── */
 
 export interface AskItem {
-  /** What it asks, in plain words. */
+  /** What it asks, in plain words; a held post, where it goes (`owner/repo#12`). */
   ask: string;
   /** Where the session runs: its mark's hue, the seed every list uses. */
   cwd: string;
@@ -1000,9 +1000,10 @@ class Home {
         origin: item.request.originInstanceId ?? null,
         thread: thread ? threadTabId(thread.id) : null,
         machineId: item.machineId,
-        // An ask no session row stands behind (a memory proposal) is titled
-        // by who asked, as the hub named them.
+        // A held post is titled by itself; an ask no session row stands
+        // behind (a memory proposal) by who asked, as the hub named them.
         title:
+          item.request.presentation.post?.title ??
           thread?.title ??
           (row
             ? instanceTitle(row)
@@ -1019,7 +1020,9 @@ class Home {
               ?.os ?? "",
         },
         isQuestion: Boolean(questions),
-        ask: item.request.presentation.summary,
+        ask:
+          item.request.presentation.post?.target ??
+          item.request.presentation.summary,
         raisedAt: item.request.raisedAt,
         request: item.request,
         stale: item.stale,

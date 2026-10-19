@@ -412,9 +412,15 @@ private final class NeedRow: UIControl {
         let inFlight = sent.map { $0.stage != .failed } ?? false
         switch item.kind {
         case let .ask(parked):
-            ask.text = parked.summary
+            // A held post (NeedsCard.svelte): its title is the row's, where
+            // it goes its one line, and the session that asked leads the place.
+            let post = parked.presentation.post
+            ask.text = post?.target ?? parked.summary
+            if post != nil, let asker = HomeModel.asker(parked) {
+                place.text = "\(asker) · \(place.text ?? item.place)"
+            }
             // What runs, under why: Approve here is made on the command too.
-            if !parked.isQuestion, let line = parked.commandLine {
+            if post == nil, !parked.isQuestion, let line = parked.commandLine {
                 column.addArrangedSubview(PromptCardView.commandLine(line))
             }
             let actions = UIStackView()

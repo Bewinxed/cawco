@@ -51,6 +51,12 @@ export interface PermissionPresentation {
   detail?: string;
   /** The rest of the input worth reading, secrets hidden. What the summary and the diffs already say is left out. */
   fields: PermissionField[];
+  /**
+   * A post to another person's repository held for the person: Needs you
+   * names it by its own title (a comment's, its body's first line) over
+   * where it goes (`owner/repo#12`). Absent for any other ask.
+   */
+  post?: HeldPostNaming;
   /** The project the asker works in, by name; absent for a session in none. The card's head reads "Caw · cockpit". */
   project?: string;
   /**
@@ -59,6 +65,14 @@ export interface PermissionPresentation {
    * two commits are on origin/main"), its command under it in `command`.
    */
   summary: string;
+}
+
+/** A held post as Needs you names it: what it is, and where it goes. */
+export interface HeldPostNaming {
+  /** `owner/repo`, the host too off GitHub, with `#n` for the issue or pull request it is on. */
+  target: string;
+  /** The post's own title; a comment's first line. */
+  title: string;
 }
 
 /** Who asks and where, as an ask's head names them: "Caw · cockpit". */
@@ -1169,8 +1183,16 @@ function upstreamPost(input: Record<string, unknown>): Presented {
   const command = text(input.command);
   const host = text(input.repo)?.split("/")[0];
   const where = host === "github.com" ? "GitHub" : host;
+  const summary = `Post ${withArticle(kind)} on ${repo}`;
+  const named =
+    title?.trim() ||
+    body
+      ?.split("\n")
+      .map((line) => line.trim())
+      .find(Boolean);
   return {
-    summary: `Post ${withArticle(kind)} on ${repo}`,
+    summary,
+    post: { title: named ?? summary, target: text(input.target) ?? repo },
     ...(account
       ? { detail: where ? `As ${account} on ${where}` : `As ${account}` }
       : {}),

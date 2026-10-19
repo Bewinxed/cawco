@@ -86,7 +86,13 @@
  *     S2 the same again: the session reads it is already waiting, and no
  *       second ask parks for it;
  *     S3 a commit pushed to the http-backend's someone/else.git, on a host
- *       that is not GitHub: held at the git door, sent nowhere.
+ *       that is not GitHub: held at the git door, sent nowhere;
+ *     S4 the real gh's comment on someone/else's issue 12, two lines long:
+ *       held at the GitHub door.
+ *     Each held post's row in the desk's Needs you names it: its own title
+ *     ('Probe deny'; the comment's first line, 'Probe comment') over where
+ *     it goes (someone/else, someone/else#12), the session that asked on
+ *     its last line.
  *     Each parks as the delegate's permission ask (`UPSTREAM_POST_TOOL`),
  *     its card naming the repository, the kind, the title, the account it
  *     posts as on its host, and the post. Deny on S1's row in the desk's
@@ -149,6 +155,8 @@ const RULE_READS = (posts: UpstreamPosts) =>
   `until grep -q '"posts":"${posts}"' "$HOME/.cawco/workspaces/$CAWCO_WORKSPACE/ro/upstream.json"; do sleep 1; done`;
 /** Step S1's post under Ask, asked twice: held at the GitHub door. */
 const DENIED = `${REAL_GH} api repos/someone/else/issues -f title='Probe deny' -f body='Denied body' 2>&1`;
+/** Step S4's comment on someone/else's issue 12, two lines long: held at the GitHub door. */
+const COMMENTED = `${REAL_GH} api repos/someone/else/issues/12/comments -f body="$(printf 'Probe comment\\nIts second line')" 2>&1`;
 /** The branch step S3 pushes to the http-backend's repository. */
 const APPROVED_BRANCH = "probe-approve";
 /** What the session reads as its post is held (upstream-guard.ts `heldWords`). */
@@ -203,6 +211,7 @@ const STEPS = [
     command: () =>
       `git -c user.name=Delegate -c user.email=d@probe.test commit -q --allow-empty -m 'Probe approve' && git push ${otherUrl} HEAD:refs/heads/${APPROVED_BRANCH} 2>&1`,
   },
+  { id: "4", command: COMMENTED },
 ] as const;
 type StepId = (typeof STEPS)[number]["id"];
 /** The waits, each let go once the probe has pressed the choice it waits on. */
@@ -925,15 +934,15 @@ const run = async (kit: Kit) => {
     ).catch(projectPosts)) === "ask",
     `project ${JSON.stringify(projectPosts())}`
   );
-  await stepRan("3", 300_000);
+  await stepRan("4", 300_000);
   const heldAsks = async () =>
     (await fleet.api<HeldAsk[]>("/api/pending")).filter(
       (one) => one.payload.toolName === UPSTREAM_POST_TOOL
     );
   const parked = await until(
-    "g: both posts parked",
+    "g: the three posts parked",
     heldAsks,
-    (all) => all.length >= 2,
+    (all) => all.length >= 3,
     30_000
   ).catch(heldAsks);
   const titled = (title: string) =>
@@ -991,9 +1000,49 @@ const run = async (kit: Kit) => {
     ),
     JSON.stringify(approvedAsk?.payload)
   );
+  const commentAsk = parked.find((one) => one.payload.input.kind === "comment");
+  check(
+    "g: S4, a comment on someone/else's issue 12, is held at the GitHub door: the session reads that it waits",
+    said("3", "4").includes(HELD) && Boolean(commentAsk),
+    `exit ${exitOf("4")}; said:\n${said("3", "4")}`
+  );
+  // Each held post's row in the desk's Needs you names the post: its own
+  // title (a comment's first line) over where it goes, owner/repo#n, and the
+  // session that asked on its last line.
+  await openNeeds(pages.desk, "desk", base);
+  await pages.desk
+    .locator(ASK_ROW)
+    .filter({ hasText: "Probe comment" })
+    .first()
+    .waitFor({ timeout: 30_000 })
+    .catch(() => undefined);
+  const heldRows = await pages.desk.evaluate((selector) => {
+    const line = (row: Element, slot: string) =>
+      (row.querySelector(`[data-slot="${slot}"]`)?.textContent ?? "")
+        .replace(/\s+/g, " ")
+        .trim();
+    return [...document.querySelectorAll(selector)].map((row) => ({
+      name: line(row, "name"),
+      want: line(row, "want"),
+      meta: line(row, "meta"),
+    }));
+  }, ASK_ROW);
+  const rowOf = (name: string) => heldRows.find((row) => row.name === name);
+  const asker = (ask: HeldAsk | undefined) =>
+    ask?.payload.presentation?.asker ?? "";
+  check(
+    "g: a held post's row in Needs you shows its title and owner/repo#n, and the session that asked: S1 'Probe deny' over someone/else, S4 'Probe comment' over someone/else#12",
+    rowOf("Probe deny")?.want === "someone/else" &&
+      rowOf("Probe comment")?.want === "someone/else#12" &&
+      asker(deniedAsk) !== "" &&
+      Boolean(rowOf("Probe deny")?.meta.includes(asker(deniedAsk))) &&
+      Boolean(rowOf("Probe comment")?.meta.includes(asker(commentAsk))) &&
+      !rowOf("Probe comment")?.meta.includes("Permission"),
+    `asker ${JSON.stringify(asker(deniedAsk))}; rows ${JSON.stringify(heldRows)}`
+  );
   /**
-   * A held post's row in Caw's Needs you, found by what the row draws (the
-   * post's summary, or the first line of its command), its button `name`
+   * A held post's row in Caw's Needs you, found by what the row draws (its
+   * title), its button `name`
    * pressed as `view`'s hand presses it.
    */
   const answerRow = async (view: View, drawn: string, name: string) => {
@@ -1008,8 +1057,8 @@ const run = async (kit: Kit) => {
     await press(page, view, "[data-probe-pick]");
     await settle(page, 300);
   };
-  // S1's row: its summary (an http post's command names no title).
-  await answerRow("desk", "Post an issue on github.com/someone/else", "Deny");
+  // S1's row: its title.
+  await answerRow("desk", "Probe deny", "Deny");
   const toldDenied = await until(
     "g: the session hears the denial",
     () => seen,
@@ -1063,7 +1112,12 @@ interface HeldAsk {
   instanceId: string;
   payload: {
     input: Record<string, unknown>;
-    presentation?: { command?: string; detail?: string; summary?: string };
+    presentation?: {
+      asker?: string;
+      command?: string;
+      detail?: string;
+      summary?: string;
+    };
     toolName: string;
   };
   requestId: string;

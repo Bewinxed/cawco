@@ -54410,6 +54410,10 @@
               "$ref": "#/components/schemas/PermissionField"
             }
           },
+          "post": {
+            "$ref": "#/components/schemas/HeldPostNaming",
+            "description": "A post to another person's repository held for the person: Needs you\nnames it by its own title (a comment's, its body's first line) over\nwhere it goes (`owner/repo#12`). Absent for any other ask."
+          },
           "project": {
             "description": "The project the asker works in, by name; absent for a session in none. The card's head reads \"Caw · cockpit\".",
             "type": "string"
@@ -54473,6 +54477,24 @@
         "required": [
           "key",
           "value"
+        ]
+      },
+      "HeldPostNaming": {
+        "description": "A held post as Needs you names it: what it is, and where it goes.",
+        "type": "object",
+        "properties": {
+          "target": {
+            "description": "`owner/repo`, the host too off GitHub, with `#n` for the issue or pull request it is on.",
+            "type": "string"
+          },
+          "title": {
+            "description": "The post's own title; a comment's first line.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target",
+          "title"
         ]
       },
       "PermissionUpdate": {
