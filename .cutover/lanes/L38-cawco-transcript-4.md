@@ -25,10 +25,8 @@ No `<style>` kept. Literals preserved: none.
 
 ## Tokens
 
-token: --c-measure 72ch — running-text measure (renames.md; DESIGN.md Typography: "Running text measures 60 to 72ch"); replaces the 68ch copies in RunBlock and Subagent and the 72ch in QuestionCard.
-token: --text-field-floor 16px — the composer field's size, which the recall wheel's ghost rows repeat so a ghost and the word it becomes share one size (renames.md: `text-input` → `text-field-floor`).
 token: --c-suggest-shimmer-w 9rem — the width of the skeleton that holds a suggestion chip's place while an ask is slow; a chip's width, no ladder step.
-token: --border-width 1px — the hairline border width; a bordered `.touch-hit` host sets `--hit-edge` to it (SuggestionChips) and the hitl card's content column subtracts it (QuestionCard).
+token: --border-width 1px — the 1px control edge DESIGN.md names (Composer: "a 1px control edge"; Inputs: `border-control`), as a value a calc can read, since `border` draws it but a custom property or a `calc()` cannot read a utility; a bordered `.touch-hit` host sets `--hit-edge` to it (SuggestionChips) and the hitl card's content column subtracts it (QuestionCard).
 
 ## Removed
 
@@ -44,6 +42,7 @@ removed: RecallWheel.svelte, QuestionCard.svelte, RunBlock.svelte, Shot.svelte, 
 
 fixed: RunBlock.svelte:~138, Subagent.svelte:~150/164/171 failure and run-line measure 68ch → `c-measure` (72ch) — DESIGN.md Typography: "Running text measures 60 to 72ch"; one measure across the transcript.
 fixed: Subagent.svelte:~97 sprite 11px and chevron box 13px → `size-icon-sm` (12) — DESIGN.md icon sizes 12/16/20.
+fixed: Subagent.svelte:83 the head carries the nested-head recipe itself (`flex-auto min-w-0` beside its label type, floors, flat button look), so a subagent card inside a delegate's transcript needs no rule reaching into it — DESIGN.md Components: one head recipe.
 fixed: Subagent.svelte beat dot 5px → `size-(--status-dot-size)` (6px) — DESIGN.md Status dot.
 fixed: Subagent.svelte chevron turn uses `rotate-90` with `transition-[rotate]` (the turn property and the transitioned property now match).
 fixed: SuggestionChips.svelte:~232 the lifted backdrop keyed on `:has(chip, shimmer, fail)` → `data-filled` set from the same condition that draws the track (a state as an attribute).
@@ -63,7 +62,7 @@ kit-swap: apps/dashboard/src/lib/cawco/transcript/SuggestionChips.svelte:318 Ske
 
 ## Contracts
 
-(none)
+contract: Subagent.svelte:83 carries the head recipe; integration drops L35's delegate-nested-head
 
 ## Other lists
 
