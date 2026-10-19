@@ -96,9 +96,12 @@ export function freshApp(top: string): { path: string; problem?: string } {
   }
   const root = top.replace(TRAILING_SLASH, "");
   console.log(`${problem}: building it`);
+  // The env is named: Bun's default is process.env as this process launched,
+  // without the CAWCO_HEAVY_RUN_HELD a heavy run of its own set since, and
+  // build-both.sh would then wait on the slot its own caller holds.
   const build = Bun.spawnSync(
     ["bash", "apps/apple/scripts/build-both.sh", "ios"],
-    { cwd: root, stdout: "inherit", stderr: "inherit" }
+    { cwd: root, stdout: "inherit", stderr: "inherit", env: process.env }
   );
   if (build.exitCode !== 0) {
     return {

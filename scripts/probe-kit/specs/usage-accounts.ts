@@ -65,13 +65,13 @@ import {
 import { type Kit, type KitFleet, open, type Spec } from "../kit";
 
 /** The personal plan: the fleet's own account, probe@scratch-fleet.test in "Scratch Fleet". */
-const PERSONAL = ACCOUNT;
+export const PERSONAL = ACCOUNT;
 /** The Team seat: the same email, in "Scratch Team". */
-const TEAM = "acct-usage-team";
+export const TEAM = "acct-usage-team";
 /** A second email: other@scratch-fleet.test in "Other Org". */
-const OTHER = "acct-usage-other";
-const ACCOUNTS = [PERSONAL, TEAM, OTHER] as const;
-type Id = (typeof ACCOUNTS)[number];
+export const OTHER = "acct-usage-other";
+export const ACCOUNTS = [PERSONAL, TEAM, OTHER] as const;
+export type Id = (typeof ACCOUNTS)[number];
 
 const TOKEN: Record<Id, string> = {
   [PERSONAL]: "sk-ant-oat01-fake-scratch-fleet",
@@ -151,7 +151,8 @@ const credits: { out: boolean; resetsAt: number } = {
   resetsAt: STARTED + 20 * 24 * HOUR_MS,
 };
 
-const accountOf = (request: Seen): Id | undefined =>
+/** The account a request to the mock is on, by the token it carries. */
+export const accountOf = (request: Seen): Id | undefined =>
   ACCOUNTS.find((id) => request.auth.endsWith(TOKEN[id]));
 
 /** The usage headers `id`'s answers carry: its 5-hour and week, and its Fable week once that leg turns it on. */
@@ -236,8 +237,15 @@ const furnish = async (
   );
 };
 
-const standUp = async (kit: Kit): Promise<KitFleet> => {
-  const fleet = await kit.fleet(respond);
+/**
+ * The fleet with its three accounts signed in on the scratch machine, the
+ * mock answering each with `answer` (this spec's usage by default).
+ */
+export const standUp = async (
+  kit: Kit,
+  answer: (request: Seen) => Reply = respond
+): Promise<KitFleet> => {
+  const fleet = await kit.fleet(answer);
   await furnish(
     fleet.home,
     TEAM,
