@@ -11,7 +11,7 @@ Base: 9ec5a3111. Files: 7 of 7 done.
 | --- | --- | --- | --- | --- | --- |
 | DiffModal.svelte | header gaps/padding 5 custom props → utilities; `--diffs-*` literals → tokens | 0 | 0 | none | none |
 | DirectoryPicker.svelte | skeleton row 30px + bar width/height → kit Skeleton variants | 0 | 0 | none | none |
-| MarkdownEditor.svelte | whole `<style>` (76 declarations, 14 `!important`) → `theme: component crepe-host`; 44px `--hit` → `--c-btn-h-lg` | 0 | 0 | `(hover: none)` → `no-hover` (also matches a coarse pointer), `(pointer: coarse)` → `coarse` | none |
+| MarkdownEditor.svelte | whole `<style>` (76 declarations, 14 `!important`) → `theme: component crepe-host`; 44px `--hit` → `--c-btn-h-lg` | 0 | 0 | `(hover: none)` kept as written, `(pointer: coarse)` → `coarse` | none |
 | ProviderLogo.svelte | `<style>` → `data-slot="provider-logo"` + `data-ink` + `text-ink-strong`, `theme: component provider-logo` | 0 | 0 | none | none |
 | tool-cards/MemoryBody.svelte | 420px/26px/44px/rotate/line-height literals → tokens and utilities | 0 | 0 | none | none |
 | tool-cards/OutputBlock.svelte | 10px/12px padding → `p-space-3` | 0 | 0 | none | none |
@@ -22,7 +22,7 @@ needs variant / needs transition token: none. Kind-5 declarations: none. `<style
 ## Kit swaps
 
 kit-swap: apps/dashboard/src/lib/components/features/DiffModal.svelte:80 DialogContent `bodyClass="flex h-full flex-col overflow-hidden"` — a `bodyPad="flush"` sibling look that makes the body a full-height column with its own overflow (`body="column"`)
-kit-swap: apps/dashboard/src/lib/components/features/DiffModal.svelte:82 DialogContent `h-(--modal-h)` (with `w-(--modal-w)`, inline `--modal-h: 90vh; --modal-w: 95vw`) — a size look `size="viewport"` next to `width="document"` that owns the 90vh by 95vw box
+kit-swap: apps/dashboard/src/lib/components/features/DiffModal.svelte:82 DialogContent `h-c-dialog-document-h w-c-dialog-document-w` — a size look `size="document"` next to `width="document"` that owns the document dialog's box
 kit-swap: apps/dashboard/src/lib/components/features/DirectoryPicker.svelte:180 Collapsible `flex flex-col` — the Root's own layout (`layout="column"`)
 kit-swap: apps/dashboard/src/lib/components/features/DirectoryPicker.svelte:182 CollapsibleTrigger `mark-line flex items-center gap-1.5 text-meta text-ink-muted transition-colors hover:text-ink-strong` — `skin="quiet"`: a meta-role muted link that goes strong on hover with the mark line
 kit-swap: apps/dashboard/src/lib/components/features/DirectoryPicker.svelte:233 Button `justify-start` — `align="start"` on the ghost `face="path"` row (a path row reads from its leading edge)
@@ -70,7 +70,7 @@ The file's whole `<style>`, no `!important`. It needs the Crepe sheets (the six 
     box-shadow: none;
     padding: var(--space-1);
 
-    @variant no-hover {
+    @media (hover: none) {
       --crepe-color-hover: transparent;
     }
   }
@@ -264,6 +264,8 @@ The mark's paths: a presentation attribute loses to any rule that matches, and `
 ## Tokens
 
 token: --c-dialog-close-clear 52px — the diff dialog's header keeps this much clear at its trailing edge for the kit Dialog's 30px close button 12px from the corner (DESIGN.md, Dialog: "a 30px ghost icon button 12px from the corner"); a component dimension no ladder step fits.
+token: --c-dialog-document-h 90vh — the diff (document) dialog's height, a viewport share (DESIGN.md, Dialog); replaces the inline `--modal-h` on DialogContent.
+token: --c-dialog-document-w 95vw — the diff (document) dialog's width on a phone-narrow window, a viewport share; replaces the inline `--modal-w`.
 token: --c-tool-well-max-h 420px — the tallest a tool-call document well (a memory document) grows before it scrolls inside the transcript; a component dimension no ladder step fits.
 
 ## Removed
@@ -276,8 +278,8 @@ removed: apps/dashboard/src/lib/components/features/tool-cards/MemoryBody.svelte
 
 ## Fixed
 
-fixed: apps/dashboard/src/lib/components/features/DiffModal.svelte:88 header padding-start 16px → `ps-space-5` (18px, the Dialog's body padding, so the title stands on the dialog's own edge); padding-block 12 → `py-space-3`, gaps 8/12 → `gap-y-space-2` / `gap-x-space-3` — DESIGN.md, Layout: the spacing ladder, Dialog: 18px body padding.
-fixed: apps/dashboard/src/lib/components/features/DiffModal.svelte:129 `--diffs-font-size: 0.8125rem` → `var(--text-label)`, `--diffs-line-height: 1.6` → `var(--leading-code)` — DESIGN.md, Typography: only the type roles' sizes and leadings.
+fixed: apps/dashboard/src/lib/components/features/DiffModal.svelte:87 header padding-start 16px → `ps-space-5` (18px, the Dialog's body padding, so the title stands on the dialog's own edge); padding-block 12 → `py-space-3`, gaps 8/12 → `gap-y-space-2` / `gap-x-space-3` — DESIGN.md, Layout: the spacing ladder, Dialog: 18px body padding.
+fixed: apps/dashboard/src/lib/components/features/DiffModal.svelte:128 `--diffs-font-size: 0.8125rem` → `var(--text-label)`, `--diffs-line-height: 1.6` → `var(--leading-code)` — DESIGN.md, Typography: only the type roles' sizes and leadings.
 fixed: apps/dashboard/src/lib/components/features/DirectoryPicker.svelte:212 skeleton row 30px → `h-c-btn-h-sm` (the `sm` Button row it stands for), bar widths 7/10/6rem → the kit's `label` / `title` / `name`, bar height 12px → the label role's x-height — DESIGN.md, Empty, loading and skeleton states: "exactly the size of what it stands for".
 fixed: apps/dashboard/src/lib/components/features/MarkdownEditor.svelte `crepe-host` block-handle rule re-anchored from the dead `.crepe-host` class to `[data-slot="crepe-host"]`.
 fixed: apps/dashboard/src/lib/components/features/MarkdownEditor.svelte `--hit: 44px` → `--c-btn-h-lg` — DESIGN.md, Focus and hit areas: the 44px floor.
@@ -289,9 +291,6 @@ fixed: apps/dashboard/src/lib/components/features/tool-cards/OutputBlock.svelte:
 
 gap: apps/dashboard/src/app.css (outside this lane) the Crepe sheets are imported unlayered by MarkdownEditor.svelte:24-35; for `crepe-host` to win without `!important` they must be `@import … layer(crepe)` with `crepe` ahead of `components` in `@layer theme, base, components, utilities, overrides;` — DESIGN.md: the app's one cascade order.
 gap: apps/dashboard/src/app.css `.prose` rules sit in a `utilities` layer and outrank any `components` rule; `tool-prose` must land in `overrides` — the same cascade order.
-gap: apps/dashboard/src/lib/components/features/MarkdownEditor.svelte `(hover: none)` carve-out became `no-hover`, which also matches a coarse pointer on a hover-capable device — wider than the original, by the theme's own definition of no-hover.
-gap: apps/dashboard/src/lib/components/features/DiffModal.svelte:82 the 90vh × 95vw box is inline custom properties on DialogContent; no token holds a modal's viewport share — DESIGN.md, Dialog.
-gap: apps/dashboard/src/lib/components/features/ProviderLogo.svelte `style` box (`width:Npx;height:Npx`) is a runtime inline string from the `size` prop; every caller passes a px number, no token — DESIGN.md, Layout (icon 12/16/20).
 
 ## Contracts
 
@@ -301,4 +300,5 @@ None.
 
 fixed: the diff dialog's header title now starts on the dialog's own 18px edge and keeps 52px clear for the close button, so a long path wraps (`flex-wrap`, `min-w-0`) rather than running under it.
 fixed: the memory document row's touch height is the transcript line's own token, so a finger gets 44px and a pointer keeps 26px.
-gap: the Browse trigger, the doc row and the path rows restyle kit parts by class (kit-swap above) — until the variants land they stay hand-built.
+fixed: the 90vh × 95vw diff dialog is two tokens (`h-c-dialog-document-h`, `w-c-dialog-document-w`) instead of inline custom properties on DialogContent.
+fixed: Crepe's `(hover: none)` carve-out stays `@media (hover: none)` in `crepe-host` (not `no-hover`, which also matches a coarse pointer).

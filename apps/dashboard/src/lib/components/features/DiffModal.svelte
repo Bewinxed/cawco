@@ -79,13 +79,12 @@
     aria-label={`Diff: ${filePath}`}
     bodyClass="flex h-full flex-col overflow-hidden"
     bodyPad="flush"
-    class="h-(--modal-h) w-(--modal-w)"
-    style="--modal-h: 90vh; --modal-w: 95vw"
+    class="h-c-dialog-document-h w-c-dialog-document-w"
     width="document"
   >
     <header
       data-slot="head"
-      class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2 py-space-3 ps-space-5 pe-(--c-dialog-close-clear) border-b border-b-border-hairline"
+      class="flex flex-wrap items-center justify-between gap-x-space-3 gap-y-space-2 py-space-3 ps-space-5 pe-c-dialog-close-clear border-b border-b-border-hairline"
     >
       <div class="flex min-w-0 items-center gap-3">
         <div class="flex min-w-0 items-center gap-2">
