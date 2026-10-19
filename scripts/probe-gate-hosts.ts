@@ -835,6 +835,12 @@ try {
     throw new Error("OpenCode found no session to reattach.");
   }
   ocSession.attached?.();
+  // The daemon's own start step on every connection (daemon.ts reannounce:
+  // each harness's report, `readHarness` → `adapter.detect()`): OpenCode's
+  // `detect` runs `#ensure`, which verifies the server's gate form and
+  // schedules its relaunch. A busy reattach does not (`#reattachOnce` ensures
+  // only for a session at rest), so the probe takes the step the daemon does.
+  await opencode.detect();
   const gateLine = await until(
     () => saidLine(GATE_LINE),
     180_000,
