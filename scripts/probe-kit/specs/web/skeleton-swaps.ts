@@ -23,9 +23,14 @@
  *     grid's columns, against the pages read, on a cold first visit and on a
  *     second one:
  *     a. the graphed project, cold: under the List | Graph segment's room,
- *        from the project's row (`decisionsGraphed`, hub decisions.ts);
+ *        from the hub's measured shape (`GET /api/decisions/shapes`);
  *     b. a project whose one page forms no graph, cold: at the list's top;
- *     c. the graphed project read a second time in one browser.
+ *     c. the graphed project read a second time in one browser;
+ *     d. a slow switch from one project's Decisions to another's: the new
+ *        page's reading grid carries the wait from the click, its load
+ *        included.
+ *     Its skeleton stands once the shapes are read, carrying the tab's wait
+ *     from its opening, so its grace is timed from the tab's birth.
  *  3. Decisions, the graph: the graph's own box.
  *  4. A decision page opened (DecisionPage): its opening line, the page's
  *     box, against what its read brings (its frame).
@@ -217,6 +222,56 @@ const run = async (kit: Kit) => {
     DECISIONS_READ,
     listSite("2c decisions list, graphed, again")
   );
+
+  // 2d. A switch from the flat project's Decisions to the graphed one's, its
+  // list held and its page's load slowed (its stages read held 600 ms): the
+  // shell mounts the new project's page, and its reading grid carries the
+  // wait from the click, the load included (the page's `landedFrom`, handed
+  // as DecisionsView `waitingSince`), not from the landing.
+  {
+    const switching = await kit.page("desk", { theme: "light" });
+    switching.setDefaultTimeout(60_000);
+    await switching.goto(`${base}/project/${flat}?view=decisions`, {
+      waitUntil: "domcontentloaded",
+    });
+    await switching.waitForSelector(
+      '[data-slot="decisions"] [data-slot="grid"]'
+    );
+    await switching.waitForTimeout(800);
+    const held = await holdRead(switching, DECISIONS_READ);
+    const loading = await holdRead(
+      switching,
+      new RegExp(`/api/projects/${project}/stages`)
+    );
+    const since = await pageNow(switching);
+    await switching.evaluate((to) => {
+      const link = document.createElement("a");
+      link.href = to;
+      link.textContent = "switch";
+      document.body.append(link);
+      link.click();
+    }, `/project/${project}?view=decisions`);
+    await switching.waitForTimeout(600);
+    await loading.release();
+    await switching.waitForSelector('[data-decisions-reading="list"]', {
+      state: "attached",
+    });
+    const stood = await pageNow(switching);
+    kit.check(
+      "2d: the switch's load was slowed: the new page's reading grid stood 600 ms or more after the click",
+      stood - since >= 600,
+      `clicked at ${Math.round(since)}, the reading grid stood at ${Math.round(stood)}`
+    );
+    await proveCarried(
+      kit,
+      switching,
+      "2d decisions list on a slow switch",
+      '[data-decisions-reading="list"] .kit-skeleton',
+      since
+    );
+    await held.release();
+    await switching.close();
+  }
 
   // 3. Decisions, the graph.
   await leg(kit, at("view=decisions&mode=graph"), GRAPH_READ, {
@@ -499,6 +554,8 @@ const flatProject = async (fleet: KitFleet): Promise<string> => {
   await fleet.api(`/api/instances/${writer}/artifacts`, {
     kind: "page",
     name: PRICING.name,
+    does: "pick",
+    ask: PRICING.ask,
     program: pageProgram(PRICING),
   });
   return id;
