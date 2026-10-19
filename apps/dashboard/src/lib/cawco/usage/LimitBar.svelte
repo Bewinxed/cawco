@@ -23,7 +23,7 @@
     elapsed,
     state,
     label,
-    size = 8,
+    size = "regular",
   }: {
     /** Share used, 0–100 (a reading can pass 100; the bar stops at full). */
     used: number;
@@ -34,8 +34,8 @@
     state: MeterState;
     /** The window's name, for assistive tech: "5-hour". */
     label: string;
-    /** Bar height in px: 8 on the page, 4 in the rail and session details. */
-    size?: number;
+    /** Regular on a page; compact in the session details' stats strip. */
+    size?: "regular" | "compact";
   } = $props();
 
   const usedShare = $derived(Math.min(100, Math.max(0, used)));
@@ -66,11 +66,11 @@
   aria-valuemin={0}
   aria-valuenow={Math.round(shown)}
   aria-valuetext={said}
-  class="group/bar relative block h-(--h) overflow-hidden rounded-hair bg-meter-calm-track state-near:bg-meter-near-track state-over:bg-meter-over-track state-reached:bg-meter-over-track state-stale:bg-meter-stale-track"
+  class="group/bar relative block h-c-limit-bar-h overflow-hidden rounded-hair bg-meter-calm-track state-near:bg-meter-near-track state-over:bg-meter-over-track state-reached:bg-meter-over-track state-stale:bg-meter-stale-track size-compact:h-space-1"
   data-reads={reads}
+  data-size={size}
   data-state={state}
   role="progressbar"
-  style:--h="{size}px"
 >
   <span
     data-slot="fill"

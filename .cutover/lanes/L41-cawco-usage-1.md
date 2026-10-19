@@ -56,8 +56,14 @@ fixed: apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:157 and apps/dashbo
 fixed: apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:164 figure/label gap 3px → `gap-space-row`; :212 lead gap 6px → `gap-space-2`; :213 10px → `gap-space-3`; :241 and :309 provider-line gap 8px → `gap-space-2` — the ladder.
 
 ## Gaps
-gap: apps/dashboard/src/lib/cawco/OpenCodeLogo.svelte:8 the `<svg>` takes no `class`, so LimitsBlock.svelte:314's glyph cell cannot size it to `size-full` as ClaudeIcon's is (DESIGN.md Mark Line Rule: a mark's box says so with `data-box` and sizes to its cell); the other side is outside this lane.
-gap: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:830 and apps/dashboard/src/routes/(app)/motion/session-limit/+page.svelte:98 pass `size={4}` px to LimitBar (usage/LimitBar.svelte:62 builds `--h="{size}px"` from it, and no caller passes another size); the prop should be a role (`rail` → `h-space-1`) once those callers change. ProviderLimit.svelte:64 is in this lane and passes the same 4.
+integration: apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:314 → `<OpenCodeLogo class="size-full">` once L34's class prop lands (OpenCodeLogo.svelte:8).
+fixed: apps/dashboard/src/lib/cawco/usage/LimitBar.svelte:26 and :69 `size` is a role, `"regular" | "compact"` (default regular): regular is `h-c-limit-bar-h`, compact is `size-compact:h-space-1` on `data-size`; no pixel number crosses the prop — DESIGN.md Limit bar: "4px tall in the session details' stats strip, 8px on a page". ProviderLimit.svelte:64 passes `size="compact"`.
+needs variant: data-size=compact (LimitBar.svelte:69 `size-compact:`)
+theme: variant size-compact
+```css
+@custom-variant size-compact (&[data-size="compact"]);
+```
+token: --c-limit-bar-h 8px — the limit bar's regular height on a page (DESIGN.md Limit bar names 8px); a named component dimension, off the ladder (7 and 11), so no ladder step. Used as `h-c-limit-bar-h` (apps/dashboard/src/lib/cawco/usage/LimitBar.svelte:69).
 
 ## Kit swaps
 kit-swap: apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:203 Skeleton h-icon-md — a height role on Skeleton (its `height` prop already names chart, figure, plot)
@@ -235,7 +241,8 @@ shadcn/no-restyle: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:700 Ta
 shadcn/no-restyle: apps/dashboard/src/lib/cawco/usage/ProjectSpend.svelte:700 TableCell max-phone:text-start
 
 ## Contracts
-(none)
+contract: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:826 passes size="compact" (LimitBar.svelte:26) and drops its duplicate `--row-paint` (:815)
+contract: apps/dashboard/src/routes/(app)/motion/session-limit/+page.svelte:94 passes size="compact" (LimitBar.svelte:26) and drops its duplicate `--row-paint` (:85)
 
 ## Literals preserved / needs variant / needs transition token / kind-5 declarations
 none

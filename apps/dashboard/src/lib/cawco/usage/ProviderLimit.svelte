@@ -61,7 +61,7 @@
       elapsed={meter.elapsed}
       {label}
       reads="left"
-      size={4}
+      size="compact"
       state={meter.state}
       used={meter.used}
     />
