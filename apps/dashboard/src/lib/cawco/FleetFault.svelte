@@ -247,18 +247,9 @@
 <!-- The alert recipe: a compact status-tinted row, status ink on its own
      tint, no edge. A hub fault is not a machine's problem and does not wear a
      machine's tint: nothing downstream of it can be fixed until it is. -->
-<!-- literal: 10px, 12px -->
 <div
-  class="flex min-w-0 flex-col rounded-md bg-(--tone-bg) px-(--fault-x) py-(--fault-y) type-body text-(color:--tone-ink)"
+  class="flex min-w-0 flex-col rounded-md bg-status-attn-bg p-space-3 type-body text-status-attn-ink data-hub:bg-status-fail-bg data-hub:text-status-fail-ink"
   data-hub={group.origin === "hub" || undefined}
-  style:--fault-x="12px"
-  style:--fault-y="10px"
-  style:--tone-bg={group.origin === "hub"
-    ? "var(--status-fail-bg)"
-    : "var(--status-attn-bg)"}
-  style:--tone-ink={group.origin === "hub"
-    ? "var(--status-fail-ink)"
-    : "var(--status-attn-ink)"}
 >
   <div
     data-slot="top"
@@ -267,7 +258,7 @@
     <IconWarningTriangle class="size-icon-md shrink-0" />
     <span
       data-slot="title"
-      class="text-size-label font-medium text-(color:--tone-ink)"
+      class="text-size-label font-medium"
       >{copy.title}</span
     >
     <!-- Where, never left implicit: the whole point of the investigation this
@@ -302,17 +293,15 @@
       {/if}
     </span>
     {#if compact}
-      <!-- literal: 24px (min-height: 24px, below that the target is under the
-           WCAG 2.5.8 (AA) minimum; measured at 14.6px). The margin keeps the
-           label optically flush with the text above it. -->
+      <!-- min-height 25px: below 24px the target is under the WCAG 2.5.8 (AA)
+           minimum; measured at 14.6px. -->
       <button
         aria-expanded={expanded}
-        class="group/disclose mark-line touch-hit inline-flex min-h-(--disclose-min) cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal text-(color:--tone-ink) opacity-80 ms-auto [&:hover]:opacity-100"
+        class="group/disclose mark-line touch-hit inline-flex min-h-space-7 cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 ms-auto hover:opacity-100"
         data-box
         onclick={() => {
           expanded = !expanded;
         }}
-        style:--disclose-min="24px"
         type="button"
       >
         <IconChevronRight
@@ -331,30 +320,28 @@
         class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
       >
         <span
-          class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
+          class="text-size-meta font-normal opacity-80"
           >{SCOPE_NOUN[group.scope]}
           {group.faults.length === 1 ? "" : "s"}:</span
         >
         {#each shown as fault (fault.scope + fault.key)}
           <code
-            class="font-mono text-size-meta wrap-anywhere text-(color:--tone-ink)"
+            class="font-mono text-size-meta wrap-anywhere"
             >{faultLabel(fault)}</code
           >
         {/each}
         {#if extra > 0}
           <span
             data-slot="more"
-            class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
+            class="text-size-meta font-normal opacity-80"
             >and {extra} more</span
           >
         {/if}
       </p>
 
-      <!-- literal: 68ch -->
       <p
         data-slot="why"
-        class="max-w-(--measure) text-size-body font-normal text-(color:--tone-ink)"
-        style:--measure="68ch"
+        class="max-w-(--c-measure-prose) text-size-body font-normal"
       >
         {copy.why}
       </p>
@@ -407,19 +394,15 @@
 
       {#if group.faults[0]?.detail}
         {#if group.cause === "unknown"}
-          <!-- literal: 10rem -->
           <pre
-            class="max-h-(--said-max) overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"
-            style:--said-max="10rem">{group.faults[0].detail}</pre>
+            class="max-h-(--c-output-max) overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{group.faults[0].detail}</pre>
         {:else}
-          <!-- literal: 24px -->
           <button
             aria-expanded={disclosureOpen}
-            class="group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-(--disclose-min) cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal text-(color:--tone-ink) opacity-80 [&:hover]:opacity-100"
+            class="group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-space-7 cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 hover:opacity-100"
             onclick={() => {
               disclosureOpen = !disclosureOpen;
             }}
-            style:--disclose-min="24px"
             type="button"
           >
             <IconChevronRight
@@ -434,10 +417,8 @@
           >
             {#each shown as fault (fault.scope + fault.key)}
               {#if fault.detail}
-                <!-- literal: 10rem -->
                 <pre
-                  class="max-h-(--said-max) overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"
-                  style:--said-max="10rem"><span class="block text-ink-muted"
+                  class="max-h-(--c-output-max) overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"><span class="block text-ink-muted"
                     >{faultLabel(fault)}</span
                   >{fault.detail}</pre>
               {/if}
@@ -446,11 +427,7 @@
         {/if}
       {/if}
 
-      <!-- literal: 68ch -->
-      <p
-        class="max-w-(--measure) text-size-body font-normal text-(color:--tone-ink)"
-        style:--measure="68ch"
-      >
+      <p class="max-w-(--c-measure-prose) text-size-body font-normal">
         {copy.fix}
       </p>
 
@@ -468,7 +445,7 @@
             variant="outline"
           />
           <span
-            class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
+            class="text-size-meta font-normal opacity-80"
             >{online
               ? actionHint
               : "It syncs on its own the moment it comes back."}</span
@@ -487,14 +464,14 @@
             variant="outline"
           />
           <span
-            class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
+            class="text-size-meta font-normal opacity-80"
             >{actionHint}</span
           >
         {:else if copy.action === "settle" && group.scope === "skills"}
           {#each shown as fault (fault.key)}
             {#if group.faults.length > 1}
               <code
-                class="font-mono text-size-meta wrap-anywhere text-(color:--tone-ink)"
+                class="font-mono text-size-meta wrap-anywhere"
                 >{fault.key}</code
               >
             {/if}
@@ -520,7 +497,7 @@
             />
           {/each}
           <span
-            class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
+            class="text-size-meta font-normal opacity-80"
             >Adopt this machine’s copy into the fleet, or overwrite it with the
             fleet’s.</span
           >
@@ -529,7 +506,7 @@
             >Compare the two copies</Button
           >
           <span
-            class="text-size-meta font-normal text-(color:--tone-ink) opacity-80"
+            class="text-size-meta font-normal opacity-80"
             >Adopt this machine’s copy into the fleet, or overwrite it with the
             fleet’s.</span
           >
@@ -542,7 +519,7 @@
       {#if result}
         <p
           data-slot="result"
-          class="text-size-meta font-normal wrap-anywhere text-(color:--tone-ink) tone-fail:text-status-fail-ink"
+          class="text-size-meta font-normal wrap-anywhere tone-fail:text-status-fail-ink"
           data-flip
           data-tone={result.tone}
           role={result.tone === "fail" ? "alert" : "status"}

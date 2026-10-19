@@ -34,7 +34,7 @@
 
 <Dialog.Root bind:open={dialogOpen}>
   <Dialog.Content width="report">
-    <div class="flex flex-col gap-6">
+    <div class="flex flex-col gap-space-7">
       <Dialog.Header>
         <Dialog.Title class="mark-line flex items-center" gap="glyph">
           <IconAlert class="size-icon-md shrink-0 text-error-9" />
@@ -43,13 +43,12 @@
       </Dialog.Header>
 
       <pre
-        class="m-0 max-h-(--error-max) overflow-auto wrap-break-word whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
-        data-error-text
-        style:--error-max="60vh">{message}</pre>
+        class="m-0 max-h-(--c-report-text-max) overflow-auto wrap-break-word whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
+        data-error-text>{message}</pre>
 
       <Dialog.Footer>
         <Button onclick={copy} type="button" variant="outline">
-          <span class="icon-swap" style="--icon-swap-dur: var(--dur-control)">
+          <span class="icon-swap" style:--icon-swap-dur="var(--dur-control)">
             <span data-active={!copied}><IconCopy /></span>
             <span data-active={copied}><IconCheck /></span>
           </span>

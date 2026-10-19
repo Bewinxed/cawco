@@ -41,21 +41,19 @@
             status={item.lead.status ?? "idle"}
           />
         {:else if item.lead.kind === "machine"}
-          <!-- literal: var(--mark-size, 18px) -->
           <span
             data-slot="lead"
             class="inline-grid size-(--lead-size) flex-none place-items-center text-ink-muted"
             data-box
-            style:--lead-size="var(--mark-size, 18px)"
+            style:--lead-size="var(--mark-size, var(--space-5))"
             ><OsMark class="size-icon-md" os={item.lead.os} /></span
           >
         {:else}
-          <!-- literal: var(--mark-size, 18px) -->
           <span
             data-slot="lead"
             class="inline-grid size-(--lead-size) flex-none place-items-center text-ink-muted"
             data-box
-            style:--lead-size="var(--mark-size, 18px)"
+            style:--lead-size="var(--mark-size, var(--space-5))"
             ><item.lead.icon aria-hidden="true" class="size-icon-md" /></span
           >
         {/if}
