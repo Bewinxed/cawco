@@ -136,6 +136,68 @@ const THUMBNAIL_STYLES = [
   "stroke",
   "stroke-width",
 ];
+/**
+ * The longest a picture's clone holds the page's thread before it lets it
+ * go for a task. modern-screenshot clones a part as one chain of promises,
+ * every element's computed style read and compared, and never yields: a part
+ * holding a frame of 400 elements was 120 ms in one go, on the dashboard's
+ * own thread under WebKit, which runs every frame there. Our call: half a
+ * frame at 60 Hz.
+ */
+const SLICE_MS = 8;
+
+/**
+ * A breath for the clone to take at each node it copies (modern-screenshot
+ * awaits `onCloneEachNode`): once `SLICE_MS` has run since the last, a
+ * timer's task lets the thread go to the page and the dashboard. No worker
+ * can take the work: it reads the page's live DOM and styles.
+ */
+const breather = () => {
+  let from = performance.now();
+  return async () => {
+    if (performance.now() - from < SLICE_MS) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    from = performance.now();
+  };
+};
+
+/** A family name as fonts are matched: unquoted, in lower case. */
+const familyKey = (name: string) =>
+  name
+    .trim()
+    .replace(/^["']|["']$/g, "")
+    .toLowerCase();
+
+/** The families only `doc`'s own font faces give (its `@font-face`), by {@link familyKey}. */
+const webFamilies = (doc: Document) =>
+  new Set([...doc.fonts].map((face) => familyKey(face.family)));
+
+/**
+ * `el`'s copied `font-family` without the families in `web`. A thumbnail
+ * embeds none of the page's web fonts, so its image never finds them, and
+ * WebKit looks each one up and misses for every face the part sets: on a
+ * phone page cloned whole that was half its image's load, 160 ms of the
+ * dashboard's thread in one task. The face it falls to is the same.
+ */
+function dropWebFamilies(el: Node, web: Set<string>) {
+  const { style } = el as HTMLElement;
+  const value = style?.getPropertyValue("font-family");
+  if (!value) {
+    return;
+  }
+  const families = value.split(",");
+  const kept = families.filter((name) => !web.has(familyKey(name)));
+  // None left: the declaration stands, so the element never takes its parent's.
+  if (kept.length > 0 && kept.length < families.length) {
+    style.setProperty(
+      "font-family",
+      kept.map((name) => name.trim()).join(", "),
+      style.getPropertyPriority("font-family")
+    );
+  }
+}
 const PNG_PREFIX = /^data:image\/png;base64,/;
 /** What a picture never draws: the overlay's own UI and layers, and what has no box. */
 export const SKIPPED =
@@ -338,7 +400,10 @@ const onPage = (view: Window, box: Box): Box => {
  * decoding it runs on the page's thread: "the last step, decoding the
  * svg+xml into an image, can't be done in a Web Worker… the bigger it is,
  * the longer the decode", modern-screenshot's maintainer,
- * github.com/qq15725/modern-screenshot/issues/18).
+ * github.com/qq15725/modern-screenshot/issues/18), and asks it for none of
+ * the page's web font families ({@link dropWebFamilies}). Every picture's
+ * clone runs in slices ({@link breather}), so the page's thread, and on
+ * WebKit the dashboard's, is never held for the whole of it.
  */
 export async function cropPicture(
   wanted: Box,
@@ -371,9 +436,17 @@ export async function cropPicture(
   ctx.fillRect(box.x, box.y, box.w, box.h);
   const steps = stepsIn(view.document, box);
   const first = steps.find((step) => step.whole);
+  const breathe = breather();
+  const web = thumbnail ? webFamilies(view.document) : null;
   const context = first
     ? await createContext(first.el, {
         scale,
+        onCloneEachNode: (node) => {
+          if (web) {
+            dropWebFamilies(node, web);
+          }
+          return breathe();
+        },
         // By node type, not `instanceof`: a copy's nodes are another window's.
         filter: (node) =>
           !(
