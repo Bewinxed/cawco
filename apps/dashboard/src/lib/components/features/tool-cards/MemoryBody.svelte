@@ -180,11 +180,9 @@
 </script>
 
 {#snippet well(source: string)}
-  <!-- literal: 420px -->
   <div
     data-slot="well"
-    class="max-h-(--well-max) overflow-auto p-space-3 border border-border-hairline rounded-sm bg-surface-recess"
-    style:--well-max="420px"
+    class="max-h-c-tool-well-max-h overflow-auto p-space-3 border border-border-hairline rounded-sm bg-surface-recess"
   >
     <ToolProse {source} />
   </div>
@@ -192,7 +190,7 @@
 
 <!-- Hangs at the row's text column, like the fields well. -->
 <div
-  class="flex flex-col gap-space-2 mt-space-2 mr-0 mb-space-3 ml-(--x-hang) min-w-0"
+  class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ml-(--x-hang) min-w-0"
 >
   {#if (writes && written !== undefined) || removes}
     {#if before.kind === "loading"}
@@ -217,33 +215,22 @@
       />
     {/if}
     {#if footer}
-      <span
-        data-slot="foot"
-        class="font-(family-name:--font-mono) text-size-meta font-normal leading-(--lh-normal) text-ink-muted num"
-        style:--lh-normal="normal">{footer}</span
+      <span data-slot="foot" class="type-code text-ink-muted num">{footer}</span
       >
     {/if}
   {:else if action === "get" && parsed.kind === "doc"}
     {@render well(parsed.content)}
     {#if footer}
-      <span
-        data-slot="foot"
-        class="font-(family-name:--font-mono) text-size-meta font-normal leading-(--lh-normal) text-ink-muted num"
-        style:--lh-normal="normal">{footer}</span
+      <span data-slot="foot" class="type-code text-ink-muted num">{footer}</span
       >
     {/if}
   {:else if action === "list_docs" && parsed.kind === "docs"}
-    <!-- literal: 26px, 44px -->
-    <div
-      class="flex flex-col gap-space-1"
-      style:--doc-h="26px"
-      style:--doc-hit="44px"
-    >
+    <div class="flex flex-col gap-space-1">
       {#each parsed.docs as doc (doc.path)}
         <Collapsible.Root>
           <Collapsible.Trigger
             data-doc
-            class="group mark-line w-full min-h-(--doc-h) flex items-center gap-space-2 p-0 border-none border-current bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--doc-hit)"
+            class="group mark-line w-full min-h-(--tx-line) flex items-center gap-space-2 p-0 border-none border-current bg-transparent text-ink-strong text-size-label font-medium text-start cursor-pointer coarse:min-h-(--tx-line-touch)"
           >
             <span
               data-slot="path"
@@ -264,9 +251,8 @@
             >
             <span
               data-slot="chev"
-              class="flex-none grid place-items-center text-ink-muted transition-[transform] dur-control ease-out motion-reduce:transition-off group-state-open:transform-(--chev-turn)"
+              class="flex-none grid place-items-center text-ink-muted transition-[rotate] dur-control ease-out motion-reduce:transition-off group-state-open:rotate-90"
               data-box
-              style:--chev-turn="rotate(90deg)"
               ><IconChevronRight class="size-icon-sm block" /></span
             >
           </Collapsible.Trigger>
