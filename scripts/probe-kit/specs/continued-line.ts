@@ -179,7 +179,19 @@ const oneChat = async (kit: Kit, fleet: KitFleet, lead: string) => {
   const page = await until(
     "1: the old id's transcript reads one conversation",
     () => transcriptOf(fleet, old),
-    (it) => it.blocks.some(isContinuedLine),
+    // The line, then the new session's first answer after its opening.
+    (it) => {
+      const opened = it.blocks.findIndex(
+        (one) => one.metadata?.continuation === true
+      );
+      return (
+        it.blocks.some(isContinuedLine) &&
+        opened >= 0 &&
+        it.blocks.some(
+          (one, index) => index > opened && one.type.startsWith("assistant")
+        )
+      );
+    },
     60_000
   ).catch(() => transcriptOf(fleet, old));
   const { blocks } = page;
