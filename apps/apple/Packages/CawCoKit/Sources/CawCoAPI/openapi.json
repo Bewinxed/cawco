@@ -19943,6 +19943,16 @@
               }
             }
           },
+          "404": {
+            "description": "getApiInstancesByIdTranscript 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "409": {
             "description": "getApiInstancesByIdTranscript 409",
             "content": {
@@ -19959,6 +19969,26 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiInstancesByIdTranscript 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiInstancesByIdTranscript 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -20002,6 +20032,26 @@
           },
           "409": {
             "description": "getApiInstancesByIdAttachments 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiInstancesByIdAttachments 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiInstancesByIdAttachments 504",
             "content": {
               "text/plain": {
                 "schema": {

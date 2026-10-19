@@ -18090,36 +18090,26 @@ export const createServer = (
   };
 
   /**
-   * A stored transcript's read that failed, as its routes answer it. An
-   * away machine is named, so a reader can say which one is away and hear
-   * it come back, and whether it is on its way back: then `Retry-After` is
-   * when this hub stops reading it so (whole seconds, rounded up, so a read
-   * then finds it offline).
+   * A stored transcript's machine is away, as its routes answer it: named,
+   * so a reader can say which one is away and hear it come back, and
+   * whether it is on its way back: then `Retry-After` is when this hub stops
+   * reading it so (whole seconds, rounded up, so a read then finds it
+   * offline).
    */
-  const historyFault = (fault: HistoryFault): Response => {
-    switch (fault.fault) {
-      case "offline": {
-        const left = fault.machineId ? reconnectingFor(fault.machineId) : 0;
-        return new Response(fault.message, {
-          status: 503,
-          headers: {
-            "X-Cawco-Machine": fault.machineId ?? "",
-            ...(left > 0
-              ? {
-                  "X-Cawco-Machine-State": "reconnecting",
-                  "Retry-After": String(Math.ceil(left / 1000)),
-                }
-              : {}),
-          },
-        });
-      }
-      case "missing":
-        return new Response(fault.message, { status: 404 });
-      case "timeout":
-        return new Response(fault.message, { status: 504 });
-      default:
-        return new Response(fault.message, { status: 500 });
-    }
+  const machineAway = (fault: HistoryFault): Response => {
+    const left = fault.machineId ? reconnectingFor(fault.machineId) : 0;
+    return new Response(fault.message, {
+      status: 503,
+      headers: {
+        "X-Cawco-Machine": fault.machineId ?? "",
+        ...(left > 0
+          ? {
+              "X-Cawco-Machine-State": "reconnecting",
+              "Retry-After": String(Math.ceil(left / 1000)),
+            }
+          : {}),
+      },
+    });
   };
 
   /** Every session's blocks, built here once, whether or not anyone watches. */
@@ -23964,7 +23954,16 @@ export const createServer = (
           if (!("fault" in page)) {
             return page;
           }
-          return historyFault(page);
+          switch (page.fault) {
+            case "offline":
+              return machineAway(page);
+            case "missing":
+              return status(404, page.message);
+            case "timeout":
+              return status(504, page.message);
+            default:
+              return status(500, page.message);
+          }
         }
       )
       // Files' Attachments: every text, file and picture the session's
@@ -23989,7 +23988,16 @@ export const createServer = (
             );
           }
           if ("fault" in page) {
-            return historyFault(page);
+            switch (page.fault) {
+              case "offline":
+                return machineAway(page);
+              case "missing":
+                return status(404, page.message);
+              case "timeout":
+                return status(504, page.message);
+              default:
+                return status(500, page.message);
+            }
           }
           pages.push(page);
           if (page.cursor === null) {
