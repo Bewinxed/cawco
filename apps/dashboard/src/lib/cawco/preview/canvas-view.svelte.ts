@@ -31,8 +31,33 @@ export const CANVAS_WIDTHS: [CanvasWidth, string][] = [
   ["all", "Every width"],
 ];
 
+/** A canvas's own view, before anyone chose another. */
+const OWN_VIEW: CanvasChosen = { scheme: "page", width: "own", motion: "on" };
+
+/** The view kept for a session under `key`, over the canvas's own; its own when none is kept or it doesn't read. */
+function keptView(key: string): CanvasChosen {
+  const kept = stored("local", key);
+  if (!kept) {
+    return OWN_VIEW;
+  }
+  try {
+    return { ...OWN_VIEW, ...(JSON.parse(kept) as Partial<CanvasChosen>) };
+  } catch {
+    return OWN_VIEW;
+  }
+}
+
+/**
+ * Built where a derived builds it (PreviewPane `canvasView`): its state is
+ * set from storage and never read while it is built, so nothing the pane's
+ * effects write to it (`send`) can rebuild it. Reading `this.chosen` here
+ * made the pane's derived depend on the view its own effect sends, and the
+ * two re-ran each other until Svelte stopped the side panel
+ * (`effect_update_depth_exceeded`, the owner's "i selected plan view" on
+ * nightly 4202, whenever a view was kept for the session).
+ */
 export class CanvasViewState {
-  chosen = $state<CanvasChosen>({ scheme: "page", width: "own", motion: "on" });
+  chosen = $state<CanvasChosen>(OWN_VIEW);
   /** Map mode: the map stands over the page, which stays loaded under it. */
   map = $state(false);
   readonly #key: string;
@@ -45,17 +70,7 @@ export class CanvasViewState {
     this.#mapKey = `cawco-canvas-map:${instanceId}`;
     this.#post = post;
     this.map = stored("local", this.#mapKey) === "on";
-    const kept = stored("local", this.#key);
-    if (kept) {
-      try {
-        this.chosen = {
-          ...this.chosen,
-          ...(JSON.parse(kept) as Partial<CanvasChosen>),
-        };
-      } catch {
-        // Unreadable: the canvas's own view.
-      }
-    }
+    this.chosen = keptView(this.#key);
   }
 
   /** Map mode on or off, kept per session. */

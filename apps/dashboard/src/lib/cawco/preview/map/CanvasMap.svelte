@@ -266,6 +266,18 @@
     ];
   });
 
+  /**
+   * The list opens on the canvas's own card: the group it stands in at the
+   * list's top, what renders it a scroll up. Once, as the list comes.
+   */
+  const openAtCanvas = (group: HTMLElement) => {
+    const list = group.parentElement;
+    if (list) {
+      list.scrollTop =
+        group.offsetTop - Number.parseFloat(getComputedStyle(list).paddingTop);
+    }
+  };
+
   const name = $derived(map?.center.name ?? "");
   const groups = $derived(
     map
@@ -319,7 +331,11 @@
   {:else if narrow}
     <div data-slot="map-list" class="map-list">
       {#each groups as group (group.key)}
-        <section aria-label={group.words} class="group">
+        <section
+          aria-label={group.words}
+          class="group"
+          {@attach group.key === "center" && openAtCanvas}
+        >
           <h3 class="group-words">{group.words}</h3>
           {#if group.nodes.length === 0}
             <p class="group-empty">{group.empty}</p>

@@ -1842,9 +1842,14 @@
     }
   }
   /** A component canvas's view, one for its head button and More's submenu alike; each load of the page takes the view kept for this session. */
-  const canvasView = $derived(
-    isSheet ? new CanvasViewState(instanceId, post) : null
-  );
+  const canvasView = $derived.by(() => {
+    const session = instanceId;
+    // Built untracked: the view depends on the session and the kind alone,
+    // never on the state it holds, which the effect below sends.
+    return isSheet
+      ? untrack(() => new CanvasViewState(session, post))
+      : null;
+  });
   $effect(() => {
     const held = canvasView;
     if (connected && held) {

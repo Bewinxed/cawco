@@ -58,7 +58,9 @@
  *    (`POST …/verify`) and toasts the hub's answer.
  * 12. The owner's crash on nightly 4202 ("i selected plan view and got
  *    this in the side panel": the panel's error boundary): the panel,
- *    showing a page or a canvas, with Inspect shut or open, switches to a
+ *    showing a page or a canvas, with Inspect shut or open and a canvas
+ *    view kept for the session and the page connected (the loop's
+ *    condition: the overlay's `cawco:ready`, posted by the frame here), switches to a
  *    canvas whose states file does not exist and whose stage failed
  *    (plan-view's own state); it draws that canvas's failed state in the
  *    pane, its name in the head and its about under it, and nothing throws.
@@ -1643,6 +1645,7 @@ const readMap = (page: Page) =>
         none: card.querySelector("p[data-slot=map-thumb]")?.textContent ?? null,
         top: box.top,
         bottom: box.bottom,
+        across: box.left >= room.left - 0.5 && box.right <= room.right + 0.5,
         inside:
           box.left >= room.left - 0.5 &&
           box.right <= room.right + 0.5 &&
@@ -1755,11 +1758,12 @@ async function mapLeg(
     drewLive > 0;
   if (phone) {
     kit.check(
-      `10: ${leg}: Map is a list (Used in, This canvas, Made of), every card inside it; the canvas's card is chosen and live (its page drawn, by=map), the others the report's thumbnail or "Not drawn yet"`,
+      `10: ${leg}: Map is a list (Used in, This canvas, Made of), every card across it, opened on the canvas's own card, chosen and live (its page drawn, by=map), the others the report's thumbnail or "Not drawn yet"`,
       read.list &&
         !read.graph &&
         read.groups.join(",") === "Used in,This canvas,Made of" &&
-        read.cards.every((one) => one.inside || one.role !== "center") &&
+        read.cards.every((one) => one.across) &&
+        center?.inside === true &&
         cardsSaid,
       `${JSON.stringify(read)}; live canvas drew ${drewLive} sections`
     );
@@ -1872,13 +1876,18 @@ async function switchLeg(
     for (const inspect of [false, true]) {
       // biome-ignore lint/performance/noAwaitInLoops: one page at a time
       const page = await kit.page("desk", { theme, scale: 2 });
+      // What the page threw (the bench has no hub, so its requests' refusals are not the page's).
       const errors: string[] = [];
       page.on("pageerror", (error) =>
         errors.push(`${error.message} ${error.stack?.split("\n")[1] ?? ""}`)
       );
       page.on("console", (message) => {
-        if (message.type() === "error") {
-          errors.push(message.text().split("\n")[0] ?? "");
+        const text = message.text();
+        if (
+          message.type() === "error" &&
+          !text.startsWith("Failed to load resource")
+        ) {
+          errors.push(text.split("\n")[0] ?? "");
         }
       });
       await page.setViewportSize({ width: 760, height: 900 });
@@ -1889,11 +1898,29 @@ async function switchLeg(
         })
       );
       await serveDoc(page, { [BENCH_THEN]: missingStage() });
+      // A view kept for the session, as anyone who ever chose one has: with it, nightly 4202's panel looped until its boundary stopped it.
+      await page.addInitScript((key) => {
+        localStorage.setItem(
+          key,
+          JSON.stringify({ scheme: "page", width: "own", motion: "on" })
+        );
+      }, `cawco-canvas-view:${BENCH_INSTANCE}`);
       if (inspect) {
         await page.addInitScript((key) => {
           localStorage.setItem(key, "open");
         }, `cawco-preview-inspect:${BENCH_INSTANCE}`);
       }
+      // The hub's overlay says a framed page is ready (`cawco:ready`): the bench's canvas has no hub, so the frame says it here, and the pane connects as it does live (where the canvas view's send ran the loop).
+      await page.addInitScript(() => {
+        if (window.top !== window && location.pathname.includes("/@cawco/")) {
+          addEventListener("load", () =>
+            parent.postMessage(
+              { type: "cawco:ready", url: location.href, title: document.title },
+              "*"
+            )
+          );
+        }
+      });
       await page.goto(
         `${bench}/motion/artifact-head?w=720&kind=${from}&then=${encodeURIComponent(thenPath())}&thenName=plan-view&after=4000&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
       );
@@ -2501,9 +2528,17 @@ const spec: Spec = {
   name: "canvas-design",
   run: async (kit) => {
     const stage = await stageOf();
-    // `CANVAS_DESIGN=head` or `=page` runs that half alone.
+    // `CANVAS_DESIGN=head` or `=page` runs that half alone; `=switch` runs leg 12 alone (the side panel's 4202 crash).
     const only = process.env.CANVAS_DESIGN;
     try {
+      if (only === "switch") {
+        const bench = await kit.bench();
+        for (const theme of ["light", "dark"] as const) {
+          // biome-ignore lint/performance/noAwaitInLoops: one theme at a time
+          await switchLeg(kit, bench, stage, theme);
+        }
+        return;
+      }
       for (const theme of only === "head" ? [] : (["light", "dark"] as const)) {
         for (const width of [390, 523, 1024]) {
           // biome-ignore lint/performance/noAwaitInLoops: one page at a time

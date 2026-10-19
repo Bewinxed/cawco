@@ -41,8 +41,9 @@
  *     as preview-bridge.ts makes it (socat, unix to the stage's port): the
  *     stage's report says `by: "stage"`, every frame drawn, the move read,
  *     and a frame's picture.
- * 14. A section on its way (a states file whose helper takes 4 s): the band
- *     says neither the canvas's name nor its about (the panel's head does);
+ * 14. A section on its way (a states file whose helper takes 4 s): opened
+ *     alone, the band names the canvas once with its about (framed, the
+ *     panel's head says both and the band neither: canvas-design 8i);
  *     the section is named in words (its title's last part) in the title
  *     role over its file in meta ink, never link-styled; one status line
  *     ("Drawing 2 stories"), the column's head and a skeleton frame per
@@ -913,8 +914,10 @@ async function waiting(kit: Kit, stage: Stage): Promise<void> {
     own.decoration === "none" &&
     own.tag !== "A";
   kit.check(
-    "14a: the band names neither the canvas nor its about; the section is named in words in the title role over its file in meta ink, never link-styled, and no text holds a route",
-    !(seen.band.includes(spec.name) || seen.band.includes(spec.about)) &&
+    "14a: alone (not framed), the band names the canvas once with its about, nothing else naming it; the section is named in words in the title role over its file in meta ink, never link-styled, and no text holds a route",
+    seen.band.includes(spec.name) &&
+      seen.band.includes(spec.about) &&
+      seen.page.split(spec.name).length - 1 === 1 &&
       seen.title === "Late badge" &&
       seen.file === "src/Slow.stories.js" &&
       same(title, titleWant) &&
