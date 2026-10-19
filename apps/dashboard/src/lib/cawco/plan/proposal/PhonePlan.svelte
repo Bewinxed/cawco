@@ -6,6 +6,7 @@
    * (`data-coarse`), as a phone draws them.
    */
   import type { Snippet } from "svelte";
+  import { capEdgeFades } from "#lib/cawco/edge-fade-caps.js";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Drawer from "#lib/components/ui/drawer/index.js";
@@ -78,6 +79,7 @@
         <div
           class="scroll kit-sheet-scroll kit-edge-fade-block"
           {@attach holdOn(focus)}
+          {@attach capEdgeFades}
         >
           {@render children()}
         </div>

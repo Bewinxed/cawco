@@ -7,6 +7,7 @@
    * does nothing here). The plan scrolls inside it.
    */
   import type { Snippet } from "svelte";
+  import { capEdgeFades } from "#lib/cawco/edge-fade-caps.js";
   import { setSideExpand } from "#lib/cawco/side/expand.js";
   import SideSurface from "#lib/cawco/side/SideSurface.svelte";
   import TaskRing from "#lib/cawco/TaskRing.svelte";
@@ -41,8 +42,8 @@
 <div class="desk" data-slot="side-card">
   <SideSurface label="Plan" onclose={() => undefined} recessed={false}>
     {#snippet titleControl()}
-      <span class="head mark-line">
-        <span class="title" data-slot="name-lead">Plan</span>
+      <span class="head mark-line" data-slot="name-lead">
+        <span class="title">Plan</span>
         <span class="progress" data-slot="progress" data-box
           ><TaskRing done={got.done} total={got.total} /></span
         >
@@ -50,18 +51,27 @@
       </span>
     {/snippet}
     {#snippet actions()}
-      <button
-        aria-label="Open the task {plan.task.title}, {plan.task.stage}"
-        class="task mark-line"
-        type="button"
-      >
-        <GlyphTask aria-hidden="true" class="task-glyph" data-box />
-        <span class="task-title">{plan.task.title}</span>
-        <span class="stage">· {plan.task.stage}</span>
-        <IconChevronRight aria-hidden="true" />
-      </button>
+      <!-- A box of its own, because SideSurface's direct-child
+           `:is(button, a) { flex: none }` is for fixed actions, and this
+           chip is the one control in the head that gives way. -->
+      <span class="task-at">
+        <button
+          aria-label="Open the task {plan.task.title}, {plan.task.stage}"
+          class="task mark-line"
+          type="button"
+        >
+          <GlyphTask aria-hidden="true" class="task-glyph" data-box />
+          <span class="task-title">{plan.task.title}</span>
+          <span class="stage">· {plan.task.stage}</span>
+          <IconChevronRight aria-hidden="true" />
+        </button>
+      </span>
     {/snippet}
-    <div class="body kit-edge-fade-block" {@attach holdOn(focus)}>
+    <div
+      class="body kit-edge-fade-block"
+      {@attach holdOn(focus)}
+      {@attach capEdgeFades}
+    >
       {@render children()}
     </div>
   </SideSurface>
@@ -99,15 +109,35 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
+  /* "Plan", its ring and its count are the name's lead (`name-lead`), the
+     width SideSurface keeps: none of them gives, so the count is never
+     cut. */
+  .title,
+  .progress,
+  .figure {
+    flex: none;
+  }
   /* The head's names in one size, on one line (the head recipe's label
-     role): "Plan", the task's title, its stage. "Plan" is the name's lead
-     (`name-lead`), the width SideSurface keeps; the ring and its figure
-     are cut where the head is short. The task's badge stands a step clear
-     of it and gives way by truncating its title. */
-  .task {
+     role): "Plan", the task's title, its stage. The task's badge stands a
+     step clear of the name and gives way first, its title ending in an
+     ellipsis. */
+  /* The chip's slot, shrinkable: SideSurface keeps its direct-child
+     buttons whole, and the chip is the one that gives way. */
+  .task-at {
+    display: flex;
     flex: 0 1 auto;
     min-inline-size: 0;
     margin-inline-start: var(--space-3);
+  }
+  .task {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-inline-size: 0;
+
+    & :global(svg) {
+      flex: none;
+    }
   }
   .task-title,
   .stage {
@@ -122,11 +152,11 @@
     color: var(--ink-strong);
   }
   .stage {
+    flex: none;
     color: var(--ink-muted);
   }
   /* The task badge's glyph, grown to the head with the task's title. */
   .desk :global(.task-glyph) {
-    flex: none;
     inline-size: 12px;
     block-size: 12px;
     color: var(--ink-muted);
