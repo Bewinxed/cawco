@@ -34870,13 +34870,14 @@
         ]
       },
       "FrameState": {
-        "description": "What a browser drew of one frame: `unseen` until one drew it since its file last changed.",
+        "description": "What a browser drew of one frame: `unseen` until one drew it since its\nfile last changed; `unshown` when the page did not show it at its width (a\nphone's canvas shows one frame at a time), so it is neither drawn nor\nempty: `empty` is a frame shown that drew nothing.",
         "type": "string",
         "enum": [
           "drawn",
           "empty",
           "failed",
-          "unseen"
+          "unseen",
+          "unshown"
         ]
       },
       "Interaction": {
