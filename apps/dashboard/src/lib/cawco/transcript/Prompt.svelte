@@ -145,7 +145,7 @@
   /** What the card is, as its title and a screen reader name it. */
   const cardLabel = $derived.by(() => {
     if (browserAsk) {
-      return `Browser request from ${asker}`;
+      return `Browser ask from ${asker}`;
     }
     return questions
       ? `Question from ${asker}`

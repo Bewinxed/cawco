@@ -5,7 +5,7 @@
  * that session (core `BrowserAskFrame`), a short reason and a long one. At
  * 390, 680 and 1440, on the session's composer:
  *
- * - the title "Browser request from <asker>", the reason as a question's
+ * - the title "Browser ask from <asker>", the reason as a question's
  *   text (the body's weight, not the summary's), the origin alone on its
  *   line in code type, each label on one line (broken only after its
  *   dots), and the one consequence
@@ -508,7 +508,7 @@ async function rest(
   }
   kit.check(
     `${label}: titled "${card.title}", the reason whole, the origin alone on its line`,
-    card.title.startsWith("Browser request from ") &&
+    card.title.startsWith("Browser ask from ") &&
       card.reason === reason &&
       card.origin === ORIGIN &&
       card.meta === ORIGIN,

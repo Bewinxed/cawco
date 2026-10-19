@@ -420,7 +420,7 @@ const listedInHistory = (info: NeutralSessionInfo): boolean =>
   info.tag !== CAWCO_SCRATCH_TAG;
 
 export interface PendingPermission {
-  /** A browser ask's browser, reason and origin (core `BrowserAskFrame`): its card offers Decline and Take over. */
+  /** A browser ask's browser, reason and origin (core `BrowserAskFrame`): its card offers Deny and Take over. */
   browserAsk?: BrowserAskFrame;
   /**
    * When this device last heard the hub park it, in the order it hears
@@ -8379,7 +8379,7 @@ export function permissionAnswer(
   request: PendingPermission,
   answer: PermissionAnswer
 ): PermissionResult {
-  // A browser ask's Decline carries the person's words alone, none here.
+  // A browser ask's Deny carries the person's words alone, none here.
   if (answer === "deny") {
     return {
       behavior: "deny",
