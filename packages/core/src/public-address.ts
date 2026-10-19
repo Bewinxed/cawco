@@ -7,7 +7,13 @@
  */
 import { BlockList, isIP } from "node:net";
 
-const NOT_PUBLIC = new BlockList();
+/**
+ * The ranges that are no public address, one list per family: Node's
+ * `BlockList` checks an IPv4 address against IPv6 rules too, as its
+ * IPv4-mapped form (`::ffff:a.b.c.d`), which lies inside `::/3`, so one list
+ * holding both families' rules read every IPv4 address as not public.
+ */
+const NOT_PUBLIC_V4 = new BlockList();
 for (const [address, prefix] of [
   ["0.0.0.0", 8],
   ["10.0.0.0", 8],
@@ -23,15 +29,16 @@ for (const [address, prefix] of [
   ["203.0.113.0", 24],
   ["224.0.0.0", 3],
 ] as const) {
-  NOT_PUBLIC.addSubnet(address, prefix, "ipv4");
+  NOT_PUBLIC_V4.addSubnet(address, prefix, "ipv4");
 }
+const NOT_PUBLIC_V6 = new BlockList();
 for (const [address, prefix] of [
   ["::", 3],
   ["4000::", 2],
   ["8000::", 1],
   ["2001:db8::", 32],
 ] as const) {
-  NOT_PUBLIC.addSubnet(address, prefix, "ipv6");
+  NOT_PUBLIC_V6.addSubnet(address, prefix, "ipv6");
 }
 
 /** An IPv4-mapped IPv6 address (`::ffff:203.0.113.9`), as a socket reports an IPv4 peer on a dual-stack listener. */
@@ -51,5 +58,7 @@ export const isPublicAddress = (address: string): boolean => {
   if (family === 0) {
     return false;
   }
-  return !NOT_PUBLIC.check(plain, family === 4 ? "ipv4" : "ipv6");
+  return family === 4
+    ? !NOT_PUBLIC_V4.check(plain, "ipv4")
+    : !NOT_PUBLIC_V6.check(plain, "ipv6");
 };

@@ -109,6 +109,35 @@ const publicAddresses = (): string[] => [
   ),
 ];
 
+/**
+ * How the internet reaches the machine (a stream relay listens there,
+ * Projects spec §5.11): its interfaces' public addresses, else the public
+ * address its router maps it to, as a STUN binding answers it
+ * (browser/relay-reach.ts), so a machine at home can run the relay behind
+ * its router.
+ */
+const publicAddressItem = async (): Promise<MachineCapability> => {
+  const addresses = publicAddresses();
+  const nat = addresses.length > 0 ? undefined : await routerAddress();
+  if (addresses.length > 0 || nat) {
+    return {
+      id: "public-address",
+      available: true,
+      addresses,
+      ...(nat ? { nat } : {}),
+      installCommand: "",
+    };
+  }
+  return {
+    id: "public-address",
+    available: false,
+    addresses,
+    installCommand: "",
+    reason:
+      "No interface of this machine holds a public address, and no STUN server answered with its router's",
+  };
+};
+
 function linuxInstall(pkg: string): string {
   if (resolveBin("apt-get")) {
     return `sudo apt-get update && sudo apt-get install -y ${pkg}`;
@@ -234,11 +263,7 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
     "missing" in runtime
       ? { reason: runtimeMissing() }
       : await foundRuntimeFacts(runtime);
-  const addresses = publicAddresses();
-  // No interface holds a public address: the router's, as a STUN binding
-  // maps the machine (browser/relay-reach.ts), so a machine at home can run
-  // the stream relay behind its router.
-  const nat = addresses.length > 0 ? undefined : await routerAddress();
+  const reach = await publicAddressItem();
   const opencodeAdvice = await installAdvice("opencode");
   const items: MachineCapability[] = [
     {
@@ -296,19 +321,7 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
       installCommand: runtimeInstallCommand(),
       ...runtimeFacts,
     },
-    {
-      id: "public-address",
-      available: addresses.length > 0 || nat !== undefined,
-      addresses,
-      ...(nat ? { nat } : {}),
-      installCommand: "",
-      ...(addresses.length || nat
-        ? {}
-        : {
-            reason:
-              "No interface of this machine holds a public address, and no STUN server answered with its router's",
-          }),
-    },
+    reach,
     {
       id: "service-manager",
       available: !!service,

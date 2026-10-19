@@ -10,7 +10,7 @@
    * relay asked in place. The card is the one Caw's Needs you draws, from the
    * same journey, live (client.svelte.ts `relayJourney`).
    */
-  import type { RelayJourneyView } from "@cawco/core";
+  import type { RelayJourneyView } from "@cawco/core/stream-relay";
   import { onMount } from "svelte";
   import { cawco, readRelayJourney } from "#lib/cawco/client.svelte.js";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
@@ -42,9 +42,7 @@
    * before the start stands again (a name added, a start that failed); Set
    * up before anyone set it up.
    */
-  const faceOf = (
-    view: RelayJourneyView
-  ): "start" | "journey" | "summary" => {
+  const faceOf = (view: RelayJourneyView): "start" | "journey" | "summary" => {
     const start = view.steps.find((step) => step.step === "start");
     if (
       view.summary &&

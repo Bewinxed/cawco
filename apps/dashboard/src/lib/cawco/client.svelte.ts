@@ -66,6 +66,11 @@ import type {
   ProviderSigninChallenge,
   ProviderSigninResult,
   RebalanceNotice,
+  RelayAct,
+  RelayAnswer,
+  RelayJourneyView,
+  RelayProofReport,
+  RelayTry,
   SendAttachment,
   SendPayload,
   SendRecord,
@@ -82,11 +87,6 @@ import type {
   SupportedCommands,
   TailnetHttps,
   ThreadMessage,
-  RelayAct,
-  RelayAnswer,
-  RelayJourneyView,
-  RelayProofReport,
-  RelayTry,
   ThreadRead,
   ThreadSaid,
   ThreadSummary,
@@ -6140,7 +6140,9 @@ export async function actOnRelay(act: RelayAct): Promise<void> {
 }
 
 /** What this screen's proof found, told to the hub, and its answer kept. */
-export async function reportRelayProof(report: RelayProofReport): Promise<void> {
+export async function reportRelayProof(
+  report: RelayProofReport
+): Promise<void> {
   const answered = await askHub<RelayAnswer>(
     "/api/stream-relay/proof",
     json("POST", report)

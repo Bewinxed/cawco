@@ -7,14 +7,19 @@
  * hand. Each lease is renewed before it ends; `relay.remove` unmaps them.
  *
  * Asked in turn, the first that answers maps:
- * 1. UPnP IGD v2, with `@achingbrain/nat-port-mapper` ("Port mapping with
- *    UPnP and NAT-PMP", npmjs.com/package/@achingbrain/nat-port-mapper);
- * 2. UPnP IGD v1, with {@link igdV1}: nat-port-mapper 4.0.5, its newest,
- *    finds and maps v2 gateways alone (its discovery asks for
- *    `InternetGatewayDevice:2` only), and miniupnpd, most home routers'
- *    UPnP, advertises v1 by default ("My solution is to default to IGD v1",
- *    github.com/miniupnp/miniupnp/issues/277);
- * 3. NAT-PMP at the default route's gateway, with nat-port-mapper.
+ * 1. UPnP, IGD v2 then v1, found by SSDP and asked over SOAP by
+ *    {@link upnpGateway}: `AddAnyPortMapping` on `WANIPConnection:2`,
+ *    `AddPortMapping` on `WANIPConnection:1` or `WANPPPConnection:1`.
+ *    miniupnpd, most home routers' UPnP, advertises v1 by default ("My
+ *    solution is to default to IGD v1", github.com/miniupnp/miniupnp/issues/277),
+ *    and `@achingbrain/nat-port-mapper` 4.0.5, its newest, finds and maps v2
+ *    alone, its every UPnP call failing under Bun besides (its `device.run`
+ *    hands the map's `protocol: 'udp'` to `fetch`, which Bun refuses:
+ *    "fetch: 'protocol' must be "http2", "h2", "http3", "h3", "http1.1", or
+ *    "h1"");
+ * 2. NAT-PMP at the default route's gateway, with nat-port-mapper ("Port
+ *    mapping with UPnP and NAT-PMP", npmjs.com/package/@achingbrain/nat-port-mapper),
+ *    whose NAT-PMP is a UDP socket of its own.
  *
  * A scratch fleet names its stand-in gateway's descriptor URL
  * (`CAWCO_UPNP_GATEWAY`): then that gateway alone is asked, by the version
@@ -23,8 +28,9 @@
  */
 import { createSocket } from "node:dgram";
 import { readFile } from "node:fs/promises";
-import { pmpNat, upnpNat } from "@achingbrain/nat-port-mapper";
+import { pmpNat } from "@achingbrain/nat-port-mapper";
 import { CAWCO_ENV, readEnv } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 import {
   RELAY_HTTP_PORT,
   type RelayMapArgs,
@@ -46,9 +52,21 @@ const RENEW_BEFORE_MS = 60_000;
 const IGD_V1 = "urn:schemas-upnp-org:device:InternetGatewayDevice:1";
 const IGD_V2 = "urn:schemas-upnp-org:device:InternetGatewayDevice:2";
 const CONNECTIONS = [
+  "urn:schemas-upnp-org:service:WANIPConnection:2",
   "urn:schemas-upnp-org:service:WANIPConnection:1",
   "urn:schemas-upnp-org:service:WANPPPConnection:1",
 ];
+/** The routing table's fields, an SSDP answer's location, and the descriptor's and SOAP answers' parts. */
+const FIELDS = /\s+/;
+const BYTE = /../g;
+const LOCATION = /^location:\s*(\S+)/im;
+const DEVICE_TYPE = /<deviceType>\s*([^<]+?)\s*<\/deviceType>/;
+const SERVICE = /<service>[\s\S]*?<\/service>/g;
+const SERVICE_TYPE = /<serviceType>\s*([^<]+?)\s*<\/serviceType>/;
+const CONTROL_URL = /<controlURL>\s*([^<]+?)\s*<\/controlURL>/;
+const ERROR_CODE = /<errorCode>\s*(\d+)/;
+const ERROR_WORDS = /<errorDescription>\s*([^<]+)/;
+const RESERVED_PORT = /<NewReservedPort>\s*(\d+)/;
 /** UPnP IGD v1's fault for a router that takes only permanent leases (WANIPConnection:1, error 725). */
 const ONLY_PERMANENT = 725;
 
@@ -59,6 +77,19 @@ interface PortGateway {
   unmap: (port: number, protocol: "udp" | "tcp") => Promise<void>;
 }
 
+/** `read` given `ms` to answer (core bounded.ts `readWithin`); unanswered, it throws saying what went unanswered. */
+const within = async <T>(
+  ms: number,
+  what: string,
+  read: (signal: AbortSignal) => Promise<T>
+): Promise<T> => {
+  const answer = await readWithin(ms, read);
+  if (answer.kind === "unanswered") {
+    throw new Error(`${what}: no answer within ${ms} ms`);
+  }
+  return answer.value;
+};
+
 /** The gateway the relay's ports are mapped on, and how it was reached; none before a map. */
 let mapped: { gateway: PortGateway; how: RelayMapHow } | null = null;
 
@@ -66,23 +97,26 @@ const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 /* ------------------------------------------------------------------ */
-/* nat-port-mapper's gateways: UPnP IGD v2 and NAT-PMP                  */
+/* NAT-PMP, with nat-port-mapper                                        */
 /* ------------------------------------------------------------------ */
 
-type LibraryGateway = Awaited<
-  ReturnType<ReturnType<typeof upnpNat>["getGateway"]>
->;
+type LibraryGateway = ReturnType<typeof pmpNat>;
 
-/** A nat-port-mapper gateway as a {@link PortGateway}: its external port must be the one asked. */
+/** nat-port-mapper's NAT-PMP gateway as a {@link PortGateway}: its external port must be the one asked. */
 const fromLibrary = (gateway: LibraryGateway): PortGateway => ({
   map: async (port, lan, protocol) => {
     try {
-      const mapping = await gateway.map(port, lan, {
-        protocol,
-        externalPort: port,
-        description: DESCRIPTION,
-        signal: AbortSignal.timeout(MAP_MS),
-      });
+      const mapping = await within(
+        MAP_MS,
+        `NAT-PMP ${protocol} ${port}`,
+        (signal) =>
+          gateway.map(port, lan, {
+            protocol,
+            externalPort: port,
+            description: DESCRIPTION,
+            signal,
+          })
+      );
       if (mapping.externalPort !== port) {
         await gateway.unmap(port).catch(() => undefined);
         return false;
@@ -104,19 +138,16 @@ const fromLibrary = (gateway: LibraryGateway): PortGateway => ({
 const defaultGateway = async (): Promise<string | undefined> => {
   const table = await readFile("/proc/net/route", "utf8").catch(() => "");
   for (const line of table.split("\n").slice(1)) {
-    const [, destination, gateway] = line.trim().split(/\s+/);
+    const [, destination, gateway] = line.trim().split(FIELDS);
     if (destination === "00000000" && gateway && gateway !== "00000000") {
-      const bytes = gateway
-        .match(/../g)
-        ?.map((hex) => Number.parseInt(hex, 16));
+      const bytes = gateway.match(BYTE)?.map((hex) => Number.parseInt(hex, 16));
       return bytes ? bytes.reverse().join(".") : undefined;
     }
   }
-  return;
 };
 
 /* ------------------------------------------------------------------ */
-/* UPnP IGD v1                                                          */
+/* UPnP IGD v2 and v1                                                   */
 /* ------------------------------------------------------------------ */
 
 /** The descriptor URLs that answer an SSDP search for `target` within {@link FIND_MS}. */
@@ -133,7 +164,7 @@ const ssdpSearch = (target: string): Promise<string[]> =>
       resolve([...found]);
     };
     socket.on("message", (message) => {
-      const location = /^location:\s*(\S+)/im.exec(message.toString())?.[1];
+      const location = LOCATION.exec(message.toString())?.[1];
       if (location) {
         found.add(location);
       }
@@ -158,14 +189,21 @@ const ssdpSearch = (target: string): Promise<string[]> =>
 const describe = async (
   location: string
 ): Promise<{ device: string; service?: string; control?: string }> => {
-  const response = await fetch(location, { signal: AbortSignal.timeout(FIND_MS) });
-  const xml = await response.text();
-  const device = /<deviceType>\s*([^<]+?)\s*<\/deviceType>/.exec(xml)?.[1] ?? "";
-  for (const block of xml.match(/<service>[\s\S]*?<\/service>/g) ?? []) {
-    const service = /<serviceType>\s*([^<]+?)\s*<\/serviceType>/.exec(block)?.[1];
-    const control = /<controlURL>\s*([^<]+?)\s*<\/controlURL>/.exec(block)?.[1];
+  const xml = await within(
+    FIND_MS,
+    `the gateway's descriptor at ${location}`,
+    async (signal) => (await fetch(location, { signal })).text()
+  );
+  const device = DEVICE_TYPE.exec(xml)?.[1] ?? "";
+  for (const block of xml.match(SERVICE) ?? []) {
+    const service = SERVICE_TYPE.exec(block)?.[1];
+    const control = CONTROL_URL.exec(block)?.[1];
     if (service && control && CONNECTIONS.includes(service)) {
-      return { device, service, control: new URL(control, location).toString() };
+      return {
+        device,
+        service,
+        control: new URL(control, location).toString(),
+      };
     }
   }
   return { device };
@@ -177,30 +215,38 @@ const soap = async (
   service: string,
   action: string,
   args: [string, string | number][]
-): Promise<{ ok: true } | { ok: false; code: number; said: string }> => {
+): Promise<
+  { ok: true; body: string } | { ok: false; code: number; said: string }
+> => {
   const body = `<?xml version="1.0"?>
 <s:Envelope xmlns:s="http://schemas.xmlsoap.org/soap/envelope/" s:encodingStyle="http://schemas.xmlsoap.org/soap/encoding/">
 <s:Body><u:${action} xmlns:u="${service}">${args.map(([name, value]) => `<${name}>${value}</${name}>`).join("")}</u:${action}></s:Body>
 </s:Envelope>`;
   try {
-    const response = await fetch(control, {
-      method: "POST",
-      headers: {
-        "content-type": 'text/xml; charset="utf-8"',
-        soapaction: `"${service}#${action}"`,
-      },
-      body,
-      signal: AbortSignal.timeout(MAP_MS),
-    });
+    const response = await within(
+      MAP_MS,
+      `${action} at ${control}`,
+      async (signal) => {
+        const sent = await fetch(control, {
+          method: "POST",
+          headers: {
+            "content-type": 'text/xml; charset="utf-8"',
+            soapaction: `"${service}#${action}"`,
+          },
+          body,
+          signal,
+        });
+        return { ok: sent.ok, status: sent.status, text: await sent.text() };
+      }
+    );
+    const { text } = response;
     if (response.ok) {
-      return { ok: true };
+      return { ok: true, body: text };
     }
-    const text = await response.text();
     return {
       ok: false,
-      code: Number(/<errorCode>\s*(\d+)/.exec(text)?.[1] ?? response.status),
-      said:
-        /<errorDescription>\s*([^<]+)/.exec(text)?.[1] ?? `HTTP ${response.status}`,
+      code: Number(ERROR_CODE.exec(text)?.[1] ?? response.status),
+      said: ERROR_WORDS.exec(text)?.[1] ?? `HTTP ${response.status}`,
     };
   } catch (error) {
     return { ok: false, code: -1, said: said(error) };
@@ -208,11 +254,14 @@ const soap = async (
 };
 
 /**
- * A UPnP IGD v1 gateway (WANIPConnection:1 or WANPPPConnection:1): each port
- * mapped by `AddPortMapping` with a lease of {@link LEASE_S}, renewed a minute
- * before it ends, or a permanent lease where the router takes only those.
+ * A UPnP gateway's WAN connection service: on IGD v2 (WANIPConnection:2) each
+ * port by `AddAnyPortMapping`, the port it reserved checked to be the one
+ * asked; on v1 by `AddPortMapping`. A lease of {@link LEASE_S}, renewed a
+ * minute before it ends, or on v1 a permanent one where the router takes
+ * only those.
  */
-const igdV1 = (service: string, control: string): PortGateway => {
+const upnpGateway = (service: string, control: string): PortGateway => {
+  const v2 = service.endsWith(":2");
   const leases = new Map<string, ReturnType<typeof setTimeout> | null>();
   const add = async (
     port: number,
@@ -220,7 +269,7 @@ const igdV1 = (service: string, control: string): PortGateway => {
     protocol: "udp" | "tcp",
     lease: number
   ) =>
-    soap(control, service, "AddPortMapping", [
+    soap(control, service, v2 ? "AddAnyPortMapping" : "AddPortMapping", [
       ["NewRemoteHost", ""],
       ["NewExternalPort", port],
       ["NewProtocol", protocol.toUpperCase()],
@@ -238,18 +287,34 @@ const igdV1 = (service: string, control: string): PortGateway => {
     const key = `${protocol}:${port}`;
     let answer = await add(port, lan, protocol, LEASE_S);
     let lease = LEASE_S;
-    if (!answer.ok && answer.code === ONLY_PERMANENT) {
+    if (!(answer.ok || v2) && answer.code === ONLY_PERMANENT) {
       answer = await add(port, lan, protocol, 0);
       lease = 0;
     }
     if (!answer.ok) {
       return false;
     }
+    // IGD v2 may reserve another port when the one asked is taken: the
+    // relay needs its own, so that one is given back.
+    const reserved = RESERVED_PORT.exec(answer.body)?.[1];
+    if (v2 && Number(reserved) !== port) {
+      if (reserved) {
+        await soap(control, service, "DeletePortMapping", [
+          ["NewRemoteHost", ""],
+          ["NewExternalPort", reserved],
+          ["NewProtocol", protocol.toUpperCase()],
+        ]);
+      }
+      return false;
+    }
     const renew =
       lease > 0
-        ? setTimeout(() => {
-            map(port, lan, protocol).catch(() => undefined);
-          }, lease * 1000 - RENEW_BEFORE_MS)
+        ? setTimeout(
+            () => {
+              map(port, lan, protocol).catch(() => undefined);
+            },
+            lease * 1000 - RENEW_BEFORE_MS
+          )
         : null;
     renew?.unref();
     const before = leases.get(key);
@@ -285,11 +350,13 @@ const igdV1 = (service: string, control: string): PortGateway => {
   };
 };
 
-/** The IGD v1 gateway at `location`, when its descriptor names a WAN connection service. */
-const igdV1At = async (location: string): Promise<PortGateway | undefined> => {
+/** The UPnP gateway at `location`, when its descriptor names an IGD and a WAN connection service. */
+const upnpAt = async (location: string): Promise<PortGateway | undefined> => {
   const found = await describe(location);
-  return found.service && found.control
-    ? igdV1(found.service, found.control)
+  return (found.device === IGD_V1 || found.device === IGD_V2) &&
+    found.service &&
+    found.control
+    ? upnpGateway(found.service, found.control)
     : undefined;
 };
 
@@ -299,54 +366,26 @@ const igdV1At = async (location: string): Promise<PortGateway | undefined> => {
 
 type Way = [RelayMapHow, string, () => Promise<PortGateway | undefined>];
 
-/** The stand-in's descriptor named: that gateway alone, by the version it names. */
+/** The stand-in's descriptor named: that gateway alone. */
 const standInWays = (location: string): Way[] => [
-  [
-    "UPnP",
-    "UPnP",
-    async () => {
-      const found = await describe(location);
-      if (found.device === IGD_V2) {
-        return fromLibrary(
-          await upnpNat({ description: DESCRIPTION }).getGateway(
-            new URL(location),
-            { signal: AbortSignal.timeout(FIND_MS) }
-          )
-        );
-      }
-      return found.device === IGD_V1 ? igdV1At(location) : undefined;
-    },
-  ],
+  ["UPnP", "UPnP", () => upnpAt(location)],
 ];
 
-/** A real router: UPnP IGD v2, then IGD v1, both found by SSDP, then NAT-PMP at the default route's gateway. */
+/** A real router: UPnP, IGD v2 then v1, found by SSDP; then NAT-PMP at the default route's gateway. */
 const routerWays = (): Way[] => [
   [
     "UPnP",
-    "UPnP IGD v2",
-    async () => {
-      for await (const gateway of upnpNat({
-        description: DESCRIPTION,
-      }).findGateways({ signal: AbortSignal.timeout(FIND_MS) })) {
-        if (gateway.family === "IPv4") {
-          return fromLibrary(gateway);
-        }
-      }
-      return;
-    },
-  ],
-  [
     "UPnP",
-    "UPnP IGD v1",
     async () => {
-      for (const location of await ssdpSearch(IGD_V1)) {
-        // biome-ignore lint/performance/noAwaitInLoops: the first gateway that names a WAN connection is the one.
-        const gateway = await igdV1At(location).catch(() => undefined);
-        if (gateway) {
-          return gateway;
+      for (const target of [IGD_V2, IGD_V1]) {
+        for (const location of await ssdpSearch(target)) {
+          // biome-ignore lint/performance/noAwaitInLoops: the first gateway that names a WAN connection is the one.
+          const gateway = await upnpAt(location).catch(() => undefined);
+          if (gateway) {
+            return gateway;
+          }
         }
       }
-      return;
     },
   ],
   [
@@ -382,7 +421,10 @@ const mapListener = async (
 };
 
 /** The relay range, port by port: all mapped, or the ones mapped taken back (the range is then a forward by hand). */
-const mapRange = async (gateway: PortGateway, lan: string): Promise<boolean> => {
+const mapRange = async (
+  gateway: PortGateway,
+  lan: string
+): Promise<boolean> => {
   const [first, last] = STREAM_RELAY_PORTS.relayRange;
   const done: number[] = [];
   for (let port = first; port <= last; port += 1) {
@@ -424,7 +466,9 @@ export const mapRelayPorts = async (
       continue;
     }
     if (!(await mapListener(gateway, args))) {
-      tried.push(`${label}: the router refused UDP and TCP ${STREAM_RELAY_PORT}`);
+      tried.push(
+        `${label}: the router refused UDP and TCP ${STREAM_RELAY_PORT}`
+      );
       continue;
     }
     mapped = { gateway, how };

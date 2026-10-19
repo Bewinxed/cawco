@@ -14,6 +14,7 @@
  */
 import { BlockList, isIPv4 } from "node:net";
 import { CAWCO_ENV, readEnv } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
 
 const API = "https://api.cloudflare.com/client/v4";
 const IPS = "https://www.cloudflare.com/ips-v4/";
@@ -30,9 +31,23 @@ interface Envelope<T> {
 }
 
 /** One answer: what Cloudflare gave, or its words for why not. */
-export type CloudflareRead<T> = { ok: true; value: T } | { ok: false; said: string };
+export type CloudflareRead<T> =
+  { ok: true; value: T } | { ok: false; said: string };
 
 const apiOrigin = (): string => readEnv(CAWCO_ENV.cloudflareApi) ?? API;
+
+/** `read` given `ms` to answer (core bounded.ts `readWithin`); unanswered, it throws saying what went unanswered. */
+const within = async <T>(
+  ms: number,
+  what: string,
+  read: (signal: AbortSignal) => Promise<T>
+): Promise<T> => {
+  const answer = await readWithin(ms, read);
+  if (answer.kind === "unanswered") {
+    throw new Error(`${what}: no answer within ${ms} ms`);
+  }
+  return answer.value;
+};
 
 const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
@@ -44,17 +59,34 @@ const call = async <T>(
   init: { method?: string; body?: unknown } = {}
 ): Promise<CloudflareRead<T>> => {
   try {
-    const response = await fetch(`${apiOrigin()}${path}`, {
-      method: init.method ?? "GET",
-      headers: {
-        authorization: `Bearer ${token}`,
-        "content-type": "application/json",
-      },
-      ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-      signal: AbortSignal.timeout(CALL_MS),
-    });
-    const envelope = (await response.json().catch(() => ({}))) as Envelope<T>;
-    if (response.ok && envelope.success !== false && envelope.result !== undefined) {
+    const response = await within(
+      CALL_MS,
+      `Cloudflare's ${path}`,
+      async (signal) => {
+        const sent = await fetch(`${apiOrigin()}${path}`, {
+          method: init.method ?? "GET",
+          headers: {
+            authorization: `Bearer ${token}`,
+            "content-type": "application/json",
+          },
+          ...(init.body === undefined
+            ? {}
+            : { body: JSON.stringify(init.body) }),
+          signal,
+        });
+        return {
+          ok: sent.ok,
+          status: sent.status,
+          envelope: (await sent.json().catch(() => ({}))) as Envelope<T>,
+        };
+      }
+    );
+    const { envelope } = response;
+    if (
+      response.ok &&
+      envelope.success !== false &&
+      envelope.result !== undefined
+    ) {
       return { ok: true, value: envelope.result };
     }
     const first = envelope.errors?.[0];
@@ -116,14 +148,16 @@ const cloudflareRanges = async (): Promise<BlockList | undefined> => {
     return ranges.list;
   }
   try {
-    const response = await fetch(readEnv(CAWCO_ENV.cloudflareIps) ?? IPS, {
-      signal: AbortSignal.timeout(CALL_MS),
+    const url = readEnv(CAWCO_ENV.cloudflareIps) ?? IPS;
+    const text = await within(CALL_MS, url, async (signal) => {
+      const sent = await fetch(url, { signal });
+      if (!sent.ok) {
+        throw new Error(`HTTP ${sent.status}`);
+      }
+      return sent.text();
     });
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
     const list = new BlockList();
-    for (const line of (await response.text()).split("\n")) {
+    for (const line of text.split("\n")) {
       const [net, prefix] = line.trim().split("/");
       if (net && prefix && isIPv4(net)) {
         list.addSubnet(net, Number(prefix), "ipv4");
@@ -141,4 +175,5 @@ const cloudflareRanges = async (): Promise<BlockList | undefined> => {
 
 /** Whether `address` is one Cloudflare's proxy answers from. */
 export const isCloudflareAddress = async (address: string): Promise<boolean> =>
-  isIPv4(address) && ((await cloudflareRanges())?.check(address, "ipv4") ?? false);
+  isIPv4(address) &&
+  ((await cloudflareRanges())?.check(address, "ipv4") ?? false);

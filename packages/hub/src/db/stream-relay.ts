@@ -34,13 +34,7 @@ export interface StoredRelay {
 export type RelayChange = Partial<
   Pick<
     StoredRelay,
-    | "state"
-    | "ports"
-    | "why"
-    | "whyCommand"
-    | "health"
-    | "checkedAt"
-    | "wanted"
+    "state" | "ports" | "why" | "whyCommand" | "health" | "checkedAt" | "wanted"
   >
 >;
 
@@ -84,14 +78,14 @@ export interface StreamRelayDb {
   readonly forget: () => void;
   /** The journey's row, made when absent. */
   readonly journey: () => StoredJourney | null;
+  /** The journey gone with the relay, its proofs with it. */
+  readonly journeyForget: () => void;
   /** The journey begun (or begun again), through `domain` when one was seen. */
   readonly journeyOpen: (domain: string | null) => void;
   readonly journeyUpdate: (change: Partial<StoredJourney>) => void;
-  /** The journey gone with the relay, its proofs with it. */
-  readonly journeyForget: () => void;
   readonly proofs: () => StoredProof[];
-  readonly proved: (proof: StoredProof) => void;
   readonly proofsForget: () => void;
+  readonly proved: (proof: StoredProof) => void;
   readonly read: () => StoredRelay | null;
   /** The fleet's relay is this one, from now: any before it is replaced. */
   readonly set: (relay: {

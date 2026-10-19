@@ -65,7 +65,12 @@ import {
   verifyToken,
   zoneId,
 } from "./cloudflare";
-import type { StoredJourney, StoredProof, StreamRelayDb } from "./db/stream-relay";
+import type {
+  StoredJourney,
+  StoredProof,
+  StoredRelay,
+  StreamRelayDb,
+} from "./db/stream-relay";
 import {
   candidateOf,
   type RelayCall,
@@ -93,9 +98,9 @@ const AWAY_MS = 30_000;
 export interface RelayAsker {
   /** The public address the request came from: Cloudflare's word for it through a proxy, else the socket's. */
   address: string | null;
+  device: { id: string; name: string };
   /** The domain the page reached CawCo through, through a proxy; null by IP, the tailnet or a name of the hub's. */
   domain: string | null;
-  device: { id: string; name: string };
 }
 
 export interface RelayJourneyDeps {
@@ -111,10 +116,10 @@ export interface RelayJourneyDeps {
 
 export interface RelayJourney {
   act: (act: RelayAct, asker: RelayAsker) => Promise<void>;
-  /** The machine connected: a router mapping it held is asked for again (its leases lived in its agent). */
-  connected: (machineId: string) => void;
   /** Something the journey reads changed (the relay's record, a machine's report): looked at again now. */
   changed: () => void;
+  /** The machine connected: a router mapping it held is asked for again (its leases lived in its agent). */
+  connected: (machineId: string) => void;
   proof: (report: RelayProofReport, asker: RelayAsker) => void;
   /** The person's Cloudflare token, for a renewal by DNS. */
   token: () => string | null;
@@ -145,24 +150,277 @@ const said = (error: unknown): string =>
 /** A step's own entry, by kind. */
 type StepOf<K extends RelayStep["step"]> = Extract<RelayStep, { step: K }>;
 
+/** What the name check last found, for the name it asked. */
+interface NameCheck {
+  answers?: string;
+  askedAt: number;
+  finding: NameFinding;
+  name: string;
+}
+
+/** The machine's last low-ports read, for the machine and the port it was read for; `failed` when the machine refused the read (no runtime, not Linux). */
+interface LowRead {
+  lowest: number;
+  machineId: string;
+  read: RelayLowPorts | "failed";
+}
+
+/** What every step's state is read from, beside what the hub has in hand. */
+interface StepFacts {
+  /** A certificate over HTTP: TCP 80 is forwarded, and the low ports go to 80. */
+  http: boolean;
+  journey: StoredJourney;
+  lowest: 443 | 80;
+  machine: RelayMachine | null;
+  name: string;
+  named: boolean;
+  /** Proofs from outside that answered, newest first. */
+  outside: StoredProof[];
+  proofs: StoredProof[];
+  /** The relay's record, when it is the one this journey's settings make. */
+  relayNow: StoredRelay | null;
+}
+
+const machineStepOf = (
+  machine: RelayMachine | null,
+  found: RelayCandidate[]
+): StepOf<"machine"> => {
+  if (machine) {
+    return { step: "machine", state: "done" };
+  }
+  if (found.length === 0) {
+    return { step: "machine", state: "none" };
+  }
+  return {
+    step: "machine",
+    state: "needs",
+    choices: found.map((one): RelayChoice => ({
+      machineId: one.machineId,
+      name: one.name,
+      address: one.address,
+      lan: one.lan,
+      online: one.online,
+    })),
+  };
+};
+
+const nameStepOf = (
+  facts: StepFacts,
+  check: NameCheck | null,
+  tokenWhy: string | undefined
+): StepOf<"name"> => {
+  const { journey, machine, name } = facts;
+  const why = tokenWhy ? { tokenWhy } : {};
+  if (!machine) {
+    return { step: "name", state: "waiting", name };
+  }
+  if (journey.nameState === "skipped") {
+    return { step: "name", state: "skipped", name };
+  }
+  if (journey.nameState === "pointed") {
+    return { step: "name", state: "done", name };
+  }
+  if (!name) {
+    return { step: "name", state: "needs", name, ...why };
+  }
+  if (check?.name !== name) {
+    return { step: "name", state: "checking", name };
+  }
+  return {
+    step: "name",
+    state: "needs",
+    name,
+    askedAt: check.askedAt,
+    finding: check.finding,
+    ...(check.answers ? { answers: check.answers } : {}),
+    ...why,
+  };
+};
+
+/** The router, behind one: its tick by hand comes only from an outside proof. */
+const routerStepOf = (facts: StepFacts, asking: boolean): StepOf<"router"> => {
+  const { journey, http, outside, relayNow } = facts;
+  const how = journey.routerHow ? { how: journey.routerHow } : {};
+  const forwards = http ? { http } : {};
+  if (journey.router === "mapped") {
+    return { step: "router", state: "done", ...how };
+  }
+  if (journey.router === null) {
+    return { step: "router", state: asking ? "asking" : "needs", ...forwards };
+  }
+  if (outside.length > 0) {
+    return {
+      step: "router",
+      state: "done",
+      ...(journey.router === "partial" ? how : {}),
+    };
+  }
+  if (relayNow?.state === "live") {
+    return { step: "router", state: "by-hand" };
+  }
+  return { step: "router", state: journey.router, ...how, ...forwards };
+};
+
+/** The low ports, on a rootless runtime; null where they don't apply (a root runtime, or a machine that refused the read). */
+const runtimeStepOf = (
+  facts: StepFacts,
+  low: LowRead | null
+): StepOf<"runtime"> | null => {
+  const { journey, lowest } = facts;
+  const read = low?.machineId === journey.machineId ? low : null;
+  if (read?.read === "failed" || (read && !read.read.rootless)) {
+    return null;
+  }
+  const readAllowed = read?.read.allowed === true && read.lowest <= lowest;
+  const kept = journey.lowPorts && (!read || read.lowest <= lowest);
+  if (kept || readAllowed) {
+    return { step: "runtime", state: "done", lowest };
+  }
+  return {
+    step: "runtime",
+    state: !read || read.lowest !== lowest ? "checking" : "needs",
+    lowest,
+  };
+};
+
+/** Which of the certificate and the start may begin: each once every step before it stands. */
+const gatesOf = (
+  facts: StepFacts,
+  stands: { name: boolean; router: boolean; runtime: boolean }
+): { certDone: boolean; eligibleCert: boolean; eligibleStart: boolean } => {
+  const { journey, machine, named, http } = facts;
+  const certDone =
+    named &&
+    journey.certificateName === facts.name &&
+    journey.certificateEndsAt !== null;
+  const before = !!machine && stands.name && stands.runtime;
+  return {
+    certDone,
+    eligibleCert: before && named && (!http || stands.router) && !certDone,
+    eligibleStart: before && stands.router && (!named || certDone),
+  };
+};
+
+const certificateStepOf = (
+  facts: StepFacts,
+  eligible: boolean,
+  certifying: boolean
+): StepOf<"certificate"> => {
+  const { journey, name } = facts;
+  if (journey.certificateName === name && journey.certificateEndsAt !== null) {
+    return {
+      step: "certificate",
+      state: "done",
+      endsAt: journey.certificateEndsAt,
+    };
+  }
+  if (certifying) {
+    return { step: "certificate", state: "running" };
+  }
+  if (journey.certificateWhy && eligible) {
+    return {
+      step: "certificate",
+      state: "failed",
+      why: journey.certificateWhy,
+    };
+  }
+  return { step: "certificate", state: "waiting" };
+};
+
+const startStepOf = (
+  relayNow: StoredRelay | null,
+  eligible: boolean,
+  starting: boolean,
+  pulled: { done: number; total: number } | undefined
+): StepOf<"start"> => {
+  if (starting && (eligible || relayNow)) {
+    return {
+      step: "start",
+      state: "running",
+      progress: STREAM_RELAY_WORDS.starting,
+    };
+  }
+  if (!relayNow) {
+    return { step: "start", state: "waiting" };
+  }
+  switch (relayNow.state) {
+    case "live":
+      return { step: "start", state: "done" };
+    case "failed":
+      return {
+        step: "start",
+        state: "failed",
+        why: relayNow.why ?? STREAM_RELAY_WORDS.failed,
+        ...(relayNow.whyCommand ? { command: relayNow.whyCommand } : {}),
+      };
+    case "stopped":
+      return {
+        step: "start",
+        state: "failed",
+        why: STREAM_RELAY_WORDS.stoppedStep,
+      };
+    default:
+      return {
+        step: "start",
+        state: "running",
+        progress: pulled
+          ? STREAM_RELAY_WORDS.pulling(pulled.done, pulled.total)
+          : STREAM_RELAY_WORDS.starting,
+      };
+  }
+};
+
+/** The proof: from outside it ticks; the latest that answered nothing stands as a failure; one from inside asks for one from outside. */
+const proveStepOf = (
+  startDone: boolean,
+  proofs: StoredProof[],
+  outside: StoredProof[]
+): StepOf<"prove"> => {
+  if (!startDone) {
+    return { step: "prove", state: "waiting" };
+  }
+  const [best] = outside;
+  if (best) {
+    return {
+      step: "prove",
+      state: "done",
+      device: best.device,
+      at: best.at,
+      ports: best.ports.join(", "),
+    };
+  }
+  const [latest] = [...proofs].sort((a, b) => b.at - a.at);
+  if (latest && latest.ports.length === 0) {
+    return {
+      step: "prove",
+      state: "failed",
+      device: latest.device,
+      at: latest.at,
+      outside: latest.outside,
+      ...(latest.refused ? { refused: true } : {}),
+    };
+  }
+  const inside = proofs.find((one) => one.ports.length > 0);
+  return inside
+    ? {
+        step: "prove",
+        state: "inside",
+        device: inside.device,
+        at: inside.at,
+        ports: inside.ports.join(", "),
+      }
+    : { step: "prove", state: "waiting" };
+};
+
 export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   const { db, relay, call } = deps;
 
-  /** What the name check last found, for the name it asked. */
-  let nameCheck: {
-    name: string;
-    askedAt: number;
-    finding: NameFinding;
-    answers?: string;
-  } | null = null;
+  let nameCheck: NameCheck | null = null;
   let nameAsking = false;
   /** Cloudflare's refusal of the token or the record, in its words. */
   let tokenWhy: string | undefined;
   let routerAsking = false;
-  /** The machine's last low-ports read, for the machine and the port it was read for; `failed` when the machine refused the read (no runtime, not Linux). */
-  let lowRead:
-    | { machineId: string; lowest: number; read: RelayLowPorts | "failed" }
-    | null = null;
+  let lowRead: LowRead | null = null;
   let lowAsking = false;
   let certifying = false;
   /** When a certificate's issue last found its machine away. */
@@ -182,14 +440,19 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     return deps
       .machines()
       .flatMap((one) => candidateOf(one) ?? [])
-      .sort((a, b) => Number(b.machineId === hub) - Number(a.machineId === hub));
+      .sort(
+        (a, b) => Number(b.machineId === hub) - Number(a.machineId === hub)
+      );
   };
 
   /** The machine picked, its address as the fleet reaches it now (as last found when it reports none). */
   const machineOf = (
     journey: StoredJourney,
     found: RelayCandidate[]
-  ): { machine: RelayMachine; candidate: RelayCandidate | undefined } | null => {
+  ): {
+    machine: RelayMachine;
+    candidate: RelayCandidate | undefined;
+  } | null => {
     if (!journey.machineId) {
       return null;
     }
@@ -238,259 +501,49 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     const picked = machineOf(journey, found);
     const machine = picked?.machine ?? null;
     const named = journey.nameState !== "skipped";
-    const name = journey.name ?? "";
-    const dns = !!journey.cloudflareToken;
-    const http = named && !dns;
-    const lowest: 443 | 80 = http ? 80 : 443;
+    const http = named && !journey.cloudflareToken;
     const proofs = db.proofs();
-    const outside = outsideProofs(proofs);
-    const steps: RelayStep[] = [];
-
-    // 1 · The machine.
-    if (machine) {
-      steps.push({ step: "machine", state: "done" });
-    } else if (found.length === 0) {
-      steps.push({ step: "machine", state: "none" });
-    } else {
-      steps.push({
-        step: "machine",
-        state: "needs",
-        choices: found.map(
-          (one): RelayChoice => ({
-            machineId: one.machineId,
-            name: one.name,
-            address: one.address,
-            lan: one.lan,
-            online: one.online,
-          })
-        ),
-      });
-    }
-
-    // 2 · The name.
-    const nameStep = ((): StepOf<"name"> => {
-      if (!machine) {
-        return { step: "name", state: "waiting", name };
-      }
-      if (journey.nameState === "skipped") {
-        return { step: "name", state: "skipped", name };
-      }
-      if (journey.nameState === "pointed") {
-        return { step: "name", state: "done", name };
-      }
-      if (!name) {
-        return {
-          step: "name",
-          state: "needs",
-          name,
-          ...(tokenWhy ? { tokenWhy } : {}),
-        };
-      }
-      if (nameCheck?.name !== name) {
-        return { step: "name", state: "checking", name };
-      }
-      return {
-        step: "name",
-        state: "needs",
-        name,
-        askedAt: nameCheck.askedAt,
-        finding: nameCheck.finding,
-        ...(nameCheck.answers ? { answers: nameCheck.answers } : {}),
-        ...(tokenWhy ? { tokenWhy } : {}),
-      };
-    })();
-    steps.push(nameStep);
+    const facts: StepFacts = {
+      journey,
+      machine,
+      name: journey.name ?? "",
+      named,
+      http,
+      lowest: http ? 80 : 443,
+      proofs,
+      outside: outsideProofs(proofs),
+      relayNow: machine ? relayFor(journey, named) : null,
+    };
+    const nameStep = nameStepOf(facts, nameCheck, tokenWhy);
     const nameDone = nameStep.state === "done" || nameStep.state === "skipped";
-
-    // 3 · The router, behind one. Its tick by hand comes only from outside.
-    const relayNow = machine ? relayFor(journey, named) : null;
-    const startLive = relayNow?.state === "live";
-    let routerOk = true;
-    if (machine?.lan) {
-      const routerStep = ((): StepOf<"router"> => {
-        if (journey.router === "mapped") {
-          return {
-            step: "router",
-            state: "done",
-            ...(journey.routerHow ? { how: journey.routerHow } : {}),
-          };
-        }
-        if (journey.router === "partial" || journey.router === "refused") {
-          if (outside.length > 0) {
-            return {
-              step: "router",
-              state: "done",
-              ...(journey.router === "partial" && journey.routerHow
-                ? { how: journey.routerHow }
-                : {}),
-            };
-          }
-          if (startLive) {
-            return { step: "router", state: "by-hand" };
-          }
-          return {
-            step: "router",
-            state: journey.router,
-            ...(journey.routerHow ? { how: journey.routerHow } : {}),
-            ...(http ? { http } : {}),
-          };
-        }
-        return {
-          step: "router",
-          state: routerAsking ? "asking" : "needs",
-          ...(http ? { http } : {}),
-        };
-      })();
-      routerOk = !(
-        routerStep.state === "needs" || routerStep.state === "asking"
-      );
-      steps.push(routerStep);
-    }
-
-    // 4 · The low ports, on a rootless runtime; known once its machine read them.
-    let runtimeOk = true;
-    if (machine && journey.machineId) {
-      const read =
-        lowRead?.machineId === journey.machineId ? lowRead : null;
-      const absent =
-        read?.read === "failed" ||
-        (read?.read !== undefined && !read.read.rootless);
-      if (!absent) {
-        const allowed =
-          (journey.lowPorts && (!read || read.lowest <= lowest)) ||
-          (read?.read !== "failed" &&
-            read?.read.allowed === true &&
-            read.lowest <= lowest);
-        let state: StepOf<"runtime">["state"] = "needs";
-        if (allowed) {
-          state = "done";
-        } else if (!read || read.lowest !== lowest) {
-          state = "checking";
-        }
-        runtimeOk = state === "done";
-        steps.push({ step: "runtime", state, lowest });
-      }
-    }
-
-    // 5 · The certificate, with a name: over HTTP once the router is asked.
-    const certDone =
-      named &&
-      journey.certificateName === name &&
-      journey.certificateEndsAt !== null;
-    const eligibleCert =
-      !!machine &&
-      named &&
-      nameDone &&
-      runtimeOk &&
-      (!http || routerOk) &&
-      !certDone;
-    if (named) {
-      let certStep: StepOf<"certificate"> = {
-        step: "certificate",
-        state: "waiting",
-      };
-      if (certDone) {
-        certStep = {
-          step: "certificate",
-          state: "done",
-          endsAt: journey.certificateEndsAt as number,
-        };
-      } else if (certifying) {
-        certStep = { step: "certificate", state: "running" };
-      } else if (journey.certificateWhy && eligibleCert) {
-        certStep = {
-          step: "certificate",
-          state: "failed",
-          why: journey.certificateWhy,
-        };
-      }
-      steps.push(certStep);
-    }
-
-    // 6 · The start, once everything above it stands.
-    const eligibleStart =
-      !!machine && nameDone && routerOk && runtimeOk && (!named || certDone);
-    const startStep = ((): StepOf<"start"> => {
-      if (!(eligibleStart || relayNow)) {
-        return { step: "start", state: "waiting" };
-      }
-      if (starting) {
-        return { step: "start", state: "running", progress: STREAM_RELAY_WORDS.starting };
-      }
-      if (!relayNow) {
-        return { step: "start", state: "waiting" };
-      }
-      switch (relayNow.state) {
-        case "live":
-          return { step: "start", state: "done" };
-        case "failed":
-          return {
-            step: "start",
-            state: "failed",
-            why: relayNow.why ?? STREAM_RELAY_WORDS.failed,
-            ...(relayNow.whyCommand ? { command: relayNow.whyCommand } : {}),
-          };
-        case "stopped":
-          return {
-            step: "start",
-            state: "failed",
-            why: STREAM_RELAY_WORDS.stoppedStep,
-          };
-        default: {
-          const pulled = relay.progress();
-          return {
-            step: "start",
-            state: "running",
-            progress: pulled
-              ? STREAM_RELAY_WORDS.pulling(pulled.done, pulled.total)
-              : STREAM_RELAY_WORDS.starting,
-          };
-        }
-      }
-    })();
-    steps.push(startStep);
+    const routerStep = machine?.lan ? routerStepOf(facts, routerAsking) : null;
+    const routerOk = !(
+      routerStep?.state === "needs" || routerStep?.state === "asking"
+    );
+    const runtimeStep = machine ? runtimeStepOf(facts, lowRead) : null;
+    const runtimeOk = !runtimeStep || runtimeStep.state === "done";
+    const { eligibleCert, eligibleStart } = gatesOf(facts, {
+      name: nameDone,
+      router: routerOk,
+      runtime: runtimeOk,
+    });
+    const startStep = startStepOf(
+      facts.relayNow,
+      eligibleStart,
+      starting,
+      relay.progress()
+    );
     const startDone = startStep.state === "done";
-
-    // 7 · The proof.
-    const proveStep = ((): StepOf<"prove"> => {
-      if (!startDone) {
-        return { step: "prove", state: "waiting" };
-      }
-      const [best] = outside;
-      if (best) {
-        return {
-          step: "prove",
-          state: "done",
-          device: best.device,
-          at: best.at,
-          ports: best.ports.join(", "),
-        };
-      }
-      const [latest] = [...proofs].sort((a, b) => b.at - a.at);
-      if (latest && latest.ports.length === 0) {
-        return {
-          step: "prove",
-          state: "failed",
-          device: latest.device,
-          at: latest.at,
-          outside: latest.outside,
-          ...(latest.refused ? { refused: true } : {}),
-        };
-      }
-      const inside = proofs.find((one) => one.ports.length > 0);
-      if (inside) {
-        return {
-          step: "prove",
-          state: "inside",
-          device: inside.device,
-          at: inside.at,
-          ports: inside.ports.join(", "),
-        };
-      }
-      return { step: "prove", state: "waiting" };
-    })();
-    steps.push(proveStep);
-
+    const proveStep = proveStepOf(startDone, proofs, facts.outside);
+    const steps: RelayStep[] = [
+      machineStepOf(machine, found),
+      nameStep,
+      ...(routerStep ? [routerStep] : []),
+      ...(runtimeStep ? [runtimeStep] : []),
+      ...(named ? [certificateStepOf(facts, eligibleCert, certifying)] : []),
+      startStep,
+      proveStep,
+    ];
     return {
       steps,
       machine,
@@ -498,7 +551,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       found,
       eligibleCert,
       eligibleStart,
-      lowest,
+      lowest: facts.lowest,
       named,
       startDone,
       proved: proveStep.state === "done",
@@ -511,7 +564,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     if (!stored || (journey && journey.liveAt === null)) {
       return null;
     }
-    const proven = outsideProofs(db.proofs())[0];
+    const [proven] = outsideProofs(db.proofs());
     const pulled = relay.progress();
     return {
       machine: {
@@ -610,6 +663,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         : { name, askedAt, finding: "elsewhere", answers: answers[0] };
     } finally {
       nameAsking = false;
+      publish();
     }
   };
 
@@ -619,7 +673,12 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   ): Promise<void> => {
     lowAsking = true;
     try {
-      const read = await call(machineId, RELAY_LOW_PORTS, [{ lowest }], READ_MS);
+      const read = await call(
+        machineId,
+        RELAY_LOW_PORTS,
+        [{ lowest }],
+        READ_MS
+      );
       if (read.kind === "unanswered") {
         return;
       }
@@ -635,6 +694,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       }
     } finally {
       lowAsking = false;
+      publish();
     }
   };
 
@@ -666,6 +726,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       }
     } finally {
       certifying = false;
+      publish();
     }
   };
 
@@ -692,11 +753,16 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       console.warn(`[relay-journey] the relay did not start: ${said(error)}`);
     } finally {
       starting = false;
+      publish();
     }
   };
 
   /** A fleet machine on another network than the relay's proves it, without the person. */
-  const fleetProve = async (relayAddress: string, relayMachine: string, urls: string[]): Promise<void> => {
+  const fleetProve = async (
+    relayAddress: string,
+    relayMachine: string,
+    urls: string[]
+  ): Promise<void> => {
     const away = deps.machines().find((one) => {
       if (!one.online || one.machineId === relayMachine) {
         return false;
@@ -731,11 +797,82 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     } finally {
       fleetProving = false;
       fleetProvedAt = Date.now();
+      publish();
     }
   };
 
-  /** One look at everything: what it can do by itself now is started, and the view sent when it changed. */
-  const refresh = async (): Promise<void> => {
+  type Computed = ReturnType<typeof compute>;
+
+  /** The name asked of DNS again, while its step stands and its last answer is {@link NAME_MS} old. */
+  const nameDue = (journey: StoredJourney, computed: Computed): void => {
+    const { name } = journey;
+    const step = computed.steps.find((one) => one.step === "name");
+    const standing = step?.state === "checking" || step?.state === "needs";
+    if (
+      !(computed.machine && name && standing) ||
+      nameAsking ||
+      journey.nameState !== "open" ||
+      (nameCheck?.name === name && Date.now() - nameCheck.askedAt < NAME_MS)
+    ) {
+      return;
+    }
+    checkName(name, computed.machine.address).catch((error: unknown) =>
+      console.warn(`[relay-journey] ${name} not asked: ${said(error)}`)
+    );
+  };
+
+  /** The low ports read again, while their step stands (or before the first read says whether it applies). */
+  const lowPortsDue = (journey: StoredJourney, computed: Computed): void => {
+    const { machineId } = journey;
+    const step = computed.steps.find((one) => one.step === "runtime");
+    const due =
+      step === undefined
+        ? lowRead?.machineId !== machineId
+        : step.state !== "done";
+    if (machineId && !lowAsking && due) {
+      readLowPorts(machineId, computed.lowest).catch(() => undefined);
+    }
+  };
+
+  /** The certificate, the start and a fleet machine's proof, each begun once everything before it stands. */
+  const workDue = (journey: StoredJourney, computed: Computed): void => {
+    const now = Date.now();
+    const { machine, candidate } = computed;
+    if (
+      computed.eligibleCert &&
+      !(certifying || journey.certificateWhy) &&
+      now - certAwayAt >= AWAY_MS
+    ) {
+      certify(journey).catch(() => undefined);
+    }
+    if (
+      machine &&
+      computed.eligibleStart &&
+      !starting &&
+      !relayFor(journey, computed.named)
+    ) {
+      start(journey, machine, candidate, computed.named).catch(() => undefined);
+    }
+    if (computed.startDone && journey.liveAt === null) {
+      db.journeyUpdate({ liveAt: now });
+    }
+    const stored = relay.read();
+    if (
+      computed.startDone &&
+      stored &&
+      !(computed.proved || fleetProving) &&
+      now - fleetProvedAt >= FLEET_PROOF_MS
+    ) {
+      fleetProve(
+        stored.address,
+        stored.machineId,
+        streamRelayUrls(stored.address, stored.hostname)
+      ).catch(() => undefined);
+    }
+  };
+
+  /** One look at everything: what it can do by itself now is begun, and the view sent when it changed. */
+  const refresh = (): void => {
     const journey = db.journey();
     if (!journey) {
       publish();
@@ -743,10 +880,10 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     }
     const computed = compute(journey);
     const { machine, candidate, found } = computed;
-    const now = Date.now();
+    const [only] = found;
     // One machine could run it: it is the one.
-    if (!journey.machineId && found.length === 1 && found[0]) {
-      pick(found[0]);
+    if (!journey.machineId && found.length === 1 && only) {
+      pick(only);
       publish();
       return;
     }
@@ -758,66 +895,9 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     ) {
       db.journeyUpdate({ address: candidate.address, lan: candidate.lan });
     }
-    const steps = new Map(computed.steps.map((step) => [step.step, step]));
-    const nameStep = steps.get("name") as StepOf<"name"> | undefined;
-    if (
-      machine &&
-      journey.machineId &&
-      !nameAsking &&
-      journey.nameState === "open" &&
-      journey.name &&
-      (nameCheck?.name !== journey.name || now - nameCheck.askedAt >= NAME_MS) &&
-      nameStep &&
-      (nameStep.state === "checking" || nameStep.state === "needs")
-    ) {
-      checkName(journey.name, machine.address).catch((error: unknown) =>
-        console.warn(`[relay-journey] ${journey.name} not asked: ${said(error)}`)
-      );
-    }
-    const runtime = steps.get("runtime") as StepOf<"runtime"> | undefined;
-    if (
-      journey.machineId &&
-      !lowAsking &&
-      (runtime === undefined
-        ? lowRead?.machineId !== journey.machineId
-        : runtime.state !== "done")
-    ) {
-      readLowPorts(journey.machineId, computed.lowest).catch(() => undefined);
-    }
-    if (
-      computed.eligibleCert &&
-      !certifying &&
-      !journey.certificateWhy &&
-      now - certAwayAt >= AWAY_MS
-    ) {
-      certify(journey).catch(() => undefined);
-    }
-    const startStep = steps.get("start") as StepOf<"start"> | undefined;
-    if (
-      machine &&
-      computed.eligibleStart &&
-      !starting &&
-      !relayFor(journey, computed.named)
-    ) {
-      start(journey, machine, candidate, computed.named).catch(() => undefined);
-    }
-    if (startStep?.state === "done" && journey.liveAt === null) {
-      db.journeyUpdate({ liveAt: now });
-    }
-    const stored = relay.read();
-    if (
-      startStep?.state === "done" &&
-      stored &&
-      !computed.proved &&
-      !fleetProving &&
-      now - fleetProvedAt >= FLEET_PROOF_MS
-    ) {
-      fleetProve(
-        stored.address,
-        stored.machineId,
-        streamRelayUrls(stored.address, stored.hostname)
-      ).catch(() => undefined);
-    }
+    nameDue(journey, computed);
+    lowPortsDue(journey, computed);
+    workDue(journey, computed);
     publish();
   };
 
@@ -826,13 +906,13 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       return;
     }
     refreshing = true;
-    refresh()
-      .catch((error: unknown) =>
-        console.warn(`[relay-journey] not looked at: ${said(error)}`)
-      )
-      .finally(() => {
-        refreshing = false;
-      });
+    try {
+      refresh();
+    } catch (error) {
+      console.warn(`[relay-journey] not looked at: ${said(error)}`);
+    } finally {
+      refreshing = false;
+    }
   };
 
   /* -------------------------------------------------------------- */
@@ -853,10 +933,12 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
   };
 
   const openPorts = async (journey: StoredJourney): Promise<void> => {
-    const machineId = journey.machineId;
-    const lan = journey.lan;
+    const { machineId, lan } = journey;
     if (!(machineId && lan)) {
-      throw new RelayRefusal(409, "The relay's machine is not behind a router.");
+      throw new RelayRefusal(
+        409,
+        "The relay's machine is not behind a router."
+      );
     }
     routerAsking = true;
     publish();
@@ -864,14 +946,25 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       const read = await call(
         machineId,
         RELAY_MAP,
-        [{ lan, http: journey.nameState !== "skipped" && !journey.cloudflareToken }],
+        [
+          {
+            lan,
+            http: journey.nameState !== "skipped" && !journey.cloudflareToken,
+          },
+        ],
         MAP_MS
       );
       if (read.kind === "unanswered") {
-        throw new RelayRefusal(503, STREAM_RELAY_WORDS.machineAway(machineName(machineId)));
+        throw new RelayRefusal(
+          503,
+          STREAM_RELAY_WORDS.machineAway(machineName(machineId))
+        );
       }
       if (!read.value.ok) {
-        throw new RelayRefusal(409, read.value.error ?? "The router was not asked.");
+        throw new RelayRefusal(
+          409,
+          read.value.error ?? "The router was not asked."
+        );
       }
       const mapped = read.value.result as RelayMapped;
       let router: StoredJourney["router"] = "refused";
@@ -881,16 +974,22 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       db.journeyUpdate({ router, routerHow: mapped.how });
     } finally {
       routerAsking = false;
+      publish();
     }
   };
 
   /** Let CawCo add it: the token checked, the zone found, the record made DNS only; the token kept sealed once it reaches the zone. */
-  const addTheRecord = async (journey: StoredJourney, token: string): Promise<void> => {
-    const name = journey.name;
-    const address = journey.address;
+  const addTheRecord = async (
+    journey: StoredJourney,
+    token: string
+  ): Promise<void> => {
+    const { name, address } = journey;
     const zone = name ? zoneOf(name) : null;
     if (!(name && address && zone)) {
-      throw new RelayRefusal(409, "The relay has no name with a zone to add yet.");
+      throw new RelayRefusal(
+        409,
+        "The relay has no name with a zone to add yet."
+      );
     }
     tokenWhy = undefined;
     const verified = await verifyToken(token);
@@ -919,99 +1018,125 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     nameCheck = null;
   };
 
-  const act = async (act: RelayAct, asker: RelayAsker): Promise<void> => {
-    const journey = db.journey();
-    if (act.act === "set-up") {
-      db.journeyOpen(asker.domain);
-      db.asked();
-      const opened = db.journey();
-      if (opened && !opened.name && opened.nameState === "open") {
-        const suggestion = suggestedName(asker.domain ?? opened.domain ?? "");
-        if (suggestion) {
-          db.journeyUpdate({ name: suggestion });
-        }
+  /** Set up: the journey begun (or begun again) through the asker's domain, its name suggested from it. */
+  const setUp = (asker: RelayAsker): void => {
+    db.journeyOpen(asker.domain);
+    db.asked();
+    const opened = db.journey();
+    if (opened && !opened.name && opened.nameState === "open") {
+      const suggestion = suggestedName(asker.domain ?? opened.domain ?? "");
+      if (suggestion) {
+        db.journeyUpdate({ name: suggestion });
       }
+    }
+  };
+
+  /** The relay started again on its machine; its failure stands on the start step (the relay's record keeps it), so the card says it once, there. */
+  const startAgain = async (journey: StoredJourney): Promise<void> => {
+    const stored = relay.read();
+    if (stored?.machineId !== journey.machineId) {
       return;
     }
-    if (act.act === "later" && !journey) {
+    await relay.start().catch((error: unknown) => {
+      if (!(error instanceof RelayRefusal)) {
+        throw error;
+      }
+    });
+  };
+
+  /** Each act on a journey that stands, by its kind. */
+  const ACTS: {
+    [K in RelayAct["act"]]: (
+      journey: StoredJourney,
+      act: Extract<RelayAct, { act: K }>,
+      asker: RelayAsker
+    ) => void | Promise<void>;
+  } = {
+    "set-up": (_journey, _act, asker) => setUp(asker),
+    later: () => {
+      db.journeyUpdate({ closed: "later" });
       db.asked();
+    },
+    "done-for-now": () => {
+      db.journeyUpdate({ closed: "done-for-now" });
+    },
+    pick: (_journey, one) => {
+      const candidate = candidates().find(
+        (each) => each.machineId === one.machineId
+      );
+      if (!candidate) {
+        throw new RelayRefusal(
+          409,
+          `${machineName(one.machineId)} can't run the relay: the internet reaches it nowhere the hub knows.`
+        );
+      }
+      pick(candidate);
+    },
+    name: (_journey, one) => {
+      const name = one.name.trim().toLowerCase();
+      if (!RELAY_DNS_NAME.test(name)) {
+        throw new RelayRefusal(
+          400,
+          STREAM_RELAY_WORDS.notDnsName(name || one.name)
+        );
+      }
+      db.journeyUpdate({ name, nameState: "open" });
+      nameCheck = null;
+      tokenWhy = undefined;
+    },
+    "skip-name": () => {
+      db.journeyUpdate({ nameState: "skipped" });
+    },
+    "add-name": (journey, _act, asker) => {
+      db.journeyUpdate({
+        nameState: "open",
+        name:
+          journey.name ?? suggestedName(asker.domain ?? journey.domain ?? ""),
+        closed: null,
+      });
+      nameCheck = null;
+    },
+    "add-record": (journey, one) => addTheRecord(journey, one.token.trim()),
+    "open-ports": (journey) => openPorts(journey),
+    retry: () => {
+      db.journeyUpdate({ certificateWhy: null });
+    },
+    "start-again": (journey) => startAgain(journey),
+    start: (journey) => startAgain(journey),
+    stop: () => relay.stop(),
+    remove: async () => {
+      await relay.remove();
+      db.journeyForget();
+      nameCheck = null;
+      tokenWhy = undefined;
+      lowRead = null;
+    },
+    // This screen proves it itself (the dashboard's `proveRelayHere`).
+    "check-again": () => undefined,
+  };
+
+  const actOn = async (one: RelayAct, asker: RelayAsker): Promise<void> => {
+    const journey = db.journey();
+    if (one.act === "set-up") {
+      setUp(asker);
       return;
     }
     if (!journey) {
-      throw new RelayRefusal(404, "The stream relay is not set up yet: press Set up first.");
-    }
-    switch (act.act) {
-      case "later":
-      case "done-for-now":
-        db.journeyUpdate({ closed: act.act });
+      if (one.act === "later") {
         db.asked();
         return;
-      case "pick": {
-        const candidate = candidates().find((one) => one.machineId === act.machineId);
-        if (!candidate) {
-          throw new RelayRefusal(
-            409,
-            `${machineName(act.machineId)} can't run the relay: the internet reaches it nowhere the hub knows.`
-          );
-        }
-        pick(candidate);
-        return;
       }
-      case "name": {
-        const name = act.name.trim().toLowerCase();
-        if (!RELAY_DNS_NAME.test(name)) {
-          throw new RelayRefusal(400, STREAM_RELAY_WORDS.notDnsName(name || act.name));
-        }
-        db.journeyUpdate({ name, nameState: "open" });
-        nameCheck = null;
-        tokenWhy = undefined;
-        return;
-      }
-      case "skip-name":
-        db.journeyUpdate({ nameState: "skipped" });
-        return;
-      case "add-name": {
-        const suggestion = suggestedName(asker.domain ?? journey.domain ?? "");
-        db.journeyUpdate({
-          nameState: "open",
-          name: journey.name ?? suggestion,
-          closed: null,
-        });
-        nameCheck = null;
-        return;
-      }
-      case "add-record":
-        await addTheRecord(journey, act.token.trim());
-        return;
-      case "open-ports":
-        await openPorts(journey);
-        return;
-      case "retry":
-        db.journeyUpdate({ certificateWhy: null });
-        return;
-      case "start-again":
-      case "start": {
-        const stored = relay.read();
-        if (stored && stored.machineId === journey.machineId) {
-          await relay.start();
-        }
-        return;
-      }
-      case "stop":
-        await relay.stop();
-        return;
-      case "remove":
-        await relay.remove();
-        db.journeyForget();
-        nameCheck = null;
-        tokenWhy = undefined;
-        lowRead = null;
-        return;
-      case "check-again":
-        return;
-      default:
-        throw new RelayRefusal(400, `No such act: ${JSON.stringify(act)}`);
+      throw new RelayRefusal(
+        404,
+        "The stream relay is not set up yet: press Set up first."
+      );
     }
+    const run = ACTS[one.act] as (
+      journey: StoredJourney,
+      act: RelayAct,
+      asker: RelayAsker
+    ) => void | Promise<void>;
+    await run(journey, one, asker);
   };
 
   /**
@@ -1038,16 +1163,22 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     changed: tick,
     connected: (machineId) => {
       const journey = db.journey();
-      if (journey?.machineId === machineId && journey.router && journey.router !== "refused") {
+      if (
+        journey?.machineId === machineId &&
+        journey.router &&
+        journey.router !== "refused"
+      ) {
         openPorts(journey).catch((error: unknown) =>
-          console.warn(`[relay-journey] the router was not asked again: ${said(error)}`)
+          console.warn(
+            `[relay-journey] the router was not asked again: ${said(error)}`
+          )
         );
       }
       tick();
     },
     act: async (one, asker) => {
       try {
-        await act(one, asker);
+        await actOn(one, asker);
       } finally {
         tick();
       }
@@ -1055,7 +1186,10 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     try: (asker) => {
       const minted = relay.mint(`proof:${asker.device.id}`, TRY_MS);
       if (!(minted && relay.read()?.state === "live")) {
-        throw new RelayRefusal(409, "The stream relay is not live yet, so there is nothing to prove.");
+        throw new RelayRefusal(
+          409,
+          "The stream relay is not live yet, so there is nothing to prove."
+        );
       }
       return minted;
     },
@@ -1070,7 +1204,11 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
         device: asker.device.name,
         address: report.seenAs ?? asker.address,
         outside: outsideOf(report.seenAs, asker.address, stored.address),
-        ports: [...new Set(report.answered.filter((url) => urls.includes(url)).map(portNameOf))],
+        ports: [
+          ...new Set(
+            report.answered.filter((url) => urls.includes(url)).map(portNameOf)
+          ),
+        ],
         refused: report.refused.length > 0 && report.answered.length === 0,
         at: Date.now(),
       });
@@ -1097,7 +1235,10 @@ const PROXY_HEADERS = ["x-forwarded-proto", "cf-connecting-ip", "cf-ray"];
  * it carries one of {@link PROXY_HEADERS} and its page's host is none of the
  * hub's own names (`own`) and no address. Null otherwise.
  */
-export const domainOf = (headers: Headers, own: readonly string[]): string | null => {
+export const domainOf = (
+  headers: Headers,
+  own: readonly string[]
+): string | null => {
   if (!PROXY_HEADERS.some((name) => headers.has(name))) {
     return null;
   }
@@ -1116,7 +1257,10 @@ export const domainOf = (headers: Headers, own: readonly string[]): string | nul
 };
 
 /** The public address a request came from: Cloudflare's word for it through a proxy, the first forwarded hop, else the socket's. */
-export const askedFrom = (headers: Headers, socket: string | null): string | null => {
+export const askedFrom = (
+  headers: Headers,
+  socket: string | null
+): string | null => {
   const through =
     headers.get("cf-connecting-ip") ??
     headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
@@ -1127,7 +1271,10 @@ export const askedFrom = (headers: Headers, socket: string | null): string | nul
 
 /** A browser's own key, for a device the hub has no pairing for (a trusted hub): its agent's words, hashed. */
 export const browserKey = (userAgent: string | null): string =>
-  `browser:${createHash("sha256").update(userAgent ?? "").digest("hex").slice(0, 16)}`;
+  `browser:${createHash("sha256")
+    .update(userAgent ?? "")
+    .digest("hex")
+    .slice(0, 16)}`;
 
 /** Answers a refusal with its status and sentence; anything else goes on as an error. */
 const refused = (error: unknown): Response => {
@@ -1158,7 +1305,10 @@ const ACT_BODY = t.Union([
       ).map((one) => t.Literal(one))
     ),
   }),
-  t.Object({ act: t.Literal("add-record"), token: t.String({ minLength: 1, maxLength: 200 }) }),
+  t.Object({
+    act: t.Literal("add-record"),
+    token: t.String({ minLength: 1, maxLength: 200 }),
+  }),
   t.Object({ act: t.Literal("pick"), machineId: t.String({ minLength: 1 }) }),
   t.Object({ act: t.Literal("name"), name: t.String({ maxLength: 253 }) }),
 ]);

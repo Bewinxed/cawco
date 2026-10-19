@@ -195,5 +195,4 @@ export const relayPickOf = (
   if (option === RELAY_CARD.setUp || option === RELAY_CARD.later) {
     return option;
   }
-  return;
 };

@@ -27,7 +27,7 @@
     type RelaySummary,
     STREAM_RELAY_WORDS as words,
     zoneOf,
-  } from "@cawco/core";
+  } from "@cawco/core/stream-relay";
   import AskHere from "#lib/cawco/AskHere.svelte";
   import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
   import Field from "#lib/cawco/config/Field.svelte";
@@ -459,7 +459,8 @@
     data-relay-choice={choice.machineId}
   >
     <div class="flex min-w-0 flex-col gap-(--space-1)">
-      <span class="min-w-0 text-label text-(--ink-strong) [overflow-wrap:anywhere]"
+      <span
+        class="min-w-0 text-label text-(--ink-strong) [overflow-wrap:anywhere]"
         >{choice.name}</span
       >
       <p class="min-w-0 text-meta text-(--ink-muted) [overflow-wrap:anywhere]">
@@ -483,7 +484,10 @@
   {#if step.state === "none"}
     <p class={NOTE}>{words.none}</p>
   {:else}
-    <ul aria-label={words.machine} class="m-0 flex min-w-0 list-none flex-col p-0">
+    <ul
+      aria-label={words.machine}
+      class="m-0 flex min-w-0 list-none flex-col p-0"
+    >
       {#each step.choices ?? [] as choice (choice.machineId)}
         {@render choiceRow(choice)}
       {/each}
@@ -566,7 +570,11 @@
     </div>
     {#if step.state !== "checking" && zone && tokenOpen}
       <div class="flex min-w-0 flex-col gap-(--space-2)" in:unfold out:unfold>
-        <Field hint={words.tokenHint(zone)} id="relay-token" label={words.tokenLabel}>
+        <Field
+          hint={words.tokenHint(zone)}
+          id="relay-token"
+          label={words.tokenLabel}
+        >
           <Input
             autocapitalize="off"
             autocomplete="off"
@@ -606,7 +614,10 @@
       <p class={NOTE}>{words.routerRefused}</p>
       {@render copyable(
         words.forwardsLabel,
-        words.forwards(machineNow.lan ?? machineNow.address, step.http ?? false),
+        words.forwards(
+          machineNow.lan ?? machineNow.address,
+          step.http ?? false
+        ),
         words.copyForwards,
         false
       )}
@@ -686,7 +697,11 @@
       <p class={NOTE}>{words.proveChecking}</p>
     {:else if step.state === "inside"}
       <p class={NOTE}>
-        {words.proveInside(step.device ?? "", machineNow.name, step.ports ?? "")}
+        {words.proveInside(
+          step.device ?? "",
+          machineNow.name,
+          step.ports ?? ""
+        )}
       </p>
       <div class="flex">
         <!-- A ghost's ink starts inside its box: it hangs back by its edge
@@ -711,6 +726,17 @@
         {/if}
       </p>
       <div class={CONTROLS}>
+        {#if step.refused}
+          <!-- Another secret than the hub's: the start gives it the hub's. -->
+          <Button
+            disabled={pending !== null}
+            label={words.startAgain}
+            onclick={() => act("start-again")}
+            pending={pending === "start-again"}
+            size="sm"
+            variant="secondary"
+          />
+        {/if}
         <Button
           disabled={pending !== null}
           label={words.checkAgain}
@@ -845,7 +871,9 @@
   >
     {@render head(false)}
     <div class="{UNDER_TITLE} items-start gap-(--space-3)">
-      <p class="text-body text-(--ink-strong) text-pretty [overflow-wrap:anywhere]">
+      <p
+        class="text-body text-(--ink-strong) text-pretty [overflow-wrap:anywhere]"
+      >
         {domain ? words.leadDomain(domain) : words.leadPlain}
       </p>
       <Button
@@ -978,7 +1006,9 @@
         >
           {#each summary.ports as port (port.name)}
             <li>
-              <Badge data-relay-port={port.name} variant={port.up ? "done" : "fail"}
+              <Badge
+                data-relay-port={port.name}
+                variant={port.up ? "done" : "fail"}
                 ><span>{port.name} {port.up ? "up" : "down"}</span></Badge
               >
             </li>
@@ -998,8 +1028,8 @@
         <p class="col-span-full {FAIL}" data-relay-why>
           {#if summary.whyCommand && summary.why.includes(summary.whyCommand)}
             {@const at = summary.why.indexOf(summary.whyCommand)}
-            {summary.why.slice(0, at)}<code class="font-mono text-(--ink-strong)"
-              >{summary.whyCommand}</code
+            {summary.why.slice(0, at)}<code
+              class="font-mono text-(--ink-strong)">{summary.whyCommand}</code
             >{summary.why.slice(at + summary.whyCommand.length)}
           {:else}
             {summary.why}

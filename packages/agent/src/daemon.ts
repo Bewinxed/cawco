@@ -328,7 +328,11 @@ const relayCertifyOf = (args: unknown): RelayCertifyArgs => {
 /** A `relay.map`'s address on the router's network, or a refusal saying what came. */
 const relayMapOf = (args: unknown): RelayMapArgs => {
   const given = args as Partial<RelayMapArgs> | null;
-  if (!(given && typeof given.lan === "string" && typeof given.http === "boolean")) {
+  if (!(
+    given &&
+    typeof given.lan === "string" &&
+    typeof given.http === "boolean"
+  )) {
     throw new Error("relay.map takes the machine's router address and http.");
   }
   return given as RelayMapArgs;
@@ -1699,15 +1703,15 @@ const attach = (
     // The machine's network changed (an interface's address came or went):
     // its capabilities read again, so the public address its router maps it
     // to (STUN, browser/relay-reach.ts) follows the network it is on.
-    const networkOf = (): string =>
+    const interfacesNow = (): string =>
       Object.values(networkInterfaces())
         .flatMap((addresses) => addresses ?? [])
         .map((one) => one.address)
         .sort()
         .join(",");
-    let network = networkOf();
+    let network = interfacesNow();
     const networkWatch = setInterval(() => {
-      const now = networkOf();
+      const now = interfacesNow();
       if (now === network) {
         return;
       }
@@ -3216,7 +3220,9 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(RELAY_RENEW, (args) => {
       const token = (args as { cloudflareToken?: unknown } | null)
         ?.cloudflareToken;
-      return renewRelay(typeof token === "string" ? { cloudflareToken: token } : {});
+      return renewRelay(
+        typeof token === "string" ? { cloudflareToken: token } : {}
+      );
     });
     // The relay's journey (hub relay-journey.ts): its certificate issued, the
     // low ports read, the router asked, and a binding from here through it.
@@ -3233,7 +3239,7 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(RELAY_PROVE, (args) => {
       const urls = (args as { urls?: unknown } | null)?.urls;
       return proveRelay(
-        Array.isArray(urls) ? urls.filter((url) => typeof url === "string") : []
+        Array.isArray(urls) ? urls.filter((one) => typeof one === "string") : []
       );
     });
     yield* Effect.forkScoped(

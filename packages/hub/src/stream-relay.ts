@@ -171,7 +171,9 @@ export const candidateOf = (
       externalIp: `${nat.address}/${nat.lan}`,
     };
   }
-  return seen ? { ...base, address: seen, lan: null, externalIp: seen } : undefined;
+  return seen
+    ? { ...base, address: seen, lan: null, externalIp: seen }
+    : undefined;
 };
 
 /** One port's STUN binding: answered within {@link STUN_MS}, or why not. */
@@ -260,10 +262,10 @@ export interface RelaySetup {
 }
 
 export interface StreamRelay {
-  /** The relay's machine connected: a relay that should run is started again (kept as it is when it runs already). */
-  connected: (machineId: string) => void;
   /** `relay.certify` on `machineId`: the certificate's end, or the refusal in its machine's words. */
   certify: (machineId: string, args: RelayCertifyArgs) => Promise<number>;
+  /** The relay's machine connected: a relay that should run is started again (kept as it is when it runs already). */
+  connected: (machineId: string) => void;
   /** A machine's relay frame: the record follows it. */
   heard: (frame: RelayFrame) => void;
   /** A credential for `userId`, good for `ttlMs`; null while the fleet has no relay, or none that runs. */

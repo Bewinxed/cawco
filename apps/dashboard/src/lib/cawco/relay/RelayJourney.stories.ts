@@ -12,7 +12,7 @@ import {
   type RelayStep,
   type RelaySummary,
   suggestedName,
-} from "@cawco/core";
+} from "@cawco/core/stream-relay";
 import RelayJourney from "./RelayJourney.svelte";
 
 const machine = {
@@ -118,7 +118,10 @@ const pick = {
 /** 1 · Two machines could run it: one row each, Run the relay here. */
 export const PickMachine = { args: pick, parameters: desk };
 /** 1 · The pick, as Caw's Needs you row: "2 machines can run it". */
-export const PickMachinePhone = { args: { ...pick, row: true }, parameters: phone };
+export const PickMachinePhone = {
+  args: { ...pick, row: true },
+  parameters: phone,
+};
 
 const checking = { steps: path({}) };
 /** A · Checking: just started through the domain; obelisk ticked, the name and the low ports being checked. */

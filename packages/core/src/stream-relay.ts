@@ -354,10 +354,10 @@ export interface RelaySummary {
   /** Its name, or null when the name was skipped. */
   name: string | null;
   ports: RelayPortChip[];
-  /** Who proved it from outside and when, or null while nobody has. */
-  proven: { device: string; at: number } | null;
   /** How far an image pull is, while it pulls. */
   progress?: string;
+  /** Who proved it from outside and when, or null while nobody has. */
+  proven: { device: string; at: number } | null;
   state: StreamRelayState;
   why: string | null;
   /** The command `why` names as its fix. */
@@ -712,13 +712,13 @@ export const STREAM_RELAY_WORDS = {
   prove: "Prove it from outside",
   proveChecking: "Checking from here…",
   proveInside: (device: string, machine: string, ports: string) =>
-    `Works from here (${device} on ${machine}'s network · ${ports}). Open this from a phone off Wi‑Fi to prove it from outside.`,
+    `Works from here (${device}, on ${machine}'s network · ${ports}). Open this from a phone off Wi‑Fi to prove it from outside.`,
   proveFailedInside: (machine: string) =>
     `No relay answer reached this screen within 8 s. This screen is on ${machine}'s own network, and many routers don't answer their own public address from inside. Open this from a phone off Wi‑Fi; it ticks here when that proves it.`,
   proveFailedOutside: (machine: string) =>
     `No relay answer reached this screen within 8 s from outside. The ports aren't reaching ${machine}: check the router's forwards, then press Check again.`,
   proveRefused:
-    "The relay answered this screen and refused its credential (401). Check again; if it is refused again, start the relay again so it takes the hub's secret.",
+    "The relay answered this screen and refused its credential (401), so it holds another secret than the hub's. Start it again to give it the hub's, then Check again.",
   proveDone: (device: string, at: number, ports: string) =>
     `Works from outside · ${device}, ${relayWhen(at)} (${ports})`,
   doneForNow: "Done for now",

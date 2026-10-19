@@ -19,7 +19,11 @@
  *   later item that draws the stream's place reads whether this page came
  *   through a domain while no relay is live, and opens the journey there.
  */
-import type { RelayAct, RelayJourneyView, RelayStep } from "@cawco/core";
+import type {
+  RelayAct,
+  RelayJourneyView,
+  RelayStep,
+} from "@cawco/core/stream-relay";
 import {
   actOnRelay,
   cawco,
@@ -27,6 +31,9 @@ import {
   reportRelayProof,
 } from "#lib/cawco/client.svelte.js";
 
+/** A TURN URL's scheme and its query, as the STUN URL through its host drops them. */
+const TURN_SCHEME = /^turns?:/;
+const QUERY = /\?.*$/;
 /** How long a relay candidate has to come, per URL (the journey design's 8 s). */
 const PROVE_MS = 8000;
 /** A TURN server's refusal of a credential (RFC 8656 401 Unauthorized). */
@@ -68,7 +75,9 @@ const probe = (
       }
     };
     peer.onicecandidateerror = (event) => {
-      if ((event as RTCPeerConnectionIceErrorEvent).errorCode === UNAUTHORIZED) {
+      if (
+        (event as RTCPeerConnectionIceErrorEvent).errorCode === UNAUTHORIZED
+      ) {
         refused = true;
       }
     };
@@ -82,7 +91,7 @@ const probe = (
 /** The public address the relay's STUN answer sees this screen at, through `turnUrl`'s host on UDP; null when none answered. */
 const seenBy = (turnUrl: string): Promise<string | null> =>
   new Promise((resolve) => {
-    const stun = turnUrl.replace(/^turns?:/, "stun:").replace(/\?.*$/, "");
+    const stun = turnUrl.replace(TURN_SCHEME, "stun:").replace(QUERY, "");
     const peer = new RTCPeerConnection({ iceServers: [{ urls: stun }] });
     let settled = false;
     const done = (address: string | null): void => {
@@ -110,7 +119,10 @@ const seenBy = (turnUrl: string): Promise<string | null> =>
   });
 
 /** This screen's proof running now: the card draws its step as checking. */
-export const relayProof = $state({ running: false, refusal: null as string | null });
+export const relayProof = $state({
+  running: false,
+  refusal: null as string | null,
+});
 
 /** The URLs this page proved by itself, so the start's tick proves once per page. */
 let provedFor: string | null = null;
@@ -145,7 +157,9 @@ export async function proveRelayHere(): Promise<void> {
 
 /** Whether the journey's start has ticked and nobody has proven it from outside yet. */
 const unproven = (journey: RelayJourneyView): boolean =>
-  journey.steps.some((step) => step.step === "start" && step.state === "done") &&
+  journey.steps.some(
+    (step) => step.step === "start" && step.state === "done"
+  ) &&
   !journey.steps.some((step) => step.step === "prove" && step.state === "done");
 
 /**

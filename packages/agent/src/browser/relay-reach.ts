@@ -28,8 +28,7 @@ const mappedBy = (url: string): Promise<string | undefined> =>
     }
   });
 
-const PRIVATE_V4 =
-  /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/;
+const PRIVATE_V4 = /^(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[01])\.)/;
 
 /**
  * This machine's address on its router's network: the first private IPv4
@@ -40,8 +39,10 @@ const PRIVATE_V4 =
 const lanAddress = (): string | undefined =>
   Object.values(networkInterfaces())
     .flatMap((addresses) => addresses ?? [])
-    .find((one) => one.family === "IPv4" && !one.internal && PRIVATE_V4.test(one.address))
-    ?.address;
+    .find(
+      (one) =>
+        one.family === "IPv4" && !one.internal && PRIVATE_V4.test(one.address)
+    )?.address;
 
 /**
  * The public address this machine's router maps it to, and its address on
@@ -59,8 +60,10 @@ export const routerAddress = async (): Promise<
   return address && isPublicAddress(address) ? { address, lan } : undefined;
 };
 
+const TURN_SCHEME = /^turn(s?):/;
+
 /** A TURN URL as the STUN binding through it: `turn:` → `stun:`, `turns:` → `stuns:`. */
-const asStun = (url: string): string => url.replace(/^turn(s?):/, "stun$1:");
+const asStun = (url: string): string => url.replace(TURN_SCHEME, "stun$1:");
 
 /** `relay.prove`: each of the relay's URLs that answered a STUN binding from this machine. */
 export const proveRelay = async (urls: string[]): Promise<string[]> => {

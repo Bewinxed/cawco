@@ -719,6 +719,13 @@ import {
 } from "./rebalance";
 import { envelopeFault, type RegistryShape, refusalFrame } from "./registry";
 import { createRelay, type Relay, relayRoutes } from "./relay";
+import {
+  askedFrom,
+  browserKey,
+  createRelayJourney,
+  domainOf,
+  relayJourneyRoutes,
+} from "./relay-journey";
 import { createRepoPublish } from "./repo-publish";
 import { createRoutines, type Routines, routineRoutes } from "./routines";
 import { RuleEngine } from "./rules";
@@ -737,13 +744,6 @@ import { createSshDoor } from "./ssh-door";
 import { createSshTunnels } from "./ssh-tunnels";
 import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
-import {
-  askedFrom,
-  browserKey,
-  createRelayJourney,
-  domainOf,
-  relayJourneyRoutes,
-} from "./relay-journey";
 import { createStreamRelay } from "./stream-relay";
 import { suggest } from "./suggest";
 import { createTailnetHttps, dashboardRelay } from "./tailnet-https";

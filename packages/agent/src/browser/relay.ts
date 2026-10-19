@@ -709,9 +709,7 @@ export const certifyRelay = (args: RelayCertifyArgs): Promise<RelayCertified> =>
       if (lowPorts) {
         throw new RelayFailed(lowPorts);
       }
-      await port80Free((held) =>
-        RELAY_FAILURES.certificatePort80(name, held)
-      );
+      await port80Free((held) => RELAY_FAILURES.certificatePort80(name, held));
     }
     await pullImage(docker, CERTBOT_IMAGE, () => undefined);
     await ensureVolume(docker);
