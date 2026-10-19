@@ -211,9 +211,9 @@ const CHOICES: [string, (view: View) => View, ("fit" | 1)?][] = [
   ],
 ];
 const VIEW_MENU =
-  "Scheme[As the page*, Light, Dark, Light and dark] | Width[Each story's own*, Phone, 390, Tablet, 768, Desk, 1280, Every width] | Reduced motion | Zoom to fit, Zoom to 100%";
+  "Map | Scheme[As the page*, Light, Dark, Light and dark] | Width[Each story's own*, Phone, 390, Tablet, 768, Desk, 1280, Every width] | Reduced motion | Zoom to fit, Zoom to 100% | Verify against the design system";
 const VIEW_MENU_CHOSEN =
-  "Scheme[As the page, Light, Dark, Light and dark*] | Width[Each story's own, Phone, 390, Tablet, 768, Desk, 1280, Every width*] | Reduced motion | Zoom to fit, Zoom to 100%";
+  "Map | Scheme[As the page, Light, Dark, Light and dark*] | Width[Each story's own, Phone, 390, Tablet, 768, Desk, 1280, Every width*] | Reduced motion | Zoom to fit, Zoom to 100% | Verify against the design system";
 
 /** CanvasView.svelte's `send`: the message as the web posts it, its keys sorted as the app's log writes them. */
 function posted(view: View, zoom?: "fit" | 1): string {
@@ -396,7 +396,7 @@ function appLegs(kit: Kit, tag: string, heard: string[]): void {
     "canvas view menu [fresh] "
   );
   kit.check(
-    `${tag}: v: its entries, as the web's: Scheme, Width, Reduced motion, the zooms; the session's first view checked`,
+    `${tag}: v: its entries, as the web's: Map, Scheme, Width, Reduced motion, the zooms, Verify; the session's first view checked`,
     fresh === VIEW_MENU,
     fresh
   );

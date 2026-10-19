@@ -8,8 +8,16 @@ import UIKit
 /// workspace preview's server (`serve`), each run by the daemon in its
 /// workspace. Starting, waking and a sheet's page compiling stand on the
 /// loading cover; compile errors on a card over the last render, dimmed; a
-/// stage that didn't start, where the page would be, with Try again.
+/// stage that didn't start, where the page would be, with Try again; and a
+/// page still on its way past the time its stage is given, the same place,
+/// never an endless cover.
 struct SheetStageShown: Equatable {
+    /// How long a stage has to answer once started (core stage.ts `STAGE_READY_MS`).
+    static let readyTime = 60.0
+    /// How long a place's stage clone may take before its stage starts: its
+    /// git, then its install (core `STAGE_CLONE_MS`, `STAGE_CLONE_GIT_MS` + `STAGE_CLONE_INSTALL_MS`).
+    static let cloneTime = 60.0 + 180.0
+
     /// The cover's line while the page is on its way; nil when nothing is.
     var waiting: String?
     /// The first compile error standing now, and how many more stand besides.
@@ -20,13 +28,43 @@ struct SheetStageShown: Equatable {
 
     struct Down: Equatable {
         var title: String
+        /// The plain words (core sheet.ts `downLine`, `serverDownLine`).
         var line: String
+        /// The stage's own words, under Show details; nil when it gave none.
+        var details: String?
+        /// The canvas can leave the panel from here (a page never drawn): Remove, asked in place.
+        var remove = false
+    }
+
+    /// How long the cover may stand, in seconds (PreviewPane.svelte
+    /// `waitingFor`), counted from when the pane began waiting: a starting
+    /// stage its clone and install, then its time to serve; one waking or
+    /// live but not yet drawn its time to serve; nil when nothing is on its way.
+    static func waitingFor(_ stage: StageState?, connected: Bool, served: Int?) -> Double? {
+        switch stage?.value1?.status ?? stage?.value2?.status {
+        case .starting: cloneTime + readyTime
+        case .waking, .asleep: readyTime
+        case .live: connected || served != nil ? nil : readyTime
+        default: nil
+        }
     }
 
     /// PreviewPane.svelte's derivations, for `stage` while the page has (or
     /// has not) said it is ready; `served`, the port of a workspace preview's
-    /// server, nil for a sheet's stage.
-    init(_ stage: StageState?, connected: Bool, served: Int?) {
+    /// server, nil for a sheet's stage; `neverDrawn`, the page stood on its
+    /// way past `waitingFor` (`waited`, in seconds).
+    init(_ stage: StageState?, connected: Bool, served: Int?, neverDrawn: Bool = false, waited: Double? = nil) {
+        defer {
+            if neverDrawn, down == nil {
+                // What the stage last said of it: its own message, else the first compile error's line.
+                let said = stage?.value1?.message ?? stage?.value2?.message
+                    ?? error?.message.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init)
+                waiting = nil
+                down = Down(title: Words.Sheet.neverDrawnTitle,
+                            line: Words.Sheet.neverDrawnLine(seconds: Int((waited ?? Self.readyTime).rounded())),
+                            details: said, remove: true)
+            }
+        }
         if let sheet = stage?.value1 {
             switch sheet.status {
             case .starting: waiting = Words.Sheet.starting(dir: sheet.dir)
@@ -37,9 +75,8 @@ struct SheetStageShown: Equatable {
                 more = max(0, sheet.errors.count - 1)
             case .error:
                 let toolchain = Words.Sheet.Toolchains.byKey[sheet.toolchain.rawValue] ?? sheet.toolchain.rawValue
-                // The stage's own words on their own line under the plain one (the web folds them under Show details).
                 down = Down(title: Words.Sheet.downTitle(dir: sheet.dir),
-                            line: [Words.Sheet.downLine(toolchain: toolchain), sheet.message].compactMap(\.self).joined(separator: "\n"))
+                            line: Words.Sheet.downLine(toolchain: toolchain), details: sheet.message)
             case .unrecognized: break
             }
         } else if let server = stage?.value2, let served {
@@ -51,7 +88,7 @@ struct SheetStageShown: Equatable {
                 more = max(0, server.errors.count - 1)
             case .error:
                 down = Down(title: Words.Sheet.serverDownTitle(port: served),
-                            line: [Words.Sheet.serverDownLine, server.message].compactMap(\.self).joined(separator: "\n"))
+                            line: Words.Sheet.serverDownLine, details: server.message)
             case .unrecognized: break
             }
         }
@@ -171,12 +208,27 @@ final class SheetErrorCard: UIView {
 
 /// `.down` for a stage that didn't start: the well's own surface over the
 /// page, the kit's empty state `space-6` in from its sides, scrolling when
-/// it is taller than the well, Try again its one action.
+/// it is taller than the well, Try again its one action. The stage's own
+/// words, when it gave any, fold under Show details beside it, as RowFault
+/// folds a machine's (PreviewPane.svelte `stageDetails`): `.down-details`,
+/// the figure face in muted ink `space-2` under the actions, a long machine
+/// path wrapping anywhere.
 final class SheetDownView: UIView {
     private let scroll = UIScrollView()
     private var empty: KitEmptyState?
     private(set) var again: UIButton!
+    /// Show details / Hide details, standing while the stage gave its own words.
+    private(set) var detailsButton: UIButton!
+    /// Remove, on a page never drawn: the canvas leaves the panel, once asked in place.
+    private(set) var removeButton: UIButton!
+    /// The question Remove asks, under the actions (AskHere, The Open Page Rule).
+    let asks = AskHere()
+    private let details = KitLabel(TypeScale.typeCode, ink: Palette.inkMuted, lines: 0)
+    /// The stage's own words unfolded: the pane's, kept from one down to the next.
+    private(set) var detailsShown = false
     var onAgain: () -> Void = {}
+    /// The canvas's name, and its removal once the person confirms.
+    var onRemove: (() -> (name: String, run: () async throws -> Void)?) = { nil }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -191,6 +243,24 @@ final class SheetDownView: UIView {
             scroll.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
         again = KitButton.make(Words.Sheet.tryAgain, glyph: .refresh, variant: .outline, height: .sm) { [weak self] in self?.onAgain() }
+        detailsButton = KitButton.make("Show details", variant: .ghost, height: .sm) { [weak self] in
+            guard let self else { return }
+            detailsShown.toggle()
+            paintDetails()
+        }
+        removeButton = KitButton.make(Words.Sheet.remove, glyph: .trash, variant: .ghost, height: .sm) { [weak self] in
+            self?.askRemove()
+        }
+        details.lineBreakMode = .byCharWrapping
+        details.isHidden = true
+    }
+
+    /// Remove, asked in place under the actions (PreviewPane.svelte `removeShown`): destructive.
+    private func askRemove() {
+        guard let asked = onRemove() else { return }
+        asks.ask(.init(title: Words.Sheet.removeTitle(name: asked.name), body: [Words.Sheet.removeBody],
+                       confirmLabel: Words.Sheet.removeConfirm, pendingLabel: Words.Sheet.removing,
+                       destructive: true, run: asked.run))
     }
 
     @available(*, unavailable)
@@ -199,8 +269,18 @@ final class SheetDownView: UIView {
     /// What stands where the page would be, as the pane says it.
     func show(_ down: SheetStageShown.Down) {
         empty?.removeFromSuperview()
-        again.removeFromSuperview()
-        let made = KitEmptyState(icon: .alert, title: down.title, line: down.line, action: again)
+        // `.down-actions`: Try again, Remove on a page never drawn, and Show details while the stage said why.
+        let actions = UIStackView(arrangedSubviews: [again, removeButton, detailsButton])
+        actions.spacing = Space.space2
+        actions.alignment = .center
+        removeButton.isHidden = !down.remove
+        detailsButton.isHidden = down.details == nil
+        details.text = down.details
+        let action = UIStackView(arrangedSubviews: [actions, details, asks])
+        action.axis = .vertical
+        action.alignment = .leading
+        action.spacing = Space.space2
+        let made = KitEmptyState(icon: .alert, title: down.title, line: down.line, action: action)
         made.translatesAutoresizingMaskIntoConstraints = false
         scroll.addSubview(made)
         let side = Space.space6
@@ -210,8 +290,24 @@ final class SheetDownView: UIView {
             made.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor, constant: -side),
             made.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
             made.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -side * 2),
+            action.widthAnchor.constraint(lessThanOrEqualTo: made.widthAnchor),
+            details.widthAnchor.constraint(lessThanOrEqualTo: action.widthAnchor),
+            asks.widthAnchor.constraint(equalTo: action.widthAnchor),
         ])
         empty = made
+        paintDetails()
+    }
+
+    /// Show details' words and the stage's own words, folded or not.
+    private func paintDetails() {
+        let shown = detailsShown && details.text != nil
+        details.isHidden = !shown
+        let words = shown ? "Hide details" : "Show details"
+        KitButton.setTitle(words, of: detailsButton, variant: .ghost, height: .sm)
+        detailsButton.accessibilityValue = shown ? "Expanded" : "Collapsed"
+        #if DEBUG
+        PreviewProbe.say("preview stage-down details=\(detailsButton.isHidden ? "none" : shown ? "shown" : "folded") words=\(detailsButton.isHidden ? "-" : words) text=\(shown ? details.text ?? "" : "-")")
+        #endif
     }
 
     /// Try again's pending form (Button `pending`): its spinner and "Starting…", not pressable.

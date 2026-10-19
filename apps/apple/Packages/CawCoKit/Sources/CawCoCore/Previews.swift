@@ -176,7 +176,7 @@ public extension HubConnection {
     }
 
     /// An error as the formula's middle sentence: a refusal's words, a lost connection's.
-    private static func sentence(_ error: any Error) -> String {
+    static func sentence(_ error: any Error) -> String {
         if let refusal = error as? TaskRefusal { return refusal.message }
         if error is URLError { return "The hub could not be reached." }
         return error.localizedDescription

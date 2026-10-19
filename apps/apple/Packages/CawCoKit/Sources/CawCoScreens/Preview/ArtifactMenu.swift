@@ -69,7 +69,9 @@ final class ArtifactTitleButton: UIButton {
 
 /// The title control's menu (ArtifactMenu.svelte): the session's artifacts,
 /// newest first, each promoted one tagged with its short commit; choosing
-/// one shows it. Each row's Remove (its trailing glyph, always under a
+/// one shows it. Where the head dropped its line for want of room, the line
+/// (the ask, or "Sent to <session>") is the menu's first row: plain words,
+/// wrapping, never an item. Each row's Remove (its trailing glyph, always under a
 /// finger) removes it where it stands: a light action, no confirm. A row
 /// leaves once the hub says it is gone, the rows under it closing up, and
 /// also when the panel's frame stops listing it (removed in another view, or
@@ -85,16 +87,21 @@ final class ArtifactMenuController: KitPopoverController {
     /// Rows whose removal the hub has not answered yet.
     private var removing: Set<String> = []
     private let rows = UIStackView()
+    /// The head's line, said here while the head has no room for it.
+    private var lineWords: String?
+    private let lineLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+    private let lineRow = UIView()
     private let scroll = UIScrollView()
     private var drawn: [String: ArtifactMenuRow] = [:]
     /// The menu's width (ArtifactMenu.svelte `w-64`).
     static let width = 256.0
 
-    init(hub: HubConnection, instanceId: String, shown: (id: String, kind: ArtifactKind, name: String), held: [String]?) {
+    init(hub: HubConnection, instanceId: String, shown: (id: String, kind: ArtifactKind, name: String), held: [String]?, line: String?) {
         self.hub = hub
         self.instanceId = instanceId
         self.shown = shown
         self.held = held
+        lineWords = line
         super.init()
     }
 
@@ -104,9 +111,13 @@ final class ArtifactMenuController: KitPopoverController {
     override func viewDidLoad() {
         super.viewDidLoad()
         rows.axis = .vertical
+        lineLabel.lineBreakStrategy = .standard
+        lineRow.hold(lineLabel, insets: UIEdgeInsets(top: Space.space1, left: Space.space2, bottom: Space.space1, right: Space.space2))
+        let body = UIStackView(arrangedSubviews: [lineRow, rows])
+        body.axis = .vertical
         scroll.alwaysBounceVertical = false
-        scroll.hold(rows, insets: UIEdgeInsets(top: 6, left: 6, bottom: 6, right: 6))
-        rows.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -12).isActive = true
+        scroll.hold(body, insets: UIEdgeInsets(top: 6, left: 6, bottom: 6, right: 6))
+        body.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -12).isActive = true
         card.hold(scroll)
         view.accessibilityViewIsModal = true
         draw()
@@ -122,13 +133,20 @@ final class ArtifactMenuController: KitPopoverController {
         draw()
     }
 
+    /// The head's line as it stands: nil while the head says it itself.
+    func line(_ words: String?) {
+        guard words != lineWords else { return }
+        lineWords = words
+        draw()
+    }
+
     private func read() {
         Task { [weak self] in
             guard let self else { return }
             do {
                 listed = try await hub.listArtifacts(in: instanceId)
                 #if DEBUG
-                PreviewProbe.say("artifact menu listed " + (listed ?? []).map { "\($0.name)@\($0.createdAt)\($0.promoted.map { ":promoted=\($0.commit.prefix(7))" } ?? "")" }.joined(separator: ","))
+                PreviewProbe.say("artifact menu listed " + (listed ?? []).map { "\($0.name)@\($0.createdAt)\($0.promoted.map { ":promoted=\($0.commit.prefix(7))" } ?? "")\($0.waiting ? ":waiting" : "")" }.joined(separator: ","))
                 #endif
                 draw()
                 #if DEBUG
@@ -145,14 +163,19 @@ final class ArtifactMenuController: KitPopoverController {
     }
 
     /// The rows as they stand: the list as read, less any the frame no longer names.
-    private var rowsNow: [(id: String, kind: ArtifactKind, name: String, createdAt: String?, promoted: String?)] {
-        guard let listed else { return [(shown.id, shown.kind, shown.name, nil, nil)] }
+    private var rowsNow: [(id: String, kind: ArtifactKind, name: String, createdAt: String?, promoted: String?, waiting: Bool)] {
+        guard let listed else { return [(shown.id, shown.kind, shown.name, nil, nil, false)] }
         return listed.filter { row in held?.contains(row.id) ?? true }
-            .map { ($0.id, $0.kind, $0.name, $0.createdAt, $0.promoted.map { String($0.commit.prefix(7)) }) }
+            .map { ($0.id, $0.kind, $0.name, $0.createdAt, $0.promoted.map { String($0.commit.prefix(7)) }, $0.waiting) }
     }
 
     private func draw() {
         guard isViewLoaded else { return }
+        lineLabel.text = lineWords
+        lineRow.isHidden = lineWords == nil
+        #if DEBUG
+        PreviewProbe.say("artifact menu line \(lineWords ?? "-")")
+        #endif
         let now = rowsNow
         let ids = now.map(\.id)
         // A row that left closes up, the rows under it sliding into its room.
@@ -186,11 +209,11 @@ final class ArtifactMenuController: KitPopoverController {
             }()
             let age = item.createdAt.flatMap { try? Date.ISO8601FormatStyle(includingFractionalSeconds: true).parse($0) }
                 .map { RailAge.short($0.timeIntervalSince1970 * 1000, now: wall) }
-            row.show(kind: item.kind, name: item.name, promoted: item.promoted, age: age,
+            row.show(kind: item.kind, name: item.name, promoted: item.promoted, waiting: item.waiting, age: age,
                      current: item.id == shown.id, busy: removing.contains(item.id))
         }
         view.layoutIfNeeded()
-        let fits = rows.systemLayoutSizeFitting(CGSize(width: Self.width - 12, height: 0),
+        let fits = (rows.superview ?? rows).systemLayoutSizeFitting(CGSize(width: Self.width - 12, height: 0),
                                                 withHorizontalFittingPriority: .required,
                                                 verticalFittingPriority: .fittingSizeLevel).height + 12
         let room = (presentingViewController?.view.bounds.height ?? 600) * 0.6
@@ -236,7 +259,7 @@ final class ArtifactMenuController: KitPopoverController {
 
     /// The rows as drawn, top to bottom: each name with its promoted tag's words.
     private func logRows() {
-        let drawnNames = rowsNow.map { "\($0.name)\($0.promoted.map { "[\(Words.Artifacts.promoted(commit: $0))]" } ?? "")" }
+        let drawnNames = rowsNow.map { "\($0.name)\($0.promoted.map { "[\(Words.Artifacts.promoted(commit: $0))]" } ?? "")\($0.waiting ? "[\(Words.Artifacts.waitingOnYou)]" : "")" }
         PreviewProbe.say("artifact menu rows \(drawnNames.joined(separator: ","))")
     }
     #endif
@@ -244,7 +267,8 @@ final class ArtifactMenuController: KitPopoverController {
 
 /// One row of the menu (the kit's menu item, `--c-artifact-row-h` tall): the
 /// kind's glyph, the name in the label role, the promoted tag and the age in
-/// the meta size, muted and in tabular figures, then Remove. The name keeps
+/// the meta size, muted and in tabular figures, then Remove; a row waiting
+/// on the person wears the live dot after its name (LiveDot). The name keeps
 /// its own width; in a row too narrow for everything the promoted tag gives
 /// up its room first.
 private final class ArtifactMenuRow: UIControl {
@@ -254,6 +278,7 @@ private final class ArtifactMenuRow: UIControl {
     private let name = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
     private let promoted = KitLabel(TypeScale.typeLabel.with(points: TypeScale.textMeta), ink: Palette.inkMuted)
     private let age = KitLabel(TypeScale.typeLabel.with(points: TypeScale.textMeta), ink: Palette.inkMuted)
+    private let waiting = liveDot(Words.Artifacts.waitingOnYou)
     private var removeButton: UIButton!
 
     init() {
@@ -272,7 +297,7 @@ private final class ArtifactMenuRow: UIControl {
         removeButton.tintColor = Palette.inkMuted
         let spacer = UIView()
         spacer.setContentHuggingPriority(.defaultLow, for: .horizontal)
-        let line = UIStackView(arrangedSubviews: [glyph, name, promoted, spacer, age, removeButton])
+        let line = UIStackView(arrangedSubviews: [glyph, name, promoted, waiting, spacer, age, removeButton])
         line.spacing = 10
         line.alignment = .center
         line.setCustomSpacing(Space.space1, after: age)
@@ -294,7 +319,7 @@ private final class ArtifactMenuRow: UIControl {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("ArtifactMenuRow is built in code") }
 
-    func show(kind: ArtifactKind, name text: String, promoted commit: String?, age said: String?, current: Bool, busy: Bool) {
+    func show(kind: ArtifactKind, name text: String, promoted commit: String?, waiting waits: Bool, age said: String?, current: Bool, busy: Bool) {
         glyph.glyph = kind.glyph
         name.text = text
         // The one shown is the strong ink, as `aria-current` draws it.
@@ -302,13 +327,14 @@ private final class ArtifactMenuRow: UIControl {
         glyph.tintColor = current ? Palette.inkStrong : Palette.inkMuted
         promoted.text = commit.map { Words.Artifacts.promoted(commit: $0) }
         promoted.isHidden = commit == nil
+        waiting.isHidden = !waits
         age.text = said
         age.isHidden = said == nil
         alpha = busy ? 0.5 : 1
         removeButton.isEnabled = !busy
         removeButton.accessibilityLabel = Words.Artifacts.removeNamed(name: text)
         removeButton.toolTip = Words.Artifacts.remove
-        accessibilityLabel = [text, commit.map { Words.Artifacts.promoted(commit: $0) }, said].compactMap(\.self).joined(separator: ", ")
+        accessibilityLabel = [text, commit.map { Words.Artifacts.promoted(commit: $0) }, waits ? Words.Artifacts.waitingOnYou : nil, said].compactMap(\.self).joined(separator: ", ")
         accessibilityTraits = current ? [.button, .selected] : .button
         // VoiceOver's own way to Remove, beside the row's choose.
         accessibilityCustomActions = [UIAccessibilityCustomAction(name: Words.Artifacts.removeNamed(name: text)) { [weak self] _ in

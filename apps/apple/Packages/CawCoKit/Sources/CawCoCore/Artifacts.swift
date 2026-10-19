@@ -100,6 +100,24 @@ public extension HubConnection {
         return CanvasExport(file: text, drawn: drawn, outline: outline, png: png, page: page)
     }
 
+    /// A component canvas's map (artifact-api.ts `fetchCanvasMap`): its
+    /// component, what renders it and what it renders, each with its states
+    /// and frames in miniature.
+    func canvasMap(_ id: String, in instanceId: String) async throws -> CanvasMap {
+        let output = try await api.instances.canvasMap(.init(path: .init(id: instanceId, artifact: id)))
+        guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
+        return try answer.body.json
+    }
+
+    /// The panel's Verify (artifact-api.ts `verifyArtifact`): a design system
+    /// round on a component canvas, its verdict to the canvas's session.
+    /// Answers what the hub did, one sentence.
+    func verifyArtifact(_ id: String, in instanceId: String) async throws -> String {
+        let output = try await api.instances.verifyArtifact(.init(path: .init(id: instanceId, artifact: id)))
+        guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
+        return try answer.body.json.verify
+    }
+
     /// The draft canvas went out with a send: the session holds it now (client.svelte.ts `canvasSent`).
     func canvasSent(_ id: String, in instanceId: String) async throws {
         let output = try await api.instances.canvasSent(.init(path: .init(id: instanceId, artifact: id)))
@@ -151,5 +169,11 @@ public extension HubConnection {
 
 /// One artifact as the panel's title menu lists it (core `ArtifactSummary`), newest first.
 public typealias ArtifactSummary = Components.Schemas.ArtifactSummary
+/// A component canvas's map (core `CanvasMap`): its component, what renders it above, what it renders below.
+public typealias CanvasMap = Components.Schemas.CanvasMap
+/// One component on it (core `CanvasMapNode`).
+public typealias CanvasMapNode = Components.Schemas.CanvasMapNode
+/// A component's frames as a browser last drew them, in miniature (core `DesignThumb`).
+public typealias DesignThumb = Components.Schemas.DesignThumb
 /// What an artifact is: a page, a canvas, a preview or a sheet (core `ArtifactKind`).
 public typealias ArtifactKind = OpenEnums.ArtifactKind

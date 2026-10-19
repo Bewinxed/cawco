@@ -28,6 +28,25 @@
  * the stage's start is refused ("…runs inside another macOS sandbox
  * (Seatbelt), and Seatbelt does not nest…", core boundary-nesting.ts).
  *
+ * 3. A component canvas of `src/Card.stories.js` made with an `ask`, the
+ *    app opened with `-canvas-map`: the head's line under its name says the
+ *    `ask` word for word, and no line it ever says is a path or a route;
+ *    the canvas view's Map stands the map over the page, Card in the middle
+ *    and Deck, which renders it, above (the hub's `GET …/map` the same).
+ * 4. The app opened with `-canvas-verify`: the canvas view's Verify asks the
+ *    hub's design system round (`POST …/verify`), and the hub's sentence comes
+ *    back as the app's toast.
+ * 5. A component canvas of `broken/src/Tag.stories.js`, whose toolchain's
+ *    Vite config throws: the stage stands down, the app opened with
+ *    `-stage-details` shows the plain words with Show details beside Try
+ *    again, and Show details unfolds the stage's own error.
+ * 6. A component canvas of `src/Unfinished.stories.js`, whose component
+ *    never compiles: its stage is live but its page never draws, and past
+ *    the stage's 60s the cover gives way to "The canvas couldn't be drawn"
+ *    with Try again, Remove (asked in place) and Show details.
+ * 3, 5 and 6 are captured beside Mobile Safari's dashboard at the same
+ * simulator viewport, light and dark, in `caps/` under the run's folder.
+ *
  *   bash apps/apple/scripts/build-both.sh ios --compile-only
  *   bun scripts/probe-kit/run.ts ios-sheet-inspector
  *
@@ -86,7 +105,54 @@ export default { component: Card, args: { title: "Hello" } };
 
 export const One = { args: {} };
 `,
+  // Deck renders Card: the map's Used in.
+  "src/Deck.svelte": `<script lang="ts">
+  import Card from "./Card.svelte";
+</script>
+
+<section><Card title="One" /><Card title="Two" tone="warm" /></section>
+`,
+  "src/Deck.stories.js": `import Deck from "./Deck.svelte";
+
+export default { component: Deck };
+
+export const Pair = {};
+`,
+  // A toolchain whose Vite config throws: its stage never starts.
+  "broken/package.json": JSON.stringify({
+    name: "probe-broken",
+    private: true,
+    type: "module",
+  }),
+  "broken/vite.config.mjs": `throw new Error("probe: this config refuses to load");
+`,
+  "broken/src/Tag.svelte": `<span>tag</span>
+`,
+  // Leg 6's component, which never compiles: its stage is live, its page never drawn.
+  "src/Unfinished.svelte": `<script>
+  export let label = "Unfinished";
+</script>
+
+<p>{label</p>
+`,
+  "src/Unfinished.stories.js": `import Unfinished from "./Unfinished.svelte";
+
+export default { component: Unfinished };
+
+export const One = { args: { label: "One" } };
+`,
+  "broken/src/Tag.stories.js": `import Tag from "./Tag.svelte";
+
+export default { component: Tag };
+
+export const Plain = {};
+`,
 };
+
+/** The ask leg 3's canvas is made with: the head's line says it, word for word. */
+const ASK = "Judge Card in each of its tones, beside the deck that holds it";
+/** A line the head says that names a path or a route: never. */
+const ROUTE = /preview head-line words=.*(\/|\?|localhost)/;
 
 const PAGE = (words: string) =>
   `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>${words}</title></head><body><p>${words}</p></body></html>`;
@@ -154,7 +220,202 @@ const respond = (request: Seen): Reply => {
     : text(`${ask.name} is not offered`);
 };
 
+/** The stage-down line's Show details, standing where a touch lands. */
+const DETAILS_AT = /details=\d+,\d+/;
+const REMOVE_AT = /remove=\d+,\d+/;
+
 const short = (said: string) => said.replaceAll(/\s+/g, " ").slice(0, 400);
+
+/** What legs 3 to 5 work with: the run's kit, the session's calls, the app's launches and what it said. */
+interface CanvasLegs {
+  call: (name: string, input: object) => Promise<string>;
+  fleet: Awaited<ReturnType<Kit["fleet"]>>;
+  heard: string[];
+  kit: Kit;
+  launch: (flags: string) => Promise<unknown>;
+  pair: (dir: string, name: string, flags: string) => Promise<void>;
+  said: (prefix: string) => string[];
+  session: string;
+  udid: string;
+}
+
+/** Legs 3 to 5: the head's description, Map, Verify, and a down stage's Show details. */
+async function canvasLegs({
+  call,
+  fleet,
+  heard,
+  kit,
+  launch,
+  pair,
+  said,
+  session,
+  udid,
+}: CanvasLegs): Promise<void> {
+  const CREATE = "mcp__cawco__artifact_create";
+  // 3. The head's line is the canvas's ask; Map lists its neighbours.
+  const caps = join(kit.out, "caps");
+  await mkdir(caps, { recursive: true });
+  const canvas = await call(CREATE, {
+    kind: "component",
+    name: "card-canvas",
+    file: STORY,
+    does: "judge",
+    ask: ASK,
+  });
+  const canvasId = canvas.match(ID)?.[1];
+  if (
+    !kit.check(
+      "3a: the session makes a component canvas with an ask",
+      !!canvasId,
+      short(canvas)
+    )
+  ) {
+    return;
+  }
+  const readMap = async () => {
+    try {
+      return await fleet.api<{ usedIn: { name: string }[] }>(
+        `/api/instances/${session}/artifacts/${canvasId}/map`
+      );
+    } catch {
+      // Not mapped yet: the wait asks again.
+    }
+  };
+  const hubMap = await until(
+    "the hub's map",
+    readMap,
+    (read) => !!read?.usedIn.some((one) => one.name === "Deck"),
+    180_000
+  ).catch(() => undefined);
+  await launch("-canvas-map");
+  const headLine = await until(
+    "the head's line",
+    () => said("preview head-line words=").at(-1),
+    (line) => !!line?.startsWith(`preview head-line words=${ASK} stands=`),
+    180_000
+  ).catch(() => said("preview head-line words=").at(-1));
+  const mapCards = await until(
+    "the map's cards",
+    () => said("preview map cards").at(-1),
+    (line) => !!line?.includes("Deck:usedIn:") && line.includes("Card:center:"),
+    120_000
+  ).catch(() => said("preview map").at(-1));
+  const routes = heard.filter((line) => ROUTE.test(line));
+  await sh(
+    `xcrun simctl io ${udid} screenshot "${join(kit.out, "ios-canvas-map.png")}" >/dev/null`
+  );
+  kit.check(
+    "3b: the head's line is the canvas's ask and never a path; Map stands Card with Deck above it, as the hub's map says",
+    !!headLine?.startsWith(`preview head-line words=${ASK} stands=`) &&
+      routes.length === 0 &&
+      !!hubMap?.usedIn.some((one) => one.name === "Deck") &&
+      !!mapCards?.includes("Deck:usedIn:") &&
+      !!mapCards?.includes("Card:center:") &&
+      !!mapCards?.includes(":chosen"),
+    `head: ${headLine}; routes said: ${routes.join(" | ") || "none"}; hub: ${JSON.stringify(hubMap ?? null).slice(0, 300)}; app: ${mapCards}; canvas-view: ${said("preview canvas-view").at(-1)}`
+  );
+  await pair(caps, "canvas-map", "-canvas-map");
+
+  // 4. Verify asks the hub's round; its sentence is the app's toast.
+  await launch("-canvas-verify");
+  const verified = await until(
+    "Verify's answer",
+    () =>
+      said("preview verify said").at(-1) ??
+      said("preview verify failed").at(-1),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  kit.check(
+    "4: the canvas view's Verify asks the hub's design round and says the hub's sentence",
+    !!said("preview verify asked").at(-1) &&
+      !!verified?.startsWith("preview verify said "),
+    `asked: ${said("preview verify asked").at(-1)}; answer: ${verified}`
+  );
+
+  // 5. A stage that never starts: Show details unfolds its own words.
+  const broken = await call(CREATE, {
+    kind: "component",
+    name: "broken-tag",
+    file: "broken/src/Tag.stories.js",
+    does: "judge",
+    ask: "Judge the tag once its toolchain starts",
+  });
+  if (
+    !kit.check(
+      "5a: the session makes a canvas on a toolchain that can't start",
+      ID.test(broken),
+      short(broken)
+    )
+  ) {
+    return;
+  }
+  await launch("-stage-details");
+  const folded = await until(
+    "the stage down, its details folded",
+    () => said("preview stage-down details=folded").at(-1),
+    Boolean,
+    240_000
+  ).catch(() => undefined);
+  const unfolded = await until(
+    "Show details unfolding the stage's words",
+    () => said("preview stage-down details=shown").at(-1),
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  await sh(
+    `xcrun simctl io ${udid} screenshot "${join(kit.out, "ios-stage-details.png")}" >/dev/null`
+  );
+  kit.check(
+    "5b: the stage stands down in plain words, Show details beside Try again, and unfolds the stage's own error",
+    !!folded?.includes("words=Show details") &&
+      !!unfolded?.includes("words=Hide details") &&
+      !unfolded?.endsWith("text=-") &&
+      DETAILS_AT.test(said("preview stage-down again=").at(-1) ?? ""),
+    `folded: ${folded}; unfolded: ${unfolded}; place: ${said("preview stage-down again=").at(-1)}`
+  );
+  await pair(caps, "stage-details", "-stage-details");
+
+  // 6. A page never drawn: past its stage's time, the cover gives way to the ways out.
+  const unfinished = await call(CREATE, {
+    kind: "component",
+    name: "unfinished",
+    file: "src/Unfinished.stories.js",
+    does: "judge",
+    ask: "Judge the unfinished paragraph once it draws",
+  });
+  if (
+    !kit.check(
+      "6a: the session makes a canvas whose component never compiles",
+      ID.test(unfinished),
+      short(unfinished)
+    )
+  ) {
+    return;
+  }
+  await launch("-stage-details");
+  const past = await until(
+    "the cover's time to run out",
+    () => said("preview never-drawn after=").at(-1),
+    Boolean,
+    180_000
+  ).catch(() => undefined);
+  const outs = await until(
+    "the ways out",
+    () => said("preview stage-down again=").at(-1),
+    (line) => !!line && !line.endsWith("remove=none"),
+    30_000
+  ).catch(() => said("preview stage-down again=").at(-1));
+  kit.check(
+    "6b: a page never drawn stands down past its stage's 60s: Try again, Remove and Show details, never an endless cover",
+    past === "preview never-drawn after=60s" &&
+      !!outs &&
+      DETAILS_AT.test(outs) &&
+      REMOVE_AT.test(outs),
+    `past: ${past}; ways out: ${outs}; stage: ${said("preview stage status=").at(-1)}`
+  );
+  await pair(caps, "never-drawn", "-stage-details");
+}
 
 const run = async (kit: Kit) => {
   const { path: app, problem } = freshApp(ROOT);
@@ -163,6 +424,7 @@ const run = async (kit: Kit) => {
   }
   const fleet = await kit.fleet(respond);
   await mkdir(join(fleet.repo, "src"), { recursive: true });
+  await mkdir(join(fleet.repo, "broken", "src"), { recursive: true });
   await Promise.all(
     Object.entries(PROJECT).map(([file, words]) =>
       writeFile(join(fleet.repo, file), words)
@@ -224,7 +486,13 @@ const run = async (kit: Kit) => {
     name: "notes",
     html: PAGE("Notes"),
   });
-  await call(CREATE, { kind: "page", name: "draft", html: PAGE("Draft") });
+  await call(CREATE, {
+    kind: "page",
+    does: "try",
+    ask: "Try this draft",
+    name: "draft",
+    html: PAGE("Draft"),
+  });
   if (
     !kit.check(
       "0: the session made a page and promoted it, and two more pages",
@@ -286,6 +554,35 @@ const run = async (kit: Kit) => {
         Boolean,
         60_000
       );
+    /** The app and Mobile Safari's dashboard at the simulator's viewport, light and dark, for a reviewer: `<dir>/app-<name>-<theme>.png`, `web-…`. */
+    const pair = async (dir: string, name: string, flags: string) => {
+      const dashboard = await fleet.dashboard();
+      for (const theme of ["light", "dark"] as const) {
+        // biome-ignore lint/performance/noAwaitInLoops: one appearance at a time, as the simulator holds one
+        await sh(`xcrun simctl ui ${udid} appearance ${theme}`);
+        await launch(flags);
+        await pause(8000);
+        await sh(
+          `xcrun simctl io ${udid} screenshot "${join(dir, `app-${name}-${theme}.png`)}" >/dev/null`
+        );
+        try {
+          const page = await kit.page("iphone", { engine: "webkit", theme });
+          await page.goto(`${dashboard}/session/${session}`, {
+            waitUntil: "domcontentloaded",
+          });
+          await pause(8000);
+          await page.screenshot({
+            path: join(dir, `web-${name}-${theme}.png`),
+          });
+          await page.close();
+        } catch (error) {
+          console.log(
+            `  the web ${theme} ${name} wasn't captured: ${(error as Error).message.split("\n")[0]}`
+          );
+        }
+      }
+      await sh(`xcrun simctl ui ${udid} appearance light`);
+    };
 
     // 1. The menu: newest first, the promote's commit, Remove.
     const listedBefore = await fleet.api<{ id: string; name: string }[]>(
@@ -309,20 +606,29 @@ const run = async (kit: Kit) => {
     const listedAfter = await fleet.api<{ id: string; name: string }[]>(
       `/api/instances/${session}/artifacts`
     );
+    // Each row wears the live dot as the menu's read of the hub says it waits on the person.
+    const waits = new Set(
+      (said("artifact menu listed").at(0) ?? "")
+        .replace("artifact menu listed ", "")
+        .split(",")
+        .filter((row) => row.endsWith(":waiting"))
+        .map((row) => row.split("@")[0])
+    );
     const tagged = (name: string) =>
-      name === "kept" ? `kept[Promoted ${commit}]` : name;
+      `${name}${name === "kept" ? `[Promoted ${commit}]` : ""}${waits.has(name) ? "[Waiting on you]" : ""}`;
     await sh(
       `xcrun simctl io ${udid} screenshot "${join(kit.out, "ios-sheet-inspector-menu.png")}" >/dev/null`
     );
     kit.check(
-      "1: the menu lists the hub's artifacts newest first, the promoted one tagged with its short commit; Remove takes notes out of the menu and the hub",
+      "1: the menu lists the hub's artifacts newest first, the promoted one tagged with its short commit, each waiting on the person wearing the live dot; Remove takes notes out of the menu and the hub",
       listedBefore.map((row) => row.name).join() === "draft,notes,kept" &&
         firstRows ===
           `artifact menu rows ${listedBefore.map((row) => tagged(row.name)).join(",")}` &&
         !!removed &&
-        lastRows === `artifact menu rows draft,${tagged("kept")}` &&
+        lastRows ===
+          `artifact menu rows ${tagged("draft")},${tagged("kept")}` &&
         listedAfter.map((row) => row.name).join() === "draft,kept",
-      `hub before: ${listedBefore.map((row) => row.name).join()}; first: ${firstRows}; removed: ${removed}; last: ${lastRows}; hub after: ${listedAfter.map((row) => row.name).join()}`
+      `hub before: ${listedBefore.map((row) => row.name).join()}; waiting: ${[...waits].join() || "none"}; first: ${firstRows}; removed: ${removed}; last: ${lastRows}; hub after: ${listedAfter.map((row) => row.name).join()}`
     );
 
     // The menu open beside the dashboard's, at the simulator's viewport, light and dark, for a later review.
@@ -429,6 +735,18 @@ const run = async (kit: Kit) => {
         SAVED_ARGS.test(changed[1] ?? ""),
       `heard: ${heardSheet ?? "nothing"}; wrote: ${wrote ?? "nothing"}; stat: ${stat.trim()}; diff: ${changed.join(" | ")}; last inspector line: ${said("inspector ").at(-1)}`
     );
+
+    await canvasLegs({
+      kit,
+      call,
+      launch,
+      said,
+      heard,
+      udid,
+      pair,
+      fleet,
+      session,
+    });
   } finally {
     stream?.kill();
     await sim?.release();

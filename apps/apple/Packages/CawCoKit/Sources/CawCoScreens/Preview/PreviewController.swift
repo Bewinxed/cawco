@@ -41,7 +41,17 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// Its picker: over the well in a pane, or the house sheet in the phone's drawer.
     fileprivate var placePick: PlacePickView?
     fileprivate weak var placePickSheet: UIViewController?
-    private let pathLabel = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
+    /// The line under the name (PreviewPane.svelte `headLine`, SideSurface's
+    /// subtitle): the artifact's ask, or "Sent to <session>" while the
+    /// person's Send stands unanswered; in the meta role, one line cut at its
+    /// tail, whole in its tooltip; never a path or a route.
+    private let lineLabel = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
+    /// The artifact's ask as its frame carries it, from the first frame.
+    private var ask = ""
+    /// The line stands under the name while the identity gives it what it
+    /// needs by the name's own rule (its own width, up to `nameFloor`); else
+    /// the title menu says it as its first row.
+    private var lineStands = true
     /// Send picks: the page's picks the session has not heard; pins and ink go by themselves.
     private var sendButton: UIButton!
     private var sending = false
@@ -108,15 +118,35 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// else, goes again from Reload.
     private var failureOf: String?
     private var revision: String?
-    /// The line under the name, standing only while it has words to say.
-    private let pathRow = UIView()
-    /// What is on show is an artifact's page, which has no path of its own to say.
-    private var showsPage = false
+    /// The line's row, standing only while it has words to say and the room to say them.
+    private let lineRow = UIView()
+    private let lineTip = UIToolTipInteraction()
     /// The revision the overlay was asked to draw the card's thumbnail of.
     private var capturedFor: String?
 
-    private func paintPath() {
-        pathRow.isHidden = pathLabel.text?.isEmpty ?? true
+    /// The head's line as it stands now (PreviewPane.svelte `headLine`).
+    private var headLine: String {
+        guard comments.sent else { return ask }
+        // The session the artifact belongs to, as the pin card names it (PreviewPane.svelte `ownerName`).
+        return Words.Artifacts.sentTo(session: hub.fleet.byId[instanceId].map { hub.fleet.title($0) } ?? "the session")
+    }
+
+    /// The head's line: under the name while it stands, else the title
+    /// menu's first row; always the title control's description and tooltip.
+    private func paintLine() {
+        let words = headLine
+        if lineLabel.text != words { lineLabel.text = words }
+        // Whole where a pointer rests on it (the web's `title`), and on the control it describes.
+        lineTip.defaultToolTip = words.isEmpty ? nil : words
+        titleButton.toolTip = words.isEmpty ? nil : words
+        titleButton.accessibilityHint = words.isEmpty ? nil : words
+        lineLabel.isAccessibilityElement = false
+        let hidden = words.isEmpty || !lineStands
+        if lineRow.isHidden != hidden { lineRow.isHidden = hidden }
+        menu?.line(words.isEmpty || lineStands ? nil : words)
+        #if DEBUG
+        PreviewProbe.say("preview head-line words=\(words.isEmpty ? "-" : words) stands=\(lineStands)")
+        #endif
     }
     private var artifactId: String?
     private var origin: URL?
@@ -153,7 +183,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The moved pin the next tap places again, and the mode the pane goes back to once it is placed.
     private var placing: String?
     private var placingFrom: Mode?
-    private var connected = false
+    private var connected = false {
+        didSet { if connected != oldValue { armNeverDrawn() } }
+    }
+    /// The page stood on its way past the time its stage is given (PreviewPane.svelte `neverDrawn`).
+    private var neverDrawn = false
+    private var neverDrawnWait: Task<Void, Never>?
+    /// What the wait counts for: its time, the artifact and the load; another starts it over.
+    private var neverDrawnFor: String?
+    /// Loads asked for (Try again, Reload): each starts the cover's wait over.
+    private var loads = 0
     private var closing = false
     /// As the phone's drawer: the card stands at the well's foot.
     private var drawer = false
@@ -241,6 +280,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     var onBackToSession: () -> Void = {}
     private var newCanvasButton: UIButton!
     private var openTabButton: UIButton!
+    /// Map mode's map, over the page while the canvas view's Map is on.
+    private var canvasMap: CanvasMapView?
     private var undockButton: UIButton!
     /// The head's + is making a canvas.
     private var making = false
@@ -254,22 +295,24 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
         // The header: `height: 44px`, the identity then the actions, `gap-1`.
         // The identity gives way to the actions: its title is one line cut at
-        // its tail, its path one line cut in its middle, and both stop 8pt
-        // short of the first action.
-        pathLabel.lineBreakMode = .byTruncatingMiddle
+        // its tail, its description one line cut at its tail, and both stop
+        // 8pt short of the first action.
+        lineLabel.lineBreakMode = .byTruncatingTail
+        lineLabel.isUserInteractionEnabled = true
+        lineLabel.addInteraction(lineTip)
         titleButton.addAction(UIAction { [weak self] _ in self?.openMenu() }, for: .touchUpInside)
-        // The title control keeps its own width up to the head's room; the path under it gives way first.
+        // The title control keeps its own width up to the head's room; the line under it gives way first.
         let title = UIStackView(arrangedSubviews: [titleButton, UIView()])
-        // The path starts where the title control's glyph does.
-        let path = pathRow
-        path.hold(pathLabel, insets: UIEdgeInsets(top: 0, left: Space.space2, bottom: 0, right: 0))
+        // The line starts where the title control's glyph does.
+        let path = lineRow
+        path.hold(lineLabel, insets: UIEdgeInsets(top: 0, left: Space.space2, bottom: 0, right: 0))
         path.isHidden = true
         let identity = UIStackView(arrangedSubviews: [title, path])
         identity.axis = .vertical
         identity.isLayoutMarginsRelativeArrangement = true
         identity.directionalLayoutMargins.leading = 0
         identity.directionalLayoutMargins.trailing = 8 - Space.space1
-        for part in [identity, title, titleButton, path, pathLabel] as [UIView] {
+        for part in [identity, title, titleButton, path, lineLabel] as [UIView] {
             part.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             part.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
@@ -367,6 +410,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         }])
         // A component canvas's view (CanvasView.svelte), between Open in new tab and Inspect.
         canvasView = CanvasViewControl(instanceId: instanceId) { [weak self] message in self?.deliver(message) }
+        canvasView.onChange = { [weak self] in self?.paintMap() }
+        canvasView.onVerify = { [weak self] in self?.verify() }
         let controls: [(HeadItem, UIView)] = [
             (.send, sendButton), (.newCanvas, newCanvasButton), (.undock, undockButton), (.openTab, openTabButton),
             (.view, canvasView.button), (.inspect, inspectButton), (.mode, modes), (.modePick, modePick), (.comments, pinsButton), (.reload, reload),
@@ -417,6 +462,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             part.isHidden = true
         }
         down.onAgain = { [weak self] in self?.tryStageAgain() }
+        down.onRemove = { [weak self] in
+            guard let self, let frame = hub.previews.byInstance[instanceId] else { return nil }
+            let id = frame.artifact.id
+            return (frame.artifact.name, { [hub, instanceId] in try await hub.removeArtifact(id, in: instanceId) })
+        }
         failure.isHidden = true
         card.isHidden = true
         wellEdge.translatesAutoresizingMaskIntoConstraints = false
@@ -743,6 +793,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             laidNarrow = narrow
             paintMode()
             paintPins()
+            paintMap()
         }
         placeHeadItems()
         placeCard()
@@ -860,6 +911,14 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let moreHidden = overflowed.isEmpty
         if moreSlot.isHidden != moreHidden { moreSlot.isHidden = moreHidden }
         paintMore()
+        // The line stands while the identity's room (the name's, and what the
+        // controls leave) holds what it needs: its own width from its inset, up to the name's floor.
+        let needs = min(lineLabel.intrinsicContentSize.width + Space.space2, Self.nameFloor)
+        let stands = nameKept + max(left, 0) >= needs
+        if stands != lineStands {
+            lineStands = stands
+            paintLine()
+        }
     }
 
     /// The web's `standing()` past its first case, in `room` (the head's,
@@ -1095,6 +1154,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let artifact = frame.artifact
         titleButton.show(kind: artifact.kind, name: artifact.name)
         menu?.follow(held: frame.artifacts, shown: (artifact.id, artifact.kind, artifact.name))
+        // Its ask moves on its own too (`artifact_update`), at the same revision.
+        ask = artifact.ask ?? ""
+        paintLine()
         // Out of sight, the page waits to be seen.
         guard pageShown else { return }
         let origin = route.origin
@@ -1128,11 +1190,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             refresh()
             adoptSheet(frame)
         }
-        pathLabel.text = Self.place(frame)
-        showsPage = frame.source?.value3 != nil
-        paintPath()
         self.origin = origin
         connected = false
+        // Another page or artifact: the cover's wait starts over.
+        armNeverDrawn()
         // A canvas draws with its own tools: no modes or Comments over it, and
         // it can go back to the composer (`canUndock`).
         canvasShown = frame.artifact.kind == .canvas
@@ -1140,6 +1201,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         paintSend()
         pageLoaded = false
         paintCover(animated: false)
+        paintMap()
         byHost = route.byHost
         reentered = false
         enter(hub.previewStart(frame) ?? origin)
@@ -1221,6 +1283,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         pageLoaded = true
         endRetry()
         paintCover(animated: true)
+        paintMap()
         // A load served the page again: the stopped state goes.
         if !stopped.isHidden { showStopped(false) }
         guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
@@ -1239,6 +1302,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let shown = !pageLoaded || word != nil
         if shown { coverLine.isHidden = false }
         let target: CGFloat = shown ? 1 : 0
+        // A wait that begins: its words come after the grace. One that ends lets the next begin afresh.
+        if shown, cover.alpha < 1 || coverGrace == nil { graceCover() }
+        if !shown {
+            coverGrace?.cancel()
+            coverGrace = nil
+        }
         guard cover.alpha != target else { return }
         guard animated else {
             cover.alpha = target
@@ -1251,6 +1320,26 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             coverLine.isHidden = true
         }
         fade.startAnimation()
+    }
+
+    /// The cover's line and words stand unseen until the wait has lasted
+    /// `--dur-wait-grace` (DESIGN.md's Real Wait Rule, PreviewPane.svelte
+    /// `.cover > *`), then fade up over `--dur-fade`; at once with less motion.
+    private var coverGrace: Task<Void, Never>?
+
+    private func graceCover() {
+        coverGrace?.cancel()
+        coverLine.alpha = 0
+        coverState.alpha = 0
+        coverGrace = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(Motion.durWaitGrace))
+            guard !Task.isCancelled, let self, cover.alpha > 0 else { return }
+            let up: @MainActor @Sendable () -> Void = {
+                self.coverLine.alpha = 1
+                self.coverState.alpha = 1
+            }
+            if UIAccessibility.isReduceMotionEnabled { up() } else { Motion.easeOut.animator(Motion.durFade, animations: up).startAnimation() }
+        }
     }
 
     /// PreviewPane.svelte `announce`, at the page's own `load` (the host
@@ -1350,11 +1439,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         case "cawco:loaded":
             hello()
         case "cawco:ready", "cawco:navigated":
-            // A page's place is its artifact's own: no path stands under its name (PreviewPane.svelte `subtitle={page ? "" : …}`).
-            if !showsPage, let at = (body["url"] as? String).flatMap(URL.init(string:)), at.host() == origin?.host(), at.port == origin?.port {
-                pathLabel.text = at.path() + (at.query().map { "?\($0)" } ?? "")
-                paintPath()
-            }
             // Its title, for the transcript's card (`preview.title`, wire.ts `previewTitle`).
             if let revision, let title = Self.text(body["title"], 300) {
                 hub.previews.titled(instanceId, revision: revision, title: title)
@@ -1478,6 +1562,73 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // A component canvas's page takes the view kept for this session (CanvasView.svelte's `ready`).
         if inspection != nil { canvasView.tell() }
         if let revision { word(revision, failure: nil) }
+        #if DEBUG
+        if inspection != nil {
+            if PreviewProbe.canvasMapAtLaunch, !Self.canvasMapDone {
+                Self.canvasMapDone = true
+                canvasView.showMap(true)
+            }
+            if PreviewProbe.canvasVerifyAtLaunch, !Self.canvasVerifyDone {
+                Self.canvasVerifyDone = true
+                verify()
+            }
+        }
+        #endif
+    }
+
+    // MARK: A component canvas's view
+
+    /// Map mode (CanvasMap.svelte): the map over the page, which stays loaded
+    /// under it, above the cover and below a stage's own states; its live
+    /// card waits for the pane's own page to load (its pass entered).
+    private func paintMap() {
+        guard isViewLoaded else { return }
+        guard inspection != nil, canvasView.map, let artifactId, let revision else {
+            canvasMap?.removeFromSuperview()
+            canvasMap = nil
+            return
+        }
+        let map = canvasMap ?? {
+            let made = CanvasMapView(hub: hub, instanceId: instanceId, artifactId: artifactId)
+            well.insertSubview(made, aboveSubview: cover)
+            NSLayoutConstraint.activate([
+                made.topAnchor.constraint(equalTo: well.topAnchor),
+                made.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+                made.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+                made.bottomAnchor.constraint(equalTo: well.bottomAnchor),
+            ])
+            canvasMap = made
+            return made
+        }()
+        let live = pageLoaded ? start.map { CanvasMapView.Live(address: $0, byHost: byHost) } : nil
+        map.update(revision: revision, live: live, view: canvasView.chosen, narrow: narrow)
+    }
+
+    /// The canvas view's Verify (PreviewPane.svelte `verify`): a design system
+    /// round on the canvas, its verdict to the session; the hub's sentence
+    /// says what it did, as a toast.
+    private func verify() {
+        guard !canvasView.verifying, let artifactId else { return }
+        canvasView.verifying = true
+        #if DEBUG
+        PreviewProbe.say("preview verify asked \(artifactId)")
+        #endif
+        Task { [weak self, hub, instanceId] in
+            do {
+                let said = try await hub.verifyArtifact(artifactId, in: instanceId)
+                Toast.show(said, kind: .info, in: self?.view)
+                #if DEBUG
+                PreviewProbe.say("preview verify said \(said)")
+                #endif
+            } catch {
+                let sentence = HubConnection.sentence(error)
+                Toast.error(sentence, in: self?.view)
+                #if DEBUG
+                PreviewProbe.say("preview verify failed: \(sentence)")
+                #endif
+            }
+            self?.canvasView.verifying = false
+        }
     }
 
     // MARK: A sheet's stage
@@ -1487,9 +1638,33 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// where the page would be. Each appears and leaves as the web's
     /// `appear` does: its opacity over `--dur-fade`, the same with or without
     /// Reduce Motion, since nothing travels.
+    /// The cover's wait (PreviewPane.svelte `waitingFor`'s effect): counted
+    /// on this pane's clock from when it began waiting, started over by a new
+    /// time, another artifact or another load; past it, the page was never drawn.
+    private func armNeverDrawn() {
+        let budget = SheetStageShown.waitingFor(stage, connected: connected, served: served)
+        let key = budget.map { "\($0)|\(artifactId ?? "-")|\(loads)" }
+        guard key != neverDrawnFor else { return }
+        neverDrawnFor = key
+        neverDrawnWait?.cancel()
+        neverDrawn = false
+        guard let budget else { return }
+        neverDrawnWait = Task { [weak self] in
+            try? await Task.sleep(for: .seconds(budget))
+            guard !Task.isCancelled, let self else { return }
+            neverDrawn = true
+            #if DEBUG
+            PreviewProbe.say("preview never-drawn after=\(Int(budget))s")
+            #endif
+            paintStage()
+        }
+    }
+
     private func paintStage() {
         guard isViewLoaded else { return }
-        let next = SheetStageShown(stage, connected: connected, served: served)
+        armNeverDrawn()
+        let next = SheetStageShown(stage, connected: connected, served: served, neverDrawn: neverDrawn,
+                                   waited: SheetStageShown.waitingFor(stage, connected: connected, served: served))
         let before = stageShown
         stageShown = next
         paintCover(animated: true)
@@ -1515,7 +1690,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             DispatchQueue.main.async { [weak self] in
                 guard let self else { return }
                 view.layoutIfNeeded()
-                PreviewProbe.say("preview stage-down again=\(PreviewProbe.centre(self.down.again))")
+                PreviewProbe.say("preview stage-down again=\(PreviewProbe.centre(self.down.again)) details=\(PreviewProbe.centre(self.down.detailsButton)) remove=\(self.down.removeButton.isHidden ? "none" : PreviewProbe.centre(self.down.removeButton))")
+                // `-stage-details`: Show details pressed once, as the person's tap would.
+                if PreviewProbe.stageDetailsAtLaunch, !Self.stageDetailsDone, !self.down.detailsButton.isHidden {
+                    Self.stageDetailsDone = true
+                    self.down.detailsButton.sendActions(for: .primaryActionTriggered)
+                }
             }
         }
         #endif
@@ -1609,6 +1789,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     private func reload() {
+        loads += 1
         clearFailure()
         revision = nil
         show()
@@ -1799,6 +1980,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // held and this one does not (deleted, erased) closes it.
         let held = openPin.map { open in comments.pins.contains { $0.id == open } } ?? false
         comments = read
+        paintLine()
         live = read.live(working: sessionWorking)
         paintPins()
         list?.show(read.pins, live: live)
@@ -2393,7 +2575,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// Interact's, the way out), the mode, Draw's centre, the open pins and
     /// Comments' centre, Send's words and centre, Reload's, the grabber's,
     /// and the web view's frame.
-    private func headLine() -> String {
+    private func probeHead() -> String {
         let centre = PreviewProbe.centre
         let words = mode == .comment ? "Interact" : "Comment"
         let toggle = segmentCentre(mode == .comment ? 0 : 1)
@@ -2412,7 +2594,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         return "\(Int(x.rounded())),\(Int(Double(box.midY).rounded()))"
     }
 
-    /// `-menu-remove` and `-inspect-set` act once a launch.
+    /// `-menu-remove`, `-inspect-set`, `-canvas-map` and `-canvas-verify` act once a launch.
+    private static var canvasMapDone = false
+    private static var canvasVerifyDone = false
+    private static var stageDetailsDone = false
     private static var menuDone = false
     private static var inspectDone = false
     private var menuAtLaunch: Bool {
@@ -2516,7 +2701,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// has laid it out (a keyboard leaving, a sheet put away).
     private func probeLayout() {
         guard PreviewProbe.on, view.window != nil else { return }
-        let line = headLine()
+        let line = probeHead()
         if line != laidHead {
             laidHead = line
             PreviewProbe.say(line)
@@ -2608,12 +2793,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The probe's page posts `cawco:probe` with its state and the viewport
     /// rects of what the probe taps: logged with each rect's centre in the
     /// window's points, where a simulator touch lands, after the header's own
-    /// line (`headLine`: the mode's places, Comments', Send's, Reload's, the
+    /// line (`probeHead`: the mode's places, Comments', Send's, Reload's, the
     /// grabber's, and the web view's frame in the window), so every post
     /// says where everything is now.
     private func probePage(_ body: [String: Any]) {
         guard PreviewProbe.on, let web else { return }
-        PreviewProbe.say(headLine())
+        PreviewProbe.say(probeHead())
         if openPin != nil, !card.isHidden { cardLines().forEach(PreviewProbe.say) }
         var parts = [Self.text(body["state"], 200) ?? ""]
         let rects = body["rects"] as? [String: Any] ?? [:]
@@ -2668,16 +2853,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard let x = body["x"] as? Double, let y = body["y"] as? Double, let r = body["r"] as? Double,
               x.isFinite, y.isFinite, r.isFinite else { return nil }
         return (x, y, r)
-    }
-
-    /// source.ts `previewPlace`: a page by its name, a folder by its leaf, a dev server by its port.
-    /// The line under the name (PreviewPane.svelte `subtitle`): a page has none, a
-    /// folder its leaf, a dev server its port.
-    private static func place(_ frame: PreviewFrame) -> String {
-        if frame.source?.value3 != nil { return "" }
-        if let dir = frame.source?.value2?.dir { return (dir as NSString).lastPathComponent }
-        if let port = frame.source?.value1?.port { return "localhost:\(Int(port))" }
-        return ""
     }
 
     /// The page lays out at the panel's width, scale 1, as the web's iframe
@@ -2875,6 +3050,8 @@ extension PreviewController {
         } else {
             inspection = nil
         }
+        canvasMap?.removeFromSuperview()
+        canvasMap = nil
         placeHeadItems()
         placeInspector()
     }
@@ -2969,7 +3146,7 @@ extension PreviewController {
         guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
         let artifact = frame.artifact
         let content = ArtifactMenuController(hub: hub, instanceId: instanceId, shown: (artifact.id, artifact.kind, artifact.name),
-                                             held: frame.artifacts)
+                                             held: frame.artifacts, line: lineStands || headLine.isEmpty ? nil : headLine)
         menu = content
         content.loadViewIfNeeded()
         KitPopover.present(content, from: titleButton, in: self, align: .start, side: .bottom, offset: Space.space1)

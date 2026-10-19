@@ -58,14 +58,15 @@ private func pinWords(_ name: KitLabel, _ under: KitLabel) -> UIStackView {
     return words
 }
 
-/// The activity dot's Working form (DESIGN.md "Activity dot"; PinList.svelte
-/// `.live`): 8pt, `status-live-glyph`, pulsing on the one loop, on a pin the
-/// agent is working on.
-private func liveDot() -> Dot {
+/// The live dot (DESIGN.md "Activity dot"; LiveDot.svelte): 8pt,
+/// `status-live-glyph`, pulsing on the one loop; on a pin the agent is
+/// working on, and on an artifact's row while it waits on the person. Its
+/// words are for VoiceOver alone.
+func liveDot(_ label: String = "The agent is working on it") -> Dot {
     let dot = Dot(8, color: Palette.statusLiveGlyph)
     dot.working()
     dot.isAccessibilityElement = true
-    dot.accessibilityLabel = "The agent is working on it"
+    dot.accessibilityLabel = label
     dot.accessibilityTraits = .image
     return dot
 }
@@ -1009,6 +1010,14 @@ enum PreviewProbe {
         guard let flag = arguments.firstIndex(of: "-menu-remove"), arguments.indices.contains(flag + 1) else { return nil }
         return arguments[flag + 1]
     }()
+
+    /// `-canvas-map`: once a component canvas's page is ready, its view's Map
+    /// is chosen, as the person's pick in the canvas view would (ios-sheet-inspector.ts).
+    static let canvasMapAtLaunch = ProcessInfo.processInfo.arguments.contains("-canvas-map")
+    /// `-canvas-verify`: once a component canvas's page is ready, its view's Verify runs, once.
+    static let canvasVerifyAtLaunch = ProcessInfo.processInfo.arguments.contains("-canvas-verify")
+    /// `-stage-details`: once a stage stands down, its Show details is pressed, once.
+    static let stageDetailsAtLaunch = ProcessInfo.processInfo.arguments.contains("-stage-details")
 
     static func say(_ line: String) {
         guard on else { return }

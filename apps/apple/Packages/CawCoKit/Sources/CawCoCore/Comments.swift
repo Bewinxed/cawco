@@ -107,9 +107,12 @@ public struct ArtifactComments: Sendable, Equatable {
     public let unsentPicks: Int
     /// When the person last sent from it; nil until they have.
     public let sentAt: String?
+    /// The person's Send is in and the session has not revised it or changed
+    /// its ask since (core `ArtifactSummary.sent`): the head reads "Sent to <session>".
+    public let sent: Bool
 
     /// An artifact with no pins and nothing unsent, until the hub is read.
-    public static let empty = ArtifactComments(pins: [], unsentPicks: 0, sentAt: nil)
+    public static let empty = ArtifactComments(pins: [], unsentPicks: 0, sentAt: nil, sent: false)
 
     /// Open pins, a moved one too, as the hub counts them: the list's Open tab and the head's badge.
     public var open: Int { pins.count { !$0.resolved } }
@@ -150,13 +153,15 @@ public extension HubConnection {
     }
 
     /// Every pin on one artifact, open and resolved, and the picks the session
-    /// has not heard (`comment_read`'s route with `filter=all`, and the doc's
-    /// view for its picks and `sentAt`), read together.
+    /// has not heard (`comment_read`'s route with `filter=all`, the doc's
+    /// view for its picks and `sentAt`, and the session's list for whether
+    /// a Send stands unanswered), read together.
     func comments(on artifact: String, in instanceId: String) async throws -> ArtifactComments {
         let api = try api
         async let read = api.instances.comments(.init(path: .init(id: instanceId), query: .init(artifact: artifact, filter: .all)))
         async let view = artifactView(artifact, in: instanceId)
-        let (comments, held) = try await (read, view)
+        async let listed = listArtifacts(in: instanceId)
+        let (comments, held, rows) = try await (read, view, listed)
         guard case let .ok(found) = comments else { throw await TaskRefusal.reading(comments) }
         // Each pin as the doc keeps it; the ink's box beside it is the agent's.
         let pins = try found.body.json.artifacts.first { $0.id == artifact }?.pins.map(\.value1) ?? []
@@ -165,7 +170,8 @@ public extension HubConnection {
             guard let at = (entry as? [String: (any Sendable)?])?["at"] as? String else { return false }
             return held.sentAt.map { at > $0 } ?? true
         }
-        return ArtifactComments(pins: pins.sorted { $0.number < $1.number }, unsentPicks: picks, sentAt: held.sentAt)
+        return ArtifactComments(pins: pins.sorted { $0.number < $1.number }, unsentPicks: picks, sentAt: held.sentAt,
+                                sent: rows.first { $0.id == artifact }?.sent ?? false)
     }
 
     /// This view's word that it has the artifact on screen at `revision`, or

@@ -39,11 +39,8 @@ import UIKit
 /// (`fit.ts`: a fifth of padding, never past 1). A tap on a node selects
 /// it; a tap on the pane lets it go. Nothing here changes the graph.
 final class WorkflowCanvasView: UIView, UIScrollViewDelegate {
-    /// `fit.ts` `FIT`, and the canvas's own `minZoom` and `maxZoom`.
-    private static let fitPadding = 0.2
-    private static let fitMaxZoom = 1.0
-    private static let minZoom = 0.15
-    private static let maxZoom = 2.0
+    private static let minZoom = FlowFit.minZoom
+    private static let maxZoom = FlowFit.maxZoom
     /// Room round the graph to pan into.
     private static let margin = 1200.0
 
@@ -161,19 +158,7 @@ final class WorkflowCanvasView: UIView, UIScrollViewDelegate {
         // In the graph's own coordinates, as Svelte Flow works it: the floors below turn on them.
         let extent = cards.values.map(\.frame).reduce(CGRect.null) { $0.union($1) }.offsetBy(dx: origin.x, dy: origin.y)
         guard !extent.isNull, bounds.width > 0 else { return }
-        // `parsePadding`: a number is that share of the canvas, as whole points a side.
-        let padX = ((bounds.width - bounds.width / (1 + Self.fitPadding)) * 0.5).rounded(.down)
-        let padY = ((bounds.height - bounds.height / (1 + Self.fitPadding)) * 0.5).rounded(.down)
-        let zoom = min(Self.fitMaxZoom, max(Self.minZoom, min((bounds.width - padX * 2) / extent.width, (bounds.height - padY * 2) / extent.height)))
-        var x = bounds.width / 2 - extent.midX * zoom
-        var y = bounds.height / 2 - extent.midY * zoom
-        // `calculateAppliedPaddings`: where flooring left less than the padding asked for, the view shifts to give it back.
-        let left = (extent.minX * zoom + x).rounded(.down)
-        let top = (extent.minY * zoom + y).rounded(.down)
-        let right = (bounds.width - (extent.maxX * zoom + x)).rounded(.down)
-        let bottom = (bounds.height - (extent.maxY * zoom + y)).rounded(.down)
-        x = x - min(left - padX, 0) + min(right - padX, 0)
-        y = y - min(top - padY, 0) + min(bottom - padY, 0)
+        let (zoom, x, y) = FlowFit.view(extent, in: bounds.size)
         // The board stands at the graph's origin less its margin.
         let offset = CGPoint(x: -x - origin.x * zoom, y: -y - origin.y * zoom)
         let move = {
@@ -224,7 +209,7 @@ final class WorkflowCanvasView: UIView, UIScrollViewDelegate {
     @objc private func fitPressed() { fit(animated: true) }
 
     /// Svelte Flow's `Background` of dots: one 1pt dot every 16pt, scaling with the zoom.
-    private final class DotGrid: UIView {
+    final class DotGrid: UIView {
         init() {
             super.init(frame: .zero)
             registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: DotGrid, _: UITraitCollection) in view.paint() }
@@ -577,13 +562,40 @@ enum SmoothStep {
 
     static func path(source: CGPoint, target: CGPoint, centerY: Double?) -> (path: CGPath, label: CGPoint) {
         let (points, label) = points(source: source, target: target, centerY: centerY)
+        return (stroke(points), label)
+    }
+
+    /// A route from a source handle on a node's foot to a target handle on
+    /// another's head (`Position.Bottom` to `Position.Top`, as a canvas map's
+    /// edges run): `getPoints` where `dirAccessor` is `y`, its handles
+    /// opposite, the step at its middle.
+    static func downPath(source: CGPoint, target: CGPoint) -> CGPath {
+        let sourceGapped = CGPoint(x: source.x, y: source.y + offset)
+        let targetGapped = CGPoint(x: target.x, y: target.y - offset)
+        let currDir = sourceGapped.y < targetGapped.y ? 1.0 : -1.0
+        let centreX = sourceGapped.x + (targetGapped.x - sourceGapped.x) * stepPosition
+        let centreY = sourceGapped.y + (targetGapped.y - sourceGapped.y) * stepPosition
+        // The source's own direction (down) is the route's: a horizontal split; else a vertical one.
+        let middle = currDir == 1
+            ? [CGPoint(x: sourceGapped.x, y: centreY), CGPoint(x: targetGapped.x, y: centreY)]
+            : [CGPoint(x: centreX, y: sourceGapped.y), CGPoint(x: centreX, y: targetGapped.y)]
+        var points = [source]
+        if sourceGapped != middle[0] { points.append(sourceGapped) }
+        points += middle
+        if targetGapped != middle[middle.count - 1] { points.append(targetGapped) }
+        points.append(target)
+        return stroke(points)
+    }
+
+    /// The route's points joined, each corner rounded (`getSmoothStepPath`).
+    private static func stroke(_ points: [CGPoint]) -> CGPath {
         let path = CGMutablePath()
         path.move(to: points[0])
         for index in 1 ..< points.count - 1 {
             bend(path, points[index - 1], points[index], points[index + 1])
         }
         path.addLine(to: points[points.count - 1])
-        return (path, label)
+        return path
     }
 
     /// `getPoints`: an orthogonal route. With a right source handle and a
@@ -625,6 +637,39 @@ enum SmoothStep {
         let yDir = a.y < c.y ? -1.0 : 1.0
         path.addLine(to: CGPoint(x: b.x, y: b.y + size * yDir))
         path.addQuadCurve(to: CGPoint(x: b.x + size * xDir, y: b.y), control: b)
+    }
+}
+
+// MARK: Fit
+
+/// Svelte Flow's `fitView` with `fit.ts`'s `FIT` (a fifth of padding, never
+/// past 1) and `ZOOM` (0.15 to 2), ported from `parsePadding`,
+/// `calculateAppliedPaddings` and `getViewportForBounds`: every graph
+/// canvas's (the workflow's, a component canvas's map).
+enum FlowFit {
+    static let padding = 0.2
+    static let maxFitZoom = 1.0
+    static let minZoom = 0.15
+    static let maxZoom = 2.0
+
+    /// The zoom and translation at which `extent` (in the graph's own
+    /// coordinates) fills a canvas of `size` less its padding, the extent's
+    /// centre on the canvas's.
+    static func view(_ extent: CGRect, in size: CGSize) -> (zoom: Double, x: Double, y: Double) {
+        // `parsePadding`: a number is that share of the canvas, as whole points a side.
+        let padX = ((size.width - size.width / (1 + padding)) * 0.5).rounded(.down)
+        let padY = ((size.height - size.height / (1 + padding)) * 0.5).rounded(.down)
+        let zoom = min(maxFitZoom, max(minZoom, min((size.width - padX * 2) / extent.width, (size.height - padY * 2) / extent.height)))
+        var x = size.width / 2 - extent.midX * zoom
+        var y = size.height / 2 - extent.midY * zoom
+        // `calculateAppliedPaddings`: where flooring left less than the padding asked for, the view shifts to give it back.
+        let left = (extent.minX * zoom + x).rounded(.down)
+        let top = (extent.minY * zoom + y).rounded(.down)
+        let right = (size.width - (extent.maxX * zoom + x)).rounded(.down)
+        let bottom = (size.height - (extent.maxY * zoom + y)).rounded(.down)
+        x = x - min(left - padX, 0) + min(right - padX, 0)
+        y = y - min(top - padY, 0) + min(bottom - padY, 0)
+        return (zoom, x, y)
     }
 }
 

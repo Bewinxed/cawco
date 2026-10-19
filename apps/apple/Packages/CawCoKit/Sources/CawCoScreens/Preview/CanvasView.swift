@@ -9,7 +9,10 @@ import UIKit
 /// The kit's menu under the head's own `sm` ghost, as Inspect beside it;
 /// in More, a submenu of the same entries. Kept per session, as the web
 /// keeps it (`cawco-canvas-view:<session>`), and told to each load of the
-/// page once it says it is ready.
+/// page once it says it is ready. Map stands first: the canvas's component
+/// among what renders it and what it renders (CanvasMapView), over the page
+/// while on, kept per session (`cawco-canvas-map:<session>`). Verify stands
+/// last: a design-system round on the canvas, asked in the session's chat.
 @MainActor
 final class CanvasViewControl {
     enum Scheme: String, CaseIterable {
@@ -72,16 +75,27 @@ final class CanvasViewControl {
     /// The head's own button: the `sm` ghost, its glyph layers, the menu its primary action.
     let button: UIButton
     private(set) var chosen: Chosen
+    /// Map mode: the map stands over the page, which stays loaded under it.
+    private(set) var map: Bool
+    /// A Verify is on its way to the hub: its entry waits.
+    var verifying = false
+    /// Verify pressed.
+    var onVerify: () -> Void = {}
+    /// The map went on or off, or the view changed: the pane lays its map out again.
+    var onChange: () -> Void = {}
     private let key: String
+    private let mapKey: String
     private let post: ([String: Any]) -> Void
 
     init(instanceId: String, post: @escaping ([String: Any]) -> Void) {
         key = "cawco-canvas-view:\(instanceId)"
+        mapKey = "cawco-canvas-map:\(instanceId)"
         self.post = post
         chosen = Self.kept(UserDefaults.standard.string(forKey: key))
+        map = UserDefaults.standard.string(forKey: mapKey) == "on"
         button = KitButton.make("", glyph: .dataLayers, variant: .ghost, height: .sm) {}
         button.accessibilityLabel = "Canvas view"
-        button.toolTip = "Canvas view: scheme, widths, motion, zoom"
+        button.toolTip = "Canvas view: map, scheme, widths, motion, zoom, verify"
         button.showsMenuAsPrimaryAction = true
         button.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
             MainActor.assumeIsolated { done(self?.entries() ?? []) }
@@ -99,18 +113,41 @@ final class CanvasViewControl {
         return chosen
     }
 
-    /// The menu (CanvasView.svelte's content): Scheme and Width each a
-    /// choice of one, Reduced motion a check, then the two zooms.
+    /// The menu (CanvasView.svelte's content): Map a check, Scheme and Width
+    /// each a choice of one, Reduced motion a check, the two zooms (the
+    /// page's, waiting while the map stands with its own), then Verify,
+    /// waiting while one is out.
     func entries() -> [UIMenuElement] {
         let action = { (choice: Choice) -> UIAction in
-            UIAction(title: choice.words, state: self.isOn(choice) ? .on : .off) { [weak self] _ in self?.pick(choice) }
+            let made = UIAction(title: choice.words, state: self.isOn(choice) ? .on : .off) { [weak self] _ in self?.pick(choice) }
+            if case .zoom = choice, self.map { made.attributes = .disabled }
+            return made
+        }
+        let mapEntry = UIAction(title: "Map", state: map ? .on : .off) { [weak self] _ in
+            guard let self else { return }
+            showMap(!map)
+        }
+        let verify = UIAction(title: "Verify against the design system", attributes: verifying ? .disabled : []) { [weak self] _ in
+            self?.onVerify()
         }
         return [
+            UIMenu(options: .displayInline, children: [mapEntry]),
             UIMenu(title: "Scheme", options: [.displayInline, .singleSelection], children: Scheme.allCases.map { action(.scheme($0)) }),
             UIMenu(title: "Width", options: [.displayInline, .singleSelection], children: Width.allCases.map { action(.width($0)) }),
             UIMenu(options: .displayInline, children: [action(.motion)]),
             UIMenu(options: .displayInline, children: [action(.zoom(.fit)), action(.zoom(.whole))]),
+            UIMenu(options: .displayInline, children: [verify]),
         ]
+    }
+
+    /// Map mode on or off, kept per session.
+    func showMap(_ on: Bool) {
+        map = on
+        UserDefaults.standard.set(on ? "on" : "off", forKey: mapKey)
+        #if DEBUG
+        PreviewProbe.say("preview canvas-view map=\(on ? "on" : "off")")
+        #endif
+        onChange()
     }
 
     /// More's entry while the head has no room for the button: the same menu, one level in.
@@ -169,5 +206,6 @@ final class CanvasViewControl {
         case nil: break
         }
         post(["type": "cawco:canvas-view", "view": view])
+        onChange()
     }
 }
