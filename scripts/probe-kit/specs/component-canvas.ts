@@ -1287,14 +1287,25 @@ async function daemonRender(kit: Kit, stage: Stage): Promise<void> {
       (one) => one.file === "src/Pairing.stories.js"
     )?.moves[0];
     const png = Buffer.from(rendered.png ?? "", "base64");
+    // The picture is the hover frame at its own size (the render's page draws at one device pixel per CSS px), on whole pixels: the report's box is rounded, the picture's edges taken out to the pixels the frame touches.
+    const pictured = frames.find(
+      (one) => one.story === "Primary" && one.interaction === "hover"
+    );
+    const size =
+      png.subarray(1, 4).toString() === "PNG"
+        ? { w: png.readUInt32BE(16), h: png.readUInt32BE(20) }
+        : null;
     kit.check(
-      "13: with no panel open, the daemon's render draws every section in the machine's Chromium through the bridge's socket: by stage, every frame drawn, the move read, a frame's picture",
+      "13: with no panel open, the daemon's render draws every section in the machine's Chromium through the bridge's socket: by stage, every frame drawn, the move read, a frame's picture at its own size",
       rendered.report.by === "stage" &&
         frames.length >= 14 &&
         frames.every((one) => one.state === "drawn") &&
         (move?.animations.length ?? 0) === 2 &&
-        png.subarray(1, 4).toString() === "PNG",
-      `${Math.round(performance.now() - started)} ms, by ${rendered.report.by}: ${frames.length} frames ${[...new Set(frames.map((one) => one.state))].join(",")}; move ${move?.from}→${move?.to} ${move?.animations.length} animations; picture ${png.length} bytes`
+        !!size &&
+        !!pictured &&
+        Math.abs(size.w - pictured.box.w) <= 2 &&
+        Math.abs(size.h - pictured.box.h) <= 2,
+      `${Math.round(performance.now() - started)} ms, by ${rendered.report.by}: ${frames.length} frames ${[...new Set(frames.map((one) => one.state))].join(",")}; move ${move?.from}→${move?.to} ${move?.animations.length} animations; picture ${size ? `${size.w}×${size.h}` : "none"} px for the frame's ${pictured ? `${pictured.box.w}×${pictured.box.h}` : "none"}`
     );
   } finally {
     socat.kill();

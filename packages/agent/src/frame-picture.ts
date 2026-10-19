@@ -126,6 +126,9 @@ export async function poseFrame(
     });
 }
 
+/** Lengths that differ by less than this are one length: layout's float noise, never a zoom. */
+const SAME = 0.05;
+
 /** A png's size, from its header. */
 const pngSize = (png: Buffer) => ({
   w: png.readUInt32BE(16),
@@ -151,9 +154,11 @@ export async function framePicture(
     throw new FramePictureRefusal(`The canvas draws no frame ${key}.`);
   }
   const { rect, own, scale } = read;
-  if (Math.abs(rect.w - own.w) > 0.5) {
+  // At its own size the box on the page is its layout box; anything else is
+  // a zoom or a transform still running over it.
+  if (Math.abs(rect.w - own.w) > SAME || Math.abs(rect.h - own.h) > SAME) {
     throw new FramePictureRefusal(
-      `Frame ${key} stands ${rect.w.toFixed(1)} px wide on the page for its own ${own.w}, ${read.view}: its picture would be scaled.`
+      `Frame ${key} stands ${rect.w.toFixed(2)}×${rect.h.toFixed(2)} px on the page for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)}, ${read.view}: its picture would be scaled.`
     );
   }
   if (!read.whole) {
@@ -161,17 +166,30 @@ export async function framePicture(
       `Frame ${key} does not stand whole in the canvas (${JSON.stringify(rect)}, ${read.view}): its picture would be cut.`
     );
   }
+  // The clip on whole device pixels, out from the box: the screenshot then
+  // rounds nothing, and the picture holds every pixel the frame touches.
+  const left = Math.floor(rect.x * scale) / scale;
+  const top = Math.floor(rect.y * scale) / scale;
+  const right = Math.ceil((rect.x + rect.w) * scale) / scale;
+  const bottom = Math.ceil((rect.y + rect.h) * scale) / scale;
   const png = await page.screenshot({
-    clip: { x: rect.x, y: rect.y, width: rect.w, height: rect.h },
+    clip: { x: left, y: top, width: right - left, height: bottom - top },
     animations: "disabled",
     caret: "hide",
   });
   const size = pngSize(png);
-  const want = { w: Math.round(own.w * scale), h: Math.round(own.h * scale) };
-  // The body's height can be fractional where its offsetHeight is rounded: a device pixel's play.
-  if (size.w !== want.w || Math.abs(size.h - want.h) > scale) {
+  const want = {
+    w: Math.round((right - left) * scale),
+    h: Math.round((bottom - top) * scale),
+  };
+  if (
+    size.w !== want.w ||
+    size.h !== want.h ||
+    size.w < own.w * scale - SAME ||
+    size.h < own.h * scale - SAME
+  ) {
     throw new FramePictureRefusal(
-      `Frame ${key}'s picture came out ${size.w}×${size.h} px for its own ${own.w}×${own.h} at ×${scale} (${want.w}×${want.h}).`
+      `Frame ${key}'s picture came out ${size.w}×${size.h} px for its own ${own.w.toFixed(2)}×${own.h.toFixed(2)} at ×${scale} (${want.w}×${want.h} on whole device pixels).`
     );
   }
   return { png, read };
