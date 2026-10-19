@@ -25,13 +25,13 @@
 >
   {#each suggestions as one (one.text)}
     {@const Glyph = GLYPHS[one.glyph]}
-    <li class="flex max-w-full">
+    <li class="flex max-inline-full">
       <Tip label={one.text}>
         {#snippet children(tip)}
           <button
             {...tip}
             aria-label={one.text}
-            class="kit-chip touch-hit max-w-full transition-[background-color,scale] duration-(--dur-control) ease-(--ease-out) active:scale-(--press-scale)"
+            class="kit-chip touch-hit max-inline-full transition-[background-color,scale] duration-(--dur-control) ease-(--ease-out) motion-safe:active:scale-(--press-scale)"
             onclick={() => onpick(one.text)}
             type="button"
           >
@@ -39,7 +39,7 @@
               aria-hidden="true"
               class="size-(--icon-md) shrink-0 text-(--ink-muted) [&_[opacity]]:opacity-(--glyph-duo-status-opacity)"
             />
-            <span class="min-w-0 [overflow-wrap:anywhere]"
+            <span class="min-inline-0 wrap-anywhere"
               >{LABELS[one.text] ?? one.text}</span
             >
           </button>

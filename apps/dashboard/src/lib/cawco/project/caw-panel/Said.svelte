@@ -21,11 +21,11 @@
 </script>
 
 <ol
-  class="m-0 flex min-w-0 list-none flex-col gap-(--space-5) p-0"
+  class="m-0 flex min-inline-0 list-none flex-col gap-(--space-5) p-0"
   data-panel-said
 >
   {#each messages as one (one.id)}
-    <li class="flex min-w-0 flex-col gap-(--space-2)">
+    <li class="flex min-inline-0 flex-col gap-(--space-2)">
       <p
         class={[
           "mark-line m-0 flex items-center gap-(--space-2) text-label",
@@ -40,9 +40,7 @@
         {/if}
       </p>
       {#each one.words as para, at (at)}
-        <p
-          class="m-0 text-(--ink-strong) text-body [overflow-wrap:anywhere] [text-wrap:pretty]"
-        >
+        <p class="m-0 text-(--ink-strong) text-body wrap-anywhere text-pretty">
           {para}
         </p>
       {/each}

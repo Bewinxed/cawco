@@ -34,7 +34,7 @@
   <RowFault {again} data-not-woken="under" {details} {reason} />
 {:else}
   <div
-    class="mt-(--space-3) flex min-w-0 flex-col gap-(--space-1)"
+    class="mbs-(--space-3) flex min-inline-0 flex-col gap-(--space-1)"
     data-not-woken="caw"
   >
     <p

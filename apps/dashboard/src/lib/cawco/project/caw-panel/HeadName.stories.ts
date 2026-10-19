@@ -24,7 +24,7 @@ export const DeskWaiting = {
   parameters: { viewport: 440 },
 };
 
-/** Phone: the sheet's grabber over the head, Close last. */
+/** Phone: hanging from his tab under the bar, Close last. */
 export const Phone = {
   args: { form: "phone" },
   parameters: { viewport: "phone" },

@@ -12,11 +12,19 @@
  *    (scrollWidth past clientWidth on an overflow that clips), a run cut
  *    with an ellipsis inside its own box (The Truncate Inside Rule) and a
  *    visually hidden one (sr-only) aside.
+ * 1b. Every phone frame's panel is the real HangCard, in the frame, its top
+ *    on Caw's glass's foot, its trailing side the screen's edge, its
+ *    leading side 12px in (DESIGN.md, Caw's panel).
  * 3. Nothing overlaps: no two runs of words in a frame cross, an ancestor
  *    and its own words aside.
  *
  * The sweep's total is the count of spills and overlaps over every frame;
  * it prints per states file, then the first few of each with where.
+ *
+ * 4. Each resize option operated with a pointer: a drag on the grip grows
+ *    the panel, a long drag stops at its 720 max, a double press brings
+ *    back 380 × 640; the edge changes only the width and the foot only the
+ *    height; Wide panel in More makes it 560.
  *
  *   bun scripts/probe-kit/run.ts caw-panel-page
  */
@@ -42,6 +50,10 @@ const freePort = async (): Promise<number> => {
 
 interface Sweep {
   frames: number;
+  /** Phone frames whose panel doesn't hang from the glass as DESIGN.md has it. */
+  hangs: string[];
+  /** Phone frames read for the hang. */
+  hung: number;
   notDrawn: string[];
   overlaps: string[];
   spills: string[];
@@ -56,7 +68,14 @@ const DRAWN = /:drawn$/;
  */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one in-page sweep, serialised whole into the page
 const sweepPage = (file: string): Sweep => {
-  const out: Sweep = { frames: 0, notDrawn: [], overlaps: [], spills: [] };
+  const out: Sweep = {
+    frames: 0,
+    hangs: [],
+    hung: 0,
+    notDrawn: [],
+    overlaps: [],
+    spills: [],
+  };
   const frames = [
     ...document.querySelectorAll<HTMLElement>(
       `.cawco-frame[data-cawco-file="${file}"][data-cawco-interaction="rest"]`
@@ -79,6 +98,38 @@ const sweepPage = (file: string): Sweep => {
     }
     out.frames += 1;
     const bodyBox = body.getBoundingClientRect();
+    // A phone frame: the panel is the hanging card, inside this frame, its
+    // top on the glass's foot (the bar's floor line), its trailing side the
+    // screen's edge, its leading side the 12px margin (DESIGN.md, Caw's
+    // panel), measured in the frame's own pixels (the canvas may scale it).
+    const glass = body.querySelector<HTMLElement>("[data-panel-glass]");
+    const screen = body.querySelector<HTMLElement>('[data-panel-form="phone"]');
+    if (glass && screen) {
+      out.hung += 1;
+      const card = screen.querySelector<HTMLElement>(".kit-hang");
+      const s = screen.getBoundingClientRect();
+      const scale = s.width / screen.offsetWidth || 1;
+      if (card) {
+        const c = card.getBoundingClientRect();
+        const g = glass.getBoundingClientRect();
+        const off = {
+          top: (c.top - g.bottom) / scale,
+          end: (s.right - c.right) / scale,
+          start: (c.left - s.left) / scale,
+          glassEnd: (s.right - g.right) / scale,
+        };
+        if (
+          Math.abs(off.top) > 1 ||
+          Math.abs(off.end) > 1 ||
+          Math.abs(off.start - 12) > 1 ||
+          Math.abs(off.glassEnd) > 1
+        ) {
+          out.hangs.push(`${where}: ${JSON.stringify(off)}`);
+        }
+      } else {
+        out.hangs.push(`${where}: no hanging card in the frame`);
+      }
+    }
     // Runs of words: elements holding text of their own, drawn.
     const words: { box: DOMRect; el: Element }[] = [];
     for (const el of body.querySelectorAll("*")) {
@@ -219,6 +270,8 @@ const spec: Spec = {
       page.on("pageerror", (error) => logged.push(error.message));
       let total = 0;
       let frames = 0;
+      let hung = 0;
+      const hangs: string[] = [];
       const notDrawn: string[] = [];
       for (const file of files) {
         await page.goto(
@@ -285,6 +338,8 @@ const spec: Spec = {
         notDrawn.push(...bad.map((one) => `${file} ${one}`));
         const sweep = await page.evaluate(sweepPage, file);
         frames += sweep.frames;
+        hung += sweep.hung;
+        hangs.push(...sweep.hangs.map((one) => `${file} ${one}`));
         notDrawn.push(...sweep.notDrawn.map((one) => `${file} ${one}`));
         const count = sweep.spills.length + sweep.overlaps.length;
         total += count;
@@ -310,6 +365,116 @@ const spec: Spec = {
         `2-3: the sweep totals zero spills and overlaps over ${frames} frames`,
         total === 0,
         `total ${total}`
+      );
+      kit.check(
+        `1b: every phone frame (${hung}) hangs the real card from Caw's glass: its top on the floor line, its trailing side the screen's edge, 12px in at its leading side`,
+        hung > 0 && hangs.length === 0,
+        hangs.slice(0, 8).join(" | ") || "all hang"
+      );
+      // 4. Each resize option, operated: a drag on the grip grows the panel
+      // toward the page and down, a long drag stops at 720 wide, a double
+      // press brings back 380 × 640; Wide panel in More makes it 560.
+      const sizeOf = () =>
+        page.evaluate(() => {
+          const panel = document.querySelector<HTMLElement>(
+            '.cawco-frame[data-cawco-interaction="rest"] [data-panel]'
+          );
+          return panel
+            ? { w: panel.offsetWidth, h: panel.offsetHeight }
+            : { w: 0, h: 0 };
+        });
+      const openResize = async (file: string) => {
+        await page.goto(
+          `http://127.0.0.1:${port}/@cawco/canvas?file=${encodeURIComponent(`${DIR}/${file}`)}&width=1440&scheme=light`,
+          { waitUntil: "load" }
+        );
+        await page.waitForSelector(
+          '.cawco-frame[data-cawco-interaction="rest"] [data-panel]',
+          { timeout: 60_000 }
+        );
+        await page.waitForTimeout(600);
+      };
+      const drag = async (grip: string, dx: number, dy: number) => {
+        const handle = page
+          .locator(
+            `.cawco-frame[data-cawco-interaction="rest"] [data-panel-grip="${grip}"]`
+          )
+          .first();
+        const box = await handle.boundingBox();
+        if (!box) {
+          return false;
+        }
+        const x = box.x + box.width / 2;
+        const y = box.y + box.height / 2;
+        await page.mouse.move(x, y);
+        await page.mouse.down();
+        for (let step = 1; step <= 8; step += 1) {
+          await page.mouse.move(x + (dx * step) / 8, y + (dy * step) / 8);
+        }
+        await page.mouse.up();
+        return true;
+      };
+      const resets = async (grip: string) => {
+        const handle = page
+          .locator(
+            `.cawco-frame[data-cawco-interaction="rest"] [data-panel-grip="${grip}"]`
+          )
+          .first();
+        await handle.dblclick();
+        return sizeOf();
+      };
+      for (const [file, grip] of [
+        ["ResizeEdges.stories.ts", "corner"],
+        ["ResizeCorner.stories.ts", "corner"],
+      ] as const) {
+        await openResize(file);
+        const rest = await sizeOf();
+        const found = await drag(grip, -120, 90);
+        const grown = await sizeOf();
+        await drag(grip, -2000, 0);
+        const widest = await sizeOf();
+        const back = await resets(grip);
+        kit.check(
+          `4: ${file}: a drag on the ${grip} grows the panel across and down, a long drag stops at 720 wide, a double press brings back 380 × 640`,
+          found &&
+            rest.w === 380 &&
+            rest.h === 640 &&
+            grown.w > rest.w + 40 &&
+            grown.h > rest.h + 30 &&
+            widest.w === 720 &&
+            back.w === 380 &&
+            back.h === 640,
+          JSON.stringify({ rest, grown, widest, back })
+        );
+      }
+      await openResize("ResizeEdges.stories.ts");
+      const edgeRest = await sizeOf();
+      await drag("edge", -100, 0);
+      const across = await sizeOf();
+      await drag("foot", 0, 80);
+      const down = await sizeOf();
+      kit.check(
+        "4: ResizeEdges.stories.ts: the leading edge changes only the width, the foot only the height",
+        across.w > edgeRest.w + 30 &&
+          across.h === edgeRest.h &&
+          down.h > across.h + 30 &&
+          down.w === across.w,
+        JSON.stringify({ edgeRest, across, down })
+      );
+      await openResize("ResizeMenu.stories.ts");
+      const menuRest = await sizeOf();
+      await page
+        .locator(
+          '.cawco-frame[data-cawco-interaction="rest"] [data-panel] button[aria-label="More"]'
+        )
+        .first()
+        .click();
+      await page.getByRole("menuitemcheckbox", { name: "Wide panel" }).click();
+      const wide = await sizeOf();
+      kit.check(
+        "4: ResizeMenu.stories.ts: Wide panel in More makes the panel 560 wide, its height kept",
+        menuRest.w === 380 && wide.w === 560 && wide.h === menuRest.h,
+        JSON.stringify({ menuRest, wide })
       );
       kit.check(
         "no console errors on the canvases",

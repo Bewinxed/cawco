@@ -15,7 +15,7 @@
    *   waits on you, the budget, off. Nothing when there is nothing.
    * - Desk: a popover, which Escape and a press outside close (HIG,
    *   Popovers), so New thread and More trail and there is no Close. Phone:
-   *   the sheet's Close is last (DESIGN.md, Drawer), New thread moves into
+   *   Close is last (DESIGN.md, Drawer's head), New thread moves into
    *   More so the thread's name keeps its room at 390.
    */
   import CawFace from "#lib/cawco/home/CawFace.svelte";
@@ -58,7 +58,7 @@
 
 <div
   class={[
-    "grid min-h-(--c-btn-h-lg) shrink-0 grid-cols-[var(--c-row-lead)_minmax(0,1fr)_auto] items-center gap-x-(--space-3) border-(--border-hairline) border-b py-(--space-1)",
+    "grid min-block-(--c-btn-h-lg) shrink-0 grid-cols-[var(--c-row-lead)_minmax(0,1fr)_auto] items-center gap-x-(--space-3) border-(--border-hairline) border-be py-(--space-1)",
     phone ? "px-(--space-4)" : "px-(--space-3)",
   ]}
   data-panel-head={kind}
@@ -67,12 +67,14 @@
   <span class="grid place-items-center" data-box
     ><CawFace size={28} status={pose} /></span
   >
-  <div class="flex min-w-0 flex-col items-start">
-    <div class="mark-line flex min-w-0 max-w-full items-center gap-(--space-2)">
+  <div class="flex min-inline-0 flex-col items-start">
+    <div
+      class="mark-line flex min-inline-0 max-inline-full items-center gap-(--space-2)"
+    >
       <span class="text-(--ink-strong) text-label">Caw</span>
       {#if fact}
-        <Badge data-box class="min-w-0" data-panel-fact variant={fact.tone}
-          ><span class="mark-text min-w-0 overflow-clip text-ellipsis"
+        <Badge data-box class="min-inline-0" data-panel-fact variant={fact.tone}
+          ><span class="mark-text min-inline-0 overflow-clip text-ellipsis"
             >{fact.text}</span
           ></Badge
         >
@@ -84,12 +86,12 @@
           {#snippet child({ props })}
             <button
               {...props}
-              class="mark-line press-tint -mx-(--space-1) flex min-w-0 max-w-full cursor-pointer items-center gap-(--space-1) rounded-xs px-(--space-1) text-(--ink-muted) text-meta hover:bg-(--surface-hover) focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-(--focus-ring) focus-visible:outline-solid"
+              class="mark-line press-tint -mx-(--space-1) flex min-inline-0 max-inline-full cursor-pointer items-center gap-(--space-1) rounded-xs px-(--space-1) text-(--ink-muted) text-meta hover:bg-(--surface-hover) focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-(--focus-ring) focus-visible:outline-solid"
               data-panel-thread
               type="button"
             >
               <span
-                class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                class="min-inline-0 overflow-clip text-ellipsis whitespace-nowrap"
                 >{name}</span
               >
               <IconChevronDown
@@ -101,12 +103,12 @@
         </DropdownMenu.Trigger>
         <DropdownMenu.Content
           align="start"
-          class="max-w-[min(var(--c-panel-w),calc(100vw-var(--space-6)))]"
+          class="max-inline-[min(var(--c-panel-w),calc(100vw-var(--space-6)))]"
         >
           {#each THREADS as one (one)}
             <DropdownMenu.Item
               ><span
-                class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                class="min-inline-0 overflow-clip text-ellipsis whitespace-nowrap"
                 >{one}</span
               ></DropdownMenu.Item
             >
@@ -143,7 +145,7 @@
           />
         {/snippet}
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end" class="min-w-44">
+      <DropdownMenu.Content align="end" class="min-inline-44">
         {#if phone}
           <DropdownMenu.Item
             ><IconPlus aria-hidden="true" /><span>New thread</span

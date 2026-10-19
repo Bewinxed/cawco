@@ -6,9 +6,13 @@
  * copy (many items, 40-word lines) so every option is drawn at one item,
  * many items, a short line and a long one.
  *
- * Two things here have no source in the hub yet: a filed task's one-line
- * description and why Caw filed it (`summary`, `why`), and a suggestion's
- * short label (`LABELS`). The options that draw them say so in their cost.
+ * A filed task's `description` is the task file's own (the text between its
+ * title and its first section, packages/hub task-file.ts; the dashboard's
+ * `readTask` answers it as TaskView.description; `task_create` takes it).
+ * Two things here have no source in the hub yet: why Caw filed each task
+ * (`why`: task_create takes no reason, and his reply names only the tasks'
+ * ids), and a suggestion's short label (`LABELS`). The options that draw
+ * them say so in their cost.
  */
 import type { Starter } from "#lib/cawco/project-tasks.js";
 
@@ -81,12 +85,12 @@ export const LONG_ASK: Said = {
 /** A task Caw filed, as his reply's block shows it. */
 export interface Filed {
   id: string;
-  /** The task file's first body line. No hub source yet. */
-  summary: string | null;
+  /** The task file's description (TaskView.description), its first line drawn. */
+  description: string | null;
   title: string;
   /** Waits on you: its why is marked with the needs-you glyph. */
   waits: boolean;
-  /** Why Caw filed it, in his words. No hub source yet. */
+  /** Why Caw filed it, in his words. No hub source yet: the build adds it. */
   why: string | null;
 }
 
@@ -94,21 +98,21 @@ export const FILED: Filed[] = [
   {
     id: "hb-3",
     title: "Write the pricing page copy",
-    summary: "Prices, plans and the FAQ for /pricing",
+    description: "Prices, plans and the FAQ for /pricing",
     why: "Needs your numbers before anyone starts it",
     waits: true,
   },
   {
     id: "hb-4",
     title: "Changelog for 0.9",
-    summary: "Every change since 0.8, grouped by area",
+    description: "Every change since 0.8, grouped by area",
     why: "So the launch email can link to it",
     waits: false,
   },
   {
     id: "hb-5",
     title: "Swap the hero photo for the harbour at dusk",
-    summary: "The dusk shot from the brand folder",
+    description: "The dusk shot from the brand folder",
     why: null,
     waits: false,
   },
@@ -121,7 +125,7 @@ const LONG_TITLES = [
   "Find out why the booking page drops the selected date when a guest switches between weekly and monthly views on a phone, write down every step that reproduces it, and fix it without changing the desk layout",
   "Draft Friday's launch email with three subject lines, a short body that leads with the harbour photo, a link to the new pricing page, and a plain-text version for the readers whose mail refuses images",
 ];
-const LONG_SUMMARY =
+const LONG_DESCRIPTION =
   "Every plan, its price per seat, its limits, and the FAQ entries that answer what changes for teams already booked under the old prices, kept to what the pricing page itself can say";
 const LONG_WHY =
   "Needs your numbers for the team plan and the yearly discount before anyone starts it, because the copy and the FAQ both quote them and nobody else has them";
@@ -130,7 +134,7 @@ const LONG_WHY =
 export const FILED_LONG: Filed[] = LONG_TITLES.map((title, at) => ({
   id: `hb-${20 + at}`,
   title,
-  summary: at % 3 === 2 ? null : LONG_SUMMARY,
+  description: at % 3 === 2 ? null : LONG_DESCRIPTION,
   why: at % 2 === 0 ? LONG_WHY : null,
   waits: at === 0,
 }));

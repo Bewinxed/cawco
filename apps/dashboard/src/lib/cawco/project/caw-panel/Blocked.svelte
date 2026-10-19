@@ -63,7 +63,7 @@
 <section
   aria-labelledby={titleId}
   class={[
-    "mx-auto grid w-full min-w-0 max-w-[60ch] gap-y-(--space-2)",
+    "mx-auto grid inline-full min-inline-0 max-inline-[60ch] gap-y-(--space-2)",
     layout === "beside"
       ? "grid-cols-[auto_minmax(0,1fr)] gap-x-(--space-4)"
       : "grid-cols-[minmax(0,1fr)]",
@@ -78,25 +78,25 @@
       "grid",
       layout === "beside"
         ? "row-span-5 self-start"
-        : "mb-(--space-3) justify-self-center",
+        : "mbe-(--space-3) justify-self-center",
     ]}
     data-box
     data-blocked-caw><CawFace size={80} status="needs-you" /></span
   >
   <h3
-    class="m-0 min-w-0 text-(--ink-strong) text-title [overflow-wrap:anywhere] [text-wrap:balance]"
+    class="m-0 min-inline-0 text-(--ink-strong) text-title wrap-anywhere text-balance"
     id={titleId}
   >
     {title}
   </h3>
   <p
-    class="m-0 min-w-0 text-(--ink-muted) text-body [overflow-wrap:anywhere] [text-wrap:pretty]"
+    class="m-0 min-inline-0 text-(--ink-muted) text-body wrap-anywhere text-pretty"
   >
     {line}
   </p>
   <div
     class={[
-      "mt-(--space-2) flex min-w-0 flex-wrap items-center gap-(--space-2)",
+      "mbs-(--space-2) flex min-inline-0 flex-wrap items-center gap-(--space-2)",
       centred && "justify-center",
     ]}
   >
@@ -108,7 +108,7 @@
   {#if raw || rows.length > 0}
     <div
       class={[
-        "flex min-w-0 flex-col gap-(--space-2) self-stretch",
+        "flex min-inline-0 flex-col gap-(--space-2) self-stretch",
         centred ? "items-center" : "items-start",
       ]}
     >
@@ -126,7 +126,7 @@
         <IconChevronDown
           aria-hidden="true"
           class={[
-            "transition-transform duration-(--dur-control) ease-(--ease-in-out)",
+            "motion-safe:transition-transform motion-safe:duration-(--dur-control) motion-safe:ease-(--ease-in-out)",
             shown && "rotate-180",
           ]}
           data-icon="inline-end"
@@ -134,13 +134,13 @@
       </Button>
       {#if shown}
         <div
-          class="relative w-full min-w-0 rounded-sm border border-(--border-well) bg-(--surface-well) py-(--space-2) ps-(--space-3) pe-(--space-8) text-start"
+          class="relative inline-full min-inline-0 rounded-sm border border-(--border-well) bg-(--surface-well) py-(--space-2) ps-(--space-3) pe-(--space-8) text-start"
           data-blocked-raw
           transition:unfold
         >
           {#if raw}
             <p
-              class="m-0 whitespace-pre-wrap font-mono text-(--ink-muted) text-meta [font-variant-ligatures:none] [overflow-wrap:anywhere]"
+              class="m-0 whitespace-pre-wrap font-mono text-(--ink-muted) text-meta [font-variant-ligatures:none] wrap-anywhere"
             >
               {raw}
             </p>
@@ -150,12 +150,12 @@
             >
               {#each rows as row (row.name)}
                 <dt
-                  class="min-w-0 font-mono text-(--ink-strong) text-meta [font-variant-ligatures:none] [overflow-wrap:anywhere]"
+                  class="min-inline-0 font-mono text-(--ink-strong) text-meta [font-variant-ligatures:none] wrap-anywhere"
                 >
                   {row.name}
                 </dt>
                 <dd
-                  class="m-0 min-w-0 text-(--ink-muted) text-meta [overflow-wrap:anywhere]"
+                  class="m-0 min-inline-0 text-(--ink-muted) text-meta wrap-anywhere"
                 >
                   {row.said}
                 </dd>
@@ -164,7 +164,7 @@
           {/if}
           <CopyButton
             aria-label="Copy details"
-            class="absolute end-(--space-1) top-(--space-1)"
+            class="absolute inset-e-(--space-1) inset-bs-(--space-1)"
             size="icon-xs"
             text={copied}
           />

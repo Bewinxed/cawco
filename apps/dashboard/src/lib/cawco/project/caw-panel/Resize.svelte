@@ -91,31 +91,31 @@
 {#if mode === "edges"}
   <div
     aria-hidden="true"
-    class="absolute inset-y-0 -start-[3px] z-10 w-1.5 cursor-col-resize touch-none transition-colors hover:bg-(--border-control)"
+    class="absolute inset-y-0 -inset-s-[3px] z-10 inline-1.5 cursor-col-resize touch-none transition-colors hover:bg-(--border-control)"
     data-panel-grip="edge"
     {...handlers("x")}
   ></div>
   <div
     aria-hidden="true"
-    class="absolute inset-x-0 -bottom-[3px] z-10 h-1.5 cursor-row-resize touch-none transition-colors hover:bg-(--border-control)"
+    class="absolute inset-x-0 -inset-be-[3px] z-10 block-1.5 cursor-row-resize touch-none transition-colors hover:bg-(--border-control)"
     data-panel-grip="foot"
     {...handlers("y")}
   ></div>
   <div
     aria-hidden="true"
-    class="absolute -start-[3px] -bottom-[3px] z-10 size-(--space-3) cursor-nesw-resize touch-none"
+    class="absolute -inset-s-[3px] -inset-be-[3px] z-10 size-(--space-3) cursor-nesw-resize touch-none"
     data-panel-grip="corner"
     {...handlers("xy")}
   ></div>
 {:else}
   <div
     aria-hidden="true"
-    class="absolute -start-(--space-3) -bottom-(--space-3) z-10 size-6 cursor-nesw-resize touch-none"
+    class="absolute -inset-s-(--space-3) -inset-be-(--space-3) z-10 size-6 cursor-nesw-resize touch-none"
     data-panel-grip="corner"
     {...handlers("xy")}
   >
     <span
-      class="absolute start-[5.5px] bottom-[5.5px] block size-5 rounded-bl-[calc(var(--radius-lg)+4px)] border-(--border-control) border-b-[1.5px] border-s-[1.5px]"
+      class="absolute inset-s-[5.5px] inset-be-[5.5px] block size-5 rounded-es-[calc(var(--radius-lg)+4px)] border-(--border-control) border-be-[1.5px] border-s-[1.5px]"
     ></span>
   </div>
 {/if}

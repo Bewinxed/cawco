@@ -158,7 +158,7 @@
     <EmptyState title="What’s next for {PROJECT}?">
       {#snippet mark()}
         <!-- mark-line: Caw stands over the empty thread's title -->
-        <span class="mb-(--space-3) grid justify-items-start" data-box
+        <span class="mbe-(--space-3) grid justify-items-start" data-box
           ><CawFace size={80} status="ready" /></span
         >
       {/snippet}

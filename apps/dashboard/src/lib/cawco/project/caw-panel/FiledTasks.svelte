@@ -2,7 +2,7 @@
   /**
    * The tasks Caw filed, under the reply that filed them (pin 1): his
    * receipt, read to see he got it right. Each says what it is (its title),
-   * what it holds (the task file's first line) and why he filed it, the why
+   * what it holds (its description, as its task file holds it: TaskView.description, read by `readTask`; its first line drawn) and why he filed it, the why
    * that waits on you led by the needs-you glyph. A task with nothing past
    * its title is one line. Nothing leads to the board (pin 2): each task
    * opens itself.
@@ -60,9 +60,9 @@
 </script>
 
 {#if tasks.length > 0}
-  <div class="@container min-w-0 pt-(--space-2)" data-filed={form}>
+  <div class="@container min-inline-0 pbs-(--space-2)" data-filed={form}>
     <p
-      class="m-0 mb-(--space-2) text-(--ink-muted) text-meta"
+      class="m-0 mbe-(--space-2) text-(--ink-muted) text-meta"
       in:arrive|global={0}
     >
       {head}
@@ -76,12 +76,12 @@
       ]}
     >
       {#each tasks as task, at (task.id)}
-        <li class="grid min-w-0" in:arrive|global={at + 1}>
+        <li class="grid min-inline-0" in:arrive|global={at + 1}>
           <a
             class={[
-              "group/task press-tint flex min-w-0 flex-col gap-(--space-1) text-(--ink-strong) no-underline transition-colors focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-(--focus-ring) focus-visible:outline-solid focus-visible:[outline-offset:calc(var(--focus-ring-width)*-1)]",
+              "group/task press-tint flex min-inline-0 flex-col gap-(--space-1) text-(--ink-strong) no-underline transition-colors focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-(--focus-ring) focus-visible:outline-solid focus-visible:[outline-offset:calc(var(--focus-ring-width)*-1)]",
               form === "cards"
-                ? "rounded-sm bg-(--surface-raised) px-(--space-3) pt-(--space-2) pb-(--space-3) shadow-(--shadow-tile) hover:bg-(--surface-hover)"
+                ? "rounded-sm bg-(--surface-raised) px-(--space-3) pbs-(--space-2) pbe-(--space-3) shadow-(--shadow-tile) hover:bg-(--surface-hover)"
                 : "-mx-(--space-2) rounded-sm px-(--space-2) py-(--space-2) hover:bg-(--surface-hover)",
             ]}
             data-filed-task={task.id}
@@ -89,18 +89,18 @@
             onclick={(event) => event.preventDefault()}
           >
             <span
-              class="line-clamp-2 min-w-0 text-label underline decoration-transparent decoration-from-font transition-[text-decoration-color] duration-(--dur-control) ease-(--ease-out) [overflow-wrap:anywhere] [text-underline-position:from-font] group-hover/task:decoration-[color-mix(in_oklab,currentColor_35%,transparent)] group-focus-visible/task:decoration-[color-mix(in_oklab,currentColor_35%,transparent)]"
+              class="line-clamp-2 min-inline-0 text-label underline decoration-transparent decoration-from-font transition-[text-decoration-color] duration-(--dur-control) ease-(--ease-out) wrap-anywhere [text-underline-position:from-font] group-hover/task:decoration-[color-mix(in_oklab,currentColor_35%,transparent)] group-focus-visible/task:decoration-[color-mix(in_oklab,currentColor_35%,transparent)]"
               >{task.title}</span
             >
-            {#if task.summary}
+            {#if task.description}
               <span
-                class="line-clamp-2 min-w-0 text-(--ink-muted) text-meta [overflow-wrap:anywhere] [text-wrap:pretty]"
-                >{task.summary}</span
+                class="line-clamp-2 min-inline-0 text-(--ink-muted) text-meta wrap-anywhere text-pretty"
+                >{task.description}</span
               >
             {/if}
             {#if task.why}
               <span
-                class="mark-line flex min-w-0 items-start gap-(--space-1) text-(--ink-muted) text-meta"
+                class="mark-line flex min-inline-0 items-start gap-(--space-1) text-(--ink-muted) text-meta"
               >
                 {#if task.waits}
                   <span class="mark-cell"
@@ -111,7 +111,7 @@
                   >
                 {/if}
                 <span
-                  class="line-clamp-2 min-w-0 [overflow-wrap:anywhere] [text-wrap:pretty]"
+                  class="line-clamp-2 min-inline-0 wrap-anywhere text-pretty"
                   >{task.why}</span
                 >
               </span>
