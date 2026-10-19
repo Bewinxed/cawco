@@ -1347,8 +1347,8 @@ const fitChecks = async (on: OnCanvas) => {
 
 /**
  * The tools group's fills inside a canvas frame, on the host's own bundle
- * (Bun's minified host.css, where a `light-dark()` once lowered to switch
- * variables nothing set and drew no fill): the chosen tool's at rest, the
+ * (the minified host.css the hub serves, where a `light-dark()` Bun once
+ * lowered to switch variables nothing set drew no fill): the chosen tool's at rest, the
  * first unchosen one's under the pointer, and the two tokens they stand on
  * as the frame resolves them in its scheme.
  */

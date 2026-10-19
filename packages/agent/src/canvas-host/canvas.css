@@ -151,10 +151,8 @@ body {
 /* A tool: 34px at the concentric 5px radius (the group's 12px less its
    7px inset), the chosen one on the kit Toggle's on step (surface-pressed:
    a step past the hover by day, surface-fill by night), so it never reads
-   as hovered; 44px under a finger. The step is a token, never a
-   `light-dark()` here: Bun's bundler lowers one in this sheet to switch
-   variables it sets only beside a `color-scheme` in the same sheet, and
-   host.tsx sets the scheme inline, so a lowered one draws nothing. */
+   as hovered; 44px under a finger. The step is a token (DESIGN.md), as
+   every colour here is. */
 .rail-box {
   display: grid;
   width: var(--rail-box);

@@ -36606,6 +36606,15 @@
               "position": {
                 "type": "string"
               },
+              "display": {
+                "type": "string"
+              },
+              "margin": {
+                "type": "string"
+              },
+              "padding": {
+                "type": "string"
+              },
               "backgroundColor": {
                 "type": "string"
               },
@@ -36619,15 +36628,6 @@
                 "type": "string"
               },
               "lineHeight": {
-                "type": "string"
-              },
-              "display": {
-                "type": "string"
-              },
-              "padding": {
-                "type": "string"
-              },
-              "margin": {
                 "type": "string"
               },
               "borderRadius": {

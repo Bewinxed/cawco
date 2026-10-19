@@ -30,8 +30,8 @@
  * `surface-hover`. The canvas host is its own
  * bundle, whose sheet styles html and body, so the rail is drawn on a page of
  * its own from the sheets the host loads: the decision-page kit's tokens as
- * written (host.tsx) and the bundle's host.css as Bun builds it (canvas.css
- * raw would miss what Bun lowers: a `light-dark()` there drew no fill), in
+ * written (host.tsx) and the host.css the hub serves (canvas.css raw would
+ * miss what its compile changes: a `light-dark()` Bun once lowered there drew no fill), in
  * the host's scheme (`color-scheme` on the root, as host.tsx sets it). The
  * rail's material is translucent: each
  * ground is painted as it stacks (the canvas's surface-raised, the rail's
@@ -448,13 +448,12 @@ const same = (a: number[], b: number[]) =>
 
 /**
  * The sheets the canvas host loads, as it loads them: the kit's tokens as
- * written (host.tsx sets them unbundled) and the host's own sheet as Bun
- * bundles it (canvas-host.ts `buildCanvasHost`, minified, `light-dark()`
- * and all lowered as the hub serves it), never canvas.css raw.
+ * written (host.tsx sets them unbundled) and the host's own sheet as
+ * Lightning CSS compiles it (canvas-host.ts `buildCanvasHost`, minified at
+ * the product's CSS floor, as the hub serves it), never canvas.css raw.
  */
 const railSheets = async (): Promise<string[]> => {
-  const outputs = await buildCanvasHost();
-  const sheet = outputs.find((output) => output.path.endsWith("host.css"));
+  const sheet = (await buildCanvasHost()).get("host.css");
   if (!sheet) {
     throw new Error("the canvas host's bundle has no host.css");
   }

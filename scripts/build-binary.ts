@@ -272,8 +272,15 @@ export async function buildBinary(options: {
     // cpu-features: an optional native addon of ssh2 (dockerode's
     // docker-modem loads it), built by no install here; ssh2 requires it
     // inside a try and goes on without it, and the browser runtime speaks to
-    // unix sockets alone, never SSH.
-    external: ["playwright-core", "cpu-features"],
+    // unix sockets alone, never SSH. lightningcss and browserslist: the
+    // runtime pages' CSS compiler (core page-css.ts), which loads them on a
+    // compile only; the binary carries every page prebuilt and compiles none.
+    external: [
+      "playwright-core",
+      "cpu-features",
+      "lightningcss",
+      "browserslist",
+    ],
     define: {
       __CAWCO_RELEASE__: "true",
       __CAWCO_VERSION__: JSON.stringify(options.version),

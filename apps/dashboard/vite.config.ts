@@ -7,6 +7,7 @@ import {
   crossSiteRefusal,
   PAGE_ORIGIN_HEADER,
 } from "@cawco/core/browser-gate";
+import { CSS_TARGET } from "@cawco/core/css-target";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
@@ -299,15 +300,6 @@ export const proseNotByClass = (): Plugin => ({
   },
 });
 
-/** The CSS floor, for the minifier (`build.cssTarget` below says why). */
-export const CSS_TARGET = [
-  "chrome131",
-  "edge131",
-  "firefox146",
-  "safari18",
-  "ios18",
-];
-
 export default defineConfig(({ command }) => {
   // A build talks to no hub; only a vite server does, and only to the dev hub.
   if (command === "serve" && DEV_HUB) {
@@ -360,14 +352,10 @@ export default defineConfig(({ command }) => {
         : undefined,
     },
     /**
-     * The CSS floor, for the minifier. Vite's own default target predates
-     * light-dark(), and Lightning CSS lowers what a target lacks: light-dark()
-     * would become variables keyed on a `prefers-color-scheme` media query,
-     * which ignores the app's theme class and breaks every relative colour
-     * built on a token. These are the releases where the stylesheet's newest
-     * features ship natively: @scope (Firefox 146) and a relative colour whose
-     * origin is light-dark() or currentColor (Chrome 131, Safari 18). The JS
-     * target stays Vite's default.
+     * The CSS floor, for the minifier: the product's one (core
+     * css-target.ts says why), which the hub's runtime pages are compiled at
+     * too. Vite's own default target predates light-dark(). The JS target
+     * stays Vite's default.
      */
     build: {
       cssTarget: CSS_TARGET,
