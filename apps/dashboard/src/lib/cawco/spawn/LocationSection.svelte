@@ -341,7 +341,7 @@
               <button
                 data-slot="crumb"
                 aria-current="location"
-                class="min-h-(--min) min-w-(--min) max-w-full flex-none cursor-pointer rounded-xs border-none border-current bg-surface-lift p-(--pad) text-left font-medium wrap-anywhere text-ink-strong hover:bg-surface-hover"
+                class="min-h-(--min) min-w-(--min) max-w-full flex-none cursor-pointer rounded-xs border-none border-current bg-surface-lift p-(--pad) text-left font-medium wrap-anywhere text-ink-strong"
                 onclick={() => list(path)}
                 style:--min="44px"
                 style:--pad="8px"

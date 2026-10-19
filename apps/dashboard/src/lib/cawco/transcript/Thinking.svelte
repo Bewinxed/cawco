@@ -202,8 +202,7 @@
                as the next step. -->
           <span
             data-slot="tail"
-            style:--tail-fade={"linear-gradient(to right, transparent, var(--mask-opaque) 30%)"}
-            class="flex justify-end flex-auto min-w-0 overflow-hidden text-ink-muted text-size-meta font-normal whitespace-nowrap mask-(--tail-fade)"
+            class="flex justify-end flex-auto min-w-0 overflow-hidden text-ink-muted text-size-meta font-normal whitespace-nowrap tail-fade"
             in:tailIn
             out:tailOut><span class="flex-none">{tail}</span></span
           >

@@ -858,16 +858,15 @@
   </div>
   <!-- The action row (SessionFooter's): right-aligned, 8px apart, on the
        body's surface under the meters, parted from them by space alone. -->
-  <!-- literal: 8px, 44px -->
+  <!-- literal: 8px -->
   <div
     data-slot="footer"
     class="flex flex-none items-center justify-end gap-(--footer-gap) px-space-5 py-space-4"
     style:--footer-gap="8px"
-    style:--footer-btn-h="44px"
   >
     <button
       data-slot="primary"
-      class="ns-btn cursor-pointer [@media(max-width:640px)]:h-(--footer-btn-h) [@media(max-width:640px)]:flex-1"
+      class="ns-btn cursor-pointer [@media(max-width:640px)]:flex-1"
       data-size="xs"
       data-variant="primary"
       onclick={() => {

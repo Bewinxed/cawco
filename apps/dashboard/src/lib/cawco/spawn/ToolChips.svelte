@@ -125,7 +125,7 @@
       data-tool
       data-slot="ns-chip-btn"
       aria-disabled="true"
-      class="ns-chip-btn cursor-not-allowed opacity-55 hover:bg-surface-raised variant-static:hover:bg-surface-recess"
+      class="ns-chip-btn opacity-55 hover:bg-surface-raised variant-static:hover:bg-surface-recess"
       data-variant={readonly ? "static" : undefined}
       title={effortOff.reason}
     >

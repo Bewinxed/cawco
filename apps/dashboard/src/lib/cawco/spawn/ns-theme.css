@@ -12,9 +12,9 @@
  * them, and their scoped rules out-weighed it. So each utility sits at zero
  * specificity, its whole selector inside `:where()`, and every component
  * utility still wins; among themselves each utility lists its rules in the
- * order they won in. Two declarations keep weight, because they beat
- * something other than the sheet: the drawer card's font and colour (E1)
- * and a static chip's cursor (E2). Rules into DOM no utility names sit in
+ * order they won in. One declaration keeps weight, because it beats
+ * something other than the sheet: the drawer card's font and colour (E1).
+ * Rules into DOM no utility names sit in
  * `@layer components`, and three carve-outs for the kit's controls in
  * `@layer utilities` (K1–K3). The cascade, row by row:
  * .cutover/shared-sheets.md §3.
@@ -341,10 +341,6 @@
   :where(.ns-theme &[data-variant="static"]) {
     background: var(--surface-recess);
     border-color: var(--border-hairline);
-  }
-  /* E2: a static chip's cursor keeps (0,3,0), over an off chip's own
-     `cursor-not-allowed`. */
-  .ns-theme &[data-variant="static"] {
     cursor: default;
   }
   @media (hover: hover) {
