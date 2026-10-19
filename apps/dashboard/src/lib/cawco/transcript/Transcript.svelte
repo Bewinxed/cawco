@@ -1642,7 +1642,15 @@
     // task (`landFar`, `catchUpRest`): the held rows wait, still skipped,
     // and go unstyled; let go here as well, their removal landed in the
     // frame of the landing's own step (tab-return 1b: 14.2ms).
-    if (staging || narrow) {
+    if (staging || narrow || landingAway !== undefined) {
+      return true;
+    }
+    // Nor in the frame the away landing's scroll comes in: its `onscroll`
+    // reads the list's place, and the rows styled here were styled there
+    // (tab-return 1a: 277 elements, a 13.3ms scroll event). Two steps at
+    // most, should no scroll come.
+    if (awayScroll > 0) {
+      awayScroll -= 1;
       return true;
     }
     if (heldRows.length > 0) {
@@ -2606,6 +2614,7 @@
     );
   }
   function onscroll(): void {
+    awayScroll = 0;
     if (!(scroller && listing && landed)) {
       return;
     }
@@ -2884,12 +2893,18 @@
    */
   const awayAtTail = (): boolean => landed && atBottom && !jumping && !visible;
   let landingAway: ReturnType<typeof setTimeout> | undefined;
+  /** Steps a warming pane's staging waits for the away landing's scroll (`stageStep`); 0 once it has come. */
+  let awayScroll = 0;
   function landAway(): void {
     landingAway ??= setTimeout(() => {
       landingAway = undefined;
       if (awayAtTail()) {
+        const was = scroller?.scrollTop;
         keepWhole();
         pinBottom();
+        if (scroller && scroller.scrollTop !== was) {
+          awayScroll = 2;
+        }
       }
     });
   }
