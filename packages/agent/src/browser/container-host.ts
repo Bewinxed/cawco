@@ -23,7 +23,7 @@
 import { randomBytes } from "node:crypto";
 import { readWithin } from "@cawco/core/bounded";
 import type { BrowserRelay } from "@cawco/core/browser";
-import { browserSlug } from "@cawco/core/browser";
+import { BROWSER_SCREEN, browserSlug } from "@cawco/core/browser";
 import type { MediaPath } from "@cawco/core/capabilities";
 import type Docker from "dockerode";
 import { ensureImage } from "./image";
@@ -92,7 +92,7 @@ const nekoEnv = (
 ): string[] => {
   const port = portsOf(record).media;
   return [
-    "NEKO_DESKTOP_SCREEN=1280x800@30",
+    `NEKO_DESKTOP_SCREEN=${BROWSER_SCREEN.width}x${BROWSER_SCREEN.height}@30`,
     "NEKO_SERVER_BIND=0.0.0.0:8080",
     "NEKO_SERVER_CORS=",
     "NEKO_MEMBER_PROVIDER=multiuser",

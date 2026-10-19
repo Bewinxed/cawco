@@ -46,6 +46,15 @@ export const browserGatePort = (): number => {
   return port;
 };
 
+/**
+ * The screen of a project's browser on both hosts, and the size of the view
+ * the person takes it over in: neko's desktop on the container host (its
+ * Chromium maximized on it, the browser's own UI in view); on the local
+ * host the headless virtual screen, the window, and the page the take-over
+ * shows, laid out at it (local-host.ts, cdp-takeover.ts).
+ */
+export const BROWSER_SCREEN = { width: 1280, height: 800 } as const;
+
 /** How many ports one browser takes from {@link BROWSER_PORTS}. */
 export const BROWSER_PORTS_EACH = 3;
 

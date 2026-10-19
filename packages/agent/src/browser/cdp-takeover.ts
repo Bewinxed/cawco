@@ -18,6 +18,7 @@
  */
 
 import { readWithin } from "@cawco/core/bounded";
+import { BROWSER_SCREEN } from "@cawco/core/browser";
 
 /** What a view sends: the person's pointer, keys and words, in the page's CSS pixels. */
 export type CdpInput =
@@ -54,7 +55,7 @@ interface Message {
 type CastState = "idle" | "casting" | "stopped";
 
 /** The frame's largest edges, and the page's viewport while it is taken over: the container host's screen. */
-const FRAME = { width: 1280, height: 800 } as const;
+const FRAME = BROWSER_SCREEN;
 const QUALITY = 70;
 
 /** How long one call to Chromium may take before it is given up. */

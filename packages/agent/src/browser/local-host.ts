@@ -11,7 +11,7 @@ import { spawn } from "node:child_process";
 import { accessSync, closeSync, constants, openSync } from "node:fs";
 import { mkdir, readFile, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { BrowserRelay } from "@cawco/core/browser";
+import { BROWSER_SCREEN, type BrowserRelay } from "@cawco/core/browser";
 import { bootId, processStart } from "@cawco/core/process-identity";
 import { standalone } from "@cawco/core/runtime";
 import { hostEnvironment } from "@cawco/core/session-env";
@@ -224,13 +224,14 @@ export class LocalHost implements BrowserHost {
         "--use-mock-keychain",
         "--disable-sync",
         "--disable-background-networking",
-        // The container host's screen (neko's 1280x800): Chromium's headless
-        // screen is a virtual 800x600 one unless `--screen-info` names it
-        // (components/headless/screen_info/README.md), and a window is
-        // kept within it. The window's page is smaller by the browser's own
-        // UI; the take-over sets its page's viewport (cdp-takeover.ts).
-        "--screen-info={1280x800}",
-        "--window-size=1280,800",
+        // The container host's screen (core `BROWSER_SCREEN`): Chromium's
+        // headless screen is a virtual 800x600 one unless `--screen-info`
+        // names it (components/headless/screen_info/README.md), and a window
+        // is kept within it. A window's page is smaller by the browser's own
+        // UI, as on neko's desktop; the take-over lays the page it shows out
+        // at the whole screen (cdp-takeover.ts).
+        `--screen-info={${BROWSER_SCREEN.width}x${BROWSER_SCREEN.height}}`,
+        `--window-size=${BROWSER_SCREEN.width},${BROWSER_SCREEN.height}`,
         "about:blank",
       ],
       { detached: true, env: hostEnvironment(), stdio: ["ignore", log, log] }
