@@ -187,7 +187,6 @@
   bind:this={pane}
   class="group/decisions @container/decisions relative flex min-h-0 flex-auto flex-col"
   data-mode={page ? "page" : view}
-  style:--seg-h="36px"
 >
   {#if graphed && !page}
     <div data-slot="seg-row" class="absolute end-0 top-0 z-1 flex">
@@ -217,7 +216,7 @@
         data-under-seg={(graphed && !page) || undefined}
         out:leave
         style:animation={swap.rowAnim(0, ListSwap.leaveEnd(0))}
-        style:--seg-pad="calc(var(--seg-h) + var(--space-3))"
+        style:--seg-pad="calc(var(--c-btn-h) + var(--space-3))"
       >
         {#if page}
           <DecisionPage
@@ -247,12 +246,7 @@
             <Skeleton class="w-full" height="board" radius="card" />
           {/if}
         {:else if decisions.problem && !list}
-          <!-- literal: 72ch -->
-          <div
-            class="max-w-(--measure)"
-            data-slot="state"
-            style:--measure="72ch"
-          >
+          <div data-slot="state">
             <EmptyState
               icon={IconDecisions}
               line={words.unavailableLine(projectName, decisions.problem)}
@@ -266,7 +260,7 @@
             </EmptyState>
           </div>
         {:else if empty && canTalk}
-          <div data-slot="caw-empty" class="state caw-empty">
+          <div data-slot="caw-empty" class="max-w-c-starters-w">
             <EmptyState line={words.emptyCaw} title={words.empty}>
               {#snippet mark()}
                 <div
@@ -289,12 +283,7 @@
             </EmptyState>
           </div>
         {:else if empty}
-          <!-- literal: 72ch -->
-          <div
-            class="max-w-(--measure)"
-            data-slot="state"
-            style:--measure="72ch"
-          >
+          <div data-slot="state">
             <EmptyState
               icon={IconDecisions}
               line={words.emptySession}
@@ -329,12 +318,7 @@
               {/each}
             {:else}
               {#each [0, 1, 2, 3] as slot (slot)}
-                <!-- literal: 90px -->
-                <Skeleton
-                  class="h-(--skeleton-h) w-full"
-                  radius="card"
-                  style="--skeleton-h: 90px"
-                />
+                <Skeleton height="plot" radius="card" />
               {/each}
             {/if}
           </div>
@@ -343,14 +327,3 @@
     {/key}
   </div>
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  [data-slot="cell"] > :global([data-slot="tile"]) {
-    flex: 1 1 auto;
-  }
-  /* residual: foreign-dom */
-  [data-slot="caw-empty"] :global(.kit-empty-action) {
-    align-self: stretch;
-  }
-</style>

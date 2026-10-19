@@ -56,7 +56,6 @@
   };
 </script>
 
-<!-- literal: 16 / 10 (the still's ratio) -->
 <article
   data-slot="record"
   class="flex min-w-0 scroll-mt-space-4 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile"
@@ -65,9 +64,8 @@
   {#if card.still}
     <img
       alt={chosen[0]?.label ?? ""}
-      class="block aspect-(--still-ratio) w-full bg-surface-recess object-cover"
+      class="block aspect-16/10 w-full bg-surface-recess object-cover"
       src={card.still}
-      style:--still-ratio="16 / 10"
     />
   {/if}
   <!-- A task filed onto the card arrives as rows do (motion/rows): its row
@@ -100,7 +98,9 @@
         </p>
       {/each}
     {:else}
-      <p data-slot="open-card" class="open-card">{words.leftOpen}</p>
+      <p data-slot="open-card" class="type-label max-w-full text-ink-subtle">
+        {words.leftOpen}
+      </p>
     {/if}
     {#if card.dials.length > 0}
       <p class="type-meta max-w-full text-ink-muted">
@@ -168,83 +168,78 @@
       </p>
     {/if}
     {#if others.length > 0 && card.options.length > 1}
-      <!-- literal: calc(-1 * (1px + var(--space-2))), the toggle's hang into the card's inset -->
-      <div
-        data-slot="fold-row"
-        class="my-(--fold-row-my) ms-(--fold-row-ms) max-w-full"
-        style:--fold-row-my="calc(-1 * var(--space-1))"
-        style:--fold-row-ms="calc(-1 * (1px + var(--space-2)))"
-      >
-        <Button
-          data-toggle
-          aria-controls="{fid}-others"
-          aria-expanded={open}
-          expanded="unfilled"
-          onclick={() => {
-            open = !open;
-          }}
-          size="xs"
-          variant="ghost"
-        >
-          <span>{foldWords}</span>
-          <IconChevronDown
-            data-chev
-            aria-hidden="true"
-            class="transition-[transform] dur-panel ease-out group-aria-expanded/button:transform-(--chev-flip) motion-reduce:transition-off"
-            data-icon="inline-end"
-            style="--chev-flip: scaleY(-1)"
-          />
-        </Button>
-      </div>
-      <!-- literal: 0fr, 1fr (the fold's track) -->
-      <div
-        data-slot="fold"
-        class="group/fold mt-(--fold-pull) grid max-w-full grid-rows-(--rows-shut) transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-(--rows-open) data-open:dur-panel motion-reduce:transition-off motion-reduce:data-open:dur-panel"
-        data-open={open || undefined}
-        id="{fid}-others"
-        inert={!open}
-        style:--fold-pull="calc(-1 * var(--space-3))"
-        style:--rows-open="1fr"
-        style:--rows-shut="0fr"
-      >
+      <!-- The toggle and its fold stand as one item of the body, so a shut
+           fold (a track of nothing) takes no gap of the body's: it opens
+           into the body's own air, its inner box's padding. -->
+      <div data-slot="fold-wrap" class="flex max-w-full flex-col">
+        <!-- The toggle hangs into the card's leading inset: its words line up
+             with the card's text. -->
+        <div data-slot="fold-row" class="-ms-space-2 -my-space-1 max-w-full">
+          <Button
+            data-toggle
+            aria-controls="{fid}-others"
+            aria-expanded={open}
+            expanded="unfilled"
+            onclick={() => {
+              open = !open;
+            }}
+            size="xs"
+            variant="ghost"
+          >
+            <span>{foldWords}</span>
+            <IconChevronDown
+              data-chev
+              aria-hidden="true"
+              class="transition-[scale] dur-panel ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
+              data-icon="inline-end"
+            />
+          </Button>
+        </div>
         <div
-          data-slot="fold-inner"
-          class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
+          data-slot="fold"
+          class="group/fold grid max-w-full grid-rows-fold-shut transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-fold-open data-open:dur-panel motion-reduce:transition-off motion-reduce:data-open:dur-panel"
+          data-open={open || undefined}
+          id="{fid}-others"
+          inert={!open}
         >
-          <div class="flex flex-col gap-space-2 pt-space-3">
-            {#if card.why}
-              <p data-slot="why" class="type-meta text-ink-muted">{card.why}</p>
-            {/if}
-            {#each others as option (option.id)}
-              <p
-                data-slot="other"
-                class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
-              >
-                <span class="kit-chip opacity-50">
-                  <span class="kit-keycap">{option.keycap}</span><span
-                    data-slot="record-card-label">{option.label}</span
-                  >
-                </span>
-                {#if option.recommended}
-                  <span data-slot="tag" class="tag">{words.recommended}</span>
-                {/if}
-                {#if option.line}
-                  <span class="type-meta min-w-0 text-ink-muted"
-                    >{option.line}</span
-                  >
-                {/if}
-              </p>
-            {/each}
+          <div
+            data-slot="fold-inner"
+            class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
+          >
+            <div class="flex flex-col gap-space-2 pt-space-3">
+              {#if card.why}
+                <p data-slot="why" class="type-meta text-ink-muted">
+                  {card.why}
+                </p>
+              {/if}
+              {#each others as option (option.id)}
+                <p
+                  data-slot="other"
+                  class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
+                >
+                  <span class="kit-chip opacity-50">
+                    <span class="kit-keycap">{option.keycap}</span><span
+                      data-slot="record-card-label">{option.label}</span
+                    >
+                  </span>
+                  {#if option.recommended}
+                    <span
+                      data-slot="tag"
+                      class="type-meta rounded-xs border border-border-hairline px-space-1 text-ink-muted"
+                      >{words.recommended}</span
+                    >
+                  {/if}
+                  {#if option.line}
+                    <span class="type-meta min-w-0 text-ink-muted"
+                      >{option.line}</span
+                    >
+                  {/if}
+                </p>
+              {/each}
+            </div>
           </div>
         </div>
       </div>
     {/if}
   </div>
 </article>
-
-<style>
-  /* residual: foreign-dom */
-  [data-slot="fold-row"] :global([data-chev] path) {
-    vector-effect: non-scaling-stroke;
-  }
-</style>

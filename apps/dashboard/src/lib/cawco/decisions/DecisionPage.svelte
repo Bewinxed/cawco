@@ -24,6 +24,7 @@
   import TaskRing from "#lib/cawco/TaskRing.svelte";
   import FootFade from "#lib/cawco/transcript/FootFade.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { IconChevronLeft, IconSend } from "#lib/icons.js";
   import {
@@ -217,12 +218,10 @@
     style:--scroll-pad="calc(var(--dock-room) + var(--space-4))"
     bind:this={scroller}
   >
-    <!-- The draft-bar recipe: surface-band, a hairline inside, 12px.
-         literal: inset 0 0 0 1px -->
+    <!-- The draft-bar recipe: surface-band, a hairline edge, 12px. -->
     <div
       data-slot="page-head"
-      class="flex flex-none flex-col gap-space-2 rounded-lg bg-surface-band px-space-3 py-space-2 shadow-(--head-ring)"
-      style:--head-ring="inset 0 0 0 1px var(--border-hairline)"
+      class="flex flex-none flex-col gap-space-2 rounded-lg border border-border-hairline bg-surface-band px-space-3 py-space-2"
     >
       <div class="flex flex-wrap items-center gap-x-space-3 gap-y-space-2">
         <Button
@@ -234,11 +233,9 @@
           <IconChevronLeft />
           <span>{words.tab}</span>
         </Button>
-        <!-- literal: 1 1 14rem -->
         <div
           data-slot="what"
-          class="flex min-w-0 flex-(--what-flex) flex-wrap items-center gap-x-space-3 gap-y-space-1"
-          style:--what-flex="1 1 14rem"
+          class="flex min-w-0 shrink grow basis-(--c-decision-head-what) flex-wrap items-center gap-x-space-3 gap-y-space-1"
         >
           <span
             data-slot="title"
@@ -280,7 +277,9 @@
     </div>
 
     {#if unread && !read}
-      <p class="problem" role="alert">{words.unread(unread)}</p>
+      <p class="type-body py-space-5 text-ink-muted" role="alert">
+        {words.unread(unread)}
+      </p>
     {:else if read?.record}
       <!-- The record on the page's own grid: two across on a desk, one under;
            the cards stretch to their row, their content at its top. -->
@@ -299,16 +298,10 @@
         title={read.title}
       />
     {:else if read}
-      <p class="problem">{words.gone}</p>
+      <p class="type-body py-space-5 text-ink-muted">{words.gone}</p>
     {:else}
       <div aria-hidden="true" class="p-space-5">
-        <!-- literal: 11px, 42% -->
-        <span
-          data-slot="block"
-          class="kit-skeleton block h-(--skeleton-h) w-(--skeleton-w) rounded-xs"
-          style:--skeleton-h="11px"
-          style:--skeleton-w="42%"
-        ></span>
+        <Skeleton class="h-space-3 w-2/5" data-slot="block" radius="text" />
       </div>
     {/if}
   </div>
@@ -318,7 +311,7 @@
        the pane's width under 900. -->
   <form
     data-slot="dock"
-    class="absolute inset-x-0 bottom-(--dock-bottom) z-20 mx-auto flex w-c-composer-w max-w-full flex-col gap-space-2 max-[900px]:w-full"
+    class="absolute inset-x-0 bottom-(--dock-bottom) z-20 mx-auto flex w-c-composer-w max-w-full flex-col gap-space-2 max-desk:w-full"
     style:--dock-bottom="calc(var(--space-4) + var(--safe-bottom))"
     onsubmit={(event) => {
       event.preventDefault();
@@ -339,19 +332,19 @@
     <!-- Its shell is the composer's (app.css `.kit-dock-shell`). The note's
          sizes stand on the shell, so the field and the twin its autosize
          measures on (motion/autosize.svelte.ts, which writes the twin's own
-         style whole) inherit them alike. -->
-    <!-- literal: 200px, 1.25, max(16px, var(--text-body)) -->
+         style whole) inherit them alike. The phone's 16px floor is app.css's
+         for every field. -->
     <div
       data-slot="cin"
       class="kit-dock-shell flex items-end gap-space-2 p-c-composer-inset ps-space-3"
-      style:--note-max-h="200px"
-      style:--note-leading="1.25"
-      style:--note-fs="max(16px, var(--text-body))"
+      style:--note-leading="var(--leading-ui)"
+      style:--note-fs="var(--text-body)"
     >
       <Textarea
         data-note
         aria-label={words.noteLabel}
-        class="note"
+        class="max-h-(--c-decision-note-max-h) min-h-c-composer-field flex-auto"
+        look="note"
         oninput={() => {
           refusal = null;
         }}
@@ -367,13 +360,13 @@
       />
       <Button
         aria-label={words.send}
-        class="ctl"
+        class="size-c-composer-field flex-none"
         disabled={!note.trim()}
         icon={IconSend}
         pending={sendingNote}
         shape="inset"
         size="icon"
-        style="--btn-icon: 16px"
+        style="--btn-icon: var(--icon-md)"
         type="submit"
         variant="outline"
       />
