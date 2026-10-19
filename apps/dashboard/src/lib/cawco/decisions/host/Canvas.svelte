@@ -105,6 +105,7 @@
 </figure>
 
 <style>
+  /* tailwind: this file is bundled by Bun for the decision host page, which loads only the kit's page.css and tokens.css and has no Tailwind compiler, so a utility class here would have no CSS behind it — https://tailwindcss.com/docs/installation */
   .media {
     min-inline-size: 0;
   }
