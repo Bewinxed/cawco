@@ -15,6 +15,7 @@ import {
   UPSTREAM_POST_TOOL,
   type UpstreamPost,
 } from "@cawco/core/upstream-post";
+import { askNaming } from "./ask-naming";
 import type { NeedsItem } from "./home-state.svelte";
 import NeedsCardSheet from "./NeedsCardSheet.svelte";
 
@@ -28,6 +29,7 @@ const held = (post: UpstreamPost, repo: string, asker = ASKER): NeedsItem => {
     { ...input },
     { asker, memory: () => undefined } as never
   );
+  const { title, ask } = askNaming(presentation, () => asker);
   return {
     kind: "ask",
     key: `probe:${JSON.stringify(post).length}`,
@@ -36,12 +38,12 @@ const held = (post: UpstreamPost, repo: string, asker = ASKER): NeedsItem => {
     origin: null,
     thread: null,
     machineId: "obelisk",
-    title: presentation.post?.title ?? asker,
+    title,
     place: "obelisk · cockpit",
     project: { name: "cockpit", hue: 3 },
     machine: { name: "obelisk", os: "linux-x64" },
     isQuestion: false,
-    ask: presentation.post?.target ?? presentation.summary,
+    ask,
     raisedAt: Date.now() - 4 * 60_000,
     request: {
       heard: 0,

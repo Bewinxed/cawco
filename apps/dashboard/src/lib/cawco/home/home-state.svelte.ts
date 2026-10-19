@@ -66,6 +66,7 @@ import { threadIdOf, threadTabId } from "../thread-tabs";
 import { hasParent, rooted, tree } from "../tree";
 import { runHref, runIdOf } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
+import { askNaming } from "./ask-naming";
 import { choices } from "./choices.svelte";
 
 /* ── Seen, on the hub ──────────────────────────────────────────────────
@@ -992,6 +993,16 @@ class Home {
       const thread = item.request.threadId
         ? cawco.threadOf(threadTabId(item.request.threadId))
         : undefined;
+      // A held post is named by itself; an ask no session row stands behind
+      // (a memory proposal) is titled by who asked, as the hub named them.
+      const { title, ask } = askNaming(
+        item.request.presentation,
+        () =>
+          thread?.title ??
+          (row
+            ? instanceTitle(row)
+            : item.request.presentation.asker || item.hostname)
+      );
       return {
         kind: "ask",
         key: `${item.instanceId}:${item.request.requestId}`,
@@ -1000,14 +1011,7 @@ class Home {
         origin: item.request.originInstanceId ?? null,
         thread: thread ? threadTabId(thread.id) : null,
         machineId: item.machineId,
-        // A held post is titled by itself; an ask no session row stands
-        // behind (a memory proposal) by who asked, as the hub named them.
-        title:
-          item.request.presentation.post?.title ??
-          thread?.title ??
-          (row
-            ? instanceTitle(row)
-            : item.request.presentation.asker || item.hostname),
+        title,
         place: row ? placeOfRow(row) : placeOf(item.machineId, item.cwd),
         project: projectAt(
           top?.machineId ?? item.machineId,
@@ -1020,9 +1024,7 @@ class Home {
               ?.os ?? "",
         },
         isQuestion: Boolean(questions),
-        ask:
-          item.request.presentation.post?.target ??
-          item.request.presentation.summary,
+        ask,
         raisedAt: item.request.raisedAt,
         request: item.request,
         stale: item.stale,
