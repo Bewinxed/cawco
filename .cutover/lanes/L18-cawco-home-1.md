@@ -1,5 +1,10 @@
 # Lane L18-cawco-home-1
 
+## Skills loaded
+defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding, emil-design-eng, transitions-dev, interface-craft, ui-observer.
+better-ui rules followed: motion only under `motion-safe:` (the fold), transition only the named properties (`transition-[scale]`, `transition-[grid-template-rows]`), press scale kept on the peek button, `hover:` only on hover-capable pointers (the variant carries the guard), one icon stroke/size per surface.
+better-layout rules followed: logical properties (`ps-`/`pe-`/`ms-`/`me-`, `start-`/`end-`), `min-h-` never `h-` on text boxes, `min-w-0` on every flex/grid text child, tokens for spacing and breakpoints, no fixed widths on text.
+
 ## Files
 | file | moved to utilities | residual `<style>` | literals preserved | breakpoint edges | STOPs |
 |---|---|---|---|---|---|
