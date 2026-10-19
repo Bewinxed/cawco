@@ -14,7 +14,7 @@ file · rules moved · residual 1/2/3/4/5 · literals preserved · breakpoint ed
 | preview/SheetInspector.svelte | 3 style vars off (`--insp-rows`, `--sheet-max`, `--skeleton-w`), literal marker deleted | 0 | 0 | 0 | 0 | 0 | none | none |
 | preview/map/CanvasMap.svelte | 14 rules, style deleted | 0 | 0 | 0 | 0 | 0 | none | `@container (width < 640px)` → `@max-phone:` (container width < 640px) |
 | preview/map/MapCard.svelte | 11 rules, style deleted, 3 inline styles → custom properties | 0 | 0 | 0 | 0 | 0 | none | none |
-| preview/map/MapNode.svelte | 1 rule → theme component, style deleted | 0 | 0 | 0 | 0 | 0 | none | none |
+| preview/map/MapNode.svelte | 1 rule → xyflow handle custom properties, style deleted | 0 | 0 | 0 | 0 | 0 | none | none |
 | preview/map/MapThumb.svelte | 8 rules, style deleted | 0 | 0 | 0 | 0 | 0 | none | none |
 
 Needs variant: none. Needs transition token: none. Needs colour token: none. Kind-5 declarations: none.
@@ -32,21 +32,6 @@ theme: animate wait-reveal-motion
 ```css
 @theme {
   --animate-wait-reveal-motion: kit-fade-in var(--dur-fade) var(--ease-out) var(--dur-wait-grace) both;
-}
-```
-
-theme: component map-handle
-```css
-@layer components {
-  [data-slot="map-node"] .svelte-flow__handle {
-    width: 1px;
-    height: 1px;
-    min-width: 0;
-    min-height: 0;
-    border: 0;
-    background: transparent;
-    pointer-events: none;
-  }
 }
 ```
 
@@ -70,9 +55,8 @@ none.
 none.
 
 ## Gaps
-- gap: apps/dashboard/src/lib/cawco/preview/map/MapNode.svelte:16 xyflow's `style.css` is imported unlayered (CanvasMap.svelte:25), so it outranks every `@layer components` rule on its DOM (`.svelte-flow__handle`'s 6px size and border beat `theme: component map-handle`) — import it with `layer(...)` below `components` in app.css, which also fixes DecisionNode, TaskNode and the Workflow nodes' handle rules; until then the map's handles draw as xyflow's default dot. — DESIGN.md's one-cascade rule (a state is an attribute, a class is a style; no unlayered sheet beats the utilities).
-
 ## fixed
+- fixed: apps/dashboard/src/lib/cawco/preview/map/MapNode.svelte:15 the handles draw nothing through xyflow's own `--xy-handle-background-color` / `--xy-handle-border-color` set transparent on the node (its unlayered sheet outranks any rule of ours); the handle's 6px box keeps the same centre, so edge endpoints do not move — Elevation (edges carry the link, handles are not drawn).
 - fixed: apps/dashboard/src/lib/cawco/preview/SheetInspector.svelte:198 aside's rows were a grid template held in a custom property; head, body and foot are a flex column now — Layout (the sheet recipe: head and foot take their own height, the body scrolls).
 - fixed: apps/dashboard/src/lib/cawco/preview/map/MapCard.svelte:81 the live frame's inline `block-size` / `inline-size` / `scale` are custom properties read by `h-` / `w-` / `scale-` utilities — styling through classes, dynamic values through custom properties.
 

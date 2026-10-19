@@ -12,7 +12,11 @@
   const card = $derived(data as unknown as MapCardData);
 </script>
 
-<div data-slot="map-node">
+<div
+  data-slot="map-node"
+  style:--xy-handle-background-color="transparent"
+  style:--xy-handle-border-color="transparent"
+>
   <Handle id="in" isConnectable={false} position={Position.Top} type="target" />
   <MapCard {...card} />
   <Handle
