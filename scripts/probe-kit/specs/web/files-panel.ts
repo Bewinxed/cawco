@@ -244,6 +244,11 @@ const run = async (kit: Kit) => {
   const many = await fleet.spawn("claude", "files many", fleet.repo);
   const one = await fleet.spawn("claude", "files one", fleet.repo);
   const none = await fleet.spawn("claude", "files none", fleet.repo);
+  const noneOpenCode = await fleet.spawn(
+    "opencode",
+    "files none opencode",
+    fleet.repo
+  );
 
   // The seeds, through the dashboard's origin.
   const seeder = await openSession(kit, base, "desk", "light", many);
@@ -296,7 +301,7 @@ const run = async (kit: Kit) => {
   }
 
   await reviewLegs(kit, base, { many, one });
-  await askLegs(kit, base, none);
+  await askLegs(kit, base, none, noneOpenCode);
   await roundThree(kit, base, fleet, { many, one, none });
   for (const theme of THEMES) {
     await desk(kit, base, theme, { many, one, none });
@@ -1147,7 +1152,26 @@ const ASK_WORDS = "Make a page that shows what we've done so far";
  * the caret after them and nothing is sent. On the phone, its touch area
  * is 44px.
  */
-const askLegs = async (kit: Kit, base: string, none: string) => {
+const askLegs = async (
+  kit: Kit,
+  base: string,
+  none: string,
+  noneOpenCode: string
+) => {
+  // The label names the session's own agent: an OpenCode session's.
+  const other = await openSession(kit, base, "desk", "light", noneOpenCode);
+  await other.locator("[data-files-control]").click();
+  await other.locator("[data-files-ask]").waitFor({ timeout: 15_000 });
+  const otherLabel = (
+    await other.locator("[data-files-ask]").textContent()
+  )?.trim();
+  kit.check(
+    '23a (OpenCode): an OpenCode session\'s empty Files asks its own agent by name: "Ask OpenCode for a page"',
+    otherLabel === "Ask OpenCode for a page",
+    JSON.stringify(otherLabel)
+  );
+  await other.close();
+
   const onDesk = await openSession(kit, base, "desk", "light", none);
   await onDesk.locator("[data-files-control]").click();
   await onDesk.locator(".kit-pop.files-pop").waitFor();
@@ -1285,49 +1309,103 @@ const roundThree = async (
     await page.locator("[data-files-control]").click();
     await page.locator("[data-files-row]").first().waitFor({ timeout: 30_000 });
     await page.waitForTimeout(400);
-    const inside = await page.evaluate(() =>
-      [
+    const read = await page.evaluate(() => {
+      /** Where a control's touch area ends: its ::after's trailing edge, or its own. */
+      const touchRight = (el: HTMLElement | null) => {
+        if (!el) {
+          return null;
+        }
+        const after = getComputedStyle(el, "::after");
+        const r = el.getBoundingClientRect();
+        const inset = Number.parseFloat(after.right);
+        return after.content === "none" || Number.isNaN(inset)
+          ? r.right
+          : r.right - inset;
+      };
+      /** The nearest ancestor that clips: its computed overflow is not `visible`. */
+      const clipperOf = (el: HTMLElement) => {
+        for (let at = el.parentElement; at; at = at.parentElement) {
+          const style = getComputedStyle(at);
+          if (style.overflowX !== "visible" || style.overflowY !== "visible") {
+            const box = at.getBoundingClientRect();
+            return {
+              name: `${at.tagName.toLowerCase()}.${[...at.classList].filter((one) => !one.startsWith("svelte-")).join(".")}`,
+              overflow: `${style.overflowX} ${style.overflowY}`,
+              paddingEnd: style.paddingInlineEnd,
+              // Its padding box's trailing edge: what it clips at.
+              right: box.right - Number.parseFloat(style.borderRightWidth),
+            };
+          }
+        }
+        return null;
+      };
+      return [
         ...document.querySelectorAll<HTMLElement>(
           ".files-pop [data-files-region]"
         ),
       ].map((region) => {
-        const box = region.getBoundingClientRect();
+        const head = region
+          .querySelector<HTMLElement>(".files-head")
+          ?.getBoundingClientRect();
         const scroller = region.querySelector<HTMLElement>(
           "[data-files-scroll]"
         );
-        const rect = scroller?.getBoundingClientRect();
-        const show = region.querySelector<HTMLElement>("[data-files-show]");
-        let showRight: number | null = null;
-        if (show) {
-          const after = getComputedStyle(show, "::after");
-          const r = show.getBoundingClientRect();
-          const inset = Number.parseFloat(after.right);
-          showRight =
-            after.content === "none" || Number.isNaN(inset)
-              ? r.right
-              : r.right - inset;
-        }
+        const cards = [
+          ...region.querySelectorAll<HTMLElement>("[data-files-card]"),
+        ].map((card) => card.getBoundingClientRect());
+        const top = Math.min(...cards.map((card) => card.top));
+        const topRow = cards.filter((card) => Math.abs(card.top - top) < 1);
+        const row = region
+          .querySelector<HTMLElement>("[data-files-row]")
+          ?.getBoundingClientRect();
+        const showRight = touchRight(
+          region.querySelector<HTMLElement>("[data-files-show]")
+        );
         return {
           region: region.dataset.filesRegion,
-          regionRight: box.right,
-          scrollbar: scroller ? scroller.offsetWidth - scroller.clientWidth : 0,
-          scrollerRight: rect?.right ?? 0,
+          headRight: head?.right ?? null,
+          lastCardRight:
+            topRow.length > 0
+              ? Math.max(...topRow.map((card) => card.right))
+              : null,
+          rowRight: row?.right ?? null,
+          scrollerRight: scroller?.getBoundingClientRect().right ?? null,
           showRight,
+          clipper: scroller ? clipperOf(scroller) : null,
         };
-      })
+      });
+    });
+    const flush = read.every((one) => {
+      const end = one.region === "artifacts" ? one.lastCardRight : one.rowRight;
+      return (
+        one.headRight !== null &&
+        end !== null &&
+        Math.abs(end - one.headRight) <= 0.5
+      );
+    });
+    const unclipped = read.every(
+      (one) =>
+        !!one.clipper &&
+        one.scrollerRight !== null &&
+        one.scrollerRight <= one.clipper.right + 0.5 &&
+        (one.showRight === null || one.showRight <= one.clipper.right + 0.5)
     );
     kit.check(
-      // Playwright's headless Chromium hides scrollbars (--hide-scrollbars), so
-      // a scrollbar takes no width here: its place is the scroller's own
-      // trailing edge, read against the region's.
-      `24 (${view}): each region's scroller (where its scrollbar draws) and Show's touch area stand inside the region (nothing clips them)`,
-      inside.length === 2 &&
-        inside.every(
-          (one) =>
-            one.scrollerRight <= one.regionRight + 0.5 &&
-            (one.showRight === null || one.showRight <= one.regionRight + 0.5)
-        ),
-      JSON.stringify(inside)
+      `24a (${view}): the top row's last card and an attachment row end on their region head's trailing edge (±0.5)`,
+      flush,
+      JSON.stringify(read.map(({ clipper: _clipper, ...rest }) => rest))
+    );
+    kit.check(
+      `24b (${view}): the scroller's trailing edge and Show's touch area lie inside the nearest ancestor that clips (named)`,
+      unclipped,
+      JSON.stringify(
+        read.map((one) => ({
+          region: one.region,
+          scrollerRight: one.scrollerRight,
+          showRight: one.showRight,
+          clipper: one.clipper,
+        }))
+      )
     );
     await page.close();
   }

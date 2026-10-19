@@ -30,7 +30,7 @@
    * the chosen list filling the rest of the drawer (owner: "aren't tabs for
    * attachments and artifacts a better fit here?").
    */
-  import type { ArtifactSummary } from "@cawco/core";
+  import { type ArtifactSummary, accountsWords } from "@cawco/core";
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -56,7 +56,6 @@
   import { lightbox } from "../lightbox/lightbox-state.svelte";
   import { crossIn, crossOut, dur } from "../motion/curves.svelte";
   import RowFault from "../RowFault.svelte";
-  import { speakerName } from "../transcript/speaker";
   import ArtifactCards from "./ArtifactCards.svelte";
   import {
     type ArtifactCard,
@@ -95,11 +94,15 @@
 
   /**
    * The Empty Starts Work Rule, a session's own case: "Ask" takes its
-   * object by name (WORDS.md), the session's agent by its harness.
+   * object by name (WORDS.md), the session's own agent by its harness, as
+   * a sentence names it (core `accountsWords.harnesses`: Claude Code,
+   * OpenCode, pi).
    */
-  const askLabel = $derived(
-    `Ask ${speakerName(cawco.session(instanceId)?.harness)} for a page`
-  );
+  const askLabel = $derived.by(() => {
+    const harness = cawco.session(instanceId)?.harness;
+    const agent = harness ? accountsWords.harnesses[harness] : "the agent";
+    return `Ask ${agent} for a page`;
+  });
 
   const uid = $props.id();
   let words = $state("");
@@ -847,10 +850,10 @@
     min-block-size: 0;
   }
   /* Each region's own scroll, with the house fade at its foot while more is
-     below, at its full length on every width as Caw's panel has it. Padded
-     at its end, inside the region, so a row's Show in conversation keeps
-     its touch area in the scroller's own box, and its scrollbar stands in
-     the region. */
+     below, at its full length on every width as Caw's panel has it. It pads
+     its end into an equal negative margin (The 44 Touch Rule), so a row's
+     Show in conversation keeps its touch area in the scroller's own box and
+     the cards and rows still end on their head's trailing edge. */
   .files-scroll {
     --fade-len: 40px;
     flex: 1 1 auto;
@@ -858,6 +861,7 @@
     overflow-y: auto;
     overscroll-behavior: contain;
     padding-inline-end: var(--space-3);
+    margin-inline-end: calc(-1 * var(--space-3));
     scrollbar-width: thin;
     scrollbar-color: var(--border-control) transparent;
   }
