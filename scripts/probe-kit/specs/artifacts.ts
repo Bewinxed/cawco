@@ -131,7 +131,14 @@ import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
-import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
+import {
+  type Kit,
+  type KitFleet,
+  open,
+  pressIn,
+  type Spec,
+  settle,
+} from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
 /** The design tokens' one source (CLAUDE.md, Design Context). */
@@ -542,7 +549,7 @@ const run = async (kit: Kit) => {
     30_000
   );
   const clickedAt = Date.now();
-  await frame.locator('[data-option="b"]').click();
+  await pressIn(frame, '[data-option="b"]');
   const heard = await until(
     "the pick in artifact_read",
     () => read(id),
@@ -1521,7 +1528,7 @@ const promoteChecks = async ({
   // no pointerdown, with 85 runs going on the page). Clicked once it lands,
   // as check 2 is.
   await settle(page);
-  await frame.locator('[data-option="b"]').click();
+  await pressIn(frame, '[data-option="b"]');
   await until(
     "the pick in the hub's read",
     () => fleet.api<Read>(at),
@@ -1934,7 +1941,7 @@ const fieldChecks = async ({
     Date.now()
   );
   const pickedAt = Date.now();
-  await fieldFrame.locator('input[name="size"][value="m"]').check();
+  await pressIn(fieldFrame, 'input[name="size"][value="m"]');
   await fieldFrame.locator('select[name="tone"]').selectOption("bright");
   const pickedIn = await within2s(
     (answer) =>
@@ -2040,7 +2047,7 @@ const fieldChecks = async ({
     10_000
   ).catch(() => fieldValues(tabFrame));
   const tabPickedAt = Date.now();
-  await tabFrame.locator('[data-option="cool"]').click();
+  await pressIn(tabFrame, '[data-option="cool"]');
   const crossed = await until(
     "the tab's pick in the first page",
     () => fieldFrame.locator('[data-option="cool"][data-cawco-picked]').count(),

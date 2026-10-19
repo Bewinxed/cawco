@@ -18,6 +18,8 @@ import {
   type Browser,
   type BrowserContext,
   chromium,
+  type Frame,
+  type FrameLocator,
   firefox,
   type Page,
   webkit,
@@ -883,3 +885,57 @@ export const frames = (page: Page): Promise<void> =>
         requestAnimationFrame(() => requestAnimationFrame(() => done()))
       )
   );
+
+/** How many times {@link pressIn} presses before a press its frame never heard is a failure. */
+const PRESSES = 3;
+
+/**
+ * Clicks `selector` in `frame`, a preview's frame of another origin, and
+ * returns once its frame's window heard the press. Chromium hit-tests a
+ * press sent over the DevTools protocol against the compositor's last
+ * frame, and a frame not yet in it takes the press as its `<iframe>`
+ * element in the parent: "the compositor might not be up-to-date yet
+ * resulting in a misclick (the iframe element becomes the event target
+ * instead of the content inside the iframe)" (Puppeteer's
+ * test/src/oopif.spec.ts, on crbug.com/1334119). Playwright's click hears
+ * no event in the frame and calls it done (its injected
+ * `setupHitTargetInterceptor`: `return result || "done"`). A person presses
+ * only what was drawn: each press waits for two frames of the page inside
+ * and two of the page around it, and a press the frame's window never
+ * heard reached nothing in the page, so it is made again.
+ */
+export async function pressIn(
+  frame: Frame | FrameLocator,
+  selector: string
+): Promise<void> {
+  const root = frame.locator(":root");
+  for (let press = 1; press <= PRESSES; press += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each press waits on the one before it
+    await root.evaluate(
+      () =>
+        new Promise<void>((done) => {
+          const kept = window as unknown as { __kitPressed: boolean };
+          kept.__kitPressed = false;
+          addEventListener(
+            "pointerdown",
+            () => {
+              kept.__kitPressed = true;
+            },
+            { capture: true, once: true }
+          );
+          requestAnimationFrame(() => requestAnimationFrame(() => done()));
+        })
+    );
+    await frames(root.page());
+    await frame.locator(selector).click();
+    const heard = await root.evaluate(
+      () => (window as unknown as { __kitPressed: boolean }).__kitPressed
+    );
+    if (heard) {
+      return;
+    }
+  }
+  throw new Error(
+    `${selector}: none of ${PRESSES} presses reached its frame's window; the parent's <iframe> took each`
+  );
+}
