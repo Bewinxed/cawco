@@ -1093,7 +1093,11 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* Not main's: main's "2 of 3" shrinks beside a long title, a word a line
+     at 390 (approval-card spec leg 0d). Kept on one line here so the pick
+     compares the two cards, not that defect. */
   h2 :global(.place) {
+    flex: none;
     margin-inline-start: auto;
   }
   /* The minimize chevron ends the title row, in the title's muted ink; it

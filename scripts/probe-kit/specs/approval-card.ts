@@ -847,7 +847,10 @@ function panelFrames(floor: number) {
   // lines (an inline span has no width of its own to wrap in).
   const lineBox = (from: Element): HTMLElement => {
     let at: Element | null = from;
-    while (at && ["inline", "contents"].includes(getComputedStyle(at).display)) {
+    while (
+      at &&
+      ["inline", "contents"].includes(getComputedStyle(at).display)
+    ) {
       at = at.parentElement;
     }
     return (at ?? from) as HTMLElement;
@@ -1026,7 +1029,9 @@ async function panelLeg(kit: Kit, base: string): Promise<void> {
     `${fit.length} cards; under 340: ${
       collapsed
         .slice(0, 8)
-        .map((one) => `${one.key} card ${one.content}px in a ${one.body}px body`)
+        .map(
+          (one) => `${one.key} card ${one.content}px in a ${one.body}px body`
+        )
         .join("; ") || "none"
     }`
   );
