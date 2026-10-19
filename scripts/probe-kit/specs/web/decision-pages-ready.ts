@@ -670,6 +670,15 @@ function readPage() {
       previews: card.querySelectorAll("iframe.frame").length,
       diagrams: card.querySelectorAll("svg").length,
     })),
+    figures: document.querySelectorAll(".dp-card .diagram").length,
+    /** The smallest drawn line of text in any diagram, in px: a diagram zoomed to fit a phone can shrink past reading. */
+    diagramText: Math.min(
+      ...[
+        ...document.querySelectorAll(".dp-card .diagram svg text, .dp-card .diagram svg foreignObject div"),
+      ]
+        .map((one) => one.getBoundingClientRect().height)
+        .filter((h) => h > 0)
+    ),
     gone: [...document.querySelectorAll(".dp-card .gone")]
       .map((one) => one.textContent?.trim() ?? "")
       .filter(Boolean),
@@ -944,6 +953,12 @@ const spec: Spec = {
               `${one.name} ${leg}: nothing scrolls sideways (${said.sideways}px past the window)`,
               said.sideways <= 0
             );
+            if (said.figures > 0) {
+              kit.check(
+                `${one.name} ${leg}: every diagram's text reads at 11px or more (smallest line ${r1(said.diagramText)}px)`,
+                Number.isFinite(said.diagramText) && said.diagramText >= 11
+              );
+            }
             const file = `${one.name}-${view === "desk" ? "1440" : "390"}-${theme}.png`;
             await page.screenshot({
               path: join(OUT, file),
