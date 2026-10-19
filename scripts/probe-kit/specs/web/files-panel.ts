@@ -999,6 +999,12 @@ const reviewLegs = async (
 
   // 21. The phone: earned counts, the burger's focus, the strips, Send, 320px.
   const phone = await openSession(kit, base, "phone", "light", ids.one);
+  // Both strips stand once the conversation on screen is known, and Send with its composer.
+  await phone
+    .locator('[data-slot="edge-pull"]')
+    .nth(1)
+    .waitFor({ state: "attached" });
+  await phone.locator('[aria-label="Send message"]').first().waitFor();
   const strips = await phone.evaluate(() => {
     const send = document
       .querySelector<HTMLElement>('[aria-label="Send message"]')
