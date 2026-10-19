@@ -7,7 +7,7 @@
  * 1440 and in Caw's panel or on a phone at 390. The meta's args are every
  * story's; a story's own args are what it changes.
  */
-import type { RelayStep, RelaySummary } from "./journey.js";
+import { type RelayStep, type RelaySummary, suggestedName } from "./journey.js";
 import RelayJourney from "./RelayJourney.svelte";
 
 const machine = {
@@ -80,10 +80,21 @@ const needsYou = {
     runtime: { step: "runtime", state: "needs", lowest: 443 },
   }),
 };
-/** B · Needs you: the name doesn't resolve yet and the low ports need the command; both stand at once. */
+/** B · Needs you: the name doesn't resolve yet and the low ports need the command; the name, first, is the one open. */
 export const NeedsYou = { args: needsYou, parameters: desk };
 /** B · Needs you, in Caw's panel or on a phone. */
 export const NeedsYouPhone = { args: needsYou, parameters: phone };
+
+const lowPorts = {
+  steps: path({
+    name: ticked.name,
+    runtime: { step: "runtime", state: "needs", lowest: 443 },
+  }),
+};
+/** B · The name ticked; the low ports stand: the command to run once on obelisk. */
+export const LowPorts = { args: lowPorts, parameters: desk };
+/** B · The low ports, on a phone: the command clamped to two lines, Copy command takes it whole. */
+export const LowPortsPhone = { args: lowPorts, parameters: phone };
 
 const routerAsks = {
   steps: path({
@@ -178,10 +189,19 @@ export const NoName = { args: noName, parameters: desk };
 /** F · No name, on a phone. */
 export const NoNamePhone = { args: noName, parameters: phone };
 
-/** B · Needs you with a long machine name, an IPv6 address and a long relay name, at 390. */
+/** Needs you's ticked row, in Caw's panel: live at turn.bewinxed.com, and Settings › Browsers to open. */
+export const DonePhone = {
+  args: { view: "done", summary: proven },
+  parameters: phone,
+};
+
+/** Reached through a .co.uk domain: the name and the token's zone under northwind-logistics.co.uk, not co.uk. */
+const coUk = "relay.northwind-logistics.co.uk";
+
+/** B · Needs you through a .co.uk domain, with a long machine name and an IPv6 address, the token field open, at 390. */
 export const LongNamesPhone = {
   args: {
-    domain: "dashboard.internal.northwind-logistics.example.co.uk",
+    domain: coUk,
     machine: {
       name: "build-runner-eu-west-02-obelisk-backup",
       address: "2a01:4f8:c17:3b2a:0:0:0:1",
@@ -191,9 +211,10 @@ export const LongNamesPhone = {
       name: {
         step: "name",
         state: "needs",
-        name: "turn.northwind-logistics.example.co.uk",
+        name: suggestedName(coUk) ?? "",
         finding: "elsewhere",
         answers: "203.0.113.9",
+        tokenOpen: true,
       },
       router: { step: "router", state: "refused" },
       runtime: { step: "runtime", state: "needs", lowest: 443 },

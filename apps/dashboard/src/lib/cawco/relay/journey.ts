@@ -9,6 +9,7 @@
  * journey-ports-revision.md's diff), held here until the real build moves
  * them into core's `STREAM_RELAY_WORDS`.
  */
+import { getDomain } from "tldts";
 
 /** The machine the relay runs on, as step 1 found it. */
 export interface RelayMachine {
@@ -119,13 +120,19 @@ export type RelayAct =
     }
   | { act: "add-record"; token: string };
 
-/** "turn.bewinxed.com" from "outpost.bewinxed.com": the name suggested under the domain the person came in by. */
-export const suggestedName = (domain: string): string =>
-  `turn.${domain.split(".").slice(-2).join(".")}`;
+/**
+ * The registrable domain of a name (its zone at a DNS host), by the Public
+ * Suffix List: `bewinxed.com` for outpost.bewinxed.com, `northwind.co.uk`
+ * for relay.northwind.co.uk. Null for an address or a name under no public
+ * suffix (localhost, a .local name), which no DNS host serves.
+ */
+export const zoneOf = (name: string): string | null => getDomain(name);
 
-/** The registrable domain of a name, for the Cloudflare token's zone. */
-export const zoneOf = (name: string): string =>
-  name.split(".").slice(-2).join(".");
+/** "turn.bewinxed.com" from "outpost.bewinxed.com": the name suggested under the domain the person came in by; none when it has no zone. */
+export const suggestedName = (domain: string): string | null => {
+  const zone = zoneOf(domain);
+  return zone ? `turn.${zone}` : null;
+};
 
 /** The ports the relay answers on, by whether a name stands: its chips' and its tick's words. */
 export const portsWords = (named: boolean): string =>
@@ -133,9 +140,13 @@ export const portsWords = (named: boolean): string =>
 
 export const JOURNEY_WORDS = {
   leadDomain: (domain: string) =>
-    `You reach CawCo through ${domain}, which carries pages, not streams. A stream relay on one of your machines carries them, from anywhere. Each step ticks by itself; the ones that need you say so.`,
+    `You reach CawCo through ${domain}, which carries pages, not streams. A stream relay on one of your machines carries them, from anywhere.`,
   leadPlain:
-    "A stream relay lets you take over a browser from anywhere: on cellular data, behind a strict firewall, through a web-only tunnel. Each step ticks by itself; the ones that need you say so.",
+    "A stream relay lets you take over a browser from anywhere: on cellular data, behind a strict firewall, through a web-only tunnel.",
+  /** The phone's lead (the design's 390 wireframe). */
+  leadDomainShort: (domain: string) =>
+    `You reach CawCo through ${domain}, which carries pages, not streams. A relay on one of your machines carries them.`,
+  leadPlainShort: "A stream relay lets you take over a browser from anywhere.",
 
   machine: "Pick the machine",
   machineDone: (machine: RelayMachine) =>
@@ -148,8 +159,8 @@ export const JOURNEY_WORDS = {
     askedAgo === undefined
       ? `Checking ${name}…`
       : `Checking ${name}… (asked ${askedAgo} s ago)`,
-  nameUnresolved: (name: string, address: string) =>
-    `${name} doesn't resolve yet. Add an A record for it at your DNS host, DNS only (no proxy), pointing at ${address}. It ticks here once it answers; DNS can take a few minutes.`,
+  nameUnresolved: (name: string) =>
+    `${name} doesn't resolve yet. Add this record at your DNS host; it ticks once it answers (DNS can take a few minutes).`,
   nameProxied: (name: string, address: string) =>
     `${name} answers with Cloudflare's addresses, so it's proxied, and the proxy carries pages, not streams. Set it to DNS only at Cloudflare. It ticks once it answers with ${address}.`,
   nameElsewhere: (name: string, answers: string, machine: RelayMachine) =>
@@ -168,14 +179,19 @@ export const JOURNEY_WORDS = {
   addRecord: "Add the record",
 
   router: "Open the ports on the router",
-  routerAsk: (machine: string) =>
-    `${machine} is behind a router. CawCo asks it to open the relay's ports (UPnP or NAT-PMP); a router that refuses shows them here.`,
+  routerAsk:
+    "CawCo asks the router to open the relay's ports (UPnP or NAT-PMP). If it refuses, the ports to forward show here.",
   openPorts: "Open the ports",
   openingPorts: "Asking the router…",
-  routerRefused: (machine: RelayMachine) =>
-    `The router didn't open the ports (no UPnP or NAT-PMP answered). Forward these on it to ${machine.name} at ${machine.lan ?? machine.address}, then come back; the last step proves they're open.`,
+  routerRefused:
+    "Your router didn't answer UPnP or NAT-PMP. Forward these on it, then come back; the last step proves they're open.",
   forwards: (lan: string) => `UDP 443 · TCP 443 · UDP 49152–49400 → ${lan}`,
   forwardsLabel: "The forwards to make",
+  copyRecord: "Copy record",
+  copyForwards: "Copy forwards",
+  copyCommand: "Copy command",
+  copied: "Copied",
+  copyFailed: "Copy failed",
   routerDone: "Ports open on the router (UPnP)",
   routerByHand: (proveAt: number) =>
     `Forwarded by hand · proven in step ${proveAt}`,
@@ -184,7 +200,6 @@ export const JOURNEY_WORDS = {
     lowest === 80
       ? "Let the container runtime bind 80 and 443"
       : "Let the container runtime bind 443",
-  runtimeChecking: "Checking…",
   runtimeNote: (machine: string) =>
     `Run it once in a terminal on ${machine}. It holds a reboot and ticks here by itself.`,
   runtimeCommand: (lowest: 443 | 80) =>
@@ -195,7 +210,7 @@ export const JOURNEY_WORDS = {
   certificate: "Issue the certificate",
   certificateRunning: (name: string) => `Asking Let's Encrypt for ${name}…`,
   certificateFailed: (name: string, why: string) =>
-    `Let's Encrypt did not issue a certificate for ${name} (${why}). Check the token can edit ${zoneOf(name)}'s DNS, then Retry.`,
+    `Let's Encrypt did not issue a certificate for ${name} (${why}). Check the token can edit ${zoneOf(name) ?? name}'s DNS, then Retry.`,
   certificateDone: (name: string, ends: string) =>
     `Certificate for ${name} · ends ${ends}`,
   retry: "Retry",
@@ -227,10 +242,11 @@ export const JOURNEY_WORDS = {
     `The stream didn't connect: this screen reaches CawCo through ${domain}, which carries pages, not streams. A stream relay carries them from anywhere.`,
   setUp: "Set up the stream relay",
 
-  summaryLine: (summary: RelaySummary) =>
-    summary.name
-      ? `${summary.machine.address} · ${summary.name}`
-      : summary.machine.address,
+  /** Caw's Needs you row once the relay is live and proven: its tick and where it is seen. */
+  doneRow: (where: string) =>
+    `The stream relay is live at ${where}. Streams reach you anywhere.`,
+  openSettings: "Open Settings › Browsers",
+
   certificateEnds: (ends: string) => `Certificate ends ${ends}`,
   provenBy: (device: string, at: string) =>
     `Proven from outside by ${device}, ${at}`,
