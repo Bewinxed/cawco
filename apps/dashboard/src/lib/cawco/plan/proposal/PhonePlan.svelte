@@ -14,56 +14,10 @@
   import GlyphTask from "~icons/solar/clipboard-check-bold-duotone";
   import { type PlanFixture, progress } from "./fixtures";
 
-  let {
-    plan,
-    today = false,
-    focus,
-    children,
-  }: {
-    plan: PlanFixture;
-    /** The sheet's head as it is now: the title alone. */
-    today?: boolean;
-    /** The row the sheet stands scrolled to (its id), near its top. */
-    focus?: string;
-    children: Snippet;
-  } = $props();
+  let { plan, children }: { plan: PlanFixture; children: Snippet } = $props();
 
   let host = $state<HTMLElement>();
   const got = $derived(progress(plan));
-
-  /** Holds the scroller on the focused row while what is in it lays out. */
-  function foot(node: HTMLElement) {
-    if (!focus) {
-      return;
-    }
-    const hold = () => {
-      const row = node.querySelector<HTMLElement>(
-        `[data-row="${CSS.escape(focus)}"]`
-      );
-      if (row) {
-        node.scrollTop +=
-          row.getBoundingClientRect().top -
-          node.getBoundingClientRect().top -
-          8;
-      }
-    };
-    const sizes = new ResizeObserver(hold);
-    for (const child of node.children) {
-      sizes.observe(child);
-    }
-    hold();
-    // The person's own scroll takes over from the first wheel or touch.
-    const stop = () => sizes.disconnect();
-    node.addEventListener("wheel", stop, { once: true, passive: true });
-    node.addEventListener("touchstart", stop, { once: true, passive: true });
-    node.addEventListener("pointerdown", stop, { once: true });
-    return () => {
-      sizes.disconnect();
-      node.removeEventListener("wheel", stop);
-      node.removeEventListener("touchstart", stop);
-      node.removeEventListener("pointerdown", stop);
-    };
-  }
 </script>
 
 <div bind:this={host} data-coarse class="phone" data-slot="phone-screen">
@@ -91,29 +45,25 @@
         trapFocus={false}
       >
         <Drawer.Header>
-          <Drawer.Title class="sheet-title">
+          <Drawer.Title class="sheet-title mark-line">
             <span>Plan</span>
-            {#if !today}
-              <span class="progress" data-slot="progress"
-                ><TaskRing done={got.done} total={got.total} /></span
-              >
-              <span data-num class="num figure">{got.done} of {got.total}</span>
-            {/if}
+            <span class="progress" data-box data-slot="progress"
+              ><TaskRing done={got.done} total={got.total} /></span
+            >
+            <span data-num class="num figure">{got.done} of {got.total}</span>
           </Drawer.Title>
         </Drawer.Header>
-        {#if plan.task && !today}
-          <button
-            aria-label="Open the task {plan.task.title}, {plan.task.stage}"
-            class="task touch-hit"
-            type="button"
-          >
-            <GlyphTask aria-hidden="true" class="task-glyph" />
-            <span class="task-title">{plan.task.title}</span>
-            <span class="stage">· {plan.task.stage}</span>
-            <IconChevronRight aria-hidden="true" />
-          </button>
-        {/if}
-        <div class="scroll kit-sheet-scroll" {@attach foot}>
+        <button
+          aria-label="Open the task {plan.task.title}, {plan.task.stage}"
+          class="task touch-hit mark-line"
+          type="button"
+        >
+          <GlyphTask aria-hidden="true" class="task-glyph" data-box />
+          <span class="task-title">{plan.task.title}</span>
+          <span class="stage">· {plan.task.stage}</span>
+          <IconChevronRight aria-hidden="true" />
+        </button>
+        <div class="scroll kit-sheet-scroll">
           {@render children()}
         </div>
       </Drawer.Content>

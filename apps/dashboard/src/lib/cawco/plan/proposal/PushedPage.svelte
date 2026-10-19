@@ -35,7 +35,7 @@
   <div class="page detail" data-slot="pushed-page" inert={!pushed}>
     {#if pushed}
       <button
-        class="back pressable"
+        class="back pressable mark-line"
         onclick={() => {
           view.pushed.id = null;
         }}
@@ -91,6 +91,7 @@
           </ul>
         {/if}
       {:else if delegate}
+        <!-- mark-line: the mark stands at the top of a title that wraps, in its own grid cell -->
         <header class="head">
           <SessionMark
             id={delegate.id}
@@ -117,7 +118,7 @@
           <p class="report" data-slot="report">{delegate.report}</p>
         {/if}
         <span class="acts">
-          <button class="open pressable" type="button">
+          <button class="open pressable mark-line" type="button">
             <span>Open its session</span>
             <IconExternal aria-hidden="true" />
           </button>
