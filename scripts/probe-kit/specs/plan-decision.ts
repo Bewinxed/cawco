@@ -21,8 +21,8 @@
  *   comment seen by Fable with its reply, a reworded to-do seen by this
  *   session, the task's attempt;
  * - a pick is kept as the card's state, and a note with it;
- * - the revision made on the pick collapses the card to one line,
- *   "Decided: C · Crew first", and only the picked way's embed stays;
+ * - the pick folds the card itself to "Decided: C · Crew first" with
+ *   Change;
  * - nothing is written to the console as an error.
  *
  * Captures of the page in each leg, and after the collapse, go to
@@ -91,26 +91,22 @@ export const DIALS = [
   },
 ];
 
-/** The page: one decision, each way's live canvas over its option. */
+/**
+ * The page: one question, each way's live canvas in its own option's media
+ * (the decision host's interview card: the option's line what it gets, its
+ * cost what it costs, the Decision's why the recommendation's reason). A
+ * pick folds the card to "Decided: …" with Change; nothing is revised.
+ */
 export const programOf = (
   ids: Record<(typeof WAYS)[number]["id"], string>
-) => `root = Decisions("The plan view", [plan], "One choice: how the side panel shows what a session and its delegates are doing. Each way below is the real panel on the same plan, a booking page with four delegates out; press a step to open it, and switch desk, phone, light and dark in its own frame.")
-plan = Decision("plan", "Which plan do you want?", [oneList, lanes, crewFirst], "Recommended: C, because its first row answers whether anything needs you: Fable, waiting on your answer, stands at the top of the stack.", [ways])
-ways = Row([oneListShow, lanesShow, crewFirstShow], "start", "start")
-oneListShow = Column([Text("A · One list", "label"), Preview("${ids["one-list"]}")])
-lanesShow = Column([Text("B · Lanes", "label"), Preview("${ids.lanes}")])
-crewFirstShow = Column([Text("C · Crew first", "label"), Preview("${ids["crew-first"]}")])
-oneList = Option("one-list", "A · One list", "Everything in one list, each delegate one row under its to-do; edit or comment on a step where it stands. Costs: the longest list when several delegates run.")
-lanes = Option("lanes", "B · Lanes", "Which steps wait on which, drawn as lines, the line to a working delegate pulsing. Costs: two lanes take a word's width at 360, most plans need one, a move redraws the lines, and on a phone a step is edited on its own page.")
-crewFirst = Option("crew-first", "C · Crew first", "Who needs you and who is working first, each with its progress, over a quiet to-do list. Costs: a delegate shows twice, and its step is edited from its to-do, not from the stack.", true)`;
-
-/** The revision made on a pick: the card becomes one line, and only the picked way's canvas stays, its dials with it. */
-export const decidedOf = (
-  way: (typeof WAYS)[number],
-  id: string
-) => `root = Decisions("The plan view", [decided, picked], "Decided. Tune the tile, the line and the sweep in its frame's dials; the build starts from what you set.")
-decided = Text("Decided: ${way.label}", "title")
-picked = Preview("${id}")`;
+) => `root = Decisions("The plan view", [plan], "One choice: how the side panel shows what a session and its delegates are doing. Each way below is the real panel on the same plan, a booking page with four delegates out; open a step, reword it or comment on it, and switch desk, phone, light and dark in its own frame.")
+plan = Decision("plan", "Which plan do you want?", [oneList, lanes, crewFirst], "C, because its first row answers whether anything needs you: Fable, waiting on your answer, stands at the top of the stack.")
+oneList = Option("one-list", "A · One list", "Everything in one list, each delegate one row under its to-do; edit or comment on a step where it stands.", false, [oneListShow], "The longest list when several delegates run.")
+lanes = Option("lanes", "B · Lanes", "Which steps wait on which, drawn as lines, the line to a working delegate pulsing.", false, [lanesShow], "Two lanes take a word's width at 360 and most plans need one; a move redraws the lines, and a phone edits a step on its own page.")
+crewFirst = Option("crew-first", "C · Crew first", "Who needs you and who is working first, each with its progress, over a quiet to-do list.", true, [crewFirstShow], "A delegate shows twice, and its step is edited from its to-do, not from the stack.")
+oneListShow = Preview("${ids["one-list"]}")
+lanesShow = Preview("${ids.lanes}")
+crewFirstShow = Preview("${ids["crew-first"]}")`;
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -182,8 +178,11 @@ const cardIn = (frame: Frame) =>
             .map((el) => `${el.localName}.${el.className}`),
         };
       })(),
-      decided:
-        document.querySelector('p.text[data-role="title"]')?.textContent ?? "",
+      // A picked card folds itself: "Decided: <option>" and Change.
+      decided: card?.hasAttribute("data-decided")
+        ? (card.querySelector(".dp-state")?.textContent?.trim() ?? "")
+        : "",
+      change: !!card?.querySelector(".dp-change"),
     };
   });
 
@@ -395,10 +394,11 @@ const spec: Spec = {
     desk.on("pageerror", (error) => said.push(String(error)));
     await open(desk, `${base}/session/${writer}`, '[data-slot="pane"]');
     const frame = await frameWith(desk, "#decision-plan");
-    await frame.locator('[data-option="crew-first"]').click();
+    // The note first: a pick folds the card, its note field with it.
     await frame
       .locator("#decision-plan .dp-note textarea")
       .fill("Keep the counts on the heads.");
+    await frame.locator('[data-option="crew-first"]').click();
     const picked = await until(
       "the pick and its note kept",
       read,
@@ -413,29 +413,16 @@ const spec: Spec = {
       JSON.stringify((await read()).state)
     );
 
-    // The revision made on that pick: the card collapses to one line.
-    const way = WAYS.find((one) => one.id === "crew-first") ?? WAYS[2];
-    await fleet.api(
-      `/api/instances/${writer}/artifacts/${page.id}/statements`,
-      { statements: decidedOf(way, ids["crew-first"]) }
-    );
+    // The pick folds the card itself: one line and Change.
     const after = await until(
-      "the card collapsed",
-      async () => cardIn(await frameWith(desk, "body")),
-      (now) => now.cards === 0 && now.decided.includes("Decided"),
+      "the card folded",
+      () => cardIn(frame),
+      (now) => now.decided.length > 0,
       30_000
     ).catch(() => null);
-    const left = await until(
-      "only the picked way's canvas left",
-      () => drawnWays(desk),
-      (drawn) => drawn.join(",") === "c",
-      60_000
-    ).catch(() => [] as string[]);
     kit.check(
-      `a pick collapses the card to "Decided: C · Crew first", only its canvas left (${left.join(",")})`,
-      !!after &&
-        after.decided.includes("Decided: C · Crew first") &&
-        left.join(",") === "c",
+      `a pick folds the card to one line with Change ("${after?.decided ?? ""}")`,
+      !!after && after.decided === "Decided: C · Crew first" && after.change,
       JSON.stringify(after)
     );
     await shoot(desk, "decided-desk-light");
