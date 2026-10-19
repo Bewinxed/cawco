@@ -48,6 +48,5 @@ export const Done = card("tsk-12");
 /** Phone · Every state in one column. */
 export const Phone = {
   component: CardStackFixture,
-  args: { proposed: true },
   parameters: { viewport: "phone" },
 };
