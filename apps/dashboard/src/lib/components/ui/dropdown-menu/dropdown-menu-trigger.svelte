@@ -1,3 +1,24 @@
+<script lang="ts" module>
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "#lib/utils.js";
+
+  /**
+   * Its callers' looks. `face`: its words' face. `title`: a pane head's
+   * title, the name of what is on show (the artifact switcher): the label
+   * role and the strong ink, as the head's own title (SideSurface `.title`;
+   * DESIGN.md, The Role, Not Size Rule).
+   */
+  export const dropdownMenuTriggerVariants = tv({
+    variants: {
+      face: { title: "type-label text-ink-strong" },
+    },
+  });
+
+  export type DropdownMenuTriggerLooks = VariantProps<
+    typeof dropdownMenuTriggerVariants
+  >;
+</script>
+
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import { on } from "svelte/events";
@@ -13,13 +34,15 @@
     class: className,
     variant,
     size,
+    face,
     onpointerdown,
     ...restProps
-  }: DropdownMenuPrimitive.TriggerProps & {
-    /** A trigger drawn as a kit Button of this variant and size. */
-    variant?: ButtonVariant;
-    size?: ButtonSize;
-  } = $props();
+  }: DropdownMenuPrimitive.TriggerProps &
+    DropdownMenuTriggerLooks & {
+      /** A trigger drawn as a kit Button of this variant and size. */
+      variant?: ButtonVariant;
+      size?: ButtonSize;
+    } = $props();
 
   /**
    * Held from the press until the pointer lets go, drawn by the `pressed`
@@ -66,6 +89,7 @@
   class={cn(
     "touch-hit",
     (variant || size) && buttonVariants({ variant, size }),
+    dropdownMenuTriggerVariants({ face }),
     className
   )}
   data-pressed={pressed || undefined}
