@@ -322,6 +322,16 @@ public final class FleetStore {
     }
     /// The continuations the hub is carrying, settled ones for a few minutes after.
     public internal(set) var continuations: [Components.Schemas.ContinuationJob] = []
+    /// Every former id, by the id its session has now: a session the hub
+    /// folded into its continuation. A tab or a link on a former id is that
+    /// session (ShellController `moveToOrigins`).
+    public internal(set) var formerIds: [String: String] = [:]
+
+    /// The board frame's former ids, as ids.
+    func adopt(formerIds container: OpenAPIObjectContainer) {
+        let next = container.value.compactMapValues { $0 as? String }
+        if next != formerIds { formerIds = next }
+    }
     /// The project moves the hub is carrying (core move.ts), settled ones for a
     /// few minutes after: the board frame's on connect, then each `moves` frame.
     public internal(set) var moves: [Components.Schemas.MoveJob] = []

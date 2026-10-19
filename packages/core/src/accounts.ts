@@ -1105,23 +1105,36 @@ export type AccountMove =
     }
   | {
       /**
-       * History only, from before the hub compacted natively: the session
-       * went on in a fresh conversation of its own, seeded with a summary of
-       * the one before, the same session with its account changed (`from`
-       * to `to`; null on a harness without accounts). Lines a hub stored
-       * then still read, between the conversations they divide.
+       * The session went on in a fresh conversation of its own, seeded with
+       * a summary of the one before (or the person's own messages alone,
+       * `asks`), on `to` from `from` (null on a harness without accounts):
+       * a continuation anything but the person's own Continue asked for,
+       * which stays one session (hub `foldContinued`). The line stands
+       * between the two conversations.
        */
       kind: "continued";
       from: NamedAccount | null;
       to: NamedAccount | null;
-      /** The account whose summariser wrote the summary it went on from. */
+      /** The account whose summariser wrote the summary it went on from; null when nothing was summarised. */
       writtenOn: NamedAccount | null;
-      /** The session asked for it (`continue_session`), not its account's limit. */
+      /**
+       * Who asked for it, as the line's detail names them: a session by its
+       * name, or a comment on a task. Absent on a line a hub stored before
+       * continuations stayed one session.
+       */
+      by?: string;
+      /** A session asked for it, not its account's limit: true on every line written now. */
       asked?: true;
       /** It restarted from the person's own messages alone: nothing was summarised. */
       asks?: true;
       tokens: number | null;
-      /** The window's percent when the summary was written ahead of the limit; null when it was written at the move. */
+      /**
+       * Null on every line written now (no summary is written ahead of a
+       * limit any more), and never shown. Sent only because the TestFlight
+       * builds 20261015 to 20261018 require it, which the hub's wire check
+       * holds to (packages/hub/scripts/openapi.ts); it goes in the change
+       * that expires them.
+       */
       preparedAtPct: number | null;
     }
   | {
@@ -1472,19 +1485,20 @@ const continuedWords = (
   if (move.asks) {
     return {
       line: `Restarted${move.to ? ` on ${move.to.name}` : ""} from the person's messages · ${stayed}`,
-      detail:
-        "Nothing was summarised: the fresh conversation opened on the person's own messages alone",
+      detail: [
+        ...(move.by ? [`Asked by ${move.by}`] : []),
+        "nothing was summarised: the fresh conversation opened on the person's own messages alone",
+      ].join(" · "),
     };
   }
-  let detail = `Summary written at ${Math.round(move.preparedAtPct ?? 0)}%, before the move`;
-  if (move.preparedAtPct === null) {
-    detail = move.writtenOn
-      ? `Summary written on ${move.writtenOn.name}, ${move.asked ? "as it asked" : "at the move"}`
-      : "Summary written as it asked";
-  }
+  const written = move.writtenOn
+    ? `summary written on ${move.writtenOn.name}`
+    : "summary written as it was asked";
   return {
     line: `Continued${move.to ? ` on ${move.to.name}` : ""} from a summary · ${stayed}`,
-    detail,
+    detail: move.by
+      ? `Asked by ${move.by} · ${written}`
+      : `S${written.slice(1)}`,
   };
 };
 

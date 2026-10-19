@@ -28,11 +28,14 @@
  *   close, so it is held on A until its reset with a person's message
  *   queued for it. The orchestrator's `continue_session` moves its item to
  *   a new session (placed on B), then hands a message to the OLD session.
- *   The invariant (hub server.ts `retireContinued`): the old session never
- *   takes another turn, past A's reset and that handoff; its row names its
- *   continuation, it is stopped and no hold of its is left; the queued
- *   message and the handoff both reach the new session, and the handoff's
- *   answer names it.
+ *   The rule (hub server.ts `foldContinued`): a continuation a session asks
+ *   for stays one session. The old session never takes another turn, past
+ *   A's reset and that handoff; its id is a former id of the new one, the
+ *   board lists the new row alone and no hold of the old is left; the
+ *   queued message, the handoff and a person's message to the old id all
+ *   reach the new session, and the handoff's answer names it; the old id's
+ *   transcript reads the old conversation, one `continued` line, then the
+ *   new one; its page opens the live session.
  *
  *   bun scripts/probe-kit/run.ts limit-stall
  */
@@ -708,23 +711,32 @@ const continuedLeg = async (
           )
           .join(" | ")
   );
-  const [row] = fleet.query<Record<string, unknown>>(
-    "SELECT * FROM instances WHERE id = ?",
+  const [row] = fleet.query<{ end_intent: string | null; status: string }>(
+    "SELECT status, end_intent FROM instances WHERE id = ?",
     old
   );
   const holds = fleet.query<{ until: number | null }>(
     "SELECT until FROM limit_holds WHERE instance_id = ?",
     old
   );
+  const alias = fleet.query<{ instance_id: string }>(
+    "SELECT instance_id FROM instance_aliases WHERE id = ?",
+    old
+  )[0]?.instance_id;
+  const listed = (await fleet.api<{ id: string }[]>("/api/instances")).filter(
+    (one) => one.id === old || one.id === target
+  );
   kit.check(
-    "continued: the old session's row names its continuation, it is stopped, and no hold of its is left",
-    row?.continued_into === target &&
-      row?.status === "stopped" &&
+    "continued: one session from the move: the old id is a former id of the new one, the board lists the new row alone, the old row is gone or ending, and no hold of its is left",
+    alias === target &&
+      listed.length === 1 &&
+      listed[0]?.id === target &&
+      (!row || row.end_intent === "delete") &&
       holds.length === 0,
     JSON.stringify({
-      status: row?.status,
-      continued_into: row?.continued_into ?? "(no such column)",
-      work_item_id: row?.work_item_id,
+      alias: alias ?? null,
+      listed: listed.map((one) => one.id),
+      row: row ?? null,
       holds,
     })
   );
@@ -749,10 +761,10 @@ const continuedLeg = async (
 };
 
 /**
- * A person writing to the continued session: the hub refuses the send to
- * its id in the words its page says, "Continued in <the new session's
- * title>", and the new session never reads it; its page has no composer,
- * only that line, its title a link to the new session.
+ * A person writing to the old session's id after the move: one session, so
+ * it reaches the new one; its transcript reads the old conversation, the
+ * `continued` line, then the new one; its page opens the live session, its
+ * composer there.
  */
 const personAfter = async (
   kit: Kit,
@@ -760,70 +772,79 @@ const personAfter = async (
   old: string,
   target: string
 ): Promise<void> => {
-  const [named] = fleet.query<{
-    derived_title: string | null;
-    title: string | null;
-  }>("SELECT title, derived_title FROM instances WHERE id = ?", target);
-  const title = named?.title || named?.derived_title || target.slice(0, 8);
-  const words = `Continued in ${title}`;
   await fleet.send(old, `${TYPED_AFTER}: typed on its page`);
-  const typed = await until(
-    "continued: the person's send to the old id settled",
-    () =>
-      fleet.query<{
-        instance_id: string;
-        reason: string | null;
-        state: string;
-      }>(
-        "SELECT instance_id, state, reason FROM sent_messages WHERE body LIKE ?",
-        `%${TYPED_AFTER}%`
-      ),
-    (rows) => rows.some((one) => one.state !== "pending"),
-    20_000
-  ).catch(() =>
+  const sends = () =>
     fleet.query<{ instance_id: string; reason: string | null; state: string }>(
       "SELECT instance_id, state, reason FROM sent_messages WHERE body LIKE ?",
       `%${TYPED_AFTER}%`
-    )
-  );
-  await Bun.sleep(5000);
+    );
+  const typed = await until(
+    "continued: the person's send to the old id read",
+    sends,
+    (rows) => rows.some((one) => one.state !== "pending"),
+    60_000
+  ).catch(sends);
   const read = newSeen(fleet).some((one) => one.all.includes(TYPED_AFTER));
   kit.check(
-    `continued: a person's send to the old session is refused with "${words}", and the new session never reads it`,
+    "continued: a person's send to the old id reaches the new session",
     typed.length === 1 &&
-      typed[0]?.instance_id === old &&
-      typed[0]?.state === "failed" &&
-      typed[0]?.reason === words &&
-      !read,
+      typed[0]?.instance_id === target &&
+      typed[0]?.state === "read" &&
+      read,
     `${JSON.stringify(typed)}; the new session read it: ${read}`
   );
-  const base = await fleet.dashboard();
-  const page = await kit.page("desk");
-  await open(page, `${base}/session/${old}`, '[data-slot="pane"]');
-  const foot = await until(
-    "continued: the old page's line",
-    () =>
-      page.evaluate((next) => {
-        const link = document.querySelector<HTMLAnchorElement>(
-          `a[href="/session/${next}"]`
-        );
-        return {
-          composers: document.querySelectorAll('[data-slot="composer"]').length,
-          line: link?.parentElement?.textContent?.replace(/\s+/g, " ").trim(),
-          link: link?.textContent?.trim(),
-        };
-      }, target),
-    // Its title, not its id: the line as it settles, whatever drew first.
-    (now) => now.link === title,
-    30_000
-  ).catch(() => undefined);
+  const page = await fleet.api<{
+    blocks: {
+      content: string;
+      metadata?: { accountMove?: { kind: string }; continuation?: boolean };
+      type: string;
+    }[];
+  }>(`/api/instances/${old}/transcript?limit=400`);
+  const line = page.blocks.findIndex(
+    (one) =>
+      one.type === "system.account_move" &&
+      one.metadata?.accountMove?.kind === "continued"
+  );
+  const lines = page.blocks.filter(
+    (one) => one.metadata?.accountMove?.kind === "continued"
+  ).length;
+  const brief = page.blocks.findIndex((one) =>
+    one.content.includes(briefOf("continued"))
+  );
   kit.check(
-    `continued: the old session's page has no composer, only "${words}", its title a link to the new session`,
-    !!foot &&
-      foot.composers === 0 &&
-      foot.line?.replace(/\s/g, "") === words.replace(/\s/g, "") &&
-      foot.link === title,
-    JSON.stringify(foot ?? "no link to the new session on the old page")
+    "continued: the old id's transcript reads the old conversation, one continued line, then the opening folded under it",
+    brief >= 0 &&
+      lines === 1 &&
+      line > brief &&
+      page.blocks[line + 1]?.metadata?.continuation === true,
+    JSON.stringify({
+      brief,
+      line,
+      lines,
+      words: page.blocks[line]?.content ?? null,
+    })
+  );
+  const base = await fleet.dashboard();
+  const tab = await kit.page("desk");
+  await open(tab, `${base}/session/${old}`, '[data-slot="pane"]');
+  const look = () =>
+    tab.evaluate(() => ({
+      path: location.pathname,
+      composers: document.querySelectorAll('[data-slot="composer"]').length,
+      continuedIn: document.querySelectorAll(".readonly.continued").length,
+    }));
+  const shown = await until(
+    "continued: the old page opens the live session",
+    look,
+    (it) => it.path === `/session/${target}` && it.composers > 0,
+    30_000
+  ).catch(look);
+  kit.check(
+    "continued: the old session's URL opens the live session, its composer there",
+    shown.path === `/session/${target}` &&
+      shown.composers > 0 &&
+      shown.continuedIn === 0,
+    JSON.stringify(shown)
   );
 };
 

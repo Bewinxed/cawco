@@ -20,9 +20,11 @@
    * stopped"). The compaction itself is Claude Code's own, drawn by its own
    * divider after the turns it took.
    *
-   * A `continued` line a hub stored before it compacted natively still
-   * reads, the message that conversation opened on folded under it: the
-   * chevron opens it, as a compaction's brief opens.
+   * A `continued` line stands between a session's conversation and the
+   * fresh one it went on in from a summary, when anything but the person's
+   * own Continue asked for it (hub `foldContinued`): one session, the
+   * message the fresh conversation opened on folded under the line, which
+   * the chevron opens as a compaction's brief opens.
    */
   import { accountMoveWords } from "@cawco/core";
   import IconChevron from "~icons/solar/alt-arrow-right-bold-duotone";

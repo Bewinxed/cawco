@@ -518,7 +518,11 @@ import {
 import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import type { LimitCompaction } from "./db/at-limit";
-import type { PriorConversation, TrashKind } from "./db/schema";
+import type {
+  ContinuationAsker,
+  PriorConversation,
+  TrashKind,
+} from "./db/schema";
 import { TAG_MARKERS, tagStoredSend } from "./db/tag-markers";
 import { undoable } from "./db/trash";
 import { buildDecisionPage, type PageSources } from "./decision-page";
@@ -1230,27 +1234,13 @@ const WORKSPACE_TIMEOUT_MS = 60_000;
  * hear how it ended, and keeps the table to the few jobs of the moment.
  */
 const CONTINUATION_KEPT_MS = 5 * 60_000;
-/**
- * Who asked for a continuation: a person (the dashboard's "Continue in new
- * session", or the API with no session named), a session's
- * `continue_session`, the at-limit controller, or your comment on a task
- * whose ended attempt's session is cold (jev-tasks.ts, Attach or spawn).
- */
-type ContinuationAsker =
-  | { kind: "person" }
-  | { kind: "session"; id: string }
-  | { kind: "at-limit" }
-  | { kind: "task"; id: string };
 /** Who asked, as a continuation's log line says it. */
 const askerWords = (by: ContinuationAsker): string => {
   if (by.kind === "session") {
     return `session ${by.id} (continue_session)`;
   }
-  if (by.kind === "task") {
-    return `your comment on ${by.id} (attach or spawn)`;
-  }
-  return by.kind === "at-limit"
-    ? "the at-limit controller"
+  return by.kind === "task"
+    ? `your comment on ${by.id} (attach or spawn)`
     : "a person (the dashboard or the API)";
 };
 /** The origin of the hub's word to a sender that its message did not arrive. */
@@ -14155,17 +14145,12 @@ export const createServer = (
    */
   const continuationRefusal = async (
     prepared: PreparedContinuation,
-    request: ContinueRequest
+    request: ContinueRequest,
+    askedBy: ContinuationAsker
   ): Promise<string | undefined> => {
-    const itemId = db.getInstancesByIds([prepared.source.instanceId])[0]
-      ?.workItemId;
-    const { cwd: at, machineId: on } = request.target;
-    if (
-      itemId &&
-      ((at && at !== prepared.source.cwd) ||
-        (on && on !== prepared.source.machineId))
-    ) {
-      return `${prepared.source.title} holds work item ${itemId}: its new session takes the item on, so it starts where the item's workspace is, in ${prepared.source.cwd} on ${machineName(prepared.source.machineId)}.`;
+    const misplaced = placeRefusal(prepared, request, askedBy);
+    if (misplaced) {
+      return misplaced;
     }
     if (prepared.prompt) {
       if (!request.summarizer) {
@@ -14192,6 +14177,35 @@ export const createServer = (
     return refusal
       ? `Continue on ${model ?? "the default model"}: ${refusal}`
       : undefined;
+  };
+
+  /**
+   * Where a continuation must start, when it names somewhere else: where
+   * the source's work item's workspace is, and, for one that stays one
+   * session with its source ({@link foldContinued}), where the source ran,
+   * whose conversation is read there.
+   */
+  const placeRefusal = (
+    prepared: PreparedContinuation,
+    request: ContinueRequest,
+    askedBy: ContinuationAsker
+  ): string | undefined => {
+    const { cwd: at, machineId: on } = request.target;
+    if (!(
+      (at && at !== prepared.source.cwd) ||
+      (on && on !== prepared.source.machineId)
+    )) {
+      return;
+    }
+    const where = `in ${prepared.source.cwd} on ${machineName(prepared.source.machineId)}`;
+    const itemId = db.getInstancesByIds([prepared.source.instanceId])[0]
+      ?.workItemId;
+    if (itemId) {
+      return `${prepared.source.title} holds work item ${itemId}: its new session takes the item on, so it starts where the item's workspace is, ${where}.`;
+    }
+    return askedBy.kind === "person"
+      ? undefined
+      : `${prepared.source.title} goes on as the same session, its conversation before read where it ran, so its continuation starts there, ${where}.`;
   };
 
   /** The stages nothing more happens after. */
@@ -14345,6 +14359,7 @@ export const createServer = (
       openItems: null,
       stage: files ? "filing" : afterFiling(summarise),
       error: null,
+      askedBy,
     });
     console.info(
       startedWords(prepared, request, askedBy, { files, summarise })
@@ -14648,18 +14663,145 @@ export const createServer = (
     // The source never runs again in that workspace.
     if (source?.workItemId) {
       workItems.continuedIn(source.workItemId, row.targetInstanceId);
-      retireContinued(source.id, row.targetInstanceId);
     }
-    adoptChildren(prepared.source.instanceId, row.targetInstanceId);
-    sendOpening(ready);
-    // What was owed to the source goes behind the opening ({@link releaseOne}).
-    releaseOwed({ instanceId: prepared.source.instanceId });
+    if (source && row.askedBy.kind !== "person") {
+      oneSession(ready, source);
+    } else {
+      separateSession(ready, source);
+    }
     return true;
   };
 
   /**
-   * A session whose work item a continuation moved to `to` never runs again
-   * (the item's workspace has one session from here): its row names `to`
+   * The person's own Continue: a separate session. The source of an item
+   * points onward to it ({@link retireContinued}); what the source was owed
+   * goes behind the opening ({@link releaseOne}).
+   */
+  const separateSession = (
+    job: ContinuationRow,
+    source: ReturnType<typeof db.getInstancesByIds>[number] | undefined
+  ): void => {
+    if (source?.workItemId) {
+      retireContinued(source.id, job.targetInstanceId);
+    }
+    adoptChildren(job.prepared.source.instanceId, job.targetInstanceId);
+    sendOpening(job);
+    releaseOwed({ instanceId: job.prepared.source.instanceId });
+  };
+
+  /**
+   * Anything else's continuation: one session with its source
+   * ({@link foldContinued}), its line written before the opening it folds.
+   */
+  const oneSession = (
+    job: ContinuationRow,
+    source: ReturnType<typeof db.getInstancesByIds>[number]
+  ): void => {
+    adoptChildren(source.id, job.targetInstanceId);
+    noteContinued(job, source);
+    sendOpening(job);
+    foldContinued(job, source);
+  };
+
+  /** Who asked for a continuation, as its line's detail names them. */
+  const askerLine = (by: ContinuationAsker): string => {
+    if (by.kind === "task") {
+      return `your comment on ${by.id}`;
+    }
+    if (by.kind === "person") {
+      return "you";
+    }
+    const [asker] = db.getInstancesByIds([by.id]);
+    return asker ? sessionName(asker) : `session ${by.id.slice(0, 8)}`;
+  };
+
+  /**
+   * The line a continuation that stays one session stands on between its
+   * two conversations ({@link foldContinued}): where it went on, from what,
+   * and who asked. Written on the new session before its opening goes, so
+   * the opening folds under it as its brief.
+   */
+  const noteContinued = (
+    job: ContinuationRow,
+    source: ReturnType<typeof db.getInstancesByIds>[number]
+  ): void => {
+    const [target] = db.getInstancesByIds([job.targetInstanceId]);
+    if (!target) {
+      return;
+    }
+    const named = (accountId: string | null | undefined) => {
+      const account = accountId ? db.accounts.get(accountId) : undefined;
+      return account ? namedAccount(account) : null;
+    };
+    const summariser = job.summariserInstanceId
+      ? db.getInstancesByIds([job.summariserInstanceId])[0]
+      : undefined;
+    const asks = !!job.request.asksOnly;
+    noteAtLimit(target, {
+      kind: "continued",
+      from: named(source.accountId),
+      to: named(target.accountId),
+      writtenOn: asks ? null : named(summariser?.accountId),
+      by: askerLine(job.askedBy),
+      asked: true,
+      ...(asks ? { asks: true as const } : {}),
+      tokens: job.prepared.liveContextTokens,
+      preparedAtPct: null,
+    });
+  };
+
+  /**
+   * THE ONE-SESSION RULE: a continuation anything but the person's own
+   * Continue asked for (a session's `continue_session`, a task's comment)
+   * is the session going on in a fresh conversation, never a second
+   * session. Once its opening has gone, the source is folded into the new
+   * session (db `foldContinued`): its id is a former id of it, so a send,
+   * a handoff, a tab or a link that names it reaches the new one
+   * ({@link byIdNow}); its row goes, the new one taking its place, title
+   * and start on the board; its conversation reads before the new one's,
+   * with its line between ({@link noteContinued}). Its at-limit hold, the
+   * resume at its reset, a move owed at its turn's end and its compaction
+   * go, and its process is ended, the wake-ups it scheduled inside it with
+   * it. What it was handed and never read is owed again, and goes with
+   * what it was owed, behind the opening.
+   */
+  const foldContinued = (
+    job: ContinuationRow,
+    source: ReturnType<typeof db.getInstancesByIds>[number]
+  ): void => {
+    const from = source.id;
+    const to = job.targetInstanceId;
+    atLimit.forget(from);
+    relaunchAtTurnEnd.delete(from);
+    stopCompaction(from);
+    for (const send of db.sendsIn(from, ["pending"])) {
+      if (!send.owed && send.envelope) {
+        db.holdSend(send.uuid, send.envelope);
+      }
+    }
+    forgetPending(from, UNREAD.stopped, false, "all");
+    const folded = db.foldContinued(from, to);
+    if (folded && folded.ending.length > 0) {
+      lifecycle.oweEndSession(from, "delete");
+    }
+    console.info(
+      `[continuation] ${sessionName(source)} (${from.slice(0, 8)}) goes on as ${to.slice(0, 8)}, one session, asked by ${askerWords(job.askedBy)}: ${from.slice(0, 8)} is a former id of it from here${folded?.ending.length ? ", its process ended" : ""}.`
+    );
+    const opening = db.sendRecord(job.openingUuid);
+    if (opening) {
+      publishSend(opening);
+    }
+    transcripts.reread(to);
+    publishInstances(source.machineId);
+    publishInstances(targetMachineOf(job));
+    releaseOwed({ instanceId: to });
+  };
+
+  /**
+   * A session whose work item the person's own Continue moved to `to` (a
+   * separate session; anything else's continuation is folded into one,
+   * {@link foldContinued}) never runs again (the item's workspace has one
+   * session from here): its row names `to`
    * ({@link InstanceRow.continuedInto}), so core `relaunchOf` refuses every
    * wake of it (a send's, a revive's, a relaunch on another account) and
    * every send to it goes to `to` ({@link toContinuation}); its at-limit
@@ -15735,6 +15877,9 @@ export const createServer = (
     noticesSeen: noticesSeen.ids(),
     // A damaged record says so, and notices are off until it is reset.
     noticesDamaged: noticesSeen.damaged(),
+    // Every former id, whole: a session folded into its continuation leaves
+    // a tab on its id for the session it is now.
+    formerIds: db.formerIds(),
     // `hubBuild` lets a client tell a hub that is
     // behind from a machine that is. `protocol` is the wire this hub speaks:
     // a page built for an older one reloads itself on its first frame.
@@ -15752,8 +15897,6 @@ export const createServer = (
       kind: "instances",
       instances: rows,
       ...boardExtras(),
-      // Fixed once the hub has folded what an older one split: once per connection.
-      formerIds: db.formerIds(),
       // Seed now-state once per connection; updates have per-session frames.
       pulses: Object.fromEntries(pulses),
     },
@@ -15804,6 +15947,7 @@ export const createServer = (
         "previews",
         "handoffs",
         "continuations",
+        "formerIds",
         "noticesSeen",
         "noticesDamaged",
       ] as const
@@ -15939,6 +16083,7 @@ export const createServer = (
       "previews",
       "handoffs",
       "continuations",
+      "formerIds",
       "noticesSeen",
       "noticesDamaged",
     ] as const) {
@@ -20528,11 +20673,12 @@ export const createServer = (
         },
         note: comment,
       };
-      const refusal = await continuationRefusal(prepared, request);
+      const asker: ContinuationAsker = { kind: "task", id: taskId };
+      const refusal = await continuationRefusal(prepared, request, asker);
       if (refusal) {
         throw new Error(refusal);
       }
-      job = startContinuation(prepared, request, { kind: "task", id: taskId });
+      job = startContinuation(prepared, request, asker);
     } finally {
       release();
     }
@@ -23830,6 +23976,9 @@ export const createServer = (
           if (!(request.summarizer || request.asksOnly)) {
             return status(400, "summarizer is required unless asksOnly is set");
           }
+          const asker: ContinuationAsker = askedBy
+            ? { kind: "session", id: askedBy }
+            : { kind: "person" };
           let prepared: PreparedContinuation;
           let refusal: string | undefined;
           let release: () => void = () => undefined;
@@ -23840,7 +23989,7 @@ export const createServer = (
               body.note,
               body.asksOnly
             );
-            refusal = await continuationRefusal(prepared, request);
+            refusal = await continuationRefusal(prepared, request, asker);
           } catch (error) {
             release();
             return status(
@@ -23852,11 +24001,7 @@ export const createServer = (
             release();
             return status(409, refusal);
           }
-          const row = startContinuation(
-            prepared,
-            request,
-            askedBy ? { kind: "session", id: askedBy } : { kind: "person" }
-          );
+          const row = startContinuation(prepared, request, asker);
           // Its record holds the source's workspace from here (work-items.ts `holdOn`).
           release();
           return {

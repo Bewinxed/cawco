@@ -3138,9 +3138,11 @@ function handleFrame(frame: FramePayload): void {
     }
     if (frame.kind === "instances") {
       state.moves = frame.moves;
-      if (!equal(state.formerIds, frame.formerIds ?? {})) {
-        state.formerIds = frame.formerIds ?? {};
-      }
+    }
+    // Whole whenever it moved: a session folded into its continuation
+    // leaves its tab on the session it is now (SessionSurface).
+    if (frame.formerIds && !equal(state.formerIds, frame.formerIds)) {
+      state.formerIds = frame.formerIds;
     }
     // The notices acknowledged on any tab or device: one dismissed elsewhere leaves this tab now.
     if (frame.noticesSeen) {

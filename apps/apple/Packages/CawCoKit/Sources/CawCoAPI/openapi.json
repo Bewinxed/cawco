@@ -46381,7 +46381,7 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "History only, from before the hub compacted natively: the session\nwent on in a fresh conversation of its own, seeded with a summary of\nthe one before, the same session with its account changed (`from`\nto `to`; null on a harness without accounts). Lines a hub stored\nthen still read, between the conversations they divide.",
+                    "description": "The session went on in a fresh conversation of its own, seeded with\na summary of the one before (or the person's own messages alone,\n`asks`), on `to` from `from` (null on a harness without accounts):\na continuation anything but the person's own Continue asked for,\nwhich stays one session (hub `foldContinued`). The line stands\nbetween the two conversations.",
                     "type": "string",
                     "enum": [
                       "continued"
@@ -46394,11 +46394,15 @@
                     "$ref": "#/components/schemas/NamedAccount"
                   },
                   "writtenOn": {
-                    "description": "The account whose summariser wrote the summary it went on from.",
+                    "description": "The account whose summariser wrote the summary it went on from; null when nothing was summarised.",
                     "$ref": "#/components/schemas/NamedAccount"
                   },
+                  "by": {
+                    "description": "Who asked for it, as the line's detail names them: a session by its\nname, or a comment on a task. Absent on a line a hub stored before\ncontinuations stayed one session.",
+                    "type": "string"
+                  },
                   "asked": {
-                    "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "description": "A session asked for it, not its account's limit: true on every line written now.",
                     "const": true,
                     "type": "boolean"
                   },
@@ -46414,7 +46418,7 @@
                     ]
                   },
                   "preparedAtPct": {
-                    "description": "The window's percent when the summary was written ahead of the limit; null when it was written at the move.",
+                    "description": "Null on every line written now (no summary is written ahead of a\nlimit any more), and never shown. Sent only because the TestFlight\nbuilds 20261015 to 20261018 require it, which the hub's wire check\nholds to (packages/hub/scripts/openapi.ts); it goes in the change\nthat expires them.",
                     "type": [
                       "null",
                       "number"
@@ -53944,7 +53948,7 @@
                 "type": "object",
                 "properties": {
                   "kind": {
-                    "description": "History only, from before the hub compacted natively: the session\nwent on in a fresh conversation of its own, seeded with a summary of\nthe one before, the same session with its account changed (`from`\nto `to`; null on a harness without accounts). Lines a hub stored\nthen still read, between the conversations they divide.",
+                    "description": "The session went on in a fresh conversation of its own, seeded with\na summary of the one before (or the person's own messages alone,\n`asks`), on `to` from `from` (null on a harness without accounts):\na continuation anything but the person's own Continue asked for,\nwhich stays one session (hub `foldContinued`). The line stands\nbetween the two conversations.",
                     "type": "string",
                     "enum": [
                       "continued"
@@ -53957,11 +53961,15 @@
                     "$ref": "#/components/schemas/NamedAccount"
                   },
                   "writtenOn": {
-                    "description": "The account whose summariser wrote the summary it went on from.",
+                    "description": "The account whose summariser wrote the summary it went on from; null when nothing was summarised.",
                     "$ref": "#/components/schemas/NamedAccount"
                   },
+                  "by": {
+                    "description": "Who asked for it, as the line's detail names them: a session by its\nname, or a comment on a task. Absent on a line a hub stored before\ncontinuations stayed one session.",
+                    "type": "string"
+                  },
                   "asked": {
-                    "description": "The session asked for it (`continue_session`), not its account's limit.",
+                    "description": "A session asked for it, not its account's limit: true on every line written now.",
                     "const": true,
                     "type": "boolean"
                   },
@@ -53977,7 +53985,7 @@
                     ]
                   },
                   "preparedAtPct": {
-                    "description": "The window's percent when the summary was written ahead of the limit; null when it was written at the move.",
+                    "description": "Null on every line written now (no summary is written ahead of a\nlimit any more), and never shown. Sent only because the TestFlight\nbuilds 20261015 to 20261018 require it, which the hub's wire check\nholds to (packages/hub/scripts/openapi.ts); it goes in the change\nthat expires them.",
                     "type": [
                       "null",
                       "number"
@@ -55028,7 +55036,7 @@
           },
           "formerIds": {
             "type": "object",
-            "description": "The ids sessions had before the hub folded each one's continuations at\nits account's limit into it (migration 0128): former id → its id now. A\ntab or link that names a former id is that session."
+            "description": "The ids sessions had before the hub folded each one's continuations\ninto it (a continuation anything but the person's own Continue asked\nfor, and those of hubs before migration 0128): former id → its id now. A\ntab or link that names a former id is that session."
           },
           "handoffs": {
             "type": "object"
@@ -55439,6 +55447,10 @@
             "items": {
               "$ref": "#/components/schemas/ContinuationJob"
             }
+          },
+          "formerIds": {
+            "type": "object",
+            "description": "Present when it moved: every former id, by its id now ({@link InstancesFrame.formerIds}), whole."
           },
           "handoffs": {
             "type": "object"

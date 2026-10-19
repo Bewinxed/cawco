@@ -322,9 +322,9 @@ function roster(
 }
 
 /**
- * The session a target names by one of its former ids (a session whose
- * continuations at its account's limit the hub folded into one, the hub's
- * `instanceIdOf`): its id now, and the id it was named by. By the full id,
+ * The session a target names by one of its former ids (a session the hub
+ * folded into its continuation, the hub's `instanceIdOf`): its id now, and
+ * the id it was named by. By the full id,
  * or a short id of six or more characters that names only it. Undefined
  * when the target names no former id.
  */
@@ -1639,7 +1639,7 @@ export const handoffActions = ({
         `Continued session ${source} in a new ${input.target_harness} session ` +
         `${done.targetInstanceId} on ${input.target_model}. ` +
         openedOnWords(input, done.summariserInstanceId) +
-        "If the source ran a work item, the new session runs it now and the source is stopped for good: it never runs again, and what is sent to it goes to the new session. Otherwise the source was only read. " +
+        `It is the same session from here, under ${done.targetInstanceId}: the source's process is ended, its work item and delegates go on in the new one, and what is sent to the source's id reaches it. ` +
         `The new session opened with:\n\n${done.opening}`,
     };
   },

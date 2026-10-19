@@ -843,6 +843,18 @@ export interface DbShape {
   /** Whether fleet watch is on for the fleet; on while no row says otherwise. */
   readonly fleetWatchOn: () => boolean;
   /**
+   * Folds session `from` into `to`, the continuation it went on in, as
+   * {@link foldFormerSessions} folds a former row, in one transaction: `from`
+   * is a former id of `to` from here (and so is every id that was a former
+   * id of `from`), what it ran and was sent is `to`'s, its conversation is
+   * the one before `to`'s, and its row goes, or is ended first when its
+   * process may still run. Undefined when `from` is no longer recorded.
+   */
+  readonly foldContinued: (
+    from: string,
+    to: string
+  ) => FoldedSession | undefined;
+  /**
    * Folds every former session ({@link instanceAliases}) not yet folded into
    * the session it is now, one transaction each: what answered to it, what
    * it ran, what it was sent and wrote, its conversation (into
@@ -990,9 +1002,9 @@ export interface DbShape {
     sessionId: string
   ) => PublicInstanceRow | undefined;
   /**
-   * The session an id names now: a former id (a session whose continuations
-   * at its account's limit the hub folded into one, migration 0128) is the
-   * session it is part of; any other id is itself. Every path that takes a
+   * The session an id names now: a former id (a session the hub folded
+   * into its continuation, {@link instanceAliases}) is the session it is
+   * part of; any other id is itself. Every path that takes a
    * session id from outside — a send, a wake, a control, a tool's target, a
    * link — reads it here.
    */
@@ -3123,6 +3135,7 @@ const make = async (path: string): Promise<DbShape> => {
    */
   const FOLD_MOVED: readonly (readonly [string, string, "once"?])[] = [
     ["instances", "parent_instance_id"],
+    ["instances", "continued_into"],
     ["work_items", "instance_id"],
     ["work_items", "parent_instance_id"],
     ["queued_work_items", "parent_instance_id"],
@@ -3138,6 +3151,9 @@ const make = async (path: string): Promise<DbShape> => {
     ["turn_usage", "instance_id"],
     ["artifacts", "instance_id"],
     ["artifacts", "made_by"],
+    ["routines", "made_by"],
+    ["design_proposals", "instance_id"],
+    ["session_lines", "instance_id"],
     ["completed_turns", "instance_id", "once"],
     ["session_plans", "instance_id", "once"],
     ["project_offers", "instance_id", "once"],
@@ -3147,7 +3163,7 @@ const make = async (path: string): Promise<DbShape> => {
   const FOLD_DROPPED = [
     "session_identities",
     "limit_holds",
-    "limit_summaries",
+    "limit_compactions",
     "parked_asks",
     "rule_state",
     "moved_from_sessions",
@@ -3294,17 +3310,29 @@ const make = async (path: string): Promise<DbShape> => {
         opened.set(member.id, first.id);
       }
     }
-    const kept = new Set(opened.values());
+    // A line between two conversations a member already holds stands, as
+    // does the one each member opened on.
+    const kept = new Set([
+      ...opened.values(),
+      ...members.flatMap((member) =>
+        conversationsOf(tx, member.id).flatMap((one) =>
+          one.next ? [one.next] : []
+        )
+      ),
+    ]);
     const told = continued
       .filter((event) => !kept.has(event.id))
       .map((event) => event.id);
     if (told.length > 0) {
       tx.delete(limitEvents).where(inArray(limitEvents.id, told)).run();
     }
+    // Each former's own earlier conversations (one folded before), then the
+    // one it ran.
     const prior: PriorConversation[] = order
       .slice(0, -1)
-      .flatMap((member, at) =>
-        member.sessionId
+      .flatMap((member, at) => [
+        ...conversationsOf(tx, member.id),
+        ...(member.sessionId
           ? [
               {
                 sessionId: member.sessionId,
@@ -3315,8 +3343,8 @@ const make = async (path: string): Promise<DbShape> => {
                 next: opened.get(order[at + 1].id) ?? null,
               },
             ]
-          : []
-      );
+          : []),
+      ]);
     // Since the first continuation, what failed only because a process
     // went away is the session's still: pending again, kept whole and owed
     // by the hub as it starts (server.ts `keepPendingWhole`).
@@ -5205,6 +5233,24 @@ const make = async (path: string): Promise<DbShape> => {
         })
       );
     },
+    foldContinued: (from, to) =>
+      db.transaction((tx) => {
+        tx.update(instanceAliases)
+          .set({ instanceId: to })
+          .where(eq(instanceAliases.instanceId, from))
+          .run();
+        tx.insert(instanceAliases)
+          .values({ id: from, instanceId: to, folded: true })
+          .onConflictDoUpdate({
+            target: instanceAliases.id,
+            set: { instanceId: to, folded: true },
+          })
+          .run();
+        // Nothing a process lost is failed in a live fold: the hub owes what
+        // `from` was handed and never read before it folds (server.ts
+        // `foldContinued`).
+        return foldInto(tx, to, [from], () => false);
+      }),
     markSeen: (instanceIds, runIds, at) => ({
       instances:
         instanceIds.length > 0

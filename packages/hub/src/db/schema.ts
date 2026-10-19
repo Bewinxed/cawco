@@ -3014,9 +3014,29 @@ export const continuations = sqliteTable("continuations", {
   openItems: text("open_items"),
   stage: text("stage").$type<ContinuationJob["stage"]>().notNull(),
   error: text("error"),
+  /**
+   * Who asked for it. A person's own Continue starts a separate session;
+   * anything else's continuation is folded into one session with its source
+   * once its opening has gone (server.ts `foldContinued`).
+   */
+  askedBy: text("asked_by", { mode: "json" })
+    .$type<ContinuationAsker>()
+    .notNull()
+    .default({ kind: "person" }),
   createdAt: timestamp("created_at").notNull(),
   updatedAt: timestamp("updated_at").notNull(),
 });
+
+/**
+ * Who asked for a continuation: a person (the dashboard's or the app's
+ * "Continue in new session", or the API with no session named), a session's
+ * `continue_session`, or a comment on a task whose ended attempt's session
+ * is cold (jev-tasks.ts, Attach or spawn).
+ */
+export type ContinuationAsker =
+  | { kind: "person" }
+  | { kind: "session"; id: string }
+  | { kind: "task"; id: string };
 
 /**
  * What kind of line the hub keeps in a session's transcript:
@@ -3105,13 +3125,14 @@ export const instanceConversations = sqliteTable(
 );
 
 /**
- * The ids a session had before the hub folded its continuations into it
- * (migration 0128): a hub before it started a second session for each
- * continuation at an account's limit, and each of those is one session now,
- * under the id of the one that runs (`instanceId`). Anything that names a
- * former id — a link, a tab, a session's memory of its parent — is that
- * session. `folded`: the former row's data has been moved onto it and the
- * row is gone (db `foldFormerSessions`, once).
+ * The ids a session had before the hub folded its continuations into it:
+ * each continuation anything but the person's own Continue asked for
+ * (server.ts `foldContinued`), and those a hub before migration 0128 started
+ * at an account's limit. Each is one session, under the id of the one that
+ * runs (`instanceId`). Anything that names a former id — a link, a tab, a
+ * session's memory of its parent — is that session. `folded`: the former
+ * row's data has been moved onto it and the row is gone, or ends first
+ * (db `foldContinued`, `foldFormerSessions`).
  */
 export const instanceAliases = sqliteTable("instance_aliases", {
   id: text("id").primaryKey(),
