@@ -169,7 +169,11 @@ import {
   workspacePolicy,
 } from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
-import { seatbeltProfile, srtSettings } from "./boundary-policy";
+import {
+  readOnlyDeniesBwrap,
+  seatbeltProfile,
+  srtSettings,
+} from "./boundary-policy";
 import { closeWorkspaceBrowsers, ensureGateToken } from "./browser/gate";
 import { cloneInPlace } from "./clone";
 import { reportDamaged } from "./damaged-records";
@@ -2460,6 +2464,22 @@ const runtimePlaces = (id: string, allowRead: readonly string[]): string[] => {
  */
 const BOUNDARY_MARKER = "CAWCO_BOUNDARY";
 
+/** The host's bwrap: the first on the system PATH, where `missingHostTools` looks for it. */
+const hostBwrap = (): string =>
+  SYSTEM_PATH.split(":")
+    .map((dir) => join(dir, "bwrap"))
+    .find((path) => existsSync(path)) ?? "/usr/bin/bwrap";
+
+/**
+ * The bwrap generation `gen` of workspace `id`'s srt runs (srt's `bwrapPath`,
+ * boundary-policy.ts `readOnlyDeniesBwrap`): the host's, with each
+ * read-denied dir remounted read-only. Named `bwrap`, and it execs the host's
+ * in its own process, so the outer sandbox process reads as a bwrap
+ * ({@link isBwrap}).
+ */
+const bwrapLauncherOf = (id: string, gen: string): string =>
+  join(generationDir(id, gen), "bwrap");
+
 /** The ripgrep srt scans a clone with: the one this build ships. */
 const ripgrep = (): string =>
   standalone ? runtimeExecutable("srt/rg") : rgPath;
@@ -2473,8 +2493,9 @@ const hostScript = (): string =>
 /**
  * What the host script runs, for the form: a change to it is a change of
  * form. A build's script bundles srt; a checkout's imports it, so srt's
- * module that writes the sandbox's mounts is read beside it (the repository's
- * patch makes each read-denied dir read-only there, `patches/`).
+ * module that writes the sandbox's mounts (each read-deny tmpfs among them,
+ * which the bwrap it runs makes read-only, {@link bwrapLauncherOf}) is read
+ * beside it.
  */
 const readHostText = async (host: string): Promise<string> => {
   if (standalone) {
@@ -2495,8 +2516,8 @@ let hostText: Promise<string> | undefined;
 
 /** How a workspace's boundary of one generation starts in this build, and the form that names it. */
 interface Plan {
-  /** Written into the generation's dir before the boundary starts. */
-  readonly files: readonly (readonly [string, string])[];
+  /** Written into the generation's dir before the boundary starts: path, text and, for one that runs, its mode. */
+  readonly files: readonly (readonly [string, string, number?])[];
   /**
    * A hash of what the boundary runs under: its srt settings or Seatbelt
    * profile (so the policy as this machine stands now), the runner, the
@@ -2616,7 +2637,9 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
     };
   }
   const srtTmp = srtTmpOf(id, gen);
-  const settings = `${JSON.stringify(srtSettings(policy, { rg: ripgrep(), srtTmp }), null, 2)}\n`;
+  const bwrap = bwrapLauncherOf(id, gen);
+  const launcher = readOnlyDeniesBwrap(hostBwrap());
+  const settings = `${JSON.stringify(srtSettings(policy, { bwrap, rg: ripgrep(), srtTmp }), null, 2)}\n`;
   const host = hostScript();
   hostText ??= readHostText(host);
   // What the host makes in the clone before each sandbox, so srt binds
@@ -2634,10 +2657,13 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
       [files.settings, settings],
       [files.runner, RUNNER],
       [files.denies, denies],
+      [bwrap, launcher, 0o755],
       ...guardFiles(id, gen),
     ],
     form: hash
       .update(settings)
+      .update("\0")
+      .update(launcher)
       .update("\0")
       .update(RUNNER)
       .update("\0")
@@ -5107,9 +5133,9 @@ const launch = async (
     await listStandIns(ref, linux);
   }
   const plan = await planOf(ref, gen);
-  for (const [path, content] of plan.files) {
+  for (const [path, content, mode] of plan.files) {
     // biome-ignore lint/performance/noAwaitInLoops: a few small files
-    await writeWhole(path, content, 0o644);
+    await writeWhole(path, content, mode ?? 0o644);
   }
   const fifo = fifoOf(ref.id, gen);
   const made = await Bun.$`/usr/bin/mkfifo ${fifo}`.quiet().nothrow();

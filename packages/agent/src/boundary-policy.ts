@@ -56,6 +56,8 @@ export const DENIED_RESOLVED_ADDRESSES = [
 
 /** Where srt runs for one Linux workspace: what its settings name besides the policy. */
 export interface SrtPlace {
+  /** The bwrap srt runs (its `bwrapPath`): {@link readOnlyDeniesBwrap}, as the workspace's boundary writes it. */
+  readonly bwrap: string;
   /** The ripgrep srt scans the clone for its protected names with. */
   readonly rg: string;
   /**
@@ -77,10 +79,11 @@ export interface SrtPlace {
  * inside the sandbox's own network namespace.
  *
  * Every read-denied dir (the home dir, `/tmp`, `/run`) is an empty tmpfs that
- * srt mounts and the repository's patch of srt remounts read-only once what
- * is bound back into it is in place (`patches/`, srt #149): a write there fails
- * at once with EROFS naming its path, never lands in the sandbox's memory to
- * vanish with it. What a command writes is the policy's `allowWrite` alone:
+ * srt mounts writable (srt #149), and that the bwrap srt runs
+ * ({@link SrtPlace.bwrap}, {@link readOnlyDeniesBwrap}) remounts read-only once
+ * what is bound back into it is in place: a write there fails at once with
+ * EROFS naming its path, never lands in the sandbox's memory to vanish with
+ * it. What a command writes is the policy's `allowWrite` alone:
  * the clone, its scratch dir (`TMPDIR`, its XDG config, data and state homes)
  * and the workspaces' cache (every tool's cache, `XDG_CACHE_HOME`,
  * `XDG_RUNTIME_DIR`).
@@ -138,7 +141,87 @@ export const srtSettings = (
   },
   ripgrep: { command: place.rg },
   mandatoryDenySearchDepth: 3,
+  bwrapPath: place.bwrap,
 });
+
+/** `text` as one bash word. */
+const bashWord = (text: string): string => `'${text.replaceAll("'", "'\\''")}'`;
+
+/**
+ * The bwrap a Linux workspace's srt runs, by srt's own `bwrapPath` setting
+ * ("absolute path to the bwrap (bubblewrap) binary", sandbox-config.js): the
+ * host's bwrap `real`, with `--remount-ro` on each tmpfs srt mounts. srt
+ * mounts a tmpfs only over a read-denied dir (`--tmpfs`, linux-sandbox-utils.js
+ * `pushReadDenyDirMounts` at 0.0.79), and a tmpfs is writable: "inside the
+ * sandbox it is an EMPTY WRITABLE directory" (srt's README; srt #149). Each
+ * remount goes after all of srt's mounts, just before the command, which srt
+ * always ends its words with (`-- SHELL -c COMMAND`), so every mount point
+ * inside a tmpfs is made first; bwrap's `--remount-ro` "works only on the
+ * specified mount point, without changing any other mount point under the
+ * specified path" (bwrap(1)), so what srt binds back into it, the clone and
+ * the scratch dir among them, keeps its own flags. srt moves its mounts into
+ * a file bwrap reads through `--args FD` when the line would be too long; the
+ * launcher reads them from that fd by its own open (`/proc/self/fd/FD`), so
+ * bwrap still reads the file from its start. What srt runs with no tmpfs (its
+ * namespace probe, `--version`) runs as it is. A command whose words this
+ * cannot read starts no sandbox, in its own words.
+ */
+export const readOnlyDeniesBwrap = (real: string): string => `#!/bin/bash
+set -u
+real=${bashWord(real)}
+words=("$@")
+count=$#
+head=("$@")
+tail=()
+if (( count >= 4 )) && [[ \${words[count-4]} == -- && \${words[count-2]} == -c ]]; then
+  head=("\${words[@]:0:count-4}")
+  tail=("\${words[@]:count-4}")
+fi
+landings=()
+scan() {
+  local all=("$@") at=0 fd word
+  while (( at < \${#all[@]} )); do
+    case \${all[at]} in
+      --tmpfs)
+        landings+=("\${all[at+1]}")
+        at=$((at + 2))
+        ;;
+      --args)
+        fd=\${all[at+1]}
+        local file=()
+        while IFS= read -r -d '' word || [[ -n $word ]]; do
+          file+=("$word")
+        done < "/proc/self/fd/$fd" || {
+          echo "cawco: srt's bwrap mounts on fd $fd could not be read, so its read-denied dirs cannot be made read-only and no sandbox starts" >&2
+          exit 125
+        }
+        scan "\${file[@]}"
+        at=$((at + 2))
+        ;;
+      *)
+        at=$((at + 1))
+        ;;
+    esac
+  done
+}
+scan "\${head[@]}"
+if (( \${#landings[@]} == 0 )); then
+  exec "$real" "$@"
+fi
+if (( \${#tail[@]} == 0 )); then
+  echo "cawco: srt's bwrap words do not end in '-- SHELL -c COMMAND', so its read-denied dirs cannot be made read-only and no sandbox starts" >&2
+  exit 125
+fi
+declare -A seen=()
+remounts=()
+for landing in "\${landings[@]}"; do
+  if [[ -z \${seen[$landing]:-} ]]; then
+    seen[$landing]=1
+    remounts+=(--remount-ro "$landing")
+  fi
+done
+exec "$real" "\${head[@]}" "\${remounts[@]}" "\${tail[@]}"
+`;
 
 /** A path as a Seatbelt string. */
 const sbString = (path: string): string =>

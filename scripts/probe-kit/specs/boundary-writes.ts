@@ -2,7 +2,7 @@
  * Inside a Linux workspace's boundary every write reaches real disk or fails
  * at once naming its path: nothing a command writes is kept in the sandbox's
  * memory and lost when the boundary closes (agent boundary-policy.ts
- * `srtSettings`, the repository's patch of srt under `patches/`). On a
+ * `srtSettings` and `readOnlyDeniesBwrap`, the bwrap srt runs). On a
  * scratch fleet (real hub, agent and sessiond; Claude Code against the mock
  * model). This spec delegates, so its fleet cuts a workspace: it runs on the
  * host, outside every boundary.
