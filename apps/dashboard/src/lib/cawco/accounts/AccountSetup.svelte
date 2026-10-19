@@ -631,14 +631,19 @@
       </h2>
     {/if}
     {#if joined || (signedIn > 0 && choice?.signin !== "device-code")}
-      <div class="signed-as mark-line" in:unfold out:unfold>
-        <IconSuccess aria-hidden="true" />
+      <div
+        data-slot="signed-as"
+        class="signed-as mark-line"
+        in:unfold
+        out:unfold
+      >
+        <span class="mark-cell"><IconSuccess aria-hidden="true" /></span>
         {#if joined}
-          <span data-account-setup-joined
+          <span data-slot="joined"
             >{words.joined(email ?? accountsWords.signin.theAccount)}</span
           >
         {:else}
-          <span
+          <span data-slot="signed-in"
             >{accountsWords.signin.signedInAs}
             <b>{email ?? accountsWords.signin.theAccount}</b></span
           >
@@ -1046,9 +1051,11 @@
   .fld :global(.nickname) {
     max-width: 280px;
   }
+  /* Its one line of words wraps, an unbroken address included, its mark on
+     the first line (.mark-cell). */
   .signed-as {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-3);
     margin-block-end: var(--space-4);
     padding: var(--space-3) var(--space-4);
@@ -1060,6 +1067,10 @@
     width: 16px;
     height: 16px;
     color: var(--status-done-glyph);
+  }
+  .signed-as > span:not(.mark-cell) {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
   }
   .signed-as b {
     font-weight: var(--weight-strong);

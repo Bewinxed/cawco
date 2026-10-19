@@ -225,7 +225,7 @@ export const accountsWords = {
     signedIn: "Signed in",
     /** A sign-in that came out as an account the hub already had: the setup carries on with that one. */
     joined: (who: string) =>
-      `${who} was already one of your accounts, so this login joined it. Name it changes that account.`,
+      `${who} was already one of your accounts, so this sign-in joined it. Naming it here renames that account.`,
     someoneElse: "Someone else",
     offline: "Offline",
     signIn: "Sign in",

@@ -441,7 +441,7 @@ public enum Words {
 
             /// A sign-in that came out as an account the hub already had: the setup carries on with that one.
             public static func joined(who: String) -> String {
-                "\(who) was already one of your accounts, so this login joined it. Name it changes that account."
+                "\(who) was already one of your accounts, so this sign-in joined it. Naming it here renames that account."
             }
 
             public static let someoneElse = "Someone else"

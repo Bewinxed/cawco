@@ -17,6 +17,11 @@
  * 2. A sign-in as the same email and org name in another org id is an
  *    account of its own; one in the same org id joins the fleet's account.
  *    Main keyed on the org's name and joined the first.
+ * 4. At 320, Add account's Sign in line with a 60-character address, both
+ *    the joined line and the signed-in line: it wraps inside its box (no
+ *    sideways scroll in it, the step or the page), two lines or more, and
+ *    its mark's middle is within 0.5px of the first line's x-height middle
+ *    (The Mark Line Rule).
  * 3. Every Claude account past its reserve, its nickname long: New session
  *    shows placement's refusal as the hub wrote it, over 160 characters.
  *    Main's hub-read turned it into "The hub didn't answer (400)."
@@ -33,6 +38,8 @@ const EMAIL = "probe@scratch-fleet.test";
 const ORG_NAME = "Scratch Fleet";
 const ORG_ONE = "00000000-0000-4000-8000-0000000000a1";
 const ORG_TWO = "00000000-0000-4000-8000-0000000000b2";
+const ORG_THREE = "00000000-0000-4000-8000-0000000000c3";
+const ORG_FOUR = "00000000-0000-4000-8000-0000000000d4";
 const STATE = "pr0beStateValue";
 /** The page's code, whole: `code#state`. */
 const CODE = `pr0beCode#${STATE}`;
@@ -175,48 +182,63 @@ const spec: Spec = {
       );
     });
 
+    /**
+     * Add account up to its Sign in step's answer, signed in on the fleet's
+     * machine as `identity`: the words the step shows for it, the joined
+     * line's or the signed-in line's.
+     */
+    const wizardSignIn = async (
+      on: typeof page,
+      identity: Identity
+    ): Promise<string> => {
+      await signInAs(identity);
+      await open(on, `${base}/config/accounts/new`, "[data-choice]");
+      await on
+        .locator("[data-choice]")
+        .filter({ has: on.locator(".plabel", { hasText: CLAUDE_ROW }) })
+        .first()
+        .click();
+      await on
+        .locator("[data-slot=machines]")
+        .getByRole("button", { name: "Sign in", exact: true })
+        .first()
+        .click();
+      const code = on.locator("[data-account-setup-code]").first();
+      await until(
+        "the sign-in link handed out",
+        () => code.isEnabled(),
+        Boolean,
+        60_000
+      );
+      await code.fill(CODE);
+      await on
+        .getByRole("button", { name: "Done", exact: true })
+        .first()
+        .click();
+      const words = on.locator(
+        "[data-slot=signed-as] [data-slot=joined], [data-slot=signed-as] [data-slot=signed-in]"
+      );
+      const said = await until(
+        "the sign-in answered",
+        async () =>
+          (await words.count()) > 0
+            ? await words.first().innerText()
+            : undefined,
+        Boolean,
+        60_000
+      );
+      await settle(on, 300);
+      return said;
+    };
+
     // ── 1. Add account, landing on the fleet's account ──────────────────
-    await signInAs({ email: EMAIL, orgName: ORG_NAME, orgId: ORG_ONE });
-    await open(page, `${base}/config/accounts/new`, "[data-choice]");
-    await page
-      .locator("[data-choice]")
-      .filter({ has: page.locator(".plabel", { hasText: CLAUDE_ROW }) })
-      .first()
-      .click();
-    const machines = page.locator("[data-slot=machines]");
-    await machines
-      .getByRole("button", { name: "Sign in", exact: true })
-      .first()
-      .click();
-    const code = page.locator("[data-account-setup-code]").first();
-    await until(
-      "the sign-in link handed out",
-      () => code.isEnabled(),
-      Boolean,
-      60_000
-    );
-    await code.fill(CODE);
-    await page
-      .getByRole("button", { name: "Done", exact: true })
-      .first()
-      .click();
-    const joinedNote = page.locator("[data-account-setup-joined]");
-    const said = await until(
-      "the sign-in answered",
-      async () => {
-        if ((await joinedNote.count()) > 0) {
-          return await joinedNote.innerText();
-        }
-        const ok = page.locator("[data-slot=machines] .st.ok");
-        return (await ok.count()) > 0
-          ? "(signed in, no joined line)"
-          : undefined;
-      },
-      Boolean,
-      60_000
-    );
+    const said = await wizardSignIn(page, {
+      email: EMAIL,
+      orgName: ORG_NAME,
+      orgId: ORG_ONE,
+    });
     check(
-      "1: Sign in says the login was already one of your accounts",
+      "1: Sign in says the sign-in was already one of your accounts",
       said.includes(`${EMAIL} was already one of your accounts`),
       said
     );
@@ -315,6 +337,84 @@ const spec: Spec = {
         !afterSame.some((one) => one.id === same.id),
       `answer ${JSON.stringify(same.done)}; accounts ${JSON.stringify(afterSame)}`
     );
+
+    // ── 4. A long address wraps, in both lines, at 320 ──────────────────
+    const narrow = await kit.page("phone");
+    await narrow.setViewportSize({ width: 320, height: 740 });
+    /** The Sign in step's line `slot`, read off the engine. */
+    const lineOf = (slot: "joined" | "signed-in") =>
+      narrow.evaluate((which) => {
+        const row = document.querySelector<HTMLElement>(
+          "[data-slot=signed-as]"
+        );
+        const words = row?.querySelector<HTMLElement>(`[data-slot=${which}]`);
+        const glyph = row?.querySelector(".mark-cell svg");
+        if (!(row && words && glyph)) {
+          return null;
+        }
+        const range = document.createRange();
+        range.selectNodeContents(words);
+        const lines = new Set(
+          [...range.getClientRects()]
+            .filter((rect) => rect.width > 0)
+            .map((rect) => Math.round(rect.top))
+        ).size;
+        // A zero-wide box 1ex tall on the first line's baseline: its middle
+        // is that line's x-height middle.
+        const ex = document.createElement("span");
+        ex.style.cssText =
+          "display:inline-block;inline-size:0;block-size:1ex;vertical-align:baseline";
+        words.prepend(ex);
+        const band = ex.getBoundingClientRect();
+        ex.remove();
+        const mark = glyph.getBoundingClientRect();
+        const step = row.closest<HTMLElement>(".box");
+        return {
+          lines,
+          offBy:
+            Math.round(
+              Math.abs(
+                mark.top + mark.height / 2 - (band.top + band.height / 2)
+              ) * 100
+            ) / 100,
+          row: row.scrollWidth - row.clientWidth,
+          step: step ? step.scrollWidth - step.clientWidth : null,
+          page:
+            document.documentElement.scrollWidth -
+            document.documentElement.clientWidth,
+        };
+      }, slot);
+    const LONG_JOINED =
+      "the-wrap-leg-of-account-join-signs-in-as@some-long-domain.test";
+    const LONG_NEW =
+      "a-fresh-account-for-the-wrap-leg-of-the-spec@long-domain.test";
+    await signInThroughHub({
+      email: LONG_JOINED,
+      orgName: ORG_NAME,
+      orgId: ORG_THREE,
+    });
+    for (const [slot, email, orgId] of [
+      ["joined", LONG_JOINED, ORG_THREE],
+      ["signed-in", LONG_NEW, ORG_FOUR],
+    ] as const) {
+      // biome-ignore lint/performance/noAwaitInLoops: one sign-in at a time, on one page
+      const shown = await wizardSignIn(narrow, {
+        email,
+        orgName: ORG_NAME,
+        orgId,
+      });
+      const read = await lineOf(slot);
+      check(
+        `4: at 320, the ${slot} line with a ${email.length}-character address wraps inside its box, its mark on the first line's x-height`,
+        read !== null &&
+          read.row <= 0 &&
+          (read.step ?? 0) <= 0 &&
+          read.page <= 0 &&
+          read.lines >= 2 &&
+          read.offBy <= 0.5,
+        `${JSON.stringify(read)}; said ${JSON.stringify(shown)}`
+      );
+    }
 
     // ── 3. A long refusal, in New session ───────────────────────────────
     fleet.write(
