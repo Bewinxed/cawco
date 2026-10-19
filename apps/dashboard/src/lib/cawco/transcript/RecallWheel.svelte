@@ -902,7 +902,6 @@
          on the field's line, what Enter or a tap takes, its words and its
          time in the selected ink; the reader's own draft on the line is not
          a pick and keeps the field's ink. -->
-    <!-- literal: 16px, the two-column track -->
     <!-- svelte-ignore a11y_click_events_have_key_events -->
     <!-- biome-ignore lint/a11y/useKeyWithClickEvents: the field owns the keys for every row (aria-activedescendant) -->
     <div
@@ -919,7 +918,7 @@
       data-own={(entry.kind === "draft" && ownText) || undefined}
       style:--ghost-pad="calc((var(--c-composer-field) - 1lh) / 2)"
       style:--ghost-cols="minmax(0, 1fr) auto"
-      style:--ghost-size="16px"
+      style:--ghost-size="var(--text-field-floor)"
       style:--ghost-moves="translate, rotate, scale, opacity"
     >
       <span class="min-w-0 truncate group-data-none/ghost:text-ink-muted">
@@ -964,13 +963,9 @@
     style:left="{measured.line.left}px"
     style:width="{measured.line.width}px"
   >
-    <!-- literal: 45%, the hairline ring -->
     <span
-      class="mark-line inline-flex items-center gap-space-1 max-w-(--qchip-max-w) py-(--qchip-pad-y) px-space-2 rounded-pill bg-surface-recess shadow-(--qchip-ring) text-size-meta font-medium text-ink-strong whitespace-nowrap"
+      class="mark-line inline-flex items-center gap-space-1 max-w-9/20 py-space-row px-space-2 rounded-pill bg-surface-recess inset-ring-1 inset-ring-border-hairline text-size-meta font-medium text-ink-strong whitespace-nowrap"
       bind:offsetWidth={chipWidth}
-      style:--qchip-max-w="45%"
-      style:--qchip-pad-y="calc(var(--space-1) / 2)"
-      style:--qchip-ring="inset 0 0 0 1px var(--border-hairline)"
     >
       <IconSearch
         aria-hidden="true"

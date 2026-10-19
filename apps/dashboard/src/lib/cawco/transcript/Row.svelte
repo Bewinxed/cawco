@@ -459,47 +459,21 @@
      (flow-root): what is measured, handed on and tweened is what the list
      lays out, and clipping it for a tween changes nothing. Continuation is
      published, not reached for: rail blocks read --rail-head and --rail-gap
-     wherever they sit (`var(--rail-head, var(--rail))`). -->
+     wherever they sit (`var(--rail-head, var(--rail))`). A row marked is the
+     record a conversation was opened at: the selection tint laid over the
+     whole row, a well's step past its edges and on its radius, so a message
+     in the reader's well and a line on the rail read the same. It fades in
+     where it stands and out once the reader has moved on; with less motion
+     it is simply there, then gone. -->
 <div
   data-slot="row"
   data-continues={continues || undefined}
-  class="flow-root data-marked:relative"
+  class="flow-root data-marked:relative data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-x-space-2 data-marked:before:inset-y-0 data-marked:before:rounded-well data-marked:before:bg-selection data-marked:before:starting:opacity-0 marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:dur-panel motion-safe:data-marked:before:ease-out"
   data-marked={marked}
   data-row={rowKey}
   bind:this={node}
   style:--rail-head={continues ? "var(--rail-body)" : undefined}
-  style:--rail-gap={continues ? "0px" : undefined}
+  style:--rail-gap={continues ? "0" : undefined}
 >
   {@render children(ticket)}
 </div>
-
-<style>
-  /* residual: pseudo */
-  /* The record a conversation was opened at: the selection tint laid over
-     the whole row, a well's step past its edges and on its radius, so a
-     message in the reader's well and a line on the rail read the same. It
-     fades in where it stands and out once the reader has moved on; with less
-     motion it is simply there, then gone. */
-  [data-slot="row"][data-marked] {
-    &::before {
-      content: "";
-      position: absolute;
-      inset-block: 0;
-      inset-inline: calc(-1 * var(--space-2));
-      border-radius: var(--radius-well);
-      background: var(--selection);
-      pointer-events: none;
-      transition: opacity var(--dur-panel) var(--ease-out);
-
-      @starting-style {
-        opacity: 0;
-      }
-      @media (prefers-reduced-motion: reduce) {
-        transition: none;
-      }
-    }
-    &[data-marked="off"]::before {
-      opacity: 0;
-    }
-  }
-</style>

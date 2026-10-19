@@ -227,7 +227,7 @@
   class="mt-space-4 ms-(--x-rail) py-space-3 pe-space-3 ps-(--hitl-start) border border-border-control rounded-lg bg-surface-raised shadow-hairline"
   data-frame
   bind:this={section}
-  style:--hitl-start="calc(var(--x-glyph) - var(--x-rail) - 1px)"
+  style:--hitl-start="calc(var(--x-glyph) - var(--x-rail) - var(--border-width))"
 >
   <!-- The card's head is a rail line: its state's mark in the glyph cell,
        the title at the text column, the state in words after it. Each
@@ -297,11 +297,9 @@
   </h2>
 
   {#each questions as q (q.question)}
-    <!-- literal: 72ch -->
     <p
       data-slot="lede"
-      class="rail-hang text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-(--measure)"
-      style:--measure="72ch"
+      class="rail-hang text-size-body font-normal leading-body text-ink-strong mb-space-2 max-w-c-measure"
     >
       {q.question}
     </p>
@@ -339,11 +337,9 @@
       {/if}
     </div>
     {#if otherText(q)}
-      <!-- literal: 72ch -->
-      <p
-        class="rail-hang text-size-body font-normal leading-body text-ink-strong max-w-(--measure) flex gap-space-2 items-baseline"
+        <p
+        class="rail-hang text-size-body font-normal leading-body text-ink-strong max-w-c-measure flex gap-space-2 items-baseline"
         in:crossIn
-        style:--measure="72ch"
       >
         <span
           class="text-size-label font-medium uppercase tracking-caps text-ink-muted flex-none"
@@ -354,11 +350,9 @@
   {/each}
 
   {#if freeform}
-    <!-- literal: 72ch -->
     <p
-      class="rail-hang text-size-body font-normal leading-body text-ink-strong max-w-(--measure) flex gap-space-2 items-baseline"
+      class="rail-hang text-size-body font-normal leading-body text-ink-strong max-w-c-measure flex gap-space-2 items-baseline"
       in:crossIn
-      style:--measure="72ch"
     >
       <span
         class="text-size-label font-medium uppercase tracking-caps text-ink-muted flex-none"

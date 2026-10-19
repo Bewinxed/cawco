@@ -225,10 +225,10 @@
      repaint. -->
 <div
   data-slot="suggest"
-  style:--chip-block="var(--c-suggest-chip)"
+  data-filled={shown.length > 0 || slow || !!failure || undefined}
   style:--suggest-bottom="calc(100% + var(--space-2))"
   style:--suggest-lift={"linear-gradient(to top, var(--surface-recess) 55%, var(--surface-recess-clear))"}
-  class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-c-suggest-row pt-space-4 pointer-events-none has-[[data-slot=suggest-chip],[data-slot=suggest-shimmer],[data-slot=suggest-fail]]:bg-(image:--suggest-lift)"
+  class="absolute inset-x-0 bottom-(--suggest-bottom) flex flex-col justify-end h-c-suggest-row pt-space-4 pointer-events-none data-filled:bg-(image:--suggest-lift)"
 >
   <!-- Drawn only with something in it: chips, the shimmer of an answer on
        its way, or a failure. Its row is kept whether it is drawn or not
@@ -252,12 +252,12 @@
              confidence that moves in place re-tints over --dur-panel. -->
         <button
           data-slot="suggest-chip"
-          class="inline-flex items-center h-(--chip-block) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap cursor-pointer flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:transform-(--chip-press) [&:hover]:bg-suggest-tint-hover [&:hover]:text-ink-strong mark-line touch-hit"
+          class="inline-flex items-center h-c-suggest-chip gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap cursor-pointer flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:transform-(--chip-press) hover:bg-suggest-tint-hover mark-line touch-hit"
           onclick={() => choose(candidate)}
           title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ""}`}
           type="button"
           style:--conf={confidence(noul)}
-          style:--hit-edge="1px"
+          style:--hit-edge="var(--border-width)"
           style:--tint="calc(8% + var(--conf) * 24%)"
           style:--chip-press="scale(var(--press-scale))"
           in:arrive={{ i }}
@@ -309,13 +309,11 @@
       {/if}
       {#if slow && shown.length === 0}
         <!-- A chip's size, held by the kit skeleton only while an ask is
-             slow. literal: 9rem -->
+             slow. -->
         <span
           aria-hidden="true"
           data-slot="suggest-shimmer"
-          style:--shimmer-w="9rem"
-          style:--shimmer-h="calc(var(--text-label) + var(--space-1) * 2 + 2px)"
-          class="shimmer block w-(--shimmer-w) h-(--shimmer-h) flex-none pointer-events-auto"
+          class="shimmer block w-c-suggest-shimmer-w h-c-suggest-chip flex-none pointer-events-auto"
           in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
           ><Skeleton class="size-full" /></span
         >
