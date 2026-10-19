@@ -316,10 +316,10 @@ removed: AttachmentChips.svelte:(buttons) `[&:hover]:` arbitrary variants — `h
 removed: CompactionDivider.svelte, AccountMoveDivider.svelte: `--cols` grid track custom property — a `flex-1 min-w-0` row
 
 ## fixed
-fixed: AttachmentChips.svelte:46 the row's dock states (pointer, drawing stack, asking fade) live on the row itself, read from the dock group; Composer's `<style>` no longer reaches into another component's root
+fixed: AttachmentChips.svelte:58 the row's dock states (pointer, drawing stack, asking fade) live on the row itself, read from the dock group; Composer's `<style>` no longer reaches into another component's root
 fixed: AttachButton.svelte:59 the recall deck's card edge is `group-inert/ctrls:` on Attach itself, not a selector from Composer
-fixed: Delegate.svelte:565 the live beat breathes as `animate-breath` under `motion-safe:` (DESIGN.md, Live work breathes) instead of the global `.breathe` class
-fixed: CompactionDivider.svelte:300 the failure line's rail is `border-s-2 border-status-fail-ink` (logical, one element) in place of a gradient background painted with a physical left position
+fixed: Delegate.svelte:567 the live beat breathes as `animate-breath` under `motion-safe:` (DESIGN.md, Live work breathes) instead of the global `.breathe` class
+fixed: CompactionDivider.svelte:301 the failure line's rail is `border-s-2 border-status-fail-ink` (logical, one element) in place of a gradient background painted with a physical left position
 fixed: Delegate.svelte:429 head floors are the tokens `min-h-c-mark` and `coarse:min-h-c-row-h` (26px/44px literals before)
 
 ## Gaps
@@ -330,7 +330,7 @@ gap: components/ui/command/command-item.svelte, command-list.svelte, command-gro
 gap: components/ui/button/button.svelte (needs a `reveal="coarse"` variant) — Composer.svelte:3266 reaches the Keep-it Button through `[&_[data-keep]]:`
 gap: find/MentionField.svelte (its root needs `min-h`/`max-h`/`text`/`py` through its own props) — Composer.svelte:3468 sets them through `[&>[data-editor]]:`
 gap: components/ui (no Chip/Badge variant for picture + name + remove) — AttachmentChips.svelte:112 hand-rolls the chip
-note: AttachmentChips.svelte:53 `coarse:p-space-3 coarse:-m-space-2` is not a cancelled offset: the row is a scroller (`overflow-y-auto`) and clips the remove buttons' touch areas, so on a finger it takes one ladder step of padding into an equal margin; layout-neutral by construction
+note: AttachmentChips.svelte:58 `coarse:p-space-3 coarse:-m-space-2` is not a cancelled offset: the row is a scroller (`overflow-y-auto`) and clips the remove buttons' touch areas, so on a finger it takes one ladder step of padding into an equal margin; layout-neutral by construction
 
 ## Design Critique (interface-craft, from markup against DESIGN.md)
 - Hierarchy: dividers read as hairline + one meta-role line; unchanged, the flex arms keep the word centred when the arms are equal (`flex-1` on a zero basis).
