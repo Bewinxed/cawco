@@ -31,7 +31,8 @@
  *    record DNS only and ticking;
  * 3. the router: an IGD v1 router capping the range (443 mapped, the range a
  *    forward by hand), one refusing (the forwards), an IGD v2 one mapping all;
- * 4–6. no container runtime under the scratch agent: the low ports not drawn,
+ * 4–6. no container runtime under the scratch agent (its `DOCKER_HOST` names a
+ *    socket that isn't there, on every machine): the low ports not drawn,
  *    the certificate failing with that sentence and Retry, the name skipped
  *    and the start failing with it and Start again;
  * 7. the proof: the relay read live, this screen inside (its STUN answer the
@@ -50,6 +51,7 @@
  */
 import { createSocket, type Socket } from "node:dgram";
 import { networkInterfaces } from "node:os";
+import { join } from "node:path";
 import type { Page } from "playwright-core";
 import type { MachineCapabilities } from "../../../packages/core/src/capabilities";
 import {
@@ -645,6 +647,12 @@ const run = async (kit: Kit): Promise<void> => {
     fleet.launch("agent", [], {
       CAWCO_STUN_SERVER: `stun:127.0.0.1:${stun.port}`,
       CAWCO_UPNP_GATEWAY: gateway.descriptor,
+      // No container runtime on any machine: set, `DOCKER_HOST` is the one
+      // socket the agent tries (runtime.ts `findRuntime`), and none answers
+      // at this path. So no certbot or coturn ever runs here against Let's
+      // Encrypt or Cloudflare, on the host as in a workspace, and legs 4–6
+      // read the same everywhere.
+      DOCKER_HOST: `unix://${join(fleet.sandbox, "no-runtime.sock")}`,
     });
     await fleet.agentUp();
 
