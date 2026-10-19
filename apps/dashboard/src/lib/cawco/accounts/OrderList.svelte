@@ -115,12 +115,10 @@
   >
     {words.order}
   </p>
-  <!-- literal: 3px -->
   <ol
     data-slot="list"
     aria-labelledby="order-label"
-    class="m-0 flex list-none flex-col gap-(--list-gap) p-0"
-    style:--list-gap="3px"
+    class="flex flex-col gap-space-row"
     bind:this={list}
     {@attach reflow()}
   >
@@ -142,28 +140,21 @@
             order.length
           )}
           aria-roledescription={words.draggable}
-          class="type-label relative flex min-h-space-8 w-full cursor-grab touch-none items-center gap-space-3 rounded-sm border-none border-current bg-surface-fill px-space-3 py-0 text-start text-ink-row select-none group-data-held:cursor-grabbing group-data-held:bg-surface-lift group-data-held:shadow-md focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) coarse:min-h-c-btn-h-lg"
+          class="type-label relative flex min-h-space-8 w-full cursor-grab touch-none items-center gap-space-3 rounded-sm border-none border-current bg-surface-fill px-space-3 text-start text-ink-row select-none group-data-held:cursor-grabbing group-data-held:bg-surface-lift group-data-held:shadow-md focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-inset) coarse:min-h-c-btn-h-lg"
           data-id={account.id}
           onkeydown={(event) => nudge(event, account.id)}
           onpointerdown={(event) => grab(event, account.id)}
           type="button"
           style:--c={hueVar(account.hue)}
         >
-          <!-- literal: 10px; radial-gradient dots; 5px tile -->
           <span
             aria-hidden="true"
-            class="h-space-4 w-(--handle-w) flex-none bg-(image:--handle-dots) bg-size-(--handle-tile)"
-            style:--handle-w="10px"
-            style:--handle-dots={"radial-gradient(circle, var(--ink-subtle) 1px, transparent 1.5px)"}
-            style:--handle-tile="5px 5px"
+            class="h-space-4 w-(--c-drag-dots-w) flex-none drag-dots"
           ></span>
-          <!-- literal: 8px; 50% -->
           <span
             data-slot="dot"
             aria-hidden="true"
-            class="size-(--dot) flex-none rounded-(--dot-radius) bg-(--c)"
-            style:--dot="8px"
-            style:--dot-radius="50%"
+            class="size-space-2 flex-none rounded-pill bg-(--c)"
           ></span>
           <AccountName {account} row />
         </button>

@@ -90,12 +90,10 @@
         in:openPlace
       >
         <span class="sr-only">{words.said(flow.code ?? "")}</span>
-        <!-- literal: 0.08em -->
         <span
           data-slot="code"
           aria-hidden="true"
-          class="type-code liga-none flex select-all gap-space-3 tracking-(--code-track) text-ink-strong"
-          style:--code-track="0.08em"
+          class="type-code liga-none flex select-all gap-space-3 tracking-caps text-ink-strong"
         >
           {#each groups as group, at (at)}
             <span>{group}</span>
