@@ -1489,8 +1489,12 @@
    * stands as rows mount above it.
    */
   let unseen = $state(untrack(() => !visible));
-  /** The rows as the pane was put away: what virtua last measured (`parkRows`). */
-  let putAway: Row[] = NO_ROWS;
+  /**
+   * How long each mounted row's text was as the pane was put away, by key:
+   * what virtua last measured (`parkRows`). Read off the page's text, never
+   * its layout.
+   */
+  let putAway = new Map<string, number>();
   $effect(() => {
     const now = visible;
     let task: ReturnType<typeof setTimeout> | undefined;
@@ -1498,7 +1502,7 @@
       task = setTimeout(() => {
         unseen = !now;
         if (!now) {
-          putAway = renderedRows;
+          putAway = textOfRows();
         }
       });
     });
@@ -1616,18 +1620,18 @@
       return;
     }
     const at = new Map(renderedRows.map((row, index) => [row.key, index]));
-    // A row rewritten since the pane was put away (the live row a turn
-    // streamed into) has outgrown the size virtua has for it: it is not
-    // skipped, and is measured in the frame that lays the pane out. Skipped
-    // and let go by a far landing, it kept that size above the view
-    // (tab-return 1b: the list 15.5px short of main's).
-    const asPutAway = new Map(putAway.map((row) => [row.key, row]));
-    const rewritten = (key: string, index: number) =>
-      asPutAway.has(key) && asPutAway.get(key) !== renderedRows[index];
+    // A row rewritten since the pane was put away (its text changed: the
+    // live row a turn streamed into) has outgrown the size virtua has for
+    // it: it is not skipped, and is measured in the frame that lays the
+    // pane out. Skipped and let go by a far landing, it kept that size above
+    // the view (tab-return 1b: the list 15.5px short of main's).
+    const now = textOfRows();
+    const rewritten = (key: string) =>
+      putAway.has(key) && putAway.get(key) !== now.get(key);
     const skips = new Map<string, number>();
     for (const key of holding) {
       const index = at.get(key);
-      if (index !== undefined && !rewritten(key, index)) {
+      if (index !== undefined && !rewritten(key)) {
         skips.set(key, list.getItemSize(index));
       }
     }
@@ -1650,6 +1654,17 @@
         })
       );
     step();
+  }
+  /** How long each mounted row's text is, by key. */
+  function textOfRows(): Map<string, number> {
+    const lengths = new Map<string, number>();
+    for (const item of listing?.firstElementChild?.children ?? []) {
+      const row = item.querySelector<HTMLElement>(":scope > [data-row]");
+      if (row?.dataset.row) {
+        lengths.set(row.dataset.row, row.textContent?.length ?? 0);
+      }
+    }
+    return lengths;
   }
   /** One step of the staging (`parkRows`); answers whether another is due. */
   function stageStep(): boolean {
