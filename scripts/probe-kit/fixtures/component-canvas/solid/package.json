@@ -1,0 +1,11 @@
+{
+  "name": "canvas-probe-solid",
+  "private": true,
+  "type": "module",
+  "devDependencies": {
+    "solid-js": "^1.9",
+    "typescript": "^6",
+    "vite": "^8.3.4",
+    "vite-plugin-solid": "^2"
+  }
+}

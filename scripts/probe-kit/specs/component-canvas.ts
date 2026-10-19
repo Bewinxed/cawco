@@ -7,9 +7,11 @@
  * from pixels: the page's own report, computed styles, boxes,
  * `getAnimations()`, the module requests a page made.
  *
- * On two scratch projects (fixtures/component-canvas: a Svelte 5 one with
- * Tailwind 4, and a React 19 one), each installed in `$TMPDIR` and served
- * by the stage host as the daemon starts it, minus the workspace boundary:
+ * On four scratch projects (fixtures/component-canvas: a Svelte 5 one with
+ * Tailwind 4, a React 19 one, a Vue 3 one and a Solid one), each installed
+ * in `$TMPDIR` and served by the stage host as the daemon starts it, minus
+ * the workspace boundary (Vue and Solid run legs 1, 2, 4 and 12, so each
+ * framework's adapter, its `update` included, is run):
  *
  * 1. Every story is drawn as a live instance: each frame `drawn`, with the
  *    component chain its elements came from.
@@ -28,7 +30,9 @@
  *    requested only once the canvas is moved to it.
  * 9. The stage keeps the report: drawn by the panel, `unseen` once the
  *    states file changes, drawn again on the next load.
- * 10. A mount that throws is `failed`, with its message and file.
+ * 10. A mount that throws is `failed`, with its message and its place in
+ *     the source, mapped through Vite's sourcemap (the throw's own line, not
+ *     the compiled one).
  * 11. At 1440 and 390, light and dark: both schemes drawn side by side; a
  *     phone shows one frame with its state strip, and a step plays the move.
  * 12. No console errors (the throwing story's page aside).
@@ -66,7 +70,7 @@ const FIXTURES = join(ROOT, "scripts/probe-kit/fixtures/component-canvas");
 const SCRATCH = join(process.env.TMPDIR ?? "/tmp", "component-canvas");
 const CAPS = [join(process.env.TMPDIR ?? "/tmp", "caps"), join(ROOT, "caps")];
 
-type Framework = "svelte" | "react";
+type Framework = "svelte" | "react" | "vue" | "solid";
 
 /** A port nothing holds now. */
 const freePort = async (): Promise<number> => {
@@ -781,14 +785,17 @@ async function kept(kit: Kit, stage: Stage): Promise<void> {
       about: "A broken component",
     })
   );
-  const report = await reportOn(broken);
-  const [frame] = framesOf(report);
+  const onPage = framesOf(await reportOn(broken))[0];
+  // What the tools answer: the stage's kept report, its place mapped through Vite's sourcemap to the line the component writes.
+  const [frame] = framesOf(await read("src/Throws.stories.js"));
   kit.check(
-    "10: a mount that throws is failed, with its message and its file",
+    "10: a mount that throws is failed, with its message and its place in the source (Throws.svelte:4:11, the throw's `new Error`), not the compiled line",
     frame?.state === "failed" &&
       frame.error?.message === "boom" &&
-      frame.error.file === "src/Throws.svelte",
-    JSON.stringify(frame)
+      frame.error.file === "src/Throws.svelte" &&
+      frame.error.line === 4 &&
+      frame.error.column === 11,
+    `kept ${JSON.stringify(frame?.error)}; as the page said it ${JSON.stringify(onPage?.error)}`
   );
   await broken.close();
 }
@@ -842,6 +849,66 @@ async function react(kit: Kit, stage: Stage): Promise<void> {
   );
   kit.check(
     "12e: no console errors on the React canvas",
+    errors.length === 0,
+    errors.join(" | ") || "none"
+  );
+  await page.close();
+}
+
+/** Legs 1, 2 and 4 on Vue and Solid: the same kit, each adapter's `update` run on its own reactive props. */
+async function adapterLegs(
+  kit: Kit,
+  stage: Stage,
+  name: "Vue" | "Solid",
+  files: { button: string; toggle: string }
+): Promise<void> {
+  const page = await kit.page("desk", { init: [BRIDGE] });
+  const errors = errorsOf(page);
+  await page.goto(
+    canvasUrl(stage, [files.button, files.toggle], {
+      name: `${name} kit`,
+      about: `The ${name} button and toggle, and the toggle's move`,
+    })
+  );
+  const report = await reportOn(page, 2500);
+  const all = framesOf(report);
+  const button = framesOf(report, files.button)
+    .map((one) => one.interaction)
+    .sort()
+    .join(",");
+  const hover = framesOf(report, files.button).find(
+    (one) => one.interaction === "hover"
+  );
+  kit.check(
+    `1/2 (${name}): every story drawn with its chain; Button reaches hover and focus and no pressed, its hover delta said`,
+    all.length > 0 &&
+      all.every((one) => one.state === "drawn" && one.parts.length > 0) &&
+      button === "focus,hover,rest" &&
+      !!hover?.delta?.changed.some((one) => one.changed["background-color"]),
+    `${said(all)}; Button columns ${button}`
+  );
+  const move = report.sections.find((one) => one.file === files.toggle)
+    ?.moves[0];
+  kit.check(
+    `4 (${name}): the toggle's move updates the live instance in place and lists its CSS transitions, curve and all`,
+    move?.from === "Off" &&
+      !move.error &&
+      !!move.animations.some(
+        (one) =>
+          one.property === "background-color" &&
+          one.duration === 210 &&
+          one.easing === "ease-out"
+      ) &&
+      !!move.animations.some(
+        (one) =>
+          one.property === "translate" &&
+          one.duration === 230 &&
+          one.easing === "ease-in-out"
+      ),
+    JSON.stringify(move)
+  );
+  kit.check(
+    `12 (${name}): no console errors on the canvas`,
     errors.length === 0,
     errors.join(" | ") || "none"
   );
@@ -915,6 +982,24 @@ const spec: Spec = {
       await react(kit, reactStage);
     } finally {
       reactStage.stop();
+    }
+    const vueStage = await stageOf("vue", host);
+    try {
+      await adapterLegs(kit, vueStage, "Vue", {
+        button: "src/Button.stories.js",
+        toggle: "src/Toggle.stories.js",
+      });
+    } finally {
+      vueStage.stop();
+    }
+    const solidStage = await stageOf("solid", host);
+    try {
+      await adapterLegs(kit, solidStage, "Solid", {
+        button: "src/Button.stories.jsx",
+        toggle: "src/Toggle.stories.jsx",
+      });
+    } finally {
+      solidStage.stop();
     }
   },
 };

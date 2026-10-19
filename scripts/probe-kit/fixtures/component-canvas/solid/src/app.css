@@ -1,0 +1,54 @@
+:root {
+  --radius: 6px;
+  --ground: light-dark(#fcfcfd, #141418);
+  --ink: light-dark(#17171a, #efeff2);
+  color-scheme: light dark;
+}
+
+body {
+  background-color: var(--ground);
+  color: var(--ink);
+  font-family: system-ui, sans-serif;
+}
+
+.k-btn {
+  border: 0;
+  border-radius: var(--radius);
+  padding: 8px 14px;
+  background: #7c3aed;
+  color: white;
+  font: 500 14px/1.2 system-ui, sans-serif;
+  transition: background-color 150ms ease-out;
+}
+.k-btn:hover {
+  background: #6d28d9;
+}
+.k-btn:focus-visible {
+  outline: 2px solid #e65d46;
+  outline-offset: 2px;
+}
+.k-track {
+  display: inline-block;
+  position: relative;
+  inline-size: 44px;
+  block-size: 24px;
+  border-radius: 999px;
+  background: light-dark(#d4d4d8, #3f3f46);
+  transition: background-color 210ms ease-out;
+}
+.k-track[data-on="true"] {
+  background: #7c3aed;
+}
+.k-knob {
+  position: absolute;
+  inset-block-start: 2px;
+  inset-inline-start: 2px;
+  inline-size: 20px;
+  block-size: 20px;
+  border-radius: 999px;
+  background: white;
+  transition: translate 230ms ease-in-out;
+}
+.k-track[data-on="true"] .k-knob {
+  translate: 20px 0;
+}

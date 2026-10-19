@@ -23,6 +23,7 @@ const BUNDLED: [name: string, home: string][] = [
     "react-docgen-typescript",
     "https://github.com/styleguidist/react-docgen-typescript",
   ],
+  ["@jridgewell/trace-mapping", "https://github.com/jridgewell/sourcemaps"],
 ];
 const LICENCE_FILES = ["LICENSE", "LICENSE.md", "license", "LICENCE"];
 

@@ -78,6 +78,11 @@ import {
   WRITE_PATH,
 } from "@cawco/core/stage";
 import { transformCode } from "@code-inspector/core";
+import {
+  originalPositionFor,
+  type SourceMapInput,
+  TraceMap,
+} from "@jridgewell/trace-mapping";
 import { propsNames, propsOf } from "./docgen";
 import {
   readStoryFile,
@@ -96,7 +101,7 @@ interface ModuleNode {
   importedModules: Set<ModuleNode>;
   importers: Set<ModuleNode>;
   /** Its code as last served; null until a page asked for it. */
-  transformResult: { code: string } | null;
+  transformResult: { code: string; map?: unknown } | null;
   url: string;
 }
 
@@ -712,12 +717,57 @@ function keepReport(body: unknown): void {
         at:
           typeof report?.at === "string" ? report.at : new Date().toISOString(),
         by: report?.by === "stage" ? "stage" : "panel",
-        errors: report?.page?.errors ?? [],
-        section,
+        errors: (report?.page?.errors ?? []).map(sourced),
+        section: {
+          ...section,
+          frames: section.frames.map((frame) =>
+            frame.error ? { ...frame, error: sourced(frame.error) } : frame
+          ),
+          moves: section.moves.map((move) =>
+            move.error ? { ...move, error: sourced(move.error) } : move
+          ),
+        },
       });
     }
   }
 }
+
+/**
+ * A page's error at its place in the project's source: the browser's stack
+ * names the code Vite served (a compiled `.svelte`, a transformed `.tsx`),
+ * which Vite's own sourcemap for that module maps back to the line the
+ * project wrote. An error with no place, or whose module has no map, is as
+ * the page said it.
+ */
+function sourced(error: PageError): PageError {
+  if (!error.file || error.line === null || error.column === null) {
+    return error;
+  }
+  const abs = resolve(root, error.file);
+  const map = [
+    ...(server?.environments.client.moduleGraph.getModulesByFile(abs) ?? []),
+  ].find((one) => one.transformResult?.map)?.transformResult?.map;
+  if (!(map && typeof map === "object" && "mappings" in map)) {
+    return error;
+  }
+  let traced: ReturnType<typeof originalPositionFor>;
+  try {
+    traced = originalPositionFor(new TraceMap(map as SourceMapInput), {
+      line: error.line,
+      column: error.column - 1,
+    });
+  } catch {
+    return error;
+  }
+  if (traced.line === null || traced.column === null) {
+    return error;
+  }
+  const file = traced.source
+    ? relative(root, resolve(dirname(abs), traced.source.replace(FILE_URL, "")))
+    : error.file;
+  return { ...error, file, line: traced.line, column: traced.column + 1 };
+}
+const FILE_URL = /^file:\/\//;
 
 /**
  * The canvas of `files` as the stage knows it: each section's newest
@@ -1922,35 +1972,44 @@ function cawcoStage() {
  * which compiles the markup away.
  */
 function stamp() {
-  const prefix = `data-insp-path="${root}${sep}`;
   return {
     name: "cawco:stage-stamp",
     enforce: "pre" as const,
-    async transform(code: string, id: string) {
-      if (id.includes("?") || id.includes(`${sep}node_modules${sep}`)) {
-        return null;
-      }
-      let fileType: "vue" | "jsx" | null = null;
-      if (id.endsWith(".vue")) {
-        fileType = "vue";
-      } else if (JSX_FILE.test(id)) {
-        fileType = "jsx";
-      }
-      if (!(fileType && id.startsWith(`${root}${sep}`))) {
-        return null;
-      }
-      const stamped = await transformCode({
-        content: code,
-        filePath: id,
-        fileType,
-        escapeTags: [],
-        pathType: "absolute",
-      });
-      return stamped === code
-        ? null
-        : { code: stamped.split(prefix).join('data-insp-path="'), map: null };
+    // Ahead of every plugin's transform, a framework's own `pre` one too:
+    // vite-plugin-solid compiles JSX away in its, and a project's plugins
+    // stand before the stage's in the merged config.
+    transform: {
+      order: "pre" as const,
+      handler: stampTransform,
     },
   };
+}
+
+/** One module stamped by code-inspector's transform; null when it is none the stage stamps. */
+async function stampTransform(code: string, id: string) {
+  if (id.includes("?") || id.includes(`${sep}node_modules${sep}`)) {
+    return null;
+  }
+  let fileType: "vue" | "jsx" | null = null;
+  if (id.endsWith(".vue")) {
+    fileType = "vue";
+  } else if (JSX_FILE.test(id)) {
+    fileType = "jsx";
+  }
+  if (!(fileType && id.startsWith(`${root}${sep}`))) {
+    return null;
+  }
+  const stamped = await transformCode({
+    content: code,
+    filePath: id,
+    fileType,
+    escapeTags: [],
+    pathType: "absolute",
+  });
+  const prefix = `data-insp-path="${root}${sep}`;
+  return stamped === code
+    ? null
+    : { code: stamped.split(prefix).join('data-insp-path="'), map: null };
 }
 
 const JSX_FILE = /\.[jt]sx$/;
