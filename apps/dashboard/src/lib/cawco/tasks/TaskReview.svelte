@@ -274,15 +274,13 @@
 {#snippet attachment(one: ResultArtifact)}
   {@const Icon = GLYPH[one.kind]}
   {#if compact}
-    <!-- literal: 44px -->
     <button
       data-slot="attachment"
       aria-label="Open {task.id}: {nameOf(one)}"
-      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-(--hit) coarse:my-(--attach-my-coarse) press-tint focus-inset"
+      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
       onclick={() => onopen?.(task.id)}
-      style:--hit="44px"
       style:--attach-my="calc((1lh - var(--c-btn-h-xs)) / 2)"
-      style:--attach-my-coarse="calc((1lh - var(--hit)) / 2)"
+      style:--attach-my-coarse="calc((1lh - var(--c-btn-h-lg)) / 2)"
       title={titleOf(one)}
       type="button"
     >
@@ -292,15 +290,13 @@
       >
     </button>
   {:else}
-    <!-- literal: 44px -->
     <a
       data-slot="attachment"
-      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-(--hit) coarse:my-(--attach-my-coarse) press-tint focus-inset"
+      class="inline-flex items-center gap-space-1 max-w-full min-h-c-btn-h-xs px-space-1 -mx-space-1 my-(--attach-my) rounded-sm type-label text-ink-muted no-underline hover:bg-surface-hover hover:text-ink-strong coarse:min-h-c-btn-h-lg coarse:my-(--attach-my-coarse) press-tint focus-inset"
       href={hrefOf(one)}
       rel="noopener"
-      style:--hit="44px"
       style:--attach-my="calc((1lh - var(--c-btn-h-xs)) / 2)"
-      style:--attach-my-coarse="calc((1lh - var(--hit)) / 2)"
+      style:--attach-my-coarse="calc((1lh - var(--c-btn-h-lg)) / 2)"
       target="_blank"
       title={titleOf(one)}
     >
@@ -326,13 +322,11 @@
   {/if}
 {/snippet}
 
-<!-- literal: minmax(0, 1fr); auto minmax(0, 1fr) auto; minmax(0, 1fr) auto; var(--c-review-words) minmax(0, 1fr); the bands' areas -->
 <section
   aria-label="Review {task.id}"
-  class="group flex-auto grid grid-cols-(--review-cols-one) grid-rows-(--review-rows) grid-areas-(--review-areas) @task-frame/task-frame:not-data-compact:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-border-hairline data-compact:flex data-compact:flex-none data-compact:flex-col data-compact:border data-compact:border-status-attn-glyph/40 data-compact:rounded-md data-compact:bg-surface-raised data-compact:overflow-hidden @task-frame/task-frame:not-data-compact:grid-cols-(--review-cols) @task-frame/task-frame:not-data-compact:grid-rows-(--review-rows-wide)"
+  class="group flex-auto grid grid-cols-1 grid-rows-(--review-rows) grid-areas-(--review-areas) @task-frame/task-frame:not-data-compact:grid-areas-(--review-areas-wide) min-h-0 border-t border-t-border-hairline data-compact:flex data-compact:flex-none data-compact:flex-col data-compact:border data-compact:border-status-attn-glyph/40 data-compact:rounded-md data-compact:bg-surface-raised data-compact:overflow-hidden @task-frame/task-frame:not-data-compact:grid-cols-(--review-cols) @task-frame/task-frame:not-data-compact:grid-rows-(--review-rows-wide)"
   data-compact={compact || undefined}
   data-words-staged={wordsStage || undefined}
-  style:--review-cols-one="minmax(0, 1fr)"
   style:--review-areas={'"result" "stage" "decide"'}
   style:--review-areas-wide={'"result stage" "decide decide"'}
   style:--review-rows="auto minmax(0, 1fr) auto"
@@ -486,7 +480,6 @@
 
   <!-- Band 3: the decision, pinned -->
   {#if ended || (deciding && (approveTo || backTo))}
-    <!-- literal: max(var(--space-3), env(safe-area-inset-bottom)) -->
     <div
       class="flex flex-col gap-space-2 pt-space-3 pb-(--decide-end) px-(--pane-inline) group-data-compact:px-space-4 group-data-compact:border-t group-data-compact:border-t-border-hairline row-(--area) col-(--area) @task-frame/task-frame:border-t @task-frame/task-frame:border-t-border-hairline"
       data-band="decide"

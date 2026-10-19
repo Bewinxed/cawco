@@ -94,10 +94,9 @@
 {/snippet}
 
 {#snippet row(name: string, ids: string[], edgeName: TaskEdge | null)}
-  <!-- literal: 6rem minmax(0, 1fr) -->
   <div
     class="grid grid-cols-(--edge-cols) items-box-start gap-space-2"
-    style:--edge-cols="6rem minmax(0, 1fr)"
+    style:--edge-cols="var(--c-task-edge-label-w) minmax(0, 1fr)"
   >
     <span class="pt-space-1 type-label text-ink-muted">{name}</span>
     <div data-slot="edge-list" class="flex flex-col gap-space-1 min-w-0">
@@ -126,12 +125,7 @@
           >
         {/snippet}
       </Popover.Trigger>
-      <!-- literal: 20rem -->
-      <Popover.Content
-        align="end"
-        class="w-(--popover-w)"
-        style="--popover-w: 20rem"
-      >
+      <Popover.Content align="end" width="wide">
         <div data-slot="pick" class="flex flex-col gap-space-2">
           <Choice
             label="Edge"
@@ -147,10 +141,8 @@
             placeholder="Find a task…"
             bind:value={query}
           />
-          <!-- literal: 14rem -->
           <ul
-            class="flex flex-col max-h-(--candidates-max) m-0 p-0 overflow-y-auto list-none"
-            style:--candidates-max="14rem"
+            class="flex flex-col max-h-(--c-task-candidates-max-h) m-0 p-0 overflow-y-auto list-none"
           >
             {#each candidates as each (each.id)}
               <li>

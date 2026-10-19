@@ -466,11 +466,7 @@
             </span>
           {/if}
         {:else}
-          <!-- literal: 6rem -->
-          <Skeleton
-            class="h-c-btn-h-sm w-(--skeleton-w)"
-            style="--skeleton-w: 6rem"
-          />
+          <Skeleton class="h-c-btn-h-sm w-(--c-task-stage-skeleton-w)" />
         {/if}
       </div>
       {#if titleDraft !== null}
@@ -587,11 +583,9 @@
       <Alert variant="destructive">
         <AlertDescription>
           {readProblem}
-          <!-- literal: 0.5rem -->
           <Button
-            class="mt-(--retry-gap)"
+            class="mt-space-2"
             onclick={() => read(taskId)}
-            style="--retry-gap: 0.5rem"
             size="sm"
             variant="outline">Retry</Button
           >
@@ -603,17 +597,8 @@
         aria-hidden="true"
         class="flex flex-col gap-space-2 mx-(--pane-inline)"
       >
-        <!-- literal: 6rem -->
-        <Skeleton
-          class="h-(--skeleton-h) w-full"
-          radius="tile"
-          style="--skeleton-h: 6rem"
-        />
-        <!-- literal: 0.5rem -->
-        <Skeleton
-          class="mt-(--skeleton-gap) h-icon-md w-1/3"
-          style="--skeleton-gap: 0.5rem"
-        />
+        <Skeleton class="w-full" height="plot" radius="tile" />
+        <Skeleton class="mt-space-2 h-icon-md w-1/3" />
         <Skeleton class="h-space-4 w-full" />
         <Skeleton class="h-space-4 w-11/12" />
         <Skeleton class="h-space-4 w-3/5" />

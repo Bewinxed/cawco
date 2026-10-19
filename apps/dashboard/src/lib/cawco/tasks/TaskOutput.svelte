@@ -139,7 +139,7 @@
         target="_blank"
       >
         <span>{madeWords.open}</span>
-        <IconArrowUpRight data-task-output-glyph class="glyph" />
+        <IconArrowUpRight data-task-output-glyph class="size-icon-sm" />
       </a>
     {/if}
   </figcaption>
@@ -167,42 +167,35 @@
       {:else if post}
         <PostCard {compact} {post} {projectId} />
       {:else if kind === "markdown" && content !== null}
-        <!-- literal: 6rem -->
         <div
           data-slot="markdown"
-          style:--markdown-max="6rem"
           style:--markdown-fade={"linear-gradient(to bottom, var(--mask-opaque) calc(100% - var(--space-6)), transparent)"}
-          class="group-data-compact:max-h-(--markdown-max) group-data-compact:overflow-hidden group-data-compact:mask-(--markdown-fade)"
+          class="group-data-compact:max-h-(--c-task-output-compact-h) group-data-compact:overflow-hidden group-data-compact:mask-(--markdown-fade)"
         >
           <MessageBody source={content} />
         </div>
       {:else if kind === "image"}
         <button
           aria-label={madeWords.openFile(name)}
-          class="image press-tint focus-inset"
+          class="block p-0 rounded-sm cursor-zoom-in press-tint focus-inset"
           onclick={openImage}
           type="button"
         >
-          <!-- literal: 20rem, 6rem -->
           <img
             alt={name}
-            class="block max-w-full max-h-(--image-max) group-data-compact:max-h-(--image-max-compact) rounded-sm"
+            class="block max-w-full max-h-(--c-task-output-image-h) group-data-compact:max-h-(--c-task-output-compact-h) rounded-sm"
             src={raw}
-            style:--image-max="20rem"
-            style:--image-max-compact="6rem"
             bind:this={image}
           />
         </button>
       {:else if kind === "video"}
         <!-- svelte-ignore a11y_media_has_caption -->
-        <!-- literal: 24rem -->
         <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
         <video
-          class="block w-full max-h-(--video-max) rounded-sm bg-surface-recess"
+          class="block w-full max-h-(--c-task-output-video-h) rounded-sm bg-surface-recess"
           controls
           preload="metadata"
           src={raw}
-          style:--video-max="24rem"
         ></video>
       {:else if kind === "audio"}
         <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
