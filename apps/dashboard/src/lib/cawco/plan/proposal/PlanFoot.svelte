@@ -19,7 +19,7 @@
 </script>
 
 <div class="foot">
-  <button class="add pressable touch-hit" type="button">
+  <button class="add pressable touch-hit mark-line" type="button">
     <IconPlus aria-hidden="true" />
     <span>Add a to-do</span>
   </button>
@@ -29,13 +29,13 @@
   <button
     aria-controls="spec-{uid}"
     aria-expanded={open}
-    class="spec-head"
+    class="spec-head mark-line"
     onclick={() => view.toggle("spec")}
     type="button"
   >
     <span class="spec-name">Spec</span>
     <span class="spec-at">· written {plan.spec.ago}</span>
-    <span aria-hidden="true" class="chev" data-open={open || undefined}
+    <span aria-hidden="true" class="chev" data-box data-open={open || undefined}
       ><IconChevronRight /></span
     >
   </button>
@@ -141,7 +141,8 @@
       color: var(--ink-muted);
     }
   }
-  :global([data-coarse]) :is(.add, .spec-head) {
+  :global([data-coarse]) .add,
+  :global([data-coarse]) .spec-head {
     min-block-size: 44px;
   }
 </style>

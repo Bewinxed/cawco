@@ -46,13 +46,15 @@
   } = $props();
 
   const view = useView();
-  const state = $derived(view.stateOf(step.id, step.state));
+  const now = $derived(view.stateOf(step.id, step.state));
   const time = $derived(
     view.timeOf(step.id, step.state, step.startedAgo, step.took)
   );
   const open = $derived(view.opened.has(step.id));
   const waitsOn = $derived(openBefore(plan, step));
   const proposed = $derived(step.proposed && !view.agreed.has(step.id));
+  /** A proposal the person turned down leaves the plan. */
+  let dismissed = $state(false);
   const uid = $props.id();
   const foldId = $derived(`fold-${uid}`);
 
@@ -70,9 +72,10 @@
   data-lit={view.lit.id === step.id || undefined}
   data-row={step.id}
   data-flip="box"
+  hidden={dismissed}
   style:--lead-in="calc({lane} * (var(--pv-tile, 18px) + var(--space-2)))"
 >
-  <div class="row" data-slot="plan-row" data-state={state}>
+  <div class="row" data-slot="plan-row" data-state={now}>
     <span class="pv-lead"
       ><span class="tile-at" data-tile={step.id}
         ><StepTile
@@ -84,7 +87,7 @@
               view.ticked.add(step.id);
             }
           }}
-          {state}
+          state={now}
         /></span
       ></span
     >
@@ -98,20 +101,26 @@
     >
       {step.words}
     </button>
-    <span class="trail" data-slot="trail">
+    <span class="trail mark-line" data-slot="trail">
       {@render trail?.()}
       {#if step.promoted}
-        <TaskBadge stage={step.promoted.stage} title={step.promoted.title} />
+        <span data-box
+          ><TaskBadge
+            stage={step.promoted.stage}
+            title={step.promoted.title}
+          /></span
+        >
       {/if}
       <span
         aria-hidden="true"
         class="chev"
+        data-box
         data-open={(open && !pushes) || undefined}
         data-slot="chevron"><IconChevronRight /></span
       >
       <span class="num time" data-num data-slot="time">{time}</span>
     </span>
-    {#if waitsOn.length > 0 && state !== "done"}
+    {#if waitsOn.length > 0 && now !== "done"}
       <span class="under after" data-slot="after" out:fade={{ duration: 160 }}>
         <span>after</span>
         {#each waitsOn as before, index (before.id)}
@@ -132,6 +141,14 @@
           onclick={() => view.agreed.add(step.id)}
           size="xs"
           variant="outline">Agree</Button
+        >
+        <Button
+          class="agree"
+          onclick={() => {
+            dismissed = true;
+          }}
+          size="xs"
+          variant="ghost">Dismiss</Button
         >
       </span>
     {/if}
