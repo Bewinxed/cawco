@@ -3545,15 +3545,17 @@ class ClaudeSession implements HarnessSession {
       }
       if (read.slot === "refused") {
         throw new Error(
-          "CawCo MCP refused this session's credential (needs-auth)."
+          "This session didn't start: the hub refused its sign-in to CawCo's tools (needs-auth). Start it again; a fresh start signs in afresh."
         );
       }
       if (read.slot === "off") {
-        throw new Error(`CawCo MCP is not connected (${read.status}).`);
+        throw new Error(
+          `This session didn't start: its connection to CawCo's tools is off (${read.status}). Start it again.`
+        );
       }
       if (Date.now() >= deadline) {
         throw new Error(
-          `CawCo MCP did not connect within ${HUB_AWAY_BOUND_MS / 1000} seconds (${read.why}).`
+          `This session didn't start: its connection to CawCo's tools didn't come up within ${HUB_AWAY_BOUND_MS / 1000} seconds (${read.why}). Start it again.`
         );
       }
       await Bun.sleep(read.why === "connecting" ? 250 : 1000);
@@ -3588,7 +3590,9 @@ class ClaudeSession implements HarnessSession {
       cawco?.config?.type !== "http" ||
       cawco.config.headers?.Authorization !== `Bearer ${credential}`
     ) {
-      throw new Error("CawCo MCP launch credential could not be verified.");
+      throw new Error(
+        "This session didn't start: its sign-in to CawCo's tools couldn't be checked. Start it again."
+      );
     }
     await acknowledgeSessionCredential(credential);
     console.info(`[claude] launch credential installed ${this.instanceId}`);
@@ -3624,7 +3628,7 @@ class ClaudeSession implements HarnessSession {
         : undefined;
     if (!header?.startsWith("Bearer ")) {
       throw new Error(
-        "This Claude process was launched without a CawCo session credential."
+        "CawCo couldn't take this session back after a restart: its Claude Code was started without a sign-in to CawCo's tools. Start it again."
       );
     }
     const credential = header.slice("Bearer ".length);
@@ -3647,7 +3651,7 @@ class ClaudeSession implements HarnessSession {
       return { credential, refused: true };
     } else {
       throw new Error(
-        `CawCo MCP is not connected (${cawco?.status ?? "missing"}).`
+        `CawCo couldn't take this session back after a restart: its connection to CawCo's tools is off (${cawco?.status ?? "missing"}). Start it again.`
       );
     }
     return { credential };

@@ -1453,8 +1453,8 @@ const mcpLateCase = async (label: string) => {
       refused: await Promise.all(
         taken.map(
           async (id) =>
-            (await agentSaid(id, "did not connect within")) +
-            (await agentSaid(id, "could not be verified")) +
+            (await agentSaid(id, "tools didn't come up within")) +
+            (await agentSaid(id, "tools couldn't be checked")) +
             (await agentSaid(id, CREDENTIAL_GONE))
         )
       ),

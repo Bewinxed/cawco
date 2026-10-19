@@ -2151,7 +2151,9 @@ export class OpencodeHarness implements Harness {
         (await this.#activity(old).sessionState(oldClient, sessionId)).kind ===
           "decided" && this.#activity(old).state(sessionId) === "idle";
       if (!(await idleOn())) {
-        throw new Error("OpenCode turn remains in its incumbent generation.");
+        throw new Error(
+          "This message wasn't sent: this session's OpenCode server is being replaced, and its last turn is still running on the old one. Send it again."
+        );
       }
       if (
         [...this.#children].some(
@@ -2162,7 +2164,7 @@ export class OpencodeHarness implements Harness {
         )
       ) {
         throw new Error(
-          "OpenCode child turn remains in its incumbent generation."
+          "This message wasn't sent: this session's OpenCode server is being replaced, and a subagent's turn is still running on the old one. Send it again."
         );
       }
       if (session.turnInFlight) {
@@ -2170,7 +2172,7 @@ export class OpencodeHarness implements Harness {
       }
       if (session.turnInFlight) {
         throw new Error(
-          "OpenCode dispatch custody is still pending in the incumbent."
+          "This message wasn't sent: this session's OpenCode server is being replaced, and its last turn is still running on the old one. Send it again."
         );
       }
       const client = this.#clientForGeneration(target);
@@ -2210,21 +2212,25 @@ export class OpencodeHarness implements Harness {
       });
       if (settled[0] !== settled[1]) {
         throw new Error(
-          "OpenCode candidate has not observed the incumbent's settled turn history."
+          "This message wasn't sent: this session's new OpenCode server hasn't caught up with its last turn yet. Send it again."
         );
       }
       if (!(await idleOn())) {
-        throw new Error("OpenCode incumbent resumed during idle migration.");
+        throw new Error(
+          "This message wasn't sent: this session's OpenCode server is being replaced, and a turn started on the old one. Send it again."
+        );
       }
       if (
         this.#sessions.get(session.instanceId) !== session ||
         this.#sessionOwners.get(session.instanceId)?.procId !== old.procId
       ) {
-        throw new Error("OpenCode attachment changed during idle migration.");
+        throw new Error(
+          "This message wasn't sent: this session's OpenCode server changed while the message was on its way. Send it again."
+        );
       }
       if (slot.owner.active?.procId !== target.procId) {
         throw new Error(
-          "OpenCode active generation changed during idle migration."
+          "This message wasn't sent: this session's OpenCode server changed while the message was on its way. Send it again."
         );
       }
       this.#activity(old).unbind(sessionId, session.instanceId);
@@ -2241,7 +2247,9 @@ export class OpencodeHarness implements Harness {
       );
       await this.#ensurePump(target);
       if (this.#sessions.get(session.instanceId) !== session) {
-        throw new Error("OpenCode attachment ended during idle migration.");
+        throw new Error(
+          "This message wasn't sent: this session stopped or restarted while its OpenCode server was being replaced. Send it again."
+        );
       }
       await session.mcpUnconnected(unconnected);
     })().finally(() => this.#migrations.delete(session.instanceId));
@@ -2262,7 +2270,9 @@ export class OpencodeHarness implements Harness {
     }
     await this.#migrate(session);
     if (this.#sessions.get(session.instanceId) !== session) {
-      throw new Error("OpenCode dispatch attachment has ended.");
+      throw new Error(
+        "This message wasn't sent: this session stopped or restarted while the message was on its way. Send it again."
+      );
     }
     const identity = this.#sessionOwners.get(session.instanceId);
     if (!(identity && session.sessionId)) {
