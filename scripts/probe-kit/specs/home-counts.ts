@@ -31,7 +31,10 @@
  *     SIGNAL_REPEAT_MS, so the hub fails the row ("something … keeps ending
  *     it") and the page draws the Badge's `fail` variant;
  *  c. on the narrowest rail (Shell's RAIL_MIN, 216px) with three-digit
- *     counts, both labels stand whole beside their counts.
+ *     counts, both labels stand whole beside their counts;
+ *  d. while nothing has finished, Finished draws no count (DESIGN.md, The
+ *     Earned Count Rule); a sixth top-level session asked something short
+ *     then finishes, and (b)'s Finished reads are of its count, 1.
  *
  *   bun scripts/probe-kit/run.ts home-counts
  */
@@ -205,6 +208,23 @@ export async function seedCounts(
 
 type Fleet = Awaited<ReturnType<typeof seedCounts>>["fleet"];
 
+/** A top-level session asked something short: its turn ends, and Finished lists it. */
+async function finishOne(fleet: Fleet): Promise<void> {
+  const id = await fleet.spawn("claude", "Counts finished");
+  await fleet.send(id, "Say done.");
+  const row = () =>
+    fleet.query<{ status: string; turn_open_at: number | null }>(
+      "SELECT status, turn_open_at FROM instances WHERE id = ?",
+      id
+    )[0];
+  await until(
+    "the short session's turn ended",
+    row,
+    (r) => !r?.turn_open_at,
+    120_000
+  );
+}
+
 /**
  * A fifth top-level session, failed the way a person's would be: its
  * process ended from outside CawCo mid-turn, started again by the hub with
@@ -357,6 +377,39 @@ const spec: Spec = {
           `read: ${JSON.stringify(counts)}`
         );
       }
+      // (d) Nothing has finished: Finished draws no count and its tab's name is bare.
+      await settle(page);
+      // The count trails the tab's hit inside its segment (TabItem's `trail`).
+      const zero = await page.evaluate(() =>
+        [...document.querySelectorAll(".ff-tab")]
+          .filter((tab) =>
+            (tab.querySelector(":scope > .hit")?.textContent ?? "").includes(
+              "Finished"
+            )
+          )
+          .map((tab) => ({
+            badges: tab.querySelectorAll('[data-slot="count"]').length,
+            text: (tab.textContent ?? "")
+              .replace(/\s+/g, "")
+              .replaceAll("Finished", ""),
+          }))
+      );
+      kit.check(
+        `(d) ${theme}: at 0, Finished draws no count, no figure in its segment`,
+        zero.length > 0 &&
+          zero.every((tab) => tab.badges === 0 && tab.text === ""),
+        JSON.stringify(zero)
+      );
+    }
+
+    // One session finishes: Finished's count is drawn, in the done pair.
+    await finishOne(fleet);
+
+    for (const [theme, page] of pages) {
+      // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time
+      await page.waitForSelector('[data-slot="count"][data-tab="finished"]', {
+        timeout: 60_000,
+      });
       await settle(page);
       await choose(page, "working");
       await page.mouse.move(0, 0);

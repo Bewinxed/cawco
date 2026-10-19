@@ -38,7 +38,11 @@
       : "attn";
   });
   const label = $derived.by(() => {
-    const machines = `${count} ${count === 1 ? "machine" : "machines"}`;
+    /* The number only above 0 (DESIGN.md, The Earned Count Rule). */
+    const machines =
+      count > 0
+        ? `${count} ${count === 1 ? "machine" : "machines"}`
+        : "Machines";
     const stuck = home.exceptions.length;
     return stuck > 0
       ? `${machines}, ${stuck} ${stuck === 1 ? "needs" : "need"} attention`
@@ -77,11 +81,14 @@
       aria-haspopup="dialog"
       aria-label={label}
       class="bar-item machines mark-line touch-hit press-tint"
+      class:counted={count > 0}
       data-tone={tone}
       type="button"
     >
       <IconServer aria-hidden="true" class="bar-symbol" />
-      <span data-slot="num" class="num">{count}</span>
+      {#if count > 0}
+        <span data-slot="num" class="num">{count}</span>
+      {/if}
     </button>
   {/snippet}
 </Tip>
@@ -96,8 +103,9 @@
      where a symbol's would. Every item the group's gap from the next, the
      group reads at one spacing between its items' ink (Caw's round face
      standing as much nearer as a round's overshoot), its number held closer
-     to its symbol than to the item beside it. */
-  .machines {
+     to its symbol than to the item beside it. With no number it is a plain
+     item. */
+  .machines.counted {
     --mark-inset: calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2);
     gap: var(--space-2);
     padding-inline: var(--mark-inset)
