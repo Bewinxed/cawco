@@ -646,12 +646,12 @@
        its own, gone when that stage's groups arrive, so nothing drawn is
        ever pushed down. -->
   <Sidebar.Group aria-busy="true" aria-label="Loading" data-flip pad="rail">
-    <div class="flex h-space-8 items-center px-2.5">
+    <div class="flex h-space-8 items-center px-space-3">
       <Skeleton class="h-icon-sm" width="label" />
     </div>
-    <div class="flex flex-col gap-0.5">
+    <div class="flex flex-col gap-space-row">
       {#each Array.from({ length: rows }, (_, row) => row) as row (row)}
-        <Skeleton class="h-(--rail-list-row-h) w-full" />
+        <Skeleton class="h-c-btn-h-sm w-full" />
       {/each}
     </div>
   </Sidebar.Group>
@@ -759,11 +759,8 @@
   </li>
 {/snippet}
 
-<!-- literal: 30px (a list row, and the footer's avatar button) -->
 <div
   class="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-surface-page text-ink-strong"
-  style:--rail-list-row-h="30px"
-  style:--rail-avatar-size="30px"
   bind:this={railEl}
   {@attach highlight({ rows: ROWS })}
 >
@@ -776,7 +773,7 @@
     <div data-slot="sidebar-brand-row" class="flex items-center gap-space-1">
       <Sidebar.Menu aria-label="Workspace" class="flex-1">
         <Sidebar.MenuItem>
-          <Sidebar.MenuButton class="h-c-nav-h" isActive={false} row="nav">
+          <Sidebar.MenuButton isActive={false} row="nav">
             {#snippet child({ props })}
               <a
                 href="/session"
@@ -838,15 +835,13 @@
       <!-- The phone's search: the Jump palette's field, which opens Jump
            hanging from the bar's glass, standing where the sheet starts; a
            press closes the sheet and opens the palette. -->
-      <div class="px-2 pb-space-1">
-        <!-- literal: 44px -->
+      <div class="px-space-2 pb-space-1">
         <button
           data-slot="search"
           aria-haspopup="dialog"
-          class="mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-(--search-h) px-space-3 border border-border-control rounded-sm bg-surface-raised type-body text-ink-muted text-start cursor-text"
+          class="mark-line press-tint focus-inset flex items-center gap-space-2 w-full min-h-c-btn-h-lg px-space-3 border border-border-control rounded-sm bg-surface-raised type-body text-ink-muted text-start cursor-text"
           data-share="jump"
           onclick={() => onsearch()}
-          style:--search-h="44px"
           type="button"
         >
           <IconSearch class="flex-none size-icon-md" />
@@ -864,7 +859,7 @@
       <Sidebar.Group pad="rail">
         <Sidebar.Menu aria-label="This conversation" gap="tight">
           <Sidebar.MenuItem>
-            <Sidebar.MenuButton class="h-c-nav-h" isActive={false} row="nav">
+            <Sidebar.MenuButton isActive={false} row="nav">
               {#snippet child({ props })}
                 <button
                   {...props}
@@ -903,7 +898,6 @@
           <!-- The board is the place while it is on screen; with a
                conversation open, its row is the one selection. -->
           <Sidebar.MenuButton
-            class="h-c-nav-h"
             isActive={path.startsWith("/session") && activeSession === null}
             row="nav"
           >
@@ -936,7 +930,6 @@
 
         <Sidebar.MenuItem>
           <Sidebar.MenuButton
-            class="h-c-nav-h"
             isActive={path.startsWith("/workflows")}
             row="nav"
           >
@@ -967,7 +960,7 @@
           <!-- The sort lives here rather than once per list because it governs all
            of them at once: a rail whose projects were ordered by recency and
            whose "Not running" was ordered by name would be two rails. -->
-          <div class="-mr-space-1 ml-auto flex items-center gap-0.5">
+          <div class="-me-space-1 ms-auto flex items-center gap-space-row">
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 {#snippet child({ props })}
@@ -1011,7 +1004,7 @@
                 <Button
                   {...tip}
                   aria-label="New project"
-                  class="-mr-space-1"
+                  class="-me-space-1"
                   href="/project/new"
                   size="icon-sm"
                   variant="ghost"
@@ -1023,7 +1016,7 @@
           </div>
         </Sidebar.GroupLabel>
         {#if orderedProjects.length === 0}
-          <p class="px-2.5 text-meta text-ink-muted" data-flip>
+          <p class="px-space-3 text-meta text-ink-muted" data-flip>
             {cawco.machines.length === 0
               ? sidebarWords.noProjectsNoMachines
               : sidebarWords.noProjects}
@@ -1052,7 +1045,7 @@
                   {project}
                 >
                   <Sidebar.MenuButton
-                    class="h-(--rail-list-row-h)"
+                    class="h-c-btn-h-sm"
                     isActive={here}
                     row="list"
                   >
@@ -1070,7 +1063,7 @@
                         {...props}
                         aria-current={here ? "page" : undefined}
                         class="{props.class} mark-line"
-                        style:--mark-hit-gap="calc(var(--spacing) * 2.5)"
+                        style:--mark-hit-gap="var(--space-3)"
                       >
                         <ProjectMark
                           count={runningCount}
@@ -1092,10 +1085,16 @@
                   </Sidebar.MenuButton>
                 </FolderMenu>
                 <!-- A forget asked from this row's menu, under it. -->
-                <ForgetProjectTray
-                  at={forgetAtRail(project.id)}
-                  class="rail-forget"
-                />
+                <div
+                  data-slot="sidebar-forget"
+                  class="contents"
+                  style:--ask-indent="var(--space-1)"
+                  style:--ask-end="var(--space-1)"
+                  style:--fault-indent="var(--space-2)"
+                  style:--fault-end="var(--space-2)"
+                >
+                  <ForgetProjectTray at={forgetAtRail(project.id)} />
+                </div>
 
                 <!-- Its sessions hang under it the way a session's delegates
                      hang under theirs: on a rail that leaves the project's
@@ -1197,7 +1196,7 @@
               <Sidebar.MenuButton
                 {...tip}
                 aria-label="You"
-                class="touch-hit size-(--rail-avatar-size) justify-center overflow-visible"
+                class="touch-hit size-c-btn-h-sm justify-center overflow-visible"
                 row="avatar"
               >
                 <!-- No picture of the reader yet: Caw stands in, the brand
@@ -1225,6 +1224,7 @@
               {...tip}
               aria-current={configuring ? "page" : undefined}
               aria-label="Configure"
+              current="selected"
               data-rail-configure
               href={configureHref}
               size="icon-sm"
@@ -1244,32 +1244,3 @@
 </div>
 
 <!-- end flex column wrapper -->
-
-<style>
-  /* residual: foreign-dom — child components' roots, named by the class
-     this file passes them. A forget's tray and its fault under a folder
-     row (ForgetProjectTray hands the class to its line, its RowFault and
-     its AskHere), set in by the rail's row padding so they sit inside the
-     rail's column. */
-  [data-slot="sidebar-menu-item"] :global(.rail-forget) {
-    --ask-indent: var(--space-1);
-    --ask-end: var(--space-1);
-    --fault-indent: var(--space-2);
-    --fault-end: var(--space-2);
-  }
-  /* Configure (the kit Button), while a /config page is open: the selected
-     tint, crossing over --dur-control like every control's colour. The
-     Button's own transition and press are an arbitrary property in its
-     recipe, which a utility here would not reliably replace; this rule
-     outranks them as it always has. */
-  [data-slot="sidebar-settings"]
-    :global([data-rail-configure][aria-current="page"]) {
-    background: var(--selected-bg);
-    color: var(--selected-ink);
-  }
-  [data-slot="sidebar-settings"] :global([data-rail-configure]) {
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-  }
-</style>

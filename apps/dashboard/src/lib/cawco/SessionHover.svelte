@@ -331,7 +331,7 @@
     onpointerenter={hold}
     onpointerleave={release}
     side="right"
-    style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: 360px"
+    style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: var(--c-session-hover-room)"
     watch={watchOf(openId)}
   >
     {#snippet children(id)}
@@ -341,18 +341,14 @@
       {@const runId = runIdOf(id)}
       {@const thread = cawco.threadOf(id)}
       <div data-nest-host>
-        <!-- literal: 240px -->
         <div
           data-slot="head"
-          class="mark-line mb-space-2 flex min-w-(--head-min) items-center gap-space-2"
-          style:--head-min="240px"
+          class="mark-line mb-space-2 flex min-w-c-session-hover-head items-center gap-space-2"
         >
-          <!-- literal: 17px -->
           <span
             data-slot="mark"
             aria-hidden="true"
-            class="grid size-(--mark-box) flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
-            style:--mark-box="17px"
+            class="grid size-c-row-mark flex-none place-items-center rounded-xs bg-(--mark-bg) bg-mark-overlay"
             style:--mark-bg="var(--mark-{markHue(row?.cwd || id)})"
             data-box
           >
@@ -376,12 +372,9 @@
             role="img"
           >
             {#if tone === "live"}
-              <!-- literal: 5px, 50% -->
               <span
                 data-slot="dot"
-                class="size-(--dot) rounded-(--dot-r) bg-status-live-glyph"
-                style:--dot="5px"
-                style:--dot-r="50%"
+                class="size-space-2 rounded-pill bg-status-live-glyph"
               ></span>
             {:else if tone === "needs"}
               <IconAsk />
@@ -423,18 +416,3 @@
     {/snippet}
   </HoverPanel>
 </Portal>
-
-<style>
-  /* residual: foreign-dom — the glyph the mark holds (the session's sprite,
-     a thread's CawFace) and the state's icon or spinner: svg those
-     components draw. */
-  [data-slot="mark"] :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-    color: var(--mark-glyph);
-  }
-  [data-session-hover-tone] :global(svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-  }
-</style>

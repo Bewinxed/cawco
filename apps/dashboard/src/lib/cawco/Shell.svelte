@@ -539,7 +539,7 @@
 
      The one part the first client render draws other than the server did,
      on purpose: under the drawer's line the server's rail (hidden there by
-     its `hidden min-[900px]:flex`) is dropped as the page hydrates, through
+     its `hidden desk:flex`) is dropped as the page hydrates, through
      Svelte's block repair, rather than hydrated for a frame. It is stored
      nowhere, so nothing the reader kept is lost, and it is never seen. The
      probe kit holds it to that (tabs-region-errors (g)). */
@@ -951,12 +951,10 @@
 
 <svelte:window onkeydown={shortcut} />
 
-<!-- literal: -9999px -->
 <a
   data-slot="skip"
-  class="absolute left-(--skip-off) z-100 py-space-2 px-space-4 bg-surface-raised rounded-sm shadow-tile focus:left-space-4 focus:top-space-4"
-  href="#main-content"
-  style:--skip-off="-9999px">Skip to content</a
+  class="sr-only z-100 rounded-sm bg-surface-raised px-space-4 py-space-2 shadow-tile focus:not-sr-only focus:absolute focus:start-space-4 focus:top-space-4"
+  href="#main-content">Skip to content</a
 >
 
 <!-- `--rail-w` is set before the body parses (app.html) from the same key this
@@ -981,7 +979,7 @@
          its outer edge stays where a drag puts it (`startDrag`). -->
     <aside
       data-slot="rail"
-      class="hidden min-[900px]:flex relative w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-(--sidebar) border-r border-r-border-hairline"
+      class="hidden desk:flex relative w-(--sidebar-width) grow-0 shrink-0 basis-(--sidebar-width) min-w-0 ps-(--rail-inset) bg-(--sidebar) border-e border-e-border-hairline"
       style:--rail-inset="env(safe-area-inset-left, 0px)"
     >
       {#if railed}
@@ -989,19 +987,16 @@
           <Sidebar {narrow} scroller={keepScroll} />
         </RegionBoundary>
       {/if}
-      <!-- literal: 6px, -3px (the grip, 6px over the rail's edge) -->
       <div
         aria-label="Resize sidebar"
         aria-orientation="vertical"
         aria-valuemax={RAIL_MAX}
         aria-valuemin={RAIL_MIN}
         aria-valuenow={railWidth}
-        class="absolute top-0 bottom-0 right-(--grip-right) w-(--grip-w) cursor-col-resize touch-none z-5 [&:hover]:bg-border-control"
+        class="absolute inset-y-0 -end-space-1 w-space-2 cursor-col-resize touch-none z-5 hover:bg-border-control"
         onkeydown={resizeKey}
         onpointerdown={startDrag}
         role="slider"
-        style:--grip-w="6px"
-        style:--grip-right="-3px"
         tabindex="0"
       ></div>
     </aside>
@@ -1022,12 +1017,10 @@
            close button sits in the brand row's corner (16px in, 30px wide,
            and 7px of touch area around it): the brand row stops short of it
            (--rail-sheet-close-room). -->
-      <!-- literal: 284px, 46px -->
       <Sheet.Content
         data-rail-sheet
-        class="w-(--rail-sheet-w) min-[900px]:hidden"
+        class="w-c-rail-sheet-w desk:hidden"
         pad="none"
-        style="--rail-sheet-w: 284px; --rail-sheet-close-room: 46px"
         onCloseAutoFocus={(event) => {
           if (barGlass.open === "jump") {
             event.preventDefault();
@@ -1073,43 +1066,37 @@
            bar's bottom pixel, where the sheet ends and covers it. The narrow
            bar (NARROW_QUERY: under 900px, or a finger held portrait) draws
            itself raised even while hosting, so the shelf is the wide bar's
-           alone (`min-[900px]:` with `not-coarse:` or `not-portrait:`).
+           alone (`desk:` with `not-coarse:` or `not-portrait:`).
            Floating over the phone's tab row it draws nothing. -->
-      <!-- literal: 100% 1px (the hairline's band, one layer over the shelf: the base's own shorthand) -->
       <header
         data-slot="top"
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 pl-0 pr-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:min-[900px]:pl-space-7 max-[900px]:pl-(--top-inset-start) max-[900px]:pr-(--top-inset-end) max-[900px]:data-floating:relative max-[900px]:data-floating:-mbe-(--c-top-bar-h) max-[900px]:data-floating:z-20 max-[900px]:data-floating:pointer-events-none min-[900px]:not-coarse:data-hosting:border-b-none min-[900px]:not-coarse:data-hosting:background-(--hosting-bg) min-[900px]:not-portrait:data-hosting:border-b-none min-[900px]:not-portrait:data-hosting:background-(--hosting-bg) max-[900px]:data-floating:border-b-none max-[900px]:data-floating:bg-transparent"
+        class="group/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) bg-surface-raised border-b border-b-seam coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-(--c-top-bar-h) max-desk:data-floating:z-20 max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:border-b-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:border-b-none desk:not-portrait:data-hosting:shelf-hairline max-desk:data-floating:border-b-none max-desk:data-floating:bg-transparent"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end="env(safe-area-inset-right, 0px)"
-        style:--hosting-bg={"linear-gradient(var(--border-hairline), var(--border-hairline)) bottom / 100% 1px no-repeat, var(--surface-shelf)"}
       >
         <!-- The sidebar toggle; at the 900px line the rail returns and it
-             retires (`min-[900px]:hidden`). On the phone's row it is a bare
+             retires (`desk:hidden`). On the phone's row it is a bare
              glyph (owner, variant B): its leading edge c-bar-phone-edge from
              the screen's, its centre on the tabs' centre line, which stand
              on the bar's floor, in a 44px touch area that reaches into the
              screen's edge. Tactile press: it dips under the finger, with
              less motion not at all. -->
-        <!-- literal: 44px, 22px (half the touch area) -->
         <button
           data-slot="burger"
           aria-label="Open navigation"
-          class="min-[900px]:hidden size-(--burger) -ml-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong cursor-pointer transition-[background] dur-control ease-in-out hover:bg-surface-hover motion-safe:active:transform-(--burger-press) max-[900px]:self-start max-[900px]:ms-(--burger-start) max-[900px]:mt-(--burger-top) max-[900px]:text-ink-muted max-[900px]:group-data-floating/top:pointer-events-auto"
+          class="desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong cursor-pointer transition-[background] dur-control ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-(--burger-start) max-desk:mt-(--burger-top) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
-          style:--burger="44px"
-          style:--burger-press="scale(var(--press-scale))"
-          style:--glyph="var(--c-bar-toggle-glyph)"
-          style:--burger-start={"calc(var(--c-bar-phone-edge) + var(--glyph) / 2 - 22px)"}
-          style:--burger-top={"calc(var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - 22px)"}
+          style:--burger-start={"calc(var(--c-bar-phone-edge) + var(--c-bar-toggle-glyph) / 2 - var(--c-btn-h-lg) / 2)"}
+          style:--burger-top={"calc(var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - var(--c-btn-h-lg) / 2)"}
           type="button"
           bind:this={burger}
         >
-          <IconSidebar class="size-icon-lg max-[900px]:size-(--glyph)" />
+          <IconSidebar class="size-icon-lg max-desk:size-c-bar-toggle-glyph" />
         </button>
         <!-- The one "where am I" label, now visible at every width — the brand
            lives in the rail, and the crumb is what the top bar owes a reader
@@ -1121,7 +1108,7 @@
            control: the bar's gap and the slot's own end inset (7 + 11). -->
         <div
           data-slot="slot"
-          class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 max-[900px]:pe-space-3 coarse:portrait:pe-space-3 max-[900px]:group-data-floating/top:invisible"
+          class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 max-desk:pe-space-3 coarse:portrait:pe-space-3 max-desk:group-data-floating/top:invisible"
         >
           {#if barLeaves.length > 0}
             <!-- Nothing inside reaches the strip's own size or what is
@@ -1131,7 +1118,7 @@
                  but gives up the row; gone, it is not drawn. -->
             <div
               data-slot="slot-tabs"
-              class="contain-layout contain-size relative grow shrink basis-0 self-stretch min-w-0 data-shell-lifted:absolute data-shell-lifted:inset-0 data-shell-away:invisible max-[900px]:group-data-hosting/top:hidden coarse:portrait:group-data-hosting/top:hidden"
+              class="contain-layout contain-size relative grow shrink basis-0 self-stretch min-w-0 data-shell-lifted:absolute data-shell-lifted:inset-0 data-shell-away:invisible max-desk:group-data-hosting/top:hidden coarse:portrait:group-data-hosting/top:hidden"
               {@attach barTabs(() => hosting)}
               {@attach followPanes}
             >
@@ -1158,7 +1145,7 @@
                        it: a hairline rail down the leading edge. -->
                   <span
                     aria-hidden="true"
-                    class="absolute top-0 right-auto bottom-0 left-0 w-space-row bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
+                    class="absolute inset-y-0 start-0 w-space-row bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
                   ></span>
                   <RegionBoundary region="tabs">
                     <PaneTabs hosted {leaf} />
@@ -1174,10 +1161,7 @@
                strip is the slot's row. -->
             <div
               data-slot="slot-strip"
-              class={[
-                "slot-strip",
-                { lifted: stripAwayAtFirst, away: stripAwayAtFirst },
-              ]}
+              class="relative flex grow shrink basis-0 items-center self-stretch min-w-0 data-shell-lifted:absolute data-shell-lifted:inset-0 data-shell-away:invisible max-desk:hidden coarse:portrait:hidden"
               data-shell-away={stripAwayAtFirst || undefined}
               inert={stripAwayAtFirst}
               {@attach barTabs(() => stripHosted)}
@@ -1195,13 +1179,10 @@
           {:else if narrow && page.url.pathname.startsWith("/config/")}
             <!-- Inside a section on a phone the rail is its own page, so the bar
                leads back to it. -->
-            <!-- literal: 44px, 8px -->
             <a
               data-slot="crumb"
-              class="mark-line pressable inline-flex items-center gap-space-row min-h-(--back-h) ps-space-1 pe-(--back-end) rounded-sm type-label text-ink-strong no-underline"
+              class="mark-line pressable inline-flex items-center gap-space-row min-h-c-btn-h-lg ps-space-1 pe-space-2 rounded-sm type-label text-ink-strong no-underline"
               href="/config"
-              style:--back-h="44px"
-              style:--back-end="8px"
               in:riseIn
               out:crossOut
               ><IconChevronLeft class="size-icon-md" /><span>Configure</span></a
@@ -1215,7 +1196,7 @@
                  is clipped to, past the 16px a name needs from a control. -->
             <span
               data-slot="crumb"
-              class="min-w-0 truncate ps-space-7 me-space-3 max-[900px]:ps-0 coarse:portrait:ps-0"
+              class="min-w-0 truncate ps-space-7 me-space-3 max-desk:ps-0 coarse:portrait:ps-0"
               in:riseIn
               out:crossOut
             >
@@ -1228,29 +1209,35 @@
              conversation Files first, then Jump, the machines, then Caw's
              head last, at the edge. A phone keeps Files, Jump and the
              machines in its sidebar, so its group holds Caw alone. -->
-        <div class="right">
+        <div
+          data-slot="right"
+          class="relative ms-auto flex min-w-0 items-center group-data-hosting/top:flex-none group-data-hosting/top:ps-space-3 max-desk:self-stretch max-desk:group-data-hosting/top:flex-initial max-desk:group-data-hosting/top:ps-0 coarse:portrait:group-data-hosting/top:flex-initial coarse:portrait:group-data-hosting/top:ps-0"
+        >
           <div
             data-slot="tools"
-            class="group/tools relative flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill hit-gap-x-(--c-bar-group-pad) coarse:gap-(--tools-coarse-gap) coarse:hit-gap-x-(--tools-coarse-gap) max-[900px]:self-start max-[900px]:h-c-bar-caw-glass-phone max-[900px]:mt-(--tools-top) max-[900px]:p-0 max-[900px]:rounded-l-(--tools-round) max-[900px]:rounded-r-none max-[900px]:caw-neck-(--tools-neck)"
+            class="group/tools relative flex items-center gap-c-bar-group-pad h-c-btn-h p-c-bar-group-pad rounded-pill hit-gap-x-(--c-bar-group-pad) coarse:gap-space-5 coarse:hit-gap-x-(--space-5) before:absolute before:inset-0 before:rounded-inherit before:border before:border-border-hairline before:bg-material-panel before:shadow-tile before:glass-backdrop before:pointer-events-none contrast-more:before:border-border-contrast contrast-more:before:bg-surface-raised contrast-more:before:backdrop-filter-none reduced-transparency:before:border-border-contrast reduced-transparency:before:bg-surface-raised reduced-transparency:before:backdrop-filter-none max-desk:before:border-e-0 max-desk:self-start max-desk:h-c-bar-caw-glass-phone max-desk:mt-(--tools-top) max-desk:p-0 max-desk:rounded-s-(--tools-round) max-desk:rounded-e-none max-desk:caw-neck-(--tools-neck)"
             data-bar-group
             data-instant={barGlass.instant ? "" : undefined}
             data-joined={barGlass.joined ? "" : undefined}
             style:--flare="var(--radius-lg)"
-            style:--tools-coarse-gap="16px"
             style:--tools-top="calc(var(--c-top-bar-h) - var(--c-tab-row-h))"
             style:--tools-round="calc(var(--c-bar-caw-glass-phone) / 2)"
             style:--tools-neck={"calc(var(--c-tab-row-h) - var(--c-bar-caw-glass-phone))"}
           >
             <!-- The glass as one shape with the card hanging from it while
                  one does (bar-glass: Caw's panel, the machines, Jump, Files). -->
-            <span data-slot="join" aria-hidden="true" class="join"></span>
+            <span
+              data-slot="join"
+              aria-hidden="true"
+              class="before:absolute before:inset-0 before:bg-surface-raised before:clip-join max-desk:before:clip-join-phone"
+            ></span>
             {#if railed && files.session}
               <!-- Files, the conversation on screen's artifacts and
                    attachments, leads the group. -->
               <FilesItem count={filesCounted} />
             {/if}
-            <!-- Drawn on every screen and hidden on a phone by the styles
-                 (`.jump, .machines` under 900px), so the first client
+            <!-- Drawn on every screen and hidden on a phone by its own
+                 class and the bar group's (`[data-machines]` under 900px), so the first client
                  render keeps the bar the server drew. -->
             <Tip keys="⌘K" label="Jump to session">
               {#snippet children(tip)}
@@ -1260,14 +1247,17 @@
                   aria-expanded={barGlass.open === "jump"}
                   aria-haspopup="dialog"
                   aria-label="Jump to session"
-                  class="bar-item jump touch-hit press-tint"
+                  class="touch-hit press-tint max-desk:hidden"
                   data-share="jump"
                   onclick={() => {
                     barGlass.toggle("jump");
                   }}
                   type="button"
                 >
-                  <IconSearch aria-hidden="true" />
+                  <IconSearch
+                    aria-hidden="true"
+                    class="size-icon-md text-ink-muted"
+                  />
                 </button>
               {/snippet}
             </Tip>
@@ -1324,13 +1314,12 @@
       <main
         data-slot="shell-content"
         data-floating={floating || undefined}
-        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto pe-(--content-end) max-[900px]:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-[900px]:data-floating:bg-(image:--shelf-band) max-[900px]:data-floating:bg-top max-[900px]:data-floating:bg-size-(--shelf-band-size) max-[900px]:data-floating:bg-no-repeat"
+        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto pe-(--content-end) max-desk:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-desk:data-floating:bg-linear-to-b max-desk:data-floating:from-surface-shelf max-desk:data-floating:to-surface-shelf max-desk:data-floating:bg-top max-desk:data-floating:bg-size-(--shelf-band-size) max-desk:data-floating:bg-no-repeat"
         data-safe={!onSession || undefined}
         data-safe-bottom
         id="main-content"
         style:--content-end="env(safe-area-inset-right, 0px)"
         style:--content-start="env(safe-area-inset-left, 0px)"
-        style:--shelf-band={"linear-gradient(var(--surface-shelf), var(--surface-shelf))"}
         style:--shelf-band-size="100% var(--c-top-bar-h)"
       >
         <!-- The page is keyed on its route, so a navigation swaps one page for
@@ -1342,8 +1331,7 @@
            a flex child of the content. -->
         <div
           data-slot="swap"
-          class="grid grid-rows-(--swap-track) grid-cols-(--swap-track) flex-auto min-h-0"
-          style:--swap-track="minmax(0, 1fr)"
+          class="grid grid-rows-1 grid-cols-1 flex-auto min-h-0"
         >
           {#key pageKey}
             <div
@@ -1406,281 +1394,3 @@
     restore={continuing.restore ?? undefined}
   />
 </Overlays>
-
-<style>
-  /* residual: pseudo — the glass, and the join's surface. The glass is
-     drawn by a layer under the items, never by the group itself: a backdrop
-     filter on the group would make it the box Caw's fixed drawer is laid
-     out in. Either setting (more contrast, less transparency): the solid
-     raised surface and an edge that holds 3:1 against the bar and the
-     surface (`border-contrast`), as the Apple apps' GlassCapsule draws it.
-     The join's ::before is the surface 1px inside its edge. On the phone's
-     row the side that meets the screen's edge draws no edge of its own. */
-  [data-slot="tools"]::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border: 1px solid var(--border-hairline);
-    border-radius: inherit;
-    background: var(--material-panel);
-    box-shadow: var(--shadow-tile);
-    backdrop-filter: blur(calc(var(--material-blur) * 1.4))
-      saturate(var(--material-saturate));
-    pointer-events: none;
-
-    @media (prefers-contrast: more), (prefers-reduced-transparency: reduce) {
-      background: var(--surface-raised);
-      backdrop-filter: none;
-      border-color: var(--border-contrast);
-    }
-  }
-  [data-slot="join"]::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background: var(--surface-raised);
-    clip-path: shape(
-      from 0 100%,
-      arc to calc(var(--f) + 1px) calc(var(--h) - var(--f)) of
-        calc(var(--f) + 1px) ccw,
-      line to calc(var(--f) + 1px) var(--r),
-      arc to calc(var(--f) + var(--r)) 1px of calc(var(--r) - 1px) cw,
-      line to calc(100% - var(--r)) 1px,
-      arc to calc(100% - 1px) var(--r) of calc(var(--r) - 1px) cw,
-      line to calc(100% - 1px) 100%,
-      close
-    );
-  }
-  @media (width < 900px) {
-    [data-slot="tools"]::before {
-      border-inline-end-width: 0;
-    }
-    [data-slot="join"]::before {
-      clip-path: shape(
-        from 0 100%,
-        arc to calc(var(--f) + 1px) calc(var(--h) - var(--f)) of
-          calc(var(--f) + 1px) ccw,
-        line to calc(var(--f) + 1px) var(--r),
-        arc to calc(var(--f) + var(--r)) 1px of calc(var(--r) - 1px) cw,
-        line to 100% 1px,
-        line to 100% 100%,
-        close
-      );
-    }
-  }
-
-  /* residual: foreign-dom — the group's items (MachinesButton's, NeedsCaw's
-     and this file's Jump, each `[data-bar-item]`, its symbol `.bar-symbol`):
-     borderless (Apple HIG, Toolbars: "Borders… aren't necessary because the
-     section provides a visible container"), on the glass itself, every one
-     the same height with the same symbol size, in the bar's one ink. Hover
-     lifts it by the hover step; a press is each item's `press-tint`
-     (DESIGN.md, The Press Rule: grouped controls tint), by day the step
-     past this hover. An item's symbol is named so: an item may draw more
-     than its symbol (Caw's rim is an SVG too). On the phone's row Caw, the
-     group's one item, is the glass's whole box. */
-  [data-slot="tools"] :global([data-bar-item]) {
-    position: relative;
-    display: inline-flex;
-    flex: none;
-    align-items: center;
-    justify-content: center;
-    min-inline-size: var(--c-bar-item);
-    block-size: var(--c-bar-item);
-    border: 0;
-    border-radius: var(--radius-pill);
-    background: none;
-    color: var(--ink-strong);
-    cursor: pointer;
-    transition: var(--transition-control);
-  }
-  /* An item with its number (the machines', Files'): a plain item widened
-     by its number, its ink as far inside its edges as a plain item's: the
-     symbol's box the plain item's inset in (the item less its symbol,
-     halved), the number --space-2 past the symbol, and after the number the
-     same inset and the symbol's grid margin (Solar draws on 24 units, 2
-     clear on each side: 1/12 of the box), which a number's glyphs do not
-     keep, so its ink ends where a symbol's would. Every item the group's
-     gap from the next, the group reads at one spacing between its items'
-     ink, its number held closer to its symbol than to the item beside it.
-     With no number it is a plain item. */
-  .tools :global(.bar-item[data-counted]) {
-    --mark-inset: calc((var(--c-bar-item) - var(--c-bar-symbol)) / 2);
-    gap: var(--space-2);
-    padding-inline: var(--mark-inset)
-      calc(var(--mark-inset) + var(--c-bar-symbol) / 12);
-  }
-  .tools :global(.bar-item .num) {
-    font: var(--type-label);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
-  /* An item's symbol, named so: an item may draw more than its symbol
-     (Caw's rim is an SVG too). */
-  .tools :global(.bar-symbol) {
-    inline-size: var(--c-bar-symbol);
-    block-size: var(--c-bar-symbol);
-    color: var(--ink-muted);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    [data-slot="tools"] :global([data-bar-item]:hover) {
-      background: var(--surface-hover);
-    }
-  }
-  /* Jump is the group's search glyph alone, an item of the glass like the
-     machines and Caw; its tip names it and ⌘K (owner: the search integrated
-     into the group, not "the whole expanded thing with 'jump'"). Its 16px
-     glyph (DESIGN.md) takes the muted ink every symbol of the group takes:
-     in the item's strong ink the lens's half-ink layer drew as a dark disc
-     with a tail. */
-  .tools :global(.jump > svg) {
-    inline-size: var(--icon-md);
-    block-size: var(--icon-md);
-    color: var(--ink-muted);
-  }
-
-  @media (hover: hover) and (pointer: fine) {
-    .burger:hover {
-      background: var(--surface-hover);
-    }
-  }
-  /* Tactile press — the affordance dips under the finger, only the transform
-     transitions, and it is suppressed for reduced-motion. */
-  .burger {
-    transition: background var(--dur-control) var(--ease-in-out);
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .burger:active {
-      transform: scale(var(--press-scale));
-    }
-  }
-
-  /* ── The phone's one row ─────────────────────────────────────────────
-     44px, the compact bar's height (Apple HIG, Toolbars): the toggle at the
-     leading end, Caw at the trailing one, the page's name or nothing
-     between. With a conversation in front the bar floats over the top of
-     the group's own tab row, which leaves the toggle and Caw their ends
-     (PaneTabs), so the two read as one row and the bar draws nothing of its
-     own; only its two controls take a touch. */
-  @media (width < 900px) {
-    /* Caw's glass ends on the screen's trailing edge, and the toggle starts
-       from its leading one, each inside a landscape notch's inset, so the
-       row has no pad of its own. */
-    .top {
-      padding-inline: env(safe-area-inset-left, 0px)
-        env(safe-area-inset-right, 0px);
-    }
-    /* The toggle is a bare glyph (owner, variant B): its leading edge
-       c-bar-phone-edge from the screen's, its centre on the tabs' centre
-       line, which stand on the bar's floor, in a 44px touch area that
-       reaches into the screen's edge. */
-    .burger {
-      --glyph: var(--c-bar-toggle-glyph);
-      align-self: flex-start;
-      margin-inline-start: calc(
-        var(--c-bar-phone-edge) + var(--glyph) / 2 - 22px
-      );
-      margin-block-start: calc(
-        var(--c-top-bar-h) - var(--c-tab-row-h) / 2 - 22px
-      );
-      color: var(--ink-muted);
-    }
-    .burger :global(svg) {
-      width: var(--glyph);
-      height: var(--glyph);
-    }
-    /* Caw's glass (`c-bar-caw-glass-phone`) is a tab tucked into the
-       screen's trailing edge: square on that side, which meets the edge,
-       and round on the other (owner: "it's top right doesn't need to be
-       rounded"). It tops with the tabs and stands clear of the floor: its
-       top where the tabs' tops stand, the bar's height less a tab row's
-       (owner: "the spacing above the tabs isn't equal to the spacing from
-       caw to the top"), and its foot the neck (`--caw-neck`, what the row
-       is taller than his glass) over the row's floor, the transcript's top
-       edge (owner: "caw is still touching the transcript"). Open, his panel
-       hangs from the floor through that neck (`.join`). His rim's arcs
-       follow its outline (NeedsCaw). */
-    .right {
-      align-self: stretch;
-    }
-    .tools {
-      --caw-neck: calc(var(--c-tab-row-h) - var(--c-bar-caw-glass-phone));
-      align-self: flex-start;
-      block-size: var(--c-bar-caw-glass-phone);
-      margin-block-start: calc(var(--c-top-bar-h) - var(--c-tab-row-h));
-      padding: 0;
-      border-radius: calc(var(--c-bar-caw-glass-phone) / 2) 0 0
-        calc(var(--c-bar-caw-glass-phone) / 2);
-    }
-    /* The side that meets the screen's edge draws no edge of its own. */
-    .tools::before {
-      border-inline-end-width: 0;
-    }
-    /* Jump and the machines live in the phone's sidebar: the bar draws them
-       on every screen and they go without here, so its first paint and its
-       hydration are the same bar. */
-    .tools :global(:is(.jump, .machines)) {
-      display: none;
-    }
-    /* Caw, the group's one item, is the glass's whole box. */
-    [data-slot="tools"] :global([data-bar-item]) {
-      inline-size: var(--c-bar-caw-glass-phone);
-      min-inline-size: var(--c-bar-caw-glass-phone);
-      block-size: var(--c-bar-caw-glass-phone);
-    }
-  }
-  .content {
-    flex: 1 1 auto;
-    min-height: 0;
-    display: flex;
-    flex-direction: column;
-    /* A page sliding in sideways must not open a horizontal scrollbar for
-       the length of its travel; wide content scrolls in its own box. */
-    overflow-x: hidden;
-    overflow-y: auto;
-    /* Clear of a landscape notch's inset on the trailing side; the rail
-       holds the leading one where it stands. Page grounds are the shell's
-       own (surface-recess), so the inset beside them is the same ground. */
-    padding-inline-end: env(safe-area-inset-right, 0px);
-  }
-  @media (width < 900px) {
-    .content {
-      padding-inline-start: env(safe-area-inset-left, 0px);
-    }
-    /* Under the floating bar the session's tab row is the screen's top
-       row: the insets beside it are its shelf, the rest the shell's ground
-       the transcript stands on. */
-    .content.floating {
-      background: linear-gradient(var(--surface-shelf), var(--surface-shelf))
-        top / 100% var(--c-top-bar-h) no-repeat;
-    }
-  }
-  /* One grid cell, a page's height: an outgoing and an incoming page stand
-     in it together while they overlap, and a page taller than the screen
-     overflows it into the content's scroll exactly as it did as a flex
-     child of the content. */
-  .swap {
-    display: grid;
-    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-    flex: 1 1 auto;
-    min-height: 0;
-  }
-  .page {
-    grid-area: 1 / 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-  }
-  /* The session surface under another spoke: laid out, so its virtualisers
-     keep their measurements and its scroll offsets stand, but not drawn. */
-  .page:global(.parked) {
-    visibility: hidden;
-  }
-  /* Own the home-indicator inset where no composer is present to own it. */
-  @media (pointer: coarse) {
-    .content.safe {
-      padding-bottom: var(--safe-bottom);
-    }
-  }
-</style>
