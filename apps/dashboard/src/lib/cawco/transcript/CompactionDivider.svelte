@@ -162,7 +162,6 @@
      turns from "Compacting…" to "Compacted" its box takes the new word's
      width at once and the letters leaving fade past its end: clipped
      across, never up or down, the word is its box throughout. -->
-<!-- literal: minmax(0, 1fr) auto minmax(0, 1fr), 12px -->
 <button
   data-compaction-divider-live={live || undefined}
   data-compaction-divider-failed={failed || undefined}
@@ -171,13 +170,12 @@
   aria-label={row.brief === null || failed
     ? undefined
     : `Compacted, ${open ? "hide" : "show"} the summary`}
-  class="group/divider divider-chevron grid grid-cols-(--cols) items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink cursor-pointer transition-[color] dur-control ease-out disabled:cursor-default hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
+  class="group/divider divider-chevron flex items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink cursor-pointer transition-[color] dur-control ease-out disabled:cursor-default hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
   disabled={row.brief === null || failed}
   onclick={() => disclosed.set(!open)}
   type="button"
   style:--lead={lead === null ? undefined : `${lead}ms`}
-  style:--cols="minmax(0, 1fr) auto minmax(0, 1fr)"
-  style:--room="calc((12px + var(--space-1)) / 2)"
+  style:--room="calc((var(--icon-sm) + var(--space-1)) / 2)"
   data-arriving={(lead !== null && !watched) || undefined}
   data-failed={failed || undefined}
   data-live={live || undefined}
@@ -185,23 +183,25 @@
   data-settling={settlingNow || undefined}
   {@attach watched && morph()}
 >
-  <!-- Each arm is the container its wave is measured against. -->
-  <!-- Mirrored, so both arms run outward from the word.
-       literal: scaleX(-1) -->
+  <!-- Each arm is the container its wave is measured against. `--run` is how
+       much of the path the arm shows, along the curve: the wave is 1.087px
+       long for each pixel it crosses, so the dash is 1.08 of the column's
+       width less the cap's room, and the line ends on a round cap just
+       inside the column (`wave-dash`). -->
+
+  <!-- Mirrored, so both arms run outward from the word. -->
   <span
     style:--arm-clip="inset(0 calc(var(--chev) * var(--room)) 0 0)"
-    class="@container clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
+    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
   >
     <svg
       aria-hidden="true"
-      style:--wave-flip="scaleX(-1)"
-      class="wave block w-full h-(--tx-compact-wave) transform-(--wave-flip)"
+      class="block w-full h-(--tx-compact-wave) -scale-x-100"
       ><path
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
-        style:--dash-gap="9999px"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
-        class="fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] dur-control ease-out"
+        class="wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] dur-control ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
       /></svg
     >
   </span>
@@ -223,10 +223,8 @@
       class="relative inline-block align-middle w-(--tx-compact-caw) h-(--tx-compact-caw) me-c-pill-gap group-data-live/divider:w-(--tx-compacting-caw) motion-safe:transition-[inline-size,margin-inline-end] motion-safe:dur-panel motion-safe:ease-out"
       data-caw
       >{#if working}
-        <!-- literal: 0 -->
         <span
-          style:--stand-leading="0"
-          class="absolute top-1/2 left-1/2 block leading-(--stand-leading) -translate-1/2"
+          class="absolute top-1/2 left-1/2 block leading-0 -translate-1/2"
           ><Caw
             next={[COMPACTION_MARK.status]}
             ongone={() => {
@@ -239,10 +237,8 @@
         >
       {/if}
       {#if !(live || failed)}
-        <!-- literal: 0 -->
         <span
-          style:--stand-leading="0"
-          class="absolute top-1/2 left-1/2 block leading-(--stand-leading) -translate-1/2"
+          class="absolute top-1/2 left-1/2 block leading-0 -translate-1/2"
           in:fade={{ duration: watched ? dur("--dur-fade") : 0 }}
           ><CawMark
             arrival={watched || lead !== null
@@ -254,8 +250,8 @@
           /></span
         >
       {/if}</span
-    ><!-- literal: -0.5em --><span
-      style:--word-clip="inset(-0.5em 0)"
+    ><span
+      style:--word-clip="inset(calc(var(--c-compaction-word-bleed) * -1) 0)"
       class="group-data-settling/divider:clip-path-(--word-clip)"
       >{#if failed}
         <!-- A compaction that failed never reads "Compacted", seen or not. -->
@@ -269,11 +265,11 @@
           sliding out from the word's edge as it comes in, and points down
           while the brief is open. The mark sharpens as it comes in, and
           turns on the spot (on-screen movement, not an entrance): the
-          chevron's clock, and the turn's. --><!-- literal: 4px --><span
+          chevron's clock, and the turn's. --><span
       data-slot="chev"
       style:--chev-x="calc(var(--chev) * var(--space-1))"
       style:--chev-scale="calc(0.25 + 0.75 * var(--chev))"
-      style:--chev-blur="calc((1 - var(--chev)) * 4px)"
+      style:--chev-blur="calc((1 - var(--chev)) * var(--space-1))"
       style:--chev-filter="blur(var(--chev-blur))"
       class="inline-block align-middle w-0 h-icon-sm opacity-(--chev) transition-[opacity] duration-(--chev-dur) ease-(--chev-ease)"
       ><IconChevron
@@ -284,15 +280,14 @@
   >
   <span
     style:--arm-clip="inset(0 0 0 calc(var(--chev) * var(--room)))"
-    class="@container clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
+    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
   >
-    <svg aria-hidden="true" class="wave block w-full h-(--tx-compact-wave)"
+    <svg aria-hidden="true" class="block w-full h-(--tx-compact-wave)"
       ><path
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
-        style:--dash-gap="9999px"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
-        class="fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] dur-control ease-out"
+        class="wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] dur-control ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
       /></svg
     >
   </span>
@@ -301,12 +296,9 @@
          line, why and the way on hung at the text column (SystemLine). No
          line, no Caw — he is never in an error — and nothing centred. Its
          rail is a 2px band of the failure ink down its start edge. -->
-    <!-- literal: 2px 100% -->
     <span
-      style:--fail-pad="calc(var(--x-glyph) - var(--x-rail))"
-      style:--fail-rail={"linear-gradient(var(--status-fail-ink), var(--status-fail-ink))"}
-      style:--fail-rail-size="2px 100%"
-      class="block ms-(--x-rail) ps-(--fail-pad) text-size-label font-medium leading-body bg-(image:--fail-rail) bg-left-top bg-size-(--fail-rail-size) bg-no-repeat"
+      style:--fail-pad="calc(var(--x-glyph) - var(--x-rail) - 2px)"
+      class="block ms-(--x-rail) ps-(--fail-pad) border-s-2 border-status-fail-ink text-size-label font-medium leading-body"
       in:fade={{ duration: dur("--dur-fade") }}
     >
       <span class="rail-line"
@@ -326,6 +318,7 @@
 {#if open && row.brief !== null}
   <!-- The brief, at the text column, where a note's body opens. -->
   <div
+    data-slot="transcript-brief"
     class="ms-(--x-text) pt-space-1"
     data-state="open"
     onintrostart={opening}
@@ -339,74 +332,3 @@
     </div>
   </div>
 {/if}
-
-<style>
-  /* residual: svg-paint: how much of the path the arm shows, along the
-     curve: the wave is 1.087px long for each pixel it crosses. Dashed to
-     that length, the line ends on a round cap just inside the column. */
-  .wave path {
-    stroke-linecap: round;
-    stroke-dasharray: var(--run) var(--dash-gap);
-  }
-  /* residual: keyframes: landed live, the line draws in once, from the word
-     outward, as the row's own entrance fades it up (Row's arrival: the
-     place opens over --dur-rail, then the content comes in). */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-arriving] .wave path {
-      animation: wave-draw var(--dur-pop) var(--ease-out)
-        calc(var(--dur-rail) + var(--lead)) backwards;
-    }
-    /* A compaction watched to its end: the line draws out from the word
-       as the row settles. */
-    [data-settled] .wave path {
-      animation: wave-draw var(--dur-pop) var(--ease-out) backwards;
-    }
-    /* While it compacts the line breathes, two breaths a loop: it draws out
-       from the word over the first, then fades where it stands over the
-       second, and draws again. Two animations on one clock, since an easing
-       per keyframe can't name a token: each easing runs its own half, and
-       the other half holds. */
-    [data-live] .wave path {
-      animation:
-        wave-breath-draw calc(var(--breath) * 2) var(--ease-out) infinite,
-        wave-breath-fade calc(var(--breath) * 2) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes wave-breath-draw {
-    0% {
-      stroke-dashoffset: var(--run);
-    }
-    50%,
-    100% {
-      stroke-dashoffset: 0;
-    }
-  }
-  @keyframes wave-breath-fade {
-    0%,
-    50% {
-      opacity: 1;
-    }
-    100% {
-      opacity: 0;
-    }
-  }
-  @keyframes wave-draw {
-    from {
-      stroke-dashoffset: var(--run);
-    }
-  }
-
-  /* residual: foreign-dom: MessageBody's message and its prose, which take
-     no class; the brief reads in the muted ink of a note, not a turn's. */
-  [data-slot="body"] :global([data-slot="msg"]),
-  [data-slot="body"] :global([data-slot="msg"] .prose),
-  [data-slot="body"]
-    :global([data-slot="msg"] .prose :is(h1, h2, h3, h4, h5, h6)) {
-    color: var(--ink-muted);
-  }
-  [data-slot="body"] :global([data-slot="msg"] .prose) {
-    --tw-prose-body: var(--ink-muted);
-    --tw-prose-headings: var(--ink-muted);
-    --tw-prose-bold: var(--ink-muted);
-  }
-</style>

@@ -44,18 +44,18 @@
 </script>
 
 {#if folded || draft.images.length || draft.texts.length || draft.files.length}
-  <!-- The row scrolls, so on a coarse pointer it takes 8px more padding into
-       an equal negative margin: the remove buttons' touch areas fit inside
-       its clip, nothing moves. -->
-  <!-- literal: 180px, -8px -->
+  <!-- In the composer's dock the row takes the pointer the composer does not;
+       while the canvas stands, it stands in the grown shape over the field,
+       above its surface; while an ask holds the composer it steps aside with
+       the rest. -->
+  <!-- The row scrolls, so on a coarse pointer it takes one step more padding
+       (space-2) into an equal negative margin: the remove buttons' touch
+       areas fit inside its clip, nothing moves. -->
   <div
     data-atts
     style:--hit-gap-x="var(--space-2)"
     style:--hit-gap-y="var(--space-2)"
-    style:--atts-max-h="180px"
-    style:--atts-pad-coarse="calc(var(--space-1) + 8px)"
-    style:--atts-m-coarse="-8px"
-    class="flex flex-wrap gap-space-2 max-h-(--atts-max-h) overflow-y-auto p-space-1 coarse:p-(--atts-pad-coarse) coarse:m-(--atts-m-coarse) transition-fade-show"
+    class="flex flex-wrap gap-space-2 max-h-c-atts-max-h overflow-y-auto p-space-1 coarse:p-space-3 coarse:-m-space-2 pointer-events-auto transition-fade-show group-data-drawing/dock:relative group-data-drawing/dock:z-2 group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide"
     transition:unfold
     {@attach reflow()}
   >
@@ -63,7 +63,7 @@
       <!-- The canvas, folded: a tap opens it again out of this box. -->
       <span
         data-slot="canvas-chip"
-        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pr-space-1 pl-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong data-canvas-hidden:invisible"
+        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pe-space-1 ps-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong data-canvas-hidden:invisible"
         data-artifact={folded.id}
         data-canvas-hidden={canvasHidden || undefined}
         data-flip="pop"
@@ -74,7 +74,7 @@
         <button
           data-slot="canvas-open"
           aria-label="Open the canvas"
-          class="inline-flex place-items-center gap-space-2 w-auto min-w-0 h-icon-lg p-0 border-none border-current rounded-xs bg-transparent text-ink-strong cursor-pointer flex-none mark-line touch-hit"
+          class="inline-flex items-center gap-space-2 w-auto min-w-0 h-icon-lg p-0 border-none border-current rounded-xs bg-transparent text-ink-strong cursor-pointer flex-none mark-line touch-hit"
           onclick={onopencanvas}
           type="button"
         >
@@ -100,7 +100,7 @@
         </button>
         <button
           aria-label="Remove the canvas"
-          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none [&:hover]:bg-surface-recess [&:hover]:text-ink-strong touch-hit"
+          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
           onclick={onremovecanvas}
           type="button"
         >
@@ -110,7 +110,7 @@
     {/if}
     {#each draft.images as img, i (img.name + i)}
       <span
-        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pr-space-1 pl-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong mark-line"
+        class="inline-flex items-center gap-space-2 max-w-full py-space-1 pe-space-1 ps-space-2 border border-border-hairline rounded-sm bg-surface-raised shadow-tile text-size-label font-medium text-ink-strong mark-line"
         data-flip="pop"
       >
         <img
@@ -125,7 +125,7 @@
         >
         <button
           aria-label={`Remove ${img.name}`}
-          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none [&:hover]:bg-surface-recess [&:hover]:text-ink-strong touch-hit"
+          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
           data-box
           onclick={() => removeImage(i)}
           type="button"
@@ -142,8 +142,7 @@
         <DocThumb content={t.content} name={t.name} />
         <button
           aria-label={`Remove ${t.name}`}
-          style:--hit-edge="1px"
-          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline rounded-xs bg-surface-raised text-ink-muted cursor-pointer [&:hover]:text-ink-strong touch-hit"
+          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
           onclick={() => removeText(i)}
           type="button"
         >
@@ -162,8 +161,7 @@
         />
         <button
           aria-label={`Remove ${f.name}`}
-          style:--hit-edge="1px"
-          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline rounded-xs bg-surface-raised text-ink-muted cursor-pointer [&:hover]:text-ink-strong touch-hit"
+          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline hit-edge rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
           onclick={() => removeFile(f.id)}
           type="button"
         >

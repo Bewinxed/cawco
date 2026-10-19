@@ -99,18 +99,16 @@
 >
   <!-- A button, so a keyboard and a finger can bring in the second line, as
        a pointer does by hovering. -->
-  <!-- literal: minmax(0, 1fr) auto minmax(0, 1fr) -->
   <button
     aria-expanded={open}
-    class="peer/line grid grid-cols-(--cols) items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted cursor-pointer focus-inset touch-hit"
+    class="peer/line flex items-center gap-space-3 w-full min-h-c-btn-h-sm p-0 border-none border-current rounded-xs bg-transparent type-meta text-ink-muted cursor-pointer focus-inset touch-hit"
     onclick={() => {
       open = !open;
     }}
     type="button"
     style:--account={hue ? hueVar(hue) : "var(--ink-muted)"}
-    style:--cols="minmax(0, 1fr) auto minmax(0, 1fr)"
   >
-    <span class="h-px bg-border-control"></span>
+    <span class="h-px flex-1 min-w-0 bg-border-control"></span>
     <span
       class="inline-flex items-center gap-space-2 min-w-0 whitespace-nowrap mark-line"
       ><span
@@ -122,13 +120,10 @@
           aria-hidden="true"
           class="flex-none size-space-4"
         />
-        <!-- literal: 8px, 50% -->
         <span
           data-slot="dot"
           aria-hidden="true"
-          style:--dot="8px"
-          style:--dot-r="50%"
-          class="flex-none size-(--dot) rounded-(--dot-r) bg-(--account)"
+          class="flex-none size-space-2 rounded-pill bg-(--account)"
         ></span></span
       >
       <span data-slot="words" class="min-w-0 overflow-clip text-ellipsis num"
@@ -143,20 +138,18 @@
         >
       {/if}</span
     >
-    <span class="h-px bg-border-control"></span>
+    <span class="h-px flex-1 min-w-0 bg-border-control"></span>
   </button>
-  <!-- literal: 0fr, 1fr -->
   <p
     data-slot="detail"
-    style:--rows-shut="0fr"
-    style:--rows-open="1fr"
-    class="grid grid-rows-(--rows-shut) opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-(--rows-open) group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-(--rows-open) peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-(--rows-open) group-hover/move:opacity-100 @phone:grid-rows-(--rows-open) @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:dur-toggle motion-safe:ease-out"
+    class="grid grid-rows-fold-shut opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-fold-open group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-fold-open peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-fold-open group-hover/move:opacity-100 @phone:grid-rows-fold-open @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:dur-toggle motion-safe:ease-out"
   >
     <span class="overflow-hidden">{words.detail}</span>
   </p>
   {#if open && row.brief !== null}
     <div
-      class="brief ms-(--x-text) pt-space-1"
+      data-slot="transcript-brief"
+      class="ms-(--x-text) pt-space-1"
       data-state="open"
       transition:unfold
     >
@@ -164,20 +157,3 @@
     </div>
   {/if}
 </div>
-
-<style>
-  /* residual: foreign-dom: MessageBody's message and its prose, which take
-     no class; the summary reads in the muted ink of a note. */
-  .brief {
-    & :global([data-slot="msg"]),
-    & :global([data-slot="msg"] .prose),
-    & :global([data-slot="msg"] .prose :is(h1, h2, h3, h4, h5, h6)) {
-      color: var(--ink-muted);
-    }
-    & :global([data-slot="msg"] .prose) {
-      --tw-prose-body: var(--ink-muted);
-      --tw-prose-headings: var(--ink-muted);
-      --tw-prose-bold: var(--ink-muted);
-    }
-  }
-</style>
