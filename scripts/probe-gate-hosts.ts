@@ -776,7 +776,28 @@ try {
   if (!recordName) {
     throw new Error("The machine's OpenCode server record was not written.");
   }
-  const record = JSON.parse(await Bun.file(join(cawco, recordName)).text()) as {
+  // The record as the previous agent left it, once nothing of it writes it
+  // any more: a write of its in-memory record landing after the old form is
+  // planted would put the current form back, and this build's agent would
+  // then find a server on its own form (its `#verifyApply` passes), and
+  // relaunch nothing.
+  const recordFile = join(cawco, recordName);
+  const settled = async () => {
+    let last = "";
+    let quietSince = Date.now();
+    const deadline = Date.now() + 30_000;
+    while (Date.now() - quietSince < 3000 && Date.now() < deadline) {
+      // biome-ignore lint/performance/noAwaitInLoops: polling the file until it stops changing
+      const read = await Bun.file(recordFile).text();
+      if (read !== last) {
+        last = read;
+        quietSince = Date.now();
+      }
+      await Bun.sleep(250);
+    }
+  };
+  await settled();
+  const record = JSON.parse(await Bun.file(recordFile).text()) as {
     active: { launch?: string; pid: number; procId: string };
   };
   const launch = JSON.parse(record.active.launch ?? "[]") as [string, string][];
@@ -785,7 +806,23 @@ try {
       name === "CAWCO_GATE_FORM" ? [name, OLD_FORM] : [name, value]
     )
   );
-  await Bun.write(join(cawco, recordName), JSON.stringify(record));
+  await Bun.write(recordFile, JSON.stringify(record));
+  await settled();
+  // What this build's agent reads: the old form, or this probe says what
+  // took its place instead of waiting out a relaunch that cannot come.
+  const planted = (
+    JSON.parse(await Bun.file(recordFile).text()) as {
+      active: { launch?: string };
+    }
+  ).active.launch;
+  const plantedForm = (JSON.parse(planted ?? "[]") as [string, string][]).find(
+    ([name]) => name === "CAWCO_GATE_FORM"
+  )?.[1];
+  if (plantedForm !== OLD_FORM) {
+    throw new Error(
+      `The server record's gate form is ${plantedForm ?? "none"} after the probe planted ${OLD_FORM}: something wrote the record over it.`
+    );
+  }
   const oldServer = record.active;
 
   // This build's agent takes the session back mid-turn.
