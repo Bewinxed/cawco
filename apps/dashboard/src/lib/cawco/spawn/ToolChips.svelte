@@ -199,13 +199,7 @@
               {@render effortChip()}
               <Down data-slot="chevron" />
             {/snippet}
-            <!-- literal: 8px 6px 6px padding -->
-            <div
-              class="pt-(--pt) pr-(--px) pb-(--pb) pl-(--px)"
-              style:--pb="6px"
-              style:--pt="8px"
-              style:--px="6px"
-            >
+            <div class="p-space-2">
               <EffortPips
                 efforts={tools.efforts}
                 embedded

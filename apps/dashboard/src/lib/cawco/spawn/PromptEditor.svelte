@@ -325,20 +325,18 @@
   });
 </script>
 
-<!-- literal: 1rem on a phone or a coarse pointer -->
 <div
   data-slot="editor-wrap"
-  class="relative prompt-fs-(--text-body) max-phone:prompt-fs-(--prompt-fs-touch) coarse:prompt-fs-(--prompt-fs-touch)"
+  class="relative prompt-fs-(--text-body) max-phone:prompt-fs-(--text-field-floor) coarse:prompt-fs-(--text-field-floor)"
   data-keeps-draft
-  style:--prompt-fs-touch="1rem"
-  style:--prompt-lh="calc(var(--prompt-fs) * 1.55)"
+  style:--prompt-lh="calc(var(--prompt-fs) * var(--leading-prose))"
 >
   <!-- biome-ignore lint/a11y/useSemanticElements: a contenteditable is the only element that can hold inline chips; textarea cannot -->
   <div
     data-slot="editor"
     aria-label="First prompt"
     aria-multiline="true"
-    class="fai-scroll h-(--prompt-height) max-phone:h-(--prompt-height-phone) w-full overflow-auto rounded-t-lg bg-transparent px-(--pad-x) pt-(--pad-t) pb-(--pad-b) font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong outline-off max-phone:overscroll-contain max-phone:transition-off motion-safe:phone:transition-[height] motion-safe:phone:duration-(--ns-prompt-ms) motion-safe:phone:ease-in-out"
+    class="fai-scroll h-(--prompt-height) max-phone:h-(--c-prompt-grown-h) w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong outline-off max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:dur-pop motion-safe:phone:ease-in-out"
     contenteditable="true"
     id="session-prompt"
     onblur={() => {
@@ -354,23 +352,14 @@
     onkeyup={caret}
     onpaste={paste}
     role="textbox"
-    style:--chip-gap="5px"
-    style:--chip-pad-start="5px"
-    style:--pad-b="6px"
-    style:--pad-t="12px"
-    style:--pad-x="16px"
     style:--prompt-height={`${promptH}px`}
-    style:--prompt-height-phone="120px"
     tabindex="0"
     bind:this={element}
   ></div>
   {#if promptEmpty}
-    <!-- literal: 16px inline inset, 12px top inset -->
     <span
       aria-hidden="true"
-      class="pointer-events-none absolute top-(--top) right-(--x) left-(--x) truncate font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal text-ink-subtle"
-      style:--top="12px"
-      style:--x="16px"
+      class="pointer-events-none absolute inset-x-space-4 top-space-3 truncate font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal text-ink-subtle"
       >What should the agent do first?
       <span class="text-ink-subtle max-phone:hidden"
         >@ machine or project · / skills and plugins</span
@@ -391,40 +380,3 @@
     open={menu !== null}
   />
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  /* A chip is centred on its line by construction, not tuned to a baseline.
-     It is the line minus 1px of margin above and below, pinned to the line's
-     top: the margin box is exactly one line tall, so the chip never grows the
-     line box and its centre is the line's centre, which is also the centre of
-     the text's content area (half-leading is symmetric). Nothing depends on the
-     chip's own font, the icon's size or the prompt's size, so it holds at the
-     desktop 14px, the mobile 16px and any font the token stack resolves to.
-     (Flex alignment inside the chip centres the icon and the label together;
-     a flex chip's own baseline is never consulted because it is top-aligned.) */
-  [data-slot="editor"] :global(.ns-chip) {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--chip-gap);
-    vertical-align: top;
-    block-size: calc(var(--prompt-lh) - 2px);
-    margin: 1px;
-    padding-inline: var(--chip-pad-start) var(--space-2);
-    border-radius: var(--radius-sm);
-    background: var(--surface-fill);
-    border: 1px solid var(--border-control);
-    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
-    color: var(--ink-strong);
-    white-space: nowrap;
-    user-select: all;
-  }
-  [data-slot="editor"] :global(.ns-chip-icon) {
-    display: inline-flex;
-  }
-  /* The harness logo sizes itself (16px); every other icon is a bare svg. */
-  [data-slot="editor"] :global(.ns-chip-icon > svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
-  }
-</style>
