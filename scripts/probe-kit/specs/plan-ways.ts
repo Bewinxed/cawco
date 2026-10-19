@@ -805,7 +805,7 @@ const readReview = (page: Page) =>
       const figureEl = body.querySelector('[data-slot="side-card"] .figure');
       let figure: { right: number } | undefined;
       if (figureEl) {
-        let right = figureEl.getBoundingClientRect().right;
+        let { right } = figureEl.getBoundingClientRect();
         for (let at = figureEl.parentElement; at && at !== body;) {
           if (getComputedStyle(at).overflowX !== "visible") {
             right = Math.min(right, at.getBoundingClientRect().right);
