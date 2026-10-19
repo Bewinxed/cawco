@@ -33,9 +33,15 @@
  *    the new boundary started without the folder.
  * 5. A message gives H a third turn: its command shows the line naming the
  *    loop by its command and pid, saying it can be started again.
+ * 6. The hub's own move of a project's folder is an event: with the agent's
+ *    look held off, H's loop started again in a boundary that reads the
+ *    folder, and H and its parent asleep, the project is deleted; within 10 s
+ *    the fleet sync that follows replaces H's boundary, its loop stopped and
+ *    the line queued for H's next command.
  *
  *   bun scripts/probe-kit/run.ts boundary-handover
  */
+import { existsSync } from "node:fs";
 import { mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isBoundaryOf } from "../../../packages/agent/src/proc-id";
@@ -43,14 +49,14 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const WAIT = "mcp__cawco__wait_item";
-const TAG = /PROBE-BEAT-(?:CHECK-|NARROW-)?H:/;
+const TAG = /PROBE-BEAT-(?:CHECK-|NARROW-|AGAIN-)?H:/;
+/** The loop's beat, `sleep 2`: a read of the heartbeat that must see it grow waits more than one. */
+const BEAT_GAP_MS = 5000;
 const PID_NS = /pid:\[\d+\]/g;
 const STARTED = /BEAT-STARTED-(\d+):/;
 const ALIVE = /BEAT-ALIVE-(\d+):/;
 const BEATS = /BEAT-COUNT-(\d+):/;
 const ACCOUNT_ADDED = "acct-probe-older-form";
-/** The remote the older project has, and H's checkout learns in round 6. */
-const REMOTE = "https://github.com/cawco-probe/beat.git";
 /** How the agent says a fleet sync found a narrowed access (boundary.ts `recheckNow`). */
 const SYNCED = "its access narrowed (the fleet's config was synced)";
 const START_LINE = "[workspace] boundary hooks written for ";
@@ -123,13 +129,16 @@ const respond = (request: Seen): Reply => {
     steps.narrowed = true;
     return tool("Bash", { command: CHECK, description: "Check it again" });
   }
-  // Told its loop was stopped, it starts it again, as the line says to.
-  if (steps.narrowed && !steps.restarted) {
+  // Told to, it starts its stopped loop again, as the line says it can.
+  if (request.all.includes("PROBE-BEAT-AGAIN-H:") && !steps.restarted) {
     steps.restarted = true;
     return tool("Bash", { command: START, description: "Start it again" });
   }
   const rests =
-    1 + Number(Boolean(steps.checked)) + Number(Boolean(steps.restarted));
+    1 +
+    Number(Boolean(steps.checked)) +
+    Number(Boolean(steps.narrowed)) +
+    Number(Boolean(steps.restarted));
   if (steps.rested < rests) {
     const reply = offered(request, WAIT, REST);
     if (reply.tool?.name === WAIT) {
@@ -210,21 +219,6 @@ const standUp = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
-  // An older project of the remote H's checkout learns in round 6: H's
-  // project then folds into it, and the hub moves H's project's folder away
-  // (hub project-merge.ts).
-  const keepSrc = join(fleet.sandbox, "keep");
-  await mkdir(keepSrc, { recursive: true });
-  await Bun.$`sh -c ${`git init -q -b main && git remote add origin ${REMOTE} && echo keep > README.md && git add -A && git commit -qm 'First commit'`}`
-    .cwd(keepSrc)
-    .env({ ...process.env, HOME: home })
-    .quiet();
-  const keep = await fleet.api<{ id: string }>("/api/projects", {
-    name: "Keep",
-    machineId: MACHINE,
-    cwd: keepSrc,
-  });
-  await mkdir(projectFolderOf(fleet, keep.id), { recursive: true });
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "Beat",
     machineId: MACHINE,
@@ -248,7 +242,7 @@ const standUp = async (kit: Kit) => {
     model: "claude-haiku-4-5",
     cwd: src,
   });
-  return { fleet, home, h, project: project.id, src };
+  return { fleet, home, h, parent, project: project.id };
 };
 
 /** Gives workspace `id` an older form (an account added to its policy), then restarts the agent, as an update does. */
@@ -287,7 +281,7 @@ const run = async (kit: Kit) => {
     );
     return;
   }
-  const { fleet, home, h, project, src } = await standUp(kit);
+  const { fleet, home, h, parent, project } = await standUp(kit);
   const item = () =>
     fleet.query<{ state: string; wait_until: number | null }>(
       "SELECT state, wait_until FROM work_items WHERE id = ?",
@@ -318,6 +312,10 @@ const run = async (kit: Kit) => {
 
   await olderFormRestart(fleet, home, h.workspaceId);
   const beatsBefore = await beats(clone);
+  // More than a beat before H's turn reads it: a turn that comes back
+  // within the loop's own 2 s would read the same count from a live loop
+  // (3cf54d3f1's run: 1, then 1, then 5 six seconds on).
+  await Bun.sleep(BEAT_GAP_MS);
 
   const from = fleet.seen.length;
   await fleet.send(
@@ -330,6 +328,9 @@ const run = async (kit: Kit) => {
   const counted = Number(BEATS.exec(second?.all ?? "")?.[1] ?? 0);
   await Bun.sleep(6000);
   const beatsAfter = await beats(clone);
+  kit.note(
+    `1: the heartbeat's beats, each its second: ${(await readFile(join(clone, "beat"), "utf8").catch(() => "")).trim().split("\n").join(" ")}`
+  );
 
   kit.check(
     "1: the heartbeat file grows across the turn boundary, and still grows after H's second turn",
@@ -345,19 +346,19 @@ const run = async (kit: Kit) => {
     `turn ran: ${Boolean(second)}; alive: ${alive ?? "no"} (started as ${loopPid ?? "unread"}); pid namespace ${secondNs ?? "unread"}, first turn's ${firstNs ?? "unread"}`
   );
   await keptAsItWas(kit, fleet, h.workspaceId, had);
-  const restarted = await narrowedStops(kit, fleet, home, {
+  await narrowedStops(kit, fleet, home, {
     clone,
     id: h.workspaceId,
     instanceId: h.instanceId,
     loopPid,
     project,
   });
-  await mergedStops(kit, fleet, home, {
+  await deletedStops(kit, fleet, home, {
     clone,
     id: h.workspaceId,
-    loopPid: restarted,
+    instanceId: h.instanceId,
+    parent,
     project,
-    src,
   });
 };
 
@@ -385,7 +386,7 @@ const narrowedStops = async (
     loopPid: string | undefined;
     project: string;
   }
-): Promise<string | undefined> => {
+): Promise<void> => {
   const folder = await realpath(projectFolderOf(fleet, h.project));
   const had = await grantedNow(home, h.id);
   kit.check(
@@ -422,8 +423,9 @@ const narrowedStops = async (
     `${beatsThen} lines, then ${beatsLater} six seconds on`
   );
 
-  // The folder back before H's turn: its boundary, started without it, is
-  // replaced at the turn's ensure by one that reads it again (round 6's).
+  // The folder back before H's turn. Its boundary, started without it, has
+  // nothing running now, so the next ensure (round 6's agent start, or H's
+  // wake) hands it over to one that reads the folder again.
   await rename(`${folder}.aside`, folder);
   const from = fleet.seen.length;
   await fleet.send(h.instanceId, "PROBE-BEAT-NARROW-H: check the heartbeat.");
@@ -448,35 +450,50 @@ const narrowedStops = async (
     Boolean(third) && !ALIVE.test(said),
     `turn ran: ${Boolean(third)}; alive: ${ALIVE.exec(said)?.[1] ?? "no"}`
   );
-  const again = await until(
-    "H started its loop again",
-    () => fleet.seen.slice(from).find((one) => STARTED.test(one.last)),
-    Boolean,
+};
+
+/** Asks the dashboard's `sleep` of session `id` until it reads sleeping (again every 15 s, as a machine refuses a session not at rest); answers its status. */
+const asleep = (fleet: Fleet, id: string): Promise<string | undefined> => {
+  let asked = 0;
+  return until(
+    `${id.slice(0, 8)} asleep`,
+    async () => {
+      if (
+        fleet.instance(id)?.status !== "sleeping" &&
+        Date.now() - asked > 15_000
+      ) {
+        asked = Date.now();
+        await fleet.control(id, "sleep");
+      }
+      return fleet.instance(id)?.status;
+    },
+    (status) => status === "sleeping",
     120_000
-  ).catch(() => undefined);
-  return STARTED.exec(again?.last ?? "")?.[1];
+  ).catch(() => fleet.instance(id)?.status);
 };
 
 /**
- * 6: the hub's own move of a project's folder is an event: H's checkout
- * learns the remote an older project has, so H's project folds into that one
- * and the hub moves its folder to the trash (hub project-merge.ts), then
- * syncs every machine's fleet config (server.ts `projectFolderMoved`). The
- * agent runs with its look held off (`CAWCO_NARROW_LOOK_MS`), so only that
- * sync can act: within {@link LOOK_BOUND_MS} H's boundary, which read the
- * folder, is replaced, said as the sync's in the agent's log, its loop
- * stopped, and the line queued for H's next command.
+ * 6: the hub's own move of a project's folder is an event. The agent starts
+ * again with its look held off (`CAWCO_NARROW_LOOK_MS`), so only an event
+ * can act; H's idle boundary, of an older form since the folder came back,
+ * is handed over to one that reads it, and H starts its loop again there.
+ * With H and its parent asleep (a project is deleted only once nothing of it
+ * runs), the project is deleted: the hub trashes its folder and syncs every
+ * machine's fleet config (server.ts `projectFolderMoved`). Within
+ * {@link LOOK_BOUND_MS} of the delete H's boundary is replaced, said as the
+ * sync's in the agent's log, its loop stopped, and the line naming it queued
+ * for H's next command.
  */
-const mergedStops = async (
+const deletedStops = async (
   kit: Kit,
   fleet: Fleet,
   home: string,
   h: {
     clone: string;
     id: string;
-    loopPid: string | undefined;
+    instanceId: string;
+    parent: string;
     project: string;
-    src: string;
   }
 ): Promise<void> => {
   const folder = await realpath(projectFolderOf(fleet, h.project));
@@ -490,28 +507,38 @@ const mergedStops = async (
     (logged) => logged.split(START_LINE).length > before,
     120_000
   );
+  const from = fleet.seen.length;
+  await fleet.send(h.instanceId, "PROBE-BEAT-AGAIN-H: start it again.");
+  const again = await until(
+    "H started its loop again",
+    () => fleet.seen.slice(from).find((one) => STARTED.test(one.last)),
+    Boolean,
+    240_000
+  ).catch(() => undefined);
+  const loopPid = STARTED.exec(again?.last ?? "")?.[1];
   const had = await grantedNow(home, h.id);
-  const running = await boundariesOf(fleet, h.id);
   kit.check(
-    "6: before the merge, H's boundary reads its project's folder, and its loop runs again",
-    had?.allowRead?.includes(folder) === true && h.loopPid !== undefined,
-    `${folder} in its allowRead: ${had?.allowRead ? had.allowRead.includes(folder) : "not on record"}; loop pid ${h.loopPid ?? "unread"}`
+    "6: before the delete, H's boundary was started reading its project's folder, and its loop runs there again",
+    had?.allowRead?.includes(folder) === true && loopPid !== undefined,
+    `${folder} in its allowRead: ${had?.allowRead ? had.allowRead.includes(folder) : "not on record"}; loop pid ${loopPid ?? "unread"}`
   );
-  const learned = Date.now();
-  await Bun.$`git remote add origin ${REMOTE}`.cwd(h.src).quiet();
-  await fleet
-    .api(`/api/projects/${h.project}/places`, {
-      machineId: MACHINE,
-      path: h.src,
-    })
-    .catch(() => undefined);
+  const sleeping = [
+    await asleep(fleet, h.instanceId),
+    await asleep(fleet, h.parent),
+  ];
+  const running = await boundariesOf(fleet, h.id);
+  const asked = Date.now();
+  const deleted = await fetch(`${fleet.base}/api/projects/${h.project}`, {
+    method: "DELETE",
+  });
+  const answer = `${deleted.status} ${await deleted.text()}`;
   const after = await until(
     "H's boundary replaced",
     () => boundariesOf(fleet, h.id),
     (now) => now.length === 1 && !running.includes(now[0] as string),
     30_000
   ).catch(() => boundariesOf(fleet, h.id));
-  const took = Date.now() - learned;
+  const took = Date.now() - asked;
   const beatsThen = await beats(h.clone);
   await Bun.sleep(6000);
   const beatsLater = await beats(h.clone);
@@ -523,21 +550,20 @@ const mergedStops = async (
     "utf8"
   ).catch(() => "");
   kit.check(
-    `6: the hub moves H's project's folder away as the projects merge, and within ${LOOK_BOUND_MS / 1000} s H's boundary is replaced on the fleet sync that follows, its look held off`,
-    after.length === 1 &&
+    `6: the project's delete trashes its folder, and within ${LOOK_BOUND_MS / 1000} s H's boundary is replaced on the fleet sync that follows, its look held off`,
+    deleted.ok &&
+      !existsSync(folder) &&
+      after.length === 1 &&
       !running.includes(after[0] as string) &&
       took <= LOOK_BOUND_MS &&
-      Boolean(said) &&
-      !(await Bun.file(join(folder, "."))
-        .exists()
-        .catch(() => false)),
-    `before: ${running.join(",") || "none"}; after: ${after.join(",") || "none"}, ${took} ms after the remote was learned; ${said ?? "no line names the sync"}`
+      Boolean(said),
+    `sessions ${sleeping.join(", ")}; delete: ${answer}; folder there: ${existsSync(folder)}; before: ${running.join(",") || "none"}; after: ${after.join(",") || "none"}, ${took} ms after the delete; ${said ?? "no line names the sync"}`
   );
   kit.check(
     "6: its loop is stopped with it, and the line naming it is queued for H's next command",
     beatsLater === beatsThen &&
       NARROWED_LINE.test(notice) &&
-      notice.includes(`(pid ${h.loopPid})`) &&
+      notice.includes(`(pid ${loopPid})`) &&
       notice.includes("Start it again"),
     `${beatsThen} lines, then ${beatsLater} six seconds on; queued: ${notice.trim() || "nothing"}`
   );

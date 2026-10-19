@@ -5188,6 +5188,11 @@ export class SessionSupervisor {
       // sends one desired state, and each harness converges the parts it
       // understands onto its own files. Reports merge into one machine word.
       if (method === FLEET_SYNC) {
+        // What a workspace's policy reads may have moved with it (a
+        // project's folder the hub moved away): every boundary this agent
+        // holds is checked for a narrowed access at once, whether or not it
+        // is the machine's agent, which alone writes the harness config.
+        recheckNarrowed("the fleet's config was synced").catch(() => undefined);
         // Fleet sync writes machine-wide harness config (claude's, opencode's
         // and pi's); only the machine's own agent may (see machine-agent.ts).
         if (!(await isMachineAgent())) {
@@ -5200,10 +5205,6 @@ export class SessionSupervisor {
           "syncFleet"
         );
         this.#healFleetMcp([...this.#sessions.keys()]);
-        // What a workspace's policy reads may have moved with it (the
-        // synced paths, a project's folder the hub moved away): every
-        // boundary is checked for a narrowed access at once.
-        recheckNarrowed("the fleet's config was synced").catch(() => undefined);
         return report;
       }
       if (method === FLEET_STATUS) {
