@@ -150,18 +150,24 @@
 </script>
 
 {#if standing && place}
+  <!-- A floating panel: the kit popover (its raised surface, radius, overlay
+       shadow, and its open and close on `data-state`), edge to edge inside,
+       as tall as Caw's panel or the room under the glass less the 11px kept
+       from the screen's foot. Its edge is the row outline's, which holds 3:1
+       against the raised surface and the recess alike, so it stands clear of
+       the page by day too. -->
   <section
     bind:this={node}
     aria-label={standing.name}
-    class="kit-pop files-float"
+    class="kit-pop fixed end-(--float-right) top-(--float-top) z-50 flex h-(--float-h) w-(--float-w) flex-col overflow-hidden border-border-row-outline p-0 inner-side-card:flex-1 inner-side-card:rounded-none inner-side-card:shadow-none"
     data-files-float
     data-side="left"
     data-state={standing.open ? "open" : "closed"}
     inert={!standing.open}
     style:--float-top="{place.top}px"
-    style:inset-block-start="{place.top}px"
-    style:inset-inline-end="{place.right}px"
-    style:inline-size="{place.width}px"
+    style:--float-right="{place.right}px"
+    style:--float-w="{place.width}px"
+    style:--float-h="min(var(--c-caw-panel-h), calc(100dvh - var(--float-top) - var(--space-3)))"
     {@attach afterFiles}
   >
     <RegionBoundary region="preview">
@@ -169,30 +175,3 @@
     </RegionBoundary>
   </section>
 {/if}
-
-<style>
-  /* A floating panel: the kit popover (its raised surface, radius, overlay
-     shadow, and its open and close on `data-state`), edge to edge inside,
-     as tall as Caw's panel or the room under the glass less the 11px kept
-     from the screen's foot. Its edge is the row outline's, which holds 3:1
-     against the raised surface and the recess alike, so it stands clear of
-     the page by day too. */
-  .files-float {
-    position: fixed;
-    z-index: 50;
-    display: flex;
-    flex-direction: column;
-    block-size: min(
-      var(--c-caw-panel-h),
-      calc(100dvh - var(--float-top) - var(--space-3))
-    );
-    padding: 0;
-    overflow: hidden;
-    border-color: var(--border-row-outline);
-  }
-  .files-float :global([data-slot="side-card"]) {
-    flex: 1;
-    border-radius: 0;
-    box-shadow: none;
-  }
-</style>

@@ -82,7 +82,7 @@
   }
 </script>
 
-<div class="files-face" data-files-panel>
+<div class="flex min-h-0 flex-auto flex-col" data-files-panel>
   {#if instanceId}
     {#key instanceId}
       <FilesList
@@ -98,12 +98,3 @@
     {/key}
   {/if}
 </div>
-
-<style>
-  .files-face {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-  }
-</style>

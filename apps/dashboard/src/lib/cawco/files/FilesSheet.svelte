@@ -83,9 +83,13 @@
   shouldScaleBackground={false}
   snapPoints={SNAPS}
 >
+  <!-- The recipe's height, up to 85vh, from the first frame: vaul's stops are
+       shares of the screen's height, so the sheet holds one height at every
+       stop. -->
   <Drawer.Content
-    class="files-drawer"
+    class="h-(--files-drawer-h)"
     data-files-sheet
+    style="--files-drawer-h: min(var(--drawer-max-height, 85vh), var(--visible-height, 100dvh))"
     onCloseAutoFocus={(event: Event) => {
       // The focus moved on by itself (the ask, into the composer): it stays.
       // Opened from the sidebar, which went as it rose: the focus goes back
@@ -110,9 +114,11 @@
     <Drawer.Header>
       <Drawer.Title>Files</Drawer.Title>
     </Drawer.Header>
+    <!-- At the lower stop the sheet stands that share of the screen lower:
+         what it holds ends where the screen does. -->
     <div
-      class="files-drawer-body"
-      style:--snap={typeof snap === "number" ? snap : 1}
+      class="flex min-h-0 flex-auto flex-col pb-(--snap-drop)"
+      style:--snap-drop="calc((1 - {typeof snap === 'number' ? snap : 1}) * 100dvh)"
     >
       {#if instanceId}
         {#key instanceId}
@@ -129,25 +135,3 @@
     </div>
   </Drawer.Content>
 </Drawer.Root>
-
-<style>
-  /* css-scope .files-drawer: Files' drawer, the kit's bottom sheet, named on its content */
-  /* The recipe's height, up to 85vh, from the first frame: vaul's stops are
-     shares of the screen's height, so the sheet holds one height at every
-     stop. */
-  :global([data-slot="drawer-content"].files-drawer) {
-    block-size: min(
-      var(--drawer-max-height, 85vh),
-      var(--visible-height, 100dvh)
-    );
-  }
-  /* At the lower stop the sheet stands that share of the screen lower:
-     what it holds ends where the screen does. */
-  .files-drawer-body {
-    display: flex;
-    flex: 1 1 auto;
-    flex-direction: column;
-    min-block-size: 0;
-    padding-block-end: calc((1 - var(--snap)) * 100dvh);
-  }
-</style>
