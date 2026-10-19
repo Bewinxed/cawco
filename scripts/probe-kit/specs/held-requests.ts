@@ -19,7 +19,7 @@
  */
 import { signal, spawnedPid } from "../../../packages/core/src/signal";
 import { delay } from "../../scratch-fleet";
-import type { Kit, Spec } from "../kit";
+import { type Kit, logSince, type Spec } from "../kit";
 import { relay } from "../relay";
 
 const OTHER = "held-requests-other";
@@ -58,7 +58,7 @@ const spec: Spec = {
     const hubLog = async () => await fleet.logs("hub");
 
     // Back in time.
-    const before = (await hubLog()).length;
+    const before = await hubLog();
     freeze(true);
     const asked = Date.now();
     const answer = inspect().then(
@@ -76,7 +76,7 @@ const spec: Spec = {
       got.ok && typeof got.value === "object",
       `${Math.round((Date.now() - asked) / 1000)} s; ${got.ok ? JSON.stringify(got.value).slice(0, 200) : got.error.slice(0, 400)}`
     );
-    const said = (await hubLog()).slice(before);
+    const said = logSince(before, await hubLog());
     check(
       "the hub sent the held request again on the machine's register",
       said.includes(RESENT),

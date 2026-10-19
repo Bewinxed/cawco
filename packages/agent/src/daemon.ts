@@ -202,6 +202,7 @@ import { readConfig, writeConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
 import { rediscoverHub, toWsUrl } from "./discovery";
 import { forgePost } from "./forges/forge";
+import { setHubGitOrigins } from "./git-credential";
 import type { Harness } from "./harness";
 import { harness, harnesses } from "./harnesses";
 import { removeCawcoSessionConfigs } from "./harnesses/opencode";
@@ -2598,6 +2599,9 @@ const attach = (
           identity.machineId,
           (envelope.payload as RegisterAckPayload).machineCredential
         );
+        // Every address the hub's git remote answers at: a clone made by
+        // another machine names the hub as that machine reached it.
+        setHubGitOrigins((envelope.payload as RegisterAckPayload).gitOrigins);
         // Registered: launches ask on this connection from here, the held
         // spawns below among them, and what went unanswered before goes now.
         launchAsks.connected(askHub);

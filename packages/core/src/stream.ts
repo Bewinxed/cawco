@@ -327,6 +327,18 @@ export interface RegisterAckPayload {
    */
   delivered?: Record<string, DeliveryMark>;
   /**
+   * Every origin the hub's git remote answers at (`http://<name>:<port>`, a
+   * name for each of its hostnames, tailnet names and addresses): a clone
+   * whose `origin` is under any of them, `/git/`, is a repository of this
+   * hub's, whatever address it was made by (agent git-credential.ts
+   * `hubOriginOf`). Each machine reaches the hub by the address it found it
+   * at, and a clone's origin names the address of the machine that made it:
+   * read as an outside remote, another machine's create sent it no
+   * credential, and the hub refused it ("This remote takes a CawCo machine
+   * or session credential", 2026-10-20).
+   */
+  gitOrigins: string[];
+  /**
    * Whether this machine is the hub's own computer: its machine id is the
    * hub's (hub server.ts `isHubMachine`: "an agent registered under it shares
    * the hub's disk"). The agent's loopback carries nothing there (agent

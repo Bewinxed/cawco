@@ -471,6 +471,7 @@ import {
   DASHBOARD_PORT,
   DB_PATH,
   GIT_ROOT,
+  HUB_PORT,
   HUB_VERSION,
   LFS_ROOT,
   LOCAL_DASHBOARD_PORT,
@@ -1520,7 +1521,8 @@ const registerAck = (
   sessionLimits: SessionLimits,
   upstream: UpstreamRules,
   hostsHub: boolean,
-  revokedCredentials: string[]
+  revokedCredentials: string[],
+  gitOrigins: string[]
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
@@ -1528,6 +1530,7 @@ const registerAck = (
     ok: true,
     ingested,
     delivered,
+    gitOrigins,
     hubEpoch: HUB_EPOCH,
     machineCredential,
     sessionLimits,
@@ -11045,6 +11048,21 @@ export const createServer = (
         .map((one) => one.address.toLowerCase()),
     ];
   };
+  /**
+   * Every origin this hub's git remote answers at, one per name it answers
+   * by ({@link hubOwnNames}, a link-local address with its zone left out),
+   * on its own port (RegisterAckPayload.gitOrigins).
+   */
+  const hubGitOrigins = (): string[] => [
+    ...new Set(
+      hubOwnNames()
+        .filter((name) => !name.includes("%"))
+        .map(
+          (name) =>
+            `http://${name.includes(":") ? `[${name}]` : name}:${HUB_PORT}`
+        )
+    ),
+  ];
   /**
    * The domain a page last reached CawCo through (every dashboard reads the
    * journey as it loads): the setup card recommends Set up with it.
@@ -28952,7 +28970,8 @@ export const createServer = (
                   await isHubMachine(message.machineId),
                   // Which of the credentials its redaction store holds the
                   // hub has revoked since: those leave the store.
-                  db.revokedAmong(credentialHashesOf(message.payload))
+                  db.revokedAmong(credentialHashesOf(message.payload)),
+                  hubGitOrigins()
                 )
               );
               // Behind its ack, which it waits for to take requests: what
