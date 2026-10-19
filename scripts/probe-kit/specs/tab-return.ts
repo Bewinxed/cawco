@@ -65,7 +65,7 @@ import { cp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
-import { type MainTask, SCROLLER, traceMain } from "../frames";
+import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
 import { type Kit, open, ROOT, type Spec } from "../kit";
 import {
   type Cost,
@@ -163,6 +163,11 @@ interface Back {
   page?: PageBack;
   /** When the switch was pressed, epoch ms. */
   pressAt: number;
+  /**
+   * The press's own task (its pointerup) said whole, as `reachWhat`, with
+   * its script's sampled self time by the bundle file it ran in.
+   */
+  pressWhat: string;
   psi: string;
   /** The longest task between the reach and the press, CPU ms. */
   reach: number;
@@ -937,7 +942,7 @@ function noteOf(back: Back, turns: number): string {
   const warm = Number.isNaN(back.warmTask)
     ? "not traced"
     : `${back.warmTask.toFixed(1)}ms`;
-  return `${back.scene}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${page}${landed}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach task (its warm and the frame laying the pane out) ${warm}: ${back.warmWhat} | the longest from the reach to the press ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`;
+  return `${back.scene}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${page}${landed}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach task (its warm and the frame laying the pane out) ${warm}: ${back.warmWhat} | the longest from the reach to the press ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input}; its task: ${back.pressWhat} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`;
 }
 
 /**
@@ -1038,6 +1043,39 @@ async function checkPaneLookup(
     found.slotPane === pane,
     `[data-pane] finds ${found.bare}; [data-slot="pane"][data-pane] finds ${found.slot}`
   );
+}
+
+/** A sampled function's bundle file: `name@file:line:column`, or the engine's own. */
+const FILE_OF = /@([^:@]+):\d+:\d+$/;
+
+/**
+ * The press's own task, the first pointerup at or after the press: said
+ * whole (`line`), and its script's sampled self time summed by the bundle
+ * file each function ran in, the most first.
+ */
+function pressLine(
+  tasks: MainTask[],
+  madeMark: number,
+  main: MainThread,
+  line: (task: MainTask) => string
+): string {
+  const task = tasks.find(
+    (one) => one.at >= madeMark && one.ran === "a pointerup event"
+  );
+  if (!task) {
+    return "no pointerup traced";
+  }
+  const byFile = new Map<string, number>();
+  for (const [fn, ms] of main.selfTime(task.at, task.end)) {
+    const file = FILE_OF.exec(fn.split(" ← ").at(-1) ?? fn)?.[1] ?? fn;
+    byFile.set(file, (byFile.get(file) ?? 0) + ms);
+  }
+  const files = [...byFile]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8)
+    .map(([file, ms]) => `${file} ${ms.toFixed(1)}ms`)
+    .join(", ");
+  return `${line(task)}; by file: ${files}`;
 }
 
 /**
@@ -1266,6 +1304,7 @@ async function measureBack(
     reachWhat: reach ? taskLine(reach) : "nothing",
     warmTask: warmed ? warmed.cpu : Number.NaN,
     warmWhat: warmed ? taskLine(warmed) : "no warm traced",
+    pressWhat: pressLine(own, madeMark, main, taskLine),
     heavy:
       own
         .filter((task) => task.cpu >= HEAVY_MS)
@@ -1332,6 +1371,7 @@ async function clickBack(
     reachWhat: "not traced",
     warmTask: Number.NaN,
     warmWhat: "not traced",
+    pressWhat: "not traced",
     shown: "not read",
     shownCounts: [],
     staging: "not read",
