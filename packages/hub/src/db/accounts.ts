@@ -38,7 +38,10 @@ const LIMIT_HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 /** What an account's editable settings may be patched with. */
 export type AccountPatch = Partial<
-  Pick<Account, "hue" | "label" | "neverBackup" | "order" | "reservePct">
+  Pick<
+    Account,
+    "atPlanLimit" | "hue" | "label" | "neverBackup" | "order" | "reservePct"
+  >
 >;
 
 export type AccountHistoryRow = typeof usageLimitHistory.$inferSelect;
@@ -183,6 +186,7 @@ const toAccount = (row: AccountRow): Account => ({
   order: row.order,
   neverBackup: row.neverBackup,
   reservePct: row.reservePct,
+  atPlanLimit: row.atPlanLimit,
   identity:
     row.email === null
       ? null

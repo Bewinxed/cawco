@@ -5,6 +5,7 @@ import {
   type AccountSignin,
   accountNameAmong,
   clockWords,
+  keepsGoingOnExtraUsage,
   type LimitWindow,
   modelScope,
   type PlacementExplain,
@@ -287,7 +288,21 @@ class Usage {
     return Math.max(this.session(id), this.weekly(id));
   }
 
-  headroom = (account: Account): boolean => this.binding(account.id) < 100;
+  /**
+   * Whether its plan limits stop nothing for this session: it keeps going on
+   * extra usage at its plan limit (core `keepsGoingOnExtraUsage`), and the
+   * session is placed fresh. A session carried off its account at a limit
+   * ({@link PlacementInput.exclude}) goes only to plan room.
+   */
+  onExtraUsage = (account: Account): boolean =>
+    this.#input.exclude === undefined &&
+    keepsGoingOnExtraUsage(
+      account,
+      this.#input.readings.find((one) => one.accountId === account.id)
+    );
+
+  headroom = (account: Account): boolean =>
+    this.binding(account.id) < 100 || this.onExtraUsage(account);
 
   /**
    * Whether its limits have been read at all: a session leaving its account
@@ -376,10 +391,15 @@ class Usage {
     );
   }
 
-  /** Whether it can take a session now: not benched, not past its reserve, under its limits. */
+  /**
+   * Whether it can take a session now: not past its reserve, and under its
+   * limits and off its bench, or past them on extra usage ({@link onExtraUsage}).
+   */
   room = (account: Account): boolean =>
-    !(this.benched(account.id) || this.pastReserve(account)) &&
-    this.headroom(account);
+    !(
+      (this.benched(account.id) && !this.onExtraUsage(account)) ||
+      this.pastReserve(account)
+    ) && this.headroom(account);
 
   /**
    * When an account with no room takes a session again: the latest of its
@@ -416,7 +436,12 @@ class Usage {
   }
 
   said(id: string): string {
-    return `5-hour ${pct(this.session(id))}, weekly ${pct(this.weekly(id))}`;
+    const account = this.#input.accounts.find((one) => one.id === id);
+    const credits =
+      account && this.binding(id) >= 100 && this.onExtraUsage(account)
+        ? "; past its plan, it keeps going on extra usage, as its setting says"
+        : "";
+    return `5-hour ${pct(this.session(id))}, weekly ${pct(this.weekly(id))}${credits}`;
   }
 }
 

@@ -27811,6 +27811,11 @@ export const createServer = (
             reservePct: t.Optional(
               t.Union([t.Integer({ minimum: 0, maximum: 100 }), t.Null()])
             ),
+            // At a plan limit with extra usage on: move its sessions to an
+            // account with plan room, or keep going on its extra usage.
+            atPlanLimit: t.Optional(
+              t.Union([t.Literal("move"), t.Literal("extra-usage")])
+            ),
           }),
         },
         ({ params, body, status }) => {

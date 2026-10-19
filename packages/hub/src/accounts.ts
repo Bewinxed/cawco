@@ -13,6 +13,7 @@ import {
   CLAUDE_READING_CURRENT_MS,
   type ClaudeExtraUsage,
   type ClaudeLimits,
+  extraUsageOn,
   type ProviderAccountReading,
   type SigninState,
   sameIdentity,
@@ -363,7 +364,7 @@ const extraUsageOf = (
       ? { on: true, inUse: true, offReason: null, resetsAt: overage.resetsAt }
       : null;
   }
-  const on = overage.status !== "rejected";
+  const on = extraUsageOn(overage);
   return {
     on,
     inUse: overage.inUse,

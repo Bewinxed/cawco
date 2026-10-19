@@ -18,6 +18,7 @@ typeOverrides:
     ArtifactStatusWaitingOn: OpenEnums.ArtifactStatusWaitingOn
     AskAnswerBehavior: OpenEnums.AskAnswerBehavior
     AskAnswerVia: OpenEnums.AskAnswerVia
+    AtPlanLimit: OpenEnums.AtPlanLimit
     AuthState: OpenEnums.AuthState
     BinaryUpdateLandingOutcome: OpenEnums.BinaryUpdateLandingOutcome
     BinaryUpdatePhase: OpenEnums.BinaryUpdatePhase

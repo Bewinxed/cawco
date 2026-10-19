@@ -151,6 +151,15 @@ export interface Reply {
    */
   cache?: { read: number; write: number };
   /**
+   * The answer ran on the account's extra usage past its plan, as Anthropic
+   * answers a subscription whose 5-hour window is spent while its usage
+   * credits are on: the unified status rejected with the overage status
+   * allowed, which Claude Code reads as `isUsingOverage` (2.1.302: `status
+   * === "rejected" && (overageStatus === "allowed" || …)`), the 5-hour window
+   * at its limit until `resetsAt` (epoch ms). Replaces `limits`' headers.
+   */
+  credits?: { resetsAt: number };
+  /**
    * The request is refused with this HTTP status and the provider's words, as
    * a provider refuses a credential it does not take (`401`, chat completions
    * and Anthropic messages alike).
@@ -480,6 +489,27 @@ const limitHeaders = (limits: Reply["limits"]): Record<string, string> => {
       : {}),
   };
 };
+
+/** Anthropic's usage headers for an answer extra usage carried past the plan ({@link Reply.credits}). */
+const creditsHeaders = ({
+  resetsAt,
+}: NonNullable<Reply["credits"]>): Record<string, string> => {
+  const reset = String(Math.ceil(resetsAt / 1000));
+  return {
+    "anthropic-ratelimit-unified-status": "rejected",
+    "anthropic-ratelimit-unified-reset": reset,
+    "anthropic-ratelimit-unified-representative-claim": "five_hour",
+    "anthropic-ratelimit-unified-5h-status": "rejected",
+    "anthropic-ratelimit-unified-5h-utilization": "1.0",
+    "anthropic-ratelimit-unified-5h-reset": reset,
+    "anthropic-ratelimit-unified-overage-status": "allowed",
+    "anthropic-ratelimit-unified-overage-in-use": "true",
+  };
+};
+
+/** The usage headers an Anthropic answer carries: on extra usage, or its account's windows. */
+const answerHeaders = (reply: Reply): Record<string, string> =>
+  reply.credits ? creditsHeaders(reply.credits) : limitHeaders(reply.limits);
 
 /** An SSE stream of `events`, one every `everyMs`, cancelled when the client goes, with `headers` beside its type. */
 const sseStream = (
@@ -1493,7 +1523,7 @@ async function standUp(
             stop_sequence: null,
             usage: { input_tokens: 10, output_tokens: 2 },
           },
-          { headers: limitHeaders(reply.limits) }
+          { headers: answerHeaders(reply) }
         );
       }
       return sseStream(
@@ -1506,7 +1536,7 @@ async function standUp(
               reply.usage
             ),
         reply.everyMs,
-        chat ? {} : limitHeaders(reply.limits)
+        chat ? {} : answerHeaders(reply)
       );
     },
   });

@@ -211,7 +211,20 @@ export interface AccountIdentity {
   orgId: string | null;
 }
 
+/**
+ * What a session on an account does once the account reaches a plan limit
+ * while its extra usage is on (Claude Code's `overageStatus` allowed): moves
+ * to an account with plan room (`move`, the default), or keeps going on this
+ * account's extra usage (`extra-usage`). With extra usage off or refused, the
+ * account is at its limit as any other is, whichever it says.
+ */
+export type AtPlanLimit = "move" | "extra-usage";
+
+export const AT_PLAN_LIMIT: readonly AtPlanLimit[] = ["move", "extra-usage"];
+
 export interface Account {
+  /** What its sessions do at a plan limit while its extra usage is on ({@link AtPlanLimit}). */
+  atPlanLimit: AtPlanLimit;
   createdAt: number;
   /** The email it is signed in as ({@link identity}'s); null until its first sign-in. */
   email: string | null;
@@ -465,6 +478,27 @@ export interface AccountOverage {
   resetsAt: string | null;
   status: string | null;
 }
+
+/**
+ * Whether requests past the plan may run as extra usage, as the account's
+ * last `rate_limit_event` said: `overageStatus` allowed or allowed with a
+ * warning; with no status, whether it was spending extra usage then.
+ */
+export const extraUsageOn = (
+  overage: AccountOverage | null | undefined
+): boolean =>
+  overage?.status ? overage.status !== "rejected" : overage?.inUse === true;
+
+/**
+ * Whether `account`'s plan limits stop nothing on it: it says to keep going
+ * on extra usage at a plan limit ({@link AtPlanLimit}), and its extra usage
+ * is on ({@link extraUsageOn}).
+ */
+export const keepsGoingOnExtraUsage = (
+  account: Pick<Account, "atPlanLimit">,
+  reading: Pick<AccountReading, "overage"> | undefined
+): boolean =>
+  account.atPlanLimit === "extra-usage" && extraUsageOn(reading?.overage);
 
 /**
  * An account's freshest limit reading, assembled from what its sessions'
