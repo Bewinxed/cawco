@@ -1,9 +1,9 @@
 # The project screens' decision page
 
 `page.oui` is the decision program (the decision library, `packages/hub/skills/decision-page/LIBRARY.md`). It replaces
-the older `design/decisions/project-redesign/` page. Four cards ask whether a surface fixed from the owner's pins looks
-right now (`pins-pane`, `pins-card`, `pins-empty`, `pins-head`), each with that surface's fixed state live; one asks
-what the Pipeline tab is for (`pipeline`). Its opening lines are `ask.txt` and `does.txt`, passed at publish.
+the older `design/decisions/project-redesign/` page. One card (`pins`) holds the four surfaces fixed from the owner's
+pins, each with his words and its fixed state live, and asks once whether they look right; one asks what the Pipeline
+tab is for (`pipeline`), its drawing above its two options. Its opening lines are `ask.txt` and `does.txt`, passed at publish.
 
 Each `Preview("@name")` stands for the component canvas of one states file. To publish: make each canvas with
 `artifact_create({ kind: "component", name, file, about })`, put the id it answers in place of `@name`, then

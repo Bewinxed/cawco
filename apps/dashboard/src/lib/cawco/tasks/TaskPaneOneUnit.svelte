@@ -6,7 +6,8 @@
    * start. Then four tabs, Review · Session · Details · Activity (Review
    * only while there is one); only the chosen tab scrolls, under the kit's
    * edge fade, never between hairlines. The decision is the pane's foot,
-   * pinned, only while there is one: Approve and Send back with More, or
+   * right under what it decides on (pinned once the tab runs long), only
+   * while there is one: Approve and Send back with More, or
    * Try again with More. The stage is said once, on its chip; the session
    * row says the session's own state.
    */
@@ -161,13 +162,15 @@
   const sayDraft = new ComposerDraft();
   let sayFoot = $state(0);
   /**
-   * The session's state word, unless it is the stage's own name (a live
-   * session in Working, a finished one in Done): the pane says its stage
-   * once, on its chip.
+   * The session's state word only when it is news the stage cannot carry:
+   * it failed or was stopped. Working and Done are what the stage already
+   * says (a task in Review was handed in by a session that is done), so the
+   * pane says one status, on its stage (owner pin: "why are you mentioning
+   * 'working' twice here?").
    */
   const rowWord = $derived(
     sessionState &&
-      sessionState.word.toLowerCase() !== stageLabel(task.stage).toLowerCase()
+      (sessionState.status === "fail" || sessionState.status === "idle")
       ? sessionState.word
       : null
   );
@@ -363,7 +366,9 @@
         size="compact"
         value={view}
       >
-        <TabsList aria-label="Task">
+        <!-- Scrollable: a narrow pane keeps each tab's words whole and scrolls
+             the track under its edge fade, never cutting a name to "R…". -->
+        <TabsList aria-label="Task" scrollable>
           <!-- Each section leads with its glyph (owner pin: "ICONS IN SECTIONS"),
                none of them a glyph its own headings already wear. -->
           {#if reviewable}
@@ -819,8 +824,10 @@
     color: var(--status-attn-ink);
   }
   /* Only the chosen tab scrolls, under the kit's edge fade: no hairlines. */
+  /* As tall as what it holds, so the decision follows it; past the pane's
+     room it gives way and scrolls, the decision then pinned under it. */
   .content {
-    flex: 1 1 auto;
+    flex: 0 1 auto;
     min-block-size: 0;
     padding: var(--space-2) var(--pane-inline) var(--space-5);
     overflow-y: auto;
@@ -1011,7 +1018,7 @@
   .todo :global(.todo-glyph.done) {
     color: var(--status-done-glyph);
   }
-  /* The decision, pinned at the pane's foot over the safe area. */
+  /* The decision: under what it decides on, clear of the safe area. */
   .foot {
     display: flex;
     flex: none;

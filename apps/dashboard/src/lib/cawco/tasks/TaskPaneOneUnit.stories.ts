@@ -1,7 +1,7 @@
 /**
  * PROPOSED: the task pane as one unit (taskpane advisor §1): the title,
  * one group of chips, one session row, the tabs Review · Session · Details
- * · Activity, the decision pinned at its foot with More. Its six states and
+ * · Activity, the decision right under what it decides on, with More. Its six states and
  * its Session tab, on a desk (the side card beside the board) and on a
  * phone (its own page).
  */
@@ -21,7 +21,7 @@ import TaskPaneOneUnit from "./TaskPaneOneUnit.svelte";
 type Tab = "review" | "session" | "details" | "activity" | null;
 const desk = () => ({ Component: PaneRoom, props: { height: 820 } });
 const phone = () => ({ Component: PaneRoom, props: { height: 844 } });
-/** `asks`: its agent's decision pinned at the foot with the review. */
+/** `asks`: its agent's decision at the foot, with the review. */
 const argsOf = (taskId: string, page: boolean, tab: Tab, asks: boolean) => ({
   task: viewOf(taskId),
   history: historyOf(taskId).events,
@@ -48,7 +48,7 @@ export default {
 
 // Each viewport is a literal on the export itself: the canvas reads it from the source.
 
-/** Desk · In Review: the result on the card, no lines around it; Approve, Send back and More pinned at the foot. */
+/** Desk · In Review: the result on the card, no lines around it; Approve, Send back and More right under it. */
 export const Review = { ...pane("tsk-16"), parameters: { viewport: 440 } };
 /** Desk · In Review, its agent asking a decision: its own three options over Approve, Send back and More. */
 export const ReviewAsks = {
@@ -66,11 +66,11 @@ export const Working = { ...pane("tsk-14"), parameters: { viewport: 440 } };
 export const ToDo = { ...pane("tsk-19"), parameters: { viewport: 440 } };
 /** Desk · Done: what it handed in; no foot. */
 export const Done = { ...pane("tsk-12"), parameters: { viewport: 440 } };
-/** Desk · Failed: how it ended under the session; Try again and More pinned. */
+/** Desk · Failed: how it ended under the session; Try again and More under it. */
 export const Failed = { ...pane("tsk-21"), parameters: { viewport: 440 } };
-/** Desk · The hub couldn't start it: its words whole under the chips; Try again and More pinned. */
+/** Desk · The hub couldn't start it: its words whole under its stage; Try again and More under it. */
 export const CantStart = { ...pane("tsk-20"), parameters: { viewport: 440 } };
-/** Phone · In Review: the decision pinned over the safe area. */
+/** Phone · In Review: the decision right under the review, clear of the safe area. */
 export const PhoneReview = {
   ...phonePane("tsk-16"),
   parameters: { viewport: "phone" },

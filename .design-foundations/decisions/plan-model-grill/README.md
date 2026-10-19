@@ -1,12 +1,12 @@
-# How you steer a session's plan
+# How your changes reach an agent's plan
 
 `page.oui` is the decision program (the decision library, `packages/hub/skills/decision-page/LIBRARY.md`). Its one
 diagram is Mermaid text, so it publishes as it stands: `artifact_create({ kind: "page", name: "plan-model-grill",
 program, ask, does })`, `ask` and `does` read from `ask.txt` and `does.txt` beside it.
 
-Two questions are open: where every session keeps its plan (`list-home`), then which of the owner's changes wake an
-idle session (`wake`, after `list-home`). The `settled` card lists the three points the cohesion model already settled,
-one plain line each, with Keep all or Change some:
+Two questions are open: where every agent keeps its plan (`list-home`: CawCo's list, or Claude Code may keep its
+own), then which of the owner's changes start a waiting agent working again (`wake`, after `list-home`). The three
+points the cohesion model already settled are one line under the page's opening (`settled`, a Text), not a pick:
 
 - `step-edges`: every way of the plan view's round 4 (branch `cawco/plan-view-round4`) draws a step's "after";
 - `delegate-depth`: round 4 draws a delegate as one row with its steps, report and session behind its fold;

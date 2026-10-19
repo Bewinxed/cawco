@@ -96,11 +96,14 @@ interface Read {
     rightGap: number;
     story: string;
   }[];
+  cutTabs?: string[];
   frames: number;
+  gaps?: { gap: number; story: string }[];
   glyph?: { least: number; where: string };
   hairlines?: { lines: string[]; story: string }[];
   once?: { story: string; times: number; word: string }[];
   overflow?: { faults: string[]; story: string }[];
+  rowWords?: { story: string; word: string }[];
   starters?: { cards: number; h: number; story: string; w: number }[];
 }
 
@@ -255,6 +258,36 @@ function measure({
       });
       return [{ story, lines }];
     });
+    // The decision follows what it decides on: the review's last line to
+    // the foot's top, where the pane has both.
+    out.gaps = frames.flatMap(({ story, body }) => {
+      const stage = body.querySelector("[data-review-stage]");
+      const foot = body.querySelector('[data-slot="foot"]');
+      const last = stage?.lastElementChild;
+      if (!(last && foot)) {
+        return [];
+      }
+      return [{ story, gap: round(rect(foot).top - rect(last).bottom) }];
+    });
+    // A tab's name is read whole: its words never wider than their box.
+    out.cutTabs = frames.flatMap(({ story, body }) =>
+      [
+        ...body.querySelectorAll<HTMLElement>(
+          '[data-slot="tab-item-label"] [data-slot="text"]:not(.strong)'
+        ),
+      ]
+        .filter((text) => text.scrollWidth > text.clientWidth + 0.5)
+        .map((text) => `${story}: ${text.textContent?.trim()}`)
+    );
+    // The session row speaks only when the stage can't: a failed or
+    // stopped session. Any other word there is a second status.
+    out.rowWords = frames.flatMap(({ story, body }) =>
+      [
+        ...body.querySelectorAll<HTMLElement>(
+          '[data-slot="session-row"] .session-word'
+        ),
+      ].map((word) => ({ story, word: word.textContent?.trim() ?? "" }))
+    );
   }
 
   if (section === "empty") {
@@ -682,6 +715,12 @@ function readPage() {
       .map((one) => one.textContent?.trim() ?? "")
       .filter(Boolean),
     sideways: document.documentElement.scrollWidth - window.innerWidth,
+    // Each diagram's groups (Mermaid's clusters): their left edges, in px.
+    groups: [...document.querySelectorAll(".dp-card .diagram svg")].map((svg) =>
+      [...svg.querySelectorAll("g.cluster > rect")].map(
+        (box) => Math.round(box.getBoundingClientRect().left * 10) / 10
+      )
+    ),
   };
 }
 
@@ -701,7 +740,7 @@ const spec: Spec = {
     // 1. Each program, as the hub would keep it.
     const programs = new Map<string, string>();
     /** The states files the pages embed, by placeholder: what the stage serves and the sweep draws. */
-    const embedded = new Set<string>();
+    const sheets = new Set<string>();
     for (const one of PAGES) {
       const written = readFileSync(join(ROOT, one.folder, "page.oui"), "utf8");
       const names = [...written.matchAll(PLACEHOLDER)].map((m) => m[1] ?? "");
@@ -733,7 +772,7 @@ const spec: Spec = {
       programs.set(one.name, program);
       for (const name of names) {
         if (!unknown.includes(name)) {
-          embedded.add(name);
+          sheets.add(name);
         }
       }
       manifest.pages[one.name] = {
@@ -752,7 +791,7 @@ const spec: Spec = {
     const stage = await startDecisionStage(
       programs,
       Object.fromEntries(
-        [...embedded].map((key) => [idOf(key), FILES[key] ?? ""])
+        [...sheets].map((key) => [idOf(key), FILES[key] ?? ""])
       )
     );
 
@@ -777,7 +816,7 @@ const spec: Spec = {
 
           // 2. The proposed states files.
           const read: Partial<Record<string, Read>> = {};
-          for (const section of embedded) {
+          for (const section of sheets) {
             read[section] = await sweepFile(
               page,
               stage.stagePort,
@@ -808,6 +847,22 @@ const spec: Spec = {
             `${leg}: the task pane says its stage once in its head (${(pane?.once ?? []).map((one) => `${one.story} "${one.word}" ${one.times}×`).join(", ")})`,
             (pane?.once ?? []).length > 0 &&
               (pane?.once ?? []).every((one) => one.times === 1)
+          );
+          kit.check(
+            `${leg}: the task pane's decision follows its review, at most 48px under it (${(pane?.gaps ?? []).map((one) => `${one.story} ${one.gap}px`).join(", ")})`,
+            (pane?.gaps ?? []).length > 0 &&
+              (pane?.gaps ?? []).every((one) => one.gap <= 48)
+          );
+          kit.check(
+            `${leg}: the task pane's tabs read whole, none cut to an ellipsis`,
+            (pane?.cutTabs ?? []).length === 0,
+            (pane?.cutTabs ?? []).join(", ")
+          );
+          kit.check(
+            `${leg}: the task pane says one status: its session row speaks only for a failed or stopped session (${(pane?.rowWords ?? []).map((one) => `${one.story} "${one.word}"`).join(", ") || "none shown"})`,
+            (pane?.rowWords ?? []).every((one) =>
+              ["Failed", "Stopped"].includes(one.word)
+            )
           );
           if (view === "desk") {
             kit.check(
@@ -899,6 +954,14 @@ const spec: Spec = {
                     c.recommended === 1
                 ),
               JSON.stringify(said.cards)
+            );
+            const staggered = said.groups.filter(
+              (lefts) => Math.max(...lefts) - Math.min(...lefts) > 1
+            );
+            kit.check(
+              `${one.name} ${leg}: each diagram's groups stand on one left edge, within 1px (${said.groups.map((lefts) => lefts.join("/")).join("; ") || "no diagram"})`,
+              staggered.length === 0,
+              JSON.stringify(staggered)
             );
             const drawnFaults = embeds.flatMap(embedDrawFaults);
             kit.check(
