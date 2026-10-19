@@ -1043,6 +1043,7 @@ const readDrawn = (page: Page) =>
         } | null;
         crew: { overlaps: number; sides: number[] };
         faded: string[];
+        inset: string | null;
         last: { faded: number; lines: number; row: string } | null;
         queued: {
           alpha: number;
@@ -1372,13 +1373,17 @@ const readDrawn = (page: Page) =>
               .filter((r) => r.width > 0)
               .map((r) => Math.round(r.top / zoom))
           );
+          // Its words never wrap: nothing past the state, its line or its row.
+          const over = [
+            said,
+            el,
+            el.parentElement,
+            el.closest<HTMLElement>('[data-slot="plan-row"]'),
+          ].map((box) => (box ? box.scrollWidth - box.clientWidth : 0));
           return {
             text: said.textContent?.trim() ?? "",
             lines: tops.size,
-            over: Math.max(
-              said.scrollWidth - said.clientWidth,
-              el.scrollWidth - el.clientWidth
-            ),
+            over: Math.max(...over),
           };
         });
       // The scroller's edge fades as they stand at rest, in client pixels:
@@ -1539,10 +1544,18 @@ const readDrawn = (page: Page) =>
           }
         }
       }
+      // What the foot's fade stands clear of (app.css `--fade-inset-end`):
+      // the caps measure the foot at the scroller's own edge.
+      const inset = scroller
+        ? getComputedStyle(scroller)
+            .getPropertyValue("--fade-inset-end")
+            .trim() || "unset"
+        : null;
       out[story] = {
         blank,
         count,
         faded,
+        inset,
         last,
         queued,
         standing,
@@ -1676,6 +1689,18 @@ function checkRound5(
 ): void {
   const json = (value: unknown) => String(JSON.stringify(value)).slice(0, 700);
   const shown = Object.entries(drawn);
+  const insets = shown.flatMap(([story, one]) =>
+    one.inset === null ? [] : [`${story} ${one.inset}`]
+  );
+  kit.check(
+    `${name}: the foot's fade ends at the scroller's own edge, where the caps measure it (--fade-inset-end: ${insets.join("; ")})`,
+    insets.length > 0 &&
+      shown.every(
+        ([, one]) =>
+          one.inset === null || one.inset === "unset" || one.inset === "0px"
+      ),
+    json(insets)
+  );
   const counts = shown.flatMap(([story, one]) =>
     one.count ? [{ story, ...one.count }] : []
   );
@@ -1695,7 +1720,7 @@ function checkRound5(
     one.standing.map((said) => ({ story, ...said }))
   );
   kit.check(
-    `${name}: a delegate's state beside its act stands on one line, nothing past its box (${standing.map((one) => `${one.story} "${one.text}" ${one.lines} line${one.lines === 1 ? "" : "s"}, ${one.over}px over`).join("; ")})`,
+    `${name}: a delegate's state beside its act stands on one line, nothing past its box, its line or its row (${standing.map((one) => `${one.story} "${one.text}" ${one.lines} line${one.lines === 1 ? "" : "s"}, ${one.over}px over`).join("; ")})`,
     standing.length > 0 &&
       standing.every((one) => one.lines === 1 && one.over <= 0),
     json(standing)
