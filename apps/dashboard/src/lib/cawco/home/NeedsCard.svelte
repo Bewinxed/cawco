@@ -18,7 +18,9 @@
    *
    * Nothing is optimistic: an answer is the same `permission.answer` command
    * the session's own card sends, and the row leaves when the hub has taken
-   * it — the request card above that pane's composer leaves with it.
+   * it — the request card above that pane's composer leaves with it. A
+   * browser ask's Take over is the card's own take-over (`takeOverBrowser`),
+   * and leaves the same way.
    *
    * An approved action is the same row with the call laid out under its
    * reason: when it runs (in this browser's zone), the connection and the
@@ -93,6 +95,7 @@
     type PermissionAnswer,
     permissionAnswer,
     submitCommand,
+    takeOverBrowser,
   } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
@@ -346,10 +349,21 @@
   const sent = $derived(
     item.kind === "ask" ? answerFor(item.request.requestId) : null
   );
+  /**
+   * A browser ask's Take over on its way, and the hub's refusal of it: the
+   * take-over is the transcript card's own (`takeOverBrowser`), and the row
+   * leaves once the hub has taken the ask off every screen.
+   */
+  let taking = $state(false);
+  let takeRefused = $state<string | null>(null);
   const answering = $derived(
-    sent !== null && sent.stage !== "failed" && sent.stage !== "applied"
+    taking ||
+      (sent !== null && sent.stage !== "failed" && sent.stage !== "applied")
   );
   const answerRefused = $derived.by(() => {
+    if (takeRefused !== null) {
+      return takeRefused;
+    }
     if (sent?.stage !== "failed") {
       return null;
     }
@@ -371,11 +385,19 @@
   /** Which peer was pressed here, for its spinner. */
   let pressed = $state<PermissionAnswer | null>(null);
 
-  function answer(kind: PermissionAnswer): void {
+  async function answer(kind: PermissionAnswer): Promise<void> {
     if (item.kind !== "ask" || held || answering) {
       return;
     }
     pressed = kind;
+    takeRefused = null;
+    const { browserAsk, requestId } = item.request;
+    if (browserAsk && kind === "allow") {
+      taking = true;
+      takeRefused = await takeOverBrowser(requestId, browserAsk);
+      taking = takeRefused === null;
+      return;
+    }
     submitCommand(item.instanceId, item.machineId, "permission.answer", {
       requestId: item.request.requestId,
       result: permissionAnswer(item.request, kind),

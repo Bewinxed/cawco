@@ -17419,12 +17419,21 @@ export const createServer = (
         }
         return;
       }
+      // A browser ask (browser-tools.ts): a Decline answers its call; an
+      // Approve is the take-over, settled once it has started (the ask
+      // taken off every screen), its refusal the hub's own words.
+      if (browserAsks.owns(requestId)) {
+        await browserAsks.answer(requestId, result);
+        if (receipt.outcome !== "answered") {
+          throw new Error("That request is no longer pending.");
+        }
+        return;
+      }
       // A hub-raised ask is settled here, never delivered to a machine: a
       // workflow's question, or an admin write waiting on the person.
       if (
         answerWorkflow(pending, requestId, result) ||
         adminAsks.answer(requestId, result) ||
-        browserAsks.answer(requestId, result) ||
         upstreamAsks.answer(requestId, result) ||
         moves.answer(requestId, result)
       ) {

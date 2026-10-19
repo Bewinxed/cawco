@@ -148,28 +148,31 @@ export const createBrowserAsks = (deps: BrowserAsksDeps) => {
       return waiter && { ...waiter.ask, instanceId: waiter.instanceId };
     },
 
+    /** Whether `requestId` is a browser ask the person has not taken yet: {@link answer}'s to settle. */
+    owns(requestId: string): boolean {
+      const waiter = waiting.get(requestId);
+      return !!waiter && !waiter.taken;
+    },
+
     /**
-     * The person's answer from an ask card (`answerPendingPermission`): a
-     * Decline answers the call with their words; an Approve (an app with no
-     * Take over) starts the take-over. False for every other ask.
+     * The person's answer from an ask card (`answerPendingPermission`), for
+     * an ask {@link owns} holds: a Decline answers the call with their
+     * words; an Approve (an app with no Take over) is the take-over itself,
+     * settled once it has started and refused in the hub's words when it
+     * cannot.
      */
-    answer(requestId: string, result: PermissionResult): boolean {
+    async answer(requestId: string, result: PermissionResult): Promise<void> {
       const waiter = waiting.get(requestId);
       if (!waiter || waiter.taken) {
-        return false;
+        throw new Error("That request is no longer pending.");
       }
       if (result.behavior === "allow") {
-        deps.takeOver(requestId).catch((error: unknown) => {
-          console.warn(
-            `[browser] the take-over of ${waiter.ask.key} for ${requestId} did not start: ${error instanceof Error ? error.message : String(error)}`
-          );
-        });
-        return true;
+        await deps.takeOver(requestId);
+        return;
       }
       waiting.delete(requestId);
       deps.settle(requestId);
       waiter.resolve({ outcome: "declined", words: result.message.trim() });
-      return true;
     },
 
     /** The person took ask `requestId`: off every screen, its call waiting for the hand-back. */

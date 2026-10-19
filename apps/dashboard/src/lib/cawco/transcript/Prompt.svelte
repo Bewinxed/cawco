@@ -52,8 +52,8 @@
     isStale,
     type PendingPermission,
     permissionAnswer,
+    takeOverBrowser,
   } from "../client.svelte";
-  import { hubRefusal } from "../hub-read";
   import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
   import { questionAnswer, questionDismissal } from "../question";
@@ -89,9 +89,8 @@
   } = $props();
 
   /**
-   * A browser ask (core `BrowserAskFrame`): Take over starts the private
-   * period (browsers.ts `/takeover`), which takes the ask off every screen
-   * and opens the session's panel on its browser; Deny answers the call,
+   * A browser ask (core `BrowserAskFrame`): Take over is `takeOverBrowser`,
+   * the one take-over Needs you's row runs too; Deny answers the call,
    * with the person's own words when its "Other" chip opened the line for
    * them. That chip and its line are the question card's own (`openOther`,
    * `writeOther`, `otherKey`): the ask is one question, its reason, with no
@@ -107,25 +106,9 @@
     }
     pressed = "allow";
     takeRefused = null;
-    try {
-      const response = await fetch(
-        `/api/browsers/${encodeURIComponent(browserAsk.key)}/takeover`,
-        {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            requestId: request.requestId,
-            machineId: browserAsk.machineId,
-          }),
-        }
-      );
-      if (!response.ok) {
-        throw await hubRefusal(response);
-      }
-    } catch (error) {
-      // What happened, why (the hub's own sentence), and what is safe and
-      // comes next (WORDS, the error formula). The button is free again.
-      takeRefused = `Couldn't take over. ${error instanceof Error ? error.message : String(error)} The agent is still waiting; try Take over again.`;
+    takeRefused = await takeOverBrowser(request.requestId, browserAsk);
+    // Refused: the button is free again.
+    if (takeRefused !== null) {
       pressed = null;
     }
   }

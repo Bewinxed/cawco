@@ -23,9 +23,11 @@
  * - dark: the card in the dark scheme.
  *
  * In Caw's panel (the bar's Needs you, opened as a person opens it), the
- * ask's row: a browser request, Deny then Take over at the row's trailing
+ * ask's row: a browser ask, Deny then Take over at the row's trailing
  * edge, both filled and tinted (each its own), `--space-2` apart, opening to
- * `--space-4` on a coarse pointer. Where the home page shows the session's
+ * `--space-4` on a coarse pointer. Take over there posts the same
+ * `/api/browsers/<key>/takeover`, with the same body, as the card's: one way
+ * to take the browser over, from either place. Where the home page shows the session's
  * composer with its card up (the desk), the card stays whole and still as
  * the panel opens (DESIGN: it "arrives once … and is then completely
  * still"): no transition or animation begins on it, its rects do not move,
@@ -741,12 +743,13 @@ async function needs(
   id: string,
   { name, view }: (typeof LEGS)[number]
 ): Promise<void> {
-  const { page } = await pageWithAsk(
+  const requestId = `probe-browser-ask-needs-${name}`;
+  const { page, posted, sent } = await pageWithAsk(
     kit,
     view,
     id,
     REASONS.short,
-    `probe-browser-ask-needs-${name}`
+    requestId
   );
   await open(page, `${base}/`, "button[data-needs-caw]", 90_000);
   // A composer's card already up on the page (the desk's session pane) is
@@ -855,6 +858,24 @@ async function needs(
   await settle(page);
   cardStaysWhole(kit, name, cardBefore, await page.evaluate(cardDrawn));
   await capture(page, `${name}-needs.png`);
+
+  // Take over from the row: the transcript card's take-over, the same POST
+  // with the same body (`taking`), never a permission answer on the socket.
+  await approve.click();
+  await page.waitForTimeout(800);
+  const take = posted.find((one) => one.url.includes("/takeover"));
+  const allowed = sent.find(
+    (raw) => raw.includes(requestId) && raw.includes('"allow"')
+  );
+  kit.check(
+    `${name} Needs you: Take over posts /api/browsers/<key>/takeover with the ask's request id and machine, as the card's Take over does, and sends no permission answer`,
+    !!take &&
+      take.url.endsWith(`/api/browsers/${encodeURIComponent(KEY)}/takeover`) &&
+      JSON.stringify(take.body) ===
+        JSON.stringify({ requestId, machineId: MACHINE }) &&
+      allowed === undefined,
+    JSON.stringify({ posted, allowed: allowed?.slice(0, 400) })
+  );
   await page.close();
 }
 

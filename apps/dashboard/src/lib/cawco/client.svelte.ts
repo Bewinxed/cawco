@@ -8394,6 +8394,32 @@ export function permissionAnswer(
 }
 
 /**
+ * Take over on a browser ask (core `BrowserAskFrame`), from its transcript
+ * card or its Needs you row alike: the hub's `/takeover` (browsers.ts)
+ * starts the private period for that ask, takes it off every screen and
+ * opens the session's panel on its browser. Answers null once the hub has
+ * it, else the line the refusal reads, the hub's own sentence inside it
+ * (WORDS, the error formula).
+ */
+export async function takeOverBrowser(
+  requestId: string,
+  browserAsk: BrowserAskFrame
+): Promise<string | null> {
+  try {
+    const response = await fetch(
+      `/api/browsers/${encodeURIComponent(browserAsk.key)}/takeover`,
+      json("POST", { requestId, machineId: browserAsk.machineId })
+    );
+    if (!response.ok) {
+      throw await hubRefusal(response);
+    }
+    return null;
+  } catch (error) {
+    return `Couldn't take over. ${error instanceof Error ? error.message : String(error)} The agent is still waiting; try Take over again.`;
+  }
+}
+
+/**
  * Every permission waiting on the user, across every machine. This is the
  * question the fleet view exists to answer, so it is derived from the sessions
  * themselves rather than tracked separately.
