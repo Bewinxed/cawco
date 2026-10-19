@@ -1,4 +1,4 @@
-Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding. (emil-design-eng, transitions-dev, interface-craft, ui-observer: not loaded in this run; see Gaps.)
+Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfaces:better-layout, impeccable, svelte-foundations:coding. interface-craft and ui-observer loaded for the critique. emil-design-eng and transitions-dev not loaded: no file here owns a transition, animation or skeleton beyond the existing motion-safe split transitions, left as written.
 better-ui rules followed: outer radius = inner + padding kept via DESIGN.md radii; hover only under the hover variant; transitions name their properties.
 better-layout rules followed: logical properties (ps-/pe-/ms-/me-), min-w-0 on flex/grid children, container queries for the relay card, 44px head, wrap-anywhere for long text.
 
@@ -109,4 +109,9 @@ kit-swap: side/SideSurface.svelte:427 DropdownMenu.Content `w-56` — a menu wid
 (none)
 
 ## Gaps
-gap: interface-craft / ui-observer critique not run: no bench renders these in this workspace
+
+## Design critique (interface-craft, from markup and classes, against DESIGN.md)
+fixed: relay/RelayJourney.svelte step number ring `rounded-full` -> `rounded-pill`, step icons `size-4` -> `size-icon-md`, lead column `w-7` -> `w-c-row-lead` — Shapes (pill for state marks) and Icons (16px) rules
+fixed: relay/RelayJourney.svelte raw `text-(--ink-*)`/`gap-(--space-*)` -> token utilities (text-ink-muted, gap-space-2) — Spacing ladder, colours on tokens
+fixed: side/SideSurface.svelte head height 44px -> `h-c-btn-h-lg`, controls 30px -> `--c-btn-h-sm` — Focus and hit areas, 44 Touch Rule (coarse pointer widens the head gap to space-4 as before)
+ui-observer: Not verified. No bench or story renders these six files in this workspace, so no layout was measured.
