@@ -58,13 +58,6 @@
   /** What the icon slot draws: the step's icon, or its dot. */
   const glyph = $derived(showIcon && Icon ? Icon : null);
   const entering = untrack(() => enters);
-  /**
-   * The light over an active step's words: its muted ink, strong at the
-   * middle of a band three times the words' width, which the shimmer
-   * keyframes slide across them once a breath.
-   */
-  const SHIMMER =
-    "linear-gradient(90deg, var(--ink-muted) 0% 35%, var(--ink-strong) 50%, var(--ink-muted) 65% 100%)";
 
   /**
    * A step's glyph changing cross-fades in its cell (--dur-control), and the
@@ -88,7 +81,8 @@
 </script>
 
 {#if status !== "pending"}
-  <!-- literal: 15px (the icon column), 16px (the icon box) -->
+  <!-- The icon column is the icon's own width (the transcript's 16px glyph
+       cell); the icon's box is at least that square and a line tall. -->
   <div
     class="flex min-w-0 gap-space-2 text-size-body font-normal leading-body size-compact:text-size-meta {className}"
     data-size={size?.() ?? "default"}
@@ -98,15 +92,13 @@
   >
     <div
       aria-hidden="true"
-      class="flex shrink-0 grow-0 basis-(--icon-col) flex-col items-center"
-      style:--icon-col="15px"
+      class="flex shrink-0 grow-0 basis-icon-md flex-col items-center"
     >
       <span
         data-slot="thinking-step-icon"
         data-thinking-step-icon
-        class="grid h-lh min-h-(--icon-box) w-icon-md place-items-center status-ahead:text-ink-subtle"
+        class="grid h-lh min-h-icon-md w-icon-md place-items-center status-ahead:text-ink-subtle"
         data-status={status}
-        style:--icon-box="16px"
         >{#key glyph}
           <span
             data-slot="glyph"
@@ -117,11 +109,7 @@
               {@const Glyph = glyph}
               <Glyph class="size-icon-md" />
             {:else}
-              <!-- literal: 50% -->
-              <span
-                data-slot="dot"
-                class="size-space-1 rounded-(--dot-round) bg-current"
-                style:--dot-round="50%"
+              <span data-slot="dot" class="size-space-1 rounded-pill bg-current"
               ></span>
             {/if}</span
           >
@@ -131,26 +119,25 @@
         <span class="w-px flex-1 bg-border-hairline" in:draw></span>
       {/if}
     </div>
+    <!-- A new step fades in; an active step's words carry the light: its
+         muted ink, strong at the middle of a band three times the words'
+         width, sliding across them once a breath. -->
     <div
-      class="flex min-w-0 flex-1 flex-col gap-space-1 pb-space-2"
+      class="flex min-w-0 flex-1 flex-col gap-space-1 pb-space-2 motion-safe:data-enters:animate-thinking-step-in"
       data-enters={entering || undefined}
     >
-      <!-- literal: 300% 100% (the sweep three times the words' width) -->
       {#if label}
         <span
           data-slot="thinking-step-label"
-          class={[
-            "font-normal text-ink-strong transition-[color] dur-control ease-out status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:bg-(image:--step-shimmer) motion-safe:data-shimmer:bg-size-(--step-shimmer-size) motion-safe:data-shimmer:bg-repeat motion-safe:data-shimmer:bg-clip-text",
-            status === "active" && "shimmer",
-          ]}
+          class="font-normal text-ink-strong transition-[color] dur-control ease-out status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
           data-shimmer={status === "active" || undefined}
-          data-status={status}
-          style:--step-shimmer={SHIMMER}
-          style:--step-shimmer-size="300% 100%">{label}</span
+          data-status={status}>{label}</span
         >
       {/if}
       {#if description && markdown}
-        <div data-slot="md" class="wrap-anywhere whitespace-normal">
+        <!-- Markdown keeps the plain description's type, and a step is
+             exactly as tall as its text. -->
+        <div data-slot="md" class="markdown-plain wrap-anywhere whitespace-normal">
           <Markdown
             {fades}
             source={description}
@@ -159,81 +146,12 @@
         </div>
       {:else if description}
         <span
-          class={[
-            "wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-transparent motion-safe:data-shimmer:bg-(image:--step-shimmer) motion-safe:data-shimmer:bg-size-(--step-shimmer-size) motion-safe:data-shimmer:bg-repeat motion-safe:data-shimmer:bg-clip-text",
-            !label && status === "active" && "shimmer",
-          ]}
+          class="wrap-anywhere whitespace-pre-wrap motion-safe:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
           data-shimmer={(!label && status === "active") || undefined}
-          style:--step-shimmer={SHIMMER}
-          style:--step-shimmer-size="300% 100%">{description}</span
+          >{description}</span
         >
       {/if}
       {@render children?.()}
     </div>
   </div>
 {/if}
-
-<style>
-  /* residual: foreign-dom */
-  /* Markdown keeps the plain description's type: prose-sm restates its own
-     size and colour on streamdown's root, so they are handed back here, and
-     block margins collapse so a step is exactly as tall as its text. */
-  [data-slot="md"] {
-    & :global(.prose) {
-      font-size: inherit;
-      line-height: inherit;
-      color: inherit;
-    }
-    & :global(p),
-    & :global(ul),
-    & :global(ol) {
-      margin-block: 0;
-    }
-    /* Every block takes the gap above it and the first gives it back:
-       `* + *` restyled the whole step per block streamed in. */
-    & :global(.prose > *) {
-      margin-block: var(--space-1) 0;
-    }
-    & :global(.prose > :first-child) {
-      margin-block-start: 0;
-    }
-    & :global(ul),
-    & :global(ol) {
-      padding-inline-start: var(--space-5);
-    }
-    & :global(strong) {
-      color: var(--ink-strong);
-    }
-    /* prose wraps inline code in literal backticks; the code face already
-       marks it. */
-    & :global(code::before),
-    & :global(code::after) {
-      content: none;
-    }
-    & :global(code) {
-      font-family: var(--font-mono);
-    }
-  }
-  /* residual: keyframes */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-enters] {
-      animation: step-in var(--dur-menu) var(--ease-out) backwards;
-    }
-    [data-shimmer] {
-      animation: shimmer var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes step-in {
-    from {
-      opacity: 0;
-    }
-  }
-  @keyframes shimmer {
-    from {
-      background-position: 0% 0;
-    }
-    to {
-      background-position: 100% 0;
-    }
-  }
-</style>
