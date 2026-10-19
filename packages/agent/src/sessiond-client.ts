@@ -926,7 +926,9 @@ export class SessiondClient {
 export class SessiondRefusal extends Error {
   readonly reason: string;
   constructor(verb: string, reason: string) {
-    super(`[sessiond] ${verb} failed: ${reason}`);
+    super(
+      `The process that keeps this machine's sessions running refused "${verb}": ${reason}`
+    );
     this.reason = reason;
   }
 }

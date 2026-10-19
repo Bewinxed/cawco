@@ -2266,7 +2266,9 @@ export class OpencodeHarness implements Harness {
     }
     const identity = this.#sessionOwners.get(session.instanceId);
     if (!(identity && session.sessionId)) {
-      throw new Error("OpenCode dispatch has no generation custody.");
+      throw new Error(
+        "This message wasn't sent: no OpenCode server holds this session right now. Send it again."
+      );
     }
     this.#activity(identity).observeBusy(session.sessionId);
   }
@@ -4713,7 +4715,9 @@ export class OpencodeHarness implements Harness {
         : this.#ensureAccount(account)));
     const identity = existing?.identity ?? slot.owner.active;
     if (!identity) {
-      throw new Error("OpenCode open has no generation custody.");
+      throw new Error(
+        "This session didn't start: OpenCode's server on this machine isn't running. Start it again to try the server again."
+      );
     }
     if (existing?.running && spec.resume?.atMessage && !spec.resume.fork) {
       throw new Error("OpenCode cannot rewind a running incumbent turn.");
@@ -4961,7 +4965,9 @@ export class OpencodeHarness implements Harness {
       // active generation was published while this attachment was prepared.
       const owner = this.#sessionOwners.get(ctx.instanceId);
       if (!owner) {
-        throw new Error("OpenCode attachment has no generation custody.");
+        throw new Error(
+          "This session stopped: its OpenCode server went away as the session started. Start it again; what you sent and it hadn't read waits for it."
+        );
       }
       session.rebindClient(this.#clientForGeneration(owner));
       this.#sessions.set(ctx.instanceId, session);
@@ -5654,7 +5660,9 @@ export class OpencodeHarness implements Harness {
         const client = await this.#ensure();
         const identity = this.#serverOwner.active;
         if (!identity) {
-          throw new Error("OpenCode MCP probe has no verified server custody.");
+          throw new Error(
+            "OpenCode's server isn't running, so its MCP servers couldn't be checked."
+          );
         }
         // The server's own directory: a read there boots its location, which
         // may also hold live sessions. Its release shares the location

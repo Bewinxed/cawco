@@ -275,7 +275,7 @@ export interface SessiondDraining {
 
 /** The reason a `spawn` sent to a draining keeper is refused with. */
 export const SESSIOND_DRAINING =
-  "draining: this keeper is shutting down and starts nothing more";
+  "draining: it is shutting down and starts nothing more";
 
 /**
  * How a `spawn` refused at the machine's process limit starts its `reason`:

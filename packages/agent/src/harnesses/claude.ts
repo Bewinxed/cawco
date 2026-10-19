@@ -4239,7 +4239,9 @@ export class ClaudeHarness implements Harness {
     // connection for as long as its process runs there.
     const child = await this.#keepers.holding(procId);
     if (!child) {
-      throw new Error(`no keeper holds a live child ${procId}`);
+      throw new Error(
+        "This session's Claude Code process ended before CawCo could reconnect to it after a restart, so the session stopped. What you sent that it hadn't read is kept: start the session again and it goes to the new process."
+      );
     }
     const { client } = child;
     // A CLI keeps the hook it was launched with for life. One whose boundary
