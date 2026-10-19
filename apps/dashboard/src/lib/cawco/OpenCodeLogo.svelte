@@ -5,7 +5,18 @@
   are one shape in two colourings, so the tokens `opencode-logo-core` and
   `opencode-logo-frame` hold the brand's colouring per scheme.
 -->
-<svg aria-hidden="true" fill="none" viewBox="0 0 300 300">
+<script lang="ts">
+  import { cn } from "#lib/utils.js";
+
+  let { class: className }: { class?: string } = $props();
+</script>
+
+<svg
+  aria-hidden="true"
+  class={cn(className)}
+  fill="none"
+  viewBox="0 0 300 300"
+>
   <!-- The glyph is 240 wide in its 300 square, inset 30 from the left. -->
   <g transform="translate(30)">
     <path class="fill-opencode-logo-core" d="M180 240H60V120H180V240Z" />

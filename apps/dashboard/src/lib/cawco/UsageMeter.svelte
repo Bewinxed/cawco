@@ -587,8 +587,8 @@
             <span
               data-slot="mark"
               aria-hidden="true"
-              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs [&_svg]:size-full"
-              ><OpenCodeLogo /></span
+              class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs"
+              ><OpenCodeLogo class="size-full" /></span
             >
             <Rings reveal ring={openCode} size={16} />
             <!-- As its popover cell says it: how long it lasts, or at its
@@ -803,8 +803,8 @@
         <span
           data-slot="mark"
           aria-hidden="true"
-          class="inline-flex size-icon-md flex-none overflow-hidden rounded-xs [&_svg]:size-full"
-          ><OpenCodeLogo /></span
+          class="inline-flex size-icon-md flex-none overflow-hidden rounded-xs"
+          ><OpenCodeLogo class="size-full" /></span
         >
       {/if}
       <!-- The name strong, the domain's stem (where it is needed) quiet
@@ -1063,8 +1063,8 @@
           <span
             data-slot="mark"
             aria-hidden="true"
-            class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs [&_svg]:size-full"
-            data-box><Mark /></span
+            class="inline-flex size-space-4 flex-none overflow-hidden rounded-xs"
+            data-box><Mark class="size-full" /></span
           >
           <span>{note.text}</span>
         </p>
