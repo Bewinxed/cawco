@@ -22,14 +22,15 @@ nothing is left as a residual. No copy changed.
 
 | file | rules moved | residuals left (1/2/3/4/5) | literals | breakpoint edges | STOPs |
 | --- | --- | --- | --- | --- | --- |
-| ui/input/input.svelte | 0 (no `<style>`); `size`, `placeholderInk` variants added; arbitrary-value forms to token utilities; the two branches' duplicate class lists made one | 0/0/0/0/0 | 0 | none | none |
+| ui/input/input.svelte | 0 (no `<style>`); `size` variant added; arbitrary-value forms to token utilities; the two branches' duplicate class lists made one | 0/0/0/0/0 | 0 | none | none |
 | ui/machine-row/machine-row.svelte | 0; three literals (26px, 6px, 6px) to tokens | 0/0/0/0/0 | 0 (was 3) | none | none |
-| ui/markdown/markdown.svelte | 2 foreign-dom rules to the theme (`markdown-tokens`); 4 trailing-`!` overrides to id-weighted theme variants | 0/0/0/0/0 | 0 | none | none |
+| ui/markdown/markdown.svelte | 2 foreign-dom rules to the theme (`markdown-tokens`); 4 trailing-`!` overrides removed (PROSE now leaves the `not-prose` well alone) | 0/0/0/0/0 | 0 | none | none |
 | ui/morph-text/morph-text.svelte | 3 foreign-dom rules to the theme (`morph-letters`); visually-hidden recipe to `sr-only` | 0/0/0/0/0 | 0 (was 2) | none | none |
 | ui/native-select/native-select.svelte | 0; `h-[30px]` and the arbitrary-value forms to tokens | 0/0/0/0/0 | 0 | none | none |
 | ui/section-header/section-header.svelte | 0; two 8px literals to the ladder | 0/0/0/0/0 | 0 (was 2) | none | none |
 | ui/sheet/sheet-content.svelte | 2 foreign-dom rules to the theme (`sheet-pan`); 4 animations and 4 keyframes to `--animate-*` | 0/0/0/0/0 | 0 | none | none |
 | ui/sidebar/sidebar-menu-badge.svelte | 0; 2 trailing-`!` removed by restructuring the tone variants | 0/0/0/0/0 | 0 | none | none |
+| lib/prose.ts (added by the conductor) | 0; `pre` / `code` dressing onto Typography's `prose-pre:` / `prose-code:` and the theme's `prose-chip:`, so it respects `not-prose`; six arbitrary values to theme utilities and tokens | 0/0/0/0/0 | 0 | none | none |
 
 Lists asked by lane-a: needs variant: none. Needs transition token: none.
 Kind-5 declarations: none. Literals preserved: none. shadcn variant lines
@@ -44,7 +45,7 @@ turns ligatures off for every such run, which the `.font-mono` base rule does.
 ## Variants
 
 One line per inventory site of the parts in this lane (Input 9 messages at 5
-sites, NativeSelect 3), plus K2. `<prop>=<value>` is the variant the site
+sites, NativeSelect 3). K2 is removed, not a variant (see Removed). `<prop>=<value>` is the variant the site
 takes; `none` is a site whose remaining classes are placement only, which
 stays the consumer's (`layout` is allowed on every kit part).
 
@@ -56,11 +57,9 @@ variant: apps/dashboard/src/routes/(app)/config/memory/+page.svelte:102 Input me
 variant: apps/dashboard/src/lib/cawco/project/ProjectDetails.svelte:611 NativeSelect none — placement only: `.bind :global(.bind-project)` is `grid-column: 1 / -1; inline-size: 100%`, so the site writes `col-span-full w-full` and drops `bind-project`.
 variant: apps/dashboard/src/lib/cawco/project/ProjectDetails.svelte:642 NativeSelect none — placement only: `.status-map :global(.status-pick)` is `inline-size: 100%`, so the site writes `w-full` and drops `status-pick`.
 variant: apps/dashboard/src/lib/cawco/project/ProjectDetails.svelte:925 NativeSelect none — placement only: `.add :global(.add-machine)` is `inline-size: 100%`, so the site writes `w-full` and drops `add-machine`.
-variant: apps/dashboard/src/lib/cawco/spawn/ns-theme.css:112 Input placeholderInk=subtle — K2: the kit Input's placeholder in the subtle ink on the new-session surface. Every kit `<Input>` rendered inside `.ns-theme` takes `placeholderInk="subtle"`, and K2's rule leaves ns-theme.css. K2's other target, `[data-slot="input-group-control"]`, is the InputGroup part's, which is not in this lane: it needs the same variant (`placeholder:text-ink-subtle`) from the lane that holds `ui/input-group/`.
 
 Variants added (all opt-in; no part's default look changed):
 - Input `size: { sm: "h-c-btn-h-sm" }` (input.svelte:15). `size` is the variant now, so Input's props omit the HTML `size` attribute, as NativeSelect's already do; no caller passed it.
-- Input `placeholderInk: { subtle: "placeholder:text-ink-subtle" }` (input.svelte:19), K2.
 - SidebarMenuBadge `tone: { row }` (sidebar-menu-badge.svelte:12), the default, holding the row inks the base used to carry (see Removed); `live` unchanged in look.
 
 K1 (the surface's font, ink and transition for Button, CopyButton,
@@ -177,21 +176,15 @@ theme: component markdown-tokens
 }
 ```
 
-theme: variant well-pre
+theme: variant prose-chip
 ```css
-/* The `pre` inside a markdown code well (ui/markdown's fence snippet), over
-   the prose dressing PROSE gives every `pre` in the message, by an id's
-   weight: `#\#` is an id no element has, so `:is(pre, #\#)` matches a pre
-   and counts as an id (Selectors 4: :is() takes its most specific
-   argument), as app.css's press tint outranks a row's own rule. */
-@custom-variant well-pre (& :is(pre, #\#));
-```
-
-theme: variant well-code
-```css
-/* The `code` inside a markdown code well, over PROSE's `[&_code]` and
-   `[&_:not(pre)>code]` dressing, by the same id weight as well-pre. */
-@custom-variant well-code (& :is(code, #\#));
+/* Inline code in a prose run (lib/prose.ts): a `code` with no `pre` around
+   it, outside any `.not-prose` subtree. Written as @tailwindcss/typography
+   0.5.20 writes its own element modifiers (`prose-code:`, `prose-pre:`;
+   src/index.js inWhere), so it weighs what they weigh and skips a
+   fence's code well as they do. Typography has no modifier for inline
+   code alone. */
+@custom-variant prose-chip (& :is(:where(:not(pre) > code):not(:where([class~="not-prose"], [class~="not-prose"] *))));
 ```
 
 ## Kit swaps
@@ -204,11 +197,16 @@ consumer lanes' `kit-swap:` lines for Input and NativeSelect resolve to.
 None new. Every value lands on an existing token: `--c-mark` (26px),
 `--status-dot-size` (6px), `--c-badge-h` (20px), `--c-btn-h-sm` (30px),
 `--c-input-h` (36px), `--space-2`, `--radius-xs`, `--shadow-drawer`,
-`--transition-control`.
+`--transition-control`, `--radius-sm`, `--code-bg`, `--border-hairline`.
+One is proposed, for prose.ts:
+
+token: --c-code-chip-pad-x 2px — inline code chip's inline padding (PROSE); the ladder starts at 4, and --space-row is the rail's row gap, a different role
 
 ## Removed
 
-removed: apps/dashboard/src/lib/components/ui/markdown/markdown.svelte:278 `[&_code]:bg-transparent! [&_code]:p-0! [&_pre]:border-0! [&_pre]:bg-transparent!` — four `!` fighting PROSE's same-weight and heavier `[&_pre]` / `[&_:not(pre)>code]` descendant rules; the cascade is now won by the id-weighted `well-pre:` / `well-code:` variants, no important.
+removed: apps/dashboard/src/lib/components/ui/markdown/markdown.svelte:278 `[&_code]:bg-transparent! [&_code]:p-0! [&_pre]:border-0! [&_pre]:bg-transparent!` — four `!` fighting PROSE's same-weight and heavier `[&_pre]` / `[&_:not(pre)>code]` descendant rules. PROSE now leaves the `not-prose` well alone (prose.ts below), so there is nothing to override.
+removed: apps/dashboard/src/lib/components/ui/markdown/markdown.svelte:278 `well-code:bg-transparent well-code:p-0 well-pre:border-0 well-pre:bg-transparent`, and the `theme: variant well-pre` / `well-code` additions (`:is(x, #\#)`). These were an id-weight specificity hack, scar tissue by delta S3, standing in for PROSE ignoring `not-prose`. With PROSE scoped, the well's pre and code take only OutputBlock's own classes.
+removed: apps/dashboard/src/lib/components/ui/input/input.svelte:17 the `placeholderInk: { subtle: "placeholder:text-ink-subtle" }` variant (K2, from ns-theme.css:112), not converted. DESIGN.md Inputs and fields says "muted placeholder", which the kit Input already draws (`placeholder:text-ink-muted`). L00 removed K1/K2 from ns-theme.css and set its raw-input placeholder to `--ink-muted`; L02 removes InputGroup's K1/K2 variants for the same reason. No caller passed `placeholderInk` (`git grep -n placeholderInk apps/dashboard/src` is empty).
 removed: apps/dashboard/src/lib/components/ui/markdown/markdown.svelte:294 the `<style>` block (three `!important` against Streamdown's inline styles) — moved whole to the theme's `markdown-tokens` component rule, the one place an important declaration is the CSS answer to a library's inline style.
 removed: apps/dashboard/src/lib/components/ui/morph-text/morph-text.svelte:189 the hand-rolled visually-hidden recipe (`absolute -m-px size-px overflow-hidden whitespace-pre clip-path-(--said-clip)` with `--said-clip: inset(50%)`) — Tailwind's `sr-only` is that box exactly (position absolute, 1px, margin -1px, overflow hidden, clip-path inset(50%)); `select-none` kept.
 removed: apps/dashboard/src/lib/components/ui/morph-text/morph-text.svelte:186 `style:--roll-bleed="-100vw"` and `clip-path: inset(0 var(--roll-bleed))` — a magic bleed standing in for "clip the block axis only"; `overflow-y: clip` with `overflow-x: visible` says that directly.
@@ -235,13 +233,16 @@ fixed: apps/dashboard/src/lib/components/ui/machine-row/machine-row.svelte:48 th
 fixed: apps/dashboard/src/lib/components/ui/section-header/section-header.svelte:25 the icon and label row takes `.mark-line` — DESIGN.md The Mark Line Rule ("any other row takes .mark-line"). The label sits in its own span and the icon is an svg, which the rule leaves alone, so only the label's x-height centring changes.
 fixed: apps/dashboard/src/lib/components/ui/sheet/sheet-content.svelte:94 `sheet-pan` now sits in `@layer components`, so a descendant's own `touch-*` utility outranks it. Audited: walking the Svelte import tree of both Sheet.Content consumers (Shell.svelte:1026 → Sidebar.svelte, and motion/overlays/+page.svelte:86) covers 132 files. One sets touch-action: SessionRow.svelte:429 `data-archivable:touch-pan-y` and :799 `touch-action: pan-y`. That is the left sheet's own axis, so nothing in a sheet claims the dismissing drag — DESIGN.md Drag to dismiss.
 
+fixed: apps/dashboard/src/lib/prose.ts:16 PROSE's `[&_pre]:*`, `[&_code]:*` and `[&_:not(pre)>code]:*` → `prose-pre:*`, `prose-code:*` (Typography 0.5.20's own element modifiers, `& :is(:where(pre):not(:where([class~="not-prose"],[class~="not-prose"] *)))`) and the theme's `prose-chip:*` in the same form. A `.not-prose` subtree is now left alone, as Typography's own rules leave it. Only one consumer exists (`git grep -n PROSE apps/dashboard/src` → markdown.svelte:10 and :258). Its fence well now draws exactly as OutputBlock draws a tool result: `text-size-label` (13px) where PROSE's leaking `[&_code]:text-meta` made it 12px, and `--code-syntax-foreground` on an unhighlighted fence where `text-ink-strong` leaked in. Highlighted tokens keep their inline colours. Inline code and every other prose `pre` / `code` are unchanged — DESIGN.md Transcript (the well is "the same well a tool result opens into").
+fixed: apps/dashboard/src/lib/prose.ts:16 arbitrary values → theme utilities and tokens (delta S/T): `rounded-[var(--radius-sm)]` → `rounded-sm`; `bg-[var(--code-bg)]` → `bg-code-bg`; `shadow-[inset_0_0_0_1px_var(--border-hairline)]` → `inset-ring inset-ring-border-hairline` (Tailwind 4.3.3's `inset-ring` is `inset 0 0 0 1px var(--tw-inset-ring-color)`); `px-[calc(var(--space-1)/2)]` → `px-(--c-code-chip-pad-x)` (token line above); `rounded-[var(--radius-xs)]` → `rounded-xs`; `[overflow-wrap:anywhere]` → `wrap-anywhere`. Also `break-words` → `wrap-break-word`, its name in 4.3.3, which lists `break-words` as the legacy alias (same `overflow-wrap: break-word`). Each draws the same value.
+
 Numeric utilities kept as written per delta C ("existing numeric utilities stay as written"; none is a ladder value of 4/7/11/14/18/21/25/32): input.svelte and native-select.svelte `px-3` / `pl-3` (12) and `file:h-7` (28); sheet-content.svelte `top-4 right-4` (16) and `phone:max-w-96`; sidebar-menu-badge.svelte `top-1.5` (6) and `top-2.5` (10); markdown.svelte `my-3` (12) and PLAIN's `mr-2` (8).
 
 Critique (interface-craft Design Critique, from markup and classes, against DESIGN.md):
 fixed: machine-row — tile, name and meta line now sit on DESIGN's own sizes (26px tile at 8px, 6px presence dot, ladder gap); the meta run keeps `overflow: clip` for the Mark Line Rule.
 fixed: sidebar-menu-badge — the live count's ink can no longer be repainted by the row's hover or selection at any specificity, without an override.
 fixed: sheet-content — motion matches the Sheet recipe in both motion preferences, transform and opacity only.
-fixed: markdown — the code well wins over prose dressing by selector weight, so its fade stays off `!important` (the Press Rule's reasoning).
+fixed: markdown — the code well is outside the prose dressing (`not-prose`, as Typography means it), so it needs neither `!important` nor a specificity trick.
 Rendered layout (ui-observer): not verified in this lane. Only the sheet has
 a bench (`/motion/overlays`). Its motion, its pan rule and the markdown and
 morph rules are `theme:` additions that reach theme.css only at integration,
@@ -250,10 +251,13 @@ without them. The other parts have no stories file, and the brief keeps lanes
 off the style compare and probe specs. The rendered check belongs after
 integration.
 
+## Sanctioned overrides
+
+sanctioned: apps/dashboard/src/lib/components/ui/markdown/markdown.svelte:251 (`theme: component markdown-tokens`, its three `!important`: `animation: none`, `display: inline`, `white-space: inherit`). The reason: Streamdown writes these three on each token span inline whenever `animation.enabled`, and an inline declaration yields only to an important one. The inline-style source is svelte-streamdown 4.2.1, dist/context.svelte.js:53–59 (`animation-name: sd-${this.animation.type}` … `white-space: pre-wrap;` `display: inline-block;`) and :67 (the block style). 4.2.1 is the npm latest (`npm view svelte-streamdown version` → 4.2.1, 2026-10-19), and its README offers no token mode without them (`animation.type`: "'fade' | 'blur' | 'typewriter' | 'slideUp' | 'slideDown'"). Tailwind's rule for it: "When you really need to force a specific utility class to take effect and have no other means of managing the specificity, you can add `!`…" — https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier
+
 ## Gaps
 
-gap: apps/dashboard/src/lib/components/ui/markdown/markdown.svelte:251 the `markdown-tokens` theme rule still needs `!important`: svelte-streamdown 4.2.1 (npm latest) writes `animation-*`, `display` and `white-space` inline whenever `animation.enabled`, and offers no option for word spans without them (`type` is typed `'fade' | 'blur' | 'slideUp' | 'slideDown'`). An upstream option would let the rule go. Checked 2026-10-19: `npm view svelte-streamdown version` → 4.2.1. The README (github.com/beynar/svelte-streamdown) lists `animation.type` as "'fade' | 'blur' | 'typewriter' | 'slideUp' | 'slideDown'", with no unanimated token mode.
-gap: apps/dashboard/src/lib/prose.ts:10 PROSE's `[&_pre]:*` and `[&_code]:*` dressing ignores `not-prose`, which is why the code well needs `well-pre:` / `well-code:` at all; scoped to `:not(.not-prose *)` (Typography's own convention) the well's overrides could go. prose.ts is on no lane's list — Typography convention, DESIGN.md Transcript (the well is "the same well a tool result opens into").
+None.
 
 ## Contracts
 
