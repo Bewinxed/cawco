@@ -47,6 +47,7 @@ import { mkdir, mkdtemp, readFile, rm } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { GATE_WORDS } from "../../../packages/agent/src/browser/gate";
+import { resolveMcpLauncher } from "../../../packages/agent/src/mcp-launcher";
 import type {
   BrowserKey,
   BrowserRow,
@@ -208,7 +209,9 @@ const mcpAs = async (
     "../../../packages/hub/node_modules/@modelcontextprotocol/sdk/dist/esm/client";
   const { Client } = await import(`${sdk}/index.js`);
   const { StdioClientTransport } = await import(`${sdk}/stdio.js`);
-  const transport = new StdioClientTransport({
+  // Its command as the fleet's sync resolves a fleet MCP's (npm's npx, never
+  // a Bun alias ahead of it), so the spec runs what sessions run.
+  const launcher = resolveMcpLauncher({
     command: "npx",
     args: [
       "-y",
@@ -217,8 +220,22 @@ const mcpAs = async (
       `--wsHeaders=${JSON.stringify({ Authorization: `Bearer ${token}` })}`,
       "--no-usage-statistics",
     ],
+  });
+  if ("unavailable" in launcher) {
+    throw new Error(`chrome-devtools-mcp as ${id}: ${launcher.unavailable}`);
+  }
+  if (!("command" in launcher.config)) {
+    throw new Error(`chrome-devtools-mcp as ${id}: not a command`);
+  }
+  const transport = new StdioClientTransport({
+    command: launcher.config.command,
+    args: launcher.config.args,
     // npx's cache is the person's, not the fleet's home.
-    env: { ...(process.env as Record<string, string>), HOME: realHome },
+    env: {
+      ...(process.env as Record<string, string>),
+      ...launcher.config.env,
+      HOME: realHome,
+    },
     // Kept: a server that exits ("Connection closed") says why only here.
     stderr: "pipe",
   });

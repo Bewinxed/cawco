@@ -5,10 +5,10 @@
  * nothing here names one.
  */
 
-import { existsSync } from "node:fs";
+import { existsSync, realpathSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import { platform } from "node:os";
-import { delimiter, dirname, join, sep } from "node:path";
+import { basename, delimiter, dirname, join, sep } from "node:path";
 import type {
   ToolFootprint,
   ToolInstallMethod,
@@ -67,9 +67,47 @@ export const claudeHomeEnv = (): Record<string, string | undefined> => {
   return rest;
 };
 
-/** A binary's absolute path, searched wherever this daemon can install one. */
+/** npm's runner, which a fleet MCP's command names to fetch and run a package (`npx -y <pkg>`). */
+const NPX = "npx";
+
+/** What Bun's own binary is called, under whatever name a link gives it. */
+const BUN_BINARIES = new Set(["bun", "bun.exe"]);
+
+/** Every `name` on {@link toolPath}, in its order. */
+const everyBin = (name: string): string[] =>
+  toolPath()
+    .split(delimiter)
+    .filter(Boolean)
+    .flatMap((dir) => Bun.which(name, { PATH: dir }) ?? []);
+
+/**
+ * Whether `path` is Bun's binary under another name, its real path's
+ * basename `bun`: `~/.bun/bin/npx` → `bunx` → `bun` runs Bun's own CLI,
+ * which refuses npx's options (`error: Invalid Argument '-y'`).
+ */
+const isBunBinary = (path: string): boolean => {
+  try {
+    return BUN_BINARIES.has(basename(realpathSync(path)));
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * A binary's absolute path, searched wherever this daemon can install one.
+ * `npx` is npm's alone: the first on the PATH that isn't Bun's binary, so a
+ * Bun alias ahead of npm's never runs an `npx -y …` it can't take.
+ */
 export const resolveBin = (name: string): string | undefined =>
-  Bun.which(name, { PATH: toolPath() }) ?? undefined;
+  name === NPX
+    ? everyBin(NPX).find((path) => !isBunBinary(path))
+    : (Bun.which(name, { PATH: toolPath() }) ?? undefined);
+
+/** The `npx` on the PATH that is Bun's binary, when that is the only kind there is ({@link resolveBin} finds none). */
+export const bunOnlyNpx = (): string | undefined => {
+  const found = everyBin(NPX);
+  return found.every(isBunBinary) ? found[0] : undefined;
+};
 
 /** The first `x.y.z` a version command says is the version. */
 const VERSION_PATTERN = /\d+\.\d+\.\d+/;
