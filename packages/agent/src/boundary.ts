@@ -2378,7 +2378,7 @@ const containerSocketDirs = (): string[] => [
  * or into it. `dirs` are runtime dirs, denied whole; `sockets` are the
  * endpoints, which may sit in a dir that holds other things.
  */
-const containerSockets = async (): Promise<{
+export const containerSockets = async (): Promise<{
   dirs: string[];
   sockets: string[];
 }> => {

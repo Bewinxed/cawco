@@ -549,13 +549,31 @@ const run = async (kit: Kit): Promise<void> => {
     process.platform === "darwin" ? "Library/Caches" : ".cache",
     "ms-playwright"
   );
+  // The runtime as this process finds it, with the person's HOME: the
+  // fleet's HOME hides a runtime kept under the home dir (Colima's
+  // `~/.colima/default/docker.sock` on a Mac). The fleet's agent and the
+  // gate host are both handed its endpoint, as a machine's one agent finds
+  // it for both: the boundaries the agent builds deny the socket the
+  // registry really dials (boundary.ts `containerSockets`).
+  const { findRuntime } =
+    await import("../../../packages/agent/src/browser/runtime");
+  const runtime = await findRuntime();
+  if ("missing" in runtime) {
+    kit.check(
+      "a container runtime answers on this machine (the container leg needs one)",
+      false,
+      runtime.missing
+    );
+    return;
+  }
+  const dockerHost = `unix://${runtime.endpoint}`;
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
   fleet.launch("hub");
   await fleet.hubUp();
   fleet.fileAccount();
-  fleet.launch("agent");
+  fleet.launch("agent", [], { DOCKER_HOST: dockerHost });
   await fleet.agentUp();
   await fleet.accountSignedIn();
 
@@ -599,27 +617,12 @@ const run = async (kit: Kit): Promise<void> => {
   });
   const gatePort = probe.port;
   probe.stop(true);
-  // The runtime as this process finds it, with the person's HOME: the
-  // fleet's HOME hides a runtime kept under the home dir (Colima's
-  // `~/.colima/default/docker.sock` on a Mac), so the gate host is handed its
-  // endpoint, as browser-runtime runs it.
-  const { findRuntime } =
-    await import("../../../packages/agent/src/browser/runtime");
-  const runtime = await findRuntime();
-  if ("missing" in runtime) {
-    kit.check(
-      "a container runtime answers on this machine (the container leg needs one)",
-      false,
-      runtime.missing
-    );
-    return;
-  }
   const gateHost = startGateHost({
     ...(process.env as Record<string, string>),
     HOME: home,
     XDG_DATA_HOME: data,
     CAWCO_BROWSER_GATE_PORT: String(gatePort),
-    DOCKER_HOST: `unix://${runtime.endpoint}`,
+    DOCKER_HOST: dockerHost,
   });
   try {
     await until(
