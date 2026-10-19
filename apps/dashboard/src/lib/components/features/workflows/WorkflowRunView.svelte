@@ -230,12 +230,11 @@
   <RowFault reason={faultOf(key)} />
 {/snippet}
 
-<!-- literal: 26px, 14rem -->
 <div
   data-slot="tx-columns"
   data-run-view
   class="tx-columns flex min-h-0 min-w-0 flex-auto flex-col gap-space-5 overflow-y-auto bg-surface-recess pt-space-6 pr-space-6 pb-space-7 pl-space-7 text-size-body font-normal text-ink-strong max-desk:px-space-5"
-  style:--rail-none="0px"
+  style:--rail-gap="0"
 >
   {#if errorMessage}
     <Alert role="alert" variant="destructive">
@@ -249,12 +248,10 @@
       aria-label="Loading workflow run"
       class="flex flex-col gap-space-3"
       role="status"
-      style:--skeleton-h="26px"
-      style:--skeleton-w="14rem"
     >
-      <Skeleton class="h-icon-md w-(--skeleton-w)" />
-      <Skeleton class="h-(--skeleton-h) w-full" />
-      <Skeleton class="h-(--skeleton-h) w-full" />
+      <Skeleton class="h-icon-md w-1/2" />
+      <Skeleton class="h-space-7 w-full" />
+      <Skeleton class="h-space-7 w-full" />
     </div>
   {:else}
     <!-- What the tab cannot say, before the run: it stands at the page's
@@ -275,10 +272,8 @@
           </p>
         {/if}
         {#if inputs.length}
-          <!-- literal: 72ch -->
           <dl
             class="m-0 grid grid-cols-(--pair-cols) gap-x-space-3 gap-y-space-1"
-            style:--measure="72ch"
             style:--pair-cols="auto minmax(0, 1fr)"
           >
             {#each inputs as [key, value] (key)}
@@ -287,7 +282,7 @@
                 <dd
                   data-workflow-run-view-code={typeof value !== "string" ||
                     undefined}
-                  class="m-0 max-w-(--measure) wrap-anywhere text-ink-strong data-is-code:font-(family-name:--font-mono) data-is-code:liga-none"
+                  class="m-0 max-w-c-measure wrap-anywhere text-ink-strong data-is-code:font-(family-name:--font-mono) data-is-code:liga-none"
                   data-is-code={typeof value !== "string" || undefined}
                 >
                   {shown(value)}
@@ -338,10 +333,8 @@
       {@const ask = run.ask}
       <!-- The question folds open; answered, the picked option pends until
            the hub moves the run on, and then the block folds away. -->
-      <!-- literal: 72ch -->
       <div
-        class="max-w-(--measure)"
-        style:--measure="72ch"
+        class="max-w-c-measure"
         in:unfold
         out:unfold
       >
@@ -470,11 +463,9 @@
     {/if}
 
     {#if logLines.length}
-      <!-- literal: 30dvh -->
       <details
         data-slot="log"
         bind:open={logOpen}
-        style:--log-h="30dvh"
         style:--pair-cols="auto minmax(0, 1fr)"
         in:unfold
         out:unfold
@@ -487,7 +478,7 @@
         <!-- A line arrives the house way (motion/rows), and the log keeps
              the newest in view only while the reader is at its end. -->
         <ol
-          class="m-0 grid h-(--log-h) list-none content-box-start gap-space-2 overflow-y-auto px-0 pt-space-2 pb-0"
+          class="m-0 grid max-h-c-wf-scroll-max-h list-none content-box-start gap-space-2 overflow-y-auto px-0 pt-space-2 pb-0"
           {@attach reflow()}
           {@attach followTail()}
         >
@@ -506,11 +497,3 @@
     {/if}
   {/if}
 </div>
-
-<style>
-  /* residual: foreign-dom — the run's block is RunBlock's own root; it draws
-     its own rail-row gap, and the column's gap stands for it. */
-  [data-run-view] > :global([data-run-block]) {
-    --rail-gap: var(--rail-none);
-  }
-</style>
