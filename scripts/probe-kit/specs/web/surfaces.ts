@@ -19,10 +19,6 @@
  * page paints, and the dump says which element differs. `--dump` writes
  * one for every capture, the picture that matched as well.
  *
- * A state whose picture the product itself leaves unsteady at a width, by a
- * race the walk has nothing to wait for (catalogue `unsteadyPicture`), takes
- * no picture there, and the run says why in a note.
- *
  * Every layer that has `will-change` is painted again where it stands
  * before its capture (`atRest`). Chromium keeps such a layer's raster from
  * whichever frame of its entrance first painted it: a hanging card's
@@ -95,10 +91,6 @@ const spec: Spec = {
         const entry = entrySlug(
           `${surface.name} ${state.name} ${pass.width} ${pass.theme}`
         );
-        if (state.unsteadyPicture?.widths.includes(pass.width)) {
-          kit.note(`${entry}: no picture: ${state.unsteadyPicture.why}`);
-          return;
-        }
         const vp = page.viewportSize() ?? { width: 0, height: 0 };
         const box =
           state.root === "body"

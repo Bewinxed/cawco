@@ -60,13 +60,6 @@ export interface State {
   root: string;
   /** A route of its own, opened fresh for this state (the scene's ids filled in). */
   route?: (scene: Scene) => string;
-  /**
-   * The widths whose picture is held to no baseline, and the product's own
-   * race that makes it unsteady there, one the walk has nothing to wait for.
-   * Its styles are still read (style-snapshot); the surfaces spec takes no
-   * picture at those widths and says why.
-   */
-  unsteadyPicture?: { why: string; widths: Width[] };
   /** The widths it exists at; every width when left out. */
   widths?: Width[];
 }
@@ -1644,12 +1637,6 @@ export const SURFACES: Surface[] = [
           await page.keyboard.type("/");
         }),
         root: "body",
-        // Two walks' desk pictures differed by 1536 px of text while their
-        // page dumps and compositor layer trees matched element for element.
-        unsteadyPicture: {
-          widths: ["desk"],
-          why: "the sheet's finished entrance (NewSessionDialog.svelte `animation: ns-panel var(--dur-panel) var(--ease-out) both`) keeps its compositor layer, rastered at a mid-entrance sub-pixel frame, and nothing repaints it at rest: its text lands 1px off by which frame that was",
-        },
       },
     ],
   },
