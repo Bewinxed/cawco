@@ -21,15 +21,18 @@
  */
 import { watch } from "node:fs";
 import { mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import type {
   BrowserFrame,
   BrowserKey,
+  BrowserPorts,
   BrowserRelay,
   BrowserRow,
   BrowserRuntime,
   BrowserStartArgs,
 } from "@cawco/core/browser";
 import { isBrowserKey } from "@cawco/core/browser";
+import { openLockFile, tryLock, unlock } from "@cawco/core/flock";
 import { ContainerHost, RELAY_RENEW_MS } from "./container-host";
 import { gateOf, servedGates, serveGate, stopGate } from "./gate";
 import { LocalHost } from "./local-host";
@@ -38,6 +41,7 @@ import {
   allBrowsers,
   type BrowserHost,
   type BrowserRecord,
+  browserDir,
   browsersDir,
   forgetBrowser,
   type Progress,
@@ -390,6 +394,60 @@ export const startBrowser = (args: BrowserStartArgs): Promise<BrowserRow> => {
       told();
     }
   });
+};
+
+/** How long a reservation waits for another process making the same key's record. */
+const RESERVE_MS = 10_000;
+const RESERVE_POLL_MS = 100;
+
+/**
+ * `key`'s record, made when it has none, without starting its browser. A
+ * start holds the key's lock for minutes while an image builds, but writes
+ * the record first: the record is read again rather than the lock waited
+ * on, so a reservation never waits on a build.
+ */
+const reserved = async (key: BrowserKey): Promise<BrowserRecord> => {
+  const kept = await readBrowser(key);
+  if (kept) {
+    return kept;
+  }
+  await mkdir(browserDir(key), { recursive: true, mode: 0o700 });
+  const fd = openLockFile(join(browserDir(key), "lock"), true);
+  const until = Date.now() + RESERVE_MS;
+  try {
+    while (!tryLock(fd)) {
+      // biome-ignore lint/performance/noAwaitInLoops: waiting for the holder to write the record.
+      await Bun.sleep(RESERVE_POLL_MS);
+      const made = await readBrowser(key);
+      if (made) {
+        return made;
+      }
+      if (Date.now() > until) {
+        throw new Error(
+          `The browser ${key} is held by another process of this machine, which made no record of it in ${RESERVE_MS / 1000} s.`
+        );
+      }
+    }
+    return (
+      (await readBrowser(key)) ??
+      (await recordFor(key, key, (await hostFor()).kind))
+    );
+  } finally {
+    unlock(fd);
+  }
+};
+
+/**
+ * `key`'s record, and so its ports, kept, and its gate served, starting no
+ * browser: what a session's browser tool is launched toward (door.ts). The
+ * gate wakes the browser as the tool first connects.
+ */
+export const reserveBrowser = async (
+  key: BrowserKey
+): Promise<BrowserPorts> => {
+  const record = await reserved(key);
+  gateFor(record);
+  return portsOf(record);
 };
 
 /** Whether a live container's relay credential is near its end and a fresh one came. */

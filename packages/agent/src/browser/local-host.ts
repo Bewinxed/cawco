@@ -64,15 +64,15 @@ const installChromium = async (): Promise<void> => {
 };
 
 /** The Chromium this machine runs, or why it has none. */
-export type Chromium =
+type Chromium =
   { executable: string } | { unavailable: string } | { failure: string };
 
 /**
- * The Chromium the local host (and, until the gate, each session's browser
- * tool) runs: a standalone install uses the browser the person installed;
+ * The Chromium the local host runs, the one Chromium the agent starts for
+ * any session: a standalone install uses the browser the person installed;
  * a source install its pinned Playwright revision, installed when missing.
  */
-export const chromiumExecutable = async (): Promise<Chromium> => {
+const chromiumExecutable = async (): Promise<Chromium> => {
   if (standalone) {
     const executable = browserExecutable();
     return executable

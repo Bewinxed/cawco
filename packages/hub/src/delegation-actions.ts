@@ -113,9 +113,9 @@ export async function fetchDelegateTypes(
 /**
  * What a type the caller named adds to a started session. Denied tools come
  * only with a named type: the default type picks what runs, but its deny
- * list is a delegate's (browser checks in isolated chrome-devtools, not the
- * owner's Chrome); a started session is not a delegate and keeps Claude in
- * Chrome. And its toolset (§5.3): the type's `role:`, kept on the row.
+ * list is a delegate's (browser checks in chrome-devtools, through the
+ * DevTools gate to the project's browser, never the owner's Chrome); a
+ * started session is not a delegate and keeps Claude in Chrome. And its toolset (§5.3): the type's `role:`, kept on the row.
  */
 const namedTypeSettings = (
   type: DelegateType | undefined,
