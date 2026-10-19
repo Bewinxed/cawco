@@ -881,8 +881,12 @@ async function toastFade({ kit, fleet, page, base }: On) {
       easing: root.getPropertyValue("--ease-out").trim(),
     };
   });
+  // The same curve by its numbers: the built sheet's minifier writes the
+  // token `cubic-bezier(.23, 1, .32, 1)`, the engine reports `0.23`.
+  const curve = (easing: string) =>
+    (easing.match(/-?\d*\.?\d+/g) ?? []).map(Number).join();
   const same = (a: string, b: string) =>
-    a.replaceAll(" ", "") === b.replaceAll(" ", "");
+    a.split("(")[0] === b.split("(")[0] && curve(a) === curve(b);
   const clock = await Clock.on(page);
   try {
     const entering = await clock.catchRuns(
