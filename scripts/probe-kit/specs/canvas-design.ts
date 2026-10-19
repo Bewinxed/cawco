@@ -851,11 +851,7 @@ async function readMore(page: Page) {
           .join(", "),
       head
     ),
-    // A count of none is not drawn on More: no element to read then.
-    count:
-      (await trigger.locator(".more-count").count()) > 0
-        ? ((await trigger.locator(".more-count").textContent()) ?? "none")
-        : "none",
+    count: (await trigger.locator(".more-count").textContent()) ?? "none",
     label: (await trigger.getAttribute("aria-label")) ?? "",
     entry: "",
     opened: false,
@@ -906,15 +902,12 @@ async function moreHoldsComments(
       await page.waitForTimeout(1200);
     }
     const said = await readMore(page);
-    // More says the count only above 0; its Comments entry says it always.
-    const count = open > 0 ? String(open) : "none";
-    const label = open > 0 ? `More, Comments ${open} open` : "More";
     kit.check(
-      `8h: 330 ${theme}, Send picks standing, ${open} open: Comments goes to More, which ${open > 0 ? `says "${open}" and "${label}"` : 'draws no count and says "More"'}, its entry says ${open}, and choosing it opens the Comments panel`,
+      `8h: 330 ${theme}, Send picks standing, ${open} open: Comments goes to More, which says "${open}" and "More, Comments ${open} open", its entry says ${open}, and choosing it opens the Comments panel`,
       said.standing.includes("send") &&
         !said.standing.includes("comments") &&
-        said.count === count &&
-        said.label === label &&
+        said.count === String(open) &&
+        said.label === `More, Comments ${open} open` &&
         said.entry.endsWith(`(menu-count ${open})`) &&
         said.opened,
       JSON.stringify(said)

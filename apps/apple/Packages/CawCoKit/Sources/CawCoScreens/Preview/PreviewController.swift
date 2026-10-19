@@ -768,8 +768,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var canvasShown = false
     /// The controls the head has no room for, in its order: More holds them.
     private var overflowed: [HeadItem] = []
-    /// More holding Comments carries its count after the dots; off where that room is the mode's.
-    private var countOnMore = true
     /// The width the name keeps while controls go to More: its own, up to `nameFloor`.
     private var nameKept = 0.0
     /// The name at `nameKept` or wider: the room the head's placing kept for it, held over the controls' own widths.
@@ -795,11 +793,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     /// Each control the panel wants stands in the head while the name keeps
-    /// its floor, by `priority`, in its narrowest form (the mode as its pick),
-    /// one with no room skipped and the lower ones still placed; then the
-    /// mode takes its segments back where the room left holds them (the web's
-    /// side/head.ts `standing`). What has no room goes to More, which then
-    /// stands before Close. Close and the name always stand.
+    /// its floor, by `priority`; what has no room goes to More, which then
+    /// stands before Close. The mode gives up its segments for its pick
+    /// before it goes. Close and the name always stand.
     private func placeHeadItems() {
         guard isViewLoaded, let head = dragArea as? UIStackView else { return }
         let width = head.bounds.width
@@ -812,38 +808,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let name = nameKept + 8 - Space.space1
         let close = Self.target
         let all = wanted.reduce(0) { $0 + room($1) }
-        // First the room More takes, then each control by priority in its narrowest form
-        // while it fits; then the mode's segments, where what is left holds the difference.
-        let fit = { (more: Double) -> Set<HeadItem> in
-            var left = width - name - close - more
-            var shown: Set<HeadItem> = []
+        var shown = Set(wanted)
+        if name + all + close > width {
+            // First the room More takes, then each control by priority while it fits.
+            var left = width - name - close - Self.target
+            shown = []
             for item in Self.priority where wanted.contains(item) {
-                let stands = item == .mode ? HeadItem.modePick : item
+                let stands = item == .mode && room(.mode) > left ? HeadItem.modePick : item
                 guard room(stands) <= left else { continue }
                 shown.insert(stands)
                 left -= room(stands)
-            }
-            let back = room(.mode) - room(.modePick)
-            if shown.contains(.modePick), back <= left {
-                shown.remove(.modePick)
-                shown.insert(.mode)
-            }
-            return shown
-        }
-        var shown = Set(wanted)
-        countOnMore = true
-        if name + all + close > width {
-            shown = fit(Self.target)
-            // More holding Comments is as wide as its count after the dots: placed again with that room,
-            // unless that room is the mode's (it outranks Comments): then the count stands in More's row.
-            if wanted.contains(.comments), !shown.contains(.comments), comments.open > 0 {
-                let counted = fit(moreWidth(holding: true))
-                let modeStands = { (set: Set<HeadItem>) in set.contains(.mode) || set.contains(.modePick) }
-                if modeStands(counted) || !modeStands(shown) {
-                    shown = counted
-                } else {
-                    countOnMore = false
-                }
             }
         }
         overflowed = wanted.filter { !shown.contains($0) && !($0 == .mode && shown.contains(.modePick)) }
@@ -860,7 +834,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private func paintMore() {
         // A count of none on the dots says nothing: More draws it only above 0.
         // Run on every layout: each is written only when it changed, as a label's words lay the head out again.
-        let holds = overflowed.contains(.comments) && countOnMore && comments.open > 0
+        let holds = overflowed.contains(.comments) && comments.open > 0
         let count = "\(comments.open)"
         if moreBadge.text != count { moreBadge.text = count }
         if moreBadge.isHidden == holds { moreBadge.isHidden = !holds }
@@ -928,7 +902,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
                 return nil
             case .comments:
                 let action = UIAction(title: "Comments", image: Glyph.chat.image) { [weak self] _ in self?.openList() }
-                action.subtitle = "\(comments.open) open"
+                // Only above 0, as on Comments itself.
+                if comments.open > 0 { action.subtitle = "\(comments.open) open" }
                 return action
             case .reload:
                 let action = UIAction(title: "Reload", image: Glyph.refresh.image) { [weak self] _ in self?.reload() }
@@ -1772,11 +1747,15 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The head's Comments, its badge the open pins (PreviewPane.svelte `.comments`), and Send picks.
     private func paintPins() {
         guard isViewLoaded else { return }
-        // The open count stands always, 0 too, one `--btn-gap` after the word (or the glyph alone on a narrow pane).
+        // The open count, one `--btn-gap` after the word (or the glyph alone on a
+        // narrow pane), only above 0: a count of none says nothing.
+        let counted = comments.open > 0
         pinsBadge.text = "\(comments.open)"
+        pinsBadge.isHidden = !counted
         KitButton.setTitle(narrow ? "" : "Comments", of: pinsButton, variant: .ghost, height: .sm)
-        pinsButton.accessibilityLabel = "Comments, \(comments.open) open\(pinsShown ? "" : ", pins hidden")"
-        let badge = pinsBadge.intrinsicContentSize.width + Space.space1
+        let open = counted ? ", \(comments.open) open" : ""
+        pinsButton.accessibilityLabel = "Comments\(open)\(pinsShown ? "" : ", pins hidden")"
+        let badge = counted ? pinsBadge.intrinsicContentSize.width + Space.space1 : 0
         pinsButton.configuration?.contentInsets.trailing = Space.space2 + badge
         paintSend()
     }

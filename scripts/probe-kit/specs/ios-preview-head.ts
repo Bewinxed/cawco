@@ -337,16 +337,11 @@ function roomFaults(room: Room, wanted: string[], pins: number): string[] {
   if (!standing.includes("mode")) {
     faults.push("the mode is off the head");
   }
-  // With no room for More's count beside the mode, the mode keeps the room and More's row carries the count (menusStep).
-  if (
-    pins > 0 &&
-    !standing.includes("comments") &&
-    room.badge === "-" &&
-    !room.shown.some((slot) => slot.name === "modePick")
-  ) {
+  // A count above 0 stands on Comments, or on More while More holds Comments.
+  if (pins > 0 && !standing.includes("comments") && room.badge === "-") {
     faults.push("Comments' count is nowhere on the head");
   }
-  // A count of none is not drawn on More.
+  // A count of none is not drawn, on More as on Comments (countFaults).
   if (pins === 0 && room.badge !== "-") {
     faults.push(`More draws a count of ${room.badge} with no open pins`);
   }
@@ -382,8 +377,10 @@ function countFaults(line: string | undefined, pins: number): string[] {
     .slice(2, 7)
     .map(boxOf);
   const faults: string[] = [];
-  if (pins === 0 && moreCount) {
-    faults.push("More's count is drawn with no open pins");
+  if (pins === 0 && (moreCount || pinsCount)) {
+    faults.push(
+      `${moreCount ? "More's" : "Comments'"} count is drawn with no open pins`
+    );
   }
   if (meets(moreCount, dots) || meets(moreCount, close)) {
     faults.push("More's count meets its dots or Close");
@@ -572,12 +569,15 @@ async function menusStep(on: On, read: string, room: Room): Promise<void> {
       rows.some((row) => row.label?.startsWith(titles.at(-1) ?? "-"))
     )
   ).catch((error: Error) => ({ rows: [], said: error.message }));
-  // Comments in More: its row says the open count, on More or not.
+  // Comments in More: its row says the open count above 0, and none at 0.
+  const labels = more.said.split(" | ");
   const counted =
     !room.more.includes("comments") ||
-    more.said.includes(`Comments, ${on.pins} open`);
+    (on.pins > 0
+      ? labels.includes(`Comments, ${on.pins} open`)
+      : labels.includes("Comments"));
   on.kit.check(
-    `${on.tag} ${read} More: its rows are the head's overflow in the head's order${tallRows(on) ? ", each at least 44pt tall" : " (row heights the system's)"}, Comments' row with its open count`,
+    `${on.tag} ${read} More: its rows are the head's overflow in the head's order${tallRows(on) ? ", each at least 44pt tall" : " (row heights the system's)"}, Comments' row with its open count above 0 and none at 0`,
     menuHolds(more.rows, titles, tallRows(on)) && counted,
     `rows ${more.rows.join(", ") || "none"} for ${titles.join(", ")}; the menu: ${more.said}`
   );

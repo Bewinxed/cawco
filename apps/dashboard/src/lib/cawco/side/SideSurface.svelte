@@ -118,10 +118,8 @@
   const stands = (key: string) => shown === null || shown.has(key);
   const formOf = (key: string): Standing => shown?.get(key) ?? "whole";
   const more = $derived(all.filter((one) => !stands(one.key)));
-  /** The count a control in More says on it (Comments'), only above 0: a count of none says nothing. */
-  const moreCount = $derived(
-    more.find((one) => one.count && one.count.n > 0)?.count
-  );
+  /** The count a control in More says on it (Comments'), whenever that control would, 0 too. */
+  const moreCount = $derived(more.find((one) => one.count)?.count);
 
   /** How far a box's text runs past it (a truncated name's): its own width is that much more. */
   const runsPast = (el: Element): number =>
