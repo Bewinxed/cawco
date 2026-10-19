@@ -164,18 +164,85 @@ const refspecOf = (line: string): { dst: string; src: string } => {
   return { src, dst };
 };
 
+/** `env` with `pairs` after the git config it already carries (`GIT_CONFIG_COUNT`, git-config(1) "ENVIRONMENT"). */
+const withGitConfig = (
+  env: Record<string, string>,
+  pairs: readonly [string, string][]
+): Record<string, string> => {
+  const first = Number.parseInt(env.GIT_CONFIG_COUNT, 10) || 0;
+  return {
+    ...env,
+    GIT_CONFIG_COUNT: String(first + pairs.length),
+    ...Object.fromEntries(
+      pairs.flatMap(([name, value], index) => [
+        [`GIT_CONFIG_KEY_${first + index}`, name],
+        [`GIT_CONFIG_VALUE_${first + index}`, value],
+      ])
+    ),
+  };
+};
+
+const TRAILING_SLASHES = /\/+$/;
+
 /**
- * The large files a push batch's sources reach, sent to the hub's LFS first:
- * `git lfs push origin <src>…` in the clone with this machine's credential
- * (Projects spec §5.1: "Large files go through Git LFS: the hub is the LFS
- * server for its remotes"). Inside the boundary git-lfs reaches no hub, and
- * CawCo's git runs no pre-push hook, so a push would otherwise land pointers
- * whose objects stay behind. Answers why the files did not go, or nothing.
+ * git-lfs's config for a push to the repository at `url` that is not the
+ * clone's origin: that repository's own LFS, from its URL alone. Over
+ * http(s), the endpoint git-lfs guesses from a remote ("By default, Git LFS
+ * will append `.git/info/lfs` to the end of a Git remote url",
+ * docs/api/server-discovery.md), its access `basic` so no 401 has git-lfs
+ * write it into the clone's config ({@link DOOR_LFS}); over ssh, the URL
+ * itself, for which git-lfs asks that server over ssh (`git-lfs-authenticate`
+ * or its pure SSH protocol). Given as `lfs.url` and `lfs.pushurl`, which
+ * git-lfs reads before any other source of an endpoint
+ * (lfsapi/endpoint_finder.go `getEndpoint`) and which command-level config
+ * holds over a committed `.lfsconfig` ("Settings from Git configuration
+ * files override the `.lfsconfig` file", git-lfs-config(5)): a clone's
+ * `.lfsconfig` never sends the host's credential, or the objects, anywhere
+ * else.
  */
-const pushLfs = async (
+export const lfsConfigFor = (url: string): [string, string][] => {
+  let web = false;
+  if (SCHEME_URL.test(url)) {
+    try {
+      const { protocol } = new URL(url);
+      web = protocol === "https:" || protocol === "http:";
+    } catch {
+      web = false;
+    }
+  }
+  if (!web) {
+    return [
+      ["lfs.url", url],
+      ["lfs.pushurl", url],
+    ];
+  }
+  const bare = url.replace(TRAILING_SLASHES, "");
+  const endpoint = bare.endsWith(".git")
+    ? `${bare}/info/lfs`
+    : `${bare}.git/info/lfs`;
+  return [
+    ["lfs.url", endpoint],
+    ["lfs.pushurl", endpoint],
+    [`lfs.${endpoint}.access`, "basic"],
+  ];
+};
+
+/**
+ * The large files a push's sources reach, sent before the push itself:
+ * `git lfs push <remote> <src>…` in the clone, on the host. To the clone's
+ * own origin (`to` none) with the credential `env` carries, to the hub's
+ * LFS for a hub origin (Projects spec §5.1: "Large files go through Git LFS:
+ * the hub is the LFS server for its remotes"); to another repository at
+ * `to`, its own LFS ({@link lfsConfigFor}) with the host's credential for
+ * that host. Inside the boundary git-lfs reaches no server, and CawCo's git
+ * runs no pre-push hook, so a push would otherwise land pointers whose
+ * objects stay behind. Answers why the files did not go, or nothing.
+ */
+export const pushLfs = async (
   ref: WorkspaceRef,
   sources: string[],
-  env: Record<string, string>
+  env: Record<string, string>,
+  to?: string
 ): Promise<string | undefined> => {
   if (sources.length === 0 || !Bun.which("git-lfs")) {
     return;
@@ -184,13 +251,20 @@ const pushLfs = async (
   if (gone) {
     return gone;
   }
-  const child = Bun.spawn(safeGitArgv(["lfs", "push", "origin", ...sources]), {
-    cwd: ref.path,
-    env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: join(ref.path, ".git") },
-    stdin: "ignore",
-    stdout: "pipe",
-    stderr: "pipe",
-  });
+  const child = Bun.spawn(
+    safeGitArgv(["lfs", "push", to ?? "origin", ...sources]),
+    {
+      cwd: ref.path,
+      env: {
+        ...(to ? withGitConfig(env, lfsConfigFor(to)) : env),
+        ...SAFE_GIT_ENV,
+        GIT_DIR: join(ref.path, ".git"),
+      },
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "pipe",
+    }
+  );
   const [code, out, err] = await Promise.all([
     child.exited,
     new Response(child.stdout).text(),
@@ -204,9 +278,9 @@ const pushLfs = async (
     .filter(Boolean)
     .at(-1);
   console.warn(
-    `[hub-git] ${ref.id}: git lfs push of ${sources.join(" ")} failed: ${said ?? `exit ${code}`}`
+    `[hub-git] ${ref.id}: git lfs push ${to ? withoutCredential(to) : "origin"} of ${sources.join(" ")} failed: ${said ?? `exit ${code}`}`
   );
-  return `the large files did not reach the hub: ${said ?? `git lfs push exited ${code}`}`;
+  return `the large files did not reach ${to ? `${withoutCredential(to)}'s LFS` : "the origin's LFS"}: ${said ?? `git lfs push exited ${code}`}`;
 };
 
 /** The clone's `origin` remote-tracking refs, each with the commit it is at. */
@@ -495,30 +569,24 @@ const DOOR_LFS: [string, string][] = [["lfs.locksverify", "false"]];
  */
 export const hostGitEnv = async (): Promise<Record<string, string>> => {
   const gh = await hostGh();
-  const first = Number.parseInt(process.env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
   const key = "credential.https://github.com.helper";
-  const pairs: [string, string][] = [
-    ...(gh
-      ? ([
-          [key, ""],
-          [key, `!${shellWord(gh)} auth git-credential`],
-          ["lfs.https://github.com/.access", "basic"],
-        ] as [string, string][])
-      : []),
-    ...DOOR_LFS,
-  ];
-  return {
-    ...(hostEnvironment() as Record<string, string>),
-    ...GIT_LOCALE,
-    GIT_TERMINAL_PROMPT: "0",
-    GIT_CONFIG_COUNT: String(first + pairs.length),
-    ...Object.fromEntries(
-      pairs.flatMap(([name, value], index) => [
-        [`GIT_CONFIG_KEY_${first + index}`, name],
-        [`GIT_CONFIG_VALUE_${first + index}`, value],
-      ])
-    ),
-  };
+  return withGitConfig(
+    {
+      ...(hostEnvironment() as Record<string, string>),
+      ...GIT_LOCALE,
+      GIT_TERMINAL_PROMPT: "0",
+    },
+    [
+      ...(gh
+        ? ([
+            [key, ""],
+            [key, `!${shellWord(gh)} auth git-credential`],
+            ["lfs.https://github.com/.access", "basic"],
+          ] as [string, string][])
+        : []),
+      ...DOOR_LFS,
+    ]
+  );
 };
 
 /**
@@ -539,14 +607,16 @@ type PushRule =
  *   that crosses the network ({@link isNetworkRemote}), reached by the
  *   host's own git with the host's own credential. Its refs and objects are
  *   read; a push goes by the project's upstream rule (core
- *   upstream-guard.ts): to the clone's own origin (its large files with it)
- *   or the project's own repository by another URL it goes on; to anyone
- *   else's it goes on where sessions may post, is held for the person under
- *   `ask`, and is refused under `off`.
+ *   upstream-guard.ts): to the clone's own origin or the project's own
+ *   repository by another URL it goes on; to anyone else's it goes on where
+ *   sessions may post, is held for the person under `ask`, and is refused
+ *   under `off`. Each push that goes carries its large files to the
+ *   repository it reaches (`origin`: whether that is the clone's own
+ *   origin, whose LFS the clone names, or another, by its URL alone).
  * Thrown for anything else: the door signs nothing else in.
  */
 type DoorTarget =
-  { kind: "hub" } | { kind: "host"; lfs: boolean; push: PushRule };
+  { kind: "hub" } | { kind: "host"; origin: boolean; push: PushRule };
 
 const doorTarget = (ref: WorkspaceRef, url: string): DoorTarget => {
   const origin = originOf(ref.path);
@@ -555,7 +625,7 @@ const doorTarget = (ref: WorkspaceRef, url: string): DoorTarget => {
       return { kind: "hub" };
     }
     if (isNetworkRemote(origin)) {
-      return { kind: "host", lfs: true, push: { kind: "go" } };
+      return { kind: "host", origin: true, push: { kind: "go" } };
     }
   }
   if (!isNetworkRemote(url) || isHubRemote(url)) {
@@ -566,11 +636,11 @@ const doorTarget = (ref: WorkspaceRef, url: string): DoorTarget => {
   const rule = upstreamRule(ref.id);
   const repo = normaliseRemote(url);
   if (!rule || rule.posts === "on" || (repo && owns(rule.remotes, repo))) {
-    return { kind: "host", lfs: false, push: { kind: "go" } };
+    return { kind: "host", origin: false, push: { kind: "go" } };
   }
   return {
     kind: "host",
-    lfs: false,
+    origin: false,
     push:
       rule.posts === "ask"
         ? { kind: "hold", repo: repo ?? url }
@@ -637,14 +707,15 @@ const PORCELAIN_REF = /^([ +\-*=!])\t[^\t]*:([^\t]+)\t(.*)$/;
  * refs by `git ls-remote`, a fetch by `git fetch` of the refs git named into
  * the clone's own objects (git writes the refs itself once the batch is
  * answered), and a push by its {@link PushRule}: held, refused, or made by
- * `git push --porcelain` of the batch's refspecs, read per ref. The clone's
- * own origin sends its large files first ({@link pushLfs}).
+ * `git push --porcelain` of the batch's refspecs, read per ref. A push that
+ * goes sends its large files first ({@link pushLfs}): to the clone's own
+ * origin's LFS when `origin`, else to the LFS of the repository at `url`.
  */
 const hostBackend = (
   ref: WorkspaceRef,
   url: string,
   env: Record<string, string>,
-  lfs: boolean,
+  origin: boolean,
   rule: PushRule
 ): HelperBackend => ({
   list: async (forPush) => {
@@ -703,13 +774,12 @@ const hostBackend = (
       return lines.map((line) => `error ${refspecOf(line).dst} ${rule.why}`);
     }
     const specs = lines.map((line) => line.slice("push ".length));
-    const refused = lfs
-      ? await pushLfs(
-          ref,
-          lines.map((line) => refspecOf(line).src).filter(Boolean),
-          env
-        )
-      : undefined;
+    const refused = await pushLfs(
+      ref,
+      lines.map((line) => refspecOf(line).src).filter(Boolean),
+      env,
+      origin ? undefined : url
+    );
     if (refused) {
       return lines.map((line) => `error ${refspecOf(line).dst} ${refused}`);
     }
@@ -901,10 +971,10 @@ const serveConnection = (ref: WorkspaceRef, socket: Socket): void => {
         serveHelper(
           socket,
           rest,
-          hostBackend(ref, url, env, target.lfs, target.push),
+          hostBackend(ref, url, env, target.origin, target.push),
           fail,
           async () => {
-            if (!target.lfs) {
+            if (!target.origin) {
               return;
             }
             // git has written the refs it fetched by the time it ends the

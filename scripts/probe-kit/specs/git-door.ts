@@ -31,6 +31,17 @@
  * With "Let agents post upstream" in the rule:
  * (h) the same push to someone/else.git goes, with the host's credential,
  *     and lands there.
+ * Large files, with the host holding a credential for the loopback host (a
+ * git credential store under its HOME) and the clone committing a
+ * `.lfsconfig` that names a trap endpoint:
+ * (i) under "Let agents post upstream", a commit carrying an LFS file pushed
+ *     to someone/else.git lands with its object in that repository's own LFS
+ *     (`someone/else.git/info/lfs`), sent with the host's credential; the
+ *     trap the `.lfsconfig` names is never called;
+ * (j) under "Ask me first", such a push is held with nothing sent; made on
+ *     approval (`makeHeldPush`), its object reaches someone/else.git's
+ *     LFS with the host's credential before the commit lands, and the trap
+ *     is still never called.
  */
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
@@ -40,6 +51,19 @@ import type { Spec } from "../kit";
 const ORIGIN = "probe/origin.git";
 const ELSE = "someone/else.git";
 const IDENTITY = ["-c", "user.name=Probe", "-c", "user.email=probe@probe.test"];
+/** git-lfs's filters, given per command so the clone's own config stays as a clone's is. */
+const LFS_FILTERS = [
+  "-c",
+  "filter.lfs.clean=git-lfs clean -- %f",
+  "-c",
+  "filter.lfs.smudge=git-lfs smudge -- %f",
+  "-c",
+  "filter.lfs.process=git-lfs filter-process",
+  "-c",
+  "filter.lfs.required=true",
+];
+/** The host's own sign-in on the loopback host, as its git credential store keeps it. */
+const HOST_LOGIN = { user: "host-probe", password: "host-secret" };
 
 const spec: Spec = {
   name: "git-door",
@@ -87,7 +111,7 @@ const spec: Spec = {
     const { normaliseRemote } =
       await import("../../../packages/core/src/upstream-guard");
 
-    const http = serveGitHttp(join(scratch, "srv"));
+    const http = serveGitHttp(join(scratch, "srv"), HOST_LOGIN);
     const originUrl = await http.bare(ORIGIN);
     const elseUrl = await http.bare(ELSE);
     // The origin holds one commit, as a project's remote would.
@@ -266,6 +290,103 @@ const spec: Spec = {
           (await tip(ELSE, "door-on")) === head &&
           http.pushes(ELSE) === 1,
         `exit ${pushedOn.exitCode}; ${said(pushedOn)}`
+      );
+
+      // The host's credential for the loopback host, and the clone's trap.
+      const base = new URL(originUrl).origin;
+      await mkdir(process.env.HOME, { recursive: true });
+      await writeFile(
+        join(process.env.HOME, ".git-credentials"),
+        `http://${HOST_LOGIN.user}:${HOST_LOGIN.password}@${new URL(base).host}\n`
+      );
+      await writeFile(
+        join(process.env.HOME, ".gitconfig"),
+        `[credential]\n\thelper = store --file=${join(process.env.HOME, ".git-credentials")}\n`
+      );
+      const trap = `${base}/trap/info/lfs`;
+      await writeFile(
+        join(clone, ".gitattributes"),
+        "*.bin filter=lfs diff=lfs merge=lfs -text\n"
+      );
+      await writeFile(
+        join(clone, ".lfsconfig"),
+        `[lfs]\n\turl = ${trap}\n\tpushurl = ${trap}\n[remote "origin"]\n\tlfsurl = ${trap}\n`
+      );
+      /** A commit carrying one new LFS file: answers its sha and the object's id. */
+      const lfsCommit = async (name: string) => {
+        const content = `${name} ${crypto.randomUUID()}\n`.repeat(64);
+        await writeFile(join(clone, name), content);
+        await Bun.$`git -C ${clone} ${LFS_FILTERS} add .gitattributes .lfsconfig ${name} && git -C ${clone} ${IDENTITY} commit -q -m ${name}`.quiet();
+        const pointer = (
+          await Bun.$`git -C ${clone} cat-file -p HEAD:${name}`.text()
+        ).trim();
+        return {
+          sha: (await Bun.$`git -C ${clone} rev-parse HEAD`.text()).trim(),
+          oid: new Bun.CryptoHasher("sha256").update(content).digest("hex"),
+          pointer,
+        };
+      };
+      const ELSE_LFS = "someone/else.git";
+      const ORIGIN_LFS = "probe/origin.git";
+
+      // (i)
+      const onLfs = await lfsCommit("on.bin");
+      const pushedLfs = await inside(clone, [
+        "push",
+        elseUrl,
+        "HEAD:refs/heads/door-lfs",
+      ]);
+      const elseObjects = http.lfs(ELSE_LFS);
+      check(
+        "(i) under Let agents post upstream, a commit's LFS object goes to someone/else.git's own LFS with the host's credential; the clone's .lfsconfig trap is never called",
+        onLfs.pointer.startsWith(
+          "version https://git-lfs.github.com/spec/v1"
+        ) &&
+          pushedLfs.exitCode === 0 &&
+          (await tip(ELSE, "door-lfs")) === onLfs.sha &&
+          elseObjects.some(
+            (one) => one.oid === onLfs.oid && one.user === HOST_LOGIN.user
+          ) &&
+          http.lfsCalls("trap") === 0 &&
+          !http.lfs(ORIGIN_LFS).some((one) => one.oid === onLfs.oid),
+        `exit ${pushedLfs.exitCode}; else LFS ${JSON.stringify(elseObjects)}; trap calls ${http.lfsCalls("trap")}; origin LFS ${JSON.stringify(http.lfs(ORIGIN_LFS))}; ${said(pushedLfs)}`
+      );
+
+      // (j)
+      await writeRule("ask");
+      const askLfs = await lfsCommit("held.bin");
+      const asksBefore = asks.length;
+      const heldLfs = await inside(clone, [
+        "push",
+        elseUrl,
+        "HEAD:refs/heads/door-lfs-held",
+      ]);
+      const heldAsk = asks[asksBefore];
+      const sentWhileHeld = http.lfs(ELSE_LFS).length;
+      // Approved: made as the agent makes it, from the workspace's clone
+      // (upstream-posts.ts `makeUpstreamPost`, once it has found the clone).
+      const { makeHeldPush } =
+        await import("../../../packages/agent/src/upstream-posts");
+      const { isUpstreamPost } =
+        await import("../../../packages/core/src/upstream-post");
+      const heldPost: unknown = heldAsk?.post;
+      const made =
+        isUpstreamPost(heldPost) && heldPost.via === "git"
+          ? await makeHeldPush(ref, heldPost)
+          : { ok: false, said: "no git push was held" };
+      const afterApproval = http.lfs(ELSE_LFS);
+      check(
+        "(j) under Ask me first, an LFS push is held with nothing sent; made on approval, its object reaches someone/else.git's LFS with the host's credential and the commit lands; the trap is never called",
+        heldLfs.exitCode !== 0 &&
+          heldAsk?.post?.refs?.[0]?.sha === askLfs.sha &&
+          sentWhileHeld === elseObjects.length &&
+          made.ok &&
+          (await tip(ELSE, "door-lfs-held")) === askLfs.sha &&
+          afterApproval.some(
+            (one) => one.oid === askLfs.oid && one.user === HOST_LOGIN.user
+          ) &&
+          http.lfsCalls("trap") === 0,
+        `held exit ${heldLfs.exitCode}; sent while held ${sentWhileHeld - elseObjects.length}; made ${JSON.stringify(made)}; else LFS ${JSON.stringify(afterApproval)}; trap calls ${http.lfsCalls("trap")}`
       );
     } finally {
       await closeGitDoor(id);

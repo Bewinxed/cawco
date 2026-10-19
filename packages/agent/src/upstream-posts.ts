@@ -8,10 +8,11 @@
  * What is made is exactly what was asked: the held request sent again to
  * GitHub's API with the host's token; the held commits pushed from the
  * workspace's clone to the same URL and refs, on any host, with the host's
- * own git credential. Nothing is retried.
+ * own git credential, their large files first to that repository's own LFS.
+ * Nothing is retried.
  */
 import { join } from "node:path";
-import { CAWCO_ENV } from "@cawco/core";
+import { CAWCO_ENV, type WorkspaceRef } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
   repositoryConfigProblem,
@@ -28,7 +29,7 @@ import type {
 } from "@cawco/core/upstream-post";
 import { toHttpBase } from "./discovery";
 import { hostGh, hostGhToken } from "./host-gh";
-import { hostGitEnv, isNetworkRemote } from "./hub-git";
+import { hostGitEnv, isNetworkRemote, pushLfs } from "./hub-git";
 import { provenFetch } from "./hub-proof";
 import { workspaceRefs } from "./workspace-records";
 
@@ -225,8 +226,17 @@ const graphqlErrors = (post: HttpPost, text: string): boolean => {
 const SHA = /^[0-9a-f]{40}([0-9a-f]{24})?$/;
 const REF = /^refs\/[A-Za-z0-9._/-]+$/;
 
-/** A held push, made from the workspace's clone to the same URL and refs, with the host's own credential for its host and transport. */
-const makeGit = async (id: string, post: GitPost): Promise<PostMade> => {
+/**
+ * A held push, made from the clone of workspace `ref` to the same URL and
+ * refs, with the host's own credential for its host and transport: the
+ * large files its commits reach go first to that repository's own LFS, by
+ * its URL alone (hub-git.ts `pushLfs`), and when they do not go nothing is
+ * pushed.
+ */
+export const makeHeldPush = async (
+  ref: WorkspaceRef,
+  post: GitPost
+): Promise<PostMade> => {
   if (!isNetworkRemote(post.url)) {
     return {
       ok: false,
@@ -242,17 +252,20 @@ const makeGit = async (id: string, post: GitPost): Promise<PostMade> => {
       said: `CawCo did not push: ${bad.sha}:${bad.dst} is not a commit and a ref.`,
     };
   }
-  const ref = (await workspaceRefs()).find((each) => each.id === id);
-  if (!ref) {
-    return {
-      ok: false,
-      said: "CawCo did not push: the workspace's clone is gone from this machine.",
-    };
-  }
   const gitDir = join(ref.path, ".git");
   const problem = await repositoryConfigProblem(gitDir);
   if (problem) {
     return { ok: false, said: `CawCo did not push: ${problem}.` };
+  }
+  const env = await hostGitEnv();
+  const lfsRefused = await pushLfs(
+    ref,
+    post.refs.map((each) => each.sha),
+    env,
+    post.url
+  );
+  if (lfsRefused) {
+    return { ok: false, said: `CawCo did not push: ${lfsRefused}.` };
   }
   const read = await runWithin(
     MAKE_MS,
@@ -265,7 +278,7 @@ const makeGit = async (id: string, post: GitPost): Promise<PostMade> => {
     ]),
     {
       cwd: ref.path,
-      env: { ...(await hostGitEnv()), ...SAFE_GIT_ENV, GIT_DIR: gitDir },
+      env: { ...env, ...SAFE_GIT_ENV, GIT_DIR: gitDir },
       stdin: "ignore",
     }
   );
@@ -284,8 +297,15 @@ export const makeUpstreamPost = async (
   switch (post.via) {
     case "http":
       return await makeHttp(post);
-    case "git":
-      return await makeGit(id, post);
+    case "git": {
+      const ref = (await workspaceRefs()).find((each) => each.id === id);
+      return ref
+        ? await makeHeldPush(ref, post)
+        : {
+            ok: false,
+            said: "CawCo did not push: the workspace's clone is gone from this machine.",
+          };
+    }
     default:
       return {
         ok: false,
