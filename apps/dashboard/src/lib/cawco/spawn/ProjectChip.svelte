@@ -93,17 +93,15 @@
   {#snippet trigger()}
     <Files class="text-hue-amber-500" />
     {#key project?.id}
-      <span data-slot="chip-label" class="swap"
+      <span data-slot="chip-label" class="ns-in"
         >{project?.name ?? "No project"}</span
       >
     {/key}
     {#if project}
-      <!-- literal: 18px box -->
       <!-- biome-ignore lint/a11y/useSemanticElements: the clear control sits inside the chip trigger, which is already a button; buttons cannot nest -->
       <span
         data-slot="clear"
-        class="clear ns-check relative -mr-space-row inline-flex size-(--box) items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] dur-control ease-out hover:bg-surface-hover hover:text-ink-strong"
-        style:--box="18px"
+        class="ns-check relative -mr-space-row inline-flex size-space-5 items-center justify-center rounded-xs text-ink-subtle transition-[background-color,color] dur-control ease-out before:absolute before:-inset-space-1 hover:bg-surface-hover hover:text-ink-strong"
         onclick={(event) => {
           event.stopPropagation();
           onclear();
@@ -124,46 +122,31 @@
     {/if}
   {/snippet}
   {#if draft}
-    <!-- literal: 8px gap -->
-    <div class="ns-panel grid gap-(--gap) p-space-1" style:--gap="8px">
-      <!-- literal: 8px gap, 36px / 44px height, 10px inline padding -->
+    <div class="ns-panel grid gap-space-2 p-space-1">
       <label
         data-slot="project-chip-field"
-        class="field-shell flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) rounded-md border border-border-control bg-surface-raised px-(--pad-x) shadow-xs"
-        style:--gap="8px"
-        style:--h="36px"
-        style:--h-phone="44px"
-        style:--pad-x="10px"
+        class="field-shell flex h-c-input-h max-phone:h-c-btn-h-lg items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 shadow-xs"
       >
         <Files class="size-icon-md flex-none text-ink-subtle" />
-        <!-- literal: 1.4 line height, 1rem on a phone -->
         <input
           aria-label="Project name"
           autocapitalize="off"
-          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-body text-size-body leading-(--lh) font-normal text-ink-strong outline-off max-phone:text-(length:--fs-phone)"
+          class="type-body min-w-0 flex-1 border-none border-current bg-transparent p-0 text-ink-strong outline-off"
           oninput={(event) => onName(event.currentTarget.value)}
           placeholder="Project name"
           spellcheck="false"
-          style:--fs-phone="1rem"
-          style:--lh="1.4"
           value={draft.name}
         />
       </label>
-      <!-- literal: 8px gap, 36px / 44px height, 10px inline padding -->
       <label
         data-slot="project-chip-field"
-        class="field-shell flex h-(--h) max-phone:h-(--h-phone) items-center gap-(--gap) rounded-md border border-border-control bg-surface-raised px-(--pad-x) shadow-xs"
-        style:--gap="8px"
-        style:--h="36px"
-        style:--h-phone="44px"
-        style:--pad-x="10px"
+        class="field-shell flex h-c-input-h max-phone:h-c-btn-h-lg items-center gap-space-2 rounded-md border border-border-control bg-surface-raised px-space-3 shadow-xs"
       >
         <Folder class="size-icon-md flex-none text-ink-subtle" />
-        <!-- literal: 1.4 line height, 1rem on a phone -->
         <input
           aria-label="Project path"
           autocapitalize="off"
-          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-body leading-(--lh) font-normal text-ink-strong outline-off max-phone:text-(length:--fs-phone)"
+          class="min-w-0 flex-1 border-none border-current bg-transparent p-0 font-(family-name:--font-mono) text-size-body leading-body font-normal text-ink-strong outline-off"
           oninput={(event) => {
             if (draft) {
               draft = { ...draft, path: event.currentTarget.value };
@@ -171,16 +154,12 @@
           }}
           placeholder={codeDir ? `${codeDir}/project` : "/path/to/project"}
           spellcheck="false"
-          style:--fs-phone="1rem"
-          style:--lh="1.4"
           value={draft.path}
         />
       </label>
-      <!-- literal: 6px gap -->
       <div
         data-slot="actions"
-        class="mt-space-row flex items-center justify-end gap-(--gap)"
-        style:--gap="6px"
+        class="mt-space-row flex items-center justify-end gap-space-2"
       >
         <span
           class="type-meta min-w-0 flex-1 truncate text-status-fail-ink"
@@ -219,24 +198,18 @@
   {:else}
     {#each projects as row, index (row.id)}
       {@const on = row.id === projectId}
-      <!-- literal: 10px gap, 44px height, 6px 8px padding, 24px tile -->
       <button
         data-slot="row"
         aria-pressed={on}
-        class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong transition-[background-color] dur-toggle ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
+        class="ns-in press-tint relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-strong transition-[background-color] dur-toggle ease-out aria-pressed:bg-selected-bg aria-pressed:text-selected-ink motion-safe:transition-[background-color,transform]"
         data-fh="1"
         onclick={() => onpick(row)}
         style={`--delay:${index * 35}ms`}
-        style:--gap="10px"
-        style:--h="44px"
-        style:--pad-x="8px"
-        style:--pad-y="6px"
         type="button"
       >
         <span
           data-slot="tile"
-          class="ns-tile size-(--tile)"
-          style:--tile="24px"
+          class="ns-tile size-c-mark"
           style:color={row.hue}><Files class="size-icon-md" /></span
         >
         <span data-slot="text" class="min-w-0 flex-1">
@@ -252,52 +225,27 @@
         {/if}
       </button>
     {/each}
-    <!-- literal: 1px rule -->
     <div
       data-slot="divider"
-      class="mx-space-row my-space-1 h-(--h) bg-border-hairline"
-      style:--h="1px"
+      class="mx-space-row my-space-1 border-t border-border-hairline"
     ></div>
-    <!-- literal: 10px gap, 40px height, 6px 8px padding, 24px tile -->
     <button
       data-slot="row"
       data-add
-      class="ns-in press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-muted transition-[background-color] dur-toggle ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
+      class="ns-in press-tint relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 py-space-2 text-start text-ink-muted transition-[background-color] dur-toggle ease-out hover:text-ink-strong motion-safe:transition-[background-color,transform]"
       data-fh="1"
       onclick={() => {
         draft = { name: "", path: "" };
       }}
-      style="--delay:110ms"
-      style:--gap="10px"
-      style:--h="40px"
-      style:--pad-x="8px"
-      style:--pad-y="6px"
+      style:--delay={`${projects.length * 35}ms`}
       type="button"
     >
       <span
         data-slot="tile"
-        class="ns-tile size-(--tile)"
-        data-variant="dashed"
-        style:--tile="24px"><Add class="size-icon-md" /></span
+        class="ns-tile size-c-mark"
+        data-variant="dashed"><Add class="size-icon-md" /></span
       >
       <span data-slot="name" class="type-label block">New project…</span>
     </button>
   {/if}
 </NsPopover>
-
-<style>
-  /* residual: pseudo */
-  /* A little larger than the mark, never larger than the chip: a 44px target
-     here reached over the label, so clicking the project's name cleared it. */
-  .clear::before {
-    content: "";
-    position: absolute;
-    inset: calc(var(--space-1) * -1);
-  }
-  /* residual: keyframes */
-  .swap {
-    @media (prefers-reduced-motion: no-preference) {
-      animation: ns-in var(--ns-row-ms) var(--ease-out) both;
-    }
-  }
-</style>

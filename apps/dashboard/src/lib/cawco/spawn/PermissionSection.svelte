@@ -80,21 +80,19 @@
   class="group relative grid gap-space-row rounded-md border border-border-control bg-surface-raised p-space-1 shadow-xs data-embedded:border-none data-embedded:border-current data-embedded:bg-transparent data-embedded:p-0 data-embedded:shadow-none"
   data-embedded={embedded || undefined}
   role="radiogroup"
-  style:--row-h="44px"
   tabindex="-1"
   {@attach highlight({ rows: "[data-fh]" })}
 >
   <span
     data-slot="fill"
     aria-hidden="true"
-    class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--row-h) rounded-sm bg-selected-bg group-data-embedded:top-0 group-data-embedded:inset-x-0 motion-safe:transition-[transform] motion-safe:dur-toggle motion-safe:ease-in-out"
-    style:transform={`translateY(calc(${index} * (var(--row-h) + 2px)))`}
-    style:opacity={rows.some((row) => row.value === value) ? 1 : 0}
+    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-row-h translate-y-(--fill-y) rounded-sm bg-selected-bg opacity-0 group-data-embedded:inset-x-0 group-data-embedded:top-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:dur-toggle motion-safe:ease-in-out"
+    data-shown={rows.some((row) => row.value === value) || undefined}
+    style:--fill-y={`calc(${index} * (var(--c-row-h) + var(--space-row)))`}
   ></span>
   {#each rows as row, i (row.value)}
     {@const Icon = row.icon}
     {@const on = row.value === value}
-    <!-- literal: 10px gap, 6px 8px padding, 26px tile -->
     <!-- biome-ignore lint/a11y/useSemanticElements: the permission rows are designed tiles with a sliding fill; a native radio cannot render them -->
     <button
       data-slot="row"
@@ -102,22 +100,18 @@
       aria-describedby={row.reason
         ? `${uid}-perm-${row.value}-reason`
         : undefined}
-      class="ns-in press-tint relative flex h-(--row-h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border border-transparent bg-transparent px-(--pad-x) py-(--pad-y) text-left text-ink-strong aria-checked:text-selected-ink disabled:cursor-not-allowed disabled:opacity-55"
+      class="ns-in press-tint relative flex h-c-row-h w-full cursor-pointer items-center gap-space-3 rounded-sm border border-transparent bg-transparent px-space-2 py-space-2 text-start text-ink-strong aria-checked:text-selected-ink disabled:cursor-not-allowed disabled:opacity-55"
       data-fh="1"
       data-perm={row.value}
       disabled={row.disabled}
       onclick={() => pick(row.value)}
       role="radio"
       style={`--delay:${i * 35}ms`}
-      style:--gap="10px"
-      style:--pad-x="8px"
-      style:--pad-y="6px"
       type="button"
     >
       <span
         data-slot="tile"
-        class="ns-tile size-(--tile)"
-        style:--tile="26px"
+        class="ns-tile size-c-mark"
         style:color={row.hue}><Icon class="size-icon-md" /></span
       >
       <span data-slot="text" class="min-w-0 flex-1">

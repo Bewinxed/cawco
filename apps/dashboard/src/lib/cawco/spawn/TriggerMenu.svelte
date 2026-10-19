@@ -33,41 +33,33 @@
   trapFocus={false}
   width={300}
 >
-  <!-- literal: 4px inset, 36px height, 38px row pitch -->
   <span
     aria-hidden="true"
-    class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 h-(--h) rounded-sm bg-surface-fill motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-in-out"
-    style:--h="36px"
-    style:transform={`translateY(calc(${index} * 38px))`}
-    style:opacity={items.length ? 1 : 0}
+    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-btn-h translate-y-(--fill-y) rounded-sm bg-surface-fill opacity-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:dur-control motion-safe:ease-in-out"
+    data-shown={items.length > 0 || undefined}
+    style:--fill-y={`calc(${index} * (var(--c-btn-h) + var(--space-row)))`}
   ></span>
   {#each items as item (item.key)}
     {@const Icon = item.icon}
-    <!-- literal: 9px gap, 36px height, 8px inline padding, 22px tile -->
     <button
       data-slot="row"
-      class="press-tint relative flex h-(--h) w-full cursor-pointer items-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) text-left text-ink-strong"
+      class="press-tint relative flex h-c-btn-h w-full cursor-pointer items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-2 text-start text-ink-strong"
       data-fh="1"
       onmousedown={(event) => {
         event.preventDefault();
         onpick(item);
       }}
-      style:--gap="9px"
-      style:--h="36px"
-      style:--pad-x="8px"
       tabindex="-1"
       type="button"
     >
       <span
         data-slot="tile"
-        class="ns-tile size-(--tile) rounded-xs"
-        style:--tile="22px"
-        style:color={item.hue}><Icon class="size-icon-sm" /></span
+        class="ns-tile size-c-mark"
+        style:color={item.hue}><Icon class="size-icon-md" /></span
       >
       <span
         data-slot="trigger-menu-label"
-        class="min-w-0 flex-1 truncate font-body text-size-label leading-(--lh) font-medium"
-        style:--lh="1.2">{item.label}</span
+        class="type-label min-w-0 flex-1 truncate">{item.label}</span
       >
       <span data-slot="kind" class="type-meta whitespace-nowrap text-ink-subtle"
         >{item.kind}</span
@@ -75,20 +67,8 @@
     </button>
   {/each}
   {#if items.length === 0}
-    <!-- literal: 10px 8px padding -->
-    <div
-      class="type-meta px-(--pad-x) py-(--pad-y) text-ink-subtle"
-      style:--pad-x="8px"
-      style:--pad-y="10px"
-    >
+    <div class="type-meta px-space-2 py-space-3 text-ink-subtle">
       No matches
     </div>
   {/if}
 </NsPopover>
-
-<style>
-  /* residual: foreign-dom */
-  :global(#trigger-menu-popover.ns-pop) {
-    padding: var(--space-1);
-  }
-</style>

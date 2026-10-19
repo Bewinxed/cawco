@@ -41,11 +41,10 @@
   }
 </script>
 
-<!-- literal: 3px padding, tab heights 26px / 30px / 38px -->
 <div
   aria-label={label}
   class={[
-    "relative grid grid-cols-(--cols) gap-space-row rounded-md bg-surface-recess-deep p-(--pad)",
+    "relative grid grid-cols-(--cols) gap-space-row rounded-md bg-surface-recess-deep p-space-1",
     className,
   ]}
   data-segmented-size={size}
@@ -53,30 +52,26 @@
   role="radiogroup"
   style:--cols="repeat(var(--n), minmax(0, 1fr))"
   style:--n={items.length}
-  style:--pad="3px"
-  style:--tab-h={size === "md" ? "30px" : "26px"}
-  style:--tab-h-phone={size === "md" ? "30px" : "38px"}
   tabindex="-1"
 >
   <span
     data-slot="thumb"
     aria-hidden="true"
-    class="pointer-events-none absolute top-(--pad) bottom-(--pad) left-(--pad) w-(--thumb-w) rounded-sm bg-surface-lift shadow-raised transition-[transform] duration-(--ns-thumb-ms) ease-in-out"
-    style:--pad="3px"
-    style:--thumb-w="calc((100% - 6px - (var(--n) - 1) * 2px) / var(--n))"
-    style:transform={`translateX(calc(${index} * (100% + 2px)))`}
+    class="pointer-events-none absolute inset-y-space-1 start-space-1 w-(--thumb-w) translate-x-(--thumb-x) rounded-sm bg-surface-lift shadow-raised motion-safe:transition-[translate] motion-safe:dur-pop motion-safe:ease-in-out"
+    style:--thumb-w="calc((100% - 2 * var(--space-1) - (var(--n) - 1) * var(--space-row)) / var(--n))"
+    style:--thumb-x={`calc(${index} * (100% + var(--space-row)))`}
   ></span>
   {#each items as item (item.value)}
-    <!-- literal: 6px gap, 10px inline padding -->
     <!-- biome-ignore lint/a11y/useSemanticElements: a designed segmented control with a sliding thumb; native radios cannot render it -->
     <button
       data-slot="tab"
       aria-checked={item.value === value}
-      class="press-tint relative inline-flex h-(--tab-h) max-phone:h-(--tab-h-phone) min-w-0 cursor-pointer items-center justify-center gap-(--gap) rounded-sm border-none border-current bg-transparent px-(--pad-x) font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted aria-checked:text-ink-strong"
+      class={[
+        "press-tint relative inline-flex min-w-0 cursor-pointer items-center justify-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-muted aria-checked:text-ink-strong",
+        size === "md" ? "h-c-btn-h-sm" : "h-c-btn-h-xs max-phone:h-c-btn-h",
+      ]}
       onclick={() => onchange(item.value)}
       role="radio"
-      style:--gap="6px"
-      style:--pad-x="10px"
       tabindex={item.value === value ? 0 : -1}
       title={item.label}
       type="button"
@@ -88,10 +83,3 @@
     </button>
   {/each}
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  [data-slot="tab"] :global(svg) {
-    flex: none;
-  }
-</style>

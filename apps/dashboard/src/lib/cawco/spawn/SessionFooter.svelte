@@ -33,12 +33,9 @@
   );
 </script>
 
-<!-- literal: 10px top padding, 8px gap, 96px minimum width -->
 <div
-  class="flex flex-none items-center justify-end gap-(--gap) px-space-1 pt-(--pad-top) pb-space-row"
+  class="flex flex-none items-center justify-end gap-space-2 px-space-1 pt-space-3 pb-space-row"
   data-ns-footer
-  style:--gap="8px"
-  style:--pad-top="10px"
 >
   <button
     class="ns-btn touch-hit"
@@ -52,14 +49,13 @@
     data-slot="primary"
     aria-busy={busy || undefined}
     aria-disabled={busy || undefined}
-    class="ns-btn touch-hit min-w-(--min-w)"
+    class="ns-btn touch-hit min-w-(--c-session-footer-action-w)"
     data-variant="primary"
     data-share="session:new"
     data-share-ttl="8000"
     {disabled}
     id="session-start"
     onclick={start}
-    style:--min-w="96px"
     type="button"
   >
     <PendingContent
