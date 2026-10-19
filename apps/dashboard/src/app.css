@@ -18,12 +18,15 @@
 /* The plugin's rules, minus the four that restyled a whole reply per block. */
 @config "../typography.config.ts";
 
-/* One cascade order for the whole app, and it is Tailwind's own: tokens in
-   theme, element defaults in base, kit recipes in components, single-purpose
-   classes in utilities (with what has to outrank the typography plugin, which
-   writes there too). Svelte component styles are unlayered, so they outrank
-   all four by design. */
-@layer theme, base, components, utilities;
+/* One cascade order for the whole app, Tailwind's own and one layer after
+   it: tokens in theme, element defaults in base, kit recipes in components,
+   single-purpose classes in utilities (with what has to outrank the
+   typography plugin, which writes there too), and in `overrides` the few
+   page-wide holds that outrank every utility on any element (a field's type
+   floor, a loop held still, the theme flip). A later layer wins over an
+   earlier one whatever the selectors' weight
+   (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer). */
+@layer theme, base, components, utilities, overrides;
 
 /* The screen's bottom inset, on the boxes that stand on the screen's bottom
    (data-safe-bottom), and nowhere else: not inherited, so the keyboard's
@@ -392,20 +395,69 @@
     -webkit-touch-callout: none;
     user-select: none;
   }
+}
 
+@layer overrides {
   /* iOS Safari zooms into any field whose text is under 16px, and a single
      missed field brings the zoom back, so this is a floor for every field
-     rather than a per-component fix. Important in the base layer, the
-     strongest place an important declaration can sit, so neither a utility
-     nor a component rule can take a field under it. A floor, not a size: a
-     field set in larger type than 16px (a project's name edited in its
-     title's type) keeps the size it inherits, `1em` being its parent's. */
-  @media (width < 640px), (pointer: coarse) {
-    input:not([type="checkbox"], [type="radio"], [type="range"]),
-    textarea,
-    select {
-      font-size: max(16px, 1em) !important;
+     rather than a per-component fix. In the last layer, so no utility or
+     kit recipe can take a field under it. A floor, not a size: a field set
+     in larger type than 16px (a project's name edited in its title's type)
+     keeps the size it inherits, `1em` being its parent's. */
+  input:not([type="checkbox"], [type="radio"], [type="range"]),
+  textarea,
+  select {
+    @variant max-phone {
+      font-size: max(16px, 1em);
     }
+    @variant coarse {
+      font-size: max(16px, 1em);
+    }
+  }
+
+  /* Nothing animates that nobody can see (motion/rest.ts): a hidden tab, an
+     element scrolled out of view and an inert surface parked behind the one
+     in front all hold every loop they carry still, over the loop's own
+     utility. A list swap's leaving layer (`data-leaving`) is inert so nobody
+     clicks a row on its way out, but its rows still play their exit.
+     Each ancestor is its own one-item :where(), never one list: Blink's
+     ancestor bloom filter reads a one-item :where() as a plain ancestor and
+     rejects every element with no such ancestor before matching it, and
+     reads nothing from a list (selector_filter.cc). */
+  :where(:root[data-at-rest]) *,
+  :where(:root[data-at-rest]) *::before,
+  :where(:root[data-at-rest]) *::after,
+  :where([data-offscreen]) *,
+  :where([data-offscreen]) *::before,
+  :where([data-offscreen]) *::after,
+  :where([inert]:not([data-leaving])) *,
+  :where([inert]:not([data-leaving])) *::before,
+  :where([inert]:not([data-leaving])) *::after,
+  :where([data-offscreen]) {
+    animation-play-state: paused;
+  }
+
+  /* A swap slot that is not the one showing (a button's spinner waits there
+     between presses) carries no loop at all, over the loop's own utility.
+     Held still instead, a paused spinner stayed on the compositor as a
+     moving layer, and the browser, which cannot tell how far a moving layer
+     reaches, put everything drawn after it on layers too: one hidden spinner
+     in the rail took the rail's rows and the whole pane with it. The slot is
+     named as one (`.icon-swap`'s child, `.kit-slot`'s): `data-active="false"`
+     alone is also every rail row that is not the open one. */
+  :is(.icon-swap, .kit-slot) > [data-active="false"] * {
+    animation: none;
+  }
+
+  /* The theme flip (theme.svelte.ts) starts no element transitions. The
+     elements only: a pseudo-element whose transition is on a colour names
+     itself where it is styled (the transcript's wells, MessageRow), and
+     naming ::before/::after made WebKit resolve both pseudo-elements of
+     every element on the page to add the class and again to remove it (a
+     ~20ms longer flip frame at 1440). */
+  :root.theme-flip,
+  :root.theme-flip * {
+    transition: none;
   }
 }
 
@@ -886,28 +938,6 @@
         animation: kit-skeleton-sweep var(--dur-loop) linear infinite;
       }
     }
-  }
-
-  /* Nothing animates that nobody can see (motion/rest.ts): a hidden tab, an
-     element scrolled out of view and an inert surface parked behind the one
-     in front all hold every loop they carry still. A list swap's leaving
-     layer (`data-leaving`) is inert so nobody clicks a row on its way out,
-     but its rows still play their exit.
-     Each ancestor is its own one-item :where(), never one list: Blink's
-     ancestor bloom filter reads a one-item :where() as a plain ancestor and
-     rejects every element with no such ancestor before matching it, and
-     reads nothing from a list (selector_filter.cc). */
-  :where(:root[data-at-rest]) *,
-  :where(:root[data-at-rest]) *::before,
-  :where(:root[data-at-rest]) *::after,
-  :where([data-offscreen]) *,
-  :where([data-offscreen]) *::before,
-  :where([data-offscreen]) *::after,
-  :where([inert]:not([data-leaving])) *,
-  :where([inert]:not([data-leaving])) *::before,
-  :where([inert]:not([data-leaving])) *::after,
-  :where([data-offscreen]) {
-    animation-play-state: paused !important;
   }
 
   /* The seam: the hairline the transcript draws between one user message
@@ -1799,25 +1829,24 @@
     animation-fill-mode: forwards;
   }
   /* A closing drawer and its scrim let presses through to the page, as a
-     closing dialog's and sheet's do (floating-presence `pressable`): left
-     catching them while they slid and faded out, the next tap after a close
-     was lost. vaul draws both through bits-ui with `pointer-events: auto`
-     inline and takes no `child` to say otherwise, so the rule is here. */
-  [data-slot="drawer-content"][data-state="closed"],
-  [data-slot="drawer-overlay"][data-state="closed"] {
-    pointer-events: none !important;
-  }
-  /* Nor does the page stay locked under one. bits-ui holds <body> at
-     `pointer-events: none` for as long as a dialog's content is drawn
-     unless it is drawn through `child`, which vaul-svelte (1.0.0-next.7,
-     the latest) does not take: the lock outlived vaul's slide out, 534ms
-     after a drawer closed on a phone, and the next tap was lost. While a
-     drawer is closing the body takes presses again. Every other modal
-     layer that could be open meanwhile has its own scrim over the page, and
-     a menu still closes on a press outside it. The closing drawer says so
-     on the body (ui/drawer/drawer-content, page-marks). */
-  body[data-drawer~="closed"] {
-    pointer-events: auto !important;
+     closing dialog's and sheet's do (floating-presence `pressable`): vaul
+     draws both through bits-ui with `pointer-events: auto` inline, which
+     only the kit's own inline value replaces, so the kit's drawer content
+     and overlay write it while they close.
+     Nor does the page stay locked under one. bits-ui holds <body> at
+     `pointer-events: none` inline for as long as a dialog's content is
+     drawn unless it is drawn through `child`, which vaul-svelte
+     (1.0.0-next.7, the latest) does not take: the lock outlived vaul's
+     slide out, 534ms after a drawer closed on a phone, and the next tap was
+     lost. While a drawer is closing the page under the body takes presses
+     again: `pointer-events` is inherited, so each of the body's children
+     takes them back (`auto` on a descendant is hit even under a `none`
+     ancestor). Every other modal layer that could be open meanwhile has its
+     own scrim over the page, and a menu still closes on a press outside
+     it. The closing drawer says so on the body (ui/drawer/drawer-content,
+     page-marks). */
+  :where(body[data-drawer~="closed"]) > * {
+    pointer-events: auto;
   }
 
   /* A kit bottom sheet rests on the bottom of what the reader can see and is
@@ -1932,18 +1961,6 @@
       pointer-events: none;
     }
   }
-  /* A swap slot that is not the one showing (a button's spinner waits there
-     between presses) carries no loop at all. Held still instead, a paused
-     spinner stayed on the compositor as a moving layer, and the browser,
-     which cannot tell how far a moving layer reaches, put everything drawn
-     after it on layers too: one hidden spinner in the rail took the rail's
-     rows and the whole pane with it. The slot is named as one
-     (`.icon-swap`'s child, `.kit-slot`'s): `data-active="false"` alone is
-     also every rail row that is not the open one. */
-  :is(.icon-swap, .kit-slot) > [data-active="false"] * {
-    animation: none !important;
-  }
-
   /* One hover ghost and one selection pill per list
      (components/ui/highlight). Drawn under the rows: the list isolates and
      the layers sit at -1, so a row's text and icons are always above them.
@@ -2129,7 +2146,7 @@
    The rules stop at code blocks and at anything marked .not-prose, the
    plugin's own boundary: what the user or a highlighter rendered keeps its
    own styles. `.prose <type>` keeps the plugin's specificity plus one type,
-   so these win without !important. Plain selectors, not @scope (see the
+   so these win on weight alone. Plain selectors, not @scope (see the
    kit recipes above). */
 @layer utilities {
   .prose {
@@ -2267,7 +2284,7 @@
    unlayered too, and outranks every such rule by an id's weight: `#\#` is
    an id no element has, so `:is(…, #\#)` matches as its other argument does
    and counts as an id (Selectors 4, :is() takes its most specific
-   argument). Not `!important`: an important base value cannot be animated
+   argument). Not an important declaration: an important base value cannot be animated
    on the compositor (Chromium's kAffectsImportantProperty), so every
    control's fade into the tint ran on the main thread. A colour change, so
    it runs under every motion preference. The kit Toggle's on step,
@@ -2702,14 +2719,14 @@
 }
 
 /* The same for a search strip whose only border is the rule under it: the
-   rule takes the ring's colour and weight. Important, because the strip's
-   own (unlayered) rule sets that border and would otherwise win over any
-   layer. */
+   rule takes the ring's colour and weight. The strip's own border is a
+   utility (`border-b-border-hairline`, ModelSection), and this selector
+   outweighs it ((0,2,1) to (0,1,0)) in the same layer. */
 @utility field-underline {
   &:has(:is(input, textarea, [contenteditable]):focus-visible) {
-    border-bottom-color: var(--focus-ring) !important;
+    border-bottom-color: var(--focus-ring);
     box-shadow: inset 0 calc(-1 * (var(--focus-ring-width) - 1px)) 0
-      var(--focus-ring) !important;
+      var(--focus-ring);
   }
   & :is(input, textarea, [contenteditable]):focus-visible {
     outline: none;
@@ -2718,13 +2735,11 @@
 
 /* A changing figure: digits of one width, so a count or a price that
    ticks does not move what stands beside it. A role's utility
-   (`type-<role>`) is the `font` shorthand, which resets
-   font-variant-numeric, and sorts before this one, so `num` beside it wins
-   by order. Important for one unlayered rule that resets it on an element
-   carrying `num`: SideSurface's head controls (`font: inherit`, its
-   `[data-slot="side-head"]` recipe) take PreviewPane's Comments button. */
+   (`type-<role>`) and `font-inherit` are the `font` shorthand, which resets
+   font-variant-numeric, and sort before this one (`--tw-sort`), so `num`
+   beside either wins by order. */
 @utility num {
-  font-variant-numeric: tabular-nums !important;
+  font-variant-numeric: tabular-nums;
 }
 
 /* A line pinned to its end whose start fades out over its first 30%
@@ -2882,7 +2897,8 @@
 /* The list swap (motion/list-swap): the model list's harness change and the
    home's Working/Finished switch. Global, because the rows name them from
    an inline style: Svelte rewrites `animation:` inside a component's own
-   <style> to a scoped name but cannot rewrite a string built in script. */
+   scoped styles to a scoped name but cannot rewrite a string built in
+   script. */
 @keyframes ns-in-r {
   from {
     opacity: 0;
@@ -2977,13 +2993,4 @@
   animation-timing-function: var(--ease-out);
 }
 
-/* The flip itself starts no element transitions (theme.svelte.ts). The
-   elements only: a pseudo-element whose transition is on a colour names
-   itself where it is styled (the transcript's wells, MessageRow), and naming
-   ::before/::after made WebKit resolve both pseudo-elements of every element
-   on the page to add the class and again to remove it (a ~20ms longer flip
-   frame at 1440). */
-:root.theme-flip,
-:root.theme-flip * {
-  transition: none !important;
-}
+/* The flip itself starts no element transitions: `overrides`, above. */
