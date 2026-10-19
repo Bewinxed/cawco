@@ -34,9 +34,6 @@
   const types = $derived(store.types.value ?? []);
   const projects = $derived(store.projectTypes.value ?? []);
   let busy = $state<Record<string, boolean>>({});
-  /** One group of rows: the fleet's, or a project's; a hairline above each after the first. */
-  const GROUP =
-    "flex flex-col gap-(--group-gap) [&+&]:border-t [&+&]:border-border-hairline [&+&]:pt-(--group-pt)";
 
   /** Harness, model, effort, and every narrowing, as one short line. */
   function runsOn(row: DelegateType): string {
@@ -87,7 +84,7 @@
     </Button>
   {/snippet}
 
-  <div data-slot="group" class="group">
+  <div data-slot="group" class="flex flex-col gap-space-2">
     <SectionHeader hue={section.hue} icon={section.icon} label={words.fleet} />
     {#if types.length === 0}
       <EmptyState
@@ -124,12 +121,9 @@
   </div>
 
   {#each projects as entry (entry.project.id)}
-    <!-- literal: 8px; 18px -->
     <div
       data-slot="group"
-      class={GROUP}
-      style:--group-gap="8px"
-      style:--group-pt="18px"
+      class="flex flex-col gap-space-2 border-t border-border-hairline pt-space-5"
     >
       <SectionHeader
         hue={section.hue}
