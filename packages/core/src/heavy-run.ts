@@ -37,6 +37,28 @@
  * work item's check stands its clock while it waits). It re-measures the room
  * every {@link ROOM_POLL_MS}, never spinning.
  *
+ * A RUN IS ADMITTED FOR THE MEMORY IT DECLARES, its peak ({@link
+ * HeavyHolder.peak}, `CAWCO_HEAVY_PEAK_GIB` for a script or `cawco
+ * heavy-run`; a slot's {@link SLOT_MEMORY} when it declares none). It takes
+ * one slot per {@link SLOT_MEMORY} of that peak ({@link unitsOf}), all at
+ * once under the gate's lock or none, so the slots held are what the runs
+ * holding them may reach together; and the machine's measured room must hold
+ * that peak beside the person's reserve. A run that needs more slots than
+ * are free waits, and one that needs fewer still starts beside it: the runs
+ * already holding slots keep the memory they were admitted for. On
+ * 2026-10-19 the nightly release (`scripts/release.ts`, its stage-1 and
+ * stage-2 proofs and seven compiles) held no admission of its own: "Consumed
+ * 15min 31.083s CPU time over 8min 33.717s wall clock time, 17.2G memory
+ * peak" on obelisk, on top of the probes and gates holding every slot, and a
+ * probe's Chromium in the window lost its browser.
+ *
+ * The machines a heavy run brings up for itself (stage 2's rig machines,
+ * `CAWCO_HEAVY_ADMITTED` set in their image) are inside its admission: their
+ * session starts wait on no reading of the host's memory ({@link
+ * measureMemoryRoom}), which their own run's load moves. On 2026-10-19 a
+ * stage-2 run's rig machines held their session starts 63 s on the host's
+ * memory stall while its 24 machines ran.
+ *
  * macOS has no PSI, so the Mac reads its own counterparts from the kernel
  * ({@link macRoom}), each over the same last 10 s: the share of CPU time
  * spent busy, the pages read back in from swap, the memory the kernel calls
@@ -88,6 +110,18 @@ export const HEAVY_RUNS_ENV = "CAWCO_HEAVY_RUNS";
  * so a probe kit run's scratch fleet, or a typecheck under `cawco heavy-run`, counts once.
  */
 export const HEAVY_RUN_HELD_ENV = "CAWCO_HEAVY_RUN_HELD";
+/**
+ * A run's declared peak, in GiB, as a script or `cawco heavy-run` names it
+ * ({@link heavyPeak}): what it is admitted for.
+ */
+export const HEAVY_PEAK_ENV = "CAWCO_HEAVY_PEAK_GIB";
+/**
+ * Set on the machines a heavy run brings up for itself (stage 2's rig
+ * machines), naming that run: they run inside its admission, and a session
+ * start there waits on no reading of the host's memory ({@link
+ * measureMemoryRoom}).
+ */
+export const HEAVY_ADMITTED_ENV = "CAWCO_HEAVY_ADMITTED";
 
 /**
  * What one heavy run costs, from `bun scripts/probe-kit/run.ts
@@ -99,6 +133,32 @@ export const HEAVY_RUN_HELD_ENV = "CAWCO_HEAVY_RUN_HELD";
  */
 const SLOT_CORES = 6;
 const SLOT_MEMORY = 8 * 1024 ** 3;
+
+/**
+ * The slots a run declaring `peak` bytes takes: one per {@link SLOT_MEMORY}
+ * of it, at least 1, and at most `count`, every slot there is (a run larger
+ * than the machine's whole heavy budget waits for every other run to end).
+ */
+const unitsOf = (peak: number, count: number): number =>
+  Math.min(count, Math.max(1, Math.ceil(peak / SLOT_MEMORY)));
+
+/**
+ * The peak a script or `cawco heavy-run` declares ({@link HEAVY_PEAK_ENV}),
+ * in bytes; undefined when it declares none (a slot's {@link SLOT_MEMORY}).
+ */
+export const heavyPeak = (): number | undefined => {
+  const raw = process.env[HEAVY_PEAK_ENV];
+  if (raw === undefined || raw === "") {
+    return;
+  }
+  const gib = Number(raw);
+  if (!Number.isFinite(gib) || gib <= 0) {
+    throw new Error(
+      `${HEAVY_PEAK_ENV} is the most memory the run reaches, in GiB, a number above 0; it is "${raw}"`
+    );
+  }
+  return gib * GIB;
+};
 
 /**
  * Linux: the most of the last 10 s in which some task waited on memory
@@ -271,6 +331,36 @@ const SWAP_FREE = /^SwapFree:\s+(\d+) kB$/m;
 
 const gib = (bytes: number): string => `${(bytes / GIB).toFixed(1)} GiB`;
 
+/**
+ * The whole machine's pressure files. Each is the root group's whatever
+ * cgroup or namespace reads it: kernel/sched/psi.c answers a read of
+ * `/proc/pressure/cpu` with `return psi_show(m, &psi_system, PSI_CPU);`
+ * (git.kernel.org, torvalds/linux, kernel/sched/psi.c), `psi_system` being
+ * the root's, where a cgroup's `cpu.pressure` counts only its own tasks'
+ * waits ("pressure stall information is also tracked for tasks grouped into
+ * cgroups", docs.kernel.org/accounting/psi.html).
+ */
+export const MACHINE_PRESSURE = {
+  cpu: "/proc/pressure/cpu",
+  memory: "/proc/pressure/memory",
+} as const;
+
+/**
+ * THE MACHINE'S CONTENTION, ONE READING: the share of the last 10 s in which
+ * some task anywhere on the machine waited for a CPU, and for memory
+ * ({@link MACHINE_PRESSURE}, "some" avg10, each a percent). Admission reads
+ * it ({@link measureRoom}) and so does every timing leg's gate (the probe
+ * kit's quiet.ts), so the two never read different things. Linux only.
+ */
+export interface MachinePressure {
+  cpu: number;
+  memory: number;
+}
+export const machinePressure = (): MachinePressure => ({
+  cpu: someAvg10(MACHINE_PRESSURE.cpu),
+  memory: someAvg10(MACHINE_PRESSURE.memory),
+});
+
 /** A pressure file's "some avg10", a percent. */
 const someAvg10 = (path: string): number => {
   const found = SOME_AVG10.exec(readFileSync(path, "utf8"));
@@ -313,7 +403,7 @@ const linuxSwap = (meminfo: string, available: number): Reading => {
   };
 };
 
-const linuxReadings = (): Reading[] => {
+const linuxReadings = (peak: number): Reading[] => {
   const memoryMax = threshold(ROOM_ENV.memoryStall, MEMORY_STALL_MAX);
   const cpuMax = threshold(ROOM_ENV.cpuStall, CPU_STALL_MAX);
   const reserve =
@@ -321,11 +411,10 @@ const linuxReadings = (): Reading[] => {
     process.env[ROOM_ENV.reserveGib] !== ""
       ? threshold(ROOM_ENV.reserveGib, 0) * GIB
       : Math.max(RESERVE_FLOOR, totalmem() * RESERVE_SHARE);
-  const memory = someAvg10("/proc/pressure/memory");
-  const cpu = someAvg10("/proc/pressure/cpu");
+  const { memory, cpu } = machinePressure();
   const meminfo = readFileSync("/proc/meminfo", "utf8");
   const free = meminfoBytes(meminfo, MEM_AVAILABLE, "MemAvailable");
-  const needs = SLOT_MEMORY + reserve;
+  const needs = peak + reserve;
   return [
     {
       memory: true,
@@ -341,7 +430,7 @@ const linuxReadings = (): Reading[] => {
     {
       memory: false,
       ok: free >= needs,
-      words: `${gib(free)} available (a run needs ${gib(needs)}: ${gib(SLOT_MEMORY)} for it, ${gib(reserve)} kept for the person)`,
+      words: `${gib(free)} available (a run needs ${gib(needs)}: ${gib(peak)} for it, ${gib(reserve)} kept for the person)`,
     },
   ];
 };
@@ -522,7 +611,7 @@ const readyRoom = async (): Promise<void> => {
   await Bun.sleep(Math.max(0, first.at + MAC_WINDOW_MS - Date.now()));
 };
 
-const macReadings = (): Reading[] => {
+const macReadings = (peak: number): Reading[] => {
   const busyMax = threshold(ROOM_ENV.cpuBusy, MAC_CPU_BUSY_MAX);
   const swapInMax = threshold(ROOM_ENV.swapInMib, MAC_SWAPIN_MAX_MIB);
   const swapUsedMax = threshold(ROOM_ENV.swapUsedMax, MAC_SWAP_USED_MAX_PCT);
@@ -545,7 +634,7 @@ const macReadings = (): Reading[] => {
   const swapShare = (100 * swap.used) / totalmem();
   const free = (sysctlInt("kern.memorystatus_level") / 100) * totalmem();
   const level = sysctlInt("kern.memorystatus_vm_pressure_level");
-  const needs = SLOT_MEMORY + reserve;
+  const needs = peak + reserve;
   return [
     {
       memory: false,
@@ -565,7 +654,7 @@ const macReadings = (): Reading[] => {
     {
       memory: false,
       ok: free >= needs,
-      words: `${gib(free)} available (a run needs ${gib(needs)}${reserve > 0 ? `: ${gib(SLOT_MEMORY)} for it, ${gib(reserve)} kept for the person` : ""})`,
+      words: `${gib(free)} available (a run needs ${gib(needs)}${reserve > 0 ? `: ${gib(peak)} for it, ${gib(reserve)} kept for the person` : ""})`,
     },
     {
       memory: true,
@@ -580,13 +669,16 @@ const macReadings = (): Reading[] => {
  * that cannot be taken is no room, in words naming why: the gate never admits
  * what it could not measure for.
  */
-const measured = (pick: (reading: Reading) => boolean): Room => {
+const measured = (
+  pick: (reading: Reading) => boolean,
+  peak: number = SLOT_MEMORY
+): Room => {
   try {
     if (process.platform === "linux") {
-      return roomOf(linuxReadings().filter(pick));
+      return roomOf(linuxReadings(peak).filter(pick));
     }
     if (process.platform === "darwin") {
-      return roomOf(macReadings().filter(pick));
+      return roomOf(macReadings(peak).filter(pick));
     }
     return {
       ok: false,
@@ -600,8 +692,11 @@ const measured = (pick: (reading: Reading) => boolean): Room => {
   }
 };
 
-/** This machine's room for one more heavy run, measured now: every reading. */
-export const measureRoom = (): Room => measured(() => true);
+/**
+ * This machine's room for one more heavy run reaching `peak` bytes (a slot's
+ * {@link SLOT_MEMORY} unless given), measured now: every reading.
+ */
+export const measureRoom = (peak?: number): Room => measured(() => true, peak);
 
 /**
  * This machine's room on memory alone, measured now: what a session start and
@@ -609,7 +704,16 @@ export const measureRoom = (): Room => measured(() => true);
  * swap read back, swap out and pressure level), in the words the heavy-run
  * queue says them. A start needs no slot's 8 GiB, nor idle CPUs.
  */
-export const measureMemoryRoom = (): Room => measured(({ memory }) => memory);
+export const measureMemoryRoom = (): Room => {
+  const admitted = process.env[HEAVY_ADMITTED_ENV];
+  if (admitted) {
+    return {
+      ok: true,
+      words: `this machine runs inside an admitted heavy run (${HEAVY_ADMITTED_ENV}=${admitted}), whose memory was taken as it started`,
+    };
+  }
+  return measured(({ memory }) => memory);
+};
 
 /**
  * Keeps this process's Mac readings a window deep, so {@link
@@ -634,6 +738,12 @@ export interface HeavyHolder {
   command: string;
   /** The landing gate the run is a step of, in its words ({@link heavyGate}): it goes first. */
   gate?: string;
+  /**
+   * The most memory the run reaches, in bytes: what it is admitted for, one
+   * slot per {@link SLOT_MEMORY} of it ({@link unitsOf}). A slot's
+   * {@link SLOT_MEMORY} when it declares none.
+   */
+  peak?: number;
   pid: number;
   where: string;
 }
@@ -660,8 +770,12 @@ const describe = (path: string): string => {
     return "a run that has not written its name yet";
   }
   const minutes = Math.round((Date.now() - holder.since) / 60_000);
-  return `${holder.gate ? `${holder.gate}, ` : ""}pid ${holder.pid} in ${holder.where}, ${minutes} min: ${holder.command}`;
+  return `${holder.gate ? `${holder.gate}, ` : ""}pid ${holder.pid} in ${holder.where}, ${minutes} min, peak ${gib(holder.peak ?? SLOT_MEMORY)}: ${holder.command}`;
 };
+
+/** The holders of `paths`, each run once however many slots it holds: a run's slots all carry its one record. */
+const describeRuns = (paths: readonly string[]): string =>
+  [...new Set(paths.map(describe))].join("; ");
 
 /** This process's place: a workspace's pids are its boundary's own. */
 export const heavyWhere = (): string => {
@@ -779,17 +893,56 @@ const gateAhead = (
 };
 
 /**
- * One look at the slots under the gate: the taken slot's descriptor, or what
- * holds the run (nothing when another run holds the gate this tick). While a
- * landing gate's ticket is held, a slot goes only to the oldest ticket's run
- * (`ticket`, this run's own when it is a gate's).
+ * The slots in `dir` as they stand, under the gate's lock: the paths of those
+ * held, every `slot-<i>` file counted, those at i ≥ `count` from a larger
+ * ceiling included, and the locks of up to `units` free ones below `count`,
+ * taken.
+ */
+const lookAtSlots = (
+  dir: string,
+  count: number,
+  units: number
+): { free: number[]; held: string[] } => {
+  const indices = new Set(Array.from({ length: count }, (_, i) => i));
+  for (const name of readdirSync(dir)) {
+    const index = SLOT_FILE.exec(name)?.[1];
+    if (index !== undefined) {
+      indices.add(Number(index));
+    }
+  }
+  const held: string[] = [];
+  const free: number[] = [];
+  for (const index of [...indices].sort((a, b) => a - b)) {
+    const path = join(dir, `slot-${index}`);
+    const fd = openLockFile(path, true);
+    if (!tryLock(fd)) {
+      held.push(path);
+      closeSync(fd);
+    } else if (free.length < units && index < count) {
+      free.push(fd);
+    } else {
+      unlock(fd);
+    }
+  }
+  return { free, held };
+};
+
+/**
+ * One look at the slots under the gate: the descriptors of the `units` slots
+ * taken, all at once, or what holds the run (nothing when another run holds
+ * the gate this tick). It takes them only while `units` more than are held
+ * fit under `count`, so the slots held never come to more than the runs
+ * holding them were admitted for. While a landing gate's ticket is held,
+ * slots go only to the oldest ticket's run (`ticket`, this run's own when it
+ * is a gate's).
  */
 const tryTake = (
   dir: string,
   count: number,
+  units: number,
   holder: HeavyHolder,
   ticket: string | undefined
-): { fd: number } | { behind?: Behind } => {
+): { fds: number[] } | { behind?: Behind } => {
   const gate = openLockFile(join(dir, "gate"), true);
   if (!tryLock(gate)) {
     closeSync(gate);
@@ -800,35 +953,18 @@ const tryTake = (
     if (ahead) {
       return { behind: ahead };
     }
-    const indices = new Set(Array.from({ length: count }, (_, i) => i));
-    for (const name of readdirSync(dir)) {
-      const index = SLOT_FILE.exec(name)?.[1];
-      if (index !== undefined) {
-        indices.add(Number(index));
-      }
-    }
-    const held: string[] = [];
-    let free: number | undefined;
-    for (const index of [...indices].sort((a, b) => a - b)) {
-      const path = join(dir, `slot-${index}`);
-      const fd = openLockFile(path, true);
-      if (!tryLock(fd)) {
-        held.push(path);
-        closeSync(fd);
-      } else if (free === undefined && index < count) {
-        free = fd;
-      } else {
+    const { held, free } = lookAtSlots(dir, count, units);
+    if (free.length < units || held.length + units > count) {
+      for (const fd of free) {
         unlock(fd);
-      }
-    }
-    if (free === undefined || held.length >= count) {
-      if (free !== undefined) {
-        unlock(free);
       }
       return {
         behind: {
           kind: "slots",
-          words: `all ${count} heavy-run slots (${HEAVY_RUNS_ENV}, else this machine's cores and memory) are held, by ${held.map(describe).join("; ")}`,
+          words:
+            units === 1
+              ? `all ${count} heavy-run slots (${HEAVY_RUNS_ENV}, else this machine's cores and memory) are held, by ${describeRuns(held)}`
+              : `this run's peak of ${gib(holder.peak ?? SLOT_MEMORY)} takes ${units} of the ${count} heavy-run slots (one per ${gib(SLOT_MEMORY)}; ${HEAVY_RUNS_ENV}, else this machine's cores and memory), and ${held.length} are held, by ${describeRuns(held)}`,
         },
       };
     }
@@ -838,7 +974,9 @@ const tryTake = (
     );
     const ago = Date.now() - newest;
     if (ago < ADMIT_SPACING_MS) {
-      unlock(free);
+      for (const fd of free) {
+        unlock(fd);
+      }
       return {
         behind: {
           kind: "spacing",
@@ -846,17 +984,20 @@ const tryTake = (
         },
       };
     }
-    ftruncateSync(free, 0);
-    writeSync(free, JSON.stringify({ ...holder, since: Date.now() }), 0);
-    return { fd: free };
+    const record = JSON.stringify({ ...holder, since: Date.now() });
+    for (const fd of free) {
+      ftruncateSync(fd, 0);
+      writeSync(fd, record, 0);
+    }
+    return { fds: free };
   } finally {
     unlock(gate);
   }
 };
 
-/** A slot taken: its descriptor's lock, and whether the run waited for it. */
+/** A run's slots taken: each one's descriptor holding its lock, and whether the run waited for them. */
 export interface HeavyTaken {
-  fd: number;
+  fds: number[];
   waited: boolean;
 }
 
@@ -883,8 +1024,9 @@ const queueGate = async (
 };
 
 /**
- * Takes a slot for `holder` once one is free and the machine has room,
- * waiting as long as that takes; `gone` ends the wait early, with no slot.
+ * Takes `holder`'s slots, one per {@link SLOT_MEMORY} of its peak, once
+ * that many are free and the machine has room for its peak, waiting as long
+ * as that takes; `gone` ends the wait early, with no slot.
  * A landing gate's run (`holder.gate`) holds a ticket while it waits, and
  * goes before every run that is not one. Each marker line goes to `say`
  * (stderr unless given).
@@ -905,7 +1047,14 @@ export async function takeHeavySlot(
   }
   try {
     await readyRoom();
-    return await waitForSlot(dir, count, holder, ticket?.name, { say, gone });
+    return await waitForSlot(
+      dir,
+      count,
+      unitsOf(holder.peak ?? SLOT_MEMORY, count),
+      holder,
+      ticket?.name,
+      { say, gone }
+    );
   } finally {
     if (ticket) {
       dropTicket(dir, ticket);
@@ -921,6 +1070,7 @@ export async function takeHeavySlot(
 async function waitForSlot(
   dir: string,
   count: number,
+  units: number,
   holder: HeavyHolder,
   ticket: string | undefined,
   { say, gone }: { say: (line: string) => void; gone: () => boolean }
@@ -930,17 +1080,17 @@ async function waitForSlot(
   let measuredAt = 0;
   for (;;) {
     if (!room || Date.now() - measuredAt >= ROOM_POLL_MS) {
-      room = measureRoom();
+      room = measureRoom(holder.peak);
       measuredAt = Date.now();
     }
     let behind: Behind | undefined;
     if (room.ok) {
-      const look = tryTake(dir, count, holder, ticket);
-      if ("fd" in look) {
+      const look = tryTake(dir, count, units, holder, ticket);
+      if ("fds" in look) {
         if (said) {
           say(`${QUEUE_MARKER} held heavy`);
         }
-        return { fd: look.fd, waited: said !== undefined };
+        return { fds: look.fds, waited: said !== undefined };
       }
       ({ behind } = look);
     } else {
@@ -959,8 +1109,12 @@ async function waitForSlot(
   }
 }
 
-/** Lets a taken slot go. */
-export const releaseHeavySlot = (fd: number): void => unlock(fd);
+/** Lets a run's taken slots go. */
+export const releaseHeavySlot = (taken: Pick<HeavyTaken, "fds">): void => {
+  for (const fd of taken.fds) {
+    unlock(fd);
+  }
+};
 
 /** `heavy-run.ts count`'s line: the ceiling, and the room over the last window. */
 export const heavyRunsSaid = async (): Promise<string> => {

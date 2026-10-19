@@ -16,7 +16,12 @@
  * CawCo's workspace roots, before it waits for a slot and again once a wait
  * ends, and holds none.
  *
- * One process holds one slot however many of its parts ask (the kit's run
+ * A run is admitted for the memory it declares (core heavy-run.ts): its
+ * `peak` option, or `CAWCO_HEAVY_PEAK_GIB` for a bash script's `heavy_run`
+ * or a run that names none, a slot's worth when neither does; it takes one
+ * slot per 8 GiB of it.
+ *
+ * One process holds one admission however many of its parts ask (the kit's run
  * and the scratch fleet under it), and a run's descendants hold none of
  * their own: the holder exports `CAWCO_HEAVY_RUN_HELD`.
  *
@@ -38,6 +43,7 @@ import {
   type HeavyHolder,
   type HeavyTaken,
   heavyGate,
+  heavyPeak,
   heavyRunsSaid,
   heavyWhere,
   POLL_MS,
@@ -73,8 +79,8 @@ const diskProblem = (what: string): string | undefined => {
         `disk-room.sh exited ${checked.exitCode} with nothing said`;
 };
 
-/** What {@link take} came to: a slot, a refusal for want of disk space, or nothing (its shell left). */
-type Taken = { fd: number } | { refused: string } | undefined;
+/** What {@link take} came to: its slots, a refusal for want of disk space, or nothing (its shell left). */
+type Taken = { fds: number[] } | { refused: string } | undefined;
 
 /**
  * Takes a slot for `holder` through the machine's gate, waiting as long as
@@ -96,11 +102,11 @@ const take = async (
   if (taken.waited) {
     const after = diskProblem(holder.command);
     if (after) {
-      releaseHeavySlot(taken.fd);
+      releaseHeavySlot(taken);
       return { refused: after };
     }
   }
-  return { fd: taken.fd };
+  return { fds: taken.fds };
 };
 
 export interface HeavySlot {
@@ -108,32 +114,41 @@ export interface HeavySlot {
   release: () => void;
 }
 
-let held: { fd: number | undefined; holds: number } | undefined;
+let held: { fds: number[] | undefined; holds: number } | undefined;
 let taking: Promise<Taken> | undefined;
 
 /**
- * One of the machine's heavy-run slots for this process, waiting for one
- * while none is free or the machine has no room. A process whose ancestor
- * holds one ({@link HEAVY_RUN_HELD_ENV}) takes none. Throws disk-room.sh's
- * sentence when the disk has no room for a run.
+ * This process's admission to the machine's heavy runs, waiting while too
+ * few slots are free for its peak or the machine has no room for it. Its
+ * peak: `peakGib` (a run that knows its own, as the release does), else
+ * `CAWCO_HEAVY_PEAK_GIB`, else a slot's worth; the first ask of the process
+ * decides it. A process whose ancestor holds one ({@link
+ * HEAVY_RUN_HELD_ENV}) takes none. Throws disk-room.sh's sentence when the
+ * disk has no room for a run.
  */
-export async function heavySlot(): Promise<HeavySlot> {
+export async function heavySlot(
+  options: { peakGib?: number } = {}
+): Promise<HeavySlot> {
   if (!held) {
     if (process.env[HEAVY_RUN_HELD_ENV] && !taking) {
-      held = { fd: undefined, holds: 0 };
+      held = { fds: undefined, holds: 0 };
     } else {
       taking ??= take({
         pid: process.pid,
         where: heavyWhere(),
         command: process.argv.slice(1).join(" "),
         gate: heavyGate(),
+        peak:
+          options.peakGib === undefined
+            ? heavyPeak()
+            : options.peakGib * 1024 ** 3,
       });
       const taken = await taking;
       taking = undefined;
       if (taken && "refused" in taken) {
         throw new Error(taken.refused);
       }
-      held ??= { fd: taken?.fd, holds: 0 };
+      held ??= { fds: taken?.fds, holds: 0 };
       process.env[HEAVY_RUN_HELD_ENV] = "1";
     }
   }
@@ -149,8 +164,8 @@ export async function heavySlot(): Promise<HeavySlot> {
       if (held.holds > 0) {
         return;
       }
-      if (held.fd !== undefined) {
-        releaseHeavySlot(held.fd);
+      if (held.fds !== undefined) {
+        releaseHeavySlot({ fds: held.fds });
         delete process.env[HEAVY_RUN_HELD_ENV];
       }
       held = undefined;
@@ -192,6 +207,7 @@ if (import.meta.main) {
       where: heavyWhere(),
       command: command.join(" "),
       gate: heavyGate(),
+      peak: heavyPeak(),
     },
     gone
   );
@@ -208,6 +224,6 @@ if (import.meta.main) {
     // biome-ignore lint/performance/noAwaitInLoops: one look at the shell per tick, for its whole life
     await Bun.sleep(POLL_MS);
   }
-  releaseHeavySlot(taken.fd);
+  releaseHeavySlot(taken);
   process.exit(0);
 }

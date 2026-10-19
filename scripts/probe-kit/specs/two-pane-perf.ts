@@ -47,28 +47,24 @@
  * more by kind; every number is written to `numbers.json` in the spec's out
  * folder.
  *
- * A LEG COUNTS ONLY UNCONTENDED. Each phase is a leg, and it counts when the
- * spec's own cgroup's CPU pressure (Linux PSI, `cpu.pressure`, `some avg10`)
- * is under `PSI_LIMIT` at its start, middle and end; a leg over it is void
- * and measured again (`LEG_TRIES`), and each leg's note leads with its PSI,
- * the box's load average beside it for reference only. The pressure that
- * cannot be read stops the spec: there is no other gate. On a box shared
- * with the fleet the spec runs in a scope of its own weighted high, the
- * fleet's services low, so its legs get a CPU whenever they ask:
- *
- *   systemd-run --user --scope -p CPUWeight=10000 bun scripts/probe-kit/run.ts two-pane-perf
+ * A LEG COUNTS ONLY WHILE THE MACHINE IS QUIET (quiet.ts `quietLeg`): the
+ * whole machine's CPU and memory pressure under its limit at the leg's
+ * start, middle and end, the reading heavy-run admission reads; a leg over
+ * it is void and measured again, and each leg's note leads with its
+ * readings, the box's load average beside them for reference only. The
+ * pressure that cannot be read stops the spec: there is no other gate.
  *
  * The weighting is the host's systemd's, run from its own shell; a
  * workspace's commands cannot reach it.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one phase, one tab, one key at a time, as a person makes them
-import { readFileSync } from "node:fs";
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { Locator, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
 import { COMPOSER, type Kit, open, type Spec } from "../kit";
+import { machineQuiet, quietLeg, quietWords } from "../quiet";
 
 /** Calls in each long session. */
 const LONG = 2000;
@@ -787,113 +783,6 @@ async function switchLayoutParts(
   return read.join("; ");
 }
 /**
- * A leg counts when the spec itself got the CPU it asked for: its own
- * cgroup's CPU pressure (Linux PSI, cgroup v2 `cpu.pressure`, `some avg10`:
- * the share of the last 10s some task of its waited for a CPU) under this at
- * the leg's start, middle and end. The box's load average says how busy the
- * machine is, not whether this spec waited on it; with the fleet's services
- * weighted low and the spec's scope high, the machine can be loaded and the
- * spec uncontended, and PSI is what proves it.
- */
-const PSI_LIMIT = 1.0;
-/** How often the pressure is read while waiting for it to fall. */
-const PSI_POLL_MS = 5000;
-/** The longest a leg waits for the pressure to fall before it is measured as it stands. */
-const PSI_WAIT_MS = 20 * 60_000;
-/** How often the pressure is read while a leg runs (its middle is the middle reading). */
-const LEG_SAMPLE_MS = 1000;
-/** How many times a leg the spec waited for CPU in is measured again. */
-const LEG_TRIES = 3;
-
-/** This process's cgroup's `cpu.pressure` file, read off `/proc/self/cgroup` (v2's `0::` line). */
-export function pressureFile(): string {
-  const line = readFileSync("/proc/self/cgroup", "utf8")
-    .split("\n")
-    .find((one) => one.startsWith("0::"));
-  if (!line) {
-    throw new Error(
-      "two-pane-perf: no cgroup v2 line in /proc/self/cgroup, so its CPU pressure cannot be read; it measures nothing without it"
-    );
-  }
-  return `/sys/fs/cgroup${line.slice(3)}/cpu.pressure`;
-}
-const PRESSURE = /^some avg10=([\d.]+)/m;
-/** The spec's own `some avg10`; throws when it cannot be read: there is no other gate. */
-export function cpuPressure(file: string): number {
-  let text: string;
-  try {
-    text = readFileSync(file, "utf8");
-  } catch (error) {
-    throw new Error(
-      `two-pane-perf: ${file} cannot be read (${String(error)}); it measures nothing without its CPU pressure`,
-      { cause: error }
-    );
-  }
-  const found = PRESSURE.exec(text);
-  if (!found) {
-    throw new Error(`two-pane-perf: no "some avg10" in ${file}: ${text}`);
-  }
-  return Number.parseFloat(found[1]);
-}
-/** The box's 1-minute load average, said beside the pressure for reference only. */
-const oneMinuteLoad = (): string =>
-  readFileSync("/proc/loadavg", "utf8").split(" ")[0];
-
-/** Waits for the spec's CPU pressure to fall under `PSI_LIMIT`, bounded; how long it waited, from what. */
-async function uncontended(file: string): Promise<string> {
-  const began = Date.now();
-  const first = cpuPressure(file);
-  let pressure = first;
-  while (!(pressure < PSI_LIMIT) && Date.now() - began < PSI_WAIT_MS) {
-    await Bun.sleep(PSI_POLL_MS);
-    pressure = cpuPressure(file);
-  }
-  return `waited ${((Date.now() - began) / 1000).toFixed(0)}s from PSI ${first}`;
-}
-
-/**
- * Runs a leg once the spec waits on no one for CPU, reading its pressure
- * each second while it runs, and again (up to `LEG_TRIES`) when its start,
- * middle or end reading was `PSI_LIMIT` or more: a contended leg is void.
- * Says the leg's readings: PSI at start, middle and end, the try kept, the
- * wait, and the load average beside them for reference.
- */
-export async function quietLeg(
-  name: string,
-  file: string,
-  run: () => Promise<void>
-): Promise<string> {
-  let said = "";
-  for (let attempt = 1; attempt <= LEG_TRIES; attempt += 1) {
-    const waited = await uncontended(file);
-    const readings: number[] = [cpuPressure(file)];
-    const loadAt = oneMinuteLoad();
-    const sampler = setInterval(
-      () => readings.push(cpuPressure(file)),
-      LEG_SAMPLE_MS
-    );
-    try {
-      await run();
-    } finally {
-      clearInterval(sampler);
-    }
-    readings.push(cpuPressure(file));
-    const marks = [
-      readings[0],
-      readings[Math.floor(readings.length / 2)],
-      readings.at(-1) ?? 0,
-    ];
-    const quiet = marks.every((one) => one < PSI_LIMIT);
-    said = `PSI some avg10 ${marks.join(" / ")} (start / middle / end), try ${attempt} (${waited}), load ${loadAt}–${oneMinuteLoad()} for reference${quiet ? "" : `, CONTENDED (PSI ${PSI_LIMIT} or more)`}`;
-    console.log(`  ${name}: ${said}`);
-    if (quiet) {
-      break;
-    }
-  }
-  return said;
-}
-
-/**
  * Each switch's work from its input (`two-pane:switch:<n>`, marked as the
  * input goes in) to the frame that shows its pane (`two-pane:shown:<n>`,
  * marked in that frame's callbacks): the CPU of every task from the one to
@@ -1400,12 +1289,11 @@ async function measure(
         : "nothing",
     };
   };
-  // Each leg uncontended (`quietLeg`): measured again when the spec waited
-  // for CPU while it ran, its readings said with it.
-  const pressure = pressureFile();
-  cpuPressure(pressure);
+  // Each leg on a quiet machine (`quietLeg`): measured again when anything
+  // on the machine waited while it ran, its readings said with it.
+  machineQuiet();
   const phase = async (name: Phase, act: () => Promise<void>) => {
-    const leg = await quietLeg(`${mode} pane(s), ${name}`, pressure, () =>
+    const leg = await quietLeg(`${mode} pane(s), ${name}`, () =>
       measurePhase(name, act)
     );
     spans[name].restyled = `${leg} | ${spans[name].restyled}`;
@@ -2050,10 +1938,9 @@ function longReply(
 const spec: Spec = {
   name: "two-pane-perf",
   run: async (kit) => {
-    // Its CPU pressure readable before anything is built: no gate, no run.
-    const pressure = pressureFile();
+    // The machine's pressure readable before anything is built: no gate, no run.
     console.log(
-      `  two-pane-perf: legs gated on ${pressure}, PSI some avg10 ${cpuPressure(pressure)} now`
+      `  two-pane-perf: legs gated on the machine's pressure, ${quietWords(machineQuiet())} now`
     );
     const scene = sceneModel();
     const { counts, mark } = scene;

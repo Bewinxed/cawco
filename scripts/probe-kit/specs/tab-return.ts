@@ -50,8 +50,9 @@
  * input to the frame that shows the pane (`workOf`); the press's
  * interaction by Event Timing. A WebKit return is a person's press
  * (`pressBack`), timed by the event's own stamp, with the dashboard's first
- * animation frames after it. Each return is a leg gated on the spec's own
- * CPU pressure (`quietLeg`). Every number is written to `numbers.json`.
+ * animation frames after it. Each return is a leg gated on the whole
+ * machine's CPU and memory pressure (quiet.ts `quietLeg`), the reading
+ * heavy-run admission reads. Every number is written to `numbers.json`.
  *
  * The busy session streams as the spec lets it: once seeded, its live turns
  * run only while the busy tab is away (one per `TURN_MS` of the absence) and
@@ -85,14 +86,13 @@ import type { CDPSession, Frame, Locator, Page } from "playwright-core";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import { type MainTask, type MainThread, SCROLLER, traceMain } from "../frames";
 import { type Kit, open, ROOT, type Spec } from "../kit";
+import { machineQuiet, quietLeg } from "../quiet";
 import {
   type Cost,
   census,
   INPUT_MS,
   inputsOf,
   LONG_TASK_MS,
-  pressureFile,
-  quietLeg,
   REACH_MS,
   SLOWER,
   type SwitchWork,
@@ -1843,7 +1843,7 @@ function checkPage(kit: Kit, back: Back): void {
 }
 
 const run = async (kit: Kit) => {
-  const pressure = pressureFile();
+  machineQuiet();
   const folder = join(kit.out, "heavy");
   await mkdir(folder, { recursive: true });
   await heavyFolder(folder);
@@ -2131,7 +2131,7 @@ const run = async (kit: Kit) => {
     const turns = kind === "busy" ? Math.round(absence / TURN_MS) : 0;
     // A keyboard return is untraced on every engine: the strip's own key, timed by the page.
     const traced = how === "pointer" ? input : null;
-    const psi = await quietLeg(name, pressure, async () => {
+    const psi = await quietLeg(name, async () => {
       let before: Clock | null = null;
       if (kind === "past") {
         before = await clockOf(page, to);

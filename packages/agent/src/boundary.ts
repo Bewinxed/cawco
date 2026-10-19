@@ -250,12 +250,11 @@ interface Held extends Boundary {
 
 /**
  * An older boundary still running beside the current one ({@link handOver}):
- * its record, and the executors that were on their way into it when it was
- * handed over, which may still hand it a command.
+ * its record. The commands still running in it, or on their way into it,
+ * are each its executor's own mark in its generation's dir ({@link
+ * commandsIn}).
  */
-interface Retiring extends Held {
-  readonly executors: readonly number[];
-}
+type Retiring = Held;
 
 /**
  * Linux: the sandbox the srt host runs now, as it writes `<state>/sandbox`
@@ -3032,9 +3031,10 @@ const executors = (
 };
 
 /**
- * Whether anything still runs in an older boundary of workspace `id`
- * ({@link Retiring}): an executor that was on its way into it as it was
- * handed over, or a command or a process one left. On Linux that is anything
+ * Whether anything still runs in boundary generation `old` of workspace
+ * `id`: a command its executor marked there and still waits on ({@link
+ * commandsIn}), whatever it listens on, or a process a command left. On
+ * Linux a process left is anything
  * that descends from its sandbox's init and was not there when its runner
  * was ready ({@link inTree}), a server a command left behind with
  * `setsid -f` or a double fork among them, in the sandbox's pid namespace or
@@ -3050,7 +3050,7 @@ const busyOld = async (
   old: Retiring,
   current: Held | undefined
 ): Promise<boolean> => {
-  if (inFlight(seen, id, old)) {
+  if ((await commandsIn(seen, id, old.gen)).length > 0) {
     return true;
   }
   if (process.platform === "linux") {
@@ -3070,16 +3070,45 @@ const busyOld = async (
 };
 
 /**
- * Whether an executor that was on its way into the older boundary `old` as it
- * was handed over is still there, its command not yet answered. Checked
- * again as the executor itself, not by the record alone: a record written
- * before {@link runsExecutor} lists the judge too.
+ * Where each executor marks the command it runs in generation `gen` of
+ * workspace `id`: a file named for its pid, made before it looks at the gate
+ * and removed as it exits, or as it goes through to a newer generation
+ * ({@link execScript}). In the generation's own dir, which nothing inside
+ * the boundary writes.
  */
-const inFlight = (seen: Seen[], id: string, old: Retiring): boolean => {
-  const exec = join(stateDir(id), "exec");
-  return seen.some(
-    (one) => old.executors.includes(one.pid) && runsExecutor(one.command, exec)
+const commandsOf = (id: string, gen: string): string =>
+  join(generationDir(id, gen), "commands");
+
+/**
+ * The executors whose command runs in generation `gen` of workspace `id`, or
+ * is on its way into it, as each marked it ({@link commandsOf}): a mark
+ * counts while its pid is an executor of the workspace in `seen`. A mark
+ * whose executor is gone (one killed outright leaves its mark) is removed.
+ * THE ONE TEST that a boundary has a live command: every look that would
+ * close or replace a generation asks it first ({@link busyOld}), whatever
+ * the command listens on, so a command with no listener keeps its boundary
+ * across an agent restart and the handover after it, to its own end.
+ */
+const commandsIn = async (
+  seen: readonly Pick<Seen, "command" | "pid">[],
+  id: string,
+  gen: string
+): Promise<number[]> => {
+  const dir = commandsOf(id, gen);
+  const names = await readdir(dir).catch(() => [] as string[]);
+  const live = new Set(executors(seen, id));
+  const marked: number[] = [];
+  await Promise.all(
+    names.map(async (name) => {
+      const pid = Number(name);
+      if (live.has(pid)) {
+        marked.push(pid);
+        return;
+      }
+      await rm(join(dir, name), { force: true });
+    })
   );
+  return marked.sort((a, b) => a - b);
 };
 
 /**
@@ -3155,13 +3184,22 @@ const workLeft = async (
   held: Held
 ): Promise<string | undefined> => {
   const seen = await snapshot();
-  if (!(await busyOld(seen, id, { ...held, executors: [] }, undefined))) {
+  if (!(await busyOld(seen, id, held, undefined))) {
     return;
   }
+  const commands = await commandsIn(seen, id, held.gen);
   const place =
     process.platform === "linux" ? await readPlace(id, held.gen) : undefined;
   const ports = place ? await workPorts(seen, place) : [];
-  return ports.length > 0 ? `listens on ${ports.join(", ")}` : "runs";
+  const words = [
+    ...(commands.length > 0
+      ? [
+          `runs ${commands.length === 1 ? "a command" : `${commands.length} commands`} (executor ${commands.join(", ")})`,
+        ]
+      : []),
+    ...(ports.length > 0 ? [`listens on ${ports.join(", ")}`] : []),
+  ];
+  return words.length > 0 ? words.join(" and ") : "runs";
 };
 
 /**
@@ -3652,7 +3690,7 @@ const inUseNow = async (): Promise<string[]> => {
       continue;
     }
     seen ??= await snapshot();
-    if (await busyOld(seen, id, { ...held, executors: [] }, undefined)) {
+    if (await busyOld(seen, id, held, undefined)) {
       used.push(id);
     }
   }
@@ -3729,8 +3767,8 @@ const readRetiring = async (id: string): Promise<Retiring[]> => {
  * Hands workspace `ref`'s boundary `old`, of an older form, over to a new
  * one of this build's form, started beside it. The gate goes up first, so an
  * executor on its way in either waits and then runs through the new one, or
- * is already past it and is recorded with the older boundary, which it may
- * still hand its command. The older one is recorded before the new one
+ * is already past it, its mark in the older generation ({@link
+ * commandsIn}), which it may still hand its command. The older one is recorded before the new one
  * replaces its record, so no agent loses it, and runs on untouched with every
  * process in it; it closes once nothing runs in it ({@link closeIdle}).
  */
@@ -3743,10 +3781,7 @@ const handOver = async (
   await writeStateFile(gate, String(process.pid));
   try {
     const record = retiringFileOf(ref.id, old);
-    const retiring: Retiring = {
-      ...old,
-      executors: executors(await snapshot(), ref.id),
-    };
+    const retiring: Retiring = old;
     await writeWhole(record, `${JSON.stringify(retiring)}\n`, 0o644);
     const fresh = await start(client, ref).catch(async (error: unknown) => {
       await rm(record, { force: true });
@@ -3780,9 +3815,12 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
       ? "has nothing left running in it and is closed"
       : "is gone";
     if (alive && (await busyOld(seen, id, old, current))) {
-      const ports = inFlight(seen, id, old)
-        ? undefined
-        : await supersededPorts(seen, old, now);
+      // A command still running there keeps it, whatever its work listens
+      // on and whoever listens there since ({@link commandsIn}).
+      const ports =
+        (await commandsIn(seen, id, old.gen)).length > 0
+          ? undefined
+          : await supersededPorts(seen, old, now);
       if (!ports) {
         left = true;
         continue;
@@ -3925,7 +3963,7 @@ const restartIfIdle = async (
     const seen = await snapshot();
     if (
       executors(seen, ref.id).length > 0 ||
-      (await busyOld(seen, ref.id, { ...held, executors: [] }, undefined))
+      (await busyOld(seen, ref.id, held, undefined))
     ) {
       return held;
     }
@@ -4970,11 +5008,17 @@ const execScript = (
 caller_path=$PATH
 PATH=${SYSTEM_PATH}
 export PATH
+# This command is this generation's from here until it exits: the agent keeps
+# the generation running while the mark names a live executor.
+marks=${shellQuote(commandsOf(id, held.gen))}
+mark="$marks/$$"
+mkdir -p "$marks" 2>/dev/null && : > "$mark"
+trap 'rm -f "$mark"' EXIT
 # While the agent replaces the boundary, wait, then run through the new one.
 gate=${shellQuote(gateOf(id))}
 if [ -e "$gate" ]; then
   while [ -e "$gate" ] && kill -0 "$(cat "$gate" 2>/dev/null)" 2>/dev/null; do sleep 0.1; done
-  [ -e "$gate" ] || PATH=$caller_path exec "$0" "$@"
+  [ -e "$gate" ] || { rm -f "$mark"; PATH=$caller_path exec "$0" "$@"; }
 fi
 fifo=${shellQuote(fifoOf(id, held.gen))}
 if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then

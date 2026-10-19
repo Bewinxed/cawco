@@ -12,7 +12,18 @@
  * loop ran on in the older sandbox, where nothing the delegate ran could see
  * or signal it.
  *
- * H starts `setsid nohup sh -c 'while :; do date +%s >> beat; sleep 2; done'`
+ * 0. First, H runs a command in the foreground that listens on nothing and
+ *    runs {@link FG_SECONDS} s (`sh -c 'sleep …; exit 7'`). While it runs,
+ *    its boundary is given an older form and the agent restarts, as a
+ *    binary-apply does (on 2026-10-19 a leaf's probe run, kf-2, exited 137
+ *    with "workspace 9874eeaf…'s boundary stopped while this command ran").
+ *    The command finishes with its own exit code, 7, in the boundary it
+ *    started in: its tool result reads `FG-STATUS-7` and not the executor's
+ *    "boundary stopped" line, and the agent's log says the boundary was kept
+ *    while its work ran (agent boundary.ts `commandsIn`, the executor's own
+ *    mark).
+ *
+ * H then starts `setsid nohup sh -c 'while :; do date +%s >> beat; sleep 2; done'`
  * in its clone and ends its turn in a wait, its item live. Its boundary is
  * given an older form (an account added to its policy, as a session on
  * another account would) and the agent restarts. A message then gives H a
@@ -49,6 +60,19 @@ import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const WAIT = "mcp__cawco__wait_item";
+/** How long round 0's foreground command runs: past an agent restart and its start-up pass. */
+const FG_SECONDS = 90;
+/** Round 0's command: a marker in the clone as it starts, then a foreground wait on no port, its status said by the shell around it. */
+const FOREGROUND = [
+  "touch fg.started",
+  `sh -c 'sleep ${FG_SECONDS}; exit 7'`,
+  `echo "FG-""STATUS-$?"`,
+].join("; ");
+const FG_STATUS = /FG-STATUS-(\d+)/;
+/** The executor's line for a command cut off by its boundary's end (agent boundary.ts `execScript`). */
+const CUT_OFF = "boundary stopped while this command ran";
+/** The account round 0's restart adds, apart from round 1's, so each restart is a form change of its own. */
+const FG_ACCOUNT = "acct-probe-older-form-fg";
 const TAG = /PROBE-BEAT-(?:CHECK-|NARROW-|AGAIN-)?H:/;
 /** The loop's beat, `sleep 2`: a read of the heartbeat that must see it grow waits more than one. */
 const BEAT_GAP_MS = 5000;
@@ -60,7 +84,7 @@ const ACCOUNT_ADDED = "acct-probe-older-form";
 /** How the agent says a fleet sync found a narrowed access (boundary.ts `recheckNow`). */
 const SYNCED = "its access narrowed (the fleet's config was synced)";
 const START_LINE = "[workspace] boundary hooks written for ";
-const KEPT_LINE = "is kept as it is while its work runs";
+const KEPT_LINE = "is kept as it is while its work";
 /** The boundary the kept line names (boundary.ts `replaceOlder`). */
 const KEPT_PID = /its boundary (\d+) \(form [^)]*\) is kept as it is/;
 /** How `closeIdle` says it closed an older generation with nothing in it, or found it gone. */
@@ -89,6 +113,7 @@ const CHECK = [
 
 const steps: {
   checked?: boolean;
+  foreground?: boolean;
   narrowed?: boolean;
   restarted?: boolean;
   rested: number;
@@ -116,6 +141,14 @@ const offered = (request: Seen, name: string, input: object): Reply => {
 const respond = (request: Seen): Reply => {
   if (!(request.tools && TAG.test(request.all))) {
     return text("ok");
+  }
+  if (!steps.foreground) {
+    steps.foreground = true;
+    return tool("Bash", {
+      command: FOREGROUND,
+      description: "Run the long command",
+      timeout: 300_000,
+    });
   }
   if (!steps.started) {
     steps.started = true;
@@ -245,17 +278,18 @@ const standUp = async (kit: Kit) => {
   return { fleet, home, h, parent, project: project.id };
 };
 
-/** Gives workspace `id` an older form (an account added to its policy), then restarts the agent, as an update does. */
+/** Gives workspace `id` an older form (`account` added to its policy), then restarts the agent, as an update does. */
 const olderFormRestart = async (
   fleet: Fleet,
   home: string,
-  id: string
+  id: string,
+  account = ACCOUNT_ADDED
 ): Promise<void> => {
   const accounts = join(home, ".cawco", "workspaces", id, "accounts.json");
   const listed = JSON.parse(
     await readFile(accounts, "utf8").catch(() => "[]")
   ) as string[];
-  await writeFile(accounts, `${JSON.stringify([...listed, ACCOUNT_ADDED])}\n`);
+  await writeFile(accounts, `${JSON.stringify([...listed, account])}\n`);
   const before = (await fleet.logs("agent")).split(START_LINE).length;
   await fleet.stop("agent");
   fleet.launch("agent");
@@ -282,6 +316,7 @@ const run = async (kit: Kit) => {
     return;
   }
   const { fleet, home, h, parent, project } = await standUp(kit);
+  await foregroundAcross(kit, fleet, home, h.workspaceId);
   const item = () =>
     fleet.query<{ state: string; wait_until: number | null }>(
       "SELECT state, wait_until FROM work_items WHERE id = ?",
@@ -360,6 +395,67 @@ const run = async (kit: Kit) => {
     parent,
     project,
   });
+};
+
+/**
+ * 0: H's foreground command, listening on nothing, runs across an agent
+ * restart that gives its boundary an older form, and finishes with its own
+ * exit code ({@link FOREGROUND}).
+ */
+const foregroundAcross = async (
+  kit: Kit,
+  fleet: Fleet,
+  home: string,
+  id: string
+): Promise<void> => {
+  const clone = await until(
+    "H's clone",
+    () =>
+      fleet.query<{ path: string }>(
+        "SELECT path FROM workspaces WHERE id = ?",
+        id
+      )[0]?.path,
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const started = await until(
+    "H's foreground command started",
+    () => (clone ? existsSync(join(clone, "fg.started")) : false),
+    Boolean,
+    240_000
+  ).catch(() => false);
+  const restartAt = Date.now();
+  if (started) {
+    await olderFormRestart(fleet, home, id, FG_ACCOUNT);
+  }
+  const restarted = Date.now() - restartAt;
+  const result = await until(
+    "H's foreground command's result",
+    () =>
+      fleet.seen.find(
+        (one) => FG_STATUS.test(one.all) || one.all.includes(CUT_OFF)
+      ),
+    Boolean,
+    (FG_SECONDS + 120) * 1000
+  ).catch(() => undefined);
+  const said = result?.all ?? "";
+  const lines = (await fleet.logs("agent"))
+    .split("\n")
+    .filter((line) => line.includes(id));
+  kit.note(`0: the agent's lines for H's workspace:\n${lines.join("\n")}`);
+  kit.check(
+    `0: H's foreground command, listening on nothing, ran across an agent restart that gave its boundary an older form (${Math.round(restarted / 1000)} s into its ${FG_SECONDS} s), and finished with its own exit code`,
+    started &&
+      restarted < FG_SECONDS * 1000 &&
+      FG_STATUS.exec(said)?.[1] === "7" &&
+      !said.includes(CUT_OFF),
+    `started: ${started}; ${result ? `its result: ${said.slice(said.lastIndexOf("touch fg.started")).slice(0, 400)}` : "no result"}`
+  );
+  kit.check(
+    "0: the agent's log says it kept the boundary as it was while its work ran",
+    lines.some((line) => line.includes("is kept as it is while its work")),
+    lines.find((line) => line.includes("is kept as it is")) ?? "no kept line"
+  );
 };
 
 /** How soon after a narrowing no event says the look replaces a boundary in use: its {@link NARROW_LOOK_MS}, a stop and a start. */
@@ -589,7 +685,8 @@ const keptAsItWas = async (
     .split("\n")
     .filter((line) => line.includes(id));
   kit.note(`3: the agent's lines for H's workspace:\n${lines.join("\n")}`);
-  const kept = lines.find((line) => line.includes(KEPT_LINE));
+  // The last: round 0's restart said one too, for the boundary H had then.
+  const kept = lines.findLast((line) => line.includes(KEPT_LINE));
   const live = KEPT_PID.exec(kept ?? "")?.[1];
   const pidOf = (entry: string) => entry.slice(entry.lastIndexOf("@") + 1);
   const ownedLive = (list: readonly string[]) =>
