@@ -17,7 +17,10 @@
  *   `leftOut: { path, why }[]` when it made one (the note written). Throws
  *   an Error whose message is the machine's sentence when the place cannot
  *   be made one (not a folder there, past 500 MB to commit, a `.git` git
- *   cannot read, git failing), or the machine is not connected.
+ *   cannot read, git failing), or the machine is not connected. A place has
+ *   one step in flight: a second `ensure` while it runs joins it.
+ * - `settled(machineId, path)` resolves once that place's step in flight,
+ *   if any, has finished, whichever way: a move's plan inspects after it.
  */
 import {
   CONTROL_PLACE_REPO,
@@ -116,7 +119,7 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     );
   };
 
-  const ensure = async (place: PlaceRef): Promise<PlaceRepo> => {
+  const make = async (place: PlaceRef): Promise<PlaceRepo> => {
     const answer = (await call(place.machineId, CONTROL_PLACE_REPO, [
       place.path,
     ])) as PlaceRepo;
@@ -126,8 +129,41 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     return answer;
   };
 
+  /** Each place's one repo step in flight, by machine and path. */
+  const inFlight = new Map<string, Promise<PlaceRepo>>();
+  const keyOf = (machineId: string, path: string): string =>
+    `${machineId}\0${path}`;
+
+  /** A place's repo step: the one in flight, joined, else a new one, registered before this returns. */
+  const ensure = (place: PlaceRef): Promise<PlaceRepo> => {
+    const key = keyOf(place.machineId, place.path);
+    const running = inFlight.get(key);
+    if (running !== undefined) {
+      return running;
+    }
+    const mine = make(place);
+    inFlight.set(key, mine);
+    const forget = () => {
+      if (inFlight.get(key) === mine) {
+        inFlight.delete(key);
+      }
+    };
+    mine.then(forget, forget);
+    return mine;
+  };
+
   return {
     ensure,
+
+    /**
+     * Resolves once the place at `path` on `machineId` has no repo step in
+     * flight: what reads the folder to decide what to ask or do (a move's
+     * plan) reads its settled state, whichever step started first. A step
+     * that fails leaves the folder as it was; its error is its caller's.
+     */
+    async settled(machineId: string, path: string): Promise<void> {
+      await inFlight.get(keyOf(machineId, path))?.catch(() => undefined);
+    },
 
     /**
      * Before a workspace is cut from `cwd` on `machineId` for `projectId`:

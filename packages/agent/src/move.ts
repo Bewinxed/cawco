@@ -48,6 +48,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
 import { useHubCredentialHelper } from "./git-credential";
+import { placeSettled, placeTurn } from "./place-repo";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
 
@@ -844,6 +845,8 @@ const inspectPlain = async (
  * what is there. `path` is absolute: the hub sends only a MachinePath.
  */
 export const moveInspect = async (path: string): Promise<MoveInspection> => {
+  // Read once no step that may make it a repository is under way in it.
+  await placeSettled(path);
   const info = await stat(path).catch(() => undefined);
   const base = {
     path,
@@ -972,64 +975,76 @@ export const moveRemoteCredential = async (
 
 /**
  * What "Move it" runs on the source: `git init` and one commit of the folder
- * as it is when it was no repository; its large files tracked by LFS first
+ * as it is when it is no repository; its large files tracked by LFS first
  * either way. Ignored files stay out of the commit, as `.gitignore` says,
- * and so do secrets ({@link SECRETS_STAY}).
+ * and so do secrets ({@link SECRETS_STAY}). It takes the folder's turn
+ * (place-repo.ts `placeTurn`), so it never runs beside the place's own first
+ * commit, and whether it inits is read from the folder in that turn, as
+ * {@link moveInspect} reads it: a place made a repository since the plan
+ * gets no second `git init` and no second first commit.
  */
 export const movePrepare = (
   request: MovePrepareRequest
 ): Promise<{ commit: string | null }> =>
-  runStep(request.jobId, "prepare", async (run) => {
-    const { path } = request;
-    const env = plainEnv(LFS_FILTERS);
-    if (request.gitInit) {
-      await must(run, path, ["init", "-q"], "git init failed", env);
-    }
-    if (request.bigFiles.length > 0) {
-      const tracking = await exec(
-        run,
-        ["git", "lfs", "track", "--filename", "--", ...request.bigFiles],
-        { cwd: path, env }
+  runStep(request.jobId, "prepare", (run) =>
+    placeTurn(request.path, () => prepareNow(run, request))
+  );
+
+const prepareNow = async (
+  run: Run,
+  request: MovePrepareRequest
+): Promise<{ commit: string | null }> => {
+  const { path } = request;
+  const env = plainEnv(LFS_FILTERS);
+  const gitInit = !(await exists(join(path, ".git")));
+  if (gitInit) {
+    await must(run, path, ["init", "-q"], "git init failed", env);
+  }
+  if (request.bigFiles.length > 0) {
+    const tracking = await exec(
+      run,
+      ["git", "lfs", "track", "--filename", "--", ...request.bigFiles],
+      { cwd: path, env }
+    );
+    if (tracking.code !== 0) {
+      throw new StepFailed(
+        "Git LFS could not track the large files",
+        lastLine(tracking.stderr) || lastLine(tracking.stdout)
       );
-      if (tracking.code !== 0) {
-        throw new StepFailed(
-          "Git LFS could not track the large files",
-          lastLine(tracking.stderr) || lastLine(tracking.stdout)
-        );
-      }
-      await must(
-        run,
-        path,
-        ["lfs", "install", "--local"],
-        "Git LFS could not be set up in the folder",
-        env
-      );
-    }
-    if (!request.gitInit) {
-      return { commit: null };
     }
     await must(
       run,
       path,
-      ["add", "-A", "--", ".", ...SECRETS_STAY],
-      "git add failed",
+      ["lfs", "install", "--local"],
+      "Git LFS could not be set up in the folder",
       env
     );
-    await must(
-      run,
-      path,
-      [
-        "commit",
-        "-q",
-        "--no-verify",
-        "-m",
-        "The folder as it was when CawCo first moved it",
-      ],
-      "git commit failed",
-      { ...env, ...CAWCO_IDENTITY() }
-    );
-    return { commit: await maybe(path, ["rev-parse", "HEAD"]) };
-  });
+  }
+  if (!gitInit) {
+    return { commit: null };
+  }
+  await must(
+    run,
+    path,
+    ["add", "-A", "--", ".", ...SECRETS_STAY],
+    "git add failed",
+    env
+  );
+  await must(
+    run,
+    path,
+    [
+      "commit",
+      "-q",
+      "--no-verify",
+      "-m",
+      "The folder as it was when CawCo first moved it",
+    ],
+    "git commit failed",
+    { ...env, ...CAWCO_IDENTITY() }
+  );
+  return { commit: await maybe(path, ["rev-parse", "HEAD"]) };
+};
 
 // ── Snapshot ───────────────────────────────────────────────────────────────
 

@@ -93,8 +93,6 @@ export interface MoveState {
   cloneUrl?: string;
   error?: MoveError;
   from: MoveJob["from"];
-  /** The folder is no repository: the approval's yes runs `git init`. */
-  gitInit: boolean;
   ignoredSecrets: string[];
   ignores: boolean;
   kept?: string;
@@ -171,6 +169,11 @@ export interface MovesDeps {
     requestId: string,
     outcome: "answered" | "cancelled"
   ) => void;
+  /**
+   * Resolves once a place's repo step in flight, if any, has finished
+   * (place-repo.ts `settled`): the plan reads the source as it settled.
+   */
+  readonly settled: (machineId: string, path: string) => Promise<void>;
   /** Starts the session as every hub-started session starts (server.ts `spawnSession`). */
   readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
 }
@@ -699,6 +702,9 @@ export const createMoves = (deps: MovesDeps) => {
     if (targetPath instanceof MachinePathRefused) {
       throw new MoveRefused(400, targetPath.message, { cause: targetPath });
     }
+    // A plain folder being made a repository is read once it is one (or
+    // stayed a folder): what the move asks never depends on which finished first.
+    await deps.settled(sourcePlace.machineId, sourcePlace.path);
     const [sourceInspection, targetInspection] = await Promise.all([
       inspect(sourcePlace.machineId, sourcePlace.path),
       inspect(targetMachineId, targetPath),
@@ -956,7 +962,6 @@ export const createMoves = (deps: MovesDeps) => {
       ),
       targetHome: t.home,
       bigFiles: s.bigFiles,
-      gitInit: !s.isGit,
       snapshotBranch: moveBranch(deps.machineName(sourceMachineId)),
       steps,
       bytes: s.bytes,
@@ -1075,7 +1080,6 @@ export const createMoves = (deps: MovesDeps) => {
             {
               jobId: row.id,
               path: state.sourcePath,
-              gitInit: state.gitInit,
               bigFiles: state.bigFiles.map((file) => file.path),
             },
           ],

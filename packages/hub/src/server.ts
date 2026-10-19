@@ -14950,6 +14950,8 @@ export const createServer = (
       registry.broadcast({ verb: "frames", machineId: "hub", payload: frame }),
     rowsChanged: (machineId) => publishInstances(machineId),
     placesChanged,
+    // The place-repo steps, made further down; no move is planned before the hub is up.
+    settled: (machineId, path) => placeRepos.settled(machineId, path),
     // A move is a New session the person started on another place: its mode
     // is the one the form chose.
     spawn: async (machineId, payload) => {
