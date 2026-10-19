@@ -53,7 +53,7 @@
    * both cards. Measured with the head from its topmost pixel to the lowest
    * pixel of the beak: ready 129 of 512, stable 168 of 1024, nightly 272 of
    * 1024. Scale = (129 / 512) / (head / 1024), about the line of his box
-   * that stands on the card's top edge (56.84%, the box's `caw-peek-rise`).
+   * that stands on the card's top edge (the box's `caw-peek-rise`).
    */
   const PICTURES = {
     stable: { light: lightStable, dark: darkStable, scale: 1.5357 },
@@ -131,9 +131,8 @@
           {/if}
         </span>
         {#if card.channel === current}
-          <!-- literal: 8px -->
           <span
-            class="mark-line relative z-2 mt-space-2 flex items-center gap-(--gap) text-ink-strong"
+            class="mark-line relative z-2 mt-space-2 flex items-center gap-space-2 text-ink-strong"
             in:blur={{
               duration: dur("--dur-panel"),
               easing: easeOut,
@@ -144,12 +143,13 @@
               easing: easeOut,
               amount: 2,
             }}
-            style:--gap="8px"
           >
             <svg
               data-slot="check"
               aria-hidden="true"
               class="size-icon-md flex-none self-center fill-none"
+              stroke-linecap="round"
+              stroke-linejoin="round"
               viewBox="0 0 20 20"
             >
               <circle
@@ -160,7 +160,10 @@
               ></circle>
               <path
                 d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                class="stroke-status-live-glyph"
+                class="stroke-status-live-glyph motion-safe:animate-check-draw"
+                stroke-dasharray="12"
+                stroke-dashoffset="0"
+                stroke-width="1.8"
               ></path>
             </svg>
             <span>The fleet follows {card.name}</span>
@@ -177,45 +180,19 @@
         in:fade={{ duration: dur("--dur-fade"), delay: dur("--dur-exit") }}
         out:fade={{ duration: dur("--dur-exit") }}
         style:--caw-top="calc(var(--caw-peek-rise) * -1)"
-        style:left={index === 0
+        style:inset-inline-start={index === 0
           ? "calc((100% - var(--space-3)) / 4 - var(--caw-peek) / 2)"
           : "calc(100% - (100% - var(--space-3)) / 4 - var(--caw-peek) / 2)"}
       >
-        <!-- literal: 50% 56.84% -->
         <img
           alt=""
-          class="absolute inset-0 size-full origin-(--origin) select-none"
+          class="absolute inset-0 size-full origin-(--origin) scale-(--caw-scale) select-none"
           draggable="false"
           src={dark ? PICTURES[chosen].dark : PICTURES[chosen].light}
-          style:--origin="50% 56.84%"
-          style:transform="scale({PICTURES[chosen].scale})"
+          style:--origin="50% var(--caw-peek-rise)"
+          style:--caw-scale={PICTURES[chosen].scale}
         />
       </span>
     {/key}
   </RadioGroup.Root>
 </div>
-
-<style>
-  /* residual: svg-paint */
-  [data-slot="check"] {
-    stroke-linecap: round;
-    stroke-linejoin: round;
-  }
-  [data-slot="check"] path {
-    stroke-width: 1.8;
-    stroke-dasharray: 12;
-    stroke-dashoffset: 0;
-  }
-
-  /* residual: keyframes */
-  @media (prefers-reduced-motion: no-preference) {
-    [data-slot="check"] path {
-      animation: draw var(--dur-toggle) var(--ease-out) var(--dur-ghost) both;
-    }
-  }
-  @keyframes draw {
-    from {
-      stroke-dashoffset: 12;
-    }
-  }
-</style>

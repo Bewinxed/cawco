@@ -61,12 +61,10 @@
       <!-- A section's name: the badge recipe (DESIGN.md, Badges and state chips),
            20px at the 5px radius, label role, a 12px glyph, in its hue's ink on
            that hue's faint fill. -->
-      <!-- literal: 6px -->
       <h3
         data-slot="release-notes-label"
-        class="mt-space-3 mb-space-2 inline-flex h-icon-lg items-center justify-self-box-start gap-space-1 rounded-xs bg-surface-recess px-(--pad) type-label text-ink-strong first:mt-0 tone-fixed:bg-note-fixed-bg tone-fixed:text-note-fixed-ink tone-improved:bg-note-improved-bg tone-improved:text-note-improved-ink tone-new:bg-note-new-bg tone-new:text-note-new-ink"
+        class="mt-space-3 mb-space-2 inline-flex h-icon-lg items-center justify-self-box-start gap-space-1 rounded-xs bg-surface-recess px-space-2 type-label text-ink-strong first:mt-0 tone-fixed:bg-note-fixed-bg tone-fixed:text-note-fixed-ink tone-improved:bg-note-improved-bg tone-improved:text-note-improved-ink tone-new:bg-note-new-bg tone-new:text-note-new-ink"
         data-tone={known?.tone}
-        style:--pad="6px"
       >
         {#if known}
           <known.icon
@@ -83,34 +81,3 @@
     {/if}
   {/each}
 </div>
-
-<style>
-  /* Prose's own scale is for a document; notes sit inside a toast or a card
-     and take that surface's type, so the prose here inherits it and keeps
-     only its structure. Every rule sits one class above prose's `:where()`. */
-  /* residual: foreign-dom — the Markdown's own elements */
-  [data-slot="release-notes"] :global(.prose) {
-    font: inherit;
-    color: inherit;
-  }
-  [data-slot="release-notes"] :global(p) {
-    margin: 0;
-  }
-  [data-slot="release-notes"] :global(ul) {
-    display: grid;
-    gap: var(--space-row);
-    margin: 0;
-    padding-inline-start: var(--space-4);
-    list-style: disc;
-  }
-  [data-slot="release-notes"] :global(li) {
-    margin: 0;
-    padding: 0;
-    overflow-wrap: anywhere;
-  }
-
-  /* residual: pseudo */
-  [data-slot="release-notes"] :global(li::marker) {
-    color: var(--ink-muted);
-  }
-</style>
