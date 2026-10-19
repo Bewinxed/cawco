@@ -44,15 +44,12 @@
         {#each accounts as account (account.id)}
           {@const going = account.id === target}
           <ContextMenu.RadioItem disabled={going} value={account.id}>
-            <!-- literal: 8px -->
             <i
               data-slot="dot"
               aria-hidden="true"
-              class="mx-space-1 size-(--dot) flex-none rounded-(--dot-r) bg-(--c)"
+              class="mx-space-1 size-space-2 flex-none rounded-pill bg-(--c)"
               data-box
               style:--c={hueVar(account.hue)}
-              style:--dot="8px"
-              style:--dot-r="50%"
             ></i>
             <span
               data-slot="name"
