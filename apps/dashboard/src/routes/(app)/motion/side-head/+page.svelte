@@ -29,7 +29,7 @@
 
 {#snippet planName()}
   <span class="plan-name mark-line" data-name-row>
-    <span data-name-lead>{planWords.plan}</span>
+    <span data-slot="name-lead">{planWords.plan}</span>
     <span data-box><TaskRing done={3} size="md" total={12} /></span>
     <span class="figure">{planWords.figure(3, 12)}</span>
   </span>

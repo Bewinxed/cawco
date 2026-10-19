@@ -5227,8 +5227,8 @@
     },
     "breath-floor": {
       "$type": "number",
-      "$value": 0.75,
-      "$description": "The opacity live work breathes down to, half a breath in (the shared `breath` keyframes). The lowest at which the status-live glyph holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well. By day 0.75 (recess-deep the floor, 3.17:1; raised 3.64:1); at night 0.56 (raised the floor, 3.14:1)."
+      "$value": 0.8,
+      "$description": "The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1)."
     },
     "glyph-duo-status-opacity": {
       "$type": "number",

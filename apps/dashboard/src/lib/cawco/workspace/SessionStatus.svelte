@@ -92,10 +92,15 @@
     height: 16px;
   }
   /* The glyph wears its status hue; the word beside it stays text ink.
-     Nothing loops but the stopping spinner (StopTray's, until the machine
-     confirms): a change cross-fades once (glyphIn) and then holds. */
+     A change cross-fades once (glyphIn); then the Working glyph breathes
+     (DESIGN.md Live work breathes) and every other holds, but for the
+     stopping spinner (StopTray's, until the machine confirms). */
   .working .glyph {
     color: var(--status-live-glyph);
+
+    @media (prefers-reduced-motion: no-preference) {
+      animation: breath var(--breath) var(--ease-in-out) infinite;
+    }
   }
   .attention .glyph {
     color: var(--status-attn-glyph);

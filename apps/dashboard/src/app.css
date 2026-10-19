@@ -2432,6 +2432,13 @@
     opacity: var(--breath-floor);
   }
 }
+/* A mark that is live work takes the breath by its class (the in-flight
+   tool glyph, a delegate's live tool row). */
+@media (prefers-reduced-motion: no-preference) {
+  .breathe {
+    animation: breath var(--breath) var(--ease-in-out) infinite;
+  }
+}
 
 /* ---- The theme switch (theme.svelte.ts): a view transition of the root
    alone. The old page fades out as the new one fades in, one --dur-fade on

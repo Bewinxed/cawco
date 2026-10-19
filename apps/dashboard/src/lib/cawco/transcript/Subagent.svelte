@@ -113,7 +113,7 @@
     {#if view.running}
       <p class="now rail-line">
         <span data-slot="rail-cell" aria-hidden="true" class="rail-cell"
-          ><span class="beat"></span></span
+          ><span class="beat breathe"></span></span
         ><span>{view.currentStep}</span>
       </p>
     {:else if failed && branch.error}
@@ -332,7 +332,7 @@
     block-size: 5px;
     flex: 0 0 auto;
     border-radius: 50%;
-    /* Still: running is said by its hue and the pill, not a loop. */
+    /* It breathes (app.css .breathe, DESIGN.md Live work breathes). */
     background: var(--status-live-glyph);
   }
 

@@ -485,7 +485,7 @@
           >
             <span data-slot="rail-cell" aria-hidden="true" class="rail-cell"
               >{#if status.beat}
-                <span class="beat"></span>
+                <span class="beat breathe"></span>
               {/if}</span
             >
             <span>{status.text}</span>
@@ -777,7 +777,7 @@
     block-size: 5px;
     flex: 0 0 auto;
     border-radius: 50%;
-    /* Still: the live hue says it, nothing loops. */
+    /* It breathes (app.css .breathe, DESIGN.md Live work breathes). */
     background: var(--status-live-glyph);
   }
 

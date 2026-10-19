@@ -3,12 +3,14 @@
  *
  * 1. Live work's breath holds 3:1 at its floor (DESIGN.md Live work
  *    breathes; WCAG 2.2 SC 1.4.11, unrounded). On the /motion/breath-floor
- *    bench, Find's real working row stands on each surface; every animation
- *    on its glyph is paused and seeked to each tenth of its loop, and the
- *    lowest computed opacity found is the floor. The glyph's computed colour
- *    at that opacity over the surface's computed colour (both rasterised
- *    through a canvas to the sRGB the page draws) must stand 3:1 or more
- *    from the surface, in both schemes.
+ *    bench every kind of breather stands on each surface; each one's
+ *    `breath` animations are paused and seeked to each tenth of the loop,
+ *    and the lowest computed opacity found is its floor. Its ink (a glyph's
+ *    colour, a dot's fill) at that opacity over the nearest opaque ground
+ *    under it (both rasterised through a canvas to the sRGB the page draws)
+ *    must stand 3:1 or more from that ground, in both schemes. Then, under
+ *    reduced motion, every breather's computed animation-name is `none`
+ *    (`breath` at full motion).
  *
  * 2. A side card's name never runs under its actions (SideSurface). On the
  *    /motion/side-head bench, the real SideSurface as wide as Split stands
@@ -30,7 +32,7 @@
  *   bun scripts/probe-kit/run.ts web breath-and-head
  */
 import type { Kit, Spec } from "../../kit";
-import { open, THEMES } from "../../kit";
+import { open, settle, THEMES } from "../../kit";
 
 const SURFACES = [
   "surface-page",
@@ -58,93 +60,141 @@ function ratio(a: number[], b: number[]): number {
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 
-interface Floor {
-  animations: number;
+interface Breather {
   floor: number;
-  glyph: number[];
-  rowBackground: string;
-  surface: number[];
-  surfaceColor: string;
+  /** Its ground: the nearest opaque background under it. */
+  ground: number[];
+  groundColor: string;
+  /** Its ink: a glyph's colour, or a dot's fill. */
+  ink: number[];
+  name: string;
+  /** Its breath's animations (CSS `breath`). */
+  runs: number;
+}
+
+/** Every breather on one surface, its breath paused and seeked through a loop. */
+function readBreathers(surface: string): Breather[] | null {
+  const rgb = (value: string) => {
+    const canvas = document.createElement("canvas");
+    canvas.width = 1;
+    canvas.height = 1;
+    const pen = canvas.getContext("2d");
+    if (!pen) {
+      return [];
+    }
+    pen.fillStyle = value;
+    pen.fillRect(0, 0, 1, 1);
+    return [...pen.getImageData(0, 0, 1, 1).data];
+  };
+  const opaque = (value: string) => rgb(value)[3] === 255;
+  const box = document.querySelector<HTMLElement>(
+    `[data-surface="${surface}"]`
+  );
+  if (!box) {
+    return null;
+  }
+  return [...box.querySelectorAll<HTMLElement>("[data-breather]")].map(
+    (holder) => {
+      const runs = holder
+        .getAnimations({ subtree: true })
+        .filter(
+          (run): run is CSSAnimation =>
+            run instanceof CSSAnimation && run.animationName === "breath"
+        );
+      const target = runs[0]?.effect
+        ? ((runs[0].effect as KeyframeEffect).target as HTMLElement | null)
+        : null;
+      const el = target ?? holder;
+      // Marked for the reduced-motion leg, which finds it by this.
+      el.dataset.breathTarget = holder.dataset.breather;
+      let floor = 1;
+      for (const run of runs) {
+        run.pause();
+        const end = Number(run.effect?.getComputedTiming().duration ?? 0);
+        for (let at = 0; at <= 10; at += 1) {
+          run.currentTime = (end * at) / 10;
+          floor = Math.min(floor, Number(getComputedStyle(el).opacity));
+        }
+      }
+      const style = getComputedStyle(el);
+      const ink = opaque(style.backgroundColor)
+        ? style.backgroundColor
+        : style.color;
+      let under: Element | null = el.parentElement;
+      while (
+        under &&
+        under !== box &&
+        !opaque(getComputedStyle(under).backgroundColor)
+      ) {
+        under = under.parentElement;
+      }
+      const groundColor = getComputedStyle(under ?? box).backgroundColor;
+      return {
+        floor,
+        ground: rgb(groundColor),
+        groundColor,
+        ink: rgb(ink),
+        name: holder.dataset.breather ?? "",
+        runs: runs.length,
+      };
+    }
+  );
 }
 
 async function breathFloor(kit: Kit, bench: string): Promise<void> {
   for (const theme of THEMES) {
     // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time, each on its own page
     const page = await kit.page("desk", { theme });
-    await open(
-      page,
-      `${bench}/motion/breath-floor`,
-      '[data-surface] [data-slot="glyph"] svg'
-    );
-    const rows: Record<string, unknown>[] = [];
+    await open(page, `${bench}/motion/breath-floor`, "[data-breather] svg");
+    await settle(page);
+    const rows: string[] = [];
     let pass = true;
+    let lowest = Number.POSITIVE_INFINITY;
     for (const surface of SURFACES) {
       // biome-ignore lint/performance/noAwaitInLoops: one surface at a time on one page
-      const read = await page.evaluate((name): Floor | null => {
-        const rgb = (value: string) => {
-          const canvas = document.createElement("canvas");
-          canvas.width = 1;
-          canvas.height = 1;
-          const pen = canvas.getContext("2d");
-          if (!pen) {
-            return [];
-          }
-          pen.fillStyle = value;
-          pen.fillRect(0, 0, 1, 1);
-          return [...pen.getImageData(0, 0, 1, 1).data];
-        };
-        const box = document.querySelector<HTMLElement>(
-          `[data-surface="${name}"]`
-        );
-        const glyph = box?.querySelector<HTMLElement>('[data-slot="glyph"]');
-        const row = box?.querySelector<HTMLElement>('[data-slot="row"]');
-        if (!(box && glyph && row)) {
-          return null;
-        }
-        const runs = glyph.getAnimations();
-        let floor = 1;
-        for (const run of runs) {
-          run.pause();
-          const end = Number(run.effect?.getComputedTiming().duration ?? 0);
-          for (let at = 0; at <= 10; at += 1) {
-            run.currentTime = (end * at) / 10;
-            floor = Math.min(floor, Number(getComputedStyle(glyph).opacity));
-          }
-        }
-        const surfaceColor = getComputedStyle(box).backgroundColor;
-        return {
-          animations: runs.length,
-          floor,
-          glyph: rgb(getComputedStyle(glyph).color),
-          rowBackground: getComputedStyle(row).backgroundColor,
-          surface: rgb(surfaceColor),
-          surfaceColor,
-        };
-      }, surface);
-      if (!read) {
+      const read = await page.evaluate(readBreathers, surface);
+      if (!read || read.length === 0) {
         pass = false;
-        rows.push({ surface, missing: "surface, row or glyph" });
+        rows.push(`${surface}: no breathers`);
         continue;
       }
-      const drawn = read.glyph.map(
-        (c, i) => read.floor * c + (1 - read.floor) * (read.surface[i] ?? 0)
-      );
-      const contrast = ratio(drawn, read.surface);
-      const clear = read.rowBackground === "rgba(0, 0, 0, 0)";
-      pass &&= read.animations > 0 && clear && contrast >= 3;
-      rows.push({
-        surface,
-        color: read.surfaceColor,
-        breathes: read.animations,
-        floor: r2(read.floor),
-        atFloor: r2(contrast),
-        full: r2(ratio(read.glyph, read.surface)),
-      });
+      for (const one of read) {
+        const drawn = one.ink.map(
+          (c, i) => one.floor * c + (1 - one.floor) * (one.ground[i] ?? 0)
+        );
+        const contrast = ratio(drawn, one.ground);
+        lowest = Math.min(lowest, contrast);
+        const ok = one.runs > 0 && contrast >= 3;
+        pass &&= ok;
+        rows.push(
+          `${ok ? "ok  " : "LOW "}${surface} ${one.name}: floor ${r2(one.floor)}, ${r2(contrast)}:1 at the floor (${r2(ratio(one.ink, one.ground))}:1 full) on ${one.groundColor}`
+        );
+      }
     }
     kit.check(
-      `${theme}: the working glyph breathes, and at its breath's floor holds 3:1 or more on every surface`,
+      `${theme}: every breather breathes, and at its breath's floor holds 3:1 or more on what stands under it, on every surface (lowest ${r2(lowest)}:1)`,
       pass,
-      `\n${rows.map((row) => `    ${JSON.stringify(row)}`).join("\n")}`
+      `\n${rows.map((row) => `    ${row}`).join("\n")}`
+    );
+    // Reduced motion: every breather's loop stops (DESIGN.md: loops stop).
+    const names = async () =>
+      await page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>("[data-breath-target]")].map(
+          (el) =>
+            `${el.dataset.breathTarget}=${getComputedStyle(el).animationName}`
+        )
+      );
+    const full = await names();
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    const reduced = await names();
+    await page.emulateMedia({ reducedMotion: "no-preference" });
+    kit.check(
+      `${theme}: every breather's animation-name is breath at full motion and none under reduced motion (${full.length} breathers)`,
+      full.length > 0 &&
+        full.every((one) => one.endsWith("=breath")) &&
+        reduced.length === full.length &&
+        reduced.every((one) => one.endsWith("=none")),
+      `\n    full: ${[...new Set(full)].join(", ")}\n    reduced: ${[...new Set(reduced)].join(", ")}`
     );
   }
 }

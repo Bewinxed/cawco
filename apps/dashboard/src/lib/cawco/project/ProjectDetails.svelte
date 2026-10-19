@@ -1300,7 +1300,9 @@
   /* Asked, not yet answered: the thumb breathes on the live-work loop. */
   .value :global(.kit-segmented.lands[data-pending] .kit-thumb),
   .value :global(.kit-segmented.trackers[data-pending] .kit-thumb) {
-    animation: breath var(--breath) var(--ease-in-out) infinite;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: breath var(--breath) var(--ease-in-out) infinite;
+    }
   }
   /* The binding's form: its connection and its repository or team, then Use. */
   .bind {

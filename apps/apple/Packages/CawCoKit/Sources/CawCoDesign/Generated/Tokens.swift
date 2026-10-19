@@ -862,9 +862,9 @@ public enum Motion {
     public static let echoScale: Double = 1.45
     /// A working session's echo as it leaves the tile.
     public static let echoOpacity: Double = 0.45
-    /// The opacity live work breathes down to, half a breath in (the shared `breath` keyframes). The lowest at which the status-live glyph holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well. By day 0.75 (recess-deep the floor, 3.17:1; raised 3.64:1); at night 0.56 (raised the floor, 3.14:1).
+    /// The opacity live work breathes down to, half a breath in (the shared `breath` keyframes, app.css). The lowest at which every breather's ink (the status-live glyph, each tool family's ink, the muted ink) holds 3:1 (WCAG 2.2 SC 1.4.11, unrounded) on every surface it stands on: page, raised, recess, recess-deep and well (probe breath-and-head). By day 0.8 (the search tool's ink on recess-deep the floor, 3.13:1); at night 0.58 (the plan tool's ink on raised the floor, 3.14:1).
     /// By day and by night: read it with `value(for:)`.
-    public static let breathFloor = SchemeValue(light: 0.75, dark: 0.56)
+    public static let breathFloor = SchemeValue(light: 0.8, dark: 0.58)
     /// The duotone second layer (the disc) of a status glyph in an alert row (join/JoinedRow), drawn in ink-strong, status-done-ink or status-attn-ink. It holds two conditions in both schemes: the disc 3:1 or more on the recess, and the glyph's full layer (the check, the strokes) 3:1 or more on the disc, so the glyph reads as a mark on a disc, not a solid one. The two multiply to the ink's own contrast on the recess, so the ink needs about 9:1 there and no hue glyph ink holds it by day. By day 0.57 (the attn ink's disc the floor, 3.18:1); at night 0.46 (the done ink's check the floor, 3.24:1). Every other Solar glyph keeps 0.5.
     /// By day and by night: read it with `value(for:)`.
     public static let glyphDuoStatusOpacity = SchemeValue(light: 0.57, dark: 0.46)

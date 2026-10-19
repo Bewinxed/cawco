@@ -1565,7 +1565,7 @@
     },
     "breath-floor": {
       "$type": "number",
-      "$value": 0.56
+      "$value": 0.58
     }
   },
   "shadow": {
