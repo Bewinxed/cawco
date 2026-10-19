@@ -68,7 +68,6 @@ fixed: apps/dashboard/src/lib/components/features/workflows/WorkflowNodeCard.sve
 ## Gaps
 
 gap: apps/dashboard/src/lib/components/features/workflows/WorkflowCanvas.svelte:270 `[data-canvas] :global(.svelte-flow__handle) { background: … }` sets `background` directly, so the near-port highlight (`xy-handle-brand`, which sets xyflow's `--xy-handle-background-color`) is outranked until that rule reads the property too (another lane's file) — DESIGN.md: one source of truth per colour
-gap: `@xyflow/svelte/dist/style.css` is imported unlayered and outranks `@layer` rules (as L14 noted); `node-focus-visible:outline-focus-ring` is a utility on the card, not on xyflow's rule, so it holds, but only if the custom variant sorts after `data-is-selected:` — integration's compare checks the focused-and-selected node
 
 ## Contracts
 
