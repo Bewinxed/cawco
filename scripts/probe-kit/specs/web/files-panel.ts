@@ -525,7 +525,9 @@ const desk = async (
 
   // 6. Search: by title, by the words on a page, and nothing.
   const field = page.locator("[data-files-search] input");
-  await field.fill("pricing");
+  // "tiers" is only on the page; "pricing" is in its name too, and the
+  // engine scores a word by its best field (the title's).
+  await field.fill("tiers");
   await until(
     "the search's hits",
     () => page.locator("[data-files-within]").count(),
@@ -545,8 +547,13 @@ const desk = async (
   await field.fill("tall board");
   await until(
     "the title's hit",
-    () => page.locator("[data-files-card]").count(),
-    (n) => n === 1,
+    () =>
+      page.evaluate(() =>
+        [...document.querySelectorAll<HTMLElement>("[data-files-card]")].map(
+          (card) => card.title
+        )
+      ),
+    (titles) => titles.includes("tall-board"),
     15_000
   ).catch(() => 0);
   const byTitle = await page.evaluate(() =>
