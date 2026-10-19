@@ -87,9 +87,9 @@ theme: component screen-edges
 }
 ```
 
-theme: utility bg-hosting-shelf
+theme: utility shelf-hairline
 ```css
-@utility bg-hosting-shelf {
+@utility shelf-hairline {
   background:
     linear-gradient(var(--border-hairline), var(--border-hairline)) bottom / 100% 1px no-repeat,
     var(--surface-shelf);
@@ -246,7 +246,7 @@ fixed: Shell.svelte:1163 the page's strip (`slot-strip`) had no layout (`relativ
 fixed: Shell.svelte:955 the skip link is visually hidden by `sr-only` and shown on focus with `focus:not-sr-only` — it no longer parks at `left: -9999px`.
 fixed: ScreenEdges.svelte:103 the top strip's mask (paint only above the safe area) was lost in the conversion; it is `edge-mask-top` again — the strip rule in the file's own header comment.
 fixed: SessionRow.svelte:592 the fault / ask indent was set by two `:global` class rules on child roots; it is set once on a `display: contents` wrapper the children inherit from — one source for the row's note, fault and question.
-fixed: Shell.svelte:1075 the shelf's hairline is one background layer (`bg-hosting-shelf`) instead of a custom property holding a gradient string.
+fixed: Shell.svelte:1075 the shelf's hairline is one background layer (`shelf-hairline`) instead of a custom property holding a gradient string.
 
 ## Gaps
 
