@@ -17,11 +17,13 @@
   import { LIVE_BEATS, livePlan, plan as still } from "./fixtures";
   import PhonePlan from "./PhonePlan.svelte";
   import PlanBody, { type Variation } from "./PlanBody.svelte";
+  import type { Scenario } from "./view.svelte";
 
   let {
     variation,
     frame = "desk",
     live = false,
+    scenario = "rest",
     tileSize = 18,
     lineWeight = 4,
     sweepSeconds = 1.2,
@@ -31,6 +33,8 @@
     frame?: FrameKind;
     /** Steps move on by themselves, a beat every 2.4s. */
     live?: boolean;
+    /** At rest, or one change already made: a step reworded, commented on, answered. */
+    scenario?: Scenario;
     /** The step tile's side, px (DESIGN.md's tree mark: 18). */
     tileSize?: number;
     /** The progress line's weight, px (the usage strip's bar: 4). */
@@ -64,11 +68,11 @@
 >
   {#if frame === "desk"}
     <DeskPlan {plan}>
-      <PlanBody {loaded} {plan} {variation} />
+      <PlanBody {loaded} {plan} {scenario} {variation} />
     </DeskPlan>
   {:else}
     <PhonePlan {plan}>
-      <PlanBody {loaded} phone {plan} {variation} />
+      <PlanBody {loaded} phone {plan} {scenario} {variation} />
     </PhonePlan>
   {/if}
 </div>
