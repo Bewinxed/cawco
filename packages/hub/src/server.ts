@@ -6541,24 +6541,43 @@ export const createServer = (
       ...spawn
     } = payload;
     const rest = { ...spawn, ...paths };
+    const settled = modeOf(machineId, harness, asked, fallback);
+    if ("refusal" in settled) {
+      return settled;
+    }
+    const { mode } = settled;
+    return mode === null
+      ? { payload: rest, permissionMode: null }
+      : {
+          payload: { ...rest, permissionMode: mode as PermissionMode },
+          permissionMode: mode,
+        };
+  };
+
+  /**
+   * {@link settleMode}'s rule for the mode alone: the mode a `harness`
+   * session on `machineId` runs in (null for a harness with none), or the
+   * refusal. A move asks it of its target before it moves anything.
+   */
+  const modeOf = (
+    machineId: string,
+    harness: string,
+    asked: string | undefined,
+    fallback?: string | null
+  ): { mode: string | null } | { refusal: string } => {
     if (harnessModes(machineId, harness)?.length === 0) {
       return asked
         ? {
             refusal: `${modeRefusal(machineId, harness, asked)} Start it without one. Nothing was started.`,
           }
-        : { payload: rest, permissionMode: null };
+        : { mode: null };
     }
     const mode = asked ?? fallback;
     if (!mode) {
       return { refusal: unchosenMode(machineId, harness) };
     }
     const unfit = modeRefusal(machineId, harness, mode);
-    return unfit
-      ? { refusal: `${unfit} Nothing was started.` }
-      : {
-          payload: { ...rest, permissionMode: mode as PermissionMode },
-          permissionMode: mode,
-        };
+    return unfit ? { refusal: `${unfit} Nothing was started.` } : { mode };
   };
 
   /** Why a spawn that names no permission mode does not start ({@link settleMode}). */
@@ -14946,6 +14965,11 @@ export const createServer = (
     },
     online: (machineId) => registry.agent(machineId) !== undefined,
     machineName,
+    // A move starts a new session: its mode is the one its request names.
+    modeRefusal: (machineId, harness, mode) => {
+      const settled = modeOf(machineId, harness, mode);
+      return "refusal" in settled ? settled.refusal : undefined;
+    },
     movedHere: (instanceId, line) => noteMovedHere(instanceId, line),
     asks: () => pending.list(),
     park: (envelope) => parkForPerson(envelope, true),

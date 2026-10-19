@@ -20,12 +20,15 @@
  * remote read among them; the agent's own calls go on). The estimate asked
  * while the read is held must give the same settled answer once A resumes.
  *
+ * Last, a move whose session names no permission mode is refused at once,
+ * with the words every start that names none gets, and nothing is cloned.
+ *
  *   bun scripts/probe-kit/run.ts move-settled
  */
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { MoveEstimate } from "../../../packages/core/src/move";
+import type { MoveEstimate, MoveJob } from "../../../packages/core/src/move";
 import { MACHINE, type Reply, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -182,6 +185,39 @@ const run = async (kit: Kit) => {
     "held round: the estimate read again once the folder is a repository says the same",
     JSON.stringify(after) === JSON.stringify(held),
     `held ${JSON.stringify(held)}, settled ${JSON.stringify(after)}`
+  );
+
+  // The modeless leg: a move whose session names no permission mode is
+  // refused as any start is (server.ts `unchosenMode`), before it copies anything.
+  const modelessTarget = join(fleet.sandbox, "moved-modeless");
+  const modeless = await fleet
+    .api<{ id?: string }>(`/api/projects/${project.id}/moves`, {
+      machineId: B,
+      path: modelessTarget,
+      prompt: "PROBE-MOVE: say ok.",
+      spawn: { harness: "claude", model: "claude-haiku-4-5" },
+    })
+    .then(
+      (job) => `accepted as job ${job.id ?? "(no id)"}`,
+      (error: Error) => error.message
+    );
+  check(
+    "modeless leg: a move that names no permission mode is refused with the words every start gets",
+    modeless.includes(
+      "400 A permission mode must be chosen for a claude session on "
+    ) &&
+      modeless.endsWith(
+        ", and none was. Choose one, then start it again. Nothing was started."
+      ),
+    modeless
+  );
+  const jobs = (await fleet.api<MoveJob[]>("/api/moves")).filter(
+    (job) => job.projectId === project.id
+  );
+  check(
+    "modeless leg: no move job was recorded and nothing was cloned",
+    jobs.length === 0 && !existsSync(modelessTarget),
+    `${jobs.length} jobs (${jobs.map((job) => job.stage).join(", ")}); ${modelessTarget} ${existsSync(modelessTarget) ? "exists" : "absent"}`
   );
 };
 

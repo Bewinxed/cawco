@@ -10,7 +10,8 @@
  * has a package.json and a bun.lock committed (what used to pick an
  * install). It moves to a folder on B with a first prompt:
  * - the job's steps hold no `install`, and it ends `started`;
- * - the session it started is on B, in the moved folder;
+ * - the session it started is on B, in the moved folder, not in error, with
+ *   its conversation's id (the move holds its row from the start);
  * - the moved folder holds the bun.lock and no node_modules: nothing was
  *   installed for it.
  *
@@ -71,7 +72,12 @@ const run = async (kit: Kit) => {
       machineId: B,
       path: target,
       prompt: "PROBE-MOVE: say ok.",
-      spawn: { harness: "claude", model: "claude-haiku-4-5" },
+      // The mode the person picks in New session, sent as startMoving sends it.
+      spawn: {
+        harness: "claude",
+        model: "claude-haiku-4-5",
+        permissionMode: "default",
+      },
     }
   );
   const jobOf = async () =>
@@ -93,13 +99,23 @@ const run = async (kit: Kit) => {
       job.install === undefined,
     JSON.stringify(job)
   );
-  const [session] = fleet.query<{ cwd: string; machine_id: string }>(
-    "SELECT cwd, machine_id FROM instances WHERE id = ?",
+  // The move holds this row from its start (moves.ts holdRow): only a
+  // status that is not `error` and a conversation's id say a session began.
+  const [session] = fleet.query<{
+    cwd: string;
+    machine_id: string;
+    session_id: string | null;
+    status: string;
+  }>(
+    "SELECT cwd, machine_id, session_id, status FROM instances WHERE id = ?",
     job?.targetInstanceId ?? ""
   );
   check(
-    "the session it started is on B, in the moved folder",
-    session?.machine_id === B && session.cwd === target,
+    "the session it started is on B, in the moved folder, and began its conversation",
+    session?.machine_id === B &&
+      session.cwd === target &&
+      session.status !== "error" &&
+      Boolean(session.session_id),
     JSON.stringify(session)
   );
   check(

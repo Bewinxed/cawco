@@ -140,6 +140,15 @@ export interface MovesDeps {
   readonly lifetime: HubLifetimeShape;
   readonly machineName: (machineId: string) => string;
   /**
+   * Why a `harness` session on `machineId` can't start in `mode`, as every
+   * start is refused (server.ts `modeOf`: no mode nobody chose), or nothing.
+   */
+  readonly modeRefusal: (
+    machineId: string,
+    harness: string,
+    mode: string | undefined
+  ) => string | undefined;
+  /**
    * The started session's transcript opens on the move's ready line: kept
    * on its row and said now. Once per session, whatever the retries.
    */
@@ -1007,6 +1016,16 @@ export const createMoves = (deps: MovesDeps) => {
         400,
         "A move names the harness its session starts on. Pick one, then move it again."
       );
+    }
+    // Its session's mode is settled as every start's is, before anything
+    // moves: a move whose start could only be refused copies nothing.
+    const unfit = deps.modeRefusal(
+      asked.machineId,
+      harness,
+      asked.spawn.permissionMode
+    );
+    if (unfit) {
+      throw new MoveRefused(400, unfit);
     }
     const request: NamedMoveRequest = {
       ...asked,
