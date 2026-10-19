@@ -45,6 +45,8 @@ export interface BrowserRecord {
     media: MediaPath;
     /** The ports it was published on: one made for other ports is made again. */
     ports?: BrowserPorts;
+    /** The STUN server neko's own ICE servers name (core `stunServer`): one made for another is made again. */
+    stun?: string;
     userPassword: string;
     volume: string;
   };

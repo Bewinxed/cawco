@@ -8,9 +8,8 @@
  * person. Both are turn-server's `getPublicIP`.
  */
 import { networkInterfaces } from "node:os";
-import { CAWCO_ENV, readEnv } from "@cawco/core";
 import { isPublicAddress } from "@cawco/core/public-address";
-import { STUN_SERVER } from "@cawco/core/stream-relay";
+import { stunServer } from "@cawco/core/stream-relay";
 import { getPublicIP } from "turn-server";
 
 /** How long a STUN binding has to be answered. */
@@ -56,7 +55,7 @@ export const routerAddress = async (): Promise<
   if (!lan) {
     return;
   }
-  const address = await mappedBy(readEnv(CAWCO_ENV.stunServer) ?? STUN_SERVER);
+  const address = await mappedBy(stunServer());
   return address && isPublicAddress(address) ? { address, lan } : undefined;
 };
 

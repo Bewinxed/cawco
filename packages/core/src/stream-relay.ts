@@ -11,6 +11,7 @@
  * Caw's setup card, and later the iOS app.
  */
 import { getDomain } from "tldts";
+import { CAWCO_ENV, readEnv } from "./index";
 
 /**
  * The ports the relay takes. It listens on one, 443 (`listening-port`), plain
@@ -52,6 +53,16 @@ export const isStreamRelayPort = (port: number): boolean =>
  * its own stand-in (`CAWCO_STUN_SERVER`).
  */
 export const STUN_SERVER = "stun:stun.cloudflare.com:3478";
+
+/**
+ * The STUN server this process names: a scratch fleet's stand-in where
+ * `CAWCO_STUN_SERVER` names one, else {@link STUN_SERVER}. The one every reading of it goes
+ * through: a machine's mapped address (agent relay-reach.ts), a browser's
+ * own ICE servers (agent container-host.ts) and each viewer's (hub
+ * browser-routes.ts), so all of them name the same server.
+ */
+export const stunServer = (): string =>
+  readEnv(CAWCO_ENV.stunServer) ?? STUN_SERVER;
 
 /** The relay as its machine runs it. */
 export type StreamRelayState =

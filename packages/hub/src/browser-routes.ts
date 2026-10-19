@@ -10,7 +10,8 @@
  *   (container host). Each `signal/provide` neko sends has its `iceservers`
  *   (neko 3.2.0 `message.SignalProvide`, json tag `iceservers`) replaced
  *   with the fleet's stream relay and a credential minted for this viewer
- *   for {@link VIEWER_RELAY_TTL_MS}, else `[]` while the fleet has no relay.
+ *   for {@link VIEWER_RELAY_TTL_MS} while the fleet has one, and the
+ *   fleet's STUN server (core `stunServer`).
  * - `/ws/browser/<instance>/<artifact>/api/*`: neko's REST.
  * - `/ws/browser/<instance>/<artifact>/cdp`: the take-over view of the local
  *   host (agent shield.ts `cdpView`): frames out, input in.
@@ -44,6 +45,7 @@ import {
   proxyHeaders,
   RELAY_HEADER,
 } from "@cawco/core/preview-proxy";
+import { stunServer } from "@cawco/core/stream-relay";
 import type { ServerWebSocket } from "bun";
 import { Elysia } from "elysia";
 import { answered, BrowserRefusal } from "./browsers";
@@ -357,18 +359,26 @@ export const createBrowserStream = (deps: BrowserStreamDeps) => {
     tell(place, now);
   };
 
-  /** The ICE servers a viewer's offer carries: the stream relay with its own credential, or none. */
+  /**
+   * The ICE servers a viewer's offer carries: the stream relay with its own
+   * credential while the fleet has one, and the fleet's STUN server (core
+   * `stunServer`, the one neko's own list names). Full ICE: host, server
+   * reflexive and relay candidates, no server no one chose.
+   */
   const iceServersFor = (session: string): RTCIceServer[] => {
     const relay = deps.mint(`viewer:${session}`, VIEWER_RELAY_TTL_MS);
-    return relay
-      ? [
-          {
-            urls: relay.urls,
-            username: relay.username,
-            credential: relay.credential,
-          },
-        ]
-      : [];
+    return [
+      ...(relay
+        ? [
+            {
+              urls: relay.urls,
+              username: relay.username,
+              credential: relay.credential,
+            },
+          ]
+        : []),
+      { urls: [stunServer()] },
+    ];
   };
 
   const shut = (socket: ViewSocket, code: number, why: string): void =>

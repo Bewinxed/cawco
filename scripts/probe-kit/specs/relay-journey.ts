@@ -102,9 +102,10 @@ const masked = (bytes: number[]): Buffer =>
     bytes.map((byte, at) => byte ^ (COOKIE[at] ?? 0))
   );
 
-/** A STUN binding responder: every binding request answered with `address` and the request's own source port. */
-const stunStandIn = (
-  address: string
+/** A STUN binding responder on `bind`: every binding request answered with `address` and the request's own source port. */
+export const stunStandIn = (
+  address: string,
+  bind: string
 ): Promise<{ port: number; socket: Socket }> =>
   new Promise((resolve) => {
     const socket = createSocket("udp4");
@@ -127,7 +128,7 @@ const stunStandIn = (
       masked(address.split(".").map(Number)).copy(answer, 28);
       socket.send(answer, remote.port, remote.address);
     });
-    socket.bind(0, "127.0.0.1", () =>
+    socket.bind(0, bind, () =>
       resolve({ port: socket.address().port, socket })
     );
   });
@@ -629,7 +630,7 @@ const setupCard = async (kit: Kit): Promise<void> => {
 const run = async (kit: Kit): Promise<void> => {
   await setupCard(kit);
 
-  const stun = await stunStandIn(PUBLIC);
+  const stun = await stunStandIn(PUBLIC, "127.0.0.1");
   const names = new Map<string, string[]>();
   const dns = await dnsStandIn(names);
   const cloudflare = cloudflareStandIn();

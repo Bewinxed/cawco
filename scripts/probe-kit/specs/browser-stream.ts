@@ -12,7 +12,10 @@
  *   (the hub swapped its own in);
  * - the viewer's `signal/provide` carries `iceservers` the hub minted for
  *   it: the relay's URLs, `<expiry>:viewer:<neko session>` good for 12 h,
- *   and the credential HMAC-SHA1 of that under the relay's secret;
+ *   and the credential HMAC-SHA1 of that under the relay's secret; then the
+ *   fleet's STUN server, alone;
+ * - neko's own ICE servers name that STUN server and nothing else (never
+ *   neko's default, Google's), and it gives viewers none of its own;
  * - that credential allocates on coturn;
  * - the viewer connects; its selected pair is host/host on the LAN;
  * - the same viewer with `iceTransportPolicy: "relay"` connects through
@@ -30,8 +33,11 @@
  * state `stopped`: the hub mints from it and never starts, stops or probes
  * it. The record's URLs name 443, so the viewer's page points them at the
  * stand-in before its peer connection reads them; the browser is started
- * before the record is written, so neko holds no relay of its own. No real
- * relay, router, DNS name or Cloudflare is touched.
+ * before the record is written, so neko holds no relay of its own. The
+ * fleet's STUN server is a stand-in (relay-journey.ts `stunStandIn`) on
+ * every address of this machine, answering its LAN address, named to the hub
+ * and the agent by `CAWCO_STUN_SERVER`. No real relay, router, DNS name,
+ * STUN server or Cloudflare is touched.
  *
  * The coturn lines run on Linux alone, where the runtime's host network is
  * this machine's (obelisk's Podman); on macOS it is the runtime's VM's, which
@@ -54,6 +60,7 @@ import { STREAM_RELAY_PORT } from "../../../packages/core/src/stream-relay";
 import { until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
 import { binding, freeStandIn, onPort, turn } from "./browser-relay";
+import { stunStandIn } from "./relay-journey";
 
 /** This spec's coturn: never the relay's own `cawco-relay`. */
 const COTURN = "cawco-relay-stream-probe";
@@ -319,12 +326,21 @@ const browserOf = async (
   return listed.find((one) => one.kind === "browser")?.id;
 };
 
-/** The agent's log from `from` on holds `line`. */
-const logged = (fleet: KitFleet, from: number, line: string) =>
+/** How many times the agent's logs, every file of every launch, say `line`. */
+const said = async (fleet: KitFleet, line: string): Promise<number> =>
+  (await fleet.logs("agent")).split(line).length - 1;
+
+/**
+ * The agent's logs say `line` more than the `before` times they had. Counted,
+ * not read from an offset: `fleet.logs` joins a launch's `.err` and `.log`
+ * in the order the directory lists them, so a line the `.log` gains can land
+ * before an offset taken in the text joined.
+ */
+const saidAgain = (fleet: KitFleet, line: string, before: number) =>
   until(
-    `the agent's log says "${line}"`,
-    async () => (await fleet.logs("agent")).slice(from),
-    (text) => text.includes(line),
+    `the agent's log says "${line}" again`,
+    () => said(fleet, line),
+    (times) => times > before,
     30_000
   ).then(
     () => true,
@@ -379,6 +395,7 @@ const run = async (kit: Kit): Promise<void> => {
     );
     await legs(kit, {
       address,
+      docker: runtime.docker,
       realHome,
       relayHere: false,
       runtime: runtime.endpoint,
@@ -400,6 +417,7 @@ const run = async (kit: Kit): Promise<void> => {
   try {
     await legs(kit, {
       address,
+      docker: runtime.docker,
       realHome,
       relayHere: true,
       runtime: runtime.endpoint,
@@ -463,20 +481,30 @@ const startCoturn = async (
   await coturn.remove({ force: true }).catch(() => undefined);
 };
 
-const legs = async (
-  kit: Kit,
-  at: {
-    address: string;
-    realHome: string;
-    /** Whether this spec's coturn runs here (Linux). */
-    relayHere: boolean;
-    runtime: string;
-    secret: string;
-    standIn: number;
-    where: string;
+interface At {
+  address: string;
+  docker: Runtime["docker"];
+  realHome: string;
+  /** Whether this spec's coturn runs here (Linux). */
+  relayHere: boolean;
+  runtime: string;
+  secret: string;
+  standIn: number;
+  where: string;
+}
+
+/** Both legs, with the fleet's STUN server this spec's stand-in on every address, answering this machine's LAN one. */
+const legs = async (kit: Kit, at: At): Promise<void> => {
+  const stun = await stunStandIn(at.address, "0.0.0.0");
+  try {
+    await legsWith(kit, at, `stun:${at.address}:${stun.port}`);
+  } finally {
+    stun.socket.close();
   }
-): Promise<void> => {
-  const { address, secret, standIn, where } = at;
+};
+
+const legsWith = async (kit: Kit, at: At, stun: string): Promise<void> => {
+  const { address, docker, secret, standIn, where } = at;
   const fleet = await kit.fleet(() => ({ everyMs: 5, words: ["ok"] }));
   const browsersPath =
     process.env.PLAYWRIGHT_BROWSERS_PATH ??
@@ -487,6 +515,7 @@ const legs = async (
     );
   const agentOn = async (dockerHost: string) => {
     fleet.launch("agent", [], {
+      CAWCO_STUN_SERVER: stun,
       DOCKER_HOST: dockerHost,
       PLAYWRIGHT_BROWSERS_PATH: browsersPath,
     });
@@ -494,7 +523,7 @@ const legs = async (
   };
   fleet.launch("sessiond");
   await fleet.sessiondUp();
-  fleet.launch("hub");
+  fleet.launch("hub", [], { CAWCO_STUN_SERVER: stun });
   await fleet.hubUp();
   fleet.fileAccount();
   await agentOn(`unix://${at.runtime}`);
@@ -509,9 +538,11 @@ const legs = async (
     page,
     ws,
     address,
+    docker,
     relayHere: at.relayHere,
     secret,
     standIn,
+    stun,
     where,
   });
   // The local leg mints nothing: the record goes.
@@ -562,7 +593,9 @@ const countLeg = async (
   key: BrowserKey,
   url: string
 ): Promise<void> => {
-  const from = (await fleet.logs("agent")).length;
+  const openLine = `${key}: the hub counts 1 view`;
+  const closeLine = `${key}: the hub counts 0 views`;
+  const openedBefore = await said(fleet, openLine);
   await page.evaluate((at: string) => {
     const socket = new WebSocket(at);
     (window as unknown as { probeView: WebSocket }).probeView = socket;
@@ -570,12 +603,12 @@ const countLeg = async (
       socket.onmessage = () => opened();
     });
   }, url);
-  const one = await logged(fleet, from, `${key}: the hub counts 1 view`);
-  const after = (await fleet.logs("agent")).length;
+  const one = await saidAgain(fleet, openLine, openedBefore);
+  const closedBefore = await said(fleet, closeLine);
   await page.evaluate(() =>
     (window as unknown as { probeView: WebSocket }).probeView.close()
   );
-  const none = await logged(fleet, after, `${key}: the hub counts 0 views`);
+  const none = await saidAgain(fleet, closeLine, closedBefore);
   kit.check(
     `viewers counted: open → browser.viewers ${one ? 1 : "?"}, close → ${none ? 0 : "?"}`,
     one && none
@@ -587,13 +620,16 @@ const containerLeg = async (
   kit: Kit,
   leg: Leg & {
     address: string;
+    docker: Runtime["docker"];
     relayHere: boolean;
     secret: string;
     standIn: number;
+    /** The fleet's STUN server, as the hub and the agent are told it. */
+    stun: string;
     where: string;
   }
 ): Promise<void> => {
-  const { fleet, page, ws, address, relayHere, secret, standIn } = leg;
+  const { fleet, page, ws, address, relayHere, secret, standIn, stun } = leg;
   // Container host. The browser starts before the relay record is written:
   // neko is given no relay of its own, so nothing of it reaches 443.
   const boxed = await sessionIn(fleet, "stream-container");
@@ -606,6 +642,7 @@ const containerLeg = async (
   )) {
     return;
   }
+  await nekoIce(kit, leg.docker, boxed.key, stun);
   await writeRelay(fleet, address, secret);
   const base = `/ws/browser/${boxed.instance}/${artifact}`;
 
@@ -634,13 +671,14 @@ const containerLeg = async (
     from: STREAM_RELAY_PORT,
     to: standIn,
   });
-  const [server] = direct.iceservers ?? [];
+  const [server, stunEntry] = direct.iceservers ?? [];
   const username = server?.username ?? "";
   const [expiry, kind, session] = username.split(":");
   const lasts = Number(expiry) - Math.floor(Date.now() / 1000);
   kit.check(
     `signal/provide relayed with iceservers=${JSON.stringify(direct.iceservers)}`,
-    direct.iceservers?.length === 1 &&
+    direct.iceservers?.length === 2 &&
+      JSON.stringify(stunEntry) === JSON.stringify({ urls: [stun] }) &&
       server?.urls.join(" ") ===
         `turn:${address}:${STREAM_RELAY_PORT}?transport=udp turn:${address}:${STREAM_RELAY_PORT}?transport=tcp` &&
       kind === "viewer" &&
@@ -678,6 +716,37 @@ const containerLeg = async (
   await post(fleet, `/api/browsers/${encodeURIComponent(boxed.key)}/stop`, {
     machineId: "scratch-fleet",
   });
+};
+
+/**
+ * neko's own ICE servers as its container was made: the fleet's STUN server
+ * alone (the browser started before the relay record, so no relay), none
+ * for its viewers, and nothing of Google's, neko's default.
+ */
+const nekoIce = async (
+  kit: Kit,
+  docker: Runtime["docker"],
+  key: BrowserKey,
+  stun: string
+): Promise<void> => {
+  const { readBrowser } =
+    await import("../../../packages/agent/src/browser/state");
+  const made = (await readBrowser(key))?.container;
+  const env = made
+    ? ((await docker.getContainer(made.id).inspect()).Config.Env ?? [])
+    : [];
+  const named = (name: string) =>
+    env.find((one) => one.startsWith(`${name}=`))?.slice(name.length + 1);
+  const backend = named("NEKO_WEBRTC_ICESERVERS_BACKEND");
+  const frontend = named("NEKO_WEBRTC_ICESERVERS_FRONTEND");
+  kit.check(
+    `neko's own ICE servers: backend ${backend}, frontend ${frontend}, the record's STUN server ${made?.stun}; no Google server in its env`,
+    backend === JSON.stringify([{ urls: [stun] }]) &&
+      frontend === "[]" &&
+      made?.stun === stun &&
+      !env.some((one) => one.includes("google")),
+    JSON.stringify(env.filter((one) => one.startsWith("NEKO_WEBRTC")))
+  );
 };
 
 /** Where this spec's coturn is, as a leg reads it. */
