@@ -20347,10 +20347,10 @@ export const createServer = (
       decisionsChanged(projectId);
     },
     fleetChoicesSet: () => db.getSupervisorConfig().choicesSetAt !== null,
-    relayOffer: () =>
+    relayOffer: (again) =>
       db.streamRelay.read() ||
       db.streamRelay.journey() ||
-      db.streamRelay.askedAt() !== null
+      (db.streamRelay.askedAt() !== null && !again)
         ? null
         : { domain: lastRelayDomain },
     upstreamAnswered: () => db.upstreamPosts() !== null,

@@ -131,7 +131,13 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import { roleOf } from "./roles";
-import { type RelayOffer, setupEvent } from "./setup";
+import {
+  type RelayOffer,
+  SETUP_PARTS,
+  type SetupAsk,
+  type SetupPart,
+  setupEvent,
+} from "./setup";
 import {
   readStages,
   type StagesTemplate,
@@ -559,7 +565,7 @@ const briefOf = (projectName: string): string =>
     `You are Caw, the lead of the project “${projectName}” in CawCo.`,
     "You have the project's board (task_read, task_create, task_update, task_link, task_start, task_retry, todo_write), its threads (thread_read, thread_reply), its views (view_draft, view_query), its folder on the hub (folder_read, folder_write: stages.md, decisions/, and delegates/, where a type you write is a proposal the person approves or declines before it is committed), decision pages (the decision-page skill: write decisions/<name>/page.oui, a program over the decision library, then artifact_create with kind page, the name, does: pick and an ask (one line in the person's words) builds and shows it; artifact_read has the picks; artifact_update's statements revise it; a decision's after and a Section draw the project's decision graph), delegate with the tools that steer the project's work (handoff, answer_delegate, stop_delegate, interrupt_delegate), send_to_user, and the fleet's MCP tools every session has (web search and fetch among them).",
     "You have shell and edit tools, inside the boundary of your place, this folder: you write only here and in $TMPDIR, read no credential store, reach no service manager and see no other session's processes, and files only their owner may read are hidden from you. The hub decides each call before it runs. Read-only commands (ls, cat, grep, find, file, stat, du, wc, head, tail, git that only reads, chained with ; && || or |, output only into /dev/null or 2>&1) run without asking whatever woke you. In a turn the person's own message woke, so do git init, git add <paths> and git commit where no one else works; every other shell or edit call raises an Approve card the person answers, wherever they are. In a turn anything else woke (an event, a routine, a report, outside text riding on your wake) every call but a read-only command raises the card, and so does every such call after you read web content in a turn. In a shared checkout git checkout, switch, restore, reset, stash, clean, rebase and push, git add -A or git add ., and any git alias are refused: file a task. Your edits are docs, config and assets only, 5 files a wake at most: anything bigger, file a task. At most 20 shell or edit calls a wake: delegate the rest. Every call shows in your thread. A task whose only changes are your own passes review only once the person approved them.",
-    "Do setup and housekeeping yourself: make the folder a git repository, write a .gitignore or a config file, look at what is there. Real task work goes to tasks and delegates. Never ask the person in text to run a command, or for a setup detail you can find out: run it, and the card asks them when it must.",
+    "Do setup and housekeeping yourself: make the folder a git repository, write a .gitignore or a config file, look at what is there. Real task work goes to tasks and delegates. Never ask the person in text to run a command, or for a setup detail you can find out: run it, and the card asks them when it must. Whenever the person asks you to set the project up, in any thread and in their own words (the first time, again, or one part of it), call project_setup with that thread and follow its steps there.",
     "AGENTS.md and knowledge/ are your project's memory: write one with memory_propose (the file's whole new text and why); it commits as you and is noted in the thread. Something worth keeping that you learned goes to the inbox with memory_note, as any session's does. A task's `context` names the knowledge/ files its attempt's brief carries.",
     "Your project's settings are yours to change with project_settings: rename it, grant it a connection, link its GitHub repository, set where its work lands, publish its place to a new private GitHub repository (create_repo), or turn Review before done on or off (set_review: whether every task waits for the person before done is theirs to choose, so it and create_repo are always an Approve card first). Each other change applies at once and is noted in the thread. A task whose work landed some other way than its attempt you close yourself: move it to done with a reason naming the commit. When a change, a memory write or anything else is the person's to decide (it posts or sends outside, spends, or undoes what they chose), call the tool with ask: true, which puts an Approve/Deny card in front of them and answers you when they do.",
     "You are woken only by events, each one a message: the person writing in a thread, an attempt at a task landing or failing, a task waiting for the person, a delegate's ask routed to you, the person asking for a view. Handle the event, then end your turn. Nothing wakes you on a timer. The person can turn you off: then only their own words wake you, and you do what they ask (tasks, routines, stages, the folder) as at any time; attempts, waiting tasks and routines no longer reach you. Inbound events from outside (GitHub, polled connections) that no route took ride along on your next wake as data: route the kinds that matter to routines with event_route_create.",
@@ -659,8 +665,8 @@ export interface CawDeps {
    * machine cannot hold it: the wake does not go out.
    */
   readonly refreshPlace: (lead: InstanceRow) => Promise<void>;
-  /** The setup page's stream relay card, while it is to be asked (with the domain the person last reached CawCo through); null once the fleet has a relay or a journey, or the card was answered. */
-  readonly relayOffer: () => RelayOffer | null;
+  /** The setup page's stream relay card, while it is to be asked (with the domain the person last reached CawCo through); null once the fleet has a relay or a journey, or the card was answered and not asked `again`. */
+  readonly relayOffer: (again: boolean) => RelayOffer | null;
   /** Delivers one message to a session through the hub's one send path: whether the hub took it (its record `pending`). */
   readonly send: (envelope: Envelope<SendPayload>) => boolean;
   /** Starts a session in `mode` where its harness has modes, resolved once its machine says it is in place. */
@@ -2141,6 +2147,39 @@ export const createCaw = ({
   };
 
   /**
+   * Setup's steps for `project` in `threadId` as the fleet stands now
+   * ({@link setupEvent}), the one source of both its paths: the wake a new
+   * project's Setup thread opens with ({@link wakeForSetup}) and
+   * `project_setup`, the person's ask in any thread. The fleet's choices,
+   * its upstream answer and the relay card are asked while unanswered, and
+   * again when the person asked to change them (`change`); the place card
+   * while the project has no checkout, or when they asked to move it.
+   */
+  const setupText = (
+    project: ReturnType<typeof projectOf>,
+    threadId: string,
+    from: SetupAsk["from"],
+    template: StagesTemplate | null,
+    {
+      change = [],
+      stages,
+    }: { change?: readonly SetupPart[]; stages?: string } = {}
+  ): string =>
+    setupEvent({
+      askFleet: !fleetChoicesSet() || change.includes("fleet"),
+      askUpstream: !upstreamAnswered() || change.includes("upstream"),
+      from,
+      placed:
+        !change.includes("place") &&
+        project.places.some((place) => place.kind === "checkout"),
+      relay: relayOffer(change.includes("relay")),
+      projectName: project.name,
+      ...(stages === undefined ? {} : { stages }),
+      template,
+      threadId,
+    });
+
+  /**
    * Wakes the project's Caw with its setup event: your words (your prompt,
    * or the offer you accepted), so on or off. When Caw cannot start for a
    * reason the thread already states (no machine online: the thread's
@@ -2156,16 +2195,7 @@ export const createCaw = ({
     wake(project.id, {
       by: "you",
       threadId,
-      text: setupEvent({
-        askFleet: !fleetChoicesSet(),
-        askUpstream: !upstreamAnswered(),
-        from,
-        placed: project.places.some((place) => place.kind === "checkout"),
-        relay: relayOffer(),
-        projectName: project.name,
-        template,
-        threadId,
-      }),
+      text: setupText(project, threadId, from, template),
     }).catch((error: unknown) => {
       // No machine for him (the composer says so), or the project was
       // deleted meanwhile: nothing to say.
@@ -2187,6 +2217,18 @@ export const createCaw = ({
     });
   };
 
+  /** The project's stages.md as it stands; undefined while it has none. */
+  const stagesOf = async (projectId: string): Promise<string | undefined> => {
+    try {
+      return (await readFolderFile(projectId, STAGES_FILE)).content;
+    } catch (error) {
+      if (error instanceof FolderRefusal && error.status === 404) {
+        return;
+      }
+      throw error;
+    }
+  };
+
   /**
    * The template the project's stages.md is, word for word; null when it is
    * its own. With no stages.md, the code template when the project was made
@@ -2195,15 +2237,11 @@ export const createCaw = ({
   const templateOf = async (
     projectId: string
   ): Promise<StagesTemplate | null> => {
-    try {
-      const { content } = await readFolderFile(projectId, STAGES_FILE);
-      return TEMPLATES.find((name) => templateText(name) === content) ?? null;
-    } catch (error) {
-      if (error instanceof FolderRefusal && error.status === 404) {
-        return db.project(projectId)?.template === "code" ? "code" : null;
-      }
-      throw error;
+    const content = await stagesOf(projectId);
+    if (content === undefined) {
+      return db.project(projectId)?.template === "code" ? "code" : null;
     }
+    return TEMPLATES.find((name) => templateText(name) === content) ?? null;
   };
 
   /** The lead session `actor` is, when it is its project's lead. */
@@ -3376,6 +3414,40 @@ export const createCaw = ({
             return ok(
               await folderCall(() => views.query(projectId, name, args ?? {}))
             );
+          }
+        ),
+        tool(
+          "project_setup",
+          "Setup's steps, to follow in `thread` whenever the person asks you to set the project up: the first time, again, or one part.",
+          {
+            thread: z.string().describe("Its id."),
+            change: z
+              .array(z.enum(SETUP_PARTS))
+              .optional()
+              .describe("Answered parts to ask again."),
+          },
+          async ({ thread, change }) => {
+            const projectId = mine();
+            threadIn(projectId, thread);
+            const stages = await folderCall(() => stagesOf(projectId));
+            const template = await folderCall(() => templateOf(projectId));
+            return {
+              content: [
+                {
+                  type: "text" as const,
+                  text: setupText(
+                    projectOf(projectId),
+                    thread,
+                    "ask",
+                    template,
+                    {
+                      ...(change ? { change } : {}),
+                      ...(stages === undefined ? {} : { stages }),
+                    }
+                  ),
+                },
+              ],
+            };
           }
         ),
       ];

@@ -279,11 +279,17 @@ import type { Tasks } from "./tasks";
  * a delegate whose update opens nothing knows why. About 28 tokens for the
  * delegate (9,992 measured beside the ask). Raised deliberately, by that;
  * the worker and the lead have no parent and do not change.
+ * 2026-10-20: `project_setup` (caw.ts), the owner's "I should be able to
+ * trigger the setup anytime naturally via caw": Setup's steps for the
+ * lead's project, which he follows in any thread the person asks in. One
+ * sentence and two one-line arguments, the parts it asks again an enum.
+ * About 128 tokens for the lead alone (lead 18,338 measured beside the
+ * held change). Raised deliberately, by that.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
   worker: 27_580,
   delegate: 10_000,
-  lead: 18_210,
+  lead: 18_338,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
