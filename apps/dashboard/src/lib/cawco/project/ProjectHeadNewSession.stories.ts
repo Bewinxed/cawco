@@ -1,8 +1,9 @@
 /**
  * PROPOSED: the project head without Spin off; New session in its place
  * opens the kit's New-session dialog on the project's checkout, where the
- * spin-off is the dialog's lifetime chip. Its look beside Ask Caw is the
- * owner's call: outlined, or coral too.
+ * spin-off is the dialog's lifetime chip. New session is outlined, so Ask
+ * Caw stays the head's one coral action (DESIGN.md: "coral marks the one
+ * place you act").
  */
 import { CAW_LEAD } from "../tasks/preview/caw-lead";
 import { MACHINE, PROJECT_ROW } from "../tasks/preview/tidewater";
@@ -21,17 +22,11 @@ export default {
     onask: () => undefined,
     onfilter: () => undefined,
     onstages: null,
-    look: "outline",
   },
   decorators: [() => ({ Component: PageRoom, props: { bare: true } })],
 };
 
-/** Desk · New session outlined: Ask Caw is the head's one coral action. */
-export const Outlined = { parameters: { viewport: 1180 } };
-/** Desk · New session in coral beside Ask Caw: two coral actions. */
-export const Coral = {
-  args: { look: "coral" },
-  parameters: { viewport: 1180 },
-};
+/** Desk · Spin off gone; New session outlined beside Ask Caw, the head's one coral action. */
+export const Desk = { parameters: { viewport: 1180 } };
 /** Phone · The head's ⋯ holds New session; Spin off is gone. */
 export const Phone = { parameters: { viewport: "phone" } };

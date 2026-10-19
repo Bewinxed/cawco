@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * PROPOSED (project-redesign sheet): an empty surface that starts work,
+   * PROPOSED (project-screens page): an empty surface that starts work,
    * laid by the Work Column Rule (placement advisor §1). Its content stands
    * in the work column (`--c-work-column-w`: the composer's column, at most
    * 720px): centred in a wider area, the area's own width in a narrower one.

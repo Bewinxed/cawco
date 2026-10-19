@@ -1,5 +1,5 @@
 /**
- * PROPOSED (project-redesign sheet): the one line a task says past its
+ * PROPOSED (project-screens page): the one line a task says past its
  * title (taskpane advisor §2's table), shared by the board card and the
  * run order: its session's state with the session's name, a refusal, what
  * it waits on, its date, or nothing (The Idle Has No Fill Rule).
