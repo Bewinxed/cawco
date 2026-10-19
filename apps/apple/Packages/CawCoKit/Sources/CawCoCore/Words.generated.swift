@@ -1778,6 +1778,11 @@ public enum Words {
         /// An app connection's registration: a GitHub App's ids and key, or a Linear app's client.
         public static let setApp = "Set app…"
 
+        /// The address of a server the person runs, asked when a service has one (`serverExample`).
+        public static let serverAddress = "Server address"
+
+        public static let serverAddressProblem = "A server address starts with https:// or http://, like the example."
+
         /// A row's own button for an app not yet set.
         public static let setAppNow = "Set app"
 
@@ -1848,15 +1853,17 @@ public enum Words {
         public struct Service: Sendable, Equatable {
             public let service: String
             public let label: String
-            public let url: String
+            public let url: String?
             public let ways: [Way]
+            public let serverExample: String?
         }
 
         public static let services: [Service] = [
-            Service(service: "github", label: "GitHub", url: "https://api.githubcopilot.com/mcp/", ways: [Way(auth: "app", label: "GitHub App", says: "An app you register and install on the projects' repositories, with Issues: read and write. It acts as itself.", key: nil), Way(auth: "bearer", label: "Token", says: "A fine-grained personal access token limited to the projects' repositories, with Issues: read and write.", key: "It acts as you.")]),
-            Service(service: "linear", label: "Linear", url: "https://mcp.linear.app/mcp", ways: [Way(auth: "app", label: "Linear app", says: "An OAuth app you create in Linear's settings. It acts as itself, with read and write.", key: nil), Way(auth: "bearer", label: "API key", says: "A personal API key limited to the projects' teams.", key: "It acts as you."), Way(auth: "oauth", label: "Sign in", says: "Linear's own sign-in, for agents' Linear tools. A project's tasks need a Linear app or an API key.", key: nil)]),
-            Service(service: "gitlab", label: "GitLab", url: "https://gitlab.com/api/v4/mcp", ways: [Way(auth: "oauth", label: "Sign in", says: "GitLab's own sign-in, for agents' GitLab tools.", key: nil), Way(auth: "bearer", label: "Token", says: "A fine-grained personal access token with the MCP tool resource's Execute permission, limited to the projects' groups.", key: "It acts as you.")]),
-            Service(service: "slack", label: "Slack", url: "https://mcp.slack.com/mcp", ways: [Way(auth: "bearer", label: "User token", says: "A Slack user token from your Slack app.", key: "A Slack user token (xoxp-…) from your Slack app.")]),
+            Service(service: "github", label: "GitHub", url: "https://api.githubcopilot.com/mcp/", ways: [Way(auth: "app", label: "GitHub App", says: "An app you register and install on the projects' repositories, with Issues: read and write. It acts as itself.", key: nil), Way(auth: "bearer", label: "Token", says: "A fine-grained personal access token limited to the projects' repositories, with Issues: read and write.", key: "It acts as you.")], serverExample: nil),
+            Service(service: "linear", label: "Linear", url: "https://mcp.linear.app/mcp", ways: [Way(auth: "app", label: "Linear app", says: "An OAuth app you create in Linear's settings. It acts as itself, with read and write.", key: nil), Way(auth: "bearer", label: "API key", says: "A personal API key limited to the projects' teams.", key: "It acts as you."), Way(auth: "oauth", label: "Sign in", says: "Linear's own sign-in, for agents' Linear tools. A project's tasks need a Linear app or an API key.", key: nil)], serverExample: nil),
+            Service(service: "gitlab", label: "GitLab", url: "https://gitlab.com/api/v4/mcp", ways: [Way(auth: "oauth", label: "Sign in", says: "GitLab's own sign-in, for agents' GitLab tools.", key: nil), Way(auth: "bearer", label: "Token", says: "A fine-grained personal access token with the MCP tool resource's Execute permission, limited to the projects' groups.", key: "It acts as you.")], serverExample: "https://gitlab.example.com/api/v4/mcp"),
+            Service(service: "gitea", label: "Gitea", url: nil, ways: [Way(auth: "bearer", label: "Token", says: "A Gitea access token, which your gitea-mcp passes to Gitea.", key: "A Gitea access token. gitea-mcp, run in http mode at the address above, passes it to Gitea; it acts as you.")], serverExample: "https://gitea.example.com/mcp"),
+            Service(service: "slack", label: "Slack", url: "https://mcp.slack.com/mcp", ways: [Way(auth: "bearer", label: "User token", says: "A Slack user token from your Slack app.", key: "A Slack user token (xoxp-…) from your Slack app.")], serverExample: nil),
         ]
     }
 

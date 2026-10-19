@@ -39,6 +39,18 @@
         }
       : { clientId: draft.clientId, clientSecret: draft.clientSecret };
 
+  /** A typed server address as the hub takes one: an http(s) URL, or none. */
+  export const serverUrl = (typed: string): string | undefined => {
+    try {
+      const url = new URL(typed.trim());
+      return url.protocol === "https:" || url.protocol === "http:"
+        ? url.href
+        : undefined;
+    } catch {
+      // Not a URL: no address the hub takes.
+    }
+  };
+
   /** Whether a way signs in through a page of the service's own, in a tab. */
   export const signsInByPage = (service: string, way: Way): boolean =>
     way.auth === "oauth" || (way.auth === "app" && service === "linear");
@@ -354,6 +366,9 @@
   let adding = $state<Service | null>(null);
   let addWay = $state<Way | null>(null);
   let account = $state("");
+  /** The server's address, for a service the person runs one of (core `serverExample`). */
+  let address = $state("");
+  let addressProblem = $state<string | null>(null);
   let addKey = $state("");
   let addApp = $state<AppDraft>(emptyApp());
   let addPending = $state(false);
@@ -363,6 +378,8 @@
     adding = service;
     addWay = service.ways[0] ?? null;
     account = "";
+    address = service.url ?? "";
+    addressProblem = null;
     addKey = "";
     addApp = emptyApp();
     addProblem = null;
@@ -405,6 +422,11 @@
     if (!(service && way)) {
       return;
     }
+    const url = service.serverExample ? serverUrl(address) : service.url;
+    if (!url) {
+      addressProblem = words.serverAddressProblem;
+      return;
+    }
     // The sign-in tab opens on the press, before anything is awaited.
     const byPage = signsInByPage(service.service, way);
     const tab = byPage ? window.open("", "_blank") : null;
@@ -423,7 +445,7 @@
           service: service.service,
           account: account.trim(),
           transport: "http",
-          url: service.url,
+          url,
           auth: way.auth,
         })
       );
@@ -669,6 +691,31 @@
           <p class="way-says" data-way-says>{addWay.says}</p>
         {/if}
       </div>
+    {/if}
+    {#if service.serverExample}
+      <Field
+        id="connection-server"
+        label={words.serverAddress}
+        problem={addressProblem ?? undefined}
+      >
+        <Input
+          autocomplete="off"
+          id="connection-server"
+          inputmode="url"
+          oninput={() => {
+            addressProblem = null;
+          }}
+          oninvalid={(event: Event) => {
+            // Said under the field, never as the browser's bubble.
+            event.preventDefault();
+            addressProblem = words.serverAddressProblem;
+          }}
+          placeholder={service.serverExample}
+          spellcheck="false"
+          type="url"
+          bind:value={address}
+        />
+      </Field>
     {/if}
     <Field
       hint={words.accountHint}

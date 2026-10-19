@@ -48,6 +48,10 @@ export const connectionsWords = {
   signsInWith: "Signs in with",
   /** An app connection's registration: a GitHub App's ids and key, or a Linear app's client. */
   setApp: "Set app…",
+  /** The address of a server the person runs, asked when a service has one (`serverExample`). */
+  serverAddress: "Server address",
+  serverAddressProblem:
+    "A server address starts with https:// or http://, like the example.",
   /** A row's own button for an app not yet set. */
   setAppNow: "Set app",
   saveApp: "Save app",
@@ -108,6 +112,9 @@ export interface ConnectionWay {
  * - Slack: "We do not support SSE-based connections or Dynamic Client
  *   Registration at this time" (docs.slack.dev/ai/slack-mcp-server), so a
  *   user token, as Bearer.
+ * - Gitea: no hosted MCP server; the person's own gitea-mcp in http mode,
+ *   where "`Authorization: Bearer <token>` … pass a Gitea credential per
+ *   request" (gitea.com/gitea/gitea-mcp), at the address they give.
  * - GitLab: its MCP server "supports OAuth 2.0 Dynamic Client Registration"
  *   and takes "A fine-grained personal access token with the MCP tool
  *   resource and the Execute permission"; legacy personal access tokens "cannot
@@ -119,8 +126,16 @@ export interface ConnectionWay {
  */
 export interface ConnectionService {
   label: string;
+  /**
+   * The person runs the service's MCP server, or may (a Gitea's gitea-mcp, a
+   * self-managed GitLab): the sign-in form asks its address, prefilled with
+   * {@link url} when the service has a hosted one, this the field's example.
+   * Absent, the hosted server's address is the connection's, unasked.
+   */
+  serverExample?: string;
   service: string;
-  url: string;
+  /** The service's hosted MCP server; absent when only the person's own runs it. */
+  url?: string;
   ways: readonly ConnectionWay[];
 }
 
@@ -170,6 +185,7 @@ export const CONNECTION_SERVICES: readonly ConnectionService[] = [
     service: "gitlab",
     label: "GitLab",
     url: "https://gitlab.com/api/v4/mcp",
+    serverExample: "https://gitlab.example.com/api/v4/mcp",
     ways: [
       {
         auth: "oauth",
@@ -181,6 +197,19 @@ export const CONNECTION_SERVICES: readonly ConnectionService[] = [
         label: "Token",
         says: "A fine-grained personal access token with the MCP tool resource's Execute permission, limited to the projects' groups.",
         key: "It acts as you.",
+      },
+    ],
+  },
+  {
+    service: "gitea",
+    label: "Gitea",
+    serverExample: "https://gitea.example.com/mcp",
+    ways: [
+      {
+        auth: "bearer",
+        label: "Token",
+        says: "A Gitea access token, which your gitea-mcp passes to Gitea.",
+        key: "A Gitea access token. gitea-mcp, run in http mode at the address above, passes it to Gitea; it acts as you.",
       },
     ],
   },

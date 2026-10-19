@@ -11,6 +11,10 @@
  *   project" (docs.gitlab.com/user/model_context_protocol/mcp_server_tools);
  *   a numeric id names no repository the guard can check, so under Off or Ask
  *   it does not run.
+ * - Gitea's gitea-mcp names one by `owner` and `repo`, but a Gitea
+ *   connection's address is the person's own gitea-mcp, not the Gitea host,
+ *   so no write names a repository the guard can check: under Off or Ask it
+ *   does not run, and `forge_post` (tea's sign-in) writes there instead.
  * A tool the server marks read-only writes nothing. Any other service's
  * connection is no forge's, and is not judged here.
  */
@@ -18,9 +22,13 @@ import type { UpstreamWrite } from "@cawco/core/upstream-guard";
 import type { Tool } from "@modelcontextprotocol/sdk/types.js";
 
 /** The forge a connection's service is, as its row names it. */
-const forgeOf = (service: string): "github" | "gitlab" | undefined => {
+const forgeOf = (
+  service: string
+): "github" | "gitlab" | "gitea" | undefined => {
   const named = service.trim().toLowerCase();
-  return named === "github" || named === "gitlab" ? named : undefined;
+  return named === "github" || named === "gitlab" || named === "gitea"
+    ? named
+    : undefined;
 };
 
 /** The host a connection's MCP server serves: GitLab's is at `<host>/api/v4/mcp`. */
@@ -57,6 +65,9 @@ export const connectionWrite = (
     return owner && repo
       ? { what, repo: `github.com/${owner}/${repo}` }
       : undefined;
+  }
+  if (forge === "gitea") {
+    return { what };
   }
   const project = text(args.project_id) ?? text(args.id);
   const host = hostOf(connection.url);
