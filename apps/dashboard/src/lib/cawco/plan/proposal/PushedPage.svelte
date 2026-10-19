@@ -12,18 +12,35 @@
   import SessionMark from "#lib/cawco/SessionMark.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconChevronLeft, IconExternal } from "#lib/icons.js";
+  import AckLine from "./AckLine.svelte";
   import DelegateRow from "./DelegateRow.svelte";
-  import { carriersOf, openBefore, type PlanFixture } from "./fixtures";
+  import {
+    carriersOf,
+    openBefore,
+    type PlanFixture,
+    type Step,
+  } from "./fixtures";
   import ProgressLine from "./ProgressLine.svelte";
   import StepTile from "./StepTile.svelte";
+  import StepTools from "./StepTools.svelte";
   import SubRows from "./SubRows.svelte";
   import TaskBadge from "./TaskBadge.svelte";
   import { useView } from "./view.svelte";
 
-  let { plan, list }: { plan: PlanFixture; list: Snippet } = $props();
+  let {
+    plan,
+    steps,
+    list,
+  }: {
+    plan: PlanFixture;
+    /** The plan's rows as the person has them. */
+    steps: Step[];
+    list: Snippet;
+  } = $props();
 
   const view = useView();
-  const step = $derived(plan.steps.find((one) => one.id === view.pushed.id));
+  const step = $derived(steps.find((one) => one.id === view.pushed.id));
+  const ack = $derived(step ? view.acks.get(step.id) : undefined);
   const delegate = $derived(
     plan.delegates.find((one) => one.id === view.pushed.id)
   );
@@ -83,6 +100,10 @@
             <SubRows steps={step.subs} />
           </ul>
         {/if}
+        {#if ack}
+          <AckLine {ack} />
+        {/if}
+        <StepTools {plan} {step} {steps} />
         {#if carriersOf(plan, step).length > 0}
           <ul class="rows">
             {#each carriersOf(plan, step) as one (one.id)}

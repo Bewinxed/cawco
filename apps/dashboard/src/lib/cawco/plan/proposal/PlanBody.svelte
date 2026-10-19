@@ -36,26 +36,32 @@
   import PlanFoot from "./PlanFoot.svelte";
   import PushedPage from "./PushedPage.svelte";
   import StepRow from "./StepRow.svelte";
-  import { frameView } from "./view.svelte";
+  import { frameView, type Scenario } from "./view.svelte";
 
   let {
     plan,
     variation,
     loaded,
     phone = false,
+    scenario = "rest",
   }: {
     plan: PlanFixture;
     variation: Variation;
     /** When the page loaded: every running time counts from it. */
     loaded: number;
     phone?: boolean;
+    /** What the frame stands at as it starts: at rest, or one change made. */
+    scenario?: Scenario;
   } = $props();
 
   const view = frameView({
     loaded: untrack(() => loaded),
     phone: untrack(() => phone),
     plan: () => plan,
+    scenario: untrack(() => scenario),
   });
+  /** The plan's rows as the person has them. */
+  const steps = $derived(view.arrange(plan.steps));
   const pushes = $derived(phone && variation !== "a");
 
   /** Lanes: a step beside a later one that starts after the same step. */
@@ -64,8 +70,8 @@
     if (!key) {
       return 0;
     }
-    const index = plan.steps.indexOf(step);
-    return plan.steps.some(
+    const index = steps.findIndex((one) => one.id === step.id);
+    return steps.some(
       (other, at) => at > index && (other.after ?? []).join(",") === key
     )
       ? 1
@@ -73,7 +79,7 @@
   };
 
   const afterEdges = $derived(
-    plan.steps.flatMap((step) =>
+    steps.flatMap((step) =>
       (step.after ?? []).map((from): Edge => ({
         from,
         to: step.id,
@@ -83,7 +89,7 @@
   );
   const laneEdges = $derived([
     ...afterEdges,
-    ...plan.steps.flatMap((step) =>
+    ...steps.flatMap((step) =>
       carriersOf(plan, step).map((one): Edge => ({
         from: step.id,
         to: `d:${one.id}`,
@@ -111,9 +117,9 @@
 
 {#snippet ledger()}
   <ul class="rows" {@attach reflow()} {@attach view.clock.watch}>
-    {#each plan.steps as step (step.id)}
+    {#each steps as step (step.id)}
       {@const carried = carriersOf(plan, step)}
-      <StepRow {plan} {step}>
+      <StepRow {plan} {step} {steps}>
         {#snippet below()}
           {#if carried.length > 0}
             <ul
@@ -134,9 +140,9 @@
   <div class="lanes">
     <Connectors edges={laneEdges} mode="lanes" />
     <ul class="rows" {@attach reflow()} {@attach view.clock.watch}>
-      {#each plan.steps as step (step.id)}
+      {#each steps as step (step.id)}
         {@const carried = carriersOf(plan, step)}
-        <StepRow lane={laneOf(step)} {plan} {pushes} {step}>
+        <StepRow lane={laneOf(step)} {plan} {pushes} {step} {steps}>
           {#snippet below()}
             {#if carried.length > 0}
               <ul class="rows on-lane" data-slot="delegates">
@@ -193,10 +199,10 @@
     <div class="column">
       <Connectors edges={afterEdges} mode="column" />
       <ul class="rows" {@attach reflow()}>
-        {#each plan.steps as step (step.id)}
+        {#each steps as step (step.id)}
           {@const carried = carriersOf(plan, step)}
           {@const working = carried.filter((one) => one.status !== "done")}
-          <StepRow {plan} {pushes} {step}>
+          <StepRow {plan} {pushes} {step} {steps}>
             {#snippet trail()}
               <CrewTiles delegates={working} />
             {/snippet}
@@ -225,7 +231,7 @@
 
 <div class="plan" data-slot="plan" data-variation={variation}>
   {#if pushes}
-    <PushedPage list={body} {plan} />
+    <PushedPage list={body} {plan} {steps} />
   {:else}
     {@render body()}
   {/if}
