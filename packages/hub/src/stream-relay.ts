@@ -256,13 +256,13 @@ const answered = <T>(
       503,
       read.reason === "dead"
         ? STREAM_RELAY_WORDS.machineAway(machine)
-        : `The relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`
+        : `The stream relay's ${ACT[what] ?? what} on ${machine} did not answer in time: it may still be at work there. The journey shows what it says next.`
     );
   }
   if (!read.value.ok) {
     throw new RelayRefusal(
       409,
-      read.value.error ?? `The relay was not ${what}.`
+      read.value.error ?? `The stream relay was not ${what}.`
     );
   }
   return read.value.result as T;
@@ -311,7 +311,7 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
     if (!relay.secret) {
       throw new RelayRefusal(
         409,
-        "The relay could not start: its secret no longer opens under the hub's key. Remove the relay and set it up again."
+        "The stream relay could not start: its secret no longer opens under the hub's key. Remove it and set it up again."
       );
     }
     return {
@@ -504,7 +504,8 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
       if (read.kind === "answered" && !read.value.ok) {
         throw new RelayRefusal(
           409,
-          read.value.error ?? "The relay was not removed, so it was kept."
+          read.value.error ??
+            "The stream relay was not removed, so it was kept."
         );
       }
       db.forget();

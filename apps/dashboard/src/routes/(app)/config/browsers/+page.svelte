@@ -6,9 +6,10 @@
    * up, the lead and Set up; then the journey's card, every step ticking by
    * itself; once the relay has gone live, its summary (machine, name, state,
    * each port's answer, the certificate's end, who proved it from outside),
-   * with Check again, Add a name while none stands, and Stop relay and Remove
-   * relay asked in place. The card is the one Caw's Needs you draws, from the
-   * same journey, live (client.svelte.ts `relayJourney`).
+   * with Check the stream relay again, Add a name while none stands, and
+   * Stop and Remove the stream relay asked in place. The card is the one
+   * Caw's Needs you draws, from the same journey, live (client.svelte.ts
+   * `relayJourney`).
    */
   import type { RelayJourneyView } from "@cawco/core/stream-relay";
   import { onMount } from "svelte";
@@ -24,11 +25,19 @@
   } from "#lib/cawco/relay/relay.svelte.js";
 
   const section = sectionOf("browsers");
+  /** A hub sentence that already tells the person to try again. */
+  const SAYS_TRY_AGAIN = /\btry again\b/i;
 
   let problem = $state<string | null>(null);
   onMount(() => {
     readRelayJourney().catch((error: unknown) => {
-      problem = `The stream relay couldn't be read. ${failureWords(error)} Nothing was changed. Reload the page to try again.`;
+      // The error formula's fix is said once: the hub's sentence carries it
+      // when it already tells the person to try again (the unreachable
+      // hub's "…then try again."); otherwise ours does.
+      const why = failureWords(error);
+      problem = SAYS_TRY_AGAIN.test(why)
+        ? `The stream relay couldn't be read. ${why} Nothing was changed.`
+        : `The stream relay couldn't be read. ${why} Nothing was changed. Reload the page to try again.`;
     });
   });
 

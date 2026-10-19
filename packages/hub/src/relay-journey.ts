@@ -964,7 +964,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     if (!(machineId && lan)) {
       throw new RelayRefusal(
         409,
-        "The relay's machine is not behind a router."
+        "The stream relay's machine is not behind a router."
       );
     }
     routerAsking = true;
@@ -1015,7 +1015,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
     if (!(name && address && zone)) {
       throw new RelayRefusal(
         409,
-        "The relay has no name with a zone to add yet."
+        "The stream relay has no name with a zone to add yet."
       );
     }
     tokenWhy = undefined;
@@ -1094,7 +1094,7 @@ export const createRelayJourney = (deps: RelayJourneyDeps): RelayJourney => {
       if (!candidate) {
         throw new RelayRefusal(
           409,
-          `${machineName(one.machineId)} can't run the relay: the internet reaches it nowhere the hub knows.`
+          `${machineName(one.machineId)} can't run the stream relay: the internet reaches it nowhere the hub knows.`
         );
       }
       pick(candidate);

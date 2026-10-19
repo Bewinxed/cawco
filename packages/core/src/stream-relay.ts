@@ -514,9 +514,9 @@ export interface RelayFailure {
 }
 
 const couldNotStart = (machine: string): string =>
-  `The relay could not start on ${machine}:`;
+  `The stream relay could not start on ${machine}:`;
 const notRenewed = (machine: string, name: string): string =>
-  `The relay's certificate for ${name} on ${machine} was not renewed:`;
+  `The stream relay's certificate for ${name} on ${machine} was not renewed:`;
 const renewNext =
   "The hub asks again tomorrow, and the certificate standing serves until it ends.";
 
@@ -534,41 +534,41 @@ export const lowPortsCommand = (port: number): string => {
  */
 export const RELAY_FAILURES = {
   notLinux: (machine: string): RelayFailure => ({
-    why: `${couldNotStart(machine)} it runs on the host network, and on a Mac that is the container runtime's VM, which nothing outside reaches. Run the relay on a Linux machine.`,
+    why: `${couldNotStart(machine)} it runs on the host network, and on a Mac that is the container runtime's VM, which nothing outside reaches. Run the stream relay on a Linux machine.`,
   }),
   noRuntime: (machine: string, install: string): RelayFailure => ({
-    why: `${couldNotStart(machine)} it runs in a container, and this machine has no container runtime. Install one with ${install}, then start the relay again.`,
+    why: `${couldNotStart(machine)} it runs in a container, and this machine has no container runtime. Install one with ${install}, then start the stream relay again.`,
     command: install,
   }),
   notDnsName: (machine: string, name: string): RelayFailure => ({
-    why: `${couldNotStart(machine)} ${name} is not a DNS name. Give a name like turn.example.com, or skip the name, then start the relay again.`,
+    why: `${couldNotStart(machine)} ${name} is not a DNS name. Give a name like turn.example.com, or skip the name, then start the stream relay again.`,
   }),
   lowPort: (machine: string, port: number): RelayFailure => {
     const command = lowPortsCommand(port);
     return {
-      why: `${couldNotStart(machine)} port ${port} is below the range this machine lets a rootless container runtime bind. Run ${command} there once (it holds a reboot), or use a root container runtime, then start the relay again.`,
+      why: `${couldNotStart(machine)} port ${port} is below the range this machine lets a rootless container runtime bind. Run ${command} there once (it holds a reboot), or use a root container runtime, then start the stream relay again.`,
       command,
     };
   },
   held: (machine: string, held: readonly string[]): RelayFailure => ({
-    why: `${couldNotStart(machine)} ${held.join("; ")}, and the relay listens there. Free ${held.length === 1 ? "it" : "them"}, then start the relay again.`,
+    why: `${couldNotStart(machine)} ${held.join("; ")}, and the stream relay listens there. Free ${held.length === 1 ? "it" : "them"}, then start the stream relay again.`,
   }),
   noCertificate: (machine: string, name: string): RelayFailure => ({
-    why: `${couldNotStart(machine)} no certificate for ${name} stands there. Issue it in the journey's certificate step, then start the relay again.`,
+    why: `${couldNotStart(machine)} no certificate for ${name} stands there. Issue it in the journey's certificate step, then start the stream relay again.`,
   }),
   coturnExited: (
     machine: string,
     exit: string,
     said: string
   ): RelayFailure => ({
-    why: `${couldNotStart(machine)} coturn stopped as it started (exit ${exit}${said ? `: ${said}` : ""}). Start the relay again; if it stops again, its words here say why.`,
+    why: `${couldNotStart(machine)} coturn stopped as it started (exit ${exit}${said ? `: ${said}` : ""}). Start the stream relay again; if it stops again, its words here say why.`,
   }),
   coturnUnbound: (
     machine: string,
     ports: readonly string[],
     seconds: number
   ): RelayFailure => ({
-    why: `${couldNotStart(machine)} coturn did not bind ${ports.join(", ")} within ${seconds} s. Check that nothing else holds ${ports.length === 1 ? "it" : "them"}, then start the relay again.`,
+    why: `${couldNotStart(machine)} coturn did not bind ${ports.join(", ")} within ${seconds} s. Check that nothing else holds ${ports.length === 1 ? "it" : "them"}, then start the stream relay again.`,
   }),
   /** The certificate step's own failures: what Let's Encrypt or certbot said, and the step's verb, Retry. */
   certificateHttp: (name: string, said: string): RelayFailure => ({
@@ -584,7 +584,7 @@ export const RELAY_FAILURES = {
     why: `certbot did not finish within ${seconds} s. ${dns ? "Check the token can edit the zone's DNS" : "Check that TCP 80 reaches this machine"}, then Retry.`,
   }),
   renewNone: (machine: string): RelayFailure => ({
-    why: `The relay's certificate on ${machine} was not renewed: the relay there has no certificate. Add a name in Settings › Browsers to have one issued.`,
+    why: `The stream relay's certificate on ${machine} was not renewed: it has no certificate there. Add a name in Settings › Browsers to have one issued.`,
   }),
   renewPort80: (machine: string, name: string, held: string): RelayFailure => ({
     why: `${notRenewed(machine, name)} ${held}, and renewal runs over port 80. Free it. ${renewNext}`,
@@ -618,7 +618,7 @@ export const STREAM_RELAY_WORDS = {
     "A stream relay lets you take over a browser from anywhere: on cellular data, behind a strict firewall, through a web-only tunnel.",
   /** The phone's lead (the design's 390 wireframe). */
   leadDomainShort: (domain: string) =>
-    `You reach CawCo through ${domain}, which carries pages, not streams. A relay on one of your machines carries them.`,
+    `You reach CawCo through ${domain}, which carries pages, not streams. A stream relay on one of your machines carries them.`,
   leadPlainShort: "A stream relay lets you take over a browser from anywhere.",
 
   machine: "Pick the machine",
@@ -627,8 +627,8 @@ export const STREAM_RELAY_WORDS = {
   none: "No machine of yours is reached from the internet yet. Add one (a small server at a host works), or open UDP and TCP 443 and UDP 49152–49400 on your router to a machine here, then come back.",
   /** No Linux machine is reached, only `machines` that aren't Linux. */
   noneNotLinux: (machines: string[]) =>
-    `No machine of yours can run the relay: it runs only on Linux, and on ${machines.length === 1 ? machines[0] : `${machines.slice(0, -1).join(", ")} and ${machines.at(-1)}`} it would run inside the container runtime's VM, which nothing outside reaches. Add a Linux machine the internet reaches (a small server at a host works); this step picks it once it reports.`,
-  runHere: "Run the relay here",
+    `No machine of yours can run the stream relay: it runs only on Linux, and on ${machines.length === 1 ? machines[0] : `${machines.slice(0, -1).join(", ")} and ${machines.at(-1)}`} it would run inside the container runtime's VM, which nothing outside reaches. Add a Linux machine the internet reaches (a small server at a host works); this step picks it once it reports.`,
+  runHere: "Run the stream relay here",
   behindRouter: "behind a router",
   offline: "offline",
 
@@ -647,10 +647,10 @@ export const STREAM_RELAY_WORDS = {
     `${name} points at ${answers}, not ${machine.name}'s ${machine.address}. Change its A record. It ticks once it answers with ${machine.address}.`,
   /** What a name gives, and what skipping it gives up: the step's one line beside Skip. */
   nameWhy: (name: string) =>
-    `${name} lets the relay answer over TLS on 443, which networks that allow only real HTTPS need. Without it the relay still answers plain on 443.`,
+    `${name} lets the stream relay answer over TLS on 443, which networks that allow only real HTTPS need. Without the name it still answers plain on 443.`,
   /** The same line with no name known yet (reached by IP or the tailnet). */
   nameWhyNone:
-    "A name pointing at this machine lets the relay answer over TLS on 443, which networks that allow only real HTTPS need. Without one it answers plain on 443, which reaches most networks.",
+    "A name pointing at this machine lets the stream relay answer over TLS on 443, which networks that allow only real HTTPS need. Without one it answers plain on 443, which reaches most networks.",
   nameLabel: "DNS name",
   namePlaceholder: "turn.example.com",
   useName: "Use this name",
@@ -675,13 +675,13 @@ export const STREAM_RELAY_WORDS = {
 
   router: "Open the ports on the router",
   routerAsk:
-    "CawCo asks the router to open the relay's ports (UPnP or NAT-PMP). If it refuses, the ports to forward show here.",
+    "CawCo asks the router to open the stream relay's ports (UPnP or NAT-PMP). If it refuses, the ports to forward show here.",
   openPorts: "Open the ports",
   openingPorts: "Asking the router…",
   routerRefused:
     "Your router didn't answer UPnP or NAT-PMP. Forward these on it, then come back; the last step proves they're open.",
   routerPartial: (how: RelayMapHow) =>
-    `The router opened UDP and TCP 443 (${how}) but not the relay range. Forward it on the router by hand; the last step proves it.`,
+    `The router opened UDP and TCP 443 (${how}) but not UDP 49152–49400. Forward that range on the router by hand; the last step proves it.`,
   forwards: forwardsOf,
   rangeForward: (lan: string) => `UDP 49152–49400 → ${lan}`,
   forwardsLabel: "The forwards to make",
@@ -713,14 +713,14 @@ export const STREAM_RELAY_WORDS = {
     `Certificate for ${name} · ends ${relayDay(endsAt)}`,
   retry: "Retry",
 
-  start: "Start the relay",
+  start: "Start the stream relay",
   starting: "Starting…",
   pulling: (done: number, total: number) => `Pulling ${done} of ${total}`,
   startDone: (machine: string, named: boolean) =>
     `Live on ${machine} · ${portsWords(named)}`,
   startAgain: "Start the stream relay again",
   stoppedStep:
-    "The relay is stopped, so streams through it don't connect. Start it again to carry them.",
+    "The stream relay is stopped, so streams through it don't connect. Start it again to carry them.",
   /** The hub's word while the relay's machine is away: the steps wait for it. */
   machineAway: (machine: string) =>
     `${machine} is not connected. The steps continue when it connects again.`,
@@ -730,11 +730,11 @@ export const STREAM_RELAY_WORDS = {
   proveInside: (device: string, machine: string, ports: string) =>
     `Works from here (${device}, on ${machine}'s network · ${ports}). Open this from a phone off Wi‑Fi to prove it from outside.`,
   proveFailedInside: (machine: string) =>
-    `No relay answer reached this screen within 8 s. This screen is on ${machine}'s own network, and many routers don't answer their own public address from inside. Open this from a phone off Wi‑Fi; it ticks here when that proves it.`,
+    `No answer from the stream relay reached this screen within 8 s. This screen is on ${machine}'s own network, and many routers don't answer their own public address from inside. Open this from a phone off Wi‑Fi; it ticks here when that proves it.`,
   proveFailedOutside: (machine: string) =>
-    `No relay answer reached this screen within 8 s from outside. The ports aren't reaching ${machine}: check the router's forwards, then check the stream relay again.`,
+    `No answer from the stream relay reached this screen within 8 s from outside. The ports aren't reaching ${machine}: check the router's forwards, then check the stream relay again.`,
   proveRefused:
-    "The relay answered this screen and refused its credential (401), so it holds another secret than the hub's. Start the stream relay again to give it the hub's, then check it again.",
+    "The stream relay answered this screen and refused its credential (401), so it holds another secret than the hub's. Start it again to give it the hub's, then check it again.",
   proveDone: (device: string, at: number, ports: string) =>
     `Works from outside · ${device}, ${relayWhen(at)} (${ports})`,
   doneForNow: "Done for now",
@@ -780,11 +780,11 @@ export const STREAM_RELAY_WORDS = {
   stopped: "Stopped",
   failed: "Failed",
 
-  startRelay: "Start relay",
-  stop: "Stop relay",
-  remove: "Remove relay",
+  startRelay: "Start the stream relay",
+  stop: "Stop the stream relay",
+  remove: "Remove the stream relay",
   stopTitle: (machine: string) => `Stop the stream relay on ${machine}?`,
-  /** Why Stop relay waits while the relay pulls or starts. */
+  /** Why Stop the stream relay waits while it pulls or starts. */
   stopWhileStarting: "It can be stopped once it has started.",
   stopBody:
     "Streams that go through it stop connecting until it starts again; a screen on the same network as a browser's machine still connects directly.",
