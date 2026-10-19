@@ -78,6 +78,15 @@ const COUNTS =
 const OPEN_TAB = /^preview head open-tab=/;
 /** The web view's frame in PreviewController's `preview head comment=…` line. */
 const WEB = / web=(-?\d+),(-?\d+),(\d+),(\d+)$/;
+/** HomeCells' `home count <tab> <text> drawn=<bool> …` line. */
+const HOME_COUNT = /^home count \w+ (\S*) ?drawn=(true|false) /;
+/** A count's own text: a number above 0. */
+const COUNTED = /^[1-9]\d*$/;
+/** TopBar's `bar machines n=<n> drawn=<bool> value=<words|->` line. */
+const MACHINES = /^bar machines n=(\d+) drawn=(true|false) value=(.+)$/;
+/** ConfigureController's `config row <name> count=<n|unread> drawn=<bool> text=<text>` line. */
+const CONFIG_ROW =
+  /^config row (.+) count=(\d+|unread) drawn=(true|false) text=(\S+)$/;
 /** How far a control's touch area may reach past the screen's edge (`c-bar-phone-edge`: "in a 44px touch area" reaching into it). */
 const EDGE_REACH = 2;
 /** What the page says of itself: loaded, in the theme the overlay set on it. */
@@ -223,7 +232,7 @@ async function openSim(
     [
       "bash",
       "-c",
-      `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND category == "Probe"'`,
+      `exec xcrun simctl spawn ${udid} log stream --level debug --style compact --predicate 'subsystem == "dev.cawco.app" AND (category == "Probe" OR category == "HomeProbe")'`,
     ],
     { stdout: "pipe", stderr: "ignore" }
   );
@@ -686,6 +695,98 @@ async function edgeStep(on: On): Promise<void> {
   );
 }
 
+/**
+ * 6. The Earned Count Rule beyond the head (DESIGN.md): on the board, each
+ * work tab's count (HomeCells), and on a wide screen the bar's Machines
+ * (TopBar), drawn only above 0, its number the count; on Configure, each
+ * counted row's count drawn above 0 or as "—" while unread, and gone at 0.
+ * Says which states the run reached: a 0 and a count above it, where the
+ * fleet gives both.
+ */
+async function countsStep(on: On, pad: boolean, hub: string): Promise<void> {
+  const open = async (extra: string) => {
+    const mark = on.heard.length;
+    await sh(
+      `xcrun simctl launch --terminate-running-process ${on.udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${hub} -preview-probe ${extra} >/dev/null`
+    );
+    await Bun.sleep(9000);
+    return on.heard.slice(mark);
+  };
+  const board = await open("");
+  // Every state a launch passes through counts, the first read's 0s among them, not only the last.
+  const tabs = ["working", "finished"].map((tab) => {
+    const lines = board
+      .filter((line) => line.startsWith(`home count ${tab} `))
+      .map((line) => line.match(HOME_COUNT))
+      .filter((m): m is RegExpMatchArray => !!m);
+    const broken = lines.filter(
+      ([, text = "", drawn]) =>
+        drawn !== String(text !== "") || !(text === "" || COUNTED.test(text))
+    );
+    // The last drawn is the last count the board was told.
+    const told = board.findLast((line) =>
+      line.startsWith("home counts: working=")
+    );
+    const held = Number(told?.match(new RegExp(`${tab}=(\\d+)`))?.[1] ?? -1);
+    const last = lines.at(-1)?.[1] ?? "-";
+    return {
+      tab,
+      zero: lines.some(([, text]) => text === ""),
+      above: lines.some(([, text = ""]) => COUNTED.test(text)),
+      ok:
+        lines.length > 0 &&
+        broken.length === 0 &&
+        last === (held > 0 ? String(held) : ""),
+      said: `${tab}: ${lines.map(([, text, drawn]) => `${text || "none"}/${drawn}`).join(" → ") || "no line"}, told ${held}${broken.map((one) => `; broken ${one[0]}`).join("")}`,
+    };
+  });
+  const machines = pad
+    ? board
+        .filter((line) => MACHINES.test(line))
+        .map((line) => line.match(MACHINES) as RegExpMatchArray)
+    : [];
+  const machinesBroken = machines.filter(
+    ([, known, drawn, value]) =>
+      drawn !== String(Number(known) > 0) ||
+      Number(known) > 0 === (value === "-")
+  );
+  const machinesOk =
+    !pad || (machines.length > 0 && machinesBroken.length === 0);
+  const configure = await open("-open-configure");
+  const rows = configure
+    .filter((line) => CONFIG_ROW.test(line))
+    .map((line) => line.match(CONFIG_ROW) as RegExpMatchArray);
+  const rowFaults = rows.filter(([, , count, drawn, text]) => {
+    const shouldDraw = count === "unread" || Number(count) > 0;
+    const says = count === "unread" ? "—" : count;
+    return drawn !== String(shouldDraw) || (shouldDraw && text !== says);
+  });
+  const both = (zero: boolean, above: boolean) =>
+    [zero ? "at 0" : "", above ? "above 0" : ""]
+      .filter(Boolean)
+      .join(" and ") || "neither";
+  const reached = [
+    ...tabs.map((one) => `${one.tab} ${both(one.zero, one.above)}`),
+    ...(pad
+      ? [
+          `machines ${both(
+            machines.some(([, known]) => known === "0"),
+            machines.some(([, known]) => Number(known) > 0)
+          )}`,
+        ]
+      : []),
+    `config rows at 0: ${rows.filter((row) => row[2] === "0").length}, above 0: ${rows.filter((row) => Number(row[2]) > 0).length}, unread: ${rows.filter((row) => row[2] === "unread").length}`,
+  ];
+  on.kit.check(
+    `${on.tag} 6: a count is drawn only above 0 beyond the head: the work tabs${pad ? ", the bar's Machines" : ""} and Configure's rows, their number the count`,
+    tabs.every((one) => one.ok) &&
+      machinesOk &&
+      rows.length > 0 &&
+      rowFaults.length === 0,
+    `reached ${reached.join("; ")}; ${tabs.map((one) => one.said).join(" | ")}; ${pad ? machines.map((one) => one[0]).join(" → ") || "no bar machines line" : "no Machines on a phone"}; ${rowFaults.map((row) => row[0]).join(" | ") || `${rows.length} config rows hold the rule`}`
+  );
+}
+
 /** The device on `runtime`: a session, its page, and the head read at each of its widths. */
 async function onDevice(
   kit: Kit,
@@ -720,6 +821,7 @@ async function onDevice(
       );
     };
     await sh(`xcrun simctl ui ${on.udid} appearance light`);
+    await countsStep(on, pad, fleet.base);
     await launch("");
     await Bun.sleep(4000);
     const made = await call(fleet, session, CREATE, {

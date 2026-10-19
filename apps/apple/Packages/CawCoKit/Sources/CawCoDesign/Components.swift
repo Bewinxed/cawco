@@ -427,6 +427,11 @@ public final class FolderTabs: UIControl {
         cells[index].setTrail(view)
     }
 
+    /// The trail at `index` stands, or goes with the tab's own end padding back (a count of none, DESIGN.md's Earned Count Rule).
+    public func showTrail(_ shown: Bool, at index: Int) {
+        cells[index].showTrail(shown)
+    }
+
     /// How far under 260pt the rail holding the tabs is, 0 to 33
     /// (WorkTabs.svelte `--tight`): a tab's inset and the room after its
     /// trail give that much back, so both labels stand whole beside their counts.
@@ -545,7 +550,18 @@ public final class FolderTabs: UIControl {
         /// (WorkTabs.svelte `.count`).
         func setTrail(_ view: UIView) {
             row.addArrangedSubview(view)
+            trail = view
             trailed = true
+            inset()
+        }
+
+        private weak var trail: UIView?
+
+        /// The trail standing ends the tab as `setTrail` says; gone, the label's hit keeps its end padding.
+        func showTrail(_ shown: Bool) {
+            guard let trail, trail.isHidden == shown else { return }
+            trail.isHidden = !shown
+            trailed = shown
             inset()
         }
 
