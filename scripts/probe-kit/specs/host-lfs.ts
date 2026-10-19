@@ -214,7 +214,11 @@ const pushLeg = async (kit: Kit, root: string): Promise<void> => {
     // The host's own credential helper for the stand-in server's host, as a
     // person's git holds one for their forge: the door's environment reads
     // it (host-lfs.ts `hostSigns`), so git-lfs sends it up front. Made in a
-    // child, whose environment is the host's.
+    // child, whose environment is the host agent's: run inside a workspace,
+    // the workspace's own git config (`GIT_CONFIG_PARAMETERS`: its door's
+    // `url.cawco::….insteadOf` and `pushInsteadOf` rewrites, hub-git.ts
+    // `gitDoorEnv`) is no part of it.
+    const { GIT_CONFIG_PARAMETERS: _workspace, ...host } = process.env;
     const made = Bun.spawnSync(
       [
         "bun",
@@ -223,7 +227,7 @@ const pushLeg = async (kit: Kit, root: string): Promise<void> => {
       ],
       {
         env: {
-          ...process.env,
+          ...host,
           GIT_CONFIG_COUNT: "1",
           GIT_CONFIG_KEY_0: `credential.${lfs.origin}.helper`,
           GIT_CONFIG_VALUE_0:
