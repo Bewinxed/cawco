@@ -2312,9 +2312,32 @@ export function boot(options: BootOptions): void {
     }
     const rect = body.getBoundingClientRect();
     const room = canvas.getBoundingClientRect();
+    // Its border box as layout sizes it, unrounded (offsetWidth rounds) and
+    // untouched by any transform: what its picture is held to.
+    const style = getComputedStyle(body);
+    const px = (value: string) => Number.parseFloat(value) || 0;
+    const content = style.boxSizing === "border-box";
+    const own = {
+      w:
+        px(style.width) +
+        (content
+          ? 0
+          : px(style.paddingLeft) +
+            px(style.paddingRight) +
+            px(style.borderLeftWidth) +
+            px(style.borderRightWidth)),
+      h:
+        px(style.height) +
+        (content
+          ? 0
+          : px(style.paddingTop) +
+            px(style.paddingBottom) +
+            px(style.borderTopWidth) +
+            px(style.borderBottomWidth)),
+    };
     return {
       rect: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
-      own: { w: body.offsetWidth, h: body.offsetHeight },
+      own,
       scale: devicePixelRatio,
       whole:
         rect.left >= Math.max(0, room.left) - 0.5 &&

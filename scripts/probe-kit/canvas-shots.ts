@@ -23,9 +23,10 @@
  *     chrome, a label, another frame) covers it;
  *  3. its pixels read back: not one colour, and at the grid's points the
  *     colour its DOM paints there.
- * Over the set: no light file is byte-identical to its dark twin, and no
- * two files are byte-identical. A shot that fails any of these fails the
- * leg `checkShots` names.
+ * Over the set: no two files are byte-identical unless their frames drew
+ * the same DOM (a light file the same as its dark twin, or one story's the
+ * same as another's that says other words, is a picture of the wrong
+ * frame). A shot that fails any of these fails the leg `checkShots` names.
  */
 import { createHash } from "node:crypto";
 import { mkdir, writeFile } from "node:fs/promises";
@@ -55,6 +56,12 @@ export interface Shot {
 
 /** What one capture showed, and what was wrong with it. */
 export interface ShotRead extends Shot {
+  /**
+   * What the frame drew, as its DOM says: the md5 of its scheme, its own
+   * size and its markup with each mount's own ids left out. Two frames that
+   * share it draw the same picture; two that don't, can't.
+   */
+  drawn: string;
   faults: string[];
   /** The png's md5. */
   hash: string;
@@ -100,7 +107,31 @@ function identityOf(args: { selector: string; holds: string | null }) {
   if (!(frame && body)) {
     return null;
   }
+  // The markup without what differs per mount alone: ids and the
+  // references to them, and comments (the framework's anchors).
+  const copy = body.cloneNode(true) as HTMLElement;
+  for (const el of copy.querySelectorAll("*")) {
+    for (const name of [
+      "id",
+      "for",
+      "aria-labelledby",
+      "aria-describedby",
+      "aria-controls",
+      "aria-owns",
+    ]) {
+      el.removeAttribute(name);
+    }
+  }
+  const comments = document.createTreeWalker(copy, NodeFilter.SHOW_COMMENT);
+  const dropped: Node[] = [];
+  for (let node = comments.nextNode(); node; node = comments.nextNode()) {
+    dropped.push(node);
+  }
+  for (const node of dropped) {
+    node.parentNode?.removeChild(node);
+  }
   return {
+    drawn: `${getComputedStyle(body).colorScheme}|${body.offsetWidth}x${body.offsetHeight}|${copy.innerHTML}`,
     story: frame.dataset.cawcoStory ?? "",
     file: frame.dataset.cawcoFile ?? "",
     width: frame.dataset.cawcoWidth ?? "",
@@ -313,6 +344,7 @@ async function shootOne(page: Page, shot: Shot): Promise<ShotRead> {
   const selector = frameSelector(shot);
   const blank: ShotRead = {
     ...shot,
+    drawn: "",
     faults: [],
     hash: "",
     label: "",
@@ -365,6 +397,7 @@ async function shootOne(page: Page, shot: Shot): Promise<ShotRead> {
   return {
     ...shot,
     faults,
+    drawn: createHash("md5").update(seen.drawn).digest("hex"),
     hash: createHash("md5").update(picture.png).digest("hex"),
     label: seen.label,
     stats: {
@@ -396,8 +429,12 @@ export async function shootFrames(
 
 /**
  * Holds a set of captures to their invariant in one leg named `leg`: every
- * shot without a fault, no light file byte-identical to its dark twin, and
- * no two files byte-identical. Returns whether it passed.
+ * shot without a fault, and no two files byte-identical unless their frames
+ * drew the same DOM (`drawn`): a light file the same bytes as its dark twin,
+ * or one story's the same as another's that says other words, is a picture
+ * of the wrong frame. Two frames drawing one DOM (one story in two states
+ * files) rightly share their picture; they are named in the leg's detail.
+ * Returns whether it passed.
  */
 export function checkShots(kit: Kit, leg: string, reads: ShotRead[]): boolean {
   const faults = reads.flatMap((one) =>
@@ -410,37 +447,29 @@ export function checkShots(kit: Kit, leg: string, reads: ShotRead[]): boolean {
   for (const one of reads.filter((read) => read.hash)) {
     byHash.set(one.hash, [...(byHash.get(one.hash) ?? []), one]);
   }
-  const twins: string[] = [];
-  const same: string[] = [];
+  const wrong: string[] = [];
+  const alike: string[] = [];
   for (const group of byHash.values()) {
     if (group.length < 2) {
       continue;
     }
-    const names = group.map(
-      (one) => `${one.file}:${one.story}@${one.width}/${one.scheme}`
+    const names = group
+      .map((one) => `${one.file}:${one.story}@${one.width}/${one.scheme}`)
+      .join(" = ");
+    (new Set(group.map((one) => one.drawn)).size === 1 ? alike : wrong).push(
+      names
     );
-    const paired = group.some((a) =>
-      group.some(
-        (b) =>
-          a !== b &&
-          a.file === b.file &&
-          a.story === b.story &&
-          a.width === b.width &&
-          a.scheme !== b.scheme
-      )
-    );
-    (paired ? twins : same).push(names.join(" = "));
   }
-  const ok =
-    reads.length > 0 &&
-    faults.length === 0 &&
-    twins.length === 0 &&
-    same.length === 0;
+  const ok = reads.length > 0 && faults.length === 0 && wrong.length === 0;
+  const twice =
+    alike.length > 0
+      ? `; one DOM drawn twice, one picture: ${alike.join(" | ")}`
+      : "";
   return kit.check(
     leg,
     ok,
     ok
-      ? `${reads.length} captures, each its own frame, none one colour, ${byHash.size} distinct files`
-      : `${faults.length} faults: ${faults.slice(0, 8).join(" | ")}; light = dark: ${twins.slice(0, 4).join(" | ") || "none"}; byte-identical: ${same.slice(0, 4).join(" | ") || "none"}`
+      ? `${reads.length} captures, each its own frame, none one colour, ${byHash.size} distinct files${twice}`
+      : `${faults.length} faults: ${faults.slice(0, 8).join(" | ")}; the same bytes for frames that drew different DOM: ${wrong.slice(0, 4).join(" | ") || "none"}${twice}`
   );
 }

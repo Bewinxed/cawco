@@ -193,7 +193,7 @@ export interface RenderReport {
  * agent's frame-picture.ts holds a picture to.
  */
 export interface FramePictureRead {
-  /** Its own CSS size, before any transform. */
+  /** Its own border-box size from layout, CSS px, unrounded and before any transform. */
   own: { h: number; w: number };
   /** Its box on the page, CSS px. */
   rect: { h: number; w: number; x: number; y: number };
