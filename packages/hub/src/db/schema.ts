@@ -5,6 +5,7 @@ import type {
   AccountOverage,
   AccountProvider,
   AtLimit,
+  AtPlanLimit,
   AttemptResult,
   AuthState,
   BlockPage,
@@ -2210,6 +2211,11 @@ export const accounts = sqliteTable(
       .notNull()
       .default(false),
     reservePct: integer("reserve_pct"),
+    /** What its sessions do at a plan limit while its extra usage is on (core `AtPlanLimit`). */
+    atPlanLimit: text("at_plan_limit")
+      .$type<AtPlanLimit>()
+      .notNull()
+      .default("move"),
     /**
      * The identity (core `AccountIdentity`) its first sign-in reported: the
      * email, any case, the organization's name, and its id. Null until then;

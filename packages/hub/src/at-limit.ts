@@ -8,6 +8,7 @@ import {
   accountNameAmong,
   accountsWords,
   clockWords,
+  keepsGoingOnExtraUsage,
   type LimitWindow,
   modelScope,
   type NeutralOrigin,
@@ -57,6 +58,12 @@ import { isLive } from "./work-items";
  * accounts forecast to run out move to where placement would carry them,
  * when moving is free (their cache carries, or is cold) or cheap (under the
  * floor and affordable), and held sessions are looked at again at once.
+ *
+ * A turn that ran on its account's extra usage past a plan limit was not
+ * refused: Claude Code answered it on the account's credits. What happens
+ * next is the account's own setting (core `AtPlanLimit`): it keeps going
+ * there, or, by default, moves between turns to an account with plan room,
+ * decided as above, and goes on where it is when none has room.
  *
  * It also answers a Claude session whose turn died on its account's
  * credential. Refused for good (server.ts `settleRefusal` signed the account
@@ -165,10 +172,13 @@ const SETTLE_MS = 5000;
 const SETTLE_FOR_MS = 2 * MINUTE_MS;
 /**
  * Why a session leaves its account: its limit refused a turn, or Claude Code
- * refused the account's credential for good. Either way it carries on where
- * it moves to.
+ * refused the account's credential for good (either way it carries on where
+ * it moves to), or a turn of it ran on its account's extra usage past a plan
+ * limit and the account says to move at a plan limit (core `AtPlanLimit`):
+ * that turn was answered, so it moves between turns and waits there for its
+ * next message, and nothing holds it where it is.
  */
-type Cause = "limit" | "refused";
+type Cause = "limit" | "refused" | "credits";
 
 /** Two accounts of one organization share its prompt cache and its thinking. */
 export const sameOrganization = (a: Account, b: Account): boolean =>
@@ -608,6 +618,102 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
   };
 
+  /**
+   * Why each session on extra usage past its plan limit stays there, as last
+   * logged: said once per reason, not at every turn's end.
+   */
+  const extraUsageSaid = new Map<string, string>();
+
+  /** Logs why `row` stays on `current`'s extra usage, once while the reason holds. */
+  const sayOnExtraUsage = (row: LimitRow, reason: string): void => {
+    if (extraUsageSaid.get(row.id) === reason) {
+      return;
+    }
+    extraUsageSaid.set(row.id, reason);
+    console.info(`[at-limit] ${ports.named(row)} ${reason}`);
+  };
+
+  /**
+   * `row` ran its turn on `current`'s extra usage past a plan limit, and
+   * `current` says to move at a plan limit, but the decision (`why`) keeps it
+   * there: nothing holds it, as its turns are answered there.
+   */
+  const stillOnExtraUsage = (
+    row: LimitRow,
+    current: Account,
+    why: WaitReason | undefined
+  ): void => {
+    const named = accountNameAmong(current, db.accounts.list());
+    const reset = refusedUntil(
+      db.accounts.bench(Date.now()),
+      readingOf(current.id),
+      current.id,
+      row.model,
+      Date.now()
+    );
+    const because: Record<WaitReason, string> = {
+      fork: "a fork stays on the account its origin's cache is on",
+      off: "moving to another account at the limit is switched off",
+      full: "no other account it may run on has plan room for it now",
+      soon: `${named} resets${reset === null ? "" : ` at ${clockWords(reset)}`}, sooner than re-reading its context elsewhere is worth`,
+      work: "its work item carries on here",
+    };
+    sayOnExtraUsage(
+      row,
+      `ran its turn on ${named}'s extra usage, past its plan limit. ${named} says to move to an account with plan room then, but it keeps going on ${named}'s extra usage: ${because[why ?? "full"]}. Each turn's end decides again.`
+    );
+  };
+
+  /**
+   * A turn of `row` ended on its account's extra usage past a plan limit:
+   * the account's last reading says extra usage is in use, and a window that
+   * bears on the session's model is spent (or the account is benched for
+   * it). The account's setting (core `AtPlanLimit`) decides: it keeps going
+   * there, or moves between turns to an account with plan room, as at a
+   * refused turn, except that nothing holds it when none has room. One a
+   * person or a rebalance already moves, one held or being decided, and Caw's
+   * own work with Caw off ({@link stoppedByCawOff}) are left as they are.
+   */
+  const extraUsageTurn = async (instanceId: string): Promise<void> => {
+    const row = rowOf(instanceId);
+    const current = row ? currentOf(row) : undefined;
+    const now = Date.now();
+    const reading = current ? readingOf(current.id) : undefined;
+    if (
+      over(row) ||
+      !(row && current && reading?.overage?.inUse) ||
+      refusedUntil(
+        db.accounts.bench(now),
+        reading,
+        current.id,
+        row.model,
+        now
+      ) === null
+    ) {
+      extraUsageSaid.delete(instanceId);
+      return;
+    }
+    if (keepsGoingOnExtraUsage(current, reading)) {
+      const named = accountNameAmong(current, db.accounts.list());
+      sayOnExtraUsage(
+        row,
+        `ran its turn on ${named}'s extra usage, past its plan limit, and stays there: ${named} says to keep going on extra usage at a plan limit.`
+      );
+      return;
+    }
+    if (
+      ports.handMove(row) ||
+      ports.owed().has(row.id) ||
+      acting.has(row.id) ||
+      settling.has(row.id) ||
+      db.atLimit.hold(row.id) ||
+      stoppedByCawOff(db, row)
+    ) {
+      return;
+    }
+    await act(row, current, "credits");
+  };
+
   /** Whether `row` is the session of a live work item (work-items.ts `isLive`). */
   const liveWork = (row: LimitRow): boolean => {
     const item = row.workItemId ? db.workItem(row.workItemId) : undefined;
@@ -700,10 +806,10 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     now: number,
     cause: Cause
   ): AccountMove => {
-    const full =
-      cause === "limit"
-        ? fullWindow(readingOf(current.id), row.model, now)
-        : undefined;
+    const atLimit = cause !== "refused";
+    const full = atLimit
+      ? fullWindow(readingOf(current.id), row.model, now)
+      : undefined;
     const cost = sameOrg
       ? undefined
       : reReadCost(readForecast(db, target.provider, now), row, target);
@@ -717,16 +823,15 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       ...(cause === "refused" ? { because: { kind: "refused" as const } } : {}),
       tokens: row.contextTokens,
       window: full ? windowWords(full) : null,
-      resetsAt:
-        cause === "limit"
-          ? refusedUntil(
-              db.accounts.bench(now),
-              readingOf(current.id),
-              current.id,
-              row.model,
-              now
-            )
-          : null,
+      resetsAt: atLimit
+        ? refusedUntil(
+            db.accounts.bench(now),
+            readingOf(current.id),
+            current.id,
+            row.model,
+            now
+          )
+        : null,
     };
   };
 
@@ -822,10 +927,17 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       ...(decision.compact ? { compact: "filing" as const } : {}),
     };
     const line = crypto.randomUUID();
+    // A turn extra usage answered is over: the session waits there for its
+    // next message, as a move between turns does.
+    const carryOn = {
+      limit: "limit",
+      refused: "signin",
+      credits: false,
+    } as const;
     const kept = await ports.move(
       row,
       target.id,
-      refused ? "signin" : "limit",
+      carryOn[cause],
       decision.compact ? { line, move: moved } : undefined
     );
     if (kept) {
@@ -840,9 +952,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
 
   /**
    * What is done with `row` off `current` for `cause`, never moving it to an
-   * account in `skip`: at its limit, as {@link decideAtLimit} says; its
-   * credential refused, a move whole to {@link refusedTarget}, else a hold
-   * until there is one.
+   * account in `skip`: at its limit, refused or on extra usage, as
+   * {@link decideAtLimit} says; its credential refused, a move whole to
+   * {@link refusedTarget}, else a hold until there is one.
    */
   const decideFor = (
     row: LimitRow,
@@ -851,7 +963,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     cause: Cause,
     skip: ReadonlySet<string>
   ): AtLimitDecision | undefined => {
-    if (cause === "limit") {
+    if (cause !== "refused") {
       return decide(row, current, now, skip);
     }
     const to = refusedTarget(row, current, skip);
@@ -1007,7 +1119,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const decision = decideFor(row, current, now, cause, skip);
     if (!decision || decision.action === "wait") {
       settling.delete(row.id);
-      if (decision) {
+      if (cause === "credits") {
+        stillOnExtraUsage(row, current, decision?.why);
+      } else if (decision) {
         hold(row, current, decision);
       } else {
         holdRefused(row, current);
@@ -1018,7 +1132,11 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (!target) {
       return undefined;
     }
-    towards.set(row.id, { from: current, to: target });
+    // One on extra usage was answered, not stopped: its chip says nothing,
+    // as at a rebalance's move.
+    if (cause !== "credits") {
+      towards.set(row.id, { from: current, to: target });
+    }
     ports.changed();
     // Only between turns: never inside a tool round, never over a turn
     // someone started since.
@@ -1037,12 +1155,21 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       settling.delete(row.id);
     }
     db.atLimit.dropHold(row.id);
+    if (cause === "credits") {
+      extraUsageSaid.delete(row.id);
+      const accounts = db.accounts.list();
+      const named = accountNameAmong(current, accounts);
+      console.info(
+        `[at-limit] ${ports.named(row)} ran its turn on ${named}'s extra usage, past its plan limit, and ${named} says to move to an account with plan room then, so it moves whole to ${accountNameAmong(target, accounts)} now, between turns. It waits there for its next message.`
+      );
+    }
     const kept = await moveWhole(row, current, target, decision, now, cause);
     if (!kept) {
       return undefined;
     }
     unmoved(row, current, target, kept.why, {
-      held: !kept.target,
+      // One on extra usage goes on there: nothing holds it.
+      held: !kept.target && cause !== "credits",
       refused: cause === "refused",
       waits: kept.later,
     });
@@ -1356,6 +1483,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         settling.delete(instanceId);
       }
       towards.delete(instanceId);
+      extraUsageSaid.delete(instanceId);
       const held = db.atLimit.hold(instanceId);
       db.atLimit.dropHold(instanceId);
       if (held || was) {
@@ -1421,9 +1549,14 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       );
       await act(row, current, "refused");
     },
-    /** A turn of `instanceId` ended as any turn does: the rebalancer may look at it again. */
+    /**
+     * A turn of `instanceId` ended as any turn does: the rebalancer may look
+     * at it again, and one its account's extra usage answered past a plan
+     * limit moves, or stays, as that account says ({@link extraUsageTurn}).
+     */
     turnEnded(instanceId: string): void {
       rebalancer.turnEnded(instanceId);
+      detach(extraUsageTurn(instanceId), "at-limit extra usage");
     },
     /** Looks at every hold now, then rebalances every provider on every machine. */
     look: () => tick().finally(plan),

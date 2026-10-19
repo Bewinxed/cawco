@@ -24824,6 +24824,13 @@
                       "integer",
                       "null"
                     ]
+                  },
+                  "atPlanLimit": {
+                    "type": "string",
+                    "enum": [
+                      "move",
+                      "extra-usage"
+                    ]
                   }
                 }
               }
@@ -50973,6 +50980,10 @@
       "Account": {
         "type": "object",
         "properties": {
+          "atPlanLimit": {
+            "$ref": "#/components/schemas/AtPlanLimit",
+            "description": "What its sessions do at a plan limit while its extra usage is on ({@link AtPlanLimit})."
+          },
           "createdAt": {
             "type": "number"
           },
@@ -51024,6 +51035,7 @@
           }
         },
         "required": [
+          "atPlanLimit",
           "createdAt",
           "email",
           "hue",
@@ -51034,6 +51046,14 @@
           "order",
           "provider",
           "reservePct"
+        ]
+      },
+      "AtPlanLimit": {
+        "description": "What a session on an account does once the account reaches a plan limit\nwhile its extra usage is on (Claude Code's `overageStatus` allowed): moves\nto an account with plan room (`move`, the default), or keeps going on this\naccount's extra usage (`extra-usage`). With extra usage off or refused, the\naccount is at its limit as any other is, whichever it says.",
+        "type": "string",
+        "enum": [
+          "extra-usage",
+          "move"
         ]
       },
       "AccountKind": {
