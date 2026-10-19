@@ -60,8 +60,8 @@ export function deadlineIn(ms: number | null): number | null {
  * `detail`; RFC 9457) gives its `detail`, else its `title`; the older
  * `{ error }` and `{ message }` shapes read the same; a plain-text answer
  * is the hub's own sentence. A proxy's page in front of the hub (a
- * tunnel's HTML 502), an empty body, or anything that is not a short
- * reason in prose is the hub not answering: that, with its status
+ * tunnel's HTML 502), an empty body, or anything that is not a reason in
+ * prose is the hub not answering: that, with its status
  * ({@link noAnswer}). Read from the body and its type alone: a universal
  * load may not read other headers SvelteKit does not serialise.
  */
@@ -151,12 +151,6 @@ function parsed(text: string): {
 /** A sentence's closing stop, dropped so the hub's words sit inside ours. */
 const FINAL_STOP = /\.$/;
 
-/**
- * Longer than this, the hub's words are not a reason a person reads in a
- * line: a stack, a dump, a page of markup. Our choice: two lines of a toast.
- */
-const REASON_LIMIT = 160;
-
 /** Markup or a JSON dump, not prose: a reason never starts so. */
 const NOT_PROSE = /^[<{[]/;
 
@@ -169,18 +163,20 @@ const ERROR_LABEL = /^[A-Za-z]*(?:[Ee]rror|[Ee]xception):\s*/;
 
 /**
  * The hub's words as a reason a person reads, without its closing stop:
- * their first line whole, a thrown error's label taken off, when it is short
- * prose; null for anything else (markup, a dump, a page, nothing). Whole,
- * not cut to its first sentence: core's refusals say what happened and then
- * what to do ("That's only part of the code. Copy all of it from the sign-in
- * page, then paste it again."), and the second sentence is the person's way on.
+ * their first line whole, a thrown error's label taken off, when it is
+ * prose; null for anything else (markup, a dump, a page, nothing). A stack
+ * keeps only its first line, and a page or a dump starts with markup
+ * (`NOT_PROSE`) or comes as HTML, which is never read: so no length makes
+ * prose "not an answer", and a long refusal (placement's, naming every
+ * account it weighed) is shown whole. Whole, not cut to its first sentence
+ * either: core's refusals say what happened and then what to do ("That's
+ * only part of the code. Copy all of it from the sign-in page, then paste it
+ * again."), and the second sentence is the person's way on.
  */
 function sentenceOf(said: string | undefined): string | null {
   const line = (said ?? "").split("\n", 1)[0].trim().replace(ERROR_LABEL, "");
   const sentence = line.replace(FINAL_STOP, "");
-  return sentence.length > 0 &&
-    sentence.length <= REASON_LIMIT &&
-    !NOT_PROSE.test(sentence)
+  return sentence.length > 0 && !NOT_PROSE.test(sentence)
     ? `${sentence[0].toUpperCase()}${sentence.slice(1)}`
     : null;
 }

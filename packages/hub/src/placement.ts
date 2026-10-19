@@ -675,31 +675,69 @@ const choose = (
       why: `No other account this session may run on has room for it now${out}.`,
     };
   }
-  return { ok: false, refusal: noRoomRefusal(allowed, usage, out, input.now) };
+  return {
+    ok: false,
+    refusal: noRoomRefusal(
+      allowed.filter((account) => !candidates.includes(account)),
+      usage,
+      input.now
+    ),
+  };
 };
 
+/** Why an account has no room now, as {@link noRoomRefusal} groups them. */
+const NO_ROOM_GROUPS = [
+  "Benched",
+  "Past the reserve",
+  "At the limit",
+  "Limits unread",
+] as const;
+
 /**
- * Why nothing started: no account it may run on has room now. Names the one
- * back first and when, in the words the account surfaces say a reset in
- * ("A resets in 3h 10m"), or that no reading says when.
+ * Why nothing can start: no account it may run on has room now. In the
+ * error formula (WORDS.md): what happened, then the way on (the account
+ * back first and when, in the words the account surfaces say a reset in, or
+ * that no reading says when), then each account by why it has no room and
+ * when it is back, the detail for whoever wants it.
  */
-const noRoomRefusal = (
-  allowed: Account[],
-  usage: Usage,
-  out: string,
-  now: number
-): string => {
+const noRoomRefusal = (full: Account[], usage: Usage, now: number): string => {
+  const backs = full.map((account) => ({
+    account,
+    at: usage.backAt(account),
+  }));
   let first: { account: Account; at: number } | undefined;
-  for (const account of allowed) {
-    const at = usage.backAt(account);
+  for (const { account, at } of backs) {
     if (at !== undefined && (!first || at < first.at)) {
       first = { account, at };
     }
   }
-  const back = first
-    ? ` ${accountName(first.account)} resets in ${spanWords(first.at - now)} (${clockWords(first.at)}); start it again then.`
-    : " No reading says when one resets.";
-  return `No account this session may run on has room for it now${out}.${back}`;
+  const wayOn = first
+    ? `${accountName(first.account)} is back ${full.length > 1 ? "first, " : ""}in ${spanWords(first.at - now)} (${clockWords(first.at)}): start it again then, or sign in another account.`
+    : "No reading says when one is back: sign in another account, or start it again once one resets.";
+  const groupOf = (account: Account): (typeof NO_ROOM_GROUPS)[number] => {
+    if (usage.benched(account.id)) {
+      return "Benched";
+    }
+    if (usage.pastReserve(account)) {
+      return "Past the reserve";
+    }
+    return usage.read(account) ? "At the limit" : "Limits unread";
+  };
+  const groups = NO_ROOM_GROUPS.flatMap((group) => {
+    const named = backs
+      .filter(({ account }) => groupOf(account) === group)
+      .map(({ account, at }) =>
+        at === undefined
+          ? accountName(account)
+          : `${accountName(account)} until ${clockWords(at)}`
+      );
+    return named.length > 0 ? [`${group}: ${named.join(", ")}.`] : [];
+  });
+  return [
+    "No account this session may run on has room for it now.",
+    wayOn,
+    ...groups,
+  ].join(" ");
 };
 
 /**

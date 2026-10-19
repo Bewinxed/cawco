@@ -286,11 +286,22 @@ export const freshenAll = async (): Promise<void> => {
 
 // ── Who a credential is ──────────────────────────────────────────────────
 
+/**
+ * A provider credential's identity: an email in an organization whose name
+ * is already an id (a key's fingerprint, a GitHub host, a ChatGPT account
+ * id), so it is its `orgId` too (core `AccountIdentity`).
+ */
+const providerIdentity = (
+  email: string,
+  organization: string
+): AccountIdentity => ({ email, organization, orgId: organization });
+
 /** A key as an identity: its last four characters, and a fingerprint of it. */
-export const keyIdentity = (key: string): AccountIdentity => ({
-  email: `…${key.slice(-4)}`,
-  organization: `key:${createHash("sha256").update(key).digest("hex").slice(0, 16)}`,
-});
+export const keyIdentity = (key: string): AccountIdentity =>
+  providerIdentity(
+    `…${key.slice(-4)}`,
+    `key:${createHash("sha256").update(key).digest("hex").slice(0, 16)}`
+  );
 
 /**
  * Who a sign-in is, kept on its credential where the provider's token names
@@ -303,7 +314,9 @@ const IDENTITY = "cawcoIdentity";
 const keptIdentity = (credential: Credential): AccountIdentity | undefined => {
   const kept = (credential as Record<string, unknown>)[IDENTITY] as
     AccountIdentity | undefined;
-  return kept && typeof kept.email === "string" ? kept : undefined;
+  return kept && typeof kept.email === "string"
+    ? providerIdentity(kept.email, kept.organization)
+    : undefined;
 };
 
 /** GitHub's host for a Copilot sign-in: github.com, or its Enterprise domain (pi-ai's `normalizeDomain`). */
@@ -369,7 +382,7 @@ const githubIdentity = async (
       `GitHub (${domain}) named no user for the Copilot sign-in.`
     );
   }
-  return { email: user.login, organization: `github:${domain}` };
+  return providerIdentity(user.login, `github:${domain}`);
 };
 
 /**
@@ -408,7 +421,7 @@ export const identityOf = (
   const email =
     claims.email ??
     (typeof credential.email === "string" ? credential.email : null);
-  return email ? { email, organization: accountId ?? provider } : undefined;
+  return email ? providerIdentity(email, accountId ?? provider) : undefined;
 };
 
 /** Every provider account's store on this machine and who it is signed in as. */

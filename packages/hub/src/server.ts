@@ -388,6 +388,8 @@ import {
   noteRateLimit,
   reconcileAccounts,
   sessionLimitsReader,
+  uncompared,
+  withOrgIdFrom,
 } from "./accounts";
 import { actionRoutes, createActions } from "./actions";
 import { createAdminAsks } from "./admin-asks";
@@ -9341,6 +9343,15 @@ export const createServer = (
   const joinedInto = new Map<string, string>();
 
   /**
+   * The account an id names: its own, or the one a join made it
+   * ({@link joinedInto}). Every route that takes an account id reads it so,
+   * so an id a sign-in joined away (still held by the screen that added it)
+   * reaches the account it is now, never "There is no account".
+   */
+  const accountOf = (id: string): Account | undefined =>
+    db.accounts.get(id) ?? db.accounts.get(joinedInto.get(id) ?? "");
+
+  /**
    * Of the account stores a connecting machine named (`accountStores` on its
    * register), the ones this hub deliberately removed (or joined away): the
    * machine forgets each ({@link RegisterAckPayload.unknownAccounts}). A
@@ -9376,12 +9387,21 @@ export const createServer = (
     return removed;
   };
 
-  /** The other account of `account`'s provider that already is `identity`. */
+  /**
+   * The other account of `account`'s provider that already is `identity`.
+   * None when the identity names no organization id: it can't be compared,
+   * and the sign-in stays an account of its own (said in the log).
+   */
   const existingAs = (
     account: Account,
     identity: AccountIdentity
-  ): Account | undefined =>
-    db.accounts.byIdentity(account.provider, identity, account.id);
+  ): Account | undefined => {
+    if (!identity.orgId) {
+      uncompared(identity, `A new sign-in into ${accountName(account)}`);
+      return undefined;
+    }
+    return db.accounts.byIdentity(account.provider, identity, account.id);
+  };
 
   /**
    * One identity is one account. A sign-in on `machineId` into `account`,
@@ -9489,19 +9509,33 @@ export const createServer = (
       : undefined;
   };
 
-  /** What a Claude sign-in came to, kept, with the models its probe read. */
+  /**
+   * What a Claude sign-in came to, kept, with the models its probe read. An
+   * account named before organization ids were read was not compared on
+   * the machine ({@link expectedOf}): its id is filled from this login, and
+   * a login of someone else is `mismatch` here.
+   */
   const settleClaudeSignin = async (
     account: Account,
     machineId: string,
-    result: AccountSigninResult
+    answered: AccountSigninResult
   ): Promise<AccountSigninResult | { error: string }> => {
     const joined =
-      result.state === "signed-in"
-        ? await joinIfTaken(account, machineId, result.probe?.identity)
+      answered.state === "signed-in"
+        ? await joinIfTaken(account, machineId, answered.probe?.identity)
         : undefined;
     if (joined) {
-      return "error" in joined ? joined : { ...result, joined };
+      return "error" in joined ? joined : { ...answered, joined };
     }
+    const signedAs = answered.probe?.identity;
+    const held =
+      answered.state === "signed-in" && signedAs
+        ? withOrgIdFrom(db, account, signedAs).identity
+        : null;
+    const result: AccountSigninResult =
+      held && signedAs && !sameIdentity(held, signedAs)
+        ? { ...answered, state: "mismatch" }
+        : answered;
     if (result.state === "signed-in" && result.probe) {
       if (result.probe.identity && !account.identity) {
         db.accounts.setIdentity(account.id, result.probe.identity);
@@ -9559,9 +9593,19 @@ export const createServer = (
   };
 
   /**
+   * The identity a machine holds a sign-in into `account` to: its own, when
+   * it names its organization's id. One that names none (a Claude account
+   * named before ids were read) can't be compared there, so none is sent and
+   * the hub compares the answer once its id is filled ({@link
+   * settleClaudeSignin}).
+   */
+  const expectedOf = (account: Account): AccountIdentity | null =>
+    account.identity?.orgId ? account.identity : null;
+
+  /**
    * Finishes a machine's sign-in, which runs under the id it was begun with
    * (`signinId`), as the account it now finishes into: it must come out as
-   * that account's identity.
+   * that account's identity ({@link expectedOf}).
    */
   const completeOn = (
     account: Account,
@@ -9573,14 +9617,14 @@ export const createServer = (
       ? callAgent(
           machineId,
           CONTROL_COMPLETE_ACCOUNT_LOGIN,
-          [code, signinId, account.identity],
+          [code, signinId, expectedOf(account)],
           SIGNIN_TIMEOUT_MS,
           "claude"
         )
       : callAgent(
           machineId,
           CONTROL_COMPLETE_PROVIDER_LOGIN,
-          [code ?? null, signinId, account.identity],
+          [code ?? null, signinId, expectedOf(account)],
           SIGNIN_TIMEOUT_MS
         );
 
@@ -26581,12 +26625,16 @@ export const createServer = (
             ),
           }),
         },
-        ({ params, body, status }) =>
-          db.accounts.patch(params.id, body) ??
-          status(404, `There is no account ${params.id}.`)
+        ({ params, body, status }) => {
+          const account = accountOf(params.id);
+          return (
+            (account && db.accounts.patch(account.id, body)) ??
+            status(404, `There is no account ${params.id}.`)
+          );
+        }
       )
       .delete("/api/accounts/:id", async ({ params, status }) => {
-        const account = db.accounts.get(params.id);
+        const account = accountOf(params.id);
         if (!account) {
           return status(404, `There is no account ${params.id}.`);
         }
@@ -26645,7 +26693,7 @@ export const createServer = (
         "/api/accounts/:id/machines/:machineId",
         { params: t.Object({ id: t.String(), machineId: t.String() }) },
         async ({ params, status }) => {
-          const account = db.accounts.get(params.id);
+          const account = accountOf(params.id);
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
@@ -26900,7 +26948,7 @@ export const createServer = (
       .post(
         "/api/accounts/:id/machines/:machineId/signin",
         async ({ params, status }) => {
-          const account = db.accounts.get(params.id);
+          const account = accountOf(params.id);
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
@@ -26911,18 +26959,21 @@ export const createServer = (
               `${accountName(account)} is a key account: send its key to the machines that use it.`
             );
           }
+          // The machine's sign-in runs under the id it was asked for, the id
+          // `…/signin/complete` finishes it under: one a join removed
+          // finishes into the account it joined ({@link finishJoined}).
           const answer = claude
             ? await callAgent(
                 params.machineId,
                 CONTROL_BEGIN_ACCOUNT_LOGIN,
-                [account.id, account.kind],
+                [params.id, account.kind],
                 SIGNIN_TIMEOUT_MS,
                 "claude"
               )
             : await callAgent(
                 params.machineId,
                 CONTROL_BEGIN_PROVIDER_LOGIN,
-                [account.id, account.provider],
+                [params.id, account.provider],
                 SIGNIN_TIMEOUT_MS
               );
           // Sent, whether or not it answered: only a machine not connected was
@@ -26930,7 +26981,7 @@ export const createServer = (
           const sent = !(
             answer.kind === "unanswered" && answer.reason === "dead"
           );
-          if (sent && !db.accounts.get(account.id)) {
+          if (sent && !accountOf(params.id)) {
             return status(
               404,
               await undoRemovedSignin(account, params.machineId)
@@ -26939,9 +26990,12 @@ export const createServer = (
           // A machine that was asked makes the account's store (and may be
           // waiting on its sign-in) whether or not a code came back; it holds
           // that store signed out, as its next register would report, so
-          // removing the account forgets it there.
+          // removing the account forgets it there. A store under an id a
+          // join removed is no account's: the machine forgets it when it
+          // next names its stores ({@link unknownAccountsOf}).
           if (
             sent &&
+            params.id === account.id &&
             !db.accounts
               .signins()
               .some(
@@ -26983,10 +27037,7 @@ export const createServer = (
         async ({ params, body, status }) => {
           // The account the sign-in finishes into: its own, or the one a
           // sign-in on another machine has since joined it into.
-          const into = () =>
-            db.accounts.get(params.id) ??
-            db.accounts.get(joinedInto.get(params.id) ?? "");
-          const account = into();
+          const account = accountOf(params.id);
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
@@ -27009,7 +27060,7 @@ export const createServer = (
               throw unreachable(asked);
           }
           const answer = asked.value;
-          const now = into();
+          const now = accountOf(params.id);
           if (!now) {
             return status(
               404,
@@ -27040,7 +27091,7 @@ export const createServer = (
           }),
         },
         async ({ params, body, status }) => {
-          const account = db.accounts.get(params.id);
+          const account = accountOf(params.id);
           if (!account) {
             return status(404, `There is no account ${params.id}.`);
           }
@@ -27075,9 +27126,8 @@ export const createServer = (
               const result = answer.value.result as ProviderSigninResult;
               // Another machine's write already joined the key into the
               // account it already was: this one joins it there too.
-              const joinedTo = db.accounts.get(account.id)
-                ? undefined
-                : db.accounts.get(joinedInto.get(account.id) ?? "");
+              const now = accountOf(account.id);
+              const joinedTo = now?.id === account.id ? undefined : now;
               const settled =
                 joinedTo && result.state === "signed-in" && result.identity
                   ? await joinOn(
@@ -28742,7 +28792,21 @@ export const createServer = (
                     break;
                   }
                   const read = frame.message.account;
-                  const account = db.accounts.get(accountId);
+                  const stored = db.accounts.get(accountId);
+                  const account =
+                    stored && read?.identity
+                      ? withOrgIdFrom(db, stored, read.identity)
+                      : stored;
+                  if (read?.identity && !read.identity.orgId) {
+                    // Its dir's login named no org id the agent could
+                    // carry over: whose process it is is not known, and its
+                    // reading is no account's.
+                    uncompared(
+                      read.identity,
+                      `${message.instanceId}'s Claude Code`
+                    );
+                    break;
+                  }
                   if (
                     read?.identity &&
                     account?.identity &&

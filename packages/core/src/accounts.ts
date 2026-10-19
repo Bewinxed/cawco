@@ -185,20 +185,30 @@ export const ACCOUNT_HUES: readonly AccountHue[] = [
 ];
 
 /**
- * Who an account is. Claude: as Claude Code's initialize response reports it
- * (`account.email`, `account.organization` — the organization's name).
- * ChatGPT: the access token's claims, read on the machine — the email
- * (`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT
- * account id (`https://api.openai.com/auth`.chatgpt_account_id), the
- * workspace the subscription bills. Another OAuth provider: the email its
+ * Who an account is: an email in an organization, the organization known by
+ * its id (`orgId`), never its name, which is a display name: an org renamed
+ * is the same org, and two orgs can share a name. Claude: as `claude auth
+ * status --json` reports it (`email`, `orgName`, `orgId`). ChatGPT: the
+ * access token's claims, read on the machine — the email
+ * (`https://api.openai.com/profile`.email) and, as `organization` and its
+ * id, the ChatGPT account id (`https://api.openai.com/auth`.chatgpt_account_id),
+ * the workspace the subscription bills. Another OAuth provider: the email its
  * credential names, if any, and its provider id. A key: its last four
- * characters (`…a1b2`) and, as `organization`, a fingerprint of it
- * (`key:` and the first 16 hex of its SHA-256), so the same key on two
+ * characters (`…a1b2`) and, as `organization` and its id, a fingerprint of
+ * it (`key:` and the first 16 hex of its SHA-256), so the same key on two
  * machines is one account and the key itself never leaves them.
  */
 export interface AccountIdentity {
   email: string;
+  /** The organization's name, for a screen. */
   organization: string;
+  /**
+   * The organization's id: what tells two identities apart. Null where
+   * nothing read one (Claude Code's initialize response names none, an agent
+   * older than this field sends none): such an identity is the same as no
+   * other ({@link sameIdentity}).
+   */
+  orgId: string | null;
 }
 
 export interface Account {
@@ -1561,19 +1571,32 @@ const cameWords = (came: RebalanceNotice["came"]): string => {
   ].join(", ");
 };
 
-/** Whether two identities are the same account: same email in the same organization. */
+/**
+ * Whether two identities are the same account: the same email in the same
+ * organization, the organization by its id alone. Either side with no id is
+ * the same as nothing: who it is can't be compared, and a name is never
+ * taken for an id. (An identity off the wire from an agent older than
+ * `orgId` has none at all, so the test is for an id, not for null.)
+ */
 export const sameIdentity = (a: AccountIdentity, b: AccountIdentity): boolean =>
-  a.email.toLowerCase() === b.email.toLowerCase() &&
-  a.organization === b.organization;
+  Boolean(a.orgId) &&
+  a.orgId === b.orgId &&
+  a.email.toLowerCase() === b.email.toLowerCase();
 
 /**
- * An initialize response's account as an identity, or nothing when it names
- * nobody (a dir that is not signed in reports no email).
+ * Who a Claude Code login says it is (its `auth status`, or its initialize
+ * response, which names no organization id) as an identity, or nothing when
+ * it names nobody (a dir that is not signed in reports no email).
  */
 export const identityOf = (account: {
   email?: string;
   organization?: string;
+  orgId?: string;
 }): AccountIdentity | undefined =>
   account.email
-    ? { email: account.email, organization: account.organization ?? "" }
+    ? {
+        email: account.email,
+        organization: account.organization ?? "",
+        orgId: account.orgId || null,
+      }
     : undefined;

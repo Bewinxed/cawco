@@ -223,6 +223,9 @@ export const accountsWords = {
     noMachineRuns: (harnesses: readonly string[]) =>
       `No machine runs ${harnesses.join(" or ")}`,
     signedIn: "Signed in",
+    /** A sign-in that came out as an account the hub already had: the setup carries on with that one. */
+    joined: (who: string) =>
+      `${who} was already one of your accounts, so this login joined it. Name it changes that account.`,
     someoneElse: "Someone else",
     offline: "Offline",
     signIn: "Sign in",

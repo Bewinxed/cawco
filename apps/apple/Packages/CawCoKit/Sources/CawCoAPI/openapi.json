@@ -44504,18 +44504,27 @@
         ]
       },
       "AccountIdentity": {
-        "description": "Who an account is. Claude: as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).\nChatGPT: the access token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT\naccount id (`https://api.openai.com/auth`.chatgpt_account_id), the\nworkspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization`, a fingerprint of it\n(`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them.",
+        "description": "Who an account is: an email in an organization, the organization known by\nits id (`orgId`), never its name, which is a display name: an org renamed\nis the same org, and two orgs can share a name. Claude: as `claude auth\nstatus --json` reports it (`email`, `orgName`, `orgId`). ChatGPT: the\naccess token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization` and its\nid, the ChatGPT account id (`https://api.openai.com/auth`.chatgpt_account_id),\nthe workspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization` and its id, a fingerprint of\nit (`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them.",
         "type": "object",
         "properties": {
           "email": {
             "type": "string"
           },
           "organization": {
+            "description": "The organization's name, for a screen.",
             "type": "string"
+          },
+          "orgId": {
+            "description": "The organization's id: what tells two identities apart. Null where\nnothing read one (Claude Code's initialize response names none, an agent\nolder than this field sends none): such an identity is the same as no\nother ({@link sameIdentity}).",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
           "email",
+          "orgId",
           "organization"
         ]
       },
@@ -51074,7 +51083,7 @@
         "properties": {
           "identity": {
             "$ref": "#/components/schemas/AccountIdentity",
-            "description": "Who an account is. Claude: as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).\nChatGPT: the access token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT\naccount id (`https://api.openai.com/auth`.chatgpt_account_id), the\nworkspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization`, a fingerprint of it\n(`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
+            "description": "Who an account is: an email in an organization, the organization known by\nits id (`orgId`), never its name, which is a display name: an org renamed\nis the same org, and two orgs can share a name. Claude: as `claude auth\nstatus --json` reports it (`email`, `orgName`, `orgId`). ChatGPT: the\naccess token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization` and its\nid, the ChatGPT account id (`https://api.openai.com/auth`.chatgpt_account_id),\nthe workspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization` and its id, a fingerprint of\nit (`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
           },
           "models": {
             "type": "array",
@@ -51186,7 +51195,7 @@
         "properties": {
           "identity": {
             "$ref": "#/components/schemas/AccountIdentity",
-            "description": "Who an account is. Claude: as Claude Code's initialize response reports it\n(`account.email`, `account.organization` — the organization's name).\nChatGPT: the access token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization`, the ChatGPT\naccount id (`https://api.openai.com/auth`.chatgpt_account_id), the\nworkspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization`, a fingerprint of it\n(`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
+            "description": "Who an account is: an email in an organization, the organization known by\nits id (`orgId`), never its name, which is a display name: an org renamed\nis the same org, and two orgs can share a name. Claude: as `claude auth\nstatus --json` reports it (`email`, `orgName`, `orgId`). ChatGPT: the\naccess token's claims, read on the machine — the email\n(`https://api.openai.com/profile`.email) and, as `organization` and its\nid, the ChatGPT account id (`https://api.openai.com/auth`.chatgpt_account_id),\nthe workspace the subscription bills. Another OAuth provider: the email its\ncredential names, if any, and its provider id. A key: its last four\ncharacters (`…a1b2`) and, as `organization` and its id, a fingerprint of\nit (`key:` and the first 16 hex of its SHA-256), so the same key on two\nmachines is one account and the key itself never leaves them."
           },
           "kind": {
             "$ref": "#/components/schemas/AccountKind",

@@ -127,6 +127,7 @@ import {
   accountReports,
   changingSignins,
   claudeSignins,
+  dirIdentity,
   linkProjectMemory,
   probeAccount,
   projectMemoryRoot,
@@ -1871,6 +1872,8 @@ class ClaudeSession implements HarnessSession {
   readonly #workdir: string;
   /** The `.claude.json` its CLI reads: its account's, or the machine's. */
   readonly #claudeJson: string;
+  /** The config dir its CLI runs in (`CLAUDE_CONFIG_DIR`): its account's, or none for the machine's own. */
+  readonly #configDir: string | undefined;
   /** One fleet MCP change taken at a time, in the order they came. */
   #fleetMcp: Promise<unknown> = Promise.resolve();
 
@@ -1946,6 +1949,7 @@ class ClaudeSession implements HarnessSession {
       ctx
     );
     this.#claudeJson = configDirClaudeJson(env.CLAUDE_CONFIG_DIR);
+    this.#configDir = env.CLAUDE_CONFIG_DIR;
     this.#sessiond = sessiond;
     this.#stored = persistSession !== false;
     this.#conversationKept = conversationKept;
@@ -2205,7 +2209,9 @@ class ClaudeSession implements HarnessSession {
     try {
       const init = await this.#handle.initializationResult();
       this.#runs = init.claude_code_version ?? null;
-      const identity = identityOf(init.account);
+      // Its organization's id is its dir's login's, as `auth status` read it:
+      // initialize names none (accounts.ts `dirIdentity`).
+      const identity = dirIdentity(this.#configDir, identityOf(init.account));
       this.#ctx.frame({
         type: "system",
         subtype: ACCOUNT_READ,

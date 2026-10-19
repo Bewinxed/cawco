@@ -8,6 +8,7 @@ import {
   type AccountReading,
   type AccountReport,
   type AccountSignin,
+  accountName,
   CLAUDE_PROVIDER,
   type ClaudeExtraUsage,
   type ClaudeLimits,
@@ -51,6 +52,53 @@ export const keepProbe = (
   }
 };
 
+/**
+ * `account` with its organization id, read from its own store: a Claude
+ * account named before ids were read has none, and the first read of its own
+ * login that names one (a machine's report on its dir, a probe of it, its
+ * sign-in's answer) fills it in. Matched by the store, which is the
+ * account's, never by identity; only a login of the same email fills it, as
+ * another email's org is no org of this account's. Any other account as it
+ * is.
+ */
+export const withOrgIdFrom = (
+  db: DbShape,
+  account: Account,
+  read: AccountIdentity
+): Account => {
+  const held = account.identity;
+  if (
+    !held ||
+    held.orgId ||
+    !read.orgId ||
+    held.email.toLowerCase() !== read.email.toLowerCase()
+  ) {
+    return account;
+  }
+  const identity = { ...held, orgId: read.orgId };
+  db.accounts.setIdentity(account.id, identity);
+  console.log(
+    `[accounts] ${accountName(account)}'s organization is ${read.orgId} (${read.organization || "unnamed"}), as its own login reads it; one identity is that email in that organization from now on.`
+  );
+  return { ...account, identity };
+};
+
+/** The {@link uncompared} lines already said, so a store read each minute says its line once. */
+const saidUncompared = new Set<string>();
+
+/**
+ * Says, once per thing read, that `identity` could not be compared with any
+ * account's: it names no organization id (an agent older than `orgId`, or a
+ * read that names none), and an org's name is never taken for its id.
+ */
+export const uncompared = (identity: AccountIdentity, what: string): void => {
+  const line = `[accounts] ${what} is ${identity.email}${identity.organization ? ` in ${identity.organization}` : ""}, but names no organization id, so it couldn't be compared with this hub's accounts: it is taken as nobody's.`;
+  if (!saidUncompared.has(line)) {
+    saidUncompared.add(line);
+    console.warn(line);
+  }
+};
+
 /** What one step of a reconcile did. */
 interface Squared {
   changed: boolean;
@@ -67,9 +115,15 @@ export const accountOfIdentity = (
   identity: AccountIdentity,
   kind: AccountKind,
   provider: AccountProvider
-): Account =>
-  db.accounts.byIdentity(provider, identity) ??
-  db.accounts.create({ provider, kind, identity });
+): Account => {
+  if (!identity.orgId) {
+    uncompared(identity, "A login moving into CawCo");
+  }
+  return (
+    db.accounts.byIdentity(provider, identity) ??
+    db.accounts.create({ provider, kind, identity })
+  );
+};
 
 /**
  * The account's models, read through a probe of its dir on the machine when
@@ -89,11 +143,10 @@ const catalogFor = async (
   if (!read) {
     return false;
   }
-  if (
-    read.identity &&
-    account.identity &&
-    sameIdentity(read.identity, account.identity)
-  ) {
+  const held = read.identity
+    ? withOrgIdFrom(db, account, read.identity).identity
+    : null;
+  if (read.identity && held && sameIdentity(read.identity, held)) {
     keepProbe(db, account.id, read);
   }
   return true;
@@ -102,13 +155,15 @@ const catalogFor = async (
 /**
  * Where one account dir stands, as its `auth status` read it for the
  * machine's latest report: signed out, signed in as its account (the first sign-in names the
- * account), or signed in as someone else (`mismatch`).
+ * account), or signed in as someone else (`mismatch`). `uncompared`: signed
+ * in as an identity that names no organization id, which says nothing of
+ * whose it is, so the store is left as it was, as an unread one is.
  */
 const dirState = (
   db: DbShape,
   account: Account,
   report: AccountReport
-): SigninState => {
+): SigninState | "uncompared" => {
   if (report.provider && report.provider !== account.provider) {
     return "mismatch";
   }
@@ -119,6 +174,10 @@ const dirState = (
   }
   if (!(report.loggedIn && report.identity)) {
     return "signed-out";
+  }
+  if (!report.identity.orgId) {
+    uncompared(report.identity, `${accountName(account)}'s store`);
+    return "uncompared";
   }
   if (!account.identity) {
     // One identity is one account: a fresh account's store signed in as
@@ -131,9 +190,8 @@ const dirState = (
     db.accounts.setIdentity(account.id, report.identity);
     return "signed-in";
   }
-  return sameIdentity(account.identity, report.identity)
-    ? "signed-in"
-    : "mismatch";
+  const held = withOrgIdFrom(db, account, report.identity).identity;
+  return held && sameIdentity(held, report.identity) ? "signed-in" : "mismatch";
 };
 
 /**
@@ -160,6 +218,9 @@ const squaredState = (
     return { state: here.state, write: false };
   }
   const state = dirState(db, account, report);
+  if (state === "uncompared") {
+    return { state: here?.state ?? "signed-out", write: false };
+  }
   if (here?.state === "signed-out" && here.reason !== null) {
     return state === "mismatch"
       ? { state, write: true }

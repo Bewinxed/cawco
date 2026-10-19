@@ -60,8 +60,9 @@ export interface AccountsDb {
   readonly bench: (now?: number) => AccountBench[];
   /**
    * The provider's account signed in as `identity` (core `sameIdentity`:
-   * the email in any case, the same organization), but `except`; one
-   * indexed lookup.
+   * the email in any case, the same organization id), but `except`; one
+   * indexed lookup. None for an identity with no organization id: it is
+   * the same as no other.
    */
   readonly byIdentity: (
     provider: AccountProvider,
@@ -172,16 +173,23 @@ const toAccount = (row: AccountRow): Account => ({
   identity:
     row.email === null
       ? null
-      : { email: row.email, organization: row.organization ?? "" },
+      : {
+          email: row.email,
+          organization: row.organization ?? "",
+          orgId: row.orgId,
+        },
   createdAt: row.createdAt.getTime(),
 });
 
-/** One identity as `accounts_identity` keys it: the provider, the email in any case, the organization. */
-const sameIdentityAs = (provider: AccountProvider, identity: AccountIdentity) =>
+/** One identity as `accounts_identity` keys it: the provider, the email in any case, the organization's id. */
+const sameIdentityAs = (
+  provider: AccountProvider,
+  identity: AccountIdentity & { orgId: string }
+) =>
   and(
     eq(accounts.provider, provider),
     eq(sql`lower(${accounts.email})`, identity.email.toLowerCase()),
-    eq(accounts.organization, identity.organization)
+    eq(accounts.orgId, identity.orgId)
   );
 
 /** A window's identity in a reading: its kind and the model it is scoped to. */
@@ -238,12 +246,16 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
     list,
     get,
     byIdentity: (provider, identity, except) => {
+      const { orgId } = identity;
+      if (!orgId) {
+        return;
+      }
       const row = db
         .select()
         .from(accounts)
         .where(
           and(
-            sameIdentityAs(provider, identity),
+            sameIdentityAs(provider, { ...identity, orgId }),
             except === undefined ? undefined : ne(accounts.id, except)
           )
         )
@@ -306,6 +318,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           order,
           email: identity?.email ?? null,
           organization: identity?.organization ?? null,
+          orgId: identity?.orgId || null,
         })
         .returning()
         .get();
@@ -319,7 +332,11 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
     },
     setIdentity: (id, identity) => {
       db.update(accounts)
-        .set({ email: identity.email, organization: identity.organization })
+        .set({
+          email: identity.email,
+          organization: identity.organization,
+          orgId: identity.orgId || null,
+        })
         .where(eq(accounts.id, id))
         .run();
     },
@@ -405,9 +422,9 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
         .select()
         .from(loginMoves)
         .all()
-        .map(({ email, organization, ...row }) => ({
+        .map(({ email, organization, orgId, ...row }) => ({
           ...row,
-          identity: { email, organization },
+          identity: { email, organization, orgId },
           since: row.since.getTime(),
         })),
     putMove: ({ identity, ...move }) => {
@@ -416,6 +433,7 @@ export const accountsDb = (db: BunSQLiteDatabase): AccountsDb => {
           ...move,
           email: identity.email,
           organization: identity.organization,
+          orgId: identity.orgId || null,
           since: new Date(move.since),
         })
         .onConflictDoNothing()

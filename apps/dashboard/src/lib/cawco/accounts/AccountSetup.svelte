@@ -13,6 +13,11 @@
    * so its email is known and becomes its name. Each step's box takes the
    * next step's height (morph) while the step rises into it. Cancel takes
    * back an account no machine signed in.
+   *
+   * A sign-in that comes out as an account the hub already has is joined
+   * into it (hub `joinExisting`): the account made for it is gone, and the
+   * setup carries on with the one it joined, said on the Sign in step, Name
+   * it starting from that account's own name and colour.
    */
   import {
     type Account,
@@ -129,7 +134,10 @@
   let existing = $state<Account | null>(null);
   const provider = $derived(choice?.provider ?? null);
   const limits = $derived(provider !== null && providerLimits(provider));
-  const full = $derived(existing !== null);
+  /** A second account of its provider: not one whose sign-in joined the first. */
+  const full = $derived.by(
+    () => existing !== null && existing.id !== accountId
+  );
   /** A step, as the rail names it (`words.steps`). */
   type Step = keyof typeof words.steps;
   const STEPS = $derived<Step[]>([
@@ -153,6 +161,7 @@
   let toward = 1;
 
   // ── Sign in ────────────────────────────────────────────────────────────
+  /** The account made for this setup by its first sign-in. */
   let createdId = $state<string | null>(null);
   let creating: Promise<string> | null = null;
   /** The colour the account is made in: the first its provider's accounts don't wear. */
@@ -160,8 +169,8 @@
 
   /** The account's id, making it first: it is made by its first sign-in. */
   function ensureAccount(): Promise<string> {
-    if (createdId) {
-      return Promise.resolve(createdId);
+    if (accountId) {
+      return Promise.resolve(accountId);
     }
     const row = choice;
     if (!row) {
@@ -184,12 +193,19 @@
     return creating;
   }
 
-  const account = $derived(
-    cawco.accounts?.accounts.find((one) => one.id === createdId) ?? null
-  );
   const machines = $derived(choice ? runsOn(choice.harnesses) : []);
   const pastes = new SvelteMap<string, SigninFlow>();
   const devices = new SvelteMap<string, DeviceFlow>();
+  /** The account the hub already had that a sign-in here came out as. */
+  const joined = $derived(
+    [...pastes.values(), ...devices.values()].find((flow) => flow.joined)
+      ?.joined ?? null
+  );
+  /** The account being added: the one its sign-in joined, else the one made for it. */
+  const accountId = $derived(joined?.accountId ?? createdId);
+  const account = $derived(
+    cawco.accounts?.accounts.find((one) => one.id === accountId) ?? null
+  );
   $effect.pre(() => {
     const kind = choice?.signin;
     for (const machine of machines) {
@@ -210,7 +226,7 @@
 
   const signins = $derived(cawco.accounts?.signins ?? []);
   const stateOn = (machineId: string) =>
-    createdId ? signinState(signins, createdId, machineId) : "signed-out";
+    accountId ? signinState(signins, accountId, machineId) : "signed-out";
   const doneOn = (machineId: string) =>
     stateOn(machineId) === "signed-in" ||
     pastes.get(machineId)?.phase === "signed-in" ||
@@ -229,7 +245,7 @@
   // ── Name it ────────────────────────────────────────────────────────────
   let nickname = $state("");
   const shown = $derived({
-    id: createdId ?? "new",
+    id: accountId ?? "new",
     email,
     label: nickname.trim() || null,
     kind: choice?.kind,
@@ -242,7 +258,9 @@
   let atLimit = $state({ ...DEFAULT_AT_LIMIT });
   /** Both accounts, the one there was first; the new one goes last. */
   const pair = $derived(
-    existing && account ? ([existing, account] as [Account, Account]) : null
+    full && existing && account
+      ? ([existing, account] as [Account, Account])
+      : null
   );
   /** Fill-first order as dragged here; until then, the one there was first. */
   let dragged = $state<string[] | null>(null);
@@ -324,8 +342,8 @@
     refused = null;
     busy = true;
     try {
-      if (at === "nameIt" && createdId) {
-        await patchAccount(createdId, {
+      if (at === "nameIt" && accountId) {
+        await patchAccount(accountId, {
           label: nickname.trim() || null,
           hue,
         });
@@ -348,6 +366,12 @@
     if (step === LAST) {
       await goto("/config/accounts");
       return;
+    }
+    // Joined into an account the hub had: Name it starts from its own name
+    // and colour, so Continue with nothing typed keeps them.
+    if (at === "signIn" && joined && account) {
+      ({ hue } = account);
+      nickname = account.label ?? "";
     }
     toward = 1;
     step += 1;
@@ -372,9 +396,9 @@
     }
   }
 
-  /** Cancel takes back an account no machine signed in; one signed in stays. */
+  /** Cancel takes back an account no machine signed in; one signed in, or joined, stays. */
   async function cancel() {
-    if (createdId && signedIn === 0) {
+    if (createdId && !joined && signedIn === 0) {
       busy = true;
       try {
         await deleteAccount(createdId);
@@ -606,13 +630,19 @@
         <span>{choiceLabel(choice)}</span>
       </h2>
     {/if}
-    {#if signedIn > 0 && choice?.signin !== "device-code"}
+    {#if joined || (signedIn > 0 && choice?.signin !== "device-code")}
       <div class="signed-as mark-line" in:unfold out:unfold>
         <IconSuccess aria-hidden="true" />
-        <span
-          >{accountsWords.signin.signedInAs}
-          <b>{email ?? accountsWords.signin.theAccount}</b></span
-        >
+        {#if joined}
+          <span data-account-setup-joined
+            >{words.joined(email ?? accountsWords.signin.theAccount)}</span
+          >
+        {:else}
+          <span
+            >{accountsWords.signin.signedInAs}
+            <b>{email ?? accountsWords.signin.theAccount}</b></span
+          >
+        {/if}
       </div>
     {/if}
     {#if choice?.signin === "api-key"}

@@ -399,13 +399,21 @@ if (role === "sessiond") {
           kind: "subscription",
           provider: CLAUDE_PROVIDER,
           label: "A",
-          identity: { email: "a@fake.invalid", organization: "org-a" },
+          identity: {
+            email: "a@fake.invalid",
+            organization: "org-a",
+            orgId: "org-a",
+          },
         });
         const b = db.accounts.create({
           kind: "subscription",
           provider: CLAUDE_PROVIDER,
           label: "B",
-          identity: { email: "b@fake.invalid", organization: "org-b" },
+          identity: {
+            email: "b@fake.invalid",
+            organization: "org-b",
+            orgId: "org-b",
+          },
         });
         // Each account's limits read, none spent: a carry goes only to an
         // account a reading shows room on (placement.ts `read`).
@@ -482,7 +490,11 @@ if (role === "sessiond") {
               kind: "subscription",
               provider: CLAUDE_PROVIDER,
               label: "C",
-              identity: { email: "c@fake.invalid", organization: "org-c" },
+              identity: {
+                email: "c@fake.invalid",
+                organization: "org-c",
+                orgId: "org-c",
+              },
             });
             db.accounts.putReading(
               c.id,

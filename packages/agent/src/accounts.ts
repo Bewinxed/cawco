@@ -107,6 +107,57 @@ export type AuthStatus =
   | { kind: "unread"; why: string }
   | { kind: "locked"; why: string };
 
+/** Who each config dir was signed in as at its last `auth status` read, by the dir. */
+const dirIdentities = new Map<string, AccountIdentity>();
+
+/**
+ * Who a Claude Code process running in config dir `dir` says it is (its
+ * initialize response's `said`, which names no organization id), with the
+ * organization id of the dir's own login as its last `auth status` read it,
+ * when that login is the same email: one login, read twice. Another email,
+ * or no read yet, leaves the id unknown, and such an identity is the same as
+ * no other (core `sameIdentity`).
+ */
+export const dirIdentity = (
+  dir: string | undefined,
+  said: AccountIdentity | undefined
+): AccountIdentity | undefined => {
+  const read = dir === undefined ? undefined : dirIdentities.get(dir);
+  return said && read?.email.toLowerCase() === said.email.toLowerCase()
+    ? { ...said, orgId: read.orgId }
+    : said;
+};
+
+/**
+ * Who an `auth status` answer says its dir is signed in as, kept for the dir
+ * (`configDir`, its `CLAUDE_CONFIG_DIR`; none for the machine's own) as
+ * {@link dirIdentity} reads it. `email`, `orgName` and `orgId` are the
+ * login's `emailAddress`, `organizationName` and `organizationUuid`. The id
+ * is what the identity is keyed on (core `sameIdentity`); its initialize
+ * response names none, so this read is the one that says who a dir is.
+ */
+const signedInAs = (
+  status: NonNullable<ReturnType<typeof statusIn>>,
+  configDir: string | undefined
+): AccountIdentity | undefined => {
+  const identity =
+    status.loggedIn && typeof status.email === "string"
+      ? identityOf({
+          email: status.email,
+          ...(typeof status.orgName === "string"
+            ? { organization: status.orgName }
+            : {}),
+          ...(typeof status.orgId === "string" ? { orgId: status.orgId } : {}),
+        })
+      : undefined;
+  if (configDir && identity) {
+    dirIdentities.set(configDir, identity);
+  } else if (configDir) {
+    dirIdentities.delete(configDir);
+  }
+  return identity;
+};
+
 /** The sentence for a `claude auth status` on `dir` that gave no answer in time, or ended before it answered. */
 export const noAuthAnswer = (
   dir: string,
@@ -124,6 +175,7 @@ const statusIn = (
       loggedIn: boolean;
       authMethod?: unknown;
       email?: unknown;
+      orgId?: unknown;
       orgName?: unknown;
     }
   | undefined => {
@@ -205,18 +257,7 @@ export const authStatusIn = async (
         why: `Claude Code answered \`claude auth status\` for ${dir} with loggedIn ${status.loggedIn} but exit ${child.exitCode}, which say opposite things. Its sign-in was not read.`,
       };
     }
-    // `email` and `orgName` are the login's `emailAddress` and
-    // `organizationName`, which its initialize response reports as `email`
-    // and `organization`: one identity, whichever of the two read it.
-    const identity =
-      status.loggedIn && typeof status.email === "string"
-        ? identityOf({
-            email: status.email,
-            ...(typeof status.orgName === "string"
-              ? { organization: status.orgName }
-              : {}),
-          })
-        : undefined;
+    const identity = signedInAs(status, env.CLAUDE_CONFIG_DIR);
     return {
       kind: "signin",
       loggedIn: status.loggedIn,
@@ -509,7 +550,8 @@ const PROBE_TIMEOUT_MS = 60_000;
  * no MCP servers, nothing persisted. Throws with the CLI's word when it
  * cannot answer, and with its own sentence when it gave no answer in time
  * (never a probe that read nothing). Not started on a login in the locked
- * login keychain ({@link lockedAway}): it throws that sentence.
+ * login keychain ({@link lockedAway}): it throws that sentence. Its identity
+ * carries the organization id the dir's `auth status` names.
  */
 export const probeAccount = async (account: string): Promise<AccountProbe> => {
   if (await lockedAway(keychainService(account))) {
@@ -546,7 +588,13 @@ export const probeAccount = async (account: string): Promise<AccountProbe> => {
         throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
       }
     }
-    const identity = identityOf(init.account);
+    // Who it is, keyed on its organization's id, which only `auth status`
+    // names: read now, so the id is this login's ({@link dirIdentity}).
+    await readAccount(account);
+    const identity = dirIdentity(
+      accountConfigDir(account),
+      identityOf(init.account)
+    );
     return {
       models: init.models as ModelInfo[],
       ...(identity ? { identity } : {}),

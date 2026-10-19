@@ -439,6 +439,11 @@ public enum Words {
 
             public static let signedIn = "Signed in"
 
+            /// A sign-in that came out as an account the hub already had: the setup carries on with that one.
+            public static func joined(who: String) -> String {
+                "\(who) was already one of your accounts, so this login joined it. Name it changes that account."
+            }
+
             public static let someoneElse = "Someone else"
 
             public static let offline = "Offline"

@@ -2206,11 +2206,15 @@ export const accounts = sqliteTable(
     reservePct: integer("reserve_pct"),
     /**
      * The identity (core `AccountIdentity`) its first sign-in reported: the
-     * email, any case, and the organization. Both null until then. One
-     * identity is one account of a provider (core `sameIdentity`).
+     * email, any case, the organization's name, and its id. Null until then;
+     * the id also on a Claude account named before ids were read, until its
+     * own login's next read fills it (accounts.ts `withOrgIdFrom`). One
+     * identity, keyed on the email and the id, is one account of a provider
+     * (core `sameIdentity`).
      */
     email: text("email"),
     organization: text("organization"),
+    orgId: text("org_id"),
     createdAt: timestamp("created_at")
       .notNull()
       .$defaultFn(() => new Date()),
@@ -2219,7 +2223,7 @@ export const accounts = sqliteTable(
     index("accounts_identity").on(
       table.provider,
       sql`lower(${table.email})`,
-      table.organization
+      table.orgId
     ),
   ]
 );
@@ -2278,6 +2282,7 @@ export const loginMoves = sqliteTable(
     /** The identity the credential is signed in as (core `AccountIdentity`). */
     email: text("email").notNull(),
     organization: text("organization").notNull(),
+    orgId: text("org_id"),
     provider: text("provider").$type<AccountProvider>().notNull(),
     since: timestamp("since").notNull(),
   },
