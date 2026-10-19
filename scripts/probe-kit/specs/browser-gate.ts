@@ -65,7 +65,6 @@ import {
   browserSlug,
   SHIELD_WORDS,
 } from "../../../packages/core/src/browser";
-import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -335,7 +334,7 @@ const DELEGATE = /PROBE-GATE-(A|B):/;
 const SELECTED = /(\d+):[^\n]*\[selected\]/;
 const TEXTBOX = /uid=(\S+) textbox/;
 
-/** The fleet's chrome-devtools entry as the fleet's sync wrote it into Claude Code's config: what every session launches. */
+/** The fleet's chrome-devtools entry as the machine's fleet sync set it for its sessions: what every session launches. */
 interface SessionEntry {
   args?: string[];
   command: string;
@@ -737,7 +736,8 @@ const run = async (kit: Kit): Promise<void> => {
 
   const home = fleet.env.HOME as string;
   // The fleet's chrome-devtools as a person adds it; the spec launches the
-  // entry the machine's sync wrote for Claude Code, as every session does.
+  // entry the machine's sync set for its sessions (the agent's fleet set),
+  // as every session does.
   const put = await fetch(`${fleet.base}/api/fleet/mcp/chrome-devtools`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -755,13 +755,16 @@ const run = async (kit: Kit): Promise<void> => {
   });
   kit.check("the fleet runs chrome-devtools-mcp", put.ok, String(put.status));
   const entry = await until(
-    "the machine's sync wrote the fleet's chrome-devtools for Claude Code",
+    "the machine's sync set the fleet's chrome-devtools for its sessions",
     async () =>
       (
         JSON.parse(
-          await readFile(join(home, CLAUDE_JSON_NAME), "utf8").catch(() => "{}")
-        ) as { mcpServers?: Record<string, SessionEntry> }
-      ).mcpServers?.["chrome-devtools"],
+          await readFile(
+            join(home, ".local", "share", "cawco", "fleet-mcp-set.json"),
+            "utf8"
+          ).catch(() => "{}")
+        ) as { servers?: Record<string, SessionEntry> }
+      ).servers?.["chrome-devtools"],
     (found) => found?.command !== undefined,
     180_000
   );

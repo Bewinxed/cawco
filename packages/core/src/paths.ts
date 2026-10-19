@@ -195,6 +195,16 @@ export const fleetMcpInstallsDir = (): string =>
   join(cawcoDataDir(), "fleet-mcp");
 
 /**
+ * The fleet's MCP servers as this machine launches them, written whole by
+ * each fleet sync (agent fleet-mcp-set.ts): what every CawCo session on
+ * Claude Code and pi loads beside its person's own servers, through its
+ * harness's per-session API. No harness reads it of its own accord, so the
+ * person's own `claude` and `pi` never load it.
+ */
+export const fleetMcpSetFile = (): string =>
+  join(cawcoDataDir(), "fleet-mcp-set.json");
+
+/**
  * What the fleet sync writes on this machine that a harness loads: each
  * skills dir ({@link claudeSkillsDir}, {@link piSkillsDir}) with the tree
  * store its links land in ({@link treeStoreOf}), the vendored marketplaces

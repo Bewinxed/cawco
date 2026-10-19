@@ -2006,11 +2006,16 @@ async function standUp(
   };
   const post = async (message: object) =>
     (await dashboard()).send(JSON.stringify(message));
-  /** A machine control asked as a dashboard asks it, on its socket: the `control_result` it answers. */
+  /**
+   * A control asked as a dashboard asks it, on its socket: the machine's, or
+   * session `instanceId`'s (its `mcpServerStatus`, say). Answers the
+   * `control_result` it gets.
+   */
   const controlAnswer = async (
     method: string,
     args: unknown[],
-    ms = 60_000
+    ms = 60_000,
+    instanceId?: string
   ): Promise<{ error?: string; ok: boolean; result?: unknown }> => {
     const ws = await dashboard();
     const requestId = crypto.randomUUID();
@@ -2035,8 +2040,14 @@ async function standUp(
       JSON.stringify({
         verb: "control",
         machineId: MACHINE,
+        ...(instanceId ? { instanceId } : {}),
         requestId,
-        payload: { requestId, method, args },
+        payload: {
+          ...(instanceId ? { instanceId } : {}),
+          requestId,
+          method,
+          args,
+        },
       })
     );
     try {

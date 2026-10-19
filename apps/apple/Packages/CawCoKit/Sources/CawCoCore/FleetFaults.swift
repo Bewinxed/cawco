@@ -72,7 +72,7 @@ public enum FaultCause: String, Sendable {
             Copy(title: "This server needs sign-in", why: "The fleet has no usable sign-in for this server.",
                  fix: "Open this server and sign in. Every supported agent can use it once approval finishes on the selected computer.", action: .none)
         case .unsupported:
-            Copy(title: "This agent has no MCP support", why: "pi cannot call MCP servers.", fix: "Use Claude Code or OpenCode for this server.", action: .none)
+            Copy(title: "This agent cannot reach this server", why: "pi connects to MCP servers over stdio or streamable HTTP, and this server speaks SSE.", fix: "Give this server a streamable HTTP URL, or use Claude Code or OpenCode for it.", action: .none)
         case .cliTooOld:
             Copy(title: "The claude CLI on this machine is too old",
                  why: "The command CawCo ran uses an option this machine’s claude does not have, so the install never started.",

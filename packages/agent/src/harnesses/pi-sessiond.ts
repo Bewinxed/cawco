@@ -19,6 +19,8 @@ import {
 } from "@cawco/core";
 import { workspaceSpillDir } from "@cawco/core/paths";
 import { standalone } from "@cawco/core/runtime";
+import { type BrowserDoor, CHROME_DEVTOOLS } from "../browser/door";
+import { fleetMcpAt, readFleetMcpSet } from "../fleet-mcp-set";
 import { gateForm } from "../gate-form";
 import { sessionGitEnv } from "../git-credential";
 import {
@@ -43,6 +45,8 @@ export type PiHostCommand =
       boundary?: HarnessContext["boundary"];
       /** The gate form of the build that starts the host, which is the build the host runs ({@link gateForm}). */
       gateForm?: string;
+      /** The session's browser door, which the fleet's chrome-devtools goes through ({@link piBrowserDoor}). */
+      door?: BrowserDoor;
     }
   | {
       type: "send";
@@ -95,6 +99,29 @@ export const backgroundShell = (
   return message.subtype === "task_notification"
     ? { taskId: message.task_id, running: false }
     : undefined;
+};
+
+/**
+ * The session's browser door when the fleet's chrome-devtools is one it
+ * takes (fleet-mcp-set.ts): made here, by the agent, which alone can, and
+ * handed to its host, which launches the server through it. None when the
+ * fleet runs no local chrome-devtools for its folder, or the door could not
+ * be made (said on the log): then the host takes no chrome-devtools.
+ */
+const piBrowserDoor = async (
+  ctx: HarnessContext
+): Promise<BrowserDoor | undefined> => {
+  const browser = fleetMcpAt(await readFleetMcpSet(), ctx.cwd)[CHROME_DEVTOOLS];
+  if (!(browser && "command" in browser)) {
+    return;
+  }
+  try {
+    return await ctx.browserDoor?.();
+  } catch (error) {
+    console.warn(
+      `[pi] ${ctx.instanceId}: its browser's door could not be made, so it takes no chrome-devtools: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 };
 
 /** The machine's keepers as pi's hosts reach them: new hosts start on the current one, each host is read on the one that holds it. */
@@ -381,14 +408,27 @@ export class PiRemoteSession implements HarnessSession {
       : undefined;
   }
   control(method: string, args: unknown[]): Promise<unknown> {
-    if (method === CONTROL_MCP_FLEET_CHANGED) {
-      // pi has no MCP client (pi-services.ts reports every fleet server so).
-      console.info(
-        `[pi] ${this.#ctx.instanceId}: fleet MCP ${(args[0] as FleetMcpChange[]).map(({ name, kind }) => `${name} ${kind}`).join(", ")}: not taken, as pi has no MCP support`
-      );
-      return Promise.resolve({ taken: false, why: "pi has no MCP support" });
-    }
-    return this.request({ type: "control", method, args });
+    return method === CONTROL_MCP_FLEET_CHANGED
+      ? this.#takeFleetMcp(args[0] as FleetMcpChange[])
+      : this.request({ type: "control", method, args });
+  }
+  /**
+   * A fleet MCP change, to the host, which registers the fleet's servers
+   * anew (pi-runtime.ts `FleetMcp`), with the door only this agent can make;
+   * what it did with each is said on the machine's log, as Claude Code's and
+   * OpenCode's sessions say theirs (the host's own output is not kept).
+   */
+  async #takeFleetMcp(changes: FleetMcpChange[]): Promise<unknown> {
+    const door = await piBrowserDoor(this.#ctx);
+    const taken = (await this.request({
+      type: "control",
+      method: CONTROL_MCP_FLEET_CHANGED,
+      args: [changes, door],
+    })) as { servers?: { kind: string; name: string; status: string }[] };
+    console.info(
+      `[pi] ${this.#ctx.instanceId}: fleet MCP ${(taken.servers ?? []).map(({ name, kind, status }) => `${name} ${kind}: ${status}`).join("; ")}`
+    );
+    return taken;
   }
   async interrupt(): Promise<void> {
     await this.control(CONTROL_INTERRUPT, []);
@@ -450,10 +490,12 @@ export async function spawnPi(
   }
   const session = new PiRemoteSession(client, ctx, proc.pid, 0);
   const form = ctx.boundary ? gateForm("pi") : undefined;
+  const door = await piBrowserDoor(ctx);
   await session.write({
     type: "start",
     spec: { ...spec, cwd: ctx.cwd },
     ...(ctx.boundary ? { boundary: ctx.boundary, gateForm: form } : {}),
+    ...(door ? { door } : {}),
   });
   await session.request({ type: "snapshot" });
   const stale = staleHosts.get(ctx.instanceId);

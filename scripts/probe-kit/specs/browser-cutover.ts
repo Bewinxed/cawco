@@ -17,8 +17,11 @@
  *   port, and C's list holds neither A's page nor B's;
  * - no Chromium on the machine has a chrome-devtools-mcp among its
  *   ancestors: the project browsers' are the only ones;
- * - no chrome-devtools-mcp command line holds a token: each names its
- *   door's 0600 config file alone (`--config=`);
+ * - no session launched its chrome-devtools with a token: as each one's
+ *   CLI holds it, it names its door's 0600 config file alone (`--config=`),
+ *   and every chrome-devtools-mcp running in the fleet holds the held file
+ *   of the install those launches preload (its command line is only its
+ *   process title);
  * - a brand-new project's first session's door reserves its browser (a
  *   record, no ports) and the machine's gate answers at once, with no wait
  *   for the agent's tick; that session's first call is answered, and only
@@ -37,7 +40,14 @@
  *
  *   bun scripts/probe-kit/run.ts browser-cutover
  */
-import { access, mkdir, rm, writeFile } from "node:fs/promises";
+import {
+  access,
+  mkdir,
+  readdir,
+  readlink,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { BrowserKey } from "../../../packages/core/src/browser";
@@ -218,14 +228,49 @@ const chromiumUnderMcp = (
   return { chromium, underMcp };
 };
 
-/** The scratch fleet's chrome-devtools-mcp processes' command lines: those under its sessiond or agent. */
-const fleetMcpLines = (procs: Procs, roots: ReadonlySet<number>): string[] =>
-  [...procs.entries()]
-    .filter(
-      ([pid, proc]) =>
-        proc.args.includes("chrome-devtools-mcp") && inFleet(procs, pid, roots)
+/**
+ * The held file of a chrome-devtools-mcp install, which every server launched
+ * from it holds open for its whole life (agent mcp-install.ts `launchArgs`):
+ * its command line shows only its process title (chrome-devtools-mcp sets
+ * `process.title`, which overwrites the arguments `ps` reads).
+ */
+const HELD_DEVTOOLS =
+  /\/fleet-mcp\/chrome-devtools-mcp@[^/]+\/\.cawco-held\.cjs$/;
+
+/** The files `pid` holds open: `/proc/<pid>/fd` on Linux, `lsof` elsewhere. */
+const openFiles = async (pid: number): Promise<string[]> => {
+  if (process.platform === "linux") {
+    const fds = await readdir(`/proc/${pid}/fd`).catch(() => [] as string[]);
+    return await Promise.all(
+      fds.map((fd) => readlink(`/proc/${pid}/fd/${fd}`).catch(() => ""))
+    );
+  }
+  const ran = await Bun.$`lsof -F n -p ${pid}`.quiet().nothrow();
+  return ran.stdout
+    .toString()
+    .split("\n")
+    .filter((line) => line.startsWith("n"))
+    .map((line) => line.slice(1));
+};
+
+/** The scratch fleet's chrome-devtools-mcp processes: those under its sessiond or agent holding an install's held file. */
+const fleetMcpPids = async (
+  procs: Procs,
+  roots: ReadonlySet<number>
+): Promise<number[]> => {
+  const inTree = [...procs.keys()].filter((pid) => inFleet(procs, pid, roots));
+  const held = await Promise.all(
+    inTree.map(async (pid) =>
+      (await openFiles(pid)).some((file) => HELD_DEVTOOLS.test(file))
+        ? pid
+        : undefined
     )
-    .map(([, proc]) => proc.args);
+  );
+  return held.filter((pid): pid is number => pid !== undefined);
+};
+
+/** What the token is carried in, which no server's arguments may hold. */
+const TOKEN_ARGS = /--wsHeaders|Bearer/;
 
 /** Whether `path` is there. */
 const exists = (path: string): Promise<boolean> =>
@@ -504,17 +549,43 @@ const run = async (kit: Kit): Promise<void> => {
       ps.underMcp.length === 0 && (host === "container" || ps.chromium >= 1),
       ps.underMcp.join("; ") || `${ps.chromium} browser process(es)`
     );
-    // npm exec and its shell carry the arguments; the server itself shows
-    // only its process title. None holds a token, and the door's config is
-    // what they name.
-    const lines = fleetMcpLines(procs, roots);
+    // What each session launched its chrome-devtools with, as its own CLI
+    // holds it (`mcpServerStatus`): its door's 0600 config file, named alone,
+    // and no token. Every chrome-devtools-mcp running in the fleet holds an
+    // install's held file, which only those launches preload: its own
+    // command line is only its process title.
+    const handed = await Promise.all(
+      [A, B, C].map(async (who) => {
+        const answer = await fleet.controlAnswer(
+          "mcpServerStatus",
+          [],
+          60_000,
+          ids[who]
+        );
+        const args =
+          (
+            (answer.result as
+              { config?: { args?: string[] }; name?: string }[] | undefined) ??
+            []
+          ).find((server) => server.name === "chrome-devtools")?.config?.args ??
+          [];
+        const config = door(who)?.config ?? "";
+        return {
+          who,
+          names: args.includes(`--config=${config}`),
+          token: args.some((arg) => TOKEN_ARGS.test(arg)),
+          mode: (await doorConfig(config)).mode,
+          args,
+        };
+      })
+    );
+    const running = await fleetMcpPids(procs, roots);
     kit.check(
-      `${host}: no chrome-devtools-mcp command line of the fleet holds a token (${lines.length} process(es), naming the door's config)`,
-      lines.some((line) => line.includes("--config=")) &&
-        lines.every(
-          (line) => !(line.includes("Bearer") || line.includes("--wsHeaders"))
-        ),
-      lines.map((line) => line.slice(0, 200)).join(" | ")
+      `${host}: each session launched chrome-devtools naming its door's 0600 config and no token (${handed.map(({ who, names, token, mode }) => `${who}: ${names ? "--config" : "no --config"}, ${token ? "TOKEN" : "no token"}, ${mode}`).join("; ")}), and each of the fleet's ${running.length} running chrome-devtools-mcp holds the install's held file those launches preload`,
+      handed.every(
+        ({ names, token, mode }) => names && !token && mode === "600"
+      ) && running.length >= 1,
+      JSON.stringify({ handed, running })
     );
     const ms = [A, B, C].map((who) => door(who)?.ms ?? Number.NaN);
     kit.check(
