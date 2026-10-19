@@ -392,9 +392,9 @@ import { workspaceRefs } from "./workspace-records";
 const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
 /**
- * How long after a heartbeat the hub's link may stay silent before it is
- * dropped as dead (the hub answers every beat). Our choice: a whole beat's
- * interval, so a hub that is slow under load is not taken for gone.
+ * How long after a ping the hub's link may stay silent before it is dropped
+ * as dead. Our choice: a whole beat's interval, so a hub that is slow under
+ * load is not taken for gone.
  */
 const HUB_SILENT_MS = 15_000;
 const USAGE_INTERVAL = Duration.seconds(60);
@@ -2710,11 +2710,55 @@ const attach = (
         onEnvelope(envelope);
       }
     });
-    // When anything last came from the hub: what the heartbeat's deadline reads.
+    // When anything last came from the hub, a frame or a pong: what the
+    // link's deadline reads.
     let lastHeard = Date.now();
     socket.addEventListener("message", (event) => {
       lastHeard = Date.now();
       line.receive(String(event.data));
+    });
+    socket.addEventListener("pong", () => {
+      lastHeard = Date.now();
+    });
+
+    // THE LINK'S DEADLINE. A socket on a network that went away (Wi-Fi, a
+    // laptop that slept) reads open and delivers nothing, for as long as the
+    // system lets it: with nothing heard {@link HUB_SILENT_MS} after a ping,
+    // it is dropped as dead, the reconnect below runs, and the outbox sends
+    // again what the hub did not take.
+    //
+    // A ping, not the heartbeat: the beat is a message, queued in this
+    // socket's outbox behind everything sent before it, and its answer in the
+    // hub's behind everything sent to this machine. While workspaces were
+    // made and landed the queues held more than 15 s of sending, and a live
+    // link was dropped as dead every minute or two (2026-10-19: "hub link
+    // silent 15100 ms after a heartbeat", each request on it failing as
+    // "Completion is unknown"). A ping is a control frame: it waits behind
+    // at most the outbox's high water in the socket's own buffer, never the
+    // queue, and the hub's server answers it as it reads, ahead of every
+    // handler (Bun's client `ping()` and `pong` event,
+    // https://bun.com/docs/runtime/http/websockets).
+    const ping = setInterval(() => {
+      if (socket.readyState !== WebSocket.OPEN) {
+        return;
+      }
+      const asked = Date.now();
+      (socket as WebSocket & { ping: () => void }).ping();
+      setTimeout(() => {
+        if (lastHeard >= asked || socket.readyState !== WebSocket.OPEN) {
+          return;
+        }
+        Effect.runFork(
+          Effect.logWarning(
+            `hub link silent ${Date.now() - asked} ms after a ping: dropping it as dead`
+          )
+        );
+        // Not `close()`: its handshake waits on the peer that went silent.
+        (socket as WebSocket & { terminate: () => void }).terminate();
+      }, HUB_SILENT_MS);
+    }, Duration.toMillis(HEARTBEAT_INTERVAL));
+    socket.addEventListener("close", () => clearInterval(ping), {
+      once: true,
     });
 
     yield* Effect.forkScoped(
@@ -2747,25 +2791,6 @@ const attach = (
             machineId: identity.machineId,
             payload: beat,
           });
-          // THE LINK'S DEADLINE. The hub answers every beat. A socket on a
-          // network that went away (Wi-Fi, a laptop that slept) reads open
-          // and delivers nothing, for as long as the system lets it: with
-          // nothing heard {@link HUB_SILENT_MS} after a beat, it is dropped
-          // as dead, the reconnect below runs, and the outbox sends again
-          // what the hub did not take.
-          const asked = Date.now();
-          setTimeout(() => {
-            if (lastHeard >= asked || socket.readyState !== WebSocket.OPEN) {
-              return;
-            }
-            Effect.runFork(
-              Effect.logWarning(
-                `hub link silent ${Date.now() - asked} ms after a heartbeat: dropping it as dead`
-              )
-            );
-            // Not `close()`: its handshake waits on the peer that went silent.
-            (socket as WebSocket & { terminate: () => void }).terminate();
-          }, HUB_SILENT_MS);
         }),
         Schedule.spaced(HEARTBEAT_INTERVAL)
       )

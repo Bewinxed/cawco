@@ -21,9 +21,10 @@
  * the socket to drain. Nothing is dropped: Bun's server `send()` drops a frame
  * outright (returns 0) once its socket has 16 MB buffered
  * (`backpressureLimit`; oven-sh/bun#44520), which lost every frame behind a
- * large one. A socket that owes more than {@link WIRE_MESSAGE_LIMIT_BYTES} is
- * a peer that is not reading: it is closed, and its peer reconnects and reads
- * its state afresh.
+ * large one. A socket that takes nothing for {@link WIRE_STALL_MS} while
+ * frames wait is a peer that is not reading: it is closed, and its peer
+ * reconnects and reads its state afresh. A peer that reads, however far
+ * behind, keeps its socket.
  *
  * Browser-safe: no Node or Bun imports.
  */
@@ -55,12 +56,26 @@ export const WIRE_FRAME_LIMIT_BYTES = 4 * 1024 * 1024;
 export const WIRE_PART_CHARS = 1024 * 1024;
 
 /**
- * The largest message the wire carries, assembled, and the most a socket's
- * outbox may owe. Our choice: above the largest message the fleet sends (a
- * long session's transcript, tens of MB), with room for an outlier; a peer
- * that falls this far behind is not reading.
+ * The largest message the wire carries, assembled. Our choice: above the
+ * largest message the fleet sends (a long session's transcript, tens of MB),
+ * with room for an outlier.
  */
 export const WIRE_MESSAGE_LIMIT_BYTES = 512 * 1024 * 1024;
+
+/**
+ * How long a socket may take nothing while frames wait for it before its
+ * peer is taken for one that is not reading, and the socket is closed.
+ *
+ * Progress, not volume. The bound was 512 MB owed, and it closed links whose
+ * peer was reading all along: a machine making and landing workspaces queued
+ * more than that on its link to the hub, and the link was closed mid-request
+ * (2026-10-19, "fell behind: 873788113 bytes owed, reconnect"; every request
+ * on it failed as "Completion is unknown"). Our choice: four times the
+ * agent's 15 s ping deadline, so a live peer whose loop is busy is never
+ * taken for gone, and a tab or phone that stopped reading is closed within
+ * a minute.
+ */
+export const WIRE_STALL_MS = 60_000;
 
 /**
  * The marker a client puts on its socket's URL to say it reads parts:
@@ -92,8 +107,12 @@ export interface WirePart {
 let nextId = 0;
 const runId = Math.random().toString(36).slice(2, 10);
 
-/** A frame cut from a message: the text after it, and whether it is the message's last. */
+/**
+ * A frame cut from a message: the text after it, how many characters of the
+ * message's JSON it carries, and whether it is the message's last.
+ */
 interface Cut {
+  carried: number;
   done: boolean;
   frame: string;
   rest: string;
@@ -159,7 +178,12 @@ class Outgoing {
         state.written &&
         this.#buffer.length <= WIRE_PART_CHARS)
     ) {
-      this.#cut = { frame: this.#buffer, rest: "", done: true };
+      this.#cut = {
+        frame: this.#buffer,
+        rest: "",
+        done: true,
+        carried: this.#buffer.length,
+      };
       return this.#buffer;
     }
     if (!state.id) {
@@ -173,7 +197,7 @@ class Outgoing {
       part: { id: state.id, seq: this.#seq, last: done },
       text: this.#buffer.slice(0, end),
     };
-    this.#cut = { frame: JSON.stringify(part), rest, done };
+    this.#cut = { frame: JSON.stringify(part), rest, done, carried: end };
     return this.#cut.frame;
   }
 
@@ -183,9 +207,9 @@ class Outgoing {
     this.#buffer = cut.rest;
     this.#seq += 1;
     this.#cut = undefined;
-    this.owed = cut.done
-      ? 0
-      : Math.max(0, this.owed - (cut.frame.length - cut.rest.length));
+    // Less what the frame carried: never more than before, however large
+    // the piece the message's JSON was written in.
+    this.owed = cut.done ? 0 : Math.max(0, this.owed - cut.carried);
     return cut.done;
   }
 }
@@ -349,16 +373,23 @@ export class Inbox {
 export interface OutboxTransport {
   /** Bytes the socket holds unwritten. */
   buffered: () => number;
-  /** Closes the socket because its peer has fallen too far behind. */
-  overflow: (owed: number) => void;
   /**
    * How long to wait before looking again at a socket that backs up, for a
    * socket with no drain event (a client `WebSocket`); absent where the
    * owner calls {@link Outbox.drained} on the socket's own drain.
    */
   pollMs?: number;
+  /**
+   * Closes the socket because its peer has taken nothing for
+   * {@link WIRE_STALL_MS} while `owed` characters waited for it.
+   */
+  stalled: (owed: number) => void;
   write: (frame: string) => "sent" | "buffered" | "dropped";
 }
+
+/** A stalled socket's close reason, under a close frame's 123 bytes. */
+const stalledReason = (owed: number): string =>
+  `not reading: nothing taken for ${WIRE_STALL_MS / 1000} s, ${owed} bytes owed, reconnect`;
 
 /** What of Bun's `ServerWebSocket` an outbox uses. */
 export interface ServerSocketLike {
@@ -385,8 +416,7 @@ export const serverTransport = (
     }
     return status === -1 ? "buffered" : "dropped";
   },
-  overflow: (owed) =>
-    raw.close(1013, `fell behind: ${owed} bytes owed, reconnect`),
+  stalled: (owed) => raw.close(1013, stalledReason(owed)),
 });
 
 /**
@@ -403,8 +433,7 @@ export const clientTransport = (socket: WebSocket): OutboxTransport => ({
     socket.send(frame);
     return "sent";
   },
-  overflow: (owed) =>
-    socket.close(4013, `fell behind: ${owed} bytes owed, reconnect`),
+  stalled: (owed) => socket.close(4013, stalledReason(owed)),
 });
 
 /** A client's side of one socket: its outbox, its inbox and its assembler. */
@@ -481,6 +510,16 @@ export class Outbox {
   #head = 0;
   #owed = 0;
   /**
+   * The stall clock ({@link WIRE_STALL_MS}): when the socket last took
+   * something (a frame, a drain, its buffer going down), the buffer as last
+   * read, and the look armed while the outbox waits.
+   */
+  readonly #stall: {
+    buffered: number;
+    look: ReturnType<typeof setTimeout> | undefined;
+    progressAt: number;
+  } = { progressAt: Date.now(), buffered: 0, look: undefined };
+  /**
    * `waiting`: on the socket to drain. `scheduled`: to go on in the next turn.
    * `closed`: the socket is gone. An object, so each method reads it as it is.
    */
@@ -500,11 +539,9 @@ export class Outbox {
 
   /**
    * Queues a message, written as JSON and cut into frames as it goes out. It
-   * is counted against the bound by its size up to a part's worth
-   * ({@link jsonSizeEstimate}, which walks no further): a peer that stops
-   * reading is closed once it owes that many messages' worth, and one large
-   * message in flight is counted as a part, its text written only as the
-   * socket takes it.
+   * is counted in what the outbox owes by its size up to a part's worth
+   * ({@link jsonSizeEstimate}, which walks no further): one large message in
+   * flight is counted as a part, its text written only as the socket takes it.
    */
   send(value: unknown): void {
     this.#enqueue(
@@ -535,12 +572,6 @@ export class Outbox {
     }
     this.#queue.push(outgoing);
     this.#owed += outgoing.owed;
-    if (this.#owed > WIRE_MESSAGE_LIMIT_BYTES) {
-      const owed = this.#owed;
-      this.close();
-      this.#to.overflow(owed);
-      return;
-    }
     if (!(this.#flags.waiting || this.#flags.scheduled)) {
       this.#pump();
     }
@@ -548,6 +579,7 @@ export class Outbox {
 
   /** The socket drained: what waits goes on. */
   drained(): void {
+    this.#stall.progressAt = Date.now();
     if (this.#flags.waiting) {
       this.#flags.waiting = false;
       this.#pump();
@@ -565,10 +597,42 @@ export class Outbox {
     this.#queue = [];
     this.#head = 0;
     this.#owed = 0;
+    clearTimeout(this.#stall.look);
+    this.#stall.look = undefined;
+  }
+
+  /**
+   * Arms the stall clock's look, once per wait: a socket that took nothing
+   * for {@link WIRE_STALL_MS} while frames waited is closed.
+   */
+  #watchStall(after: number): void {
+    if (this.#stall.look !== undefined) {
+      return;
+    }
+    this.#stall.buffered = this.#to.buffered();
+    this.#stall.look = setTimeout(() => {
+      this.#stall.look = undefined;
+      if (this.#flags.closed || !this.#flags.waiting) {
+        return;
+      }
+      const buffered = this.#to.buffered();
+      if (buffered < this.#stall.buffered) {
+        this.#stall.progressAt = Date.now();
+      }
+      const still = Date.now() - this.#stall.progressAt;
+      if (still < WIRE_STALL_MS) {
+        this.#watchStall(WIRE_STALL_MS - still);
+        return;
+      }
+      const owed = this.#owed;
+      this.close();
+      this.#to.stalled(owed);
+    }, after);
   }
 
   #wait(): void {
     this.#flags.waiting = true;
+    this.#watchStall(WIRE_STALL_MS);
     const { pollMs } = this.#to;
     if (pollMs !== undefined) {
       setTimeout(() => {
@@ -606,6 +670,7 @@ export class Outbox {
         this.#wait();
         return;
       }
+      this.#stall.progressAt = Date.now();
       const before = outgoing.owed;
       const done = outgoing.taken();
       this.#owed -= before - outgoing.owed;
