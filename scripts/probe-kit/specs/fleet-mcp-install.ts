@@ -9,7 +9,8 @@
  * would wait on it, in the agent's npm cache and in the one every workspace
  * shares (core paths.ts `workspaceCacheEnv`):
  *
- * - control: `npx -y chrome-devtools-mcp@<old> --version` with that cache
+ * - control: `npm exec --yes -- chrome-devtools-mcp@<old> --version` (npx's
+ *   own code, through npm's own npm, never a Bun alias) with that cache
  *   says nothing for {@link CONTROL_MS} (npm's with-lock.js waits until the
  *   lock is 60 s old);
  * - the fleet's chrome-devtools at <old>: the entry the sync sets for
@@ -32,6 +33,7 @@ import { createHash } from "node:crypto";
 import { existsSync } from "node:fs";
 import { mkdir, readFile, utimes } from "node:fs/promises";
 import { basename, join } from "node:path";
+import { resolveBin, toolPath } from "../../../packages/agent/src/tools";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { type Reply, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -90,10 +92,17 @@ const run = async (kit: Kit): Promise<void> => {
   await fleet.accountSignedIn();
   const home = fleet.env.HOME as string;
 
+  // npm as the product finds it (tools.ts `resolveBin`: npm's own, never a
+  // Bun alias ahead of it), for the cache it uses and the control below.
+  const npm = resolveBin("npm");
+  if (!npm) {
+    kit.check("npm's own npm is on this machine's PATH", false, toolPath());
+    return;
+  }
   // The caches a leftover lock can sit in: the agent's own npm's, and the
   // one every workspace's commands share.
   const agentCache = (
-    await Bun.$`npm config get cache`.env(fleet.env).quiet().text()
+    await Bun.$`${npm} config get cache`.env(fleet.env).quiet().text()
   ).trim();
   const caches = [agentCache, join(home, ".cawco", "workspace-cache", "npm")];
   /** A fresh lock, as a SIGKILLed npx leaves it, for each version in each cache. */
@@ -114,19 +123,27 @@ const run = async (kit: Kit): Promise<void> => {
   };
 
   const locks = await leaveLocks();
-  // Control: npx itself, behind the lock, never finishes in the time given.
+  // Control: npm's own exec, behind the lock, never finishes in the time
+  // given. `npm exec --yes --` is libnpmexec, the code `npx -y` runs, with
+  // its lock in the same `_npx/<hash>` dir; npm is the one the product
+  // installs with (tools.ts `resolveBin`), never a Bun alias ahead of it,
+  // which on a Mac's PATH an `npx` can be ("Bun is a fast JavaScript
+  // runtime…").
   const control = await readWithin(CONTROL_MS, async (signal) => {
-    const npx = Bun.spawn(["npx", "-y", `${PACKAGE}@${OLD}`, "--version"], {
-      env: { ...fleet.env, npm_config_cache: caches[1] as string },
-      stdout: "pipe",
-      stderr: "pipe",
-      signal,
-      killSignal: "SIGKILL",
-    });
+    const npx = Bun.spawn(
+      [npm, "exec", "--yes", "--", `${PACKAGE}@${OLD}`, "--version"],
+      {
+        env: { ...fleet.env, npm_config_cache: caches[1] as string },
+        stdout: "pipe",
+        stderr: "pipe",
+        signal,
+        killSignal: "SIGKILL",
+      }
+    );
     return `${await new Response(npx.stdout).text()}${await new Response(npx.stderr).text()}`;
   });
   kit.check(
-    `control: npx -y ${PACKAGE}@${OLD} --version with the lock left in the shared cache had not answered after ${CONTROL_MS / 1000} s`,
+    `control: npm exec --yes -- ${PACKAGE}@${OLD} --version (${npm}) with the lock left in the shared cache had not answered after ${CONTROL_MS / 1000} s`,
     control.kind === "unanswered",
     JSON.stringify(control)
   );

@@ -53,10 +53,16 @@ export const writeJson = (path: string, value: unknown): Promise<void> =>
 
 /** What this harness's fleet directory was last synced to, by skill hash. */
 export interface FleetSidecar {
+  /** OpenCode: the fleet's "CawCo's to-dos" choice as the last sync heard it, which CawCo's servers launch under. */
+  cawcoTodos?: true;
   /** MCP server names this harness wrote; only these are ever taken back. */
   mcp?: string[];
   memory?: string;
-  /** OpenCode: CawCo set `agent.plan.disable` for "CawCo's to-dos", so only CawCo takes it back. */
+  /**
+   * OpenCode: CawCo once set `agents.plan.disabled` in the person's
+   * `opencode.json` for "CawCo's to-dos", which only CawCo takes back out:
+   * held until its cleanup has.
+   */
   planAgentDisabled?: true;
   skills: Record<string, string>;
 }
@@ -67,6 +73,7 @@ export const readSidecar = async (path: string): Promise<FleetSidecar> => {
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),
     ...(stored?.planAgentDisabled ? { planAgentDisabled: true as const } : {}),
+    ...(stored?.cawcoTodos ? { cawcoTodos: true as const } : {}),
     mcp: stored?.mcp ?? [],
   };
 };

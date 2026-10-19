@@ -24,7 +24,10 @@
  *   server in OpenCode's file) is gone after the first sync: Claude Code's
  *   `~/.claude.json` and the account's, OpenCode's `opencode.json` and pi's
  *   `mcp.json` hold `his` and nothing of CawCo's, and the old sidecar and the
- *   sidecar's list of what it wrote are gone.
+ *   sidecar's list of what it wrote are gone;
+ * - with the fleet's "CawCo's to-dos" on, the OpenCode server CawCo's session
+ *   runs on lists no plan agent and lists his own, and his `opencode.json`
+ *   holds his agent and not the plan agent's `disabled` CawCo once wrote.
  *
  * Runs inside a workspace or on the host alike: it delegates nothing.
  *
@@ -32,6 +35,10 @@
  */
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import {
+  at,
+  opencodeClient,
+} from "../../../packages/agent/src/harnesses/opencode-client";
 import {
   CLAUDE_DIR_NAME,
   CLAUDE_JSON_NAME,
@@ -47,6 +54,10 @@ import type { Kit, Spec } from "../kit";
 
 const FLEET = "probefleet";
 const HIS = "his";
+/** His own OpenCode agent, beside the plan agent. */
+const HIS_AGENT = "hisagent";
+/** The machine's OpenCode generation record (agent opencode-server.ts `recordStem`), not an account's. */
+const SERVER_RECORD = /^opencode-server-[0-9a-f]{16}\.json$/;
 const FIXTURE = join(import.meta.dir, "../fixtures/shared-mcp-server.ts");
 const HARNESSES: Harness[] = ["claude", "opencode", "pi"];
 const TAG = /PROBE-PARITY-([A-Z]+)-(\d+): (fleet|his)/g;
@@ -174,6 +185,33 @@ const readJson = async (path: string): Promise<Record<string, unknown>> =>
     unknown
   >;
 
+/**
+ * The agents the machine's OpenCode server has in `directory`, as its own
+ * API lists them: the server and its password from the generation record
+ * the agent keeps in `home`. None when there is no record.
+ */
+const opencodeAgents = async (
+  home: string,
+  directory: string
+): Promise<string[]> => {
+  const file = (await readdir(join(home, ".cawco"))).find((name) =>
+    SERVER_RECORD.test(name)
+  );
+  const record = file
+    ? ((await readJson(join(home, ".cawco", file))) as {
+        active?: { password?: string; url?: string };
+      })
+    : {};
+  if (!record.active?.url) {
+    return [];
+  }
+  const listed = await opencodeClient({
+    url: record.active.url,
+    password: record.active.password ?? "",
+  }).agent.list(at(directory));
+  return listed.data.map((agent) => agent.id);
+};
+
 interface Row {
   mcp?: Record<string, { detail?: string; state?: string }>;
   mcpByHarness?: Record<string, Record<string, { state?: string }> | undefined>;
@@ -258,7 +296,17 @@ const run = async (kit: Kit): Promise<void> => {
           cawco: { type: "remote", url: "http://127.0.0.1:9/mcp/cawco" },
         },
       },
+      // His own agent, and the plan agent's `disabled` CawCo once wrote
+      // here for "CawCo's to-dos" (its sidecar below says so).
+      agents: {
+        [HIS_AGENT]: { description: "his own agent", system: "his" },
+        plan: { disabled: true },
+      },
     })
+  );
+  await writeFile(
+    join(home, ".config", "opencode", "cawco-fleet.json"),
+    JSON.stringify({ skills: {}, mcp: [], planAgentDisabled: true })
   );
   await writeFile(
     piJson,
@@ -291,6 +339,14 @@ const run = async (kit: Kit): Promise<void> => {
   // machine runs this build for the first time: that sync's cleanup knows
   // the fleet's names.
   kit.check(`the fleet runs ${FLEET}`, await put(pids("fleet1")));
+  // The fleet's "CawCo's to-dos" choice on: CawCo's OpenCode sessions run
+  // with no plan agent, and his own `opencode` keeps his.
+  const todos = await fetch(`${fleet.base}/api/fleet/choices`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({ todos: true }),
+  });
+  kit.check("the fleet's CawCo's to-dos is on", todos.ok, String(todos.status));
   fleet.launch("agent");
   await fleet.agentUp();
   await fleet.accountSignedIn();
@@ -353,6 +409,22 @@ const run = async (kit: Kit): Promise<void> => {
       JSON.stringify({ answered: first[harness], fleetPids })
     );
   }
+
+  // The agents the OpenCode server CawCo's session runs on has in its
+  // folder, as OpenCode's own API lists them (the machine's generation
+  // record names the server and its password).
+  // A location answers an empty list until it has loaded its config.
+  const agents = await until(
+    "the OpenCode server lists its agents",
+    () => opencodeAgents(home, fleet.workdir),
+    (listed) => listed.length > 0,
+    60_000
+  ).catch(() => [] as string[]);
+  kit.check(
+    `opencode: with CawCo's to-dos on, the server CawCo's session runs on has no plan agent and has his ${HIS_AGENT} (${agents.join(", ")})`,
+    agents.length > 0 && !agents.includes("plan") && agents.includes(HIS_AGENT),
+    JSON.stringify({ agents })
+  );
 
   const his = await askAll("his");
   for (const harness of HARNESSES) {
@@ -493,6 +565,14 @@ const run = async (kit: Kit): Promise<void> => {
       await readFile(path, "utf8").catch(() => "(missing)")
     );
   }
+  const hisAgents = Object.keys(
+    ((await readJson(opencodeJson)).agents as object | undefined) ?? {}
+  );
+  kit.check(
+    `OpenCode's opencode.json holds his own agents and none CawCo wrote: ${hisAgents.join(", ")}`,
+    hisAgents.length === 1 && hisAgents[0] === HIS_AGENT,
+    JSON.stringify((await readJson(opencodeJson)).agents)
+  );
   const placed = (
     (await readJson(claudeJson)).projects as
       Record<string, { mcpServers?: object }> | undefined
