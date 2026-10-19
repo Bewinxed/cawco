@@ -11,14 +11,26 @@
  * IntersectionObserver rooted on the scroller watches each run of words
  * (an element holding words of its own) and each mark, at the thresholds 0
  * and 1, so it says when one comes to stand partly inside, an edge across
- * it, and when it stops. Those few are the only candidates. A frame reads
- * the scroller's box and the candidates' line boxes, then writes the two
- * caps: reads before writes, nothing else read. The tree is walked for runs
- * and marks only when the list's own nodes change, never on a scroll. After
- * such a change (a row arriving, a fold opening), while motion of a set
- * length runs in the list, a frame reads again until it ends: a transform
- * moves a line past an edge without a scroll, a resize or a mutation to say
- * so. A scroll's frames never ask after the list's motion.
+ * it, and when it stops. Those few are the only candidates, read again on
+ * each scroll, each resize and each crossing.
+ *
+ * What it watches is kept from what changed: the MutationObserver's records
+ * name the nodes that came, went or were reworded, and only those are
+ * looked at again, never the whole list.
+ *
+ * A run of motion (a row's slide, a fold's height) moves lines with no
+ * scroll to say so, and where it leaves them is read when it ends: a CSS
+ * transition or animation says so itself, its end event rising to the
+ * list; a script's run (a component's transition, a list's reflow) starts
+ * with the list's nodes or a fold's state changing, so the next frame after
+ * such a change asks the list once for its runs and each says when it ends
+ * through its `finished`. No frame is read only because something moves:
+ * between a run's start and its end, the crossings it makes are read as
+ * they happen.
+ *
+ * Every capped list on the page is read in one frame and then written,
+ * reads before writes, so one list's caps never force the next list's
+ * style.
  */
 import type { Attachment } from "svelte/attachments";
 
@@ -26,6 +38,12 @@ import type { Attachment } from "svelte/attachments";
 interface Reach {
   end: number;
   start: number;
+}
+
+/** A capped list, as the page's one frame reads and then writes it. */
+interface Capped {
+  read: () => void;
+  write: () => void;
 }
 
 /**
@@ -42,6 +60,17 @@ const MARKS =
  * its ink, and a fade across it would wash a whole line out.
  */
 const SLACK = 1;
+
+/** A word's worth of text: anything but space. */
+const WORD = /\S/;
+
+/** The end of a CSS run, rising from the element it ran on. */
+const ENDS = [
+  "animationcancel",
+  "animationend",
+  "transitioncancel",
+  "transitionend",
+] as const;
 
 /** Whether an edge of `box` cuts the run from `top` to `bottom`. */
 const crosses = (box: DOMRect, top: number, bottom: number): boolean =>
@@ -66,21 +95,25 @@ function cut(reach: Reach, box: DOMRect, top: number, bottom: number): void {
 }
 
 /** Whether `el` holds words of its own, not only in its children. */
-const holdsWords = (el: Element): boolean =>
-  [...el.childNodes].some(
-    (child) => child.nodeType === Node.TEXT_NODE && !!child.textContent?.trim()
-  );
-
-/** Each run of words and each mark in `node`: what an edge can cut. */
-function cuttable(node: HTMLElement): Set<Element> {
-  const found = new Set<Element>(node.querySelectorAll(MARKS));
-  const walker = document.createTreeWalker(node, NodeFilter.SHOW_ELEMENT);
-  for (let el = walker.nextNode(); el; el = walker.nextNode()) {
-    if (holdsWords(el as Element)) {
-      found.add(el as Element);
+function holdsWords(el: Element): boolean {
+  for (let child = el.firstChild; child; child = child.nextSibling) {
+    if (child.nodeType === Node.TEXT_NODE && WORD.test((child as Text).data)) {
+      return true;
     }
   }
-  return found;
+  return false;
+}
+
+/** What an edge can cut: a run of words or a mark. */
+const cuttable = (el: Element): boolean => holdsWords(el) || el.matches(MARKS);
+
+/** `root` and every element under it. */
+function eachUnder(root: Element, visit: (el: Element) => void): void {
+  visit(root);
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_ELEMENT);
+  for (let el = walker.nextNode(); el; el = walker.nextNode()) {
+    visit(el as Element);
+  }
 }
 
 /** Takes in what `el` shows that an edge of `box` cuts: each of its lines of words, or its box as a mark. */
@@ -93,7 +126,7 @@ function cutOf(el: Element, box: DOMRect, reach: Reach, range: Range): void {
     cut(reach, box, held.top, held.bottom);
     return;
   }
-  for (const child of el.childNodes) {
+  for (let child = el.firstChild; child; child = child.nextSibling) {
     if (child.nodeType !== Node.TEXT_NODE) {
       continue;
     }
@@ -106,63 +139,123 @@ function cutOf(el: Element, box: DOMRect, reach: Reach, range: Range): void {
   }
 }
 
-/** Motion of a set length running in `node` on the page's clock: what moves a line without a scroll. */
-const moving = (node: HTMLElement): boolean =>
-  node.getAnimations({ subtree: true }).some((run) => {
-    const end = run.effect?.getComputedTiming().endTime;
-    return (
-      run.playState === "running" &&
-      run.timeline === document.timeline &&
-      typeof end === "number" &&
-      Number.isFinite(end)
-    );
-  });
+/** A run of a set length on the page's clock: one that ends, and leaves its lines where they will stand. */
+function ends(run: Animation): boolean {
+  const end = run.effect?.getComputedTiming().endTime;
+  return (
+    run.timeline === document.timeline &&
+    typeof end === "number" &&
+    Number.isFinite(end)
+  );
+}
 
-export const capEdgeFades: Attachment<HTMLElement> = (node) => {
-  let frame = 0;
-  let scan = 0;
-  /** The list's nodes changed: motion may have started with them, so frames read on until it ends. A scroll never asks. */
-  let follow = false;
-  const written = { start: "", end: "" };
-  /** What stands partly inside the scroller now, an edge across it. */
-  const partly = new Set<Element>();
-  let watched = new Set<Element>();
-
-  const write = (edge: keyof Reach, drawnPx: number, scale: number) => {
-    const value = `${Math.floor(drawnPx / scale)}px`;
-    if (written[edge] !== value) {
-      written[edge] = value;
-      node.style.setProperty(`--fade-cap-${edge}`, value);
+/**
+ * Takes in what the records changed: each node that came or went, and all
+ * under it, as it stands now (a node moved within the list is gone from one
+ * record and come in another, and stays watched either way), and each
+ * element whose own words came, went or were reworded. Says whether the
+ * list's nodes or a fold's state changed, which a script's run may move.
+ */
+function takeIn(
+  records: MutationRecord[],
+  recheck: (el: Element | null) => void
+): boolean {
+  let nodes = false;
+  for (const record of records) {
+    if (record.type === "characterData") {
+      recheck(record.target.parentElement);
+      continue;
     }
-  };
-  const measure = () => {
-    frame = 0;
-    const box = node.getBoundingClientRect();
-    if (box.height === 0) {
-      return;
-    }
-    // In layout pixels: a canvas or a zoomed page draws the box scaled.
-    const scale = box.height / (node.offsetHeight || box.height);
-    const reach: Reach = { start: 0, end: 0 };
-    const range = document.createRange();
-    for (const el of partly) {
-      cutOf(el, box, reach, range);
-    }
-    write("start", reach.start, scale);
-    write("end", reach.end, scale);
-    if (follow) {
-      follow = moving(node);
-      if (follow) {
-        later();
+    nodes = true;
+    if (record.type === "childList") {
+      for (const one of [...record.removedNodes, ...record.addedNodes]) {
+        if (one instanceof Element) {
+          eachUnder(one, recheck);
+        }
       }
-    }
-  };
-  function later(): void {
-    if (!frame) {
-      frame = requestAnimationFrame(measure);
+      recheck(record.target instanceof Element ? record.target : null);
     }
   }
+  return nodes;
+}
 
+/** The lists the next frame reads, then writes. */
+const due = new Set<Capped>();
+let frame = 0;
+
+function flush(): void {
+  frame = 0;
+  const now = [...due];
+  due.clear();
+  for (const one of now) {
+    one.read();
+  }
+  for (const one of now) {
+    one.write();
+  }
+}
+
+/** Asks the next frame to read `one` again. */
+function ask(one: Capped): void {
+  due.add(one);
+  if (!frame) {
+    frame = requestAnimationFrame(flush);
+  }
+}
+
+export const capEdgeFades: Attachment<HTMLElement> = (node) => {
+  const written = { start: "", end: "" };
+  const next = { start: "", end: "" };
+  /** What stands partly inside the scroller now, an edge across it. */
+  const partly = new Set<Element>();
+  /** Every run of words and mark in the list, each observed. */
+  const watched = new Set<Element>();
+  /** The runs whose end is already awaited. */
+  const awaited = new WeakSet<Animation>();
+  /** The list's nodes or a fold changed: the next frame asks the list for its runs. */
+  let stirred = false;
+  /** Attached: a run ending after the list is gone asks no frame. */
+  let live = true;
+  const again = () => {
+    if (live) {
+      ask(self);
+    }
+  };
+
+  const self: Capped = {
+    read() {
+      if (stirred) {
+        stirred = false;
+        for (const run of node.getAnimations({ subtree: true })) {
+          if (!awaited.has(run) && ends(run)) {
+            awaited.add(run);
+            run.finished.then(again, again);
+          }
+        }
+      }
+      const box = node.getBoundingClientRect();
+      if (box.height === 0) {
+        return;
+      }
+      // In layout pixels: a canvas or a zoomed page draws the box scaled.
+      const scale = box.height / (node.offsetHeight || box.height);
+      const reach: Reach = { start: 0, end: 0 };
+      const range = document.createRange();
+      for (const el of partly) {
+        cutOf(el, box, reach, range);
+      }
+      next.start = `${Math.floor(reach.start / scale)}px`;
+      next.end = `${Math.floor(reach.end / scale)}px`;
+    },
+    write() {
+      for (const edge of ["start", "end"] as const) {
+        if (next[edge] && written[edge] !== next[edge]) {
+          written[edge] = next[edge];
+          node.style.setProperty(`--fade-cap-${edge}`, next[edge]);
+        }
+      }
+    },
+  };
   const seen = new IntersectionObserver(
     (entries) => {
       for (const entry of entries) {
@@ -172,33 +265,30 @@ export const capEdgeFades: Attachment<HTMLElement> = (node) => {
           partly.delete(entry.target);
         }
       }
-      later();
+      again();
     },
     { root: node, threshold: [0, 1] }
   );
-  /** The runs and marks watched: the list's own, as its nodes now stand. */
-  const watch = () => {
-    scan = 0;
-    const now = cuttable(node);
-    for (const el of watched) {
-      if (!now.has(el)) {
-        seen.unobserve(el);
-        partly.delete(el);
-      }
+  /** Watches `el` while it lies in the list and is a run or a mark, and lets it go when not. */
+  const recheck = (el: Element | null) => {
+    if (!el || el === node) {
+      return;
     }
-    for (const el of now) {
+    if (node.contains(el) && cuttable(el)) {
       if (!watched.has(el)) {
+        watched.add(el);
         seen.observe(el);
       }
+    } else if (watched.delete(el)) {
+      seen.unobserve(el);
+      partly.delete(el);
     }
-    watched = now;
-    follow = true;
-    later();
   };
-  const changes = new MutationObserver(() => {
-    if (!scan) {
-      scan = requestAnimationFrame(watch);
+  const changes = new MutationObserver((records) => {
+    if (takeIn(records, recheck)) {
+      stirred = true;
     }
+    again();
   });
   // A fold opening or shutting moves the lines under it on its own clock.
   changes.observe(node, {
@@ -207,18 +297,26 @@ export const capEdgeFades: Attachment<HTMLElement> = (node) => {
     childList: true,
     subtree: true,
   });
+  for (const type of ENDS) {
+    node.addEventListener(type, again);
+  }
   // A scroll or a resize moves the candidates across their edge; the
   // observer adds and drops candidates as runs cross the thresholds.
-  const sizes = new ResizeObserver(later);
+  const sizes = new ResizeObserver(again);
   sizes.observe(node);
-  node.addEventListener("scroll", later, { passive: true });
-  watch();
+  node.addEventListener("scroll", again, { passive: true });
+  eachUnder(node, recheck);
+  stirred = true;
+  again();
   return () => {
-    cancelAnimationFrame(frame);
-    cancelAnimationFrame(scan);
+    live = false;
+    due.delete(self);
     seen.disconnect();
     changes.disconnect();
     sizes.disconnect();
-    node.removeEventListener("scroll", later);
+    for (const type of ENDS) {
+      node.removeEventListener(type, again);
+    }
+    node.removeEventListener("scroll", again);
   };
 };
