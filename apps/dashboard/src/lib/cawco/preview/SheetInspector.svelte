@@ -41,6 +41,7 @@
     NativeSelect,
     NativeSelectOption,
   } from "#lib/components/ui/native-select/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Switch } from "#lib/components/ui/switch/index.js";
   import {
     IconArrowDown,
@@ -191,22 +192,18 @@
     value === undefined || value === null ? "" : String(value);
 </script>
 
-<!-- literal: auto 1fr auto, 60%, 40% -->
 <aside
   data-sheet={layout === "sheet" || undefined}
   aria-label="Inspector"
-  class="absolute inset-y-0 end-0 z-2 grid grid-rows-(--insp-rows) w-c-sheet-inspector-w max-w-full border-s border-s-border-hairline bg-surface-raised data-sheet:top-auto data-sheet:bottom-0 data-sheet:inset-x-0 data-sheet:w-auto data-sheet:max-h-(--sheet-max) data-sheet:border-s-none data-sheet:border-t data-sheet:border-t-border-hairline data-sheet:rounded-ss-lg data-sheet:rounded-se-lg data-sheet:shadow-drawer"
+  class="absolute inset-y-0 end-0 z-2 flex flex-col w-c-sheet-inspector-w max-w-full border-s border-s-border-hairline bg-surface-raised data-sheet:top-auto data-sheet:bottom-0 data-sheet:inset-x-0 data-sheet:w-auto data-sheet:max-h-3/5 data-sheet:border-s-none data-sheet:border-t data-sheet:border-t-border-hairline data-sheet:rounded-ss-lg data-sheet:rounded-se-lg data-sheet:shadow-drawer"
   data-inspector={layout}
-  style:--insp-rows="auto 1fr auto"
-  style:--sheet-max="60%"
-  style:--skeleton-w="40%"
   style:--foot-pb="calc(var(--space-2) + env(safe-area-inset-bottom, 0px))"
   in:slide={{ leaving: false }}
   out:slide={{ leaving: true }}
 >
   <header
     data-slot="head"
-    class="flex items-center gap-space-2 min-h-c-sheet-inspector-head-h ps-space-4 pe-space-2 border-b border-b-border-hairline"
+    class="flex flex-none items-center gap-space-2 min-h-c-sheet-inspector-head-h ps-space-4 pe-space-2 border-b border-b-border-hairline"
   >
     <h2 data-slot="title" class="flex-1 m-0 text-ink-strong type-label">
       {words.inspect}
@@ -223,7 +220,7 @@
   </header>
 
   <div
-    class="grid content-box-start gap-space-3 min-h-0 overflow-auto px-space-4 py-space-3"
+    class="grid content-box-start gap-space-3 flex-1 min-h-0 overflow-auto px-space-4 py-space-3"
   >
     {#if !sheet}
       <!-- The rows' own size while the page reads the sheet's props. -->
@@ -233,11 +230,8 @@
         role="status"
       >
         {#each [0, 1, 2] as row (row)}
-          <span
-            class="kit-skeleton block w-(--skeleton-w) h-(--text-label) rounded-xs"
-          ></span>
-          <span class="kit-skeleton block h-c-input-h mb-space-2 rounded-md"
-          ></span>
+          <Skeleton class="w-2/5 h-(--text-label)" radius="text" />
+          <Skeleton class="h-c-input-h mb-space-2" radius="tile" />
         {/each}
       </div>
     {:else if sheet.stories.length === 0}
@@ -488,7 +482,7 @@
   </div>
 
   <footer
-    class="grid gap-space-2 px-space-3 pt-space-2 pb-(--foot-pb) border-t border-t-border-hairline"
+    class="grid flex-none gap-space-2 px-space-3 pt-space-2 pb-(--foot-pb) border-t border-t-border-hairline"
   >
     {#if inspector.problem}
       <p class="m-0 text-data-bad type-meta" role="alert">

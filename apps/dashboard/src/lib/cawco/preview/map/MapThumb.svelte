@@ -35,7 +35,7 @@
   <svg
     data-slot="map-thumb"
     aria-label={`${name}'s frames as last drawn: ${said}`}
-    class="thumb"
+    class="block size-full p-space-2"
     preserveAspectRatio="xMidYMid meet"
     role="img"
     viewBox={`0 0 ${thumb.w} ${thumb.h}`}
@@ -43,8 +43,11 @@
     {#each thumb.frames as frame, at (at)}
       <rect
         data-state={frame.state}
+        class="fill-surface-raised stroke-border-control stroke-1 state-empty:fill-none state-failed:fill-status-fail-bg state-failed:stroke-status-fail-glyph state-unseen:fill-surface-fill state-unseen:stroke-none state-unshown:fill-surface-fill state-unshown:stroke-none"
         height={frame.h}
         rx="8"
+        stroke-dasharray={frame.state === "empty" ? "3 3" : undefined}
+        vector-effect="non-scaling-stroke"
         width={frame.w}
         x={frame.x}
         y={frame.y}
@@ -52,40 +55,10 @@
     {/each}
   </svg>
 {:else}
-  <p data-slot="map-thumb" class="none">Not drawn yet</p>
+  <p
+    data-slot="map-thumb"
+    class="grid place-items-center h-full m-0 p-space-2 text-ink-muted type-meta"
+  >
+    Not drawn yet
+  </p>
 {/if}
-
-<style>
-  .thumb {
-    display: block;
-    inline-size: 100%;
-    block-size: 100%;
-  }
-  rect {
-    fill: var(--surface-raised);
-    stroke: var(--border-control);
-    stroke-width: 1;
-    vector-effect: non-scaling-stroke;
-  }
-  rect[data-state="empty"] {
-    fill: none;
-    stroke-dasharray: 3 3;
-  }
-  rect[data-state="failed"] {
-    fill: var(--status-fail-bg);
-    stroke: var(--status-fail-glyph);
-  }
-  rect[data-state="unseen"],
-  rect[data-state="unshown"] {
-    fill: var(--surface-fill);
-    stroke: none;
-  }
-  .none {
-    display: grid;
-    place-items: center;
-    block-size: 100%;
-    margin: 0;
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-</style>
