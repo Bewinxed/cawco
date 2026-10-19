@@ -117,7 +117,7 @@
 <!-- At 760px and under (`workflow-cards:`) the table becomes cards: each row
      its name over its age, its actions at the end of the second line. -->
 <div
-  class="wf flex flex-1 flex-col gap-space-6 overflow-y-auto px-space-6 py-space-7 workflow-cards:px-space-4 workflow-cards:py-space-4"
+  class="wf relative flex flex-1 flex-col gap-space-6 overflow-y-auto px-space-6 py-space-7 workflow-cards:px-space-4 workflow-cards:py-space-4"
   data-slot="list-page"
 >
   <header class="wf-row wf-spread">

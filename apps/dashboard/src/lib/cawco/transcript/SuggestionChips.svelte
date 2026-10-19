@@ -252,7 +252,7 @@
              confidence that moves in place re-tints over --dur-panel. -->
         <button
           data-slot="suggest-chip"
-          class="inline-flex items-center h-(--chip-block) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap cursor-pointer flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:transform-(--chip-press) [&:hover]:bg-suggest-tint-hover hover:text-ink-strong mark-line touch-hit"
+          class="inline-flex items-center h-(--chip-block) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap cursor-pointer flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:transform-(--chip-press) [&:hover]:bg-suggest-tint-hover [&:hover]:text-ink-strong mark-line touch-hit"
           onclick={() => choose(candidate)}
           title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ""}`}
           type="button"

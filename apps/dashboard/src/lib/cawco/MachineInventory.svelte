@@ -134,7 +134,7 @@
           <button
             data-slot="head"
             aria-expanded={open[machine.machineId] === true}
-            class="mark-line focus-inset press-tint flex min-h-(--inv-head-h) items-center gap-(--inv-gap) rounded-sm px-(--inv-gap) py-(--inv-tight) text-left transition-control hover:enabled:bg-surface-hover"
+            class="mark-line focus-inset press-tint flex min-h-(--inv-head-h) items-center gap-(--inv-gap) rounded-sm px-(--inv-gap) py-(--inv-tight) text-left transition-control [&:hover]:enabled:bg-surface-hover"
             disabled={machine.status !== "online" && !open[machine.machineId]}
             onclick={() => expand(machine)}
             type="button"

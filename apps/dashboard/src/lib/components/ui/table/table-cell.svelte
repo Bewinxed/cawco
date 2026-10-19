@@ -8,8 +8,6 @@
       variant: {
         /** A list row's cell: meta text on the row's own spacing. */
         list: "type-meta px-space-3 py-space-2 text-ink-muted",
-        /** A list's lead column (its mark), flush against the next. */
-        "list-lead": "type-meta px-space-3 py-space-2 pe-0 text-ink-muted",
         /** A list cell that wells while its group (`group`) is open. */
         "list-opens":
           "type-meta px-space-3 py-space-2 text-ink-muted group-state-open:bg-surface-well",

@@ -782,14 +782,14 @@
   }
 
   /* residual: foreign-dom */
-  /* The thumbnail is Shot's own box and image, which take no class. */
+  /* The thumbnail is Shot's own box and image, which take no class. Their
+     block size is Shot's thumb's (48px, and the image 100% of it): at the
+     base its `figure.thumb .box` and `figure.thumb img` outrank this. */
   [data-slot="artifact-thumb"] :global([data-slot="shot-box"]) {
-    block-size: var(--thumb-h);
     min-block-size: 0;
   }
   [data-slot="artifact-thumb"] :global(img) {
     inline-size: 100%;
-    block-size: var(--thumb-h);
     object-fit: cover;
     object-position: top;
   }

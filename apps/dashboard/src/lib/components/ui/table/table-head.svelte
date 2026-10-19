@@ -11,9 +11,6 @@
          * padding holds beside a tick too, over the base's checkbox rule.
          */
         caps: "type-label px-space-3 text-ink-muted uppercase tracking-caps [&:has([role=checkbox])]:pr-space-3",
-        /** The lead column's caps heading, flush against the next. */
-        "caps-lead":
-          "type-label px-space-3 pe-0 text-ink-muted uppercase tracking-caps",
         /** Muted caps at the kit's own label size and strong weight. */
         "caps-strong": "px-space-3 text-ink-muted uppercase tracking-caps",
         /** A matrix's corner heading. */

@@ -337,7 +337,7 @@
       One way to reach Jev. A TypeSafe key held in Jev below takes over from it.
     </p>
     <div
-      class="overflow-hidden motion-safe:transition-[height] motion-safe:dur-morph motion-safe:ease-drawer"
+      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
       style:block-size={openrouterHeight ? `${openrouterHeight}px` : undefined}
     >
       <!-- A status line that swaps: the lines cross-fade over each other in one grid cell. -->
@@ -488,7 +488,7 @@
       />
     </Field>
     <div
-      class="overflow-hidden motion-safe:transition-[height] motion-safe:dur-morph motion-safe:ease-drawer"
+      class="overflow-hidden motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
       style:block-size={keyHeight ? `${keyHeight}px` : undefined}
     >
       <div data-slot="stack" class="grid" bind:clientHeight={keyHeight}>

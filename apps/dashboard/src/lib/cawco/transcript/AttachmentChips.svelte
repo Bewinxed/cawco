@@ -100,7 +100,7 @@
         </button>
         <button
           aria-label="Remove the canvas"
-          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
+          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none [&:hover]:bg-surface-recess [&:hover]:text-ink-strong touch-hit"
           onclick={onremovecanvas}
           type="button"
         >
@@ -125,7 +125,7 @@
         >
         <button
           aria-label={`Remove ${img.name}`}
-          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none hover:bg-surface-recess hover:text-ink-strong touch-hit"
+          class="grid place-items-center size-icon-lg border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer flex-none [&:hover]:bg-surface-recess [&:hover]:text-ink-strong touch-hit"
           data-box
           onclick={() => removeImage(i)}
           type="button"
@@ -143,7 +143,7 @@
         <button
           aria-label={`Remove ${t.name}`}
           style:--hit-edge="1px"
-          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
+          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline rounded-xs bg-surface-raised text-ink-muted cursor-pointer [&:hover]:text-ink-strong touch-hit"
           onclick={() => removeText(i)}
           type="button"
         >
@@ -163,7 +163,7 @@
         <button
           aria-label={`Remove ${f.name}`}
           style:--hit-edge="1px"
-          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline rounded-xs bg-surface-raised text-ink-muted cursor-pointer hover:text-ink-strong touch-hit"
+          class="absolute -top-space-1 -end-space-1 grid place-items-center size-icon-lg border border-border-hairline rounded-xs bg-surface-raised text-ink-muted cursor-pointer [&:hover]:text-ink-strong touch-hit"
           onclick={() => removeFile(f.id)}
           type="button"
         >

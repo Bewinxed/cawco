@@ -653,7 +653,7 @@
     {#if item.href && live}
       <a
         data-slot="name"
-        class="type-body truncate text-ink-strong no-underline hover:underline"
+        class="type-body truncate text-ink-strong no-underline [&:hover]:underline"
         href={item.href}
         title={item.label}>{item.label}</a
       >

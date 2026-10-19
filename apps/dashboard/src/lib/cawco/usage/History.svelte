@@ -365,7 +365,7 @@
             data-slot="slot"
             class="group flex min-w-0 flex-1 items-end h-full"
             ><span
-              class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
+              class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-[:hover]:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
               style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
               style:--bar-h="calc(var(--h) * 100%)"
             ></span></span
@@ -384,7 +384,7 @@
                   role="img"
                 >
                   <span
-                    class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-hover:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
+                    class="h-(--bar-h) min-h-px w-full rounded-t-hair bg-meter-share group-[:hover]:bg-ink-strong motion-safe:transition-[block-size] motion-safe:dur-morph motion-safe:ease-drawer"
                     style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
                     style:--bar-h="calc(var(--h) * 100%)"
                   ></span>

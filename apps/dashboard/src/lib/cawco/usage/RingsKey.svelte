@@ -40,14 +40,19 @@
       <svg
         data-slot="glyph"
         aria-hidden="true"
-        class="block fill-(--c) data-limit:fill-border-control data-stale:opacity-40"
+        class="group/glyph block data-stale:opacity-40"
         height="10"
         viewBox="0 0 10 10"
         width="10"
         data-limit={row.limit || undefined}
         data-stale={ring.state === "stale" || undefined}
       >
-        <circle cx="5" cy="5" r={row.glyph === "disc" ? 4.5 : 4.25} />
+        <circle
+          class="fill-(--c) group-data-limit/glyph:fill-border-control"
+          cx="5"
+          cy="5"
+          r={row.glyph === "disc" ? 4.5 : 4.25}
+        />
       </svg>
     {:else}
       <span data-box></span>

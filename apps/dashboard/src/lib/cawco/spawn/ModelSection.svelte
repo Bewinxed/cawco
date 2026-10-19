@@ -306,8 +306,6 @@
     class="relative grid rounded-md border border-border-control bg-surface-raised shadow-xs rail-step-(--rail-step-fine) coarse:rail-step-(--rail-step-coarse) data-railed:grid-cols-(--cols)"
     data-railed={!runtime || undefined}
     style:--cols="auto minmax(0, 1fr)"
-    style:--hit-gap-x="calc(var(--rail-step) - var(--rail-radio))"
-    style:--hit-gap-y="calc(var(--rail-step) - var(--rail-radio))"
     style:--rail-gap="calc(var(--rail-step) - var(--rail-radio))"
     style:--rail-pad="6px"
     style:--rail-radio="36px"
@@ -317,7 +315,7 @@
     {#if !runtime}
       <Rail
         axis="y"
-        class="grid content-box-start gap-(--rail-gap) rounded-l-md border-r border-r-border-hairline bg-surface-recess p-(--rail-pad)"
+        class="grid content-box-start gap-(--rail-gap) hit-gap-x-(--rail-gap) hit-gap-y-(--rail-gap) rounded-l-md border-r border-r-border-hairline bg-surface-recess p-(--rail-pad)"
         itemClass="ns-in touch-hit press-tint grid size-(--rail-radio) place-items-center"
         stagger={30}
         items={railItems}

@@ -96,7 +96,7 @@
         <Table.Head
           class="h-c-toolbar-ctl w-(--lead-w)"
           scope="col"
-          variant="caps-lead"><span class="sr-only">Service</span></Table.Head
+          variant="caps"><span class="sr-only">Service</span></Table.Head
         >
         <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
           >Action</Table.Head
@@ -128,7 +128,7 @@
           <Table.Cell
             class="h-c-btn-h-lg num align-middle"
             rule="between"
-            variant="list-lead"
+            variant="list"
             ><span data-slot="mark" class="grid w-c-row-lead place-items-center"
               ><ProviderLogo
                 class="size-icon-md"

@@ -72,7 +72,7 @@
         class="prose max-w-(--measure) text-size-body leading-body [.prose+&]:mt-space-3"
       >
         <Skeleton
-          class="w-(--ln-w) h-(--ln-h) my-(--ln-my)"
+          class="w-(--ln-w) h-(--ln-h) [.prose>&]:my-(--ln-my)"
           radius="text"
           style="--ln-w: 52%"
         />
@@ -108,7 +108,7 @@
       >
         {#each lines as width (width)}
           <Skeleton
-            class="h-(--ln-h) my-(--ln-my)"
+            class="h-(--ln-h) [.prose>&]:my-(--ln-my)"
             radius="text"
             style="width: {width}"
           />
@@ -167,7 +167,7 @@
     >
       {#each AFTER as width (width)}
         <Skeleton
-          class="h-(--ln-h) my-(--ln-my)"
+          class="h-(--ln-h) [.prose>&]:my-(--ln-my)"
           radius="text"
           style="width: {width}"
         />
