@@ -43,16 +43,13 @@
   const enter = new ListSwap(true);
 </script>
 
-<!-- literal: 34rem, 26rem, 80px -->
 <div
-  class="group mx-auto flex w-full max-w-(--measure) flex-col items-center gap-space-4"
+  class="group mx-auto flex w-full max-w-(--c-empty-fleet-w) flex-col items-center gap-space-4"
   data-leaving={!present || undefined}
-  style:--measure="34rem"
 >
   <div
     data-slot="caw-80"
-    class="grid min-h-(--caw-min) place-items-center"
-    style:--caw-min="80px"
+    class="grid min-h-(--c-empty-fleet-caw) place-items-center"
   >
     <Caw
       next={["ready", "idle"]}
@@ -83,8 +80,7 @@
             Connect a machine to run sessions
           </h1>
           <p
-            class="m-0 max-w-(--line-max) type-body text-center text-pretty text-ink-muted"
-            style:--line-max="26rem"
+            class="m-0 max-w-(--c-empty-fleet-line) type-body text-center text-pretty text-ink-muted"
           >
             Sessions run on your own machines. Install CawCo on one and it joins
             this fleet.
@@ -125,8 +121,7 @@
             None of your machines are online
           </h1>
           <p
-            class="m-0 max-w-(--line-max) type-body text-center text-pretty text-ink-muted"
-            style:--line-max="26rem"
+            class="m-0 max-w-(--c-empty-fleet-line) type-body text-center text-pretty text-ink-muted"
           >
             Sessions run on a machine that is online. See which ones dropped and
             why.

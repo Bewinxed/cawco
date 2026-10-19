@@ -93,44 +93,45 @@
   }
 </script>
 
-<!-- literal: 8px, 6px, 10px, 44px, 72ch, 240px -->
 <div
-  class="flex flex-col gap-(--inv-gap) border-t border-t-border-hairline pt-space-5"
-  style:--inv-gap="8px"
-  style:--inv-head-h="44px"
-  style:--inv-measure="72ch"
-  style:--inv-pad="10px"
-  style:--inv-text-basis="240px"
-  style:--inv-tight="6px"
+  class="flex flex-col gap-space-2 border-t border-t-border-hairline pt-space-5"
 >
   <SectionHeader
     hue="var(--hue-amber-500)"
     icon={IconLaptop}
     label={words.onEachMachine}
   />
-  <p data-slot="note" class="note">{words.inventoryNote}</p>
+  <p
+    data-slot="note"
+    class="max-w-(--c-inventory-measure) type-meta text-ink-muted"
+  >
+    {words.inventoryNote}
+  </p>
 
   <!-- Each machine keeps its row whether it is up or not: a machine that
        drops for a moment says "Offline" in the same place, so nothing under
        the list moves. It opens only while it is up; open, it can still close. -->
   {#if machines.length === 0}
-    <p data-slot="note" class="note">
+    <p
+      data-slot="note"
+      class="max-w-(--c-inventory-measure) type-meta text-ink-muted"
+    >
       <AddMachineLink>{words.noMachines}</AddMachineLink>{words.noMachinesAfter}
     </p>
   {:else}
     <ul
       data-slot="machines"
-      class="m-0 -mx-(--inv-gap) flex list-none flex-col gap-space-row p-0"
+      class="-mx-space-2 flex flex-col gap-space-row"
     >
       {#each machines as machine (machine.machineId)}
         {@const inspection = found[machine.machineId]}
         {@const rows =
           kind === "mcp" ? (inspection?.mcp ?? []) : (inspection?.skills ?? [])}
-        <li data-slot="machine" class="flex flex-col gap-(--inv-tight)">
+        <li data-slot="machine" class="flex flex-col gap-space-2">
           <button
             data-slot="head"
             aria-expanded={open[machine.machineId] === true}
-            class="mark-line focus-inset press-tint flex min-h-(--inv-head-h) items-center gap-(--inv-gap) rounded-sm px-(--inv-gap) py-(--inv-tight) text-left transition-control [&:hover]:enabled:bg-surface-hover"
+            class="mark-line focus-inset press-tint flex min-h-c-row-h items-center gap-space-2 rounded-sm px-space-2 py-space-2 text-start transition-control hover:enabled:bg-surface-hover"
             disabled={machine.status !== "online" && !open[machine.machineId]}
             onclick={() => expand(machine)}
             type="button"
@@ -149,7 +150,7 @@
             >
             <span
               data-slot="note"
-              class="max-w-(--inv-measure) type-meta text-ink-muted"
+              class="max-w-(--c-inventory-measure) type-meta text-ink-muted"
             >
               {#if open[machine.machineId]}
                 {words.hide}
@@ -162,33 +163,40 @@
           </button>
           {#if open[machine.machineId]}
             {#if reading[machine.machineId]}
-              <p data-slot="note" class="note busy mark-line" role="status">
-                <Spinner class="size-4 shrink-0" /><span>{words.asking}</span>
+              <p
+                data-slot="note"
+                class="mark-line flex max-w-(--c-inventory-measure) items-center gap-space-2 type-meta text-ink-muted"
+                role="status"
+              >
+                <Spinner class="shrink-0" /><span>{words.asking}</span>
               </p>
             {:else if unread[machine.machineId]}
               <Alert variant="warning">
                 <AlertDescription>{unread[machine.machineId]}</AlertDescription>
               </Alert>
             {:else if rows.length === 0}
-              <p data-slot="note" class="note">
+              <p
+                data-slot="note"
+                class="max-w-(--c-inventory-measure) type-meta text-ink-muted"
+              >
                 {kind === "mcp" ? words.noMcpAtAll : words.noSkillsAtAll}
               </p>
             {:else}
               <ul
-                class="mt-0 mb-(--inv-tight) mx-(--inv-gap) flex list-none flex-col gap-space-row p-0"
+                class="mx-space-2 mb-space-2 flex flex-col gap-space-row"
               >
                 {#each rows as row ("path" in row ? row.path : `${row.scope}:${row.name}`)}
                   {@const key = keyOf(machine.machineId, row.scope, row.name)}
                   <li
                     data-slot="entry"
-                    class="flex flex-wrap items-center gap-(--inv-gap) rounded-sm bg-surface-recess px-(--inv-pad) py-(--inv-gap)"
+                    class="flex flex-wrap items-center gap-space-2 rounded-sm bg-surface-recess px-space-3 py-space-2"
                   >
                     <span
                       data-slot="text"
-                      class="flex min-w-0 grow basis-(--inv-text-basis) flex-col gap-space-row"
+                      class="flex min-w-0 grow basis-(--c-inventory-text-basis) flex-col gap-space-row"
                     >
                       <span
-                        class="flex flex-wrap items-center gap-(--inv-tight)"
+                        class="flex flex-wrap items-center gap-space-2"
                       >
                         <span
                           data-slot="name"
@@ -212,7 +220,7 @@
                       {#if "description" in row && row.description}
                         <span
                           data-slot="note"
-                          class="line-clamp-2 max-w-(--inv-measure) type-meta text-ink-muted"
+                          class="line-clamp-2 max-w-(--c-inventory-measure) type-meta text-ink-muted"
                           >{row.description}</span
                         >
                       {/if}
@@ -231,7 +239,9 @@
                         variant="outline"
                       />
                     {:else if taken.includes(row.name) && !row.managed}
-                      <span data-slot="note" class="note"
+                      <span
+                        data-slot="note"
+                        class="max-w-(--c-inventory-measure) type-meta text-ink-muted"
                         >{words.inTheFleet}</span
                       >
                     {/if}

@@ -276,13 +276,10 @@
      shadow still falls on the page. Under the drawer's line (DRAWER_QUERY)
      it stands at the top of the screen, over the bar: the same place on
      every phone screen. -->
-<!-- literal: 0fr, 1fr (the row shut and open); inset(0 -100vw -100vw) (the bar's foot) -->
 <div
   data-slot="hub-band-slot"
-  class="pointer-events-none relative z-10 grid flex-none grid-rows-(--row-shut) clip-path-(--slot-clip) @container/hub-band has-[>*>[data-open]]:grid-rows-(--row-open) max-desk:-order-1 motion-safe:not-has-[>*>[data-open]]:transition-band-row-shut motion-safe:has-[>*>[data-open]]:transition-band-row-open"
-  style:--row-open="1fr"
-  style:--row-shut="0fr"
-  style:--slot-clip="inset(0 -100vw -100vw)"
+  class="pointer-events-none relative z-10 grid flex-none grid-rows-shut clip-band-slot @container/hub-band data-open:grid-rows-open max-desk:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
+  data-open={band ? "" : undefined}
 >
   <!-- The live region stands from the first markup, so assistive tech has
        it registered before its words change; it says the band's words
@@ -301,17 +298,13 @@
            button's height whether a state has one or not, and two lines tall
            where a phone wraps the sentence: every state is one height at a
            width. -->
-      <!-- literal: minmax(0, 1fr) auto (the sentence and its button); minmax(var(--c-btn-h-sm), auto), minmax(max(var(--c-btn-h-sm), 2lh), auto) (the row's height, and on a phone two lines) -->
       <div
         data-slot="hub-band"
-        class="pointer-events-auto invisible grid auto-rows-(--band-rows) grid-cols-(--band-cols) items-center gap-x-space-3 border-b border-b-border-hairline bg-status-attn-bg py-space-2 ps-space-7 pe-space-6 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 shadow-tile @max-phone/hub-band:auto-rows-(--band-rows-phone) data-open:visible data-open:opacity-100 data-[tone=done]:bg-status-done-bg data-[tone=done]:text-status-done-ink data-[tone=fail]:bg-status-fail-bg data-[tone=fail]:text-status-fail-ink data-[tone=live]:bg-status-live-bg data-[tone=live]:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:-translate-y-full motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
+        class="pointer-events-auto invisible grid auto-rows-band grid-cols-fill-auto items-center gap-x-space-3 border-b border-b-border-hairline bg-status-attn-bg py-space-2 ps-space-7 pe-space-6 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 shadow-tile @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:-translate-y-full motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
         aria-hidden={band ? undefined : "true"}
         data-open={band ? "" : undefined}
         data-tone={tone}
         inert={!band}
-        style:--band-cols="minmax(0, 1fr) auto"
-        style:--band-rows="minmax(var(--c-btn-h-sm), auto)"
-        style:--band-rows-phone="minmax(max(var(--c-btn-h-sm), 2lh), auto)"
         {@attach morph()}
       >
         <!-- The sentence morphs as a paragraph (`wrap`): its countdown ticks

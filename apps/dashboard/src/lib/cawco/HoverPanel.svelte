@@ -192,10 +192,10 @@
        inside the viewport by its own height (the 100%), --hover-panel-inset
        clear of either edge; it grows from its row's centre, which is --origin
        under the row's top (--y) wherever the panel's own top (--top) ends up.
-       The 4px bridge between the panel and its trigger is its ::after. -->
+       The 4px bridge between the panel and its trigger is its `after:`. -->
   <div
     {...rest}
-    class="pointer-events-auto absolute start-0 bottom-(--panel-bottom) z-2 w-max origin-(--panel-origin-above) translate-x-(--panel-x) rounded-lg border border-border-control bg-surface-raised shadow-overlay side-right:fixed side-right:start-(--x) side-right:top-0 side-right:bottom-auto side-right:z-40 side-right:origin-(--panel-origin-right) side-right:translate-x-0 side-right:translate-y-(--top) motion-safe:data-gliding:transition-[translate] motion-safe:data-gliding:dur-morph motion-safe:data-gliding:ease-drawer"
+    class="pointer-events-auto absolute start-0 bottom-(--panel-bottom) z-2 w-max origin-(--panel-origin-above) translate-x-(--panel-x) rounded-lg border border-border-control bg-surface-raised shadow-overlay side-right:fixed side-right:start-(--x) side-right:top-0 side-right:bottom-auto side-right:z-40 side-right:origin-(--panel-origin-right) side-right:translate-x-0 side-right:translate-y-(--top) motion-safe:data-gliding:transition-[translate] motion-safe:data-gliding:dur-morph motion-safe:data-gliding:ease-drawer side-above:after:absolute side-above:after:inset-x-0 side-above:after:top-full side-above:after:h-space-1 side-right:after:absolute side-right:after:inset-y-0 side-right:after:end-full side-right:after:w-space-1"
     data-gliding={gliding || undefined}
     data-side={side}
     style:--panel-bottom="calc(100% + var(--space-1) + var(--rise, 0px))"
@@ -210,11 +210,10 @@
     <!-- The content's own width, capped at 440px or the room (less the
          border): never the panel's, so the panel's size tween (morph, which
          watches this box) does not resize what it is watching. -->
-    <!-- literal: 440px, 2px, 320px -->
     <div
       class="relative grid w-max max-w-(--cell-max) max-h-(--cell-room) overflow-y-auto overscroll-contain p-space-3"
-      style:--cell-max="calc(min(440px, var(--span, 440px)) - 2px)"
-      style:--cell-room="var(--room, 320px)"
+      style:--cell-max="calc(min(var(--c-hover-panel-w), var(--span, var(--c-hover-panel-w))) - 2px)"
+      style:--cell-room="var(--room, var(--c-hover-panel-room))"
     >
       {#key key}
         <div
@@ -232,21 +231,3 @@
   </div>
 {/if}
 
-<style>
-  /* residual: pseudo — the 4px between the panel and its trigger, so the
-     pointer crossing it is still over the panel. */
-  [data-side]::after {
-    content: "";
-    position: absolute;
-  }
-  [data-side="above"]::after {
-    inset-inline: 0;
-    inset-block-start: 100%;
-    block-size: var(--space-1);
-  }
-  [data-side="right"]::after {
-    inset-block: 0;
-    inset-inline-end: 100%;
-    inline-size: var(--space-1);
-  }
-</style>

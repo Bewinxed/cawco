@@ -150,12 +150,10 @@
   >
     {#each hubAuth.waiting as machine (machine.machineId)}
       {@const name = machineLabel(machine.hostname ?? machine.machineId)}
-      <!-- literal: 44px -->
       <li
         data-slot="row"
-        class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover cursor-default"
+        class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover"
         data-waiting={machine.machineId}
-        style:--row-touch="44px"
       >
         <MachineRow
           hue={machineHue(0, false)}
@@ -201,16 +199,14 @@
     {#each JOIN_WAYS as way (way.way)}
       {@const Icon = way.icon}
       <li>
-        <!-- literal: 44px -->
         <button
           data-slot="row"
           aria-haspopup="dialog"
-          class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover cursor-pointer press-tint focus-inset"
+          class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover cursor-pointer press-tint focus-inset"
           onclick={() => {
             onleave?.();
             addMachine.show(way.way);
           }}
-          style:--row-touch="44px"
           type="button"
         >
           <span
@@ -244,11 +240,9 @@
         style:--fault-indent="calc(var(--space-2) * 2 + var(--icon-md))"
       >
         <MachineMenu {machine}>
-          <!-- literal: 44px -->
           <div
             data-slot="row"
-            class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm border-none border-current bg-transparent px-space-2 py-space-1 text-start text-ink-strong transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover press-tint focus-inset"
-            style:--row-touch="44px"
+            class="flex w-full min-h-space-8 items-center gap-space-2 rounded-sm px-space-2 py-space-1 text-ink-strong transition-control coarse:min-h-c-row-h hover:bg-surface-hover press-tint focus-inset"
             tabindex="-1"
           >
             <MachineRow
@@ -271,12 +265,10 @@
       </li>
     {/each}
   </ul>
-  <!-- literal: 44px -->
   <button
     data-slot="row"
     data-add
-    class="mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 cursor-pointer items-center gap-space-2 rounded-ee-sm rounded-es-sm border-t border-t-seam border-r-none border-b-none border-l-none bg-transparent px-space-2 py-space-1 text-start type-label text-ink-muted transition-control coarse:min-h-(--row-touch) hover:bg-surface-hover"
-    style:--row-touch="44px"
+    class="mark-line press-tint focus-inset mt-space-1 flex w-full min-h-space-8 cursor-pointer items-center gap-space-2 rounded-ee-sm rounded-es-sm border-t border-t-seam px-space-2 py-space-1 text-start type-label text-ink-muted transition-control coarse:min-h-c-row-h hover:bg-surface-hover"
     onclick={() => {
       onleave?.();
       addMachine.show();
