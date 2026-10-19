@@ -248,17 +248,14 @@
   }
 </script>
 
-<!-- literal: 240px, 48px -->
 <figure
   data-thumb={size === "thumb" || undefined}
-  class="group/shot m-0 w-full max-w-full data-thumb:w-(--thumb)"
-  style:--cap="240px"
-  style:--thumb="48px"
+  class="group/shot m-0 w-full max-w-full data-thumb:w-(--tx-shot-thumb)"
 >
   {#if video && failed !== src}
     <div
       data-slot="shot-box"
-      class="relative flex items-center justify-start w-full h-(--cap) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--thumb) group-data-thumb/shot:h-(--thumb)"
+      class="relative flex items-center justify-start w-full h-(--tx-shot) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb)"
     >
       {#if captionsReady}
         <!-- Captions come from the sidecar .vtt when the video has one; a video without one has none to show. svelte-check and Biome read only an unconditional <track>. -->
@@ -266,7 +263,7 @@
         <!-- biome-ignore lint/a11y/useMediaCaption: the <track> is conditional on the sidecar .vtt, which Biome does not read -->
         <video
           aria-label={alt}
-          class="block max-w-full max-h-(--cap) h-full object-contain"
+          class="block max-w-full max-h-(--tx-shot) h-full object-contain"
           controls
           onerror={() => {
             failed = src;
@@ -290,7 +287,7 @@
   {:else if failed === src}
     <div
       data-slot="shot-box"
-      class="relative flex flex-col items-start justify-center w-full h-(--cap) p-space-3 border border-border-hairline rounded-sm overflow-hidden bg-surface-recess text-ink-muted text-size-meta font-normal group-data-thumb/shot:w-(--thumb) group-data-thumb/shot:h-(--thumb)"
+      class="relative flex flex-col items-start justify-center w-full h-(--tx-shot) p-space-3 border border-border-hairline rounded-sm overflow-hidden bg-surface-recess text-ink-muted text-size-meta font-normal group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb)"
     >
       <span>{missing ?? (video ? "Video" : "Image")} not available</span>
       {#if path}
@@ -304,7 +301,7 @@
     <button
       data-slot="shot-box"
       aria-label={`Open ${alt}`}
-      class="relative flex items-center justify-start w-full h-(--cap) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--thumb) group-data-thumb/shot:h-(--thumb) cursor-pointer"
+      class="relative flex items-center justify-start w-full h-(--tx-shot) p-0 border border-border-hairline rounded-sm overflow-hidden bg-transparent text-ink-muted group-data-thumb/shot:w-(--tx-shot-thumb) group-data-thumb/shot:h-(--tx-shot-thumb) cursor-pointer"
       onclick={open}
       type="button"
     >
@@ -312,7 +309,7 @@
         data-sized={intrinsic !== null || undefined}
         class="group/frame relative flex items-center w-full h-full rounded-sm data-sized:w-(--frame-w) data-sized:h-auto data-sized:aspect-(--frame-ratio)"
         style:--frame-ratio="var(--w) / var(--h)"
-        style:--frame-w={"min(100%, calc(var(--w) * 1px), calc(var(--cap) * var(--w) / var(--h)))"}
+        style:--frame-w={"min(100%, calc(var(--w) * 1px), calc(var(--tx-shot) * var(--w) / var(--h)))"}
         style:--h={intrinsic?.height}
         style:--w={intrinsic?.width}
       >
@@ -327,7 +324,7 @@
           {alt}
           data-cached={cached || undefined}
           data-loaded={loaded === src || undefined}
-          class="block max-w-full max-h-(--cap) object-contain opacity-0 data-loaded:opacity-100 not-data-cached:transition-[opacity] not-data-cached:dur-control not-data-cached:ease-out group-data-thumb/shot:w-full group-data-thumb/shot:h-full group-data-thumb/shot:object-cover group-data-sized/frame:w-full group-data-sized/frame:h-full"
+          class="block max-w-full max-h-(--tx-shot) object-contain opacity-0 data-loaded:opacity-100 not-data-cached:transition-[opacity] not-data-cached:dur-control not-data-cached:ease-out group-data-thumb/shot:w-full group-data-thumb/shot:h-full group-data-thumb/shot:object-cover group-data-sized/frame:w-full group-data-sized/frame:h-full"
           data-caption={caption}
           data-path={path}
           data-shot={size}

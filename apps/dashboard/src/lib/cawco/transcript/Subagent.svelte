@@ -78,41 +78,31 @@
     <!-- A disclosure header is as wide as its card, so it does not scale on
          press (that read as the whole card shrinking); it takes .press-tint.
          On a touch screen it is the card's only control, so a real target. -->
-    <!-- literal: 26px -->
-    <!-- literal: 44px -->
     <Collapsible.Trigger
       data-bhead
-      class="group/bhead rail-line press-tint min-h-(--bhead-min) coarse:min-h-(--bhead-min-coarse) w-full text-size-label font-medium bg-transparent border-none border-current rounded-xs p-0 text-inherit cursor-pointer text-start transition-[color] dur-control ease-out"
-      style="--bhead-min: 26px; --bhead-min-coarse: 44px"
+      class="group/bhead rail-line press-tint min-h-c-mark coarse:min-h-c-btn-h-lg w-full text-size-label font-medium bg-transparent border-none border-current rounded-xs p-0 text-inherit cursor-pointer text-start transition-[color] dur-control ease-out"
     >
       <!-- The per-session identity sprite, on its --mark-N hue square,
            filling the glyph cell. -->
-      <!-- literal: 11px -->
       <span
         data-rail-cell
         data-slot="mark"
         aria-hidden="true"
         class="rail-cell rounded-xs bg-mark-overlay bg-(--mark-bg)"
         style:--mark-bg="var(--mark-{markHue(seed)})"
-        style:--sprite="11px"
-        ><Sprite class="size-(--sprite) block text-mark-glyph" /></span
+        ><Sprite class="size-icon-sm block text-mark-glyph" /></span
       >
-      <!-- literal: 40% -->
       <span
-        class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-ink-strong text-size-label flex-none overflow-clip text-ellipsis whitespace-nowrap max-w-(--tk-max)"
-        style:--tk-max="40%">{branch.subagentType}</span
+        class="font-(family-name:--font-mono) text-ink-strong text-size-label flex-none overflow-clip text-ellipsis whitespace-nowrap max-w-2/5"
+        >{branch.subagentType}</span
       >
       <!-- The disclosure affordance: one glyph in currentColor, rotated by
            its own state rather than swapped for a second asset. -->
-      <!-- literal: 13px -->
-      <!-- literal: rotate(90deg) -->
       <span
         data-slot="chev"
         aria-hidden="true"
-        class="size-(--chev) flex-none grid place-items-center text-ink-muted motion-safe:transition-[transform] motion-safe:dur-control motion-safe:ease-out group-state-open/bhead:transform-(--chev-turn)"
+        class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/bhead:rotate-90"
         data-box
-        style:--chev="13px"
-        style:--chev-turn="rotate(90deg)"
         ><IconChevronRight class="size-icon-sm block" /></span
       >
       {#if title !== branch.subagentType}
@@ -137,7 +127,7 @@
         data-status={phase}
         data-subagent-phase={phase}
         data-box
-        style:--pill-py="calc(2px + (1lh - 1ex) / 2)"
+        style:--pill-py="calc(var(--space-row) + (1lh - 1ex) / 2)"
         {@attach clock.watch}
       >
         {phase}
@@ -156,26 +146,29 @@
          one: the pill already says "running" in words beside it. Still:
          running is said by its hue and the pill, not a loop. -->
     {#if view.running}
-      <p class="now rail-line">
-        <span data-slot="rail-cell" aria-hidden="true" class="rail-cell"
-          ><span class="beat breathe"></span></span
+      <p
+        class="rail-line items-start mt-space-1 mb-0 text-size-meta font-normal text-ink-strong leading-body max-w-c-measure"
+      >
+        <span
+          data-slot="rail-cell"
+          aria-hidden="true"
+          class="rail-cell h-lh"
+          ><span
+            class="breathe size-(--status-dot-size) flex-none rounded-pill bg-status-live-glyph"
+          ></span></span
         ><span>{view.currentStep}</span>
       </p>
     {:else if failed && branch.error}
-      <!-- literal: 68ch -->
       <p
         data-slot="now"
-        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-status-fail-ink leading-body max-w-(--measure)"
-        style:--measure="68ch"
+        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-status-fail-ink leading-body max-w-c-measure"
       >
         {headline(branch.error)}
       </p>
     {:else if view.report}
-      <!-- literal: 68ch -->
       <p
         data-slot="now"
-        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-ink-strong leading-body max-w-(--measure)"
-        style:--measure="68ch"
+        class="rail-hang mt-space-1 mb-0 items-box-start text-size-meta font-normal text-ink-strong leading-body max-w-c-measure"
       >
         {headline(view.report)}
       </p>
@@ -194,6 +187,8 @@
           data-slot="inner"
           class="mt-space-2 mb-0 ms-(--inner-start) me-0 p-space-1 rounded-sm bg-surface-recess"
           style:--inner-start="calc(var(--x-hang) - var(--space-1))"
+          style:--rail-head="var(--rail)"
+          style:--rail-gap="var(--space-4)"
         >
           {#each rows as row (row.key)}
             {#if row.kind === "tools"}
@@ -241,233 +236,3 @@
     </Collapsible.Content>
   </Collapsible.Root>
 </div>
-
-<style>
-  /* residual: foreign-dom */
-  /* A branch's own rows draw their own rails, and they start their own line
-     — they must not inherit the continuation the OUTER row published, or a
-     nested tool run paints the tail weight and hugs the row above it. Set on
-     every descendant (the rows ToolGroup, MessageRow and the rest render),
-     not inherited from the root, so a row that publishes its own
-     continuation still loses to it as before. */
-  [data-slot="rail-row"] :global(*) {
-    --rail-head: var(--rail);
-    --rail-gap: var(--space-4);
-  }
-  /* The spine is the rail row every rail block uses (app.css `.rail-row`).
-     The trigger is a component's element, so the scoped selector cannot
-     reach it: it is addressed globally under this card's own `.branch`
-     (global all through, it styled Delegate's head too, whose card is a
-     `.branch` as well). */
-  .branch :global(.bhead) {
-    min-block-size: 26px;
-    inline-size: 100%;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    background: none;
-    border: 0;
-    border-radius: var(--radius-xs);
-    padding: 0;
-    color: inherit;
-    cursor: pointer;
-    text-align: start;
-    /* A disclosure header is as wide as its card, so it does not scale on
-       press (that read as the whole card shrinking); it takes .press-tint. */
-    transition: color var(--dur-control) var(--ease-out);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    :global(.branch .bhead:hover) .tk {
-      color: var(--ink-strong);
-    }
-  }
-
-  /* The disclosure affordance: one glyph in currentColor, rotated by its own
-     state rather than swapped for a second asset. */
-  .chev {
-    inline-size: 13px;
-    block-size: 13px;
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-    color: var(--ink-muted);
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-out);
-    }
-  }
-  :global(.branch .bhead[data-state="open"]) .chev {
-    transform: rotate(90deg);
-  }
-  .chev :global(svg) {
-    inline-size: 12px;
-    block-size: 12px;
-    display: block;
-  }
-
-  /* The per-session identity sprite, on its --mark-N hue square, filling
-     the glyph cell. */
-  .mark {
-    border-radius: var(--radius-xs);
-    background-image: var(--mark-overlay);
-    background-color: var(--mark-1);
-  }
-  .mark :global(svg) {
-    inline-size: 11px;
-    block-size: 11px;
-    display: block;
-    color: var(--mark-glyph);
-  }
-  .mark.m2 {
-    background-color: var(--mark-2);
-  }
-  .mark.m3 {
-    background-color: var(--mark-3);
-  }
-  .mark.m4 {
-    background-color: var(--mark-4);
-  }
-  .mark.m5 {
-    background-color: var(--mark-5);
-  }
-  .mark.m6 {
-    background-color: var(--mark-6);
-  }
-  .mark.m7 {
-    background-color: var(--mark-7);
-  }
-  .mark.m8 {
-    background-color: var(--mark-8);
-  }
-
-  /* Cascade order is load-bearing — .tk's base color must lose to the :hover rule above it. */
-  .tk {
-    font-family: var(--font-mono);
-    color: var(--ink-strong);
-    font-size: var(--text-label);
-    flex: 0 0 auto;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    max-inline-size: 40%;
-  }
-  .arg {
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    min-inline-size: 0;
-    flex: 1 1 auto;
-  }
-  .model {
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    flex: 0 0 auto;
-    white-space: nowrap;
-  }
-  .pill {
-    margin-inline-start: auto;
-    flex: 0 0 auto;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    font-variant-numeric: tabular-nums;
-    border-radius: var(--radius-xs);
-    /* Its words on their x-height in the box (.mark-text): 2px past the
-       trim's room given back, so the box keeps its height. */
-    padding: calc(2px + (1lh - 1ex) / 2) var(--space-2);
-    background: var(--status-idle-bg);
-    color: var(--status-idle-ink);
-  }
-  .pill.running {
-    background: var(--status-live-bg);
-    color: var(--status-live-ink);
-  }
-  .pill.done {
-    background: var(--status-done-bg);
-    color: var(--status-done-ink);
-  }
-  .pill.failed {
-    background: var(--status-fail-bg);
-    color: var(--status-fail-ink);
-  }
-
-  /* The live line, at the head's text column. Its glyph cell is one line
-     tall, so the beat sits on the first line of a line that wraps. */
-  .now {
-    align-items: start;
-    margin-block: var(--space-1) 0;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-strong);
-    line-height: var(--leading-body);
-    max-inline-size: 68ch;
-  }
-  .now.err {
-    color: var(--status-fail-ink);
-  }
-  .now > .rail-cell {
-    block-size: 1lh;
-  }
-  /* The beat is the second cue, never the only one: the pill already says
-     "running" in words beside it. */
-  .beat {
-    inline-size: 5px;
-    block-size: 5px;
-    flex: 0 0 auto;
-    border-radius: 50%;
-    /* It breathes (app.css .breathe, DESIGN.md Live work breathes). */
-    background: var(--status-live-glyph);
-  }
-
-  /* The subagent's own transcript, in a well of its own. Concentric: the
-     well's --radius-sm (8px) less its --space-1 (4px) padding is the
-     --radius-xs the report inside it carries, so no two nested corners share
-     a radius. The transcript's own x=0 is the text column; the well reaches
-     out past it by its padding. */
-  .inner {
-    margin-block: var(--space-2) 0;
-    margin-inline: calc(var(--x-hang) - var(--space-1)) 0;
-    padding: var(--space-1);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-  }
-  .say {
-    margin-block-start: var(--space-4);
-  }
-  .report {
-    margin-block-start: var(--space-4);
-    padding: var(--space-3);
-    border-radius: var(--radius-xs);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .report h4 {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    letter-spacing: var(--track-caps);
-    text-transform: uppercase;
-    color: var(--ink-muted);
-    margin-block-end: var(--space-2);
-  }
-  .fail {
-    margin-block-start: var(--space-4);
-    padding: var(--space-3);
-    border-radius: var(--radius-xs);
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    color: var(--status-fail-ink);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    white-space: pre-wrap;
-  }
-
-  /* The head is the only control on the card, so on a touch screen it is a real
-     target. Scoped `.bhead` never matched the trigger — this is the same rule
-     the old card carried, written so it applies. */
-  @media (pointer: coarse) {
-    .branch :global(.bhead) {
-      min-block-size: 44px;
-    }
-  }
-</style>

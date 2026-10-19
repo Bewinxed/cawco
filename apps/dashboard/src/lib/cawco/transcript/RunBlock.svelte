@@ -120,13 +120,7 @@
   {/snippet}
   <!-- The glyph stands before the link, in its own cell: the steps' line
        leaves its foot outside any control. -->
-  <!-- literal: 26px, 44px -->
-  <div
-    data-slot="head"
-    class="rail-line min-h-(--head-min) coarse:min-h-(--head-min-coarse) text-size-label font-medium"
-    style:--head-min="26px"
-    style:--head-min-coarse="44px"
-  >
+  <div data-slot="head" class="rail-line text-size-label font-medium">
     <span data-rail-cell data-slot="mark" class="rail-cell"
       >{#if runId}
         <SessionStatus compact sessionId={runTabId(runId)} />
@@ -135,30 +129,24 @@
     {#if runId && !here}
       <a
         data-slot="words"
-        class="group/words mark-line press-tint flex-auto min-w-0 min-h-(--head-min) coarse:min-h-(--head-min-coarse) flex items-center gap-space-2 m-0 rounded-xs text-inherit no-underline"
+        class="group/words mark-line press-tint flex-auto min-w-0 min-h-c-mark coarse:min-h-c-btn-h-lg flex items-center gap-space-2 m-0 rounded-xs text-inherit no-underline"
         data-box
-        href={runHref(runId)}
-        style:--head-min="26px"
-        style:--head-min-coarse="44px">{@render words()}</a
+        href={runHref(runId)}>{@render words()}</a
       >
     {:else}
       <p
         data-slot="words"
-        class="mark-line flex-auto min-w-0 min-h-(--head-min) coarse:min-h-(--head-min-coarse) flex items-center gap-space-2 m-0 rounded-xs text-inherit no-underline"
+        class="mark-line flex-auto min-w-0 min-h-c-mark coarse:min-h-c-btn-h-lg flex items-center gap-space-2 m-0 rounded-xs text-inherit no-underline"
         data-box
-        style:--head-min="26px"
-        style:--head-min-coarse="44px"
       >
         {@render words()}
       </p>
     {/if}
   </div>
   {#if failure}
-    <!-- literal: 68ch -->
     <p
       data-slot="failure"
-      class="rail-hang mt-space-1 mb-0 max-w-(--measure) text-status-fail-ink text-size-meta font-normal leading-body wrap-anywhere"
-      style:--measure="68ch"
+      class="rail-hang mt-space-1 mb-0 max-w-c-measure text-status-fail-ink text-size-meta font-normal leading-body wrap-anywhere"
     >
       {failure}
     </p>
