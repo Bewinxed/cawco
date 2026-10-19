@@ -558,7 +558,8 @@ const desk = async (
           (card) => card.title
         )
       ),
-    (titles) => titles.includes("tall-board"),
+    // Until the hub answers, the cards stand unfiltered: wait for its answer.
+    (titles) => titles.length === 1 && titles[0] === "tall-board",
     15_000
   ).catch(() => 0);
   const byTitle = await page.evaluate(() =>

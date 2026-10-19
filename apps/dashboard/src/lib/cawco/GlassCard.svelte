@@ -71,6 +71,7 @@
   import FinderCard from "./find/FinderCard.svelte";
   import CawPanel from "./home/CawPanel.svelte";
   import { liveFeed } from "./home/caw-feed.svelte";
+  import { lightbox } from "./lightbox/lightbox-state.svelte";
   import MachinesList from "./MachinesList.svelte";
   import { dur, ease } from "./motion/curves.svelte";
   import { FOLDED, GROWN, standsOpen } from "./motion/hang";
@@ -428,7 +429,9 @@
     data-glass-card-frame={FRAME[shown]}
     collisionPadding={placement.collisionPadding}
     customAnchor={glass}
-    escapeKeydownBehavior={shown === "jump" ? "ignore" : "close"}
+    escapeKeydownBehavior={shown === "jump" || lightbox.current
+      ? "ignore"
+      : "close"}
     folded={() => barGlass.instant}
     forceMount
     glass
@@ -464,10 +467,14 @@
     onInteractOutside={(event) => {
       // The glass's own items open, swap or shut it themselves; bits-ui
       // tells of a press on one after its click has already done so. The
-      // file floating beside Files is Files' own.
+      // file floating beside Files is Files' own, and so is a picture it
+      // opened (the lightbox's PhotoSwipe root, appended to the body, is no
+      // layer of bits-ui's).
       if (
         event.target instanceof Element &&
-        event.target.closest("[data-bar-group], [data-files-float]")
+        event.target.closest(
+          "[data-bar-group], [data-files-float], .cawco-pswp"
+        )
       ) {
         event.preventDefault();
         return;
