@@ -53,6 +53,8 @@ const DASHBOARD = join(ROOT, "apps/dashboard");
 const ARTIFACT_SOCKET = /\/ws\/artifact\//;
 /** More's name while it holds Comments: native's words (PreviewController.swift). */
 const MORE_COUNT = /^More, Comments [1-9]\d* open$/;
+/** The crumb's words: which frame of how many. */
+const FRAME_COUNT = /^Frame \d+ of \d+$/;
 const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
 /** A states file of the probe's own, in the stage's git-ignored folder: one story with no doc comment. */
 const UNNAMED_FILE = ".cawco/probe/Unnamed.stories.ts";
@@ -64,7 +66,34 @@ const FILES = [
 const CANVAS: CanvasSpec = {
   name: "Dashboard parts",
   about: "The stat tile, the speaker line and an unnamed story",
+  dials: [
+    {
+      name: "radius",
+      label: "Radius",
+      kind: "number",
+      min: 0,
+      max: 32,
+      step: 1,
+      unit: "px",
+      target: { cssVar: "--radius-md" },
+    },
+  ],
+  // Edges a straight route would cross frames on: one skips a row, one crosses a whole sheet.
+  edges: [
+    {
+      from: "src/lib/cawco/turn/Who.stories.ts:Agent",
+      to: "src/lib/cawco/turn/Who.stories.ts:Grouped",
+      label: "skips a row",
+    },
+    {
+      from: "src/lib/cawco/StatTile.stories.ts:Spend",
+      to: `${UNNAMED_FILE}:One`,
+      label: "across sheets",
+    },
+  ],
 };
+/** Every arrow or chevron a text could draw: the chrome draws Solar's glyphs or words instead. */
+const ARROWS = /[→›←‹◀▶]/;
 
 interface Stage {
   base: string;
@@ -88,6 +117,15 @@ async function stageOf(): Promise<Stage> {
     `import StatTile from "../../src/lib/cawco/StatTile.svelte";
 export default { component: StatTile, args: { label: "Spend", value: "1.00" } };
 export const One = { args: {} };
+
+/** The figure moves on. */
+export const Two = {
+  args: { value: "2.00" },
+  from: "One",
+  play: async ({ update }) => {
+    await update({ value: "2.00" });
+  },
+};
 `
   );
   writeFileSync(
@@ -465,6 +503,7 @@ async function canvasLeg(
   await drawn(page);
   const read = await readCanvas(page);
   const leg = `${width} ${theme}`;
+  await reviewLeg(kit, page, leg, phone, theme);
   kit.check(
     `1: ${leg}: the strip stands under the band, and Outline and Reset layout take a press at their centres`,
     read.bandStripApart && read.hits.every((one) => one.ok),
@@ -557,6 +596,473 @@ async function canvasLeg(
   await page.close();
 }
 
+/** The second review's findings on one canvas page: the band's tools, its words, the arrows, the edges, the dials and the move's timeline. */
+async function reviewLeg(
+  kit: Kit,
+  page: Page,
+  leg: string,
+  phone: boolean,
+  theme: "light" | "dark"
+): Promise<void> {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one reading of the page in the page
+  const read = await page.evaluate((arrows) => {
+    const w = window as unknown as {
+      __rgb: (c: string) => string;
+      __token: (name: string, host: Element, prop?: string) => string;
+    };
+    const ARROW = new RegExp(arrows);
+    const root = document.getElementById("cawco-chrome")
+      ?.shadowRoot as ShadowRoot;
+    const band = root.querySelector(".band") as HTMLElement;
+    const style = getComputedStyle(band);
+    const b = band.getBoundingClientRect();
+    const t = (root.querySelector(".tools") as Element).getBoundingClientRect();
+    const lines =
+      (b.top +
+        Number.parseFloat(style.paddingTop) +
+        b.bottom -
+        Number.parseFloat(style.paddingBottom)) /
+      2;
+    const texts: string[] = [];
+    const walk = (node: Node) => {
+      // Sheets and scripts are not drawn.
+      if (node.nodeName === "STYLE" || node.nodeName === "SCRIPT") {
+        return;
+      }
+      if (
+        node.nodeType === Node.TEXT_NODE &&
+        ARROW.test(node.textContent ?? "")
+      ) {
+        texts.push(node.textContent ?? "");
+      }
+      for (const kid of node.childNodes) {
+        walk(kid);
+      }
+    };
+    walk(root);
+    for (const el of document.querySelectorAll(
+      ".cawco-edges, .dialkit-root, .cawco-section-head, .cawco-frame-label, .cawco-colhead"
+    )) {
+      walk(el);
+    }
+    // What an edge may not cross: every drawn part of a frame (its label, body and status) and the section heads.
+    const obstacles = [
+      ...document.querySelectorAll(
+        ".cawco-frame-label, .cawco-frame-body, .cawco-frame-status, .cawco-section-head"
+      ),
+    ]
+      .map((one) => ({ one, r: one.getBoundingClientRect() }))
+      .filter(({ r }) => r.width > 0 && r.height > 0);
+    const inside = (x: number, y: number) =>
+      obstacles.find(
+        ({ r }) =>
+          x > r.left + 1 && x < r.right - 1 && y > r.top + 1 && y < r.bottom - 1
+      );
+    const crossing: string[] = [];
+    // Each stroke sampled every 2px along its length: a box test cannot tell a lane round a frame from one through it.
+    for (const path of document.querySelectorAll<SVGPathElement>(
+      ".cawco-edges path.cawco-edge"
+    )) {
+      const ctm = path.getScreenCTM();
+      const length = path.getTotalLength();
+      for (let at = 0; ctm && at <= length; at += 2) {
+        const p = path.getPointAtLength(at).matrixTransform(ctm);
+        const hit = inside(p.x, p.y);
+        if (hit) {
+          crossing.push(
+            `${path.dataset.cawcoFrom} edge at ${Math.round(p.x)},${Math.round(p.y)} inside ${hit.one.className}`
+          );
+          break;
+        }
+      }
+    }
+    for (const text of document.querySelectorAll<SVGTextElement>(
+      ".cawco-edges text"
+    )) {
+      const r = text.getBoundingClientRect();
+      const hit = obstacles.find(
+        (o) =>
+          Math.min(r.right, o.r.right) - Math.max(r.left, o.r.left) > 0.5 &&
+          Math.min(r.bottom, o.r.bottom) - Math.max(r.top, o.r.top) > 0.5
+      );
+      if (hit) {
+        crossing.push(`label "${text.textContent}" over ${hit.one.className}`);
+      }
+    }
+    const name = root.querySelector(".name") as HTMLElement;
+    const panel = document.querySelector<HTMLElement>(
+      ".cawco-dock-dials .dialkit-panel-inner"
+    );
+    const dialRoot = document.querySelector<HTMLElement>(
+      ".cawco-dock-dials .dialkit-root"
+    );
+    let heaviest = 0;
+    for (const el of document.querySelectorAll(
+      ".dialkit-root, .dialkit-root *"
+    )) {
+      heaviest = Math.max(heaviest, Number(getComputedStyle(el).fontWeight));
+    }
+    return {
+      centring: `tools centre ${(t.top + t.height / 2).toFixed(1)}, band lines' centre ${lines.toFixed(1)}`,
+      centred: Math.abs(t.top + t.height / 2 - lines) <= 1,
+      crumb:
+        (root.querySelector(".crumb .num") as HTMLElement | null)
+          ?.textContent ?? "",
+      nameShown: getComputedStyle(name).display !== "none",
+      arrows: texts,
+      edges: document.querySelectorAll(".cawco-edges path.cawco-edge").length,
+      crossing,
+      dials:
+        panel && dialRoot
+          ? {
+              ground: [
+                w.__rgb(getComputedStyle(panel).backgroundColor),
+                w.__token("--surface-raised", panel),
+              ],
+              ink: [
+                w.__rgb(getComputedStyle(dialRoot).color),
+                w.__token("--ink-strong", dialRoot, "color"),
+              ],
+              face: getComputedStyle(dialRoot).fontFamily,
+              theme: dialRoot.dataset.theme ?? "",
+              heaviest,
+            }
+          : null,
+    };
+  }, ARROWS.source);
+  kit.check(
+    `N6: ${leg}: Outline and Reset layout stand centred on the band's lines`,
+    read.centred,
+    read.centring
+  );
+  kit.check(
+    `7c: ${leg}: the crumb says only which frame of how many, the band names the canvas where it stands alone`,
+    FRAME_COUNT.test(read.crumb) && read.nameShown,
+    `crumb "${read.crumb}", name shown ${read.nameShown}`
+  );
+  kit.check(
+    `8: ${leg}: no arrow or chevron drawn as text in the chrome, the edges, the section heads, the labels or DialKit`,
+    read.arrows.length === 0,
+    read.arrows.join(" | ") || "none"
+  );
+  kit.check(
+    `N3: ${leg}: no edge's stroke or label crosses any frame's label, body or status or a section head${phone ? " (a phone draws no edge to a frame it doesn't show)" : ", with an edge that skips a row and one across a sheet"}`,
+    read.crossing.length === 0 && (phone || read.edges >= 3),
+    `${read.edges} edges; ${read.crossing.join("; ") || "none crossing"}`
+  );
+  kit.check(
+    `N1: ${leg}: the dials are DialKit in our tokens: surface-raised ground, ink-strong, Figtree, nothing past 500, its theme the page's (${theme})`,
+    !!read.dials &&
+      same(read.dials.ground as [string, string]) &&
+      same(read.dials.ink as [string, string]) &&
+      read.dials.face.includes("Figtree") &&
+      read.dials.heaviest <= 500 &&
+      read.dials.theme === theme,
+    JSON.stringify(read.dials)
+  );
+  await markLeg(kit, page, leg);
+  await roomLeg(kit, page, leg, phone);
+  await schemeLeg(kit, page, leg, theme);
+  await moveLeg(kit, page, leg, phone, theme);
+}
+
+/** Boxes of the chrome that stands over the canvas, and the canvas's own, as drawn. */
+const ROOM = () => {
+  const box = (el: Element | null) => {
+    const r = el?.getBoundingClientRect();
+    return r && r.width > 0 && r.height > 0
+      ? { top: r.top, right: r.right, bottom: r.bottom, left: r.left }
+      : null;
+  };
+  const root = document.getElementById("cawco-chrome")
+    ?.shadowRoot as ShadowRoot;
+  return {
+    canvas: box(document.querySelector(".cawco-canvas")),
+    dials: box(document.getElementById("cawco-dock-dials")),
+    timeline: box(document.getElementById("cawco-dock-timeline")),
+    outline: box(root.querySelector(".outline")),
+    foot: box(root.querySelector(".foot")),
+  };
+};
+type Room = ReturnType<typeof ROOM>;
+const roomWords = (room: Room) =>
+  Object.entries(room)
+    .map(([name, b]) =>
+      b
+        ? `${name} ${Math.round(b.left)}–${Math.round(b.right)} × ${Math.round(b.top)}–${Math.round(b.bottom)}`
+        : `${name} none`
+    )
+    .join("; ");
+
+/** 4b: the frame in view stays marked with the outline shut: the crumb's "Frame N of M" points at it. */
+async function markLeg(kit: Kit, page: Page, leg: string): Promise<void> {
+  await page.evaluate(() => {
+    const root = document.getElementById("cawco-chrome")
+      ?.shadowRoot as ShadowRoot;
+    const outline = [...root.querySelectorAll("button")].find(
+      (one) => one.textContent === "Outline"
+    );
+    if (outline?.getAttribute("aria-pressed") === "true") {
+      outline.click();
+    }
+  });
+  await page.waitForTimeout(300);
+  const read = await page.evaluate(() => {
+    const w = window as unknown as {
+      __rgb: (c: string) => string;
+      __token: (n: string, h: Element, p?: string) => string;
+    };
+    const root = document.getElementById("cawco-chrome")
+      ?.shadowRoot as ShadowRoot;
+    const marked = [
+      ...document.querySelectorAll<HTMLElement>(
+        ".cawco-frame[data-cawco-current]"
+      ),
+    ];
+    const label = marked[0]?.querySelector(".cawco-frame-label") as
+      HTMLElement | undefined;
+    const all = [...document.querySelectorAll<HTMLElement>(".cawco-frame")];
+    return {
+      outlineShut: !!(root.querySelector(".outline") as HTMLElement).hidden,
+      marked: marked.length,
+      fill: label
+        ? [
+            w.__rgb(getComputedStyle(label).backgroundColor),
+            w.__token("--selected-bg", label),
+          ]
+        : null,
+      crumb:
+        (root.querySelector(".crumb .num") as HTMLElement).textContent ?? "",
+      frames: all.length,
+    };
+  });
+  kit.check(
+    `4b: ${leg}: with the outline shut, the frame in view is still marked by its label row (selected-bg), the one the crumb counts`,
+    read.outlineShut &&
+      read.marked === 1 &&
+      !!read.fill &&
+      same(read.fill as [string, string]) &&
+      FRAME_COUNT.test(read.crumb),
+    JSON.stringify(read)
+  );
+}
+
+/** N2's family: the chrome standing over the canvas takes its room; nothing of it stands on another or on the canvas. */
+async function roomLeg(
+  kit: Kit,
+  page: Page,
+  leg: string,
+  phone: boolean
+): Promise<void> {
+  const shut = await page.evaluate(ROOM);
+  const ok = (room: Room) =>
+    !!room.canvas &&
+    !!room.dials &&
+    (phone
+      ? room.canvas.bottom <= room.dials.top + 0.5 &&
+        !!room.foot &&
+        room.dials.bottom <= room.foot.top + 0.5
+      : room.canvas.right <= room.dials.left + 0.5 &&
+        (!room.outline || room.dials.right <= room.outline.left + 0.5));
+  kit.check(
+    `N2b: ${leg}: the dials stand as chrome: ${phone ? "across the floor over the foot, the canvas ending above them" : "at the inline end, the canvas ending left of them"}`,
+    ok(shut),
+    roomWords(shut)
+  );
+  if (!phone) {
+    await page.evaluate(() => {
+      const root = document.getElementById("cawco-chrome")
+        ?.shadowRoot as ShadowRoot;
+      [...root.querySelectorAll("button")]
+        .find((one) => one.textContent === "Outline")
+        ?.click();
+    });
+    await page.waitForTimeout(400);
+    const open = await page.evaluate(ROOM);
+    kit.check(
+      `N2c: ${leg}: with the outline open, the dials stand left of it and the canvas left of both`,
+      ok(open) &&
+        !!open.outline &&
+        !!open.canvas &&
+        open.canvas.right <= open.outline.left + 0.5,
+      roomWords(open)
+    );
+    await page.evaluate(() => {
+      const root = document.getElementById("cawco-chrome")
+        ?.shadowRoot as ShadowRoot;
+      [...root.querySelectorAll("button")]
+        .find((one) => one.textContent === "Outline")
+        ?.click();
+    });
+    await page.waitForTimeout(300);
+  }
+}
+
+/** N1 live: the scheme turned under the page reaches its page-scheme frames and both of DialKit's roots, on one source. */
+async function schemeLeg(
+  kit: Kit,
+  page: Page,
+  leg: string,
+  theme: "light" | "dark"
+): Promise<void> {
+  const other = theme === "dark" ? "light" : "dark";
+  const read = () =>
+    page.evaluate(() => {
+      const w = window as unknown as {
+        __rgb: (c: string) => string;
+        __token: (n: string, h: Element, p?: string) => string;
+      };
+      const body = document.querySelector<HTMLElement>(
+        '.cawco-frame[data-cawco-scheme="page"] .cawco-frame-body'
+      );
+      const dials = document.querySelector<HTMLElement>(
+        ".cawco-dock-dials .dialkit-root"
+      );
+      const panel = document.querySelector<HTMLElement>(
+        ".cawco-dock-dials .dialkit-panel-inner"
+      );
+      return {
+        frame: body?.style.colorScheme ?? "",
+        dials: dials?.dataset.theme ?? "",
+        ground: panel
+          ? [
+              w.__rgb(getComputedStyle(panel).backgroundColor),
+              w.__token("--surface-raised", panel),
+            ]
+          : null,
+      };
+    });
+  await page.emulateMedia({ colorScheme: other });
+  await page.waitForTimeout(500);
+  const turned = await read();
+  await page.emulateMedia({ colorScheme: theme });
+  await page.waitForTimeout(500);
+  const back = await read();
+  kit.check(
+    `N1b: ${leg}: the system's scheme turned to ${other} and back reaches the page-scheme frames and the dials live, the dials' ground the token's in each`,
+    turned.frame === other &&
+      turned.dials === other &&
+      !!turned.ground &&
+      same(turned.ground as [string, string]) &&
+      back.frame === theme &&
+      back.dials === theme,
+    `turned ${JSON.stringify(turned)}; back ${JSON.stringify(back)}`
+  );
+}
+
+/** N2 and N1 on a move's timeline: opened from its edge (desk) or by stepping to its story (phone). */
+async function moveLeg(
+  kit: Kit,
+  page: Page,
+  leg: string,
+  phone: boolean,
+  theme: "light" | "dark"
+): Promise<void> {
+  if (phone) {
+    // The outline's row for the unnamed sheet's One shows it (the canvas's own go); its step ahead plays the move to Two.
+    await page.evaluate(() => {
+      const root = document.getElementById("cawco-chrome")
+        ?.shadowRoot as ShadowRoot;
+      root
+        .querySelector<HTMLButtonElement>('.row[data-key*="|One|rest|"]')
+        ?.click();
+    });
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector(".cawco-frame[data-cawco-shown]")
+          ?.getAttribute("data-cawco-story") === "One",
+      null,
+      { timeout: 5000 }
+    );
+    await page.evaluate(() => {
+      const root = document.getElementById("cawco-chrome")
+        ?.shadowRoot as ShadowRoot;
+      const ahead = [
+        ...root.querySelectorAll<HTMLButtonElement>(".steps .ghost"),
+      ].find((one) => one.textContent?.includes("Two"));
+      ahead?.click();
+    });
+  } else {
+    await page.evaluate(() => {
+      document
+        .querySelector<SVGElement>('text[data-cawco-move$="|Two"]')
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    });
+  }
+  const opened = await page
+    .waitForFunction(
+      () =>
+        (document.querySelector(".cawco-dock-timeline")?.getBoundingClientRect()
+          .height ?? 0) > 0,
+      null,
+      { timeout: 10_000 }
+    )
+    .then(() => true)
+    .catch(() => false);
+  await page.waitForTimeout(800);
+  const read = await page.evaluate(() => {
+    const w = window as unknown as {
+      __rgb: (c: string) => string;
+      __token: (name: string, host: Element, prop?: string) => string;
+    };
+    const dock = document.querySelector(".cawco-dock-timeline") as HTMLElement;
+    const d = dock.getBoundingClientRect();
+    const c = (
+      document.querySelector(".cawco-canvas") as Element
+    ).getBoundingClientRect();
+    const status = document.querySelector<HTMLElement>(
+      '.cawco-frame[data-cawco-story="Two"][data-cawco-interaction="rest"] .cawco-frame-status'
+    );
+    const s = status?.getBoundingClientRect();
+    const ground = dock.querySelector<HTMLElement>(".dialkit-timeline-dock");
+    const root = dock.querySelector<HTMLElement>(".dialkit-root") ?? dock;
+    const dials = document
+      .getElementById("cawco-dock-dials")
+      ?.getBoundingClientRect();
+    const head = document
+      .getElementById("cawco-chrome")
+      ?.shadowRoot?.querySelector(".head")
+      ?.getBoundingClientRect();
+    return {
+      left: Math.round(c.bottom - (head?.bottom ?? 0)),
+      enough: c.bottom - (head?.bottom ?? 0) >= innerHeight * 0.3,
+      stacked: !dials || dials.height === 0 || dials.bottom <= d.top + 0.5,
+      dials: dials
+        ? `${Math.round(dials.top)}–${Math.round(dials.bottom)}`
+        : "none",
+      dock: `${Math.round(d.top)}–${Math.round(d.bottom)}`,
+      canvasBottom: Math.round(c.bottom),
+      status: s ? `${Math.round(s.top)}–${Math.round(s.bottom)}` : "none",
+      clear:
+        !!s &&
+        s.height > 0 &&
+        s.bottom <= d.top + 0.5 &&
+        s.bottom <= c.bottom + 0.5 &&
+        c.bottom <= d.top + 0.5,
+      ground: ground
+        ? [
+            w.__rgb(getComputedStyle(ground).backgroundColor),
+            w.__token("--surface-raised", ground),
+          ]
+        : null,
+      theme: root.dataset.theme ?? "",
+    };
+  });
+  kit.check(
+    `N2: ${leg}: the move's timeline stands above the foot, the canvas ends above it, and the played frame's status line stands clear of it`,
+    opened && read.clear && read.stacked && read.enough,
+    `opened ${opened}; timeline ${read.dock}, dials ${read.dials}, canvas ends ${read.canvasBottom} (${read.left}px under the head), status ${read.status}`
+  );
+  kit.check(
+    `N1: ${leg}: the timeline is DialKit in our tokens on the page's scheme (${theme})`,
+    !!read.ground &&
+      same(read.ground as [string, string]) &&
+      read.theme === theme,
+    JSON.stringify(read)
+  );
+}
+
 interface HeadRead {
   bar: { key: string; h: number; after: number }[];
   /** The head's gap and each child's box (x, width) and form, as drawn. */
@@ -637,16 +1143,142 @@ async function readHead(page: Page): Promise<HeadRead> {
   return { ...read, more };
 }
 
-/** The panel at one pane width and scheme, on the bench: the controls that stand in its head (null when it never loaded). */
-async function headLeg(
+/**
+ * Every edge an element draws on the line `at` (px from the top): its
+ * borders, its outline, and, `shadows` set, a shadow under it. Run in the
+ * page; names each `tag.class side width`.
+ */
+const EDGES_AT = ({
+  at,
+  inside,
+  shadows,
+}: {
+  at: number;
+  inside: string;
+  shadows: boolean;
+}): string[] => {
+  const scopes: (Document | ShadowRoot)[] = [document];
+  const shadow = document.getElementById("cawco-chrome")?.shadowRoot;
+  if (shadow) {
+    scopes.push(shadow);
+  }
+  const named = (el: Element, r: DOMRect, what: string) =>
+    `${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]} ${what} ${Math.round(r.width)}px`;
+  const near = (y: number) => Math.abs(y - at) <= 3;
+  const painted = (width: string, kind: string) =>
+    Number.parseFloat(width) > 0 && kind !== "none";
+  const marks = (el: Element): string[] => {
+    const r = el.getBoundingClientRect();
+    if (r.width === 0 || r.height === 0) {
+      return [];
+    }
+    const s = getComputedStyle(el);
+    const found: string[] = [];
+    if (near(r.top) && painted(s.borderTopWidth, s.borderTopStyle)) {
+      found.push(named(el, r, `top ${s.borderTopWidth}`));
+    }
+    if (near(r.bottom) && painted(s.borderBottomWidth, s.borderBottomStyle)) {
+      found.push(named(el, r, `bottom ${s.borderBottomWidth}`));
+    }
+    const ring = r.bottom + Number.parseFloat(s.outlineOffset);
+    if (near(ring) && painted(s.outlineWidth, s.outlineStyle)) {
+      found.push(named(el, r, "outline"));
+    }
+    if (shadows && near(r.bottom) && s.boxShadow !== "none") {
+      found.push(named(el, r, "shadow"));
+    }
+    return found;
+  };
+  return scopes.flatMap((scope) =>
+    [...scope.querySelectorAll(inside)].flatMap(marks)
+  );
+};
+
+/** 7 and N7 in the panel: the band says no name the head says; nothing but the well's own edge is drawn at the head/well seam, in the panel or the page's top row. */
+async function seamLeg(kit: Kit, page: Page, leg: string): Promise<void> {
+  const canvasFrame = page
+    .frames()
+    .find((one) => one.url().includes("/@cawco/canvas"));
+  const band = canvasFrame
+    ? await canvasFrame.evaluate(() => {
+        const root = document.getElementById("cawco-chrome")
+          ?.shadowRoot as ShadowRoot;
+        const name = root.querySelector(".name") as HTMLElement;
+        return {
+          nameShown: getComputedStyle(name).display !== "none",
+          crumb:
+            (root.querySelector(".crumb .num") as HTMLElement | null)
+              ?.textContent ?? "",
+        };
+      })
+    : null;
+  kit.check(
+    `7d: ${leg}: in the panel the band doesn't name the canvas the head names, and its crumb counts frames only`,
+    !!band && !band.nameShown && FRAME_COUNT.test(band.crumb),
+    JSON.stringify(band)
+  );
+  const well = await page.evaluate(() => {
+    const box = (
+      document.querySelector(
+        "[data-bench-pane] [data-slot=side-well]"
+      ) as HTMLElement
+    ).getBoundingClientRect();
+    return { top: box.top, width: Math.round(box.width) };
+  });
+  // The panel's seam, its well's own shadow aside (it's the well's ground).
+  const inPanel = (
+    await page.evaluate(EDGES_AT, {
+      at: well.top,
+      inside: "[data-bench-pane] *",
+      shadows: true,
+    })
+  ).filter((one) => !one.startsWith("div.side-well shadow"));
+  // The page's top row, under the seam: an edge there narrower than the page would read as a stray line.
+  const pageTop = canvasFrame
+    ? (
+        await canvasFrame.evaluate(EDGES_AT, {
+          at: 0,
+          inside: "*",
+          shadows: true,
+        })
+      ).filter((one) => !one.endsWith(` ${well.width - 2}px`))
+    : ["no canvas frame"];
+  // Every box 50–150px wide whose edge meets the seam, whatever it paints (the reviewer's line was 132 device px, 66 CSS px at 2×).
+  const touching = await page.evaluate((at) => {
+    const near = (y: number) => Math.abs(y - at) <= 3;
+    return [...document.querySelectorAll("[data-bench-pane] *")]
+      .map((el) => ({ el, r: el.getBoundingClientRect() }))
+      .filter(
+        ({ r }) =>
+          r.width >= 50 && r.width <= 150 && (near(r.top) || near(r.bottom))
+      )
+      .map(
+        ({ el, r }) =>
+          `${el.tagName.toLowerCase()}.${String(el.className).split(" ")[0]} ${Math.round(r.width)}px ${near(r.top) ? "top" : "bottom"} bg ${getComputedStyle(el).backgroundColor}`
+      );
+  }, well.top);
+  kit.check(
+    `N7: ${leg}: at the head/well seam only the well's own edge is drawn, the well's width, and nothing draws an edge in the page's top row`,
+    inPanel.length === 1 &&
+      inPanel[0]?.endsWith(` ${well.width}px`) === true &&
+      pageTop.length === 0,
+    `well ${well.width}px; ${inPanel.join("; ") || "nothing"}; page's top row: ${pageTop.join("; ") || "nothing"}; boxes 50–150px meeting the seam: ${touching.join("; ") || "none"}`
+  );
+}
+
+/** The bench's panel at one pane width and scheme, its canvas loaded (`query` adds to the bench's address); null, said, when it never loads. */
+async function openBench(
   kit: Kit,
   bench: string,
   stage: Stage,
   width: number,
-  theme: "light" | "dark"
-): Promise<Set<string> | null> {
-  const touch = width < 640;
-  const page = await kit.page(touch ? "phone" : "desk", { theme, scale: 2 });
+  theme: "light" | "dark",
+  query: string
+): Promise<Page | null> {
+  const page = await kit.page(width < 640 ? "phone" : "desk", {
+    theme,
+    scale: 2,
+  });
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   page.on("console", (message) => {
@@ -663,14 +1295,14 @@ async function headLeg(
     })
   );
   await page.goto(
-    `${bench}/motion/artifact-head?w=${width}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}`
+    `${bench}/motion/artifact-head?w=${width}&port=${stage.port}&path=${encodeURIComponent(canvasPath())}${query}`
   );
   const ready = await page
     .waitForSelector("[data-bench-pane] iframe.ready", { timeout: 60_000 })
     .then(() => true)
     .catch(() => false);
   if (!ready) {
-    const said = await page.evaluate(
+    const pane = await page.evaluate(
       () =>
         document.querySelector("[data-bench-pane]")?.outerHTML.slice(0, 3000) ??
         `no pane: ${location.href} ${document.body.innerText.slice(0, 600)}`
@@ -678,12 +1310,45 @@ async function headLeg(
     kit.check(
       `8: ${width} ${theme}: the canvas loads in the panel`,
       false,
-      `${said} | errors: ${errors.join(" | ")}`
+      `${pane} | errors: ${errors.join(" | ")}`
     );
     await page.close();
     return null;
   }
   await page.waitForTimeout(4000);
+  return page;
+}
+
+/** N7 with the Plan | Preview switch in the head, as the panel stands beside a conversation with a plan. */
+async function switchLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  theme: "light" | "dark"
+): Promise<void> {
+  for (const width of [390, 523, 720]) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+    const page = await openBench(kit, bench, stage, width, theme, "&switch=1");
+    if (page) {
+      await seamLeg(kit, page, `${width} ${theme} with the switch`);
+      await page.close();
+    }
+  }
+}
+
+/** The panel at one pane width and scheme, on the bench: the controls that stand in its head (null when it never loaded). */
+async function headLeg(
+  kit: Kit,
+  bench: string,
+  stage: Stage,
+  width: number,
+  theme: "light" | "dark"
+): Promise<Set<string> | null> {
+  const touch = width < 640;
+  const page = await openBench(kit, bench, stage, width, theme, "");
+  if (!page) {
+    return null;
+  }
   const read = await readHead(page);
   const leg = `${width} ${theme}`;
   kit.check(
@@ -707,6 +1372,7 @@ async function headLeg(
     read.path || "none"
   );
   kit.note(`head ${leg}: ${read.boxes}`);
+  await seamLeg(kit, page, leg);
   const standing = new Set(
     read.bar
       .map((one) => one.key)
@@ -968,6 +1634,56 @@ async function commentsCount(
   await page.close();
 }
 
+/**
+ * N7: the canvas page as a desk's side panel draws it, under 640px wide so
+ * the phone's band and strip stand, with a mouse's fine pointer: every edge
+ * drawn on the head's foot (±3px) is read, and the head's own full-width
+ * foot is the only one.
+ */
+async function footLeg(
+  kit: Kit,
+  stage: Stage,
+  theme: "light" | "dark"
+): Promise<void> {
+  const page = await kit.page("desk", { init: [PAINT], theme });
+  await page.setViewportSize({ width: 560, height: 844 });
+  await page.goto(`${stage.base}${canvasPath()}`);
+  await drawn(page);
+  const foot = await page.evaluate(
+    () =>
+      document
+        .getElementById("cawco-chrome")
+        ?.shadowRoot?.querySelector(".head")
+        ?.getBoundingClientRect().bottom ?? 0
+  );
+  // The head's own shadow aside (it is the head's), every border, outline and shadow on its foot.
+  const edges = (
+    await page.evaluate(EDGES_AT, { at: foot, inside: "*", shadows: true })
+  ).filter((one) => !one.startsWith("div.head shadow"));
+  // And, said only, everything painting a line or a shadow within 10px over the foot: where a line read as on the seam may really stand.
+  const over = (
+    await Promise.all(
+      [4, 7, 10].map((up) =>
+        page.evaluate(EDGES_AT, { at: foot - up, inside: "*", shadows: true })
+      )
+    )
+  ).flat();
+  const strip = await page.evaluate(() => {
+    const root = document.getElementById("cawco-chrome")
+      ?.shadowRoot as ShadowRoot;
+    return getComputedStyle(root.querySelector(".strip") as Element).display;
+  });
+  kit.check(
+    `N7: 560 desk pointer ${theme}: on the foot of the band and strip only the head's own full-width edge is drawn`,
+    strip !== "none" &&
+      edges.length === 1 &&
+      edges[0]?.startsWith("div.head bottom 1px") === true &&
+      edges[0]?.endsWith(" 560px") === true,
+    `strip ${strip}; head foot at ${Math.round(foot)}; ${edges.join("; ") || "nothing"}; within 10px over it: ${[...new Set(over)].join("; ") || "nothing"}`
+  );
+  await page.close();
+}
+
 const spec: Spec = {
   name: "canvas-design",
   run: async (kit) => {
@@ -980,6 +1696,7 @@ const spec: Spec = {
           // biome-ignore lint/performance/noAwaitInLoops: one page at a time
           await canvasLeg(kit, stage, width, theme);
         }
+        await footLeg(kit, stage, theme);
       }
       const bench = await kit.bench();
       for (const theme of only === "page" ? [] : (["light", "dark"] as const)) {
@@ -1007,6 +1724,7 @@ const spec: Spec = {
         );
         await moreHoldsComments(kit, bench, stage, theme);
         await commentsCount(kit, bench, stage, theme);
+        await switchLeg(kit, bench, stage, theme);
       }
     } finally {
       stage.stop();

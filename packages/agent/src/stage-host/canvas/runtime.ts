@@ -50,6 +50,7 @@ import {
   type Rewrite,
   rewriteSheet,
 } from "./pseudo";
+import { onPageScheme, pageScheme } from "./scheme";
 
 /** What the adapter is handed for one story (Storybook's `decorateStory` inputs). */
 export interface MountSpec {
@@ -478,17 +479,9 @@ export function boot(options: BootOptions): void {
     return `${preset ?? "width"} ${width}`;
   };
 
-  /** A frame's scheme: its column's, or the page's own (the host's theme, else the system's). */
-  const schemeOf = (column: Column): Scheme => {
-    if (column.scheme !== "page") {
-      return column.scheme;
-    }
-    const { theme } = document.documentElement.dataset;
-    if (theme) {
-      return theme === "dark" ? "dark" : "light";
-    }
-    return media("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-  };
+  /** A frame's scheme: its column's, or the page's own (scheme.ts: the host's theme, else the system's). */
+  const schemeOf = (column: Column): Scheme =>
+    column.scheme === "page" ? pageScheme() : column.scheme;
 
   /**
    * A frame's small line: its story's name where the label above it says
@@ -1519,6 +1512,8 @@ export function boot(options: BootOptions): void {
       );
     }
     chrome.current(key);
+    // On a phone the frame shown changed: its edges are drawn again, to frames now drawn only.
+    drawEdges();
   };
 
   /* --- Edges: moves always, the agent's own when it sent them ---------- */
@@ -1562,9 +1557,10 @@ export function boot(options: BootOptions): void {
             from,
             to,
             kind: "move",
+            // The arrow is the edge's own marker: the words name the two ends.
             label: fired
-              ? `${move.from} → ${move.to} · ${fired.animations.length} animation${fired.animations.length === 1 ? "" : "s"}`
-              : `${move.from} → ${move.to}`,
+              ? `${move.from} to ${move.to} · ${fired.animations.length} animation${fired.animations.length === 1 ? "" : "s"}`
+              : `${move.from} to ${move.to}`,
             file: section.file,
             story: move.to,
           });
@@ -1585,6 +1581,46 @@ export function boot(options: BootOptions): void {
         lines.push({ from, to, kind: "group", label: "" });
       }
     }
+    edges.replaceChildren();
+    edges.innerHTML = `<defs><marker id="cawco-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>`;
+    // An end not drawn (a phone shows one frame) has no box: no edge is drawn to it.
+    const drawn = lines.filter((line) =>
+      [line.from, line.to].every((el) => {
+        const box = el.getBoundingClientRect();
+        return box.width > 0 && box.height > 0;
+      })
+    );
+    // Every edge joins two stories' rest frames, and a rest frame stands in
+    // its section's first column: so every edge runs in the world's left
+    // gutter, out of its frame's left side, along a lane of its own and into
+    // the other's, crossing no frame whatever the grid; its label stands in
+    // the gutter too, left of every lane. The labels' widths set the gutter.
+    const svg = "http://www.w3.org/2000/svg";
+    const texts = drawn.map((line) => {
+      if (!line.label) {
+        return null;
+      }
+      const text = document.createElementNS(svg, "text");
+      text.classList.add("cawco-edge-label");
+      text.setAttribute("text-anchor", "end");
+      text.textContent = line.label;
+      if (line.kind === "move") {
+        text.dataset.cawcoMove = `${line.file}|${line.story}`;
+      }
+      edges.append(text);
+      return text;
+    });
+    const widest = Math.max(
+      0,
+      ...texts.map((text) => text?.getComputedTextLength() ?? 0)
+    );
+    const lanesWide =
+      drawn.length > 0 ? EDGE_OUT + EDGE_LANE * (drawn.length - 1) : 0;
+    const gutter =
+      drawn.length > 0
+        ? Math.ceil(lanesWide + (widest > 0 ? EDGE_LABEL_GAP * 2 + widest : 0))
+        : 0;
+    world.style.setProperty("--cawco-gutter", `${gutter}px`);
     const origin = world.getBoundingClientRect();
     const local = (rect: DOMRect) => ({
       x: (rect.x - origin.x) / zoom.z,
@@ -1592,35 +1628,32 @@ export function boot(options: BootOptions): void {
       w: rect.width / zoom.z,
       h: rect.height / zoom.z,
     });
-    edges.replaceChildren();
-    edges.innerHTML = `<defs><marker id="cawco-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z"/></marker></defs>`;
-    for (const line of lines) {
-      const a = local(line.from.getBoundingClientRect());
-      const b = local(line.to.getBoundingClientRect());
-      const across =
-        Math.abs(b.x + b.w / 2 - (a.x + a.w / 2)) >=
-        Math.abs(b.y + b.h / 2 - (a.y + a.h / 2));
-      let start: [number, number];
-      let end: [number, number];
-      if (across) {
-        const right = b.x > a.x;
-        start = [right ? a.x + a.w : a.x, a.y + a.h / 2];
-        end = [right ? b.x : b.x + b.w, b.y + b.h / 2];
-      } else {
-        const down = b.y > a.y;
-        start = [a.x + a.w / 2, down ? a.y + a.h : a.y];
-        end = [b.x + b.w / 2, down ? b.y : b.y + b.h];
-      }
-      const bend = across
-        ? [(end[0] - start[0]) / 2, 0]
-        : [0, (end[1] - start[1]) / 2];
-      const path = document.createElementNS(
-        "http://www.w3.org/2000/svg",
-        "path"
-      );
+    const labelsEnd = gutter - lanesWide - EDGE_LABEL_GAP;
+    let below = Number.NEGATIVE_INFINITY;
+    const placed = drawn
+      .map((line, lane) => {
+        const a = local(line.from.getBoundingClientRect());
+        const b = local(line.to.getBoundingClientRect());
+        return { line, lane, a, b, words: texts[lane] ?? null };
+      })
+      .sort((one, two) => (one.a.y + one.b.y) / 2 - (two.a.y + two.b.y) / 2);
+    for (const { line, lane, a, b, words } of placed) {
+      const x = gutter - EDGE_OUT - EDGE_LANE * lane;
+      const fromY = a.y + a.h / 2;
+      const toY = b.y + b.h / 2;
+      const turn = Math.min(EDGE_TURN, Math.abs(toY - fromY) / 2);
+      const down = toY >= fromY ? 1 : -1;
+      const path = document.createElementNS(svg, "path");
       path.setAttribute(
         "d",
-        `M${start[0]} ${start[1]} C${start[0] + (bend[0] as number)} ${start[1] + (bend[1] as number)} ${end[0] - (bend[0] as number)} ${end[1] - (bend[1] as number)} ${end[0]} ${end[1]}`
+        [
+          `M${a.x} ${fromY}`,
+          `H${x + turn}`,
+          `Q${x} ${fromY} ${x} ${fromY + down * turn}`,
+          `V${toY - down * turn}`,
+          `Q${x} ${toY} ${x + turn} ${toY}`,
+          `H${b.x}`,
+        ].join(" ")
       );
       path.classList.add("cawco-edge", `cawco-edge-${line.kind}`);
       if (line.kind !== "group") {
@@ -1630,28 +1663,17 @@ export function boot(options: BootOptions): void {
       path.dataset.cawcoTo = line.to.dataset.cawcoKey ?? "";
       if (line.kind === "move") {
         path.dataset.cawcoMove = `${line.file}|${line.story}`;
-        const title = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "title"
-        );
+        const title = document.createElementNS(svg, "title");
         title.textContent = `${line.label}: open its timeline`;
         path.append(title);
       }
       edges.append(path);
-      if (line.label) {
-        const text = document.createElementNS(
-          "http://www.w3.org/2000/svg",
-          "text"
-        );
-        text.classList.add("cawco-edge-label");
-        text.setAttribute("x", String((start[0] + end[0]) / 2));
-        text.setAttribute("y", String((start[1] + end[1]) / 2 - 6));
-        text.setAttribute("text-anchor", "middle");
-        text.textContent = line.label;
-        if (line.kind === "move") {
-          text.dataset.cawcoMove = `${line.file}|${line.story}`;
-        }
-        edges.append(text);
+      if (words) {
+        // At its lane's middle, below the label above it where two would meet.
+        const y = Math.max((fromY + toY) / 2 + 4, below + EDGE_LABEL_LINE);
+        below = y;
+        words.setAttribute("x", String(labelsEnd));
+        words.setAttribute("y", String(y));
       }
     }
   }
@@ -1845,6 +1867,19 @@ export function boot(options: BootOptions): void {
     world: () => zoom,
   });
 
+  // The page's scheme turned (the host's theme, or the system's): every frame drawn in it, and the chrome's DialKit, follow.
+  onPageScheme((scheme) => {
+    for (const section of sections) {
+      for (const frame of section.frames.values()) {
+        if (frame.column.scheme === "page") {
+          dress(frame);
+        }
+      }
+    }
+    chrome.scheme(scheme);
+    later();
+  });
+
   bridge()?.on("picks", (picks) => {
     const layout = picks.layout?.value;
     if (layout && typeof layout === "object" && !drag) {
@@ -1896,5 +1931,16 @@ export function boot(options: BootOptions): void {
 
 /** `file:Story`: the colon before the story's name. */
 const LAST_COLON = /:(?=[^:]+$)/;
+/**
+ * The edges' gutter, on DESIGN.md's spacing ladder: a lane's first stands
+ * 18px out from the frames, each next one 7px further, its corners turn on
+ * a 7px radius, the labels stand 7px clear of the lanes, a line (16px, the
+ * meta role's) apart where two would meet.
+ */
+const EDGE_OUT = 18;
+const EDGE_LANE = 7;
+const EDGE_TURN = 7;
+const EDGE_LABEL_GAP = 7;
+const EDGE_LABEL_LINE = 16;
 const BODY_RULE = /(^|,)\s*(body|html|:root)\s*(,|$)/;
 const REDUCED_QUERY = /prefers-reduced-motion/;
