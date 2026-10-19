@@ -1489,12 +1489,17 @@
    * stands as rows mount above it.
    */
   let unseen = $state(untrack(() => !visible));
+  /** The rows as the pane was put away: what virtua last measured (`parkRows`). */
+  let putAway: Row[] = NO_ROWS;
   $effect(() => {
     const now = visible;
     let task: ReturnType<typeof setTimeout> | undefined;
     const frame = requestAnimationFrame(() => {
       task = setTimeout(() => {
         unseen = !now;
+        if (!now) {
+          putAway = renderedRows;
+        }
       });
     });
     return () => {
@@ -1575,7 +1580,9 @@
    * skipped: virtua's `hide`, `visibility: hidden` on its item) is skipped
    * at virtua's estimate and goes first: its first measurement lands in the
    * first step, not in the frame that lays the pane out (six such rows, 300
-   * of the 454 elements that frame styled: tab-return 1a). Shown before
+   * of the 454 elements that frame styled: tab-return 1a). A row rewritten
+   * since the pane was put away is not skipped at all: virtua's size for it
+   * is stale, and it is measured in that frame, as before. Shown before
    * that ends, the pane lifts every skip in the flush that shows it
    * (`skipped`).
    */
@@ -1609,10 +1616,18 @@
       return;
     }
     const at = new Map(renderedRows.map((row, index) => [row.key, index]));
+    // A row rewritten since the pane was put away (the live row a turn
+    // streamed into) has outgrown the size virtua has for it: it is not
+    // skipped, and is measured in the frame that lays the pane out. Skipped
+    // and let go by a far landing, it kept that size above the view
+    // (tab-return 1b: the list 15.5px short of main's).
+    const asPutAway = new Map(putAway.map((row) => [row.key, row]));
+    const rewritten = (key: string, index: number) =>
+      asPutAway.has(key) && asPutAway.get(key) !== renderedRows[index];
     const skips = new Map<string, number>();
     for (const key of holding) {
       const index = at.get(key);
-      if (index !== undefined) {
+      if (index !== undefined && !rewritten(key, index)) {
         skips.set(key, list.getItemSize(index));
       }
     }
