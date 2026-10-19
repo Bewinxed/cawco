@@ -161,6 +161,7 @@ import { generateImage } from "./image-generation";
 import { type KeeperReading, withKeepers } from "./keepers";
 import { isMachineAgent } from "./machine-agent";
 import { type HostedConfig, hostedEntry, mcpHost } from "./mcp-host";
+import { retireInstalls, syncInstalls } from "./mcp-install";
 import { resolveMcpLauncher } from "./mcp-launcher";
 import { onFleetMcpMoved } from "./mcp-status";
 import { gaugeGroup, gaugeTables } from "./memory";
@@ -2235,6 +2236,11 @@ export class SessionSupervisor {
       clearTimeout(timer);
     }
     this.#pulseTimers.delete(instanceId);
+    // A fleet MCP install no row names any more may have waited on this
+    // session's process alone (mcp-install.ts).
+    retireInstalls(() => this.instanceIds).catch((error: unknown) =>
+      warn(`retiring old fleet MCP installs failed: ${errorText(error)}`)
+    );
   }
 
   /**
@@ -4973,6 +4979,72 @@ export class SessionSupervisor {
     );
   }
 
+  /**
+   * The fleet's MCP rows as this machine launches them (mcp-launcher.ts),
+   * each npx row's package installed first (mcp-install.ts): a row that
+   * cannot launch here is disabled and says why in its launcher state, and a
+   * shared command row goes to the gateway (`hosted`) with the harnesses
+   * dialing it there. The installs no row launches from any more retire once
+   * no session uses them.
+   */
+  async #launchRows(
+    rows: MachineFleetConfig["mcp"],
+    hosted: { name: string; config: HostedConfig }[]
+  ): Promise<MachineFleetConfig["mcp"]> {
+    const launched = await syncInstalls(
+      async () => {
+        const result = await Promise.all(
+          rows.map(async (row) => ({
+            row,
+            launcher: row.enabled
+              ? await resolveMcpLauncher(row.config)
+              : undefined,
+          }))
+        );
+        return {
+          dirs: result.flatMap(({ launcher }) =>
+            launcher && "dir" in launcher && launcher.dir ? [launcher.dir] : []
+          ),
+          result,
+        };
+      },
+      () => this.instanceIds
+    );
+    return launched.map(({ row, launcher }) => {
+      if (!launcher) {
+        return row;
+      }
+      if (!("config" in launcher)) {
+        this.#mcpLauncherStates.set(
+          row.name,
+          "failed" in launcher
+            ? { state: "failed", cause: "unknown", detail: launcher.failed }
+            : { state: "pending", detail: launcher.unavailable }
+        );
+        return { ...row, enabled: false };
+      }
+      const local = { ...row, config: launcher.config };
+      if (local.shared && "command" in local.config) {
+        hosted.push({ name: row.name, config: local.config });
+        return {
+          ...local,
+          config: hostedEntry(
+            harnessMcpUrl(`/mcp/local/${encodeURIComponent(row.name)}`)
+          ),
+        };
+      }
+      return local.proxied && "url" in local.config
+        ? {
+            ...local,
+            config: {
+              ...local.config,
+              url: harnessMcpUrl(`/mcp/fleet/${encodeURIComponent(row.name)}`),
+            },
+          }
+        : local;
+    });
+  }
+
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every existing fleet report field across harnesses, preserving per-harness ownership
   async #syncFleet(
@@ -4988,40 +5060,7 @@ export class SessionSupervisor {
     const hosted: { name: string; config: HostedConfig }[] = [];
     const config = incoming && {
       ...incoming,
-      mcp: incoming.mcp.map((row) => {
-        if (!row.enabled) {
-          return row;
-        }
-        const launcher = resolveMcpLauncher(row.config);
-        if ("unavailable" in launcher) {
-          this.#mcpLauncherStates.set(row.name, {
-            state: "pending",
-            detail: launcher.unavailable,
-          });
-          return { ...row, enabled: false };
-        }
-        const local = { ...row, config: launcher.config };
-        if (local.shared && "command" in local.config) {
-          hosted.push({ name: row.name, config: local.config });
-          return {
-            ...local,
-            config: hostedEntry(
-              harnessMcpUrl(`/mcp/local/${encodeURIComponent(row.name)}`)
-            ),
-          };
-        }
-        return local.proxied && "url" in local.config
-          ? {
-              ...local,
-              config: {
-                ...local.config,
-                url: harnessMcpUrl(
-                  `/mcp/fleet/${encodeURIComponent(row.name)}`
-                ),
-              },
-            }
-          : local;
-      }),
+      mcp: await this.#launchRows(incoming.mcp, hosted),
     };
     if (config) {
       mcpHost.configure(hosted);

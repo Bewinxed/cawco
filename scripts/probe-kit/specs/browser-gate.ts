@@ -53,13 +53,13 @@ import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import { CdpLink } from "../../../packages/agent/src/browser/cdp-takeover";
 import { GATE_WORDS } from "../../../packages/agent/src/browser/gate";
-import { resolveMcpLauncher } from "../../../packages/agent/src/mcp-launcher";
 import {
   type BrowserKey,
   type BrowserRow,
   browserSlug,
   SHIELD_WORDS,
 } from "../../../packages/core/src/browser";
+import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
@@ -250,56 +250,34 @@ const DELEGATE = /PROBE-GATE-(A|B):/;
 const SELECTED = /(\d+):[^\n]*\[selected\]/;
 const TEXTBOX = /uid=(\S+) textbox/;
 
-/** Where the spec's npx runs: the person's HOME, and an npm cache of this run's own. */
-interface Npx {
-  cache: string;
-  home: string;
+/** The fleet's chrome-devtools entry as the fleet's sync wrote it into Claude Code's config: what every session launches. */
+interface SessionEntry {
+  args?: string[];
+  command: string;
+  env?: Record<string, string>;
 }
 
-/** chrome-devtools-mcp at the gate as workspace `id`. */
+/** chrome-devtools-mcp at the gate as workspace `id`, launched as `entry` says, with the gate's own arguments. */
 const mcpAs = async (
   port: number,
   id: string,
   token: string,
-  npx: Npx
+  entry: SessionEntry
 ): Promise<McpClient> => {
   const sdk =
     "../../../packages/hub/node_modules/@modelcontextprotocol/sdk/dist/esm/client";
   const { Client } = await import(`${sdk}/index.js`);
   const { StdioClientTransport } = await import(`${sdk}/stdio.js`);
-  // Its command as the fleet's sync resolves a fleet MCP's (npm's npx, never
-  // a Bun alias ahead of it), so the spec runs what sessions run.
-  const launcher = resolveMcpLauncher({
-    command: "npx",
+  const transport = new StdioClientTransport({
+    command: entry.command,
     args: [
-      "-y",
-      `chrome-devtools-mcp@${MCP_VERSION}`,
+      ...(entry.args ?? []),
       `--wsEndpoint=ws://127.0.0.1:${port}/${id}`,
       `--wsHeaders=${JSON.stringify({ Authorization: `Bearer ${token}` })}`,
-      "--no-usage-statistics",
     ],
-  });
-  if ("unavailable" in launcher) {
-    throw new Error(`chrome-devtools-mcp as ${id}: ${launcher.unavailable}`);
-  }
-  if (!("command" in launcher.config)) {
-    throw new Error(`chrome-devtools-mcp as ${id}: not a command`);
-  }
-  const transport = new StdioClientTransport({
-    command: launcher.config.command,
-    args: launcher.config.args,
-    // The person's HOME, not the fleet's, and an npm cache of the run's own.
-    // npx holds `<cache>/_npx/<hash>/concurrency.lock` while it reads its
-    // install, on every start, and waits on it with no end; a holder killed
-    // by SIGKILL never removes it, and the next npx waits until it is 60 s
-    // old (npm 11.19.1 libnpmexec with-lock.js `staleThreshold = 60_000`):
-    // the MCP SDK's own 60 s for `initialize`. A shared cache is shared with
-    // every process on the machine that starts this package.
     env: {
       ...(process.env as Record<string, string>),
-      ...launcher.config.env,
-      HOME: npx.home,
-      npm_config_cache: npx.cache,
+      ...entry.env,
     },
     // Kept: a server that exits ("Connection closed") says why only here.
     stderr: "pipe",
@@ -421,12 +399,12 @@ const gateChecks = async (
   port: number,
   host: string,
   who: Record<"A" | "B", { id: string; token: string }>,
-  npx: Npx
+  entry: SessionEntry
 ): Promise<void> => {
   const { check } = kit;
   const words = GATE_WORDS;
-  const A = await mcpAs(port, who.A.id, who.A.token, npx);
-  const B = await mcpAs(port, who.B.id, who.B.token, npx);
+  const A = await mcpAs(port, who.A.id, who.A.token, entry);
+  const B = await mcpAs(port, who.B.id, who.B.token, entry);
   try {
     const opened = await called(A, "new_page", { url: "https://example.com" });
     const pageId = selected(opened.text);
@@ -643,8 +621,35 @@ const run = async (kit: Kit): Promise<void> => {
   await fleet.accountSignedIn();
 
   const home = fleet.env.HOME as string;
-  // npx's cache for this run alone, gone with the fleet's sandbox (`Npx`).
-  const npx: Npx = { home: realHome, cache: join(fleet.sandbox, "npm") };
+  // The fleet's chrome-devtools as a person adds it; the spec launches the
+  // entry the machine's sync wrote for Claude Code, as every session does.
+  const put = await fetch(`${fleet.base}/api/fleet/mcp/chrome-devtools`, {
+    method: "PUT",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      config: {
+        command: "npx",
+        args: [
+          "-y",
+          `chrome-devtools-mcp@${MCP_VERSION}`,
+          "--no-usage-statistics",
+        ],
+      },
+      enabled: true,
+    }),
+  });
+  kit.check("the fleet runs chrome-devtools-mcp", put.ok, String(put.status));
+  const entry = await until(
+    "the machine's sync wrote the fleet's chrome-devtools for Claude Code",
+    async () =>
+      (
+        JSON.parse(
+          await readFile(join(home, CLAUDE_JSON_NAME), "utf8").catch(() => "{}")
+        ) as { mcpServers?: Record<string, SessionEntry> }
+      ).mcpServers?.["chrome-devtools"],
+    (found) => found?.command !== undefined,
+    180_000
+  );
   const repo = join(fleet.sandbox, "code");
   await mkdir(repo, { recursive: true });
   await Bun.$`git init -q -b main && echo code > README.md && git -c user.name=O -c user.email=o@probe.test add -A && git -c user.name=O -c user.email=o@probe.test commit -qm 'First commit'`
@@ -778,7 +783,7 @@ const run = async (kit: Kit): Promise<void> => {
       live.host === "container" && ports.devtools > 0,
       JSON.stringify(live)
     );
-    await gateChecks(kit, gateHost, key, gatePort, "container", who, npx);
+    await gateChecks(kit, gateHost, key, gatePort, "container", who, entry);
     shell.container = { devtools: ports.devtools, socket };
     await shellChecks(kit, "container");
 
@@ -844,7 +849,7 @@ const run = async (kit: Kit): Promise<void> => {
       local.host === "local" && localPorts.devtools > 0,
       JSON.stringify(local)
     );
-    await gateChecks(kit, gateHost, key, gatePort, "local", who, npx);
+    await gateChecks(kit, gateHost, key, gatePort, "local", who, entry);
     shell.local = { devtools: localPorts.devtools, socket };
     await shellChecks(kit, "local");
 

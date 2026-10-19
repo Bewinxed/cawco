@@ -303,8 +303,8 @@ const run = async (kit: Kit): Promise<void> => {
   await agentOn(`unix://${runtime.endpoint}`);
   await fleet.accountSignedIn();
 
-  // The fleet's chrome-devtools, as a person adds it; npx's cache is the
-  // person's, not the fleet's home.
+  // The fleet's chrome-devtools, as a person adds it: the machine's sync
+  // installs it and every session launches that install.
   const put = await fetch(`${fleet.base}/api/fleet/mcp/chrome-devtools`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
@@ -316,7 +316,6 @@ const run = async (kit: Kit): Promise<void> => {
           `chrome-devtools-mcp@${MCP_VERSION}`,
           "--no-usage-statistics",
         ],
-        env: { npm_config_cache: join(realHome, ".npm") },
       },
       enabled: true,
     }),

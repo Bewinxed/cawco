@@ -187,15 +187,25 @@ export const piSkillsDir = (): string => join(piAgentDir(), "skills");
 export const piMemoryFile = (): string => join(piAgentDir(), "AGENTS.md");
 
 /**
+ * Where the fleet sync installs each fleet MCP server a row runs with npx,
+ * one dir per package and exact version (agent mcp-install.ts): every
+ * session launches the package's bin from here with node, so none runs npx.
+ */
+export const fleetMcpInstallsDir = (): string =>
+  join(cawcoDataDir(), "fleet-mcp");
+
+/**
  * What the fleet sync writes on this machine that a harness loads: each
  * skills dir ({@link claudeSkillsDir}, {@link piSkillsDir}) with the tree
  * store its links land in ({@link treeStoreOf}), the vendored marketplaces
- * with their plugins' stores ({@link VENDOR_MARKETPLACES_DIR}), and pi's
- * memory document (Claude Code's, `CLAUDE.md`, is the user layer's). Every
- * workspace reads each and writes none (core workspace-policy.ts): a harness
- * hands its model a skill's path, and the model reads the skill's other
- * files from there with its own tools, through the boundary. pi's lie in
- * its agent dir, a credential store, so only these open there.
+ * with their plugins' stores ({@link VENDOR_MARKETPLACES_DIR}), pi's
+ * memory document (Claude Code's, `CLAUDE.md`, is the user layer's), and the
+ * fleet's installed MCP servers ({@link fleetMcpInstallsDir}), which a
+ * session in a workspace launches. Every workspace reads each and writes none
+ * (core workspace-policy.ts): a harness hands its model a skill's path, and
+ * the model reads the skill's other files from there with its own tools,
+ * through the boundary. pi's lie in its agent dir, a credential store, so
+ * only these open there.
  */
 export const fleetSyncedPaths = (): string[] => [
   ...[claudeSkillsDir(), piSkillsDir()].flatMap((dir) => [
@@ -204,6 +214,7 @@ export const fleetSyncedPaths = (): string[] => [
   ]),
   userLayerPath(VENDOR_MARKETPLACES_DIR),
   piMemoryFile(),
+  fleetMcpInstallsDir(),
 ];
 
 /** Where a project's fleet skills are placed in a folder: its project skills, which Claude Code and OpenCode both read. */

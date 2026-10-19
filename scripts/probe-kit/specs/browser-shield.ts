@@ -694,7 +694,6 @@ const run = async (kit: Kit): Promise<void> => {
           `chrome-devtools-mcp@${MCP_VERSION}`,
           "--no-usage-statistics",
         ],
-        env: { npm_config_cache: join(realHome, ".npm") },
       },
       enabled: true,
     }),

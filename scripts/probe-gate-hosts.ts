@@ -38,16 +38,22 @@ const ROOT = join(import.meta.dir, "..");
  */
 const DEVTOOLS_MCP = "chrome-devtools-mcp@1.11.0";
 
-/** It, with `args`, as the fleet's sync resolves a fleet MCP's `npx -y` (mcp-launcher.ts). */
+/**
+ * It, with `args`, as the fleet's sync resolves a fleet MCP's `npx -y`
+ * (mcp-launcher.ts): installed once under the private HOME's data dir and
+ * launched from there with node.
+ */
 const devtoolsLaunch = async (args: string[]) => {
   const { resolveMcpLauncher } =
     await import("../packages/agent/src/mcp-launcher");
-  const launcher = resolveMcpLauncher({
+  const launcher = await resolveMcpLauncher({
     command: "npx",
     args: ["-y", DEVTOOLS_MCP, ...args],
   });
-  if ("unavailable" in launcher) {
-    throw new Error(`${DEVTOOLS_MCP}: ${launcher.unavailable}`);
+  if (!("config" in launcher)) {
+    throw new Error(
+      `${DEVTOOLS_MCP}: ${"failed" in launcher ? launcher.failed : launcher.unavailable}`
+    );
   }
   if (!("command" in launcher.config)) {
     throw new Error(`${DEVTOOLS_MCP}: not a command`);
@@ -74,27 +80,18 @@ const sandbox =
   process.env.GATE_PROBE_SANDBOX ??
   join(sandboxRoot, `gate-hosts-probe-${crypto.randomUUID().slice(0, 8)}`);
 if (!process.env.GATE_PROBE_SANDBOX) {
-  // What the private HOME cannot find for itself: npm's cache, which holds
-  // the pinned chrome-devtools-mcp once it is fetched here through npx as
-  // the fleet's sync resolves it, and Playwright's Chromium, which the
-  // agent's local browser runs.
+  // What the private HOME cannot find for itself: npm's cache, from which the
+  // run installs the pinned chrome-devtools-mcp as the fleet's sync does
+  // (`devtoolsLaunch`), and Playwright's Chromium, which the agent's local
+  // browser runs.
   const { resolveBin } = await import("../packages/agent/src/tools");
   const npm = resolveBin("npm");
   if (!npm) {
     throw new Error(
-      "npm is required: the fleet runs chrome-devtools-mcp by npx."
+      "npm is required: the fleet installs chrome-devtools-mcp with it."
     );
   }
   const npmCache = (await Bun.$`${npm} config get cache`.text()).trim();
-  const fetched = await devtoolsLaunch(["--version"]);
-  const warmed = Bun.spawnSync([fetched.command, ...fetched.args], {
-    env: { ...process.env, ...fetched.env },
-  });
-  if (warmed.exitCode !== 0) {
-    throw new Error(
-      `${DEVTOOLS_MCP} --version: ${warmed.stderr.toString().trim()}`
-    );
-  }
   const browsers = join(homedir(), ".cache", "ms-playwright");
   // The machine's own agent holds the default gate port: this one is free.
   const probe = Bun.listen({
