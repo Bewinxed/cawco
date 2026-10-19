@@ -36,6 +36,13 @@
  *   allowed", coturn's turnserver.conf), that address read by a STUN binding
  *   through the published listener as each start comes up.
  *
+ * Either way coturn refuses every private and CGNAT peer but this machine's
+ * own browsers: the machine's addresses their candidates name are let
+ * through (`allowed-peer-ip`), read at each start, so a viewer the relay
+ * alone reaches gets a browser of the relay's machine. coturn lets a peer
+ * through by address alone, so TCP relaying is off (`no-tcp-relay`) and the
+ * exception carries UDP only, which is all a viewer's media takes.
+ *
  * The certificate is issued by DNS at Cloudflare when the hub hands the
  * person's token (certbot's `dns-cloudflare` plugin: "The Token needed by
  * Certbot requires `Zone:DNS:Edit` permissions for only the zones you need
@@ -89,7 +96,11 @@ import {
 import type Docker from "dockerode";
 import { browserRuntime } from "./browsers";
 import { pullImage } from "./image";
-import { forwardingReader, mediaForwarding } from "./media-forwarding";
+import {
+  forwardingReader,
+  machineAddresses,
+  mediaForwarding,
+} from "./media-forwarding";
 import { lanAddress, mappedBy } from "./relay-reach";
 import { unmapRelayPorts } from "./relay-router";
 import { type Runtime, runtimeInstallCommand } from "./runtime";
@@ -536,6 +547,11 @@ export const coturnArgs = (
   `--min-port=${args.relayRange[0]}`,
   `--max-port=${args.relayRange[1]}`,
   "--no-multicast-peers",
+  // No TCP relay endpoints (RFC 6062, on by default: "By default TCP relay
+  // endpoints are enabled"): a viewer's media relays over UDP alone, and the
+  // exception for this machine's own addresses below then carries no
+  // connection to another service of the machine.
+  "--no-tcp-relay",
   "--no-software-attribute",
   // The private and CGNAT ranges, so the relay reaches no machine of the
   // owner's networks; loopback peers are refused by coturn's default.
@@ -544,6 +560,11 @@ export const coturnArgs = (
   "--denied-peer-ip=192.168.0.0-192.168.255.255",
   "--denied-peer-ip=100.64.0.0-100.127.255.255",
   "--denied-peer-ip=169.254.0.0-169.254.255.255",
+  // Except this machine's own browsers: the addresses their candidates name
+  // (container-host.ts NAT1TO1), so a viewer the relay alone reaches gets
+  // this machine's browser ("If an ip address is specified as both allowed
+  // and denied, then the ip address is considered to be allowed").
+  ...network.own.map((one) => `--allowed-peer-ip=${one}`),
   ...(certified && args.hostname
     ? [
         `--cert=${LETSENCRYPT}/live/${args.hostname}/fullchain.pem`,
@@ -575,9 +596,24 @@ const addressing = (
   ];
 };
 
-/** How a relay meets the network: on the host's, or published with the address its forwarder hands peers, once read. */
-export type RelayNetworkSettings =
-  { kind: "host" } | { kind: "published"; forwarder?: string };
+/**
+ * How a relay meets the network: on the host's, or published with the
+ * address its forwarder hands peers, once read; and `own`, this machine's
+ * addresses in the ranges it denies that its browsers' candidates name
+ * ({@link ownPeers}).
+ */
+export type RelayNetworkSettings = { own: string[] } & (
+  { kind: "host" } | { kind: "published"; forwarder?: string }
+);
+
+/**
+ * This machine's own addresses a browser's candidates name (neko's NAT1TO1
+ * list, media-forwarding.ts `machineAddresses`: its LAN and tailnet
+ * addresses, its global IPv6 ones), read now, those of them coturn's
+ * denials cover: a public one needs no exception.
+ */
+export const ownPeers = async (): Promise<string[]> =>
+  (await machineAddresses()).filter((one) => !isPublicAddress(one));
 
 /** The settings a container was made with, as its label carries them. */
 const settingsHash = (
@@ -846,24 +882,35 @@ const readyToStart = async (args: RelayStartArgs): Promise<Runtime> => {
   return runtime;
 };
 
-/** The network settings `kept` was made with on `runtime`: published, the forwarder's address its label names. */
+/**
+ * The network settings for `runtime` with this machine's addresses `own`:
+ * published, the forwarder's address `kept`'s label names, the first guess
+ * until a start reads it again. A container whose label hash differs (the
+ * machine's addresses changed since) is made again.
+ */
 const keptSettings = (
   runtime: Runtime,
-  kept: Docker.ContainerInspectInfo | null
+  kept: Docker.ContainerInspectInfo | null,
+  own: string[]
 ): RelayNetworkSettings =>
   networkOf(runtime) === "host"
-    ? { kind: "host" }
-    : { kind: "published", forwarder: kept?.Config.Labels?.[FORWARDER_LABEL] };
+    ? { kind: "host", own }
+    : {
+        kind: "published",
+        forwarder: kept?.Config.Labels?.[FORWARDER_LABEL],
+        own,
+      };
 
 /** The relay's ports while `kept` runs with these very settings; undefined otherwise. */
 const runningAsAsked = async (
   runtime: Runtime,
   kept: Docker.ContainerInspectInfo | null,
-  args: RelayStartArgs
+  args: RelayStartArgs,
+  own: string[]
 ): Promise<{ ports: RelayPorts; tls: boolean } | undefined> => {
   const tls =
     !!args.hostname && kept?.Config.Labels?.[HOSTNAME_LABEL] === args.hostname;
-  const settings = keptSettings(runtime, kept);
+  const settings = keptSettings(runtime, kept, own);
   if (
     !kept?.State.Running ||
     kept.Config.Labels?.[RELAY_LABEL] !== settingsHash(args, tls, settings)
@@ -977,7 +1024,8 @@ export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
       const runtime = await readyToStart(args);
       const { docker } = runtime;
       const kept = await relayContainer(docker);
-      const running = await runningAsAsked(runtime, kept, args);
+      const own = await ownPeers();
+      const running = await runningAsAsked(runtime, kept, args, own);
       if (running) {
         return liveFrame(running.ports, running.tls, args.hostname);
       }
@@ -1006,13 +1054,7 @@ export const startRelay = (args: RelayStartArgs): Promise<RelayFrame> =>
       // Published, the forwarder's address the container before let through
       // is the first guess; the start reads it again and makes the container
       // anew once when it changed.
-      const settings: RelayNetworkSettings =
-        network === "host"
-          ? { kind: "host" }
-          : {
-              kind: "published",
-              forwarder: kept?.Config.Labels?.[FORWARDER_LABEL],
-            };
+      const settings = keptSettings(runtime, kept, own);
       await createRelay(docker, args, tls, settings);
       let ports = await waitLive(docker, runtime, tls);
       if (settings.kind === "published") {
@@ -1053,10 +1095,7 @@ const forwarderLetThrough = async (
     return ports;
   }
   await removeRelayContainer(runtime.docker);
-  await createRelay(runtime.docker, args, tls, {
-    kind: "published",
-    forwarder,
-  });
+  await createRelay(runtime.docker, args, tls, { ...made, forwarder });
   return waitLive(runtime.docker, runtime, tls);
 };
 

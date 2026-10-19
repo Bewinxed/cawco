@@ -36,8 +36,9 @@
  *
  * The relay is this spec's own coturn (the relay's image and arguments, a
  * secret made here), on a stand-in for 443 picked as browser-relay.ts picks
- * one, with `--allowed-peer-ip=<address>` added so it relays to this
- * machine's own LAN address, which the relay's arguments deny. The hub is
+ * one: it relays to this machine's own LAN address, which neko's candidates
+ * name, as the relay does, through the exception the relay's arguments make
+ * for this machine's own browsers (agent relay.ts `ownPeers`). The hub is
  * given a relay record for it under a machine that never connects, its
  * state `stopped`: the hub mints from it and never starts, stops or probes
  * it. The record's URLs name 443, so the viewer's page points them at the
@@ -526,6 +527,17 @@ const startCoturn = async (
   );
   const { relayRange } = STREAM_RELAY_PORTS;
   const [first, last] = relayRange;
+  // The relay's own exception for this machine's browsers: neko's candidates
+  // name `address`, so it must be among them.
+  const own = await relay.ownPeers();
+  if (
+    !kit.check(
+      `the relay lets this machine's own browsers through: ${own.join(", ") || "no address"}, ${address} among them`,
+      own.includes(address)
+    )
+  ) {
+    return;
+  }
   const ports = runtime.ownNetwork
     ? []
     : [
@@ -550,11 +562,10 @@ const startCoturn = async (
             { secret, address, relayRange },
             false,
             runtime.ownNetwork
-              ? { kind: "host" }
-              : { kind: "published", forwarder }
+              ? { kind: "host", own }
+              : { kind: "published", forwarder, own }
           )
           .map(onPort(standIn)),
-        `--allowed-peer-ip=${address}`,
         // Each request's answer, each permission, and each session's peer
         // traffic at its end ("peer usage"), read when the relay-only leg fails.
         "--verbose",

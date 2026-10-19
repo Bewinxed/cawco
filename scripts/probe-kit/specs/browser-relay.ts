@@ -17,7 +17,10 @@
  * - a TURN allocation with a credential the hub's `mintCredential` made
  *   succeeds over UDP and TCP 443 (and TLS on 443 with a name), and one whose
  *   username's timestamp has passed is refused 401;
- * - a permission to 10.0.0.5 is refused 403 (`denied-peer-ip`);
+ * - a permission to 10.0.0.5 is refused 403 (`denied-peer-ip`), and one to
+ *   this machine's own address, which its browsers' candidates name, granted
+ *   (`allowed-peer-ip`, agent relay.ts `ownPeers`);
+ * - a TCP relay allocation (RFC 6062) is refused 442 (`no-tcp-relay`);
  * - with `--hostname`: the certificate issued, and TLS on 443 answering with
  *   the Let's Encrypt chain;
  * - on the host network, the ports coturn binds beside its listener, read
@@ -72,6 +75,7 @@ import { hostname as machineHostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { connect as tlsConnect } from "node:tls";
 import { connect, getPublicIP } from "turn-server";
+import type { RelayNetworkSettings } from "../../../packages/agent/src/browser/relay";
 import type { Runtime } from "../../../packages/agent/src/browser/runtime";
 import type {
   RelayFailure,
@@ -90,8 +94,11 @@ type Docker = Runtime["docker"];
 type Container = ReturnType<Docker["getContainer"]>;
 
 const PROBE_CONTAINER = "cawco-relay-probe";
-/** This spec's own coturn runs, on a rootless Linux engine's host network (`refusedLegs`). */
-const HOST = { kind: "host" } as const;
+/** This spec's own coturn runs, on a rootless Linux engine's host network (`refusedLegs`), with the relay's exception for this machine's own browsers. */
+const hostNetwork = async (relay: Relay): Promise<RelayNetworkSettings> => ({
+  kind: "host",
+  own: await relay.ownPeers(),
+});
 const TURN_MS = 8000;
 /** How long this spec's own coturn has to bind its listener. */
 const BIND_MS = 10_000;
@@ -124,12 +131,19 @@ interface TlsTo {
   servername: string;
 }
 
-/** One TURN exchange: allocate with `user`, then (when asked) a permission to `peer`; what each answered. */
+/** TCP's protocol number, REQUESTED-TRANSPORT's value for a TCP relay (RFC 6062). */
+const TCP_TRANSPORT = 6;
+
+/**
+ * One TURN exchange: allocate with `user` (a UDP relay, or a TCP one when
+ * `relay` asks), then (when asked) a permission to `peer`; what each answered.
+ */
 export const turn = (
   url: string,
   user: { username: string; credential: string },
   peer?: string,
-  tls?: TlsTo
+  tls?: TlsTo,
+  relay?: "tcp"
 ): Promise<{
   allocated: boolean;
   allocateCode?: number;
@@ -195,7 +209,9 @@ export const turn = (
           result.error = said(err);
           finish(connected);
         });
-        connected.allocate();
+        connected.allocate(
+          relay === "tcp" ? { transport: TCP_TRANSPORT } : undefined
+        );
       }
     );
     setTimeout(() => {
@@ -711,6 +727,15 @@ const udpChecks = async (
   const stun = await binding(`stun:${on.host}:${on.port}?transport=udp`);
   const udp = await turn(url, fresh, PRIVATE_PEER);
   const expired = await turn(url, lapsed);
+  const { ownPeers } =
+    await import("../../../packages/agent/src/browser/relay");
+  const [own] = await ownPeers();
+  const browser = own ? await turn(url, fresh, own) : undefined;
+  kit.check(
+    `allocation permission to this machine's own ${own ?? "address (none found)"}, which its browsers' candidates name, granted: ${browser?.permissionCode ?? "not asked"}${on.where}`,
+    browser?.permissionCode === "granted",
+    JSON.stringify(browser)
+  );
   kit.check(
     `check 2 · UDP on the listener: STUN binding on udp ${on.port} ${stun}; allocation with a minted credential relayed ${udp.relayed ?? `nothing (${udp.error ?? udp.allocateCode})`}${on.where}`,
     stun.startsWith("up") && udp.allocated,
@@ -744,6 +769,18 @@ const streamChecks = async (
   const plainStun = await binding(`stun:${on.host}:${on.port}?transport=tcp`);
   const plain = await turn(`turn:${on.host}:${on.port}?transport=tcp`, fresh);
   const plainUp = plainStun.startsWith("up") && plain.allocated;
+  const tcpRelay = await turn(
+    `turn:${on.host}:${on.port}?transport=tcp`,
+    fresh,
+    undefined,
+    undefined,
+    "tcp"
+  );
+  kit.check(
+    `a TCP relay allocation refused (no-tcp-relay): ${tcpRelay.allocateCode ?? (tcpRelay.allocated ? "allocated" : tcpRelay.error)}${on.where}`,
+    tcpRelay.allocateCode === 442,
+    JSON.stringify(tcpRelay)
+  );
   if (!on.tls) {
     kit.check(
       `plain TCP on the listener: STUN binding on tcp ${on.port} ${plainStun}; allocation relayed ${plain.relayed ?? `nothing (${plain.error ?? plain.allocateCode})`}${on.where}`,
@@ -1085,7 +1122,9 @@ const refusedLegs = async (
     const withCert = await startProbe(
       docker,
       relay.RELAY_IMAGE,
-      relay.coturnArgs(named, true, HOST).map(onPort(standIn)),
+      relay
+        .coturnArgs(named, true, await hostNetwork(relay))
+        .map(onPort(standIn)),
       standIn,
       dir
     );
@@ -1119,7 +1158,9 @@ const refusedLegs = async (
     const plain = await startProbe(
       docker,
       relay.RELAY_IMAGE,
-      relay.coturnArgs(args, false, HOST).map(onPort(standIn)),
+      relay
+        .coturnArgs(args, false, await hostNetwork(relay))
+        .map(onPort(standIn)),
       standIn
     );
     try {
@@ -1173,7 +1214,9 @@ const otherShape = async (
     docker,
     relay.RELAY_IMAGE,
     [
-      ...relay.coturnArgs(named, true, HOST).map(onPort(standIn)),
+      ...relay
+        .coturnArgs(named, true, await hostNetwork(relay))
+        .map(onPort(standIn)),
       `--tls-listening-port=${tlsPort}`,
     ],
     standIn,
