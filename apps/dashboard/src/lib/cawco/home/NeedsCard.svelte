@@ -733,16 +733,16 @@
       {/if}
       <Button
         data-deny
-        aria-label="{item.request.browserAsk ? 'Decline' : 'Deny'} {answered}"
+        aria-label="Deny {answered}"
         class="peer deny"
         disabled={held || (answering && pressed !== "deny")}
         failed={answerRefused !== null && pressed === "deny"}
         icon={IconClose}
-        label={item.request.browserAsk ? "Decline" : "Deny"}
+        label="Deny"
         onclick={() => answer("deny")}
         {onkeydown}
         pending={answering && pressed === "deny"}
-        pendingLabel={item.request.browserAsk ? "Declining…" : "Denying…"}
+        pendingLabel="Denying…"
         size="sm"
         variant="secondary"
       />

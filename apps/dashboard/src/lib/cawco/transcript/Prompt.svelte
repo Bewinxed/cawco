@@ -90,13 +90,13 @@
   /**
    * A browser ask (core `BrowserAskFrame`): Take over starts the private
    * period (browsers.ts `/takeover`), which takes the ask off every screen
-   * and opens the session's panel on its browser; Decline answers the call,
-   * with the person's own words when "Other…" opened the field for them.
+   * and opens the session's panel on its browser; Deny answers the call,
+   * with the person's own words when its "Other" chip opened the line for
+   * them. That chip and its line are the question card's own (`openOther`,
+   * `writeOther`, `otherKey`): the ask is one question, its reason, with no
+   * options of its own.
    */
   const browserAsk = $derived(request.browserAsk ?? null);
-  let declineOpen = $state(false);
-  let declineWords = $state("");
-  let declineField = $state<HTMLInputElement | null>(null);
   /** What the hub refused the take-over with. */
   let takeRefused = $state<string | null>(null);
 
@@ -127,34 +127,49 @@
     }
   }
 
-  function declineBrowser(): void {
-    if (!answerable) {
+  /** Deny, with the words the person wrote on the "Other" line, if any. */
+  function denyBrowser(): void {
+    if (!(answerable && browserAsk)) {
       return;
     }
     pressed = "deny";
-    commandId = onanswer({ behavior: "deny", message: declineWords.trim() });
+    commandId = onanswer({
+      behavior: "deny",
+      message: (others[browserAsk.reason] ?? "").trim(),
+    });
   }
 
-  /** What the card is, as a screen reader names it. */
+  /** What the card is, as its title and a screen reader name it. */
   const cardLabel = $derived.by(() => {
     if (browserAsk) {
-      return `Browser ask from ${who}`;
+      return `Browser request from ${asker}`;
     }
     return questions
       ? `Question from ${asker}`
       : `Permission request from ${who}`;
   });
 
-  async function openDecline(): Promise<void> {
-    declineOpen = true;
-    await tick();
-    declineField?.focus();
-  }
-
   /** Names each question's lede, which labels its option group. */
   const claimId = $props.id();
   const input = $derived(request.input as Record<string, unknown>);
   const questions = $derived(questionsOf(request.toolName, input));
+  /**
+   * The questions the "Other" line answers: a question card's, or a
+   * browser ask's one, its reason, which Deny sends the line's words with.
+   */
+  const asked = $derived<UserQuestion[] | null>(
+    questions ??
+      (browserAsk
+        ? [
+            {
+              question: browserAsk.reason,
+              header: "",
+              options: [],
+              multiSelect: false,
+            },
+          ]
+        : null)
+  );
   const presentation = $derived(request.presentation);
   /** Who asks and where: "Caw · cockpit". */
   const who = $derived(askerLine(presentation));
@@ -398,7 +413,7 @@
 
   /** The field's words become the answer, in place of what they were before. */
   function writeOther(text: string): void {
-    const q = otherAt === null ? undefined : questions?.[otherAt];
+    const q = otherAt === null ? undefined : asked?.[otherAt];
     if (!q) {
       return;
     }
@@ -415,7 +430,7 @@
 
   /** "Other": the field's line opens for this question's own answer. */
   async function openOther(index: number): Promise<void> {
-    const q = questions?.[index];
+    const q = asked?.[index];
     if (!(q && answerable)) {
       return;
     }
@@ -448,6 +463,11 @@
     }
     event.preventDefault();
     event.stopPropagation();
+    // A browser ask's line goes with its Deny.
+    if (browserAsk) {
+      denyBrowser();
+      return;
+    }
     if (allAnswered) {
       submitQuestion();
       return;
@@ -785,47 +805,79 @@
   bind:this={card}
 >
   {#if browserAsk}
-    {@render title("Take over the browser")}
-    <!-- What the agent needs the person for, who asks, and the page's
-         origin in code type: the person checks where they will be typing
-         before they take over. -->
+    {@render title(cardLabel)}
+    <!-- What the agent needs the person for, as a question's text, and the
+         page's origin in code type: the person checks where they will be
+         typing before they take over. -->
     <div data-slot="body" class="body part" style:--part="1">
-      <p data-slot="lede" class="lede summary">{browserAsk.reason}</p>
+      <p data-slot="lede" class="lede">{browserAsk.reason}</p>
       <p
         data-slot="browser-meta"
-        class="mb-(--space-2) flex min-w-0 flex-wrap items-baseline gap-x-(--space-2) text-(length:--text-meta) text-(--ink-muted)"
+        class="mb-(--space-2) min-w-0 text-(length:--text-meta) text-(--ink-muted)"
       >
-        <span class="min-w-0 [overflow-wrap:anywhere]">{who}</span>
+        <!-- Broken only after its dots, never inside a label. -->
         <code
           data-slot="browser-origin"
-          class="min-w-0 [font:var(--type-code)] text-(--ink-strong) [overflow-wrap:anywhere]"
-          >{browserAsk.origin}</code
+          class="min-w-0 [font:var(--type-code)] text-(--ink-strong) [overflow-wrap:break-word]"
+          >{#each browserAsk.origin.split(".") as label, at (at)}{label}{#if at < browserAsk.origin.split(".").length - 1}.<wbr
+              />{/if}{/each}</code
         >
       </p>
-      {#if declineOpen}
-        <!-- The person's own words with the decline, as a question's
-             "Other" field takes an answer of their own. -->
-        <Input
-          data-decline-words
-          aria-label="Your words with the decline"
-          class="other"
-          disabled={!answerable}
-          onkeydown={(event: KeyboardEvent) => {
-            if (event.key === "Enter" && !event.isComposing) {
+      <!-- The question card's "Other": its chip and its line, side by side
+           in one row of a fixed height, so nothing under the thumb moves as
+           the line opens. -->
+      <div
+        data-slot="browser-other"
+        class="mb-(--space-2) flex h-9 min-w-0 items-center gap-(--space-2)"
+      >
+        <ToggleGroup.Root
+          aria-label={`Other answer to: ${browserAsk.reason}`}
+          class="kit-chips flex-none"
+          type="single"
+          value={otherAt === 0 ? OTHER : ""}
+        >
+          <ToggleGroup.Item
+            data-sel={otherAt === 0 || undefined}
+            class="kit-chip touch-hit{otherAt === 0 ? ' sel' : ''}"
+            onclick={(event: MouseEvent) => {
               event.preventDefault();
-              declineBrowser();
-            }
-          }}
-          placeholder="Your words…"
-          bind:ref={declineField}
-          bind:value={declineWords}
-        />
-      {/if}
+              openOther(0);
+            }}
+            onkeydown={(event: KeyboardEvent) => otherChipKey(event, 0)}
+            type="button"
+            value={OTHER}
+          >
+            <span data-slot="opt-label" class="opt-label">Other</span>
+          </ToggleGroup.Item>
+        </ToggleGroup.Root>
+        {#if otherAt === 0}
+          <Input
+            data-other
+            aria-label={`Your answer to: ${browserAsk.reason}`}
+            class="other h-9 min-w-0 flex-1"
+            disabled={!answerable}
+            oninput={(event) => writeOther(event.currentTarget.value)}
+            onkeydown={otherKey}
+            placeholder="Your answer…"
+            value={others[browserAsk.reason] ?? ""}
+            bind:ref={otherField}
+          />
+        {/if}
+      </div>
+      <!-- What the answer reaches, before the person commits to it: the
+           permission card's own line for that. -->
+      <p data-slot="detail" class="detail">
+        Agents in this project can't see or use the browser until you hand it
+        back.
+      </p>
     </div>
     <div data-slot="foot" class="foot part" style:--part="2">
-      <!-- The Peer Rule's transcript form: Take over and Decline at the
-           row's two ends, the one recessed fill, each outlined in its
-           tint; no third control between them. -->
+      <!-- A refusal stands over the pair: the card grows upward from the
+           composer's pill, so nothing under the thumb moves as it appears. -->
+      {@render wait()}
+      <!-- The Peer Rule's transcript form: Take over and Deny at the row's
+           two ends, the one recessed fill, each outlined in its tint; no
+           third control between them. -->
       <div data-slot="choice" class="choice">
         <Button
           class={grant}
@@ -841,30 +893,17 @@
         />
         <Button
           class={refuse}
-          data-browser-decline
+          data-browser-deny
           disabled={disabledOf("deny")}
           failed={failedOf("deny")}
           icon={IconClose}
-          label="Decline"
-          onclick={declineBrowser}
+          label="Deny"
+          onclick={denyBrowser}
           pending={pendingOf("deny")}
-          pendingLabel="Declining…"
+          pendingLabel="Denying…"
           variant="secondary"
         />
       </div>
-      {#if !declineOpen}
-        <div class="mt-(--space-2) flex justify-end">
-          <Button
-            class={dismiss}
-            data-browser-other
-            disabled={!answerable}
-            label="Other…"
-            onclick={openDecline}
-            variant="ghost"
-          />
-        </div>
-      {/if}
-      {@render wait()}
     </div>
   {:else if questions}
     {@render title(`Question from ${asker}`)}
