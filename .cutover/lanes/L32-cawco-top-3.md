@@ -19,7 +19,7 @@ Breakpoint edges: NeedsCaw.svelte `max-[900px]` (≤900px) → `max-desk:` (≤8
 
 ## Removed
 removed: apps/dashboard/src/lib/cawco/NeedsCaw.svelte:675 `inset: auto` on the touch `::after` — replaced by the four longhands it needs (`start-auto end-0 top-… bottom-auto`); the shorthand reset two properties already set
-removed: apps/dashboard/src/lib/cawco/NeedsCaw.svelte:698 `data-needs-caw-covered:[&>[data-caw-face]]:invisible` — an arbitrary child selector into CawFace; visibility inherits, so `invisible` on the face wrapper hides the face and the canvas's own `visible` still shows it
+removed: apps/dashboard/src/lib/cawco/NeedsCaw.svelte:697 `data-needs-caw-covered:[&>[data-caw-face]]:invisible` — an arbitrary child selector into CawFace; visibility inherits, so `invisible` on the face wrapper hides the face and the canvas's own `visible` still shows it
 
 ## Tokens
 token: --c-turn-measure 74ch — a conversation turn's reading measure (MessageBody `[data-slot="msg"]`); a text measure in ch, no ladder step
