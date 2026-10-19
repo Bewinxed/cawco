@@ -49,6 +49,10 @@ const STARTED = /BEAT-STARTED-(\d+):/;
 const ALIVE = /BEAT-ALIVE-(\d+):/;
 const BEATS = /BEAT-COUNT-(\d+):/;
 const ACCOUNT_ADDED = "acct-probe-older-form";
+/** The remote the older project has, and H's checkout learns in round 6. */
+const REMOTE = "https://github.com/cawco-probe/beat.git";
+/** How the agent says a fleet sync found a narrowed access (boundary.ts `recheckNow`). */
+const SYNCED = "its access narrowed (the fleet's config was synced)";
 const START_LINE = "[workspace] boundary hooks written for ";
 const KEPT_LINE = "is kept as it is while its work runs";
 /** The boundary the kept line names (boundary.ts `replaceOlder`). */
@@ -80,6 +84,7 @@ const CHECK = [
 const steps: {
   checked?: boolean;
   narrowed?: boolean;
+  restarted?: boolean;
   rested: number;
   started?: boolean;
 } = { rested: 0 };
@@ -118,8 +123,13 @@ const respond = (request: Seen): Reply => {
     steps.narrowed = true;
     return tool("Bash", { command: CHECK, description: "Check it again" });
   }
+  // Told its loop was stopped, it starts it again, as the line says to.
+  if (steps.narrowed && !steps.restarted) {
+    steps.restarted = true;
+    return tool("Bash", { command: START, description: "Start it again" });
+  }
   const rests =
-    1 + Number(Boolean(steps.checked)) + Number(Boolean(steps.narrowed));
+    1 + Number(Boolean(steps.checked)) + Number(Boolean(steps.restarted));
   if (steps.rested < rests) {
     const reply = offered(request, WAIT, REST);
     if (reply.tool?.name === WAIT) {
@@ -200,6 +210,21 @@ const standUp = async (kit: Kit) => {
     .cwd(src)
     .env({ ...process.env, HOME: home })
     .quiet();
+  // An older project of the remote H's checkout learns in round 6: H's
+  // project then folds into it, and the hub moves H's project's folder away
+  // (hub project-merge.ts).
+  const keepSrc = join(fleet.sandbox, "keep");
+  await mkdir(keepSrc, { recursive: true });
+  await Bun.$`sh -c ${`git init -q -b main && git remote add origin ${REMOTE} && echo keep > README.md && git add -A && git commit -qm 'First commit'`}`
+    .cwd(keepSrc)
+    .env({ ...process.env, HOME: home })
+    .quiet();
+  const keep = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Keep",
+    machineId: MACHINE,
+    cwd: keepSrc,
+  });
+  await mkdir(projectFolderOf(fleet, keep.id), { recursive: true });
   const project = await fleet.api<{ id: string }>("/api/projects", {
     name: "Beat",
     machineId: MACHINE,
@@ -223,7 +248,7 @@ const standUp = async (kit: Kit) => {
     model: "claude-haiku-4-5",
     cwd: src,
   });
-  return { fleet, home, h, project: project.id };
+  return { fleet, home, h, project: project.id, src };
 };
 
 /** Gives workspace `id` an older form (an account added to its policy), then restarts the agent, as an update does. */
@@ -262,7 +287,7 @@ const run = async (kit: Kit) => {
     );
     return;
   }
-  const { fleet, home, h, project } = await standUp(kit);
+  const { fleet, home, h, project, src } = await standUp(kit);
   const item = () =>
     fleet.query<{ state: string; wait_until: number | null }>(
       "SELECT state, wait_until FROM work_items WHERE id = ?",
@@ -320,12 +345,19 @@ const run = async (kit: Kit) => {
     `turn ran: ${Boolean(second)}; alive: ${alive ?? "no"} (started as ${loopPid ?? "unread"}); pid namespace ${secondNs ?? "unread"}, first turn's ${firstNs ?? "unread"}`
   );
   await keptAsItWas(kit, fleet, h.workspaceId, had);
-  await narrowedStops(kit, fleet, home, {
+  const restarted = await narrowedStops(kit, fleet, home, {
     clone,
     id: h.workspaceId,
     instanceId: h.instanceId,
     loopPid,
     project,
+  });
+  await mergedStops(kit, fleet, home, {
+    clone,
+    id: h.workspaceId,
+    loopPid: restarted,
+    project,
+    src,
   });
 };
 
@@ -353,7 +385,7 @@ const narrowedStops = async (
     loopPid: string | undefined;
     project: string;
   }
-): Promise<void> => {
+): Promise<string | undefined> => {
   const folder = await realpath(projectFolderOf(fleet, h.project));
   const had = await grantedNow(home, h.id);
   kit.check(
@@ -390,6 +422,9 @@ const narrowedStops = async (
     `${beatsThen} lines, then ${beatsLater} six seconds on`
   );
 
+  // The folder back before H's turn: its boundary, started without it, is
+  // replaced at the turn's ensure by one that reads it again (round 6's).
+  await rename(`${folder}.aside`, folder);
   const from = fleet.seen.length;
   await fleet.send(h.instanceId, "PROBE-BEAT-NARROW-H: check the heartbeat.");
   const third = await until(
@@ -398,7 +433,6 @@ const narrowedStops = async (
     Boolean,
     240_000
   ).catch(() => undefined);
-  await rename(`${folder}.aside`, folder);
   const said = third?.last ?? "";
   const line = said.split("\n").find((one) => NARROWED_LINE.test(one)) ?? "";
   kit.check(
@@ -413,6 +447,99 @@ const narrowedStops = async (
     "5: the loop is not alive in H's next turn",
     Boolean(third) && !ALIVE.test(said),
     `turn ran: ${Boolean(third)}; alive: ${ALIVE.exec(said)?.[1] ?? "no"}`
+  );
+  const again = await until(
+    "H started its loop again",
+    () => fleet.seen.slice(from).find((one) => STARTED.test(one.last)),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  return STARTED.exec(again?.last ?? "")?.[1];
+};
+
+/**
+ * 6: the hub's own move of a project's folder is an event: H's checkout
+ * learns the remote an older project has, so H's project folds into that one
+ * and the hub moves its folder to the trash (hub project-merge.ts), then
+ * syncs every machine's fleet config (server.ts `projectFolderMoved`). The
+ * agent runs with its look held off (`CAWCO_NARROW_LOOK_MS`), so only that
+ * sync can act: within {@link LOOK_BOUND_MS} H's boundary, which read the
+ * folder, is replaced, said as the sync's in the agent's log, its loop
+ * stopped, and the line queued for H's next command.
+ */
+const mergedStops = async (
+  kit: Kit,
+  fleet: Fleet,
+  home: string,
+  h: {
+    clone: string;
+    id: string;
+    loopPid: string | undefined;
+    project: string;
+    src: string;
+  }
+): Promise<void> => {
+  const folder = await realpath(projectFolderOf(fleet, h.project));
+  const before = (await fleet.logs("agent")).split(START_LINE).length;
+  await fleet.stop("agent");
+  fleet.launch("agent", [], { CAWCO_NARROW_LOOK_MS: "3600000" });
+  await fleet.agentUp();
+  await until(
+    "the restarted agent's start-up pass",
+    () => fleet.logs("agent"),
+    (logged) => logged.split(START_LINE).length > before,
+    120_000
+  );
+  const had = await grantedNow(home, h.id);
+  const running = await boundariesOf(fleet, h.id);
+  kit.check(
+    "6: before the merge, H's boundary reads its project's folder, and its loop runs again",
+    had?.allowRead?.includes(folder) === true && h.loopPid !== undefined,
+    `${folder} in its allowRead: ${had?.allowRead ? had.allowRead.includes(folder) : "not on record"}; loop pid ${h.loopPid ?? "unread"}`
+  );
+  const learned = Date.now();
+  await Bun.$`git remote add origin ${REMOTE}`.cwd(h.src).quiet();
+  await fleet
+    .api(`/api/projects/${h.project}/places`, {
+      machineId: MACHINE,
+      path: h.src,
+    })
+    .catch(() => undefined);
+  const after = await until(
+    "H's boundary replaced",
+    () => boundariesOf(fleet, h.id),
+    (now) => now.length === 1 && !running.includes(now[0] as string),
+    30_000
+  ).catch(() => boundariesOf(fleet, h.id));
+  const took = Date.now() - learned;
+  const beatsThen = await beats(h.clone);
+  await Bun.sleep(6000);
+  const beatsLater = await beats(h.clone);
+  const said = (await fleet.logs("agent"))
+    .split("\n")
+    .find((line) => line.includes(h.id) && line.includes(SYNCED));
+  const notice = await readFile(
+    join(home, ".cawco", "workspaces", h.id, "notice"),
+    "utf8"
+  ).catch(() => "");
+  kit.check(
+    `6: the hub moves H's project's folder away as the projects merge, and within ${LOOK_BOUND_MS / 1000} s H's boundary is replaced on the fleet sync that follows, its look held off`,
+    after.length === 1 &&
+      !running.includes(after[0] as string) &&
+      took <= LOOK_BOUND_MS &&
+      Boolean(said) &&
+      !(await Bun.file(join(folder, "."))
+        .exists()
+        .catch(() => false)),
+    `before: ${running.join(",") || "none"}; after: ${after.join(",") || "none"}, ${took} ms after the remote was learned; ${said ?? "no line names the sync"}`
+  );
+  kit.check(
+    "6: its loop is stopped with it, and the line naming it is queued for H's next command",
+    beatsLater === beatsThen &&
+      NARROWED_LINE.test(notice) &&
+      notice.includes(`(pid ${h.loopPid})`) &&
+      notice.includes("Start it again"),
+    `${beatsThen} lines, then ${beatsLater} six seconds on; queued: ${notice.trim() || "nothing"}`
   );
 };
 

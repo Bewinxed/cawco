@@ -3257,18 +3257,40 @@ const workIn = async (
 /** At most this many reasons for a narrowing are said, then how many more. */
 const REASONS_SAID = 3;
 
-/** The line a delegate's next command shows once what its work ran was stopped as its access narrowed ({@link replaceNarrowed}). */
-const narrowedLine = (
-  narrowed: readonly string[],
+/**
+ * The line a delegate's next command shows once CawCo stopped what its work
+ * ran (`stopped`) for `cause`: each process by its command and the pid its
+ * commands saw, to be started again. Queued by {@link tellStopped}.
+ */
+const workStoppedLine = (
+  cause: string,
   stopped: readonly WorkProcess[]
 ): string => {
-  const more = narrowed.length - REASONS_SAID;
-  const why = `${narrowed.slice(0, REASONS_SAID).join("; ")}${more > 0 ? `; and ${more} more` : ""}`;
   const one = stopped.length === 1;
   const each = stopped
     .map((proc) => `\`${proc.command}\` (pid ${proc.pid})`)
     .join(", ");
-  return `cawco: this workspace's access was narrowed (${why}), so its boundary was replaced and what still ran in it was stopped: ${each}. Start ${one ? "it" : "them"} again if you still need ${one ? "it" : "them"}.`;
+  return `cawco: ${cause}, and what still ran in it was stopped: ${each}. Start ${one ? "it" : "them"} again if you still need ${one ? "it" : "them"}.`;
+};
+
+/** Queues {@link workStoppedLine} for workspace `id`'s next session command ({@link noticeOf}); nothing when nothing was stopped. Answers the line. */
+const tellStopped = async (
+  id: string,
+  cause: string,
+  stopped: readonly WorkProcess[]
+): Promise<string | undefined> => {
+  if (stopped.length === 0) {
+    return;
+  }
+  const line = workStoppedLine(cause, stopped);
+  await appendFile(noticeOf(id), `${line}\n`, { mode: 0o600 });
+  return line;
+};
+
+/** Why a narrowed boundary was replaced, in a delegate's words: at most {@link REASONS_SAID} reasons, then how many more. */
+const narrowedCause = (narrowed: readonly string[]): string => {
+  const more = narrowed.length - REASONS_SAID;
+  return `this workspace's access was narrowed (${narrowed.slice(0, REASONS_SAID).join("; ")}${more > 0 ? `; and ${more} more` : ""}), so its boundary was replaced`;
 };
 
 /** The generations of a workspace whose access narrowed ({@link narrowedGenerations}): the current one's reasons (none when it did not), and each older one still beside it that did. */
@@ -3378,12 +3400,9 @@ const replaceNarrowed = async (
             return start(await keeperTakingOver(client, owed), ref);
           })()
         : await armHook(ref.id, held);
-    const line = narrowedLine(why, stopped);
-    if (stopped.length > 0) {
-      await appendFile(noticeOf(ref.id), `${line}\n`, { mode: 0o600 });
-    }
+    const line = await tellStopped(ref.id, narrowedCause(why), stopped);
     console.info(
-      `[workspace] ${ref.id}: its boundary ${stopping.map((one) => one.pid).join(", ")} (form ${held.form ?? "none"}) is stopped now, as its access narrowed, and ${runs.pid} runs: ${stopped.length > 0 ? line : `nothing ran in it (${why.slice(0, REASONS_SAID).join("; ")})`}`
+      `[workspace] ${ref.id}: its boundary ${stopping.map((one) => one.pid).join(", ")} (form ${held.form ?? "none"}) is stopped now, as its access narrowed, and ${runs.pid} runs: ${line ?? `nothing ran in it (${why.slice(0, REASONS_SAID).join("; ")})`}`
     );
     return runs;
   } finally {
@@ -3391,8 +3410,16 @@ const replaceNarrowed = async (
   }
 };
 
-/** How often the boundaries in use are looked at for a narrowing no event says ({@link lookForNarrowing}). */
-const NARROW_LOOK_MS = 5000;
+/**
+ * How often the boundaries in use are looked at for a narrowing no event
+ * says ({@link lookForNarrowing}): 5 s, unless a probe's scratch fleet names
+ * another in `CAWCO_NARROW_LOOK_MS` (boundary-handover holds it off, so only
+ * the hub's event can act on a project's folder moved away). Read once, as
+ * the daemon starts.
+ */
+const NARROW_LOOK_MS = process.env.CAWCO_NARROW_LOOK_MS
+  ? Number(process.env.CAWCO_NARROW_LOOK_MS)
+  : 5000;
 
 /** Each workspace's narrowing check under way, and whether another was asked meanwhile ({@link recheckNarrowed}). */
 let narrowLook: Promise<void> | undefined;
@@ -3673,7 +3700,13 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
         left = true;
         continue;
       }
-      closed = `is closed with what runs in it: a newer generation listens on every port its work listened on (${ports.join(", ")})`;
+      // What still runs there is the delegate's: it is said to it.
+      const line = await tellStopped(
+        id,
+        `a newer boundary of this workspace listens on every port its older one's work listened on (${ports.join(", ")}), so the older one was closed`,
+        (await workIn(id, old)).roots
+      );
+      closed = `is closed with what runs in it: a newer generation listens on every port its work listened on (${ports.join(", ")})${line ? `; said to the delegate: ${line}` : ""}`;
     }
     await stopBoundary(id, old);
     await cleanGeneration(id, old);
