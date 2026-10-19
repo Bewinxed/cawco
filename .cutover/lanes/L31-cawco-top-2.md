@@ -11,7 +11,7 @@ better-layout rules followed: logical properties (`text-start`, `ps/pe`, `-mx`, 
 |---|---|---|---|---|---|
 | HarnessLogo.svelte | 1 (foreign svg) -> theme component | 0/0/0/0/0 | 0 | none | none |
 | HoverPanel.svelte | 3 (::after bridge) -> `after:` utilities; 3 literals -> tokens | 0/0/0/0/0 | 0 | none | none |
-| HubBand.svelte | 2 style props + 3 grid literals -> theme utilities; `has-[]` -> `data-open`; `data-[tone=]` -> `tone-*:` | 0/0/0/0/0 | 0 | `@max-phone/hub-band` unchanged | none |
+| HubBand.svelte | 3 style props + 3 grid literals -> tokens and theme utilities; `has-[]` -> `data-open`; `data-[tone=]` -> `tone-*:` | 0/0/0/0/0 | 0 | `@max-phone/hub-band` unchanged | none |
 | MachineAuthStatus.svelte | keyframes -> theme animate; state class -> `data-tone` | 0/0/0/0/0 | 0 | none | none |
 | MachineInventory.svelte | scoped classes the merge dropped -> utilities; 6 literals -> ladder/tokens | 0/0/0/0/0 | 0 | none | none |
 | MachinesButton.svelte | 2 pseudo-less tone rules -> `group-tone-*:`; dead `--machines-pe` removed | 0/0/0/0/0 | 0 | none | none |
@@ -60,13 +60,6 @@ theme: utility grid-rows-open
 }
 ```
 
-theme: utility clip-band-slot
-```css
-@utility clip-band-slot {
-  clip-path: inset(0 calc(var(--c-band-bleed) * -1) calc(var(--c-band-bleed) * -1));
-}
-```
-
 theme: utility grid-cols-fill-auto
 ```css
 @utility grid-cols-fill-auto {
@@ -100,13 +93,12 @@ removed: apps/dashboard/src/lib/cawco/MachinesList.svelte:205 `border-none borde
 removed: apps/dashboard/src/lib/cawco/MachinesList.svelte:245 `border-none border-current bg-transparent text-start` on the row `div` — Preflight; a div's text aligns start
 removed: apps/dashboard/src/lib/cawco/MachinesList.svelte:271 `border-r-none border-b-none border-l-none bg-transparent` — Preflight
 removed: apps/dashboard/src/lib/cawco/MachineInventory.svelte:124 and :186 `m-0 p-0 list-none` on the lists — Preflight resets them
-removed: apps/dashboard/src/lib/cawco/HubBand.svelte:281 `clip-path-(--slot-clip)` — Tailwind 4.3.3 has no `clip-path-*` utility, so the class generated no CSS; replaced by theme utility `clip-band-slot` (see Gaps for the same class elsewhere)
 
 ## Tokens
 
 token: --c-hover-panel-w 440px — the hover panel content's widest measure (HoverPanel.svelte:215); a component dimension, no ladder step fits
 token: --c-hover-panel-room 320px — the hover panel content's default height room when the caller gives no `--room` (HoverPanel.svelte:216)
-token: --c-band-bleed 100vw — how far the connection band's slot lets its shadow bleed past the sides and foot (theme utility `clip-band-slot`, HubBand.svelte:281)
+token: --c-band-slot-clip inset(0 -100vw -100vw) — the connection band slot's clip: open to the sides and foot so its shadow shows, closed at the bar's foot (read as `clip-path-(--c-band-slot-clip)`, HubBand.svelte:281)
 token: --c-status-mark 2.25rem — the unlock outcome's mark box and its icon (MachineAuthStatus.svelte:62, :89, :93, :95); no `--c-mark*` is this size
 token: --c-inventory-measure 72ch — the machine inventory's text measure (MachineInventory.svelte:106)
 token: --c-inventory-text-basis 240px — the inventory entry's words column, the width under which its Adopt button wraps below (MachineInventory.svelte:196)
@@ -121,13 +113,11 @@ contract: apps/dashboard/src/lib/cawco/MachinesButton.svelte:101 shadcn/no-unkno
 
 ## Gaps
 
-gap: apps/dashboard/src/lib/cawco/TreeMark.svelte:284 `clip-path-(--echo-cut)` (also home/Caw.svelte:732, transcript/Composer.svelte:3475, :3580) — Tailwind 4.3.3 generates no CSS for `clip-path-*`, so these clip nothing — DESIGN.md Layout/Elevation: a class must be a style
 gap: apps/dashboard/src/lib/cawco/MachinesList.svelte:155 and :245 hand-rolled machine row (same look as `MachineRow`'s host row, three copies) — DESIGN.md Components: one row primitive
 gap: apps/dashboard/src/lib/cawco/HoverPanel.svelte:198 `z-2` / `side-right:z-40` stack is set against the rail and tray in other files — cross-file stacking has no DESIGN.md layer scale
 
 ## Design Critique (interface-craft, from markup and classes; ui-observer not run: no bench renders these files here, so layout is Not verified in a browser)
 
-fixed: apps/dashboard/src/lib/cawco/HubBand.svelte:281 the slot's foot clip never applied (no `clip-path-*` utility); now a real utility — DESIGN.md band: the band is uncovered from under the bar
 fixed: apps/dashboard/src/lib/cawco/MachineAuthStatus.svelte:89 mark colour was a ternary class string; now `data-tone` with `tone-ok:` / `tone-caution:` — a state is an attribute
 fixed: apps/dashboard/src/lib/cawco/MachineInventory.svelte:134 head row used `text-left` and a hover guard `[&:hover]:enabled:`; now `text-start` and `hover:enabled:` (hover only where the pointer hovers)
 fixed: apps/dashboard/src/lib/cawco/MachinesList.svelte:155 touch floor read the literal 44px through a per-row property; now `coarse:min-h-c-row-h` — DESIGN.md Focus and hit areas
