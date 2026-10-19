@@ -205,10 +205,10 @@
         card,
         "body",
         "data-session-sheet",
-        ["data-vaul-drawer", "class"],
+        ["data-vaul-drawer", "data-session-card"],
         (sheet) =>
           sheet.hasAttribute("data-vaul-drawer") &&
-          sheet.classList.contains("session-card")
+          sheet.hasAttribute("data-session-card")
             ? ["up"]
             : []
       );

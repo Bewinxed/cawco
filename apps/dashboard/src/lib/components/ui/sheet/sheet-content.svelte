@@ -73,7 +73,7 @@
         ref,
         "root",
         "data-kit-sheet",
-        ["data-side", "data-state", "class"],
+        ["data-side", "data-state", "data-rail-sheet"],
         (sheet) => {
           const { side: at, state } = sheet.dataset;
           if (state !== "open") {
@@ -81,7 +81,7 @@
           }
           return [
             ...(at === "left" || at === "right" ? ["side"] : []),
-            ...(sheet.classList.contains("rail-sheet") ? ["rail"] : []),
+            ...(sheet.hasAttribute("data-rail-sheet") ? ["rail"] : []),
           ];
         }
       );
