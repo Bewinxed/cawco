@@ -652,7 +652,12 @@ const tabsFail = async (page: Page, scene: Scene) => {
     tabs: [scene.permission],
     active: scene.permission,
   };
-  const doubled = { t: "l", id: "probe-doubled", tabs: [tab, tab], active: tab };
+  const doubled = {
+    t: "l",
+    id: "probe-doubled",
+    tabs: [tab, tab],
+    active: tab,
+  };
   const root = {
     t: "b",
     id: "probe-split",
@@ -666,7 +671,10 @@ const tabsFail = async (page: Page, scene: Scene) => {
       { v: 1, root, focusedLeaf: doubled.id, ctx: {} }
     )
   )(page);
-  await page.locator("[data-region-failed]").first().waitFor({ state: "attached" });
+  await page
+    .locator("[data-region-failed]")
+    .first()
+    .waitFor({ state: "attached" });
 };
 
 /** What the transcript says while it catches up (CatchUp's words). */
