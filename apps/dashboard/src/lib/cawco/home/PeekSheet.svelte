@@ -42,12 +42,10 @@
   <!-- The peek holds its size from the first frame: it opens on "Reading…" and
        the tail arrives into a sheet already its height, instead of the sheet
        growing under the reader as the transcript lands. -->
-  <!-- literal: 80dvh -->
   <Drawer.Content
     data-peek-sheet
-    class="vaul-drawer-direction-bottom:h-(--sheet-h)"
+    class="vaul-drawer-direction-bottom:h-(--c-peek-sheet-h)"
     pad="sheet-safe-bottom"
-    style="--sheet-h: 80dvh"
   >
     <Drawer.Title class="sr-only">Peek</Drawer.Title>
     <Drawer.Description class="sr-only"
