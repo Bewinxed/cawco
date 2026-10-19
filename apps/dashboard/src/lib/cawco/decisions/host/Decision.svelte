@@ -46,6 +46,8 @@
   /** Each option's id in order: an option's keycap is its place. */
   const order = $derived(options.map((option) => option.id));
   setContext("decision-options", () => order);
+  /** Its id: each option's parts are named under it, ids that hold across revisions. */
+  setContext("decision-id", () => id);
 
   const chosen = $derived(picks.now[id]?.options ?? []);
   const picked = $derived(chosen.length);

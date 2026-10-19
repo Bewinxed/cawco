@@ -172,6 +172,16 @@ mail = Option("mail", "Theweeklynewsletterthatgoestoeverysubscriber", "Readers w
 feed = Option("feed", "Thecompanyblogfeedandeverysyndicatedmirror", "Readers who follow us.", false, [], "Slow to spread.")
 talk = Option("talk", "Thecommunityforumsannouncementsthreadpinned", "Readers who build with us.", false, [], "Needs replies.")`;
 
+/** One card at 320: an option with a long unbroken label, a cost line and a live embed beside a plain one. */
+const FIT_LABEL = "Anedgehostthatsitsclosertoeveryreaderonearthandneversleeps";
+const FIT_COST =
+  "One more host to run, and a second bill every month from its provider.";
+const fitPage = (mockup: string) => `root = Decisions("Fit the phone", [fit])
+fit = Decision("fit", "Which host carries the launch?", [wide, plain], "One card on the narrowest phone.")
+wide = Option("wide", "${FIT_LABEL}", "Closer to readers.", true, [embed], "${FIT_COST}")
+plain = Option("plain", "The hub", "Nothing new to run.")
+embed = Preview("${mockup}", "How it moves")`;
+
 /** A card's fold as the frame draws it: its mark, its line, its button, what of it shows, and where focus is. */
 const foldOf = (frame: Frame, id: string) =>
   frame.evaluate((card) => {
@@ -418,6 +428,7 @@ interface On {
   desk: Page;
   fleet: KitFleet;
   kit: Kit;
+  mockup: string;
   page: string;
   program: string;
   projectId: string;
@@ -546,6 +557,7 @@ const publish = async (
   return {
     ...up,
     kit,
+    mockup: mockup.id,
     page: made.id,
     program,
     read: () =>
@@ -1470,6 +1482,124 @@ const reachLeg = async (on: On) => {
   await phone.close();
 };
 
+/** An option's pick as the accessibility tree has it: its role and name (Playwright's aria snapshot) and its description (aria-describedby resolved). */
+const pickRead = async (frame: Frame, option: string) => {
+  const pick = frame.locator(`[data-option="${option}"]`);
+  return {
+    aria: (await pick.ariaSnapshot()).split("\n")[0] ?? "",
+    description: await pick.evaluate((button) =>
+      (button.getAttribute("aria-describedby") ?? "")
+        .split(" ")
+        .filter(Boolean)
+        .map((id) => document.getElementById(id)?.textContent?.trim() ?? "")
+        .join(" ")
+    ),
+  };
+};
+
+/**
+ * (g) 320, in one theme: an option with a cost line, a long unbroken label
+ * and a live embed fits its card; its pick is named by its label alone and
+ * described by its line, its cost and Recommended.
+ */
+const fitLeg = async (on: On, theme: "light" | "dark") => {
+  const { kit, writer } = on;
+  const phone = await kit.page("phone", { theme });
+  await phone.setViewportSize({ width: 320, height: 844 });
+  await open(phone, `${on.base}/session/${writer}`, '[data-slot="pane"]');
+  const frame = await until(
+    `320 ${theme}: the fit page in the panel`,
+    async () => {
+      const at = await frameAt(phone, FRAME);
+      return (await countIn(at, "#decision-fit")) > 0 ? at : null;
+    },
+    Boolean,
+    60_000
+  ).catch(() => null);
+  if (!frame) {
+    kit.check(`(g) 320 ${theme}: the fit page draws`, false, "no frame");
+    await phone.close();
+    return;
+  }
+  await until(
+    `320 ${theme}: the option's embed live`,
+    () =>
+      frame.evaluate(
+        () =>
+          document.querySelector<HTMLIFrameElement>(
+            "#decision-fit .dp-optmedia iframe"
+          )?.contentDocument?.body?.textContent ?? ""
+      ),
+    (words) => words.includes("slides"),
+    30_000
+  ).catch(() => "");
+  await settle(phone, 600);
+  const fit = await frame.evaluate(() => {
+    const card = document.getElementById("decision-fit");
+    const root = document.documentElement;
+    const cardBox = card?.getBoundingClientRect();
+    const embed = card
+      ?.querySelector(".dp-optmedia iframe")
+      ?.getBoundingClientRect();
+    const cost = card?.querySelector<HTMLElement>(
+      '[data-option="wide"] .dp-cost'
+    );
+    const line = cost
+      ? Number.parseFloat(getComputedStyle(cost).lineHeight)
+      : 0;
+    const box = (b: DOMRect | undefined) =>
+      b && {
+        left: Math.round(b.left),
+        right: Math.round(b.right),
+        top: Math.round(b.top),
+        bottom: Math.round(b.bottom),
+      };
+    return {
+      width: root.clientWidth,
+      frame: { scroll: root.scrollWidth, client: root.clientWidth },
+      card: card && { scroll: card.scrollWidth, client: card.clientWidth },
+      cardBox: box(cardBox),
+      embed: box(embed),
+      cost: cost && {
+        height: Math.round(cost.getBoundingClientRect().height),
+        line,
+        lines: Math.round(cost.getBoundingClientRect().height / line),
+      },
+    };
+  });
+  kit.check(
+    `(g) 320 ${theme}: an option with a cost, a long unbroken label and a live embed fits: card and frame scroll no wider than they are, the embed inside the card, the cost line wrapped`,
+    phone.viewportSize()?.width === 320 &&
+      fit.frame.scroll === fit.frame.client &&
+      !!fit.card &&
+      fit.card.scroll === fit.card.client &&
+      !!fit.cardBox &&
+      !!fit.embed &&
+      fit.embed.left >= fit.cardBox.left &&
+      fit.embed.right <= fit.cardBox.right &&
+      fit.embed.top >= fit.cardBox.top &&
+      fit.embed.bottom <= fit.cardBox.bottom &&
+      !!fit.cost &&
+      fit.cost.lines >= 2,
+    JSON.stringify(fit)
+  );
+  const wide = await pickRead(frame, "wide");
+  const plain = await pickRead(frame, "plain");
+  const named = await frame
+    .getByRole("button", { name: FIT_LABEL, exact: true })
+    .count();
+  kit.check(
+    `(g) 320 ${theme}: a pick is named by its label alone, its line, cost and Recommended its description`,
+    named === 1 &&
+      wide.aria.startsWith(`- button "${FIT_LABEL}"`) &&
+      wide.description === `Closer to readers. Cost: ${FIT_COST} Recommended` &&
+      plain.aria.startsWith('- button "The hub"') &&
+      plain.description === "Nothing new to run.",
+    JSON.stringify({ named, wide, plain })
+  );
+  await phone.close();
+};
+
 /** (d) Open as canvas: the flowchart becomes a canvas in the session's panel. */
 const openAsCanvas = async (on: On) => {
   const { desk, fleet, kit, writer } = on;
@@ -1704,6 +1834,14 @@ const run = async (kit: Kit) => {
   await makeTasks(on);
   await htmlPage(on);
   await reachLeg(on);
+  await on.fleet.api(`/api/instances/${on.writer}/artifacts`, {
+    kind: "page",
+    name: "fit",
+    program: fitPage(on.mockup),
+  });
+  for (const theme of ["light", "dark"] as const) {
+    await fitLeg(on, theme);
+  }
   await openToDraw(on);
   await openAsCanvas(on);
   kit.check(

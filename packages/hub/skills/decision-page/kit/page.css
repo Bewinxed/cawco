@@ -237,7 +237,7 @@ a {
    Recommended tag never makes its option the bigger one. */
 .dp-opts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
   grid-auto-rows: 1fr;
   gap: var(--space-2);
 }
@@ -248,10 +248,10 @@ a {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  min-width: 0;
+  min-inline-size: 0;
 }
 .dp-optmedia {
-  min-width: 0;
+  min-inline-size: 0;
 }
 .dp-opt {
   flex: 1 1 auto;
@@ -266,7 +266,8 @@ a {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  min-width: 0;
+  min-inline-size: 0;
+  overflow-wrap: anywhere;
   transition:
     border-color var(--dur-control) var(--ease-out),
     background-color var(--dur-control) var(--ease-out),
