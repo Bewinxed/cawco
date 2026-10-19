@@ -58,8 +58,11 @@
 </div>
 
 <style>
+  /* One cell the card fills: as a flex item it shrank to its words'
+     narrowest width inside the 360px box. */
   .desk {
-    display: flex;
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
     inline-size: 360px;
     max-inline-size: 100%;
     block-size: 680px;

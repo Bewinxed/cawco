@@ -233,6 +233,20 @@ export function deltaOf(
   return deltas;
 }
 
+/**
+ * Lands a run at its end, so the next forced state reads from rest. A loop
+ * (an infinite iteration count: a working glyph's breath, a skeleton's
+ * sweep) has no end, and `finish()` throws on it ("Cannot finish Animation
+ * with an infinite target effect end"), which the canvas reported as the
+ * page's error and stopped the probe there; a loop is left running.
+ */
+export function land(animation: Animation): void {
+  const end = animation.effect?.getComputedTiming().endTime;
+  if (Number.isFinite(Number(end ?? 0))) {
+    animation.finish();
+  }
+}
+
 /** One animation as the report says it: its kind, property, timing, element and when it began after `t0`. */
 export function readAnimation(animation: Animation, t0: number): AnimationRead {
   const effect = animation.effect as KeyframeEffect | null;

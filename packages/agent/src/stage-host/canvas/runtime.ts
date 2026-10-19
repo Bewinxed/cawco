@@ -41,6 +41,7 @@ import {
   deltaOf,
   drew,
   firstWords,
+  land,
   pageError,
   partsOf,
   readAnimation,
@@ -1140,7 +1141,7 @@ export function boot(options: BootOptions): void {
         const fired = body.getAnimations({ subtree: true });
         const animations = fired.map((one) => readAnimation(one, t0));
         for (const one of fired) {
-          one.finish();
+          land(one);
         }
         const changed = deltaOf(before, snapshot(body), root);
         for (const state of FORCED[interaction]) {
@@ -1148,7 +1149,7 @@ export function boot(options: BootOptions): void {
         }
         await frameTick();
         for (const one of body.getAnimations({ subtree: true })) {
-          one.finish();
+          land(one);
         }
         result.delta.set(interaction, { animations, changed });
       }
