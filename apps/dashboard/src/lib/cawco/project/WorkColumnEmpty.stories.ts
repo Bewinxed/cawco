@@ -46,13 +46,11 @@ export const Decisions = {
 /** Desk · Routines empty: the head says Routines once; its line and the cards on the card's own edge. */
 export const Routines = {
   component: RoutinesBlockFixture,
-  args: { proposed: true },
   parameters: { viewport: 1180 },
 };
 /** Desk · Caw's panel on a fresh thread: the starters as cards, every one the panel's width and one height. */
 export const Caw = {
   component: CawPanelFixture,
-  args: { proposed: true },
   parameters: { viewport: 380 },
 };
 /** Phone · The empty board: one column of cards, each the tallest's height. */
@@ -72,6 +70,6 @@ export const RoutinesPhone = { ...Routines, parameters: { viewport: "phone" } };
 /** Phone · Caw's panel on a fresh thread. */
 export const CawPhone = {
   component: CawPanelFixture,
-  args: { proposed: true, phone: true },
+  args: { phone: true },
   parameters: { viewport: "phone" },
 };

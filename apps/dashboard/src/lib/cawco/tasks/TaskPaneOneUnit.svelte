@@ -45,7 +45,6 @@
     IconColumns,
     IconDocument,
     IconDot,
-    IconError,
     IconLink,
     IconMinusCircle,
     IconMore,
@@ -438,7 +437,10 @@
                   {#if sessionState.status === "live"}
                     <IconWorking aria-hidden="true" class="status-glyph" />
                   {:else if sessionState.status === "fail"}
-                    <IconError aria-hidden="true" class="status-glyph" />
+                    <IconWarningTriangle
+                      aria-hidden="true"
+                      class="status-glyph"
+                    />
                   {:else}
                     <IconSuccess aria-hidden="true" class="status-glyph" />
                   {/if}

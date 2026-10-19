@@ -1,0 +1,1758 @@
+{
+  "ran": "2026-10-19T14:35:37.273Z",
+  "pages": {
+    "plan-model-grill": {
+      "folder": ".design-foundations/decisions/plan-model-grill",
+      "placeholders": {},
+      "decisions": [
+        {
+          "id": "list-home",
+          "options": [
+            "cawco",
+            "switch",
+            "read-only"
+          ],
+          "after": []
+        },
+        {
+          "id": "wake",
+          "options": [
+            "work",
+            "every",
+            "send"
+          ],
+          "after": [
+            "list-home"
+          ]
+        },
+        {
+          "id": "settled",
+          "options": [
+            "keep",
+            "overturn"
+          ],
+          "after": []
+        }
+      ]
+    },
+    "project-screens": {
+      "folder": ".design-foundations/decisions/project-screens",
+      "placeholders": {
+        "@pane": "apps/dashboard/src/lib/cawco/tasks/TaskPaneOneUnit.stories.ts",
+        "@card": "apps/dashboard/src/lib/cawco/tasks/TaskCardStateLine.stories.ts",
+        "@empty": "apps/dashboard/src/lib/cawco/project/WorkColumnEmpty.stories.ts",
+        "@head": "apps/dashboard/src/lib/cawco/project/ProjectHeadNewSession.stories.ts",
+        "@run-order": "apps/dashboard/src/lib/cawco/views/ViewPipelineRunOrder.stories.ts",
+        "@removed": "apps/dashboard/src/lib/cawco/views/preview/PipelineRemovedFixture.stories.ts"
+      },
+      "decisions": [
+        {
+          "id": "pins",
+          "options": [
+            "looks-right",
+            "not-yet"
+          ],
+          "after": []
+        },
+        {
+          "id": "pipeline",
+          "options": [
+            "run-order",
+            "remove"
+          ],
+          "after": [
+            "pins"
+          ]
+        }
+      ]
+    }
+  },
+  "captures": [
+    {
+      "file": "plan-model-grill-1440-light.png",
+      "leg": "1440×900 light",
+      "page": "plan-model-grill"
+    },
+    {
+      "file": "project-screens-1440-light.png",
+      "leg": "1440×900 light",
+      "page": "project-screens"
+    },
+    {
+      "file": "plan-model-grill-1440-dark.png",
+      "leg": "1440×900 dark",
+      "page": "plan-model-grill"
+    },
+    {
+      "file": "project-screens-1440-dark.png",
+      "leg": "1440×900 dark",
+      "page": "project-screens"
+    },
+    {
+      "file": "plan-model-grill-390-light.png",
+      "leg": "390×844 light",
+      "page": "plan-model-grill"
+    },
+    {
+      "file": "project-screens-390-light.png",
+      "leg": "390×844 light",
+      "page": "project-screens"
+    },
+    {
+      "file": "plan-model-grill-390-dark.png",
+      "leg": "390×844 dark",
+      "page": "plan-model-grill"
+    },
+    {
+      "file": "project-screens-390-dark.png",
+      "leg": "390×844 dark",
+      "page": "project-screens"
+    }
+  ],
+  "reads": {
+    "canvas 1440×900 light": {
+      "pane": {
+        "frames": 13,
+        "blank": [],
+        "once": [
+          {
+            "story": "Review",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "ReviewSession",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "Working",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "ToDo",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "Done",
+            "word": "Done",
+            "times": 1
+          },
+          {
+            "story": "Failed",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "CantStart",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneReview",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "PhoneWorking",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneToDo",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneDone",
+            "word": "Done",
+            "times": 1
+          },
+          {
+            "story": "PhoneFailed",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneCantStart",
+            "word": "Ready",
+            "times": 1
+          }
+        ],
+        "arrow": [
+          {
+            "story": "Review",
+            "off": 0
+          },
+          {
+            "story": "ReviewSession",
+            "off": 0
+          },
+          {
+            "story": "PhoneReview",
+            "off": 0
+          }
+        ],
+        "hairlines": [
+          {
+            "story": "Review",
+            "lines": []
+          },
+          {
+            "story": "Done",
+            "lines": []
+          },
+          {
+            "story": "PhoneReview",
+            "lines": []
+          },
+          {
+            "story": "PhoneDone",
+            "lines": []
+          }
+        ]
+      },
+      "card": {
+        "frames": 11,
+        "blank": [],
+        "glyph": {
+          "least": 16,
+          "where": "Working"
+        }
+      },
+      "empty": {
+        "frames": 8,
+        "blank": [],
+        "starters": [
+          {
+            "story": "Board",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Decisions",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Routines",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Caw",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "BoardPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "DecisionsPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "RoutinesPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "CawPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          }
+        ],
+        "columns": [
+          {
+            "story": "Board",
+            "leftGap": 207,
+            "rightGap": 207,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Decisions",
+            "leftGap": 207,
+            "rightGap": 207,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Routines",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Caw",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "BoardPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "DecisionsPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "RoutinesPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0
+            ]
+          },
+          {
+            "story": "CawPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "head": {
+        "frames": 2,
+        "blank": []
+      },
+      "run-order": {
+        "frames": 2,
+        "blank": []
+      },
+      "removed": {
+        "frames": 2,
+        "blank": []
+      }
+    },
+    "plan-model-grill 1440×900 light": {
+      "title": "Tasks, plans and to-dos: two questions left",
+      "cards": [
+        {
+          "id": "list-home",
+          "question": "Where does every session keep its plan?",
+          "options": 3,
+          "costs": 3,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 1
+        },
+        {
+          "id": "wake",
+          "question": "When a session is idle, which of your changes wake it?",
+          "options": 3,
+          "costs": 3,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 1
+        },
+        {
+          "id": "settled",
+          "question": "Settled from the sources: keep them, or overturn some?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 0
+        }
+      ],
+      "gone": [],
+      "sideways": 0
+    },
+    "project-screens 1440×900 light": {
+      "title": "The project page, redrawn from your pins",
+      "cards": [
+        {
+          "id": "pins",
+          "question": "Fixed from your pins: does it look right now?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 4,
+          "diagrams": 0
+        },
+        {
+          "id": "pipeline",
+          "question": "What is the Pipeline tab for?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 2,
+          "diagrams": 0
+        }
+      ],
+      "gone": [],
+      "sideways": 0
+    },
+    "canvas 1440×900 dark": {
+      "pane": {
+        "frames": 13,
+        "blank": [],
+        "once": [
+          {
+            "story": "Review",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "ReviewSession",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "Working",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "ToDo",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "Done",
+            "word": "Done",
+            "times": 1
+          },
+          {
+            "story": "Failed",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "CantStart",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneReview",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "PhoneWorking",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneToDo",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneDone",
+            "word": "Done",
+            "times": 1
+          },
+          {
+            "story": "PhoneFailed",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneCantStart",
+            "word": "Ready",
+            "times": 1
+          }
+        ],
+        "arrow": [
+          {
+            "story": "Review",
+            "off": 0
+          },
+          {
+            "story": "ReviewSession",
+            "off": 0
+          },
+          {
+            "story": "PhoneReview",
+            "off": 0
+          }
+        ],
+        "hairlines": [
+          {
+            "story": "Review",
+            "lines": []
+          },
+          {
+            "story": "Done",
+            "lines": []
+          },
+          {
+            "story": "PhoneReview",
+            "lines": []
+          },
+          {
+            "story": "PhoneDone",
+            "lines": []
+          }
+        ]
+      },
+      "card": {
+        "frames": 11,
+        "blank": [],
+        "glyph": {
+          "least": 16,
+          "where": "Working"
+        }
+      },
+      "empty": {
+        "frames": 8,
+        "blank": [],
+        "starters": [
+          {
+            "story": "Board",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Decisions",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Routines",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Caw",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "BoardPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "DecisionsPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "RoutinesPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "CawPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          }
+        ],
+        "columns": [
+          {
+            "story": "Board",
+            "leftGap": 207,
+            "rightGap": 207,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Decisions",
+            "leftGap": 207,
+            "rightGap": 207,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Routines",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Caw",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "BoardPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "DecisionsPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "RoutinesPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0
+            ]
+          },
+          {
+            "story": "CawPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0
+            ]
+          }
+        ]
+      },
+      "head": {
+        "frames": 2,
+        "blank": []
+      },
+      "run-order": {
+        "frames": 2,
+        "blank": []
+      },
+      "removed": {
+        "frames": 2,
+        "blank": []
+      }
+    },
+    "plan-model-grill 1440×900 dark": {
+      "title": "Tasks, plans and to-dos: two questions left",
+      "cards": [
+        {
+          "id": "list-home",
+          "question": "Where does every session keep its plan?",
+          "options": 3,
+          "costs": 3,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 1
+        },
+        {
+          "id": "wake",
+          "question": "When a session is idle, which of your changes wake it?",
+          "options": 3,
+          "costs": 3,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 1
+        },
+        {
+          "id": "settled",
+          "question": "Settled from the sources: keep them, or overturn some?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 0
+        }
+      ],
+      "gone": [],
+      "sideways": 0
+    },
+    "project-screens 1440×900 dark": {
+      "title": "The project page, redrawn from your pins",
+      "cards": [
+        {
+          "id": "pins",
+          "question": "Fixed from your pins: does it look right now?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 4,
+          "diagrams": 0
+        },
+        {
+          "id": "pipeline",
+          "question": "What is the Pipeline tab for?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 2,
+          "diagrams": 0
+        }
+      ],
+      "gone": [],
+      "sideways": 0
+    },
+    "canvas 390×844 light": {
+      "pane": {
+        "frames": 13,
+        "blank": [],
+        "once": [
+          {
+            "story": "Review",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "ReviewSession",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "Working",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "ToDo",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "Done",
+            "word": "Done",
+            "times": 1
+          },
+          {
+            "story": "Failed",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "CantStart",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneReview",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "PhoneWorking",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneToDo",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneDone",
+            "word": "Done",
+            "times": 1
+          },
+          {
+            "story": "PhoneFailed",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneCantStart",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneReview",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "PhoneWorking",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneToDo",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneDone",
+            "word": "Done",
+            "times": 1
+          },
+          {
+            "story": "PhoneFailed",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneCantStart",
+            "word": "Ready",
+            "times": 1
+          }
+        ],
+        "arrow": [
+          {
+            "story": "Review",
+            "off": 0
+          },
+          {
+            "story": "ReviewSession",
+            "off": 0
+          },
+          {
+            "story": "PhoneReview",
+            "off": 0
+          }
+        ],
+        "hairlines": [
+          {
+            "story": "Review",
+            "lines": []
+          },
+          {
+            "story": "Done",
+            "lines": []
+          },
+          {
+            "story": "PhoneReview",
+            "lines": []
+          },
+          {
+            "story": "PhoneDone",
+            "lines": []
+          }
+        ],
+        "columns": [],
+        "starters": [],
+        "overflow": [
+          {
+            "story": "PhoneReview",
+            "faults": []
+          },
+          {
+            "story": "PhoneWorking",
+            "faults": []
+          },
+          {
+            "story": "PhoneToDo",
+            "faults": []
+          },
+          {
+            "story": "PhoneDone",
+            "faults": []
+          },
+          {
+            "story": "PhoneFailed",
+            "faults": []
+          },
+          {
+            "story": "PhoneCantStart",
+            "faults": []
+          }
+        ]
+      },
+      "card": {
+        "frames": 11,
+        "blank": [],
+        "glyph": {
+          "least": 15.999930960233094,
+          "where": "Phone"
+        },
+        "once": [],
+        "columns": [],
+        "starters": [],
+        "overflow": [
+          {
+            "story": "Phone",
+            "faults": []
+          }
+        ]
+      },
+      "empty": {
+        "frames": 8,
+        "blank": [],
+        "starters": [
+          {
+            "story": "Board",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Decisions",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Routines",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Caw",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "BoardPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "DecisionsPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "RoutinesPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "CawPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "BoardPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "DecisionsPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "RoutinesPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "CawPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          }
+        ],
+        "columns": [
+          {
+            "story": "Board",
+            "leftGap": 207,
+            "rightGap": 207,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Decisions",
+            "leftGap": -25,
+            "rightGap": -21,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Routines",
+            "leftGap": -11,
+            "rightGap": -11,
+            "lines": [
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Caw",
+            "leftGap": -11,
+            "rightGap": -11,
+            "lines": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "BoardPhone",
+            "leftGap": -18,
+            "rightGap": -18,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "DecisionsPhone",
+            "leftGap": -18,
+            "rightGap": -18,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "RoutinesPhone",
+            "leftGap": -11,
+            "rightGap": -11,
+            "lines": [
+              0,
+              0
+            ]
+          },
+          {
+            "story": "CawPhone",
+            "leftGap": -11,
+            "rightGap": -11,
+            "lines": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "BoardPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "DecisionsPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "RoutinesPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0
+            ]
+          },
+          {
+            "story": "CawPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "once": [],
+        "overflow": [
+          {
+            "story": "BoardPhone",
+            "faults": []
+          },
+          {
+            "story": "DecisionsPhone",
+            "faults": []
+          },
+          {
+            "story": "RoutinesPhone",
+            "faults": []
+          },
+          {
+            "story": "CawPhone",
+            "faults": []
+          }
+        ]
+      },
+      "head": {
+        "frames": 2,
+        "blank": [],
+        "once": [],
+        "columns": [],
+        "starters": [],
+        "overflow": [
+          {
+            "story": "Phone",
+            "faults": []
+          }
+        ]
+      },
+      "run-order": {
+        "frames": 2,
+        "blank": [],
+        "once": [],
+        "columns": [],
+        "starters": [],
+        "overflow": [
+          {
+            "story": "Phone",
+            "faults": []
+          }
+        ]
+      },
+      "removed": {
+        "frames": 2,
+        "blank": [],
+        "once": [],
+        "columns": [],
+        "starters": [],
+        "overflow": [
+          {
+            "story": "Phone",
+            "faults": []
+          }
+        ]
+      }
+    },
+    "plan-model-grill 390×844 light": {
+      "title": "Tasks, plans and to-dos: two questions left",
+      "cards": [
+        {
+          "id": "list-home",
+          "question": "Where does every session keep its plan?",
+          "options": 3,
+          "costs": 3,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 4
+        },
+        {
+          "id": "wake",
+          "question": "When a session is idle, which of your changes wake it?",
+          "options": 3,
+          "costs": 3,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 1
+        },
+        {
+          "id": "settled",
+          "question": "Settled from the sources: keep them, or overturn some?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 0
+        }
+      ],
+      "gone": [],
+      "sideways": 0
+    },
+    "project-screens 390×844 light": {
+      "title": "The project page, redrawn from your pins",
+      "cards": [
+        {
+          "id": "pins",
+          "question": "Fixed from your pins: does it look right now?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 4,
+          "diagrams": 0
+        },
+        {
+          "id": "pipeline",
+          "question": "What is the Pipeline tab for?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 2,
+          "diagrams": 0
+        }
+      ],
+      "gone": [],
+      "sideways": 0
+    },
+    "canvas 390×844 dark": {
+      "pane": {
+        "frames": 13,
+        "blank": [],
+        "once": [
+          {
+            "story": "Review",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "ReviewSession",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "Working",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "ToDo",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "Done",
+            "word": "Done",
+            "times": 1
+          },
+          {
+            "story": "Failed",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "CantStart",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneReview",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "PhoneWorking",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneToDo",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneDone",
+            "word": "Done",
+            "times": 1
+          },
+          {
+            "story": "PhoneFailed",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneCantStart",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneReview",
+            "word": "Review",
+            "times": 1
+          },
+          {
+            "story": "PhoneWorking",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneToDo",
+            "word": "Ready",
+            "times": 1
+          },
+          {
+            "story": "PhoneDone",
+            "word": "Done",
+            "times": 1
+          },
+          {
+            "story": "PhoneFailed",
+            "word": "Working",
+            "times": 1
+          },
+          {
+            "story": "PhoneCantStart",
+            "word": "Ready",
+            "times": 1
+          }
+        ],
+        "arrow": [
+          {
+            "story": "Review",
+            "off": 0
+          },
+          {
+            "story": "ReviewSession",
+            "off": 0
+          },
+          {
+            "story": "PhoneReview",
+            "off": 0
+          }
+        ],
+        "hairlines": [
+          {
+            "story": "Review",
+            "lines": []
+          },
+          {
+            "story": "Done",
+            "lines": []
+          },
+          {
+            "story": "PhoneReview",
+            "lines": []
+          },
+          {
+            "story": "PhoneDone",
+            "lines": []
+          }
+        ],
+        "columns": [],
+        "starters": [],
+        "overflow": [
+          {
+            "story": "PhoneReview",
+            "faults": []
+          },
+          {
+            "story": "PhoneWorking",
+            "faults": []
+          },
+          {
+            "story": "PhoneToDo",
+            "faults": []
+          },
+          {
+            "story": "PhoneDone",
+            "faults": []
+          },
+          {
+            "story": "PhoneFailed",
+            "faults": []
+          },
+          {
+            "story": "PhoneCantStart",
+            "faults": []
+          }
+        ]
+      },
+      "card": {
+        "frames": 11,
+        "blank": [],
+        "glyph": {
+          "least": 15.999930960233094,
+          "where": "Phone"
+        },
+        "once": [],
+        "columns": [],
+        "starters": [],
+        "overflow": [
+          {
+            "story": "Phone",
+            "faults": []
+          }
+        ]
+      },
+      "empty": {
+        "frames": 8,
+        "blank": [],
+        "starters": [
+          {
+            "story": "Board",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Decisions",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Routines",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "Caw",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "BoardPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "DecisionsPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "RoutinesPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "CawPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "BoardPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "DecisionsPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "RoutinesPhone",
+            "cards": 2,
+            "w": 0,
+            "h": 0
+          },
+          {
+            "story": "CawPhone",
+            "cards": 4,
+            "w": 0,
+            "h": 0
+          }
+        ],
+        "columns": [
+          {
+            "story": "Board",
+            "leftGap": 207,
+            "rightGap": 207,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Decisions",
+            "leftGap": -25,
+            "rightGap": -21,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Routines",
+            "leftGap": -11,
+            "rightGap": -11,
+            "lines": [
+              0,
+              0
+            ]
+          },
+          {
+            "story": "Caw",
+            "leftGap": -11,
+            "rightGap": -11,
+            "lines": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "BoardPhone",
+            "leftGap": -18,
+            "rightGap": -18,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "DecisionsPhone",
+            "leftGap": -18,
+            "rightGap": -18,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "RoutinesPhone",
+            "leftGap": -11,
+            "rightGap": -11,
+            "lines": [
+              0,
+              0
+            ]
+          },
+          {
+            "story": "CawPhone",
+            "leftGap": -11,
+            "rightGap": -11,
+            "lines": [
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "BoardPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "DecisionsPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0,
+              0
+            ]
+          },
+          {
+            "story": "RoutinesPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0
+            ]
+          },
+          {
+            "story": "CawPhone",
+            "leftGap": 0,
+            "rightGap": 0,
+            "lines": [
+              0,
+              0,
+              0
+            ]
+          }
+        ],
+        "once": [],
+        "overflow": [
+          {
+            "story": "BoardPhone",
+            "faults": []
+          },
+          {
+            "story": "DecisionsPhone",
+            "faults": []
+          },
+          {
+            "story": "RoutinesPhone",
+            "faults": []
+          },
+          {
+            "story": "CawPhone",
+            "faults": []
+          }
+        ]
+      },
+      "head": {
+        "frames": 2,
+        "blank": [],
+        "once": [],
+        "columns": [],
+        "starters": [],
+        "overflow": [
+          {
+            "story": "Phone",
+            "faults": []
+          }
+        ]
+      },
+      "run-order": {
+        "frames": 2,
+        "blank": [],
+        "once": [],
+        "columns": [],
+        "starters": [],
+        "overflow": [
+          {
+            "story": "Phone",
+            "faults": []
+          }
+        ]
+      },
+      "removed": {
+        "frames": 2,
+        "blank": [],
+        "once": [],
+        "columns": [],
+        "starters": [],
+        "overflow": [
+          {
+            "story": "Phone",
+            "faults": []
+          }
+        ]
+      }
+    },
+    "plan-model-grill 390×844 dark": {
+      "title": "Tasks, plans and to-dos: two questions left",
+      "cards": [
+        {
+          "id": "list-home",
+          "question": "Where does every session keep its plan?",
+          "options": 3,
+          "costs": 3,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 4
+        },
+        {
+          "id": "wake",
+          "question": "When a session is idle, which of your changes wake it?",
+          "options": 3,
+          "costs": 3,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 1
+        },
+        {
+          "id": "settled",
+          "question": "Settled from the sources: keep them, or overturn some?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 0,
+          "diagrams": 0
+        }
+      ],
+      "gone": [],
+      "sideways": 0
+    },
+    "project-screens 390×844 dark": {
+      "title": "The project page, redrawn from your pins",
+      "cards": [
+        {
+          "id": "pins",
+          "question": "Fixed from your pins: does it look right now?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 4,
+          "diagrams": 0
+        },
+        {
+          "id": "pipeline",
+          "question": "What is the Pipeline tab for?",
+          "options": 2,
+          "costs": 2,
+          "recommended": 1,
+          "previews": 2,
+          "diagrams": 0
+        }
+      ],
+      "gone": [],
+      "sideways": 0
+    }
+  }
+}

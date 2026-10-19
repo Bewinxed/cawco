@@ -504,6 +504,8 @@ export const PROJECT_ROW: ProjectRow = {
   caw: true,
   createdAt: new Date(ago(30 * DAY)).toISOString(),
   lands: "branch",
+  lfsConnection: null,
+  lfsUrl: null,
   primaryPlaceId: "pl-harbour",
   remote: "github.com/tidewater/site",
   review: true,
