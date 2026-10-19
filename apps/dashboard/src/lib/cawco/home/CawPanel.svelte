@@ -205,8 +205,10 @@
     <section
       data-slot="section"
       aria-labelledby="caw-notices"
-      class={needs.length > 0 &&
-        "mt-space-2 border-t border-bs-brand-solid pt-space-2"}
+      class={[
+        needs.length > 0 &&
+          "mt-space-2 border-t border-bs-brand-solid pt-space-2",
+      ]}
       data-flip="box"
     >
       <div
