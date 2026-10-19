@@ -149,6 +149,16 @@
     onarchive?: () => void;
   } = $props();
 
+  /** Where a row's fault, note and question start: where its title does. */
+  const faultIndent = $derived(
+    compact
+      ? "calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"
+      : "calc(var(--space-3) + var(--space-5) + var(--space-2))"
+  );
+  const faultEnd = $derived(
+    compact ? "var(--row-compact-pad-end)" : "var(--space-3)"
+  );
+
   const sessionId = $derived(instance?.id ?? info?.sessionId ?? "");
   /** The row is a workflow run (workflow-runs.ts), not a session. */
   const run = $derived(instance ? runIdOf(instance.id) !== null : false);
@@ -311,7 +321,7 @@
         aria-label="Session title"
         autocomplete="off"
         autofocus
-        class="block items-center min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label w-full -mx-space-1 px-space-1 border border-border-control rounded-xs bg-surface-raised text-ink-strong read-only:text-ink-muted group-data-context/session-row:group-not-data-current/session-row:text-ink-muted focus-inset"
+        class="block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label w-full -mx-space-1 px-space-1 border border-border-control rounded-xs bg-surface-raised text-ink-strong read-only:text-ink-muted group-data-context/session-row:group-not-data-current/session-row:text-ink-muted focus-inset"
         data-box
         onblur={() => {
           // Left after a refusal, it stays as typed, said under the row; Try
@@ -339,7 +349,7 @@
            row's title reads in muted ink. -->
       <span
         data-slot="title"
-        class="block items-center min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label group-data-context/session-row:group-not-data-current/session-row:text-ink-muted"
+        class="block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-label group-data-context/session-row:group-not-data-current/session-row:text-ink-muted"
         ><span class="sr-only"
           >{pending ?? statusWord(instance, status)}:
         </span>
@@ -350,7 +360,7 @@
       <!-- mark-line: a line of text, trimmed by the words; the account dot
            stands in it on vertical-align: middle, the x-height's middle -->
       <span
-        class="block items-center min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-selected-ink"
+        class="block min-h-space-5 content-center min-w-0 overflow-clip text-ellipsis whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-selected-ink"
       >
         {#if pending || renaming !== null}
           <!-- What is on its way, in the meta line's place: the spinner, then
@@ -381,15 +391,13 @@
     style:--end-pull="calc(var(--space-1) - var(--space-2))"
     {@attach trailWidth}
   >
-    <!-- literal: 3ch -->
     <span
       data-slot="num"
-      class="num mark-line flex items-center min-h-space-5 whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-selected-ink group-data-compact/session-row:justify-end group-data-compact/session-row:w-(--trail-col)"
-      style:--trail-col="3ch"
+      class="num mark-line flex items-center min-h-space-5 whitespace-nowrap type-meta text-ink-muted group-data-current/session-row:text-selected-ink group-data-compact/session-row:justify-end group-data-compact/session-row:w-c-trail-col"
       title={pending ?? hint}
     >
       {#if compact && (pending || renaming !== null)}
-        <Spinner aria-hidden="true" class="size-space-4" />
+        <Spinner aria-hidden="true" />
       {:else}
         <span>{trail}</span>
       {/if}
@@ -423,7 +431,6 @@
        one line in a tree in the rail takes the tight gaps, wide enough that
        the mark's status dot (3px out of the tile) clears the name. The note
        under the row starts where its title does, per size. -->
-  <!-- literal: 28px, 44px, 13px -->
   <div
     data-slot="item"
     class="group/session-row relative flex items-center rounded-sm text-ink-strong transition-control data-current:text-selected-ink data-stale:opacity-55 data-archivable:touch-pan-y"
@@ -435,18 +442,16 @@
     data-flip
     data-peek={showPeek || undefined}
     data-stale={stale || undefined}
-    style:--action-size="28px"
+    style:--action-size="var(--c-btn-h-sm)"
     style:--action-end={"calc(var(--space-3) + var(--trail-w, 0px) + var(--space-1))"}
     style:--swipe-x="calc(var(--swipe, 0px) * -1)"
-    style:--row-touch-h="44px"
-    style:--mark-hit-room="13px"
     {@attach onarchive ? swipeToArchive(onarchive) : undefined}
   >
     {#if onarchive}
       <!-- What a finger uncovers as it draws the row away. -->
       <span
         aria-hidden="true"
-        class="mark-line absolute top-0 right-0 bottom-0 left-auto flex items-center justify-center gap-space-1 w-(--reveal-w) overflow-hidden rounded-r-sm bg-selected-bg text-selected-ink type-meta whitespace-nowrap pointer-events-none"
+        class="mark-line absolute inset-y-0 end-0 flex items-center justify-center gap-space-1 w-(--reveal-w) overflow-hidden rounded-se-sm rounded-ee-sm bg-selected-bg text-selected-ink type-meta whitespace-nowrap pointer-events-none"
         style:--reveal-w="var(--swipe, 0px)"
         ><IconArchive class="flex-none size-icon-md" /><span>Archive</span
         ></span
@@ -457,11 +462,11 @@
            name settles or Escape puts it back. -->
       <form
         data-slot="row"
-        class="flex flex-auto items-center gap-space-2 min-w-0 min-h-space-8 coarse:min-h-(--row-touch-h) py-space-1 pl-space-3 pr-space-3 text-inherit no-underline rounded-inherit group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:min-h-(--row-compact-h) group-data-compact/session-row:py-0 group-data-compact/session-row:pl-(--row-compact-gap) group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-swiping/session-row:translate-x-(--swipe-x) group-not-data-swiping/session-row:transition-control-slide"
+        class="flex flex-auto items-center gap-space-2 min-w-0 min-h-space-8 coarse:min-h-c-btn-h-lg py-space-1 pl-space-3 pr-space-3 text-inherit no-underline rounded-inherit group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:min-h-(--row-compact-h) group-data-compact/session-row:py-0 group-data-compact/session-row:pl-(--row-compact-gap) group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-swiping/session-row:translate-x-(--swipe-x) group-not-data-swiping/session-row:transition-control-slide"
         data-rail-row
         style:--mark-hit-max={compact
           ? "calc((var(--row-compact-h) - var(--mark-size, var(--space-5))) / 2 + var(--tree-gap))"
-          : "calc(var(--mark-hit-room) + var(--tree-gap))"}
+          : "calc((var(--c-btn-h-lg) - var(--c-row-mark)) / 2 + var(--tree-gap))"}
         style:--mark-hit-gap={compact
           ? "var(--row-compact-gap)"
           : "var(--space-2)"}
@@ -479,7 +484,7 @@
         aria-busy={pending ? true : undefined}
         aria-current={active ? "page" : undefined}
         class={cn(
-          "press-tint focus-inset flex coarse:min-h-(--row-touch-h) min-h-space-8 min-w-0 flex-auto items-center gap-space-2 rounded-inherit py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-not-data-swiping/session-row:transition-control-slide group-data-compact/session-row:min-h-(--row-compact-h) group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
+          "press-tint focus-inset flex coarse:min-h-c-btn-h-lg min-h-space-8 min-w-0 flex-auto items-center gap-space-2 rounded-inherit py-space-1 pr-space-3 pl-space-3 text-inherit no-underline group-not-data-swiping/session-row:transition-control-slide group-data-compact/session-row:min-h-(--row-compact-h) group-data-swiping/session-row:translate-x-(--swipe-x) group-data-compact/session-row:gap-(--row-compact-gap) group-data-compact/session-row:py-0 group-data-compact/session-row:pr-(--row-compact-pad-end) group-data-compact/session-row:pl-(--row-compact-gap)",
           trigger.class as string | undefined
         )}
         data-hover-session={instance?.id}
@@ -488,7 +493,7 @@
         {href}
         style:--mark-hit-max={compact
           ? "calc((var(--row-compact-h) - var(--mark-size, var(--space-5))) / 2 + var(--tree-gap))"
-          : "calc(var(--mark-hit-room) + var(--tree-gap))"}
+          : "calc((var(--c-btn-h-lg) - var(--c-row-mark)) / 2 + var(--tree-gap))"}
         style:--mark-hit-gap={compact
           ? "var(--row-compact-gap)"
           : "var(--space-2)"}
@@ -551,7 +556,7 @@
             data-session-row-peek
             {...tip}
             aria-label="Peek {title}"
-            class="touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) mr-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:right-(--action-end) can-hover:my-auto can-hover:ml-0 can-hover:mr-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) max-[900px]:hidden light:hover:not-group-data-current/session-row:bg-surface-fill-strong dark:hover:not-group-data-current/session-row:bg-surface-fill group-not-data-swiping/session-row:transition-control-slide"
+            class="touch-hit focus-inset inline-grid flex-none place-items-center size-(--action-size) mr-space-2 border-none border-current rounded-xs bg-transparent text-ink-muted cursor-pointer transition-control can-hover:absolute can-hover:inset-y-0 can-hover:right-(--action-end) can-hover:my-auto can-hover:ml-0 can-hover:mr-0 can-hover:bg-surface-hover can-hover:opacity-0 can-hover:group-data-current/session-row:bg-selected-bg group-hover/session-row:opacity-100 can-hover:group-focus-within/session-row:opacity-100 hover:not-group-data-current/session-row:text-ink-strong group-data-current/session-row:text-selected-ink group-data-swiping/session-row:translate-x-(--swipe-x) max-desk:hidden light:hover:not-group-data-current/session-row:bg-surface-fill-strong dark:hover:not-group-data-current/session-row:bg-surface-fill group-not-data-swiping/session-row:transition-control-slide"
             onclick={() => openPeek({ viewId: live.id, href, title })}
             type="button"
           >
@@ -581,367 +586,63 @@
     {@render body({})}
   </StoredSessionMenu>
 {/if}
-<!-- A delete's question, under the row it was asked from. -->
-<AskHere
-  asker={asks}
-  at={sessionId}
-  class="session-ask"
-  data-compact={compact || undefined}
-/>
-<!-- What did not go, under the row that asked: a rename's reason here, any
+<!-- Under the row: its question, fault, note and pending stop all start where
+     its title does (the wrapper only carries the indent they read). -->
+<div
+  data-slot="session-row-under"
+  class="contents"
+  style:--fault-indent={faultIndent}
+  style:--fault-end={faultEnd}
+  style:--ask-indent={faultIndent}
+  style:--ask-end={faultEnd}
+>
+  <!-- A delete's question, under the row it was asked from. -->
+  <AskHere asker={asks} at={sessionId} data-compact={compact || undefined} />
+  <!-- What did not go, under the row that asked: a rename's reason here, any
      other action's on every row of this session (session-acts). -->
-<RowFault
-  again={commitTitle}
-  class="session-fault"
-  data-compact={compact || undefined}
-  reason={renameFault}
-/>
-<RowFault
-  again={act?.fault?.again}
-  againLabel={act?.fault?.againLabel}
-  class="session-fault"
-  data-compact={compact || undefined}
-  reason={act?.fault?.reason}
-/>
-{#if act?.note}
-  <!-- A row's fault, note and question start where its title does: past the
+  <RowFault
+    again={commitTitle}
+    data-compact={compact || undefined}
+    reason={renameFault}
+  />
+  <RowFault
+    again={act?.fault?.again}
+    againLabel={act?.fault?.againLabel}
+    data-compact={compact || undefined}
+    reason={act?.fault?.reason}
+  />
+  {#if act?.note}
+    <!-- A row's fault, note and question start where its title does: past the
        row's own padding, its mark and the gap after it. -->
-  <p
-    data-slot="session-row-note"
-    class="m-0 py-space-1 ps-(--fault-indent) pe-(--fault-end) type-meta text-ink-muted"
-    data-compact={compact || undefined}
-    style:--fault-indent={compact
-      ? "calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"
-      : "calc(var(--space-3) + var(--space-5) + var(--space-2))"}
-    style:--fault-end={compact
-      ? "var(--row-compact-pad-end)"
-      : "var(--space-3)"}
-    transition:unfold
-  >
-    {act.note.text}
-    <a
-      class="text-ink-strong underline underline-offset-2"
-      href={act.note.href}
-      onclick={() => noteOn(sessionId, undefined)}>Open</a
+    <p
+      data-slot="session-row-note"
+      class="m-0 py-space-1 ps-(--fault-indent) pe-(--fault-end) type-meta text-ink-muted"
+      data-compact={compact || undefined}
+      transition:unfold
     >
-  </p>
-{/if}
-<!-- What runs for this session elsewhere and may be stopped from here: a
+      {act.note.text}
+      <a
+        class="text-ink-strong underline underline-offset-2"
+        href={act.note.href}
+        onclick={() => noteOn(sessionId, undefined)}>Open</a
+      >
+    </p>
+  {/if}
+  <!-- What runs for this session elsewhere and may be stopped from here: a
      continuation in a new session, in any stage before it starts. -->
-{#if act?.pending && act.stop}
-  <p
-    data-slot="session-row-note"
-    class="m-0 py-space-1 ps-(--fault-indent) pe-(--fault-end) type-meta text-ink-muted"
-    data-compact={compact || undefined}
-    style:--fault-indent={compact
-      ? "calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"
-      : "calc(var(--space-3) + var(--space-5) + var(--space-2))"}
-    style:--fault-end={compact
-      ? "var(--row-compact-pad-end)"
-      : "var(--space-3)"}
-    transition:unfold
-  >
-    {act.pending}
-    <button
-      class="cursor-pointer border-none border-current bg-transparent p-0 font-inherit text-ink-strong underline underline-offset-2"
-      onclick={stopPending}
-      type="button">{act.stop.label}</button
+  {#if act?.pending && act.stop}
+    <p
+      data-slot="session-row-note"
+      class="m-0 py-space-1 ps-(--fault-indent) pe-(--fault-end) type-meta text-ink-muted"
+      data-compact={compact || undefined}
+      transition:unfold
     >
-  </p>
-{/if}
-
-<style>
-  .item {
-    position: relative;
-    display: flex;
-    align-items: center;
-    border-radius: var(--radius-sm);
-    color: var(--ink-strong);
-    transition: var(--transition-control);
-  }
-  .row {
-    display: flex;
-    flex: 1 1 auto;
-    align-items: center;
-    gap: var(--space-2);
-    min-width: 0;
-    /* Compact at a desk; a finger keeps its 44px. */
-    min-height: var(--space-8);
-    /* How far under its mark the mark's switch may reach: the room a
-       two-line row leaves under it (44px less the 18px mark, halved), and
-       the gap to the next row. */
-    --mark-hit-max: calc(13px + var(--tree-gap));
-    /* And how far sideways under a finger: to the row's words. */
-    --mark-hit-gap: var(--space-2);
-    padding: var(--space-1) var(--space-3);
-    border-radius: inherit;
-    color: inherit;
-    text-decoration: none;
-  }
-  @media (pointer: coarse) {
-    .row {
-      min-height: 44px;
-    }
-  }
-  /* One line, in a tree in the rail: the gaps between its three parts
-     (mark, name, age) are the tight ones, wide enough that the mark's
-     status dot (3px out of the tile) clears the name. Its mark's switch
-     reaches as far under it as the row leaves room. */
-  .item[data-compact] .row {
-    gap: var(--row-compact-gap);
-    min-height: var(--row-compact-h);
-    --mark-hit-max: calc(
-      (var(--row-compact-h) - var(--mark-size, 18px)) / 2 + var(--tree-gap)
-    );
-    --mark-hit-gap: var(--row-compact-gap);
-    padding: 0 var(--row-compact-pad-end) 0 var(--row-compact-gap);
-  }
-  /* Hover and selection are the list's (highlight: the rail's one ghost,
-     the list's own pill), so a row never paints a second one under them. */
-  /* Peek and Archive sit at the row's end. A fine pointer finds them on
-     hover or focus; a touch screen always shows Peek, since there is no
-     hover, and swipes instead of Archive. */
-  .row-action {
-    display: inline-grid;
-    flex: none;
-    place-items: center;
-    width: var(--action-size);
-    height: var(--action-size);
-    margin-right: var(--space-2);
-    border: 0;
-    border-radius: var(--radius-xs);
-    background: none;
-    color: var(--ink-muted);
-    cursor: pointer;
-    transition: var(--transition-control);
-  }
-  .row-action :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  /* At a desk they take no room until wanted: they rise over the row's
-     words, block-centred on the row, a step left of the trailing column
-     (the row's end padding, then the column's measured width), so neither
-     the age nor the count is ever under them. The row's corner is
-     --radius-sm; they stand further in from its edges than that, so they
-     keep the small control's own radius. */
-  .item {
-    --action-size: 28px;
-    --action-end: calc(var(--space-3) + var(--trail-w, 0px) + var(--space-1));
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .row-action {
-      position: absolute;
-      inset-block: 0;
-      right: var(--action-end);
-      margin: auto 0;
-      background: var(--surface-hover);
-      opacity: 0;
-    }
-    .item[data-current] .row-action {
-      background: var(--selected-bg);
-    }
-    .item:hover .row-action,
-    .item:focus-within .row-action {
-      opacity: 1;
-    }
-    /* Archive rises beside Peek, a step left of it. */
-    .item[data-peek] .archive {
-      right: calc(var(--action-end) + var(--action-size) + var(--space-1));
-    }
-    /* The words yield the buttons' room while they show, so the title never
-       runs under them; a row with neither reserves nothing. */
-    .item:is([data-archivable], [data-peek]):is(:hover, :focus-within) .words {
-      margin-inline-end: calc(var(--action-size) + var(--space-1));
-    }
-    .item[data-archivable][data-peek]:is(:hover, :focus-within) .words {
-      margin-inline-end: calc(2 * (var(--action-size) + var(--space-1)));
-    }
-    /* They stand on the row's ghost, by day the hover step itself: their own
-       hover is the step past it. */
-    .row-action:hover {
-      background: var(--surface-pressed);
-      color: var(--ink-strong);
-    }
-  }
-  /* A finger swipes the row away instead: no button for it. Peek stays,
-     always shown, in the row's flow at its end, with the house's 44px of
-     touch area (`touch-hit`). */
-  @media not ((hover: hover) and (pointer: fine)) {
-    .archive {
-      display: none;
-    }
-  }
-  /* Under a finger Peek's glyph is the house's touch size (`icon-lg`, the
-     bar's symbols), in the muted ink the row's always-shown words and
-     actions use: at 16px its duotone read faint at arm's length. */
-  @media (pointer: coarse) {
-    .peek :global(svg) {
-      width: var(--icon-lg);
-      height: var(--icon-lg);
-    }
-  }
-  /* A phone has no peek: the button is never drawn there (peek.svelte.ts),
-     and this holds before the page is live. */
-  @media (width < 900px) {
-    .peek {
-      display: none;
-    }
-  }
-  /* A finger drawing the row left: the row and its Peek follow it, and
-     "Archive" is uncovered behind them, as wide as the drag. Let go short
-     of the commit point, they slide back. Up and down stays the list's.
-     Moved only while a finger is on it: a `translate` at rest, even of
-     nothing, made the row a stacking context, and its mark's level over
-     the rows folding under it (app.css, motion/branch) counted for nothing
-     outside the row: its delegates' icons rode back over its tile. */
-  .item[data-archivable] {
-    touch-action: pan-y;
-  }
-  .item[data-swiping] :is(.row, .row-action) {
-    translate: calc(var(--swipe, 0px) * -1) 0;
-  }
-  .item:not([data-swiping]) :is(.row, .row-action) {
-    transition:
-      var(--transition-control),
-      translate var(--dur-exit) var(--ease-out);
-  }
-  .swipe-reveal {
-    position: absolute;
-    inset: 0 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-1);
-    inline-size: var(--swipe, 0px);
-    overflow: hidden;
-    border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
-    background: var(--selected-bg);
-    color: var(--selected-ink);
-    font: var(--type-meta);
-    white-space: nowrap;
-    pointer-events: none;
-
-    & :global(svg) {
-      flex: none;
-      inline-size: 16px;
-      block-size: 16px;
-    }
-  }
-  /* The words take the room; the trailing column is as wide as the wider
-     of its two cells and never yields. */
-  .words,
-  .end {
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-  }
-  .words {
-    flex: 1 1 auto;
-  }
-  .end {
-    flex: none;
-    align-items: flex-end;
-    /* The row's gap is a mark's; words and what trails them sit closer. */
-    margin-inline-start: calc(var(--space-1) - var(--space-2));
-  }
-  /* Both lines stand at the count's height with or without one (a context
-     row says nothing on its second), so every row in a list is one height
-     and the nesting lines meet each glyph alike. */
-  .cell {
-    display: flex;
-    align-items: center;
-    min-block-size: var(--space-5);
-  }
-  .title,
-  .line {
-    display: block;
-    align-content: center;
-    min-width: 0;
-    overflow: clip;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .title {
-    font: var(--type-label);
-  }
-  .line {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* The age, at the title line's end: only as wide as it is, so the title
-     keeps the rest; its right edge is the row's, the same down the list. */
-  .trail {
-    white-space: nowrap;
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
-  }
-  /* In a tree the ages stand in one column, as wide as the longest
-     ("59m"), right aligned, the row's own gap from the name. */
-  .item[data-compact] {
-    & .end {
-      margin-inline-start: 0;
-    }
-    & .trail {
-      justify-content: flex-end;
-      inline-size: 3ch;
-    }
-  }
-  .item[data-current] {
-    color: var(--selected-ink);
-  }
-  .item[data-current] .line,
-  .item[data-current] .trail,
-  .item[data-current] .row-action {
-    color: var(--selected-ink);
-  }
-  .item[data-context]:not([data-current]) .title {
-    color: var(--ink-muted);
-  }
-  .item[data-stale] {
-    opacity: 0.55;
-  }
-  /* The title as a field, in the title's own type and place: no box of its
-     own beyond the input recipe's hairline, so the row keeps its height. */
-  .field {
-    inline-size: 100%;
-    margin-inline: calc(var(--space-1) * -1);
-    padding-inline: var(--space-1);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-xs);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-  }
-  .field[readonly] {
-    color: var(--ink-muted);
-  }
-  /* What is on its way, in the meta line's place: the spinner, then the word. */
-  .doing {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
-  }
-  /* A row's fault, note and question start where its title does: past the
-     row's own padding, its mark and the gap after it. */
-  :global(.session-fault),
-  :global(.session-ask) {
-    --fault-indent: calc(var(--space-3) + var(--space-5) + var(--space-2));
-    --fault-end: var(--space-3);
-  }
-  :global(.session-fault[data-compact]),
-  :global(.session-ask[data-compact]) {
-    --fault-indent: calc(
-      var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5))
-    );
-    --fault-end: var(--row-compact-pad-end);
-  }
-  :global(.session-ask) {
-    --ask-indent: var(--fault-indent);
-    --ask-end: var(--fault-end);
-  }
-</style>
+      {act.pending}
+      <button
+        class="cursor-pointer border-none border-current bg-transparent p-0 font-inherit text-ink-strong underline underline-offset-2"
+        onclick={stopPending}
+        type="button">{act.stop.label}</button
+      >
+    </p>
+  {/if}
+</div>

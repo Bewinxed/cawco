@@ -169,8 +169,7 @@
 
 {#if steps.length > 0}
   <ul
-    class="kit-nest m-0 mt-space-1 flex min-w-0 list-none flex-col gap-(--nest-gap) py-0 pr-0 pl-(--nest-pad)"
-    style:--nest-gap="var(--space-row)"
+    class="kit-nest m-0 mt-space-1 flex min-w-0 list-none flex-col gap-space-row py-0 pr-0 pl-(--nest-pad)"
     {@attach nestFrom(glyph, STEP_GLYPH)}
     {@attach reflow()}
     {@attach clock.watch}
@@ -192,39 +191,28 @@
                and neither ever runs inside a control. -->
           <SessionStatus compact step={step.status} />
           {#if foldable}
-            <!-- literal: 26px, 44px -->
             <button
               aria-expanded={opened.has(step.id)}
-              class="press-tint focus-inset cursor-pointer group flex min-h-(--step-h) min-w-0 flex-auto items-center rounded-xs border-none border-current bg-transparent py-0 pr-space-1 pl-(--line-pad-start) text-start text-size-body font-normal text-ink-strong coarse:min-h-(--step-h-coarse)"
+              class="press-tint focus-inset cursor-pointer group flex min-h-space-7 min-w-0 flex-auto items-center rounded-xs border-none border-current bg-transparent py-0 pr-space-1 pl-space-1 text-start text-size-body font-normal text-ink-strong coarse:min-h-c-btn-h-lg"
               data-err={step.status === "failed" || undefined}
               onclick={() => toggle(step.id)}
               type="button"
-              style:--step-h="26px"
-              style:--step-h-coarse="44px"
-              style:--line-pad-start="calc(var(--space-2) - var(--space-1))"
             >
               {@render line(step)}
             </button>
           {:else}
-            <!-- literal: 26px, 44px -->
             <div
-              class="group flex min-h-(--step-h) min-w-0 flex-auto items-center rounded-xs border-none border-current bg-transparent py-0 pr-space-1 pl-(--line-pad-start) text-start text-size-body font-normal text-ink-strong coarse:min-h-(--step-h-coarse)"
+              class="group flex min-h-space-7 min-w-0 flex-auto items-center rounded-xs border-none border-current bg-transparent py-0 pr-space-1 pl-space-1 text-start text-size-body font-normal text-ink-strong coarse:min-h-c-btn-h-lg"
               data-err={step.status === "failed" || undefined}
-              style:--step-h="26px"
-              style:--step-h-coarse="44px"
-              style:--line-pad-start="calc(var(--space-2) - var(--space-1))"
             >
               {@render line(step)}
             </div>
           {/if}
           {#if tab}
-            <!-- literal: 26px, 44px -->
             <a
               aria-label="Open {titleOf(step)}"
-              class="touch-hit focus-inset grid size-(--jump-size) flex-none place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out coarse:min-h-(--jump-size-coarse) hover:bg-surface-hover hover:text-brand-ink"
+              class="touch-hit focus-inset grid size-space-7 flex-none place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out coarse:min-h-c-btn-h-lg hover:bg-surface-hover hover:text-brand-ink"
               href={tab}
-              style:--jump-size="26px"
-              style:--jump-size-coarse="44px"
               title="Open {titleOf(step)}"
             >
               <IconExternal aria-hidden="true" class="size-icon-sm" />
@@ -276,13 +264,12 @@
               </div>
             {/if}
             {#if result}
-              <!-- literal: 240px -->
               <pre
                 data-slot="result"
-                class="m-0 max-h-(--result-max) self-stretch overflow-auto rounded-xs bg-surface-recess px-space-3 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong data-err:text-status-fail-ink"
+                class="m-0 max-h-c-run-result-max self-stretch overflow-auto rounded-xs bg-surface-recess px-space-3 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong data-err:text-status-fail-ink"
                 data-branch-item
                 data-err={!!step.failure || undefined}
-                style:--result-max="240px">{result}</pre>
+                >{result}</pre>
             {/if}
             {#if more}
               <div data-slot="more" data-branch-item>

@@ -38,12 +38,11 @@
   <span class="type-label text-ink-muted">{label}</span>
   <span class="flex flex-wrap items-baseline gap-x-space-2">
     <!-- A new figure morphs out of the old one, digit by digit, in place. -->
-    <!-- literal: 1lh -->
     <span
       data-slot="num"
       data-stat-value
-      class="num min-h-(--line-min) type-kpi text-ink-stat group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text-status-done-ink group-tone-fail:text-status-fail-ink max-desk:type-title"
-      style:--line-min="1lh"><MorphText text={String(value)} /></span
+      class="num min-h-lh type-kpi text-ink-stat group-tone-live:text-status-live-ink group-tone-attn:text-status-attn-ink group-tone-done:text-status-done-ink group-tone-fail:text-status-fail-ink max-desk:type-title"
+      ><MorphText text={String(value)} /></span
     >
     {#if unit}
       {#key unit}
