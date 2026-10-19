@@ -129,7 +129,7 @@
       {#if label}
         <span
           data-slot="thinking-step-label"
-          class="font-normal text-ink-strong transition-[color] dur-control ease-out status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
+          class="font-normal text-ink-strong transition-control status-ahead:text-ink-muted motion-safe:not-status-ahead:data-shimmer:text-transparent motion-safe:data-shimmer:step-shimmer motion-safe:data-shimmer:animate-step-shimmer"
           data-shimmer={status === "active" || undefined}
           data-status={status}>{label}</span
         >
