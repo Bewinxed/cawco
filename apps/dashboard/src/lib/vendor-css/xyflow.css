@@ -1,6 +1,6 @@
-/* Svelte Flow's stylesheet in its own layer, under the house's components
-   (app.css states the order: theme, base, xyflow, crepe, components, …),
+/* Svelte Flow's stylesheet in the libraries' layer, under the house's
+   components (app.css states the order: theme, base, vendor, components, …),
    loaded with the graphs that draw it (the decisions graph, the canvas map,
    a view's canvas). A layered rule of the house then wins over it whatever
    its selectors' weight (https://developer.mozilla.org/en-US/docs/Web/CSS/@import#importing_css_rules_into_a_cascade_layer). */
-@import "@xyflow/svelte/dist/style.css" layer(xyflow);
+@import "@xyflow/svelte/dist/style.css" layer(vendor);

@@ -7,11 +7,10 @@
  * display (W1) and its min-height (W4). The rules into elements (headings,
  * fields, the disabled button) sit in `@layer components`, so every utility
  * (a kit control's own recipe, `wf-check`, `wf-mono`) outranks them by
- * layer. Svelte Flow's attribution stays unlayered under `.svelte-flow`:
- * @xyflow's own sheet is unlayered (imported from script), and an unlayered
- * rule beats every layer, so only an unlayered rule of more weight can
- * restyle it (https://tailwindcss.com/docs/adding-custom-styles#adding-component-classes
- * puts third-party styles in `components`, which here would lose).
+ * layer. Svelte Flow's attribution is restyled from `@layer components`
+ * too: @xyflow's own sheet is in the `vendor` layer under it
+ * (lib/vendor-css/xyflow.css), so the house's rule wins by layer, whatever
+ * the weight of the library's selectors.
  */
 @utility wf {
   color: var(--ink-strong);
@@ -109,19 +108,21 @@
    grey wash and grey link read as a stray box in dark). The link sits in
    its corner, flush with the clip: its ring goes on its own box, and it
    reaches the 24px pointer floor (DESIGN.md, The 24 Pointer Rule). */
-.svelte-flow .svelte-flow__attribution {
-  --xy-attribution-background-color: transparent;
-  font-size: var(--text-meta);
-  font-weight: var(--weight-body);
+@layer components {
+  .svelte-flow__attribution {
+    --xy-attribution-background-color: transparent;
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
 
-  & a {
-    display: inline-flex;
-    align-items: center;
-    min-height: var(--c-pointer-floor);
-    color: var(--ink-subtle);
+    & a {
+      display: inline-flex;
+      align-items: center;
+      min-height: var(--c-pointer-floor);
+      color: var(--ink-subtle);
 
-    &:focus-visible {
-      outline-offset: var(--focus-ring-inset);
+      &:focus-visible {
+        outline-offset: var(--focus-ring-inset);
+      }
     }
   }
 }

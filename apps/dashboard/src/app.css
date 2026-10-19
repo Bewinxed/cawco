@@ -1,7 +1,8 @@
 /* One cascade order for the whole app, Tailwind's own with two more: tokens
-   in theme, element defaults in base, a library's own stylesheet in its
-   layer under the house's components (Svelte Flow's `xyflow`, Milkdown
-   Crepe's `crepe`, each loaded with what draws it: lib/vendor-css), kit recipes
+   in theme, element defaults in base, the libraries' own stylesheets in
+   `vendor` under the house's components (Svelte Flow and Milkdown Crepe by
+   lib/vendor-css, Event Calendar by vite.config.ts's calendarSheet, each
+   loaded with what draws it), kit recipes
    in components, single-purpose classes in utilities (with what has to
    outrank the typography plugin, which writes there too), and in `overrides`
    the few page-wide holds that outrank every utility on any element (a
@@ -10,7 +11,7 @@
    (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer). Stated before
    Tailwind's import, which declares its four first: a layer's place is
    where it is first named. */
-@layer theme, base, xyflow, crepe, components, utilities, overrides;
+@layer theme, base, vendor, components, utilities, overrides;
 @import "tailwindcss" source(".");
 @import "@fontsource-variable/figtree";
 @import "@fontsource-variable/jetbrains-mono";
@@ -3220,6 +3221,103 @@
 }
 [data-preview-sheet] [data-vaul-handle-hitarea] {
   height: var(--c-sheet-inspector-head-h);
+}
+
+/* ---- Sonner's toaster and toasts (the kit's sonner.svelte hosts them;
+   svelte-sonner draws them). Its own sheet stands in the `vendor` layer
+   (vite.config.ts, sonnerSheet), so these win by layer. */
+@layer components {
+  /* The kit's floating surface, over sonner's own box. */
+  [data-sonner-toaster] [data-sonner-toast][data-styled="true"] {
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-overlay);
+    font: var(--type-body);
+  }
+  /* The toast's action and cancel buttons: the label role, an item's radius,
+     and the press every control gives. */
+  [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button] {
+    border-radius: var(--radius-sm);
+    font: var(--type-label);
+    transition: transform var(--dur-toggle) var(--ease-out);
+
+    @media (prefers-reduced-motion: no-preference) {
+      &:active {
+        transform: scale(var(--press-scale));
+      }
+    }
+  }
+
+  /* Motion on the kit's scale. Sonner has no timing options, so its
+     transitions are restated here.
+     - Enter: from --pop-rise short of its place on the side of the edge it
+       comes from (below at the desktop's bottom-right, above at the phone's
+       top-centre), fading and moving over --dur-panel on --ease-out. The
+       toast is marked `data-entering` for that length (sonner.svelte).
+     - The stack closing up or making room: --dur-fade on --ease-in-out.
+     - Exit: toward the edge it came from (sonner's own direction) over
+       --dur-exit on --ease-out, inside sonner's 200ms before unmount; a toast
+       swiped away leaves the way the finger threw it, on the same timing.
+     - A toast under a finger keeps sonner's own "no transition", so it tracks
+       the finger 1:1; sonner dismisses past 45px or on a flick faster than
+       0.11px/ms.
+     No height tween: the stack stands expanded (`expand`, in the root
+     layout), every toast at its own height, so an arrival grows nothing.
+     Reduced motion: sonner's own rule turns every transition and animation
+     here off, important-flagged; sonner.svelte fades a toast in and out
+     instead, through the Web Animations API. */
+  [data-sonner-toaster]
+    [data-sonner-toast][data-y-position="bottom"][data-mounted="false"] {
+    --y: translateY(var(--pop-rise));
+  }
+  [data-sonner-toaster]
+    [data-sonner-toast][data-y-position="top"][data-mounted="false"] {
+    --y: translateY(calc(-1 * var(--pop-rise)));
+  }
+  [data-sonner-toaster] [data-sonner-toast]:not([data-swiping="true"]) {
+    transition:
+      transform var(--dur-fade) var(--ease-in-out),
+      opacity var(--dur-fade) var(--ease-out),
+      box-shadow var(--dur-control) var(--ease-out);
+  }
+  [data-sonner-toaster]
+    [data-sonner-toast][data-entering]:not([data-swiping="true"]) {
+    transition:
+      transform var(--dur-panel) var(--ease-out),
+      opacity var(--dur-panel) var(--ease-out),
+      box-shadow var(--dur-control) var(--ease-out);
+  }
+  [data-sonner-toaster]
+    [data-sonner-toast][data-removed="true"]:not([data-swiping="true"]) {
+    transition:
+      transform var(--dur-exit) var(--ease-out),
+      opacity var(--dur-exit) var(--ease-out);
+  }
+  [data-sonner-toaster] [data-sonner-toast][data-swipe-out="true"] {
+    animation-duration: var(--dur-exit);
+    animation-timing-function: var(--ease-out);
+  }
+
+  /* A phone's toast sits at the top, under the top bar: at the bottom it
+     lands on the composer, which is exactly where the reader is typing.
+     Full width less the phone bar's edge a side, so a toast lines up with
+     the bar's two ends. The bar does not pad for the notch, so the
+     inset is added here. Sonner's own narrow rules stop at 600px; these hold
+     to 640px, where the layout puts the toaster top-centre. */
+  @media (max-width: 640px) {
+    [data-sonner-toaster][data-y-position="top"][data-x-position="center"] {
+      top: calc(env(safe-area-inset-top) + var(--c-top-bar-h) + var(--space-2));
+      right: var(--c-bar-phone-edge);
+      left: var(--c-bar-phone-edge);
+      width: auto;
+      transform: none;
+    }
+    [data-sonner-toaster][data-y-position="top"][data-x-position="center"]
+      [data-sonner-toast] {
+      right: 0;
+      left: 0;
+      width: 100%;
+    }
+  }
 }
 
 /* ---- Rendered markdown. @tailwindcss/typography paints its own gray

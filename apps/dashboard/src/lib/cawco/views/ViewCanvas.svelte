@@ -22,7 +22,7 @@
     Panel,
     SvelteFlow,
   } from "@xyflow/svelte";
-  import "@xyflow/svelte/dist/style.css";
+  import "#lib/vendor-css/xyflow.css";
   import { onMount, untrack } from "svelte";
   import type { StageKind, TaskSummary } from "#lib/cawco/project-tasks.js";
   import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";

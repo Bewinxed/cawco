@@ -30,7 +30,7 @@
   );
 </script>
 
-<!-- xyflow's unlayered .svelte-flow__edge-path outranks utilities, so the paint goes through its own custom properties -->
+<!-- The edge's paint through Svelte Flow's own edge properties, which its sheet reads for the path's stroke -->
 <BaseEdge
   {id}
   markerEnd="url(#{marker})"

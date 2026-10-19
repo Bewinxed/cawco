@@ -226,19 +226,63 @@ const runningVersion = (): Plugin => ({
 
 // `/ws` is left to `server.proxy`, and HMR's upgrade to Vite.
 /**
- * Event Calendar's own palette (`src/styles/theme.css`) is not loaded: the
- * calendar view imports the library's layout stylesheet, and its first
- * line, the import of its theme, is taken out before Vite inlines the rest.
- * The project's tokens fill the `--ec-*` variables instead (PRD §5.2: the
- * libraries' themes are not loaded; our components carry DESIGN.md).
+ * Event Calendar's layout stylesheet, as the calendar view imports it: in
+ * the libraries' `vendor` layer (app.css states the order), and without its
+ * palette. Its own imports keep their order, each taking the layer
+ * (`@import … layer(vendor)`), save `./theme.css`, which is taken out: the
+ * project's tokens fill the `--ec-*` variables instead (PRD §5.2: the
+ * libraries' themes are not loaded; our components carry DESIGN.md). Its own
+ * rules follow in a `@layer vendor` block. This is done here, on the sheet's
+ * import from script, because Vite runs no plugin's transform on a sheet a
+ * CSS `@import` pulls in, so a layered `@import` of it from a stylesheet would
+ * load the palette too. The package exports only its built sheet, which
+ * carries the palette inline, so the view reaches the layout sheet by path.
  */
 const EC_INDEX = /@event-calendar[\\/]core[\\/]src[\\/]styles[\\/]index\.css$/;
-const EC_THEME_IMPORT = /@import\s+["']\.\/theme\.css["'];?/;
-export const calendarThemeOff = (): Plugin => ({
-  name: "cawco-calendar-theme-off",
+const EC_IMPORT = /^@import\s+["'](\.\/[\w-]+\.css)["'];?[ \t]*$/gm;
+export const calendarSheet = (): Plugin => ({
+  name: "cawco-calendar-sheet",
   enforce: "pre",
   transform(code, id) {
-    return EC_INDEX.test(id) ? code.replace(EC_THEME_IMPORT, "") : null;
+    if (!EC_INDEX.test(id)) {
+      return null;
+    }
+    const imports: string[] = [];
+    const rules = code.replace(EC_IMPORT, (_, path: string) => {
+      if (path !== "./theme.css") {
+        imports.push(`@import "${path}" layer(vendor);`);
+      }
+      return "";
+    });
+    return `${imports.join("\n")}\n@layer vendor {\n${rules.trim()}\n}\n`;
+  },
+});
+
+/**
+ * svelte-sonner's own sheet (1.2.1, the npm latest) is its Toaster
+ * component's `<style>`, one `:global { … }` block the Svelte compiler emits
+ * unlayered, where it would outrank every rule of the house. Here, where the
+ * compiled sheet enters the build, it is put in the libraries' `vendor`
+ * layer (app.css states the order), so app.css's sonner rules restyle the
+ * toasts from `components` by layer. Its reduced-motion `!important` stays
+ * as strong as before: an important declaration in an earlier layer wins
+ * (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer). A release that
+ * moves its sheet elsewhere fails the build here.
+ */
+const SONNER_TOASTER =
+  /svelte-sonner[\\/]dist[\\/]Toaster\.svelte\?.*type=style/;
+export const sonnerSheet = (): Plugin => ({
+  name: "cawco-sonner-sheet",
+  transform(code, id) {
+    if (!SONNER_TOASTER.test(id)) {
+      return null;
+    }
+    if (!code.includes("[data-sonner-toast]")) {
+      throw new Error(
+        `svelte-sonner's toast rules were not found in ${id}: re-read Toaster.svelte and update sonnerSheet`
+      );
+    }
+    return `@layer vendor {\n${code}\n}\n`;
   },
 });
 
@@ -355,7 +399,8 @@ export default defineConfig(({ command }) => {
   }
   return {
     plugins: [
-      calendarThemeOff(),
+      calendarSheet(),
+      sonnerSheet(),
       streamdownOverlayOwn(),
       hubProxy(),
       runningVersion(),
@@ -426,10 +471,11 @@ export default defineConfig(({ command }) => {
       dedupe: ["bits-ui"],
     },
     optimizeDeps: {
-      // svelte-streamdown is compiled like the app's own components, so its
-      // stylesheet passes through streamdownOverlayOwn in dev as in the build:
-      // prebundled, its styles are injected from the bundle's JS instead.
-      exclude: ["@xyflow/svelte", "svelte-streamdown"],
+      // svelte-streamdown and svelte-sonner are compiled like the app's own
+      // components, so their stylesheets pass through streamdownOverlayOwn and
+      // sonnerSheet in dev as in the build: prebundled, their styles are
+      // injected from the bundle's JS instead.
+      exclude: ["@xyflow/svelte", "svelte-streamdown", "svelte-sonner"],
     },
     ssr: {
       // Both ship raw .svelte sources; dev SSR must compile them, not require them.

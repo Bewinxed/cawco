@@ -40,8 +40,9 @@
    * a task without one is left off. A chip is the task's title in the label
    * role: set for later on the raised surface with the control edge, done in
    * the done pair, waiting on you in the attention pair. A chip opens the
-   * task's sheet. The library's palette is not loaded (vite.config.ts); its
-   * variables take the tokens here.
+   * task's sheet. The library's layout sheet stands in the `vendor` layer and
+   * its palette is not loaded (vite.config.ts, calendarSheet); its variables
+   * take the tokens here.
    */
   import { Calendar, DayGrid, List, TimeGrid } from "@event-calendar/core";
   import "../../../../node_modules/@event-calendar/core/src/styles/index.css";
@@ -134,7 +135,7 @@
 </div>
 
 <style>
-  /* tailwind: the rules below override declarations of Event Calendar's own sheet (imported above), which is unlayered, and an unlayered declaration beats every Tailwind layer, so a `theme: component` rule could not win here — https://tailwindcss.com/docs/adding-custom-styles#adding-component-classes */
+  /* tailwind: the rules below restyle DOM Event Calendar renders (no element here takes a class); its sheet is in the `vendor` layer now, so they move to a `theme: component` rule in wave 2 — https://tailwindcss.com/docs/adding-custom-styles#adding-component-classes */
   /* residual: foreign-dom */
   /* The library's variables, from the tokens (its theme.css is not loaded). */
   [data-slot="view-calendar"] :global(.ec) {

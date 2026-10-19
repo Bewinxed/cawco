@@ -13,7 +13,7 @@
     Panel,
     SvelteFlow,
   } from "@xyflow/svelte";
-  import "@xyflow/svelte/dist/style.css";
+  import "#lib/vendor-css/xyflow.css";
   import { onMount, untrack } from "svelte";
   import { newId } from "#lib/cawco/id.js";
   import { workflowState } from "#lib/cawco/workflow-state.svelte.js";
