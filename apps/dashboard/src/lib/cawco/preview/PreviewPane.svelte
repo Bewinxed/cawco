@@ -1857,7 +1857,7 @@
         priority: HEAD_PRIORITY.comments,
         bar: commentsBar,
         menu: commentsMenu,
-        count: openCount,
+        count: { n: openCount, of: "Comments" },
       });
     }
     all.push({
@@ -2748,7 +2748,7 @@
   }
   /* A narrow pane keeps Send picks' and Comments' glyphs (and the count),
      and lets their words go. */
-  @container (max-width: 639px) {
+  @container (width < 640px) {
     .comments-label,
     .send-label {
       display: none;

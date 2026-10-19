@@ -48,6 +48,8 @@ import { until } from "../../scratch-fleet";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const DASHBOARD = join(ROOT, "apps/dashboard");
+/** More's name while it holds Comments: native's words (PreviewController.swift). */
+const MORE_COUNT = /^More, Comments \d+ open$/;
 const CAPS = join(process.env.TMPDIR ?? "/tmp", "caps");
 /** A states file of the probe's own, in the stage's git-ignored folder: one story with no doc comment. */
 const UNNAMED_FILE = ".cawco/probe/Unnamed.stories.ts";
@@ -620,14 +622,14 @@ async function readHead(page: Page): Promise<HeadRead> {
   return { ...read, more };
 }
 
-/** The panel at one pane width and scheme, on the bench. */
+/** The panel at one pane width and scheme, on the bench: the controls that stand in its head (null when it never loaded). */
 async function headLeg(
   kit: Kit,
   bench: string,
   stage: Stage,
   width: number,
   theme: "light" | "dark"
-): Promise<void> {
+): Promise<Set<string> | null> {
   const touch = width < 640;
   const page = await kit.page(touch ? "phone" : "desk", { theme, scale: 2 });
   const errors: string[] = [];
@@ -664,7 +666,7 @@ async function headLeg(
       `${said} | errors: ${errors.join(" | ")}`
     );
     await page.close();
-    return;
+    return null;
   }
   await page.waitForTimeout(4000);
   const read = await readHead(page);
@@ -690,15 +692,33 @@ async function headLeg(
     read.path || "none"
   );
   kit.note(`head ${leg}: ${read.boxes}`);
-  if (width < 390) {
+  const standing = new Set(
+    read.bar
+      .map((one) => one.key)
+      .filter((key) => key !== "more" && key !== "close")
+  );
+  if (width < 640) {
     kit.check(
-      `8e: ${leg}: where the mode's segments have no room, it stands as one button before it would go to More`,
-      read.boxes.includes("mode(one button)") &&
+      `8e: ${leg}: priority decides who stands, form after: the mode (as one button where its segments have no room) and Comments both stand`,
+      standing.has("mode") &&
+        standing.has("comments") &&
         !read.more.some((one) => one.startsWith("Mode")),
       `${read.boxes}; More ${read.more.join(" | ")}`
     );
+  }
+  const commentsInMore = read.more.some((one) => one.startsWith("Comments"));
+  if (commentsInMore || read.moreLabel) {
+    kit.check(
+      `8g: ${leg}: More says Comments' count while it holds Comments, 0 too, in native's words`,
+      commentsInMore
+        ? MORE_COUNT.test(read.moreLabel)
+        : read.moreLabel === "More",
+      read.moreLabel
+    );
+  }
+  if (width < 390) {
     await page.close();
-    return;
+    return standing;
   }
   mkdirSync(CAPS, { recursive: true });
   const name = width < 640 ? String(width) : "desk";
@@ -707,6 +727,7 @@ async function headLeg(
     .screenshot({ path: join(CAPS, `canvas-${name}-${theme}.png`) });
   kit.note(`capture: ${join(CAPS, `canvas-${name}-${theme}.png`)}`);
   await page.close();
+  return standing;
 }
 
 const spec: Spec = {
@@ -724,10 +745,28 @@ const spec: Spec = {
       }
       const bench = await kit.bench();
       for (const theme of only === "page" ? [] : (["light", "dark"] as const)) {
+        const stood: [number, Set<string> | null][] = [];
         for (const width of [330, 390, 523, 720]) {
           // biome-ignore lint/performance/noAwaitInLoops: one page at a time
-          await headLeg(kit, bench, stage, width, theme);
+          stood.push([width, await headLeg(kit, bench, stage, width, theme)]);
         }
+        kit.check(
+          `8f: ${theme}: the controls standing at a wider pane hold every one that stood at a narrower one`,
+          stood.every(([, keys], at) => {
+            const narrower = at === 0 ? new Set<string>() : stood[at - 1]?.[1];
+            return (
+              !!keys &&
+              !!narrower &&
+              [...narrower].every((key) => keys.has(key))
+            );
+          }),
+          stood
+            .map(
+              ([width, keys]) =>
+                `${width}: ${keys ? [...keys].join(",") : "never loaded"}`
+            )
+            .join("; ")
+        );
       }
     } finally {
       stage.stop();

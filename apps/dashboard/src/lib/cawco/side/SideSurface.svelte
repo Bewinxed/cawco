@@ -118,9 +118,8 @@
   const stands = (key: string) => shown === null || shown.has(key);
   const formOf = (key: string): Standing => shown?.get(key) ?? "whole";
   const more = $derived(all.filter((one) => !stands(one.key)));
-  const moreCount = $derived(
-    more.reduce((sum, one) => sum + (one.count ?? 0), 0)
-  );
+  /** The count a control in More says on it (Comments'), whenever that control would, 0 too. */
+  const moreCount = $derived(more.find((one) => one.count)?.count);
 
   /** How far a box's text runs past it (a truncated name's): its own width is that much more. */
   const runsPast = (el: Element): number =>
@@ -314,15 +313,15 @@
       <DropdownMenu.Root>
         <DropdownMenu.Trigger
           data-slot="more"
-          aria-label={moreCount > 0
-            ? `More, ${moreCount} open comments`
+          aria-label={moreCount
+            ? `More, ${moreCount.of} ${moreCount.n} open`
             : "More"}
           class="more mark-line"
           title="More"
         >
           <IconMore />
-          {#if moreCount > 0}
-            <span class="more-count">{moreCount}</span>
+          {#if moreCount}
+            <span class="more-count">{moreCount.n}</span>
           {/if}
         </DropdownMenu.Trigger>
         <DropdownMenu.Content align="end" class="w-56">
@@ -336,20 +335,7 @@
       </DropdownMenu.Root>
     {/if}
     {#if !items && expand?.available}
-      <button
-        aria-keyshortcuts={expanded ? "Escape" : undefined}
-        aria-label={expanded ? expand.backLabel : "Expand"}
-        class="touch-hit"
-        onclick={() => expand.toggle()}
-        title={expanded ? `${expand.backLabel} (Esc)` : "Expand"}
-        type="button"
-      >
-        {#if expanded}
-          <IconMinimize />
-        {:else}
-          <IconMaximize />
-        {/if}
-      </button>
+      {@render expandBar()}
     {/if}
     <button
       data-slot="close"
@@ -412,7 +398,7 @@
   }
   /* More says the open comments it holds, as Comments does. */
   .more-count {
-    min-width: 1ch;
+    min-inline-size: 1ch;
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
   }
