@@ -15,8 +15,11 @@
     | "fly"
     | "burst"
     | "drain";
-  /** How the waiting key shows life: a light round its edge, or ripples from Caw. */
-  export type QrWait = "sweep" | "ripple";
+  /**
+   * How the waiting key shows life: its card pings (a ring leaves its edge),
+   * rings ripple from Caw, or a light rides its edge.
+   */
+  export type QrWait = "ping" | "ripple" | "sweep";
   /** The head on the code's middle: swapped by key, cross-faded. */
   export interface QrCentre {
     key: string;
@@ -40,12 +43,16 @@
    *   arrive   every dot from a scattered start, shuffling twice, then
    *            locking on its module over dur-settle, its own share of
    *            dur-panel late: the key reads the instant it settles
-   *   wait     sweep: a lit segment travels the card's rounded edge once a
-   *            breath, and one light rides the edge with it (a motion
-   *            path), screened over the key so the dots it crosses glint
+   *   wait     ping: one ring leaves the card's own edge once a breath,
+   *            growing by qr-pulse-scale as it fades
    *            ripple: the head breathes and one ring screens out from it
-   *            warm: the light takes the warn ink (the last minute)
-   *   dim      the code steps back to qr-dim-opacity, the edge gone
+   *            sweep: the scan's spinner (below), while it waits
+   *            warm: the ring or light takes the warn ink (the last minute)
+   *   dim      a phone scanned it: the code steps back to qr-dim-opacity
+   *            and the spinner runs the card's edge for the handshake: a
+   *            lit segment travels the rounded edge once a breath, and one
+   *            light rides with it (a motion path), screened over the key
+   *            so the dots it crosses glint
    *   swallow  every dot pours into the head, inner first, over dur-pop
    *            on ease-in-out, and the head gulps once
    *   fly      the whole card rises toward Caw and shrinks away
@@ -62,7 +69,7 @@
   let {
     payload,
     act,
-    wait = "sweep",
+    wait = "ping",
     warm = false,
     centre = { key: "caw", src: cawIcon },
   }: {
@@ -249,12 +256,18 @@
         {/key}
       </span>
     </div>
-    {#if act === "wait" && wait === "sweep"}
+    {#if act === "dim" || (act === "wait" && wait === "sweep")}
       <svg aria-hidden="true" class="edge">
         <rect class="lit" height="100%" pathLength="100" width="100%" />
       </svg>
       <!-- One light riding the edge with the segment: what it crosses glints. -->
       <span aria-hidden="true" class="glint"></span>
+    {:else if act === "wait" && wait === "ping"}
+      <!-- One ring leaving the card's own edge. -->
+      <span
+        aria-hidden="true"
+        class="ping pointer-events-none absolute inset-0 rounded-lg border-2 border-[var(--brand-solid)] opacity-[var(--qr-glint-opacity)]"
+      ></span>
     {:else if act === "wait" && wait === "ripple"}
       <!-- One ring out from the head: what it crosses glints. -->
       <span aria-hidden="true" class="ripple"></span>
@@ -352,6 +365,10 @@
        motion path, composited), lighting the dots it crosses. */
     .glint {
       animation: qr-ride var(--breath) linear infinite;
+    }
+    /* ping: one ring leaves the card's edge, growing as it fades. */
+    .ping {
+      animation: qr-ping var(--breath) var(--ease-out) infinite;
     }
     /* ripple: a ring out from the head, which breathes as it leaves. */
     .ripple {
@@ -451,6 +468,19 @@
   }
   [data-warm] .glint {
     background: radial-gradient(closest-side, var(--data-warn), transparent);
+  }
+  [data-warm] .ping {
+    border-color: var(--data-warn);
+  }
+  @keyframes qr-ping {
+    from {
+      opacity: var(--qr-glint-opacity);
+      transform: scale(1);
+    }
+    to {
+      opacity: 0;
+      transform: scale(var(--qr-pulse-scale));
+    }
   }
   .ripple {
     inset: 0;

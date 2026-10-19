@@ -24,7 +24,6 @@ import type {
 } from "@cawco/core";
 import { heardFrame, heardSince, readLeaves } from "./heard";
 import { failureWords, hubRefusal } from "./hub-read";
-import { leaveThePage } from "./leaving";
 
 /**
  * Where pairing stands for this browser. An answered or expired code is
