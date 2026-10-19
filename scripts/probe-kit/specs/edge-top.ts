@@ -17,11 +17,25 @@
  * edge are read with the mask off (main's strip) and on: the strip's colour
  * before, the page's own after, and the screen's top rows the same as with
  * no strip at all.
+ *
+ * Then a third session parks a Bash ask, so Caw's rim draws an arc, and at
+ * 1440 and 390, light and dark, the glass group is read from the engine
+ * (111bec1fb): the rim's radius from its first arc's path (`A r r`) and the
+ * phone outline's half height from the first point of its first arc (18
+ * less its y), each one hairline of glass inside the glass's own; the
+ * machines' computed `padding-inline`; Jump's glyph's computed size and ink
+ * against `--ink-muted`; and the ink gaps from boxes: Jump's glyph to the
+ * machines' symbol (each the union of its shapes' geometry boxes, grown by
+ * half a stroke where stroked), and the machines' number to Caw's face (the
+ * number's advance box narrowed to its ink by the canvas's measure of the
+ * digits, centred in the tabular advance; Caw's face the leftmost column of
+ * his still's canvas with any alpha, in css px).
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
 import type { Page } from "playwright-core";
 import type { Reply, Seen } from "../../scratch-fleet";
 import { at, capture, colours, off, type Raster, type Rgb } from "../ink";
+import { asking, sessionAsking } from "../journeys/asks";
 import {
   type Kit,
   open,
@@ -40,9 +54,213 @@ const ROWS = [3, 4];
 const CLIP = { x: 0, y: 0, width: 1440, height: 16 };
 
 const respond = (request: Seen): Reply =>
-  request.tools
-    ? { everyMs: 5, words: ["Done."] }
-    : { everyMs: 1, words: ["Edge top"] };
+  asking(request, (seen) =>
+    seen.tools
+      ? { everyMs: 5, words: ["Done."] }
+      : { everyMs: 1, words: ["Edge top"] }
+  );
+
+/** The rim's box (NeedsCaw `RING_BOX`), its centre the outline's. */
+const RING_MID = 18;
+/** The glass group as 111bec1fb draws it. */
+const GLASS = {
+  rim: 15,
+  stand: 13,
+  pad: ["4px", "5.66667px"],
+  jump: "16px",
+} as const;
+
+const ARC_RADIUS = /A ([\d.]+) /;
+const FIRST_Y = /^M [\d.]+ ([\d.]+)/;
+const TOOLS = '[data-slot="tools"]';
+const MACHINES = `${TOOLS} [data-machines]`;
+const JUMP_SVG = `${TOOLS} .jump > svg`;
+
+/** An svg's ink across, viewport px: its shapes' geometry boxes, grown by half a stroke where stroked; null when not drawn. */
+const svgInk = (page: Page, selector: string) =>
+  page.evaluate((sel) => {
+    const svg = document.querySelector(sel);
+    if (!svg || svg.getClientRects().length === 0) {
+      return null;
+    }
+    const SHAPES = "path, circle, rect, ellipse, line, polyline, polygon";
+    let left = Number.POSITIVE_INFINITY;
+    let right = Number.NEGATIVE_INFINITY;
+    for (const shape of svg.querySelectorAll<SVGGraphicsElement>(SHAPES)) {
+      const style = getComputedStyle(shape);
+      const box = shape.getBoundingClientRect();
+      if (
+        style.display === "none" ||
+        style.visibility === "hidden" ||
+        (box.width === 0 && box.height === 0)
+      ) {
+        continue;
+      }
+      const scale = shape.getScreenCTM()?.a ?? 1;
+      const half =
+        style.stroke === "none"
+          ? 0
+          : (Number.parseFloat(style.strokeWidth) * scale) / 2;
+      left = Math.min(left, box.left - half);
+      right = Math.max(right, box.right + half);
+    }
+    return Number.isFinite(left) ? { left, right } : null;
+  }, selector);
+
+/** The machines' number's ink across: its advance box narrowed by the canvas's measure of the digits, centred in the tabular advance; null when not drawn. */
+const numberInk = (page: Page) =>
+  page.evaluate((sel) => {
+    const num = document.querySelector(`${sel} [data-slot="num"]`);
+    const text = num?.textContent ?? "";
+    const ctx = document.createElement("canvas").getContext("2d");
+    if (!(num && text && ctx) || num.getClientRects().length === 0) {
+      return null;
+    }
+    const range = document.createRange();
+    range.selectNodeContents(num);
+    const box = range.getBoundingClientRect();
+    const style = getComputedStyle(num);
+    ctx.font = `${style.fontStyle} ${style.fontWeight} ${style.fontSize} ${style.fontFamily}`;
+    const m = ctx.measureText(text);
+    const start = box.left + (box.width - m.width) / 2;
+    return {
+      left: start - m.actualBoundingBoxLeft,
+      right: start + m.actualBoundingBoxRight,
+    };
+  }, MACHINES);
+
+/** Caw's face's leftmost inked column, viewport px: his still's canvas read back. */
+const faceInk = (page: Page) =>
+  page.evaluate(() => {
+    const canvas = document.querySelector<HTMLCanvasElement>(
+      "[data-needs-caw] .face[data-box] canvas"
+    );
+    const ctx = canvas?.getContext("2d");
+    if (!(canvas && ctx && canvas.width > 0)) {
+      return null;
+    }
+    const box = canvas.getBoundingClientRect();
+    const { data, width, height } = ctx.getImageData(
+      0,
+      0,
+      canvas.width,
+      canvas.height
+    );
+    for (let x = 0; x < width; x += 1) {
+      for (let y = 0; y < height; y += 1) {
+        if ((data[(y * width + x) * 4 + 3] ?? 0) > 0) {
+          return box.left + (x * box.width) / width;
+        }
+      }
+    }
+    return null;
+  });
+
+/** The rim's first arcs' paths, the machines' padding and Jump's glyph's size and ink, with `--ink-muted` resolved. */
+const glassStyles = (page: Page) =>
+  page.evaluate(
+    ([machinesSel, jumpSel]) => {
+      const caw = document.querySelector("[data-needs-caw]");
+      const machines = document.querySelector(machinesSel as string);
+      const jump = document.querySelector(jumpSel as string);
+      const muted = document.createElement("span");
+      muted.style.color = "var(--ink-muted)";
+      document.body.append(muted);
+      const inkMuted = getComputedStyle(muted).color;
+      muted.remove();
+      const m = machines ? getComputedStyle(machines) : null;
+      const j = jump ? getComputedStyle(jump) : null;
+      return {
+        count: caw?.querySelector(".rim")?.getAttribute("data-count") ?? "?",
+        roundArc:
+          caw?.querySelector(".rim .round .arc")?.getAttribute("d") ?? "",
+        standArc:
+          caw?.querySelector(".rim .standing .arc")?.getAttribute("d") ?? "",
+        round:
+          (caw?.querySelector(".rim .round")?.getClientRects().length ?? 0) > 0,
+        pad: m ? [m.paddingInlineStart, m.paddingInlineEnd] : null,
+        jump: j
+          ? { inline: j.inlineSize, block: j.blockSize, color: j.color }
+          : null,
+        inkMuted,
+      };
+    },
+    [MACHINES, JUMP_SVG] as const
+  );
+
+const gap = (
+  from: { right: number } | null,
+  to: { left: number } | null
+): number | null => (from && to ? to.left - from.right : null);
+
+/** The glass group's geometry and ink gaps. */
+const glassRead = async (page: Page) => {
+  const styles = await glassStyles(page);
+  const jumpInk = await svgInk(page, JUMP_SVG);
+  const symbolInk = await svgInk(page, `${MACHINES} svg`);
+  const number = await numberInk(page);
+  const face = await faceInk(page);
+  const rim = ARC_RADIUS.exec(styles.roundArc)?.[1];
+  const standY = FIRST_Y.exec(styles.standArc)?.[1];
+  return {
+    ...styles,
+    rim: rim ? Number(rim) : null,
+    standY: standY ? Number(standY) : null,
+    jumpToMachines: gap(jumpInk, symbolInk),
+    symbolToNumber: gap(symbolInk, number),
+    numberToCaw: gap(number, face === null ? null : { left: face }),
+  };
+};
+
+const px = (n: number | null) => (n === null ? "none" : n.toFixed(2));
+
+/** The glass group on `view`, Caw's rim drawing one arc. */
+const glassLeg = async (kit: Kit, page: Page, leg: string, desk: boolean) => {
+  await page.waitForFunction(
+    () =>
+      document.querySelector("[data-needs-caw] .rim .arc") !== null &&
+      (document
+        .querySelector<HTMLCanvasElement>("[data-needs-caw] .face canvas")
+        ?.getContext("2d")
+        ?.getImageData(0, 0, 1, 1) ?? null) !== null,
+    undefined,
+    { timeout: 60_000 }
+  );
+  // The arc's draw-in and his still's paint.
+  await page.waitForTimeout(800);
+  const g = await glassRead(page);
+  const stand = g.standY === null ? null : RING_MID - g.standY;
+  kit.check(
+    `${leg}: Caw's rim arc has radius ${GLASS.rim} and the phone outline half height ${GLASS.stand}`,
+    g.rim === GLASS.rim && stand === GLASS.stand,
+    `rim r ${g.rim}, outline half height ${stand} (first point y ${g.standY}), count ${g.count}, ${g.round ? "circle" : "outline"} shown`
+  );
+  if (!desk) {
+    kit.check(
+      `${leg}: the phone's group holds Caw alone`,
+      g.jumpToMachines === null && g.numberToCaw === null,
+      `machines pad ${g.pad?.join(" ") ?? "none"} (in the sidebar), jump ${g.jump ? `${g.jump.inline}×${g.jump.block} ${g.jump.color}` : "none"}`
+    );
+    return;
+  }
+  kit.check(
+    `${leg}: .machines padding-inline is ${GLASS.pad.join(" ")} (--mark-inset, and it plus the symbol's grid margin)`,
+    g.pad?.[0] === GLASS.pad[0] && g.pad?.[1] === GLASS.pad[1],
+    `padding-inline ${g.pad?.join(" ") ?? "none"}`
+  );
+  kit.check(
+    `${leg}: Jump's glyph is ${GLASS.jump} square in --ink-muted`,
+    g.jump?.inline === GLASS.jump &&
+      g.jump?.block === GLASS.jump &&
+      g.jump?.color === g.inkMuted,
+    `${g.jump?.inline}×${g.jump?.block}, color ${g.jump?.color}, --ink-muted ${g.inkMuted}`
+  );
+  kit.check(
+    `${leg}: ink gaps read`,
+    g.jumpToMachines !== null && g.numberToCaw !== null,
+    `Jump → machines ${px(g.jumpToMachines)}, symbol → number ${px(g.symbolToNumber)}, number → Caw ${px(g.numberToCaw)}`
+  );
+};
 
 /** What WebKit's sampler reads of the strip, and what its mask says. */
 const strip = (page: Page) =>
@@ -273,6 +491,14 @@ const run = async (kit: Kit) => {
     const page = await pane("desk", theme, 1);
     await inkLeg(kit, page, `desk 1x ${theme}`);
     await page.close();
+  }
+  await sessionAsking(fleet, "Gamma", "edge-top");
+  for (const view of ["desk", "phone"] as const) {
+    for (const theme of THEMES) {
+      const page = await pane(view, theme);
+      await glassLeg(kit, page, `glass ${view} ${theme}`, view === "desk");
+      await page.close();
+    }
   }
 };
 
