@@ -203,19 +203,21 @@ final class NeedsCawButton: UIControl {
 
     /// The arcs ON his glass's rim, a dial's ticks on its edge (owner: "lines
     /// along the rim of the circle … just like a dial thing"): the stroke's
-    /// outer edge just inside the glass's hairline (laid across it, its outer
-    /// half met the bar and read as cut off); arc k from k × (arc + arcGap)°
-    /// clockwise from 12 o'clock.
+    /// outer edge one hairline of glass inside the glass's own hairline
+    /// (NeedsCaw.svelte `RIM`; laid across it, its outer half met the bar and
+    /// read as cut off, and flush against it, at 1x it read as cutting the
+    /// arcs); arc k from k × (arc + arcGap)° clockwise from 12 o'clock.
     override func layoutSubviews() {
         super.layoutSubviews()
         upperHalf.frame = bounds
         lowerHalf.frame = bounds
         let centre = CGPoint(x: bounds.midX, y: bounds.midY)
-        let rim = CGFloat(glassSide) / 2 - Self.glassEdge - Size.cCawRing / 2
         if standing {
-            layoutOutline(centre: centre, rim: rim)
+            // NeedsCaw.svelte `STAND`: the outline's stroke just inside the glass's hairline.
+            layoutOutline(centre: centre, rim: CGFloat(glassSide) / 2 - Self.glassEdge - Size.cCawRing / 2)
             return
         }
+        let rim = CGFloat(glassSide) / 2 - 2 * Self.glassEdge - Size.cCawRing / 2
         let top = -CGFloat.pi / 2
         let degree = CGFloat.pi / 180
         // A round cap reaches half the stroke past the path's end: taken off

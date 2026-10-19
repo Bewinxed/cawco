@@ -308,10 +308,9 @@ private final class PanelScroll: UIScrollView {
 // MARK: The sections' rule
 
 /// The hairline between Needs you and Notices (DESIGN.md, Caw's panel): 1pt
-/// of the brand's vermillion (`brand-solid`) at the session tabs' rim
-/// strength (`tab-rim-mix`, by day or by night), across the rows' width, no
-/// glow and no fade; solid under Increase Contrast. `color-mix(in oklab,
-/// brand-solid N%, transparent)` is the vermillion itself at alpha N.
+/// of the brand's vermillion (`brand-solid`), solid, as Files draws it
+/// (CawPanel.svelte `1px solid var(--brand-solid)`), across the rows' width,
+/// no glow and no fade.
 private final class SectionRule: UIView {
     static let thickness = 1.0
 
@@ -321,10 +320,7 @@ private final class SectionRule: UIView {
         isUserInteractionEnabled = false
         isAccessibilityElement = false
         accessibilityIdentifier = "caw-section-rule"
-        backgroundColor = UIColor { traits in
-            let solid = Palette.brandSolid.resolvedColor(with: traits)
-            return traits.accessibilityContrast == .high ? solid : solid.withAlphaComponent(Effect.tabRimMix.value(for: traits))
-        }
+        backgroundColor = Palette.brandSolid
         heightAnchor.constraint(equalToConstant: Self.thickness).isActive = true
     }
 
