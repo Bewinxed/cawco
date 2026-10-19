@@ -241,7 +241,7 @@ public enum BrandLogo: String, Sendable {
     /// ProviderLogo.svelte's `INK` and accounts/marks.ts: upstream these carry
     /// a fixed dark fill that vanishes on the dark theme, or no colour of
     /// their own; they follow the ink, as glyphs do.
-    public var inked: Bool { [.openai, .github, .grok, .moonshot, .copilot, .openrouter, .bedrock, .vercel].contains(self) }
+    public var inked: Bool { [.openai, .github, .grok, .moonshot, .copilot, .openrouter, .bedrock, .vercel, .linear].contains(self) }
 
     /// An account provider's mark (accounts/marks.ts `SOURCES`), by the
     /// account's provider id (pi-ai's, or OpenCode's own); nil when nobody

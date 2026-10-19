@@ -50,12 +50,15 @@ const DEVICES = [
   {
     tag: "iPhone",
     type: "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
+    /** The dashboard beside it: the same points and pixels per point. */
+    web: { view: "iphone", scale: 3 },
   },
   {
     tag: "iPad",
     type: "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4-8GB",
+    web: { view: "ipad11", scale: 2 },
   },
-];
+] as const;
 const APPEARANCES = ["light", "dark"] as const;
 const SKILL = "probe-skill";
 const TYPE = "probe-type";
@@ -65,6 +68,15 @@ const DOC = "probe/notes.md";
 /** A file in the project's `delegates/` that makes no type, and what the hub says of it (project-delegate-types.ts). */
 const BROKEN_TYPE = "delegates/broken.md";
 const NO_FRONT_MATTER = `${BROKEN_TYPE}: the file has no front matter (a --- block on top)`;
+/** One line of a `config geometry <stage>` report: its stage and its words (a long one comes in parts). */
+const GEOMETRY_PART = /config geometry (\S+?)(?: \[part \d+\/\d+\])?: (.*)$/;
+/** A stage's report whole: `<stage>: card <w>×<h> in <pane> | …`. */
+const GEOMETRY = /^(\S+): card (\d+)×\d+ in (\d+)(.*)$/;
+/** A label in a geometry line: its words, its width and its height. */
+const LABEL_BOX = /'([^']*)'\[\d+,\d+ (\d+)×(\d+)\]/g;
+/** `mcp reach`: a touch just above the row's ⋯, and its switch, went to that control. */
+const MORE_REACHED = /more \S+ \d+pt above→itself/;
+const SWITCH_REACHED = /switch \S+ \d+pt above→itself/;
 const SECTIONS = [
   "spend",
   "delegate-types",
@@ -403,18 +415,95 @@ async function run(kit: Kit): Promise<void> {
           clipped.join(" / ").slice(0, 600) || "none"
         );
 
-        // The dashboard's same pages, in the simulator's Safari, beside the app's.
-        await sh(`xcrun simctl terminate ${udid} dev.cawco.app || true`);
-        for (const section of SECTIONS) {
-          // biome-ignore lint/performance/noAwaitInLoops: one page at a time in one Safari
-          await sh(
-            `xcrun simctl openurl ${udid} "${dashboard}/config/${section}"`
-          );
-          await Bun.sleep(5000);
-          await sh(
-            `xcrun simctl io ${udid} screenshot "${join(folder, `web-${section}.png`)}"`
-          ).catch(() => "");
+        // A touch just above a row's ⋯ and its switch, inside their 44pt
+        // reach, is theirs, not the row's that opens the editor.
+        const reach = said("mcp reach");
+        kit.check(
+          `${at}: a touch just beside a row's ⋯ or its switch reaches that control, not the row`,
+          MORE_REACHED.test(reach) && SWITCH_REACHED.test(reach),
+          reach.slice(0, 200) || "not said"
+        );
+
+        // Every card at the pane's width less its gutters, 980 at most, whatever
+        // it holds; on each section's page the purpose line stands on one line
+        // or across the card's body, never crushed beside the actions.
+        // Each stage's report whole: a long one comes in parts.
+        const reports = new Map<string, string>();
+        for (const one of heard) {
+          const part = GEOMETRY_PART.exec(one);
+          if (part) {
+            const [, stage = "", words = ""] = part;
+            reports.set(stage, (reports.get(stage) ?? "") + words);
+          }
         }
+        const geometry = [...reports]
+          .map(([stage, words]) => GEOMETRY.exec(`${stage}: ${words}`))
+          .filter((one): one is RegExpExecArray => one !== null);
+        const narrow = geometry
+          .filter(
+            ([, , wide, pane]) =>
+              Math.abs(Number(wide) - Math.min(Number(pane) - 36, 980)) > 1
+          )
+          .map(([, stage, wide, pane]) => `${stage} ${wide} in ${pane}`);
+        kit.check(
+          `${at}: every Configure card stands at the pane's width less its gutters, 980 at most`,
+          geometry.length > 0 && narrow.length === 0,
+          narrow.join(", ") || `${geometry.length} cards`
+        );
+        const crushed = geometry
+          .filter(([, stage]) => !(stage ?? "").includes("editor"))
+          .flatMap(([, stage, wide, , rest]) => {
+            const [, purpose] = [...(rest ?? "").matchAll(LABEL_BOX)];
+            const body = Number(wide) - 50;
+            return purpose &&
+              Number(purpose[2]) < body - 1 &&
+              Number(purpose[3]) > 24
+              ? [
+                  `${stage}: '${purpose[1]}' ${purpose[2]}×${purpose[3]} in ${body}`,
+                ]
+              : [];
+          });
+        kit.check(
+          `${at}: each section's purpose line stands on one line or across the card, never crushed beside its actions`,
+          crushed.length === 0,
+          crushed.join(" / ") || "none"
+        );
+
+        // The dashboard's same pages beside the app's last ones (`app-<section>`),
+        // from the same hub after the same changes: WebKit at the simulator's
+        // points, pixels per point and appearance, each once its title stands
+        // and no row is still loading.
+        await sh(`xcrun simctl terminate ${udid} dev.cawco.app || true`);
+        const page = await kit.page(device.web.view, {
+          engine: "webkit",
+          theme: appearance,
+          scale: device.web.scale,
+        });
+        for (const section of SECTIONS) {
+          try {
+            // biome-ignore lint/performance/noAwaitInLoops: one page at a time
+            await page.goto(`${dashboard}/config/${section}`, {
+              waitUntil: "domcontentloaded",
+            });
+            await page
+              .locator('[data-slot="title"]')
+              .first()
+              .waitFor({ timeout: 60_000 });
+            await page
+              .locator('[role="status"][aria-label="Loading"]')
+              .waitFor({ state: "detached", timeout: 60_000 })
+              .catch(() => undefined);
+            await Bun.sleep(800);
+            await page.screenshot({ path: join(folder, `web-${section}.png`) });
+          } catch (error) {
+            kit.check(
+              `${at}: the dashboard's ${section} page is captured`,
+              false,
+              (error as Error).message.split("\n")[0] ?? ""
+            );
+          }
+        }
+        await page.close();
       }
     } finally {
       await sim?.release();

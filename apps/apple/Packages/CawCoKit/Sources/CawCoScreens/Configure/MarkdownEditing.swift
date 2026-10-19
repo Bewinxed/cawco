@@ -26,6 +26,10 @@ final class MarkdownEditingView: UITextView, UITextViewDelegate {
         typingAttributes = Self.body
         delegate = self
         heightAnchor.constraint(greaterThanOrEqualToConstant: 320 - 8).isActive = true
+        // Its width is the well's: a text view that does not scroll asks to be
+        // as wide as its longest line, and that ask must never set the card's.
+        setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
+        setContentHuggingPriority(.defaultLow - 1, for: .horizontal)
     }
 
     @available(*, unavailable)

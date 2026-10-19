@@ -53,6 +53,8 @@ export const VIEWS = {
   /** An iPhone 15 Pro, portrait: the owner's phone. */
   iphone15Pro: { width: 393, height: 852, touch: true },
   ipad: { width: 1032, height: 1376, touch: true },
+  /** An iPad Pro 11-inch (M4), portrait: the simulator ios-config and ios-views pair with. */
+  ipad11: { width: 834, height: 1194, touch: true },
   /** The same iPad in landscape. Either way up it is an iPad's regular width, so the web stands
    *  the side panel beside the conversation (layoutPolicy.sideDrawer) as the app does. */
   ipadWide: { width: 1376, height: 1032, touch: true },

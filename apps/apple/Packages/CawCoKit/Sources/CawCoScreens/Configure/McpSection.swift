@@ -98,6 +98,9 @@ final class McpSectionController: ConfigSectionController {
     #if DEBUG
     func probeOpenNew() { open(nil) }
 
+    /// Where touches just beside a row's ⋯ and switch go (ConfigRow `probeReach`).
+    func probeReach(_ name: String) -> String { rows.rows[name]?.probeReach() ?? "no row" }
+
     func probeToggle(_ name: String, on: Bool) {
         guard let server = hub.configuration.snapshot?.config.mcp.first(where: { $0.name == name }) else { return }
         toggle(server, on: on)

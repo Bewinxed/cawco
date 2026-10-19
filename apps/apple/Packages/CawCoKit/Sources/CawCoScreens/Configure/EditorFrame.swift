@@ -44,6 +44,8 @@ class ConfigEditorController: ObservedViewController {
     private let scroll = UIScrollView()
     private let card = UIView()
     private let footer = UIStackView()
+    /// The footer's ground, under the commit row.
+    private let band = UIView()
     /// The commit row and, over it, the question Delete asked.
     private let commit = UIStackView()
     private let question = AskHere()
@@ -112,6 +114,7 @@ class ConfigEditorController: ObservedViewController {
         card.layer.cornerRadius = Radius.radiusLg
         card.layer.cornerCurve = .continuous
         card.translatesAutoresizingMaskIntoConstraints = false
+        card.accessibilityIdentifier = "config.card"
         scroll.addSubview(card)
 
         // The section's tile, the one its row carries in the list: 26pt, raised, centred on the title's line.
@@ -158,16 +161,30 @@ class ConfigEditorController: ObservedViewController {
         commit.addArrangedSubview(question)
         commit.addArrangedSubview(footer)
         commit.translatesAutoresizingMaskIntoConstraints = false
+        commit.accessibilityIdentifier = "config.commit"
+        scroll.accessibilityIdentifier = "config.scroll"
+        // `.footer`: the commit row in a band of the recess across the page,
+        // 10pt over it to the bottom edge; the page scrolls above the band.
+        band.backgroundColor = Palette.surfaceRecess
+        band.accessibilityIdentifier = "config.band"
+        band.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(band)
         view.addSubview(commit)
 
         let safe = view.safeAreaLayoutGuide
         let wide = card.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -Space.space5 * 2)
-        wide.priority = .defaultHigh
+        // `.body`: the pane's width less its gutters, 980 at most, whatever the
+        // card holds; under the cap only, never as a tie with what it holds.
+        wide.priority = .required - 1
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: safe.topAnchor),
             scroll.leadingAnchor.constraint(equalTo: safe.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: safe.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: commit.topAnchor),
+            scroll.bottomAnchor.constraint(equalTo: band.topAnchor),
+            band.topAnchor.constraint(equalTo: commit.topAnchor, constant: -10),
+            band.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            band.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            band.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             card.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: Space.space2),
             scroll.contentLayoutGuide.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: Space.space5),
             card.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor, constant: Space.space5),

@@ -52,7 +52,6 @@ final class SkillsSectionController: ConfigSectionController {
         setActions([fetch])
         refetchFault.isHidden = true
         for part in [refetch, refetchFault, link] as [UIView] { toolbar.addArrangedSubview(part) }
-        toolbar.addArrangedSubview(UIView())
         inventory = MachineInventoryView(hub: hub, kind: .skills)
         setContent([
             group(.bolt, Words.Skills.skills, [noSkills, skillsList, metaLine(Words.Skills.degraded)], first: true),

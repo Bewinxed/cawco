@@ -121,6 +121,9 @@ final class ConfigTextArea: UITextView {
         autocorrectionType = .no
         // `rows={4}`.
         heightAnchor.constraint(greaterThanOrEqualToConstant: TypeScale.typeBody.font.lineHeight * 4 + 16).isActive = true
+        // Its width is the field's: what it holds wraps, never widens the card.
+        setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
+        setContentHuggingPriority(.defaultLow - 1, for: .horizontal)
         placeholder.text = words
         placeholder.isUserInteractionEnabled = false
         placeholder.translatesAutoresizingMaskIntoConstraints = false
@@ -166,29 +169,29 @@ final class ConfigTextArea: UITextView {
 }
 
 /// A choice between a few named options (Choice.svelte): the kit's
-/// segmented control, its label for VoiceOver alone; a row too long for a
-/// narrow screen scrolls sideways rather than running off it.
-final class ChoiceField: UIScrollView {
+/// segmented control, its label for VoiceOver alone, each option at its own
+/// width; options too many for the field's width wrap inside the well.
+final class ChoiceField: UIView {
     var onChange: (String) -> Void = { _ in }
-    private let tabs = SegmentedTabs([])
+    private let tabs = SegmentedTabs([], wraps: true)
     private var values: [String] = []
 
     init(label: String) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        showsHorizontalScrollIndicator = false
         tabs.accessibilityLabel = label
         addSubview(tabs)
-        // As wide as its options, the field's width at most.
-        let fit = widthAnchor.constraint(equalTo: tabs.widthAnchor)
-        fit.priority = .defaultHigh
+        // `align-self: flex-start; max-width: 100%`: as wide as its options
+        // on one line, the field's width at most, its options wrapping then.
+        tabs.setContentHuggingPriority(.required, for: .horizontal)
+        tabs.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        tabs.setContentHuggingPriority(.required, for: .vertical)
+        tabs.setContentCompressionResistancePriority(.required, for: .vertical)
         NSLayoutConstraint.activate([
-            tabs.topAnchor.constraint(equalTo: contentLayoutGuide.topAnchor),
-            tabs.bottomAnchor.constraint(equalTo: contentLayoutGuide.bottomAnchor),
-            tabs.leadingAnchor.constraint(equalTo: contentLayoutGuide.leadingAnchor),
-            tabs.trailingAnchor.constraint(equalTo: contentLayoutGuide.trailingAnchor),
-            heightAnchor.constraint(equalTo: tabs.heightAnchor),
-            fit,
+            tabs.topAnchor.constraint(equalTo: topAnchor),
+            tabs.bottomAnchor.constraint(equalTo: bottomAnchor),
+            tabs.leadingAnchor.constraint(equalTo: leadingAnchor),
+            tabs.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
         ])
         tabs.addAction(UIAction { [weak self] _ in
             guard let self, values.indices.contains(tabs.selectedIndex) else { return }
@@ -243,6 +246,11 @@ final class ModelField: UIStackView {
         pick.widthAnchor.constraint(equalToConstant: Size.cInputH).isActive = true
         addArrangedSubview(field)
         addArrangedSubview(pick)
+        // `max-w-md`: the field at most 448pt, the row's room past the pick left empty.
+        let rest = UIView()
+        // The field grows first (250), the rest only past its cap.
+        rest.setContentHuggingPriority(.defaultLow + 1, for: .horizontal)
+        addArrangedSubview(rest)
         field.widthAnchor.constraint(lessThanOrEqualToConstant: 448).isActive = true
     }
 

@@ -138,6 +138,12 @@ public enum TextWrap: Sendable {
     static func measure(_ text: NSAttributedString) -> Double {
         CTLineGetTypographicBounds(CTLineCreateWithAttributedString(text), nil, nil, nil)
     }
+
+    /// How wide `text` stands on one line: what a flex layout measures as
+    /// an item's max-content width, for a row deciding whether it wraps.
+    public static func oneLine(_ text: NSAttributedString) -> CGFloat {
+        CGFloat(measure(text)).rounded(.up)
+    }
 }
 
 /// A paragraph cut into WebKit's inline items (words and the spaces between

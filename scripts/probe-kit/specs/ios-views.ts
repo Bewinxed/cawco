@@ -84,12 +84,15 @@ const DEVICES = [
   {
     tag: "iPhone",
     type: "com.apple.CoreSimulator.SimDeviceType.iPhone-16-Pro",
+    /** The dashboard beside it: the same points and pixels per point. */
+    web: { view: "iphone", scale: 3 },
   },
   {
     tag: "iPad",
     type: "com.apple.CoreSimulator.SimDeviceType.iPad-Pro-11-inch-M4-8GB",
+    web: { view: "ipad11", scale: 2 },
   },
-];
+] as const;
 const PROJECT = "Views probe";
 const TITLES = ["Probe alpha", "Probe beta", "Probe gamma"];
 const KEPT = "probe-week";
@@ -130,6 +133,8 @@ const TAB_COUNT = /#(\d+)$/;
 const ALL_THREE = /All tasks\s*\|?\s*3/;
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const POINT = /^(\d+),(\d+)$/;
+/** The board block's ⋯ in a `blocks page=board` line: its y. */
+const BOARD_AT = /board\/\d+@\d+,(\d+)/;
 const STRIP_LINE =
   /views strip chosen=(.*?) phone=(true|false) room=(-?\d+)-(-?\d+) items=(\S.*?)(?: ask=(\d+),(\d+))?(?: more=(\d+),(\d+) menu=(.*))?$/;
 /** How far inside the strip's room a tab's centre must stand for a touch to land on it. */
@@ -986,6 +991,34 @@ const MADE_NOTE = "notes.md";
 const MADE_POST = "hero.post.json";
 const MADE_PANE = /made pane columns=(\d+) tiles=(.*)$/;
 
+/**
+ * The strip as it settles after a launch: a launch lays the page out more
+ * than once (the first reading stood 43pt lower, its ⋯ where the Decisions
+ * tab then sat), so the newest reading since `from` counts once no newer
+ * one comes for 1.5 s.
+ */
+function settledStrip(device: Device, from: number): Promise<Strip> {
+  const latest = (): { at: number; reading: Strip } | undefined => {
+    for (let at = device.heard.length - 1; at >= from; at -= 1) {
+      const reading = stripOf(device.heard[at] ?? "");
+      if (reading) {
+        return { at, reading };
+      }
+    }
+  };
+  return until(
+    `${device.tag}: the strip at rest after the launch`,
+    async () => {
+      const before = latest();
+      await Bun.sleep(1500);
+      const after = latest();
+      return before && after?.at === before.at ? before.reading : undefined;
+    },
+    Boolean,
+    30_000
+  );
+}
+
 // ── ask: Ask Caw for a view files a view request ─────────────────────────
 const ASKED = /views asked (\S+)/;
 
@@ -999,28 +1032,7 @@ async function askViewLeg(
   // From the project's page, whatever the leg before left open (Made ends on a task).
   const from = device.heard.length;
   await device.relaunch(projectId);
-  // The strip as it settles: a launch lays the page out more than once (the
-  // first reading stood 43pt lower, its ⋯ where the Decisions tab then sat),
-  // so the newest reading counts once no newer one comes for a while.
-  const latest = (): { at: number; reading: Strip } | undefined => {
-    for (let at = device.heard.length - 1; at >= from; at -= 1) {
-      const reading = stripOf(device.heard[at] ?? "");
-      if (reading) {
-        return { at, reading };
-      }
-    }
-  };
-  const strip = await until(
-    `${device.tag}: the strip at rest after the launch`,
-    async () => {
-      const before = latest();
-      await Bun.sleep(1500);
-      const after = latest();
-      return before && after?.at === before.at ? before.reading : undefined;
-    },
-    Boolean,
-    30_000
-  ).catch(() => undefined);
+  const strip = await settledStrip(device, from).catch(() => undefined);
   let since = device.heard.length;
   // From the strip wider than a phone; from the head's ⋯ on one.
   if (strip?.ask) {
@@ -1548,6 +1560,7 @@ async function run(kit: Kit): Promise<void> {
       // The board's page with the view placed on it: the app's and the
       // dashboard's, light and dark, for the paired review (prd-parity/blocks).
       const { udid } = sim;
+      const { web } = DEVICES.find((one) => one.tag === tag) ?? DEVICES[0];
       await leg("captures", async () => {
         await placeOnBoard();
         const folder = join(CAPTURES, tag);
@@ -1555,23 +1568,72 @@ async function run(kit: Kit): Promise<void> {
         for (const appearance of ["light", "dark"] as const) {
           // biome-ignore lint/performance/noAwaitInLoops: one appearance after the other, on one simulator
           await sh(`xcrun simctl ui ${udid} appearance ${appearance}`);
+          // The app once the board's page has drawn its blocks and the view's
+          // block its route, and the strip has come to rest.
+          const from = on.heard.length;
           await on.relaunch(project.id);
-          await Bun.sleep(5000);
+          const placed = await on.next(
+            "the board's page of blocks",
+            from,
+            (line) => (line.includes("blocks page=board") ? line : undefined)
+          );
+          await on
+            .next("the placed view's height", from, (line) =>
+              line.includes(`views block name=${KEPT} height=`)
+                ? line
+                : undefined
+            )
+            .catch(() => undefined);
+          const rest = await settledStrip(on, from);
+          // The board's block opens the page right under the strip: its ⋯ stands
+          // within one block head (44pt) and the page's gaps of the strip's centre.
+          const boardAt = Number(BOARD_AT.exec(placed)?.[1] ?? "NaN");
+          const stripAt = rest.items[0]?.at[1] ?? Number.NaN;
+          kit.check(
+            `${tag} ${appearance}: the board's block stands right under the strip, not pushed down the page`,
+            boardAt - stripAt > 0 && boardAt - stripAt < 120,
+            `strip ${stripAt}, board's ⋯ ${boardAt}`
+          );
           await sh(
             `xcrun simctl io ${udid} screenshot "${join(folder, `app-blocks-${appearance}.png`)}"`
           );
-          await sh(
-            `xcrun simctl openurl ${udid} "${dashboard}/project/${project.id}"`
+          // The dashboard's same page from the same hub: WebKit at the
+          // simulator's points, pixels per point and appearance, once both
+          // blocks stand.
+          const page = await kit.page(web.view, {
+            engine: "webkit",
+            theme: appearance,
+            scale: web.scale,
+          });
+          await page.goto(`${dashboard}/project/${project.id}`, {
+            waitUntil: "domcontentloaded",
+          });
+          await until(
+            `${tag}: the dashboard's two blocks`,
+            () => page.locator('[data-slot="block"]').count(),
+            (count) => count >= 2,
+            60_000
           );
-          await Bun.sleep(6000);
-          await sh(
-            `xcrun simctl io ${udid} screenshot "${join(folder, `web-blocks-${appearance}.png`)}"`
-          );
+          await Bun.sleep(2000);
+          await page.screenshot({
+            path: join(folder, `web-blocks-${appearance}.png`),
+          });
+          await page.close();
         }
         await sh(`xcrun simctl ui ${udid} appearance light`);
         await clearPages();
         console.log(`  ${tag}: captures in ${folder}`);
       });
+      // Never once in the run did the head and the strip stand taller than
+      // their content (ProjectViewController `probeStretch`).
+      const stretched = on.heard.filter((line) =>
+        line.includes("views stretched page=")
+      );
+      kit.check(
+        `${tag}: the project page's head and strip stand at their content's height throughout`,
+        stretched.length === 0,
+        stretched.slice(0, 2).join(" / ").slice(0, 600) || "none"
+      );
     } finally {
       await writeFile(
         join(kit.out, `${tag}.log`),

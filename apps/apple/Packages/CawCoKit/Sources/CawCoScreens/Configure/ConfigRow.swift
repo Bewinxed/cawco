@@ -26,7 +26,7 @@ final class ConfigRow: UIStackView {
     var onToggle: ((Bool) -> Void)?
 
     private let row = UIView()
-    private let opener = UIControl()
+    private let opener = RowOpener()
     private let tile = TileView(radius: Radius.radiusSm)
     private let tileGlyph = GlyphView(.dataLayers, size: 16, tint: Palette.inkMuted)
     private var tileMark: UIView?
@@ -78,7 +78,11 @@ final class ConfigRow: UIStackView {
         badgeSlot.spacing = 8
         badgeSlot.alignment = .center
         badgeSlot.setContentHuggingPriority(.required, for: .horizontal)
-        let nameLine = UIStackView(arrangedSubviews: [name, badgeSlot])
+        // The badge stands beside the name, as the web's does; the line's room past it stays empty.
+        name.setContentHuggingPriority(.defaultHigh, for: .horizontal)
+        let rest = UIView()
+        rest.setContentHuggingPriority(.defaultLow, for: .horizontal)
+        let nameLine = UIStackView(arrangedSubviews: [name, badgeSlot, rest])
         nameLine.spacing = 8
         nameLine.alignment = .center
         meta.lineBreakMode = .byTruncatingTail
@@ -102,7 +106,7 @@ final class ConfigRow: UIStackView {
         trailingSlot.alignment = .center
         controls.alignment = .center
         controls.translatesAutoresizingMaskIntoConstraints = false
-        // A 30pt ⋯ and a switch: under a finger the gap opens to 14pt, so each touch area reaches 44pt.
+        // A 30pt ⋯ and a switch: under a finger the gap opens to 14pt, so each one's 44pt reach (TouchReach) is its own.
         controls.spacing = traitCollection.userInterfaceIdiom == .mac ? 8 : 14
         for part in [rolloutSlot, toggle, trailingSlot] as [UIView] { controls.addArrangedSubview(part) }
         controls.setContentHuggingPriority(.required, for: .horizontal)
@@ -131,6 +135,12 @@ final class ConfigRow: UIStackView {
             text.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             text.bottomAnchor.constraint(lessThanOrEqualTo: row.bottomAnchor, constant: -6),
             controls.leadingAnchor.constraint(greaterThanOrEqualTo: text.trailingAnchor, constant: 10),
+            // The words take the room up to the controls: never less than they need while it lasts.
+            {
+                let fills = controls.leadingAnchor.constraint(equalTo: text.trailingAnchor, constant: 10)
+                fills.priority = .defaultHigh - 1
+                return fills
+            }(),
             controls.trailingAnchor.constraint(equalTo: row.trailingAnchor, constant: -8),
             controls.centerYAnchor.constraint(equalTo: row.centerYAnchor),
             text.trailingAnchor.constraint(lessThanOrEqualTo: row.trailingAnchor, constant: -8),
@@ -243,6 +253,24 @@ final class ConfigRow: UIStackView {
 
     /// The badge after the name.
     func setBadge(_ view: UIView?) { swap(badgeSlot, to: view.map { [$0] } ?? []) }
+
+    #if DEBUG
+    /// Where a touch just above the ⋯ and just above the switch goes, as the
+    /// window sends it: to that control, within its 44pt reach, not the row.
+    func probeReach() -> String {
+        guard let window else { return "no window" }
+        func lands(_ control: UIView, _ dy: Double) -> String {
+            let box = control.convert(control.bounds, to: window)
+            let hit = window.hitTest(CGPoint(x: box.midX, y: box.minY - dy), with: nil)
+            let mine = hit.map { $0 === control || $0.isDescendant(of: control) } ?? false
+            return "\(Int(box.width))x\(Int(box.height)) \(Int(dy))pt above→\(mine ? "itself" : hit.map { String(describing: type(of: $0)) } ?? "nothing")"
+        }
+        var out: [String] = []
+        if let menu, !menu.isHidden { out.append("more " + lands(menu, 5)) }
+        if !toggle.isHidden { out.append("switch " + lands(toggle, 4)) }
+        return out.joined(separator: " | ")
+    }
+    #endif
     /// Where the row has landed (its RolloutChip).
     func setRollout(_ view: UIView?) { swap(rolloutSlot, to: view.map { [$0] } ?? []) }
     /// The row's own controls, before its ⋯.
@@ -292,13 +320,46 @@ final class ConfigRow: UIStackView {
     }
 }
 
-extension UIView {
+/// CSS `max-width` for a view standing in a column: the box spans the column
+/// as any child does, and holds its content at its own width up to `max`, at
+/// its leading edge. The cap stays inside the box: a child's own cap in a
+/// filling stack became the column's, and the card's (Spend stood 434pt wide
+/// on an 834pt iPad, Connections 696, the type editor 498).
+final class CapBox: UIView {
+    init(_ content: UIView, max: Double) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        content.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(content)
+        // Under the card's own width (999): two equal pulls let the engine
+        // narrow the card to the content's cap as readily as narrow the content.
+        let fills = content.widthAnchor.constraint(equalTo: widthAnchor)
+        fills.priority = .required - 2
+        NSLayoutConstraint.activate([
+            content.topAnchor.constraint(equalTo: topAnchor),
+            content.bottomAnchor.constraint(equalTo: bottomAnchor),
+            content.leadingAnchor.constraint(equalTo: leadingAnchor),
+            content.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor),
+            content.widthAnchor.constraint(lessThanOrEqualToConstant: max),
+            fills,
+        ])
+    }
+
     /// `max-width: 72ch`: the house measure, in the type's own `0`.
-    func holdMeasure(_ role: TypeRole) {
+    static func measure(_ content: UIView, _ role: TypeRole) -> CapBox {
         let zero = ("0" as NSString).size(withAttributes: [.font: role.font]).width
-        widthAnchor.constraint(lessThanOrEqualToConstant: zero * 72).isActive = true
+        return CapBox(content, max: zero * 72)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("CapBox is built in code")
     }
 }
+
+/// A row's whole surface, which opens its editor: a touch beside its ⋯ or its
+/// switch, within their 44pt reach, is theirs (`YieldsReach`).
+private final class RowOpener: UIControl, YieldsReach {}
 
 /// A list's rows by key, each kept for as long as its key is listed: a
 /// refresh changes the rows in place, adds a new one, and lets one that left go.

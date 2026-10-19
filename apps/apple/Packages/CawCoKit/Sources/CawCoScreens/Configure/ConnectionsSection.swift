@@ -56,7 +56,6 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
         let line = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
         line.text = Words.Connections.emptyLine
         line.wrap = .pretty
-        line.holdMeasure(TypeScale.typeBody)
         cards.axis = .vertical
         cards.spacing = Space.space2
         cards.accessibilityLabel = Words.Connections.servicesLabel
@@ -67,7 +66,7 @@ final class ConnectionsSectionController: ConfigSectionController, ASWebAuthenti
         }
         empty.axis = .vertical
         empty.spacing = Space.space3
-        empty.addArrangedSubview(line)
+        empty.addArrangedSubview(CapBox.measure(line, TypeScale.typeBody))
         empty.addArrangedSubview(cards)
 
         form.isHidden = true
@@ -539,6 +538,11 @@ private final class KeyAsk: UIStackView {
         addArrangedSubview(field)
         addArrangedSubview(save)
         addArrangedSubview(cancel)
+        // The field at most 384pt; the row's room past Cancel stays empty.
+        let rest = UIView()
+        // The field grows first (250), the rest only past its cap.
+        rest.setContentHuggingPriority(.defaultLow + 1, for: .horizontal)
+        addArrangedSubview(rest)
         draw()
     }
 

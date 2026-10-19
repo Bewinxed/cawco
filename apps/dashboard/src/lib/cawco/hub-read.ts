@@ -6,8 +6,8 @@
  */
 
 /**
- * A refused read: the status, and one sentence of why without its closing
- * stop ({@link hubFailure}). `type` and `title` are the hub's problem
+ * A refused read: the status, and why, without its closing stop
+ * ({@link hubFailure}). `type` and `title` are the hub's problem
  * fields when it sent them (RFC 9457), for a caller that tells causes
  * apart; never shown as they are.
  */
@@ -55,13 +55,13 @@ export function deadlineIn(ms: number | null): number | null {
 
 /**
  * THE ONE READER of a refused response, everywhere the dashboard asks the
- * hub: what it said, as one sentence without its closing stop, and never
- * the body as it came. The hub's problem (`type`, `title`, `status`,
+ * hub: what it said, its reason as the hub wrote it without its closing
+ * stop, and never the body as it came. The hub's problem (`type`, `title`, `status`,
  * `detail`; RFC 9457) gives its `detail`, else its `title`; the older
  * `{ error }` and `{ message }` shapes read the same; a plain-text answer
  * is the hub's own sentence. A proxy's page in front of the hub (a
  * tunnel's HTML 502), an empty body, or anything that is not a short
- * sentence of prose is the hub not answering: that, with its status
+ * reason in prose is the hub not answering: that, with its status
  * ({@link noAnswer}). Read from the body and its type alone: a universal
  * load may not read other headers SvelteKit does not serialise.
  */
@@ -157,9 +157,6 @@ const FINAL_STOP = /\.$/;
  */
 const REASON_LIMIT = 160;
 
-/** The first sentence of a text: up to its first stop that ends a word. */
-const FIRST_SENTENCE = /^.*?[.!?](?=\s|$)/;
-
 /** Markup or a JSON dump, not prose: a reason never starts so. */
 const NOT_PROSE = /^[<{[]/;
 
@@ -171,17 +168,16 @@ const NOT_PROSE = /^[<{[]/;
 const ERROR_LABEL = /^[A-Za-z]*(?:[Ee]rror|[Ee]xception):\s*/;
 
 /**
- * The hub's words as one sentence a person reads, without its closing
- * stop: their first line's first sentence, a thrown error's label taken
- * off, when it is short prose; null for anything else (markup, a dump, a
- * page, nothing).
+ * The hub's words as a reason a person reads, without its closing stop:
+ * their first line whole, a thrown error's label taken off, when it is short
+ * prose; null for anything else (markup, a dump, a page, nothing). Whole,
+ * not cut to its first sentence: core's refusals say what happened and then
+ * what to do ("That's only part of the code. Copy all of it from the sign-in
+ * page, then paste it again."), and the second sentence is the person's way on.
  */
 function sentenceOf(said: string | undefined): string | null {
   const line = (said ?? "").split("\n", 1)[0].trim().replace(ERROR_LABEL, "");
-  const sentence = (line.match(FIRST_SENTENCE)?.[0] ?? line).replace(
-    FINAL_STOP,
-    ""
-  );
+  const sentence = line.replace(FINAL_STOP, "");
   return sentence.length > 0 &&
     sentence.length <= REASON_LIMIT &&
     !NOT_PROSE.test(sentence)

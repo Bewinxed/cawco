@@ -96,6 +96,7 @@ enum ConfigProbe {
         if let window = shell.view.window {
             let cut = AccountsProbe.clipped(in: window)
             say("clipped \(stage)", cut.isEmpty ? "none" : cut.joined(separator: " / "))
+            geometry(stage, in: window)
         }
         guard let base = captureURL, let window = shell.view.window,
               let png = UIGraphicsImageRenderer(bounds: window.bounds).image(actions: { _ in
@@ -105,6 +106,66 @@ enum ConfigProbe {
         request.httpMethod = "PUT"
         let status = await (try? URLSession.shared.upload(for: request, from: png)).map { ($0.1 as? HTTPURLResponse)?.statusCode ?? 0 }
         log.notice("capture \(stage, privacy: .public): \(status.map { "sent, \($0)" } ?? "not sent", privacy: .public)")
+    }
+
+    /// The engine's view of the card on screen: its width beside the pane's,
+    /// the constraints that set it, and every label, control and field it
+    /// shows, each with its frame in the card (`[x,y w×h]`).
+    private static func geometry(_ stage: String, in window: UIWindow) {
+        func cards(_ view: UIView) -> [UIView] {
+            guard !view.isHidden, view.alpha > 0.01 else { return [] }
+            return (view.accessibilityIdentifier == "config.card" ? [view] : []) + view.subviews.flatMap(cards)
+        }
+        guard let card = cards(window).last else { return say("geometry \(stage)", "no card") }
+        let pane = card.superview?.bounds.width ?? 0
+        func name(_ item: AnyObject?) -> String {
+            guard let item else { return "-" }
+            if let view = item as? UIView { return view === card ? "card" : (view.accessibilityIdentifier ?? String(describing: type(of: view))) }
+            return String(describing: type(of: item))
+        }
+        let sets = card.constraintsAffectingLayout(for: .horizontal).map { c in
+            "\(name(c.firstItem)).\(c.firstAttribute.rawValue)\(["<=", "==", ">="][c.relation.rawValue + 1])\(name(c.secondItem)).\(c.secondAttribute.rawValue)+\(Int(c.constant))@\(Int(c.priority.rawValue))"
+        }
+        var parts: [String] = []
+        func walk(_ view: UIView) {
+            guard !view.isHidden, view.alpha > 0.01 else { return }
+            let box = view.convert(view.bounds, to: card)
+            let at = "[\(Int(box.minX)),\(Int(box.minY)) \(Int(box.width))×\(Int(box.height))]"
+            switch view {
+            case let label as UILabel:
+                parts.append("'\(String((label.text ?? "").prefix(40)))'\(at)")
+                return
+            case let button as UIButton:
+                let title = button.configuration?.title ?? button.currentTitle ?? button.accessibilityLabel ?? ""
+                parts.append("btn'\(title.prefix(30))'\(at)")
+                return
+            case is UISwitch:
+                parts.append("switch\(at)")
+                return
+            case let field as UITextField:
+                parts.append("field'\((field.text ?? "").prefix(20))'\(at)")
+                return
+            case let text as UITextView:
+                parts.append("text'\(text.text.prefix(20))'\(at)")
+                return
+            default:
+                view.subviews.forEach(walk)
+            }
+        }
+        walk(card)
+        // An editor's commit row and the scroll it stands under, in the window.
+        func tagged(_ id: String, _ view: UIView) -> UIView? {
+            guard !view.isHidden else { return nil }
+            if view.accessibilityIdentifier == id { return view }
+            return view.subviews.lazy.compactMap { tagged(id, $0) }.first
+        }
+        for id in ["config.band", "config.commit", "config.scroll"] {
+            guard let found = tagged(id, window) else { continue }
+            let box = found.convert(found.bounds, to: window)
+            let ground = found.backgroundColor.map { $0 == .clear ? "clear" : "filled" } ?? "none"
+            parts.append("\(id)[\(Int(box.minX)),\(Int(box.minY)) \(Int(box.width))×\(Int(box.height)) ground \(ground)]")
+        }
+        say("geometry \(stage)", "card \(Int(card.bounds.width))×\(Int(card.bounds.height)) in \(Int(pane)) | sets: \(sets.joined(separator: ", ")) | \(parts.joined(separator: " "))")
     }
 
     // MARK: The run
@@ -177,6 +238,7 @@ enum ConfigProbe {
             mcp.probeToggle("probe-mcp", on: false)
             await until { hub.configuration.snapshot?.config.mcp.first { $0.name == "probe-mcp" }?.enabled == false }
             say("mcp saved", AccountsProbe.texts(in: mcp.view).joined(separator: " | "))
+            say("mcp reach", mcp.probeReach("probe-mcp"))
         }
 
         // Connections: GitHub, its key set from the form; then one project allowed.
@@ -213,6 +275,18 @@ enum ConfigProbe {
             await until { hub.configuration.snapshot?.memoryDocs.first { $0.path == "probe/notes.md" }?.content.contains("Thursdays") == true }
             try? await Task.sleep(for: .seconds(1))
             say("memory saved", AccountsProbe.texts(in: editor.view).joined(separator: " | "))
+        }
+
+        // Each section once more, as every change above left it: the app's half
+        // of the pair the spec captures the dashboard's same pages beside.
+        for slug in ["spend", "delegate-types", "mcp", "connections", "skills", "memory"] {
+            shell.openConfigure(slug)
+            guard await until(30, { onScreen(ConfigSectionController.self, shell).map { $0.section.slug == slug && $0.ready } ?? false }) else {
+                say("\(slug) final", "never opened")
+                continue
+            }
+            try? await Task.sleep(for: .seconds(1.5))
+            await capture(slug, shell)
         }
     }
 }

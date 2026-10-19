@@ -9,9 +9,9 @@ import UIKit
 /// skeleton rows stand where they will; an error the first read hit stands
 /// alone, and one a later read hit sits above the last rows read.
 ///
-/// On a compact width the section is a page pushed over the list, and the
-/// navigation bar carries its title (HIG Lists and tables: "iOS Settings
-/// uses a hierarchy of lists"); the card keeps the purpose line.
+/// On a compact width the section is a page pushed over the list, its
+/// title in the navigation bar for the way back, and in the card as the
+/// web's page has it.
 class ConfigSectionController: ObservedViewController {
     let section: ConfigSection
     let context: ShellContext
@@ -24,12 +24,18 @@ class ConfigSectionController: ObservedViewController {
     let actions = UIStackView()
     /// Controls that act on the rows, arriving with them.
     let toolbar = UIStackView()
+    private let toolbarRow = UIStackView()
     /// The rows: what the section shows once read, `space5` apart.
     let content = UIStackView()
 
     private let titleLabel = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong, lines: 0)
     private let purposeLabel = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted, lines: 0)
-    private let head = UIStackView()
+    private let head = SectionHeadRow()
+    private let titles = UIStackView()
+    /// `justify-content: space-between`: the room between the titles and the actions on one line.
+    private let between = UIView()
+    /// Wrapped, the titles take the head's whole width; the actions keep their own under them.
+    private var titlesFill: NSLayoutConstraint!
     private let body = UIStackView()
     private let skeleton = UIStackView()
     private let problemSlot = UIStackView()
@@ -66,6 +72,7 @@ class ConfigSectionController: ObservedViewController {
         card.layer.cornerRadius = Radius.radiusLg
         card.layer.cornerCurve = .continuous
         card.translatesAutoresizingMaskIntoConstraints = false
+        card.accessibilityIdentifier = "config.card"
         scroll.addSubview(card)
 
         titleLabel.text = section.label
@@ -75,27 +82,40 @@ class ConfigSectionController: ObservedViewController {
         purposeLabel.text = section.purpose
         purposeLabel.isHidden = section.purpose == nil
         purposeLabel.wrap = .pretty
-        let titles = UIStackView(arrangedSubviews: [titleLabel, purposeLabel])
+        titles.addArrangedSubview(titleLabel)
+        titles.addArrangedSubview(purposeLabel)
         titles.axis = .vertical
         titles.spacing = 4
         actions.spacing = 8
         actions.alignment = .center
+        between.setContentHuggingPriority(.init(1), for: .horizontal)
         head.addArrangedSubview(titles)
+        head.addArrangedSubview(between)
         head.addArrangedSubview(actions)
         head.alignment = .top
         head.spacing = 12
-        actions.setContentHuggingPriority(.required, for: .horizontal)
-        titles.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+        titlesFill = titles.widthAnchor.constraint(equalTo: head.widthAnchor)
+        // Decided in the head's own layout, whenever it has a width (a section's
+        // first pass had none, and its view was not laid out again).
+        head.onLayout = { [weak self] in self?.wrapHead() }
+        // One 12pt gap on the line: the room between belongs to `between`.
+        head.setCustomSpacing(0, after: titles)
 
         toolbar.spacing = 8
         toolbar.alignment = .center
-        toolbar.isHidden = true
+        // The toolbar's controls at their own widths, the row's room past them empty.
+        let toolbarRest = UIView()
+        toolbarRest.setContentHuggingPriority(.init(1), for: .horizontal)
+        toolbarRow.addArrangedSubview(toolbar)
+        toolbarRow.addArrangedSubview(toolbarRest)
+        toolbarRow.alignment = .center
+        toolbarRow.isHidden = true
         problemSlot.axis = .vertical
         content.axis = .vertical
         content.spacing = Space.space5
         slot.axis = .vertical
         slot.spacing = Space.space5
-        for part in [toolbar, problemSlot, content] { slot.addArrangedSubview(part) }
+        for part in [toolbarRow, problemSlot, content] { slot.addArrangedSubview(part) }
 
         skeleton.axis = .vertical
         skeleton.spacing = 2
@@ -114,7 +134,9 @@ class ConfigSectionController: ObservedViewController {
         // The card fills the pane's height, one gutter above its foot; taller rows scroll the ground.
         let fills = card.heightAnchor.constraint(greaterThanOrEqualTo: scroll.frameLayoutGuide.heightAnchor, constant: -Space.space2 * 2)
         let wide = card.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -Space.space5 * 2)
-        wide.priority = .defaultHigh
+        // `.body`: the pane's width less its gutters, 980 at most, whatever the
+        // card holds; under the cap only, never as a tie with what it holds.
+        wide.priority = .required - 1
         NSLayoutConstraint.activate([
             scroll.topAnchor.constraint(equalTo: safe.topAnchor),
             scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -136,23 +158,9 @@ class ConfigSectionController: ObservedViewController {
             body.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -Space.space7),
             body.bottomAnchor.constraint(lessThanOrEqualTo: card.bottomAnchor, constant: -Space.space6),
         ])
-        drawTitle()
         drawFrame(animated: false)
     }
 
-    /// Pushed over the list, the navigation bar says the title; beside the rail the card says it itself.
-    private func drawTitle() {
-        let hidden = ConfigSections.listed(view)
-        guard titleLabel.isHidden != hidden else { return }
-        titleLabel.isHidden = hidden
-        view.setNeedsLayout()
-    }
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        drawTitle()
-        wrapHead()
-    }
 
     /// `.head { flex-wrap: wrap }`: the actions stand beside the titles when
     /// both fit on one line at their own widths, else on the line under them,
@@ -160,14 +168,16 @@ class ConfigSectionController: ObservedViewController {
     private func wrapHead() {
         let room = head.bounds.width
         guard room > 0, !actions.isHidden else { return }
-        let unbounded = CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
-        let titles = [titleLabel, purposeLabel].filter { !$0.isHidden }.map { $0.sizeThatFits(unbounded).width }.max() ?? 0
+        // Each line's own width on one line, as flex measures an item's max-content.
+        let words = [titleLabel, purposeLabel].filter { !$0.isHidden }.compactMap(\.attributedText).map { TextWrap.oneLine($0) }.max() ?? 0
         let acts = actions.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width
-        let wraps = titles + head.spacing + acts > room
+        let wraps = words + head.spacing + acts > room
         let axis: NSLayoutConstraint.Axis = wraps ? .vertical : .horizontal
         guard head.axis != axis else { return }
         head.axis = axis
         head.alignment = wraps ? .leading : .top
+        between.isHidden = wraps
+        titlesFill.isActive = wraps
     }
 
     /// Skeleton, problem alone, or the rows (with a later read's problem above them).
@@ -181,7 +191,7 @@ class ConfigSectionController: ObservedViewController {
         skeleton.isHidden = showRows || problem != nil
         // Before the first read the problem stands alone, where the rows will be.
         content.isHidden = !showRows
-        toolbar.isHidden = !showRows || toolbar.arrangedSubviews.isEmpty
+        toolbarRow.isHidden = !showRows || toolbar.arrangedSubviews.isEmpty
         guard animated, showRows, !UIAccessibility.isReduceMotionEnabled else {
             slot.alpha = 1
             return
@@ -211,5 +221,16 @@ extension ConfigSection {
     func missing(_ what: String, back: @escaping () -> Void) -> KitEmptyState {
         KitEmptyState(icon: glyph, title: Words.Configure.gone(what: what), line: Words.Configure.goneLine,
                       action: KitButton.make(Words.Configure.backTo(section: label), variant: .outline, action: back))
+    }
+}
+
+/// The section head's row: says when it has been laid out at a width, so the
+/// section decides there whether its actions wrap under its titles.
+private final class SectionHeadRow: UIStackView {
+    var onLayout: () -> Void = {}
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        onLayout()
     }
 }

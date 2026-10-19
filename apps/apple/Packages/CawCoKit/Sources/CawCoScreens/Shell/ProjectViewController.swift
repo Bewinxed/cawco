@@ -596,12 +596,26 @@ final class ProjectViewController: ObservedViewController {
         board.removeFromSuperview()
         board.translatesAutoresizingMaskIntoConstraints = false
         pane.addSubview(board)
-        NSLayoutConstraint.activate([
+        boardPins = [
             board.topAnchor.constraint(equalTo: pane.topAnchor),
             board.bottomAnchor.constraint(equalTo: pane.bottomAnchor),
             board.leadingAnchor.constraint(equalTo: pane.leadingAnchor),
             board.trailingAnchor.constraint(equalTo: pane.trailingAnchor),
-        ])
+        ]
+        NSLayoutConstraint.activate(boardPins)
+    }
+
+    /// The board pinned to the pane's edges while it stands there itself.
+    private var boardPins: [NSLayoutConstraint] = []
+
+    /// The board leaves the pane for its block on a page: its pins go with it.
+    /// UIKit drops a moved view's constraints only to a view it is no longer
+    /// inside, and the pane still holds the block, so the board stayed pinned
+    /// to the pane's height while the block held it to its own; each pass
+    /// moved the strip 72pt further down until the board stood at its least.
+    private func unmountBoard() {
+        NSLayoutConstraint.deactivate(boardPins)
+        boardPins = []
     }
 
     /// A task view's page of blocks, made the first time a view is placed beside it.
@@ -811,6 +825,7 @@ final class ProjectViewController: ObservedViewController {
                 if framed(.board) {
                     what = "blocks:board"
                     surface = blocksPane
+                    unmountBoard()
                     board.inset = 0
                     blocksPane.show(taskPage(.board), items: taskItems(.board, content: board, count: shownTasks.count))
                 } else {
@@ -859,8 +874,10 @@ final class ProjectViewController: ObservedViewController {
             shown = what
             let showing = surface
             let place: @MainActor @Sendable () -> Void = {
+                // Only the pane's own surfaces cross over: the board placed in a
+                // block of the page is that block's content, and shows with it.
                 for each in [self.board, self.scroller, self.custom!, self.decisionsPane!, self.routinesPane!, self.madePane!, self.blocksPane] as [UIView] {
-                    each.isHidden = each !== showing
+                    each.isHidden = each.superview === self.pane && each !== showing
                 }
                 #if DEBUG
                 ViewsProbe.say("views panes \(what) shown=" + self.pane.subviews.filter { !$0.isHidden }.map { "\(type(of: $0))" }.joined(separator: ","))
@@ -885,6 +902,9 @@ final class ProjectViewController: ObservedViewController {
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         if arrange() { requestRefresh() }
+        #if DEBUG
+        probePageHeight()
+        #endif
     }
 
     /// The page's gutters and the head's shape for the width: from 900pt the
@@ -1150,6 +1170,47 @@ final class ProjectViewController: ObservedViewController {
         guard line != probedStrip else { return }
         probedStrip = line
         ViewsProbe.say(line)
+        probeStretch()
+    }
+
+    private var probedHeight = 0.0
+
+    /// The page's height changed: whether it stands taller than its content.
+    func probePageHeight() {
+        guard ViewsProbe.on, abs(page.bounds.height - probedHeight) > 1 else { return }
+        probedHeight = page.bounds.height
+        probeStretch()
+    }
+
+    /// The head and the strip taller than their content: what holds them so,
+    /// as the engine says (`constraintsAffectingLayout`), with the pane's frame.
+    private func probeStretch() {
+        let natural = page.systemLayoutSizeFitting(CGSize(width: page.bounds.width, height: 0),
+                                                   withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
+        guard page.bounds.height > natural + 1 else { return }
+        func name(_ item: AnyObject?) -> String {
+            guard let item else { return "-" }
+            if let view = item as? UIView { return view === page ? "page" : view === pane ? "pane" : String(describing: type(of: view)) }
+            return String(describing: type(of: item))
+        }
+        // What can move: below required, a view's own size (hugging, compression,
+        // intrinsic), or the page's and the pane's own edges.
+        let holds = page.constraintsAffectingLayout(for: .vertical).filter { c in
+            c.priority.rawValue < 1000 || "\(type(of: c))".contains("ContentSize")
+                || [c.firstItem, c.secondItem].contains { $0 === page || $0 === pane }
+        }.prefix(60).map { c in
+            "\(name(c.firstItem)).\(c.firstAttribute.rawValue)\(["<=", "==", ">="][c.relation.rawValue + 1])\(name(c.secondItem)).\(c.secondAttribute.rawValue)+\(Int(c.constant))@\(Int(c.priority.rawValue))\("\(type(of: c))".contains("ContentSize") ? "(size)" : "")"
+        }
+        let below = pane.subviews.filter { !$0.isHidden }.map { "\(type(of: $0))[\(Int($0.frame.height))]" }
+        // A wrapping label whose asked height outgrows its box: a stale wrap width.
+        func labels(_ view: UIView) -> [UILabel] {
+            ((view as? UILabel).map { [$0] } ?? []) + view.subviews.flatMap(labels)
+        }
+        let tall = labels(page).filter { $0.numberOfLines != 1 && !$0.isHidden }.map { label in
+            "'\((label.text ?? "").prefix(24))' asks \(Int(label.intrinsicContentSize.height)) box \(Int(label.bounds.width))×\(Int(label.bounds.height)) wrapAt \(Int(label.preferredMaxLayoutWidth))"
+        }
+        ViewsProbe.say("views stretched labels \(tall.joined(separator: " | "))")
+        ViewsProbe.say("views stretched page=\(Int(page.bounds.height)) natural=\(Int(natural)) pane=\(Int(pane.frame.minY))+\(Int(pane.frame.height)) shown=\(below.joined(separator: ",")) holds=\(holds.joined(separator: ", "))")
     }
     #endif
 }

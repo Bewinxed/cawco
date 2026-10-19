@@ -99,12 +99,9 @@ final class MemoryEditorController: ConfigEditorController {
         filePicker.accessibilityLabel = Words.Memory.file
         rolePicker.accessibilityLabel = Words.Memory.role
         projectPicker.accessibilityLabel = Words.Memory.projects
-        // Short of room, the file's chip gives way first: the title under it says the whole path.
-        filePicker.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         menuPickers()
-        let pickers = UIStackView(arrangedSubviews: isMain ? [filePicker, UIView()] : [filePicker, rolePicker, projectPicker, UIView()])
-        pickers.spacing = 8
-        pickers.alignment = .center
+        // Each chip at its own width, the ones that do not fit on the next line.
+        let pickers = WrapLayout(isMain ? [filePicker] : [filePicker, rolePicker, projectPicker], gap: 8, centred: true)
         titleLabel.accessibilityTraits = .header
         titleLabel.tracking = -0.01
         chipSlot.alignment = .leading

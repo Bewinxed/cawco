@@ -242,7 +242,8 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
 
         let safe = view.safeAreaLayoutGuide
         let fits = card.widthAnchor.constraint(equalTo: scroll.frameLayoutGuide.widthAnchor, constant: -Space.space5 * 2)
-        fits.priority = .defaultHigh
+        // The pane's width less its gutters, 980 at most, whatever the card holds (SectionFrame `.body`).
+        fits.priority = .required - 1
         scrollToFoot = scroll.bottomAnchor.constraint(equalTo: footBar.topAnchor)
         scrollToBottom = scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
         NSLayoutConstraint.activate(contentInsets + [
@@ -273,22 +274,14 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         empty.isActive = true
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (setup: AccountSetupController, _: UITraitCollection) in setup.paintBox() }
         paintBox()
-        drawTitle()
     }
 
     private func paintBox() {
         box.layer.borderColor = Palette.borderWell.resolvedColor(with: traitCollection).cgColor
     }
 
-    /// Pushed over the list, the navigation bar says the title; beside the rail the card says it itself (SectionFrame).
-    private func drawTitle() {
-        let hidden = ConfigSections.listed(view)
-        if titleLabel.isHidden != hidden { titleLabel.isHidden = hidden }
-    }
-
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
-        drawTitle()
         // The web's container query: the setup's own width, 640 or more.
         let now = card.bounds.width - Space.space7 * 2 >= 640
         guard now != wide, card.bounds.width > 0 else { return }
@@ -695,14 +688,12 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
         card.backgroundColor = Palette.surfaceRaised
         card.layer.cornerRadius = Radius.radiusMd
         card.accessibilityIdentifier = "setup.preview"
-        card.widthAnchor.constraint(lessThanOrEqualToConstant: 360).isActive = true
         preview = (tile, name, email)
         let field = KitField(placeholder: Words.Accounts.Setup.nicknamePlaceholder)
         field.text = nickname
         field.accessibilityLabel = Words.Accounts.Setup.nicknameSaid
         field.accessibilityIdentifier = "setup.nickname"
         field.delegate = self
-        field.widthAnchor.constraint(lessThanOrEqualToConstant: 280).isActive = true
         field.addAction(UIAction { [weak self, weak field] _ in
             self?.nickname = field?.text ?? ""
             self?.requestRefresh()
@@ -721,10 +712,10 @@ final class AccountSetupController: ObservedViewController, UITextFieldDelegate 
             self?.hue = picked
             self?.requestRefresh()
         }
-        for (label, control) in [(showsLabel as UIView, card as UIView), (nicknameLabel, field), (colourLabel, swatches)] {
+        // The preview at most 360pt and the field 280pt, each in a box that spans the column.
+        for (label, control) in [(showsLabel as UIView, CapBox(card, max: 360) as UIView), (nicknameLabel, CapBox(field, max: 280)), (colourLabel, swatches)] {
             let fieldStack = UIStackView(arrangedSubviews: [label, control])
             fieldStack.axis = .vertical
-            fieldStack.alignment = control === swatches ? .fill : .leading
             fieldStack.spacing = Space.space2
             content.addArrangedSubview(fieldStack)
         }

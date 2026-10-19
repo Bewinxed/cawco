@@ -28,7 +28,6 @@ final class MemorySectionController: ConfigSectionController {
         filter.widthAnchor.constraint(lessThanOrEqualToConstant: 256).isActive = true
         filter.addAction(UIAction { [weak self] _ in self?.requestRefresh() }, for: .editingChanged)
         toolbar.addArrangedSubview(filter)
-        toolbar.addArrangedSubview(UIView())
         setContent([list, noMatch])
     }
 

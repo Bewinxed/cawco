@@ -30,11 +30,10 @@ final class SpendSectionController: ConfigSectionController {
                 UIAction(title: each.label, state: each.value == self?.onCap ? .on : .off) { [weak self] _ in self?.choose(each.value) }
             }
         }
-        select.widthAnchor.constraint(lessThanOrEqualToConstant: 384).isActive = true
-        field = ConfigField(label: Words.Spend.onCap, control: select)
+        // `max-w-sm`: the select at most 384pt, in a box that spans the column.
+        field = ConfigField(label: Words.Spend.onCap, control: CapBox(select, max: 384))
         let note = metaLine(Words.Spend.note)
-        note.holdMeasure(TypeScale.typeMeta)
-        let group = UIStackView(arrangedSubviews: [note, field])
+        let group = UIStackView(arrangedSubviews: [CapBox.measure(note, TypeScale.typeMeta), field])
         group.axis = .vertical
         group.spacing = 8
         group.alignment = .fill
