@@ -17,6 +17,7 @@
  *
  *   bun scripts/probe-kit/run.ts held-requests
  */
+import { signal, spawnedPid } from "../../../packages/core/src/signal";
 import { delay } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 import { relay } from "../relay";
@@ -45,14 +46,20 @@ const spec: Spec = {
     const other = await fleet.launchMachine(OTHER, {
       CAWCO_HUB_URL: `${between.url.replace("http", "ws")}/ws`,
     });
-    const pid = other.agent.pid;
+    const { agent } = other;
+    const pid = spawnedPid(agent);
+    if (pid === undefined) {
+      throw new Error(`${OTHER}'s agent has no pid to freeze`);
+    }
+    const freeze = (frozen: boolean) =>
+      signal(pid, frozen ? "SIGSTOP" : "SIGCONT");
     const inspect = () =>
       fleet.api<{ cwd?: string }>(`/api/agents/${OTHER}/inspect`, {});
     const hubLog = async () => await fleet.logs("hub");
 
     // Back in time.
     const before = (await hubLog()).length;
-    process.kill(pid, "SIGSTOP");
+    freeze(true);
     const asked = Date.now();
     const answer = inspect().then(
       (value) => ({ ok: true as const, value }),
@@ -62,7 +69,7 @@ const spec: Spec = {
     between.cut();
     await delay(1000);
     between.release();
-    process.kill(pid, "SIGCONT");
+    freeze(false);
     const got = await answer;
     check(
       "a request held across its machine's dropped link is answered once the machine is back",
@@ -81,7 +88,7 @@ const spec: Spec = {
     );
 
     // Away past the deadline.
-    process.kill(pid, "SIGSTOP");
+    freeze(true);
     const askedAgain = Date.now();
     const late = inspect().then(
       () => "answered",
@@ -92,7 +99,7 @@ const spec: Spec = {
     const failed = await late;
     const after = Date.now() - askedAgain;
     between.release();
-    process.kill(pid, "SIGCONT");
+    freeze(false);
     check(
       "a request whose machine stays away fails at its own deadline, saying the machine was away",
       failed.includes(AWAY) &&
