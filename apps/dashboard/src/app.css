@@ -773,7 +773,8 @@
      `-block` is the same down the page. The tabs track, the board and a
      view's pane share it. A scroller may cut an edge's fade short where
      something must stay whole (`--fade-cap-start`, `--fade-cap-end`: the
-     tabs track, for the tab drawn chosen).
+     tabs track, for the tab drawn chosen; down the page, a list for every
+     line drawn whole).
      Each edge is its own animation over only the run where it moves, the
      first and last 6% of the scroll, filled outside it: between them
      neither changes, so a long scroll asks no restyle or repaint of the
@@ -796,8 +797,12 @@
     mask-image: linear-gradient(
       to bottom,
       transparent,
-      #000 var(--fade-start),
-      #000 calc(100% - var(--fade-inset-end, 0px) - var(--fade-end)),
+      #000 min(var(--fade-start), var(--fade-cap-start, 100vh)),
+      #000
+        calc(
+          100% - var(--fade-inset-end, 0px) -
+            min(var(--fade-end), var(--fade-cap-end, 100vh))
+        ),
       transparent calc(100% - var(--fade-inset-end, 0px))
     );
     animation-timeline: scroll(self block);
