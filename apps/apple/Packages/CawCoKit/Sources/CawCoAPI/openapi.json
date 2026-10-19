@@ -28367,11 +28367,18 @@
                   "null",
                   "string"
                 ]
+              },
+              "continuedInto": {
+                "type": [
+                  "null",
+                  "string"
+                ]
               }
             },
             "required": [
               "accountId",
               "canDelegate",
+              "continuedInto",
               "createdAt",
               "cwd",
               "delegateType",
@@ -28608,6 +28615,12 @@
                     "string"
                   ]
                 },
+                "continuedInto": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
+                },
                 "damaged": {
                   "$ref": "#/components/schemas/DamagedRow",
                   "description": "What the hub lays over a session row whose record, or whose workspace's\nrecord, is damaged on its machine ({@link DamagedRecordReport}): the file,\nwhy, and the way out that removes it (`archive`: archive workspace\n`workspaceId`; `end`: end the session)."
@@ -28619,6 +28632,7 @@
               "required": [
                 "accountId",
                 "canDelegate",
+                "continuedInto",
                 "createdAt",
                 "cwd",
                 "delegateType",
@@ -55007,6 +55021,13 @@
           "chosenEffort": {
             "$ref": "#/components/schemas/EffortLevel",
             "description": "The effort the operator chose for the session: its spawn's level, or the\nlast `setEffort` sent it. The hub starts every process of the session at\nit, whatever brings it back; a reading never moves it. Null: nobody\nchose, and the harness runs its model's default."
+          },
+          "continuedInto": {
+            "description": "The session a continuation moved this one's work item to: this one never\nruns again ({@link relaunchOf} refuses it), and what is sent to it goes\nthere. Null on every other session.",
+            "type": [
+              "null",
+              "string"
+            ]
           },
           "createdAt": {
             "description": "When the hub first opened its row: when it was started.",

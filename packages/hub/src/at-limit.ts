@@ -399,9 +399,15 @@ const actionWords = (current: Account, target: Account): string =>
 const messageOf = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
-/** A session past caring: its process will not be woken by anything the hub does here. */
+/**
+ * A session past caring: its process will not be woken by anything the hub
+ * does here. One a continuation took the work item of (`continuedInto`)
+ * never runs again: no hold of its is kept and no reset resumes it.
+ */
 const over = (row: LimitRow | undefined): boolean =>
-  !row || ["stopping", "stopped", "discarded", "error"].includes(row.status);
+  !row ||
+  row.continuedInto !== null ||
+  ["stopping", "stopped", "discarded", "error"].includes(row.status);
 
 /** The carry-on the hub sends at a reset: a turn the limit itself resumed. */
 const CARRY_ON_ORIGIN = "limit";
@@ -1248,6 +1254,28 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         `[at-limit] ${row ? ports.named(row) : instanceId} is looked at again now, not at the next recheck: ${why}.`
       );
       await lookAt(held, Date.now());
+      plan();
+    },
+    /**
+     * `instanceId` never runs again (a continuation took its work item on):
+     * its hold goes, and with it the resume at its reset; a look still
+     * waiting on its turn's end is cancelled, and it is on its way nowhere.
+     */
+    forget(instanceId: string): void {
+      const was = settling.get(instanceId);
+      if (was) {
+        lifetime.cancel(was.timer);
+        settling.delete(instanceId);
+      }
+      towards.delete(instanceId);
+      const held = db.atLimit.hold(instanceId);
+      db.atLimit.dropHold(instanceId);
+      if (held || was) {
+        console.info(
+          `[at-limit] ${instanceId.slice(0, 8)} was continued in a new session, so its ${held ? `hold${held.until === null ? "" : ` until ${clockWords(held.until)}`}` : "look at its turn's end"} is dropped: nothing resumes it.`
+        );
+      }
+      ports.changed();
       plan();
     },
     /** Whether a refused turn of `instanceId` is this controller's to answer. */

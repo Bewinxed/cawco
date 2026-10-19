@@ -24,6 +24,15 @@
  *   that reset; a person's message sent meanwhile reaches no model before
  *   it; past it, the delegate goes on by itself, the message arrives, and
  *   its item runs on to done.
+ * - continued: only A is limited, and the policy waits for a reset this
+ *   close, so it is held on A until its reset with a person's message
+ *   queued for it. The orchestrator's `continue_session` moves its item to
+ *   a new session (placed on B), then hands a message to the OLD session.
+ *   The invariant (hub server.ts `retireContinued`): the old session never
+ *   takes another turn, past A's reset and that handoff; its row names its
+ *   continuation, it is stopped and no hold of its is left; the queued
+ *   message and the handoff both reach the new session, and the handoff's
+ *   answer names it.
  *
  *   bun scripts/probe-kit/run.ts limit-stall
  */
@@ -47,14 +56,22 @@ const TOKEN: Record<string, string> = {
   [B]: "sk-ant-oat01-fake-scratch-fleet-b",
 };
 /** How long the limited accounts refuse a leg's delegate from its first answer. */
-const LIMIT_MS: Record<Leg, number> = { move: 90_000, full: 75_000 };
+const LIMIT_MS: Record<Leg, number> = {
+  move: 90_000,
+  full: 75_000,
+  continued: 150_000,
+};
+/** How long past A's reset the continued leg watches for its old session. */
+const PAST_RESET_MS = 45_000;
 /** A delegate moved off its limit runs on B within this of A's refusal. */
 const MOVE_WITHIN_MS = 30_000;
 const DELEGATE = "mcp__cawco__delegate";
 const LIST = "mcp__cawco__delegate_list";
 const FINISH = "mcp__cawco__finish_item";
+const CONTINUE = "mcp__cawco__continue_session";
+const HANDOFF = "mcp__cawco__handoff";
 
-const LEGS = ["move", "full"] as const;
+const LEGS = ["move", "full", "continued"] as const;
 type Leg = (typeof LEGS)[number];
 
 /** What each leg's delegate has done, as the mock saw it. */
@@ -80,18 +97,38 @@ const played = Object.fromEntries(
   ])
 ) as unknown as Record<Leg, Played>;
 /** Which accounts each leg's delegate is refused on while limited. */
-const LIMITED: Record<Leg, string[]> = { move: [ACCOUNT], full: [ACCOUNT, B] };
+const LIMITED: Record<Leg, string[]> = {
+  move: [ACCOUNT],
+  full: [ACCOUNT, B],
+  continued: [ACCOUNT],
+};
 let repo = "";
 let projectId = "";
-/** What `delegate_list` answered the orchestrator, once asked. */
-let listed: string | undefined;
-let listAsked = false;
+
+/** What the orchestrator is asked to do with a tool, besides delegating. */
+type Ask = "list" | "continue" | "handoff";
+/** Each tool's answer to the orchestrator, once it has one. */
+const answers: Partial<Record<Ask, string>> = {};
+/** The tool the orchestrator called and has not had the answer of. */
+let asking: Ask | undefined;
 
 /** What opens every word to the orchestrator: only its conversation holds it. */
 const ASK = "PROBE-DELEGATE-";
 const askOf = (leg: Leg) => `${ASK}${leg}`;
 /** The orchestrator's word to read its delegation tree. */
 const LIST_ASK = `${ASK}list`;
+/** The orchestrator's word to continue a session, its id after it. */
+const CONTINUE_ASK = `${ASK}session-on`;
+/** The orchestrator's word to hand the old session a message, its id after it. */
+const HANDOFF_ASK = `${ASK}hand-old`;
+/** The orchestrator's handoff to the old session, after the move. */
+const HANDED = "PROBE-HANDED-after-move";
+/** The person's message to the continued leg's delegate while it is held. */
+const HELD_NOTE = "PROBE-NOTE-held-then-continued";
+/** Only a continuation from the person's asks opens this way (continuation.ts `asksOpening`). */
+const RESTARTING = "Restarting session ";
+/** A session id as an ask carries it. */
+const ID = "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}";
 /** Only `leg`'s delegate's brief carries this. */
 const briefOf = (leg: Leg) => `PROBE-CHILD-${leg}`;
 /** Only `leg`'s delegate's first answer carries this: a later request that has it has its earlier turns. */
@@ -168,6 +205,10 @@ const child = (request: Seen, leg: Leg): Reply => {
   if (state.finished) {
     return text("ok");
   }
+  // Held, then continued: it never finishes, so every turn it takes shows.
+  if (leg === "continued") {
+    return text("Still working.");
+  }
   if (leg === "full" && !request.all.includes(NOTE)) {
     return text("Still working.");
   }
@@ -187,19 +228,39 @@ const child = (request: Seen, leg: Leg): Reply => {
  * last: a deferred tool is found through ToolSearch first.
  */
 const orchestrator = (request: Seen): Reply => {
-  if (listAsked && request.afterTool && listed === undefined) {
-    const result = toolResultText(request);
-    if (result.includes('"instanceId"')) {
-      listed = result;
-      return text("ok");
-    }
+  // The tool it called answered: the next request carries its result.
+  if (asking && request.afterTool) {
+    answers[asking] = toolResultText(request);
+    asking = undefined;
+    return text("ok");
   }
-  if (request.all.includes(LIST_ASK) && listed === undefined && !listAsked) {
-    const reply = found(request, LIST, {});
-    if (reply.tool?.name === LIST) {
-      listAsked = true;
+  const call = (ask: Ask, name: string, input: object): Reply => {
+    const reply = found(request, name, input);
+    if (reply.tool?.name === name) {
+      asking = ask;
     }
     return reply;
+  };
+  const asked = (word: string): string | undefined =>
+    new RegExp(`${word} (${ID})`).exec(request.all)?.[1];
+  if (request.all.includes(LIST_ASK) && !("list" in answers) && !asking) {
+    return call("list", LIST, {});
+  }
+  const source = asked(CONTINUE_ASK);
+  if (source && !("continue" in answers) && !asking) {
+    return call("continue", CONTINUE, {
+      session: source,
+      from: "asks",
+      target_harness: "claude",
+      target_model: "claude-haiku-4-5",
+    });
+  }
+  const old = asked(HANDOFF_ASK);
+  if (old && !("handoff" in answers) && !asking) {
+    return call("handoff", HANDOFF, {
+      target: old,
+      message: `${HANDED}: one more thing for this work.`,
+    });
   }
   const leg = LEGS.find(
     (one) => !played[one].delegated && request.all.includes(askOf(one))
@@ -227,6 +288,10 @@ const respond = (request: Seen): Reply => {
   // delegate; a delegate's report it reads may quote that delegate's brief.
   if (request.all.includes(ASK)) {
     return orchestrator(request);
+  }
+  // The continued leg's new session: its opening is the old one's asks.
+  if (request.all.includes(RESTARTING)) {
+    return text("Carrying on.");
   }
   const leg = LEGS.find((one) => request.all.includes(briefOf(one)));
   return leg ? child(request, leg) : text("ok");
@@ -313,20 +378,32 @@ const standUp = async (kit: Kit): Promise<KitFleet> => {
   }));
   // Every session pinned to A, moving at its limit with no wait for a
   // close reset: placement alone decides where it goes.
-  const pinned = { strategy: "pinned", pinnedAccountId: ACCOUNT };
+  await route(fleet, ACCOUNT, 0);
+  return fleet;
+};
+
+/**
+ * Every session placed on `pinned`; at a limit, one moves to an account with
+ * room unless its own resets within `waitMinutes`, when it is held for it.
+ */
+const route = async (
+  fleet: KitFleet,
+  pinned: string,
+  waitMinutes: number
+): Promise<void> => {
+  const placed = { strategy: "pinned", pinnedAccountId: pinned };
   const put = await fetch(`${fleet.base}/api/accounts/routing/anthropic`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
-      yours: pinned,
-      delegates: pinned,
-      atLimit: { move: true, waitMinutes: 0, moveWholeUnderK: 200 },
+      yours: placed,
+      delegates: placed,
+      atLimit: { move: true, waitMinutes, moveWholeUnderK: 200 },
     }),
   });
   if (!put.ok) {
     throw new Error(`routing: ${put.status} ${await put.text()}`);
   }
-  return fleet;
 };
 
 /** The probe's reads of the fleet. */
@@ -452,7 +529,7 @@ const fullLeg = async (
   await fleet.send(orch, `${LIST_ASK} read your delegates`);
   const tree = await until(
     "full: delegate_list read",
-    () => listed,
+    () => answers.list,
     Boolean,
     60_000
   ).catch(() => undefined);
@@ -526,6 +603,139 @@ const fullLeg = async (
   );
 };
 
+/** What reached the model from the continued leg's old session after `since`: its brief, never the new session's opening. */
+const oldSeen = (fleet: KitFleet, since: number): Seen[] =>
+  fleet.seen.filter(
+    (one) =>
+      one.at > since &&
+      one.tools &&
+      one.all.includes(briefOf("continued")) &&
+      !one.all.includes(RESTARTING)
+  );
+
+/** What reached the model from the continued leg's new session. */
+const newSeen = (fleet: KitFleet): Seen[] =>
+  fleet.seen.filter(
+    (one) => one.tools && one.all.includes(RESTARTING) && !one.all.includes(ASK)
+  );
+
+const continuedLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  orch: string,
+  old: string
+): Promise<void> => {
+  const reset = played.continued.limitedUntil;
+  const hold = await until(
+    "continued: it is held on A until its reset",
+    () =>
+      fleet.query<{ until: number | null }>(
+        "SELECT until FROM limit_holds WHERE instance_id = ?",
+        old
+      )[0],
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  kit.check(
+    "continued: held on A at its limit, the reset close enough to wait for",
+    !!hold && Date.now() < reset,
+    `hold ${JSON.stringify(hold ?? null)}, ${reset - Date.now()} ms before the reset`
+  );
+  await fleet.send(old, `${HELD_NOTE}: and this`);
+  const [queued] = fleet.query<{ owed: number; state: string }>(
+    "SELECT owed IS NOT NULL AS owed, state FROM sent_messages WHERE instance_id = ? AND body LIKE ?",
+    old,
+    `%${HELD_NOTE}%`
+  );
+  kit.check(
+    "continued: the person's message to it is queued at the hub while it is held",
+    queued?.state === "pending" && queued.owed === 1,
+    JSON.stringify(queued ?? null)
+  );
+  // Its continuation is placed on B, which has room.
+  await route(fleet, B, 0);
+  await fleet.send(orch, `${CONTINUE_ASK} ${old}`);
+  const continued = await until(
+    "continued: continue_session answered",
+    () => answers.continue,
+    Boolean,
+    240_000
+  ).catch(() => undefined);
+  const movedAt = Date.now();
+  const target = fleet.query<{ instance_id: string }>(
+    "SELECT instance_id FROM work_items WHERE parent_instance_id = ? AND title = ?",
+    orch,
+    "Limit continued"
+  )[0]?.instance_id;
+  kit.check(
+    "continued: continue_session moved its item to a new session before its reset",
+    !!continued && !!target && target !== old && movedAt < reset,
+    `answer ${JSON.stringify(continued?.slice(0, 300) ?? null)}; item's session ${target ?? "none"}; ${reset - movedAt} ms before the reset`
+  );
+  if (!(target && target !== old)) {
+    return;
+  }
+  await fleet.send(orch, `${HANDOFF_ASK} ${old}`);
+  const handed = await until(
+    "continued: handoff answered",
+    () => answers.handoff,
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  // The scratch account resets; the hub's look at the old hold would resume it now.
+  await Bun.sleep(Math.max(0, reset + PAST_RESET_MS - Date.now()));
+  const turns = oldSeen(fleet, movedAt);
+  kit.check(
+    `continued: the old session takes no turn after the move, through A's reset and ${PAST_RESET_MS / 1000} s past it, and a handoff to it`,
+    turns.length === 0,
+    turns.length === 0
+      ? `no request from it since the move (${reset - movedAt} ms before the reset)`
+      : turns
+          .map(
+            (one) =>
+              `request ${one.at - reset} ms after A's reset on ${accountOfRequest(one)}: ${JSON.stringify(one.last.slice(0, 160))}`
+          )
+          .join(" | ")
+  );
+  const [row] = fleet.query<Record<string, unknown>>(
+    "SELECT * FROM instances WHERE id = ?",
+    old
+  );
+  const holds = fleet.query<{ until: number | null }>(
+    "SELECT until FROM limit_holds WHERE instance_id = ?",
+    old
+  );
+  kit.check(
+    "continued: the old session's row names its continuation, it is stopped, and no hold of its is left",
+    row?.continued_into === target &&
+      row?.status === "stopped" &&
+      holds.length === 0,
+    JSON.stringify({
+      status: row?.status,
+      continued_into: row?.continued_into ?? "(no such column)",
+      work_item_id: row?.work_item_id,
+      holds,
+    })
+  );
+  const seen = newSeen(fleet);
+  const note = seen.find((one) => one.all.includes(HELD_NOTE));
+  kit.check(
+    "continued: the message queued for the old session reaches the new one",
+    !!note && !turns.some((one) => one.all.includes(HELD_NOTE)),
+    note
+      ? `the new session read it ${note.at - movedAt} ms after the move`
+      : `never reached the new session; old turns with it: ${turns.filter((one) => one.all.includes(HELD_NOTE)).length}`
+  );
+  const reached = seen.find((one) => one.all.includes(HANDED));
+  kit.check(
+    "continued: a handoff to the old session reaches the new one, and its answer names the new one",
+    !!reached &&
+      !!handed?.includes(target.slice(0, 8)) &&
+      !turns.some((one) => one.all.includes(HANDED)),
+    `answer ${JSON.stringify(handed ?? null)}; ${reached ? "the new session read it" : "the new session never read it"}`
+  );
+};
+
 const run = async (kit: Kit) => {
   const fleet = await standUp(kit);
   const orch = await fleet.spawn("claude", "Orchestrator", repo, {
@@ -542,6 +752,14 @@ const run = async (kit: Kit) => {
   const full = await delegated(kit, fleet, orch, "full");
   if (full) {
     await fullLeg(kit, fleet, orch, look, full);
+  }
+  // Placed on A again, and held at A's limit for its reset (10 minutes is
+  // well past it) rather than moved to B, which has room.
+  await Bun.sleep(Math.max(0, played.full.limitedUntil + 5000 - Date.now()));
+  await route(fleet, ACCOUNT, 10);
+  const held = await delegated(kit, fleet, orch, "continued");
+  if (held) {
+    await continuedLeg(kit, fleet, orch, held);
   }
 };
 

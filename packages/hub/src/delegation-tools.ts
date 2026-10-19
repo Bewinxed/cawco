@@ -910,8 +910,8 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "continue_session",
-      "Continue another session (a stuck delegate) in a new one, from a summary by a model you choose; the " +
-        "named one is only read. Never this session: if your context is too big, say so. " +
+      "Continue another session (a stuck delegate) in a new one, summarised by a model you pick; " +
+        "its work item moves there; it never runs again. Never this session: if your context is too big, say so. " +
         "The new session answers tool permissions in `target_permission_mode`, this session's own mode when omitted; " +
         "when this session has none (pi) and the target harness has modes, it must be named, or nothing starts.",
       {

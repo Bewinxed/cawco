@@ -289,6 +289,7 @@ function roster(
   asleep: Peer[];
   own: InstanceRow | undefined;
   hosts: Map<string, string>;
+  rows: InstanceRow[];
 } {
   const { rows, hosts } = fleetInstances(fleet);
   const own = rows.find((row) => row.id === exceptInstanceId);
@@ -317,7 +318,7 @@ function roster(
           row.status === "stopped")
     )
     .map((row) => toPeer(row, hosts));
-  return { peers, asleep, own, hosts };
+  return { peers, asleep, own, hosts, rows };
 }
 
 /**
@@ -344,9 +345,54 @@ function formerOf(
     : undefined;
 }
 
+/**
+ * The session a target names when a continuation took its work item on
+ * (its row's `continuedInto`, the hub's `retireContinued`), followed to the
+ * last: the id its work goes on in now, and the id it was named by. By the
+ * full id, or a short id of six or more characters that names only one of
+ * `rows`. Undefined when the target names no continued session: the old
+ * one never runs again, so nothing is handed to it.
+ */
+function continuedOf(
+  rows: InstanceRow[],
+  target: string,
+  byId: (id: string) => InstanceRow | undefined
+): { now: string; former: string; continued: true } | undefined {
+  const needle = needleOf(target);
+  const idPart = needle.includes("#")
+    ? (needle.split("#").pop() ?? "")
+    : needle;
+  const rowOf = (id: string) => rows.find((row) => row.id === id) ?? byId(id);
+  const short =
+    idPart.length >= 6 ? rows.filter((row) => row.id.startsWith(idPart)) : [];
+  const called = rowOf(needle) ?? (short.length === 1 ? short[0] : undefined);
+  if (!called?.continuedInto) {
+    return undefined;
+  }
+  const seen = new Set([called.id]);
+  let now = called.continuedInto;
+  for (;;) {
+    seen.add(now);
+    const next = rowOf(now)?.continuedInto;
+    if (!next || seen.has(next)) {
+      return { now, former: called.id, continued: true };
+    }
+    now = next;
+  }
+}
+
 /** How a tool's answer names the former id a target was named by. */
-const continuesWords = (followed: { former: string } | undefined): string =>
-  followed ? ` (once ${followed.former.slice(0, 8)})` : "";
+const continuesWords = (
+  followed: { former: string; continued?: true } | undefined
+): string => {
+  if (!followed) {
+    return "";
+  }
+  const former = followed.former.slice(0, 8);
+  return followed.continued
+    ? ` (the continuation of ${former}, which never runs again)`
+    : ` (once ${former})`;
+};
 
 /** An `@` prefix on a target name, optional. */
 const AT_PREFIX = /^@/;
@@ -1593,7 +1639,8 @@ export const handoffActions = ({
         `Continued session ${source} in a new ${input.target_harness} session ` +
         `${done.targetInstanceId} on ${input.target_model}. ` +
         openedOnWords(input, done.summariserInstanceId) +
-        `The source session was not touched. The new session opened with:\n\n${done.opening}`,
+        "If the source ran a work item, the new session runs it now and the source is stopped for good: it never runs again, and what is sent to it goes to the new session. Otherwise the source was only read. " +
+        `The new session opened with:\n\n${done.opening}`,
     };
   },
   createWorkflow(name, program) {
@@ -1830,7 +1877,7 @@ export const handoffActions = ({
     message: string,
     inputs?: string[]
   ): Promise<string> {
-    const { peers, asleep, own, hosts } = roster(fleet, instanceId);
+    const { peers, asleep, own, hosts, rows } = roster(fleet, instanceId);
     // A thread (`thread#1a2b3c4d`, or its id): Caw is handed it there.
     const thread = threadOf(threads, target, [...peers, ...asleep]);
     if (thread) {
@@ -1845,8 +1892,10 @@ export const handoffActions = ({
         message
       );
     }
-    // A session named by a former id is reached by its id now.
-    const followed = formerOf(formerIds(), target);
+    // A session named by a former id is reached by its id now; one a
+    // continuation took the work item of, by its continuation's.
+    const followed =
+      formerOf(formerIds(), target) ?? continuedOf(rows, target, instanceById);
     const addressed = followed?.now ?? target;
     const unlisted =
       followed && ![...peers, ...asleep].some((p) => p.row.id === addressed)

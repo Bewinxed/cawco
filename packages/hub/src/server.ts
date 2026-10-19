@@ -3660,6 +3660,7 @@ export const createServer = (
    * whose launch is on its way ({@link launches}): the send goes behind it.
    */
   const wakesForSend = (row: {
+    continuedInto: string | null;
     id: string;
     lastErrorKind: LastErrorKind | null;
     sessionId: string | null;
@@ -7726,12 +7727,103 @@ export const createServer = (
     asked: Envelope<SendPayload>,
     ahead = false
   ): SentMessageRow | undefined => {
-    const envelope = byIdNow(asked);
-    if (toCawThread(envelope)) {
+    const envelope = toContinuation(byIdNow(asked));
+    if (!envelope || toCawThread(envelope)) {
       return;
     }
     tellForkFirst(envelope);
     return deliverToSession(envelope, ahead);
+  };
+
+  /**
+   * The session `instanceId`'s work goes on in now: the last of its
+   * continuations ({@link retireContinued}), or itself. A chain is followed
+   * to its end; one that loops ends where it started.
+   */
+  const continuationNow = (instanceId: string): string => {
+    const seen = new Set<string>([instanceId]);
+    let now = instanceId;
+    for (;;) {
+      const next = db.getInstancesByIds([now])[0]?.continuedInto;
+      if (!next || seen.has(next)) {
+        return now;
+      }
+      seen.add(next);
+      now = next;
+    }
+  };
+
+  /**
+   * Whether a message is the hub's word to one process about itself: its
+   * keep-alive ping, its carry-on at its account's reset, its filing turn
+   * or `/compact`. Such words go to no other session.
+   */
+  const aboutItsProcess = (message: SentMessage): boolean =>
+    isKeepAlive(message) ||
+    (message.origin.kind === "system" &&
+      (message.origin.name === LIMIT_ORIGIN ||
+        message.origin.name === COMPACTION_ORIGIN));
+
+  /**
+   * THE RULE FOR A CONTINUED SESSION'S MAIL: a send to a session a
+   * continuation took the work item of never reaches it, and never wakes it
+   * (core `relaunchOf` refuses it). It goes to the session its work goes on
+   * in ({@link continuationNow}), from whoever sent it, as `byIdNow` does
+   * for a former id; but the hub's word to its process alone
+   * ({@link aboutItsProcess}) is dropped, as that process is gone. Undefined
+   * when dropped; unchanged for any other session.
+   */
+  const toContinuation = (
+    envelope: Envelope<SendPayload>
+  ): Envelope<SendPayload> | undefined => {
+    const named = envelope.payload.instanceId;
+    const now = continuationNow(named);
+    if (now === named) {
+      return envelope;
+    }
+    const { message } = envelope.payload;
+    if (aboutItsProcess(message)) {
+      console.info(
+        `[continuation] ${named.slice(0, 8)} was continued in ${now.slice(0, 8)}: the hub's ${isKeepAlive(message) ? "keep-alive ping" : `${message.origin.kind === "system" ? message.origin.name : ""} word`} to its process is dropped, as that process never runs again.`
+      );
+      return undefined;
+    }
+    const [row] = db.getInstancesByIds([now]);
+    console.info(
+      `[continuation] A send to ${named.slice(0, 8)} goes to ${now.slice(0, 8)}, the session it was continued in (send ${message.uuid}).`
+    );
+    return {
+      ...envelope,
+      instanceId: now,
+      machineId: row?.machineId ?? envelope.machineId,
+      payload: { ...envelope.payload, instanceId: now },
+    };
+  };
+
+  /**
+   * An owed send to a continued session ({@link toContinuation}), handed on
+   * as the rule says: its record says what replaced it, and the same message
+   * goes to the session the work goes on in under a fresh uuid, behind what
+   * that session was owed; the hub's word to the old process is cancelled.
+   */
+  const moveOwedSend = (send: SentMessageRow): void => {
+    const owed = db.takeOwedSend(send.uuid);
+    if (owed === undefined) {
+      return;
+    }
+    const envelope = JSON.parse(owed) as Envelope<SendPayload>;
+    const moved = toContinuation(envelope);
+    if (!moved) {
+      changeSend(send, { state: "cancelled" });
+      return;
+    }
+    const uuid = crypto.randomUUID();
+    changeSend(send, { state: "replaced", replacedBy: uuid });
+    const { delivery: _delivery, ...payload } = moved.payload;
+    deliverSend({
+      ...moved,
+      payload: { ...payload, message: { ...payload.message, uuid } },
+    });
   };
 
   /**
@@ -8255,6 +8347,11 @@ export const createServer = (
   /** One owed send, as {@link releaseOwed} hands it over. */
   const releaseOne = (send: SentMessageRow): void => {
     const [row] = db.getInstancesByIds([send.instanceId]);
+    // Owed to a session whose work a continuation took on: it goes there.
+    if (row?.continuedInto) {
+      moveOwedSend(send);
+      return;
+    }
     const agent = row ? registry.agent(row.machineId) : undefined;
     // Kept for a session nothing owed may wake: it waits for a send that may.
     // Handed back by a machine with no process for it: it waits for the
@@ -14370,12 +14467,51 @@ export const createServer = (
     // The source's own work item goes on in the new session, whoever asked:
     // its opening is the item's (its row has named the item since its
     // start, {@link spawnTarget}, so it lists finish_item from its first turn).
+    // The source never runs again in that workspace.
     if (source?.workItemId) {
       workItems.continuedIn(source.workItemId, row.targetInstanceId);
+      retireContinued(source.id, row.targetInstanceId);
     }
     adoptChildren(prepared.source.instanceId, row.targetInstanceId);
     sendOpening(ready);
+    // What was owed to the source goes behind the opening ({@link releaseOne}).
+    releaseOwed({ instanceId: prepared.source.instanceId });
     return true;
+  };
+
+  /**
+   * A session whose work item a continuation moved to `to` never runs again
+   * (the item's workspace has one session from here): its row names `to`
+   * ({@link InstanceRow.continuedInto}), so core `relaunchOf` refuses every
+   * wake of it (a send's, a revive's, a relaunch on another account) and
+   * every send to it goes to `to` ({@link toContinuation}); its at-limit
+   * hold and the resume at its reset go, and a move owed at its turn's end;
+   * and its process is stopped, the wake-ups it scheduled inside it with
+   * it. What it was owed goes to `to` once the opening has gone
+   * ({@link releaseOne}). Idempotent: a job resumed after a restart does it
+   * again to the same end.
+   */
+  const retireContinued = (from: string, to: string): void => {
+    const [row] = db.getInstancesByIds([from]);
+    if (!row || from === to) {
+      return;
+    }
+    if (row.continuedInto !== to) {
+      db.patchInstance(from, { continuedInto: to });
+    }
+    atLimit.forget(from);
+    relaunchAtTurnEnd.delete(from);
+    const live = !["stopped", "discarded"].includes(row.status);
+    console.info(
+      `[continuation] ${sessionName(row)} (${from.slice(0, 8)}) was continued in ${to.slice(0, 8)}, which carries its work item on: it never runs again${live ? ", and its process is stopped" : ""}. What is sent to it goes to ${to.slice(0, 8)}.`
+    );
+    if (live) {
+      endSession(from, "stop", {
+        kind: "hub",
+        why: `it was continued in ${to.slice(0, 8)}`,
+      });
+    }
+    publishInstances(row.machineId);
   };
 
   /**

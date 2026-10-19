@@ -1223,6 +1223,12 @@ export const instances = sqliteTable("instances", {
    * a delegate from before work items existed.
    */
   workItemId: text("work_item_id"),
+  /**
+   * The session a continuation moved this one's work item to (server.ts
+   * `retireContinued`): this one never runs again (core `relaunchOf`
+   * refuses it), and what is sent to it goes there. Null on every other.
+   */
+  continuedInto: text("continued_into"),
 });
 
 /** Only hashes reach disk; installing a replacement does not revoke a live credential before ACK. */

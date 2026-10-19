@@ -1212,18 +1212,29 @@ export const lastErrorKindOf = (error: unknown): LastErrorKind | undefined =>
  * How a session with no process comes back: on its conversation by its key;
  * fresh under the same id when its harness never began one (no key: it never
  * said init), so there is nothing to lose; or not at all when its
- * conversation existed and is gone. The one decision for every revive: the
- * dashboard's (`ensureAlive`) and the hub's wake for a send.
+ * conversation existed and is gone, or a continuation took its work item on
+ * ({@link InstanceRow.continuedInto}): two sessions never work one item in
+ * one workspace. The one decision for every revive: the dashboard's
+ * (`ensureAlive`), the hub's wake for a send, and a relaunch on another
+ * account at a limit.
  */
 export type Relaunch =
   | { kind: "resume"; sessionKey: string }
   | { kind: "fresh" }
   | { kind: "refused"; reason: string };
 
+/** Why a session whose work a continuation took on never runs again. */
+export const continuedWords = (continuedInto: string): string =>
+  `This session was continued in session ${continuedInto.slice(0, 8)}, which carries its work on; it doesn't run again. Write to ${continuedInto.slice(0, 8)}.`;
+
 export const relaunchOf = (row: {
+  continuedInto?: string | null;
   lastErrorKind?: LastErrorKind | null;
   sessionId: string | null;
 }): Relaunch => {
+  if (row.continuedInto) {
+    return { kind: "refused", reason: continuedWords(row.continuedInto) };
+  }
   if (row.lastErrorKind === "conversation-gone") {
     return { kind: "refused", reason: CLAUDE_CONVERSATION_GONE };
   }
@@ -1290,6 +1301,12 @@ export interface InstanceRow {
    * chose, and the harness runs its model's default.
    */
   chosenEffort?: import("./harness").EffortLevel | null;
+  /**
+   * The session a continuation moved this one's work item to: this one never
+   * runs again ({@link relaunchOf} refuses it), and what is sent to it goes
+   * there. Null on every other session.
+   */
+  continuedInto?: string | null;
   /** When the hub first opened its row: when it was started. */
   createdAt?: string | number | Date | null;
   /** The directory the session was launched in; see `launchDir`. */
