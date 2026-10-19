@@ -54,7 +54,6 @@
 <div
   class="flex flex-none flex-wrap items-center gap-x-space-2 gap-y-space-1"
   data-provider-limit
-  style:--row-paint="var(--surface-raised)"
 >
   <span class="flex-none whitespace-nowrap text-ink-muted">{label}</span>
   <span class="w-c-limit-bar flex-none" title={pace}>

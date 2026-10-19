@@ -33,7 +33,7 @@ theme: utility hatched
 
 ## Tokens
 token: --c-usage-plot 96px — History's chart plot height (two bars charts on the Usage page); a real component dimension, no ladder step (space-8 is 32). Used as `h-c-usage-plot` (apps/dashboard/src/lib/cawco/usage/History.svelte:358).
-token: --c-limit-bar 64px — ProviderLimit's bar track width in the session details strip; a real component dimension, no ladder step. Used as `w-c-limit-bar` (apps/dashboard/src/lib/cawco/usage/ProviderLimit.svelte:60).
+token: --c-limit-bar 64px — ProviderLimit's bar track width in the session details strip; a real component dimension, no ladder step. Used as `w-c-limit-bar` (apps/dashboard/src/lib/cawco/usage/ProviderLimit.svelte:59).
 token: --c-usage-tile-min 15.5rem — the minimum width of a Limits tile (its double dial, figure and sentence); a real component dimension. Read by theme utility grid-cols-usage-tiles.
 token: --c-stat-tile-min 9.5rem — the minimum width of a project spend stat tile in its auto-fit row; a real component dimension. Read by theme utility grid-cols-stat-tiles.
 token: --c-measure-short 60ch — already merged at integration (renames.md); the Limits lead sentence uses `max-w-c-measure-short` (apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:233), no new token.
@@ -56,8 +56,8 @@ fixed: apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:157 and apps/dashbo
 fixed: apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:164 figure/label gap 3px → `gap-space-row`; :212 lead gap 6px → `gap-space-2`; :213 10px → `gap-space-3`; :241 and :309 provider-line gap 8px → `gap-space-2` — the ladder.
 
 ## Gaps
-gap: apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:309 OpenCodeLogo takes no `class`, so the glyph cell cannot size its svg to `size-full` as ClaudeIcon's is; the svg has a viewBox and sizes by flex stretch in the 16px cell — the Mark Line Rule's box (`data-box`) wants the logo to accept `class`.
-gap: apps/dashboard/src/lib/cawco/usage/LimitBar.svelte:62 the bar's height is a caller's `size` prop in px (`style:--h="{size}px"`: 8 on the page, 4 in the rail); 8 is no ladder step — the callers should pass a role (`rail` → space-1, `page` → a token), which is a change in other files.
+gap: apps/dashboard/src/lib/cawco/OpenCodeLogo.svelte:8 the `<svg>` takes no `class`, so LimitsBlock.svelte:314's glyph cell cannot size it to `size-full` as ClaudeIcon's is (DESIGN.md Mark Line Rule: a mark's box says so with `data-box` and sizes to its cell); the other side is outside this lane.
+gap: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:830 and apps/dashboard/src/routes/(app)/motion/session-limit/+page.svelte:98 pass `size={4}` px to LimitBar (usage/LimitBar.svelte:62 builds `--h="{size}px"` from it, and no caller passes another size); the prop should be a role (`rail` → `h-space-1`) once those callers change. ProviderLimit.svelte:64 is in this lane and passes the same 4.
 
 ## Kit swaps
 kit-swap: apps/dashboard/src/lib/cawco/usage/LimitsBlock.svelte:203 Skeleton h-icon-md — a height role on Skeleton (its `height` prop already names chart, figure, plot)
@@ -243,4 +243,5 @@ none
 ## Design critique (interface-craft, from markup and classes, against DESIGN.md)
 No `/motion` bench or stories file renders these components in this workspace, and the brief bars probe-kit runs, so ui-observer's rendered-layout reading is Not verified; the findings below are from markup.
 fixed: dots, ticks and glyph marks now sit on ladder steps / icon sizes (Shapes, Layout); no hand-kept magic number remains in the seven files.
-gap: LimitBar's tick fill reads `--row-paint` set by ProviderLimit (and the rail) to hide the bar behind the tick — a cross-file paint contract that should be a surface token pair, not an inherited custom property.
+removed: apps/dashboard/src/lib/cawco/usage/ProviderLimit.svelte:54 `style:--row-paint="var(--surface-raised)"` — a duplicate of LimitBar's own fallback (`var(--row-paint, var(--surface-raised))`, LimitBar.svelte:87), so it set nothing.
+gap: apps/dashboard/src/lib/cawco/workspace/SessionDetails.svelte:815 and apps/dashboard/src/routes/(app)/motion/session-limit/+page.svelte:85 set the same `--row-paint` to the same value LimitBar already falls back to; both are dead and can go with the other side.
