@@ -10493,6 +10493,7 @@ export const createServer = (
   const streamRelay = createStreamRelay({
     db: db.streamRelay,
     call: callAgent,
+    lifetime,
     machines: () =>
       db.listAgents().map((agent) => {
         const seen = registry.address(agent.machineId);
@@ -10925,6 +10926,7 @@ export const createServer = (
   // their marks go to it by themselves (artifacts/).
   const artifactDocs = createArtifactDocs({
     db: db.artifacts,
+    lifetime,
     // A pick or a note on a project's page moves its Decisions tab.
     changed: (id) => {
       const row = db.artifacts.get(id);
@@ -11047,6 +11049,7 @@ export const createServer = (
     },
     db: db.artifacts,
     docs: artifactDocs,
+    lifetime,
     root: ARTIFACTS_ROOT,
     // Your picks on a session's own page reach that session as the page's
     // word for its tools to read (artifact_read), never as your message:
@@ -11430,7 +11433,10 @@ export const createServer = (
    * row), and sends each shown preview's address again, its tailnet origin
    * come or gone.
    */
-  const tailnetHttps = createTailnetHttps({ dashboardPort: DASHBOARD_PORT });
+  const tailnetHttps = createTailnetHttps({
+    dashboardPort: DASHBOARD_PORT,
+    lifetime,
+  });
   tailnetHttps.beside(DASHBOARD_PORT, dashboardRelay(DASHBOARD_PORT));
   tailnetHttps.onChange((tailnet) => {
     noteTailnetDashboard(tailnetHttps.dashboard());
@@ -19677,6 +19683,7 @@ export const createServer = (
   // making, Caw's answers, attempts and routines at their own sites.
   const projectStarters = createProjectStarters({
     db,
+    lifetime,
     tasks,
     run: runOnMachine,
     online: (machineId) => Boolean(registry.agent(machineId)),

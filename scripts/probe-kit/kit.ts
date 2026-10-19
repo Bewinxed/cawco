@@ -690,8 +690,13 @@ export class Run {
             : {}),
         });
         contexts.push(context);
+        // Every frame runs it; one with an opaque origin (a browser error
+        // page in a frame whose server went away, a sandboxed document) has
+        // no storage, and reading it there throws a SecurityError.
         await context.addInitScript((t) => {
-          localStorage.setItem("cawco-theme", t);
+          if (self.origin !== "null") {
+            localStorage.setItem("cawco-theme", t);
+          }
         }, options.theme ?? "light");
         await context.addInitScript(installRuns);
         for (const script of options.init ?? []) {

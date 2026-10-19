@@ -708,9 +708,12 @@ const run = async (kit: Kit) => {
   const { createPreviewListeners } =
     await import("../../../packages/hub/src/preview");
   const { previewRoute } = await import("../../../packages/core/src/frames");
+  const { makeLifetime } = await import("../../../packages/hub/src/lifetime");
+  const lifetime = makeLifetime();
   const tailnet = createTailnetHttps({
     bin: join(stub, "tailscale"),
     dashboardPort: 1,
+    lifetime,
   });
   const serving = new Promise<boolean>((done) => {
     const timer = setTimeout(() => done(false), READ_MS);
@@ -729,6 +732,7 @@ const run = async (kit: Kit) => {
       JSON.stringify(tailnet.state())
     )
   ) {
+    lifetime.close();
     return;
   }
   const listeners = createPreviewListeners(
@@ -778,6 +782,7 @@ const run = async (kit: Kit) => {
   } finally {
     listeners.release(session);
     await set("absent");
+    lifetime.close();
   }
 };
 

@@ -94,6 +94,7 @@ import {
 } from "../decision-program";
 import type { AskedArtifact } from "../design-verify";
 import { sessionLabel } from "../labels";
+import type { HubLifetimeShape, HubTimer } from "../lifetime";
 import {
   changeFolderFiles,
   FolderRefusal,
@@ -845,6 +846,8 @@ export interface ArtifactServiceDeps {
    * or is gone is his to act on (Projects spec §5.8, decisions.ts).
    */
   ledProjects: (instance: InstanceRow) => string[];
+  /** The hub's lifetime: the marks' delivery and the shown acks' keep run on it. */
+  lifetime: HubLifetimeShape;
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
   /**
@@ -1746,10 +1749,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
    * The page posts its pictures of the marks it just made beside the doc
    * (sync.ts `artifactPictures`); they wait here for the delivery.
    */
-  const bursts = new Map<
-    string,
-    { first: number; timer: ReturnType<typeof setTimeout> }
-  >();
+  const bursts = new Map<string, { first: number; timer: HubTimer }>();
   const held = new Map<
     string,
     { pictures: Map<string, string>; url?: string }
@@ -1758,7 +1758,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   const marked = (id: string) => {
     const now = Date.now();
     const burst = bursts.get(id);
-    clearTimeout(burst?.timer);
+    deps.lifetime.cancel(burst?.timer);
     const first = burst?.first ?? now;
     const wait = Math.max(
       0,
@@ -1766,7 +1766,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     );
     bursts.set(id, {
       first,
-      timer: setTimeout(() => {
+      timer: deps.lifetime.after(wait, () => {
         bursts.delete(id);
         // One delivery at a time: what is still owed when it ends goes next.
         if (delivering.has(id)) {
@@ -1781,7 +1781,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
             );
           })
           .finally(() => delivering.delete(id));
-      }, wait),
+      }),
     });
   };
   docs.onMarks(marked);
@@ -2492,7 +2492,6 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const at: StageAt = { workspace: sheet.workspace };
       const deadline = Date.now() + PANEL_DRAW_MS;
       for (;;) {
-        // biome-ignore lint/performance/noAwaitInLoops: the panel redraws as Vite's HMR lands; one read at a time until it has
         const { report } =
           // biome-ignore lint/performance/noAwaitInLoops: the panel redraws as Vite's HMR lands; one read at a time until it has
           (await deps.stage(at, sheet.files[0] as string, sheet.files)).opened;
@@ -3603,7 +3602,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       } else if (!heard.has(key)) {
         heard.set(key, ack);
         // Kept as long as a show could still come to wait for it.
-        setTimeout(() => heard.delete(key), SHOWN_WAIT_MS).unref?.();
+        deps.lifetime.after(SHOWN_WAIT_MS, () => heard.delete(key));
       }
       return { heard: true };
     },

@@ -49,6 +49,7 @@ import {
 import { Elysia, t } from "elysia";
 import { getPublicIP } from "turn-server";
 import type { StoredRelay, StreamRelayDb } from "./db/stream-relay";
+import type { HubLifetimeShape } from "./lifetime";
 
 /** How long a STUN binding request has to be answered. */
 const STUN_MS = 3000;
@@ -108,6 +109,8 @@ export type RelayCall = (
 export interface StreamRelayDeps {
   call: RelayCall;
   db: StreamRelayDb;
+  /** The hub's lifetime: the health and renewal timers run on it. */
+  lifetime: HubLifetimeShape;
   machines: () => RelayMachine[];
 }
 
@@ -479,17 +482,15 @@ export const createStreamRelay = (deps: StreamRelayDeps): StreamRelay => {
         console.warn(
           `[stream-relay] ${what}: ${error instanceof Error ? error.message : String(error)}`
         );
-      const health = setInterval(() => {
+      const health = deps.lifetime.every(HEALTH_MS, () => {
         check().catch(said("health not checked"));
-      }, HEALTH_MS);
-      const renewal = setInterval(() => {
+      });
+      const renewal = deps.lifetime.every(RENEW_MS, () => {
         renew().catch(said("stream-relay-renew failed"));
-      }, RENEW_MS);
-      health.unref();
-      renewal.unref();
+      });
       return () => {
-        clearInterval(health);
-        clearInterval(renewal);
+        deps.lifetime.cancel(health);
+        deps.lifetime.cancel(renewal);
       };
     },
   };

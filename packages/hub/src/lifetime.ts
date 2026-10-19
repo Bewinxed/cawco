@@ -7,9 +7,11 @@ export type HubTimer = ReturnType<typeof setTimeout>;
  * THE ONE SHUTDOWN PATH. Everything a hub schedules for itself runs on its
  * lifetime: every `setTimeout` and `setInterval` in packages/hub/src is one of
  * {@link HubLifetimeShape.after}, {@link HubLifetimeShape.every} and
- * {@link HubLifetimeShape.sleep}, but for two that are not the hub's own
- * schedule, each named where it stands (json-response's yield inside one
- * response body; jev's backoff inside one request, bounded by its deadline).
+ * {@link HubLifetimeShape.sleep}, and every `queueMicrotask` is {@link soon}.
+ * The rest only resolve a promise, so nothing in them can throw, and none is
+ * the hub's own schedule: json-response's yield inside one response body;
+ * jev's backoff inside one request, bounded by its deadline; the register's
+ * `setImmediate` yields between restore batches (server.ts).
  * A read with a deadline waits on `readWithin` (@cawco/core/bounded) instead,
  * handed {@link HubLifetimeShape.signal} when the hub holds the wait.
  * What holds a resource gives its release to {@link HubLifetimeShape.onClose}.

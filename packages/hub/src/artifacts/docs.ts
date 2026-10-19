@@ -24,6 +24,7 @@ import {
   Map as YMap,
 } from "yjs";
 import type { ArtifactsDb } from "../db/artifacts";
+import type { HubLifetimeShape, HubTimer } from "../lifetime";
 
 /** The doc's top-level maps. */
 export const MAPS = [
@@ -65,7 +66,7 @@ export interface ArtifactClient {
 interface Loaded {
   clients: Set<ArtifactClient>;
   doc: Doc;
-  idle?: ReturnType<typeof setTimeout>;
+  idle?: HubTimer;
 }
 
 export interface ArtifactDocs {
@@ -134,21 +135,23 @@ export const createArtifactDocs = (deps: {
   /** A page's `state` changed at `keys` (a pick, a note), by anyone: its project's Decisions tab hears of it. */
   changed?: (id: string) => void;
   db: ArtifactsDb;
+  /** The hub's lifetime: each doc's idle timer runs on it. */
+  lifetime: HubLifetimeShape;
 }): ArtifactDocs => {
   const loaded = new Map<string, Loaded>();
   let marked: (id: string) => void = () => undefined;
 
   const sleep = (id: string, entry: Loaded) => {
-    clearTimeout(entry.idle);
+    deps.lifetime.cancel(entry.idle);
     if (entry.clients.size > 0) {
       return;
     }
-    entry.idle = setTimeout(() => {
+    entry.idle = deps.lifetime.after(IDLE_MS, () => {
       if (entry.clients.size === 0) {
         loaded.delete(id);
         entry.doc.destroy();
       }
-    }, IDLE_MS);
+    });
   };
 
   /** One update the doc took: kept in the log, by who made it, and sent to every other client. */
@@ -247,7 +250,7 @@ export const createArtifactDocs = (deps: {
         return;
       }
       loaded.delete(id);
-      clearTimeout(entry.idle);
+      deps.lifetime.cancel(entry.idle);
       const clients = [...entry.clients];
       entry.clients.clear();
       for (const client of clients) {
@@ -258,7 +261,7 @@ export const createArtifactDocs = (deps: {
     join: (id, client) => {
       const entry = load(id);
       entry.clients.add(client);
-      clearTimeout(entry.idle);
+      deps.lifetime.cancel(entry.idle);
       return entry.doc;
     },
     leave: (id, client) => {
