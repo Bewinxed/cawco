@@ -1920,7 +1920,11 @@ async function artifactSwitchLeg(
         if (window.top !== window && location.pathname.includes("/@cawco/")) {
           addEventListener("load", () =>
             parent.postMessage(
-              { type: "cawco:ready", url: location.href, title: document.title },
+              {
+                type: "cawco:ready",
+                url: location.href,
+                title: document.title,
+              },
               "*"
             )
           );
@@ -1940,7 +1944,8 @@ async function artifactSwitchLeg(
         return {
           name:
             pane?.querySelector(".artifact-name")?.textContent?.trim() ?? null,
-          line: pane?.querySelector("[data-slot=subtitle]")?.textContent ?? null,
+          line:
+            pane?.querySelector("[data-slot=subtitle]")?.textContent ?? null,
           title:
             pane?.querySelector("[data-slot=down] .kit-empty-title")
               ?.textContent ?? null,
@@ -2042,13 +2047,13 @@ async function stageDownLeg(
   );
   await serveDoc(page, {
     [BENCH_ARTIFACT]: {
-    runs: "sheet",
-    toolchain: "vite",
-    status: "error",
-    dir: "apps/dashboard",
-    at: new Date().toISOString(),
-    errors: [],
-    message: NIGHTLY_ERROR,
+      runs: "sheet",
+      toolchain: "vite",
+      status: "error",
+      dir: "apps/dashboard",
+      at: new Date().toISOString(),
+      errors: [],
+      message: NIGHTLY_ERROR,
     },
   });
   await page.goto(

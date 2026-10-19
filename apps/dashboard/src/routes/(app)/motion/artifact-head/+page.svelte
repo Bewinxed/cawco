@@ -38,7 +38,8 @@
   const switched = page.url.searchParams.get("switch") === "1";
   const own = page.url.searchParams.get("own") === "1";
   /** `?kind=page`: the first artifact a page (the switch below starts from one). */
-  const kind = page.url.searchParams.get("kind") === "page" ? "page" : "component";
+  const kind =
+    page.url.searchParams.get("kind") === "page" ? "page" : "component";
   /** `?then=` a second canvas address: the panel switches to it, a component canvas named `?thenName=`, `?after=` ms in. */
   const then = page.url.searchParams.get("then");
   const after = Number(page.url.searchParams.get("after") ?? 3000);

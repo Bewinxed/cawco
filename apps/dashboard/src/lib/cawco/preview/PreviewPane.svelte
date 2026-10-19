@@ -1846,9 +1846,7 @@
     const session = instanceId;
     // Built untracked: the view depends on the session and the kind alone,
     // never on the state it holds, which the effect below sends.
-    return isSheet
-      ? untrack(() => new CanvasViewState(session, post))
-      : null;
+    return isSheet ? untrack(() => new CanvasViewState(session, post)) : null;
   });
   $effect(() => {
     const held = canvasView;
