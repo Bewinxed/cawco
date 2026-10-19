@@ -4,7 +4,7 @@
     type ToasterProps as SonnerProps,
   } from "svelte-sonner";
   import { navSheet } from "#lib/cawco/motion/clock.svelte.js";
-  import { dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconError,
@@ -72,13 +72,41 @@
    * entrance, so the stylesheet below can give the arrival its --dur-panel
    * rise while the toasts already there make room on the shorter stack
    * timing: sonner draws both from the same attribute change.
+   *
+   * With reduced motion, sonner's own sheet turns every transition and
+   * animation off, so a toast would appear and vanish in one frame. Reduced
+   * motion means stillness, not an instant swap (DESIGN.md, Reduced Motion
+   * Rule): the toast still fades in over --dur-panel and out over --dur-exit,
+   * both on --ease-out, through the Web Animations API, which that sheet does
+   * not reach. A toast sonner keeps hidden (past the visible count) is left
+   * hidden. With motion allowed, the transitions below do all of it.
    */
   $effect(() => {
     if (!layer) {
       return;
     }
     const timers = new Set<ReturnType<typeof setTimeout>>();
+    const fades = new WeakMap<HTMLElement, Animation>();
+    const fade = (
+      toast: HTMLElement,
+      from: number | string,
+      to: number,
+      length: "--dur-panel" | "--dur-exit"
+    ) => {
+      if (motionOk.current || toast.dataset.visible === "false") {
+        return;
+      }
+      fades.get(toast)?.cancel();
+      fades.set(
+        toast,
+        toast.animate([{ opacity: from }, { opacity: to }], {
+          duration: dur(length),
+          easing: ease("--ease-out"),
+        })
+      );
+    };
     const enter = (toast: HTMLElement) => {
+      fade(toast, 0, 1, "--dur-panel");
       toast.dataset.entering = "";
       const timer = setTimeout(() => {
         timers.delete(timer);
@@ -86,10 +114,33 @@
       }, dur("--dur-panel"));
       timers.add(timer);
     };
+    /** A toast leaving from wherever its entrance had got to. */
+    const leave = (toast: HTMLElement) => {
+      const entering = fades.get(toast)?.playState === "running";
+      fade(
+        toast,
+        entering ? getComputedStyle(toast).opacity : 1,
+        0,
+        "--dur-exit"
+      );
+    };
     // The first toast arrives inside the list sonner draws for it, so an
-    // added node is searched, not only matched.
+    // added node is searched, not only matched. A toast is marked
+    // `data-removed` as it starts to leave, and unmarked if it is kept after
+    // all.
     const arrivals = new MutationObserver((changes) => {
       for (const change of changes) {
+        if (
+          change.type === "attributes" &&
+          change.target instanceof HTMLElement
+        ) {
+          if (change.target.dataset.removed === "true") {
+            leave(change.target);
+          } else if (change.oldValue === "true") {
+            fade(change.target, 0, 1, "--dur-panel");
+          }
+          continue;
+        }
         for (const node of change.addedNodes) {
           if (!(node instanceof HTMLElement)) {
             continue;
@@ -105,7 +156,12 @@
         }
       }
     });
-    arrivals.observe(layer, { childList: true, subtree: true });
+    arrivals.observe(layer, {
+      childList: true,
+      subtree: true,
+      attributeFilter: ["data-removed"],
+      attributeOldValue: true,
+    });
     return () => {
       arrivals.disconnect();
       for (const timer of timers) {
@@ -251,7 +307,8 @@
     animation-timing-function: var(--ease-out);
   }
   /* Reduced motion: sonner's own rule turns every transition and animation
-     off, important-flagged, so a toast arrives and leaves at once. */
+     here off, important-flagged; the script above fades a toast in and out
+     instead, through the Web Animations API. */
 
   /* A phone's toast sits at the top, under the top bar: at the bottom it
      lands on the composer, which is exactly where the reader is typing.

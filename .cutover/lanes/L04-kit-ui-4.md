@@ -9,7 +9,7 @@ Skills loaded: defensive-css, moderncss, tailwind-best-practices, interfaces:bet
 | file | what changed | residual `<style>` | relics after |
 | --- | --- | --- | --- |
 | ui/skeleton/skeleton.svelte | height `x-height`, `picture`; width `age`; radius `line`; cell `glyph`; new axis `type: label` | none | 0 |
-| ui/sonner/sonner.svelte | 12px literal → `--c-bar-phone-edge`; the two `!important` reduced-motion rules removed; toasts take taps through `toastOptions.class="pointer-events-auto"` (the foreign-DOM rule removed); `<style>` carries its docs reason | kept, reason below | 0 |
+| ui/sonner/sonner.svelte | 12px literal → `--c-bar-phone-edge`; the two `!important` reduced-motion rules removed; toasts take taps through `toastOptions.class="pointer-events-auto"` (the foreign-DOM rule removed); under reduced motion toasts fade in and out through the Web Animations API (script); `<style>` carries its docs reason | kept, reason below | 0 |
 | ui/spinner/spinner.svelte | nothing: every site's `size-4` is the default `size-icon-md` | none | 0 |
 | ui/table/table-head.svelte | variant `band` | none | 0 |
 | ui/table/table-row.svelte | nothing: every site maps to the existing `band` | none | 0 |
@@ -60,19 +60,20 @@ Until integration adds both, the two variants compute `auto`; no site uses them 
 ## Removed
 
 removed: apps/dashboard/src/lib/components/ui/sonner/sonner.svelte:124 `<!-- literal: 12px … -->` and :136 `style:--toast-edge="12px"` — a hand-kept length; the phone toast's side inset is now `var(--c-bar-phone-edge)` (12px, "the phone bar's two ends … stand this far in from the screen's edges"), so a toast lines up with the bar's ends
-removed: apps/dashboard/src/lib/components/ui/sonner/sonner.svelte:253–261 the reduced-motion `transition: opacity … !important` pair — it existed only to beat svelte-sonner 1.2.1's own `@media (prefers-reduced-motion) { [data-sonner-toast] { transition: none !important; animation: none !important } }` (Toaster.svelte:1278–1285); no declaration beats an unlayered important one without `!important`. Under reduced motion toasts now arrive and leave at once (sonner's own behaviour); see the gap below
+removed: apps/dashboard/src/lib/components/ui/sonner/sonner.svelte:253–261 the reduced-motion `transition: opacity … !important` pair — it existed only to beat svelte-sonner 1.2.1's own `@media (prefers-reduced-motion) { [data-sonner-toast] { transition: none !important; animation: none !important } }` (Toaster.svelte:1278–1285); no declaration beats an unlayered important one without `!important`. Under reduced motion the fade comes from the script instead (fixed below)
 removed: apps/dashboard/src/lib/components/ui/sonner/sonner.svelte:166 `[data-slot="toast-layer"] :global([data-sonner-toast]) { pointer-events: auto }` — replaced by `pointer-events-auto` on each toast through sonner's own `toastOptions.class` (merged with any caller's toastOptions)
 removed: apps/dashboard/src/lib/components/ui/table/table.svelte:15 `border-spacing-(--none)` — the `flush` spacing read a variable its callers had to define as 0 (`style:--none="0"`); it is `border-spacing-0` now, the same computed value with no caller contract
 
 ## Fixed
 
 fixed: apps/dashboard/src/lib/components/ui/sonner/sonner.svelte toast hit-testing — a hidden toast (`data-visible="false"`) now never takes a tap: sonner's own `pointer-events: none` there is unlayered and beats the utility; the old unlayered rule tied with it on specificity and won or lost by sheet order — DESIGN.md Toast ("A toast never paints over navigation")
+fixed: apps/dashboard/src/lib/components/ui/sonner/sonner.svelte:70–171 reduced motion — a toast fades in over `--dur-panel` and out over `--dur-exit`, both on `--ease-out` (read through `dur()`/`ease()`), by a Web Animations API opacity animation per arriving or `data-removed` toast, asked through `motionOk`; svelte-sonner's important-flagged `animation: none` does not reach a WAAPI animation, so no `!` is needed. A toast sonner keeps hidden (`data-visible="false"`) stays hidden; with motion allowed nothing changes — DESIGN.md Reduced Motion Rule ("Reduced motion means stillness. It does not mean an instant swap.") and Toast
 fixed: apps/dashboard/src/lib/components/ui/table/table.svelte `layout: ledger` restores main's separate, flush cells for the routines and sources ledgers (on the merge `class="routines table-fixed"` left them collapsed) — DESIGN.md Layout, Density (a 32px header band over 44px rows, ruled per row)
 fixed: apps/dashboard/src/lib/components/ui/table/table-head.svelte `band` gives the ledgers' heading its 32px band height in the kit instead of each site's `h-c-toolbar-ctl` — DESIGN.md Layout, Density ("a 32px header band")
 
 ## Gaps
 
-gap: apps/dashboard/src/lib/components/ui/sonner/sonner.svelte reduced motion — toasts appear and vanish with no fade; DESIGN.md's reduced-motion practice keeps a cross-fade. A fade that survives sonner's important rule needs the Web Animations API from the script (an opacity animation per arriving or `data-removed` toast), which is a script change outside a lane's remit. Proposal for the owner: add that fade, or accept sonner's instant toasts.
+integration: apps/dashboard/src/lib/components/ui/table/table.svelte:15, :23 the two `eslint-disable-next-line shadcn/no-raw-colors` lines answer a misread in @shadcn/lint 0.2.1 (its COLOR_PREFIX takes `border-spacing-0` for a border colour); 0.2.3 maps border-spacing to spacing. The bump to 0.2.3 and the removal of both lines after it are integration's (orchestrator's decision), left as they are here
 gap: apps/dashboard/src/lib/components/ui/table/table-head.svelte:6 the default look `h-12 px-3 text-left … [&:has([role=checkbox])]:pr-0` uses numeric spacing and physical sides (`text-left`, `pr-0`) — DESIGN.md Layout (the ladder) and logical properties; changing it changes the part's default look, so it is left for the audit
 gap: apps/dashboard/src/lib/components/ui/skeleton/skeleton.svelte:13–22 the height/width axes are numeric Tailwind steps (`h-6` … `h-64`, `w-6` … `w-40`), not ladder or `--c-*` tokens — DESIGN.md Layout; existing values, kept by delta C
 gap: apps/dashboard/src/lib/components/ui/table/table.svelte:13 `spacing: gap` still reads a caller's `--cell-gap`; its one Table caller (TaskTable.svelte:223) sets it to 0, so it is `layout="ledger"` in effect (note above)
@@ -96,4 +97,4 @@ Rendered layout: not verified with ui-observer; no stories file or `/motion` ben
 - Spinner: the sites' `size-4` duplicates the default 16px ring; the swap drops it.
 - Table: `band` and `ledger` name the ledger recipe once in the kit instead of per site.
 - Tabs: `column` names the pane-with-scroller role; the list's margin stays placement.
-- Toast: see the fixed and gap lines above.
+- Toast: see the fixed line above. Proof leg: `toastFade` in scripts/probe-kit/specs/config-undo.ts (the one spec whose page raises a toast; no web spec or `/motion` bench renders one) holds the delete toast's entrance under emulated reduced motion, checks one opacity Web Animation at `--dur-panel` on `--ease-out`, scrubs it to 0, 0.5, 1, and checks Undo's leave is one Web Animation at `--dur-exit` on `--ease-out`. Not yet run to that leg: on this base every scratch-fleet agent exits at start (`SyntaxError: Export named 'MCP_TYPESCRIPT_PREAMBLE' not found in module …/pi-codemode/dist/declarations.js`: packages/agent pins pi-coding-agent 1.0.1, whose `^1.0.1` pi-codemode resolves in bun.lock to 1.3.0, which dropped that export).
