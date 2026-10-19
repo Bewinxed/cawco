@@ -49,7 +49,7 @@
     data-slot="primary"
     aria-busy={busy || undefined}
     aria-disabled={busy || undefined}
-    class="ns-btn touch-hit min-w-(--c-session-footer-action-w)"
+    class="ns-btn touch-hit min-w-c-btn-min-w"
     data-variant="primary"
     data-share="session:new"
     data-share-ttl="8000"

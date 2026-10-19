@@ -118,7 +118,7 @@
 >
   <div
     data-slot="instruction-wrap"
-    class="flex max-w-(--measure-prose) flex-col items-start gap-space-1"
+    class="flex max-w-c-measure flex-col items-start gap-space-1"
   >
     <div
       data-slot="instruction"
@@ -173,19 +173,19 @@
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <Table.Head
                 data-slot="routine-detail-col-when"
-                class="h-c-toolbar-ctl w-(--c-ledger-when-w) @max-routines-ledger-399px/routines-ledger:w-(--c-ledger-when-w-narrow)"
+                class="h-c-toolbar-ctl w-c-ledger-when-w @max-routines-ledger-399px/routines-ledger:w-c-ledger-when-w-narrow"
                 scope="col"
                 variant="caps">{words.columnWhen}</Table.Head
               >
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <Table.Head
-                class="h-c-toolbar-ctl w-(--c-ledger-outcome-w) @max-routines-ledger-399px/routines-ledger:w-(--c-ledger-outcome-w-narrow)"
+                class="h-c-toolbar-ctl w-c-ledger-outcome-w @max-routines-ledger-399px/routines-ledger:w-c-ledger-outcome-w-narrow"
                 scope="col"
                 variant="caps">{words.columnOutcome}</Table.Head
               >
               <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <Table.Head
-                class="h-c-toolbar-ctl w-(--c-ledger-took-w) @max-routines-ledger-399px/routines-ledger:hidden"
+                class="h-c-toolbar-ctl w-c-ledger-took-w @max-routines-ledger-399px/routines-ledger:hidden"
                 scope="col"
                 variant="caps">{words.columnTook}</Table.Head
               >
@@ -206,7 +206,7 @@
                 data-outcome={outcome.status}
               >
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--c-ledger-when-w) num @max-routines-ledger-399px/routines-ledger:w-(--c-ledger-when-w-narrow)"
+                  class="h-c-btn-h-lg w-c-ledger-when-w num @max-routines-ledger-399px/routines-ledger:w-c-ledger-when-w-narrow"
                   data-cell="when"
                   rule="top"
                   variant="ledger"
@@ -219,7 +219,7 @@
                   >
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--c-ledger-outcome-w) num @max-routines-ledger-399px/routines-ledger:w-(--c-ledger-outcome-w-narrow)"
+                  class="h-c-btn-h-lg w-c-ledger-outcome-w num @max-routines-ledger-399px/routines-ledger:w-c-ledger-outcome-w-narrow"
                   data-cell="outcome"
                   rule="top"
                   variant="ledger"
@@ -227,7 +227,7 @@
                   <RunStatus status={outcome.status} text={outcome.word} />
                 </Table.Cell>
                 <Table.Cell
-                  class="h-c-btn-h-lg w-(--c-ledger-took-w) num @max-routines-ledger-399px/routines-ledger:hidden"
+                  class="h-c-btn-h-lg w-c-ledger-took-w num @max-routines-ledger-399px/routines-ledger:hidden"
                   data-cell="took"
                   rule="top"
                   variant="ledger"

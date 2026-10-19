@@ -17,7 +17,7 @@
       height: { tall: "min-h-80" },
       fill: { page: "bg-surface-page" },
       look: {
-        note: "min-h-c-composer-field max-h-(--c-note-max-h) min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-ui shadow-none placeholder-shown:truncate",
+        note: "min-h-c-composer-field max-h-c-textarea-max-h min-w-0 border-transparent bg-transparent px-0 py-space-2 leading-ui shadow-none placeholder-shown:truncate",
       },
     },
   });

@@ -13,7 +13,7 @@
 
 <div
   data-slot="decision-node"
-  class="group flex w-(--c-decision-node-w) min-h-(--c-decision-node-h) cursor-grab items-center gap-space-2 rounded-lg bg-surface-raised px-space-3 py-space-2 shadow-tile"
+  class="group flex w-c-decision-node-w min-h-c-decision-node-h cursor-grab items-center gap-space-2 rounded-lg bg-surface-raised px-space-3 py-space-2 shadow-tile"
   data-picked={node.picked || undefined}
 >
   <Handle

@@ -149,7 +149,7 @@
         >
           <span
             aria-hidden="true"
-            class="h-space-4 w-(--c-drag-dots-w) flex-none drag-dots"
+            class="h-space-4 w-c-drag-dots-w flex-none drag-dots"
           ></span>
           <span
             data-slot="dot"

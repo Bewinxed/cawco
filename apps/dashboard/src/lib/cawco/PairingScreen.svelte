@@ -45,7 +45,7 @@
   >
     <Caw next={["ready", "idle"]} size={CAW_SIZE} status="idle" />
   </div>
-  <div data-slot="body" class="relative w-full max-w-(--c-pairing-w)">
+  <div data-slot="body" class="relative w-full max-w-c-page-column-w">
     {#key stage.kind}
       <div
         data-slot="words"
@@ -61,7 +61,7 @@
             Pair this browser
           </h1>
           <p
-            class="m-0 max-w-(--c-pairing-line) type-body text-center text-pretty text-ink-muted"
+            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
           >
             This hub requires paired devices. Approve this code on a paired
             device, in Needs you or Configure › Devices.
@@ -90,7 +90,7 @@
             Pairing was denied
           </h1>
           <p
-            class="m-0 max-w-(--c-pairing-line) type-body text-center text-pretty text-ink-muted"
+            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
           >
             A paired device denied this browser. If that was a mistake, start
             again and approve the new code.
@@ -104,7 +104,7 @@
             The code expired
           </h1>
           <p
-            class="m-0 max-w-(--c-pairing-line) type-body text-center text-pretty text-ink-muted"
+            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
           >
             Nobody approved it within 10 minutes. Start again for a new code.
           </p>
@@ -130,7 +130,7 @@
           </h1>
           <p
             aria-live="polite"
-            class="m-0 max-w-(--c-pairing-line) type-body text-center text-pretty text-ink-muted"
+            class="m-0 max-w-c-page-line type-body text-center text-pretty text-ink-muted"
           >
             Asking the hub for a code…
           </p>

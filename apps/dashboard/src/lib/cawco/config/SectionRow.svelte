@@ -106,7 +106,7 @@
 >
   <div
     data-slot="row"
-    class="group/row relative flex min-h-c-row-h items-center gap-space-3 rounded-sm px-space-2 py-space-2 transition-control data-two:min-h-(--c-row-h-two) has-data-link:cursor-pointer has-link-active:bg-surface-fill light:has-link-active:bg-surface-fill-strong light:has-link-active:inks-strong max-phone:flex-wrap"
+    class="group/row relative flex min-h-c-row-h items-center gap-space-3 rounded-sm px-space-2 py-space-2 transition-control data-two:min-h-c-row-h-two has-data-link:cursor-pointer has-link-active:bg-surface-fill light:has-link-active:bg-surface-fill-strong light:has-link-active:inks-strong max-phone:flex-wrap"
     data-off={enabled === false || undefined}
     data-two={meta !== undefined || undefined}
   >

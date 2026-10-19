@@ -652,7 +652,7 @@
              card's edge, never past it. -->
         <div
           aria-busy={searching || undefined}
-          class="kit-edge-fade-block fade-len-(--c-edge-fade-len) min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          class="kit-edge-fade-block fade-len-c-edge-fade-len min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-artifacts-scroll"
           in:crossIn
@@ -731,7 +731,7 @@
         </p>
       {:else}
         <div
-          class="kit-edge-fade-block fade-len-(--c-edge-fade-len) min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          class="kit-edge-fade-block fade-len-c-edge-fade-len min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-attachments-scroll"
           in:crossIn

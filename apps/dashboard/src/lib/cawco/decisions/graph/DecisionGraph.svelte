@@ -151,7 +151,7 @@
 
 <section
   aria-label="Decision graph"
-  class="relative min-h-(--c-decision-graph-min-h) min-w-0 flex-auto overflow-hidden rounded-lg bg-surface-recess inset-ring inset-ring-border-hairline"
+  class="relative min-h-c-decision-graph-min-h min-w-0 flex-auto overflow-hidden rounded-lg bg-surface-recess inset-ring inset-ring-border-hairline"
   data-slot="decision-graph"
 >
   <svg aria-hidden="true" class="absolute size-0">

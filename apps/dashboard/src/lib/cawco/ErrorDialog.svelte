@@ -43,7 +43,7 @@
       </Dialog.Header>
 
       <pre
-        class="m-0 max-h-(--c-report-text-max) overflow-auto wrap-break-word whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
+        class="m-0 max-h-c-report-text-max overflow-auto wrap-break-word whitespace-pre-wrap rounded-sm border border-border-hairline bg-surface-recess p-space-3 font-mono text-size-meta leading-prose text-ink-strong select-text"
         data-error-text>{message}</pre>
 
       <Dialog.Footer>

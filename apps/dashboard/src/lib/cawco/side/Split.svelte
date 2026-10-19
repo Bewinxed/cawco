@@ -365,7 +365,7 @@
     <Resizable.Handle
       data-side-divider={open || !open || undefined}
       data-hidden={!open || undefined}
-      class="z-2 group-data-split-expanded/split:after:left-space-1 group-data-split-expanded/split:direction-vertical:after:left-space-1 group-data-split-expanded/split:after:w-(--c-side-grip-w) group-data-split-expanded/split:direction-vertical:after:w-(--c-side-grip-w) group-data-split-expanded/split:after:transform-none data-hidden:hidden"
+      class="z-2 group-data-split-expanded/split:after:left-space-1 group-data-split-expanded/split:direction-vertical:after:left-space-1 group-data-split-expanded/split:after:w-c-side-grip-w group-data-split-expanded/split:direction-vertical:after:w-c-side-grip-w group-data-split-expanded/split:after:transform-none data-hidden:hidden"
       look="split"
       onDraggingChange={(dragging) => {
         resizing = dragging;
@@ -416,7 +416,7 @@
              clock. -->
         <div
           data-split-shown={open || undefined}
-          class="w-full min-w-(--c-side-surface-min) p-space-3 opacity-0 transform-(--surface-off) transition-[opacity] dur-panel ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:dur-panel data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
+          class="w-full min-w-c-side-surface-min p-space-3 opacity-0 transform-(--surface-off) transition-[opacity] dur-panel ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:dur-panel data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
           style:--surface-off="translateX(var(--space-7))"
           style:--surface-on="translateX(0)"
           in:surfaceIn

@@ -430,7 +430,7 @@
               /><span>Output</span>
             </summary>
             <pre
-              class="mx-0 mb-0 mt-space-2 max-h-(--c-output-max) overflow-auto border border-border-control rounded-md bg-surface-hover p-space-3 text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
+              class="mx-0 mb-0 mt-space-2 max-h-c-output-max overflow-auto border border-border-control rounded-md bg-surface-hover p-space-3 text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
               {@attach followTail()}>{job.lines.join("\n")}</pre>
           </details>
           {#if sshJoin.refused}
@@ -524,7 +524,7 @@
               </Alert.Root>
               {#if failure.tail.length > 0}
                 <pre
-                  class="m-0 max-h-(--c-output-max) overflow-auto border border-border-control rounded-md bg-surface-hover p-space-3 text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong">{failure.tail.join("\n")}</pre>
+                  class="m-0 max-h-c-output-max overflow-auto border border-border-control rounded-md bg-surface-hover p-space-3 text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong">{failure.tail.join("\n")}</pre>
               {/if}
             </div>
           {:else if sshJoin.refused}

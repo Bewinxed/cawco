@@ -175,7 +175,7 @@
       data-slot="track"
       data-focus={focused || undefined}
       data-ready={ready || undefined}
-      class="group relative h-c-btn-h-sm max-phone:h-(--c-effort-track-h-phone) cursor-ew-resize touch-none overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-none transition-control-ring select-none not-data-ready:transition-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
+      class="group relative h-c-btn-h-sm max-phone:h-c-effort-track-h-phone cursor-ew-resize touch-none overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-none transition-control-ring select-none not-data-ready:transition-none data-focus:outline-solid data-focus:outline-(length:--focus-ring-width) data-focus:outline-focus-ring data-focus:outline-offset-(--focus-ring-inset)"
       onpointercancel={() => {
         draft = null;
         drag = false;
@@ -196,7 +196,7 @@
       >
         <div
           data-slot="knob"
-          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-space-2 font-body text-size-label leading-none font-medium text-ink-muted capitalize num shadow-(--shadow-knob) transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
+          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-space-2 font-body text-size-label leading-none font-medium text-ink-muted capitalize num shadow-knob transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
           data-active={active || undefined}
           style:--bars={n}
           style:opacity={n ? 1 : 0.7}

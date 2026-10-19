@@ -49,7 +49,7 @@
   );
 </script>
 
-<p data-slot="note" class="max-w-(--c-reading-measure) type-meta text-ink-muted">
+<p data-slot="note" class="max-w-c-measure type-meta text-ink-muted">
   Every save keeps what it replaced. Restoring writes an old version back as
   this one.
 </p>
@@ -61,7 +61,7 @@
   {:else if versions.length === 0}
     <p
       data-slot="note"
-      class="max-w-(--c-reading-measure) type-meta text-ink-muted"
+      class="max-w-c-measure type-meta text-ink-muted"
     >
       Nothing has been saved over yet.
     </p>
@@ -76,7 +76,7 @@
             <span class="type-label text-ink-strong">{version.name}</span>
             <span
               data-slot="note"
-              class="max-w-(--c-reading-measure) type-meta text-ink-muted"
+              class="max-w-c-measure type-meta text-ink-muted"
             >
               {new Date(version.createdAt).toLocaleString()}
               · from {sourceLabel(version.source)}

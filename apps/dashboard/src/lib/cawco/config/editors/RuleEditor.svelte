@@ -310,7 +310,7 @@
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconEye} label="What to watch for">
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       CawCo reads what a session writes, not what you write to it.
     </p>
     <div data-slot="fold" class="flex flex-col gap-inherit">
@@ -422,7 +422,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlain} label="What CawCo sends back">
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       The session is told this is CawCo and not you, so it does not answer you
       for something you never said.
     </p>
@@ -464,7 +464,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       Everywhere unless you narrow it. Each filter you set has to match for the
       rule to fire. A model matches as a substring, so a family name covers
       every dated build of it.

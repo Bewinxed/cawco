@@ -170,7 +170,7 @@
         <div
           data-slot="markdown"
           style:--markdown-fade={"linear-gradient(to bottom, var(--mask-opaque) calc(100% - var(--space-6)), transparent)"}
-          class="group-data-compact:max-h-(--c-task-output-compact-h) group-data-compact:overflow-hidden group-data-compact:mask-(--markdown-fade)"
+          class="group-data-compact:max-h-c-task-output-compact-h group-data-compact:overflow-hidden group-data-compact:mask-(--markdown-fade)"
         >
           <MessageBody source={content} />
         </div>
@@ -183,7 +183,7 @@
         >
           <img
             alt={name}
-            class="block max-w-full max-h-(--c-task-output-image-h) group-data-compact:max-h-(--c-task-output-compact-h) rounded-sm"
+            class="block max-w-full max-h-c-task-output-image-h group-data-compact:max-h-c-task-output-compact-h rounded-sm"
             src={raw}
             bind:this={image}
           />
@@ -192,7 +192,7 @@
         <!-- svelte-ignore a11y_media_has_caption -->
         <!-- biome-ignore lint/a11y/useMediaCaption: a task's output carries no caption track; its file is what there is -->
         <video
-          class="block w-full max-h-(--c-task-output-video-h) rounded-sm bg-surface-recess"
+          class="block w-full max-h-c-task-output-video-h rounded-sm bg-surface-recess"
           controls
           preload="metadata"
           src={raw}

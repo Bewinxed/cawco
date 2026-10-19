@@ -565,6 +565,10 @@
       inset 0 1px 6px
         light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.1));
     --selected-shadow: none;
+    /* The effort knob's and Browse's lifted block: a neutral-8 inner edge over shadow-raised's layers (DESIGN.md Effort chip). */
+    --shadow-knob:
+      inset 0 0 0 1px var(--neutral-8), 0 1px 3px var(--shadow-tint),
+      0 1px 1px var(--shadow-tint), inset 0 0 0 1px var(--night-ring);
     /* Caw&Co wordmark: the approved landing's Nunito Variable face. */
     --font-wordmark: "Nunito Variable", ui-rounded, system-ui, sans-serif;
     /* Figtree for UI and transcript prose, 400 and 500 only. */
@@ -650,6 +654,8 @@
     --type-kpi: 500 var(--text-kpi) / 1 var(--font-body);
     --type-code: 400 var(--text-code) / 1.6 var(--font-mono);
     --type-caps: 500 11px / 1 var(--font-body);
+    /* The 16px Field Rule's floor: no field's text under it on a phone, so iOS Safari never zooms into one. */
+    --text-field-floor: 16px;
     /* Measured off the comps, deliberately not a 4px ladder. Keep the odd values. */
     --space-1: 4px;
     --space-2: 7px;
@@ -948,6 +954,254 @@
     --row-compact-gap: 6px;
     /* A compact session row's trailing inset: where every row in the rail ends. */
     --row-compact-pad-end: 8px;
+    /* Running text's measure (DESIGN.md Body: 60 to 72ch): a note, a hint, a rule's or hook's sentence, a fault's explanation, the expanded plan, a refused write. */
+    --c-measure: 72ch;
+    /* Running text at the short end of DESIGN.md's 60 to 72ch, beside a control that takes the rest of the row. */
+    --c-measure-short: 60ch;
+    /* A meta line's measure under the thing it qualifies: a pending control's failure reason, an editor head's machines line. */
+    --c-measure-meta: 32ch;
+    /* A wrapping command's room before Copy drops under it (CopyBox). */
+    --c-copy-box-line: 20ch;
+    /* A count's box keeps one digit's width, so a lone digit does not collapse it. */
+    --c-count-digit: 1ch;
+    /* The Configure rail's count column: three digits, so the dash and the figure hold one box. */
+    --c-rail-count-min: 3ch;
+    /* A placeholder word's bar: the x-height of the text it stands in. */
+    --c-skeleton-x-height: 1ex;
+    /* A conversation turn's reading measure (MessageBody, the transcript skeleton, the thread's needs column). */
+    --c-turn-measure: 74ch;
+    /* Inline code's inline padding in prose (lib/prose.ts); prose-code-pad is its block padding. */
+    --c-code-chip-pad-x: 2px;
+    /* A relative age's placeholder ("3d"): two characters of its type role. */
+    --c-skeleton-age: 2ch;
+    /* A growing textarea's ceiling, past which it scrolls (DESIGN.md Textarea): the decision page's note, the mention field. */
+    --c-textarea-max-h: 200px;
+    /* A short number field: a reserve percentage, a limit (four digits and the field's pad). */
+    --c-number-field-w: 64px;
+    /* The Port field's column beside the SSH target in the connect form. */
+    --c-port-field-w: 6rem;
+    /* A primary action's least width, so its label swapping to a pending one keeps the button's size (Save, the session footer's action). */
+    --c-btn-min-w: 96px;
+    /* A button's icon-to-label gap (DESIGN.md Buttons: "an 8px gap"). */
+    --c-btn-gap: 8px;
+    /* A pending label's outgoing words go soft as they fade (DESIGN.md Buttons, Pending: "a 2px blur where motion is welcome"). */
+    --c-btn-words-blur: 2px;
+    /* The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer. */
+    --c-pointer-floor: 24px;
+    /* The screen's margin a popover or a floating card keeps each side (DESIGN.md Breakpoints: "popovers widen to the viewport less 24px"). */
+    --c-screen-margin: 12px;
+    /* A new-session popover's width. */
+    --c-pop-w: 320px;
+    /* A popover's height cap on a desk. */
+    --c-pop-max-h: 440px;
+    /* A popover's height cap on a phone. */
+    --c-pop-max-h-phone: 420px;
+    /* A chip tooltip's measure. */
+    --c-tip-max-w: 320px;
+    /* A thin WebKit scrollbar's thickness in a new-session scroller. */
+    --c-scrollbar-thin: 8px;
+    /* The effort comb's tick pitch: a drawn pattern, not spacing. */
+    --c-comb-pitch: 6px;
+    /* An edge fade at full length at every width, where the kit's phone 16px would show nothing (Files' scrollers, Caw's panel). */
+    --c-edge-fade-len: 40px;
+    /* A sheet's height cap (DESIGN.md Drawer: "It is as tall as its content, up to 85vh"). */
+    --c-sheet-max-h: 85vh;
+    /* The peek sheet's height on a touch screen: fixed, so it holds its size from the first frame. */
+    --c-peek-sheet-h: 80dvh;
+    /* The drawer grabber's width (DESIGN.md Drawer: "A 100×6 grabber"). */
+    --c-grabber-w: 100px;
+    /* The drawer grabber's height (DESIGN.md Drawer: "A 100×6 grabber"). */
+    --c-grabber-h: 6px;
+    /* The lightbox's document sheet: a 60rem reading sheet, never wider than the viewport. */
+    --c-lightbox-sheet-w: min(100%, 60rem);
+    /* The lightbox's document sheet's height cap. */
+    --c-lightbox-sheet-max-h: min(86dvh, 100%);
+    /* The tallest an error's whole text grows in its dialog before it scrolls. */
+    --c-report-text-max: 60vh;
+    /* Configure's content measure: a section's body, an editor and its commit row. */
+    --c-config-max-w: 980px;
+    /* The Configure rail's width. */
+    --c-config-rail-w: 232px;
+    /* A section row with a meta line under its label (two lines; c-row-h is one). */
+    --c-row-h-two: 56px;
+    /* The scrolling failure detail under a machine row. */
+    --c-detail-max: 6rem;
+    /* The longest a pre of command or fault output grows before it scrolls. */
+    --c-output-max: 12rem;
+    /* A markdown editor's well, so it never collapses to its toolbar. */
+    --c-editor-well-min: 320px;
+    /* A fetched skill's choice list before it scrolls. */
+    --c-choice-list-max-h: 13rem;
+    /* A workflow form's textarea floor. */
+    --c-wf-textarea-min: 90px;
+    /* Account setup's step rail. */
+    --c-setup-rail-w: 184px;
+    /* Account setup's machine-name column, so every machine row's controls start on one x. */
+    --c-setup-machine-name-w: 150px;
+    /* Account setup's pasted-code field's basis, under which it wraps below the link. */
+    --c-setup-code-basis: 140px;
+    /* Account setup's nickname field's widest. */
+    --c-setup-nickname-w: 280px;
+    /* Account setup's name preview card's widest. */
+    --c-setup-preview-w: 360px;
+    /* A drag handle's width: two dot tiles. */
+    --c-drag-dots-w: 10px;
+    /* A drag handle's dot pitch. */
+    --c-drag-dots-tile: 5px;
+    /* A drag handle's dot edge softness. */
+    --c-drag-dots-edge: 1.5px;
+    /* The strategy figure's stage inset (accounts/figure.ts PAD): the build places lanes and captions from it. */
+    --fig-pad: 12px;
+    /* The strategy figure's chip side and bar height (figure.ts CHIP). */
+    --fig-chip: 10px;
+    /* The strategy figure's caption line height (figure.ts CAP_LINE). */
+    --fig-cap-line: 16px;
+    /* The strategy figure's caption distance from the stage's foot (figure.ts CAP_FOOT). */
+    --fig-cap-foot: 8px;
+    /* A refused write's line: its wrap basis beside the Hidden menu. */
+    --c-block-refused-basis: 18rem;
+    /* The composer canvas's top grab strip. */
+    --c-canvas-grab-w: 160px;
+    /* A decision page head's title group: how narrow it goes beside ‹ Decisions before it wraps. */
+    --c-decision-head-what: 14rem;
+    /* The decisions graph's least height. */
+    --c-decision-graph-min-h: 24rem;
+    /* A decision card's width; the hub's graph layout assumes the same box (DecisionGraph CARD). */
+    --c-decision-node-w: 148px;
+    /* A decision card's least height (DecisionGraph CARD.height). */
+    --c-decision-node-h: 56px;
+    /* The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name. */
+    --c-artifact-card-min: 148px;
+    /* The rail width at and above which the Working/Finished header needs no squeeze. */
+    --c-work-tabs-roomy-w: 260px;
+    /* The most the Working/Finished header's spacing gives back, at the narrowest rail. */
+    --c-work-tabs-squeeze: 33px;
+    /* Caw's panel's list cap. */
+    --c-caw-list-h: 560px;
+    /* The viewport room kept clear above Caw's panel's list on a wide screen. */
+    --c-caw-list-clear: 120px;
+    /* The room kept clear under Caw's panel's list on a phone: the composer's row and the home indicator's gap. */
+    --c-caw-list-clear-phone: 96px;
+    /* The session card hung from Caw's seat (DESIGN.md: "The card is 416px wide"). */
+    --c-lead-card-w: 416px;
+    /* That card's height cap. */
+    --c-lead-card-max-h: 760px;
+    /* A staged move's wait column. */
+    --c-move-wait-col-w: 560px;
+    /* Caw's slot over a move's wait on a desk. */
+    --c-move-wait-caw-h: 128px;
+    /* Caw's slot over a move's wait on a phone. */
+    --c-move-wait-caw-h-phone: 96px;
+    /* An in-flight large file's progress track. */
+    --c-move-wait-file-bar-w: 96px;
+    /* The glass's machines card. */
+    --c-machines-w: 20rem;
+    /* A session tab's rim glow radius (DESIGN.md Session tab status rim). */
+    --tab-rim-glow: 6px;
+    /* How far past a folder tab's top and sides its rim's glow may draw before the fold's clip cuts it: four glow radii. */
+    --tab-rim-glow-room: 24px;
+    /* A finder row's floor, two lines (DESIGN.md Find rows). */
+    --c-find-row-h: 52px;
+    /* A finder row's floor on a phone. */
+    --c-find-row-h-phone: 56px;
+    /* A one-line finder row (Waiting for you, a folded kind). */
+    --c-find-line-h: 40px;
+    /* A phone's find field and one-line row. */
+    --c-find-phone-h: 52px;
+    /* A finder group head and its coverage line. */
+    --c-find-head-h: 28px;
+    /* The skeleton standing for a finder row with its reason. */
+    --c-find-skeleton-tall: 54px;
+    /* A project head's name column: the width it holds before its actions wrap under it. */
+    --c-head-who-basis: 18rem;
+    /* The project details tray's content measure. */
+    --c-project-details-measure: 32rem;
+    /* The project details rows' label column. */
+    --c-project-details-label-w: 6.5rem;
+    /* The machine and connection select column of the details tray's add forms. */
+    --c-project-details-select-w: 10rem;
+    /* The Actions and Runs ledgers' When column. */
+    --c-ledger-when-w: 6rem;
+    /* The When column in a ledger under 400px. */
+    --c-ledger-when-w-narrow: 4.5rem;
+    /* The Runs ledger's Outcome column. */
+    --c-ledger-outcome-w: 11rem;
+    /* The Outcome column in a ledger under 400px. */
+    --c-ledger-outcome-w-narrow: 8rem;
+    /* The Runs ledger's Took column. */
+    --c-ledger-took-w: 5rem;
+    /* The side divider's hit width when the split is expanded. */
+    --c-side-grip-w: 6px;
+    /* A side surface's floor (SideSurface SIDE_FLOOR_PX). */
+    --c-side-surface-min: 320px;
+    /* The new-session dialog's widest (DESIGN.md: "up to 980px wide"). */
+    --c-new-session-w: 980px;
+    /* The effort track on a phone (DESIGN.md Effort chip: "38px on a phone"). */
+    --c-effort-track-h-phone: 38px;
+    /* The model list's viewport: fixed, so the section keeps its height while filtering. */
+    --c-model-list-h: 300px;
+    /* The width a model row keeps beside its chips before they drop to their own line. */
+    --c-model-row-basis: 12rem;
+    /* The folder browser's list cap: five 36px rows and their gaps. */
+    --c-folder-list-max-h: 196px;
+    /* The first-prompt editor's grown height, fixed on a phone. */
+    --c-prompt-grown-h: 120px;
+    /* A page that stands as one centred column (the empty fleet, pairing): its width. */
+    --c-page-column-w: 34rem;
+    /* That column's sentence measure. */
+    --c-page-line: 26rem;
+    /* The hover panel's height room when its caller gives none. */
+    --c-hover-panel-room: 320px;
+    /* How far the connection band's slot lets its shadow bleed past its sides and foot. */
+    --c-band-bleed: 100vw;
+    /* An unlock outcome's mark box and its icon. */
+    --c-status-mark: 2.25rem;
+    /* A machine inventory entry's words column, under which its Adopt button wraps below. */
+    --c-inventory-text-basis: 240px;
+    /* The slot Caw stands in on the empty fleet (MachinesEmpty CAW_SIZE). */
+    --c-empty-fleet-caw: 80px;
+    /* A generated view's stat tile floor. */
+    --c-stat-min: 10rem;
+    /* A generated table's lead column floor. */
+    --c-view-lead-min: 9rem;
+    /* The Label popover's list of a project's labels before it scrolls. */
+    --c-bulk-labels-max-h: 14rem;
+    /* The tallest a post's picture or video stands under its card. */
+    --c-post-media-max-h: 16rem;
+    /* A task board column's narrowest (TaskBoard, ViewBoard, TaskNode). */
+    --c-board-col-min: 15rem;
+    /* A task board column's widest, and the open Archived column's cap. */
+    --c-board-col-max: 22rem;
+    /* The key column of a task's Fields and Relations, so the two parts' values stand on one line. */
+    --c-task-key-w: 6rem;
+    /* The Filter popover's name column. */
+    --c-filter-label-w: 3.5rem;
+    /* The new-label field in a task's label row. */
+    --c-task-label-field-w: 128px;
+    /* An approved action's argument block before it scrolls. */
+    --c-task-args-max-h: 192px;
+    /* A compact task output's body cap. */
+    --c-task-output-compact-h: 96px;
+    /* A task output image's height cap. */
+    --c-task-output-image-h: 320px;
+    /* A task output video's height cap. */
+    --c-task-output-video-h: 384px;
+    /* The stage control's placeholder while the task reads. */
+    --c-task-stage-skeleton-w: 96px;
+    /* A task relation's name column ("Found in", "Waited on by"). */
+    --c-task-edge-label-w: 96px;
+    /* The link picker's candidate list cap. */
+    --c-task-candidates-max-h: 224px;
+    /* The task ledger's Id column. */
+    --c-task-col-id-w: 104px;
+    /* The task ledger's Stage column. */
+    --c-task-col-stage-w: 192px;
+    /* The task ledger's Labels column. */
+    --c-task-col-labels-w: 224px;
+    /* The task ledger's To-dos column. */
+    --c-task-col-todos-w: 96px;
+    /* The task ledger's Created and Updated columns. */
+    --c-task-col-time-w: 112px;
     /* How much of the page's own background the scrim lays over what is under it: its alpha. The screen's edges under an open scrim (ScreenEdges) mix the same share of background into the edge colour, so the strip Safari extends is the scrim's colour over that edge. */
     --scrim-mix: 72%;
     /* A message not yet said in the conversation (sending, queued). */

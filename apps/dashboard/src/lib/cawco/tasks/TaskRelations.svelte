@@ -142,7 +142,7 @@
             bind:value={query}
           />
           <ul
-            class="flex flex-col max-h-(--c-task-candidates-max-h) m-0 p-0 overflow-y-auto list-none"
+            class="flex flex-col max-h-c-task-candidates-max-h m-0 p-0 overflow-y-auto list-none"
           >
             {#each candidates as each (each.id)}
               <li>

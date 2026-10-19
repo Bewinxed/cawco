@@ -50,7 +50,7 @@
 
 <p
   data-slot="note"
-  class="max-w-(--c-rule-note-measure) type-meta text-ink-muted"
+  class="max-w-c-measure type-meta text-ink-muted"
 >
   Sessions see the reply but never this rule's history, so this is the only
   place it is visible.
@@ -63,7 +63,7 @@
   {#if loading}
     <p
       data-slot="note"
-      class="max-w-(--c-rule-note-measure) type-meta text-ink-muted"
+      class="max-w-c-measure type-meta text-ink-muted"
     >
       Loading…
     </p>
@@ -72,7 +72,7 @@
   {:else if rows.length === 0}
     <p
       data-slot="note"
-      class="max-w-(--c-rule-note-measure) type-meta text-ink-muted"
+      class="max-w-c-measure type-meta text-ink-muted"
     >
       It has not caught anything yet. Nothing to see is the good outcome.
     </p>
@@ -106,13 +106,13 @@
               >
               {#if row.harness}
                 <span
-                  class="max-w-(--c-rule-note-measure) type-meta text-ink-muted"
+                  class="max-w-c-measure type-meta text-ink-muted"
                   >{row.harness}</span
                 >
               {/if}
             </span>
             <span
-              class="max-w-(--c-rule-note-measure) type-meta text-ink-muted"
+              class="max-w-c-measure type-meta text-ink-muted"
             >
               {times(row.totalFires)}, last {since(row.lastFiredAt)}
             </span>

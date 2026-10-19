@@ -837,7 +837,7 @@
             <Input
               aria-label="Folder on that machine"
               autocomplete="off"
-              class="h-(--c-btn-h-sm)"
+              class="h-c-btn-h-sm"
               placeholder="/absolute/path on that machine"
               spellcheck="false"
               text="label"
@@ -961,7 +961,7 @@
             <Input
               aria-label={lfsWords.url}
               autocomplete="off"
-              class="h-(--c-btn-h-sm)"
+              class="h-c-btn-h-sm"
               placeholder={lfsWords.urlPlaceholder}
               spellcheck="false"
               text="label"

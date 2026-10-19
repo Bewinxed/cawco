@@ -336,7 +336,7 @@
     data-slot="editor"
     aria-label="First prompt"
     aria-multiline="true"
-    class="fai-scroll h-c-row-h data-grown:h-(--c-prompt-grown-h) max-phone:h-(--c-prompt-grown-h) w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong outline-off max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:dur-pop motion-safe:phone:ease-in-out"
+    class="fai-scroll h-c-row-h data-grown:h-c-prompt-grown-h max-phone:h-c-prompt-grown-h w-full overflow-auto rounded-t-lg bg-transparent px-space-4 pt-space-3 pb-space-2 font-body text-(length:--prompt-fs) leading-(--prompt-lh) font-normal whitespace-pre-wrap break-word text-ink-strong outline-off max-phone:overscroll-contain motion-safe:phone:transition-[height] motion-safe:phone:dur-pop motion-safe:phone:ease-in-out"
     contenteditable="true"
     id="session-prompt"
     onblur={() => {

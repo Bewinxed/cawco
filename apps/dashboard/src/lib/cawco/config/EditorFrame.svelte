@@ -148,7 +148,7 @@
   >
     <div
       data-slot="body"
-      class="flex grow shrink-0 basis-auto flex-col gap-space-6 max-w-(--c-editor-max-w) py-space-6 px-space-7 rounded-lg bg-surface-raised"
+      class="flex grow shrink-0 basis-auto flex-col gap-space-6 max-w-c-config-max-w py-space-6 px-space-7 rounded-lg bg-surface-raised"
       bind:this={body}
       style:min-height={card === null ? undefined : `${card}px`}
       {@attach cawco.hub === "connected" && !settling

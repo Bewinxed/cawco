@@ -118,7 +118,7 @@
         <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         <Table.Head
           data-slot="actions-table-col-when"
-          class="h-c-toolbar-ctl w-(--c-ledger-when-w)"
+          class="h-c-toolbar-ctl w-c-ledger-when-w"
           scope="col"
           variant="caps">{words.columnWhen}</Table.Head
         >

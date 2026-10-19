@@ -44,7 +44,7 @@
        growing under the reader as the transcript lands. -->
   <Drawer.Content
     data-peek-sheet
-    class="vaul-drawer-direction-bottom:h-(--c-peek-sheet-h)"
+    class="vaul-drawer-direction-bottom:h-c-peek-sheet-h"
     pad="sheet-safe-bottom"
   >
     <Drawer.Title class="sr-only">Peek</Drawer.Title>

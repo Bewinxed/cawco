@@ -2300,7 +2300,7 @@
   >
     <IconChat /><span class="in-form-compact:hidden">Comments</span>
     {#if openCount > 0}
-      <span data-slot="count" class="min-w-(--c-count-digit)"
+      <span data-slot="count" class="min-w-c-count-digit"
         >{openCount}</span
       >
     {/if}

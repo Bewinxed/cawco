@@ -377,6 +377,8 @@ public enum Shadow {
     /// Inner vermillion ring and soft inner glow on code blocks.
     public static let codeRing: [ShadowLayer] = [ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.7434, 0.3271, 0.2310, 0.2800), dark: P3(0.8285, 0.4329, 0.3286, 0.3200)), inset: true), ShadowLayer(x: 0, y: 1, blur: 6, spread: 0, ink: Ink(light: P3(0.7434, 0.3271, 0.2310, 0.0600), dark: P3(0.8285, 0.4329, 0.3286, 0.1000)), inset: true)]
     public static let selectedShadow: [ShadowLayer] = []
+    /// The effort knob's and Browse's lifted block: a neutral-8 inner edge over shadow-raised's layers (DESIGN.md Effort chip).
+    public static let shadowKnob: [ShadowLayer] = [ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.6824, 0.6604, 0.6225, 1.0000), dark: P3(0.3888, 0.3730, 0.3499, 1.0000)), inset: true), ShadowLayer(x: 0, y: 1, blur: 3, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
 }
 
 public enum FontFamily {
@@ -472,6 +474,8 @@ public enum TypeScale {
     public static let typeKpi = TypeRole(weight: .medium, size: 20...24, leading: 1, family: FontFamily.fontBody, fluid: .init(base: 17.5392, perViewport: 0.006309))
     public static let typeCode = TypeRole(weight: .regular, size: 12...12, leading: 1.6, family: FontFamily.fontMono)
     public static let typeCaps = TypeRole(weight: .medium, size: 11...11, leading: 1, family: FontFamily.fontBody)
+    /// The 16px Field Rule's floor: no field's text under it on a phone, so iOS Safari never zooms into one.
+    public static let textFieldFloor: Double = 16
 }
 
 public enum Space {
@@ -786,6 +790,256 @@ public enum Size {
     public static let rowCompactGap: Double = 6
     /// A compact session row's trailing inset: where every row in the rail ends.
     public static let rowCompactPadEnd: Double = 8
+    /// Running text's measure (DESIGN.md Body: 60 to 72ch): a note, a hint, a rule's or hook's sentence, a fault's explanation, the expanded plan, a refused write.
+    public static let cMeasure: Double = 576
+    /// Running text at the short end of DESIGN.md's 60 to 72ch, beside a control that takes the rest of the row.
+    public static let cMeasureShort: Double = 480
+    /// A meta line's measure under the thing it qualifies: a pending control's failure reason, an editor head's machines line.
+    public static let cMeasureMeta: Double = 256
+    /// A wrapping command's room before Copy drops under it (CopyBox).
+    public static let cCopyBoxLine: Double = 160
+    /// A count's box keeps one digit's width, so a lone digit does not collapse it.
+    public static let cCountDigit: Double = 8
+    /// The Configure rail's count column: three digits, so the dash and the figure hold one box.
+    public static let cRailCountMin: Double = 24
+    /// A placeholder word's bar: the x-height of the text it stands in.
+    public static let cSkeletonXHeight: Double = 8
+    /// A conversation turn's reading measure (MessageBody, the transcript skeleton, the thread's needs column).
+    public static let cTurnMeasure: Double = 592
+    /// Inline code's inline padding in prose (lib/prose.ts); prose-code-pad is its block padding.
+    public static let cCodeChipPadX: Double = 2
+    /// A relative age's placeholder ("3d"): two characters of its type role.
+    public static let cSkeletonAge: Double = 16
+    /// A growing textarea's ceiling, past which it scrolls (DESIGN.md Textarea): the decision page's note, the mention field.
+    public static let cTextareaMaxH: Double = 200
+    /// A short number field: a reserve percentage, a limit (four digits and the field's pad).
+    public static let cNumberFieldW: Double = 64
+    /// The Port field's column beside the SSH target in the connect form.
+    public static let cPortFieldW: Double = 96
+    /// A primary action's least width, so its label swapping to a pending one keeps the button's size (Save, the session footer's action).
+    public static let cBtnMinW: Double = 96
+    /// A button's icon-to-label gap (DESIGN.md Buttons: "an 8px gap").
+    public static let cBtnGap: Double = 8
+    /// A pending label's outgoing words go soft as they fade (DESIGN.md Buttons, Pending: "a 2px blur where motion is welcome").
+    public static let cBtnWordsBlur: Double = 2
+    /// The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer.
+    public static let cPointerFloor: Double = 24
+    /// The screen's margin a popover or a floating card keeps each side (DESIGN.md Breakpoints: "popovers widen to the viewport less 24px").
+    public static let cScreenMargin: Double = 12
+    /// A new-session popover's width.
+    public static let cPopW: Double = 320
+    /// A popover's height cap on a desk.
+    public static let cPopMaxH: Double = 440
+    /// A popover's height cap on a phone.
+    public static let cPopMaxHPhone: Double = 420
+    /// A chip tooltip's measure.
+    public static let cTipMaxW: Double = 320
+    /// A thin WebKit scrollbar's thickness in a new-session scroller.
+    public static let cScrollbarThin: Double = 8
+    /// The effort comb's tick pitch: a drawn pattern, not spacing.
+    public static let cCombPitch: Double = 6
+    /// An edge fade at full length at every width, where the kit's phone 16px would show nothing (Files' scrollers, Caw's panel).
+    public static let cEdgeFadeLen: Double = 40
+    /// A sheet's height cap (DESIGN.md Drawer: "It is as tall as its content, up to 85vh").
+    public static let cSheetMaxH: Double = 717.4
+    /// The peek sheet's height on a touch screen: fixed, so it holds its size from the first frame.
+    public static let cPeekSheetH: Double = 675.2
+    /// The drawer grabber's width (DESIGN.md Drawer: "A 100×6 grabber").
+    public static let cGrabberW: Double = 100
+    /// The drawer grabber's height (DESIGN.md Drawer: "A 100×6 grabber").
+    public static let cGrabberH: Double = 6
+    /// The lightbox's document sheet: a 60rem reading sheet, never wider than the viewport.
+    /// At most this, in points: on the web the least of it and a share of its container (min).
+    public static let cLightboxSheetW: Double = 960
+    /// The lightbox's document sheet's height cap.
+    /// At most this, in points: on the web the least of it and a share of its container (min).
+    public static let cLightboxSheetMaxH: Double = 725.84
+    /// The tallest an error's whole text grows in its dialog before it scrolls.
+    public static let cReportTextMax: Double = 506.4
+    /// Configure's content measure: a section's body, an editor and its commit row.
+    public static let cConfigMaxW: Double = 980
+    /// The Configure rail's width.
+    public static let cConfigRailW: Double = 232
+    /// A section row with a meta line under its label (two lines; c-row-h is one).
+    public static let cRowHTwo: Double = 56
+    /// The scrolling failure detail under a machine row.
+    public static let cDetailMax: Double = 96
+    /// The longest a pre of command or fault output grows before it scrolls.
+    public static let cOutputMax: Double = 192
+    /// A markdown editor's well, so it never collapses to its toolbar.
+    public static let cEditorWellMin: Double = 320
+    /// A fetched skill's choice list before it scrolls.
+    public static let cChoiceListMaxH: Double = 208
+    /// A workflow form's textarea floor.
+    public static let cWfTextareaMin: Double = 90
+    /// Account setup's step rail.
+    public static let cSetupRailW: Double = 184
+    /// Account setup's machine-name column, so every machine row's controls start on one x.
+    public static let cSetupMachineNameW: Double = 150
+    /// Account setup's pasted-code field's basis, under which it wraps below the link.
+    public static let cSetupCodeBasis: Double = 140
+    /// Account setup's nickname field's widest.
+    public static let cSetupNicknameW: Double = 280
+    /// Account setup's name preview card's widest.
+    public static let cSetupPreviewW: Double = 360
+    /// A drag handle's width: two dot tiles.
+    public static let cDragDotsW: Double = 10
+    /// A drag handle's dot pitch.
+    public static let cDragDotsTile: Double = 5
+    /// A drag handle's dot edge softness.
+    public static let cDragDotsEdge: Double = 1.5
+    /// The strategy figure's stage inset (accounts/figure.ts PAD): the build places lanes and captions from it.
+    public static let figPad: Double = 12
+    /// The strategy figure's chip side and bar height (figure.ts CHIP).
+    public static let figChip: Double = 10
+    /// The strategy figure's caption line height (figure.ts CAP_LINE).
+    public static let figCapLine: Double = 16
+    /// The strategy figure's caption distance from the stage's foot (figure.ts CAP_FOOT).
+    public static let figCapFoot: Double = 8
+    /// A refused write's line: its wrap basis beside the Hidden menu.
+    public static let cBlockRefusedBasis: Double = 288
+    /// The composer canvas's top grab strip.
+    public static let cCanvasGrabW: Double = 160
+    /// A decision page head's title group: how narrow it goes beside ‹ Decisions before it wraps.
+    public static let cDecisionHeadWhat: Double = 224
+    /// The decisions graph's least height.
+    public static let cDecisionGraphMinH: Double = 384
+    /// A decision card's width; the hub's graph layout assumes the same box (DecisionGraph CARD).
+    public static let cDecisionNodeW: Double = 148
+    /// A decision card's least height (DecisionGraph CARD.height).
+    public static let cDecisionNodeH: Double = 56
+    /// The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name.
+    public static let cArtifactCardMin: Double = 148
+    /// The rail width at and above which the Working/Finished header needs no squeeze.
+    public static let cWorkTabsRoomyW: Double = 260
+    /// The most the Working/Finished header's spacing gives back, at the narrowest rail.
+    public static let cWorkTabsSqueeze: Double = 33
+    /// Caw's panel's list cap.
+    public static let cCawListH: Double = 560
+    /// The viewport room kept clear above Caw's panel's list on a wide screen.
+    public static let cCawListClear: Double = 120
+    /// The room kept clear under Caw's panel's list on a phone: the composer's row and the home indicator's gap.
+    public static let cCawListClearPhone: Double = 96
+    /// The session card hung from Caw's seat (DESIGN.md: "The card is 416px wide").
+    public static let cLeadCardW: Double = 416
+    /// That card's height cap.
+    public static let cLeadCardMaxH: Double = 760
+    /// A staged move's wait column.
+    public static let cMoveWaitColW: Double = 560
+    /// Caw's slot over a move's wait on a desk.
+    public static let cMoveWaitCawH: Double = 128
+    /// Caw's slot over a move's wait on a phone.
+    public static let cMoveWaitCawHPhone: Double = 96
+    /// An in-flight large file's progress track.
+    public static let cMoveWaitFileBarW: Double = 96
+    /// The glass's machines card.
+    public static let cMachinesW: Double = 320
+    /// A session tab's rim glow radius (DESIGN.md Session tab status rim).
+    public static let tabRimGlow: Double = 6
+    /// How far past a folder tab's top and sides its rim's glow may draw before the fold's clip cuts it: four glow radii.
+    public static let tabRimGlowRoom: Double = 24
+    /// A finder row's floor, two lines (DESIGN.md Find rows).
+    public static let cFindRowH: Double = 52
+    /// A finder row's floor on a phone.
+    public static let cFindRowHPhone: Double = 56
+    /// A one-line finder row (Waiting for you, a folded kind).
+    public static let cFindLineH: Double = 40
+    /// A phone's find field and one-line row.
+    public static let cFindPhoneH: Double = 52
+    /// A finder group head and its coverage line.
+    public static let cFindHeadH: Double = 28
+    /// The skeleton standing for a finder row with its reason.
+    public static let cFindSkeletonTall: Double = 54
+    /// A project head's name column: the width it holds before its actions wrap under it.
+    public static let cHeadWhoBasis: Double = 288
+    /// The project details tray's content measure.
+    public static let cProjectDetailsMeasure: Double = 512
+    /// The project details rows' label column.
+    public static let cProjectDetailsLabelW: Double = 104
+    /// The machine and connection select column of the details tray's add forms.
+    public static let cProjectDetailsSelectW: Double = 160
+    /// The Actions and Runs ledgers' When column.
+    public static let cLedgerWhenW: Double = 96
+    /// The When column in a ledger under 400px.
+    public static let cLedgerWhenWNarrow: Double = 72
+    /// The Runs ledger's Outcome column.
+    public static let cLedgerOutcomeW: Double = 176
+    /// The Outcome column in a ledger under 400px.
+    public static let cLedgerOutcomeWNarrow: Double = 128
+    /// The Runs ledger's Took column.
+    public static let cLedgerTookW: Double = 80
+    /// The side divider's hit width when the split is expanded.
+    public static let cSideGripW: Double = 6
+    /// A side surface's floor (SideSurface SIDE_FLOOR_PX).
+    public static let cSideSurfaceMin: Double = 320
+    /// The new-session dialog's widest (DESIGN.md: "up to 980px wide").
+    public static let cNewSessionW: Double = 980
+    /// The effort track on a phone (DESIGN.md Effort chip: "38px on a phone").
+    public static let cEffortTrackHPhone: Double = 38
+    /// The model list's viewport: fixed, so the section keeps its height while filtering.
+    public static let cModelListH: Double = 300
+    /// The width a model row keeps beside its chips before they drop to their own line.
+    public static let cModelRowBasis: Double = 192
+    /// The folder browser's list cap: five 36px rows and their gaps.
+    public static let cFolderListMaxH: Double = 196
+    /// The first-prompt editor's grown height, fixed on a phone.
+    public static let cPromptGrownH: Double = 120
+    /// A page that stands as one centred column (the empty fleet, pairing): its width.
+    public static let cPageColumnW: Double = 544
+    /// That column's sentence measure.
+    public static let cPageLine: Double = 416
+    /// The hover panel's height room when its caller gives none.
+    public static let cHoverPanelRoom: Double = 320
+    /// How far the connection band's slot lets its shadow bleed past its sides and foot.
+    public static let cBandBleed: Double = 390
+    /// An unlock outcome's mark box and its icon.
+    public static let cStatusMark: Double = 36
+    /// A machine inventory entry's words column, under which its Adopt button wraps below.
+    public static let cInventoryTextBasis: Double = 240
+    /// The slot Caw stands in on the empty fleet (MachinesEmpty CAW_SIZE).
+    public static let cEmptyFleetCaw: Double = 80
+    /// A generated view's stat tile floor.
+    public static let cStatMin: Double = 160
+    /// A generated table's lead column floor.
+    public static let cViewLeadMin: Double = 144
+    /// The Label popover's list of a project's labels before it scrolls.
+    public static let cBulkLabelsMaxH: Double = 224
+    /// The tallest a post's picture or video stands under its card.
+    public static let cPostMediaMaxH: Double = 256
+    /// A task board column's narrowest (TaskBoard, ViewBoard, TaskNode).
+    public static let cBoardColMin: Double = 240
+    /// A task board column's widest, and the open Archived column's cap.
+    public static let cBoardColMax: Double = 352
+    /// The key column of a task's Fields and Relations, so the two parts' values stand on one line.
+    public static let cTaskKeyW: Double = 96
+    /// The Filter popover's name column.
+    public static let cFilterLabelW: Double = 56
+    /// The new-label field in a task's label row.
+    public static let cTaskLabelFieldW: Double = 128
+    /// An approved action's argument block before it scrolls.
+    public static let cTaskArgsMaxH: Double = 192
+    /// A compact task output's body cap.
+    public static let cTaskOutputCompactH: Double = 96
+    /// A task output image's height cap.
+    public static let cTaskOutputImageH: Double = 320
+    /// A task output video's height cap.
+    public static let cTaskOutputVideoH: Double = 384
+    /// The stage control's placeholder while the task reads.
+    public static let cTaskStageSkeletonW: Double = 96
+    /// A task relation's name column ("Found in", "Waited on by").
+    public static let cTaskEdgeLabelW: Double = 96
+    /// The link picker's candidate list cap.
+    public static let cTaskCandidatesMaxH: Double = 224
+    /// The task ledger's Id column.
+    public static let cTaskColIdW: Double = 104
+    /// The task ledger's Stage column.
+    public static let cTaskColStageW: Double = 192
+    /// The task ledger's Labels column.
+    public static let cTaskColLabelsW: Double = 224
+    /// The task ledger's To-dos column.
+    public static let cTaskColTodosW: Double = 96
+    /// The task ledger's Created and Updated columns.
+    public static let cTaskColTimeW: Double = 112
 }
 
 public enum Effect {

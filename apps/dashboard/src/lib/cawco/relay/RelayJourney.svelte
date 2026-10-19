@@ -765,7 +765,7 @@
 {#snippet journey()}
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-(--measure-prose) flex-col gap-space-2 text-body"
+    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2 text-body"
     data-relay-journey
   >
     {@render head(false)}
@@ -853,7 +853,7 @@
        running underneath. -->
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-(--measure-short) flex-col items-start gap-space-3"
+    class="@container flex min-w-0 max-w-c-measure-short flex-col items-start gap-space-3"
     data-relay-entry
   >
     <p
@@ -881,7 +881,7 @@
   <!-- Settings › Browsers before anyone set it up: why, and Set up. -->
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-(--measure-prose) flex-col gap-space-2"
+    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2"
     data-relay-start
   >
     {@render head(false)}
@@ -909,7 +909,7 @@
        it is seen from now on. -->
   <section
     aria-label={words.title}
-    class="@container flex min-w-0 max-w-(--measure-prose) flex-col gap-space-2"
+    class="@container flex min-w-0 max-w-c-measure flex-col gap-space-2"
     data-relay-done
   >
     {@render head(true)}
@@ -945,7 +945,7 @@
        one width. -->
   <section
     aria-label={words.title}
-    class="@container min-w-0 max-w-(--measure-prose)"
+    class="@container min-w-0 max-w-c-measure"
     data-relay-summary
   >
     <div

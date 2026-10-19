@@ -58,7 +58,7 @@
 <nav
   data-slot="rail"
   aria-label={words.title}
-  class="group/rail flex flex-col px-space-2 pb-space-5 variant-rail:relative variant-rail:w-(--c-config-rail-w) variant-rail:flex-none variant-rail:overflow-y-auto variant-rail:rounded-lg variant-rail:bg-surface-raised variant-list:pb-space-2"
+  class="group/rail flex flex-col px-space-2 pb-space-5 variant-rail:relative variant-rail:w-c-config-rail-w variant-rail:flex-none variant-rail:overflow-y-auto variant-rail:rounded-lg variant-rail:bg-surface-raised variant-list:pb-space-2"
   data-variant={variant}
   {@attach highlight({
     rows: '[data-slot="row"]',
@@ -124,9 +124,9 @@
                      A read count stands only above 0 (DESIGN.md, The Earned
                      Count Rule). -->
                 {#if count === null}
-                  <span data-slot="count" class="flex-none min-w-(--c-rail-count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">—</span>
+                  <span data-slot="count" class="flex-none min-w-c-rail-count-min text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">—</span>
                 {:else if count > 0}
-                  <span data-slot="count" class="flex-none min-w-(--c-rail-count-min) text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">{count}</span>
+                  <span data-slot="count" class="flex-none min-w-c-rail-count-min text-end type-meta num text-ink-muted group-aria-current-page/row:text-selected-ink">{count}</span>
                 {/if}
               {/if}
             </a>

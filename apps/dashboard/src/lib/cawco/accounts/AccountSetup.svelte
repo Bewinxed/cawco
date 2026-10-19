@@ -926,7 +926,7 @@
         >{words.howItShows}</span
       >
       <div
-        class="flex max-w-(--c-setup-preview-w) min-w-0 items-center gap-space-3 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3"
+        class="flex max-w-c-setup-preview-w min-w-0 items-center gap-space-3 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3"
       >
         <AccountTile {hue} provider={choice?.provider ?? ""} size={28} />
         <AccountName account={shown} />
@@ -943,7 +943,7 @@
       </label>
       <Input
         autocomplete="off"
-        class="max-w-(--c-setup-nickname-w)"
+        class="max-w-c-setup-nickname-w"
         id="setup-nickname"
         placeholder={words.nicknamePlaceholder}
         bind:value={nickname}

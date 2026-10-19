@@ -272,13 +272,13 @@
       <!-- Said before Save, where the name is changed: that is its consequence. -->
       <p
         data-slot="note"
-        class="type-meta max-w-(--c-measure) text-ink-muted"
+        class="type-meta max-w-c-measure text-ink-muted"
         in:appear
       >
         {words.renamed(server.name)}
       </p>
     {:else}
-      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
         <Coded text={words.callsAs(serverName || "name")} />
       </p>
     {/if}
@@ -327,7 +327,7 @@
         >
           <p
             data-slot="note"
-            class="type-meta max-w-(--c-measure) text-ink-muted"
+            class="type-meta max-w-c-measure text-ink-muted"
           >
             {HOW.bunx}
           </p>
@@ -366,7 +366,7 @@
         >
           <p
             data-slot="note"
-            class="type-meta max-w-(--c-measure) text-ink-muted"
+            class="type-meta max-w-c-measure text-ink-muted"
           >
             {HOW.command}
           </p>
@@ -400,7 +400,7 @@
         >
           <p
             data-slot="note"
-            class="type-meta max-w-(--c-measure) text-ink-muted"
+            class="type-meta max-w-c-measure text-ink-muted"
           >
             {HOW.remote}
           </p>
@@ -441,7 +441,7 @@
       >
         <p
           data-slot="note"
-          class="type-meta max-w-(--c-measure) text-ink-muted"
+          class="type-meta max-w-c-measure text-ink-muted"
         >
           <Coded text={words.expanded} />
         </p>
@@ -475,7 +475,7 @@
   {/if}
 
   <EditorSection hue={HUE} icon={IconMapPoint} label={words.where}>
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       {words.whereNote}
     </p>
     <div>

@@ -55,7 +55,7 @@
   <button
     data-slot="row"
     {id}
-    class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-(--c-find-row-h) px-space-3 py-space-2 border-none border-current rounded-sm bg-transparent text-start box-border cursor-default outline-off select-none active:bg-surface-fill data-phone:min-h-(--c-find-row-h-phone) data-phone:py-space-3 data-peekable:pe-c-btn-h-lg"
+    class="group/row mark-line relative grid grid-cols-(--row-cols) grid-rows-(--row-rows) gap-x-space-2 items-center w-full min-h-c-find-row-h px-space-3 py-space-2 border-none border-current rounded-sm bg-transparent text-start box-border cursor-default outline-off select-none active:bg-surface-fill data-phone:min-h-c-find-row-h-phone data-phone:py-space-3 data-peekable:pe-c-btn-h-lg"
     aria-describedby={peeked ? `${id}-peek` : undefined}
     aria-label={row.spoken}
     aria-selected={active}
