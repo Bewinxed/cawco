@@ -12,7 +12,7 @@ cardnot = Option("not-yet", "Not yet", "Say what's still off in the note.", fals
 
 empty = Decision("pins-empty", "Fixed from your pin: do the empty views look right now?", [emptyok, emptynot], "You asked why an empty view sat off to the left and why its starter cards weren't one size.", [emptyview])
 emptyview = Preview("@empty")
-emptyok = Option("looks-right", "Looks right", "Each empty view is centred on the page, its lines start on one edge, and its starter cards are one size.", true, [], "The build follows this drawing; a change later reopens it.")
+emptyok = Option("looks-right", "Looks right", "Each empty view is centred on the page, its lines start on one edge, and its starter cards are one size. Routines says its name once and has no composer of its own.", true, [], "The build follows this drawing; a change later reopens it.")
 emptynot = Option("not-yet", "Not yet", "Say what's still off in the note.", false, [], "The empty views' build waits for the next round.")
 
 head = Decision("pins-head", "Fixed from your pin: does the project head look right now?", [headok, headnot], "You couldn't tell what the Spin off button was for, and New session was a bare command.", [headview])
