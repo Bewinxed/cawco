@@ -38,12 +38,16 @@
  *     area reaches 44px; at 320 a several-pick card of three long unbroken
  *     labels folds inside its card. A click inside an option's embed
  *     reaches the embed and picks nothing.
+ * (h) Draw and Comment land where the person makes them over an option's
+ *     live embed: a loop that crosses into the embed keeps every move made
+ *     inside it, and marks an element inside the embed; a Comment tap inside
+ *     the embed anchors to the element under it there.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { createHash } from "node:crypto";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Frame, Page } from "playwright-core";
+import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../kit";
@@ -122,10 +126,20 @@ const HTML_PAGE = `<!doctype html>
 </article></main><script>{{KIT_JS}}</script></body></html>`;
 
 interface Doc {
-  ink: Record<string, { anchor?: { selector?: string } }>;
+  ink: Record<
+    string,
+    {
+      anchor?: { frames?: string[]; selector?: string };
+      over?: { frames?: string[]; selector: string }[];
+      strokes?: { points: [number, number, number][] }[];
+    }
+  >;
   pins: Record<
     string,
-    { anchor: { selector: string; text?: string }; number: number }
+    {
+      anchor: { frames?: string[]; selector: string; text?: string };
+      number: number;
+    }
   >;
   state: Record<
     string,
@@ -658,6 +672,9 @@ const mediaLeg = async (
   await shown.close();
 };
 
+/** The moves a loop is drawn by: its press and four sides of 20 steps each. */
+const LOOP_MOVES = 81;
+
 /** A loop drawn by the mouse round `box` (the screen's px), outside it by 8px. */
 const loopRound = async (
   page: Page,
@@ -751,7 +768,8 @@ const marks = async (on: On, frame: Frame) => {
   await mode(desk, frame, "D");
   // Round the hub's chip: a stroke over the edge option's live embed is the embed's (its frame takes the pointer).
   const options = frame.locator('#decision-host [data-option="hub"]');
-  await options.scrollIntoViewIfNeeded();
+  // The chip stands as tall as its cell (the edge option's embed beside it): at the pane's top, so the whole loop is drawn on the page.
+  await toPaneTop(options);
   await settle(desk, 300);
   const box = await options.boundingBox();
   if (box) {
@@ -765,9 +783,15 @@ const marks = async (on: On, frame: Frame) => {
   ).catch(() => null);
   const [group] = inked ? Object.values(inked.ink) : [];
   kit.check(
-    "(b) an ink loop round the host card's hub option anchors inside that card",
-    await inCard(frame, group?.anchor?.selector, "host"),
-    JSON.stringify(group?.anchor)
+    "(b) an ink loop round the host card's hub option keeps every move and anchors inside that card",
+    (group?.strokes?.[0]?.points.length ?? 0) >= LOOP_MOVES &&
+      (await inCard(frame, group?.anchor?.selector, "host")),
+    JSON.stringify({
+      anchor: group?.anchor,
+      loop: box,
+      points: (group?.strokes ?? []).map((one) => one.points.length),
+      over: (group?.over ?? []).map((one) => one.selector),
+    })
   );
   await desk.keyboard.press("Escape");
   await mode(desk, frame, "V");
@@ -807,6 +831,238 @@ const embedLeg = async (on: On, frame: Frame) => {
       (state.host?.options ?? []).length === 0,
     JSON.stringify({ heard, host: state.host ?? null })
   );
+};
+
+/** The edge option's live embed, in the panel's frame. */
+const EMBED = "#decision-host .dp-optmedia iframe";
+
+/** What a page anchor names, as `[frames, selector]`, resolved in the panel's frame: its box in that frame's viewport, whether it stands in a frame, and its class. */
+interface Named {
+  frames?: string[];
+  selector: string;
+}
+const resolveIn = (frame: Frame, anchors: Named[]) =>
+  frame.evaluate((all) => {
+    const resolve = ({ frames = [], selector }: Named) => {
+      let doc: Document | null = document;
+      let dx = 0;
+      let dy = 0;
+      for (const one of frames) {
+        const holder: HTMLIFrameElement | null =
+          doc?.querySelector<HTMLIFrameElement>(one) ?? null;
+        if (!holder) {
+          return null;
+        }
+        const r = holder.getBoundingClientRect();
+        dx += r.left + holder.clientLeft;
+        dy += r.top + holder.clientTop;
+        doc = holder.contentDocument;
+      }
+      const el = doc?.querySelector(selector);
+      if (!el) {
+        return null;
+      }
+      const r = el.getBoundingClientRect();
+      return {
+        x: r.left + dx,
+        y: r.top + dy,
+        w: r.width,
+        h: r.height,
+        inFrame: frames.length > 0,
+        className: el.className,
+      };
+    };
+    return all.map(resolve);
+  }, anchors);
+
+/**
+ * `target` at the top of the page's viewport, 40px down: all of it inside
+ * the pane (a stroke past the pane's edge is the dashboard's, never the
+ * page's) and clear of the Dials panel, which floats at the viewport's foot
+ * over whatever is there.
+ */
+const toPaneTop = (target: Locator) =>
+  target.evaluate((el) => {
+    el.scrollIntoView({ block: "start" });
+    scrollBy(0, -40);
+  });
+
+/** What the page shows topmost at the middle of `box` (the desk's px), seen through the overlay. */
+const topAt = async (
+  desk: Page,
+  frame: Frame,
+  box: { height: number; width: number; x: number; y: number }
+) => {
+  const panel = await desk.locator(FRAME).first().boundingBox();
+  if (!panel) {
+    return null;
+  }
+  return frame.evaluate(
+    ([x, y]) => {
+      const hit = document
+        .elementsFromPoint(x, y)
+        .find(
+          (el) =>
+            !el.closest(
+              "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins]"
+            )
+        );
+      return hit ? `${hit.localName}.${hit.classList[0] ?? ""}` : null;
+    },
+    [box.x + box.width / 2 - panel.x, box.y + box.height / 2 - panel.y] as const
+  );
+};
+
+/**
+ * (h) Draw over an option's live embed: a loop that starts above the edge
+ * option's embed and rounds the box inside it keeps every move made over the
+ * embed, and marks the box inside it.
+ */
+const drawOverEmbed = async (on: On, frame: Frame) => {
+  const { desk, kit } = on;
+  await mode(desk, frame, "D");
+  // The mockup's box slides while motion is allowed: held still, the stroke's points read back against the box it was drawn round.
+  await desk.emulateMedia({ reducedMotion: "reduce" });
+  const embed = frame.locator(EMBED).first();
+  await toPaneTop(embed);
+  await settle(desk, 300);
+  const outer = await embed.boundingBox({ timeout: 10_000 });
+  const inner = await frame
+    .frameLocator(EMBED)
+    .locator(".box")
+    .first()
+    .boundingBox({ timeout: 10_000 });
+  const before = Object.keys((await docOf(frame)).ink);
+  if (!(outer && inner)) {
+    kit.check("(h) the edge option's embed is on the page", false, "no box");
+    await desk.emulateMedia({ reducedMotion: null });
+    return;
+  }
+  // From 16px above the embed's top edge, round its box, back to the start: each move sent alone.
+  const top = outer.y - 16;
+  const corners: [number, number][] = [
+    [inner.x - 8, top],
+    [inner.x + inner.width + 8, top],
+    [inner.x + inner.width + 8, inner.y + inner.height + 8],
+    [inner.x - 8, inner.y + inner.height + 8],
+    [inner.x - 8, top + 4],
+  ];
+  const sent: [number, number][] = [];
+  let [from] = corners as [[number, number]];
+  for (const to of corners.slice(1)) {
+    for (let i = 1; i <= 20; i += 1) {
+      sent.push([
+        from[0] + ((to[0] - from[0]) * i) / 20,
+        from[1] + ((to[1] - from[1]) * i) / 20,
+      ]);
+    }
+    from = to;
+  }
+  const [start] = corners as [[number, number]];
+  await desk.mouse.move(start[0], start[1]);
+  await desk.mouse.down();
+  for (const [x, y] of sent) {
+    await desk.mouse.move(x, y);
+  }
+  await desk.mouse.up();
+  const over = (x: number, y: number) =>
+    x >= outer.x &&
+    x <= outer.x + outer.width &&
+    y >= outer.y &&
+    y <= outer.y + outer.height;
+  const sentOver = sent.filter(([x, y]) => over(x, y)).length;
+  const inked = await until(
+    "the loop over the embed in the doc",
+    () => docOf(frame),
+    (d) => Object.keys(d.ink).some((id) => !before.includes(id)),
+    10_000
+  ).catch(() => null);
+  const group = inked
+    ? Object.entries(inked.ink).find(([id]) => !before.includes(id))?.[1]
+    : undefined;
+  const anchor = group?.anchor as Named | undefined;
+  const marked = (group?.over ?? []) as Named[];
+  const [at, ...overs] = await resolveIn(frame, [
+    anchor ?? { frames: [], selector: ":not(*)" },
+    ...marked.map((one) => ({
+      frames: one.frames ?? [],
+      selector: one.selector,
+    })),
+  ]);
+  // The stroke's points back in the panel frame's viewport, then into the desk's px by the panel frame's own place.
+  const panel = await desk.locator(FRAME).first().boundingBox();
+  const points = (group?.strokes ?? []).flatMap((stroke) => stroke.points);
+  const keptOver =
+    at && panel
+      ? points.filter(([fx, fy]) =>
+          over(panel.x + at.x + fx * at.w, panel.y + at.y + fy * at.h)
+        ).length
+      : 0;
+  const insideMarked = overs.filter(
+    (one) => one?.inFrame && String(one.className).includes("box")
+  ).length;
+  kit.check(
+    "(h) a Draw loop that crosses into an option's live embed keeps every move made over it, and marks the box inside the embed",
+    sentOver > 0 && keptOver >= sentOver && insideMarked > 0,
+    JSON.stringify({
+      sent: sent.length + 1,
+      kept: points.length,
+      sentOver,
+      keptOver,
+      top: await topAt(desk, frame, inner),
+      over: marked,
+    })
+  );
+  await desk.emulateMedia({ reducedMotion: null });
+  await desk.keyboard.press("Escape");
+  await mode(desk, frame, "V");
+};
+
+/** (h) Comment over an option's live embed: a tap on the box inside it pins to that box, through its frame. */
+const commentInEmbed = async (on: On, frame: Frame) => {
+  const { desk, kit } = on;
+  await mode(desk, frame, "C");
+  const embed = frame.locator(EMBED).first();
+  await toPaneTop(embed);
+  await settle(desk, 300);
+  const box = await frame
+    .frameLocator(EMBED)
+    .locator(".box")
+    .first()
+    .boundingBox({ timeout: 10_000 });
+  const before = Object.keys((await docOf(frame)).pins);
+  if (!box) {
+    kit.check("(h) the edge option's embed is on the page", false, "no box");
+    return;
+  }
+  await desk.mouse.click(box.x + 12, box.y + box.height / 2);
+  const pinned = await until(
+    "a pin inside the embed in the doc",
+    () => docOf(frame),
+    (d) => Object.keys(d.pins).some((id) => !before.includes(id)),
+    10_000
+  ).catch(() => null);
+  const pin = pinned
+    ? Object.entries(pinned.pins).find(([id]) => !before.includes(id))?.[1]
+    : undefined;
+  const anchor = pin?.anchor as Named | undefined;
+  const [at] = anchor
+    ? await resolveIn(frame, [
+        { frames: anchor.frames ?? [], selector: anchor.selector },
+      ])
+    : [null];
+  kit.check(
+    "(h) a Comment tap inside an option's live embed anchors to the element under it there: the box, through the embed's frame",
+    !!at?.inFrame && String(at.className).includes("box"),
+    JSON.stringify({
+      anchor: pin?.anchor ?? null,
+      top: await topAt(desk, frame, box),
+    })
+  );
+  // The pin has no words: closing its card withdraws it.
+  await desk.keyboard.press("Escape");
+  await desk.keyboard.press("Escape");
+  await mode(desk, frame, "V");
 };
 
 /** (b) the revision that puts a decision ahead: marks stay on their cards, the hash moves. */
@@ -960,7 +1216,7 @@ const graphChecks = async (on: On) => {
         edges: document.querySelectorAll(".svelte-flow__edge").length,
         frames: document.querySelectorAll(".svelte-flow__node-frame").length,
       })),
-    (g) => g.nodes === 4,
+    (g) => g.nodes === 4 && g.edges === 2 && g.frames === 1,
     20_000
   ).catch(() => null);
   kit.check(
@@ -1437,6 +1693,8 @@ const run = async (kit: Kit) => {
   await dialChecks(on, await frameWith(on.desk, 3));
   await embedLeg(on, await frameWith(on.desk, 3));
   const first = await marks(on, await frameWith(on.desk, 3));
+  await drawOverEmbed(on, await frameWith(on.desk, 3));
+  await commentInEmbed(on, await frameWith(on.desk, 3));
   await insertAhead(on, first);
   for (const theme of ["light", "dark"] as const) {
     await foldLeg(on, theme);
