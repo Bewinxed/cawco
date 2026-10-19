@@ -101,7 +101,6 @@ import {
   type WorkspaceRef,
 } from "@cawco/core";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
-import type { RelayCandidate } from "@cawco/core/stream-relay";
 import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { Elysia, status, t } from "elysia";
 import { z } from "zod";
@@ -132,7 +131,7 @@ import {
   writeFolderFile,
 } from "./project-folder";
 import { roleOf } from "./roles";
-import { setupEvent } from "./setup";
+import { type RelayOffer, setupEvent } from "./setup";
 import {
   readStages,
   type StagesTemplate,
@@ -660,8 +659,8 @@ export interface CawDeps {
    * machine cannot hold it: the wake does not go out.
    */
   readonly refreshPlace: (lead: InstanceRow) => Promise<void>;
-  /** The machines the setup page's stream relay card offers, while it is to be asked; null once the fleet has a relay or the card was answered. */
-  readonly relayOffer: () => readonly RelayCandidate[] | null;
+  /** The setup page's stream relay card, while it is to be asked (with the domain the person last reached CawCo through); null once the fleet has a relay or a journey, or the card was answered. */
+  readonly relayOffer: () => RelayOffer | null;
   /** Delivers one message to a session through the hub's one send path: whether the hub took it (its record `pending`). */
   readonly send: (envelope: Envelope<SendPayload>) => boolean;
   /** Starts a session in `mode` where its harness has modes, resolved once its machine says it is in place. */

@@ -1,6 +1,6 @@
 import { existsSync, watch } from "node:fs";
 import { readFile, rm } from "node:fs/promises";
-import { arch, homedir, hostname, platform } from "node:os";
+import { arch, homedir, hostname, networkInterfaces, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type {
   AccountIdentity,
@@ -118,10 +118,16 @@ import {
 } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
 import {
+  RELAY_CERTIFY,
+  RELAY_LOW_PORTS,
+  RELAY_MAP,
+  RELAY_PROVE,
   RELAY_REMOVE,
   RELAY_RENEW,
   RELAY_START,
   RELAY_STOP,
+  type RelayCertifyArgs,
+  type RelayMapArgs,
   type RelayStartArgs,
 } from "@cawco/core/stream-relay";
 import { readUpstreamRule } from "@cawco/core/upstream-guard";
@@ -166,6 +172,8 @@ import {
 } from "./browser/browsers";
 import { sweepBrowserDoors } from "./browser/door";
 import {
+  certifyRelay,
+  relayLowPorts,
   removeRelay,
   renewRelay,
   setRelaySink,
@@ -180,6 +188,8 @@ import {
   setShieldSink,
   shieldBrowser,
 } from "./browser/shield";
+import { proveRelay } from "./browser/relay-reach";
+import { mapRelayPorts } from "./browser/relay-router";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
@@ -275,6 +285,9 @@ const takeUpstream = (
   });
 };
 
+/** How often the machine's interfaces are compared, for a network change (our call: a minute's stale address is a minute's wrong relay candidate). */
+const NETWORK_CHECK_MS = 30_000;
+
 /** The settings a `relay.start` carries, or a refusal saying what came. */
 const relayStartOf = (args: unknown): RelayStartArgs => {
   const given = args as Partial<RelayStartArgs> | null;
@@ -296,6 +309,29 @@ const relayStartOf = (args: unknown): RelayStartArgs => {
     );
   }
   return given as RelayStartArgs;
+};
+
+/** A `relay.certify`'s name and token, or a refusal saying what came. */
+const relayCertifyOf = (args: unknown): RelayCertifyArgs => {
+  const given = args as Partial<RelayCertifyArgs> | null;
+  if (!(
+    given &&
+    typeof given.hostname === "string" &&
+    (given.cloudflareToken === undefined ||
+      typeof given.cloudflareToken === "string")
+  )) {
+    throw new Error("relay.certify takes a hostname and, for DNS, a token.");
+  }
+  return given as RelayCertifyArgs;
+};
+
+/** A `relay.map`'s address on the router's network, or a refusal saying what came. */
+const relayMapOf = (args: unknown): RelayMapArgs => {
+  const given = args as Partial<RelayMapArgs> | null;
+  if (!(given && typeof given.lan === "string" && typeof given.http === "boolean")) {
+    throw new Error("relay.map takes the machine's router address and http.");
+  }
+  return given as RelayMapArgs;
 };
 
 /** The key a `browser.stop` or `browser.remove` names (`{ key }`), or a refusal saying what came. */
@@ -1660,10 +1696,43 @@ const attach = (
           }
         })()
       : undefined;
+    // The machine's network changed (an interface's address came or went):
+    // its capabilities read again, so the public address its router maps it
+    // to (STUN, browser/relay-reach.ts) follows the network it is on.
+    const networkOf = (): string =>
+      Object.values(networkInterfaces())
+        .flatMap((addresses) => addresses ?? [])
+        .map((one) => one.address)
+        .sort()
+        .join(",");
+    let network = networkOf();
+    const networkWatch = setInterval(() => {
+      const now = networkOf();
+      if (now === network) {
+        return;
+      }
+      network = now;
+      readPart("the machine's capabilities", probeCapabilities)
+        .then((machineCapabilities) => {
+          if (machineCapabilities && socket.readyState === WebSocket.OPEN) {
+            send(socket, {
+              verb: "heartbeat",
+              machineId: identity.machineId,
+              payload: {
+                at: Date.now(),
+                instances: supervisor.instanceIds,
+                machineCapabilities,
+              } satisfies HeartbeatPayload,
+            });
+          }
+        })
+        .catch(() => undefined);
+    }, NETWORK_CHECK_MS);
     yield* Effect.addFinalizer(() =>
       Effect.sync(() => {
         clearTimeout(piSoon);
         piWatch?.close();
+        clearInterval(networkWatch);
       })
     );
     // Each part goes on its own beat as soon as it is read (`readPart`), so
@@ -3144,7 +3213,29 @@ export const startDaemon = (rediscover = false) =>
     );
     supervisor.registerDaemonFunction(RELAY_STOP, () => stopRelay());
     supervisor.registerDaemonFunction(RELAY_REMOVE, () => removeRelay());
-    supervisor.registerDaemonFunction(RELAY_RENEW, () => renewRelay());
+    supervisor.registerDaemonFunction(RELAY_RENEW, (args) => {
+      const token = (args as { cloudflareToken?: unknown } | null)
+        ?.cloudflareToken;
+      return renewRelay(typeof token === "string" ? { cloudflareToken: token } : {});
+    });
+    // The relay's journey (hub relay-journey.ts): its certificate issued, the
+    // low ports read, the router asked, and a binding from here through it.
+    supervisor.registerDaemonFunction(RELAY_CERTIFY, (args) =>
+      certifyRelay(relayCertifyOf(args))
+    );
+    supervisor.registerDaemonFunction(RELAY_LOW_PORTS, (args) => {
+      const lowest = (args as { lowest?: unknown } | null)?.lowest;
+      return relayLowPorts(typeof lowest === "number" ? lowest : 443);
+    });
+    supervisor.registerDaemonFunction(RELAY_MAP, (args) =>
+      mapRelayPorts(relayMapOf(args))
+    );
+    supervisor.registerDaemonFunction(RELAY_PROVE, (args) => {
+      const urls = (args as { urls?: unknown } | null)?.urls;
+      return proveRelay(
+        Array.isArray(urls) ? urls.filter((url) => typeof url === "string") : []
+      );
+    });
     yield* Effect.forkScoped(
       Effect.promise(() =>
         watchRelay().catch((error: unknown) =>

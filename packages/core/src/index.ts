@@ -1676,6 +1676,8 @@ export type FramePayload =
   | import("./browser").BrowserHandedBackFrame
   /** Daemon-originated: the stream relay on the machine, whole, on each change. */
   | import("./stream-relay").RelayFrame
+  /** Hub-originated: the stream relay's journey, whole, on each change. */
+  | import("./stream-relay").RelayJourneyFrame
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;
 
@@ -2027,6 +2029,21 @@ export const CAWCO_ENV = {
    * scratch fleet) names its own.
    */
   browserGatePort: "CAWCO_BROWSER_GATE_PORT",
+  /**
+   * The stream relay journey's stand-ins (hub relay-journey.ts, agent
+   * browser/relay.ts), each unset on every installed machine; a scratch
+   * fleet names its own so no request leaves the machine: Cloudflare's API
+   * origin (`https://api.cloudflare.com/client/v4`), the page listing
+   * Cloudflare's IPv4 ranges, the DNS server the name check asks
+   * (`host:port`) in place of the system's, the STUN server the agent asks
+   * for its router's address, and the UPnP gateway's descriptor URL the
+   * agent maps ports on in place of the one SSDP finds.
+   */
+  cloudflareApi: "CAWCO_CLOUDFLARE_API",
+  cloudflareIps: "CAWCO_CLOUDFLARE_IPS",
+  relayDns: "CAWCO_RELAY_DNS",
+  stunServer: "CAWCO_STUN_SERVER",
+  upnpGateway: "CAWCO_UPNP_GATEWAY",
 } as const;
 
 /** One of {@link CAWCO_ENV}'s variable names. */

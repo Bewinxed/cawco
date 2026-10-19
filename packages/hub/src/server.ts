@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { readFileSync } from "node:fs";
-import { hostname as osHostname } from "node:os";
+import { networkInterfaces, hostname as osHostname } from "node:os";
 import { join, posix } from "node:path";
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
@@ -566,7 +566,7 @@ import { gateRoutes, projectCawEdits } from "./gate-file";
 import { bareRepoPath, gitRemoteRoutes } from "./git-remote";
 import type { HarnessPlanDeps } from "./harness-plans";
 import { hidden } from "./hidden";
-import { addressOf, type Caller, createHubAuth } from "./hub-auth";
+import { addressOf, browserName, type Caller, createHubAuth } from "./hub-auth";
 import { hubId } from "./hub-id";
 import { hubRestarts } from "./hub-restart";
 import { hubHttpUrl } from "./hub-self";
@@ -737,7 +737,14 @@ import { createSshDoor } from "./ssh-door";
 import { createSshTunnels } from "./ssh-tunnels";
 import { type StagesTemplate, TEMPLATES, templateOf } from "./stages";
 import { createStreamHub } from "./stream";
-import { createStreamRelay, streamRelayRoutes } from "./stream-relay";
+import {
+  askedFrom,
+  browserKey,
+  createRelayJourney,
+  domainOf,
+  relayJourneyRoutes,
+} from "./relay-journey";
+import { createStreamRelay } from "./stream-relay";
 import { suggest } from "./suggest";
 import { createTailnetHttps, dashboardRelay } from "./tailnet-https";
 import { createTaskApproval } from "./task-approval";
@@ -10793,25 +10800,85 @@ export const createServer = (
    * The fleet's stream relay (stream-relay.ts): coturn on a machine with a
    * public address, its secret kept here, its health asked every minute.
    */
+  const relayMachines = () =>
+    db.listAgents().map((agent) => {
+      const seen = registry.address(agent.machineId);
+      return {
+        machineId: agent.machineId,
+        name: machineName(agent.machineId),
+        online: registry.agent(agent.machineId) !== undefined,
+        ...(agent.machineCapabilities
+          ? { capabilities: agent.machineCapabilities }
+          : {}),
+        ...(seen ? { seen } : {}),
+      };
+    });
   const streamRelay = createStreamRelay({
     db: db.streamRelay,
     call: callAgent,
     lifetime,
-    machines: () =>
-      db.listAgents().map((agent) => {
-        const seen = registry.address(agent.machineId);
-        return {
-          machineId: agent.machineId,
-          name: machineName(agent.machineId),
-          online: registry.agent(agent.machineId) !== undefined,
-          ...(agent.machineCapabilities
-            ? { capabilities: agent.machineCapabilities }
-            : {}),
-          ...(seen ? { seen } : {}),
-        };
-      }),
+    machines: relayMachines,
+    changed: () => relayJourney.changed(),
+    cloudflareToken: () => relayJourney.token(),
+    renewed: (expiresAt) =>
+      db.streamRelay.journeyUpdate({ certificateEndsAt: expiresAt }),
   });
   streamRelay.watch();
+  /**
+   * The stream relay's guided journey (relay-journey.ts): every step
+   * computed from its record, the fleet and the relay, and pushed to every
+   * dashboard on each change (`stream_relay.journey`). Its tick starts once
+   * the hub's own machine is read (below).
+   */
+  const relayJourney = createRelayJourney({
+    db: db.streamRelay,
+    relay: streamRelay,
+    call: callAgent,
+    machines: relayMachines,
+    hubMachineId: () => ownMachineIdRead ?? null,
+    publish: (journey) =>
+      registry.broadcast({
+        verb: "frames",
+        machineId: "hub",
+        payload: { kind: "stream_relay.journey", journey },
+      }),
+  });
+  /** The names and addresses the hub's own machine answers by: a page on one of them came in by no domain. */
+  const hubOwnNames = (): string[] => {
+    const host = osHostname().toLowerCase();
+    const tailnet = tailnetHttps.state().name?.toLowerCase();
+    return [
+      "localhost",
+      host,
+      `${host}.local`,
+      ...(tailnet ? [tailnet, tailnet.split(".")[0] ?? tailnet] : []),
+      ...Object.values(networkInterfaces())
+        .flatMap((addresses) => addresses ?? [])
+        .map((one) => one.address.toLowerCase()),
+    ];
+  };
+  /**
+   * The domain a page last reached CawCo through (every dashboard reads the
+   * journey as it loads): the setup card recommends Set up with it.
+   */
+  let lastRelayDomain: string | null = null;
+  /** Who asks of the relay's journey: the paired device (a browser's own key on a trusted hub), where from, and through what domain. */
+  const relayAsker = (request: Request, socket: string | null) => {
+    const caller = hubAuth.callerOf(request, socket);
+    const agent = request.headers.get("user-agent");
+    const domain = domainOf(request.headers, hubOwnNames());
+    if (domain) {
+      lastRelayDomain = domain;
+    }
+    return {
+      device:
+        caller.kind === "owner" && caller.device
+          ? caller.device
+          : { id: browserKey(agent), name: browserName(agent) },
+      address: askedFrom(request.headers, socket),
+      domain,
+    };
+  };
 
   /**
    * Another checkout of a project's repository: named by hand
@@ -11397,20 +11464,23 @@ export const createServer = (
     sending: (instance, artifact, state) =>
       applySetupPicks(artifact, instance.projectId, state, {
         fleet: (choices) => setFleetChoices(fleetChoices, choices),
-        // The relay's own record says how its start went (Settings › Browsers).
-        relay: (pick) => {
-          db.streamRelay.asked();
-          if (pick === "later") {
-            return;
-          }
-          streamRelay
-            .setup(pick)
+        // Set up opens the relay's journey, and its row stands in Needs you;
+        // Later only answers the card.
+        relay: (pick) =>
+          relayJourney
+            .act(
+              { act: pick },
+              {
+                device: { id: "setup", name: "the setup page" },
+                address: null,
+                domain: null,
+              }
+            )
             .catch((error: unknown) =>
               console.warn(
-                `[stream-relay] the setup page's relay on ${machineName(pick.machineId)} did not start: ${error instanceof Error ? error.message : String(error)}`
+                `[relay-journey] the setup page's ${pick} was not taken: ${error instanceof Error ? error.message : String(error)}`
               )
-            );
-        },
+            ),
         // A refusal is an ArtifactRefusal too: the send answers it.
         place: async (projectId, place) => {
           await addProjectPlace(projectId, place.machineId, place.path);
@@ -16138,6 +16208,7 @@ export const createServer = (
     }),
     "own machine id"
   );
+  relayJourney.watch();
 
   /** The fleet content a machine holds on its disk now; nothing when it cannot say. */
   const readHoldings = async (machineId: string): Promise<FleetHoldings> => {
@@ -19755,9 +19826,11 @@ export const createServer = (
     },
     fleetChoicesSet: () => db.getSupervisorConfig().choicesSetAt !== null,
     relayOffer: () =>
-      db.streamRelay.read() || db.streamRelay.askedAt() !== null
+      db.streamRelay.read() ||
+      db.streamRelay.journey() ||
+      db.streamRelay.askedAt() !== null
         ? null
-        : streamRelay.answer().candidates,
+        : { domain: lastRelayDomain },
     upstreamAnswered: () => db.upstreamPosts() !== null,
     projectsChanged,
     // Thread rows and messages reach every dashboard on the ledger, as sessions do.
@@ -22948,9 +23021,11 @@ export const createServer = (
           db.listProjects().some((project) => project.id === id)
         ),
         fleetChoicesRoutes(fleetChoices),
-        streamRelayRoutes(streamRelay),
         browserRoutes(browsers),
         browserStreamRoutes(browserStream),
+        relayJourneyRoutes(relayJourney, relayAsker, (request, server) =>
+          addressOf(server as Parameters<typeof addressOf>[0], request)
+        ),
         projectFolderRoutes(
           (id) => db.listProjects().some((project) => project.id === id),
           (id) => {
@@ -27871,6 +27946,7 @@ export const createServer = (
               // A take-over it held is sent again: its gate stays closed.
               browsers.connected(message.machineId);
               browserStream.connected(message.machineId);
+              relayJourney.connected(message.machineId);
               // A question parked by a process that is gone cannot be answered:
               // the reply would arrive at a daemon with no such session. Drop them
               // with the sessions they belonged to, or they replay to every
