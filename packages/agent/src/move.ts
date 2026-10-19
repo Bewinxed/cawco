@@ -48,7 +48,7 @@ import { hostEnvironment } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
 import type { Subprocess } from "bun";
 import { useHubCredentialHelper } from "./git-credential";
-import { placeSettled, placeTurn } from "./place-repo";
+import { notAProject, placeSettled, placeTurn } from "./place-repo";
 
 // ── The hub's git remote ───────────────────────────────────────────────────
 
@@ -998,6 +998,11 @@ const prepareNow = async (
   const env = plainEnv(LFS_FILTERS);
   const gitInit = !(await exists(join(path, ".git")));
   if (gitInit) {
+    // The rule every first commit keeps (place-repo.ts): no home or cache folder.
+    const refused = notAProject(path);
+    if (refused) {
+      throw new StepFailed(refused);
+    }
     await must(run, path, ["init", "-q"], "git init failed", env);
   }
   if (request.bigFiles.length > 0) {

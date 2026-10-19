@@ -26,6 +26,7 @@
  */
 import {
   CONTROL_PLACE_REPO,
+  CONTROL_REPO_ROOT,
   machineCalled,
   type PlaceLeftOut,
   type PlaceRepo,
@@ -191,25 +192,30 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
     };
   };
 
+  /**
+   * Resolves once the place at `path` on `machineId` has no repo step in
+   * flight: what reads the folder to decide what to ask or do (a move's
+   * plan) reads its settled state, whichever step started first. A step
+   * that fails leaves the folder as it was; its error is its caller's.
+   */
+  const settled = async (machineId: string, path: string): Promise<void> => {
+    await inFlight.get(keyOf(machineId, path))?.catch(() => undefined);
+  };
+
   return {
     ensure,
     hold,
+    settled,
 
     /**
-     * Resolves once the place at `path` on `machineId` has no repo step in
-     * flight: what reads the folder to decide what to ask or do (a move's
-     * plan) reads its settled state, whichever step started first. A step
-     * that fails leaves the folder as it was; its error is its caller's.
-     */
-    async settled(machineId: string, path: string): Promise<void> {
-      await inFlight.get(keyOf(machineId, path))?.catch(() => undefined);
-    },
-
-    /**
-     * Before a workspace is cut from `cwd` on `machineId` for `projectId`:
-     * the project's place that holds it, made a repository when it is not
-     * one. A folder that is none of the project's places is left alone, and
-     * the workspace's own create says why it cannot be cut.
+     * Before a workspace is cut from `cwd` on `machineId` for `projectId`.
+     * The workspace is cut from the git checkout `cwd` is in: once the
+     * project's place holding `cwd` has settled, a `cwd` already in a
+     * checkout needs nothing, and nothing else is touched. Only a `cwd` in no
+     * checkout has the project's place that holds it made a repository (the
+     * machine refuses a home or cache folder, in its words). A folder that
+     * is none of the project's places is left alone, and the workspace's own
+     * create says why it cannot be cut.
      */
     async beforeCut(
       projectId: string,
@@ -221,7 +227,13 @@ export const createPlaceRepos = ({ call, db, notice }: PlaceRepoDeps) => {
         machineId,
         cwd
       );
-      if (place) {
+      if (!place) {
+        return;
+      }
+      await settled(machineId, place.path);
+      const root = (await call(machineId, CONTROL_REPO_ROOT, [cwd])) as
+        string | null;
+      if (root === null) {
         await ensure({ projectId, machineId, path: place.path });
       }
     },

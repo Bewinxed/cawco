@@ -21,11 +21,12 @@
  * Nothing is pushed and no remote is added. A run that fails after
  * `git init` takes its `.git` and `.gitignore` change back.
  */
-import { lstat, mkdtemp, readFile, rm, stat } from "node:fs/promises";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { lstat, mkdtemp, open, readFile, rm, stat } from "node:fs/promises";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import {
   credentialIn,
+  LARGE_FILE_BYTES,
   PLACE_REPO_LIMIT_BYTES,
   type PlaceLeftOut,
   type PlaceRepo,
@@ -108,7 +109,7 @@ const ignoreLine = (path: string): string =>
 const ignoreBlock = (leftOut: readonly PlaceLeftOut[]): string =>
   leftOut.length === 0
     ? ""
-    : `# CawCo left these out of this folder's first commit: each holds what reads as a credential, or is a git repository of its own.\n${leftOut
+    : `# CawCo left these out of this folder's first commit: each holds what reads as a credential, is a large file, or is a git repository of its own.\n${leftOut
         .map((each) => ignoreLine(each.path))
         .join("\n")}\n`;
 
@@ -198,13 +199,70 @@ type Git = ReturnType<typeof gitIn>;
 
 const nulList = (text: string): string[] => text.split("\0").filter(Boolean);
 
-const utf8 = new TextDecoder();
+/** How much of a file the credential scan reads at a time. */
+const SCAN_READ = 1024 * 1024;
+/**
+ * How much of what it read last the scan carries into the next read: more
+ * than any credential's shape needs to be seen whole (core secret-text.ts),
+ * so one across two reads is found.
+ */
+const SCAN_CARRY = 4096;
 
-/** What reads as a credential in `bytes`, when they are text; undefined for binary or for none. */
-const credentialOf = (bytes: Uint8Array): string | undefined =>
-  bytes.subarray(0, BINARY_PROBE).includes(0)
-    ? undefined
-    : credentialIn(utf8.decode(bytes));
+/**
+ * The credential scan of one file's bytes as they arrive, holding no more
+ * than one read and {@link SCAN_CARRY} of the last: a file is never held
+ * whole. `found` is what the first credential reads as; a file with a NUL in
+ * its first {@link BINARY_PROBE} bytes is binary, and holds none.
+ */
+class CredentialScan {
+  readonly #decoder = new TextDecoder();
+  #carry = "";
+  #seen = 0;
+  found: string | undefined;
+  /** Whether more bytes could change what it found: a credential found, or binary. */
+  done: boolean;
+
+  constructor() {
+    this.done = false;
+  }
+
+  feed(bytes: Uint8Array): void {
+    if (this.done) {
+      return;
+    }
+    if (
+      this.#seen < BINARY_PROBE &&
+      bytes.subarray(0, BINARY_PROBE - this.#seen).includes(0)
+    ) {
+      this.done = true;
+      return;
+    }
+    this.#seen += bytes.length;
+    const text = this.#carry + this.#decoder.decode(bytes, { stream: true });
+    this.found = credentialIn(text);
+    this.done = this.found !== undefined;
+    this.#carry = text.slice(-SCAN_CARRY);
+  }
+}
+
+/** What reads as a credential in the file at `path`, read {@link SCAN_READ} at a time; undefined for binary or for none. */
+const credentialInFile = async (path: string): Promise<string | undefined> => {
+  const file = await open(path, "r");
+  try {
+    const scan = new CredentialScan();
+    const buffer = new Uint8Array(SCAN_READ);
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: one read at a time is the point: a file is never held whole
+      const { bytesRead } = await file.read(buffer, 0, SCAN_READ, null);
+      if (bytesRead === 0 || scan.done) {
+        return scan.found;
+      }
+      scan.feed(buffer.subarray(0, bytesRead));
+    }
+  } finally {
+    await file.close();
+  }
+};
 
 /**
  * The paths git reads as the place's own and has not yet: untracked and
@@ -243,9 +301,11 @@ interface Judged {
 
 /**
  * The paths git listed, judged: a repository of its own is left out, as git
- * takes none of its files; so is a file whose text reads as a credential.
- * A file or link is taken (a link as git takes one: its target's path, never
- * what it leads to); anything else git would not take either.
+ * takes none of its files; so is a large file (core `LARGE_FILE_BYTES`, the
+ * size a move sends separately), never read, and a file whose text reads as
+ * a credential. A file or link is taken (a link as git takes one: its
+ * target's path, never what it leads to); anything else git would not take
+ * either.
  */
 const judge = async (
   root: string,
@@ -259,12 +319,17 @@ const judge = async (
       continue;
     }
     const full = join(root, path);
-    // biome-ignore lint/performance/noAwaitInLoops: one file in memory at a time
+    // biome-ignore lint/performance/noAwaitInLoops: one file read at a time
     const info = await lstat(full).catch(() => undefined);
     if (info?.isSymbolicLink()) {
       sizes.set(path, 0);
+    } else if (info?.isFile() && info.size >= LARGE_FILE_BYTES) {
+      leftOut.push({
+        path,
+        why: `a large file (${mb(info.size)}); a first commit takes none of ${mb(LARGE_FILE_BYTES)} or more`,
+      });
     } else if (info?.isFile()) {
-      const found = credentialOf(await readFile(full));
+      const found = await credentialInFile(full);
       if (found) {
         leftOut.push({ path, why: `its text holds what reads as ${found}` });
       } else {
@@ -284,21 +349,23 @@ const NEWLINE = 10;
 /**
  * `git cat-file --batch`'s answer, fed as it arrives: `<oid> <type> <size>`,
  * a newline, the object's bytes and a newline, for each object asked; an
- * `<oid> missing` line for one there is not. Each blob is handed to `each`
- * whole, one at a time.
+ * `<oid> missing` line for one there is not. Each blob's bytes go through a
+ * {@link CredentialScan} as git writes them, and `each` hears what it found:
+ * no blob is held whole.
  */
 class BatchReader {
-  readonly #each: (oid: string, bytes: Uint8Array) => void;
+  readonly #each: (oid: string, found: string | undefined) => void;
   readonly #decoder = new TextDecoder();
   #header = "";
   #oid = "";
-  #kind = "";
-  #body: Uint8Array | undefined;
-  #filled = 0;
+  /** The blob being read; undefined for any other object. */
+  #scan: CredentialScan | undefined;
+  /** Its bytes still to come; undefined between objects. */
+  #left: number | undefined;
   /** Bytes to pass over before the next header: the newline after an object. */
   #skip = 0;
 
-  constructor(each: (oid: string, bytes: Uint8Array) => void) {
+  constructor(each: (oid: string, found: string | undefined) => void) {
     this.#each = each;
   }
 
@@ -308,21 +375,20 @@ class BatchReader {
       if (this.#skip > 0) {
         this.#skip -= 1;
         at += 1;
-      } else if (this.#body) {
-        at = this.#fill(chunk, at);
-      } else {
+      } else if (this.#left === undefined) {
         at = this.#readHeader(chunk, at);
+      } else {
+        at = this.#fill(chunk, at);
       }
     }
   }
 
-  /** Copies what of the object's bytes `chunk` holds from `at`; answers where it stopped. */
+  /** Scans what of the object's bytes `chunk` holds from `at`; answers where it stopped. */
   #fill(chunk: Uint8Array, at: number): number {
-    const body = this.#body as Uint8Array;
-    const n = Math.min(body.length - this.#filled, chunk.length - at);
-    body.set(chunk.subarray(at, at + n), this.#filled);
-    this.#filled += n;
-    if (this.#filled === body.length) {
+    const n = Math.min(this.#left ?? 0, chunk.length - at);
+    this.#scan?.feed(chunk.subarray(at, at + n));
+    this.#left = (this.#left ?? 0) - n;
+    if (this.#left === 0) {
       this.#done();
     }
     return at + n;
@@ -340,10 +406,9 @@ class BatchReader {
     this.#header = "";
     if (size !== undefined) {
       this.#oid = id;
-      this.#kind = type;
-      this.#body = new Uint8Array(Number(size));
-      this.#filled = 0;
-      if (this.#body.length === 0) {
+      this.#scan = type === "blob" ? new CredentialScan() : undefined;
+      this.#left = Number(size);
+      if (this.#left === 0) {
         this.#done();
       }
     }
@@ -351,24 +416,25 @@ class BatchReader {
   }
 
   #done(): void {
-    if (this.#body && this.#kind === "blob") {
-      this.#each(this.#oid, this.#body);
+    if (this.#scan) {
+      this.#each(this.#oid, this.#scan.found);
     }
-    this.#body = undefined;
+    this.#scan = undefined;
+    this.#left = undefined;
     this.#skip = 1;
   }
 }
 
 /**
- * Hands each blob `oids` name in `root` to `each`, read through one
- * `git cat-file --batch`, a blob at a time: a history is read whole without
- * holding more than its largest file.
+ * Hands what each blob `oids` name in `root` reads as to `each`, read
+ * through one `git cat-file --batch` as git streams it: a history is read
+ * whole without holding any of its files whole.
  */
 const eachBlob = (
   root: string,
   oids: readonly string[],
   deadline: number,
-  each: (oid: string, bytes: Uint8Array) => void
+  each: (oid: string, found: string | undefined) => void
 ): Promise<void> =>
   within(deadline, "git cat-file", async (signal) => {
     const args = ["cat-file", "--batch"];
@@ -417,9 +483,8 @@ const historyHits = async (
     }
   }
   const hits = new Map<string, PlaceLeftOut>();
-  await eachBlob(root, [...pathOf.keys()], deadline, (oid, bytes) => {
+  await eachBlob(root, [...pathOf.keys()], deadline, (oid, found) => {
     const path = pathOf.get(oid) ?? oid;
-    const found = credentialOf(bytes);
     if (found && (inHead.has(oid) || !hits.has(path))) {
       hits.set(path, {
         path,
@@ -514,7 +579,7 @@ const gitignoreText = (
 
 /** The first commit's message: what it took and what it left out. */
 const messageOf = (plan: Plan): string =>
-  `CawCo: this folder's first commit\n\n${plan.staged.length + 1} files, ${mb(plan.bytes)}. ${plan.leftOut.length} paths left out and named in .gitignore: each holds what reads as a credential, or is a git repository of its own. Nothing was pushed.`;
+  `CawCo: this folder's first commit\n\n${plan.staged.length + 1} files, ${mb(plan.bytes)}. ${plan.leftOut.length} paths left out and named in .gitignore: each holds what reads as a credential, is a large file, or is a git repository of its own. Nothing was pushed.`;
 
 /**
  * Makes `root` a repository with the plan's files in one commit; on any
@@ -650,20 +715,61 @@ export const placeRepo = (
   return placeTurn(root, () => placeRepoNow(root, false));
 };
 
-const placeRepoNow = async (root: string, dry: boolean): Promise<PlaceRepo> => {
-  const info = await stat(root).catch(() => undefined);
-  if (!info?.isDirectory()) {
-    throw new Error(
-      `${root} is not a folder on this machine, so CawCo can't make it a git repository.`
-    );
+/** This machine's cache folder: `XDG_CACHE_HOME`, else where the platform keeps one under the home folder. */
+const cacheFolder = (): string =>
+  resolve(
+    process.env.XDG_CACHE_HOME ||
+      join(
+        homedir(),
+        process.platform === "darwin" ? "Library/Caches" : ".cache"
+      )
+  );
+
+/** Whether `inner` is `outer` or lies in it. */
+const isIn = (inner: string, outer: string): boolean =>
+  inner === outer || inner.startsWith(outer === "/" ? "/" : `${outer}/`);
+
+/**
+ * Why `root` is no project's folder to make a git repository, or nothing:
+ * this machine's home folder, a folder that holds it, or its cache folder,
+ * one in it or one holding it. Each holds far more than a project (other
+ * repositories, caches of models and packages, keys), so a first commit of
+ * it is never what the person meant. Read from paths alone: nothing in the
+ * folder is read.
+ */
+export const notAProject = (path: string): string | undefined => {
+  const root = resolve(path);
+  const home = resolve(homedir());
+  const cache = cacheFolder();
+  const instead =
+    "Make a folder for the project, or pick its repository, and add that as its place instead.";
+  if (root === home) {
+    return `${root} is the home folder on this machine, which holds far more than one project, so CawCo won't make it a git repository. ${instead}`;
   }
-  const git = gitIn(Date.now() + WORKSPACE_GIT_TIMEOUT_MS);
+  if (isIn(home, root)) {
+    return `${root} holds the home folder ${home} on this machine, so CawCo won't make it a git repository. ${instead}`;
+  }
+  if (isIn(root, cache)) {
+    return `${root} ${root === cache ? "is" : "is in"} this machine's cache folder ${cache}, so CawCo won't make it a git repository. ${instead}`;
+  }
+  if (isIn(cache, root)) {
+    return `${root} holds this machine's cache folder ${cache}, so CawCo won't make it a git repository. ${instead}`;
+  }
+  return undefined;
+};
+
+/**
+ * The top of the git checkout `path` is in, or undefined when it is in
+ * none. Throws when git can't tell, or when `path` is inside a
+ * repository's own directory rather than a checkout of it.
+ */
+const repoTop = async (path: string, git: Git): Promise<string | undefined> => {
   const couldNotTell = (error: Error): Error =>
     new Error(
-      `CawCo couldn't tell whether ${root} is in a git repository: ${error.message}`,
+      `CawCo couldn't tell whether ${path} is in a git repository: ${error.message}`,
       { cause: error }
     );
-  const inside = await git(root, "rev-parse", "--is-inside-work-tree").then(
+  const inside = await git(path, "rev-parse", "--is-inside-work-tree").then(
     (out) => out.trim(),
     (error: Error) => {
       if (error instanceof GitFailed && error.code === NOT_A_REPO_EXIT) {
@@ -672,19 +778,54 @@ const placeRepoNow = async (root: string, dry: boolean): Promise<PlaceRepo> => {
       throw couldNotTell(error);
     }
   );
-  if (inside === "true") {
-    const top = await git(root, "rev-parse", "--show-toplevel").then(
-      (out) => out.trim(),
-      (error: Error) => {
-        throw couldNotTell(error);
-      }
+  if (inside === undefined) {
+    return undefined;
+  }
+  if (inside !== "true") {
+    throw new Error(
+      `${path} is inside a git repository's own directory, not a checkout of it, so CawCo leaves the folder as it is.`
     );
+  }
+  return await git(path, "rev-parse", "--show-toplevel").then(
+    (out) => out.trim(),
+    (error: Error) => {
+      throw couldNotTell(error);
+    }
+  );
+};
+
+/**
+ * {@link CONTROL_REPO_ROOT}: the top of the git checkout the folder at
+ * `path` is in, or null when it is in none. Reads only; a folder that is
+ * not there is refused.
+ */
+export const repoRoot = async (path: unknown): Promise<string | null> => {
+  const folder = String(path);
+  const info = await stat(folder).catch(() => undefined);
+  if (!info?.isDirectory()) {
+    throw new Error(`${folder} is not a folder on this machine.`);
+  }
+  return (
+    (await repoTop(folder, gitIn(Date.now() + WORKSPACE_GIT_TIMEOUT_MS))) ??
+    null
+  );
+};
+
+const placeRepoNow = async (root: string, dry: boolean): Promise<PlaceRepo> => {
+  const info = await stat(root).catch(() => undefined);
+  if (!info?.isDirectory()) {
+    throw new Error(
+      `${root} is not a folder on this machine, so CawCo can't make it a git repository.`
+    );
+  }
+  const git = gitIn(Date.now() + WORKSPACE_GIT_TIMEOUT_MS);
+  const top = await repoTop(root, git);
+  if (top !== undefined) {
     return { state: "checkout", root: top };
   }
-  if (inside !== undefined) {
-    throw new Error(
-      `${root} is inside a git repository's own directory, not a checkout of it, so CawCo leaves the folder as it is.`
-    );
+  const refused = notAProject(root);
+  if (refused) {
+    throw new Error(refused);
   }
   // One git cannot read is someone's, and a failed run would take it back
   // with its own: it is left alone, and so is the place.

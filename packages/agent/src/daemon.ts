@@ -46,6 +46,7 @@ import {
   CONTROL_PLACE_PUSH,
   CONTROL_PLACE_REPO,
   CONTROL_READ_HOME_CREDENTIALS,
+  CONTROL_REPO_ROOT,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_SET_PROVIDER_KEY,
@@ -197,7 +198,7 @@ import {
   setMoveProgress,
 } from "./move";
 import { placePush } from "./place-push";
-import { placeRepo } from "./place-repo";
+import { placeRepo, repoRoot } from "./place-repo";
 import { servingPreviews } from "./preview";
 import { probesStarted } from "./probe-count";
 import { parseProcId, procIdFor, SESSION_PROC_KINDS } from "./proc-id";
@@ -2983,6 +2984,10 @@ export const startDaemon = (rediscover = false) =>
     // A place's first commit writes its folder: none starts behind a raised fence.
     supervisor.registerDaemonFunction(CONTROL_PLACE_REPO, (path) =>
       fenced() ? Promise.reject(new Error(AGENT_RESTARTING)) : placeRepo(path)
+    );
+    // What a workspace cut from a folder is cut from: read only.
+    supervisor.registerDaemonFunction(CONTROL_REPO_ROOT, (path) =>
+      repoRoot(path)
     );
     // A place published to GitHub goes through the hub's remote first.
     supervisor.registerDaemonFunction(

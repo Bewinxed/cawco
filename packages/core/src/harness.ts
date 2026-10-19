@@ -1827,6 +1827,14 @@ export interface WorkspaceCut {
  */
 export const CONTROL_PLACE_REPO = "placeRepo";
 
+/**
+ * The top of the git checkout a folder is in, or null when it is in none:
+ * what a workspace is cut from when it is cut from that folder. Reads only.
+ * Args `[path]`. Answers `string | null`. Refused when the folder is not
+ * there, or git can't tell. Machine-scoped.
+ */
+export const CONTROL_REPO_ROOT = "repoRoot";
+
 /** The most a place's first commit may weigh; a place past it stays a folder. */
 export const PLACE_REPO_LIMIT_BYTES = 500 * 1024 * 1024;
 
