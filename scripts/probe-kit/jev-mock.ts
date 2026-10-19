@@ -2,9 +2,10 @@
  * Jev as a scratch fleet's hub reaches it on the TypeSafe route
  * (`fleet.standIns.typesafeUrl`, scripts/stand-ins), as scripts/probe-fleet-watch.ts
  * stands one in: every request kept whole, every question answered by its
- * type (https://docs.typesafe.ai/api.md). A noul is answered no (0.05), or
- * as `noul` says, a score its lowest level, a choice `none` when it offers
- * one, else its first option.
+ * type (https://docs.typesafe.ai/api.md). A noul is answered no (0.05), yes
+ * (0.9) when it asks about a candidate whose description the call's prompt
+ * says, or as `noul` says, a score its lowest level, a choice `none` when it
+ * offers one, else its first option.
  * A starters call (hub jev-placement.ts `jevStarters`: its state holds
  * `shown` and `repository`) is answered by `starters`, which picks each
  * question's choice and probability, and may add answers of its own. Any
@@ -80,6 +81,30 @@ export const firstAsk = (call: JevCall): Record<string, StarterPick> =>
     ])
   );
 
+/** A description's closing stop, which a prompt saying the same task leaves off. */
+const CLOSING_STOP = /[.!]\s*$/;
+
+/**
+ * A noul's answer: yes (0.9) when it asks whether a candidate (a composer
+ * suggestion's skill, tool or MCP server: hub suggest.ts) is made for the
+ * task the call's prompt describes, and the prompt says what the
+ * candidate's description says; no (0.05) otherwise.
+ */
+const candidateFits = (call: JevCall, asked: JevAsked): number => {
+  const { candidate } = (asked.instructions ?? {}) as {
+    candidate?: { description?: unknown };
+  };
+  const { prompt } = call.state;
+  const said =
+    typeof candidate?.description === "string"
+      ? candidate.description.replace(CLOSING_STOP, "").trim().toLowerCase()
+      : "";
+  return said !== "" &&
+    typeof prompt === "string" &&
+    prompt.toLowerCase().includes(said)
+    ? 0.9
+    : 0.05;
+};
 /** A choice no hook picked: `none` when it offers one, else its first option. */
 const defaultPick = (asked: JevAsked): StarterPick => ({
   choice: options(asked).includes("none")
@@ -90,8 +115,12 @@ const defaultPick = (asked: JevAsked): StarterPick => ({
 
 export const jevMock = (
   starters: (call: JevCall) => Record<string, StarterPick> = firstAsk,
-  /** Each noul question's answer, by its call and id. */
-  noul: (call: JevCall, id: string) => number = () => 0.05,
+  /** Each noul question's answer, by its call, id and question; by default {@link candidateFits}. */
+  noul: (call: JevCall, id: string, asked: JevAsked) => number = (
+    call,
+    _id,
+    asked
+  ) => candidateFits(call, asked),
   /** A choice question's pick outside a starters call, by its call, id and question; none: the default. */
   choice: (
     call: JevCall,
@@ -118,7 +147,7 @@ export const jevMock = (
       const answers: Record<string, unknown> = {};
       for (const [id, asked] of Object.entries(body.questions)) {
         if (asked.type === "noul") {
-          answers[id] = { type: "noul", noul: noul(call, id) };
+          answers[id] = { type: "noul", noul: noul(call, id, asked) };
         } else if (asked.type === "score") {
           answers[id] = {
             type: "score",
