@@ -13,6 +13,7 @@
     IconWarningTriangle,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
+  import { cn } from "#lib/utils.js";
 
   let { ...restProps }: SonnerProps = $props();
 
@@ -121,9 +122,9 @@
      under it showed through, and its text and buttons read as painted over
      the toast even though the toast was on top and taking the taps. -->
 <div class="contents" bind:this={home}>
-  <!-- literal: 12px (a phone toast's inset from each side) -->
   <!-- A sheet over the viewport, above the app chrome (the highest is the
-       shell's 100), that takes no taps itself; the toasts take their own.
+       shell's 100), that takes no taps itself; the toasts take their own
+       (`pointer-events-auto` through sonner's `toastOptions.class`).
        Navigation stays above a toast. While the burger's sheet is open (its
        scrim and panel stand at 50), the layer goes under the scrim: a toast
        arriving then waits dimmed in the content area, and the sheet that
@@ -133,7 +134,6 @@
     bind:this={layer}
     data-slot="toast-layer"
     data-under-nav={navSheet.open || undefined}
-    style:--toast-edge="12px"
   >
     <Sonner
       data-sonner-group
@@ -141,6 +141,10 @@
       style="--normal-bg: var(--surface-raised); --normal-text: var(--ink-strong); --normal-border: var(--border-control);"
       theme={theme.current}
       {...restProps}
+      toastOptions={{
+        ...restProps.toastOptions,
+        class: cn("pointer-events-auto", restProps.toastOptions?.class),
+      }}
     >
       {#snippet loadingIcon()}
         <Spinner class="size-icon-md" />
@@ -162,10 +166,8 @@
 </div>
 
 <style>
-  /* residual: foreign-dom */
-  [data-slot="toast-layer"] :global([data-sonner-toast]) {
-    pointer-events: auto;
-  }
+  /* tailwind: sonner's own sheet is unlayered, and every Tailwind layer (components, utilities) loses to an unlayered rule, so the overrides of sonner's declarations stay unlayered here — https://tailwindcss.com/docs/adding-custom-styles#adding-component-classes */
+  /* residual: foreign-dom — sonner's toaster and toasts, drawn by svelte-sonner */
 
   /* The kit's floating surface, over sonner's own box. One attribute more
      specific than sonner's `[data-sonner-toast][data-styled=true]`, so the
@@ -248,21 +250,13 @@
     animation-duration: var(--dur-exit);
     animation-timing-function: var(--ease-out);
   }
-  /* Reduced motion: sonner turns every transition off; the fades stay, and
-     a toast swiped away fades where it was let go. */
-  @media (prefers-reduced-motion: reduce) {
-    :global([data-sonner-toaster] [data-sonner-toast]) {
-      transition: opacity var(--dur-panel) var(--ease-out) !important;
-    }
-    :global([data-sonner-toaster] [data-sonner-toast][data-removed="true"]) {
-      opacity: 0;
-      transition: opacity var(--dur-exit) var(--ease-out) !important;
-    }
-  }
+  /* Reduced motion: sonner's own rule turns every transition and animation
+     off, important-flagged, so a toast arrives and leaves at once. */
 
   /* A phone's toast sits at the top, under the top bar: at the bottom it
      lands on the composer, which is exactly where the reader is typing.
-     Full width less 12px a side. The bar does not pad for the notch, so the
+     Full width less the phone bar's edge a side, so a toast lines up with
+     the bar's two ends. The bar does not pad for the notch, so the
      inset is added here. Sonner's own narrow rules stop at 600px; these hold
      to 640px, where the layout puts the toaster top-centre. */
   @media (max-width: 640px) {
@@ -270,8 +264,8 @@
       [data-sonner-toaster][data-y-position="top"][data-x-position="center"]
     ) {
       top: calc(env(safe-area-inset-top) + var(--c-top-bar-h) + var(--space-2));
-      right: var(--toast-edge);
-      left: var(--toast-edge);
+      right: var(--c-bar-phone-edge);
+      left: var(--c-bar-phone-edge);
       width: auto;
       transform: none;
     }

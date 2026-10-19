@@ -11,6 +11,11 @@
          * padding holds beside a tick too, over the base's checkbox rule.
          */
         caps: "type-label px-space-3 text-ink-muted uppercase tracking-caps [&:has([role=checkbox])]:pr-space-3",
+        /**
+         * A ledger's band heading: the caps heading at the band's 32px height
+         * (DESIGN.md, Density: "a 32px header band").
+         */
+        band: "type-label h-c-toolbar-ctl px-space-3 text-ink-muted uppercase tracking-caps [&:has([role=checkbox])]:pr-space-3",
         /** Muted caps at the kit's own label size and strong weight. */
         "caps-strong": "px-space-3 text-ink-muted uppercase tracking-caps",
         /** A matrix's corner heading. */
