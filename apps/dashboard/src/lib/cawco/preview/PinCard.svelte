@@ -395,7 +395,7 @@
   {#if pin.thread.length > 0 && Body}
     <div
       data-whole={squeezed || undefined}
-      class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain data-whole:shrink-0"
+      class="kit-edge-fade-block relative flex flex-auto flex-col min-h-0 overflow-y-auto overscroll-contain scrollbar-gutter-stable data-whole:shrink-0"
       data-pin-room
       onscroll={readAt}
       bind:this={roomEl}

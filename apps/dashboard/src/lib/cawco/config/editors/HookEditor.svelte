@@ -1011,7 +1011,7 @@
               {#if refused && item?.detail}
                 <!-- literal: 6rem, 6px, 8px -->
                 <pre
-                  class="max-h-(--said-max) overflow-auto rounded-sm bg-surface-raised px-(--said-px) py-(--said-py) font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
+                  class="max-h-(--said-max) overflow-auto overscroll-contain rounded-sm bg-surface-raised px-(--said-px) py-(--said-py) font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
                   style:--said-max="6rem"
                   style:--said-px="8px"
                   style:--said-py="6px"

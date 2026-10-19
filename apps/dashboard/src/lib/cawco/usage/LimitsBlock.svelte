@@ -228,7 +228,7 @@
       <div
         data-slot="grid"
         class="grid grid-cols-(--tiles) gap-space-3"
-        style:--tiles="repeat(auto-fill, minmax(15.5rem, 1fr))"
+        style:--tiles="repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr))"
       >
         {#each [0, 1, 2] as one (one)}
           <Skeleton class="w-full" height="chart" />
@@ -302,7 +302,7 @@
             <span
               {...props}
               aria-label="Delegates go to {claude.delegate?.name}. {why}"
-              class="type-meta ms-auto whitespace-nowrap text-ink-muted"
+              class="type-meta ms-auto min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-muted"
               data-delegates
               role="img"
               ><Words
@@ -321,7 +321,7 @@
       <div
         data-slot="grid"
         class="grid grid-cols-(--tiles) gap-space-3"
-        style:--tiles="repeat(auto-fill, minmax(15.5rem, 1fr))"
+        style:--tiles="repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr))"
       >
         {#each claude.accounts as ring, i (ring.id)}
           {@render tile(
@@ -376,7 +376,7 @@
         <div
           data-slot="grid"
           class="grid grid-cols-(--tiles) gap-space-3"
-          style:--tiles="repeat(auto-fill, minmax(15.5rem, 1fr))"
+          style:--tiles="repeat(auto-fill, minmax(min(100%, 15.5rem), 1fr))"
         >
           {@render tile(
             openCode,

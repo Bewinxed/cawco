@@ -378,7 +378,7 @@
       </span>
     {/if}
     {#if running}
-      <span class="ml-auto flex shrink-0 items-center gap-space-1" data-box>
+      <span class="ms-auto flex shrink-0 items-center gap-space-1" data-box>
         <ContextMeter
           compaction={session?.lastCompaction ?? null}
           onrefresh={() => {
@@ -411,12 +411,12 @@
     <div
       class="flex flex-col gap-2 border-t border-border/50 bg-status-attn-bg px-4 py-3"
     >
-      <p class="text-body">{summary}</p>
+      <p class="text-body wrap-anywhere">{summary}</p>
       {#if !question && request.presentation.command}
         <!-- What runs, under why: Approve here is made on the command. -->
         <code
           data-slot="block"
-          class="block truncate whitespace-pre border-l-2 border-border-hairline ps-2 font-mono text-meta text-ink-muted"
+          class="block truncate whitespace-pre border-s-2 border-border-hairline ps-2 font-mono text-meta text-ink-muted"
           >{request.presentation.command.trim().split("\n")[0]}</code
         >
       {/if}
@@ -492,7 +492,7 @@
       </p>
       <div
         data-slot="peek-plan"
-        class="max-h-48 overflow-y-auto overscroll-contain px-4"
+        class="max-h-48 overflow-y-auto overscroll-contain scrollbar-gutter-stable px-4"
       >
         <PlanTree nodes={planRows} />
       </div>
@@ -504,7 +504,7 @@
        peeked opens at its own end. -->
   {#key target.viewId}
     <div
-      class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto border-t border-border/50 px-4 py-3"
+      class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto overscroll-contain scrollbar-gutter-stable border-t border-border/50 px-4 py-3"
       {@attach followTail()}
     >
       {#if session?.loading && tail.length === 0}
@@ -525,7 +525,9 @@
               >
               {#if glanceOf(message)}
                 <span class="shrink-0">·</span>
-                <span class="truncate font-mono">{glanceOf(message)}</span>
+                <span class="min-w-0 truncate font-mono"
+                  >{glanceOf(message)}</span
+                >
               {/if}
             </p>
           {:else if message.type === "user"}

@@ -626,7 +626,7 @@
                   data-slot="action"
                   style:--btn-gap="var(--space-1)"
                   style:--btn-icon="var(--icon-sm)"
-                  class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50"
+                  class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong hover:enabled:bg-surface-hover disabled:opacity-50"
                   disabled={editPending}
                   onclick={cancelEditing}
                   type="button"
@@ -639,7 +639,7 @@
                   aria-disabled={editPending || undefined}
                   style:--btn-gap="var(--space-1)"
                   style:--btn-icon="var(--icon-sm)"
-                  class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50"
+                  class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong hover:enabled:bg-surface-hover disabled:opacity-50"
                   disabled={!(canEdit && editContent.trim())}
                   onclick={whileIdle(() => editPending, submitEdit)}
                   type="button"
@@ -692,7 +692,7 @@
                       aria-disabled={retrying || undefined}
                       style:--btn-gap="var(--space-1)"
                       style:--btn-icon="var(--icon-sm)"
-                      class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50"
+                      class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong hover:enabled:bg-surface-hover disabled:opacity-50"
                       onclick={whileIdle(() => retrying, tryAgain)}
                       type="button"
                     >
@@ -709,7 +709,7 @@
                       data-slot="action"
                       style:--btn-gap="var(--space-1)"
                       style:--btn-icon="var(--icon-sm)"
-                      class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50"
+                      class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong hover:enabled:bg-surface-hover disabled:opacity-50"
                       disabled={retrying}
                       onclick={edit}
                       type="button"
@@ -835,7 +835,7 @@
                           data-slot="action"
                           style:--btn-gap="var(--space-1)"
                           style:--btn-icon="var(--icon-sm)"
-                          class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:bg-surface-hover min-w-0 max-w-full no-underline"
+                          class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong hover:bg-surface-hover min-w-0 max-w-full no-underline"
                           href={action.href}
                           ><span data-slot="message-row-label" class="truncate"
                             >{action.label}</span
@@ -850,7 +850,7 @@
                           aria-disabled={going || undefined}
                           style:--btn-gap="var(--space-1)"
                           style:--btn-icon="var(--icon-sm)"
-                          class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50 mark-line"
+                          class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong hover:enabled:bg-surface-hover disabled:opacity-50 mark-line"
                           onclick={whileIdle(
                             () => going,
                             () => moveAndSend(action.account.id)
@@ -882,7 +882,7 @@
                           aria-disabled={starting || undefined}
                           style:--btn-gap="var(--space-1)"
                           style:--btn-icon="var(--icon-sm)"
-                          class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50 mark-line"
+                          class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong hover:enabled:bg-surface-hover disabled:opacity-50 mark-line"
                           onclick={whileIdle(
                             () => starting,
                             () => startWith(action)
@@ -904,7 +904,7 @@
                       aria-disabled={retrying || undefined}
                       style:--btn-gap="var(--space-1)"
                       style:--btn-icon="var(--icon-sm)"
-                      class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong [&:hover]:enabled:bg-surface-hover disabled:opacity-50"
+                      class="pressable inline-flex items-center gap-(--btn-gap) rounded-xs border border-well-edge bg-surface-raised py-space-1 px-space-2 text-size-label font-medium text-ink-strong hover:enabled:bg-surface-hover disabled:opacity-50"
                       onclick={whileIdle(() => retrying, tryAgain)}
                       type="button"
                     >

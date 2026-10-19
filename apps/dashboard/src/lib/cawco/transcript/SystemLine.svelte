@@ -299,7 +299,7 @@
     <pre
       data-slot="well"
       style:--well-x="calc(var(--x-hang) - var(--space-3))"
-      class="bg-surface-recess rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap">{message?.content}</pre>
+      class="bg-surface-recess rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto overscroll-x-contain font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap">{message?.content}</pre>
   </div>
 {:else if isInterrupted}
   <!-- One quiet word for a deliberate act. The colour budget is for things
@@ -504,7 +504,7 @@
           <pre
             data-slot="well"
             style:--well-x="calc(var(--x-hang) - var(--space-3))"
-            class="bg-surface-recess rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap">{foldCommand}</pre>
+            class="bg-surface-recess rounded-sm p-space-3 mt-space-2 ms-(--well-x) overflow-x-auto overscroll-x-contain font-mono text-size-label leading-body text-ink-strong whitespace-pre-wrap">{foldCommand}</pre>
         {:else if foldBody}
           <div class="mt-space-3 rail-hang">
             <MessageBody source={foldBody} />

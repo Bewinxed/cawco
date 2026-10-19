@@ -68,7 +68,7 @@
           aria-hidden="true"
           class="size-icon-sm flex-none"
         />
-        <span><MorphText text={problem} /></span>
+        <span class="wrap-break-word"><MorphText text={problem} /></span>
       </span>
     {/if}
     <span

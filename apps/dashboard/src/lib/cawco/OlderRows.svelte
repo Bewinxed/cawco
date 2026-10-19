@@ -202,7 +202,7 @@
        its words stand on its siblings' axes and the nesting line meets its
        mark as it meets theirs. -->
   <Sidebar.MenuSubButton
-    class="h-(--older-h)"
+    class="h-auto min-h-(--older-h)"
     data-branch-item
     data-tall={tall || undefined}
     row="compact-tall"
@@ -265,7 +265,7 @@
          attributes). -->
     <ul
       data-slot="older-rows-box"
-      class="flex flex-col gap-(--gap) max-h-(--older-max) mt-(--tree-gap) mx-0 mb-0 p-0 overflow-y-auto overscroll-contain scrollbar-thin list-none not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
+      class="flex flex-col gap-(--gap) max-h-(--older-max) mt-(--tree-gap) mx-0 mb-0 p-0 overflow-y-auto overscroll-contain scrollbar-gutter-stable scrollbar-thin list-none not-data-more-below:data-more-above:mask-(--fade-above) not-data-more-above:data-more-below:mask-(--fade-below) data-more-above:data-more-below:mask-(--fade-both)"
       data-flip-anchor
       style:--fade="var(--space-4)"
       style:--fade-above={"linear-gradient(transparent, var(--mask-opaque) var(--fade))"}

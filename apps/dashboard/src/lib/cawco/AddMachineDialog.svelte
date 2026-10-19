@@ -442,7 +442,7 @@
             </summary>
             <!-- literal: 10px, 12px, 14rem, 8px -->
             <pre
-              class="mx-0 mb-0 mt-(--pre-top) max-h-(--pre-max) overflow-auto border border-border-control rounded-md bg-surface-hover px-(--pre-x) py-(--pre-y) text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
+              class="mx-0 mb-0 mt-(--pre-top) max-h-(--pre-max) overflow-auto overscroll-contain border border-border-control rounded-md bg-surface-hover px-(--pre-x) py-(--pre-y) text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
               style:--pre-max="14rem"
               style:--pre-top="8px"
               style:--pre-x="12px"
@@ -546,7 +546,7 @@
               {#if failure.tail.length > 0}
                 <!-- literal: 10px, 12px, 12rem -->
                 <pre
-                  class="m-0 max-h-(--pre-max) overflow-auto border border-border-control rounded-md bg-surface-hover px-(--pre-x) py-(--pre-y) text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
+                  class="m-0 max-h-(--pre-max) overflow-auto overscroll-contain border border-border-control rounded-md bg-surface-hover px-(--pre-x) py-(--pre-y) text-size-meta leading-root wrap-anywhere whitespace-pre-wrap text-ink-strong"
                   style:--pre-max="12rem"
                   style:--pre-x="12px"
                   style:--pre-y="10px">{failure.tail.join("\n")}</pre>

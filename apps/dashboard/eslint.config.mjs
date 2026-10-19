@@ -220,7 +220,8 @@ export default defineConfig([
     "src/lib/cawco/transcript/Composer.svelte": [
       "block-size",
       "bottom",
-      "height",
+      // main's `height` on the edit row, as a floor: its words may wrap (8b).
+      "min-height",
       "inline-size",
       "opacity",
       "transform",

@@ -675,11 +675,10 @@
     >
       <!-- His head: his face and the clip playing over it in one cell,
            squashed once under a press (DESIGN.md, The Press Rule) with
-           motion allowed, on his own layer from the start: made by his first
-           press's squash, it was work in the frame that press was waiting
-           on. -->
+           motion allowed: a transition of transform, his layer for the
+           squash alone. -->
       <span
-        class="pointer-events-none grid place-items-center motion-safe:will-change-transform motion-safe:transition-[transform] motion-safe:dur-toggle motion-safe:ease-out motion-safe:data-pressed:transform-(--mug-squash)"
+        class="pointer-events-none grid place-items-center motion-safe:transition-[transform] motion-safe:dur-toggle motion-safe:ease-out motion-safe:data-pressed:transform-(--mug-squash)"
         data-pressed={pressed || undefined}
         style:--mug-squash="scale(var(--press-scale))"
       >

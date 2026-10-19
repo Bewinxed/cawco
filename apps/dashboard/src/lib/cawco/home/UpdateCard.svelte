@@ -224,7 +224,7 @@
 </script>
 
 {#snippet lines(n: Notice)}
-  <div data-slot="body" class="grid gap-space-row type-meta">
+  <div data-slot="body" class="grid gap-space-row type-meta wrap-anywhere">
     {#each n.lines as line, i (i)}
       {#if line.state === "busy" && i === spinnerAt}
         <!-- literal: 6px -->

@@ -208,7 +208,7 @@
     <div data-slot="sessions-chip-card" class="flex flex-col" bind:this={card}>
       <p
         data-slot="head"
-        class="px-space-3 pt-space-2 pb-space-1 text-ink-strong type-meta font-medium"
+        class="px-space-3 pt-space-2 pb-space-1 text-ink-strong type-meta font-medium wrap-break-word"
         data-flyover-head
       >
         {name}
@@ -220,7 +220,7 @@
             <!-- literal: 40px, 44px -->
             <a
               data-slot="item"
-              class="no-hover:h-(--item-h-touch) h-(--item-h) max-phone:h-(--item-h-touch) transition-[background-color] dur-control ease-out flex items-center gap-space-2 px-space-3 py-0 text-ink-strong no-underline hover:bg-surface-hover"
+              class="no-hover:min-h-(--item-h-touch) min-h-(--item-h) max-phone:min-h-(--item-h-touch) transition-[background-color] dur-control ease-out flex items-center gap-space-2 px-space-3 py-0 text-ink-strong no-underline hover:bg-surface-hover"
               style:--item-h="40px"
               style:--item-h-touch="44px"
               data-session-link={session.id}

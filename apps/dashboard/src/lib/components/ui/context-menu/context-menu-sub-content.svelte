@@ -70,7 +70,7 @@
 <ContextMenuPortal {...portalProps}>
   <ContextMenuPrimitive.SubContent
     class={cn(
-      "kit-pop relative z-50 max-h-(--bits-menu-content-available-height) min-w-32 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden",
+      "kit-pop scrollbar-gutter-stable relative z-50 max-h-(--bits-menu-content-available-height) min-w-32 origin-(--bits-menu-content-transform-origin) overflow-y-auto overflow-x-hidden overscroll-contain",
       contextMenuSubContentVariants({ min, width, frame, pad }),
       className
     )}

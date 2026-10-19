@@ -93,7 +93,7 @@
          over --dur-control while the words stay put. -->
     <div
       data-slot="grid"
-      class="relative grid max-h-40 overflow-y-auto rounded-sm bg-surface-page font-mono text-label leading-relaxed"
+      class="relative grid max-h-40 overflow-y-auto overscroll-contain rounded-sm bg-surface-page font-mono text-label leading-relaxed"
     >
       <!-- literal: 12px -->
       <p

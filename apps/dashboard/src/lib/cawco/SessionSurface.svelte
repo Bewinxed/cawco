@@ -582,7 +582,7 @@
       >
         {#if machinesThere}
           <div
-            class="max-h-full w-full self-start overflow-y-auto px-space-6 pt-(--pad-top) pb-space-8"
+            class="max-h-full w-full self-start overflow-y-auto overscroll-contain scrollbar-gutter-stable px-space-6 pt-(--pad-top) pb-space-8"
             style:--pad-top="calc(var(--space-8) * 2)"
           >
             <MachinesEmpty

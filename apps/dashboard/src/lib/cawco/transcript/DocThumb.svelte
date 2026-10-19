@@ -150,7 +150,7 @@
   <button
     data-slot="doc"
     aria-label={`Open ${name}`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer [&:hover]:bg-surface-hover"
+    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
     style:--doc-h="48px"
     style:--doc-max="min(100%, 16rem)"
     data-share={share}
@@ -165,7 +165,7 @@
   <a
     data-slot="doc"
     aria-label={`Download ${name}`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer [&:hover]:bg-surface-hover"
+    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
     style:--doc-h="48px"
     style:--doc-max="min(100%, 16rem)"
     download={name}
@@ -178,7 +178,7 @@
   <button
     data-slot="doc"
     aria-label={`Couldn't upload ${name}: ${file.failed} Try again`}
-    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer [&:hover]:bg-surface-hover"
+    class="press-tint inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-pointer hover:bg-surface-hover"
     style:--doc-h="48px"
     style:--doc-max="min(100%, 16rem)"
     onclick={() => file?.onretry?.()}
@@ -193,7 +193,7 @@
       data-slot="doc"
       aria-busy="true"
       aria-label={`Uploading ${name}`}
-      class="inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default [&:hover]:bg-surface-recess"
+      class="inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default hover:bg-surface-recess"
       style:--doc-h="48px"
       style:--doc-max="min(100%, 16rem)"
       role="status"
@@ -204,7 +204,7 @@
   {:else}
     <span
       data-slot="doc"
-      class="inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default [&:hover]:bg-surface-recess"
+      class="inline-flex items-center gap-space-2 h-(--doc-h) max-w-(--doc-max) py-0 ps-space-2 pe-space-3 border border-border-hairline rounded-sm bg-surface-recess text-ink-strong text-start motion-safe:transition-[background-color,transform] motion-safe:dur-control motion-safe:ease-out cursor-default hover:bg-surface-recess"
       style:--doc-h="48px"
       style:--doc-max="min(100%, 16rem)"
       title={name}>{@render face()}</span

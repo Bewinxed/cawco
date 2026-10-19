@@ -47,7 +47,7 @@
   <Popover.Trigger
     data-picker-chip
     aria-label="{label}: {chosen}"
-    class="inline-flex items-center gap-(--chip-gap) max-w-full h-(--chip-h) px-(--chip-pad) border border-border-control rounded-md bg-surface-raised type-label text-ink-strong transition-control [&:hover]:bg-surface-hover motion-safe:active:transform-(--tpress) mark-line"
+    class="inline-flex items-center gap-(--chip-gap) max-w-full min-h-(--chip-h) px-(--chip-pad) border border-border-control rounded-md bg-surface-raised type-label text-ink-strong transition-control hover:bg-surface-hover motion-safe:active:transform-(--tpress) mark-line"
     motion="press"
     style="--chip-gap: 6px; --chip-h: 32px; --chip-pad: 10px; --tpress: scale(var(--press-scale))"
   >
@@ -61,7 +61,7 @@
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="overflow-y-auto"
+    class="overflow-y-auto overscroll-contain"
     gap="none"
     height="capped"
     width="narrow"
@@ -93,7 +93,7 @@
         <button
           data-slot="item"
           aria-selected={isChosen(option.value)}
-          class="kit-item flex items-center gap-(--opt-gap) w-full px-(--opt-pad) text-left type-label text-ink-strong focus-inset"
+          class="kit-item flex items-center gap-(--opt-gap) w-full px-(--opt-pad) text-start type-label text-ink-strong focus-inset"
           onclick={() => {
             onpick(option.value);
             // One of several stays open for the next.

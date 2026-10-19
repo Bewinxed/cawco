@@ -179,13 +179,13 @@
               did not install</span
             >
             {#if toolStatus?.method}
-              <span class="ml-auto shrink-0 font-mono text-label text-ink-muted"
+              <span class="ms-auto shrink-0 font-mono text-label text-ink-muted"
                 >{toolStatus.method}</span
               >
             {/if}
           </header>
           <pre
-            class="max-h-56 overflow-auto px-space-3 py-space-2 font-mono text-label whitespace-pre-wrap">{toolStatus?.detail ??
+            class="max-h-56 overflow-auto overscroll-contain px-space-3 py-space-2 font-mono text-label whitespace-pre-wrap wrap-anywhere">{toolStatus?.detail ??
               "The machine did not say why."}</pre>
           <footer class="border-t border-border px-space-3 py-space-2">
             <Button
@@ -232,7 +232,7 @@
         {/snippet}
       </Popover.Trigger>
       <Popover.Content align="start" frame="panel-high" width="wide">
-        <p class="font-mono text-label">
+        <p class="font-mono text-label wrap-anywhere">
           {toolStatus?.detail ?? "no install method for this platform"}
         </p>
       </Popover.Content>
@@ -295,9 +295,9 @@
 {:else}
   <!-- The matrix scrolls sideways inside the section; the page never does. -->
   <div
-    class="overflow-x-auto rounded-md bg-surface-raised inset-ring inset-ring-border-hairline"
+    class="overflow-x-auto overscroll-x-contain rounded-md bg-surface-raised inset-ring inset-ring-border-hairline"
   >
-    <Table.Root class="border-collapse text-left">
+    <Table.Root class="border-collapse text-start">
       <Table.Header>
         <Table.Row class="align-top">
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
@@ -375,7 +375,7 @@
                 />
                 <span class="flex min-w-0 flex-col">
                   <span class="flex items-center gap-space-2">
-                    <span class="truncate text-label text-ink-strong"
+                    <span class="min-w-0 truncate text-label text-ink-strong"
                       >{machineLabel(machine.hostname)}</span
                     >
                     <span

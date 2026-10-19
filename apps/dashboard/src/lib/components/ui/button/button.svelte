@@ -9,7 +9,7 @@
   import { cn, tv, type WithElementRef } from "#lib/utils.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-[var(--border-button-outline)] bg-[var(--surface-raised)] bg-clip-padding font-medium text-[var(--ink-strong)] text-body leading-none tracking-[-0.01em] [--hit-edge:1px] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line touch-hit inline-flex min-w-0 shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-[var(--border-button-outline)] bg-[var(--surface-raised)] bg-clip-padding font-medium text-[var(--ink-strong)] text-body leading-none tracking-[-0.01em] [--hit-edge:1px] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* The press, by size (app.css, press feedback): a compact button
          scales; one stretched full width, as a list row or a card's body,
@@ -41,10 +41,10 @@
       },
       size: {
         default:
-          "h-9 gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        xs: "h-6 gap-(--btn-gap) px-2 text-label [--btn-gap:4px] [--btn-icon:12px] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
-        sm: "h-[30px] gap-(--btn-gap) px-[11px] text-label [--btn-gap:7px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+          "min-h-9 gap-(--btn-gap) px-space-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-start]:ps-3 has-data-[icon=inline-end]:pe-3",
+        xs: "min-h-6 min-w-6 gap-(--btn-gap) px-2 text-label [--btn-gap:4px] [--btn-icon:12px] has-data-[icon=inline-start]:ps-1.5 has-data-[icon=inline-end]:pe-1.5 [&_svg:not([class*='size-'])]:size-icon-sm",
+        sm: "min-h-c-btn-h-sm gap-(--btn-gap) px-[11px] text-label [--btn-gap:7px] [--btn-icon:16px] has-data-[icon=inline-start]:ps-2 has-data-[icon=inline-end]:pe-2",
+        lg: "min-h-11 gap-(--btn-gap) px-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-start]:ps-3 has-data-[icon=inline-end]:pe-3",
         icon: "size-9",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-icon-sm",
         "icon-sm": "size-[30px]",
@@ -84,7 +84,7 @@
         prompt: "gap-(--btn-gap) rounded-sm px-space-3 font-medium text-label",
         "prompt-wide":
           "gap-(--btn-gap) rounded-sm px-space-4 font-medium text-label",
-        "square-24": "h-6 w-6",
+        "square-24": "h-6 min-h-6 w-6",
       },
       /** A control inset in a field takes the field's tighter corner. */
       shape: { inset: "rounded-xs" },
@@ -93,8 +93,8 @@
       /** Pulled into what stands beside it, or set off from it. */
       margin: {
         "hairline-overlap": "-me-px",
-        "ghost-end": "-mr-1.5",
-        "start-gap": "ml-2",
+        "ghost-end": "-me-1.5",
+        "start-gap": "ms-2",
         "beside-num": "peer-data-num/place:ms-0",
       },
       /** Its words and mark spread apart. */
@@ -106,7 +106,7 @@
           over the kit's dimming: the halves keep the states apart. */
       reveal: {
         "value-hover":
-          "coarse:opacity-100 opacity-0 not-disabled:focus-visible:opacity-100 coarse:disabled:opacity-100 disabled:opacity-0 disabled:focus-visible:opacity-100 group-[:hover]/value:not-disabled:opacity-100 group-[:hover]/value:disabled:opacity-100",
+          "coarse:opacity-100 opacity-0 not-disabled:focus-visible:opacity-100 coarse:disabled:opacity-100 disabled:opacity-0 disabled:focus-visible:opacity-100 group-hover/value:not-disabled:opacity-100 group-hover/value:disabled:opacity-100",
         "row-hover":
           "can-hover:dur-control can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
       },

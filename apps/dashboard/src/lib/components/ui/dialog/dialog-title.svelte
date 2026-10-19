@@ -28,7 +28,11 @@
 </script>
 
 <DialogPrimitive.Title
-  class={cn("text-title", dialogTitleVariants({ gap, look }), className)}
+  class={cn(
+    "wrap-anywhere text-title",
+    dialogTitleVariants({ gap, look }),
+    className
+  )}
   data-slot="dialog-title"
   bind:ref
   {...restProps}

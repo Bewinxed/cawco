@@ -405,7 +405,7 @@
       >
         <p
           data-slot="summary"
-          class="m-0 type-body text-ink-strong text-pretty line-clamp-2 group-data-more/words:block"
+          class="m-0 type-body text-ink-strong text-pretty wrap-anywhere line-clamp-2 group-data-more/words:block"
         >
           {summary}
         </p>

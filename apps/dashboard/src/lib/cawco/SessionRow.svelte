@@ -620,7 +620,7 @@
   >
     {act.note.text}
     <a
-      class="text-ink-strong underline underline-offset-2"
+      class="touch-hit text-ink-strong underline underline-offset-2"
       href={act.note.href}
       onclick={() => noteOn(sessionId, undefined)}>Open</a
     >
@@ -631,7 +631,7 @@
 {#if act?.pending && act.stop}
   <p
     data-slot="session-row-note"
-    class="m-0 py-space-1 ps-(--fault-indent) pe-(--fault-end) type-meta text-ink-muted"
+    class="m-0 py-space-1 ps-(--fault-indent) pe-(--fault-end) type-meta text-ink-muted wrap-anywhere"
     data-compact={compact || undefined}
     style:--fault-indent={compact
       ? "calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"
@@ -643,7 +643,7 @@
   >
     {act.pending}
     <button
-      class="cursor-pointer border-none border-current bg-transparent p-0 font-inherit text-ink-strong underline underline-offset-2"
+      class="touch-hit cursor-pointer border-none border-current bg-transparent p-0 font-inherit text-ink-strong underline underline-offset-2"
       onclick={stopPending}
       type="button">{act.stop.label}</button
     >

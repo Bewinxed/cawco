@@ -184,7 +184,7 @@
         <!-- literal: 50% 56.84% -->
         <img
           alt=""
-          class="absolute inset-0 size-full origin-(--origin) select-none"
+          class="absolute inset-0 size-full object-cover origin-(--origin) select-none"
           draggable="false"
           src={dark ? PICTURES[chosen].dark : PICTURES[chosen].light}
           style:--origin="50% 56.84%"

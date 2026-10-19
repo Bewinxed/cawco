@@ -378,7 +378,7 @@
                   <span class="type-label">{stageLabel(task.stage)}</span>
                 </span>
               {:else if cell.column.id === "labels"}
-                <span class="flex gap-space-1 overflow-hidden">
+                <span class="kit-edge-fade flex gap-space-1 overflow-hidden">
                   {#each task.labels as label (label)}
                     <Badge variant="secondary"><span>{label}</span></Badge>
                   {/each}

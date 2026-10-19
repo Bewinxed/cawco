@@ -439,7 +439,7 @@
           <li
             data-account-setup-done={place < step || undefined}
             aria-current={place === step ? "step" : undefined}
-            class="group mark-line flex h-(--step-h) items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] dur-fade ease-out @max-setup/setup:px-space-2 data-account-setup-done:text-ink-row data-cur:bg-selected-bg data-cur:not-data-account-setup-done:text-selected-ink"
+            class="group mark-line flex min-h-(--step-h) items-center gap-space-3 rounded-sm px-space-3 type-label text-ink-muted transition-[background-color,color] dur-fade ease-out @max-setup/setup:px-space-2 data-account-setup-done:text-ink-row data-cur:bg-selected-bg data-cur:not-data-account-setup-done:text-selected-ink"
             data-cur={place === step || undefined}
             style:--step-h="34px"
           >

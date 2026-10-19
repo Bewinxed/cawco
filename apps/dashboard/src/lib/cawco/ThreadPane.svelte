@@ -958,7 +958,7 @@
     {#if readProblem}
       <!-- literal: 60ch -->
       <p
-        class="m-0 ms-(--problem-ms) max-w-(--problem-w) py-space-6 type-body text-ink-muted max-desk:ms-space-3"
+        class="m-0 ms-(--problem-ms) max-w-(--problem-w) py-space-6 type-body text-ink-muted wrap-anywhere max-desk:ms-space-3"
         role="alert"
         style:--problem-ms="calc((100% - var(--c-composer-w)) / 2)"
         style:--problem-w="60ch"
@@ -974,7 +974,7 @@
            It clears the composer as the transcript does. Its own stacking: what is raised inside it (an Earlier row's
            mark) stays under the foot fade as it scrolls past the composer. -->
       <div
-        class="flex flex-auto flex-col min-h-0 px-(--hero-px) pb-(--composer-clearance) overflow-y-auto isolate max-desk:px-space-3"
+        class="flex flex-auto flex-col min-h-0 px-(--hero-px) pb-(--composer-clearance) overflow-y-auto overscroll-contain isolate max-desk:px-space-3"
         data-thread-hero
         style:--hero-px="calc((100% - var(--c-composer-w)) / 2)"
         in:crossIn

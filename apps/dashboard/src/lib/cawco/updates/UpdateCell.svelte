@@ -30,7 +30,7 @@
   /** The machine's whole error, unfolded in place under the cell. */
   let reading = $state(false);
   const refused = $derived(updates.refused.get(machine.machineId));
-  const CHIP = "h-auto whitespace-normal text-start";
+  const CHIP = "h-auto whitespace-normal wrap-break-word text-start";
 </script>
 
 <div class="overflow-hidden" {@attach morph()}>
@@ -112,7 +112,7 @@
   {#if reading && cell.buttons.includes("error")}
     <!-- literal: 10rem -->
     <pre
-      class="mx-0 mt-space-2 mb-0 max-h-(--said-max) overflow-auto rounded-xs border border-border-well bg-surface-well p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
+      class="mx-0 mt-space-2 mb-0 max-h-(--said-max) overflow-auto overscroll-contain rounded-xs border border-border-well bg-surface-well p-space-2 type-code wrap-anywhere whitespace-pre-wrap text-ink-strong"
       style:--said-max="10rem"
       transition:unfold>{machine.binaryUpdate?.error ??
         "The machine did not say why."}</pre>

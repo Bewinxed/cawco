@@ -49,7 +49,7 @@
     "flex min-h-16 w-full resize-none py-2",
     "border border-[var(--border-control)]",
     "bg-[var(--surface-raised)] px-3 text-[var(--ink-strong)]",
-    "text-body placeholder:text-ink-muted",
+    "coarse:text-size-input-touch text-body placeholder:text-ink-muted",
     "disabled:cursor-not-allowed disabled:opacity-50",
     "aria-invalid:border-error-9",
     "dark:aria-invalid:border-error-9/50",

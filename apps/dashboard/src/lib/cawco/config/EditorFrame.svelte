@@ -141,7 +141,7 @@
   }}
 >
   <div
-    class="flex flex-auto flex-col min-h-0 overflow-y-auto pt-space-2 px-space-5 pb-space-5 max-phone:pb-(--scroll-pb)"
+    class="flex flex-auto flex-col min-h-0 overflow-y-auto scrollbar-gutter-stable pt-space-2 px-space-5 pb-space-5 max-phone:pb-(--scroll-pb)"
     data-safe-bottom
     style:--scroll-pb={"calc(var(--c-btn-h-sm) + var(--space-8) + var(--safe-bottom))"}
     bind:this={scroller}

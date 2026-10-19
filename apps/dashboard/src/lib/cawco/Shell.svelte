@@ -914,7 +914,7 @@
         aria-valuemax={RAIL_MAX}
         aria-valuemin={RAIL_MIN}
         aria-valuenow={railWidth}
-        class="absolute top-0 bottom-0 right-(--grip-right) w-(--grip-w) cursor-col-resize touch-none z-5 [&:hover]:bg-border-control"
+        class="absolute top-0 bottom-0 right-(--grip-right) w-(--grip-w) cursor-col-resize touch-none z-5 hover:bg-border-control"
         onkeydown={resizeKey}
         onpointerdown={startDrag}
         role="slider"
@@ -1266,7 +1266,7 @@
       <main
         data-slot="shell-content"
         data-floating={floating || undefined}
-        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto pe-(--content-end) max-[900px]:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-[900px]:data-floating:bg-(image:--shelf-band) max-[900px]:data-floating:bg-top max-[900px]:data-floating:bg-size-(--shelf-band-size) max-[900px]:data-floating:bg-no-repeat"
+        class="flex-auto min-h-0 flex flex-col overflow-x-hidden overflow-y-auto scrollbar-gutter-stable pe-(--content-end) max-[900px]:ps-(--content-start) coarse:data-safe:pb-(--safe-bottom) max-[900px]:data-floating:bg-(image:--shelf-band) max-[900px]:data-floating:bg-top max-[900px]:data-floating:bg-size-(--shelf-band-size) max-[900px]:data-floating:bg-no-repeat"
         data-safe={!onSession || undefined}
         data-safe-bottom
         id="main-content"

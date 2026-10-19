@@ -3587,7 +3587,7 @@
   data-slot="tr"
   aria-label="Session transcript"
   style:--foot-room={"max(calc(var(--space-8) * 3), var(--composer-clearance, 0px))"}
-  class="flex-auto overflow-y-auto anchor-none scroll-timeline-transcript-head py-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
+  class="flex-auto overflow-y-auto scrollbar-gutter-stable anchor-none scroll-timeline-transcript-head py-0 ps-space-7 pe-space-6 max-desk:ps-space-5 max-desk:pe-space-5 min-h-0 relative tx-columns"
   {onscroll}
   role="log"
   bind:this={scroller}

@@ -307,7 +307,7 @@
            label optically flush with the text above it. -->
       <button
         aria-expanded={expanded}
-        class="group/disclose mark-line touch-hit inline-flex min-h-(--disclose-min) cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal text-(color:--tone-ink) opacity-80 ms-auto [&:hover]:opacity-100"
+        class="group/disclose mark-line touch-hit inline-flex min-h-(--disclose-min) cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal text-(color:--tone-ink) opacity-80 ms-auto hover:opacity-100"
         data-box
         onclick={() => {
           expanded = !expanded;
@@ -415,7 +415,7 @@
           <!-- literal: 24px -->
           <button
             aria-expanded={disclosureOpen}
-            class="group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-(--disclose-min) cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal text-(color:--tone-ink) opacity-80 [&:hover]:opacity-100"
+            class="group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-(--disclose-min) cursor-pointer items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal text-(color:--tone-ink) opacity-80 hover:opacity-100"
             onclick={() => {
               disclosureOpen = !disclosureOpen;
             }}

@@ -54,7 +54,7 @@
       <!-- literal: 28px -->
       <button
         aria-label="Delete edge"
-        class="touch-hit grid size-(--hit) place-items-center rounded-sm bg-surface-raised text-ink-muted opacity-0 transition-[opacity] dur-control ease-out group-[:hover]:opacity-100 group-[:hover]:scale-100 focus-visible:opacity-100 focus-visible:scale-100 data-visible:opacity-100 data-visible:scale-100 motion-safe:not-coarse:scale-(--pop-scale) motion-safe:transition-[opacity,scale] motion-safe:pressed:transform-(--tpress) coarse:opacity-100 coarse:scale-100"
+        class="touch-hit grid size-(--hit) place-items-center rounded-sm bg-surface-raised text-ink-muted opacity-0 transition-[opacity] dur-control ease-out group-hover:opacity-100 group-hover:scale-100 focus-visible:opacity-100 focus-visible:scale-100 data-visible:opacity-100 data-visible:scale-100 motion-safe:not-coarse:scale-(--pop-scale) motion-safe:transition-[opacity,scale] motion-safe:pressed:transform-(--tpress) coarse:opacity-100 coarse:scale-100"
         data-box
         data-visible={selected || undefined}
         onclick={() => {

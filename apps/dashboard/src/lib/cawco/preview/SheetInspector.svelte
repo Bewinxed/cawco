@@ -223,7 +223,7 @@
   </header>
 
   <div
-    class="grid content-box-start gap-space-3 min-h-0 overflow-auto px-space-4 py-space-3"
+    class="grid content-box-start gap-space-3 min-h-0 overflow-auto overscroll-contain px-space-4 py-space-3"
   >
     {#if !sheet}
       <!-- The rows' own size while the page reads the sheet's props. -->

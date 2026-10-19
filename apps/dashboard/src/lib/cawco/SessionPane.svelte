@@ -1128,9 +1128,9 @@
     title="This session isn't reachable from here"
   >
     {#snippet line()}
-      The hub has no record of <code>{viewId}</code>, and no machine it can
-      reach has a transcript filed under it. It may live on a machine that is
-      offline, or it may have been deleted.
+      The hub has no record of <code class="wrap-anywhere">{viewId}</code>, and
+      no machine it can reach has a transcript filed under it. It may live on a
+      machine that is offline, or it may have been deleted.
     {/snippet}
     {#snippet action()}
       <Button href="/session" variant="outline">Back to the fleet</Button>

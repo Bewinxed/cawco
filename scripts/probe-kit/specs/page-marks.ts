@@ -123,13 +123,6 @@ const PAIRS: Pair[] = [
     made: true,
   },
   {
-    name: "session card",
-    on: "wrapper",
-    old: `${WRAPPER}:has(> [data-session-details-popover])`,
-    now: `${WRAPPER}[data-session-details]`,
-    made: true,
-  },
-  {
     name: "session card glide",
     on: "wrapper",
     old: `${WRAPPER}:has(> [data-session-details-popover][data-morph])`,

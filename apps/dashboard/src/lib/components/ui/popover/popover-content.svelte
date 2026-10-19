@@ -6,7 +6,12 @@
       its padding and the gap between what it holds, and a card's frame. */
   export const popoverContentVariants = tv({
     variants: {
-      width: { narrow: "w-64", wide: "w-80", widest: "w-96" },
+      /** Each held to the room beside its anchor (a 320px screen is narrower than `wide`). */
+      width: {
+        narrow: "w-64 max-w-(--bits-popover-content-available-width)",
+        wide: "w-80 max-w-(--bits-popover-content-available-width)",
+        widest: "w-96 max-w-(--bits-popover-content-available-width)",
+      },
       height: { capped: "max-h-80" },
       pad: { none: "p-0", inset: "p-space-2", form: "p-3" },
       gap: {

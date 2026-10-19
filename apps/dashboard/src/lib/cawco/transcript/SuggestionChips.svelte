@@ -238,7 +238,7 @@
       data-slot="track"
       style:--hit-gap-x="var(--space-2)"
       style:--hit-gap-y="var(--space-2)"
-      class="relative min-w-0 m-0 border-none border-current flex flex-nowrap items-center gap-space-2 p-space-1 overflow-x-auto overscroll-x-contain no-scrollbar"
+      class="kit-edge-fade relative min-w-0 m-0 border-none border-current flex flex-nowrap items-center gap-space-2 p-space-1 overflow-x-auto overscroll-x-contain no-scrollbar"
       out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
     >
       <legend class="sr-only flex-none pointer-events-auto"
@@ -252,7 +252,7 @@
              confidence that moves in place re-tints over --dur-panel. -->
         <button
           data-slot="suggest-chip"
-          class="inline-flex items-center h-(--chip-block) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap cursor-pointer flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:transform-(--chip-press) [&:hover]:bg-suggest-tint-hover [&:hover]:text-ink-strong mark-line touch-hit"
+          class="inline-flex items-center h-(--chip-block) gap-space-2 max-w-full py-space-1 ps-space-2 pe-space-3 border border-suggest-tint rounded-sm bg-suggest-tint shadow-tile text-ink-strong text-size-label font-medium whitespace-nowrap cursor-pointer flex-none pointer-events-auto motion-safe:transition-suggest-chip motion-safe:active:transform-(--chip-press) hover:bg-suggest-tint-hover hover:text-ink-strong mark-line touch-hit"
           onclick={() => choose(candidate)}
           title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ""}`}
           type="button"
@@ -315,7 +315,7 @@
           data-slot="suggest-shimmer"
           style:--shimmer-w="9rem"
           style:--shimmer-h="calc(var(--text-label) + var(--space-1) * 2 + 2px)"
-          class="shimmer block w-(--shimmer-w) h-(--shimmer-h) flex-none pointer-events-auto"
+          class="block w-(--shimmer-w) h-(--shimmer-h) flex-none pointer-events-auto"
           in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
           ><Skeleton class="size-full" /></span
         >

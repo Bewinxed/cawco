@@ -69,7 +69,8 @@
         style:--measure="74ch"
         style:--ln-h="0.75em"
         style:--ln-my="calc((1lh - 0.75em) / 2)"
-        class="prose max-w-(--measure) text-size-body leading-body [.prose+&]:mt-space-3"
+        data-slot="paragraph"
+        class="max-w-(--measure) text-size-body leading-body [[data-slot=paragraph]+&]:mt-space-3"
       >
         <Skeleton
           class="w-(--ln-w) h-(--ln-h) [.prose>&]:my-(--ln-my)"
@@ -104,7 +105,8 @@
         style:--measure="74ch"
         style:--ln-h="0.75em"
         style:--ln-my="calc((1lh - 0.75em) / 2)"
-        class="prose max-w-(--measure) text-size-body leading-body [.prose+&]:mt-space-3"
+        data-slot="paragraph"
+        class="max-w-(--measure) text-size-body leading-body [[data-slot=paragraph]+&]:mt-space-3"
       >
         {#each lines as width (width)}
           <Skeleton
@@ -163,7 +165,8 @@
       style:--measure="74ch"
       style:--ln-h="0.75em"
       style:--ln-my="calc((1lh - 0.75em) / 2)"
-      class="prose max-w-(--measure) text-size-body leading-body [.prose+&]:mt-space-3"
+      data-slot="paragraph"
+      class="max-w-(--measure) text-size-body leading-body [[data-slot=paragraph]+&]:mt-space-3"
     >
       {#each AFTER as width (width)}
         <Skeleton

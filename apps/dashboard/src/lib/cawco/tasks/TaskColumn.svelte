@@ -118,7 +118,7 @@
   </header>
   <ol
     data-slot="cards"
-    class="m-0 flex min-h-c-btn-h-lg flex-auto list-none flex-col gap-space-1 overflow-y-auto p-0 max-phone:flex-none max-phone:overflow-visible"
+    class="m-0 flex min-h-c-btn-h-lg flex-auto list-none flex-col gap-space-1 overflow-y-auto overscroll-contain scrollbar-gutter-stable p-0 max-phone:flex-none max-phone:overflow-visible"
     {@attach reflow()}
   >
     {#each cards as task (task.id)}

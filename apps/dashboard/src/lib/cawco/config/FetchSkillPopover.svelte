@@ -216,7 +216,7 @@
       {#if choices.length > 0}
         <!-- literal: 13rem, 10px -->
         <div
-          class="flex flex-col max-h-(--choices-max) overflow-y-auto"
+          class="flex flex-col max-h-(--choices-max) overflow-y-auto overscroll-contain"
           style:--choices-max="13rem"
           style:--choice-pad="10px"
           transition:unfold
@@ -227,7 +227,7 @@
           {#each choices as choice (choice)}
             <button
               data-slot="choice"
-              class="kit-item px-(--choice-pad) text-left font-(family-name:--font-mono) text-size-meta text-ink-strong focus-inset"
+              class="kit-item px-(--choice-pad) text-start font-(family-name:--font-mono) text-size-meta text-ink-strong focus-inset"
               disabled={busy}
               onclick={() => choose(choice)}
               type="button"

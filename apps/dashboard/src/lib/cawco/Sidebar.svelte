@@ -771,7 +771,11 @@
     <div data-slot="sidebar-brand-row" class="flex items-center gap-space-1">
       <Sidebar.Menu aria-label="Workspace" class="flex-1">
         <Sidebar.MenuItem>
-          <Sidebar.MenuButton class="h-c-nav-h" isActive={false} row="nav">
+          <Sidebar.MenuButton
+            class="h-auto min-h-c-nav-h"
+            isActive={false}
+            row="nav"
+          >
             {#snippet child({ props })}
               <a
                 href="/session"
@@ -863,7 +867,7 @@
           <!-- The board is the place while it is on screen; with a
                conversation open, its row is the one selection. -->
           <Sidebar.MenuButton
-            class="h-c-nav-h"
+            class="h-auto min-h-c-nav-h"
             isActive={path.startsWith("/session") && activeSession === null}
             row="nav"
           >
@@ -896,7 +900,7 @@
 
         <Sidebar.MenuItem>
           <Sidebar.MenuButton
-            class="h-c-nav-h"
+            class="h-auto min-h-c-nav-h"
             isActive={path.startsWith("/workflows")}
             row="nav"
           >
@@ -1012,7 +1016,7 @@
                   {project}
                 >
                   <Sidebar.MenuButton
-                    class="h-(--rail-list-row-h)"
+                    class="h-auto min-h-(--rail-list-row-h)"
                     isActive={here}
                     row="list"
                   >
@@ -1096,7 +1100,7 @@
                     {#if lists.older.length + lists.recent.length === 0}
                       <Sidebar.MenuSubItem data-flip>
                         <Sidebar.MenuSubButton
-                          class="h-(--row-compact-h)"
+                          class="h-auto min-h-(--row-compact-h)"
                           data-branch-item
                           onclick={() => newSession({ projectId: project.id })}
                           row="compact"

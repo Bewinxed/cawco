@@ -415,9 +415,10 @@
        settle runs, and a tap that jumps along the strip keeps the pane it
        left painted until it lands (gesture.svelte.ts, `veiled`, `leaving`). -->
   <!-- Parked by delta, flush, so the seam between two panes never shows. The
-       swipe writes its travel inline over these and clears it after; only a
-       pane that can be seen is promised to the compositor. Swipe groups
-       only. A desktop pane is never parked or promoted: a transcript held on
+       swipe writes its travel inline over these and clears it after, and
+       promises a pane that can be seen to the compositor for the move alone
+       (gesture.svelte.ts `layer`). Swipe groups only. A pane is never held
+       promoted at rest, at the desk or on a phone: a transcript held on
        its own GPU layer cannot snap its text to the pixel grid, and wherever
        the rail's width leaves the pane on a fractional x the whole
        transcript reads soft and hazy. The switch glide promotes the pane
@@ -480,7 +481,7 @@
         data-pane-settling={(!shown && laidOut) || undefined}
         data-pane-hidden={!(shown || laidOut) || undefined}
         data-slot="pane"
-        class="absolute inset-0 flex group-data-swipe/stack:not-data-pane-hidden:not-data-pane-settling:will-change-transform group-data-swipe/stack:delta--1:transform-(--park-left) group-data-swipe/stack:delta-0:transform-(--park-here) group-data-swipe/stack:delta-1:transform-(--park-right) data-pane-hidden:pointer-events-none data-pane-hidden:content-visibility-hidden data-pane-settling:invisible"
+        class="absolute inset-0 flex group-data-swipe/stack:delta--1:transform-(--park-left) group-data-swipe/stack:delta-0:transform-(--park-here) group-data-swipe/stack:delta-1:transform-(--park-right) data-pane-hidden:pointer-events-none data-pane-hidden:content-visibility-hidden data-pane-settling:invisible"
         data-delta={delta}
         data-pane={paneId}
         inert={shown && !isActive}

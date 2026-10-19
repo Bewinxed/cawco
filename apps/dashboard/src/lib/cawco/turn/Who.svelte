@@ -129,7 +129,7 @@
     <time
       data-slot="when"
       data-after-note={note || undefined}
-      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 group-[:hover]/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out data-after-note:ms-0"
+      class="ms-auto text-size-meta font-normal text-ink-muted tabular-nums opacity-0 group-hover/turn:opacity-100 group-focus-within/turn:opacity-100 no-hover:opacity-100 coarse:opacity-100 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out data-after-note:ms-0"
       datetime={validAt.toISOString()}>{clock}</time
     >
   {/if}

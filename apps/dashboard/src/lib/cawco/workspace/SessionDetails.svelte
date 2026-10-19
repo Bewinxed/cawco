@@ -578,7 +578,7 @@
 >
   <div
     data-slot="details-body"
-    class="min-h-0 touch-pan-y overflow-y-auto overscroll-contain scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+    class="min-h-0 touch-pan-y overflow-y-auto overscroll-contain scrollbar-gutter-stable scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
   >
     <!-- The head is the tab's own surface, continued through the junction
          where the card hangs from the tab: the folder's label band. A
@@ -905,7 +905,16 @@
   [data-slot="settings"] :global(.tool-chips) {
     gap: var(--space-1);
   }
-  [data-slot="settings"] :global(.ns-chip-btn) {
+  /* A chip by its hook, never the `ns-chip-btn` class, which is also its
+     utility (ns-theme.css): a span's own `data-slot`, a popover trigger's
+     `data-ns-popover-trigger-class` (NsPopover). */
+  [data-slot="settings"]
+    :global(
+      :is(
+        [data-slot="ns-chip-btn"],
+        [data-ns-popover-trigger-class~="ns-chip-btn"]
+      )
+    ) {
     gap: var(--space-1);
     height: var(--chip-h);
   }
@@ -936,7 +945,13 @@
   @media (max-width: 640px) {
     /* A phone's row is ~350px: the three chips fit it whole, the model's
        name included, with the chips' sides and gaps drawn in. */
-    [data-slot="settings"] :global(.ns-chip-btn) {
+    [data-slot="settings"]
+      :global(
+        :is(
+          [data-slot="ns-chip-btn"],
+          [data-ns-popover-trigger-class~="ns-chip-btn"]
+        )
+      ) {
       height: var(--chip-h-phone);
       padding-inline: var(--chip-px-phone);
     }
@@ -945,7 +960,11 @@
        only hint that it opens anything. */
     [data-slot="settings"]
       :global(
-        .ns-chip-btn:not([data-account-chip]) > svg[data-slot="chevron"]
+        :is(
+            [data-slot="ns-chip-btn"],
+            [data-ns-popover-trigger-class~="ns-chip-btn"]
+          ):not([data-account-chip])
+          > svg[data-slot="chevron"]
       ) {
       display: none;
     }

@@ -591,7 +591,10 @@
               style:opacity={headHidden(entry.kind, id) ? "0" : undefined}
             >
               <OsMark class="size-icon-md shrink-0" os={entry.group.os} />
-              <span>{entry.group.name}</span>
+              <span
+                class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                >{entry.group.name}</span
+              >
             </h3>
           {/if}
           <div class="relative flex flex-col gap-space-1">
@@ -656,17 +659,19 @@
     {#if item.href && live}
       <a
         data-slot="name"
-        class="type-body truncate text-ink-strong no-underline [&:hover]:underline"
+        class="type-body truncate text-ink-strong no-underline hover:underline"
         href={item.href}
         title={item.label}>{item.label}</a
       >
     {:else if item.os}
       <span
         data-slot="name"
-        class="mark-line type-body flex items-center gap-space-2 truncate text-ink-strong"
+        class="mark-line type-body flex min-w-0 items-center gap-space-2 text-ink-strong"
       >
         <OsMark class="size-icon-md shrink-0" os={item.os} />
-        <span>{item.label}</span>
+        <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+          >{item.label}</span
+        >
       </span>
     {:else}
       <span

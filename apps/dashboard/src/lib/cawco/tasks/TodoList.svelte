@@ -227,7 +227,7 @@
                   >Proposed</span
                 >
               {/if}
-              <span>{todo.text}</span>
+              <span class="min-w-0 wrap-anywhere">{todo.text}</span>
               {#if todo.promoted}
                 <span
                   class="flex-none type-meta font-mono liga-none text-ink-muted"

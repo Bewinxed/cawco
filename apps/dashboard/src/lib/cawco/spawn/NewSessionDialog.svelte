@@ -1947,7 +1947,7 @@
   <!-- literal: 20px bottom padding -->
   <div
     data-slot="body"
-    class="fai-scroll kit-sheet-scroll kit-edge-fade-block group min-h-0 flex-initial overflow-auto rounded-lg bg-surface-raised px-space-5 pt-space-5 pb-(--pad-b) max-phone:-mx-space-1 max-phone:touch-pan-y max-phone:overscroll-contain max-phone:rounded-none max-phone:bg-transparent max-phone:px-space-1 max-phone:pt-space-3 max-phone:pb-space-4"
+    class="fai-scroll kit-sheet-scroll kit-edge-fade-block group min-h-0 flex-initial overflow-auto rounded-lg bg-surface-raised px-space-5 pt-space-5 pb-(--pad-b) max-phone:-mx-space-1 max-phone:touch-pan-y overscroll-contain max-phone:rounded-none max-phone:bg-transparent max-phone:px-space-1 max-phone:pt-space-3 max-phone:pb-space-4"
     data-stepped={moveStep || undefined}
     data-vaul-no-drag
     inert={busy}

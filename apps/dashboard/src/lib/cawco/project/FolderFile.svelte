@@ -70,7 +70,7 @@
 
 {#snippet body()}
   <div
-    class="flex min-h-0 flex-1 flex-col gap-space-2 overflow-y-auto p-space-5 in-data-file-page:border-t in-data-file-page:border-t-border-hairline"
+    class="flex min-h-0 flex-1 flex-col gap-space-2 overflow-y-auto overscroll-contain scrollbar-gutter-stable p-space-5 in-data-file-page:border-t in-data-file-page:border-t-border-hairline"
     data-folder-file={path}
   >
     {#if problem}
@@ -102,7 +102,7 @@
   >
     <header
       data-slot="page-head"
-      class="flex flex-none items-center gap-space-2 pt-0 pr-space-5 pb-space-2 pl-space-3"
+      class="flex flex-none items-center gap-space-2 pt-0 pe-space-5 pb-space-2 ps-space-3"
     >
       <Button onclick={onclose} size="sm" variant="ghost">
         <IconChevronLeft />

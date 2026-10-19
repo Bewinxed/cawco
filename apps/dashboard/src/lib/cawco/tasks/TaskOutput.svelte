@@ -148,7 +148,7 @@
       class="p-space-3 not-data-roomy:group-data-compact:p-space-2 data-roomy:px-space-4 data-roomy:pb-space-4"
     >
       {#if problem || postProblem}
-        <p class="m-0 type-meta text-status-fail-ink">
+        <p class="m-0 type-meta text-status-fail-ink wrap-anywhere">
           {problem ?? postProblem}
         </p>
       {:else if read && content === null}
@@ -183,7 +183,7 @@
           <!-- literal: 20rem, 6rem -->
           <img
             alt={name}
-            class="block max-w-full max-h-(--image-max) group-data-compact:max-h-(--image-max-compact) rounded-sm"
+            class="block max-w-full max-h-(--image-max) group-data-compact:max-h-(--image-max-compact) rounded-sm outline outline-image-outline -outline-offset-1"
             src={raw}
             style:--image-max="20rem"
             style:--image-max-compact="6rem"

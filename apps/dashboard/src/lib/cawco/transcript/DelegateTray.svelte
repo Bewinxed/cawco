@@ -1618,7 +1618,7 @@
           >
             <header
               data-slot="shead"
-              class="flex items-center gap-space-2 py-space-2 pr-space-2 pl-space-4 border-b border-b-border-hairline"
+              class="flex items-center gap-space-2 py-space-2 pe-space-2 ps-space-4 border-b border-b-border-hairline"
             >
               <h2
                 class="flex-auto min-w-0 m-0 text-size-label font-medium text-ink-strong"
