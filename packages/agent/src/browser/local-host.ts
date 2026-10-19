@@ -224,6 +224,12 @@ export class LocalHost implements BrowserHost {
         "--use-mock-keychain",
         "--disable-sync",
         "--disable-background-networking",
+        // The container host's screen (neko's 1280x800): Chromium's headless
+        // screen is a virtual 800x600 one unless `--screen-info` names it
+        // (components/headless/screen_info/README.md), and a window is
+        // kept within it. The window's page is smaller by the browser's own
+        // UI; the take-over sets its page's viewport (cdp-takeover.ts).
+        "--screen-info={1280x800}",
         "--window-size=1280,800",
         "about:blank",
       ],

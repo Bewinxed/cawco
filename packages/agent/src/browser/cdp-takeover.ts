@@ -53,7 +53,7 @@ interface Message {
 /** A take-over's screencast: none yet, frames being made, or ended. */
 type CastState = "idle" | "casting" | "stopped";
 
-/** The frame's largest edges: the local browser's window (local-host.ts). */
+/** The frame's largest edges, and the page's viewport while it is taken over: the container host's screen. */
 const FRAME = { width: 1280, height: 800 } as const;
 const QUALITY = 70;
 
@@ -299,6 +299,23 @@ export class CdpTakeover {
     try {
       const session = await link.attach(targetId);
       await link.call("Page.enable", {}, session);
+      // The person's view is the container host's 1280x800 (its neko
+      // screen). Headless Chromium lays the page out in its window less the
+      // browser's own UI, whose height changes by version (1280x657 under
+      // Chrome 156's new headless for a 1280,800 window); the page's viewport
+      // is set as Playwright sets every viewport (`Emulation.
+      // setDeviceMetricsOverride`, playwright-core 1.64.1 `_updateViewport`),
+      // and lasts while this take-over's session is attached.
+      await link.call(
+        "Emulation.setDeviceMetricsOverride",
+        {
+          width: FRAME.width,
+          height: FRAME.height,
+          deviceScaleFactor: 1,
+          mobile: false,
+        },
+        session
+      );
       return new CdpTakeover(link, session, targetId);
     } catch (error) {
       link.close();

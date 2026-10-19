@@ -79,7 +79,13 @@ interface ViewRead {
   error?: string;
   iceservers?: { urls: string[]; username?: string; credential?: string }[];
   pair?: {
-    local: { type?: string; relayProtocol?: string; address?: string };
+    local: {
+      type?: string;
+      relayProtocol?: string;
+      address?: string;
+      /** The ICE server it was obtained from: a local relay (or relay-made prflx) candidate's TURN URL. */
+      url?: string;
+    };
     remote: { type?: string; address?: string };
   };
   said: string[];
@@ -150,6 +156,7 @@ const view = (args: {
           type: local?.candidateType,
           relayProtocol: local?.relayProtocol,
           address: local?.address,
+          url: local?.url,
         },
         remote: { type: remote?.candidateType, address: remote?.address },
       };
@@ -646,9 +653,21 @@ const containerLeg = async (
   if (relayHere) {
     await allocates(kit, leg, username, server?.credential ?? "");
   }
+  // Direct on the LAN, no relay: the local candidate carries no
+  // `relayProtocol` ("only present for local relay candidates",
+  // webrtc-stats; libwebrtc sets it on a prflx made from a relay candidate
+  // too), and the remote is neko's host candidate on this machine's
+  // address. The local side may read `prflx`: libwebrtc makes one of the
+  // local candidate whenever the peer's mapped address in its binding
+  // response matches no local candidate (p2p/base/connection.cc
+  // `MaybeUpdateLocalCandidate`), as the runtime's port forwarding into
+  // neko's container rewrites the viewer's source.
   kit.check(
-    `a headless Chromium viewer connects; getStats() selected pair ${direct.pair?.local.type}/${direct.pair?.remote.type} on the LAN (${direct.pair?.local.address} → ${direct.pair?.remote.address})`,
-    direct.pair?.local.type === "host" && direct.pair.remote.type === "host",
+    `a headless Chromium viewer connects; getStats() selected pair ${direct.pair?.local.type}/${direct.pair?.remote.type} on the LAN, no relay (local relayProtocol ${direct.pair?.local.relayProtocol ?? "absent"} → remote ${direct.pair?.remote.type} ${direct.pair?.remote.address})`,
+    !!direct.pair &&
+      direct.pair.local.relayProtocol === undefined &&
+      direct.pair.remote.type === "host" &&
+      direct.pair.remote.address === address,
     JSON.stringify(direct)
   );
   if (relayHere) {
@@ -689,7 +708,7 @@ const allocates = async (
 /** The viewer connected through this spec's coturn alone. */
 const relayPair = async (
   kit: Kit,
-  { page, standIn, where }: Leg & Relayed,
+  { page, address, standIn, where }: Leg & Relayed,
   url: string
 ): Promise<void> => {
   const relayed = await page.evaluate(view, {
@@ -698,10 +717,19 @@ const relayPair = async (
     from: STREAM_RELAY_PORT,
     to: standIn,
   });
+  // Through this spec's coturn over UDP: the local candidate's
+  // `relayProtocol` is "udp" and its `url` this coturn's. libwebrtc reports
+  // both for a relay candidate and for a prflx it made of one
+  // (pc/rtc_stats_collector.cc: `candidate.is_relay() ||
+  // (candidate.is_prflx() && !relay_protocol.empty())`), the type it reads
+  // when neko's mapped address for the relayed one matches none it knows.
+  const turnUrl = `turn:${address}:${standIn}?transport=udp`;
   kit.check(
-    `the same viewer with iceTransportPolicy relay: selected pair ${relayed.pair?.local.type} relayProtocol ${relayed.pair?.local.relayProtocol}${where}`,
-    relayed.pair?.local.type === "relay" &&
-      relayed.pair.local.relayProtocol === "udp",
+    `the same viewer with iceTransportPolicy relay: selected pair ${relayed.pair?.local.type} relayProtocol ${relayed.pair?.local.relayProtocol} via ${relayed.pair?.local.url}${where}`,
+    (relayed.pair?.local.type === "relay" ||
+      relayed.pair?.local.type === "prflx") &&
+      relayed.pair.local.relayProtocol === "udp" &&
+      relayed.pair.local.url === turnUrl,
     JSON.stringify(relayed)
   );
 };
