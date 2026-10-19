@@ -176,7 +176,6 @@ import {
   CONTROL_PLACE_REPO,
   CONTROL_PROBE_ACCOUNT,
   CONTROL_READ_CONTINUATION,
-  CONTROL_WORK_IN_FLIGHT,
   CONTROL_READ_HOME_CREDENTIALS,
   CONTROL_READ_HOME_LOGIN,
   CONTROL_READ_SESSION_CONTEXT,
@@ -190,6 +189,7 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SET_PROVIDER_KEY,
   CONTROL_SLEEP,
+  CONTROL_WORK_IN_FLIGHT,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_AT,
   CONTROL_WORKSPACE_BOUNDARY,
@@ -201,7 +201,6 @@ import {
   type CommandQueueFrame,
   type CommandRun,
   type ContinuationRead,
-  type WorkInFlight,
   CUSTODY_HELD,
   clockWords,
   contextFitRefusal,
@@ -321,6 +320,7 @@ import {
   WIRE_PROTOCOL,
   WITHDRAW_PERMISSION,
   WORKSPACE_CREATE_TIMEOUT_MS,
+  type WorkInFlight,
 } from "@cawco/core";
 import {
   AGENT_RESTARTING,
@@ -14299,6 +14299,60 @@ export const createServer = (
     }
   };
 
+  /**
+   * Waits until `row`'s source holds no work in flight and is between turns,
+   * or until the restart bound from when the job began to wait: true then.
+   * False when a Cancel landed or its machine went away meanwhile.
+   */
+  const untilWorkEnds = async (row: ContinuationRow): Promise<boolean> => {
+    const sourceId = row.sourceInstanceId;
+    const from = row.waiting?.from ?? Date.now();
+    for (;;) {
+      if (cancelledContinuation(row.id) || !registry.agent(machineFor(row))) {
+        return false;
+      }
+      if (waitedOut(from)) {
+        console.info(
+          `[continuation] ${row.prepared.source.title}'s continuation waited ${RESTART_WAIT_CAP_MS / 60_000} minutes for its work in flight; it goes on now, and that work ends with the source's process.`
+        );
+        return true;
+      }
+      // biome-ignore lint/performance/noAwaitInLoops: one look a beat until the work in flight ends
+      const now = await workInFlightOf(sourceId);
+      const [source] = db.getInstancesByIds([sourceId]);
+      if (!now && (!source || (await sessionIdle(source)))) {
+        return true;
+      }
+      if (now && now.why !== row.waiting?.why) {
+        moveContinuation(row.id, {
+          waiting: { why: now.why, since: now.since, from },
+        });
+      }
+      await lifetime.sleep(WAIT_LOOK_MS);
+    }
+  };
+
+  /**
+   * The work in flight a continuation of `sourceId` must wait for: none when
+   * it leaves the source running ({@link endsSource}) or nothing is held;
+   * a refusal in its machine's words when the machine could not say.
+   */
+  const inFlightFor = async (
+    sourceId: string,
+    asker: ContinuationAsker
+  ): Promise<{ work?: WorkInFlight } | { refusal: string }> => {
+    if (!endsSource(sourceId, asker)) {
+      return {};
+    }
+    try {
+      return { work: (await workInFlightOf(sourceId)) ?? undefined };
+    } catch (error) {
+      return {
+        refusal: error instanceof Error ? error.message : String(error),
+      };
+    }
+  };
+
   /** How often a waiting job looks again whether its source's work in flight has ended. */
   const WAIT_LOOK_MS = 5000;
 
@@ -14316,34 +14370,10 @@ export const createServer = (
   const waitStep = async (
     row: ContinuationRow
   ): Promise<ContinuationRow | undefined> => {
-    const sourceId = row.sourceInstanceId;
-    const from = row.waiting?.from ?? Date.now();
-    for (;;) {
-      if (cancelledContinuation(row.id)) {
-        return undefined;
-      }
-      if (!registry.agent(machineFor(row))) {
-        return undefined;
-      }
-      if (waitedOut(from)) {
-        console.info(
-          `[continuation] ${row.prepared.source.title}'s continuation waited ${RESTART_WAIT_CAP_MS / 60_000} minutes for its work in flight; it goes on now, and that work ends with the source's process.`
-        );
-        break;
-      }
-      // biome-ignore lint/performance/noAwaitInLoops: one look a beat until the work in flight ends
-      const now = await workInFlightOf(sourceId);
-      const [source] = db.getInstancesByIds([sourceId]);
-      if (!now && (!source || (await sessionIdle(source)))) {
-        break;
-      }
-      if (now && now.why !== row.waiting?.why) {
-        moveContinuation(row.id, {
-          waiting: { why: now.why, since: now.since, from },
-        });
-      }
-      await lifetime.sleep(WAIT_LOOK_MS);
+    if (!(await untilWorkEnds(row))) {
+      return undefined;
     }
+    const sourceId = row.sourceInstanceId;
     const prepared = await prepareContinuation(
       sourceId,
       row.request.note,
@@ -24213,32 +24243,25 @@ export const createServer = (
           }
           // What the source's process holds that ending it would lose: the
           // job waits for it, and the caller hears so at once.
-          let inFlight: WorkInFlight | null = null;
-          if (endsSource(params.id, asker)) {
-            try {
-              inFlight = await workInFlightOf(params.id);
-            } catch (error) {
-              release();
-              return status(
-                422,
-                error instanceof Error ? error.message : String(error)
-              );
-            }
+          const inFlight = await inFlightFor(params.id, asker);
+          if ("refusal" in inFlight) {
+            release();
+            return status(422, inFlight.refusal);
           }
           const row = startContinuation(
             prepared,
             request,
             asker,
-            inFlight ?? undefined
+            inFlight.work
           );
           // Its record holds the source's workspace from here (work-items.ts `holdOn`).
           release();
-          const { waiting } = continuationJob(row);
+          const job = continuationJob(row);
           return {
             continuationId: row.id,
             targetInstanceId: row.targetInstanceId,
             summariserInstanceId: row.summariserInstanceId,
-            ...(waiting ? { waiting } : {}),
+            ...(job.waiting ? { waiting: job.waiting } : {}),
           };
         }
       )
