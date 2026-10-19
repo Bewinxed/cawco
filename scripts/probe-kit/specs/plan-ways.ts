@@ -49,7 +49,7 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { Page } from "playwright-core";
+import type { CDPSession, Page } from "playwright-core";
 import { buildStageHost } from "../../../packages/agent/src/stage-host/build";
 import type {
   CanvasSpec,
@@ -2307,19 +2307,59 @@ async function leg(
   await page.close();
 }
 
+/** What one run read: its frames and length, its worst frame and task, its scripting and the caps' share of it, in all. */
+interface ScrollRun {
+  caps: number;
+  frames: number;
+  longest: number;
+  ms: number;
+  range: number;
+  script: number;
+  worstFrame: number;
+}
+
+/** The share of a profile's samples with a frame of edge-fade-caps.ts on their stack, the native calls it makes included, in milliseconds. */
+function capsShare(profile: {
+  nodes: { callFrame: { url: string }; children?: number[]; id: number }[];
+  samples: number[];
+  timeDeltas: number[];
+}): number {
+  const parent = new Map<number, number>();
+  for (const node of profile.nodes) {
+    for (const child of node.children ?? []) {
+      parent.set(child, node.id);
+    }
+  }
+  const url = new Map(
+    profile.nodes.map((node) => [node.id, node.callFrame.url])
+  );
+  let us = 0;
+  profile.samples.forEach((id, i) => {
+    for (
+      let at: number | undefined = id;
+      at !== undefined;
+      at = parent.get(at)
+    ) {
+      if (url.get(at)?.includes("edge-fade-caps")) {
+        us += profile.timeDeltas[i] ?? 0;
+        return;
+      }
+    }
+  });
+  return us / 1000;
+}
+
 /**
- * What the edge fades' caps cost a scroll (DESIGN.md, Edge fade): the desk
- * card's list scrolled down its length and back, 6px a frame, at a 4×
- * CPU throttle. Says the longest task (the Long Tasks API reports 50ms and
- * up), the longest frame, the page's scripting per frame (the protocol's
- * ScriptDuration over the run) and the caps' own share of it (the
- * sampling profiler's stacks through edge-fade-caps.ts, every list on the
- * page, the Live story's beats among them). A note, not a check: the canvas
- * page runs tasks past 50ms under the throttle with no caps at all (round
- * 4's list, 204-229ms), so it is read against the tree before the caps.
+ * The desk card's list scrolled down its length and back, 6px a frame; or,
+ * `still` for `ms`, the same page run frame by frame with nothing scrolled,
+ * so what the page does on its own (the Live story's beats) is read apart
+ * from what the scroll asks.
  */
-async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
-  const cdp = await page.context().newCDPSession(page);
+async function runOnce(
+  page: Page,
+  cdp: CDPSession,
+  still: number | null
+): Promise<ScrollRun | null> {
   const metric = async () =>
     Object.fromEntries(
       (
@@ -2328,14 +2368,10 @@ async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
         }
       ).metrics.map((one) => [one.name, one.value])
     );
-  await cdp.send("Performance.enable");
-  await cdp.send("Profiler.enable");
-  await cdp.send("Profiler.setSamplingInterval", { interval: 100 });
-  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
-  try {
-    const before = await metric();
-    await cdp.send("Profiler.start");
-    const run = await page.evaluate(async (selector) => {
+  const before = await metric();
+  await cdp.send("Profiler.start");
+  const run = await page.evaluate(
+    async ({ selector, hold }) => {
       const scroller = document.querySelector<HTMLElement>(
         `${selector} [data-slot="side-card"] .body`
       );
@@ -2351,20 +2387,29 @@ async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
       tasks.observe({ type: "longtask" });
       const range = scroller.scrollHeight - scroller.clientHeight;
       const gaps: number[] = [];
+      const from = performance.now();
+      let down = true;
+      /** One frame's step: whether the run is over. */
+      const over = (now: number): boolean => {
+        if (hold !== null) {
+          return now - from >= hold;
+        }
+        scroller.scrollTop += down ? 6 : -6;
+        if (down && scroller.scrollTop >= range - 0.5) {
+          down = false;
+        }
+        return !down && scroller.scrollTop <= 0;
+      };
       await new Promise<void>((done) => {
-        let down = true;
-        let last = performance.now();
+        let last = from;
         const tick = (now: number) => {
           gaps.push(now - last);
           last = now;
-          scroller.scrollTop += down ? 6 : -6;
-          if (down && scroller.scrollTop >= range - 0.5) {
-            down = false;
-          } else if (!down && scroller.scrollTop <= 0) {
+          if (over(now)) {
             done();
-            return;
+          } else {
+            requestAnimationFrame(tick);
           }
-          requestAnimationFrame(tick);
         };
         requestAnimationFrame(tick);
       });
@@ -2372,59 +2417,60 @@ async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
       return {
         range: Math.round(range),
         frames: gaps.length,
+        ms: performance.now() - from,
         worstFrame: Math.round(Math.max(...gaps.slice(1))),
         longest: Math.round(longest),
       };
-    }, FRAME("Plan"));
-    const after = await metric();
-    // The caps' own share: every sample with a frame of edge-fade-caps.ts
-    // on its stack, the native calls it makes included.
-    const { profile } = (await cdp.send("Profiler.stop")) as {
-      profile: {
-        nodes: {
-          callFrame: { url: string };
-          children?: number[];
-          id: number;
-        }[];
-        samples: number[];
-        timeDeltas: number[];
-      };
-    };
-    const parent = new Map<number, number>();
-    for (const node of profile.nodes) {
-      for (const child of node.children ?? []) {
-        parent.set(child, node.id);
-      }
+    },
+    { selector: FRAME("Plan"), hold: still }
+  );
+  const after = await metric();
+  const { profile } = (await cdp.send("Profiler.stop")) as {
+    profile: Parameters<typeof capsShare>[0];
+  };
+  if (!run || run.frames === 0) {
+    return null;
+  }
+  return {
+    ...run,
+    script: ((after.ScriptDuration ?? 0) - (before.ScriptDuration ?? 0)) * 1000,
+    caps: capsShare(profile),
+  };
+}
+
+/** Milliseconds a frame, to the hundredth. */
+const perFrame = (ms: number, frames: number): number =>
+  Math.round((ms / Math.max(frames, 1)) * 100) / 100;
+
+/**
+ * What the edge fades' caps cost a scroll (DESIGN.md, Edge fade): the desk
+ * card's list scrolled down its length and back at a 4x CPU throttle, then
+ * the page run as long again with nothing scrolled. Says the frames, the
+ * longest frame and task (the Long Tasks API reports 50ms and up), the
+ * page's scripting per frame (the protocol's ScriptDuration over the run),
+ * the caps' share of it (the sampling profiler's stacks through
+ * edge-fade-caps.ts), and the scroll's own: the caps' share less what they
+ * spent in the still run, as long, on the page's own beats (the Live
+ * story's). A note, not a check: the canvas page runs tasks past 50ms
+ * under the throttle with no caps at all (round 4's list, 204-229ms), so
+ * it is read against the tree before the caps.
+ */
+async function scrollCost(kit: Kit, name: string, page: Page): Promise<void> {
+  const cdp = await page.context().newCDPSession(page);
+  await cdp.send("Performance.enable");
+  await cdp.send("Profiler.enable");
+  await cdp.send("Profiler.setSamplingInterval", { interval: 100 });
+  await cdp.send("Emulation.setCPUThrottlingRate", { rate: 4 });
+  try {
+    const run = await runOnce(page, cdp, null);
+    const still = run ? await runOnce(page, cdp, run.ms) : null;
+    if (!(run && still)) {
+      kit.note(`${name}: the desk card's list did not scroll`);
+      return;
     }
-    const url = new Map(
-      profile.nodes.map((node) => [node.id, node.callFrame.url])
-    );
-    let capsUs = 0;
-    profile.samples.forEach((id, i) => {
-      for (
-        let at: number | undefined = id;
-        at !== undefined;
-        at = parent.get(at)
-      ) {
-        if (url.get(at)?.includes("edge-fade-caps")) {
-          capsUs += profile.timeDeltas[i] ?? 0;
-          return;
-        }
-      }
-    });
-    const script =
-      run && run.frames > 0
-        ? Math.round(
-            (((after.ScriptDuration ?? 0) - (before.ScriptDuration ?? 0)) *
-              1000 *
-              100) /
-              run.frames
-          ) / 100
-        : 0;
-    const caps =
-      run && run.frames > 0 ? Math.round(capsUs / 10 / run.frames) / 100 : 0;
+    const own = Math.max(0, run.caps - (still.caps * run.ms) / still.ms);
     kit.note(
-      `${name}: the desk card's list scrolled ${run?.range ?? 0}px down and back at 4× CPU throttle: ${run?.frames ?? 0} frames, scripting ${script} ms a frame (the caps' own ${caps} ms), longest frame ${run?.worstFrame ?? 0} ms, longest task ${run?.longest ? `${run.longest} ms` : "none of 50 ms or more"}`
+      `${name}: the desk card's list scrolled ${run.range}px down and back at 4× CPU throttle: ${run.frames} frames, scripting ${perFrame(run.script, run.frames)} ms a frame, the caps' ${perFrame(run.caps, run.frames)} ms of it, the scroll's own ${perFrame(own, run.frames)} ms (the page still as long: the caps' ${perFrame(still.caps, still.frames)} ms a frame on its own beats), longest frame ${run.worstFrame} ms, longest task ${run.longest ? `${run.longest} ms` : "none of 50 ms or more"}`
     );
   } finally {
     await cdp.send("Emulation.setCPUThrottlingRate", { rate: 1 });
