@@ -23,6 +23,8 @@
  *   record, no ports) and the machine's gate answers at once, with no wait
  *   for the agent's tick; that session's first call is answered, and only
  *   then does the browser take ports;
+ * - a session outside any workspace whose row the hub deletes has its door
+ *   folder (token, config, project) removed within the agent's next tick;
  * - each session's door was made in at most 200 ms (the agent's
  *   `[browser] <id>'s door … made in N ms` lines), so a spawn grows by no
  *   more than that.
@@ -32,9 +34,9 @@
  *
  *   bun scripts/probe-kit/run.ts browser-cutover
  */
-import { mkdir } from "node:fs/promises";
+import { access, mkdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { BrowserKey } from "../../../packages/core/src/browser";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
@@ -173,16 +175,27 @@ const ancestor = (
   }
 };
 
-/** Every Chromium whose ancestors hold a chrome-devtools-mcp: none is the cutover. */
+/** Whether `pid` is one of the scratch fleet's own processes: under its sessiond or its agent, never a live session's. */
+const inFleet = (procs: Procs, pid: number, roots: ReadonlySet<number>) =>
+  roots.has(pid) || !!ancestor(procs, pid, (up) => roots.has(up));
+
+/**
+ * Every Chromium a chrome-devtools-mcp of the scratch fleet launched (the
+ * server among its ancestors, and the fleet's sessiond or agent among the
+ * server's): none is the cutover. Another fleet's on the host (the live
+ * one's) is not this fleet's to judge. Also counts the fleet's own
+ * browsers' Chromium processes (the local host's, under its agent).
+ */
 const chromiumUnderMcp = (
-  procs: Procs
+  procs: Procs,
+  roots: ReadonlySet<number>
 ): { chromium: number; underMcp: string[] } => {
   const isChromium = (args: string) =>
     CHROMIUM.test(args.split(" --")[0] ?? "") && !args.includes("--type=");
   let chromium = 0;
   const underMcp: string[] = [];
   for (const [pid, proc] of procs) {
-    if (!isChromium(proc.args)) {
+    if (!(isChromium(proc.args) && inFleet(procs, pid, roots))) {
       continue;
     }
     chromium += 1;
@@ -196,15 +209,21 @@ const chromiumUnderMcp = (
   return { chromium, underMcp };
 };
 
-/** The fleet's chrome-devtools-mcp command lines: those under its sessiond. */
-const fleetMcpLines = (procs: Procs, sessiond: number): string[] =>
+/** The scratch fleet's chrome-devtools-mcp processes' command lines: those under its sessiond or agent. */
+const fleetMcpLines = (procs: Procs, roots: ReadonlySet<number>): string[] =>
   [...procs.entries()]
     .filter(
       ([pid, proc]) =>
-        proc.args.includes("chrome-devtools-mcp") &&
-        !!ancestor(procs, pid, (up) => up === sessiond)
+        proc.args.includes("chrome-devtools-mcp") && inFleet(procs, pid, roots)
     )
     .map(([, proc]) => proc.args);
+
+/** Whether `path` is there. */
+const exists = (path: string): Promise<boolean> =>
+  access(path).then(
+    () => true,
+    () => false
+  );
 
 /** The agent's door lines, by gate id: the browser's key, the door's config file, and how long it took. */
 const doors = (
@@ -258,11 +277,13 @@ const run = async (kit: Kit): Promise<void> => {
     );
     return;
   }
+  /** The agent now running: with the sessiond, the roots of the fleet's own process tree. */
+  let agent = 0;
   const agentOn = async (dockerHost: string) => {
-    fleet.launch("agent", [], {
+    agent = fleet.launch("agent", [], {
       DOCKER_HOST: dockerHost,
       PLAYWRIGHT_BROWSERS_PATH: browsersPath,
-    });
+    }).pid;
     await fleet.agentUp();
   };
   const sessiond = fleet.launch("sessiond");
@@ -468,21 +489,22 @@ const run = async (kit: Kit): Promise<void> => {
       )
     );
     const procs = await processes();
-    const ps = chromiumUnderMcp(procs);
+    const roots = new Set([sessiond.pid, agent]);
+    const ps = chromiumUnderMcp(procs, roots);
     kit.check(
-      `${host}: ps shows no Chromium launched by an MCP server (${ps.chromium} Chromium browser process(es), the projects' own)`,
-      ps.underMcp.length === 0 && ps.chromium >= 1,
+      `${host}: ps shows no Chromium launched by the fleet's chrome-devtools-mcp (${ps.chromium} Chromium browser process(es) in the fleet's own tree; a container's run outside it)`,
+      ps.underMcp.length === 0 && (host === "container" || ps.chromium >= 1),
       ps.underMcp.join("; ") || `${ps.chromium} browser process(es)`
     );
-    const lines = fleetMcpLines(procs, sessiond.pid);
+    // npm exec and its shell carry the arguments; the server itself shows
+    // only its process title. None holds a token, and the door's config is
+    // what they name.
+    const lines = fleetMcpLines(procs, roots);
     kit.check(
-      `${host}: no chrome-devtools-mcp command line holds a token (${lines.length} of the fleet's, each naming its door's config alone)`,
-      lines.length >= 3 &&
+      `${host}: no chrome-devtools-mcp command line of the fleet holds a token (${lines.length} process(es), naming the door's config)`,
+      lines.some((line) => line.includes("--config=")) &&
         lines.every(
-          (line) =>
-            line.includes("--config=") &&
-            !line.includes("Bearer") &&
-            !line.includes("--wsHeaders")
+          (line) => !(line.includes("Bearer") || line.includes("--wsHeaders"))
         ),
       lines.map((line) => line.slice(0, 200)).join(" | ")
     );
@@ -494,6 +516,45 @@ const run = async (kit: Kit): Promise<void> => {
     );
     await Promise.allSettled(
       Object.values(ids).map((id) => fleet.stopSession(id))
+    );
+  };
+
+  /**
+   * A session outside any workspace makes its own door as it launches; the
+   * hub deletes the session (stopped, then `DELETE /api/instances/:id`), and
+   * the stop that delete owes its machine carries `forget`: the door's folder
+   * is gone within the agent's next tick.
+   */
+  const forgotten = async (): Promise<void> => {
+    const id = await fleet.spawn("claude", "Cutover forgotten", ours.repo, {
+      projectId: ours.id,
+    });
+    const door = doors(await fleet.logs("agent")).get(id);
+    const folder = door ? dirname(door.config) : undefined;
+    const made = folder ? await exists(folder) : false;
+    await fleet.stopSession(id);
+    await until(
+      "the session to stop",
+      () => fleet.instance(id)?.status,
+      (status) => status === "stopped",
+      120_000
+    ).catch(() => undefined);
+    const deleted = await fetch(`${fleet.base}/api/instances/${id}`, {
+      method: "DELETE",
+    });
+    const said = `${deleted.status} ${await deleted.text()}`;
+    const gone = folder
+      ? await until(
+          "the session's door folder to go",
+          async () => !(await exists(folder)),
+          Boolean,
+          70_000
+        ).catch(() => false)
+      : false;
+    kit.check(
+      `a session outside any workspace made its door (${folder}), the hub deleted the session (${said}), and the folder is gone within the agent's next tick`,
+      made && deleted.ok && gone && fleet.instance(id) === undefined,
+      JSON.stringify({ made, said, gone, row: fleet.instance(id) })
     );
   };
 
@@ -509,6 +570,7 @@ const run = async (kit: Kit): Promise<void> => {
     await browsers.browserRuntime(true);
     await agentOn("unix:///nonexistent");
     await leg(2, "local");
+    await forgotten();
   } finally {
     await fleet.stop("agent").catch(() => undefined);
     process.env.DOCKER_HOST = `unix://${runtime.endpoint}`;

@@ -22,17 +22,18 @@
  * wakes the browser as a tool first connects, which chrome-devtools-mcp does
  * at its first tool call, not as it starts.
  */
-import { readFile } from "node:fs/promises";
+import { readFile, rm, rmdir, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { browserGatePort } from "@cawco/core/browser";
 import { machineId } from "@cawco/core/machine-id";
-import { workspaceStateDir } from "@cawco/core/paths";
+import { workspaceProjectFile, workspaceStateDir } from "@cawco/core/paths";
 import { writeStateFile } from "@cawco/core/state-file";
 import { setProject } from "../boundary";
 import { reserveBrowser } from "./browsers";
 import {
   closeWorkspaceBrowsers,
   ensureGateToken,
+  gateTokenFile,
   keyOfWorkspace,
 } from "./gate";
 
@@ -95,6 +96,49 @@ export const closeBrowserDoor = (instanceId: string): void => {
       `[browser] ${instanceId}'s pages were not closed: ${String(error)}`
     )
   );
+};
+
+/** A workspace's records (workspace-records.ts): a state dir holding any is a workspace's, never a session's own door. */
+const WORKSPACE_RECORDS = ["create.json", "boundary.json", "place.json"];
+
+/**
+ * A session's own door let go for good, as the hub forgets the session: its
+ * pages closed on every browser of the machine, then its token, config and
+ * project, and its folder once nothing else is in it. A workspace's door goes
+ * with its workspace, so a folder holding a workspace's records is left.
+ */
+export const forgetBrowserDoor = async (instanceId: string): Promise<void> => {
+  const dir = workspaceStateDir(instanceId);
+  const workspace = await Promise.all(
+    WORKSPACE_RECORDS.map((name) =>
+      stat(join(dir, name)).then(
+        () => true,
+        () => false
+      )
+    )
+  );
+  if (workspace.some(Boolean)) {
+    return;
+  }
+  try {
+    await closeWorkspaceBrowsers(instanceId);
+    await Promise.all(
+      [
+        gateTokenFile(instanceId),
+        join(dir, GATE_CONFIG_NAME),
+        workspaceProjectFile(instanceId),
+      ].map((file) => rm(file, { force: true }))
+    );
+    await rmdir(dir);
+    console.info(`[browser] ${instanceId}'s door is gone with its session`);
+  } catch (error) {
+    const { code } = error as NodeJS.ErrnoException;
+    if (code !== "ENOENT" && code !== "ENOTEMPTY") {
+      console.warn(
+        `[browser] ${instanceId}'s door was not let go: ${String(error)}`
+      );
+    }
+  }
 };
 
 /** chrome-devtools-mcp's arguments that pick a browser or a config: the door picks both now. */

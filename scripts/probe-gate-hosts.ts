@@ -68,6 +68,8 @@ if (!process.env.GATE_PROBE_SANDBOX) {
   probe.stop(true);
   await mkdir(sandbox, { recursive: true });
   const home = join(sandbox, "home");
+  const runtimeDir = join(sandbox, "run");
+  await mkdir(runtimeDir, { recursive: true, mode: 0o700 });
   const env: NodeJS.ProcessEnv = {
     ...process.env,
     GATE_PROBE_SANDBOX: sandbox,
@@ -82,6 +84,9 @@ if (!process.env.GATE_PROBE_SANDBOX) {
     XDG_CACHE_HOME: join(home, ".cache"),
     XDG_STATE_HOME: join(home, ".local", "state"),
     CAWCO_SESSIOND_ENDPOINT: join(sandbox, "sessiond.sock"),
+    // Its own runtime dir: the live agent keeps its sockets in the real one
+    // (core paths.ts `hubCredentialSocket`).
+    XDG_RUNTIME_DIR: runtimeDir,
   };
   env.INVOCATION_ID = undefined;
   env.CAWCO_SERVICE_MODE = undefined;
@@ -342,6 +347,10 @@ const hub = Bun.serve({
   },
 });
 process.env.CAWCO_HUB_URL = `${hub.url.origin}/ws`;
+// Its own MCP gateway: the harnesses' CawCo tools (`harnessMcpUrl`) are this
+// server's, never the live agent's on the default port. Read once per
+// process (core `CAWCO_ENV.mcpPort`), so named before anything reads it.
+process.env.CAWCO_MCP_PORT = String(hub.port);
 await Bun.write(
   join(home, ".config", "cawco", "config.json"),
   JSON.stringify({ hubUrl: `${hub.url.origin}/ws` })

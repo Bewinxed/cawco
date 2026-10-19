@@ -174,6 +174,10 @@ export const createSessionLifecycle = (ports: {
                 }
               : {}),
             discard: row.endIntent === "discard" && row.status !== "discarded",
+            ...(row.endIntent === "delete" ||
+            row.endIntent === "delete-transcript"
+              ? { forget: true as const }
+              : {}),
           });
           if (delivered) {
             issued.set(row.id, { generation: generation(row), sequence });

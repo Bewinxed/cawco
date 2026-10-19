@@ -689,6 +689,12 @@ export interface StopPayload {
   cwd?: string;
   /** Explicitly abort unadopted custody too, then tear down spin-off resources. */
   discard?: boolean;
+  /**
+   * The hub forgets the session once this stop is confirmed (its end is a
+   * delete or a transcript delete): the machine lets go of what it kept for
+   * the session to be reattached, its browser door among it.
+   */
+  forget?: true;
   /** The instance a fleet-originated stop claims as its caller; the hub honours the call only when the target is that instance's own delegate. */
   from?: string;
   /**

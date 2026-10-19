@@ -122,6 +122,7 @@ import {
   type BrowserDoor,
   browserDoor,
   closeBrowserDoor,
+  forgetBrowserDoor,
 } from "./browser/door";
 import { carryWorktree, worktreeHeld } from "./carry";
 import { carryRefusal, carrySessions } from "./claude-sessions";
@@ -4262,6 +4263,7 @@ export class SessionSupervisor {
     cwd,
     claimedSessionIds = [],
     scratchWorktree,
+    forget,
   }: StopPayload): Promise<void> {
     const stopStartedAt = Date.now();
     const processGeneration =
@@ -4390,6 +4392,11 @@ export class SessionSupervisor {
         if (!(sessionId && claimedSessionIds.includes(sessionId))) {
           await this.#removeQuestSession(instanceId);
         }
+      }
+      // The hub forgets the session once this stop is confirmed: nothing
+      // can reattach it, so its own browser door goes now.
+      if (forget) {
+        await forgetBrowserDoor(instanceId);
       }
       Effect.runFork(
         Effect.logInfo(
