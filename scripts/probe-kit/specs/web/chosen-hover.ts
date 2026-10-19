@@ -202,29 +202,6 @@ const CONTROLS: Control[] = [
   },
 ];
 
-/**
- * The model list's catalogue: what the browser kept from the last visit
- * (models.svelte `cawco-models:by-harness`), read as the app loads, so it is
- * written before the page's own scripts. Two Claude models, the first chosen.
- */
-const seedModels = () => {
-  localStorage.setItem(
-    "cawco-models:by-harness",
-    JSON.stringify([
-      {
-        displayName: "Opus 4.5",
-        harness: "claude",
-        value: "claude-opus-4-5",
-      },
-      {
-        displayName: "Sonnet 4.5",
-        harness: "claude",
-        value: "claude-sonnet-4-5",
-      },
-    ])
-  );
-};
-
 interface Read {
   color: string;
   rgb: number[];
@@ -701,7 +678,7 @@ const spec: Spec = {
     const bench = await kit.bench();
     for (const theme of THEMES) {
       // biome-ignore lint/performance/noAwaitInLoops: one scheme at a time, each on its own page
-      const page = await kit.page("desk", { theme, init: [seedModels] });
+      const page = await kit.page("desk", { theme });
       const cdp = await page.context().newCDPSession(page);
       await cdp.send("DOM.enable");
       await cdp.send("CSS.enable");
