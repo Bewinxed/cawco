@@ -121,9 +121,8 @@
       role="alert"
       in:appear
     >
-      <!-- literal: 14px -->
-      <span class="mark-cell" style:--warn-icon="14px"
-        ><IconWarningTriangle class="size-(--warn-icon) flex-none" /></span
+      <span class="mark-cell"
+        ><IconWarningTriangle class="size-icon-md flex-none" /></span
       >
       <span>{words.mismatch(machine, flow.email, expected)}</span>
     </p>
