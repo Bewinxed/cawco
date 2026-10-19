@@ -1,93 +1,98 @@
 /**
  * What the plan-view preview shows: one session building the booking page
- * for the Tidewater sailing school. Every state is built from the same rows
- * (`todoRows`), so a to-do reads the same in the task state, the delegates
- * state, the live frame and Today; a state only adds what it is about. Data
- * only; the proposal draws it (ProposedPlan.svelte), Today draws it the way
- * the panel draws it now (TodayPlan.svelte).
+ * for the Tidewater sailing school, on a task with seven to-dos and four
+ * delegates out. All three variations draw these same rows, so the owner
+ * compares one plan three ways; a frame only changes which folds stand open.
+ * Data only. Today (TodayPlan.svelte) draws the same rows as the panel does
+ * now.
  */
 import type { MarkStatus } from "#lib/cawco/TreeMark.svelte";
 
-/** What a step is doing, as its row draws it. */
+/**
+ * What a step is doing, as its tile says it: to do (the empty tile), doing,
+ * waiting on you, waiting on a step or a slot, done, failed.
+ */
 export type StepState =
-  "todo" | "doing" | "done" | "waiting" | "queued" | "failed";
+  "todo" | "doing" | "you" | "waiting" | "done" | "failed";
 
-/** The session behind a step someone else carries. */
-export interface Carrier {
-  /** Its session, for its sprite. */
+/** What a line under the words says something waits on. */
+export interface Wait {
+  kind: "you" | "slot" | "fail";
+  words: string;
+}
+
+/** A session's own sub-step, or a delegate's step. */
+export interface SubStep {
   id: string;
+  /** When it started, ms before the page loaded (counted while it runs). */
+  startedAgo?: number;
+  state: StepState;
+  took?: string;
+  words: string;
+}
+
+export interface Delegate {
+  /** Its session, for its sprite and hue. */
+  id: string;
+  /** Its name, short: what the stack leads with. */
+  name: string;
   /** Where it runs, for its hue. */
   place: string;
+  /** How far its own plan has got; none yet while it has no plan. */
+  plan: { done: number; total: number } | null;
+  /** What it is working on: the step it carries, in its own words. */
+  problem: string;
+  /** Its report, once it has one. */
+  report?: string;
+  startedAgo?: number;
   status: MarkStatus;
+  /** The step of this session it carries. */
+  step: string;
+  steps: SubStep[];
+  took?: string;
+  /** What it waits on, when it waits. */
+  wait?: Wait;
 }
 
 export interface Step {
-  /** Who carries it, when it is not this session. */
-  carrier?: Carrier;
-  children?: Step[];
-  /** What it folds: its own steps, or its report. */
-  fold?: { count: number; noun: string; open: boolean; report?: string };
+  /** Steps this one starts after. */
+  after?: string[];
+  /** Who carries it: delegates, by id. */
+  delegates?: string[];
+  /** What the step is, in a few sentences (markdown). */
+  description: string;
   id: string;
-  /** The to-do grew into a task of its own: that task's title and stage. */
+  /** The to-do grew into a task of its own: that task's stage. */
   promoted?: { stage: string; title: string };
   /** A to-do the session offered and the person has not agreed to. */
   proposed?: boolean;
-  /** When it started, as ms before the page loaded (counted while it runs). */
+  /** Its name in a few words, where another step points at it. */
+  short: string;
   startedAgo?: number;
   state: StepState;
-  /** The task's to-do it is, on a task attempt (Today writes it as `[td-n]`). */
-  todo?: string;
-  /** How long it took, once it is done. */
+  subs?: SubStep[];
   took?: string;
-  /** What it waits on, said under its words. */
-  wait?: { kind: "you" | "slot" | "fail"; words: string };
   words: string;
 }
 
 export interface PlanFixture {
-  spec?: { ago: string; markdown: string; open: boolean };
+  delegates: Delegate[];
+  spec: { ago: string; markdown: string };
   steps: Step[];
-  /** On a task attempt: the task's title and stage. */
-  task?: { stage: string; title: string };
+  task: { stage: string; title: string };
 }
 
-/** How far a plan has got: its rows at the top, a proposed to-do not yet one. */
-export function progress(plan: PlanFixture): { done: number; total: number } {
-  const counted = plan.steps.filter((step) => !step.proposed);
+const SEC = 1000;
+const MIN = 60 * SEC;
+
+/** How far a plan has got: its to-dos, a proposed one not yet one. */
+export function progress(from: PlanFixture): { done: number; total: number } {
+  const counted = from.steps.filter((step) => !step.proposed);
   return {
     done: counted.filter((step) => step.state === "done").length,
     total: counted.length,
   };
 }
-
-/** Whether any row in the plan folds something open (the fold column shows). */
-export function folds(steps: Step[]): boolean {
-  return steps.some(
-    (step) => step.fold !== undefined || folds(step.children ?? [])
-  );
-}
-
-/** The delegates: the frames and the key draw the same tiles. */
-export const STRIPE: Carrier = {
-  id: "deposit-stripe-7f3",
-  place: "/srv/tidewater",
-  status: "live",
-};
-export const FABLE: Carrier = {
-  id: "fable-calendar-21c",
-  place: "fable",
-  status: "attn",
-};
-export const IPHONE: Carrier = {
-  id: "ios-booking-9a0",
-  place: "mac-studio",
-  status: "idle",
-};
-export const READER: Carrier = {
-  id: "a11y-check-44e",
-  place: "/srv/tidewater-a11y",
-  status: "fail",
-};
 
 /**
  * A step's time, one way everywhere: seconds alone under a minute ("52s"),
@@ -101,6 +106,35 @@ export function clockWords(ms: number): string {
   return `${Math.floor(seconds / 60)}m ${String(seconds % 60).padStart(2, "0")}s`;
 }
 
+/** Whether a step's time is counting. */
+export const counting = (state: StepState): boolean =>
+  state === "doing" || state === "you";
+
+/** The delegates a step carries, in the plan's order. */
+export const carriersOf = (from: PlanFixture, step: Step): Delegate[] =>
+  (step.delegates ?? []).flatMap((id) => {
+    const found = from.delegates.find((one) => one.id === id);
+    return found ? [found] : [];
+  });
+
+/** The steps a step waits on that have not finished. */
+export const openBefore = (from: PlanFixture, step: Step): Step[] =>
+  (step.after ?? []).flatMap((id) => {
+    const found = from.steps.find((one) => one.id === id);
+    return found && found.state !== "done" ? [found] : [];
+  });
+
+/** A delegate's place in the stack: working first, then you, queued, done, failed. */
+const ORDER: Record<MarkStatus, number> = {
+  live: 0,
+  attn: 1,
+  idle: 2,
+  done: 3,
+  fail: 4,
+};
+export const stackOrder = (delegates: Delegate[]): Delegate[] =>
+  [...delegates].sort((a, b) => ORDER[a.status] - ORDER[b.status]);
+
 const SPEC = `## Booking page
 
 - **Classes** come from the \`classes\` table: this season's only, with the spaces left on each.
@@ -110,313 +144,273 @@ const SPEC = `## Booking page
 
 Out of scope: gift vouchers, and changing a booking once it is paid.`;
 
-const SEC = 1000;
-const MIN = 60 * SEC;
+/**
+ * Where the attempt stands: what each frame freezes at, and what the live
+ * frame moves through a beat at a time.
+ */
+interface Moment {
+  /** The delegate on the deposit has finished its own plan. */
+  depositDone: boolean;
+  /** How many of the deposit delegate's three steps are done. */
+  depositSteps: number;
+  /** "Disable those days in the calendar" is done. */
+  disabled: boolean;
+  /** Fable has its answer and the date picker is done. */
+  pickerDone: boolean;
+}
 
-const TASK = { title: "Booking page", stage: "Working" } as const;
+const STILL: Moment = {
+  depositDone: false,
+  depositSteps: 1,
+  disabled: false,
+  pickerDone: false,
+};
 
-/** 1. A session's own plan: no task, its own steps and sub-steps. */
-export const plain: PlanFixture = {
+function fable(moment: Moment): Delegate {
+  const done = moment.pickerDone;
+  return {
+    id: "fable-calendar-21c",
+    name: "Fable",
+    problem: "Is a calendar library the right approach?",
+    place: "fable",
+    plan: { done: done ? 2 : 1, total: 2 },
+    status: done ? "done" : "attn",
+    startedAgo: 3 * MIN + 8 * SEC,
+    took: done ? "3m 40s" : undefined,
+    step: "a2",
+    wait: done
+      ? undefined
+      : {
+          kind: "you",
+          words:
+            "Waiting on you · Can it read the harbour's tide timetable site?",
+        },
+    report: done
+      ? "Keep the picker we have. A library adds 40 kB for one rule, and the closed days are a list, not a timetable."
+      : undefined,
+    steps: [
+      { id: "f1", words: "Compare two calendar libraries", state: "done" },
+      {
+        id: "f2",
+        words: "Read the tide timetable",
+        state: done ? "done" : "you",
+        startedAgo: MIN + 2 * SEC,
+      },
+    ],
+  };
+}
+
+const DEPOSIT_STEPS = [
+  "Add the deposit to each class",
+  "Create the payment at checkout",
+  "Refund it when a class is cancelled",
+];
+
+function stripe(moment: Moment): Delegate {
+  const done = moment.depositDone;
+  const reached = done ? 3 : moment.depositSteps;
+  return {
+    id: "deposit-stripe-7f3",
+    name: "Stripe",
+    problem: "Take the deposit with Stripe",
+    place: "/srv/tidewater",
+    plan: { done: reached, total: 3 },
+    status: done ? "done" : "live",
+    startedAgo: 4 * MIN + 5 * SEC,
+    took: done ? "4m 52s" : undefined,
+    step: "a3",
+    report: done
+      ? "Each class carries its £40 deposit, checkout takes it with Stripe, and cancelling a class refunds it."
+      : undefined,
+    steps: DEPOSIT_STEPS.map((words, index) => {
+      let state: StepState = "todo";
+      if (index < reached) {
+        state = "done";
+      } else if (index === reached) {
+        state = "doing";
+      }
+      return {
+        id: `s${index + 1}`,
+        words,
+        state,
+        startedAgo: 52 * SEC,
+      };
+    }),
+  };
+}
+
+const IPHONE: Delegate = {
+  id: "ios-booking-9a0",
+  name: "iPhone",
+  problem: "Build the booking page for the iPhone",
+  place: "mac-studio",
+  plan: null,
+  status: "idle",
+  step: "a5",
+  wait: {
+    kind: "slot",
+    words: "Queued for the Mac's build slot, behind one build",
+  },
+  steps: [],
+};
+
+const READER: Delegate = {
+  id: "a11y-check-44e",
+  name: "Reader",
+  problem: "Check the page with a screen reader",
+  place: "/srv/tidewater-a11y",
+  plan: { done: 1, total: 3 },
+  status: "fail",
+  took: "1m 18s",
+  step: "a5",
+  wait: { kind: "fail", words: "The browser on the Mac didn't start" },
+  report:
+    "It had opened the booking form and was about to read it with VoiceOver. Retry it once the Mac is free, or run the check on the iPhone simulator instead.",
   steps: [
-    {
-      id: "p1",
-      words: "Read the current booking form",
-      state: "done",
-      took: "1m 40s",
-      children: [
-        {
-          id: "p1a",
-          words: "List the fields the form asks for",
-          state: "done",
-        },
-        {
-          id: "p1b",
-          words: "Find where bookings are stored",
-          state: "done",
-        },
-      ],
-    },
-    {
-      id: "p2",
-      words: "Build the class picker",
-      state: "doing",
-      startedAgo: 2 * MIN + 14 * SEC,
-      children: [
-        { id: "p2a", words: "Load this season's classes", state: "done" },
-        {
-          id: "p2b",
-          words: "Show the spaces left on each class",
-          state: "doing",
-          startedAgo: 48 * SEC,
-        },
-        { id: "p2c", words: "Grey out classes that are full", state: "todo" },
-      ],
-    },
-    { id: "p3", words: "Send the confirmation email", state: "todo" },
+    { id: "r1", words: "Open the booking form", state: "done" },
+    { id: "r2", words: "Read it with VoiceOver", state: "failed" },
+    { id: "r3", words: "Note what trips the reader", state: "todo" },
   ],
 };
 
-/**
- * Where the attempt stands: each moment the task, delegates and live frames
- * freeze at. Every frame reads its rows from here.
- */
-interface Moment {
-  /** Fable, the iPhone build and the screen reader check are out. */
-  delegatesOut: boolean;
-  /** The deposit's delegate has started under its to-do. */
-  depositCarried: boolean;
-  /** Its steps are folded open. */
-  depositOpen: boolean;
-  /** "Disable those days in the calendar" is done. */
-  disabled: boolean;
-  /** "Check a closed Sunday by hand" is done, and with it the to-do. */
-  sundayChecked: boolean;
-}
-
-function sunday(moment: Moment): StepState {
-  if (moment.sundayChecked) {
-    return "done";
-  }
-  return moment.disabled ? "doing" : "todo";
-}
-
 function datePicker(moment: Moment): Step {
-  const children: Step[] = [
-    {
-      id: "a2a",
-      words: "Load the harbour master's closed days",
-      state: "done",
-    },
-    {
-      id: "a2b",
-      words: "Disable those days in the calendar",
-      state: moment.disabled ? "done" : "doing",
-      startedAgo: 31 * SEC,
-    },
-    {
-      id: "a2c",
-      words: "Check a closed Sunday by hand",
-      state: sunday(moment),
-      startedAgo: 3 * SEC,
-    },
-  ];
-  if (moment.delegatesOut) {
-    children.push({
-      id: "a2f",
-      words: "Fable: is a calendar library the right approach?",
-      state: "waiting",
-      startedAgo: 3 * MIN + 5 * SEC,
-      carrier: FABLE,
-      fold: { count: 2, noun: "step", open: true },
-      wait: {
-        kind: "you",
-        words:
-          "Waiting on you · Can it read the harbour's tide timetable site?",
-      },
-      children: [
-        {
-          id: "a2fa",
-          words: "Compare two calendar libraries",
-          state: "done",
-        },
-        { id: "a2fb", words: "Read the tide timetable", state: "todo" },
-      ],
-    });
+  const done = moment.pickerDone;
+  let sunday: StepState = "todo";
+  if (done) {
+    sunday = "done";
+  } else if (moment.disabled) {
+    sunday = "doing";
   }
   return {
     id: "a2",
-    todo: "td-2",
     words: "Date picker skips days the harbour is closed",
-    state: moment.sundayChecked ? "done" : "doing",
-    startedAgo: MIN + 12 * SEC,
-    took: moment.sundayChecked ? "1m 30s" : undefined,
-    children,
-  };
-}
-
-function deposit(moment: Moment): Step {
-  if (!moment.depositCarried) {
-    return {
-      id: "a3",
-      todo: "td-3",
-      words: "Take the £40 deposit when a class is booked",
-      state: "todo",
-    };
-  }
-  return {
-    id: "a3",
-    todo: "td-3",
-    words: "Take the £40 deposit when a class is booked",
-    state: "doing",
-    startedAgo: 4 * MIN + 10 * SEC,
-    children: [
+    short: "Date picker",
+    description:
+      "Skip the days the harbour master closes the slipway. The list is kept in `closed_days`, not read from the tide site, so a closed day shows greyed out and can't be booked.",
+    state: done ? "done" : "doing",
+    startedAgo: MIN + 15 * SEC,
+    took: done ? "2m 06s" : undefined,
+    after: ["a1"],
+    delegates: ["fable-calendar-21c"],
+    subs: [
+      { id: "a2a", words: "Load the closed days", state: "done" },
       {
-        id: "a3d",
-        words: "Take the deposit with Stripe",
-        state: "doing",
-        startedAgo: 4 * MIN + 2 * SEC,
-        carrier: STRIPE,
-        fold: { count: 3, noun: "step", open: moment.depositOpen },
-        children: [
-          {
-            id: "a3da",
-            words: "Add the deposit to each class",
-            state: "done",
-          },
-          {
-            id: "a3db",
-            words: "Create the payment at checkout",
-            state: "doing",
-            startedAgo: 52 * SEC,
-          },
-          {
-            id: "a3dc",
-            words: "Refund it when a class is cancelled",
-            state: "todo",
-          },
-        ],
+        id: "a2b",
+        words: "Disable those days in the calendar",
+        state: moment.disabled || done ? "done" : "doing",
+        startedAgo: 34 * SEC,
+        took: moment.disabled || done ? "41s" : undefined,
+      },
+      {
+        id: "a2c",
+        words: "Check a closed Sunday by hand",
+        state: sunday,
+        startedAgo: 3 * SEC,
       },
     ],
   };
 }
 
-function phoneAndReader(moment: Moment): Step {
-  if (!moment.delegatesOut) {
-    return {
-      id: "a5",
-      todo: "td-5",
-      words: "Booking page works on a phone and with a screen reader",
-      state: "todo",
-    };
-  }
-  return {
-    id: "a5",
-    todo: "td-5",
-    words: "Booking page works on a phone and with a screen reader",
-    state: "doing",
-    startedAgo: 2 * MIN + 40 * SEC,
-    children: [
-      {
-        id: "a5i",
-        words: "Build the booking page for the iPhone",
-        state: "queued",
-        carrier: IPHONE,
-        wait: {
-          kind: "slot",
-          words: "Queued for the Mac's build slot, behind one build",
-        },
-      },
-      {
-        id: "a5r",
-        words: "Check the page with a screen reader",
-        state: "failed",
-        took: "1m 18s",
-        carrier: READER,
-        fold: {
-          count: 1,
-          noun: "report",
-          open: true,
-          report:
-            "It had opened the booking form and was about to read it with VoiceOver. Retry it once the Mac is free, or run the check on the iPhone simulator instead.",
-        },
-        wait: {
-          kind: "fail",
-          words: "Failed · The browser on the Mac didn't start",
-        },
-      },
-    ],
-  };
-}
-
-/** The task's to-dos at a moment: the same six rows in every frame. */
-function todoRows(moment: Moment): Step[] {
+function rows(moment: Moment): Step[] {
+  const { pickerDone, depositDone } = moment;
+  const bothDone = pickerDone && depositDone;
   return [
     {
       id: "a1",
-      todo: "td-1",
       words: "Class picker shows this season's classes",
+      short: "Class picker",
+      description:
+        "Read this season's classes from the `classes` table, with the spaces left on each. Past seasons stay out of the list.",
       state: "done",
       took: "3m 02s",
-      children: [{ id: "a1a", words: "Read the classes table", state: "done" }],
+      subs: [
+        { id: "a1a", words: "Read the classes table", state: "done" },
+        { id: "a1b", words: "Hide classes from past seasons", state: "done" },
+      ],
     },
     datePicker(moment),
-    deposit(moment),
+    {
+      id: "a3",
+      words: "Take the £40 deposit when a class is booked",
+      short: "Deposit",
+      description:
+        "Take £40 at checkout and the rest on the day. A class the school cancels refunds the deposit by itself.",
+      state: depositDone ? "done" : "doing",
+      startedAgo: 4 * MIN + 13 * SEC,
+      took: depositDone ? "4m 58s" : undefined,
+      after: ["a1"],
+      delegates: ["deposit-stripe-7f3"],
+    },
+    {
+      id: "a6",
+      words: "Book a class end to end, deposit and all",
+      short: "End-to-end booking",
+      description:
+        "Book the 10 a.m. dinghy class in a week with a closed day, and pay the deposit with a test card. It starts once the date picker and the deposit are done.",
+      state: bothDone ? "doing" : "waiting",
+      startedAgo: 2 * SEC,
+      after: ["a2", "a3"],
+    },
     {
       id: "a4",
-      todo: "td-4",
       words: "Confirmation email names the instructor",
+      short: "Confirmation email",
+      description:
+        "The email names the instructor and the meeting point at the slipway. It became a task of its own, now in review.",
       state: "todo",
       promoted: { title: "Booking confirmation email", stage: "Review" },
     },
-    phoneAndReader(moment),
     {
-      id: "a6",
-      todo: "td-6",
+      id: "a5",
+      words: "Booking page works on a phone and with a screen reader",
+      short: "Phone and screen reader",
+      description:
+        "The booking page in the iPhone app, and the web page read aloud with VoiceOver, both checked by a delegate each.",
+      state: "doing",
+      startedAgo: 2 * MIN + 40 * SEC,
+      delegates: ["ios-booking-9a0", "a11y-check-44e"],
+    },
+    {
+      id: "a7",
       words: "Offer a waiting list when a class is full",
+      short: "Waiting list",
+      description:
+        "When a class is full, offer a place on its waiting list and email the first in line when a space opens. The session suggested it; it starts once you agree.",
       state: "todo",
       proposed: true,
     },
   ];
 }
 
-const START: Moment = {
-  depositCarried: false,
-  depositOpen: false,
-  delegatesOut: false,
-  disabled: false,
-  sundayChecked: false,
-};
+function at(moment: Moment): PlanFixture {
+  return {
+    task: { title: "Booking page", stage: "Working" },
+    steps: rows(moment),
+    delegates: [fable(moment), stripe(moment), IPHONE, READER],
+    spec: { ago: "3 min ago", markdown: SPEC },
+  };
+}
 
-/** 2. A task attempt: the plan is the task's to-dos, the session's steps under them. */
-export const attempt: PlanFixture = { task: TASK, steps: todoRows(START) };
-
-/** 3. The same attempt with its delegates out: the same rows, and who carries what. */
-export const delegates: PlanFixture = {
-  task: TASK,
-  steps: todoRows({
-    ...START,
-    depositCarried: true,
-    depositOpen: true,
-    delegatesOut: true,
-  }),
-};
-
-/** 4. The spec at the foot, folded, then open under the whole plan. */
-export const specFolded: PlanFixture = {
-  ...plain,
-  spec: { ago: "3 min ago", markdown: SPEC, open: false },
-};
-export const specOpen: PlanFixture = {
-  ...plain,
-  spec: { ago: "3 min ago", markdown: SPEC, open: true },
-};
+/** The plan every still frame draws. */
+export const plan: PlanFixture = at(STILL);
 
 /** The live frame's beats: what changes on each, said under the frame. */
 export const LIVE_BEATS = [
-  "Under way: the calendar's closed days",
-  "A sub-step ticks, the next one starts",
-  "A delegate's step arrives under the deposit",
-  "It folds open to show its own steps",
-  "The to-do ticks and the ring moves on",
+  "Under way: the date picker and the deposit",
+  "A sub-step ticks and the next one starts; the deposit's delegate moves on",
+  "The deposit's delegate finishes: its line fills and stops, the to-do ticks",
+  "Fable has its answer: the date picker ticks, and the step that waited on both starts",
   "Holding, then it starts again",
 ] as const;
 
-/**
- * The live frame at a beat: the task state moving on. Rows keep their ids,
- * so a row that stays slides, one that arrives is uncovered, and a tick
- * draws on the row that completes.
- */
-export function livePhase(beat: number): PlanFixture {
-  return {
-    task: TASK,
-    steps: todoRows({
-      ...START,
-      disabled: beat >= 1,
-      depositCarried: beat >= 2,
-      depositOpen: beat >= 3,
-      sundayChecked: beat >= 4,
-    }),
-  };
+/** The live frame at a beat. Rows keep their ids, so what stays slides. */
+export function livePlan(beat: number): PlanFixture {
+  return at({
+    disabled: beat >= 1,
+    depositSteps: beat >= 1 ? 2 : 1,
+    depositDone: beat >= 2,
+    pickerDone: beat >= 3,
+  });
 }
 
 /** A row as the panel draws it today: flat, its to-do id written into its words. */
@@ -431,37 +425,41 @@ const todayStatus = (state: StepState): TodayRow["status"] => {
   if (state === "done") {
     return "completed";
   }
-  return state === "todo" || state === "queued" ? "pending" : "in_progress";
+  return state === "todo" || state === "waiting" ? "pending" : "in_progress";
 };
 
 /**
  * The session's own steps as it writes them today: each to-do's step with
- * `[td-n]` in its words, the steps under it, and a delegate's step as one
- * more line of words (the panel never draws a delegate's own steps).
+ * `[td-n]` in its words and its sub-steps under it; a delegate is one more
+ * line of words (the panel never draws a delegate's own steps).
  */
-export function todaySteps(plan: PlanFixture): TodayRow[] {
-  const rows: TodayRow[] = [];
-  const walk = (steps: Step[], depth: number) => {
-    for (const step of steps) {
-      rows.push({
-        id: step.id,
-        depth,
-        status: todayStatus(step.state),
-        text: step.todo ? `[${step.todo}] ${step.words}` : step.words,
-      });
-      if (!step.carrier) {
-        walk(step.children ?? [], depth + 1);
-      }
-    }
-  };
-  walk(plan.steps, 0);
-  return rows;
+export function todaySteps(from: PlanFixture): TodayRow[] {
+  return from.steps.flatMap((step, index) => [
+    {
+      id: step.id,
+      depth: 0,
+      status: todayStatus(step.state),
+      text: `[td-${index + 1}] ${step.words}`,
+    },
+    ...(step.subs ?? []).map((sub) => ({
+      id: sub.id,
+      depth: 1,
+      status: todayStatus(sub.state),
+      text: sub.words,
+    })),
+    ...carriersOf(from, step).map((one) => ({
+      id: one.id,
+      depth: 1,
+      status: todayStatus(one.status === "done" ? "done" : "doing"),
+      text: one.problem,
+    })),
+  ]);
 }
 
 /** The task's to-dos as the panel's second list draws them today. */
-export function todayTodos(plan: PlanFixture): TodayRow[] {
-  return plan.steps.map((step) => ({
-    id: step.todo ?? step.id,
+export function todayTodos(from: PlanFixture): TodayRow[] {
+  return from.steps.map((step, index) => ({
+    id: `td-${index + 1}`,
     depth: 0,
     status: step.state === "done" ? "completed" : "pending",
     text: step.words,
@@ -471,40 +469,3 @@ export function todayTodos(plan: PlanFixture): TodayRow[] {
 /** The task's id, as the panel's "To-dos" head writes it today. */
 export const TODAY_TASK_ID = "tsk-12";
 export const TODAY_SPEC = SPEC;
-
-/** The delegates as the transcript's cards draw them today. */
-export const todayCards = [
-  {
-    seed: "deposit-stripe-7f3",
-    label: "Take the deposit with Stripe",
-    tone: "live",
-    pill: "Working · 4m 02s",
-    brief: "Add Stripe so a booking takes its £40 deposit at checkout.",
-    now: "Creating the payment at checkout",
-  },
-  {
-    seed: "fable-calendar-21c",
-    label: "Fable: is a calendar library the right approach?",
-    tone: "attn",
-    pill: "Needs you · 3m 05s",
-    brief: "Advise: a calendar library, or the picker we have?",
-    ask: "Can it read the harbour's tide timetable site?",
-  },
-  {
-    seed: "ios-booking-9a0",
-    label: "Build the booking page for the iPhone",
-    tone: "idle",
-    pill: "Queued",
-    brief: "Build the booking page in the iPhone app.",
-    now: "Queued for the Mac's build slot, behind one build",
-  },
-  {
-    seed: "a11y-check-44e",
-    label: "Check the page with a screen reader",
-    tone: "fail",
-    pill: "Failed · 1m 18s",
-    brief: "Read the booking page with VoiceOver and report what trips.",
-    now: "The browser on the Mac did not start",
-    err: true,
-  },
-] as const;
