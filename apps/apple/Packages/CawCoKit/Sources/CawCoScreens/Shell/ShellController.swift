@@ -659,6 +659,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         return "beside: \(probeRailBeside ? "yes" : "no") | width \(view.bounds.width) | size class \(compact ? "compact" : "regular") | display mode \(mode) | rail in window: \(rail.viewIfLoaded?.window != nil ? "yes" : "no")"
     }
 
+    /// The bar's sidebar toggle, pressed as a finger presses it: under the
+    /// rail's breakpoint it brings the sidebar over the page as the sheet (`toggleRail`).
+    func probePressRailToggle() { railToggle.sendActions(for: .primaryActionTriggered) }
+
+    /// The sidebar's sheet while it is presented, and its putting away.
+    var probeRailSheet: SidebarViewController? { railSheet }
+    func probeCloseRailSheet() { railSheet?.dismiss(animated: true) }
+
     /// The machines card, as the bar's Machines button opens it.
     func probeOpenMachines() {
         if machinesCard?.open == true { return }
