@@ -4,6 +4,7 @@ import {
   type AccountMove,
   type AccountProvider,
   accountName,
+  accountNameAmong,
   clockWords,
   LIMITED_PROVIDERS,
   modelScope,
@@ -508,17 +509,18 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     }
     const cost = reReadCost(source.forecast, row, target);
     const room = 100 - usedOf(source.forecast, target.id, Date.now());
+    const named = accountNameAmong(target, source.forecast.accounts);
     if (cost && cost.pct > room) {
       return {
         ok: false,
-        why: `re-reading it would take ≈${Math.round(cost.pct)}% of ${accountName(target)}'s 5-hour window, more than its ${Math.round(room)}% of room`,
+        why: `re-reading it would take ≈${Math.round(cost.pct)}% of ${named}'s 5-hour window, more than its ${Math.round(room)}% of room`,
       };
     }
     return {
       ok: true,
       why: cost
-        ? `under the floor, and the re-read (≈${Math.max(1, Math.round(cost.pct))}% of ${accountName(target)}'s 5-hour window) fits its room`
-        : `under the floor; the re-read is not priced, as no turns are recorded on ${accountName(target)} yet`,
+        ? `under the floor, and the re-read (≈${Math.max(1, Math.round(cost.pct))}% of ${named}'s 5-hour window) fits its room`
+        : `under the floor; the re-read is not priced, as no turns are recorded on ${named} yet`,
     };
   };
 
@@ -605,7 +607,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     if (why) {
       refused.add(row.id);
       console.warn(
-        `[rebalance] ${ports.named(row)} stays on ${accountName(from)}, not moved to ${accountName(target)} ahead of its forecast run-out: ${why.why}. It isn't tried again until its next turn ends or an account signs in, leaves, or comes back from its bench.`
+        `[rebalance] ${ports.named(row)} stays on ${accountNameAmong(from, source.forecast.accounts)}, not moved to ${accountNameAmong(target, source.forecast.accounts)} ahead of its forecast run-out: ${why.why}. It isn't tried again until its next turn ends or an account signs in, leaves, or comes back from its bench.`
       );
       return "skip";
     }
@@ -631,11 +633,12 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       return "skip";
     }
     const { from, forecast } = source;
+    const fromName = accountNameAmong(from, forecast.accounts);
     const targetId = ports.target(fresh, from.id);
     const target = targetId ? db.accounts.get(targetId) : undefined;
     if (!target) {
       console.info(
-        `[rebalance] ${ports.named(fresh)} stays on ${accountName(from)}, which is forecast to run out at ${clockWords(source.stress.runsOutAt)}: no other account signed in on its machine has room for it. The next look at the accounts, within 5 minutes, decides again.`
+        `[rebalance] ${ports.named(fresh)} stays on ${fromName}, which is forecast to run out at ${clockWords(source.stress.runsOutAt)}: no other account signed in on its machine has room for it. The next look at the accounts, within 5 minutes, decides again.`
       );
       return "stop";
     }
@@ -646,10 +649,11 @@ export const createRebalancer = (deps: RebalancerDeps) => {
           ok: true,
           why: "its cache is cold, so moving re-reads nothing extra",
         };
-    const head = `[rebalance] ${ports.named(fresh)} is on ${accountName(from)}, which is forecast to run out at ${clockWords(source.stress.runsOutAt)}, and ${share.why}`;
+    const targetName = accountNameAmong(target, forecast.accounts);
+    const head = `[rebalance] ${ports.named(fresh)} is on ${fromName}, which is forecast to run out at ${clockWords(source.stress.runsOutAt)}, and ${share.why}`;
     if (!allowed.ok) {
       console.info(
-        `${head}. It stays, not moved to ${accountName(target)}: ${allowed.why}. The next look at the accounts, within 5 minutes, decides again.`
+        `${head}. It stays, not moved to ${targetName}: ${allowed.why}. The next look at the accounts, within 5 minutes, decides again.`
       );
       return "skip";
     }
@@ -690,12 +694,12 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     );
     if (out !== null) {
       console.info(
-        `${head}. It stays, and so do the rest on ${accountName(from)}: with its burn, ${accountName(target)} would run out at ${clockWords(out)}. The next look at the accounts, within 5 minutes, decides again.`
+        `${head}. It stays, and so do the rest on ${fromName}: with its burn, ${targetName} would run out at ${clockWords(out)}. The next look at the accounts, within 5 minutes, decides again.`
       );
       return "stop";
     }
     console.info(
-      `${head}. It moves to ${accountName(target)} between turns: ${allowed.why}.`
+      `${head}. It moves to ${targetName} between turns: ${allowed.why}.`
     );
     const done = await carry(source, fresh, target, warm);
     // Owed or moved, its burn leaves `from` for `target`.
@@ -731,7 +735,7 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       rows,
       forecast.turns.get(from.id) ?? [],
       stress,
-      accountName(from),
+      accountNameAmong(from, forecast.accounts),
       now
     );
     const planned = rows
@@ -918,7 +922,8 @@ export const createRebalancer = (deps: RebalancerDeps) => {
           {
             from,
             // Its line names the organization after its name
-            // (core `rebalanceWords`): none where the name already does.
+            // (core `rebalanceWords`): none where the name already does,
+            // that is where it differs from the bare `accountName`.
             organization:
               from.name === accountName(one.from)
                 ? one.from.identity?.organization || null
@@ -1159,7 +1164,9 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       const came = cause.came
         .map((one) => {
           const account = db.accounts.get(one.accountId);
-          const named = account ? accountName(account) : "an account";
+          const named = account
+            ? accountNameAmong(account, db.accounts.list())
+            : "an account";
           return `${named} ${one.how === "added" ? "signed in" : "came back from its bench"}`;
         })
         .join(", ");

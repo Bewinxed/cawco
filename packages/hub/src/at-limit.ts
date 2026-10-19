@@ -5,7 +5,7 @@ import {
   type AccountProvider,
   type AccountReading,
   type AtLimit,
-  accountName,
+  accountNameAmong,
   accountsWords,
   clockWords,
   type LimitWindow,
@@ -391,9 +391,13 @@ export interface AtLimitPorts {
   warm: (row: LimitRow) => boolean;
 }
 
-/** A move as a line says what waits: "move from A to B". */
-const actionWords = (current: Account, target: Account): string =>
-  `move from ${accountName(current)} to ${accountName(target)}`;
+/** A move as a line says what waits: "move from A to B", each named beside `accounts`. */
+const actionWords = (
+  current: Account,
+  target: Account,
+  accounts: readonly Account[]
+): string =>
+  `move from ${accountNameAmong(current, accounts)} to ${accountNameAmong(target, accounts)}`;
 
 /** What a failure said, as a line quotes it. */
 const messageOf = (error: unknown): string =>
@@ -616,7 +620,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
     const name = word.origin.kind === "system" ? word.origin.name : undefined;
     console.info(
-      `[at-limit] ${ports.named(row)}'s refused turn was started by the hub's own word (${name ?? "a notice"}), not by a person or its parent, so it isn't moved for it. It stays on ${accountName(current)} until a person or its parent writes to it.`
+      `[at-limit] ${ports.named(row)}'s refused turn was started by the hub's own word (${name ?? "a notice"}), not by a person or its parent, so it isn't moved for it. It stays on ${accountNameAmong(current, db.accounts.list())} until a person or its parent writes to it.`
     );
     return true;
   };
@@ -645,8 +649,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (lifetime.closed() || Date.now() >= until) {
       settling.delete(row.id);
       towards.delete(row.id);
+      const named = accountNameAmong(current, db.accounts.list());
       console.info(
-        `[at-limit] ${ports.named(row)} is still inside a turn ${SETTLE_FOR_MS / 60_000} minutes after ${accountName(current)} refused one, so the hub stops looking: a turn running that long is one ${accountName(current)} took. Its next refused turn is answered when it ends.`
+        `[at-limit] ${ports.named(row)} is still inside a turn ${SETTLE_FOR_MS / 60_000} minutes after ${named} refused one, so the hub stops looking: a turn running that long is one ${named} took. Its next refused turn is answered when it ends.`
       );
       return;
     }
@@ -668,8 +673,10 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     row: LimitRow,
     current: Account,
     error: unknown
-  ): string =>
-    `[at-limit] ${ports.named(row)}: the hub's answer to ${accountName(current)}'s limit failed: ${messageOf(error)}. It stays on ${accountName(current)} as it was; the next look at the limit decides again.`;
+  ): string => {
+    const named = accountNameAmong(current, db.accounts.list());
+    return `[at-limit] ${ports.named(row)}: the hub's answer to ${named}'s limit failed: ${messageOf(error)}. It stays on ${named} as it was; the next look at the limit decides again.`;
+  };
 
   /** The line a move writes: what it cost, and the window, or the refused sign-in, that sent it. */
   const movedNote = (
@@ -861,8 +868,11 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       row.model,
       now
     );
-    const from = accountName(current);
-    const to = target ? accountName(target) : "the account a person chose";
+    const accounts = db.accounts.list();
+    const from = accountNameAmong(current, accounts);
+    const to = target
+      ? accountNameAmong(target, accounts)
+      : "the account a person chose";
     if (full !== null) {
       settling.delete(row.id);
       // Held without a transcript line of its own: its account's "waiting"
@@ -956,7 +966,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         return;
       }
       console.info(
-        `[at-limit] ${ports.named(row)} couldn't move to ${accountName(failed.target)} (${failed.why}), so the same decision tries the next account with room now.`
+        `[at-limit] ${ports.named(row)} couldn't move to ${accountNameAmong(failed.target, db.accounts.list())} (${failed.why}), so the same decision tries the next account with room now.`
       );
       skip.add(failed.target.id);
     }
@@ -994,7 +1004,12 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     // Only between turns: never inside a tool round, never over a turn
     // someone started since.
     if (!(await ports.idle(row))) {
-      settle(row, current, cause, actionWords(current, target));
+      settle(
+        row,
+        current,
+        cause,
+        actionWords(current, target, db.accounts.list())
+      );
       return undefined;
     }
     const was = settling.get(row.id);
@@ -1077,7 +1092,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     } else if (await ports.idle(row)) {
       db.atLimit.dropHold(row.id);
       console.info(
-        `[at-limit] ${ports.named(row)}: ${accountName(current)} is signed in again on its machine, so it carries on there.`
+        `[at-limit] ${ports.named(row)}: ${accountNameAmong(current, db.accounts.list())} is signed in again on its machine, so it carries on there.`
       );
       ports.resume(row, "signin");
     }
@@ -1124,7 +1139,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (await ports.idle(row)) {
       db.atLimit.dropHold(row.id);
       console.info(
-        `[at-limit] ${ports.named(row)}: ${accountName(current)}'s limit has reset, so it carries on there, told to pick up where the limit stopped it.`
+        `[at-limit] ${ports.named(row)}: ${accountNameAmong(current, db.accounts.list())}'s limit has reset, so it carries on there, told to pick up where the limit stopped it.`
       );
       ports.resume(row, "limit");
     }
@@ -1195,7 +1210,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       const held = db.atLimit.hold(instanceId);
       if (held) {
         const from = db.accounts.get(held.accountId);
-        const name = from ? accountName(from) : "its account";
+        const name = from
+          ? accountNameAmong(from, db.accounts.list())
+          : "its account";
         if (held.until === null) {
           return { words: words.signedOut(name) };
         }
@@ -1213,14 +1230,16 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         };
       }
       const moving = towards.get(instanceId);
-      return moving
-        ? {
-            words: words.moving(
-              accountName(moving.from),
-              accountName(moving.to)
-            ),
-          }
-        : undefined;
+      if (!moving) {
+        return undefined;
+      }
+      const accounts = db.accounts.list();
+      return {
+        words: words.moving(
+          accountNameAmong(moving.from, accounts),
+          accountNameAmong(moving.to, accounts)
+        ),
+      };
     },
     /** Every session {@link stall} says is stopped now: held, or on its way to another account. */
     stalled(): string[] {
@@ -1305,7 +1324,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
         now
       );
       console.info(
-        `[at-limit] ${ports.named(row)}'s turn was refused: ${accountName(current)} is at its limit${resets === null ? "" : ` until ${clockWords(resets)}`}. ${ports.handMove(row) ? "A person moved it, so that move is all the hub does with it." : "The hub decides now whether it moves whole to an account with room or waits for the earliest reset."}`
+        `[at-limit] ${ports.named(row)}'s turn was refused: ${accountNameAmong(current, db.accounts.list())} is at its limit${resets === null ? "" : ` until ${clockWords(resets)}`}. ${ports.handMove(row) ? "A person moved it, so that move is all the hub does with it." : "The hub decides now whether it moves whole to an account with room or waits for the earliest reset."}`
       );
       // A person moved it: that move is all that is done, whoever started
       // the turn and whoever's work it is.
@@ -1333,8 +1352,9 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       if (!(row && current)) {
         return;
       }
+      const named = accountNameAmong(current, db.accounts.list());
       console.info(
-        `[at-limit] ${ports.named(row)}'s turn ended because Claude Code refused ${accountName(current)}'s sign-in, so ${accountName(current)} is signed out on its machine. It moves to another account and carries on there; with none free, it waits until ${accountName(current)} is signed in again in Configure → Accounts.`
+        `[at-limit] ${ports.named(row)}'s turn ended because Claude Code refused ${named}'s sign-in, so ${named} is signed out on its machine. It moves to another account and carries on there; with none free, it waits until ${named} is signed in again in Configure → Accounts.`
       );
       await act(row, current, "refused");
     },

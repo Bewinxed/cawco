@@ -125,7 +125,7 @@ import {
   ASK_USER_QUESTION,
   ATTACHMENTS_HOME,
   accountMoveSentence,
-  accountName,
+  accountNameAmong,
   accountProvidersOf,
   agentProblem,
   archiveRefusal,
@@ -4123,7 +4123,9 @@ export const createServer = (
       return { accountId };
     }
     const account = db.accounts.get(accountId);
-    const named = account ? accountName(account) : accountId;
+    const named = account
+      ? accountNameAmong(account, db.accounts.list())
+      : accountId;
     return {
       refusal: `${named} isn't signed in on ${machine}, so ${session} can't run there. Sign ${named} in on ${machine} in Configure → Accounts, or continue the session on another account.`,
       cause: { kind: "account-signed-out", accountId, machineId },
@@ -7225,7 +7227,7 @@ export const createServer = (
   /** Why an account's lender cannot lend it now, in a sentence. */
   const lenderAway = (accountId: string, lender: string): string => {
     const account = db.accounts.get(accountId);
-    return `${account ? accountName(account) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which is offline.`;
+    return `${account ? accountNameAmong(account, db.accounts.list()) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which is offline.`;
   };
 
   /**
@@ -7355,7 +7357,7 @@ export const createServer = (
     );
     const account = db.accounts.get(accountId);
     const refused = (why: string) => ({
-      error: `${account ? accountName(account) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which did not lend it: ${why}.`,
+      error: `${account ? accountNameAmong(account, db.accounts.list()) : `Account ${accountId}`} is refreshed by ${machineName(lender)}, which did not lend it: ${why}.`,
     });
     switch (lent.kind) {
       case "unanswered":
@@ -9043,7 +9045,9 @@ export const createServer = (
       return "the machine's own Claude Code login";
     }
     const account = db.accounts.get(accountId);
-    return account ? accountName(account) : "an account this hub no longer has";
+    return account
+      ? accountNameAmong(account, db.accounts.list())
+      : "an account this hub no longer has";
   };
 
   /** The machine's word on each carry asked of it; one it never gave is a failure with its reason. */
@@ -9476,7 +9480,7 @@ export const createServer = (
     ) {
       return {
         status: 409,
-        error: `${accountName(account)} is already signed in on ${machine} in CawCo; nothing was moved.`,
+        error: `${accountNameAmong(account, db.accounts.list())} is already signed in on ${machine} in CawCo; nothing was moved.`,
       };
     }
     if (
@@ -9486,7 +9490,7 @@ export const createServer = (
     ) {
       return {
         status: 409,
-        error: `Another of ${machine}'s own stores is already moving ${accountName(account)} into CawCo.`,
+        error: `Another of ${machine}'s own stores is already moving ${accountNameAmong(account, db.accounts.list())} into CawCo.`,
       };
     }
     const move: LoginMove = {
@@ -9625,7 +9629,10 @@ export const createServer = (
     identity: AccountIdentity
   ): Account | undefined => {
     if (!identity.orgId) {
-      uncompared(identity, `A new sign-in into ${accountName(account)}`);
+      uncompared(
+        identity,
+        `A new sign-in into ${accountNameAmong(account, db.accounts.list())}`
+      );
       return undefined;
     }
     return db.accounts.byIdentity(account.provider, identity, account.id);
@@ -9673,14 +9680,15 @@ export const createServer = (
         throw unreachable(asked);
     }
     const answer = asked.value;
+    const existingName = accountNameAmong(existing, db.accounts.list());
     if (!answer.ok) {
       return {
-        error: `${machineName(machineId)} signed in as ${identity.email}, already ${accountName(existing)}, but could not make it that account's: ${answer.error ?? "it gave no reason"}`,
+        error: `${machineName(machineId)} signed in as ${identity.email}, already ${existingName}, but could not make it that account's: ${answer.error ?? "it gave no reason"}`,
       };
     }
     const joined = answer.result as AccountJoinedOn;
     console.log(
-      `[accounts] A new sign-in on ${machineName(machineId)} is ${identity.email}, which this hub already has as ${accountName(existing)}, so the two are one account there: ${joined.outcome === "kept" ? `${accountName(existing)}'s login on ${machineName(machineId)} is kept, and the new one is dropped` : `the new login is ${accountName(existing)}'s on ${machineName(machineId)} from now on`}.`
+      `[accounts] A new sign-in on ${machineName(machineId)} is ${identity.email}, which this hub already has as ${existingName}, so the two are one account there: ${joined.outcome === "kept" ? `${existingName}'s login on ${machineName(machineId)} is kept, and the new one is dropped` : `the new login is ${existingName}'s on ${machineName(machineId)} from now on`}.`
     );
     db.accounts.putSignin({
       accountId: existing.id,
@@ -17643,10 +17651,11 @@ export const createServer = (
       id === CLAUDE_PROVIDER
         ? "Claude"
         : (knownProviders().find((one) => one.id === id)?.name ?? id);
+    const called = accountNameAmong(account, db.accounts.list());
     if (provider !== account.provider) {
       return provider
-        ? `${sessionName(row)} runs on a ${named(provider)} account; ${accountName(account)} is a ${named(account.provider)} account.`
-        : `${sessionName(row)}'s model is no account's, so it can't run on ${accountName(account)}.`;
+        ? `${sessionName(row)} runs on a ${named(provider)} account; ${called} is a ${named(account.provider)} account.`
+        : `${sessionName(row)}'s model is no account's, so it can't run on ${called}.`;
     }
     const signedIn = db.accounts
       .signins()
@@ -17661,7 +17670,7 @@ export const createServer = (
     }
     // An account never signed in has no name of its own yet.
     return account.label || account.email
-      ? `${accountName(account)} isn't signed in on ${machineName(row.machineId)}; sign it in there first.`
+      ? `${called} isn't signed in on ${machineName(row.machineId)}; sign it in there first.`
       : `That ${named(account.provider)} account has never been signed in; sign it in on ${machineName(row.machineId)} first.`;
   };
 
@@ -17735,7 +17744,7 @@ export const createServer = (
     );
     const title = sessionName(row);
     const fromName = accountWords(row.accountId);
-    const toName = accountName(account);
+    const toName = accountNameAmong(account, db.accounts.list());
     const owe = (words: string) => {
       relaunchAtTurnEnd.set(row.id, { byHand: true, to: account.id, move });
       return { state: "pending" as const, accountId: account.id, why: words };
@@ -17978,7 +17987,7 @@ export const createServer = (
       return false;
     }
     console.info(
-      `[at-limit] ${sessionName(row)}'s turn was refused: ${accountWords(row.accountId)} is at its limit. It already owed a move to ${accountName(to)}, which has room, so it moves there now and carries on there.`
+      `[at-limit] ${sessionName(row)}'s turn was refused: ${accountWords(row.accountId)} is at its limit. It already owed a move to ${accountNameAmong(to, db.accounts.list())}, which has room, so it moves there now and carries on there.`
     );
     relaunchOnAccount(row.id, "limit");
     return true;
@@ -22475,10 +22484,11 @@ export const createServer = (
     if (!to || to.id === from.id) {
       return;
     }
-    console.info(
-      `[rebalance] ${sessionName(row)} moves from ${accountName(from)} to ${accountName(to)} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${accountName(to)} is where placement puts it now. Its conversation is copied there before it starts.`
-    );
     const accounts = db.accounts.list();
+    const toName = accountNameAmong(to, accounts);
+    console.info(
+      `[rebalance] ${sessionName(row)} moves from ${accountNameAmong(from, accounts)} to ${toName} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${toName} is where placement puts it now. Its conversation is copied there before it starts.`
+    );
     relaunchAtTurnEnd.set(row.id, {
       to: to.id,
       move: {
@@ -22718,7 +22728,7 @@ export const createServer = (
     }
     refusedFailures.set(instanceId, {
       accountId: from.id,
-      words: `${accountName(from)}'s sign-in was refused, so it is signed out on ${machineName(row.machineId)}; ${stays}. Sign it in again in Configure → Accounts.`,
+      words: `${accountNameAmong(from, db.accounts.list())}'s sign-in was refused, so it is signed out on ${machineName(row.machineId)}; ${stays}. Sign it in again in Configure → Accounts.`,
     });
   };
 
@@ -24276,7 +24286,7 @@ export const createServer = (
             return {
               state: "moved" as const,
               accountId: account.id,
-              why: `${sessionName(row)} already runs on ${accountName(account)}.`,
+              why: `${sessionName(row)} already runs on ${accountNameAmong(account, db.accounts.list())}.`,
             };
           }
           const moved = await moveByHand(row, account);
@@ -27219,13 +27229,14 @@ export const createServer = (
         if (!account) {
           return status(404, `There is no account ${params.id}.`);
         }
+        const named = accountNameAmong(account, db.accounts.list());
         // An id a join removed names the account it became, which is not the
         // one the screen asking made: removing that is never done by its old
         // id.
         if (account.id !== params.id) {
           return status(
             409,
-            `That account's sign-in was already ${accountName(account)}, so the two are one account now, and nothing was removed. To remove ${accountName(account)}, remove it in Configure → Accounts.`
+            `That account's sign-in was already ${named}, so the two are one account now, and nothing was removed. To remove ${named}, remove it in Configure → Accounts.`
           );
         }
         const signins = db.accounts
@@ -27241,7 +27252,7 @@ export const createServer = (
         if (live.length > 0) {
           return status(
             409,
-            `${live.length} session${live.length === 1 ? "" : "s"} still run on ${accountName(account)}; stop them first.`
+            `${live.length} session${live.length === 1 ? "" : "s"} still run on ${named}; stop them first.`
           );
         }
         // Each machine signed in to it signs it out (Claude Code itself for a
@@ -27259,10 +27270,10 @@ export const createServer = (
             409,
             [
               failed.length > 0
-                ? `${failed.join(", ")} did not sign ${accountName(account)} out.`
+                ? `${failed.join(", ")} did not sign ${named} out.`
                 : "",
               silent.length > 0
-                ? `${silent.join("; ")}, so whether ${accountName(account)} was signed out there is not known.`
+                ? `${silent.join("; ")}, so whether ${named} was signed out there is not known.`
                 : "",
               "Try again.",
             ]
@@ -27288,6 +27299,7 @@ export const createServer = (
             return status(404, `There is no account ${params.id}.`);
           }
           const machine = machineName(params.machineId);
+          const named = accountNameAmong(account, db.accounts.list());
           const signin = db.accounts
             .signins()
             .find(
@@ -27296,10 +27308,7 @@ export const createServer = (
                 one.machineId === params.machineId
             );
           if (!signin) {
-            return status(
-              404,
-              `${accountName(account)} is not signed in on ${machine}.`
-            );
+            return status(404, `${named} is not signed in on ${machine}.`);
           }
           const live = db
             .listInstances()
@@ -27312,7 +27321,7 @@ export const createServer = (
           if (live.length > 0) {
             return status(
               409,
-              `${live.length} session${live.length === 1 ? "" : "s"} still run on ${accountName(account)} on ${machine}; stop them first.`
+              `${live.length} session${live.length === 1 ? "" : "s"} still run on ${named} on ${machine}; stop them first.`
             );
           }
           const answer = await forgetOn(account, params.machineId);
@@ -27321,17 +27330,17 @@ export const createServer = (
               return answer.reason === "dead"
                 ? status(
                     409,
-                    `${machine} is offline, so ${accountName(account)} was not signed out there; try again when it is online.`
+                    `${machine} is offline, so ${named} was not signed out there; try again when it is online.`
                   )
                 : status(
                     409,
-                    `${machine} did not answer within ${Math.round(answer.after / 1000)} s, so whether ${accountName(account)} was signed out there is not known. Try again.`
+                    `${machine} did not answer within ${Math.round(answer.after / 1000)} s, so whether ${named} was signed out there is not known. Try again.`
                   );
             case "answered":
               if (!answer.value.ok) {
                 return status(
                   409,
-                  `${machine} did not sign ${accountName(account)} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
+                  `${machine} did not sign ${named} out: ${answer.value.error ?? "it gave no reason"}. Try again.`
                 );
               }
               break;
@@ -27546,7 +27555,7 @@ export const createServer = (
           if (!claude && account.kind !== "oauth") {
             return status(
               400,
-              `${accountName(account)} is a key account: send its key to the machines that use it.`
+              `${accountNameAmong(account, db.accounts.list())} is a key account: send its key to the machines that use it.`
             );
           }
           // The machine's sign-in runs under the id it was asked for, the id
@@ -27688,7 +27697,7 @@ export const createServer = (
           if (account.kind !== "api_key") {
             return status(
               400,
-              `${accountName(account)} signs in with ${account.provider === CLAUDE_PROVIDER ? "Claude Code" : "OAuth"}, not a key.`
+              `${accountNameAmong(account, db.accounts.list())} signs in with ${account.provider === CLAUDE_PROVIDER ? "Claude Code" : "OAuth"}, not a key.`
             );
           }
           const machines = await Promise.all(
@@ -29460,7 +29469,7 @@ export const createServer = (
                     // from it held it "mismatch" with its own login intact,
                     // since an unchanged reading is never squared again.
                     console.warn(
-                      `[hub] ${message.instanceId} runs on ${accountName(account)} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}; its reading is dropped, and the account's sign-in there is its dir's reading`
+                      `[hub] ${message.instanceId} runs on ${accountNameAmong(account, db.accounts.list())} but its Claude Code is signed in as someone else on ${machineName(message.machineId)}; its reading is dropped, and the account's sign-in there is its dir's reading`
                     );
                     break;
                   }

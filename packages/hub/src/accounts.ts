@@ -8,7 +8,7 @@ import {
   type AccountReading,
   type AccountReport,
   type AccountSignin,
-  accountName,
+  accountNameAmong,
   CLAUDE_PROVIDER,
   CLAUDE_READING_CURRENT_MS,
   type ClaudeExtraUsage,
@@ -81,7 +81,7 @@ export const withOrgIdFrom = (
   const identity = { ...held, orgId: read.orgId };
   db.accounts.setIdentity(account.id, identity);
   console.log(
-    `[accounts] ${accountName(account)}'s organization is ${read.orgId} (${read.organization || "unnamed"}), as its own login reads it; one identity is that email in that organization from now on.`
+    `[accounts] ${accountNameAmong(account, db.accounts.list())}'s organization is ${read.orgId} (${read.organization || "unnamed"}), as its own login reads it; one identity is that email in that organization from now on.`
   );
   return { ...account, identity };
 };
@@ -179,7 +179,10 @@ const dirState = (
     return "signed-out";
   }
   if (!report.identity.orgId) {
-    uncompared(report.identity, `${accountName(account)}'s store`);
+    uncompared(
+      report.identity,
+      `${accountNameAmong(account, db.accounts.list())}'s store`
+    );
     return "uncompared";
   }
   if (!account.identity) {

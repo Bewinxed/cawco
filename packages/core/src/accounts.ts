@@ -983,15 +983,19 @@ export const accountName = (
 export const accountNames = (
   accounts: readonly NameableAccount[]
 ): Map<string, string> =>
-  new Map(accounts.map((one) => [one.id, nameAmong(one, accounts)]));
+  new Map(accounts.map((one) => [one.id, accountNameAmong(one, accounts)]));
 
 type NameableAccount = Pick<
   Account,
   "email" | "id" | "identity" | "label" | "provider"
 >;
 
-/** `one`'s name among `accounts` ({@link accountNames}); `accounts` may hold other providers'. */
-const nameAmong = (
+/**
+ * What `one` is called beside `accounts` ({@link accountNames}): the name
+ * every line the hub writes or logs gives it. `accounts` may hold other
+ * providers'.
+ */
+export const accountNameAmong = (
   one: NameableAccount,
   accounts: readonly NameableAccount[]
 ): string => {
@@ -1022,7 +1026,7 @@ export const namedAccount = (
   accounts: readonly Account[]
 ): NamedAccount => ({
   id: account.id,
-  name: nameAmong(account, accounts),
+  name: accountNameAmong(account, accounts),
   hue: account.hue,
 });
 
