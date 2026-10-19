@@ -868,17 +868,20 @@ const ownStyle = (page: Page, selector: string) =>
       };
     });
 
-/** Where each stand-in or each rest frame stands, in story order: its grid cell and its box's corner. */
+/** Where each stand-in or each rest frame stands, in story order: its grid cell and its box's corner from its grid's (the world moves as the head settles; a place in the grid does not). */
 const placesOf = (page: Page, selector: string) =>
   page.evaluate(
     (wanted) =>
       [...document.querySelectorAll<HTMLElement>(wanted)]
         .map((el) => {
           const box = el.getBoundingClientRect();
+          const grid = (
+            el.parentElement as HTMLElement
+          ).getBoundingClientRect();
           return {
             cell: `${el.style.gridRow}/${el.style.gridColumn}`,
-            x: Math.round(box.x),
-            y: Math.round(box.y),
+            x: Math.round(box.x - grid.x),
+            y: Math.round(box.y - grid.y),
           };
         })
         .sort((a, b) => a.cell.localeCompare(b.cell)),

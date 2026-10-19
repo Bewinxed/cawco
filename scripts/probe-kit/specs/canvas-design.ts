@@ -2007,11 +2007,15 @@ async function ownTabLeg(
         frame.url().includes("/@cawco/canvas") &&
         !frame.url().includes("by=map")
     );
+  // What the band shows, not what it holds: a framed band keeps its name and about hidden.
   const band = canvas
-    ? await canvas.evaluate(
-        () =>
-          document.getElementById("cawco-chrome")?.shadowRoot?.textContent ?? ""
-      )
+    ? await canvas.evaluate(() => {
+        const root = document.getElementById("cawco-chrome")?.shadowRoot;
+        return [...(root?.querySelectorAll<HTMLElement>(".name, .about") ?? [])]
+          .filter((el) => getComputedStyle(el).display !== "none")
+          .map((el) => el.textContent ?? "")
+          .join(" | ");
+      })
     : null;
   kit.check(
     `8i: ${theme}: in its own tab the canvas is named once, by its head, its about on the line under the name; its page, framed there, says neither`,
@@ -2021,7 +2025,7 @@ async function ownTabLeg(
       band !== null &&
       !band.includes(CANVAS.name ?? "") &&
       !band.includes(CANVAS.about ?? ""),
-    `pane ${JSON.stringify(pane)}; the page's chrome says ${JSON.stringify(band?.slice(0, 200))}`
+    `pane ${JSON.stringify(pane)}; the page's band shows ${JSON.stringify(band)}`
   );
   await page.close();
 }
