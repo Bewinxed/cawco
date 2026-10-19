@@ -486,10 +486,17 @@ const delegated = async (
     Boolean,
     180_000
   ).catch(() => undefined);
+  // A start its machine held for room never reached a model to be refused.
+  const room = instance
+    ? fleet.query<{ content: string }>(
+        "SELECT content FROM session_lines WHERE instance_id = ? AND kind = 'room'",
+        instance
+      )[0]?.content
+    : undefined;
   kit.check(
     `${leg}: its delegate started on A and answered its brief, then A refused it at its limit`,
     !!instance && !!refused,
-    `delegate ${instance ?? "none"}, refused ${refused ? "yes" : "no"}`
+    `delegate ${instance ?? "none"}, ${played[leg].worked ? "answered its brief" : "never answered its brief"}, refused ${refused ? "yes" : "no"}${room ? `; its start was held: ${room}` : ""}`
   );
   return instance && refused ? instance : undefined;
 };

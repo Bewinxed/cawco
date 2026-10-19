@@ -59,7 +59,8 @@
  * behind it.
  *
  * The machines a heavy run brings up for itself (stage 2's rig machines,
- * `CAWCO_HEAVY_ADMITTED` set in their image) are inside its admission: their
+ * `CAWCO_HEAVY_ADMITTED` set in their image; a scratch fleet's, in its
+ * environment, scripts/scratch-fleet.ts) are inside its admission: their
  * session starts wait on no reading of the host's memory ({@link
  * measureMemoryRoom}), which their own run's load moves. On 2026-10-19 a
  * stage-2 run's rig machines held their session starts 63 s on the host's
@@ -123,7 +124,7 @@ export const HEAVY_RUN_HELD_ENV = "CAWCO_HEAVY_RUN_HELD";
 export const HEAVY_PEAK_ENV = "CAWCO_HEAVY_PEAK_GIB";
 /**
  * Set on the machines a heavy run brings up for itself (stage 2's rig
- * machines), naming that run: they run inside its admission, and a session
+ * machines, a scratch fleet's), naming that run: they run inside its admission, and a session
  * start there waits on no reading of the host's memory ({@link
  * measureMemoryRoom}).
  */
