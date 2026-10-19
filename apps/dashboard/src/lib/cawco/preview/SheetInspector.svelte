@@ -28,6 +28,7 @@
    * place). A right panel beside the page on a desk; a sheet over the
    * page's foot on a phone.
    */
+  import { artifactWords as words } from "@cawco/core";
   import type { PropMeta } from "@cawco/core/stage";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -77,7 +78,9 @@
   const sheet = $derived(inspector.sheet);
   const story = $derived(inspector.story);
   const component = $derived(inspector.component);
-  const fileName = $derived(sheet?.file.split("/").at(-1) ?? "the story file");
+  const fileName = $derived(
+    sheet?.file.split("/").at(-1) ?? words.theStoryFile
+  );
 
   /** The name field Add story and Duplicate ask for, and which of them it is for. */
   let naming = $state<"add" | "duplicate" | null>(null);
@@ -88,10 +91,10 @@
       return null;
     }
     if (!STORY_NAME.test(name)) {
-      return "A story's name starts with a capital: letters, digits and _ only, like Roomy.";
+      return words.nameRule;
     }
     return sheet?.stories.some((one) => one.name === name)
-      ? `${fileName} has a story ${name} already.`
+      ? words.nameTaken(fileName, name)
       : null;
   });
   function startNaming(kind: "add" | "duplicate") {
@@ -121,14 +124,14 @@
     // biome-ignore lint/complexity/noVoid: the question answers itself; a Cancel changes nothing
     void asks.ask({
       at: "remove-story",
-      title: `Remove the story ${name}?`,
-      body: `Its export goes from ${fileName}, and its frame from the sheet. The component stays as it is.`,
-      confirmLabel: "Remove story",
-      pendingLabel: "Removing…",
+      title: words.removeTitle(name),
+      body: words.removeBody(fileName),
+      confirmLabel: words.removeConfirm,
+      pendingLabel: words.removing,
       destructive: true,
       run: async () => {
         if (!(await inspector.op({ remove: name }))) {
-          throw new Error(inspector.problem ?? `${name} wasn't removed.`);
+          throw new Error(inspector.problem ?? words.storyNotRemoved(name));
         }
       },
     });
@@ -169,7 +172,11 @@
       .map((prop, at) => ({
         prop,
         at,
-        rank: RANK[inspector.code(prop) === null ? controlOf(prop) : "code"],
+        rank: RANK[
+          inspector.code(prop) === null && !inspector.readOnly
+            ? controlOf(prop)
+            : "code"
+        ],
       }))
       .sort((a, b) => a.rank - b.rank || a.at - b.at)
       .map((one) => one.prop);
@@ -194,14 +201,14 @@
   out:slide={{ leaving: true }}
 >
   <header data-slot="head" class="head">
-    <h2 data-slot="title" class="title">Inspect</h2>
+    <h2 data-slot="title" class="title">{words.inspect}</h2>
     <Button
-      aria-label="Close the inspector"
+      aria-label={words.closeInspector}
       class="touch-hit"
       icon={IconClose}
       onclick={onclose}
       size="icon-sm"
-      title="Close the inspector"
+      title={words.closeInspector}
       variant="ghost"
     />
   </header>
@@ -209,17 +216,17 @@
   <div class="body">
     {#if !sheet}
       <!-- The rows' own size while the page reads the sheet's props. -->
-      <div aria-label="Reading the sheet's props" class="loading" role="status">
+      <div aria-label={words.readingProps} class="loading" role="status">
         {#each [0, 1, 2] as row (row)}
           <span class="kit-skeleton skeleton-name"></span>
           <span class="kit-skeleton skeleton-control"></span>
         {/each}
       </div>
     {:else if sheet.stories.length === 0}
-      <p class="note">{fileName} has no stories yet. Add one below.</p>
+      <p class="note">{words.noStories(fileName)}</p>
     {:else}
       <div class="story">
-        <label class="sr-only" for={`${id}-story`}>Story</label>
+        <label class="sr-only" for={`${id}-story`}>{words.story}</label>
         <NativeSelect
           class="story-pick"
           id={`${id}-story`}
@@ -230,52 +237,57 @@
         >
           {#each sheet.stories as one (one.name)}
             <NativeSelectOption value={one.name}>
-              {one.name}{inspector.dirtyOf(one.name) ? " · edited" : ""}
+              {words.storyOption(one.name, inspector.dirtyOf(one.name))}
             </NativeSelectOption>
           {/each}
         </NativeSelect>
         <div class="story-ops">
           <Button
-            aria-label="Duplicate the story"
+            aria-label={words.duplicateStory}
             disabled={!!inspector.writing}
             icon={IconCopy}
             onclick={() => startNaming("duplicate")}
             size="icon-sm"
-            title="Duplicate"
+            title={words.duplicate}
             variant="ghost"
           />
           <Button
-            aria-label="Move the story up"
+            aria-label={words.moveStoryUp}
             disabled={!up || !!inspector.writing}
             icon={IconArrowUp}
             onclick={() => up && inspector.op(up)}
             size="icon-sm"
-            title="Move up"
+            title={words.moveUp}
             variant="ghost"
           />
           <Button
-            aria-label="Move the story down"
+            aria-label={words.moveStoryDown}
             disabled={!down || !!inspector.writing}
             icon={IconArrowDown}
             onclick={() => down && inspector.op(down)}
             size="icon-sm"
-            title="Move down"
+            title={words.moveDown}
             variant="ghost"
           />
           <Button
-            aria-label="Remove the story"
+            aria-label={words.removeStory}
             disabled={!!inspector.writing}
             icon={IconTrash}
             onclick={remove}
             size="icon-sm"
-            title="Remove"
+            title={words.remove}
             variant="ghost"
           />
         </div>
       </div>
       <AskHere asker={asks} at="remove-story" />
 
-      {#if component}
+      {#if inspector.readOnly}
+        <p class="note" data-slot="read-only">{inspector.readOnly.reason}</p>
+      {/if}
+      {#if inspector.readOnly?.read === false}
+        <!-- No controls: the file builds this story's component and args in code the reader can't follow. -->
+      {:else if component}
         <p class="where">
           {component.name} · <code>{component.file}</code>
         </p>
@@ -285,22 +297,24 @@
         <ul class="props">
           {#each ordered(component.props) as prop (prop.name)}
             {@const control =
-              inspector.code(prop) === null ? controlOf(prop) : "code"}
+              inspector.code(prop) === null && !inspector.readOnly
+                ? controlOf(prop)
+                : "code"}
             {@const value = inspector.value(prop)}
             <li class="prop" data-prop={prop.name}>
               <div class="prop-head">
                 <label class="prop-name" for={fieldId(prop)}>{prop.name}</label>
                 {#if prop.required}
-                  <span class="prop-meta">required</span>
+                  <span class="prop-meta">{words.required}</span>
                 {/if}
                 {#if inspector.own(prop) && control !== "code" && control !== "slot"}
                   <Button
-                    aria-label={`Reset ${prop.name}`}
+                    aria-label={words.resetProp(prop.name)}
                     class="prop-reset"
                     icon={IconReset}
                     onclick={() => inspector.reset(prop)}
                     size="icon-xs"
-                    title={`Reset ${prop.name} to the sheet's or the component's default`}
+                    title={words.resetTitle(prop.name)}
                     variant="ghost"
                   />
                 {/if}
@@ -396,17 +410,20 @@
               {:else if control === "slot"}
                 <p class="slot mark-line" id={fieldId(prop)}>
                   <IconComment class="slot-glyph" />
-                  <span
-                    >Content is a pin: Comment on the page to change it.</span
-                  >
+                  <span>{words.slot}</span>
                 </p>
               {:else}
                 <p data-slot="code" class="code" id={fieldId(prop)}>
-                  <code>{inspector.code(prop) ?? prop.type.raw}</code>
+                  <code
+                    >{inspector.code(prop) ??
+                      (inspector.readOnly && value !== undefined
+                        ? JSON.stringify(value)
+                        : prop.type.raw)}</code
+                  >
                   <span
                     >{inspector.code(prop) === null
-                      ? "Set it in the file."
-                      : "Code in the file: a pin changes it."}</span
+                      ? words.setInFile
+                      : words.codeInFile}</span
                   >
                 </p>
               {/if}
@@ -419,15 +436,12 @@
             </li>
           {:else}
             {#if component.types !== "unknown"}
-              <li class="note">{component.name} takes no props.</li>
+              <li class="note">{words.takesNoProps(component.name)}</li>
             {/if}
           {/each}
         </ul>
       {:else}
-        <p class="note">
-          The sheet's meta names no component the stage could find, so it has no
-          controls. Give its default export a <code>component</code>.
-        </p>
+        <p class="note">{words.noComponent} <code>component</code>.</p>
       {/if}
     {/if}
   </div>
@@ -440,22 +454,22 @@
       <form class="naming" onsubmit={named}>
         <label class="prop-name" for={`${id}-name`}>
           {naming === "add"
-            ? "New story's name"
-            : `Name the copy of ${story?.name ?? "the story"}`}
+            ? words.newStoryName
+            : words.nameCopy(story?.name ?? words.theStory)}
         </label>
         <Input
           aria-invalid={nameProblem ? "true" : undefined}
           autocomplete="off"
           bind:value={newName}
           id={`${id}-name`}
-          placeholder="Roomy"
+          placeholder={words.namePlaceholder}
         />
         {#if nameProblem}
           <p class="problem">{nameProblem}</p>
         {/if}
         <div data-slot="actions" class="actions">
           <Button
-            label="Cancel"
+            label={words.cancel}
             onclick={() => {
               naming = null;
             }}
@@ -464,9 +478,9 @@
           />
           <Button
             disabled={!newName.trim() || !!nameProblem}
-            label={naming === "add" ? "Add story" : "Duplicate"}
+            label={naming === "add" ? words.addStory : words.duplicate}
             pending={inspector.writing === "op"}
-            pendingLabel={naming === "add" ? "Adding…" : "Duplicating…"}
+            pendingLabel={naming === "add" ? words.adding : words.duplicating}
             size="sm"
             type="submit"
           />
@@ -477,28 +491,28 @@
         <Button
           disabled={!sheet || !!inspector.writing}
           icon={IconPlus}
-          label="Add story"
+          label={words.addStory}
           onclick={() => startNaming("add")}
           size="sm"
-          title="A new story from the controls as they stand"
+          title={words.addStoryTitle}
           variant="ghost"
         />
         <span class="spacer"></span>
         <Button
           disabled={!inspector.dirty || !!inspector.writing}
-          label="Discard"
+          label={words.discard}
           onclick={() => inspector.discard()}
           size="sm"
           variant="ghost"
         />
         <Button
           disabled={!inspector.dirty || inspector.writing === "op"}
-          label="Save"
+          label={words.save}
           onclick={() => inspector.save()}
           pending={inspector.writing === "save"}
-          pendingLabel="Saving…"
+          pendingLabel={words.saving}
           size="sm"
-          title={`Write ${story?.name ?? "the story"}'s args into ${fileName}`}
+          title={words.saveTitle(story?.name ?? words.theStory, fileName)}
         />
       </div>
     {/if}

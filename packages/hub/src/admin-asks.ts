@@ -203,7 +203,7 @@ export const createAdminAsks = ({
           kind: "permission_request",
           instanceId: actor.id,
           requestId,
-          harness: actor.harness ?? "claude",
+          harness: actor.harness,
           requestKind: "tool",
           toolName: `mcp__cawco__${name}`,
           input,

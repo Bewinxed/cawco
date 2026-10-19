@@ -54,11 +54,9 @@ import {
 } from "yjs";
 import type { ArtifactHold } from "../preview-overlay/artifact";
 import { toHost } from "../preview-overlay/host-origin";
+import { bindingMade } from "./bound";
 import { clock, progressOf, tokenMs } from "./motion";
 import { HOLD_PX, seenByDoc, snapToShape, swapView } from "./snap";
-
-/** With `CAWCO_PROBE_HOOKS=1` at build (core canvas-host.ts), the page shows the probe what it binds. */
-declare const __CAWCO_PROBE_HOOKS__: boolean;
 
 /** Origins of the page's own transactions. */
 const LIVE = "live";
@@ -213,14 +211,7 @@ export function bindScene(
       applyUpdate(live, update, SCENE);
     }
   });
-  if (__CAWCO_PROBE_HOOKS__) {
-    (window as unknown as { cawcoCanvasProbe: object }).cawcoCanvasProbe = {
-      live,
-      scene,
-      api,
-      elements: () => api.getSceneElements(),
-    };
-  }
+  bindingMade({ live, scene, api });
   /** What waited for the pointers: after Excalidraw has ended the gesture on the same pointerup. */
   const release = () =>
     later(() => {

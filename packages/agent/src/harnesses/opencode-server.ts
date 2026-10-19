@@ -17,6 +17,11 @@ import {
   sessiondEndpoint,
   sessiondHomePath,
 } from "@cawco/core/sessiond";
+import {
+  identifiedPid,
+  signalGroup,
+  signal as signalPid,
+} from "@cawco/core/signal";
 import { writeStateFile } from "@cawco/core/state-file";
 import { launchGateForm } from "../gate-form";
 import { OPENCODE_SERVER_PROC_ID } from "../proc-id";
@@ -1116,18 +1121,22 @@ export class OpencodeServerOwner {
     const client = held ? await this.#keeperOf(identity.epoch) : undefined;
     const present = () =>
       held ? this.#matches(identity) : this.#runs(identity);
-    const signal = async (sig: NodeJS.Signals): Promise<void> => {
+    const send = async (sig: NodeJS.Signals): Promise<void> => {
       if (client) {
         await client.signal(identity.procId, sig);
         return;
       }
-      for (const target of [-identity.pid, identity.pid]) {
-        try {
-          process.kill(target, sig);
-        } catch {
-          // that group or process is already gone
-        }
+      // Its pid only while the process is still the one recorded: one that
+      // has ended, or whose pid is another's now, leaves nothing to signal.
+      const pid = await identifiedPid({
+        pid: identity.pid,
+        procStart: identity.startedAt,
+      });
+      if (pid === undefined) {
+        return;
       }
+      signalGroup(pid, sig);
+      signalPid(pid, sig);
     };
     if (this.active?.procId === identity.procId || !(await present())) {
       return;
@@ -1136,7 +1145,7 @@ export class OpencodeServerOwner {
     console.info(
       `[opencode] retire ${identity.procId}/${identity.pid} start=${identity.startedAt}${whose}, ${why}: SIGTERM`
     );
-    await signal("SIGTERM");
+    await send("SIGTERM");
     const deadline = Date.now() + 15_000;
     // biome-ignore lint/performance/noAwaitInLoops: observe this exact retired identity during its grace period
     while (Date.now() < deadline && (await present())) {
@@ -1145,7 +1154,7 @@ export class OpencodeServerOwner {
     // dd1e4ca1 protects active work and live procId reuse. This generation is
     // retired, has no bound sessions, and its unique procId is never reused.
     if (this.active?.procId !== identity.procId && (await present())) {
-      await signal("SIGKILL");
+      await send("SIGKILL");
       console.info(
         `[opencode] retire ${identity.procId}/${identity.pid}${whose}: retired-only SIGKILL after grace`
       );

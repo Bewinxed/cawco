@@ -36,7 +36,7 @@ import { cloneHolding } from "./workspace-records";
  * git in `dir`, on this host, as every git call there runs (`safe-git.ts`).
  * In a workspace's clone it refuses to run while the clone's own config
  * holds a key past the allowlist: the workspace writes that config. A
- * project lead's place is a person's own folder, whose config is theirs, and
+ * place is a person's own folder, whose config is theirs, and
  * is never refused. `stdin` is fed to git when given.
  */
 export const hostGit = async (

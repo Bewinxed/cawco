@@ -30,12 +30,17 @@ typeOverrides:
     BlockMetadataTrigger: OpenEnums.BlockMetadataTrigger
     BlockPage: OpenEnums.BlockPage
     BlockWidth: OpenEnums.BlockWidth
+    BrowserHostKind: OpenEnums.BrowserHostKind
+    BrowserRuntimeKind: OpenEnums.BrowserRuntimeKind
+    BrowserState: OpenEnums.BrowserState
     CallerKind: OpenEnums.CallerKind
+    CanvasDialKind: OpenEnums.CanvasDialKind
     CapPeriod: OpenEnums.CapPeriod
     CatalogTypeSource: OpenEnums.CatalogTypeSource
     CawHarness: OpenEnums.CawHarness
     CawNotWokenReason: OpenEnums.CawNotWokenReason
     CawRunningKind: OpenEnums.CawRunningKind
+    ClaudeLimitsErrorKind: OpenEnums.ClaudeLimitsErrorKind
     CommandAckOutcome: OpenEnums.CommandAckOutcome
     CommandAckStage: OpenEnums.CommandAckStage
     ComponentDocTypes: OpenEnums.ComponentDocTypes
@@ -44,9 +49,11 @@ typeOverrides:
     ConnectionTransport: OpenEnums.ConnectionTransport
     ContinuationJobStage: OpenEnums.ContinuationJobStage
     ContinueStep: OpenEnums.ContinueStep
+    CreatedBy: OpenEnums.CreatedBy
     DamagedRowRemedy: OpenEnums.DamagedRowRemedy
     DecisionSentTo: OpenEnums.DecisionSentTo
     DecisionState: OpenEnums.DecisionState
+    DeclaredStepNeeds: OpenEnums.DeclaredStepNeeds
     DelegateBudgetPer: OpenEnums.DelegateBudgetPer
     DelegateEventBaseRequestKind: OpenEnums.DelegateEventBaseRequestKind
     DelegateEventBaseStatus: OpenEnums.DelegateEventBaseStatus
@@ -57,22 +64,26 @@ typeOverrides:
     DeviceKind: OpenEnums.DeviceKind
     DiscoveredSkillScope: OpenEnums.DiscoveredSkillScope
     EffortLevel: OpenEnums.EffortLevel
+    ErrorFrameLastErrorKind: OpenEnums.ErrorFrameLastErrorKind
     Exclude: OpenEnums.Exclude
     FindConversationOutcome: OpenEnums.FindConversationOutcome
     FindConversationRole: OpenEnums.FindConversationRole
     FindField: OpenEnums.FindField
     FindLiveState: OpenEnums.FindLiveState
     FleetChoicesUpstream: OpenEnums.FleetChoicesUpstream
-    FleetItemStateState: OpenEnums.FleetItemStateState
+    FleetFaultCause: OpenEnums.FleetFaultCause
     FleetMcpServerMode: OpenEnums.FleetMcpServerMode
     FleetMcpServerState: OpenEnums.FleetMcpServerState
     FleetScope: OpenEnums.FleetScope
     FolderEntryKind: OpenEnums.FolderEntryKind
+    FormName: OpenEnums.FormName
+    FrameState: OpenEnums.FrameState
     FsEntryKind: OpenEnums.FsEntryKind
     GetApiAccountsPlacement200Strategy: OpenEnums.GetApiAccountsPlacement200Strategy
     GetApiInstances200Kind: OpenEnums.GetApiInstances200Kind
     GetApiRulesByIdActivity200Status: OpenEnums.GetApiRulesByIdActivity200Status
     HarnessKind: OpenEnums.HarnessKind
+    HarnessNoteKind: OpenEnums.HarnessNoteKind
     HomeCredentialKind: OpenEnums.HomeCredentialKind
     HomeStore: OpenEnums.HomeStore
     HookCommandHandlerShell: OpenEnums.HookCommandHandlerShell
@@ -83,12 +94,15 @@ typeOverrides:
     InstanceRowLaunchDir: OpenEnums.InstanceRowLaunchDir
     InstanceRowTitleSource: OpenEnums.InstanceRowTitleSource
     InstanceStatus: OpenEnums.InstanceStatus
+    Interaction: OpenEnums.Interaction
+    IssueTracker: OpenEnums.IssueTracker
     ItemEnd: OpenEnums.ItemEnd
     KeepAliveState: OpenEnums.KeepAliveState
     KeepAliveTtl: OpenEnums.KeepAliveTtl
     LandsMode: OpenEnums.LandsMode
     Law: OpenEnums.Law
     MachineCapabilityId: OpenEnums.MachineCapabilityId
+    MachineCapabilityMedia: OpenEnums.MachineCapabilityMedia
     MemoryScopeRole: OpenEnums.MemoryScopeRole
     MomentAuthor: OpenEnums.MomentAuthor
     MoveProgressFrameStage: OpenEnums.MoveProgressFrameStage
@@ -98,6 +112,7 @@ typeOverrides:
     NeutralTaskPriority: OpenEnums.NeutralTaskPriority
     OnCap: OpenEnums.OnCap
     PageAnchorFramework: OpenEnums.PageAnchorFramework
+    PageAnchorScheme: OpenEnums.PageAnchorScheme
     PermissionMode: OpenEnums.PermissionMode
     PermissionSettledFrameOutcome: OpenEnums.PermissionSettledFrameOutcome
     PermissionUpdateBehavior: OpenEnums.PermissionUpdateBehavior
@@ -116,6 +131,7 @@ typeOverrides:
     PropKind: OpenEnums.PropKind
     QueueSlot: OpenEnums.QueueSlot
     RebalanceNoticeHow: OpenEnums.RebalanceNoticeHow
+    RelayPortName: OpenEnums.RelayPortName
     RelayProvider: OpenEnums.RelayProvider
     RelayState: OpenEnums.RelayState
     RepoInfoVisibility: OpenEnums.RepoInfoVisibility
@@ -138,11 +154,15 @@ typeOverrides:
     StageHooksBy: OpenEnums.StageHooksBy
     StageKind: OpenEnums.StageKind
     StageStatus: OpenEnums.StageStatus
+    StageToolchain: OpenEnums.StageToolchain
     StagesTemplate: OpenEnums.StagesTemplate
     StagesViewSource: OpenEnums.StagesViewSource
     StarterGlyph: OpenEnums.StarterGlyph
     StarterPlace: OpenEnums.StarterPlace
     StarterSourceKind: OpenEnums.StarterSourceKind
+    StreamRelayState: OpenEnums.StreamRelayState
+    TailnetHttpsState: OpenEnums.TailnetHttpsState
+    TailnetHttpsStep: OpenEnums.TailnetHttpsStep
     TaskHistoryActorMover: OpenEnums.TaskHistoryActorMover
     TaskHistoryKind: OpenEnums.TaskHistoryKind
     TaskHistoryState: OpenEnums.TaskHistoryState
@@ -151,6 +171,7 @@ typeOverrides:
     ToolPlatform: OpenEnums.ToolPlatform
     ToolState: OpenEnums.ToolState
     Tracker: OpenEnums.Tracker
+    TrackerSyncState: OpenEnums.TrackerSyncState
     TranscriptBlockState: OpenEnums.TranscriptBlockState
     TranscriptBranchStatus: OpenEnums.TranscriptBranchStatus
     TranscriptEventOpenBlock: OpenEnums.TranscriptEventOpenBlock

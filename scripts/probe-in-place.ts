@@ -59,6 +59,14 @@ import { createRequire } from "node:module";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { machinePath } from "../packages/core/src/machine-path";
+import { processStart } from "../packages/core/src/process-identity";
+import { identifiedPid, type Pid, signal } from "../packages/core/src/signal";
+
+/** A stand-in session's child, as its pid file names it: its pid and its start, so a kill reaches it only while it is still that process. */
+interface PidFile {
+  pid: number;
+  procStart?: string;
+}
 
 const root = resolve(import.meta.dir, "..");
 const hold = process.argv.includes("--hold");
@@ -650,22 +658,22 @@ if (role === "sessiond") {
     extra: object = {}
   ) =>
     entry(key, kind, text, { timestamp: new Date().toISOString(), ...extra });
-  /** What the SDK says of a CLI that exited on SIGTERM: Claude Code catches it and exits 143. */
-  const TERM_EXIT = "Claude Code process exited with code 143";
-  /** The SDK's word for how a CLI child ended, from sessiond's listing of it. */
-  const sdkWord = (
+  type ProcessExit =
+    import("../packages/agent/src/sessiond-client").ProcessExit;
+  /** A CLI that ended on SIGTERM, as sessiond reaps it: Claude Code catches it and exits 143. */
+  const TERM_EXIT: ProcessExit = { code: 143, signal: null };
+  /** How a CLI child ended, from sessiond's listing of it, as the bridge hands it to the adapter. */
+  const exitOf = (
     proc: { exitCode?: number; signal?: string } | undefined
-  ): string => {
+  ): ProcessExit => {
     if (proc?.signal && proc.signal !== "SIGTERM") {
-      return `Claude Code process terminated by signal ${proc.signal}`;
+      return { code: null, signal: proc.signal as NodeJS.Signals };
     }
     if (!proc?.signal && proc?.exitCode) {
-      return `Claude Code process exited with code ${proc.exitCode}`;
+      return { code: proc.exitCode, signal: null };
     }
     return TERM_EXIT;
   };
-  /** What the stand-in's CLI says on stderr as it crashes on a `crash-turn`. */
-  const CRASH_SAID = "fatal: the stand-in's CLI crashed on purpose";
   const session = (
     ctx: import("../packages/agent/src/harness").HarnessContext,
     key: string,
@@ -673,9 +681,9 @@ if (role === "sessiond") {
     /** Its child's pid, watched as Claude Code's SDK watches its CLI. */
     pid?: number
   ) => {
-    // Its process's end, said as the SDK says a Claude Code CLI's: the CLI
-    // exits 143 on SIGTERM, whoever sent it, and the real adapter's own
-    // word for that decides what it was (claude.ts `processEnded`).
+    // Its process's end, handed over as the bridge hands a Claude Code
+    // CLI's: the CLI exits 143 on SIGTERM, whoever sent it, and the real
+    // adapter decides from that exit what it was (claude.ts `processEnded`).
     let over = false;
     const watching =
       pid === undefined
@@ -688,7 +696,7 @@ if (role === "sessiond") {
                   (proc) => proc.procId === ctx.instanceId && proc.pid === pid
                 );
                 if (!mine?.alive) {
-                  ended(sdkWord(mine));
+                  ended(exitOf(mine));
                 }
               })
               .catch(() => undefined);
@@ -712,14 +720,20 @@ if (role === "sessiond") {
         compact_metadata: { trigger: "manual", pre_tokens: 50_000 },
       } as never);
     };
-    const ended = (said = TERM_EXIT): void => {
+    const ended = (exit = TERM_EXIT): void => {
       if (over) {
         return;
       }
       over = true;
       clearInterval(watching);
-      processEnded(ctx, new Error(said));
-      ctx.closed?.();
+      processEnded(
+        ctx,
+        new Error(`the stand-in's CLI ended: ${JSON.stringify(exit)}`),
+        exit,
+        undefined
+      )
+        .then(() => ctx.closed?.())
+        .catch(console.error);
     };
     return {
       harness: "claude" as const,
@@ -798,15 +812,13 @@ if (role === "sessiond") {
             transcript(key),
             `${JSON.stringify(stamped(key, "user", text, { uuid: message.uuid }))}\n`
           );
-          // Its CLI crashes in this turn: it exits 1, its stderr saying why,
-          // as the SDK reports such an end. Said before its child is gone, so
-          // the watch above does not read the child's end as a kill.
+          // Its CLI crashes in this turn: it exits 1, as sessiond reaps such
+          // an end. Said before its child is gone, so the watch above does
+          // not read the child's end as a kill.
           if (text.includes("crash-turn")) {
             ctx.busy(true);
             await log(`CRASH ${ctx.instanceId}`);
-            ended(
-              `Claude Code process exited with code 1. stderr: ${CRASH_SAID}`
-            );
+            ended({ code: 1, signal: null });
             await endProc(client, ctx.instanceId);
             return;
           }
@@ -993,7 +1005,11 @@ if (role === "sessiond") {
         (proc) => proc.procId === ctx.instanceId && proc.alive
       )?.pid;
       if (pid !== undefined) {
-        await writeFile(join(scratch, `pid-${ctx.instanceId}`), String(pid));
+        const record: PidFile = { pid, procStart: await processStart(pid) };
+        await writeFile(
+          join(scratch, `pid-${ctx.instanceId}`),
+          JSON.stringify(record)
+        );
       }
       return session(ctx, key, spec.accountDir?.accountId, pid);
     },
@@ -1010,6 +1026,18 @@ if (role === "sessiond") {
     `in-place-${crypto.randomUUID().slice(0, 8)}`
   );
   await mkdir(join(dir, "home", ".config", "cawco"), { recursive: true });
+  /** The stand-in's child for `id`, while it is still the process its pid file names. */
+  const standIn = async (id: string): Promise<Pid> => {
+    const record = JSON.parse(
+      await readFile(join(dir, `pid-${id}`), "utf8")
+    ) as PidFile;
+    const pid = await identifiedPid(record);
+    assert.ok(
+      pid !== undefined,
+      `${id}'s child is no longer the process its pid file names (${JSON.stringify(record)})`
+    );
+    return pid;
+  };
   const freePort = async (): Promise<number> => {
     const lease = Bun.serve({
       hostname: "127.0.0.1",
@@ -1903,10 +1931,7 @@ if (role === "sessiond") {
     });
     const stopped = await tool(parent, "stop_delegate", { target: g2 });
     assert.ok(!stopped.isError, stopped.text);
-    process.kill(
-      Number(await readFile(join(dir, `pid-${g3}`), "utf8")),
-      "SIGTERM"
-    );
+    signal(await standIn(g3), "SIGTERM");
     const endedLine = async (id: string) =>
       (
         (await api(`/api/instances/${id}/transcript?limit=200`)) as {
@@ -1985,11 +2010,11 @@ if (role === "sessiond") {
     );
     const crashShown = failuresShown.filter((one) => one.startsWith(h1));
     assert.ok(
-      crashShown.some(
-        (one) =>
-          one.includes(
-            "Claude Code stopped on its own: fatal: the stand-in's CLI crashed on purpose"
-          ) && one.includes("A message to it starts it again")
+      // claude.ts `CRASHED`: its exit says it stopped on its own.
+      crashShown.some((one) =>
+        one.includes(
+          "Claude Code stopped on its own and said nothing about why. A message to it starts it again."
+        )
       ),
       JSON.stringify(crashShown)
     );
@@ -2010,10 +2035,7 @@ if (role === "sessiond") {
         )
     );
     const h1After = (await row(h1)) as Row;
-    process.kill(
-      Number(await readFile(join(dir, `pid-${h2}`), "utf8")),
-      "SIGKILL"
-    );
+    signal(await standIn(h2), "SIGKILL");
     const h2Lines = await until(
       'H2\'s end said as "Ended from outside CawCo (SIGKILL)"',
       () => endedLine(h2),

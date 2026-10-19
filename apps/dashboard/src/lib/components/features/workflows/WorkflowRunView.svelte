@@ -466,7 +466,7 @@
     font-size: var(--text-body);
     font-weight: var(--weight-body);
 
-    @media (width <= 900px) {
+    @media (width < 900px) {
       padding-inline: var(--space-5);
     }
   }

@@ -5,6 +5,7 @@
  * ```
  * ---
  * stage: draft
+ * issue: "https://github.com/acme/app/issues/12"
  * type: writer
  * after: [138]
  * parent: 120
@@ -78,6 +79,7 @@ import type { WorkBudget } from "./db/schema";
 /** The front matter fields a task file knows, in the order a new file writes them. */
 export const TASK_FIELDS = [
   "stage",
+  "issue",
   "type",
   "after",
   "parent",
@@ -133,6 +135,11 @@ export interface TaskFields {
   foundIn: string | null;
   /** Its attempts' group under their parent: one combined report once all have ended. */
   group: string | null;
+  /**
+   * The GitHub issue or Linear issue it is one record with (tracker.ts), by
+   * its URL; only the hub's tracker sync writes it. Null when none.
+   */
+  issue: string | null;
   labels: string[];
   /** Where an attempt's work lands (`main`, `branch`, `pr`, `none`); null: the project's default. */
   lands: LandsMode | null;
@@ -382,6 +389,7 @@ const renderEdge = (ref: string): string =>
 
 const FIELD_KEYS = {
   stage: "stage",
+  issue: "issue",
   type: "type",
   after: "after",
   parent: "parent",
@@ -435,6 +443,7 @@ const renderBudget = (budget: WorkBudget): string | undefined => {
 
 const emptyFields = (): TaskFields => ({
   stage: null,
+  issue: null,
   type: null,
   after: [],
   parent: null,
@@ -571,6 +580,7 @@ const LIST_FIELDS: ReadonlySet<string> = new Set([
 ]);
 const SCALAR_FIELDS: ReadonlySet<string> = new Set([
   "stage",
+  "issue",
   "type",
   "group",
   "rank",
@@ -596,7 +606,8 @@ const readField = (
       field as "checks" | "outputs" | "context" | "owns" | "labels" | "accounts"
     ] = readList(field, line, problems);
   } else if (SCALAR_FIELDS.has(field)) {
-    fields[field as "stage" | "type" | "group" | "rank"] = scalarOf(line);
+    fields[field as "stage" | "issue" | "type" | "group" | "rank"] =
+      scalarOf(line);
   } else if (field === "budget") {
     fields.budget = readBudget(line, problems);
   } else if (field === "lands") {

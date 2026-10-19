@@ -8,7 +8,6 @@ import type {
   AuthState,
   BuildInfo,
   Envelope,
-  HarnessKind,
   HeartbeatAckPayload,
   HeartbeatPayload,
   LaunchAsk,
@@ -16,6 +15,7 @@ import type {
   LentAccess,
   MachineHarnessReport,
   MachineProviderLists,
+  NamedSpawn,
   RegisterAckPayload,
   SessionCustody,
   SpawnPayload,
@@ -39,7 +39,6 @@ import {
   CONTROL_MOVE_CLONE,
   CONTROL_MOVE_HOME_CREDENTIAL,
   CONTROL_MOVE_INSPECT,
-  CONTROL_MOVE_INSTALL,
   CONTROL_MOVE_LFS,
   CONTROL_MOVE_PREPARE,
   CONTROL_MOVE_REMOTE_CREDENTIAL,
@@ -70,6 +69,14 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
+  BROWSER_REMOVE,
+  BROWSER_START,
+  BROWSER_STOP,
+  type BrowserKey,
+  type BrowserStartArgs,
+  isBrowserKey,
+} from "@cawco/core/browser";
+import {
   CUSTODY_BOUND_MS,
   type HandoverCommand,
   type HandoverEvent,
@@ -88,16 +95,26 @@ import {
   writeMachineKey,
 } from "@cawco/core/machine-key";
 import { userLayerPath } from "@cawco/core/paths";
+import { sweepDeadShortLinks } from "@cawco/core/sessiond";
+import type { DesignQuery } from "@cawco/core/stage";
 import {
   type ServeSpec,
   type SheetWrite,
   STAGE_COMPONENTS,
   STAGE_ENSURE,
+  STAGE_RENDER,
   STAGE_SERVE,
   STAGE_UNSERVE,
   STAGE_WRITE,
 } from "@cawco/core/stage";
 import { writeStateFile } from "@cawco/core/state-file";
+import {
+  RELAY_REMOVE,
+  RELAY_RENEW,
+  RELAY_START,
+  RELAY_STOP,
+  type RelayStartArgs,
+} from "@cawco/core/stream-relay";
 import {
   CONTROL_UPSTREAM_POST,
   isUpstreamPost,
@@ -108,7 +125,7 @@ import { getAgentDir } from "@earendil-works/pi-coding-agent";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { accountStoreIds, forgetUnknownAccounts } from "./account-sweep";
 import { accountReports, claudeAuthNote, claudeSignins } from "./accounts";
-import { unlockKeychain } from "./auth";
+import { resolveClaudeExecutable, unlockKeychain } from "./auth";
 import {
   BinaryUpdater,
   latestBinaryUpdate,
@@ -121,6 +138,21 @@ import {
   takeUpstreamRules,
   watchQuietBoundaries,
 } from "./boundary";
+import {
+  removeBrowser,
+  setBrowserSink,
+  startBrowser,
+  stopBrowser,
+  watchBrowsers,
+} from "./browser/browsers";
+import {
+  removeRelay,
+  renewRelay,
+  setRelaySink,
+  startRelay,
+  stopRelay,
+  watchRelay,
+} from "./browser/relay";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
@@ -133,6 +165,7 @@ import { removeCawcoSessionConfigs } from "./harnesses/opencode";
 import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { serveHubCredential } from "./hub-git";
+import { carryHub, stopCarrying } from "./hub-loopback";
 import { recordJoinedHub, setConnectedHub } from "./hub-proof";
 import { readInputs, writeInputs } from "./inputs";
 import { KeeperWatchdog } from "./keeper-watchdog";
@@ -145,7 +178,6 @@ import {
   moveCancel,
   moveClone,
   moveInspect,
-  moveInstall,
   moveLfs,
   movePrepare,
   moveRemoteCredential,
@@ -189,15 +221,19 @@ import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { serviceManaged, setSessionLimits } from "./sessiond-client";
 import {
+  closingStages,
   ensureServed,
   ensureStage,
+  networkOf,
+  renderStage,
   StageRefusal,
   setStageSink,
   stageComponents,
   stopServed,
-  stopStages,
   writeSheet,
 } from "./stage";
+import { setStageCloneSink } from "./stage-clone";
+import type { RenderAsk } from "./stage-render";
 import { makeUpstreamPost } from "./upstream-posts";
 
 /** The hub's upstream rules, written into each workspace here; a failure is said in the log, never thrown at the socket. */
@@ -209,6 +245,38 @@ const takeUpstream = (
       `[workspace] the hub's upstream rules could not be written: ${error instanceof Error ? error.message : String(error)}`
     );
   });
+};
+
+/** The settings a `relay.start` carries, or a refusal saying what came. */
+const relayStartOf = (args: unknown): RelayStartArgs => {
+  const given = args as Partial<RelayStartArgs> | null;
+  const range = given?.relayRange;
+  if (!(
+    given &&
+    typeof given.secret === "string" &&
+    given.secret.length > 0 &&
+    typeof given.address === "string" &&
+    given.address.length > 0 &&
+    (given.hostname === undefined || typeof given.hostname === "string") &&
+    (given.externalIp === undefined || typeof given.externalIp === "string") &&
+    Array.isArray(range) &&
+    range.length === 2 &&
+    range.every((port) => Number.isInteger(port))
+  )) {
+    throw new Error(
+      "relay.start takes a secret, an address and a relay range."
+    );
+  }
+  return given as RelayStartArgs;
+};
+
+/** The key a `browser.stop` or `browser.remove` names (`{ key }`), or a refusal saying what came. */
+const browserKeyOf = (args: unknown): BrowserKey => {
+  const key = (args as { key?: unknown } | null)?.key;
+  if (!isBrowserKey(key)) {
+    throw new Error(`${JSON.stringify(args)} names no browser key.`);
+  }
+  return key;
 };
 
 /** The hub's session limits, said to every keeper, which starts each child under them from here; said in the log once each time they change. */
@@ -700,8 +768,7 @@ export interface RegisterPayload extends MachineIdentity {
    * When each of those conversations last changed, ms epoch, by session id.
    * The hub writes it onto the rows it is not being told are live, so a
    * sleeping session's age is when the session last said something rather than
-   * when this register ran. Absent alongside `resumable`, and separate from it
-   * so a hub that predates this field still reads the ids.
+   * when this register ran. Absent alongside `resumable`.
    */
   resumableAt?: Record<string, number>;
   sessionAddresses: import("@cawco/core").SessionAddress[];
@@ -1131,14 +1198,13 @@ const closed = (socket: WebSocket, url: string) =>
  */
 export const adoptable = (
   payload: SpawnPayload | undefined
-): payload is SpawnPayload =>
+): payload is NamedSpawn =>
   payload !== undefined &&
   typeof payload.instanceId === "string" &&
   payload.instanceId.length > 0 &&
   typeof payload.cwd === "string" &&
   payload.cwd.length > 0 &&
-  (payload.harness === undefined ||
-    SESSION_PROC_KINDS.some((kind) => kind === payload.harness)) &&
+  SESSION_PROC_KINDS.some((kind) => kind === payload.harness) &&
   payload.bootstrap === undefined &&
   payload.scratch === undefined;
 
@@ -1345,7 +1411,6 @@ const attach = (
     // proofs name (hub-proof.ts).
     setConnectedHub(challenge.hubId);
     yield* Effect.promise(() => recordJoinedHub(url, challenge.hubId));
-    supervisor.setHubContract(false);
     supervisor.resetStopSequence();
     process.env[CAWCO_ENV.hubUrl] = url;
     const { catalog } = yield* Effect.promise(() => reading);
@@ -1501,7 +1566,9 @@ const attach = (
     let reportedHomeStores = homeStoresStamp();
     /** `report` in place of the one of its harness this connection last read, or beside the others. */
     const keepReport = (report: MachineHarnessReport): void => {
-      if (report.harness === "claude") {
+      // A machine with no Claude Code has its sentence in the report's
+      // `authReason`, not the one about its accounts' sign-ins.
+      if (report.harness === "claude" && report.installed) {
         noteClaudeAuth(report.auth);
       }
       reportedHarnesses = [
@@ -1742,7 +1809,9 @@ const attach = (
      * again, when either moved since the last one this connection sent (a
      * login gone, a keychain locked or unlocked under the agent); the whole
      * report read again when the announce could not read it, so its sign-ins
-     * still reach the hub. Nothing when there is nothing new to send.
+     * still reach the hub, and while Claude Code is not installed or has gone
+     * from PATH since, so its installing or going is said. Nothing when there
+     * is nothing new to send.
      */
     const rereadClaude = async (): Promise<
       MachineHarnessReport | undefined
@@ -1750,9 +1819,12 @@ const attach = (
       const old = reportedHarnesses.find(
         (report) => report.harness === "claude"
       );
-      if (!old) {
+      if (!old?.installed || resolveClaudeExecutable() === undefined) {
         const claude = harness("claude");
-        return claude ? await readHarness(claude) : undefined;
+        const report = claude ? await readHarness(claude) : undefined;
+        return report && old && Bun.deepEquals(report, old)
+          ? undefined
+          : report;
       }
       const read = await readPart(
         "the claude harness's sign-ins",
@@ -1767,7 +1839,7 @@ const attach = (
         unreadAccounts: _unread,
         ...rest
       } = old;
-      const next = { ...rest, ...(await claudeSignins(read)) };
+      const next = { ...rest, ...claudeSignins(read) };
       return Bun.deepEquals(next, old) ? undefined : next;
     };
 
@@ -1914,8 +1986,8 @@ const attach = (
       }
       // Usage and workflow-run transitions originate at the hub, never at a
       // daemon; machine-scoped control replies do travel through this sink,
-      // without an instanceId. A move's progress and a command's slot wait
-      // go out on `emit`.
+      // without an instanceId. A move's progress, a command's slot wait, a
+      // stage's and the browsers' frames go out on `emit`.
       if (
         frame.kind === "usage" ||
         frame.kind === "workflow" ||
@@ -1923,7 +1995,10 @@ const attach = (
         frame.kind === "moves" ||
         frame.kind === "move_progress" ||
         frame.kind === "command_queue" ||
-        frame.kind === "stage"
+        frame.kind === "stage" ||
+        frame.kind === "browsers" ||
+        frame.kind === "stream_relay" ||
+        frame.kind === "stage-clone"
       ) {
         return false;
       }
@@ -1974,7 +2049,7 @@ const attach = (
      * operator's spawn, a delegate's, and every later `reannounce` ack go
      * straight through.
      */
-    const heldSpawns: Envelope[] = [];
+    const heldSpawns: Envelope<NamedSpawn>[] = [];
     /** The hub holds this connection until the person admits the machine ({@link admission}). */
     let waitingAdmission = false;
     /**
@@ -2057,14 +2132,15 @@ const attach = (
      * OpenCode reattach is no unit of it: it is its own session's
      * ({@link reattaching}).
      */
-    const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
+    const takeCustody = (
+      ackPayload: unknown,
+      spawns: Envelope<NamedSpawn>[]
+    ): void => {
       clearTimeout(registrationDeadline);
-      const harnessOf = (envelope: Envelope): HarnessKind =>
-        (envelope.payload as SpawnPayload).harness ?? "claude";
       const units = new Map(
         spawns.map((envelope) => [
-          (envelope.payload as SpawnPayload).instanceId,
-          harnessOf(envelope),
+          envelope.payload.instanceId,
+          envelope.payload.harness,
         ])
       );
       custodyEpoch = supervisor.beginCustody([...units.keys()]);
@@ -2245,7 +2321,7 @@ const attach = (
       void Promise.all(
         SESSION_PROC_KINDS.flatMap((kind) => {
           const mine = spawns.filter(
-            (envelope) => harnessOf(envelope) === kind
+            (envelope) => envelope.payload.harness === kind
           );
           if (mine.length === 0) {
             return [];
@@ -2369,10 +2445,6 @@ const attach = (
     /** What arrives ahead of the register ack: custody, taken on the ack. Whether it was taken. */
     const beforeAck = (envelope: Envelope): boolean => {
       if (envelope.verb === "register") {
-        supervisor.declareHubContract(
-          (envelope.payload as { addressContract?: unknown })
-            .addressContract === true
-        );
         agentStep({ kind: "register-ack" });
         recordRegistered();
         // What each session is owed goes first, ahead of anything this ack
@@ -2383,6 +2455,15 @@ const attach = (
           (envelope.payload as RegisterAckPayload).sessionLimits
         );
         takeUpstream((envelope.payload as RegisterAckPayload).upstream);
+        // localhost on this computer is the hub this connection reached.
+        carryHub(
+          url,
+          {
+            dashboard: (envelope.payload as RegisterAckPayload).dashboardPorts,
+            previews: (envelope.payload as RegisterAckPayload).previewPorts,
+          },
+          (envelope.payload as RegisterAckPayload).hostsHub
+        );
         // This connection's credential for the hub's git remote, in memory only.
         setHubCredential(
           identity.machineId,
@@ -2410,7 +2491,7 @@ const attach = (
       const opencodeSpawn = spawn?.harness === "opencode";
       const instanceId = spawn?.instanceId;
       if (adoptable(spawn)) {
-        heldSpawns.push(envelope);
+        heldSpawns.push({ ...envelope, payload: spawn });
         undecided.set(spawn.instanceId, undecided.get(spawn.instanceId) ?? []);
         return true;
       }
@@ -2682,6 +2763,15 @@ export const startDaemon = (rediscover = false) =>
       )
     );
     checkBoundaryHost();
+    // macOS: short names in the socket root CawCo made whose target is gone
+    // (a scratch fleet's or a release run's HOME, an archived workspace's
+    // scratch dir), each a `c-` or `t-` link; nothing else.
+    const deadLinks = sweepDeadShortLinks();
+    if (deadLinks.length > 0) {
+      console.info(
+        `[agent] removed ${deadLinks.length} short name(s) in the socket root whose target is gone: ${deadLinks.join(", ")}`
+      );
+    }
     const url = process.env[CAWCO_ENV.hubUrl] ?? DEFAULT_HUB_URL;
     // Re-pinned by the rediscovery trigger below (discovered hubs only), read fresh by every attempt
     // `reconnecting` makes — see its own doc for why a plain closure variable
@@ -2692,6 +2782,8 @@ export const startDaemon = (rediscover = false) =>
       Effect.promise(() => startMcpGateway(() => hubUrl)),
       (listener) => Effect.sync(() => listener.stop(true))
     );
+    // The hub on this computer's loopback, started by each register (hub-loopback.ts `carryHub`).
+    yield* Effect.addFinalizer(() => Effect.promise(() => stopCarrying()));
     const machineIdValue = yield* Effect.promise(() => machineId());
     // Child processes — the opencode server and its plugins most of all — read
     // the machine's identity and the hub off the environment they inherit.
@@ -2706,6 +2798,8 @@ export const startDaemon = (rediscover = false) =>
       );
     } else if (denied.state === "failed") {
       yield* Effect.logWarning(denied.detail);
+    } else if (denied.state === "unsynced") {
+      yield* Effect.logInfo(`${denied.detail}: spawns wait for it`);
     }
     // Size the transcript cache from machine config (if set).
     const machineConfig = yield* Effect.promise(() => readConfig());
@@ -2749,13 +2843,14 @@ export const startDaemon = (rediscover = false) =>
     // session bounded there, a preview of a port in it (and, read by
     // boundary.ts itself, an attached CLI, a command in flight, a live work
     // item the hub names on each beat). One quiet for a while closes, and its
-    // next command starts it again.
+    // next command starts it again. A place's sheet holds its stage clone's.
     watchQuietBoundaries({
       sessions: () => supervisor.boundedWorkspaces(),
       previews: () =>
-        servingPreviews().flatMap(({ source }) =>
-          "workspace" in source && source.workspace ? [source.workspace] : []
-        ),
+        servingPreviews().flatMap(({ source }) => {
+          const network = "port" in source ? networkOf(source) : undefined;
+          return network ? [network] : [];
+        }),
     });
 
     // The usage scanner outlives connections too: its store (usage.db) is the
@@ -2883,16 +2978,22 @@ export const startDaemon = (rediscover = false) =>
       CONTROL_WORKSPACE_BOUNDARY,
       workspaceBoundary
     );
-    // An archive ends the workspace's stage first: nothing of it is left to serve.
-    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_ARCHIVE, (ref) => {
-      stopStages((ref as { id?: string } | null)?.id);
-      return archiveWorkspace(ref);
-    });
+    // An archive ends the workspace's stage first: nothing of it is left to
+    // serve. A place's stage clone waits for its stage to sleep (stage.ts
+    // `closingStages`).
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_ARCHIVE, (ref) =>
+      closingStages(
+        ref as { id?: string; path?: string; skip?: string[] } | null,
+        archiveWorkspace
+      )
+    );
     // An archive whose unlanded work a person let go: a carry first.
-    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_DISCARD, (ref) => {
-      stopStages((ref as { id?: string } | null)?.id);
-      return discardWorkspace(ref);
-    });
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_DISCARD, (ref) =>
+      closingStages(
+        ref as { id?: string; path?: string; skip?: string[] } | null,
+        discardWorkspace
+      )
+    );
     // A post to another person's repository the person approved, made once
     // with this machine's GitHub sign-in (upstream-posts.ts).
     supervisor.registerDaemonFunction(CONTROL_UPSTREAM_POST, (id, post) => {
@@ -2903,20 +3004,77 @@ export const startDaemon = (rediscover = false) =>
       }
       return makeUpstreamPost(id, post);
     });
+    // A project's browser (browser/browsers.ts): started or woken on its
+    // machine's host, stopped, removed; the whole list told on each change.
+    setBrowserSink(machineIdValue, (frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
+    supervisor.registerDaemonFunction(BROWSER_START, (args) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : startBrowser(args as BrowserStartArgs)
+    );
+    supervisor.registerDaemonFunction(BROWSER_STOP, async (args) =>
+      stopBrowser(browserKeyOf(args))
+    );
+    supervisor.registerDaemonFunction(BROWSER_REMOVE, async (args) =>
+      removeBrowser(browserKeyOf(args))
+    );
+    yield* Effect.forkScoped(
+      Effect.promise(() =>
+        watchBrowsers().catch((error: unknown) =>
+          console.warn(`[browser] not watched: ${String(error)}`)
+        )
+      )
+    );
+    // The fleet's stream relay, when this machine runs it (browser/relay.ts):
+    // started, stopped, its certificate renewed; read back from its container.
+    setRelaySink(machineIdValue, (frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
+    supervisor.registerDaemonFunction(RELAY_START, async (args) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : startRelay(relayStartOf(args))
+    );
+    supervisor.registerDaemonFunction(RELAY_STOP, () => stopRelay());
+    supervisor.registerDaemonFunction(RELAY_REMOVE, () => removeRelay());
+    supervisor.registerDaemonFunction(RELAY_RENEW, () => renewRelay());
+    yield* Effect.forkScoped(
+      Effect.promise(() =>
+        watchRelay().catch((error: unknown) =>
+          console.warn(`[relay] not read back: ${String(error)}`)
+        )
+      )
+    );
     // Live components: a workspace's stage, started or woken, and a sheet's stories (stage.ts).
     setStageSink((frame) =>
       supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
-    supervisor.registerDaemonFunction(STAGE_ENSURE, (ref, file) =>
-      fenced()
-        ? Promise.reject(new Error(AGENT_RESTARTING))
-        : ensureStage(ref as WorkspaceRef, String(file))
+    setStageCloneSink((frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
     );
+    // A canvas's first states file, and (`{ file, files }`) every states file whose report it reads.
+    supervisor.registerDaemonFunction(STAGE_ENSURE, (ref, file) => {
+      if (fenced()) {
+        return Promise.reject(new Error(AGENT_RESTARTING));
+      }
+      const named = file as { file?: string; files?: string[] } | string;
+      return typeof named === "string"
+        ? ensureStage(ref as WorkspaceRef, named)
+        : ensureStage(ref as WorkspaceRef, String(named.file), named.files);
+    });
     // A sheet's story file written by its stage: a story's args, a story added, duplicated, removed or moved.
     supervisor.registerDaemonFunction(STAGE_WRITE, (ref, write) =>
       fenced()
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : writeSheet(ref as WorkspaceRef, write as SheetWrite)
+    );
+    // A canvas drawn by the daemon's own Chromium when no panel has drawn it (stage-render.ts).
+    supervisor.registerDaemonFunction(STAGE_RENDER, (ref, ask) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : renderStage(ref as WorkspaceRef, ask as RenderAsk)
     );
     // A toolchain root's components, as its stage finds them (spec §6's discovery).
     supervisor.registerDaemonFunction(STAGE_COMPONENTS, (ref, dir) =>
@@ -2924,7 +3082,7 @@ export const startDaemon = (rediscover = false) =>
         ? Promise.reject(new Error(AGENT_RESTARTING))
         : stageComponents(
             ref as WorkspaceRef,
-            typeof dir === "string" ? dir : undefined
+            dir && typeof dir === "object" ? (dir as DesignQuery) : {}
           )
     );
     // A workspace preview's server, started or woken and kept up there (stage.ts).
@@ -3008,12 +3166,6 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_MOVE_LFS,
       unfenced((request) => moveLfs(request as Parameters<typeof moveLfs>[0]))
-    );
-    supervisor.registerDaemonFunction(
-      CONTROL_MOVE_INSTALL,
-      unfenced((request) =>
-        moveInstall(request as Parameters<typeof moveInstall>[0])
-      )
     );
     supervisor.registerDaemonFunction(CONTROL_MOVE_CANCEL, (jobId) =>
       moveCancel(jobId as string)

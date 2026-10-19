@@ -4,9 +4,7 @@ import CawCoDesign
 import CawCoMascot
 import CawCoTranscript
 import OSLog
-import PhotosUI
 import UIKit
-import UniformTypeIdentifiers
 import WebKit
 
 /// One conversation's pane (SessionPane.svelte under PaneLeaf.svelte): the
@@ -16,7 +14,7 @@ import WebKit
 /// permission and question cards) and its group draws one composer over the
 /// active tab. The group says how far up the pane that composer stands
 /// (`composerInset`), and the transcript keeps its last line clear of it.
-final class SessionViewController: ObservedViewController, PHPickerViewControllerDelegate, UIDocumentPickerDelegate {
+final class SessionViewController: ObservedViewController {
     let sessionId: String
     private static let restoring = Logger(subsystem: "dev.cawco.app", category: "Restore")
     private let hub: HubConnection
@@ -24,6 +22,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     private let transcriptView = TranscriptView()
     private let transcriptHost = UIViewController()
     let composerBinding: SessionComposerBinding
+    /// What rides with the words: picks, pastes and uploads.
+    private var attacher: ComposerAttacher!
     private var cards: [String: PromptCardView] = [:]
     private var sent: String?
     /// The `send.withdraw` taking a queued message back to send its edit in its place.
@@ -42,6 +42,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     var onReturnToFleet: () -> Void = {}
     /// Opens another session, or a run's board row (`BoardRun.prefix + runId`), as a board row opens.
     var onOpenSession: (String) -> Void = { _ in }
+    /// A project's page: the one a "make this a project" answer joined.
+    var onOpenProject: (String) -> Void = { _ in }
+    /// The "make this a project" card, while the offer or what it joined stands.
+    private var offerCard: ProjectOfferCard?
 
     /// How far up from the pane's foot the group's composer (and the cards
     /// standing on it) reaches; the transcript's last line clears it.
@@ -61,9 +65,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         super.init(nibName: nil, bundle: nil)
         composerBinding.onSend = { [weak self] words, attachments in self?.send(words, attachments) }
         composerBinding.onStop = { [weak self] in self?.stopTurn() }
-        composerBinding.onPasteItems = { [weak self] items in self?.attachPasted(items) }
-        composerBinding.onRetryFile = { [weak self] id in self?.upload(id) }
-        composerBinding.attachMenu = attachMenu()
+        attacher = ComposerAttacher(hub: hub, binding: composerBinding, presenter: self)
+        composerBinding.onPasteItems = { [weak self] items in self?.attacher.pasted(items) }
+        composerBinding.onRetryFile = { [weak self] id in self?.attacher.upload(id) }
+        composerBinding.attachMenu = attacher.menu()
         composerBinding.recall = { [weak self] in self.map { SentMessages.recall($0.transcript) } ?? [] }
         composerBinding.readOlder = { [weak self] in
             guard let self else { return }
@@ -81,6 +86,70 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         // The composer's canvas: it stands in this pane's column and docks into its artifact panel.
         composerBinding.canvasHost = CanvasHost(hub: hub, column: { [weak self] in self?.canvasColumn() },
                                                 panel: { [weak self] id in self?.canvasPanel(showing: id) })
+        // Its plan, as the hub keeps it, for as long as the tab is open (SessionPane.svelte's PlanRing).
+        hub.plans.follow(id)
+        planRing.addAction(UIAction { [weak self] _ in self?.openPlan() }, for: .touchUpInside)
+    }
+
+    // MARK: Its plan
+
+    private let planRing = PlanRingButton()
+    private weak var planSheet: UIViewController?
+    /// The reader asked for the plan beside the conversation (its ring) and has not closed it (SideSplit.svelte `planAsked`).
+    private var planAsked = false
+    private var planSide: PlanSideController?
+
+    /// The ring on the composer while the plan has something to show: how far it has got (PlanPane.svelte `planProgress`).
+    private func syncPlan() {
+        guard let plan = hub.plans.plans[sessionId], plan.shows else {
+            composerBinding.ring = nil
+            return
+        }
+        planRing.configure(done: plan.progress.done, total: plan.progress.total)
+        // Pressed while the plan is on show: in its sheet on a compact width, on the side's front beside the transcript.
+        planRing.open = planSheet != nil || (beside != nil && beside === planSide)
+        composerBinding.ring = planRing
+        #if DEBUG
+        if PreviewProbe.openPlanAtLaunch, !planOpenedAtLaunch, view.window != nil {
+            planOpenedAtLaunch = true
+            openPlan()
+        }
+        #endif
+    }
+
+    #if DEBUG
+    private var planOpenedAtLaunch = false
+    #endif
+
+    /// The plan whole: beside the transcript on a regular width, on the
+    /// side's front (SideSplit.svelte `openPlan`); on a compact one, in the
+    /// house sheet (PlanPane.svelte in SideSplit's sheet).
+    private func openPlan() {
+        if traitCollection.horizontalSizeClass == .regular {
+            planAsked = true
+            sideTab = .plan
+            syncSide()
+            syncPlan()
+            #if DEBUG
+            PreviewProbe.say("plan opened \(sessionId) beside")
+            #endif
+            return
+        }
+        let sheet = PlanSheetController(hub: hub, instanceId: sessionId)
+        let house = HouseSheetController(sheet, title: PlanSheetController.title(hub.plans.plans[sessionId]), scroller: sheet.scroll)
+        planSheet = house
+        present(house, animated: true) { [weak sheet, sessionId] in
+            #if DEBUG
+            // The sheet stood: as tall as the plan it holds, up to its cap (never its title alone).
+            guard let sheet else { return }
+            let box = sheet.view.convert(sheet.view.bounds, to: nil)
+            PreviewProbe.say("plan sheet \(sessionId) content=\(Int(box.minY)),\(Int(box.height)) plan=\(Int(sheet.scroll.contentSize.height))")
+            #endif
+        }
+        planRing.open = true
+        #if DEBUG
+        PreviewProbe.say("plan opened \(sessionId)")
+        #endif
     }
 
     // MARK: The composer's canvas
@@ -221,7 +290,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         super.viewDidAppear(animated)
         shownOnce = true
         // An open preview whose sheet could not be shown off screen is shown now.
-        syncPreview()
+        syncSide()
         // Laid out expanded before it had a window (a relaunch): Esc is the pane's now.
         if expanded { takeKeys() }
     }
@@ -230,6 +299,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     func close() {
         guard opened else { return }; opened = false
         hub.sessions.close(sessionId)
+        hub.plans.unfollow(sessionId)
         onClose()
     }
 
@@ -261,6 +331,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         transcriptHost.additionalSafeAreaInsets.bottom = clearance
         transcriptHost.view.layoutIfNeeded()
         if following { transcriptView.latest() }
+        #if DEBUG
+        PreviewProbe.say("transcript clearance=\(Int(clearance)) composer=\(Int(composerInset)) following=\(following)")
+        #endif
     }
 
     // MARK: Model
@@ -282,8 +355,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         composerBinding.sendError = editNote ?? (command?.refusedByHub == true ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil)
         composerBinding.sendBlock = sendBlock(hub)
         syncCards()
+        syncSide()
+        syncPlan()
         composerBinding.publish()
-        syncPreview()
         #if DEBUG
         sendForProbe()
         #endif
@@ -449,30 +523,116 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         reveal(preview)
     }
 
-    /// The preview as the hub says it: open, beside the transcript on a
-    /// regular width (the web's split) or in a drawer above the composer on a
-    /// compact one (its phone sheet); closed, gone.
-    private func syncPreview() {
+    /// What stands beside the conversation (SideSplit.svelte `Shown`): the plan or the preview.
+    private enum SideTab { case plan, preview }
+    /// The one chosen; on show while it is open, else the newest there is.
+    private var sideTab = SideTab.plan
+    /// The preview was open at the last sync: one opening now takes the front.
+    private var previewWasOpen = false
+    /// The switch, while both are open (SideSplit.svelte `switcher`), in the head of the one on show.
+    private lazy var sideSwitch: KitSegmented = {
+        let made = KitSegmented([Words.Side.plan, Words.Side.preview], selected: 0)
+        made.accessibilityLabel = Words.Side.label
+        made.addAction(UIAction { [weak self, weak made] _ in
+            guard let self, let index = made?.selectedIndex else { return }
+            sideTab = index == 0 ? .plan : .preview
+            syncSide()
+            syncPlan()
+        }, for: .valueChanged)
+        return made
+    }()
+
+    /// What the side holds, as the hub and the reader say (SideSplit.svelte
+    /// `opened`, `shown`): the preview while the hub has it open, beside the
+    /// transcript on a regular width (the web's split) or in a drawer above
+    /// the composer on a compact one (its phone sheet); the plan beside the
+    /// transcript while asked for and it has something to show (on a compact
+    /// width it is the house sheet, `openPlan`). Both open, the switch stands
+    /// in the head of the one on show; closed, each goes.
+    private func syncSide() {
         let frame = hub.previews.byInstance[sessionId]
-        let key = frame?.state == .open ? frame.flatMap(PreviewKey.of) : nil
+        // The artifact on show, and what its page has said of itself since (its title, its picture): the cards draw both.
+        let page = frame.flatMap(hub.previews.page)
+        let key = frame?.state == .open ? frame.flatMap(PreviewKey.of).map { "\($0)|\(page?.title ?? "")|\(page?.thumbnail?.light?.count ?? 0)|\(page?.thumbnail?.dark?.count ?? 0)" } : nil
         if key != drawnPreview {
             drawnPreview = key
             // The transcript's cards stand at full presence for the page now shown.
             transcriptView.previewChanged()
         }
-        guard frame?.state == .open else {
-            removePreview()
-            return
+        let previewOpen = frame?.state == .open
+        // An agent showing a preview brings it to the front.
+        if previewOpen, !previewWasOpen { sideTab = .preview }
+        previewWasOpen = previewOpen
+        let regular = traitCollection.horizontalSizeClass == .regular
+        let planOpen = regular && planAsked && hub.plans.plans[sessionId]?.shows == true
+        let opened = (planOpen ? [SideTab.plan] : []) + (previewOpen ? [.preview] : [])
+        let shown = opened.contains(sideTab) ? sideTab : opened.last
+        // Closing the last of them ends the expansion: what opens next opens
+        // beside the conversation. Only a close counts: before the hub's
+        // first word after a launch there was nothing to close.
+        let closing = (preview != nil || planSide != nil) && shown == nil
+        if !previewOpen { removePreview() }
+        if !planOpen, let planSide {
+            self.planSide = nil
+            if planSide.parent === self { unembed(planSide) }
         }
-        let controller = preview ?? makePreview()
-        let side = traitCollection.horizontalSizeClass == .regular
-        if controller.parent === self, drawer != !side {
-            unembed(controller)
+        if closing, expandAsked { keepExpanded(false) }
+        #if DEBUG
+        probeSide(shown: shown, opened: opened, regular: regular)
+        #endif
+        guard let shown else { return }
+        let card: SideCard = shown == .plan ? (planSide ?? makePlanSide()) : (preview ?? makePreview())
+        let asDrawer = shown == .preview && !regular
+        for other in [preview as SideCard?, planSide as SideCard?].compactMap(\.self)
+            where other !== card && other.parent === self {
+            unembed(other)
         }
-        if controller.parent !== self {
-            embed(controller, drawer: !side)
+        if card.parent === self, drawer != asDrawer {
+            unembed(card)
         }
-        controller.show()
+        if card.parent !== self {
+            embed(card, drawer: asDrawer)
+        }
+        if opened.count > 1 {
+            sideSwitch.select(shown == .plan ? 0 : 1, animated: false)
+            card.showSwitcher(sideSwitch)
+        } else {
+            card.showSwitcher(nil)
+        }
+        preview?.show()
+    }
+
+    #if DEBUG
+    private var probedSide = ""
+    private var sideSwitched = false
+
+    /// What the side holds as a simulator pass reads it, logged when it
+    /// changed; with `-side-switch`, the switch pressed once both stand there.
+    private func probeSide(shown: SideTab?, opened: [SideTab], regular: Bool) {
+        guard PreviewProbe.on else { return }
+        let line = "side \(sessionId) shown=\(shown.map { "\($0)" } ?? "none") opened=\(opened.map { "\($0)" }.joined(separator: ",")) regular=\(regular)"
+        if line != probedSide {
+            probedSide = line
+            PreviewProbe.say(line)
+        }
+        guard PreviewProbe.sideSwitch, opened.count > 1, !sideSwitched, let shown else { return }
+        sideSwitched = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+            self?.sideSwitch.choose(shown == .plan ? 1 : 0)
+        }
+    }
+    #endif
+
+    private func makePlanSide() -> PlanSideController {
+        let controller = PlanSideController(hub: hub, instanceId: sessionId)
+        controller.onClose = { [weak self] in
+            guard let self else { return }
+            planAsked = false
+            syncSide()
+            syncPlan()
+        }
+        planSide = controller
+        return controller
     }
 
     /// The preview stands as the phone's drawer (over the transcript, above
@@ -496,10 +656,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         // A docked canvas stands over the panel's page: it follows it as it moves.
         composerBinding.panelMoved()
         // The group's composer stands over this share of the pane: all of it,
-        // unless the preview stands beside the transcript.
+        // unless the plan or the preview stands beside the transcript.
         var share: CGFloat = 1
-        if !drawer, let preview, preview.parent === self, view.bounds.width > 0 {
-            share = min(1, max(0, (preview.view.frame.minX - Space.space2) / view.bounds.width))
+        if let beside, beside.parent === self, view.bounds.width > 0 {
+            share = min(1, max(0, (beside.view.frame.minX - Space.space2) / view.bounds.width))
         }
         if abs(share - transcriptShare) > 0.001 {
             transcriptShare = share
@@ -635,6 +795,13 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     private func makePreview() -> PreviewController {
         let controller = PreviewController(hub: hub, instanceId: sessionId)
         controller.standsInFront(inFront)
+        // Open in new tab: the artifact in a tab of its own, beside this one.
+        controller.onOpenTab = { [weak self] id in self?.onOpenSession(ArtifactTabs.tabId(id)) }
+        // Undock, or Done while docked: this conversation's composer takes the canvas, out of where the panel draws it.
+        controller.onGiveBack = { [weak self] id, name, folded in
+            guard let self else { return }
+            composerBinding.takeBack(canvas: id, name: name, folded: folded, from: canvasPanel(showing: id)?.shown)
+        }
         preview = controller
         return controller
     }
@@ -653,16 +820,16 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// phone's drawer (PreviewSheet): over the transcript, its floor the top
     /// of the composer, so the conversation's composer stays there to write
     /// and send in; 60% of the room above the composer, or all of it.
-    private func embed(_ controller: PreviewController, drawer: Bool) {
-        addChild(controller)
-        controller.view.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(controller.view)
-        controller.view.layer.cornerRadius = Radius.radiusLg
-        controller.view.layer.cornerCurve = .continuous
-        controller.view.boxShadow = Shadow.shadowDrawer
+    private func embed(_ card: SideCard, drawer: Bool) {
+        addChild(card)
+        card.view.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(card.view)
+        card.view.layer.cornerRadius = Radius.radiusLg
+        card.view.layer.cornerCurve = .continuous
+        card.view.boxShadow = Shadow.shadowDrawer
         self.drawer = drawer
-        controller.standsAsDrawer(drawer)
-        if drawer {
+        (card as? PreviewController)?.standsAsDrawer(drawer)
+        if drawer, let controller = card as? PreviewController {
             drawerFull = false
             let height = controller.view.heightAnchor.constraint(equalToConstant: drawerRoom * 0.6)
             let floor = controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -composerInset)
@@ -694,39 +861,44 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         view.addSubview(divider)
         let split = Split(
             transcriptWidth: transcriptHost.view.widthAnchor.constraint(equalToConstant: 0),
-            previewLeading: controller.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            previewTrailing: controller.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            previewTop: controller.view.topAnchor.constraint(equalTo: view.topAnchor),
-            previewBottom: controller.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            previewLeading: card.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            previewTrailing: card.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            previewTop: card.view.topAnchor.constraint(equalTo: view.topAnchor),
+            previewBottom: card.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
             dividerCentre: divider.centerXAnchor.constraint(equalTo: view.leadingAnchor),
             dividerWidth: divider.widthAnchor.constraint(equalToConstant: Size.cSideDividerHit)
         )
         self.split = split
+        beside = card
         NSLayoutConstraint.activate(split.all + [
-            divider.topAnchor.constraint(equalTo: controller.view.topAnchor),
-            divider.bottomAnchor.constraint(equalTo: controller.view.bottomAnchor),
+            divider.topAnchor.constraint(equalTo: card.view.topAnchor),
+            divider.bottomAnchor.constraint(equalTo: card.view.bottomAnchor),
         ])
         divider.onDrag = { [weak self] pan in self?.dragSplit(pan) }
         divider.onStep = { [weak self] step in self?.stepSplit(step) }
-        controller.onExpand = { [weak self] in self?.toggleExpanded() }
-        controller.onEscapeLeft = { [weak self] in self?.collapse() }
+        card.onExpand = { [weak self] in self?.toggleExpanded() }
+        card.onEscapeLeft = { [weak self] in self?.collapse() }
         applySplit(sliding: false)
-        controller.didMove(toParent: self)
+        card.didMove(toParent: self)
     }
 
-    private func unembed(_ controller: PreviewController) {
-        controller.willMove(toParent: nil)
-        controller.view.removeFromSuperview()
-        controller.removeFromParent()
+    private func unembed(_ card: SideCard) {
+        card.willMove(toParent: nil)
+        card.view.removeFromSuperview()
+        card.removeFromParent()
+        if beside === card { beside = nil }
+        card.showSwitcher(nil)
         // The drawer's handles go with it: an embed beside the transcript has none.
-        for handle in [controller.dragArea!, controller.grabArea] as [UIView] {
-            handle.gestureRecognizers?.filter { $0 is UIPanGestureRecognizer }.forEach(handle.removeGestureRecognizer)
+        if let controller = card as? PreviewController {
+            for handle in [controller.dragArea!, controller.grabArea] as [UIView] {
+                handle.gestureRecognizers?.filter { $0 is UIPanGestureRecognizer }.forEach(handle.removeGestureRecognizer)
+            }
+            controller.grabArea.removeTarget(self, action: #selector(cycleDrawer), for: .primaryActionTriggered)
         }
-        controller.grabArea.removeTarget(self, action: #selector(cycleDrawer), for: .primaryActionTriggered)
         drawerSettle?.stopAnimation(true)
         drawerSettle = nil
         drawerLeaving = false
-        controller.view.transform = .identity
+        card.view.transform = .identity
         drawerHeight = nil
         drawerFloor = nil
         if let split {
@@ -736,9 +908,9 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             NSLayoutConstraint.deactivate(split.all)
             self.split = nil
             divider.removeFromSuperview()
-            controller.onExpand = {}
-            controller.onEscapeLeft = {}
-            controller.standsExpanded(false)
+            card.onExpand = {}
+            card.onEscapeLeft = {}
+            card.standsExpanded(false)
             putTranscript(away: false)
             transcriptHost.view.clipsToBounds = false
             transcriptTrailing.isActive = true
@@ -763,8 +935,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         }
     }
 
-    /// The preview beside the transcript: nil in the phone's drawer or with no preview.
+    /// The card beside the transcript: nil in the phone's drawer or with nothing beside.
     private var split: Split?
+    /// What stands in the split: the plan or the preview.
+    private weak var beside: SideCard?
     private let divider = SplitDivider()
     /// Expand or Back sliding on the panel's clock.
     private var slide: UIViewPropertyAnimator?
@@ -875,14 +1049,14 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// web's `.sliding`) when the reader watches it change by Expand, Back or
     /// Esc; at once under a drag, when the split is made, and with Reduce Motion.
     private func applySplit(sliding: Bool) {
-        guard let preview, split != nil else { return }
+        guard let card = beside, split != nil else { return }
         let whole = expanded
         slide?.stopAnimation(true)
         slide = nil
         divider.expanded = whole
         putTranscript(away: whole)
         // The card's shadow would fall outside the pane once it meets the edges.
-        preview.view.boxShadow = whole ? [] : Shadow.shadowDrawer
+        card.view.boxShadow = whole ? [] : Shadow.shadowDrawer
         placeSplit()
         if whole {
             takeKeys()
@@ -890,8 +1064,8 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             resignFirstResponder()
         }
         let lay = { [self] in
-            preview.standsExpanded(whole)
-            preview.view.layer.cornerRadius = whole ? 0 : Radius.radiusLg
+            card.standsExpanded(whole)
+            card.view.layer.cornerRadius = whole ? 0 : Radius.radiusLg
             view.layoutIfNeeded()
         }
         guard sliding, view.window != nil, !UIAccessibility.isReduceMotionEnabled else {
@@ -989,16 +1163,26 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     // Expanded, Esc is the pane's (SideSplit.svelte `escapeExpanded`): it
     // takes the keyboard unless something in the preview has it, whose own
     // Esc reaches it up the chain, or from the page through `onEscapeLeft`.
-    override var canBecomeFirstResponder: Bool { expanded }
+    // A question card standing, it takes the keyboard too, for the card's keys.
+    override var canBecomeFirstResponder: Bool { expanded || composerBinding.standsQuestion }
 
-    private func takeKeys() {
-        guard view.window != nil, preview?.holdsKeys != true, !isFirstResponder else { return }
+    /// A question card standing and nothing holding the keyboard: the pane
+    /// takes it, so the card's digits and Return reach it (UIKit gathers key
+    /// commands from the first responder up, WWDC20 10109).
+    private func claimCardKeys() {
+        guard composerBinding.standsQuestion, view.window != nil, !isFirstResponder,
+              UIResponder.current == nil else { return }
         becomeFirstResponder()
     }
 
-    /// Esc, expanded: an open pin's card first, then Comment mode, then the conversation comes back.
+    private func takeKeys() {
+        guard view.window != nil, beside?.holdsKeys != true, !isFirstResponder else { return }
+        becomeFirstResponder()
+    }
+
+    /// Esc, expanded: the preview's open pin card first, then its Comment mode, then the conversation comes back.
     @objc private func escapeKey() {
-        if preview?.escape() == true { return }
+        if beside?.escape() == true { return }
         collapse()
     }
 
@@ -1009,9 +1193,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// pane's bounds, the preview's frame, the transcript's width, the kept
     /// and shown shares, the state, and the composer's share.
     private func probeSplit() {
-        guard PreviewProbe.on, let preview, split != nil, view.window != nil else { return }
+        guard PreviewProbe.on, let card = beside, split != nil, view.window != nil else { return }
         let width = view.bounds.width
-        let line = "split pane=\(Self.probeRect(view.bounds)) preview=\(Self.probeRect(preview.view.frame)) transcript=\(Int(transcriptHost.view.frame.width.rounded())) divider=\(Int(divider.center.x.rounded())),\(Int(divider.bounds.width.rounded())) kept=\(String(format: "%.3f", sideShare)) shown=\(String(format: "%.3f", shownShare(width))) expanded=\(expanded) away=\(!transcriptHost.view.isUserInteractionEnabled) composerShare=\(String(format: "%.3f", transcriptShare)) keys=\(isFirstResponder) \(preview.probeExpand) dividerAt=\(PreviewProbe.centre(divider))"
+        let side = (card as? PreviewController)?.probeExpand ?? "card=plan"
+        let line = "split pane=\(Self.probeRect(view.bounds)) preview=\(Self.probeRect(card.view.frame)) transcript=\(Int(transcriptHost.view.frame.width.rounded())) divider=\(Int(divider.center.x.rounded())),\(Int(divider.bounds.width.rounded())) kept=\(String(format: "%.3f", sideShare)) shown=\(String(format: "%.3f", shownShare(width))) expanded=\(expanded) away=\(!transcriptHost.view.isUserInteractionEnabled) composerShare=\(String(format: "%.3f", transcriptShare)) keys=\(isFirstResponder) \(side) dividerAt=\(PreviewProbe.centre(divider))"
         guard line != probedSplit else { return }
         probedSplit = line
         PreviewProbe.say(line)
@@ -1021,10 +1206,10 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// its clock (the pane's layer at `speed` 0, `timeOffset` stepped from the
     /// slide's begin), then let go.
     private func scrubSlide() {
-        guard PreviewProbe.on, ProcessInfo.processInfo.arguments.contains("-split-scrub"), let preview else { return }
+        guard PreviewProbe.on, ProcessInfo.processInfo.arguments.contains("-split-scrub"), let beside else { return }
         CATransaction.flush()
         let pane = view.layer
-        let card = preview.view.layer
+        let card = beside.view.layer
         let begun = card.animationKeys()?.compactMap { card.animation(forKey: $0)?.beginTime }.first { $0 > 0 }
         let begin = begun ?? pane.convertTime(CACurrentMediaTime(), from: nil)
         pane.speed = 0
@@ -1056,15 +1241,11 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         guard let controller = preview else { return }
         preview = nil
         if controller.parent === self { unembed(controller) }
-        // Closing the preview ends the expansion: what opens next opens beside
-        // the conversation. Only a close counts: before the hub's first word
-        // after a launch there was no preview to close.
-        if expandAsked { keepExpanded(false) }
     }
 
     override func traitCollectionDidChange(_ previous: UITraitCollection?) {
         super.traitCollectionDidChange(previous)
-        if previous?.horizontalSizeClass != traitCollection.horizontalSizeClass { syncPreview() }
+        if previous?.horizontalSizeClass != traitCollection.horizontalSizeClass { syncSide() }
     }
 
     /// The asks this conversation made: its own in arrival order, then those
@@ -1110,36 +1291,29 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
             #endif
             ordered.append(card)
         }
+        // The quiet one: "make this a project", standing beside the parked asks (SessionPane.svelte `offer`).
+        let offer = hub.offers.offers[sessionId]
+        let joined = hub.offers.joins[sessionId]
+        if offer != nil || joined != nil {
+            let card = offerCard ?? {
+                let made = ProjectOfferCard(hub: hub, instanceId: sessionId, arriving: shownOnce && composerBinding.composer != nil)
+                made.onHeight = { [weak self] in self?.composerBinding.composer?.onHeight() }
+                made.onSetupThread = { [weak self] id in self?.onOpenSession(ThreadTabs.tabId(id)) }
+                made.onOpenProject = { [weak self] id in self?.onOpenProject(id) }
+                offerCard = made
+                return made
+            }()
+            card.show(offer: offer, joined: joined)
+            ordered.append(card)
+        } else {
+            offerCard = nil
+        }
         composerBinding.prompts = ordered
-        #if DEBUG
-        approveForProbe(standing.first)
-        openCommandForProbe(standing.first)
-        #endif
+        claimCardKeys()
     }
 
     #if DEBUG
-    /// `-approve-asks`: the permission standing on the composer is approved
-    /// as its Approve approves it (`answer`), a moment after it stands, for a
-    /// simulator pass (probe-kit spec `ios-chat-opens`).
-    private static let approvesAsks = ProcessInfo.processInfo.arguments.contains("-approve-asks")
     private static let probeLog = Logger(subsystem: "dev.cawco.app", category: "Probe")
-    /// The asks already approved here.
-    private var approved: Set<String> = []
-
-    /// `-open-ask-command`: the standing card's command opened whole, as its
-    /// chevron opens it, a second after it stands, for a simulator pass where
-    /// nothing can tap (probe-kit spec `ios-long-ask` on iOS 27).
-    private static let opensAskCommand = ProcessInfo.processInfo.arguments.contains("-open-ask-command")
-    private var commandOpened: Set<String> = []
-
-    private func openCommandForProbe(_ ask: ParkedAsk?) {
-        guard Self.opensAskCommand, let ask, !commandOpened.contains(ask.requestId) else { return }
-        commandOpened.insert(ask.requestId)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1) { [weak self] in
-            guard let self, let card = cards[ask.requestId] else { return }
-            Self.probeLog.notice("probe opened \(ask.requestId, privacy: .public) \(card.probeOpenCommand() ? "whole" : "no chevron", privacy: .public)")
-        }
-    }
 
     /// `-probe-send <words>`: once this pane can send, its Send sends `words`
     /// with one picture of about 2 MB (noise, which does not compress), once
@@ -1162,16 +1336,6 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         }
         Self.probeLog.notice("probe send: \(words, privacy: .public) with a picture of \(png.count) bytes")
         send(words, [.image(name: "probe.png", mediaType: "image/png", data: png)])
-    }
-
-    private func approveForProbe(_ ask: ParkedAsk?) {
-        guard Self.approvesAsks, let ask, !ask.isQuestion, !approved.contains(ask.requestId) else { return }
-        approved.insert(ask.requestId)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { [weak self] in
-            guard let self, madeAsks.contains(where: { $0.requestId == ask.requestId }) else { return }
-            Self.probeLog.notice("probe approve \(ask.requestId, privacy: .public)")
-            answer(ask, .allow, [:])
-        }
     }
     #endif
 
@@ -1225,28 +1389,18 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     }
 
     func stopTurn() {
-        guard canStop, let row = hub.fleet.byId[sessionId] else { return }
+        guard canStop, let row = hub.fleet.byId[sessionId]?.session else { return }
         sent = hub.sessions.stop(row)
         requestRefresh()
     }
 
     private func send(_ words: String, _ attachments: [ComposerAttachment]) {
-        guard canSend, let row = hub.fleet.byId[sessionId] else { return }
+        guard canSend, let row = hub.fleet.byId[sessionId]?.session else { return }
         editNote = nil
-        var images: [(mediaType: String, data: Data)] = []
-        var texts: [(name: String, content: String)] = []
-        var files: [SentFile] = []
-        for attachment in attachments {
-            switch attachment {
-            case let .image(_, mediaType, data): images.append((mediaType, data))
-            case let .text(name, content): texts.append((name, content))
-            case let .file(_, name, mediaType, size, .ready(ref)): files.append(SentFile(name: name, mediaType: mediaType, size: size, ref: ref))
-            // The composer sends nothing while a pick is being read or a file is not on the hub.
-            case .file, .pending: return
-            }
-        }
+        // The composer sends nothing while a pick is being read or a file is not on the hub.
+        guard let carried = ComposerAttacher.carried(attachments) else { return }
         // Kept with all it carries from here (`SendOutbox`): the field is free at once.
-        sent = hub.sessions.steer(row, text: words, images: images, texts: texts, files: files)
+        sent = hub.sessions.steer(row, text: words, images: carried.images, texts: carried.texts, files: carried.files)
         composerBinding.sent()
         requestRefresh()
     }
@@ -1255,7 +1409,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     /// The harness the session runs.
     private var harness: String? {
-        hub.fleet.byId[sessionId]?.harness ?? transcript.facts?.harness ?? transcript.location?.harness
+        hub.fleet.byId[sessionId]?.harness?.rawValue ?? transcript.facts?.harness ?? transcript.location?.harness.rawValue
     }
 
     /// client.svelte.ts `canWithdraw`: a send still waiting to be read, on
@@ -1283,7 +1437,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
     /// Read first, the edit stays the reader's, as a draft, and the
     /// composer's error line says why.
     private func replaceQueued(_ id: String, with text: String) {
-        guard let row = hub.fleet.byId[sessionId], canWithdraw(id) else {
+        guard let row = hub.fleet.byId[sessionId]?.session, canWithdraw(id) else {
             let note = SentMessages.isQueued(id, in: transcript)
                 ? "Couldn't edit your queued message: the session can't be reached. Your edit is back in the composer."
                 : "Claude Code had already read your queued message, so it went as it was. Your edit is back in the composer."
@@ -1342,263 +1496,13 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
         return URL(string: src, relativeTo: base)?.absoluteURL
     }
 
-    // MARK: Attach
-
-    /// The sources a file input offers on iOS: the photo library and files.
-    private func attachMenu() -> UIMenu {
-        UIMenu(children: [
-            UIAction(title: "Photo Library", image: Glyph.window.image) { [weak self] _ in self?.pickPhotos() },
-            UIAction(title: "Choose File", image: Glyph.document.image) { [weak self] _ in self?.pickFiles() },
-        ])
-    }
-
-    private func pickPhotos() {
-        var config = PHPickerConfiguration()
-        config.filter = .any(of: [.images, .videos])
-        // A video as it is stored, not transcoded first.
-        config.preferredAssetRepresentationMode = .current
-        config.selectionLimit = 0
-        let picker = PHPickerViewController(configuration: config)
-        picker.delegate = self
-        present(picker, animated: true)
-    }
-
-    /// Any file at all: a picture, a text, or anything else, which uploads.
-    private func pickFiles() {
-        let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.item], asCopy: true)
-        picker.allowsMultipleSelection = true
-        picker.delegate = self
-        present(picker, animated: true)
-    }
-
-    func picker(_ picker: PHPickerViewController, didFinishPicking results: [PHPickerResult]) {
-        picker.dismiss(animated: true)
-        for result in results {
-            let provider = result.itemProvider
-            if provider.hasItemConformingToTypeIdentifier(UTType.movie.identifier) {
-                loadFile(provider, type: .movie)
-            } else {
-                loadImage(provider)
-            }
-        }
-    }
-
-    func documentPicker(_: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-        for url in urls {
-            let type = (try? url.resourceValues(forKeys: [.contentTypeKey]).contentType) ?? UTType(filenameExtension: url.pathExtension)
-            ingest(url, name: url.lastPathComponent, type: type)
-        }
-    }
-
-    /// Whatever is pasted into the composer that is not words: a picture as
-    /// a picture, anything else as Choose File takes it, by its own type
-    /// rather than the link Files copies beside it; and a bare link to a file,
-    /// as the file it names.
-    private func attachPasted(_ items: [NSItemProvider]) {
-        for provider in items {
-            let types = provider.registeredTypeIdentifiers.compactMap(UTType.init)
-            if provider.hasItemConformingToTypeIdentifier(UTType.image.identifier) {
-                loadImage(provider)
-            } else if let type = types.first(where: { !$0.conforms(to: .url) }) {
-                loadFile(provider, type: type)
-            } else if types.contains(where: { $0.conforms(to: .fileURL) }) {
-                loadLinkedFile(provider)
-            }
-        }
-    }
-
-    /// A pasted link to a file: the file it names, copied while it may be read.
-    private func loadLinkedFile(_ provider: NSItemProvider) {
-        let slot = reserve(provider.suggestedName ?? "File")
-        _ = provider.loadObject(ofClass: URL.self) { [weak self] url, error in
-            let scoped = url?.startAccessingSecurityScopedResource() ?? false
-            let kept = url.flatMap { Self.keep($0, name: $0.lastPathComponent) }
-            if scoped { url?.stopAccessingSecurityScopedResource() }
-            let reason = error?.localizedDescription ?? "The file couldn't be read."
-            Task { @MainActor in
-                guard let self else { return }
-                guard let kept else {
-                    self.composerBinding.resolve(slot, with: nil)
-                    Toast.error("Couldn't attach that file. \(reason)", in: self.view)
-                    return
-                }
-                let type = (try? kept.resourceValues(forKeys: [.contentTypeKey]).contentType) ?? UTType(filenameExtension: kept.pathExtension)
-                self.ingest(kept, name: kept.lastPathComponent, type: type, slot: slot)
-            }
-        }
-    }
-
-    /// A pick or paste is read off its source in the background. Its place
-    /// in the draft is taken now, under its own id, and what it becomes
-    /// fills that place and no other: a read that lands after the place is
-    /// gone (removed, or sent) is dropped rather than riding the next message.
-    private func reserve(_ name: String) -> String {
-        let id = UUID().uuidString
-        composerBinding.attach(.pending(id: id, name: name))
-        return id
-    }
-
-    private func loadImage(_ provider: NSItemProvider) {
-        let name = provider.suggestedName ?? "Image"
-        let slot = reserve(name)
-        provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { [weak self] data, error in
-            let image = data.flatMap(Self.sendable)
-            Task { @MainActor in
-                guard let self else { return }
-                guard let image else {
-                    self.composerBinding.resolve(slot, with: nil)
-                    Toast.error("Couldn't attach \(name). \(error?.localizedDescription ?? "The picture couldn't be read.")", in: self.view)
-                    return
-                }
-                self.composerBinding.resolve(slot, with: .image(name: name, mediaType: image.type, data: image.data))
-            }
-        }
-    }
-
-    /// A provider's file, copied out of the callback (its copy is gone once
-    /// the callback returns) and taken as a picked file, in its own place.
-    private func loadFile(_ provider: NSItemProvider, type: UTType) {
-        let suggested = provider.suggestedName
-        let slot = reserve(suggested ?? "File")
-        provider.loadFileRepresentation(forTypeIdentifier: type.identifier) { [weak self] url, error in
-            let kept = url.flatMap { Self.keep($0, name: Self.fileName(suggested, url: $0, type: type)) }
-            // The copy's own type is the narrower one (a video picked as any movie is a QuickTime movie).
-            let actual = kept.flatMap { UTType(filenameExtension: $0.pathExtension) }.flatMap { $0.conforms(to: type) ? $0 : nil } ?? type
-            let reason = error?.localizedDescription ?? "The file couldn't be read."
-            Task { @MainActor in
-                guard let self else { return }
-                guard let kept else {
-                    self.composerBinding.resolve(slot, with: nil)
-                    Toast.error("Couldn't attach that file. \(reason)", in: self.view)
-                    return
-                }
-                self.ingest(kept, name: kept.lastPathComponent, type: actual, slot: slot)
-            }
-        }
-    }
-
-    /// The largest text that rides as text, folded into the turn.
-    private static let textLimit = 1024 * 1024
-
-    /// What a file becomes (Composer.svelte `addFiles`): a picture, through
-    /// `sendable`; a text, when it is one, reads as UTF-8 and is at most
-    /// 1 MB; anything else a file, uploading to the hub at once.
-    /// `slot`: the place a pick reserved, which this fills; without one the
-    /// attachment is added at the end.
-    private func ingest(_ url: URL, name: String, type: UTType?, slot: String? = nil) {
-        let place = { [composerBinding] (attachment: ComposerAttachment) -> Bool in
-            guard let slot else {
-                composerBinding.attach(attachment)
-                return true
-            }
-            return composerBinding.resolve(slot, with: attachment)
-        }
-        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        if type?.conforms(to: .image) == true, let data = try? Data(contentsOf: url), let image = Self.sendable(data) {
-            place(.image(name: name, mediaType: image.type, data: image.data))
-            return
-        }
-        if type?.conforms(to: .text) == true, size <= Self.textLimit,
-           let data = try? Data(contentsOf: url), let text = String(data: data, encoding: .utf8) {
-            place(.text(name: name, content: text))
-            return
-        }
-        let id = slot ?? UUID().uuidString
-        let mediaType = type?.preferredMIMEType ?? "application/octet-stream"
-        guard place(.file(id: id, name: name, mediaType: mediaType, size: size, state: .uploading(0))) else { return }
-        uploads[id] = Upload(url: url, name: name, mediaType: mediaType)
-        upload(id)
-    }
-
-    /// A file on its way to the hub, kept until the hub has it so a failed
-    /// upload can be tried again. `attempt` lets a late word from an earlier
-    /// try fall on the floor.
-    private struct Upload {
-        let url: URL
-        let name: String
-        let mediaType: String
-        var attempt = 0
-    }
-
-    private var uploads: [String: Upload] = [:]
-
-    /// Uploads (again) the file `id`; its chip follows along.
-    private func upload(_ id: String) {
-        guard var job = uploads[id] else { return }
-        job.attempt += 1
-        uploads[id] = job
-        let attempt = job.attempt
-        composerBinding.updateFile(id, .uploading(0))
-        // Heard on URLSession's queue; the chip moves on the main actor.
-        let report: @Sendable (Double) -> Void = { [weak self] fraction in
-            Task { @MainActor in
-                guard let self, self.uploads[id]?.attempt == attempt else { return }
-                self.composerBinding.updateFile(id, .uploading(fraction))
-            }
-        }
-        Task { [weak self, hub] in
-            do {
-                let file = try await hub.uploadFile(at: job.url, name: job.name, mediaType: job.mediaType, progress: report)
-                guard let self, uploads[id]?.attempt == attempt else { return }
-                uploads[id] = nil
-                composerBinding.updateFile(id, .ready(file.ref))
-                if job.url.path.hasPrefix(Self.keptFiles.path) { try? FileManager.default.removeItem(at: job.url.deletingLastPathComponent()) }
-            } catch {
-                guard let self, uploads[id]?.attempt == attempt else { return }
-                // A later progress word from this try must not bring the ring back.
-                uploads[id]?.attempt += 1
-                composerBinding.updateFile(id, .failed(error.localizedDescription))
-            }
-        }
-    }
-
-    /// Where pasted and picked files wait to upload: a folder of their own each.
-    nonisolated private static var keptFiles: URL {
-        FileManager.default.temporaryDirectory.appending(path: "cawco-uploads", directoryHint: .isDirectory)
-    }
-
-    nonisolated private static func keep(_ url: URL, name: String) -> URL? {
-        let folder = keptFiles.appending(path: UUID().uuidString, directoryHint: .isDirectory)
-        let kept = folder.appending(path: name)
-        do {
-            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            try FileManager.default.copyItem(at: url, to: kept)
-            return kept
-        } catch {
-            return nil
-        }
-    }
-
-    /// The name a pasted or picked file goes by: the name its source
-    /// suggested, with its type's extension, else the copy's own.
-    nonisolated private static func fileName(_ suggested: String?, url: URL, type: UTType) -> String {
-        // A pasted item names nothing, and its copy's name is a hash: it goes by its kind ("PDF document.pdf").
-        let suggested = suggested.flatMap { $0.isEmpty ? nil : $0 } ?? type.localizedDescription ?? "File"
-        guard let ext = type.preferredFilenameExtension ?? (url.pathExtension.isEmpty ? nil : url.pathExtension),
-              (suggested as NSString).pathExtension.isEmpty else { return suggested }
-        return "\(suggested).\(ext)"
-    }
-
-    /// An image as a turn carries it: PNG stays PNG, anything else as JPEG.
-    nonisolated private static func sendable(_ data: Data) -> (type: String, data: Data)? {
-        if data.starts(with: [0x89, 0x50, 0x4E, 0x47]) { return ("image/png", data) }
-        guard let image = UIImage(data: data), let jpeg = image.jpegData(compressionQuality: 0.9) else { return nil }
-        return ("image/jpeg", jpeg)
-    }
-
     // MARK: Keys
 
     override var keyCommands: [UIKeyCommand]? {
         var keys = [UIKeyCommand(title: "Stop", action: #selector(stopKey), input: ".", modifierFlags: .command),
                     UIKeyCommand(title: "Steer", action: #selector(steerKey), input: "l", modifierFlags: .command)]
-        // The first question card owns the digits and Return while the field is not being written in.
-        // Never Escape: a question is put down only by its own Dismiss button.
-        if !composerBinding.isWriting, cards.values.contains(where: \.ask.isQuestion) {
-            for digit in 1 ... 9 {
-                keys.append(UIKeyCommand(input: "\(digit)", modifierFlags: [], action: #selector(cardKey(_:))))
-            }
-            keys.append(UIKeyCommand(input: "\r", modifierFlags: [], action: #selector(cardKey(_:))))
-        }
+        // The question card's digits and Return, unless a field or the preview's page holds the keyboard: what is typed in keeps its keys.
+        if !UIResponder.isTyping, !PreviewKeys.pageHolds { keys += composerBinding.cardKeys(#selector(cardKey(_:))) }
         // Expanded, Esc gives the conversation back, after the preview's own
         // card and Comment mode; the composer, and its cards, are put away.
         if expanded {
@@ -1612,10 +1516,7 @@ final class SessionViewController: ObservedViewController, PHPickerViewControlle
 
     @objc private func stopKey() { stopTurn() }
     @objc private func steerKey() { focusComposer() }
-    @objc private func cardKey(_ command: UIKeyCommand) {
-        let owner = composerBinding.prompts.compactMap { $0 as? PromptCardView }.first { $0.ask.isQuestion }
-        if let input = command.input { owner?.key(input) }
-    }
+    @objc private func cardKey(_ command: UIKeyCommand) { composerBinding.cardKey(command) }
 
     static func activity(_ id: String) -> NSUserActivity {
         let activity = NSUserActivity(activityType: "dev.cawco.session")

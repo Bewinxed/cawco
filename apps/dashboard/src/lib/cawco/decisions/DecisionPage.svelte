@@ -508,7 +508,7 @@
       font-size: max(16px, var(--text-body));
     }
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .dock {
       inline-size: 100%;
     }

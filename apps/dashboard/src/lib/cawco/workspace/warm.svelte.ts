@@ -38,6 +38,22 @@ const cooling = new Map<string, ReturnType<typeof setTimeout>>();
 /** Each group's reach waiting for its frame to paint: the pane it warms, and how to call it off. */
 const reaching = new Map<string, { cancel: () => void; paneId: string }>();
 
+/**
+ * Runs `then` once the frame in hand has painted, never in its task: a
+ * frame's callbacks run before it paints, a task queued from them runs
+ * after. Answers how to call it off.
+ */
+export function afterPaint(then: () => void): () => void {
+  let task: ReturnType<typeof setTimeout> | undefined;
+  const frame = requestAnimationFrame(() => {
+    task = setTimeout(then);
+  });
+  return () => {
+    cancelAnimationFrame(frame);
+    clearTimeout(task);
+  };
+}
+
 /** Calls off `leafId`'s reach still waiting for its frame. */
 function callOff(leafId: string): void {
   reaching.get(leafId)?.cancel();
@@ -52,8 +68,7 @@ export const warm = {
 
   /**
    * The reader reached for `paneId`'s tab in `leafId`: it warms, in place of
-   * any other there, once the frame in hand has painted. A frame's callbacks
-   * run before it paints; a task queued from them runs after.
+   * any other there, once the frame in hand has painted ({@link afterPaint}).
    */
   reach(leafId: string, paneId: string): void {
     clearTimeout(cooling.get(leafId));
@@ -65,19 +80,12 @@ export const warm = {
     if (warmPanes.get(leafId) === paneId) {
       return;
     }
-    let task: ReturnType<typeof setTimeout> | undefined;
-    const frame = requestAnimationFrame(() => {
-      task = setTimeout(() => {
-        reaching.delete(leafId);
-        warmPanes.set(leafId, paneId);
-      });
-    });
     reaching.set(leafId, {
       paneId,
-      cancel: () => {
-        cancelAnimationFrame(frame);
-        clearTimeout(task);
-      },
+      cancel: afterPaint(() => {
+        reaching.delete(leafId);
+        warmPanes.set(leafId, paneId);
+      }),
     });
   },
 

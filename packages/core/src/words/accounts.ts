@@ -167,6 +167,12 @@ export const accountsWords = {
       `${machine} signed in as ${who ?? "another account"}, so it signed out again.`,
     notACode:
       "The machine answered a sign-in link, not a code. Update CawCo on it, then start again.",
+    /** The text answer to a question the provider's sign-in asks. */
+    answer: "Continue",
+    answering: "Continuing…",
+    /** Under a sign-in link: what to paste back once the page is done. */
+    linked:
+      "Sign in at the link, then paste the code or the address the page ends on.",
   },
 
   // ── A key account's key (KeyPanel) ────────────────────────────────────

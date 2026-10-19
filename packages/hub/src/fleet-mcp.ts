@@ -1,7 +1,7 @@
 import {
   CAWCO_OAUTH_URL,
-  type FleetConfig,
   type FleetMcpServer,
+  type MachineFleetConfig,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import {
@@ -367,10 +367,10 @@ export class FleetMcp {
   }
 
   /**
-   * All outbound syncs pass here, including targeted memory and hook pushes:
-   * the fleet's servers and a project's placed copies alike.
+   * Every machine's sync passes here: the fleet's servers and a project's
+   * placed copies alike.
    */
-  syncConfig(config: FleetConfig, hub: string): FleetConfig {
+  syncConfig(config: MachineFleetConfig, hub: string): MachineFleetConfig {
     const outbound = (server: FleetMcpServer): FleetMcpServer => {
       if (server.auth?.state === "failed") {
         return { ...server, enabled: false };
@@ -393,9 +393,7 @@ export class FleetMcp {
     return {
       ...config,
       mcp: config.mcp.map(outbound),
-      ...(config.placedMcp
-        ? { placedMcp: config.placedMcp.map(outbound) }
-        : {}),
+      placedMcp: config.placedMcp.map(outbound),
     };
   }
 

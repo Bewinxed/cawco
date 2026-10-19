@@ -11,6 +11,7 @@
  * agent, model and location. There are no parts: a message is whole.
  */
 import type {
+  CompactionFailure,
   NeutralAssistantBlock,
   NeutralContentBlock,
   NeutralSystemMessage,
@@ -378,13 +379,40 @@ const programOf = (block: ToolBlock): ProgramState => {
   };
 };
 
+/**
+ * A compaction's failure as OpenCode typed it (`{type, message, status?}`,
+ * `Session.StructuredError`): its type is the kind; anything else it threw
+ * is `unknown`, in its own words.
+ */
+export const compactionFailure = (error: unknown): CompactionFailure => {
+  const structured = (error ?? {}) as {
+    type?: unknown;
+    message?: unknown;
+    status?: unknown;
+  };
+  return typeof structured.message === "string"
+    ? {
+        kind: typeof structured.type === "string" ? structured.type : "unknown",
+        message: structured.message,
+        ...(typeof structured.status === "number"
+          ? { status: structured.status }
+          : {}),
+      }
+    : { kind: "unknown", message: errorText(error) };
+};
+
+/** How a compaction ended: whole, or failed, in its words and typed. */
+type CompactionOutcome =
+  | { result: "success" }
+  | { result: "failed"; error: string; failure: CompactionFailure };
+
 /** A compaction as the boundary frame the transcript draws, under its message's id live and read back alike. */
 export const compactBoundary = (
   id: string,
   sessionId: string,
   reason: "auto" | "manual",
   timestamp: string | undefined,
-  outcome?: { result: "success" } | { result: "failed"; error: string }
+  outcome?: CompactionOutcome
 ): NeutralSystemMessage => ({
   type: "system",
   subtype: "compact_boundary",
@@ -397,12 +425,16 @@ export const compactBoundary = (
 /** How a stored compaction ended. */
 const compactionOutcome = (
   message: SessionMessageCompaction
-): { result: "success" } | { result: "failed"; error: string } | undefined => {
+): CompactionOutcome | undefined => {
   if (message.status === "completed") {
     return { result: "success" };
   }
   return message.status === "failed"
-    ? { result: "failed", error: errorText(message.error) }
+    ? {
+        result: "failed",
+        error: errorText(message.error),
+        failure: compactionFailure(message.error),
+      }
     : undefined;
 };
 

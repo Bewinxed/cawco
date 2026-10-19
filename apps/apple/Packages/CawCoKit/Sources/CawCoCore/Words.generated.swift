@@ -12,6 +12,11 @@ public enum Words {
         n < 10 && n >= 0 ? "0\(n)" : "\(n)"
     }
 
+    /// A wait in the unit a person reads it in: "45s" up to a minute, then "3 min", rounded up.
+    public static func timeLeft(_ seconds: Int) -> String {
+        seconds > 60 ? "\((seconds + 59) / 60) min" : "\(seconds)s"
+    }
+
     public enum Configure {
         // packages/core/src/words/configure.ts `configureWords`
         /// The place, as the sidebar and a page's title name it.
@@ -105,6 +110,7 @@ public enum Words {
             Section(slug: "phone", group: "Hub", label: "Phone", purpose: "Pushes to the CawCo app when something needs you", counted: false, badge: "fleet-faults", icon: "smartphone-bold-duotone", hue: "hue-green-500"),
             Section(slug: "devices", group: "Hub", label: "Devices", purpose: "Which browsers, apps and machines may run your fleet", counted: false, badge: "fleet-faults", icon: "lock-keyhole-minimalistic-bold-duotone", hue: "hue-orange-500"),
             Section(slug: "previews", group: "Hub", label: "Previews", purpose: "How a session's previews are reached, each on an origin of its own", counted: false, badge: "fleet-faults", icon: "square-top-down-bold-duotone", hue: "hue-cyan-400"),
+            Section(slug: "browsers", group: "Hub", label: "Browsers", purpose: "The stream relay a browser's take-over reaches you through, from any network", counted: false, badge: "fleet-faults", icon: "global-bold-duotone", hue: "hue-blue-500"),
             Section(slug: "updates", group: "Hub", label: "Updates", purpose: "The builds your machines run, and when they install them", counted: false, badge: "updates-waiting", icon: "download-bold-duotone", hue: "hue-blue-500"),
         ]
     }
@@ -318,6 +324,14 @@ public enum Words {
             }
 
             public static let notACode = "The machine answered a sign-in link, not a code. Update CawCo on it, then start again."
+
+            /// The text answer to a question the provider's sign-in asks.
+            public static let answer = "Continue"
+
+            public static let answering = "Continuing…"
+
+            /// Under a sign-in link: what to paste back once the page is done.
+            public static let linked = "Sign in at the link, then paste the code or the address the page ends on."
         }
 
         public enum Key {
@@ -693,6 +707,96 @@ public enum Words {
         public static let inherit = "Same as the fleet"
     }
 
+    public enum Tailnet {
+        // packages/core/src/words/tailnet.ts `tailnetWords`
+        public static let title = "HTTPS on your tailnet"
+
+        /// Where the row comes from: onboarding, on the hub's machine's Tailscale.
+        public static func meta(host: String) -> String {
+            "Onboarding · Tailscale on \(host)"
+        }
+
+        /// MagicDNS is off, and HTTPS Certificates need it (tailscale.com/kb/1153/enabling-https: "Enable MagicDNS if not already enabled").
+        public static let enableMagicDns = "Turn on MagicDNS, then HTTPS Certificates, on Tailscale's DNS page, and every device on your tailnet opens CawCo over HTTPS. Tailscale lists your machine names in the public certificate log."
+
+        /// The tailnet has no certificates ("Under HTTPS Certificates, select Enable HTTPS"; "your machine names … will be published on a public ledger").
+        public static let enableHttps = "Turn on HTTPS Certificates on Tailscale's DNS page, and every device on your tailnet opens CawCo over HTTPS. Tailscale lists your machine names in the public certificate log."
+
+        /// Tailscale gives its certificate only to root and its operator.
+        public static func `operator`(host: String, command: String) -> String {
+            "Tailscale on \(host) gives its certificate only to root and its operator. Run \(command) there once."
+        }
+
+        /// tailscaled runs with `--tun=userspace-networking`: no tailnet address to listen on.
+        public static func userspace(host: String) -> String {
+            "Tailscale on \(host) runs in userspace networking, so CawCo can't listen on its tailnet address. Run tailscaled as root there, without --tun=userspace-networking."
+        }
+
+        /// A listener the hub can't share holds a port on the tailnet address.
+        public static func port(host: String, port: Int, command: String) -> String {
+            "Port \(port) on \(host)'s tailnet address is held by a listener CawCo can't share. Run \(command) there once."
+        }
+
+        /// The row's line over its steps, while one stands.
+        public static let lead = "Every device on your tailnet opens CawCo over HTTPS once these are done. Each ticks by itself."
+
+        /// The admin console's two switches, MagicDNS first (tailscale.com/kb/1153/enabling-https: "Enable MagicDNS if not already enabled").
+        public static let stepMagicDns = "Turn on MagicDNS, then HTTPS Certificates"
+
+        /// "Under HTTPS Certificates, select Enable HTTPS."
+        public static let stepHttps = "Turn on HTTPS Certificates"
+
+        /// "your machine names and your tailnet DNS name will be published on a public ledger."
+        public static let adminNote = "On Tailscale's DNS page. Tailscale lists your machine names in the public certificate log."
+
+        /// `tailscale cert` answers only root, tailscaled's own user and its operator.
+        public static let stepOperator = "Let CawCo take Tailscale's certificate"
+
+        /// Where the command runs: sudo asks for the person's password there.
+        public static func runOnce(host: String) -> String {
+            "Run it once in a terminal on \(host)."
+        }
+
+        public static let stepUserspace = "Run tailscaled with its network interface"
+
+        public static func userspaceNote(host: String) -> String {
+            "Tailscale on \(host) runs in userspace networking, so CawCo has no tailnet address to listen on. Run tailscaled as root, without --tun=userspace-networking."
+        }
+
+        public static func stepPort(port: Int) -> String {
+            "Free port \(port) on the tailnet address"
+        }
+
+        public static func portNote(host: String) -> String {
+            "A listener CawCo can't share holds it. Run this once in a terminal on \(host)."
+        }
+
+        /// What a screen reader hears before a step that is taken (its tick says it to the eye).
+        public static let stepDone = "Done:"
+
+        /// A step's command box, for a screen reader.
+        public static let command = "Command"
+
+        /// HTTPS came on while the row stood: its tick.
+        public static func done(dashboard: String) -> String {
+            "HTTPS is on. Every device on your tailnet opens CawCo at \(dashboard)."
+        }
+
+        public static let openDnsPage = "Open Tailscale's DNS page"
+
+        /// The admin console's DNS page, where MagicDNS and HTTPS Certificates are switched on (tailscale.com/kb/1153/enabling-https).
+        public static let dnsPage = "https://console.tailscale.com/admin/dns"
+
+        public static let openDocs = "Open Tailscale's docs"
+
+        /// Tailscale's page on kernel and userspace networking.
+        public static let userspacePage = "https://tailscale.com/kb/1177/kernel-vs-userspace-routers"
+
+        public static let copyCommand = "Copy command"
+
+        public static let openDashboard = "Open the HTTPS dashboard"
+    }
+
     public enum Catalog {
         // packages/core/src/words/catalog.ts `catalogWords`
         /// One harness on `machine` didn't list in time: its sessions are the ones it listed last.
@@ -720,11 +824,320 @@ public enum Words {
         public static let reloading = "Reloading…"
     }
 
+    public enum Offers {
+        // packages/core/src/words/offers.ts `offerWords`
+        public static let offerLabel = "Make this session a project"
+
+        public static let joinedLabel = "Joined a project"
+
+        /// Where the offer stood, once answering joined a project that already was.
+        public static func joined(name: String, filed: Int) -> String {
+            filed > 0 ? "Joined \(name), with \(filed) proposed \(filed == 1 ? "task" : "tasks") from the plan." : "Joined \(name)."
+        }
+
+        public static func openProject(name: String) -> String {
+            "Open \(name)"
+        }
+
+        public static let putAway = "Put this away"
+
+        public static let notNow = "Not now"
+
+        public static let createProject = "Create project"
+
+        public static let makingProject = "Making project…"
+
+        public static let build = "Build"
+
+        public static let filing = "Filing…"
+
+        public static let notNowPending = "Not now…"
+
+        /// What was answered: Build filed the task.
+        public static let filed = "Filed"
+
+        public static let open = "Open"
+    }
+
+    public enum PlacePick {
+        // packages/core/src/words/place.ts `placePickWords`
+        public static let title = "Pick a machine and folder"
+
+        public static let machine = "Machine"
+
+        /// A machine as the select lists it: its label, then its OS.
+        public static func machineOption(label: String, os: String) -> String {
+            "\(label) · \(os)"
+        }
+
+        /// The select before the person has chosen one: no machine is offered for them.
+        public static let chooseMachine = "Choose a machine"
+
+        public static let noMachines = "No machines online"
+
+        public static let folder = "Folder"
+
+        public static let folderPlaceholder = "/home/you/project"
+
+        public static let use = "Use this place"
+
+        public static let saving = "Saving…"
+
+        public static let cancel = "Cancel"
+
+        public static let needsMachine = "Choose a machine that is online."
+
+        public static let needsPath = "A folder is its full path, starting with /."
+    }
+
+    public enum Plan {
+        // packages/core/src/words/plan.ts `planWords`
+        /// The ring's word, and the panel's title over steps or a spec.
+        public static let plan = "Plan"
+
+        /// The ring, for a screen reader: how far the plan has got.
+        public static func ringLabel(done: Int, total: Int) -> String {
+            total > 0 ? "Plan, \(done) of \(total) done" : "Plan"
+        }
+
+        /// The ring's figure.
+        public static func figure(done: Int, total: Int) -> String {
+            "\(done)/\(total)"
+        }
+
+        /// The panel's title when it holds a task's to-dos alone, and their part's heading.
+        public static let todos = "To-dos"
+
+        public static let steps = "Steps"
+
+        public static let spec = "Spec"
+
+        public static let openInCanvas = "Open in canvas"
+    }
+
+    public enum Side {
+        // packages/core/src/words/side.ts `sideWords`
+        /// The switch, for a screen reader.
+        public static let label = "Beside the conversation"
+
+        public static let plan = "Plan"
+
+        public static let preview = "Preview"
+
+        public static let task = "Task"
+    }
+
+    public enum Artifacts {
+        // packages/core/src/words/artifacts.ts `artifactWords`
+        /// A row's Remove, for a screen reader: its trailing glyph says it.
+        public static func removeNamed(name: String) -> String {
+            "Remove \(name)"
+        }
+
+        public static let remove = "Remove"
+
+        /// A promoted row's tag: its commit, short.
+        public static func promoted(commit: String) -> String {
+            "Promoted \(commit)"
+        }
+
+        public static func promotedTitle(name: String) -> String {
+            "Promoted into the project's folder at artifacts/\(name)/"
+        }
+
+        public static func notRemoved(name: String, why: String) -> String {
+            "\(name) wasn't removed: \(why)"
+        }
+
+        public static let inspect = "Inspect"
+
+        public static let inspectTitle = "Inspect: change the story's props, then Save them into its file"
+
+        public static let closeInspector = "Close the inspector"
+
+        public static let readingProps = "Reading the sheet's props"
+
+        public static let theStoryFile = "the story file"
+
+        public static let theStory = "the story"
+
+        public static func noStories(file: String) -> String {
+            "\(file) has no stories yet. Add one below."
+        }
+
+        public static let story = "Story"
+
+        public static func storyOption(name: String, edited: Bool) -> String {
+            edited ? "\(name) · edited" : name
+        }
+
+        public static let duplicateStory = "Duplicate the story"
+
+        public static let duplicate = "Duplicate"
+
+        public static let moveStoryUp = "Move the story up"
+
+        public static let moveUp = "Move up"
+
+        public static let moveStoryDown = "Move the story down"
+
+        public static let moveDown = "Move down"
+
+        public static let removeStory = "Remove the story"
+
+        public static func removeTitle(name: String) -> String {
+            "Remove the story \(name)?"
+        }
+
+        public static func removeBody(file: String) -> String {
+            "Its export goes from \(file), and its frame from the sheet. The component stays as it is."
+        }
+
+        public static let removeConfirm = "Remove story"
+
+        public static let removing = "Removing…"
+
+        public static func storyNotRemoved(name: String) -> String {
+            "\(name) wasn't removed."
+        }
+
+        public static let nameRule = "A story's name starts with a capital: letters, digits and _ only, like Roomy."
+
+        public static func nameTaken(file: String, name: String) -> String {
+            "\(file) has a story \(name) already."
+        }
+
+        public static let required = "required"
+
+        public static func resetProp(prop: String) -> String {
+            "Reset \(prop)"
+        }
+
+        public static func resetTitle(prop: String) -> String {
+            "Reset \(prop) to the sheet's or the component's default"
+        }
+
+        public static let slot = "Content is a pin: Comment on the page to change it."
+
+        public static let setInFile = "Set it in the file."
+
+        public static let codeInFile = "Code in the file: a pin changes it."
+
+        public static func takesNoProps(name: String) -> String {
+            "\(name) takes no props."
+        }
+
+        /// Before the meta field it names, which is set as code: `component`, then a full stop.
+        public static let noComponent = "The sheet's meta names no component the stage could find, so it has no controls. Give its default export a"
+
+        public static let newStoryName = "New story's name"
+
+        public static func nameCopy(story: String) -> String {
+            "Name the copy of \(story)"
+        }
+
+        public static let namePlaceholder = "Roomy"
+
+        public static let cancel = "Cancel"
+
+        public static let addStory = "Add story"
+
+        public static let addStoryTitle = "A new story from the controls as they stand"
+
+        public static let adding = "Adding…"
+
+        public static let duplicating = "Duplicating…"
+
+        public static let discard = "Discard"
+
+        public static let save = "Save"
+
+        public static let saving = "Saving…"
+
+        public static func saveTitle(story: String, file: String) -> String {
+            "Write \(story)'s args into \(file)"
+        }
+    }
+
     public enum Pairing {
         // packages/core/src/words/pairing.ts `pairingWords`
         /// A pairing waiting on the person: the code the asking device shows, and how to tell it is theirs.
         public static func asks(userCode: String) -> String {
             "Wants to run your fleet with code \(userCode). Approve only if it's the code on that device."
+        }
+    }
+
+    public enum Sheet {
+        // packages/core/src/words/sheet.ts `sheetWords`
+        /// The loading cover's line while the stage first starts.
+        public static func starting(dir: String) -> String {
+            "Starting the dev server in \(dir)…"
+        }
+
+        /// The cover's line while a sleeping stage starts again.
+        public static let waking = "Waking…"
+
+        /// The cover's line while the stage serves and the page has not said it is ready.
+        public static let compiling = "Compiling…"
+
+        /// The compile error card's title, before the error's `file:line:column`.
+        public static let errorTitle = "Doesn't compile:"
+
+        /// The card's foot: how many errors stand besides the first, and what happens next.
+        public static func errorNext(more: Int) -> String {
+            "\(more > 0 ? "\(more) more besides. " : "")The session is told; the sheet redraws once it compiles."
+        }
+
+        /// Where the page would be, when the stage did not start or failed its restarts.
+        public static func downTitle(dir: String) -> String {
+            "The stage for \(dir) didn't start"
+        }
+
+        /// Each dev toolchain a sheet's stage runs (core stage.ts `StageToolchain`), by its own name.
+        public enum Toolchains {
+            public static let vite = "Vite"
+
+            public static let astro = "Astro"
+
+            public static let nuxt = "Nuxt"
+
+            /// Each word by the key it stands under, for a lookup by data value.
+            public static let byKey: [String: String] = ["vite": vite, "astro": astro, "nuxt": nuxt]
+        }
+
+        /// The line under it: the stage's own reason, or, when it gave none, that its toolchain (its name in `toolchains`) ended.
+        public static func downLine(message: String?, toolchain: String) -> String {
+            "\(message ?? "\(toolchain) ended before it served the sheet.") Try again starts it again."
+        }
+
+        /// A workspace preview's server (`serve`), run the same way: the cover's line while it starts.
+        public static let serverStarting = "Starting the server…"
+
+        /// Where its page would be, when the server did not start or stopped.
+        public static func serverDownTitle(port: Int) -> String {
+            "The server on port \(port) isn't running"
+        }
+
+        public static func serverDownLine(message: String?) -> String {
+            "\(message ?? "It ended before it answered.") Try again starts it again."
+        }
+
+        public static let tryAgain = "Try again"
+
+        /// Try again's words while the stage starts again.
+        public static let tryingAgain = "Starting…"
+    }
+
+    public enum Connection {
+        // packages/core/src/words/connection.ts `connectionWords`
+        /// The hub restarts for the update to `version` (null when unnamed), back within `seconds`.
+        public static func updating(version: String?, seconds: Int) -> String {
+            "CawCo is updating\((version ?? "").count > 0 ? " to \(version ?? "")" : "") — the hub is back within \(Words.timeLeft(seconds))."
+        }
+
+        /// The hub answered again after the update it announced.
+        public static func updated(version: String?) -> String {
+            "CawCo updated\((version ?? "").count > 0 ? " to \(version ?? "")" : "")."
         }
     }
 }

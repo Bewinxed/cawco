@@ -1,13 +1,15 @@
 /**
  * Jev as a scratch fleet's hub reaches it on the TypeSafe route
- * (`CAWCO_TYPESAFE_URL`, hub jev.ts), as scripts/probe-fleet-watch.ts
+ * (`fleet.standIns.typesafeUrl`, scripts/stand-ins), as scripts/probe-fleet-watch.ts
  * stands one in: every request kept whole, every question answered by its
- * type (https://docs.typesafe.ai/api.md). A noul is answered no (yes when it
- * asks about a candidate whose description the call's prompt says), a score its
- * lowest level, a choice `none` when it offers one, else its first option.
+ * type (https://docs.typesafe.ai/api.md). A noul is answered no (0.05), yes
+ * (0.9) when it asks about a candidate whose description the call's prompt
+ * says, or as `noul` says, a score its lowest level, a choice `none` when it
+ * offers one, else its first option.
  * A starters call (hub jev-placement.ts `jevStarters`: its state holds
  * `shown` and `repository`) is answered by `starters`, which picks each
- * question's choice and probability, and may add answers of its own.
+ * question's choice and probability, and may add answers of its own. Any
+ * other call's choice is `choice`'s pick when it makes one.
  *
  * Jev is on once the hub holds a TypeSafe key: {@link jevOn}.
  */
@@ -37,7 +39,7 @@ export interface JevMock {
   /** The starters calls, oldest first; for one project when named. */
   starterCalls: (projectName?: string) => JevCall[];
   stop: () => void;
-  /** What `CAWCO_TYPESAFE_URL` names. */
+  /** What the fleet's `standIns.typesafeUrl` names. */
   url: string;
 }
 
@@ -103,9 +105,28 @@ const candidateFits = (call: JevCall, asked: JevAsked): number => {
     ? 0.9
     : 0.05;
 };
+/** A choice no hook picked: `none` when it offers one, else its first option. */
+const defaultPick = (asked: JevAsked): StarterPick => ({
+  choice: options(asked).includes("none")
+    ? "none"
+    : (options(asked)[0] ?? "none"),
+  p: 0.9,
+});
 
 export const jevMock = (
-  starters: (call: JevCall) => Record<string, StarterPick> = firstAsk
+  starters: (call: JevCall) => Record<string, StarterPick> = firstAsk,
+  /** Each noul question's answer, by its call, id and question; by default {@link candidateFits}. */
+  noul: (call: JevCall, id: string, asked: JevAsked) => number = (
+    call,
+    _id,
+    asked
+  ) => candidateFits(call, asked),
+  /** A choice question's pick outside a starters call, by its call, id and question; none: the default. */
+  choice: (
+    call: JevCall,
+    id: string,
+    asked: JevAsked
+  ) => StarterPick | undefined = () => undefined
 ): JevMock => {
   const calls: JevCall[] = [];
   const server = Bun.serve({
@@ -126,7 +147,7 @@ export const jevMock = (
       const answers: Record<string, unknown> = {};
       for (const [id, asked] of Object.entries(body.questions)) {
         if (asked.type === "noul") {
-          answers[id] = { type: "noul", noul: candidateFits(call, asked) };
+          answers[id] = { type: "noul", noul: noul(call, id, asked) };
         } else if (asked.type === "score") {
           answers[id] = {
             type: "score",
@@ -136,12 +157,10 @@ export const jevMock = (
             probabilities: { "0": 1 },
           };
         } else {
-          const pick = picks[id] ?? {
-            choice: options(asked).includes("none")
-              ? "none"
-              : (options(asked)[0] ?? "none"),
-            p: 0.9,
-          };
+          const pick =
+            picks[id] ??
+            (isStartersCall(call) ? undefined : choice(call, id, asked)) ??
+            defaultPick(asked);
           answers[id] = choiceAnswer(asked, pick);
         }
       }

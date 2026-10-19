@@ -246,7 +246,7 @@
     padding: var(--space-6) var(--space-6) var(--space-6) var(--space-7);
     min-width: 0;
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .page {
       padding-inline: var(--space-5);
     }

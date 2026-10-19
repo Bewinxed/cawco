@@ -244,9 +244,18 @@
       background: var(--surface-hover);
     }
   }
-  .pin-row:active,
-  .pin-row[aria-current="true"] {
+  .pin-row:active {
     background: var(--surface-fill);
+  }
+  /* The pin on show takes the selected wash, apart from the hover step. */
+  .pin-row[aria-current="true"] {
+    background: var(--selected-bg);
+
+    /* Its last line too: ink-muted measures 4.49:1 on the wash by day,
+       selected-ink 4.73:1 (DESIGN.md Colors: Selected). */
+    & :is(.name, .last) {
+      color: var(--selected-ink);
+    }
   }
   .pin-row:focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);

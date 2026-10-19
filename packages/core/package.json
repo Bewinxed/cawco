@@ -18,6 +18,7 @@
     "./cli-failure": "./src/cli-failure.ts",
     "./binary-wrapper": "./src/binary-wrapper.ts",
     "./process-identity": "./src/process-identity.ts",
+    "./signal": "./src/signal.ts",
     "./heavy-run": "./src/heavy-run.ts",
     "./live-processes": "./src/live-processes.ts",
     "./detach": "./src/detach.ts",
@@ -29,10 +30,14 @@
     "./file-hash": "./src/file-hash.ts",
     "./binary-installation": "./src/binary-installation.ts",
     "./keepers": "./src/keepers.ts",
+    "./launchd": "./src/launchd.ts",
     "./handover": "./src/handover.ts",
     "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
+    "./browser": "./src/browser.ts",
     "./browser-gate": "./src/browser-gate.ts",
+    "./stream-relay": "./src/stream-relay.ts",
+    "./public-address": "./src/public-address.ts",
     "./hub-auth": "./src/hub-auth.ts",
     "./machine-key": "./src/machine-key.ts",
     "./choices": "./src/choices.ts",
@@ -43,8 +48,10 @@
     "./comments": "./src/comments.ts",
     "./stage": "./src/stage.ts",
     "./canvas-host": "./src/canvas-host.ts",
+    "./decision-host": "./src/decision-host.ts",
     "./shell-shortcuts": "./src/shell-shortcuts.ts",
     "./paths": "./src/paths.ts",
+    "./flock": "./src/flock.ts",
     "./state-file": "./src/state-file.ts",
     "./workspace-policy": "./src/workspace-policy.ts",
     "./workspace-judge": "./src/workspace-judge.ts",
@@ -93,7 +100,12 @@
       "types": "./src/views-library.ts",
       "default": "./src/views-library.ts"
     },
-    "./views-spec": "./src/views-spec.json"
+    "./views-spec": "./src/views-spec.json",
+    "./decisions-spec": "./src/decisions-spec.json",
+    "./decisions-library": {
+      "types": "./src/decisions-library.ts",
+      "default": "./src/decisions-library.ts"
+    }
   },
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -109,12 +121,13 @@
     "@dagrejs/dagre": "^3.1.1",
     "@openuidev/lang-core": "1.0.1",
     "@typescript/native": "npm:typescript@~7.0.2",
+    "bun-plugin-svelte": "0.0.6",
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "yaml": "^2.9.1",
     "yjs": "13.6.33",
     "zod": "4.6.5"
   },
   "devDependencies": {
-    "@types/bun": "^1.4.2"
+    "@types/bun": "^1.4.3"
   }
 }

@@ -386,7 +386,7 @@
       const set = await peekMemory(machine.machineId);
       copies[machine.machineId] = main
         ? (set?.content ?? null)
-        : (set?.docs?.find((doc) => doc.path === path)?.content ?? null);
+        : (set?.docs.find((doc) => doc.path === path)?.content ?? null);
     } catch (caught) {
       unread[machine.machineId] = message(caught);
     } finally {

@@ -121,9 +121,6 @@
     text-align: left;
     color: var(--ink-strong);
   }
-  .row.on {
-    background: var(--surface-fill);
-  }
   .tile {
     width: 26px;
     height: 26px;
@@ -151,5 +148,18 @@
     height: 16px;
     flex: none;
     color: var(--ink-strong);
+  }
+  /* The chosen option takes the selected wash, never the hover step. */
+  .row.on {
+    background: var(--selected-bg);
+    color: var(--selected-ink);
+  }
+  /* Its second line too: ink-subtle measures 4.23:1 on the wash by day,
+     selected-ink 4.73:1 (DESIGN.md Colors: Selected). */
+  .row.on .meta {
+    color: var(--selected-ink);
+  }
+  .row.on :global(svg.check) {
+    color: var(--selected-icon);
   }
 </style>

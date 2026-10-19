@@ -89,7 +89,14 @@
     />
   </form>
   {#if flow.problem}
-    <p class="error" id="{codeId}-problem" role="alert" in:appear>
+    <!-- The daemon's sentence, then the CLI's screen lines, each its own line. -->
+    <p
+      class="error"
+      data-signin-problem
+      id="{codeId}-problem"
+      role="alert"
+      in:appear
+    >
       {flow.problem}
     </p>
   {:else if flow.phase === "signed-in"}
@@ -135,6 +142,8 @@
   }
   .error {
     color: var(--status-fail-ink);
+    white-space: pre-line;
+    overflow-wrap: anywhere;
   }
   .warn {
     color: var(--status-attn-ink);

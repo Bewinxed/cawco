@@ -97,7 +97,7 @@ final class PeekController: ObservedViewController {
     private let tasksBox = UIStackView()
     private let tasksTitle = KitLabel(TypeScale.typeLabel, ink: Palette.foreground)
     private let tasksScroll = UIScrollView()
-    private let tasks: TaskPanelView
+    private let tasks: PlanView
     private let tail: PeekTailView
     private var height: NSLayoutConstraint?
 
@@ -114,7 +114,7 @@ final class PeekController: ObservedViewController {
         self.home = home
         self.target = target
         self.fill = fill
-        tasks = TaskPanelView(hub: hub, instanceId: target.viewId, dense: true)
+        tasks = PlanView(hub: hub, instanceId: target.viewId)
         tail = PeekTailView(hub: hub, instanceId: target.viewId)
         super.init(nibName: nil, bundle: nil)
     }
@@ -130,16 +130,27 @@ final class PeekController: ObservedViewController {
         super.viewWillAppear(animated)
         // A peek is a live view: it reads the session as an open tab does.
         hub.sessions.setPeeked(target.viewId)
-        // A peek is the one moment a session's plan is looked at from the board.
-        hub.tasks.refresh(target.viewId)
+        // The session's plan, as the hub keeps it, followed while the peek is up.
+        if !followsPlan {
+            followsPlan = true
+            hub.plans.follow(target.viewId)
+        }
     }
 
     override func viewDidDisappear(_ animated: Bool) {
         super.viewDidDisappear(animated)
-        if isBeingDismissed || parent?.isBeingDismissed == true { hub.sessions.setPeeked(nil) }
+        if isBeingDismissed || parent?.isBeingDismissed == true {
+            hub.sessions.setPeeked(nil)
+            if followsPlan {
+                followsPlan = false
+                hub.plans.unfollow(target.viewId)
+            }
+        }
     }
 
-    private var row: InstanceRow? { hub.fleet.byId[target.viewId] }
+    private var followsPlan = false
+
+    private var row: BoardRow? { hub.fleet.byId[target.viewId] }
 
     private func refreshContext() {
         guard let row, row.isLive else { return }
@@ -277,14 +288,15 @@ final class PeekController: ObservedViewController {
         let id = target.viewId
         let status = row?.status.rawValue
         let machine = row.flatMap { row in hub.fleet.machines.first { $0.machineId == row.machineId } }
-        let forkable = row?.sessionId
+        // Only a session has a conversation to branch from.
+        let session = row?.session
+        let forkable = session?.sessionId
         var first: [UIMenuElement] = [
             UIAction(title: "Open", image: Glyph.external.image) { [weak self] _ in self?.onOpen() },
             SessionMenus.pending("Fork", running: "Forking…", image: Glyph.fork.image, verb: .fork, id: id, status: status,
                                  host: host, hub: hub, enabled: forkable != nil && machine != nil) { [hub] in
-                guard let row, let key = forkable else { return nil }
-                return try await hub.fork(machineId: row.machineId, cwd: row.cwd, sessionKey: key,
-                                          harness: row.harness.flatMap { .init(rawValue: $0) } ?? .claude)
+                guard let session, let key = forkable else { return nil }
+                return try await hub.fork(machineId: session.machineId, cwd: session.cwd, sessionKey: key, harness: session.harness)
             } then: { [weak self] forked in
                 if let forked { self?.onDive(forked) }
             },
@@ -453,11 +465,12 @@ final class PeekController: ObservedViewController {
             noteBox.isHidden = true
         }
 
-        let plan = hub.tasks.snapshot(target.viewId)
-        if let plan, !plan.tasks.isEmpty {
-            let progress = hub.tasks.progress(plan)
+        if let plan = tasks.plan, plan.shows {
+            let progress = plan.progress
             tasksBox.isHidden = false
-            tasksTitle.text = "Tasks · \(progress.done) of \(progress.total)"
+            // The plan's title, as its panel's (To-dos when an attempt's task alone), and how far it has got.
+            let title = plan.onlyTodos ? Words.Plan.todos : Words.Plan.plan
+            tasksTitle.text = progress.total > 0 ? "\(title) · \(Words.Plan.figure(done: progress.done, total: progress.total))" : title
             tasks.refresh()
         } else {
             tasksBox.isHidden = true

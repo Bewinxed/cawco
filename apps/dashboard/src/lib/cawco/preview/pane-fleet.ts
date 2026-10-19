@@ -9,13 +9,18 @@
 import type { PreviewFrame } from "@cawco/core";
 import { createContext } from "svelte";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
+import type { PageThumbnail } from "./wire";
 
 /** A session's panel as the pane holds it: the hub's frame, and what the page told the pane. */
 export type PanePreview = PreviewFrame & {
   /** The page's own title, as its overlay said. */
   title?: string;
-  /** The page's first capture, base64 PNG. */
-  thumbnail?: string;
+  /** The page's capture in each scheme (PageThumb draws the reader's). */
+  thumbnail?: PageThumbnail;
+  /** The revision the thumbnail was taken of. */
+  thumbnailRevision?: string;
+  /** A transcript card that shows the thumbnail is on screen (ToolGroup): the pane takes one. */
+  thumbnailWanted?: boolean;
 };
 
 /** The session that made the artifact: what names it, where it runs, its project. */

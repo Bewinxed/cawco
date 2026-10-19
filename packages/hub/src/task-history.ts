@@ -7,12 +7,13 @@
  * - **What the hub writes.** Every commit tasks.ts makes carries git
  *   trailers under its subject: who ({@link TRAILERS} `actor`: the session's
  *   instance id, `you`, `hub`, `action:<id>`), the mover its stage rules were
- *   checked as, a stage move (`draft -> review`, `(none) -> idea` for a new
- *   task) and the reason, when there is one.
- * - **Older commits** have no trailers. A commit tasks.ts made says the same
- *   in its subject (`task tsk-12: stage draft → review (by Fix tray chip)`),
- *   and is read from it. Any other commit (a hand edit, Caw's folder_write,
- *   the folder editor) is an edit by its git author, with no mover.
+ *   checked as, what it did in words, a stage move (`draft -> review`,
+ *   `(none) -> idea` for a new task), the reason when there is one, and the
+ *   kind of change when the words alone do not say ({@link CHANGES}).
+ * - **Only trailers are read.** A commit without them (one made before the
+ *   hub wrote them, a hand edit, Caw's folder_write, the folder editor) is an
+ *   edit by its git author whose mover is unknown, in its subject's words as
+ *   they are.
  * - **Lifecycle times** come from the moves and the project's current
  *   stages: started is the first move into a stage of kind `active`;
  *   completed and dropped are the move into a `done` or `dropped` stage that
@@ -34,14 +35,41 @@ import { ARCHIVE_DIR, fileTaskNumber, taskId } from "./task-file";
 export const TRAILERS = {
   actor: "CawCo-Actor",
   mover: "CawCo-Mover",
+  /** What it did, in words: `stage draft → review`, `update title`, `tick td-2`. */
+  what: "CawCo-What",
   stage: "CawCo-Stage",
   reason: "CawCo-Reason",
-  /** What kind of change it was, when the words alone do not say: `comment`. */
+  /** What kind of change it was, when the words alone do not say ({@link CHANGES}). */
   change: "CawCo-Change",
 } as const;
 
+/**
+ * Each `CawCo-Change`: a comment added; a task the hub filed (`create`), one
+ * written straight into the folder that it adopted at its start (`adopt`),
+ * and tasks or files merged in from another project (`merge`).
+ */
+export const CHANGES = {
+  comment: "comment",
+  create: "create",
+  adopt: "adopt",
+  merge: "merge",
+} as const;
+
+export type TaskChange = (typeof CHANGES)[keyof typeof CHANGES];
+
 /** The `CawCo-Change` a comment's commit carries. */
-export const COMMENT_CHANGE = "comment";
+export const COMMENT_CHANGE = CHANGES.comment;
+
+/** The changes by which a task's file is the hub's own: filed, adopted, or merged in by it. */
+const HUB_FILED: ReadonlySet<string> = new Set<TaskChange>([
+  CHANGES.create,
+  CHANGES.adopt,
+  CHANGES.merge,
+]);
+
+/** Whether a commit filed, adopted or merged its task in on the hub's own say, by its trailer. */
+export const hubFiled = (trailers: Partial<Record<string, string>>): boolean =>
+  HUB_FILED.has(trailers[TRAILERS.change] ?? "");
 
 /** Whether a path is in the tasks archive (`tasks/archive/…`). */
 export const inArchive = (path: string): boolean =>
@@ -71,7 +99,7 @@ const MOVER_NAMES: ReadonlySet<string> = new Set<HistoryMover>([
 export interface TaskHistoryActor {
   /** The session's instance id (a session, the lead), or the approved action's id; null when the commit names none. */
   id: string | null;
-  /** The mover the change was checked as; null for a commit the hub's task code did not make (a hand edit, folder_write, the folder editor). */
+  /** The mover the change was checked as; null, unknown, for a commit with no `CawCo-Mover` trailer (a hand edit, folder_write, the folder editor, one made before the hub wrote trailers). */
   mover: HistoryMover | null;
   /** The commit's author: you, Caw, the session's title as it was, hub, approved action. */
   name: string;
@@ -140,75 +168,12 @@ export interface TaskLife {
   startedAt: number | null;
 }
 
-/** `task tsk-12: …` and `tasks tsk-4, tsk-5: …`: a subject tasks.ts wrote, and what it says. */
-const TASK_SUBJECT = /^tasks? tsk-\d+(?:, tsk-\d+)*: ([\s\S]*)$/;
-/** `stage draft → review`, alone or after a link (`duplicate of tsk-2; stage …`). */
-const MOVE_SAID = /(?:^|; )stage (\S+) → (\S+)$/;
-const CREATE_SAID = /^create “[\s\S]*” in (\S+)$/;
-const ADOPT_SAID = /^adopt at (\S+), written by [\s\S]* into stage (\S+)$/;
+/** The `CawCo-Stage` trailer's value, `from -> to`: the hub writes it, so it is read. */
 const STAGE_TRAILER = /^(\S+) -> (\S+)$/;
 const ACTION_ID = /^action:(.+)$/;
-const BY = " (by ";
-
-/** A subject's `(by …)` part taken off: what it says before, and the reason after the author's name. */
-const byPart = (
-  subject: string,
-  author: string
-): { reason: string | null; what: string } | undefined => {
-  if (!subject.endsWith(")")) {
-    return;
-  }
-  const named = subject.lastIndexOf(`${BY}${author}`);
-  const at = named >= 0 ? named : subject.lastIndexOf(BY);
-  if (at < 0) {
-    return;
-  }
-  const inner = subject.slice(at + BY.length, -1);
-  const reason = inner.startsWith(`${author}: `)
-    ? inner.slice(author.length + 2).trim()
-    : null;
-  return { what: subject.slice(0, at), reason: reason || null };
-};
-
-/** The mover a trailer-less task commit was made as, by its author's name. */
-const moverByName = (author: string): HistoryMover => {
-  switch (author) {
-    case AUTHOR.you:
-      return "you";
-    case AUTHOR.lead:
-      return "lead";
-    case AUTHOR.hub:
-      return "hub";
-    case AUTHOR.action:
-      return "action";
-    case AUTHOR.routine:
-      return "routine";
-    default:
-      return "session";
-  }
-};
 
 const stageName = (name: string): string | null =>
   name === NO_STAGE ? null : name;
-
-/** The stage move a task commit's words say, for a commit with no stage trailer. */
-const stageSaid = (
-  what: string
-): { from: string | null; to: string } | null => {
-  const moved = MOVE_SAID.exec(what);
-  if (moved) {
-    return { from: stageName(moved[1] as string), to: moved[2] as string };
-  }
-  const created = CREATE_SAID.exec(what);
-  if (created) {
-    return { from: null, to: created[1] as string };
-  }
-  const adopted = ADOPT_SAID.exec(what);
-  if (adopted) {
-    return { from: stageName(adopted[2] as string), to: adopted[1] as string };
-  }
-  return null;
-};
 
 const kindOf = (
   { change, commit, from, path }: FolderFileChange,
@@ -241,38 +206,29 @@ const kindOf = (
 const eventOf = (change: FolderFileChange): TaskHistoryEvent => {
   const { commit } = change;
   const { trailers } = commit;
-  const by = byPart(commit.subject, commit.author);
-  const said = TASK_SUBJECT.exec(by?.what ?? "")?.[1];
   const trailed = trailers[TRAILERS.mover];
-  let mover: HistoryMover | null = null;
-  if (trailed && MOVER_NAMES.has(trailed)) {
-    mover = trailed as HistoryMover;
-  } else if (said !== undefined) {
-    mover = moverByName(commit.author);
-  }
+  const mover: HistoryMover | null =
+    trailed && MOVER_NAMES.has(trailed) ? (trailed as HistoryMover) : null;
   const named = trailers[TRAILERS.actor] ?? "";
   const id =
     ACTION_ID.exec(named)?.[1] ??
     (named && !MOVER_NAMES.has(named) ? named : null);
   const stageTrailer = STAGE_TRAILER.exec(trailers[TRAILERS.stage] ?? "");
-  let stage: TaskHistoryEvent["stage"] = null;
-  if (stageTrailer) {
-    stage = {
-      from: stageName(stageTrailer[1] as string),
-      to: stageTrailer[2] as string,
-    };
-  } else if (mover && said !== undefined) {
-    stage = stageSaid(said);
-  }
+  const stage: TaskHistoryEvent["stage"] = stageTrailer
+    ? {
+        from: stageName(stageTrailer[1] as string),
+        to: stageTrailer[2] as string,
+      }
+    : null;
   return {
     at: commit.at,
     commit: commit.sha,
     actor: { mover, id, name: commit.author },
     kind: kindOf(change, stage !== null && stage.from !== stage.to, mover),
     path: change.path,
-    what: said ?? commit.subject,
+    what: trailers[TRAILERS.what] || commit.subject,
     stage,
-    reason: trailers[TRAILERS.reason] || by?.reason || null,
+    reason: trailers[TRAILERS.reason] || null,
   };
 };
 

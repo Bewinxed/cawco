@@ -32,8 +32,20 @@
    * An onboarding choice nobody answered (the fleet's upstream choice) is
    * the same row with its risk as its line and its two options as the
    * peers; it opens nothing, and leaves once the hub has the answer.
+   *
+   * HTTPS on the tailnet is an onboarding row of the same kind: one line,
+   * then every step on the path in order, each with its control (Tailscale's
+   * DNS page to open, its command to copy, the docs) and its own tick as the
+   * hub finds it taken; once HTTPS is on, the row's tick with the https
+   * dashboard to open.
    */
-  import { pairingWords, questionsOf } from "@cawco/core";
+  import {
+    pairingWords,
+    questionsOf,
+    type TailnetHttps,
+    type TailnetHttpsTodo,
+    tailnetWords,
+  } from "@cawco/core";
   import {
     UPSTREAM_POSTS,
     UPSTREAM_WORDS,
@@ -48,6 +60,7 @@
     IconClose,
     IconDollar,
     IconError,
+    IconExternal,
     IconFolder,
     IconLock,
     IconMaximize,
@@ -55,6 +68,8 @@
     IconSend,
     IconServer,
     IconShield,
+    IconSuccess,
+    IconTailnetHttps,
     IconTick,
     IconWarningTriangle,
     IconWorkflow,
@@ -71,6 +86,7 @@
   } from "../client.svelte";
   import ErrorText from "../ErrorText.svelte";
   import { answerMachine, answerPairing } from "../hub-auth.svelte";
+  import CopyBox from "../join/CopyBox.svelte";
   import { conversationHref } from "../links";
   import OsMark from "../OsMark.svelte";
   import SessionMark from "../SessionMark.svelte";
@@ -92,7 +108,7 @@
   } = $props();
 
   const href = $derived.by(() => {
-    if (item.kind === "choice") {
+    if (item.kind === "choice" || item.kind === "tailnet") {
       return;
     }
     if (item.kind !== "ask") {
@@ -115,6 +131,10 @@
         return item.notice.title;
       case "choice":
         return UPSTREAM_WORDS.risk;
+      case "tailnet":
+        return item.done
+          ? tailnetWords.done(item.tailnet.dashboard ?? "")
+          : tailnetWords.lead;
       case "pairing":
         return pairingWords.asks(item.request.userCode);
       case "admission":
@@ -217,6 +237,8 @@
         return `Fleet watch · ${item.place}`;
       case "choice":
         return "Onboarding · each project can change it";
+      case "tailnet":
+        return tailnetWords.meta(item.tailnet.host);
       case "pairing":
         return item.place ? `Pairing · ${item.place}` : "Pairing";
       case "admission":
@@ -328,6 +350,65 @@
     }
   }
 
+  /**
+   * One step on the path to HTTPS, laid out: what to do, where or why, and
+   * its control, a page to open or its command to copy.
+   */
+  function tailnetTodo(
+    tailnet: TailnetHttps,
+    todo: TailnetHttpsTodo
+  ): {
+    label: string;
+    note: string;
+    href?: string;
+    link?: string;
+    command?: string;
+  } {
+    switch (todo.step) {
+      case "enable-magicdns":
+      case "enable-https":
+        return {
+          label:
+            todo.step === "enable-magicdns"
+              ? tailnetWords.stepMagicDns
+              : tailnetWords.stepHttps,
+          note: tailnetWords.adminNote,
+          href: tailnetWords.dnsPage,
+          link: tailnetWords.openDnsPage,
+        };
+      case "operator":
+        return {
+          label: tailnetWords.stepOperator,
+          note: tailnetWords.runOnce(tailnet.host),
+          command: todo.command,
+        };
+      case "userspace":
+        return {
+          label: tailnetWords.stepUserspace,
+          note: tailnetWords.userspaceNote(tailnet.host),
+          href: tailnetWords.userspacePage,
+          link: tailnetWords.openDocs,
+        };
+      default:
+        return {
+          label: tailnetWords.stepPort(tailnet.port ?? 0),
+          note: tailnetWords.portNote(tailnet.host),
+          command: todo.command,
+        };
+    }
+  }
+
+  /** Every step on the path, while one stands; none once HTTPS is on. */
+  const tailnetTodos = $derived.by(() => {
+    if (item.kind !== "tailnet" || item.done) {
+      return [];
+    }
+    const { tailnet } = item;
+    return (tailnet.steps ?? []).map((todo) => ({
+      todo,
+      ...tailnetTodo(tailnet, todo),
+    }));
+  });
   /** An approved action waiting for your approval: Deny and Approve stand. */
   const approvable = $derived(
     item.kind === "action" && item.action.state === "proposed"
@@ -399,6 +480,12 @@
       <IconWorkflow aria-hidden="true" />
     {:else if item.kind === "choice"}
       <IconShield aria-hidden="true" />
+    {:else if item.kind === "tailnet"}
+      {#if item.done}
+        <IconSuccess aria-hidden="true" class="done" />
+      {:else}
+        <IconTailnetHttps aria-hidden="true" />
+      {/if}
     {:else if item.kind === "pairing"}
       <IconLock aria-hidden="true" />
     {:else if item.kind === "admission"}
@@ -518,6 +605,67 @@
         <span class="task">{item.action.taskId}</span>
       {/if}
     </span>
+  {:else if item.kind === "tailnet"}
+    {#if tailnetTodos.length > 0}
+      <!-- Every step on the path, in order: a step that stands says what to
+           do, where or why, and its control; a step taken is its tick and
+           its label. -->
+      <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops a list's semantics once its markers are styled away (VoiceOver reads no list); these steps are still a numbered list. -->
+      <ol data-slot="steps" class="steps" role="list">
+        {#each tailnetTodos as one, index (one.todo.step)}
+          <li
+            data-slot="step"
+            class="step mark-line"
+            data-done={one.todo.done || undefined}
+            data-step={one.todo.step}
+          >
+            <span class="mark-cell">
+              <span data-slot="step-mark" class="step-mark">
+                {#if one.todo.done}
+                  <IconSuccess aria-hidden="true" />
+                {:else}
+                  <span
+                    aria-hidden="true"
+                    class="step-number"
+                    data-n={index + 1}
+                  ></span>
+                {/if}
+              </span>
+            </span>
+            <span data-slot="step-label" class="step-label"
+              >{#if one.todo.done}<span class="sr-only"
+                  >{tailnetWords.stepDone}{" "}</span
+                >{/if}{one.label}</span
+            >
+            {#if !one.todo.done}
+              <span data-slot="step-note" class="step-note">{one.note}</span>
+              {#if one.command}
+                <div data-slot="step-command" class="step-control" data-box>
+                  <CopyBox
+                    label={tailnetWords.command}
+                    text={one.command}
+                    wrap
+                  />
+                </div>
+              {:else if one.href}
+                <div data-slot="step-link" class="step-control" data-box>
+                  <Button
+                    href={one.href}
+                    icon={IconExternal}
+                    label={one.link}
+                    rel="noopener"
+                    size="sm"
+                    target="_blank"
+                    variant="secondary"
+                  />
+                </div>
+              {/if}
+            {/if}
+          </li>
+        {/each}
+      </ol>
+    {/if}
+    <span data-slot="meta" class="meta">{meta}</span>
   {:else if item.kind === "task"}
     <span data-where data-slot="meta" class="meta where mark-line">
       {#if item.project}
@@ -606,6 +754,19 @@
           variant="secondary"
         />
       {/each}
+    </div>
+  {:else if item.kind === "tailnet" && item.done}
+    <!-- Ticked: the https dashboard to open. -->
+    <div data-slot="peers" class="peers">
+      <Button
+        href={item.tailnet.dashboard}
+        icon={IconExternal}
+        label={tailnetWords.openDashboard}
+        rel="noopener"
+        size="sm"
+        target="_blank"
+        variant="secondary"
+      />
     </div>
   {:else if item.kind === "pairing" || item.kind === "admission"}
     {@const who =
@@ -933,11 +1094,106 @@
   .peers > :global(.peer) {
     border-color: transparent;
   }
-  /* A choice's risk is the whole of what it asks: read whole, never cut. */
-  .row[data-kind="choice"] > .want {
+  /* A choice's risk, and HTTPS's step, is the whole of what it asks: read
+     whole, never cut. */
+  .row[data-kind="choice"] > .want,
+  .row[data-kind="tailnet"] > .want {
     display: block;
     -webkit-line-clamp: unset;
     line-clamp: none;
+  }
+  /* HTTPS's tick, in the done status's ink. */
+  .lead > :global(.done) {
+    color: var(--status-done-ink);
+  }
+  /* HTTPS's steps stand under its line, before where it is from; the
+     ticked row's one button under that. */
+  .row[data-kind="tailnet"] > .meta {
+    grid-row: 4;
+  }
+  .row[data-kind="tailnet"] > .peers {
+    grid-row: 5;
+  }
+  .steps {
+    position: relative;
+    grid-row: 3;
+    grid-column: 2 / 4;
+    display: grid;
+    gap: var(--space-3);
+    margin: var(--space-3) 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* A step: its number (a tick once taken) on the label's first line, in a
+     mark cell one label line tall (The Mark Line Rule: a label that wraps
+     keeps its mark on its first line), then the note and the control in the
+     label's column, so every step's words start on one edge. */
+  .step {
+    display: grid;
+    grid-template-columns: var(--icon-md) minmax(0, 1fr);
+    column-gap: var(--space-2);
+    row-gap: var(--space-1);
+    align-items: start;
+    font: var(--type-label);
+  }
+  .step-mark {
+    display: grid;
+    place-items: center;
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+    color: var(--ink-muted);
+  }
+  .step-mark > :global(svg) {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+    color: var(--status-done-ink);
+  }
+  .step-number {
+    display: grid;
+    place-items: center;
+    box-sizing: border-box;
+    inline-size: 100%;
+    block-size: 100%;
+    border: 1px solid var(--border-control);
+    border-radius: var(--radius-pill);
+    font: var(--type-meta);
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+  }
+  /* The step's place in the list, drawn from its attribute: the grid
+     items are no list items, so the list's own counter stays at 0. */
+  .step-number::before {
+    content: attr(data-n);
+  }
+  .step-label {
+    min-inline-size: 0;
+    font: var(--type-label);
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
+  .step[data-done] > .step-label {
+    color: var(--ink-muted);
+  }
+  .step-note,
+  .step-control {
+    grid-column: 2;
+    min-inline-size: 0;
+  }
+  .step-note {
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+  }
+  .step-control {
+    display: flex;
+    margin-block-start: var(--space-1);
+  }
+  .step-control > :global(*) {
+    flex: 0 1 auto;
+    min-inline-size: 0;
+  }
+  .step-control[data-slot="step-command"] > :global(*) {
+    flex: 1 1 auto;
   }
   /* A choice's options are its words, longer than Deny and Approve, too
      long to stand side by side in the panel: they stack, each the text

@@ -8,9 +8,7 @@
  * not point it. A dry run reads the branch, the commit and its tree's files
  * and bytes, and pushes nothing.
  */
-import { basename } from "node:path";
 import { type PlacePush, WORKSPACE_GIT_TIMEOUT_MS } from "@cawco/core";
-import { isSecretFileName } from "@cawco/core/paths";
 import { useHubCredentialHelper } from "./git-credential";
 import { hubGitEnv, hubRepo, isHubRemote } from "./move";
 import { publishCheck } from "./place-repo";
@@ -58,32 +56,12 @@ export const placePush = async (
       const size = TREE_SIZE.exec(line);
       return size ? [Number(size[1])] : [];
     });
-  // What the branch holds now, read by the first commit's rules and the
-  // credential scan; and every path its history ever held, by name. A
-  // publish takes the history, so a secret committed once is refused even
-  // when a later commit took it out.
-  const tracked = (await git(root, "ls-tree", "-r", "--name-only", "HEAD"))
-    .split(LINE)
-    .filter(Boolean);
-  const { leftOut, refused } = await publishCheck(root, tracked);
-  const held = new Set(tracked);
-  const history = [
-    ...new Set(
-      (await git(root, "log", "--format=", "--name-only", "HEAD"))
-        .split(LINE)
-        .filter((file) => file && !held.has(file))
-    ),
-  ].filter((file) => isSecretFileName(basename(file)));
-  const barred = [
-    ...refused,
-    ...history.map((file) => ({
-      path: file,
-      why: "a secret's name, in an earlier commit",
-    })),
-  ];
-  if (barred.length > 0) {
+  // A publish takes the whole history, so every commit HEAD reaches is read
+  // by the credential scan: a key a later commit took out is still in it.
+  const { leftOut, refused } = await publishCheck(root, deadline);
+  if (refused.length > 0) {
     throw new Error(
-      `CawCo does not publish ${root}: its commits hold what reads as private or secret: ${barred
+      `CawCo does not publish ${root}: its commits hold what reads as a credential: ${refused
         .map((one) => `${one.path} (${one.why})`)
         .join("; ")}. Take them out of its history first.`
     );
@@ -114,7 +92,7 @@ export const placePush = async (
     );
   }
   useHubCredentialHelper(root);
-  await gitUntil(deadline, hubGitEnv())(
+  await gitUntil(deadline, hubGitEnv(origin || hubRepo(projectId)))(
     root,
     "push",
     "--quiet",

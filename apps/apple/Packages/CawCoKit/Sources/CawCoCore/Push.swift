@@ -898,7 +898,7 @@ public enum PushActions {
         let deadline = ContinuousClock.now + window
         let connection = HubConnection(drainsOutbox: false)
         defer { connection.disconnect() }
-        guard await until(deadline, { connection.socket == .connected }) else {
+        guard await observedUntil(deadline, { connection.socket == .connected }) else {
             log.error("reply to \(instanceId, privacy: .public): the hub socket did not open")
             await notSent(note, words, "The hub couldn't be reached.")
             return false
@@ -949,7 +949,7 @@ public enum PushActions {
             return nil
         }
         let connection = HubConnection(drainsOutbox: false)
-        guard await until(deadline, { connection.socket == .connected }) else {
+        guard await observedUntil(deadline, { connection.socket == .connected }) else {
             log.error("\(note.action, privacy: .public) \(requestId, privacy: .public): the hub socket did not open")
             connection.disconnect()
             await failed()
@@ -961,7 +961,7 @@ public enum PushActions {
     /// The command's last stage by `deadline`; nil when nothing was sent.
     private static func settled(_ commandId: String?, on connection: HubConnection, deadline: ContinuousClock.Instant) async -> Ledger.Stage? {
         guard let commandId else { return nil }
-        _ = await until(deadline) { connection.ledger.commands[commandId]?.isSettled ?? true }
+        _ = await observedUntil(deadline) { connection.ledger.commands[commandId]?.isSettled ?? true }
         return connection.ledger.commands[commandId]?.stage
     }
 
@@ -981,35 +981,6 @@ public enum PushActions {
             log.notice("posted in place of \(note.id, privacy: .public) (category \(local.category, privacy: .public)), \(body.count) characters")
         } catch {
             log.error("local notification failed: \(String(describing: error), privacy: .public)")
-        }
-    }
-
-    /// Waits until `met` holds or `deadline` passes, woken by what `met` reads changing.
-    private static func until(_ deadline: ContinuousClock.Instant, _ met: @escaping @MainActor () -> Bool) async -> Bool {
-        while !met() {
-            guard ContinuousClock.now < deadline else { return false }
-            let wake = Wake()
-            await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-                wake.continuation = done
-                withObservationTracking { _ = met() } onChange: { Task { @MainActor in wake.fire() } }
-                wake.timer = Task { @MainActor in
-                    try? await Task.sleep(until: deadline, clock: .continuous)
-                    wake.fire()
-                }
-            }
-        }
-        return true
-    }
-
-    @MainActor
-    private final class Wake {
-        var continuation: CheckedContinuation<Void, Never>?
-        var timer: Task<Void, Never>?
-
-        func fire() {
-            timer?.cancel()
-            continuation?.resume()
-            continuation = nil
         }
     }
 }

@@ -5,10 +5,17 @@
  * never turned into an empty value that looks like a real answer.
  */
 
-/** A refused read: the hub's status and what it said about it, without a closing stop. */
+/**
+ * A refused read: the status, and one sentence of why without its closing
+ * stop ({@link hubFailure}). `type` and `title` are the hub's problem
+ * fields when it sent them (RFC 9457), for a caller that tells causes
+ * apart; never shown as they are.
+ */
 export interface HubFailure {
   detail: string;
   status: number;
+  title?: string;
+  type?: string;
 }
 
 export type HubRead<T> = { ok: true; value: T } | ({ ok: false } & HubFailure);
@@ -47,33 +54,95 @@ export function deadlineIn(ms: number | null): number | null {
 }
 
 /**
- * The hub's own words on a refused read: the problem's `detail` or `title`,
- * the api proxy's `error`, or the text it answered. Read from the body alone —
- * a universal load may not read response headers SvelteKit does not
- * serialise.
+ * THE ONE READER of a refused response, everywhere the dashboard asks the
+ * hub: what it said, as one sentence without its closing stop, and never
+ * the body as it came. The hub's problem (`type`, `title`, `status`,
+ * `detail`; RFC 9457) gives its `detail`, else its `title`; the older
+ * `{ error }` and `{ message }` shapes read the same; a plain-text answer
+ * is the hub's own sentence. A proxy's page in front of the hub (a
+ * tunnel's HTML 502), an empty body, or anything that is not a short
+ * sentence of prose is the hub not answering: that, with its status
+ * ({@link noAnswer}). Read from the body and its type alone: a universal
+ * load may not read other headers SvelteKit does not serialise.
  */
 export async function hubFailure(response: Response): Promise<HubFailure> {
-  const text = (await response.text()).trim();
-  const body = text.startsWith("{") ? parsed(text) : null;
-  const said =
-    body?.detail ||
-    body?.error ||
-    body?.title ||
-    body?.message ||
-    text ||
-    `the hub answered ${response.status}`;
-  return { status: response.status, detail: said.replace(FINAL_STOP, "") };
+  const { status } = response;
+  const kind = response.headers.get("content-type") ?? "";
+  const text = kind.includes("html") ? "" : (await response.text()).trim();
+  const problem = text.startsWith("{") ? parsed(text) : null;
+  const said = problem
+    ? (problem.detail ?? problem.title ?? problem.error ?? problem.message)
+    : unquoted(text);
+  return {
+    status,
+    detail: sentenceOf(said) ?? noAnswer(status),
+    ...(problem?.type ? { type: problem.type } : {}),
+    ...(problem?.title ? { title: problem.title } : {}),
+  };
 }
 
-/** A JSON error body, or null when the text only starts like one. */
+/**
+ * {@link hubFailure} as the error its caller throws, its sentence closed:
+ * what every refused write and read rejects with. `then` is what the
+ * caller says came of it ("so the project was not saved. Try again."),
+ * said after the hub not answering; the hub's own words already say it.
+ */
+export async function hubRefusal(
+  response: Response,
+  then?: string
+): Promise<Error> {
+  const { detail, status } = await hubFailure(response);
+  return new Error(
+    then && detail === noAnswer(status) ? `${detail}, ${then}` : `${detail}.`
+  );
+}
+
+/**
+ * A refused read as a sentence with its stop: the hub's words with their
+ * status after them for support (WORDS.md, Error formula), or that it
+ * didn't answer, which already names it.
+ */
+export const failureSentence = ({ detail, status }: HubFailure): string =>
+  detail === noAnswer(status) ? `${detail}.` : `${detail} (${status}).`;
+
+/** That the hub didn't answer, naming the status that came instead, without a closing stop. */
+export const noAnswer = (status: number): string =>
+  `The hub didn't answer (${status})`;
+
+/** Elysia's refusal as a JSON string (`"No such rule"`) read as its words; any other text as it is. */
+function unquoted(text: string): string {
+  if (!text.startsWith('"')) {
+    return text;
+  }
+  try {
+    const words: unknown = JSON.parse(text);
+    return typeof words === "string" ? words : text;
+  } catch {
+    return text;
+  }
+}
+
+/** A problem's fields that are strings; null for text that only starts like JSON. */
 function parsed(text: string): {
   detail?: string;
   error?: string;
   message?: string;
   title?: string;
+  type?: string;
 } | null {
   try {
-    return JSON.parse(text);
+    const body = JSON.parse(text) as Record<string, unknown>;
+    const field = (key: string) =>
+      typeof body[key] === "string" && body[key] !== ""
+        ? (body[key] as string)
+        : undefined;
+    return {
+      detail: field("detail"),
+      error: field("error"),
+      message: field("message"),
+      title: field("title"),
+      type: field("type"),
+    };
   } catch {
     return null;
   }
@@ -102,25 +171,22 @@ const NOT_PROSE = /^[<{[]/;
 const ERROR_LABEL = /^[A-Za-z]*(?:[Ee]rror|[Ee]xception):\s*/;
 
 /**
- * Why a read was refused, as one sentence a person reads, without its
- * closing stop: the hub's own words when their first line is a short
- * sentence of prose, its thrown error's label taken off, else what its
- * status says ("The hub answered 502"). Never more than one sentence, never
- * a body as it came.
+ * The hub's words as one sentence a person reads, without its closing
+ * stop: their first line's first sentence, a thrown error's label taken
+ * off, when it is short prose; null for anything else (markup, a dump, a
+ * page, nothing).
  */
-export function failureReason({ detail, status }: HubFailure): string {
-  const line = detail.split("\n", 1)[0].trim().replace(ERROR_LABEL, "");
+function sentenceOf(said: string | undefined): string | null {
+  const line = (said ?? "").split("\n", 1)[0].trim().replace(ERROR_LABEL, "");
   const sentence = (line.match(FIRST_SENTENCE)?.[0] ?? line).replace(
     FINAL_STOP,
     ""
   );
-  const prose =
-    sentence.length > 0 &&
+  return sentence.length > 0 &&
     sentence.length <= REASON_LIMIT &&
-    !NOT_PROSE.test(sentence);
-  return prose
+    !NOT_PROSE.test(sentence)
     ? `${sentence[0].toUpperCase()}${sentence.slice(1)}`
-    : `The hub answered ${status}`;
+    : null;
 }
 
 /**

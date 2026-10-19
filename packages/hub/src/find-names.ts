@@ -59,7 +59,7 @@ export const KIND_WORDS = {
   preview: ["preview", "previews"],
   page: ["page", "pages"],
   canvas: ["canvas", "canvases"],
-  sheet: ["sheet", "sheets"],
+  component: ["component", "components"],
   decision: ["decision", "decisions"],
   commit: ["commit", "commits"],
   file: ["file", "files"],

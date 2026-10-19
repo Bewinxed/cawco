@@ -20,8 +20,8 @@
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import { depart } from "#lib/cawco/motion/share.svelte.js";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
-  import CawStarters from "#lib/cawco/project/CawStarters.svelte";
   import type { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import StarterCards from "#lib/cawco/project/StarterCards.svelte";
   import type { ProjectStarter, StageKind } from "#lib/cawco/project-tasks.js";
   import { newSession } from "#lib/cawco/spawn/new-session.svelte.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -161,7 +161,8 @@
       .then((read) => {
         if (live) {
           graph = read;
-          graphProblem = null;
+          graphProblem =
+            read.problems.length > 0 ? read.problems.join(" ") : null;
         }
       })
       .catch((error: unknown) => {
@@ -267,14 +268,11 @@
               {/snippet}
               {#snippet action()}
                 <!-- The ask is a starter: it opens his panel with its words
-                     in his composer, nothing sent. A press on it is no
-                     press outside the panel (CawFloat, data-caw-asks). -->
-                <div class="contents" data-caw-asks>
-                  <CawStarters
-                    onpick={(text) => lead.ask(text, "decisions")}
-                    {starters}
-                  />
-                </div>
+                     in his composer, nothing sent. -->
+                <StarterCards
+                  onpick={(text) => lead.ask(text, "decisions")}
+                  {starters}
+                />
               {/snippet}
             </EmptyState>
           </div>
@@ -388,18 +386,13 @@
   .caw-empty {
     inline-size: 100%;
     max-inline-size: 36rem;
-    margin-inline: auto;
-  }
-  .caw-empty :global(.kit-empty) {
-    align-items: center;
-    text-align: center;
   }
   .caw-empty :global(.kit-empty-action) {
     align-self: stretch;
   }
   .caw-80 {
     display: grid;
-    place-items: center;
+    justify-items: start;
     margin-block-end: var(--space-3);
   }
   .problem {

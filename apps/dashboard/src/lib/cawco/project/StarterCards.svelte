@@ -16,18 +16,22 @@
     IconMic,
     IconPalette,
     IconPen,
-    IconRefresh,
+    IconRenew,
     IconRocket,
     IconRulerPen,
     IconSearch,
     IconSend,
     IconSort,
     IconStars,
-    IconToolTodo,
+    IconTaskList,
     IconWindow,
   } from "#lib/icons.js";
 
-  /** Each kind of work a starter names (the hub's `STARTER_GLYPHS`), as its Solar duotone glyph. */
+  /**
+   * Each kind of work a starter names (the hub's `STARTER_GLYPHS`), as its
+   * Solar duotone glyph: each one a mark on its half-ink body (The Solar
+   * Duotone Rule), never strokes alone beside a filled one.
+   */
   export const GLYPHS: Record<
     StarterGlyph,
     Component<SVGAttributes<SVGSVGElement>>
@@ -42,7 +46,7 @@
     mail: IconSend,
     palette: IconPalette,
     people: IconAccounts,
-    refresh: IconRefresh,
+    refresh: IconRenew,
     reply: IconChat,
     rocket: IconRocket,
     routine: IconClock,
@@ -51,7 +55,7 @@
     site: IconGlobe,
     stages: IconColumns,
     system: IconRulerPen,
-    tasks: IconToolTodo,
+    tasks: IconTaskList,
     triage: IconSort,
     voice: IconMic,
   };
@@ -72,18 +76,33 @@
    * centred, tinting under a press as wide controls do (The Press Rule). One
    * column in a narrow container; wider, as many columns of at least
    * --c-starter-w as fit (3 + 1, then 4 across at --c-starters-w).
+   *
+   * `rows`: in Caw's panel, the same tiles as suggestion rows, one under the
+   * other, each as wide as its words and no wider (the owner's pin 22), its
+   * reason under its words when the hub wrote one: a smaller caption in the
+   * muted ink, so the words lead and the reason says why (pin 10).
    */
   let {
     starters,
     onpick,
+    rows = false,
   }: {
-    starters: Starter[];
+    starters: (Starter & { reason?: string })[];
     onpick: (text: string) => void;
+    rows?: boolean;
   } = $props();
 </script>
 
-<div data-slot="starter-cards" class="starter-cards">
-  <ul data-slot="cards" aria-label="Starters" class="cards">
+<div
+  data-slot="starter-cards"
+  class="starter-cards"
+  data-rows={rows || undefined}
+>
+  <ul
+    data-slot="cards"
+    aria-label={rows ? "Things to ask Caw" : "Starters"}
+    class="cards"
+  >
     {#each starters as starter (starter.text)}
       {@const Glyph = GLYPHS[starter.glyph]}
       <li>
@@ -93,10 +112,23 @@
           onclick={() => onpick(starter.text)}
           type="button"
         >
-          <Glyph data-starter-glyph aria-hidden="true" class="starter-glyph" />
-          <span data-slot="starter-text" class="starter-text"
-            >{starter.text}</span
+          <span class="mark-cell"
+            ><Glyph
+              data-starter-glyph
+              aria-hidden="true"
+              class="starter-glyph"
+            /></span
           >
+          <span class="starter-words" data-box>
+            <span data-slot="starter-text" class="starter-text"
+              >{starter.text}</span
+            >
+            {#if rows && starter.reason}
+              <span data-slot="starter-reason" class="starter-reason"
+                >{starter.reason}</span
+              >
+            {/if}
+          </span>
         </button>
       </li>
     {/each}
@@ -129,7 +161,7 @@
   }
   .starter {
     display: flex;
-    align-items: center;
+    align-items: start;
     gap: var(--space-2);
     inline-size: 100%;
     block-size: 100%;
@@ -147,7 +179,7 @@
     transition: background-color var(--dur-control) var(--ease-out);
   }
   /* The glyph in the words' own ink, so its duotone's darker layer stands
-     clear of the card (CawStarters' chips the same). */
+     clear of the card. */
   .starter :global(.starter-glyph) {
     flex: none;
     inline-size: var(--icon-md);
@@ -162,5 +194,46 @@
   .starter:focus-visible {
     outline: var(--focus-ring-width) solid var(--focus-ring);
     outline-offset: var(--focus-ring-offset);
+  }
+  .starter-words {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-inline-size: 0;
+  }
+  .starter-text {
+    overflow-wrap: anywhere;
+  }
+  /* Why it is offered: under the words, a step down in size and ink. */
+  .starter-reason {
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+    text-wrap: pretty;
+  }
+  /* Suggestion rows: one under the other, each as wide as its words (never
+     past the column), at a row's height rather than a card's. Each is an
+     outline button standing on the thread's recess, so its edge is the one
+     made for that (`border-row-outline`: 3:1 against the recess and the
+     raised fill, by day and at night) in place of the tile's drop, which
+     reads at night as no edge at all. */
+  [data-rows] .cards {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+  }
+  [data-rows] li {
+    max-inline-size: 100%;
+  }
+  [data-rows] .starter {
+    inline-size: auto;
+    max-inline-size: 100%;
+    block-size: auto;
+    min-block-size: var(--c-btn-h);
+    padding: calc(var(--space-2) - 1px) calc(var(--space-3) - 1px);
+    border: 1px solid var(--border-row-outline);
+    border-radius: var(--radius-md);
+    box-shadow: none;
   }
 </style>

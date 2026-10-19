@@ -41,6 +41,14 @@ import { newId } from "./id";
 import { fitToPage } from "./ink";
 import { motionOk } from "./motion";
 import type { InkChrome } from "./radial";
+import {
+  bandsAt,
+  bringInto,
+  discMeets,
+  inBands,
+  scrollersOf,
+  scrollMoves,
+} from "./scrollers";
 
 const SVG = "http://www.w3.org/2000/svg";
 
@@ -84,6 +92,8 @@ export interface PinsDeps {
 export interface Pins {
   /** The person tapped `el` at the viewport's `x`, `y` in Comment mode: a comment pin there, and its card opened; its id. */
   commentAt: (el: Element, x: number, y: number) => string;
+  /** What of the page's viewport the host's chrome covers now (`cawco:covered`, the viewport's px); none when nothing does. */
+  cover: (boxes: Box[]) => void;
   /**
    * Where pin `id`'s picture is cropped, the page's px, and what it shows
    * (its look: a new one is drawn again); null when it is not on the page.
@@ -91,8 +101,10 @@ export interface Pins {
   cropOf: (id: string) => { box: Box; look: string } | null;
   /** Pins drawn again where their elements stand now. */
   draw: () => void;
-  /** The pin the host focused (J, K, its row), outlined and scrolled into view; or none. */
+  /** The pin the host focused (J, K, its row), outlined and brought into view out from under the host's chrome; or none. */
   focus: (id: string | null, scroll: boolean) => void;
+  /** After a re-publish or an HMR update: the open card's pin, if it now stands under the host's chrome, brought out again. */
+  keepClear: () => void;
   layer: SVGSVGElement;
   /** A pin on an ink group (Annotate, Comment); a comment's card opened. */
   pinInk: (
@@ -159,13 +171,17 @@ export function startPins(deps: PinsDeps): Pins {
    * of its components (re-read after each HMR update), once it has laid out.
    */
   const settled = () =>
-    (artifact.kind() === "page" || artifact.kind() === "sheet") &&
+    (artifact.kind() === "page" || artifact.kind() === "component") &&
     document.readyState !== "loading";
 
   /** Each placed pin: where it stands; a disc is drawn for it while its frames show it. */
   const placed = new Map<string, Standing>();
   let focused: string | null = null;
   let tracked: string | null = null;
+  /** What of the page's viewport the host's chrome covers (`cawco:covered`): its Comments list, a phone's card. */
+  let covered: Box[] = [];
+  /** Pins no scroll brought out from under the host's chrome when they were last revealed. */
+  const stuck = new Set<string>();
 
   const anchoredEl = (pin: Pin): Element | null =>
     "selector" in pin.anchor ? (deps.locate(pin.anchor)?.el ?? null) : null;
@@ -284,10 +300,15 @@ export function startPins(deps: PinsDeps): Pins {
   /** Places each pin on the page, drawing a disc for each its frames show; answers those that are gone. */
   const placeAll = (all: Pin[]): Pin[] => {
     const gone: Pin[] = [];
-    const paint = {
-      fill: chrome.token("--action-solid"),
-      ink: chrome.token("--on-action"),
-      font: chrome.token("--type-label", "font"),
+    // Read for the first disc drawn: a token is the page's style, read there and then.
+    let painted: { fill: string; font: string; ink: string } | null = null;
+    const paintNow = () => {
+      painted ??= {
+        fill: chrome.token("--action-solid"),
+        ink: chrome.token("--on-action"),
+        font: chrome.token("--type-label", "font"),
+      };
+      return painted;
     };
     // A resolved pin stands on the page only while the host has its card open.
     const onIt = (pin: Pin) => !pin.resolvedAt || pin.id === tracked;
@@ -302,7 +323,7 @@ export function startPins(deps: PinsDeps): Pins {
       placed.set(pin.id, where);
       // A pin in a frame scrolled away from it stands hidden until the frame shows it again.
       if (where.shown) {
-        layer.append(disc(pin, where, paint));
+        layer.append(disc(pin, where, paintNow()));
       }
     }
     return gone;
@@ -314,10 +335,11 @@ export function startPins(deps: PinsDeps): Pins {
     }
     placed.clear();
     if (!(onPage() && artifact.keeps())) {
+      fitToPage(layer, false);
       return;
     }
-    fitToPage();
     const all = [...pinsMap().values()].sort((a, b) => a.number - b.number);
+    fitToPage(layer, all.length > 0);
     const gone = placeAll(all);
     if (settled()) {
       settle(reanchor(all), gone);
@@ -328,7 +350,7 @@ export function startPins(deps: PinsDeps): Pins {
     tell();
   }
 
-  /** The tracked pin's disc in the viewport, for the host's card. */
+  /** The tracked pin's disc in the viewport, for the host's card; `stuck` while no scroll brings it out from under the host's chrome. */
   const tell = () => {
     if (!tracked) {
       return;
@@ -338,6 +360,7 @@ export function startPins(deps: PinsDeps): Pins {
     deps.post("cawco:pin-at", {
       id: tracked,
       ...(at ? { x: at[0] - scrollX, y: at[1] - scrollY, r: PIN_R } : {}),
+      ...(stuck.has(tracked) ? { stuck: true } : {}),
     });
   };
   let frame = 0;
@@ -353,6 +376,57 @@ export function startPins(deps: PinsDeps): Pins {
     }
   };
   addEventListener("scroll", onScroll, { capture: true, passive: true });
+
+  /**
+   * Pin `id` brought where the person sees it: inside the viewport and out
+   * from under every box the host's chrome covers the page with (its
+   * Comments list, a phone's card), each scroller round it moved as little
+   * as lands it there (scrollers.ts `bringInto`). A pin already standing
+   * there stays where the person is looking. One no scroll can bring out
+   * from under the host's chrome (the page's top under the list) is
+   * `stuck`: the host makes room for it.
+   */
+  const reveal = (id: string) => {
+    stuck.delete(id);
+    const where = placed.get(id);
+    if (!where) {
+      return;
+    }
+    const x = where.at[0] - scrollX;
+    const y = where.at[1] - scrollY;
+    const clear = bandsAt(x, covered, PIN_R);
+    if (where.shown && inBands(y, clear)) {
+      return;
+    }
+    const chain = scrollersOf(where.el);
+    const landed = bringInto(chain, y, clear);
+    if (landed) {
+      scrollMoves(landed, motionOk() ? "smooth" : "auto");
+      return;
+    }
+    if (covered.length > 0) {
+      stuck.add(id);
+    }
+    // Out from under nothing: at least in the viewport.
+    const shown = bringInto(chain, y, bandsAt(x, [], PIN_R));
+    if (shown) {
+      scrollMoves(shown, motionOk() ? "smooth" : "auto");
+    }
+  };
+
+  /** The open card's pin, when it stands under what the host's chrome covers, brought out again. */
+  const keepClear = () => {
+    const where = tracked ? placed.get(tracked) : undefined;
+    if (
+      tracked &&
+      where &&
+      covered.some((box) =>
+        discMeets(where.at[0] - scrollX, where.at[1] - scrollY, box)
+      )
+    ) {
+      reveal(tracked);
+    }
+  };
 
   const nextNumber = () =>
     Math.max(0, ...[...pinsMap().values()].map((pin) => pin.number)) + 1;
@@ -457,26 +531,18 @@ export function startPins(deps: PinsDeps): Pins {
       focused = id;
       const el: Element | null = id ? (placed.get(id)?.el ?? null) : null;
       if (scroll && id) {
-        const where = placed.get(id);
-        const at = where?.at;
-        // A pin already in view stays where the person is looking: the page moves only to bring one in.
-        const inView =
-          !!where?.shown &&
-          !!at &&
-          at[1] - scrollY >= PIN_R &&
-          at[1] - scrollY <= innerHeight - PIN_R &&
-          at[0] - scrollX >= 0 &&
-          at[0] - scrollX <= innerWidth;
-        const behavior = motionOk() ? "smooth" : "auto";
-        if (at && !inView && el && clipOf(el)) {
-          // Inside a frame or a scroll container: each scrolls to it, and every one and the page round it.
-          el.scrollIntoView({ block: "center", inline: "nearest", behavior });
-        } else if (at && !inView) {
-          scrollTo({ top: Math.max(0, at[1] - innerHeight / 3), behavior });
-        }
+        reveal(id);
       }
       deps.outline(el);
     },
+    cover: (boxes) => {
+      covered = boxes;
+      // What covers the page changed under an open card (its card came to a
+      // phone's foot, the panel opened or grew): its pin is brought out again.
+      keepClear();
+      tell();
+    },
+    keepClear,
     track: (id) => {
       const before = tracked;
       tracked = id;

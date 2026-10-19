@@ -212,6 +212,11 @@
       color-mix(in oklab, var(--neutral-8), var(--neutral-9) 40%),
       color-mix(in oklab, var(--neutral-9), var(--neutral-11) 10%)
     );
+    /* A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess and 3.47:1 on raised by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.47:1 on the recess. */
+    --border-row-outline: light-dark(
+      color-mix(in oklab, var(--neutral-8), var(--neutral-9) 50%),
+      color-mix(in oklab, var(--neutral-9), var(--neutral-11) 10%)
+    );
     --input: light-dark(
       var(--neutral-7),
       oklch(from var(--neutral-12) l c h / 0.14)
@@ -342,12 +347,6 @@
       color-mix(in oklch, var(--status-fail-ink) 6%, transparent),
       color-mix(in oklch, var(--status-fail-ink) 10%, transparent)
     );
-    /* A work tab's count pill (WorkTabs, the app's CountChip): solid in its status hue, chosen or not, so the pill reads against any sheet it stands on (3:1 non-text or more on the chosen sheet, the recess, hover and press, in both themes) and its numeral in count-fill-ink holds 4.5:1 or more on it. The 6% and 10% washes it replaces measured about 1.05:1 against the sheet and read as a smudge. */
-    --count-fill-live: var(--status-live-glyph);
-    --count-fill-done: var(--status-done-glyph);
-    --count-fill-fail: var(--status-fail-glyph);
-    /* A count pill's numeral: the lightest neutral by day, the darkest at night, against the status fill. */
-    --count-fill-ink: var(--neutral-1);
     --presence-online: light-dark(oklch(62.7% 0.17 149), oklch(74% 0.17 149));
     --presence-away: light-dark(oklch(70.5% 0.187 47.6), oklch(76% 0.187 47.6));
     --presence-off: var(--neutral-8);
@@ -694,6 +693,8 @@
     --c-find-w: 520px;
     /* A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line. */
     --c-panel-w: 380px;
+    /* The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next. */
+    --c-signin-pop-w: 340px;
     /* Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters and earlier threads; shorter where the room under his seat is less. */
     --c-caw-panel-h: 640px;
     /* The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top. */
@@ -754,6 +755,8 @@
     --c-composer-panel: calc(
       var(--c-composer-field) + var(--c-composer-inset) * 2 + 2px
     );
+    /* New project's field at its widest: the session Composer under "What are we working on?", and the starter chips under it, which stand on that composer's column (the Composer's own --c-composer-w inside it). */
+    --c-new-project-field-w: 570px;
     /* The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line). */
     --c-composer-w: min(720px, calc(100% - 50px));
     /* A suggestion chip: its Tab key cap, padding and border. */
@@ -762,7 +765,7 @@
       var(--space-4) + var(--space-1) * 2 + var(--c-suggest-chip)
     );
     --c-suggest-room: calc(var(--c-suggest-row) + var(--space-2));
-    /* A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (CawStarters). */
+    /* A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (StarterCards). */
     --c-starter-w: 11rem;
     /* A Caw starter card's shortest: one line of words with its padding, a thumb's height on a phone. */
     --c-starter-h: 56px;
@@ -807,7 +810,7 @@
     --focus-ring-inset: -2px;
     --material-blur: 20px;
     --scrim-blur: 2px;
-    /* The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 at 900px wide and under (tx-x-rail-narrow). */
+    /* The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 under 900px wide (tx-x-rail-narrow). */
     --tx-x-rail: var(--space-2);
     --tx-x-rail-narrow: 0px;
     /* The transcript's glyph cell (--w-glyph): the glyph column sits a space-3 past the rail, the text column a space-2 past the cell. */

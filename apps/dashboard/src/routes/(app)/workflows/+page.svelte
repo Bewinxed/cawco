@@ -154,7 +154,6 @@
     {#if !workflowState.error}
       <div in:crossIn>
         <EmptyState
-          class="mx-auto w-full max-w-[420px]"
           icon={IconWorkflow}
           line="A workflow is a graph of steps that run one after another across your fleet."
           title="No workflows yet"

@@ -12,12 +12,43 @@ import { MediaQuery } from "svelte/reactivity";
 import { choices } from "../home/choices.svelte";
 
 const coarse = new MediaQuery("pointer: coarse");
-const phone = new MediaQuery("max-width: 899px");
+const phone = new MediaQuery("(width < 900px)");
 const touchPortrait = new MediaQuery(
   "(pointer: coarse) and (orientation: portrait)"
 );
+/** DESIGN.md's phone breakpoint (Breakpoints: "640px (phone: …)"), in px. */
+const PHONE_BREAKPOINT = 640;
+/** An iPad's regular width: a coarse pointer at the phone breakpoint or wider. */
+const touchRegular = new MediaQuery(
+  `(pointer: coarse) and (min-width: ${PHONE_BREAKPOINT}px)`
+);
 
 export const layoutPolicy = {
+  /** A screen under 900px: a phone's, where conversations are the deck. */
+  get phone(): boolean {
+    return phone.current;
+  },
+  /**
+   * A phone's screen, not an iPad's regular width: a coarse pointer under
+   * 640px, or a fine one under 900px. The hidden previews' bound is 1 here.
+   */
+  get compact(): boolean {
+    return coarse.current ? !touchRegular.current : phone.current;
+  },
+  /**
+   * The artifact panel is the bottom drawer, not the side sheet, for a pane
+   * `paneWidth` wide (DESIGN.md, Artifact panel): an iPad at its regular
+   * width keeps the side sheet in a pane at the phone breakpoint or wider,
+   * so a group split beside another (choices b and c) is never squeezed
+   * into two phone-narrow columns; a fine pointer gets the drawer in a
+   * pane under 900px; a phone always.
+   */
+  sideDrawer(paneWidth: number): boolean {
+    if (coarse.current) {
+      return !(touchRegular.current && paneWidth >= PHONE_BREAKPOINT);
+    }
+    return paneWidth > 0 && paneWidth < 900;
+  },
   /** Whether conversations are a deck of one group at a time, not a grid. */
   get deck(): boolean {
     if (phone.current) {

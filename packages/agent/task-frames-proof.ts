@@ -173,7 +173,12 @@ function waitForResult(
 const TIMEOUT = 180_000;
 
 const spawned = await claudeHarness.spawn(
-  { instanceId: "task-frames-proof", cwd: PROOF_DIR, persistSession: false },
+  {
+    instanceId: "task-frames-proof",
+    cwd: PROOF_DIR,
+    harness: "claude",
+    persistSession: false,
+  },
   ctx
 );
 if (!spawned) {

@@ -831,7 +831,7 @@
           title="No routines yet"
         >
           {#snippet action()}
-            <!-- The starters as the kit's option chips (CawStarters' own),
+            <!-- The starters as the kit's option chips,
                  a press putting its words in the composer under them, unsent. -->
             {#if starters.length > 0}
               <ul
@@ -1269,11 +1269,19 @@
     gap: var(--space-3);
     align-self: stretch;
   }
+  /* The starters stand on the composer's column under them (Composer
+     `.composer`: --c-composer-w, centred; under 900px, --space-3 in
+     from its box), so the chips and the field share one start edge, as the
+     thread hero's do (ThreadPane `.hero`). */
   .routine-starters {
-    justify-content: center;
     margin: 0;
     padding: 0;
+    padding-inline: calc((100% - var(--c-composer-w)) / 2);
     list-style: none;
+
+    @media (width < 900px) {
+      padding-inline: var(--space-3);
+    }
   }
   .routine-starters li {
     display: flex;

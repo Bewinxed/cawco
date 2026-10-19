@@ -43,7 +43,6 @@
   import {
     type FinderState,
     type GoTo,
-    GRACE_MS,
     type MachineAct,
     type Opening,
     type Spoken,
@@ -77,33 +76,19 @@
   const idOf = (key: string) => `${uid}-${key}`;
   const stopKey = (r: FindResult) => `${r.kind}:${r.id}`;
 
-  // ---- Waits that outlast the grace (DESIGN.md, The Real Wait Rule) ----
-  let namesLate = $state(false);
-  let everyLate = $state(false);
+  // ---- Asks in flight ----
+  /**
+   * A section with nothing drawn yet stands placeholder rows from the frame
+   * its ask goes out (owner: "there should be a placeholder while it's
+   * loading and smoothly expand to what it should be"), so the card opens
+   * at about the size of its answer and the answer lands in place; the
+   * card's box follows any difference (HangCard's morph). A section that
+   * has rows keeps them drawn while the next answer is asked.
+   */
   const namesWaiting = $derived(
     finder.names.state === "asking" || finder.namesPending !== null
   );
   const everyWaiting = $derived(finder.searching);
-  $effect(() => {
-    if (!namesWaiting) {
-      namesLate = false;
-      return;
-    }
-    const t = setTimeout(() => {
-      namesLate = true;
-    }, GRACE_MS);
-    return () => clearTimeout(t);
-  });
-  $effect(() => {
-    if (!everyWaiting) {
-      everyLate = false;
-      return;
-    }
-    const t = setTimeout(() => {
-      everyLate = true;
-    }, GRACE_MS);
-    return () => clearTimeout(t);
-  });
 
   // ---- Keys ----
   const step = (n: number) => finder.move(phone ? -n : n);
@@ -267,6 +252,17 @@
     finder.missing.length > 0 || finder.indexing.length > 0
   );
   const machines = (n: number) => (n === 1 ? "1 machine" : `${n} machines`);
+  /**
+   * What is being searched, counted only when there is something to count:
+   * before the names answer says how many machines a find asks, or with no
+   * machine to ask, it is the hub alone that searches (never "Searching 0
+   * machines…").
+   */
+  const searchingWords = $derived(
+    finder.askable > 0
+      ? `Searching ${machines(finder.askable)}…`
+      : "Searching the hub…"
+  );
 
   type Fold = Extract<GoTo, { type: "fold" }>;
   type Item =
@@ -333,7 +329,8 @@
       {
         key: "loading",
         lead: [],
-        units: namesLate && nameRows.length === 0 ? skeletons("names", 3) : [],
+        units:
+          namesWaiting && nameRows.length === 0 ? skeletons("names", 3) : [],
       },
     ];
   }
@@ -354,7 +351,7 @@
       }),
     };
     let nameUnits = nameRows.map((r) => rowUnit(r, "names"));
-    if (nameUnits.length === 0 && namesLate) {
+    if (nameUnits.length === 0 && namesWaiting) {
       nameUnits = skeletons("names", 2);
     }
     const said: Section = { key: "said", lead: [], units: [] };
@@ -371,7 +368,7 @@
         said.lead.push({ t: "coverage", key: "coverage" });
       }
       said.units = saidRows.map((r) => rowUnit(r, "said"));
-      if (said.units.length === 0 && everyLate) {
+      if (said.units.length === 0 && everyWaiting) {
         said.units = skeletons("said", 2, true);
       }
     }
@@ -431,13 +428,13 @@
 
   const announce = $derived.by(() => {
     if (finder.hubDown) {
-      return "Can't reach the hub.";
+      return "Nothing can be searched until the hub is back.";
     }
     if (finder.nothing) {
       return `No sessions for “${finder.text.trim()}”`;
     }
     if (finder.searching) {
-      return `${nameRows.length} found by name. Searching ${machines(finder.askable)}.`;
+      return `${nameRows.length} found by name. ${searchingWords.replace("…", ".")}`;
     }
     if (finder.typed) {
       const gone = finder.missing.length
@@ -531,9 +528,7 @@
     {/if}
     {#if finder.searching}
       <span data-slot="searching" class="searching mark-line" aria-hidden="true"
-        ><span>Searching {machines(finder.askable)}…</span><Spinner
-          class="spin"
-        /></span
+        ><span>{searchingWords}</span><Spinner class="spin" /></span
       >
     {:else if finder.coverage?.asked && !short}
       <span data-slot="covered" class="covered"
@@ -814,15 +809,21 @@
   {/if}
   <div data-slot="body" class="body">
     {#if finder.hubDown || finder.refused}
-      <div class="fault" role="alert">
-        {#if finder.hubDown}
-          Can't reach the hub. Nothing can be found until it's back.
-        {:else}
-          {finder.refused}.
-        {/if}
-        <button class="link" onclick={() => finder.retry()} type="button"
-          >Retry</button
-        >
+      <!-- Where an answer's one line stands ("No sessions for …"): the
+           list's own box and the line's, by the field on a phone too. -->
+      <div class={["list", { phone }]}>
+        <div class="nothing" role="alert">
+          <p data-slot="find-fault" class="nothing-line">
+            {#if finder.hubDown}
+              Nothing can be searched until the hub is back.
+            {:else}
+              {finder.refused}.
+            {/if}
+          </p>
+          <button class="link" onclick={() => finder.retry()} type="button"
+            >Retry</button
+          >
+        </div>
       </div>
     {:else}
       {#key finder.view}
@@ -1220,12 +1221,6 @@
   }
   .nothing-line {
     margin: 0;
-    color: var(--ink-strong);
-  }
-
-  .fault {
-    padding: var(--space-3);
-    font: var(--type-body);
     color: var(--ink-strong);
   }
 

@@ -14,6 +14,7 @@ import type {
   WorkflowRunStatus,
   WorkflowStep,
 } from "@cawco/core";
+import type { BoardRow } from "./links";
 
 const PREFIX = "run:";
 
@@ -80,7 +81,7 @@ export const runSince = (run: WorkflowRun): number | undefined =>
 const BOARD_MS = 24 * 60 * 60 * 1000;
 
 /** Whether a run row is one the board lists: still going, or ended within the window. */
-export const onBoard = (row: InstanceRow, now: number): boolean =>
+export const onBoard = (row: BoardRow, now: number): boolean =>
   row.status === "running" ||
   now - new Date(row.updatedAt ?? 0).getTime() < BOARD_MS;
 
@@ -88,12 +89,14 @@ export const onBoard = (row: InstanceRow, now: number): boolean =>
  * A run as a session row. Its parent is the run it is a child of, else the
  * session that supervises it; its folder is the workspace it runs in.
  */
-export function runRowOf(run: WorkflowRun, name: string): InstanceRow {
+export function runRowOf(run: WorkflowRun, name: string): BoardRow {
   return {
     id: runTabId(run.id),
     machineId: run.machineId,
     cwd: run.workspace,
+    harness: null,
     launchDir: "known",
+    kind: "mainline",
     sessionId: null,
     status: STATUS[run.status],
     title: name,

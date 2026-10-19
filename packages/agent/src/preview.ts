@@ -1,7 +1,7 @@
 import { timingSafeEqual } from "node:crypto";
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { PreviewSource } from "@cawco/core";
+import { PREVIEW_PING_PATH, type PreviewSource } from "@cawco/core";
 import {
   cachePreview,
   causeOf,
@@ -27,7 +27,7 @@ import {
   WorkspaceDown,
   workspaceGone,
 } from "./preview-bridge";
-import { sourceViewer, wakeSource } from "./stage";
+import { networkOf, sourceViewer, wakeSource } from "./stage";
 
 /**
  * The listeners this process serves, with the source each was asked for and
@@ -231,22 +231,19 @@ export function stopPreview({
 
 /**
  * Where a port preview's requests go: the host's loopback, or for a
- * workspace's port the socket of the bridge into that workspace's network
- * (`preview-bridge.ts`); a workspace with no boundary running throws
- * {@link WorkspaceDown}.
+ * workspace's port the socket of the bridge into the network it is in
+ * (`preview-bridge.ts`, stage.ts `networkOf`); a workspace with no boundary
+ * running throws {@link WorkspaceDown}.
  */
 const upstreamOf = async (
   instanceId: string,
-  source: { port: number; workspace?: string }
+  source: { port: number; stage?: unknown; workspace?: string }
 ): Promise<{ unix: string } | "host"> => {
-  if (source.workspace === undefined) {
+  const network = networkOf(source);
+  if (network === undefined) {
     return "host";
   }
-  const reached = await reachWorkspace(
-    instanceId,
-    source.workspace,
-    source.port
-  );
+  const reached = await reachWorkspace(instanceId, network, source.port);
   return reached === "host" ? "host" : { unix: reached };
 };
 
@@ -351,12 +348,25 @@ async function start(
       ? { dir: root as string }
       : portSource(port, { workspace, stage, serve });
   await stopNow(instanceId);
-  if ("port" in source) {
-    // A workspace no boundary runs refuses the preview in so many words.
+  // A workspace no boundary runs refuses the preview in so many words. A
+  // sheet's stage or a served preview's server is woken by its first
+  // request (`staged`), which starts the boundary it runs in: a boundary
+  // closed while it slept is no refusal.
+  if (
+    "port" in source &&
+    !(source.workspace && (source.stage || source.serve))
+  ) {
     await upstreamOf(instanceId, source);
   }
-  /** A sheet's stage or a workspace preview's server, woken when it sleeps or failed; its refusal is the page the pane draws. */
-  const staged = async (): Promise<Response | null> => {
+  /**
+   * A sheet's stage or a workspace preview's server, woken when it sleeps;
+   * its refusal is the page the pane draws. One in `error` starts again only
+   * for a page's own load (a navigation: the pane opened, or its Try again):
+   * an open page's background requests (Vite's client pinging its server
+   * while it is down) are answered with the refusal, so the stage that
+   * didn't start stands until the person asks again.
+   */
+  const staged = async (request: Request): Promise<Response | null> => {
     if (!(
       "port" in source &&
       (source.stage || source.serve) &&
@@ -365,7 +375,10 @@ async function start(
       return null;
     }
     try {
-      await wakeSource(source);
+      await wakeSource(
+        source,
+        request.headers.get("sec-fetch-mode") === "navigate"
+      );
       return null;
     } catch (error) {
       previewFailed("agent listener", instanceId, causeOf(error));
@@ -379,7 +392,8 @@ async function start(
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two source modes converge here so header rewriting and HTML injection have one path.
     async fetch(request, server) {
       // `/__cawco/*` (the overlay among it) is the hub listener's own and
-      // never reaches here.
+      // never reaches here, but the ping, which the hub relays to learn this
+      // listener answers (hub preview.ts `pingSession`).
       const url = new URL(request.url);
       // The hub's relay alone, before anything here acts on the request or
       // tells the app it comes from its own localhost: a request straight to
@@ -396,6 +410,9 @@ async function start(
           `refused a request to ${url.pathname} that its hub didn't relay`
         );
         return notRelayed();
+      }
+      if (url.pathname === PREVIEW_PING_PATH) {
+        return new Response("ok", { headers: { "cache-control": "no-store" } });
       }
       let response: Response;
       /** A folder's file at its folder's key: kept for good. */
@@ -435,7 +452,7 @@ async function start(
           }
         }
         headers.set("accept-encoding", "identity");
-        const asleep = await staged();
+        const asleep = await staged(request);
         if (asleep) {
           return asleep;
         }
@@ -487,10 +504,8 @@ async function start(
           );
         } catch (error) {
           // Nothing answered: the workspace closed under it, or its server is down.
-          if (
-            source.workspace !== undefined &&
-            (await workspaceGone(source.workspace))
-          ) {
+          const network = networkOf(source);
+          if (network !== undefined && (await workspaceGone(network))) {
             previewFailed(
               "agent listener",
               instanceId,

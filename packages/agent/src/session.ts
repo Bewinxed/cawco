@@ -17,7 +17,6 @@ import type {
   ControlPayload,
   DaemonPermissionRequestFrame,
   Envelope,
-  FleetConfig,
   FleetHoldings,
   FleetSyncReport,
   FramePayload,
@@ -27,6 +26,7 @@ import type {
   HarnessKind,
   IngestMark,
   LaunchGrant,
+  MachineFleetConfig,
   MoveEnded,
   NeutralMessage,
   NeutralResultMessage,
@@ -65,6 +65,7 @@ import {
   CONTROL_WORKSPACE_DISCARD,
   cacheHit,
   type DeliveryMark,
+  deriveTitleFromFirstMessage,
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
@@ -74,6 +75,7 @@ import {
   INSTALL_SESSION_CREDENTIAL,
   LIMIT_REACHED,
   type LimitHolder,
+  lastErrorKindOf,
   limitSentence,
   MESSAGES_HELD,
   MESSAGES_READ,
@@ -127,7 +129,6 @@ import type { Harness, HarnessContext, HarnessSession } from "./harness";
 import {
   HarnessRecoveryRefused,
   HeldProcessRefused,
-  HubContractRefused,
   type KeeperRefused,
   ReattachFailed,
   SessionAddressRefused,
@@ -254,8 +255,8 @@ export interface SessiondAwareContext extends HarnessContext {
  * The frames an agent has to send. The hub's own registry news is not one.
  *
  * A frame read off a sessiond ring additionally carries the line it came from
- * ({@link FrameProvenance}, design §7) — additively, so the daemon's socket
- * writer and an older hub both pass it through untouched. It is the hub's only
+ * ({@link FrameProvenance}, design §7), which the daemon's socket writer
+ * passes through untouched. It is the hub's only
  * way to tell a replayed line it already has from one it does not.
  */
 export type FrameSink = (
@@ -393,6 +394,26 @@ const custodyProbe = async <T>(
  */
 const HARNESS_LISTING_MS = 10_000;
 
+/**
+ * A listed session with its first prompt as a title
+ * ({@link NeutralSessionInfo.firstTitle}), derived once here so no reader
+ * parses the prompt.
+ */
+const titled = (info: NeutralSessionInfo): NeutralSessionInfo => {
+  const firstTitle = info.firstPrompt
+    ? deriveTitleFromFirstMessage(info.firstPrompt)
+    : "";
+  return firstTitle ? { ...info, firstTitle } : info;
+};
+
+/** A call for a session this agent runs no process for: a control refusal of kind `not-running`. */
+class NotRunning extends Error {
+  constructor(instanceId: string) {
+    super(`no session ${instanceId}`);
+    this.name = "NotRunning";
+  }
+}
+
 const isDirectory = async (path: string): Promise<boolean> => {
   const info = await stat(path).catch(() => null);
   return info?.isDirectory() ?? false;
@@ -496,8 +517,8 @@ const ghAvailable = async (): Promise<boolean> =>
  * In a workspace's clone they run inside its boundary, as every git call
  * there does (`safe-git.ts`): its config and hooks are the workspace's to
  * write, and `git status` runs what they name (an fsmonitor, a filter). A
- * project lead's place is a person's own folder, whose protected config the
- * lead cannot write (core workspace-policy.ts): there they run on the host.
+ * place is a person's own folder, whose protected config its boundary
+ * cannot write (core workspace-policy.ts): there they run on the host.
  */
 const gitChanges = async (dir: string, since: string): Promise<GitChanges> => {
   const workspace = await cloneHolding(dir);
@@ -665,23 +686,6 @@ export const agreedHashes = (
 };
 
 export class SessionSupervisor {
-  #hubContract = false;
-  readonly #hubRefusal =
-    "The hub has not restarted onto this build yet. Restart the hub, then retry.";
-
-  setHubContract(supported: boolean): void {
-    this.#hubContract = supported;
-  }
-
-  declareHubContract(supported: boolean): void {
-    this.setHubContract(supported);
-    if (!supported) {
-      for (const pending of this.#addressWaiting.values()) {
-        pending.ack.reject(new HubContractRefused(this.#hubRefusal));
-      }
-    }
-  }
-
   #stopSequence = 0;
 
   get stopSequence(): number {
@@ -1306,13 +1310,8 @@ export class SessionSupervisor {
     this.#custodyHarnesses?.delete(instanceId);
   }
 
-  /** Whether custody is ready now: false when the hub refused its contract (reported as a failure) or a newer epoch began. */
+  /** Whether custody is ready now: false when a newer epoch began. */
   completeCustody(epoch: number): boolean {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: register declarations mutate this connection-local contract before custody completion
-    if (!this.#hubContract) {
-      this.failCustody(epoch, new HubContractRefused(this.#hubRefusal));
-      return false;
-    }
     if (epoch !== this.#custodyEpoch) {
       return false;
     }
@@ -1338,21 +1337,14 @@ export class SessionSupervisor {
   }
 
   /**
-   * A recovery that could not be decided: the register went unanswered, or
-   * the hub refused the contract. Said to every session it named and in the
-   * log, and idle-gated operations stay held. Only for the epoch in
-   * progress: one that completed was recovered, and losing the connection
-   * after that begins a new one (`loseCustody`). A harness whose reattach
-   * fails or runs out of time is not this: it settles its own sessions and
-   * custody goes on (daemon.ts `takeCustody`).
-   *
-   * What happens next depends on the cause. An unanswered register is sent
-   * again on the same connection (daemon.ts `registrationExpired`). A
-   * refused contract is not: the hub answers every register with the
-   * contract its build has (server.ts `registerAck`), and this agent reads it
-   * once per connection, from that connection's first register ack (daemon.ts
-   * `beforeAck`), so only a new connection to a hub on a build with the
-   * contract changes it.
+   * A recovery that could not be decided: the register went unanswered. Said
+   * to every session it named and in the log, and idle-gated operations stay
+   * held; the register is sent again on the same connection (daemon.ts
+   * `registrationExpired`). Only for the epoch in progress: one that
+   * completed was recovered, and losing the connection after that begins a
+   * new one (`loseCustody`). A harness whose reattach fails or runs out of
+   * time is not this: it settles its own sessions and custody goes on
+   * (daemon.ts `takeCustody`).
    */
   failCustody(epoch: number, problem: unknown): void {
     if (epoch !== this.#custodyEpoch || this.#custodyState === "ready") {
@@ -1361,11 +1353,7 @@ export class SessionSupervisor {
     this.#custodyState = "failed";
     this.#custodyError =
       problem instanceof Error ? problem.message : String(problem);
-    const next =
-      problem instanceof HubContractRefused
-        ? "It's tried again when the hub next restarts and this machine registers"
-        : "The register is sent again while connected";
-    const message = `Machine custody recovery failed: ${this.#custodyError.replace(FINAL_STOP, "")}. ${next}; idle-gated operations remain held.`;
+    const message = `Machine custody recovery failed: ${this.#custodyError.replace(FINAL_STOP, "")}. The register is sent again while connected; idle-gated operations remain held.`;
     const ids = [...this.#custodyInstances];
     for (const instanceId of ids) {
       this.sink({ kind: "error", instanceId, verb: "register", message });
@@ -1707,8 +1695,25 @@ export class SessionSupervisor {
     // longer listed it first would have the hub settle it as ended.
     this.#ending.add(session);
     await session.stop();
+    // Asleep only once no keeper holds its process, as a stop says `stopped`
+    // only then ({@link #stop}). `session.stop()` closes the CLI's stdin and
+    // its `Query`, and the SDK's own SIGTERM and SIGKILL for a child still
+    // there come on unref'd timers 2 s and 7 s on, in this process: an agent
+    // restarted inside them left a CLI the hub had filed asleep, which no
+    // custody names again, running in its workspace's clone; the hub then
+    // closed that workspace under it (obelisk, 2026-10-18).
+    const left = await this.#endHeld(instanceId).then(
+      () => undefined,
+      (error: unknown) =>
+        error instanceof Error ? error : new Error(String(error))
+    );
     this.#sessions.delete(instanceId);
     this.#forgetPulse(instanceId);
+    if (left) {
+      // Still running past its kill: not asleep, and the hub hears why.
+      this.#fail(instanceId, left, processGeneration);
+      return { asleep: false, awake: left.message };
+    }
     this.#asleep.add(instanceId);
     this.#gone(instanceId, processGeneration);
     Effect.runFork(
@@ -2311,10 +2316,10 @@ export class SessionSupervisor {
     }
   }
 
-  #adapter(kind: HarnessKind | undefined): Harness {
-    const adapter = harnessOf(kind ?? "claude");
+  #adapter(kind: HarnessKind): Harness {
+    const adapter = harnessOf(kind);
     if (!adapter) {
-      throw new Error(`no harness adapter for ${kind ?? "claude"}`);
+      throw new Error(`no harness adapter for ${kind}`);
     }
     return adapter;
   }
@@ -2592,6 +2597,11 @@ export class SessionSupervisor {
     if (payload.title) {
       this.#titles.set(instanceId, payload.title);
     }
+    if (!kind) {
+      throw new Error(
+        "A start names the harness it runs on; this one named none."
+      );
+    }
     const adapter = this.#adapter(kind);
     if (payload.resume && !payload.resume.fork) {
       this.#resumable.set(instanceId, {
@@ -2601,9 +2611,6 @@ export class SessionSupervisor {
       });
     }
     try {
-      if (adapter.kind === "opencode" && !this.#hubContract) {
-        throw new HubContractRefused(this.#hubRefusal);
-      }
       if (payload.scratchWorktree) {
         this.#worktrees.set(instanceId, payload.scratchWorktree);
       }
@@ -2737,7 +2744,7 @@ export class SessionSupervisor {
       // workspace's: its boundary reads that project's folder.
       const boundary = await boundaryFor(
         place,
-        (spec.harness ?? "claude") === "claude"
+        spec.harness === "claude"
           ? (spec.accountDir?.accountId ?? spec.homeLoginMove?.accountId)
           : undefined,
         spec.workspace ? spec.projectId : undefined,
@@ -2845,19 +2852,6 @@ export class SessionSupervisor {
             requestId: ack,
             ok: false,
             error: "The session was stopped before it was attached.",
-          });
-        }
-        return;
-      }
-      if (error instanceof HubContractRefused) {
-        this.#fail(instanceId, error, payload.processGeneration);
-        if (ack) {
-          this.sink({
-            kind: "control_result",
-            instanceId,
-            requestId: ack,
-            ok: false,
-            error: error.message,
           });
         }
         return;
@@ -3130,9 +3124,16 @@ export class SessionSupervisor {
         }
         if (recovery) {
           this.#failures.set(instanceId, String(error));
-        } else {
-          this.#fail(instanceId, error, processGeneration);
+          return;
         }
+        // Its process may still run: its harness's stream failed, not the
+        // CLI. Ended here, as a stop ends it, before the hub hears the
+        // failure: a failed row holds no workspace (work-items.ts `holdOn`),
+        // and a CLI left running in one was closed under ({@link #endFailed}).
+        if (holder.session) {
+          this.#ending.add(holder.session);
+        }
+        this.#endFailed(instanceId, error, processGeneration);
       },
       died: (signal, error) => {
         const { session } = holder;
@@ -3321,7 +3322,7 @@ export class SessionSupervisor {
     claude: Harness & SessiondAdoption,
     row: Claimed["row"],
     proc: Claimed["proc"],
-    ingested: Record<string, IngestMark> | undefined
+    ingested: Record<string, IngestMark>
   ): void {
     const { instanceId } = row;
     const stop = new AbortController();
@@ -3352,7 +3353,7 @@ export class SessionSupervisor {
     claude: Harness & SessiondAdoption,
     row: Claimed["row"],
     proc: Claimed["proc"],
-    ingested: Record<string, IngestMark> | undefined,
+    ingested: Record<string, IngestMark>,
     stopped: AbortSignal
   ): Promise<void> {
     const { instanceId } = row;
@@ -3481,12 +3482,12 @@ export class SessionSupervisor {
   async #adoptClaimed(
     claude: Harness & SessiondAdoption,
     { row, proc, running, settle }: Claimed,
-    ingested: Record<string, IngestMark> | undefined,
+    ingested: Record<string, IngestMark>,
     stopped?: AbortSignal
   ): Promise<void> {
     if (!(await isDirectory(row.cwd))) {
       this.#recoveryUnavailable(
-        { ...row, reattachOnly: true },
+        { ...row, harness: claude.kind, reattachOnly: true },
         "The recovery directory is no longer available."
       );
       return;
@@ -3498,7 +3499,7 @@ export class SessionSupervisor {
     // names lines that no longer exist, and one from an earlier process
     // under the same id names another ring. Disk transcripts cover the
     // middle.
-    const mark = ingested?.[row.instanceId];
+    const mark = ingested[row.instanceId];
     const cursor = resumeCursor(procEpoch(proc.epoch, proc.pid), mark);
     if (cursor !== undefined && mark) {
       this.#ingested.set(row.instanceId, mark);
@@ -3784,7 +3785,39 @@ export class SessionSupervisor {
     this.#sessions.delete(instanceId);
     this.#busy.delete(instanceId);
     this.#forgetPulse(instanceId);
-    this.#fail(instanceId, error, processGeneration);
+    // The keeper refused its input, not its life: the process may run on,
+    // driven by nothing. It alone is ended, by its pid ({@link
+    // KeeperRefused.pid}), before the hub hears the failure. A refusal that
+    // names no pid came from a keeper that could not list its child, and
+    // ends nothing: the id alone may name the session's next process.
+    if (error.pid === undefined) {
+      this.#fail(instanceId, error, processGeneration);
+      return;
+    }
+    this.#endFailed(instanceId, error, processGeneration, error.pid);
+  }
+
+  /**
+   * A FAILED SESSION LEAVES NO PROCESS RUNNING. Its keeper's child (only the
+   * one of `pid`, when given) is ended and waited out ({@link #endHeld}),
+   * then the hub hears the failure ({@link #fail}). The hub files the row
+   * failed and holds its workspace no longer (work-items.ts `holdOn`), and
+   * nothing ends a CLI left running there: no custody names a failed session
+   * again. One that outlives its kill is said beside the failure.
+   */
+  #endFailed(
+    instanceId: string,
+    error: unknown,
+    processGeneration: string | undefined,
+    pid?: number
+  ): void {
+    this.#endHeld(instanceId, pid)
+      .catch((problem: unknown) =>
+        warn(
+          `${instanceId}: its process could not be ended after its failure: ${errorText(problem)}`
+        )
+      )
+      .finally(() => this.#fail(instanceId, error, processGeneration));
   }
 
   /** A send handed to its harness, whole as the hub sent it, until the harness reads it. */
@@ -4015,12 +4048,14 @@ export class SessionSupervisor {
       warn(`${instanceId}: ${said}`);
     }
     this.#failures.set(instanceId, message);
+    const lastErrorKind = lastErrorKindOf(error);
     const frame = {
       kind: "error" as const,
       instanceId,
       processGeneration,
       verb: "spawn" as const,
       message,
+      ...(lastErrorKind ? { lastErrorKind } : {}),
     };
     // The hub fails the row and its work item on this frame alone. One that
     // could not go out now goes out on the next connection.
@@ -4150,8 +4185,12 @@ export class SessionSupervisor {
     session.send(message, { attachments, images });
   }
 
-  /** Ends the instance's children on every keeper that holds one, the current or a retiring one, and waits until each has gone. */
-  #endHeld(instanceId: string): Promise<boolean> {
+  /**
+   * Ends the instance's children on every keeper that holds one, the current
+   * or a retiring one, and waits until each has gone; with `pid`, only the
+   * child of that pid, so a process started since under the same id is left.
+   */
+  #endHeld(instanceId: string, pid?: number): Promise<boolean> {
     return withKeepers(async (keepers) => {
       const children = keepers.flatMap(({ client }) =>
         client.procs
@@ -4159,6 +4198,7 @@ export class SessionSupervisor {
             const id = parseProcId(proc.procId);
             return (
               proc.alive &&
+              (pid === undefined || proc.pid === pid) &&
               (id.kind === "claude" || id.kind === "pi") &&
               id.instanceId === instanceId
             );
@@ -4214,10 +4254,12 @@ export class SessionSupervisor {
       if (session) {
         this.#ending.add(session);
       }
-      const kind = harness ?? session?.harness;
-      if (kind === "opencode" && !this.#hubContract) {
-        throw new HubContractRefused(this.#hubRefusal);
+      if (!harness) {
+        throw new Error(
+          "A stop names its session's harness; this one named none."
+        );
       }
+      const kind = harness;
       let ended: Extract<FramePayload, { kind: "stopped" }>["ended"];
       let sharedConversation = false;
       if (kind === "opencode") {
@@ -4308,7 +4350,7 @@ export class SessionSupervisor {
       }
       if (kind !== "opencode") {
         await this.#endHeld(instanceId);
-        ended = { harness: kind ?? "claude", resourcesClosed: true };
+        ended = { harness: kind, resourcesClosed: true };
       }
       this.#resumable.delete(instanceId);
       this.#handed.delete(instanceId);
@@ -4322,7 +4364,7 @@ export class SessionSupervisor {
           this.#spinOffs.set(instanceId, {
             dir: cwd,
             sessionId,
-            harness: harness ?? "claude",
+            harness,
           });
         }
         if (!(sessionId && claimedSessionIds.includes(sessionId))) {
@@ -4581,11 +4623,21 @@ export class SessionSupervisor {
         result: await runFs(payload),
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       this.sink({
         kind: "control_result",
         requestId,
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        // Kept as said beside the refusal: the shipped app reads its
+        // `ENOENT:` prefix.
+        error: message,
+        refusal: {
+          kind:
+            (error as NodeJS.ErrnoException).code === "ENOENT"
+              ? "missing"
+              : "unknown",
+          message,
+        },
       });
     }
   }
@@ -4645,12 +4697,17 @@ export class SessionSupervisor {
             : result,
       });
     } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
       this.sink({
         kind: "control_result",
         instanceId,
         requestId,
         ok: false,
-        error: error instanceof Error ? error.message : String(error),
+        error: message,
+        refusal: {
+          kind: error instanceof NotRunning ? "not-running" : "unknown",
+          message,
+        },
       });
     }
   }
@@ -4708,7 +4765,7 @@ export class SessionSupervisor {
     const all = listed.flat();
     all.sort((a, b) => (b.lastModified ?? 0) - (a.lastModified ?? 0));
     return {
-      sessions: options.limit ? all.slice(0, options.limit) : all,
+      sessions: (options.limit ? all.slice(0, options.limit) : all).map(titled),
       unanswered,
       failed,
     };
@@ -4748,7 +4805,7 @@ export class SessionSupervisor {
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every existing fleet report field across harnesses, preserving per-harness ownership
   async #syncFleet(
-    incoming: FleetConfig | undefined,
+    incoming: MachineFleetConfig | undefined,
     which: "syncFleet" | "fleetStatus"
   ): Promise<FleetSyncReport> {
     // The daemon's connection names a hub reachable from this machine.
@@ -4768,7 +4825,11 @@ export class SessionSupervisor {
               row.name,
               "unavailable" in launcher
                 ? { state: "pending", detail: launcher.unavailable }
-                : { state: "failed", detail: launcher.failure }
+                : {
+                    state: "failed",
+                    cause: "unknown",
+                    detail: launcher.failure,
+                  }
             );
             return { ...row, enabled: false };
           }
@@ -4801,13 +4862,12 @@ export class SessionSupervisor {
     const skills: Record<string, State> = {};
     // Merged rather than dropped. This rebuilds the machine's one word from
     // each harness's, and every field it does not name is a field the hub never
-    // hears about — which is how the memory documents, the memory hook, the
-    // hooks and (once it existed) `have` all went missing between a daemon that
+    // hears about — which is how the memory documents, the hooks and (once it
+    // existed) `have` all went missing between a daemon that
     // reported them and a hub that had nowhere to read them from.
     const memoryDocs: Record<string, State> = {};
     const hooks: Record<string, State> = {};
     let memory: FleetSyncReport["memory"];
-    let memoryHook: FleetSyncReport["memoryHook"];
     // Merged the same way, and it has to be: the toolchain is what attributes a
     // CLI failure to a binary, and a field this rebuild does not name is a field
     // the hub never hears about.
@@ -4830,7 +4890,7 @@ export class SessionSupervisor {
                   await adapter.syncFleet!(
                     (adapter.capabilities.mcpStatus
                       ? config
-                      : incoming) as FleetConfig
+                      : incoming) as MachineFleetConfig
                   )
                 : // biome-ignore lint/style/noNonNullAssertion: filtered to adapters that have it above
                   await adapter.fleetStatus!();
@@ -4849,7 +4909,11 @@ export class SessionSupervisor {
         mcpByHarness[adapter.kind] = Object.fromEntries(
           (config?.mcp ?? []).map((row) => [
             row.name,
-            { state: "failed", detail: `${adapter.kind}: ${String(error)}` },
+            {
+              state: "failed",
+              cause: "unknown",
+              detail: `${adapter.kind}: ${String(error)}`,
+            },
           ])
         );
         continue;
@@ -4871,9 +4935,6 @@ export class SessionSupervisor {
       if (report.memory) {
         ({ memory } = report);
       }
-      if (report.memoryHook) {
-        ({ memoryHook } = report);
-      }
       if (report.toolchain) {
         toolchain = { ...toolchain, ...report.toolchain };
       }
@@ -4884,7 +4945,10 @@ export class SessionSupervisor {
     ]);
     for (const [kind, detail] of mcpFailures) {
       mcpByHarness[kind] = Object.fromEntries(
-        [...names].map((name) => [name, { state: "failed", detail }])
+        [...names].map((name) => [
+          name,
+          { state: "failed", cause: "unknown", detail },
+        ])
       );
     }
     for (const [kind, report] of Object.entries(mcpByHarness)) {
@@ -4923,7 +4987,6 @@ export class SessionSupervisor {
       memoryDocs,
       hooks,
       ...(memory ? { memory } : {}),
-      ...(memoryHook ? { memoryHook } : {}),
       ...(toolchain ? { toolchain } : {}),
       have: await this.#fleetHoldings(),
       at: Date.now(),
@@ -5019,7 +5082,7 @@ export class SessionSupervisor {
           );
         }
         const report = await this.#syncFleet(
-          args[0] as FleetConfig,
+          args[0] as MachineFleetConfig,
           "syncFleet"
         );
         this.#healFleetMcp([...this.#sessions.keys()]);
@@ -5033,13 +5096,20 @@ export class SessionSupervisor {
       }
 
       if (CATALOG_METHODS.has(method)) {
+        if (!kind) {
+          throw new Error(
+            `${method} names no harness: a session key is one harness's`
+          );
+        }
         const adapter = this.#adapter(kind);
         switch (method) {
-          case "getSessionInfo":
-            return await adapter.getSessionInfo(
+          case "getSessionInfo": {
+            const info = await adapter.getSessionInfo(
               args[0] as string,
               dirOf(args[1])
             );
+            return info ? titled(info) : info;
+          }
           case "getSessionMessages":
             return await adapter.getSessionMessages(
               args[0] as string,
@@ -5124,7 +5194,7 @@ export class SessionSupervisor {
   #session(instanceId: string): HarnessSession {
     const session = this.#sessions.get(instanceId);
     if (!session) {
-      throw new Error(`no session ${instanceId}`);
+      throw new NotRunning(instanceId);
     }
     return session;
   }

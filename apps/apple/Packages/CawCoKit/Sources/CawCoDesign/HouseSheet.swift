@@ -3,9 +3,16 @@ import UIKit
 /// The house bottom sheet (vaul, components/ui/drawer; DESIGN.md "Dialog,
 /// sheet and drawer"), presented over the scrim:
 ///
-/// - `.card`: the drawer. A raised card inset 8pt from the screen's edges
-///   (radius 12, 1pt border), its 100×6 grabber, a leading title in the label
-///   role, its content 8pt inside the card, at most 80% of the screen tall.
+/// - `.card`: the drawer, one recipe for every bottom sheet. Its raised
+///   surface is full-bleed: edge to edge and flush on the screen's foot,
+///   rounded 12 at the top corners only, the hairline along the top edge
+///   only. Its 100×6 grabber, then one header (drawer-header,
+///   `.kit-sheet-head`): the title in the title role and Close at the
+///   trailing edge (a 28pt ghost with a 16pt glyph, 44pt under a finger),
+///   a seam under it that comes in over the first 11pt of the content's
+///   scroll. The content stands on the surface 16pt in from the sides and
+///   16pt plus the safe area above the foot; as tall as its content, up to
+///   85% of the screen.
 /// - `.edge`: the session details sheet (PaneTabs.svelte): flush to the
 ///   bottom and sides, rounded on top, its border open at the foot.
 ///
@@ -87,6 +94,9 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         }
         card.boxShadow = Shadow.shadowDrawer
         view.addSubview(card)
+        topEdge.fillColor = nil
+        topEdge.lineWidth = 1
+        card.layer.addSublayer(topEdge)
         paint()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (sheet: HouseSheetController, _: UITraitCollection) in
             sheet.paint()
@@ -102,22 +112,40 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         column.axis = .vertical
         column.translatesAutoresizingMaskIntoConstraints = false
         if let titleText {
-            let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+            // `.kit-sheet-head`: the title in the title role, Close at the trailing
+            // edge, `space-2` apart; `space-3` under the grabber and over its seam.
+            let title = KitLabel(TypeScale.typeTitle, ink: Palette.inkStrong)
             title.text = titleText
             title.accessibilityTraits = .header
-            column.addArrangedSubview(title)
-            column.setCustomSpacing(Space.space1, after: title)
+            title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
+            let close = SheetCloseButton()
+            close.addAction(UIAction { [weak self] _ in self?.dismiss(animated: true) }, for: .primaryActionTriggered)
+            let head = UIStackView(arrangedSubviews: [title, close])
+            head.spacing = Space.space2
+            head.alignment = .center
+            head.isLayoutMarginsRelativeArrangement = true
+            head.directionalLayoutMargins = NSDirectionalEdgeInsets(top: Space.space3, leading: 0, bottom: Space.space3, trailing: 0)
+            column.addArrangedSubview(head)
+            seam.backgroundColor = Palette.borderHairline
+            seam.alpha = 0
+            seam.heightAnchor.constraint(equalToConstant: 1).isActive = true
+            column.addArrangedSubview(seam)
+            watchScroll()
         }
         addChild(content)
         column.addArrangedSubview(content.view)
         content.didMove(toParent: self)
         card.addSubview(column)
 
-        // vaul's content box: the card is inset 8 inside it (`before:inset-2`)
-        // and the content padded 16 (`p-4`), so 8 inside the card.
-        // DESIGN.md: "a raised inner card (12px radius, inset 8px)".
-        let inset = style == .edge ? 0 : 8.0
-        let pad = style == .edge ? 0 : 16 - inset
+        // vaul's content box, `p-4`: the drawer's surface is full-bleed
+        // (`before:inset-x-0 before:bottom-0`), its content 16 in. The side
+        // drawer keeps the raised inner card, inset 8 inside its box.
+        let inset = style == .side ? 8.0 : 0
+        let pad = switch style {
+        case .card: 16.0
+        case .edge: 0.0
+        case .side: 8.0
+        }
         footPad = column.bottomAnchor.constraint(equalTo: card.bottomAnchor, constant: -pad)
         // The edge sheet's 1pt border is part of its box on the web: its
         // content stands inside it at the sides (the foot's is open).
@@ -153,15 +181,17 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
                 formPlace = [
                     card.centerXAnchor.constraint(equalTo: view.centerXAnchor),
                     card.centerYAnchor.constraint(equalTo: view.centerYAnchor),
-                    card.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -inset * 2),
+                    card.widthAnchor.constraint(lessThanOrEqualTo: view.widthAnchor, constant: -Space.space2 * 2),
                     wide,
                 ]
             }
             NSLayoutConstraint.activate([
-                card.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: cap ?? (style == .card ? 0.8 : 0.88), constant: -inset * 2),
-                // The grabber's `mt-4`, under the content box's `p-4` on the
-                // drawer, and inside the edge sheet's 1pt border on it.
-                handle.topAnchor.constraint(equalTo: card.topAnchor, constant: style == .card ? 16 + 16 - inset : 1 + 16),
+                // As tall as its content, up to 85% of the screen (the box's 8 above the surface in it).
+                card.heightAnchor.constraint(lessThanOrEqualTo: view.heightAnchor, multiplier: cap ?? (style == .card ? 0.85 : 0.88),
+                                             constant: style == .card ? -Space.space2 : 0),
+                // The grabber's `mt-4`, under the content box's `p-4`, whose surface
+                // stands 8 inside its top (`before:inset-2`); inside the edge sheet's 1pt border on it.
+                handle.topAnchor.constraint(equalTo: card.topAnchor, constant: style == .card ? 16 + 16 - Space.space2 : 1 + 16),
                 handle.centerXAnchor.constraint(equalTo: card.centerXAnchor),
                 handle.widthAnchor.constraint(equalToConstant: 100),
                 handle.heightAnchor.constraint(equalToConstant: 6),
@@ -191,6 +221,42 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         NSLayoutConstraint.deactivate(form ? drawerPlace : formPlace)
         NSLayoutConstraint.activate(form ? formPlace : drawerPlace)
         handle.isHidden = style == .side || form
+        // The drawer meets the screen's foot: rounded on top only, its hairline
+        // along the top edge alone; the centred form keeps every corner and edge.
+        if style == .card {
+            card.layer.maskedCorners = form ? [.layerMinXMinYCorner, .layerMaxXMinYCorner, .layerMinXMaxYCorner, .layerMaxXMaxYCorner]
+                : [.layerMinXMinYCorner, .layerMaxXMinYCorner]
+        }
+        paint()
+    }
+
+    /// The drawer's hairline: along its top edge and round its two top corners.
+    private let topEdge = CAShapeLayer()
+    /// Under the header: comes in as the content scrolls (`--sheet-scroll` over its first 11pt).
+    private let seam = UIView()
+    private var scrolled: NSKeyValueObservation?
+
+    private func watchScroll() {
+        scrolled = scroller?.observe(\.contentOffset, options: [.initial, .new]) { [weak self] scroll, _ in
+            let by = scroll.contentOffset.y + scroll.adjustedContentInset.top
+            MainActor.assumeIsolated { self?.seam.alpha = min(1, max(0, by / 11)) }
+        }
+    }
+
+    private func drawEdge() {
+        guard style == .card, !isForm else { return }
+        let r = Radius.radiusLg
+        let width = card.bounds.width
+        let edge = UIBezierPath()
+        edge.move(to: CGPoint(x: 0.5, y: r))
+        edge.addArc(withCenter: CGPoint(x: r, y: r), radius: r - 0.5, startAngle: .pi, endAngle: .pi * 1.5, clockwise: true)
+        edge.addLine(to: CGPoint(x: width - r, y: 0.5))
+        edge.addArc(withCenter: CGPoint(x: width - r, y: r), radius: r - 0.5, startAngle: .pi * 1.5, endAngle: 0, clockwise: true)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        topEdge.frame = card.bounds
+        topEdge.path = edge.cgPath
+        CATransaction.commit()
     }
 
     private var footPad: NSLayoutConstraint!
@@ -210,11 +276,15 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         if footPad != nil, footPad.constant != foot {
             footPad.constant = foot
         }
+        drawEdge()
     }
 
     private func paint() {
+        let drawer = style == .card && !isForm
         card.layer.borderColor = (style == .edge ? Palette.borderControl : Palette.border).resolvedColor(with: traitCollection).cgColor
-        card.layer.borderWidth = 1
+        card.layer.borderWidth = drawer ? 0 : 1
+        topEdge.strokeColor = Palette.border.resolvedColor(with: traitCollection).cgColor
+        topEdge.isHidden = !drawer
     }
 
     override public func accessibilityPerformEscape() -> Bool {
@@ -303,6 +373,47 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
 
     public func animationController(forDismissed _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
         HouseSheetMotion(presenting: false)
+    }
+}
+
+/// Close in a sheet's head (app.css `.kit-sheet-close`): a 28pt ghost, its
+/// 16pt glyph in the muted ink, `--radius-sm`; under a finger it takes 44pt
+/// (`.touch-hit`), and a press tints it as the hover does, in the strong ink.
+final class SheetCloseButton: UIButton {
+    private let glyph = GlyphView(.close, size: Size.iconMd, tint: Palette.inkMuted)
+
+    init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        layer.cornerRadius = Radius.radiusSm
+        layer.cornerCurve = .continuous
+        glyph.isUserInteractionEnabled = false
+        glyph.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(glyph)
+        NSLayoutConstraint.activate([
+            widthAnchor.constraint(equalToConstant: 28),
+            heightAnchor.constraint(equalToConstant: 28),
+            glyph.centerXAnchor.constraint(equalTo: centerXAnchor),
+            glyph.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+        accessibilityLabel = "Close"
+        toolTip = "Close"
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) { fatalError("SheetCloseButton is built in code") }
+
+    override var isHighlighted: Bool {
+        didSet {
+            backgroundColor = isHighlighted ? Palette.surfaceHover : .clear
+            glyph.tintColor = isHighlighted ? Palette.inkStrong : Palette.inkMuted
+        }
+    }
+
+    override func point(inside point: CGPoint, with _: UIEvent?) -> Bool {
+        bounds.insetBy(dx: -8, dy: -8).contains(point)
     }
 }
 

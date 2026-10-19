@@ -20,7 +20,6 @@
 </script>
 
 <script lang="ts">
-  import type { HarnessKind } from "@cawco/core";
   import { Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,
@@ -128,7 +127,6 @@
   interface Tab {
     activity: Activity;
     failed: boolean;
-    harness: string;
     href: string;
     id: string;
     /** The tab's key in the strip: its id and which arrival of that id it is (`arrivals`). */
@@ -162,7 +160,6 @@
 
   function resolve(id: string): Tab {
     const row = cawco.instanceIndex.byId.get(id);
-    const view = cawco.session(id);
     const ctx = contextOf(id);
     const thread = cawco.threadOf(id);
     const { label, named } = isThreadTab(id)
@@ -192,7 +189,6 @@
         cwd: ctx?.cwd,
       }),
       label,
-      harness: ctx?.harness || row?.harness || view?.harness || "claude",
       named,
       activity,
       failed,
@@ -547,9 +543,15 @@
   // The morph mark changes as the surface retargets. It is set on the
   // element: as a prop of the popover's content the change re-mounts
   // bits-ui's focus scope, which runs its close auto-focus on a surface
-  // that is still open.
+  // that is still open. The card's floating wrapper (HangCard draws it) is
+  // marked the card's, and while the card glides it says so too: the
+  // wrapper's move is the glide (the styles below).
   $effect(() => {
-    cardEl?.toggleAttribute("data-morph", morphing);
+    const card = cardEl;
+    const wrapper = card?.parentElement;
+    card?.toggleAttribute("data-morph", morphing);
+    wrapper?.setAttribute("data-session-details", "");
+    wrapper?.toggleAttribute("data-details-morph", morphing);
   });
   function hoverTab(id: string, event: PointerEvent) {
     if (touch.current || event.pointerType !== "mouse" || pinned || menuOpen) {
@@ -742,7 +744,7 @@
       newSession(ctx?.machine ? { machineId: ctx.machine } : undefined);
       return;
     }
-    const harness = ctx.harness as HarnessKind;
+    const { harness } = ctx;
     const same = spawnPrefs.harness === harness;
     const projectId = cawco.instanceIndex.byId.get(here)?.projectId;
     starting = true;
@@ -1888,7 +1890,14 @@
     max-height: inherit;
   }
   /* A tab's rim's ink at the strength it wears it now: the one outline's
-     ink across the tab while a hang stands drawn out of it (HangCard). */
+     ink across the tab while a hang stands drawn out of it (HangCard).
+     Read off the tab alone, so it stays there: inherited, its value moving
+     with `--pick` restyled every element under the tab each frame of a
+     choice. */
+  @property --hang-rim {
+    syntax: "*";
+    inherits: false;
+  }
   .tab :global(.ff-tab) {
     --hang-rim: color-mix(
       in oklab,
@@ -1906,19 +1915,13 @@
   /* A pinned card follows its tab as the strip scrolls, frame by frame: its
      wrapper moves on its own layer, so each step is the compositor's, not a
      repaint of the card. */
-  :global(
-    [data-bits-floating-content-wrapper]:has(> .session-details-popover)
-  ) {
+  :global([data-bits-floating-content-wrapper][data-session-details]) {
     will-change: transform;
   }
   /* The glide to another tab: the wrapper's move and the card's height
      together; the outline follows them frame by frame (HangCard). */
   @media (prefers-reduced-motion: no-preference) {
-    :global(
-      [data-bits-floating-content-wrapper]:has(
-        > .session-details-popover[data-morph]
-      )
-    ) {
+    :global([data-bits-floating-content-wrapper][data-details-morph]) {
       transition: transform var(--dur-pop) var(--ease-drawer);
     }
     :global(.session-details-popover[data-morph]) .details-morph {
@@ -1974,7 +1977,7 @@
     }
     /* A phone's tabs have no chevron: a long press opens the tab's menu
        (Session details first), and a tap on the chosen tab its details. */
-    @media (max-width: 899px) {
+    @media (width < 900px) {
       display: none;
     }
     & :global(svg) {
@@ -2042,7 +2045,7 @@
      glass (`c-bar-caw-glass-phone` across) is flush with the other edge,
      and the strip stops c-bar-phone-gap short of it, so the tabs scroll
      between them and never under. */
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     :global(.session-tabs:not(.hosted)) {
       --strip-item: var(--c-tab-row-h);
       --strip-flare: var(--radius-lg);
@@ -2090,7 +2093,7 @@
      At rest the strip's start does not fade, so a first tab is drawn
      whole, its foot and all. A chosen tab is brought clear of both fades
      (TabsList `inView`). */
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     :global(
       .session-tabs:not(.hosted)[data-slot="tabs"] .ff-tabs-list.scrollable
     ) {
@@ -2332,7 +2335,7 @@
      no status glyph. A swipe carries the choice from tab to tab with the
      finger (`look`, the kit's `--pick`), and nothing in it sizes a tab:
      choosing one never moves the others. */
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     /* The rim is the status: no glyph beside the title. */
     .tglyph {
       display: none;
@@ -2420,7 +2423,7 @@
 
     /* A finger closes a tab from its options (owner: "remove the x make
        it close on hold menu then close"). */
-    @media (max-width: 899px), (pointer: coarse) {
+    @media (width < 900px), (pointer: coarse) {
       display: none;
     }
   }

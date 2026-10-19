@@ -22,6 +22,7 @@ import type {
   FleetMcpConfig,
   FleetScope,
   FleetSyncReport,
+  HarnessKind,
   HarnessReport,
   HomeStore,
   HookEvent,
@@ -31,11 +32,12 @@ import type {
   McpPlatform,
   MemoryRole,
   ModelInfo,
-  MoveRequest,
   MoveStage,
+  NamedMoveRequest,
   NeutralUserMessage,
   OnCap,
   OpenCodeGoLimits,
+  PermissionMode,
   RoutineMadeEvent,
   RuleMatchKind,
   RuleScope,
@@ -73,6 +75,11 @@ import type {
 } from "@cawco/core";
 import type { MachineCapabilities } from "@cawco/core/capabilities";
 import type { MachinePath } from "@cawco/core/machine-path";
+import type {
+  RelayPortHealth,
+  RelayPorts,
+  StreamRelayState,
+} from "@cawco/core/stream-relay";
 import { UPSTREAM_POSTS } from "@cawco/core/upstream-guard";
 import type {
   AuthorizationServerMetadata,
@@ -131,7 +138,7 @@ const sealedJson = <T>(column: string) =>
 export interface PriorConversation {
   accountId: string | null;
   endedAt: number;
-  harness: string;
+  harness: HarnessKind;
   model: string | null;
   /** The `limit_events` id drawn after it. */
   next: string | null;
@@ -362,9 +369,6 @@ export const workflowAttempts = sqliteTable("workflow_attempts", {
 
 /** Machines running an agent daemon, keyed by their stable hardware fingerprint. */
 export const agents = sqliteTable("agents", {
-  addressContract: integer("address_contract", { mode: "boolean" })
-    .notNull()
-    .default(false),
   machineCapabilities: text("machine_capabilities", {
     mode: "json",
   }).$type<MachineCapabilities>(),
@@ -457,6 +461,23 @@ export const agentHarnesses = sqliteTable(
 );
 
 /**
+ * The permission mode the person last chose for a harness on a machine: the
+ * mode a start from the dashboard's or the app's form went out on, written
+ * as it goes. A revive of a session whose row records no mode runs on it
+ * (server.ts `settleMode`); with none here it is refused.
+ */
+export const chosenModes = sqliteTable(
+  "chosen_modes",
+  {
+    machineId: text("machine_id").notNull(),
+    harness: text("harness").$type<HarnessReport["harness"]>().notNull(),
+    permissionMode: text("permission_mode").$type<PermissionMode>().notNull(),
+    chosenAt: timestamp("chosen_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.machineId, table.harness] })]
+);
+
+/**
  * A machine the person removed from the fleet (Remove machine), with the
  * name it last had and when it went. Rows that name it keep its id (a
  * session's `machineRemoved`, a rule's scope), and this is what reads of
@@ -467,6 +488,38 @@ export const removedMachines = sqliteTable("removed_machines", {
   hostname: text("hostname").notNull(),
   removedAt: timestamp("removed_at").notNull(),
 });
+
+/**
+ * A machine the hub added over SSH, and the connection it holds to it
+ * (ssh-tunnels.ts): the SSH target the person typed, and the port on the
+ * machine's loopback its agent reaches the hub on, carried to the hub's port
+ * by that connection. Kept so the hub opens every connection again when it
+ * starts, on the same port, which the agent's config names. `machineId` is
+ * null while the add that made the row runs, and set once the machine has
+ * joined; the hub only holds the connection of a joined machine open.
+ */
+export const sshMachines = sqliteTable(
+  "ssh_machines",
+  {
+    /** 12 random hex: names the connection's control socket (ssh-tunnels.ts `controlPath`). */
+    id: text("id").primaryKey(),
+    /** `user@host`, or a `Host` from the hub user's `~/.ssh/config`. */
+    target: text("target").notNull(),
+    /** The SSH port the person gave, or null: whatever `ssh` connects to. */
+    sshPort: integer("ssh_port"),
+    /** The port on the machine's loopback carried to the hub: null until OpenSSH allocates it. */
+    boxPort: integer("box_port"),
+    machineId: text("machine_id"),
+    /**
+     * The machine key the last add wrote to the machine (ssh-tunnels.ts
+     * `admit`), sealed, until the machine proves it under the id it
+     * registers as and it is kept as that machine's key (hub-auth.ts).
+     */
+    pendingKey: sealedText("pending_key"),
+    createdAt: timestamp("created_at").notNull(),
+  },
+  (table) => [index("ssh_machines_machine").on(table.machineId)]
+);
 
 /**
  * A project: one identity for work across machines and folders (WORDS.md).
@@ -491,8 +544,8 @@ export const projects = sqliteTable("projects", {
   remote: text("remote"),
   /**
    * Where the project's tasks live (§5.2 of the Projects spec): CawCo's own
-   * files in the project folder. GitHub Issues and Linear are named so the
-   * setting is ready for them; the hub refuses them until they are built.
+   * files in the project folder, alone or with GitHub Issues or Linear as
+   * the record of each task's issue fields (tracker.ts, `tracker_bindings`).
    */
   tracker: text("tracker").$type<Tracker>().notNull().default("cawco"),
   /**
@@ -587,14 +640,6 @@ export const projects = sqliteTable("projects", {
    */
   review: integer("review", { mode: "boolean" }).notNull().default(false),
   /**
-   * The Apple build gate (work-items.ts `appleGate`): an item whose diff
-   * touches the app's sources lands only once the iOS build compiles at its
-   * last commit on an apple-capable machine. Off: no item waits on a Mac.
-   */
-  appleGate: integer("apple_gate", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  /**
    * Whether its sessions may post to repositories that are not its own
    * (core upstream-guard.ts `UpstreamPosts`): `off` keeps them off, `ask`
    * holds each post for the person, `on` lets them. Null: the fleet's
@@ -617,8 +662,8 @@ export interface WorkBudget {
   usd?: number;
 }
 
-/** Where a project's tasks live: CawCo's files, or (later) an outside tracker. */
-export type Tracker = "cawco" | "github" | "linear";
+/** Where a project's tasks live: CawCo's files alone, or an outside tracker beside them (tracker.ts). */
+export type Tracker = import("@cawco/core").Tracker;
 
 /**
  * Attempts a stage's `runs:` hook asked for while the project already ran
@@ -886,10 +931,6 @@ export const projectRepositories = sqliteTable(
 
 /** A running or resumable `query()`. Messages live in SDK session storage, not here. */
 export const instances = sqliteTable("instances", {
-  /** Birth contract, immutable on retries; acknowledgement is recorded separately. */
-  addressRequired: integer("address_required", { mode: "boolean" })
-    .notNull()
-    .default(false),
   /** Removed machines keep ownership hidden without an end decision. */
   machineRemoved: integer("machine_removed", { mode: "boolean" })
     .notNull()
@@ -897,9 +938,6 @@ export const instances = sqliteTable("instances", {
   scratchWorktree: text("scratch_worktree", { mode: "json" }).$type<
     import("@cawco/core").ScratchWorktree
   >(),
-  addressProtocol: integer("address_protocol", { mode: "boolean" })
-    .notNull()
-    .default(false),
   endReason: text("end_reason"),
   endRetryAt: timestamp("end_retry_at"),
   endAttempts: integer("end_attempts").notNull().default(0),
@@ -985,7 +1023,7 @@ export const instances = sqliteTable("instances", {
   /** SDK session id, absent until the first init frame arrives. */
   sessionId: text("session_id"),
   /** Which harness owns `sessionId` — what a resume and a catalog read route on. */
-  harness: text("harness"),
+  harness: text("harness").$type<HarnessKind>().notNull(),
   /**
    * The account the session runs on, chosen by placement when it started (a
    * fork's is its origin's). Every later spawn of the row runs on it, until
@@ -1156,6 +1194,9 @@ export const instances = sqliteTable("instances", {
     .default("starting"),
   /** Why the session died, for a dashboard that was not watching when it did. */
   lastError: text("last_error"),
+  /** What `lastError` was, typed where it was found (core `LastErrorKind`); null when nothing typed it. */
+  lastErrorKind:
+    text("last_error_kind").$type<import("@cawco/core").LastErrorKind>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -1215,8 +1256,10 @@ export const completedTurns = sqliteTable(
  * `active` while an item there is live, or ended a moment ago and the hub
  * has not settled it, or while something holds it (a session attached, an
  * artifact showing what it serves); `held` once its item ended with work
- * that is nowhere else, which only the person ends, by continuing it or
- * discarding it; `archived` once its boundary and clone are gone.
+ * that is nowhere else, which the session that started its work ends, told
+ * so, by continuing it or discarding it (work-items.ts `heldNotice`), or a
+ * workspace cut from it ends by landing that work (`vouchLanded`);
+ * `archived` once its boundary and clone are gone.
  */
 export type WorkspaceState = "active" | "held" | "archived";
 
@@ -1275,6 +1318,15 @@ export const workspaces = sqliteTable("workspaces", {
    */
   checksFor: text("checks_for"),
   /**
+   * The place whose sheets' stage runs in this workspace: a stage clone, cut
+   * by its machine from the checkout a session with no workspace works in
+   * (agent stage-clone.ts) and filed on its word (core `StageCloneFrame`).
+   * It has no work items; it settles once that stage sleeps
+   * (work-items.ts `settle`), and the next sheet cuts it again. Null for a
+   * delegate's.
+   */
+  stageFor: text("stage_for"),
+  /**
    * What its clone held that is nowhere else when it was filed `held`, as
    * its machine read it once its boundary was closed; null in any other
    * state.
@@ -1291,14 +1343,37 @@ export const workspaces = sqliteTable("workspaces", {
    */
   head: text("head", { mode: "json" }).$type<WorkspaceCut>(),
   /**
-   * The carry its discard wrote on its machine, the person letting its
-   * unlanded work go: such a workspace is never cut again.
+   * The carry its discard wrote on its machine, its parent or the person
+   * letting its unlanded work go: such a workspace is never cut again.
    */
   carry: text("carry"),
+  /**
+   * The workspace a `delegate` call's `from` cut this one from, and the
+   * commit its clone started at (work-items.ts `cutFrom`); null for one cut
+   * from its repository.
+   */
+  cutFrom: text("cut_from", { mode: "json" }).$type<WorkspaceFrom>(),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
 });
+
+/**
+ * Where a workspace cut `from` another started ({@link workspaces.cutFrom}):
+ * that workspace, and its HEAD then, which this one's clone took.
+ */
+export interface WorkspaceFrom {
+  /** The source's HEAD as this clone took it. */
+  commit: string;
+  /**
+   * Whether this workspace's landing put every patch of that commit's work
+   * on the base branch (work-items.ts `vouchLanded`): then the source holds
+   * none of it as its own, and an archive is told so (core
+   * `WorkspaceArchive.landed`).
+   */
+  landed: boolean;
+  workspace: string;
+}
 
 /**
  * Who began a piece of work, or a turn of Caw's: `you`, the person's own
@@ -1317,6 +1392,13 @@ export type WorkOrigin = Origin | "kept";
 /** A work item's life. Only `starting` and `running` take messages. */
 export type WorkItemState =
   "starting" | "running" | "done" | "failed" | "cancelled";
+
+/** What a work item's landing put where ({@link workItems} `landed`). */
+export interface WorkLanding {
+  /** The base commit its commits were rebased onto; null for a push to a branch of its own. */
+  onto: string | null;
+  sha: string;
+}
 
 /** What a delegate hands in with `finish_item`. */
 export interface WorkItemSubmission {
@@ -1461,7 +1543,19 @@ export const workItems = sqliteTable(
      * until then.
      */
     headline: text("headline"),
-    /** Why it failed. */
+    /**
+     * What its landing put where, kept when it runs again: the commit pushed,
+     * and the base commit it was rebased onto (`onto..sha` landed on its base
+     * branch), null for a push to a branch of its own. Set, its work is landed,
+     * and a follow-up that ends without landing leaves it done (work-items.ts
+     * `finish`). Null: nothing of it landed.
+     */
+    landed: text("landed", { mode: "json" }).$type<WorkLanding>(),
+    /**
+     * Why it failed; on a done item, why the follow-up of its landed work
+     * ended without landing (blocked, stopped, failed), what its task's
+     * review shows.
+     */
     error: text("error"),
     createdAt: timestamp("created_at")
       .notNull()
@@ -1639,12 +1733,8 @@ export const sentMessages = sqliteTable(
      * Claude send stored under its own uuid.
      */
     harnessId: text("harness_id"),
-    /**
-     * What the sender submitted, pictures as media references. Null only on a
-     * record from before the hub kept bodies, until a history read links it to
-     * its stored entry and fills it from there.
-     */
-    body: text("body", { mode: "json" }).$type<NeutralUserMessage>(),
+    /** What the sender submitted, pictures as media references. */
+    body: text("body", { mode: "json" }).$type<NeutralUserMessage>().notNull(),
     /** Records from before modes were kept were all ordinary turns to the reader. */
     mode: text("mode").$type<SendMode>().notNull().default("turn"),
     /**
@@ -2705,15 +2795,6 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
   /** Always `'supervisor'`: the hub has one, and a table with a key says so cheaply. */
   id: text("id").primaryKey(),
   /**
-   * Whether the fleet's tool denials (`fleet_denied_tools`) are set. False
-   * only before the seeding migration or a fresh hub's first choice, when
-   * every daemon falls back to its compiled list; once set, the rows are the
-   * list, possibly none when the operator has removed all denials.
-   */
-  deniedSeeded: integer("denied_seeded", { mode: "boolean" })
-    .notNull()
-    .default(false),
-  /**
    * The fleet's "CawCo's to-dos" choice (§5.2): every session is denied its
    * harness's own list and plan mode, added at spawn (`cawcoTodosDenied`),
    * never stored in `fleet_denied_tools`.
@@ -2727,6 +2808,13 @@ export const supervisorConfig = sqliteTable("supervisor_config", {
    * is when a new project's setup page asks for them.
    */
   choicesSetAt: timestamp("choices_set_at"),
+  /**
+   * When the fleet's stream relay was last offered on a new project's setup
+   * page and answered (a machine picked, or Later); null while never, so the
+   * page offers it (fleet-choices.ts). Settings › Browsers is where it is
+   * finished afterwards.
+   */
+  relayAskedAt: timestamp("relay_asked_at"),
   updatedAt: timestamp("updated_at")
     .notNull()
     .$defaultFn(() => new Date()),
@@ -2963,7 +3051,7 @@ export const instanceConversations = sqliteTable(
     /** Its place, oldest first. */
     ord: integer("ord").notNull(),
     sessionId: text("session_id").notNull(),
-    harness: text("harness").notNull(),
+    harness: text("harness").$type<HarnessKind>().notNull(),
     model: text("model"),
     /** The account it ran on; null once that account is removed. */
     accountId: text("account_id").references(() => accounts.id, {
@@ -3002,6 +3090,16 @@ export const instanceAliases = sqliteTable("instance_aliases", {
 });
 
 /**
+ * The hub's one-time migrations over the rows it keeps, by name, once each
+ * has run (db/tag-markers.ts): a row here is its rows migrated, and it never
+ * runs again.
+ */
+export const dataMigrations = sqliteTable("data_migrations", {
+  name: text("name").primaryKey(),
+  at: timestamp("at").notNull(),
+});
+
+/**
  * Project moves (moves.ts, core move.ts): the one record of each, so a hub
  * that restarts mid-way carries the job on from its stage rather than
  * forgetting it. A started or cancelled job is kept a while so a screen that
@@ -3031,8 +3129,10 @@ export const moves = sqliteTable(
     targetMachineId: text("target_machine_id").notNull(),
     /** A Cancel the machine running its step has not heard yet: told at its register. */
     stopOn: text("stop_on"),
-    /** The request as asked: the target and the spawn New session sent. */
-    request: text("request", { mode: "json" }).$type<MoveRequest>().notNull(),
+    /** The request as asked: the target and the spawn New session sent, its harness named. */
+    request: text("request", { mode: "json" })
+      .$type<NamedMoveRequest>()
+      .notNull(),
     createdAt: timestamp("created_at").notNull(),
     updatedAt: timestamp("updated_at").notNull(),
   },
@@ -3288,7 +3388,7 @@ export const projectStarterSets = sqliteTable(
     generatedAt: timestamp("generated_at").notNull(),
     /** The hash of the inputs Jev was asked over. */
     inputHash: text("input_hash").notNull(),
-    /** What asked for it: `project created`, `task moved`, `turn ended`, `commit landed`, `attempt failed`, `routine failed`, `routine made`, `event received`, `stale`. */
+    /** What asked for it, several joined by `, ` (project-starters.ts `StartersTrigger`): `project created`, `task moved`, `turn ended`, `commit landed`, `attempt failed`, `routine failed`, `routine made`, `event received`, `design offer declined`, `read` (`stale` before 2026-10-18). */
     trigger: text("trigger").notNull(),
   },
   (table) => [primaryKey({ columns: [table.projectId, table.place] })]
@@ -3420,6 +3520,14 @@ export const artifacts = sqliteTable(
     sourceWorkspace: text("source_workspace").references(() => workspaces.id, {
       onDelete: "set null",
     }),
+    /**
+     * A sheet's place instead (core `isPlace`): the boundary over the
+     * folder of a session with no workspace, whose stage runs there. No
+     * workspace row is ever made for a place (archiving one deletes its
+     * folder), so it is no key: the hub finds it through the session that
+     * names it (server.ts `stageWhere`).
+     */
+    sourcePlace: text("source_place"),
     /** A sheet's: the stage's toolchain root and its story file, from the clone's root. */
     sourceStageDir: text("source_stage_dir"),
     sourceStageFile: text("source_stage_file"),
@@ -3497,6 +3605,48 @@ export const previewPorts = sqliteTable("preview_ports", {
     .primaryKey()
     .references(() => instances.id, { onDelete: "cascade" }),
   port: integer("port").notNull().unique(),
+});
+
+/**
+ * The fleet's stream relay (stream-relay.ts) — one row, keyed `'relay'`,
+ * following the {@link previewSettings} precedent: the machine that runs it,
+ * the address and DNS name it is reached by, the shared secret coturn checks
+ * credentials against (sealed), and what its machine and the hub's health
+ * check last said. No row: the fleet has no relay.
+ */
+export const streamRelay = sqliteTable("stream_relay", {
+  /** Always `'relay'`. */
+  id: text("id").primaryKey(),
+  machineId: text("machine_id")
+    .notNull()
+    .references(() => agents.machineId, { onDelete: "cascade" }),
+  /** The address its URLs name. */
+  address: text("address").notNull(),
+  /** A DNS name pointing at the machine: TLS answers for it once its certificate stands. */
+  hostname: text("hostname"),
+  /** coturn's `external-ip`, when the address is not one of the machine's own. */
+  externalIp: text("external_ip"),
+  /** Sealed: whoever holds it mints credentials the relay accepts. Null when the hub's key does not open it. */
+  secret: sealedText("secret").notNull(),
+  /** Whether the person wants it running: Stop relay sets it false, Start relay true. */
+  wanted: integer("wanted", { mode: "boolean" }).notNull().default(true),
+  state: text("state").$type<StreamRelayState>().notNull().default("starting"),
+  /** What its machine has bound, as its last frame said. */
+  ports: text("ports", { mode: "json" }).$type<RelayPorts>(),
+  why: text("why"),
+  /** The command `why` names as its fix, word for word inside it (shown as code). */
+  whyCommand: text("why_command"),
+  /** Each port's last STUN answer. */
+  health: text("health", { mode: "json" })
+    .$type<RelayPortHealth[]>()
+    .notNull()
+    .default(sql`'[]'`),
+  checkedAt: timestamp("checked_at"),
+  /** When its certificate ends, as its last renewal said. */
+  certificateEndsAt: timestamp("certificate_ends_at"),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
 });
 
 /**
@@ -3632,6 +3782,82 @@ export const sessionSubagents = sqliteTable(
     call: text("call"),
   },
   (table) => [primaryKey({ columns: [table.instanceId, table.task] })]
+);
+
+/**
+ * When a brief last carried each of a project's fact lines (memory.ts
+ * `contextFor`), by its file and the hash of its words: the hub's own record
+ * of use, written into the line's `used` only inside a diff the curator or
+ * Jev's sort proposes anyway, so a brief commits nothing.
+ */
+export const factUses = sqliteTable(
+  "fact_uses",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** `knowledge/<topic>.md`. */
+    path: text("path").notNull(),
+    /** The fact's words, hashed (memory-facts.ts `factKey`): its parenthesis may change, its words not. */
+    key: text("key").notNull(),
+    usedAt: timestamp("used_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.path, table.key] })]
+);
+
+/**
+ * The prose cut of a project's sessions (session-prose.ts): the person's
+ * words a session read and the agent's own text, one row per message, no
+ * tool calls, no tool output, no thinking. Kept on the hub, never in the
+ * project's folder, for `memory_recall`.
+ */
+export const sessionProse = sqliteTable(
+  "session_prose",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    instanceId: text("instance_id").notNull(),
+    at: timestamp("at").notNull(),
+    /** `person`: words the person sent it; `agent`: its own text. */
+    who: text("who", { enum: ["person", "agent"] }).notNull(),
+    text: text("text").notNull(),
+  },
+  (table) => [index("session_prose_project_at").on(table.projectId, table.at)]
+);
+
+/**
+ * The project sessions whose stored transcripts were cut into
+ * `session_prose` after the fact (session-prose.ts `backfill`): one row per
+ * session done, with how many messages it gave, so a backfill stopped part
+ * way resumes where it was.
+ */
+export const proseBackfills = sqliteTable("prose_backfills", {
+  instanceId: text("instance_id")
+    .primaryKey()
+    .references(() => instances.id, { onDelete: "cascade" }),
+  at: timestamp("at").notNull(),
+  messages: integer("messages").notNull(),
+});
+
+/**
+ * A knowledge file's prose the person declined to have rewritten as fact
+ * lines (memory.ts `proposeConversions`), by the hash of the words declined:
+ * its rewrite is proposed again only once the file says something else.
+ */
+export const declinedRewrites = sqliteTable(
+  "declined_rewrites",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    path: text("path").notNull(),
+    /** The declined prose, hashed (memory-facts.ts `factKey` of the whole file). */
+    words: text("words").notNull(),
+    at: timestamp("at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.projectId, table.path] })]
 );
 
 /**
@@ -3926,8 +4152,22 @@ export const routineRuns = sqliteTable(
   ]
 );
 
+/**
+ * An `app` connection's registration (connections.ts): a GitHub App's id,
+ * installation and private key, or a Linear OAuth app's client id and secret.
+ */
+export type ConnectionAppSecret =
+  | {
+      appId: string;
+      installationId: string;
+      privateKey: string;
+      service: "github";
+    }
+  | { clientId: string; clientSecret: string; service: "linear" };
+
 /** What a connection's sealed `secret` holds. */
 export interface ConnectionSecret {
+  app?: ConnectionAppSecret;
   client?: import("@modelcontextprotocol/sdk/shared/auth.js").OAuthClientInformationMixed;
   key?: string;
   tokens?: OAuthTokens;
@@ -4179,6 +4419,137 @@ export const connectorPollItems = sqliteTable(
     version: text("version").notNull(),
   },
   (table) => [primaryKey({ columns: [table.pollId, table.itemId] })]
+);
+
+/**
+ * Where a tracker binding's poll stands (tracker.ts): the newest change it
+ * took in, of issues and of their comments, and GitHub's ETag for each list
+ * as it last asked it.
+ */
+export interface TrackerCursor {
+  commentsEtag: string | null;
+  /** The newest comment taken in, ms. */
+  commentsSince: number;
+  etag: string | null;
+  /** The newest issue change taken in, ms. */
+  since: number;
+}
+
+/**
+ * A project's tracker (Projects spec D2, §5.2; tracker.ts): the connection
+ * it signs in with, the repository or team its tasks' issues are in, and
+ * where its poll stands. One per project; none while the project keeps its
+ * tasks in CawCo's files alone.
+ */
+export const trackerBindings = sqliteTable("tracker_bindings", {
+  projectId: text("project_id")
+    .primaryKey()
+    .references(() => projects.id, { onDelete: "cascade" }),
+  provider: text("provider")
+    .$type<import("@cawco/core").IssueTracker>()
+    .notNull(),
+  /** The connection's name (connections.ts). */
+  connection: text("connection").notNull(),
+  /** GitHub: `owner/repo`; Linear: the team's id. */
+  target: text("target").notNull(),
+  targetName: text("target_name").notNull(),
+  targetUrl: text("target_url").notNull(),
+  /** Issues opened after it become tasks; nothing older is copied. */
+  boundAt: timestamp("bound_at").notNull(),
+  cursor: text("cursor", { mode: "json" }).$type<TrackerCursor>().notNull(),
+  state: text("state")
+    .$type<import("@cawco/core").TrackerSyncState>()
+    .notNull(),
+  /** Why it is refused, or why its last poll stopped short; null when all went through. */
+  reason: text("reason"),
+  polledAt: timestamp("polled_at"),
+  /** The tracker's rate limit holds polls back until then. */
+  resumeAt: timestamp("resume_at"),
+});
+
+/**
+ * What a task and its issue last agreed on (tracker.ts): each field the
+ * tracker is the record of, and the stage that agreed with the issue's
+ * state. A side whose value moved off it changed that field.
+ */
+export interface TrackerSynced {
+  description: string;
+  labels: string[];
+  /** The stage the task stood in when they agreed. */
+  stage: string;
+  /** The issue's state, as tracker.ts names it (`open`, `closed:completed`, a Linear state's id). */
+  state: string;
+  title: string;
+}
+
+/**
+ * A task linked to its issue (tracker.ts). The task file names the issue
+ * (`issue:`, its URL); this row keeps the issue's own key and what the two
+ * last agreed on.
+ */
+export const trackerLinks = sqliteTable(
+  "tracker_links",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    /** The task, `tsk-12`. */
+    taskId: text("task_id").notNull(),
+    provider: text("provider")
+      .$type<import("@cawco/core").IssueTracker>()
+      .notNull(),
+    /** GitHub: the issue's number; Linear: the issue's id. */
+    issueKey: text("issue_key").notNull(),
+    /** `#12`, `ENG-123`. */
+    ref: text("ref").notNull(),
+    url: text("url").notNull(),
+    synced: text("synced", { mode: "json" }).$type<TrackerSynced>().notNull(),
+    /** The issue's `updated_at` when they last agreed, ms. */
+    remoteUpdatedAt: integer("remote_updated_at").notNull(),
+    /** Why the last sync of this task stopped short, in the tracker's words. */
+    problem: text("problem"),
+    syncedAt: timestamp("synced_at"),
+    /** Comments written after it, on either side, are carried to the other. */
+    linkedAt: timestamp("linked_at").notNull(),
+    /**
+     * Who opened the issue when the tracker does not vouch for them, in
+     * words; null when it does, or CawCo filed it. Set, the issue's pulls
+     * never put its task where an agent takes it: they wait for you.
+     */
+    unvouched: text("unvouched"),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.taskId] }),
+    uniqueIndex("tracker_links_issue").on(
+      table.projectId,
+      table.provider,
+      table.issueKey
+    ),
+  ]
+);
+
+/**
+ * A comment carried between a task and its issue (tracker.ts), so it is
+ * carried once: the issue's comment id, and which entry of the task's
+ * `## Comments` it is (its heading's time).
+ */
+export const trackerComments = sqliteTable(
+  "tracker_comments",
+  {
+    projectId: text("project_id")
+      .notNull()
+      .references(() => projects.id, { onDelete: "cascade" }),
+    taskId: text("task_id").notNull(),
+    remoteId: text("remote_id").notNull(),
+    /** `cawco`: written on the task and posted to the issue; `tracker`: written on the issue and added to the task. */
+    origin: text("origin").$type<"cawco" | "tracker">().notNull(),
+    /** The task comment's heading time, ms. */
+    at: integer("at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.projectId, table.remoteId] }),
+    index("tracker_comments_task").on(table.projectId, table.taskId),
+  ]
 );
 
 /**

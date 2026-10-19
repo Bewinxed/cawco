@@ -1,8 +1,9 @@
 /**
  * Adding a machine to the fleet: what the hub's join routes answer with, and
- * what the dashboard renders from them. The hub never connects out except for
- * an SSH add the operator started; every machine joins by running the hub's
- * install script, which ends in `cawco binary-install agent`.
+ * what the dashboard renders from them. Every machine joins by running the
+ * hub's install script, which ends in `cawco binary-install agent`. One added
+ * over SSH runs it through the connection the hub holds to it, which
+ * carries a port on the machine's loopback to the hub (hub ssh-tunnels.ts).
  */
 
 /** Every line of progress the install script and `cawco binary-install` print starts with this. */
@@ -36,43 +37,82 @@ export interface JoinInfo {
 
 /** `POST /api/machines/ssh`. */
 export interface SshJoinRequest {
-  /** One of {@link JoinInfo.addresses}' urls; nothing typed reaches the remote shell. */
-  hubUrl: string;
+  /**
+   * Unread: a machine added over SSH reaches the hub through the hub's own
+   * connection to it. Apps built before still send the address they picked.
+   */
+  hubUrl?: string;
+  /**
+   * The target's password, for a machine that does not trust the hub's key
+   * yet: this one connection signs in with it and adds the key to the
+   * machine's `~/.ssh/authorized_keys`, so every later one uses the key. The
+   * hub holds it only while it hands it to `ssh`, and never stores it.
+   */
+  password?: string;
   port?: number;
   /** `user@host`, or a `Host` from the hub user's `~/.ssh/config`. */
   target: string;
 }
 
 /**
- * Why an SSH add failed, as read off its output. The wording is the
- * dashboard's; the hub only says which case it is.
+ * Why an SSH add failed. The wording is the dashboard's; the hub only says
+ * which case it is, decided by what it measured (a TCP connect's errno, the
+ * host keys compared, the remote command's own step lines), never by ssh's
+ * words. A sign-in ssh refused is the `step` it stopped on, ssh's words
+ * shown below it: ssh exits 255 for every failure of its own.
  */
 export type SshJoinProblem =
-  /** The machine refused the hub's key. */
-  | { kind: "key" }
-  /** The machine's host key is not the one the hub saw before. */
+  /** The machine's host key is not one the hub knows it by (ssh-keyscan against ssh-keygen -F). */
   | { kind: "host-key" }
-  /** Nothing answered on that address and port, or the name did not resolve. */
+  /**
+   * The hub's TCP connect to that address and port failed, or the name did
+   * not resolve: `detail` says which, by its errno.
+   */
   | { kind: "unreachable"; detail: string }
-  /** SSH got in, but the machine could not download the script from the hub address. */
+  /** SSH got in, but the machine's `curl` of the script through the hub's connection failed. */
   | { kind: "download" }
   /** A step of the install script or `cawco join` failed. */
   | { kind: "step"; step: string }
   /** Everything ran, but the hub never saw the machine come online. */
   | { kind: "unregistered" };
 
+/** A password add's refusal as the shipped apps read it (TestFlight 20261018): the hub no longer sends one. */
+export interface SshPasswordProblem {
+  asked: boolean;
+}
+
 /** `GET /api/machines/ssh/:id`: one SSH add, as the hub holds it in memory. */
 export interface SshJoinJob {
   exitCode: number | null;
+  /**
+   * The hub as the machine reaches it, `http://127.0.0.1:<port>`: the port on
+   * its loopback the hub's connection carries to the hub. Empty until that
+   * connection is up.
+   */
   hubUrl: string;
   id: string;
-  /** Everything the SSH session printed, stdout and stderr in arrival order. */
+  /**
+   * Everything the SSH session printed, stdout and stderr in arrival order.
+   * A step line ({@link INSTALL_STEP_PREFIX}) means it has signed in: the
+   * remote command prints one before anything else it does.
+   */
   lines: string[];
   /** From the `joined as` line, once it has been printed. */
   machineId: string | null;
+  /**
+   * Never sent: declared while an installable app reads it (TestFlight
+   * 20261018), as the wire check (hub scripts/openapi.ts) counts a property
+   * gone from the schema as gone from what that app receives. A password ssh
+   * refused is the sign-in `step` now, in ssh's words. It goes once no
+   * installable app reads it.
+   */
+  passwordProblem?: SshPasswordProblem;
   port: number | null;
   problem: SshJoinProblem | null;
-  /** `done` means the script exited 0 and the hub has the machine online. */
-  state: "running" | "failed" | "done";
+  /**
+   * `done` means the script exited 0 and the hub has the machine online;
+   * `stopped`, that the person stopped it and its `ssh` is gone.
+   */
+  state: "running" | "failed" | "done" | "stopped";
   target: string;
 }

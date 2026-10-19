@@ -7,11 +7,10 @@
    * Go plan is at its limit in every one.
    */
   import { onMount } from "svelte";
-  import { usage } from "#lib/cawco/usage/forecast.svelte.js";
   import LimitsBlock from "#lib/cawco/usage/LimitsBlock.svelte";
   import { theme } from "#lib/theme.svelte.js";
   import { page } from "$app/state";
-  import { stageUsage } from "../usage-relay/stage";
+  import { stageUsage, unstageUsage } from "../usage-relay/stage";
 
   const count = $derived(page.url.searchParams.get("n") === "20" ? 20 : 6);
   $effect(() => {
@@ -20,7 +19,7 @@
   $effect(() => {
     theme.set(page.url.searchParams.get("theme") === "dark" ? "dark" : "light");
   });
-  onMount(() => () => usage.stage(null));
+  onMount(() => unstageUsage);
 </script>
 
 <svelte:head><title>Usage limits | CawCo</title></svelte:head>

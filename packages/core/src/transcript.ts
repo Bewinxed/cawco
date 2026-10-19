@@ -451,6 +451,9 @@ export class TranscriptBuilder {
               ? {
                   result: block.metadata.compactResult,
                   error: block.metadata.compactError,
+                  ...(block.metadata.compactFailure
+                    ? { failure: block.metadata.compactFailure }
+                    : {}),
                 }
               : {}),
           },
@@ -535,6 +538,9 @@ export class TranscriptBuilder {
           trigger: this.facts.lastCompaction?.trigger ?? "auto",
           result: mapping.compaction.result,
           error: mapping.compaction.error,
+          ...(mapping.compaction.failure
+            ? { failure: mapping.compaction.failure }
+            : {}),
         },
       });
     }

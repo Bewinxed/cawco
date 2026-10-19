@@ -4,6 +4,7 @@ import {
   type CommandQueueFrame,
   type CommandResult,
   type CommandRun,
+  HEAVY_GATE_ENV,
   QUEUE_MARKER,
   QUEUE_SLOTS,
   QUEUE_WAIT_MAX_MS,
@@ -13,6 +14,7 @@ import {
 } from "@cawco/core";
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { signalGroup, spawnedPid } from "@cawco/core/signal";
 import { ensureBoundary } from "./boundary";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
@@ -44,17 +46,6 @@ const live = new Set<Running>();
  * directory, or starting their boundary), by id, with when the cancel came.
  */
 const cancelledEarly = new Map<string, number>();
-
-/** Signals a process group; one already gone is no error. */
-const signalGroup = (pid: number, signal: NodeJS.Signals): void => {
-  try {
-    process.kill(-pid, signal);
-  } catch (error) {
-    if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
-      throw error;
-    }
-  }
-};
 
 /** Where queue frames go: the daemon's socket. */
 let sendQueue: (frame: CommandQueueFrame) => void = () => undefined;
@@ -114,12 +105,13 @@ export const isWorkspaceRef = (value: unknown): value is WorkspaceRef =>
   typeof (value as WorkspaceRef).path === "string" &&
   (value as WorkspaceRef).path.startsWith("/");
 
-/** Whether `value` names a run the hub follows: `{ id, queueMaxMs }` (core `CommandRun`). */
+/** Whether `value` names a run the hub follows: `{ id, queueMaxMs, gate? }` (core `CommandRun`). */
 const isCommandRun = (value: unknown): value is CommandRun =>
   typeof value === "object" &&
   value !== null &&
   typeof (value as CommandRun).id === "string" &&
-  typeof (value as CommandRun).queueMaxMs === "number";
+  typeof (value as CommandRun).queueMaxMs === "number" &&
+  ["string", "undefined"].includes(typeof (value as CommandRun).gate);
 
 /** The slots only the runner itself waits for: no command's marker opens them. */
 const RUNNER_SLOTS: ReadonlySet<QueueSlot> = new Set(["folder", "boundary"]);
@@ -388,8 +380,14 @@ export async function runWorkflowCommand(
     const child = spawn(file, args, {
       cwd,
       detached: true,
-      // The executor enters the boundary in `$PWD`: it names `cwd`.
-      env: { ...hostEnvironment(), PWD: cwd },
+      // The executor enters the boundary in `$PWD`: it names `cwd`. A landing
+      // gate's step carries its gate's words, so a heavy run it starts goes
+      // first (core heavy-run.ts).
+      env: {
+        ...hostEnvironment(),
+        PWD: cwd,
+        ...(named?.gate ? { [HEAVY_GATE_ENV]: named.gate } : {}),
+      },
       stdio: ["ignore", "pipe", "pipe"],
     });
     const stdout: Buffer[] = [];
@@ -402,28 +400,36 @@ export async function runWorkflowCommand(
     const running: Running = {
       runId: named?.id,
       stop: (why) => {
-        const { pid } = child;
-        if (stopped || !pid) {
+        // A spawn that made no process leaves nothing to signal.
+        const leader = spawnedPid(child);
+        if (stopped || leader === undefined) {
           return;
         }
         stopped = why;
         clock.stop();
         try {
-          signalGroup(pid, "SIGTERM");
+          if (signalGroup(leader, "SIGTERM") === "denied") {
+            reject(
+              new Error(
+                `command group ${leader} is not this user's to signal, so it was not stopped`
+              )
+            );
+            return;
+          }
         } catch (error) {
           reject(error);
           return;
         }
         setTimeout(() => {
           try {
-            signalGroup(pid, "SIGKILL");
+            signalGroup(leader, "SIGKILL");
           } catch (error) {
-            console.warn(`could not kill command group ${pid}: ${error}`);
+            console.warn(`could not kill command group ${leader}: ${error}`);
           }
         }, KILL_GRACE_MS).unref();
       },
     };
-    if (child.pid) {
+    if (spawnedPid(child) !== undefined) {
       live.add(running);
     }
     const clock = commandClock(

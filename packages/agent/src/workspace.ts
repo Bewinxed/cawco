@@ -36,10 +36,10 @@ import {
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import {
+  forgetWorkspaceTmp,
   isSecretFileName,
   workspaceCacheDir,
   workspaceCarriesDir,
-  workspaceFleetDir,
   workspaceScratchDir,
   workspacesDir,
 } from "@cawco/core/paths";
@@ -56,6 +56,7 @@ import {
   readRecord,
   writeStateFile,
 } from "@cawco/core/state-file";
+import { excludedPaths, IGNORED_STATUS } from "@cawco/core/workspace-policy";
 import {
   addAccount,
   closeBoundary,
@@ -82,7 +83,6 @@ import {
   LFS_FILTERS,
   withoutCredential,
 } from "./move";
-import { finishInstall, seedDependencies } from "./seed-deps";
 import { noRepositoryAt, straysIn } from "./stand-ins";
 import { runWorkflowCommand } from "./workflow-command";
 import { cloneHolding } from "./workspace-records";
@@ -237,14 +237,16 @@ const inSource = <T>(repo: string, work: () => Promise<T>): Promise<T> => {
  * {@link inSource}: its `origin` (the hub's remote of `projectId` when it has
  * none), the hub's credential helper in its config when that is the hub and
  * `source` (another workspace's clone, whose config is that workspace's) is
- * none, and the branch the workspace starts from ({@link hubBase}).
+ * none, and the branch the workspace starts from ({@link hubBase}). `hub` is
+ * that origin's URL when it is the hub's, which every git that reaches it
+ * runs under ({@link hubGitEnv}).
  */
 const readySource = (
   repoRoot: string,
   projectId: unknown,
   fromClone: boolean,
   deadline: number
-): Promise<{ hub: boolean; known: string | undefined }> =>
+): Promise<{ hub: string | undefined; known: string | undefined }> =>
   inSource(repoRoot, async () => {
     const plain = gitUntil(deadline);
     // A workspace starts from origin's default branch and lands there.
@@ -264,12 +266,12 @@ const readySource = (
       );
     }
     // A clone of a workspace's clone reaches the hub as that workspace does.
-    const hub = isHubRemote(origin);
+    const hub = isHubRemote(origin) ? origin : undefined;
     if (hub && !fromClone) {
       useHubCredentialHelper(repoRoot);
     }
     const known = hub
-      ? await hubBase(gitUntil(deadline, hubGitEnv()), repoRoot)
+      ? await hubBase(gitUntil(deadline, hubGitEnv(hub)), repoRoot)
       : undefined;
     return { hub, known };
   });
@@ -313,7 +315,7 @@ export const createWorkspace = async (
     }
   );
   // A workspace cut from another workspace's clone: that clone's config is
-  // the other workspace's to write. A lead's place is a person's own repo,
+  // the other workspace's to write. A place is a person's own repo,
   // whose config is theirs.
   const source = await cloneHolding(repoRoot);
   const problem = source
@@ -328,7 +330,7 @@ export const createWorkspace = async (
     Boolean(source),
     deadline
   );
-  const authed = hub ? gitUntil(deadline, hubGitEnv()) : plain;
+  const authed = hub ? gitUntil(deadline, hubGitEnv(hub)) : plain;
   const id = String(workspaceId);
   const id8 = id.slice(0, 8);
   const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);
@@ -352,11 +354,12 @@ export const createWorkspace = async (
       await fetchCut(path, id, base, cut, authed);
     }
     const start = cut ? cut.commit : `origin/${base}`;
-    // A hub branch's large files come down with the checkout, from the
-    // hub's LFS, whatever filters this machine's own config names.
+    // A hub branch's large files come down with the checkout, from its own
+    // repository's LFS on the hub, whatever filters this machine's own
+    // config names and whatever the branch's `.lfsconfig` says.
     const checkout =
       hub && (await marksLfs(authed, path, start))
-        ? gitUntil(deadline, hubGitEnv(LFS_FILTERS))
+        ? gitUntil(deadline, hubGitEnv(hub, LFS_FILTERS))
         : authed;
     await checkout(path, "checkout", "--quiet", "-b", branch, start);
     if (cut) {
@@ -375,12 +378,7 @@ export const createWorkspace = async (
     if (typeof projectId === "string" && projectId) {
       await setProject(id, projectId);
     }
-    // Before the boundary: inside it bun copies every file (seed-deps.ts).
-    const seeded = await seedDependencies(id, path);
     const boundary = await ensureBoundary({ id, path });
-    if (seeded) {
-      await finishInstall({ id, path });
-    }
     return {
       repoRoot,
       path,
@@ -444,7 +442,7 @@ const fetchCut = async (
  * its repository with that repository's keys, and reads no other's. One in
  * a package or build tree is not the repository's own.
  */
-const copyOwnSecrets = async (
+export const copyOwnSecrets = async (
   repoRoot: string,
   path: string,
   git: (root: string, ...args: string[]) => Promise<string>
@@ -484,10 +482,7 @@ const copyOwnSecrets = async (
   }
 };
 
-/**
- * Trees that hold packages and builds: their secret-named files are not the
- * repository's own, and a place's first commit (place-repo.ts) takes none.
- */
+/** Trees that hold packages and builds: their secret-named files are not the repository's own. */
 export const PACKAGE_TREES = new Set([
   "node_modules",
   ".venv",
@@ -667,11 +662,16 @@ const NOTHING_HELD: Held = { ahead: 0, dirty: 0, stashes: 0 };
  * never followed: a delegate can point one at any folder it can name) or
  * when its git directory names another or its config holds a key past the
  * allowlist (`repositoryConfigProblem`). Answers git's stdout, trimmed, for
- * an argv; its stderr is the error.
+ * an argv, `input` on its stdin; an exit past `exits` throws its stderr.
  */
 const closedCloneGit = async (
   workspace: WorkspaceRef
-): Promise<(args: readonly string[]) => Promise<string>> => {
+): Promise<
+  (
+    args: readonly string[],
+    given?: { exits?: readonly number[]; input?: string }
+  ) => Promise<string>
+> => {
   const dotGit = join(workspace.path, ".git");
   const found = await lstat(dotGit);
   if (!found.isDirectory()) {
@@ -685,12 +685,16 @@ const closedCloneGit = async (
       `Workspace ${workspace.id} was not archived: ${problem}, so nothing was deleted.`
     );
   }
-  return async (args) => {
-    const ran = await Bun.$`git ${SAFE_GIT_FLAGS} -C ${workspace.path} ${args}`
+  return async (args, { exits = [0], input } = {}) => {
+    const command =
+      input === undefined
+        ? Bun.$`git ${SAFE_GIT_FLAGS} -C ${workspace.path} ${args}`
+        : Bun.$`git ${SAFE_GIT_FLAGS} -C ${workspace.path} ${args} < ${Buffer.from(input)}`;
+    const ran = await command
       .env({ ...hostEnvironment(), ...SAFE_GIT_ENV })
       .quiet()
       .nothrow();
-    if (ran.exitCode !== 0) {
+    if (!exits.includes(ran.exitCode)) {
       throw new Error(
         `git ${args[0]} failed in workspace ${workspace.id}: ${ran.stderr.toString().trim() || `exit ${ran.exitCode}`}`
       );
@@ -729,15 +733,67 @@ const ownObjects = async (workspace: WorkspaceRef): Promise<void> => {
   );
 };
 
+type ClosedGit = Awaited<ReturnType<typeof closedCloneGit>>;
+
+const TRAILING_SLASH = /\/$/;
+
+/**
+ * The untracked paths in the clone kept out of git by no `.gitignore` the
+ * repository tracks ({@link WorkspaceHolding} `excluded`; core
+ * workspace-policy.ts `excludedPaths`): each path `git status
+ * --ignored=matching` names, the source of its rule read by `git
+ * check-ignore -v`.
+ */
+const excludedIn = async (
+  clone: string,
+  git: ClosedGit,
+  pathspec: readonly string[]
+): Promise<string[]> => {
+  const ignored = (await git([...IGNORED_STATUS, ...pathspec]))
+    .split("\0")
+    .filter((entry) => entry.startsWith("!! "))
+    .map((entry) => entry.slice("!! ".length));
+  if (ignored.length === 0) {
+    return [];
+  }
+  const [tracked, rules] = await Promise.all([
+    git(["ls-files", "-z", "--", ":(glob)**/.gitignore"]),
+    // Exit 1: none of them ignored, which a path listed a moment ago and
+    // gone since can be.
+    git(["check-ignore", "-v", "-z", "--stdin"], {
+      input: `${ignored.join("\0")}\0`,
+      exits: [0, 1],
+    }),
+  ]);
+  return excludedPaths(clone, tracked, rules);
+};
+
+/**
+ * The rev-list arguments that leave out what `landed` names: commits the hub
+ * knows are on the base branch through another workspace's landing
+ * ({@link WorkspaceArchive} `landed`), each a full commit id, never an option.
+ */
+const notLanded = (landed: readonly string[] | undefined): string[] => {
+  const shas = landed ?? [];
+  const bad = shas.find((sha) => !COMMIT.test(sha));
+  if (bad !== undefined) {
+    throw new Error(`"${bad}" is not a commit id`);
+  }
+  return [...shas];
+};
+
 /**
  * What the workspace holds that is nowhere else ({@link WorkspaceHolding}),
  * read by git on this host once its boundary is closed
- * ({@link closedCloneGit}); `skip` are paths `git status` passes over. Files
- * git ignores are not read: they go with the clone.
+ * ({@link closedCloneGit}); `skip` are paths `git status` passes over, and
+ * the commits `landed` reaches are not its own (their work is on the base
+ * branch through the workspace cut from it that landed them). Files a
+ * tracked `.gitignore` covers are not read: they go with the clone.
  */
 const holding = async (
   workspace: WorkspaceRef,
-  skip: readonly string[]
+  skip: readonly string[],
+  landed: readonly string[] | undefined
 ): Promise<Held> => {
   // A clone already deleted (an archive that died after its `rm`) holds nothing.
   const gone = await stat(workspace.path).then(
@@ -761,9 +817,12 @@ const holding = async (
     };
   }
   const git = await closedCloneGit(workspace);
-  const excluded = skip.map((path) => `:(exclude,literal)${path}`);
+  const pathspec =
+    skip.length > 0
+      ? ["--", ".", ...skip.map((path) => `:(exclude,literal)${path}`)]
+      : [];
   const lines = (out: string): number => out.split("\n").filter(Boolean).length;
-  const [ahead, status, stashes] = await Promise.all([
+  const [ahead, status, stashes, excluded] = await Promise.all([
     git([
       "rev-list",
       "--count",
@@ -771,18 +830,17 @@ const holding = async (
       "--branches",
       "--not",
       "--remotes=origin",
+      ...notLanded(landed),
     ]),
-    git([
-      "status",
-      "--porcelain",
-      ...(excluded.length > 0 ? ["--", ".", ...excluded] : []),
-    ]),
+    git(["status", "--porcelain", ...pathspec]),
     git(["stash", "list"]),
+    excludedIn(workspace.path, git, pathspec),
   ]);
   return {
     ahead: Number(ahead),
     dirty: lines(status),
     stashes: lines(stashes),
+    ...(excluded.length > 0 ? { excluded } : {}),
   };
 };
 
@@ -791,13 +849,16 @@ const holding = async (
  * once it is deleted ({@link WorkspaceCut}): its HEAD, on `origin`'s branch
  * `base` when that holds it, else the one most recently committed to among
  * those that do. Git on this host once its boundary is closed
- * ({@link closedCloneGit}). Nothing for a folder whose `.git` is gone. A HEAD
- * no branch of `origin` holds throws, and nothing is deleted: such a clone
+ * ({@link closedCloneGit}). Nothing for a folder whose `.git` is gone, nor
+ * for a HEAD `landed` reaches: its work went on in the workspace cut from it,
+ * which landed it, and is cut again from nowhere here. Any other HEAD no
+ * branch of `origin` holds throws, and nothing is deleted: such a clone
  * holds commits of its own, and {@link holding} said none.
  */
 const headOnOrigin = async (
   workspace: WorkspaceRef,
-  base: string | undefined
+  base: string | undefined,
+  landed: readonly string[] | undefined
 ): Promise<WorkspaceCut | undefined> => {
   if (!(await lstat(join(workspace.path, ".git")).catch(() => undefined))) {
     return;
@@ -817,6 +878,15 @@ const headOnOrigin = async (
     .split("\n")
     .filter((name) => name && name !== "HEAD");
   const branch = base && holders.includes(base) ? base : holders[0];
+  if (
+    !branch &&
+    landed?.length &&
+    Number(
+      await git(["rev-list", "--count", commit, "--not", ...notLanded(landed)])
+    ) === 0
+  ) {
+    return;
+  }
   if (!branch) {
     throw new Error(
       `Workspace ${workspace.id} was not archived: its HEAD ${commit.slice(0, 9)} is on no branch of origin, so its clone could not be cut again there, and nothing was deleted.`
@@ -923,17 +993,18 @@ const cacheOfClone = async (clone: string): Promise<string[]> => {
 /**
  * Writes what a workspace holds that is nowhere else into a new carry folder
  * in `~/.cawco/carries` (carry.ts), git running on this host once its
- * boundary is closed ({@link closedCloneGit}'s checks first), and answers
- * that folder; `skip`, its items' handed-over outputs, left out of the
- * uncommitted diff. A carry that cannot be written whole, or that holds
- * anything but folders and files of its own, is taken away again and
- * nothing is deleted.
+ * boundary is closed ({@link closedCloneGit}'s checks first), its excluded
+ * files copied as they are into its `excluded/` (carry.ts `copyStrays`),
+ * and answers that folder and the excluded entries not copied; `skip`, its
+ * items' handed-over outputs, left out of the uncommitted diff. A carry
+ * that cannot be written whole, or that holds anything but folders and
+ * files of its own, is taken away again and nothing is deleted.
  */
 const writeCarry = async (
   workspace: WorkspaceRef,
   held: Held,
   skip: readonly string[]
-): Promise<string> => {
+): Promise<{ carry: string; left: string[] }> => {
   await closedCloneGit(workspace);
   const carry = carryFolder(workspace.id);
   await mkdir(workspaceCarriesDir(), { recursive: true, mode: 0o700 });
@@ -947,7 +1018,16 @@ const writeCarry = async (
     if (ran.exitCode !== 0) {
       throw new Error(ran.stderr.toString().trim() || `exit ${ran.exitCode}`);
     }
+    // A folder's entry without its slash: a link named as one is never followed.
+    const left = held.excluded?.length
+      ? await copyStrays(
+          workspace.path,
+          held.excluded.map((path) => path.replace(TRAILING_SLASH, "")),
+          join(carry, "excluded")
+        )
+      : [];
     await ownFilesOnly(carry);
+    return { carry, left };
   } catch (error) {
     await rm(carry, { recursive: true, force: true });
     throw new Error(
@@ -955,7 +1035,6 @@ const writeCarry = async (
       { cause: error }
     );
   }
-  return carry;
 };
 
 /**
@@ -991,7 +1070,8 @@ const carryStrays = async (
  * ({@link holding}, {@link WorkspaceUnlanded}). Anything there keeps the
  * clone, its state and scratch dirs, and answers `held`: nothing is
  * deleted. Holding nothing, the clone is deleted with what it owns in the
- * workspaces' cache ({@link cacheOfClone}), its files git ignores with it;
+ * workspaces' cache ({@link cacheOfClone}), the files a tracked
+ * `.gitignore` covers with it;
  * `closeBoundary` takes its state and scratch dirs.
  */
 export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
@@ -999,8 +1079,8 @@ export const archiveWorkspace = (ref: unknown): Promise<WorkspaceArchived> =>
 
 /**
  * {@link CONTROL_WORKSPACE_DISCARD}: as {@link archiveWorkspace}, but what
- * the clone holds that is nowhere else (its unlanded commits, changes and
- * stashes) is written to a carry in `~/.cawco/carries` (carry.ts), git on
+ * the clone holds that is nowhere else (its unlanded commits, changes,
+ * stashes and excluded files) is written to a carry in `~/.cawco/carries` (carry.ts), git on
  * this host, which must be whole before anything is deleted. A folder that
  * is no git clone any more has its own entries copied there as they are
  * (carry.ts `copyStrays`).
@@ -1017,20 +1097,13 @@ const closeClone = async (
   const unread: WorkspaceUnlanded[] = ["check", "unmade"];
   const read = !unread.includes(request.unlanded);
   const path = request.path ?? (await createdPath(request.id));
-  // A scratch fleet the workspace ran keeps its folders here on macOS,
-  // outside its scratch dir (core paths.ts `workspaceFleetDir`), and goes
-  // with it, beside the clone's DerivedData: "The Mac filled to 120 MB free
-  // on 2026-10-14 (a Catalyst link died with errno 28) because nothing
-  // removed a workspace once its work was over" (d31b2f5ac).
-  const fleet = await workspaceFleetDir(request.id);
   if (!path) {
     await Promise.all(
-      [
-        join(workspacesDir(), request.id),
-        workspaceScratchDir(request.id),
-        ...(fleet ? [fleet] : []),
-      ].map((dir) => rm(dir, { recursive: true, force: true }))
+      [join(workspacesDir(), request.id), workspaceScratchDir(request.id)].map(
+        (dir) => rm(dir, { recursive: true, force: true })
+      )
     );
+    forgetWorkspaceTmp(request.id);
     return { carry: null };
   }
   const workspace: WorkspaceRef = { id: request.id, path };
@@ -1038,7 +1111,9 @@ const closeClone = async (
   // Nothing writes the clone from here on, and no boundary is started to
   // read it: git reads it on this host.
   await stopWorkspaceBoundary(workspace);
-  const held = read ? await holding(workspace, skip) : NOTHING_HELD;
+  const held = read
+    ? await holding(workspace, skip, request.landed)
+    : NOTHING_HELD;
   const holds = !holdsNothing({ ...held, bytes: 0 });
   if (holds && !carryHeld) {
     if (held.strays === undefined) {
@@ -1053,7 +1128,7 @@ const closeClone = async (
   // Read before the clone goes: where it is cut again.
   const head =
     read && !holds && held.strays === undefined
-      ? await headOnOrigin(workspace, request.base)
+      ? await headOnOrigin(workspace, request.base, request.landed)
       : undefined;
   let carry: string | null = null;
   if (holds) {
@@ -1062,11 +1137,9 @@ const closeClone = async (
     // its carry; its own entries are copied.
     const folder = held.strays !== undefined;
     let left: string[] = [];
-    if (folder) {
-      ({ carry, left } = await carryStrays(request.id, path));
-    } else {
-      carry = await writeCarry(workspace, held, skip);
-    }
+    ({ carry, left } = folder
+      ? await carryStrays(request.id, path)
+      : await writeCarry(workspace, held, skip));
     await writeFile(
       join(carry, "README.md"),
       await carryReadme({
@@ -1082,7 +1155,7 @@ const closeClone = async (
       `[workspace] ${request.id}: ${words} in ${path} saved to the carry ${carry}`
     );
   }
-  const cached = [...(await cacheOfClone(path)), ...(fleet ? [fleet] : [])];
+  const cached = await cacheOfClone(path);
   await closeBoundary(workspace);
   await rm(workspace.path, { recursive: true, force: true });
   await Promise.all(

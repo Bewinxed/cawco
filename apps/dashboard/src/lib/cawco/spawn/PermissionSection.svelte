@@ -157,7 +157,8 @@
     right: 4px;
     top: 4px;
     height: var(--row-h);
-    background: var(--surface-fill);
+    /* The chosen mode's selected wash, apart from the hover ghost. */
+    background: var(--selected-bg);
     border-radius: var(--radius-sm);
     pointer-events: none;
     @media (prefers-reduced-motion: no-preference) {
@@ -221,5 +222,18 @@
     width: 16px;
     height: 16px;
     color: var(--ink-strong);
+  }
+  /* The chosen mode's ink and icon, paired with the wash its fill draws. */
+  .row[aria-checked="true"] {
+    color: var(--selected-ink);
+
+    /* Its second line too: ink-subtle measures 4.23:1 on the wash by day,
+       selected-ink 4.73:1 (DESIGN.md Colors: Selected). */
+    & .desc {
+      color: var(--selected-ink);
+    }
+    & :global(svg.check) {
+      color: var(--selected-icon);
+    }
   }
 </style>

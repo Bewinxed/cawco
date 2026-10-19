@@ -34,12 +34,15 @@ import { ArtifactRefusal } from "./service";
 /**
  * A canvas's host page, served by the hub as a page is: the page with the
  * overlay, carrying the canvas's doc and kind so it draws before it joins;
- * its bundle and fonts under `/canvas/`.
+ * its bundle and fonts under `/canvas/`. `embed`: a decision page's Canvas
+ * shows it (`?embed=1`), so its overlay runs inside that page's frame, joins
+ * the canvas's doc as no screen, and the page draws it read-only.
  */
 export async function serveCanvas(
   artifactId: string,
   pathname: string,
-  state: (artifactId: string) => string
+  state: (artifactId: string) => string,
+  embed = false
 ): Promise<Response> {
   if (pathname === "/") {
     return new Response(
@@ -47,6 +50,7 @@ export async function serveCanvas(
         artifact: artifactId,
         kind: "canvas",
         state: state(artifactId),
+        ...(embed ? { embed: "1" } : {}),
       }),
       {
         headers: {

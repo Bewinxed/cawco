@@ -405,10 +405,7 @@ struct PermissionLook {
     /// most to the one that asks the least.
     static let order = ["default", "plan", "acceptEdits", "bypassPermissions", "fullSend"]
 
-    private static let names = [
-        "default": "Ask first", "plan": "Plan first", "acceptEdits": "Accept edits",
-        "bypassPermissions": "Bypass", "fullSend": "Full Send",
-    ]
+    private static let names = SpawnPrefs.modeNames
 
     /// What each mode does on each harness that has modes (permission-modes.ts `DESCRIPTIONS`).
     private static let descriptions: [String: [String: String]] = [
@@ -457,12 +454,6 @@ struct PermissionLook {
     /// Whether the CLI runs in its bypass mode: Bypass, and Full Send on top of it.
     static func bypasses(_ mode: String?) -> Bool {
         mode == "bypassPermissions" || mode == "fullSend"
-    }
-
-    /// Where a form's mode goes when the machine cannot honour it: Full Send
-    /// to Bypass, anything else to the first mode the machine can.
-    static func fallback(_ mode: String, honoured: [String]) -> String? {
-        mode == "fullSend" && honoured.contains("bypassPermissions") ? "bypassPermissions" : honoured.first
     }
 }
 

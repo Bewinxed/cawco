@@ -138,7 +138,7 @@ const THUMBNAIL_STYLES = [
 ];
 const PNG_PREFIX = /^data:image\/png;base64,/;
 /** What a picture never draws: the overlay's own UI and layers, and what has no box. */
-const SKIPPED =
+export const SKIPPED =
   "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins], script, style, template, noscript, link, meta";
 /** Elements drawn whole wherever the crop meets them: their insides are not boxes of their own. */
 const WHOLE = new Set([
@@ -169,9 +169,16 @@ const holds = (outer: Box, inner: Box) =>
   inner.x + inner.w <= outer.x + outer.w &&
   inner.y + inner.h <= outer.y + outer.h;
 
+/** `el`'s box in its own document's px (its window's scroll added). */
 const boxOf = (el: Element): Box => {
   const r = el.getBoundingClientRect();
-  return { x: r.left + scrollX, y: r.top + scrollY, w: r.width, h: r.height };
+  const view = el.ownerDocument.defaultView ?? window;
+  return {
+    x: r.left + view.scrollX,
+    y: r.top + view.scrollY,
+    w: r.width,
+    h: r.height,
+  };
 };
 
 /** Whether `el` holds words of its own, beside its child elements: drawn whole, so its text is. */
@@ -198,8 +205,8 @@ const drawnWhole = (el: Element, at: Box, box: Box) =>
   el.childElementCount === 0 ||
   ownText(el);
 
-/** What of the page the crop `box` shows, from the body down. */
-function stepsIn(box: Box): Step[] {
+/** What of the page in `doc` the crop `box` shows, from the body down. */
+function stepsIn(doc: Document, box: Box): Step[] {
   const steps: Step[] = [];
   let wholes = 0;
   const walk = (parent: Element) => {
@@ -225,15 +232,20 @@ function stepsIn(box: Box): Step[] {
       walk(child);
     }
   };
-  if (document.body) {
-    walk(document.body);
+  if (doc.body) {
+    walk(doc.body);
   }
   return steps;
 }
 
 /** An element's own background and border, as its computed style has them, in the page's px. */
-function paintBox(ctx: CanvasRenderingContext2D, el: Element, at: Box) {
-  const style = getComputedStyle(el);
+function paintBox(
+  ctx: CanvasRenderingContext2D,
+  view: Window,
+  el: Element,
+  at: Box
+) {
+  const style = view.getComputedStyle(el);
   const radius = Number.parseFloat(style.borderTopLeftRadius) || 0;
   const shape = () => {
     ctx.beginPath();
@@ -253,16 +265,39 @@ function paintBox(ctx: CanvasRenderingContext2D, el: Element, at: Box) {
   }
 }
 
-/** The canvas's own colour: the root's background, else the body's, else white. */
-const groundOf = () => {
-  for (const el of [document.documentElement, document.body]) {
-    const colour = el ? getComputedStyle(el).backgroundColor : "";
+/**
+ * The canvas's own colour: the root's background, else the body's, else the
+ * browser's own canvas in the scheme the root draws in (`Canvas`, dark under
+ * a dark `color-scheme`), as the page is painted on it.
+ */
+export const groundOf = (view: Window) => {
+  const doc = view.document;
+  for (const el of [doc.documentElement, doc.body]) {
+    const colour = el ? view.getComputedStyle(el).backgroundColor : "";
     if (colour && !CLEAR.has(colour)) {
       return colour;
     }
   }
-  return "#fff";
+  return canvasOf(view);
 };
+
+/**
+ * The browser's `Canvas` colour in the scheme `view`'s root draws in, read
+ * off a probe that takes the root's `color-scheme`; the probe stands for one
+ * read and goes, inside `view`'s own overlay host when it has one (a mutation
+ * there reaches none of the page's observers), else at its root.
+ */
+function canvasOf(view: Window): string {
+  const doc = view.document;
+  const root = doc.documentElement;
+  const probe = doc.createElement("i");
+  probe.style.cssText = `all:initial;position:fixed;inline-size:0;block-size:0;visibility:hidden;color-scheme:${view.getComputedStyle(root).colorScheme};background-color:Canvas`;
+  const host = doc.querySelector("cawco-overlay")?.shadowRoot ?? root;
+  host.append(probe);
+  const colour = view.getComputedStyle(probe).backgroundColor;
+  probe.remove();
+  return colour && !CLEAR.has(colour) ? colour : "#fff";
+}
 
 /** The person's ink as the ink layer draws it now, filled over the crop. */
 function paintInk(ctx: CanvasRenderingContext2D) {
@@ -278,10 +313,10 @@ function paintInk(ctx: CanvasRenderingContext2D) {
 }
 
 /** The crop `box` within the page's own extent. */
-const onPage = (box: Box): Box => {
-  const root = document.documentElement;
-  const right = Math.max(root.scrollWidth, innerWidth);
-  const bottom = Math.max(root.scrollHeight, innerHeight);
+const onPage = (view: Window, box: Box): Box => {
+  const root = view.document.documentElement;
+  const right = Math.max(root.scrollWidth, view.innerWidth);
+  const bottom = Math.max(root.scrollHeight, view.innerHeight);
   const x = Math.max(0, box.x);
   const y = Math.max(0, box.y);
   return {
@@ -295,7 +330,9 @@ const onPage = (box: Box): Box => {
 /**
  * The page cropped to `box` (the page's px) with the person's ink, as a
  * base64 PNG of at most `area` pixels; null when nothing could be drawn,
- * `failed` hearing why. A `thumbnail` is drawn for a glance: its parts
+ * `failed` hearing why. `view` is the window drawn, this page's own unless
+ * a copy of it in another scheme is (schemes.ts); the ink is always this
+ * page's, which stands in the same px. A `thumbnail` is drawn for a glance: its parts
  * carry {@link THUMBNAIL_STYLES} alone, no scrollbar styles, and the
  * system's faces for the page's web fonts (each part's SVG stays small, and
  * decoding it runs on the page's thread: "the last step, decoding the
@@ -306,15 +343,19 @@ const onPage = (box: Box): Box => {
 export async function cropPicture(
   wanted: Box,
   failed: (message: string) => void,
-  { area, thumbnail }: { area: number; thumbnail: boolean } = {
+  {
+    area,
+    thumbnail,
+    view = window,
+  }: { area: number; thumbnail: boolean; view?: Window } = {
     area: PICTURE_AREA,
     thumbnail: false,
   }
 ): Promise<string | null> {
-  const box = onPage(wanted);
+  const box = onPage(view, wanted);
   const scale = Math.min(
     2,
-    devicePixelRatio || 1,
+    view.devicePixelRatio || 1,
     Math.sqrt(area / (box.w * box.h))
   );
   const canvas = document.createElement("canvas");
@@ -326,14 +367,19 @@ export async function cropPicture(
     return null;
   }
   ctx.setTransform(scale, 0, 0, scale, -box.x * scale, -box.y * scale);
-  ctx.fillStyle = groundOf();
+  ctx.fillStyle = groundOf(view);
   ctx.fillRect(box.x, box.y, box.w, box.h);
-  const steps = stepsIn(box);
+  const steps = stepsIn(view.document, box);
   const first = steps.find((step) => step.whole);
   const context = first
     ? await createContext(first.el, {
         scale,
-        filter: (node) => !(node instanceof Element && node.matches(SKIPPED)),
+        // By node type, not `instanceof`: a copy's nodes are another window's.
+        filter: (node) =>
+          !(
+            node.nodeType === Node.ELEMENT_NODE &&
+            (node as Element).matches(SKIPPED)
+          ),
         ...(thumbnail
           ? {
               font: false as const,
@@ -346,7 +392,7 @@ export async function cropPicture(
   try {
     for (const step of steps) {
       if (!step.whole) {
-        paintBox(ctx, step.el, step.box);
+        paintBox(ctx, view, step.el, step.box);
         continue;
       }
       if (!context) {

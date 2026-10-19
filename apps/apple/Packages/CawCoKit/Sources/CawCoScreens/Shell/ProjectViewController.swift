@@ -336,6 +336,7 @@ final class ProjectViewController: ObservedViewController {
         // do; a discarded draft leaves the board in its place.
         custom = ProjectViewPane(hub: context.hub)
         custom.onOpenTask = { [weak self] id in self?.open(id) }
+        custom.onOpenFile = { [weak self] path in self?.openFile(path) }
         custom.keep = { [weak self] name in try await self?.store.keepView(name) }
         custom.discard = { [weak self] name in
             guard let self else { return }
@@ -650,6 +651,14 @@ final class ProjectViewController: ObservedViewController {
 
     private func open(_ taskId: String) {
         context.openTask(projectId, taskId)
+    }
+
+    /// A file of the project's folder a view links to (the project page's
+    /// `?file=`), read as it is on the hub, in the sheet a Caw reply's chip
+    /// opens (ThreadViewController `openFile`).
+    private func openFile(_ path: String) {
+        let sheet = FolderFileController(hub: context.hub, projectId: projectId, path: path)
+        present(HouseSheetController(sheet, title: path, scroller: sheet.scroll), animated: true)
     }
 
     /// A tap on the name: the field takes its place, holding it, selected (ProjectHead.svelte).

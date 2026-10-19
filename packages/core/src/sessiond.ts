@@ -13,8 +13,15 @@
  */
 
 import { createHash } from "node:crypto";
+import {
+  existsSync,
+  lstatSync,
+  readdirSync,
+  readlinkSync,
+  unlinkSync,
+} from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { basename, join, resolve } from "node:path";
 import type { ChildLimit } from "./harness";
 import type { BuildInfo, SessionLimits } from "./index";
 import { darwinSocketRoot, SESSIOND_LINK, shortLink } from "./paths";
@@ -336,7 +343,16 @@ export const sessiondEndpoint = (): string => {
  * `/private/tmp` whichever side starts first makes the name again.
  */
 export const sessiondLinkDir = (): string =>
-  shortLink(sessiondLinkName(), join(homedir(), ".cawco"));
+  shortLink(sessiondLinkName(), sessiondHomeDir());
+
+/**
+ * sessiond's dir under `home`, `<home>/.cawco`, as an absolute path whatever
+ * HOME says: a link in the socket root resolves a relative target against
+ * the root itself, so a HOME given as `build/…/home.XXXXXX` (the release's
+ * signing run of `cawco --version`) named a dir that was never there.
+ */
+const sessiondHomeDir = (home: string = homedir()): string =>
+  resolve(home, ".cawco");
 
 /**
  * The short name's own name: `c-` and its HOME's first 8 hex of sha256, as
@@ -344,12 +360,103 @@ export const sessiondLinkDir = (): string =>
  * fleet runs one under a HOME of its own; one name for all would be pointed
  * at whichever HOME asked last.
  */
-const sessiondLinkName = (): string =>
-  `${SESSIOND_LINK}-${createHash("sha256").update(homedir()).digest("hex").slice(0, 8)}`;
+const sessiondLinkName = (home: string = homedir()): string =>
+  `${SESSIOND_LINK}-${createHash("sha256").update(home).digest("hex").slice(0, 8)}`;
 
 /** {@link sessiondLinkDir}'s path alone, nothing made. */
 export const sessiondLinkPath = (): string =>
   join(darwinSocketRoot(), sessiondLinkName());
+
+/**
+ * {@link sessiondEndpoint}'s path alone, nothing made: what a unit file or a
+ * layout names, read where nothing is dialled yet. sessiond makes the short
+ * name itself before it binds there (sessiond main.ts), and every dialler
+ * through {@link sessiondEndpoint}. A CLI that only names the endpoint (its
+ * layout, read as `cawco --version` starts) leaves no link in the socket
+ * root behind it.
+ */
+export const sessiondEndpointPath = (): string =>
+  process.platform === "darwin"
+    ? join(sessiondLinkPath(), "sessiond.sock")
+    : sessiondEndpoint();
+
+/**
+ * macOS: removes the short name of sessiond's dir under `home`, a HOME that
+ * is going (a scratch fleet's service HOME), when it names that HOME's
+ * `.cawco` and nothing else. Nothing elsewhere.
+ */
+export const forgetSessiondLink = (home: string): void => {
+  if (process.platform !== "darwin") {
+    return;
+  }
+  const link = join(darwinSocketRoot(), sessiondLinkName(home));
+  try {
+    if (readlinkSync(link) === sessiondHomeDir(home)) {
+      unlinkSync(link);
+    }
+  } catch {
+    // Not there, or not a link: nothing of this HOME's to remove.
+  }
+};
+
+/**
+ * Whether `target`, a short name's, is where CawCo points one of that kind:
+ * a `c-` name at a HOME's `.cawco` ({@link sessiondLinkDir}), a `t-<id8>`
+ * name at a workspace's scratch dir `<HOME>/.cawco/tmp/<id8>` (paths.ts
+ * `linkWorkspaceTmp`), the HOME being any (a scratch fleet's agents run
+ * under HOMEs of their own).
+ */
+const cawcoTarget = (name: string, target: string): boolean =>
+  name.startsWith("t-")
+    ? target.endsWith(`/.cawco/tmp/${name.slice(2)}`)
+    : basename(target) === ".cawco";
+
+/**
+ * macOS: removes each short name in the socket root CawCo made whose target
+ * is gone: a `c-` (sessiond's dir under a HOME) or `t-` (a workspace's
+ * scratch dir) link named with 8 hex, pointing where CawCo points one of its
+ * kind ({@link cawcoTarget}), at nothing that is there. This HOME's own `c-`
+ * name is kept whatever it names, and every other entry of the root (each
+ * workspace's door dir, the git credential socket, a link of another name
+ * or target) is left as it is. Which links went; none elsewhere.
+ */
+export const sweepDeadShortLinks = (
+  root: string = darwinSocketRoot()
+): string[] => {
+  if (process.platform !== "darwin") {
+    return [];
+  }
+  let names: string[];
+  try {
+    names = readdirSync(root);
+  } catch {
+    return [];
+  }
+  const own = sessiondLinkName();
+  // `c-` (sessiondLinkName) or `t-` (paths.ts scratchLinkName) and 8 hex.
+  // Built here, as paths.ts and this module import each other.
+  const given = new RegExp(`^(${SESSIOND_LINK}|t)-[0-9a-f]{8}$`);
+  return names.filter((name) => {
+    if (name === own || !given.test(name)) {
+      return false;
+    }
+    const link = join(root, name);
+    try {
+      if (!lstatSync(link).isSymbolicLink()) {
+        return false;
+      }
+      const target = readlinkSync(link);
+      if (!cawcoTarget(name, target) || existsSync(resolve(root, target))) {
+        return false;
+      }
+      unlinkSync(link);
+      return true;
+    } catch {
+      // Gone already, or not this user's to read: left as it is.
+      return false;
+    }
+  });
+};
 
 /**
  * `path` as it lies on disk under `~/.cawco` when it is named through

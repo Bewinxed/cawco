@@ -43,8 +43,9 @@
  * proposal's card), kept in `design_proposals` and parked again when the hub
  * starts. Approve writes it through `design_write` where it was proposed and
  * commits it as the person; Deny leaves design/ as it was. The proposing
- * session is told either way. A system the session is building itself is
- * written at once, and the person judges it in the task's review. The
+ * session is told either way. A system the session is building itself, or
+ * that its own open task landed ({@link ownLandings}), is written at once,
+ * and the person judges it in the task's review. The
  * person's own edits are theirs, never proposals; Caw's folder_write refuses
  * design/ (memory.ts `personsTier`).
  */
@@ -60,8 +61,8 @@ import {
   type PermissionResult,
   type WorkspaceRef,
 } from "@cawco/core";
-import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
-import type { DbShape } from "./db";
+import { GIT_LOCALE, SAFE_GIT_SHELL } from "@cawco/core/safe-git";
+import type { DbShape, WorkItemRow } from "./db";
 import type { DesignProposalRow } from "./db/design-checks";
 import type { DesignProposalFile } from "./db/schema";
 import { type BuiltTokens, buildTokens } from "./design-tokens";
@@ -123,7 +124,7 @@ const HEADER = [
   "   Do not edit: change the token files and write them again with design_write. */",
 ].join("\n");
 
-/** A project's token system built: the dashboard's generator, in a `tokens` layer, both schemes. */
+/** A project's token system built: the dashboard's generator, in a `tokens` layer, the schemes it has declared. */
 export const buildDesignTokens = (
   read: (path: string) => Promise<unknown>
 ): Promise<BuiltTokens> =>
@@ -232,6 +233,12 @@ export interface DesignStore {
   /** Each path's bytes now (relative to `design/`), or null when there is none. */
   read: (paths: string[]) => Promise<Map<string, Uint8Array | null>>;
   /**
+   * A file's bytes from anywhere in the place the session works (its
+   * repository, or the project's folder), by a path from that root or an
+   * absolute one inside it: a `design_write` file's `from`.
+   */
+  source: (path: string) => Promise<Uint8Array>;
+  /**
    * Whether a system here is the project's, not one the writing session is
    * building: its manifest on the repository's base commit, or first
    * committed to the folder by anyone but that session. A change to it is a
@@ -249,6 +256,70 @@ export interface DesignFile {
   encoding?: "utf8" | "base64";
   path: string;
 }
+
+/**
+ * A file as `design_write` takes it: its `content`, or `from`, a file where
+ * the session works whose bytes the hub reads ({@link DesignStore.source}),
+ * so a font or a clip never passes through the model or a shell argument.
+ */
+export type DesignFileIn = Omit<DesignFile, "content"> & {
+  content?: string;
+  from?: string;
+};
+
+/** A path inside `root`, from it: relative, or absolute under it; undefined when it leaves it. */
+const insideRoot = (root: string, raw: string): string | undefined => {
+  const trimmed = raw.trim().replaceAll("\\", "/");
+  const rel = posix.normalize(
+    trimmed.startsWith(`${root}/`) ? trimmed.slice(root.length + 1) : trimmed
+  );
+  return rel.startsWith("/") ||
+    rel === "." ||
+    rel === ".." ||
+    rel.startsWith("../")
+    ? undefined
+    : rel;
+};
+
+/**
+ * The call's files with each `from` read where the session works, as base64
+ * content: what is planned, what a proposal keeps and what Approve writes.
+ * Refused whole, every problem named, when one does not hold.
+ */
+const withSources = async (
+  store: DesignStore,
+  files: DesignFileIn[]
+): Promise<DesignFile[]> => {
+  const problems: string[] = [];
+  const out: DesignFile[] = [];
+  for (const file of files) {
+    if ((file.content === undefined) === (file.from === undefined)) {
+      problems.push(`${file.path}: give its content or from, one of the two.`);
+      continue;
+    }
+    if (file.content !== undefined) {
+      out.push({ ...file, content: file.content });
+      continue;
+    }
+    try {
+      // biome-ignore lint/performance/noAwaitInLoops: one file after another, each a read on its machine
+      const bytes = await store.source(file.from ?? "");
+      out.push({
+        path: file.path,
+        content: Buffer.from(bytes).toString("base64"),
+        encoding: "base64",
+      });
+    } catch (error) {
+      problems.push(
+        `${file.path}: ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+  }
+  if (problems.length > 0) {
+    throw new Error(`Nothing was written. ${problems.join(" ")}`);
+  }
+  return out;
+};
 
 export interface DesignWritten {
   kept: { path: string; why: string }[];
@@ -606,24 +677,73 @@ const writeTemporary = async (
   }
 };
 
+/** What an attempt at a task landed on its base: `onto..sha` (work-items.ts `landed`). */
+export interface OwnLanding {
+  onto: string;
+  sha: string;
+}
+
+/**
+ * What `item`'s task landed on its base while the task is open: each of its
+ * attempts' landings. A system one of them put there is still that task's
+ * build, not the project's: its builder's follow-up while the task waits in
+ * review writes at once and lands as its first hand-in did, unchecked by a
+ * verifier. On nightly 3944 Caw sent a landed build back over its
+ * Foundations page's lint warnings, the fix became a proposal against the
+ * builder's own system, and its attempt failed. Another task's system, the
+ * person's, or one whose task the person closed has none here: changing it
+ * stays a proposal and design work on it is verified (b613bafc8: "design_write
+ * to the project's system (on the workspace's base branch, …) writes
+ * nothing: it parks the person's ask").
+ */
+export const ownLandings = (
+  attempts: Pick<WorkItemRow, "landed" | "taskId">[],
+  item: Pick<WorkItemRow, "taskId">,
+  taskOpen: boolean
+): OwnLanding[] =>
+  taskOpen && item.taskId
+    ? attempts.flatMap((attempt) =>
+        attempt.taskId === item.taskId && attempt.landed?.onto
+          ? [{ onto: attempt.landed.onto, sha: attempt.landed.sha }]
+          : []
+      )
+    : [];
+
+/**
+ * Whether the newest commit that added design/'s manifest on `base` (in
+ * `$add`) lies inside one of `own`'s landings: on its pushed commit, not on
+ * the commit it was rebased onto. A landing the clone lacks holds none of it.
+ */
+const ownTest = (own: OwnLanding[]): string =>
+  own.length === 0
+    ? "false"
+    : own
+        .map(
+          ({ onto, sha }) =>
+            `{ git cat-file -e ${quote(`${sha}^{commit}`)} 2>/dev/null && git merge-base --is-ancestor "$add" ${quote(sha)} && ! git merge-base --is-ancestor "$add" ${quote(onto)}; }`
+        )
+        .join(" || ");
+
 /**
  * A system at a repository's root on a machine, read and written with its
  * shell, inside its workspace's boundary when it is one, git run the safe
  * way (core `SAFE_GIT_SHELL`). `base` is the commit a system must be on to
  * be the project's: a workspace's base branch on origin, else the
- * checkout's HEAD.
+ * checkout's HEAD. One that `own` landed is not ({@link ownLandings}).
  */
 const repositoryStore = (
   run: Run,
   at: RepositoryAt,
-  base = "HEAD"
+  base = "HEAD",
+  own: OwnLanding[] = []
 ): DesignStore => {
   const sh = runIn(run, at);
   return {
     where: `${at.root}/${DESIGN_DIR}`,
     theirs: async () => {
+      const manifest = `${DESIGN_DIR}/${MANIFEST}`;
       const result = await sh(
-        `${SAFE_GIT_SHELL}git rev-parse --verify -q ${quote(`${base}^{commit}`)} >/dev/null || { echo "${base} is not a commit here" >&2; exit 2; }; if git cat-file -e ${quote(`${base}:${DESIGN_DIR}/${MANIFEST}`)} 2>/dev/null; then echo yes; else echo no; fi`
+        `${SAFE_GIT_SHELL}git rev-parse --verify -q ${quote(`${base}^{commit}`)} >/dev/null || { echo "${base} is not a commit here" >&2; exit 2; }; if git cat-file -e ${quote(`${base}:${manifest}`)} 2>/dev/null; then add=$(git log -1 --diff-filter=A --format=%H ${quote(base)} -- ${quote(manifest)}); if [ -n "$add" ] && { ${ownTest(own)}; }; then echo own; else echo yes; fi; else echo no; fi`
       );
       if (result.exitCode !== 0) {
         throw failed("design/'s history could not be read", result);
@@ -640,25 +760,41 @@ const repositoryStore = (
       return result.stdout.trim().split("\n").at(-1) ?? "";
     },
     read: async (paths) => {
-      const result = await sh(
-        `for p in ${paths.map((path) => quote(`${DESIGN_DIR}/${path}`)).join(" ")}; do if [ -f "$p" ]; then printf 'F\\t%s\\t' "$p"; base64 < "$p" | tr -d '\\n'; echo; fi; done`
-      );
-      if (result.exitCode !== 0) {
-        throw failed("design/ could not be read", result);
-      }
-      const found = new Map<string, Uint8Array | null>(
-        paths.map((path) => [path, null])
-      );
-      for (const line of result.stdout.split("\n")) {
-        const [mark, path, body] = line.split("\t");
-        if (mark === "F" && path) {
-          found.set(
-            path.slice(DESIGN_DIR.length + 1),
-            new Uint8Array(Buffer.from(body ?? "", "base64"))
-          );
+      // A command a file: one command's output is held to the agent's
+      // 8 MiB (workflow-command.ts), and a system's assets together pass it.
+      const found = new Map<string, Uint8Array | null>();
+      for (const path of paths) {
+        // biome-ignore lint/performance/noAwaitInLoops: one file after another
+        const result = await sh(
+          `p=${quote(`${DESIGN_DIR}/${path}`)}; if [ -f "$p" ]; then echo F; base64 < "$p" | tr -d '\\n'; fi`
+        );
+        if (result.exitCode !== 0) {
+          throw failed("design/ could not be read", result);
         }
+        const [mark, body] = result.stdout.split("\n");
+        found.set(
+          path,
+          mark === "F"
+            ? new Uint8Array(Buffer.from(body ?? "", "base64"))
+            : null
+        );
       }
       return found;
+    },
+    source: async (raw) => {
+      const path = insideRoot(at.root, raw);
+      if (!path) {
+        throw new Error(
+          `from ${raw} is not inside ${at.root}: name a file in the repository you work in.`
+        );
+      }
+      const result = await sh(
+        `f=${quote(path)}; [ -f "$f" ] || { echo "from $f: there is no such file in ${at.root}" >&2; exit 2; }; n=$(wc -c < "$f"); [ "$n" -le ${FOLDER_FILE_LIMIT} ] || { echo "from $f: it is $n bytes, past the ${FOLDER_FILE_LIMIT} one design file may weigh" >&2; exit 2; }; base64 < "$f" | tr -d '\\n'`
+      );
+      if (result.exitCode !== 0) {
+        throw failed("it could not be read", result);
+      }
+      return new Uint8Array(Buffer.from(result.stdout.trim(), "base64"));
     },
     write: async (files) => {
       // Each file to a temporary name first, then all moved into place.
@@ -709,7 +845,7 @@ const folderStore = (
         "--",
         `${DESIGN_DIR}/${MANIFEST}`,
       ],
-      { cwd: projectRoot(projectId) }
+      { cwd: projectRoot(projectId), env: { ...process.env, ...GIT_LOCALE } }
     );
     if (read.exitCode !== 0) {
       // A folder git has no history for yet holds no system.
@@ -726,7 +862,12 @@ const folderStore = (
   // Every folder write is its own commit already.
   commit: () =>
     Promise.resolve(
-      Bun.spawnSync(["git", "-C", projectRoot(projectId), "rev-parse", "HEAD"])
+      Bun.spawnSync(
+        ["git", "-C", projectRoot(projectId), "rev-parse", "HEAD"],
+        {
+          env: { ...process.env, ...GIT_LOCALE },
+        }
+      )
         .stdout.toString()
         .trim()
     ),
@@ -750,6 +891,15 @@ const folderStore = (
         })
       )
     ),
+  source: async (raw) => {
+    const path = insideRoot(projectRoot(projectId), raw);
+    if (!path) {
+      throw new Error(
+        `from ${raw} is not inside the project's folder: name a file in it.`
+      );
+    }
+    return (await readFolderBytes(projectId, path, FOLDER_FILE_LIMIT)).bytes;
+  },
   write: async (files) => {
     await writeFolderFiles(
       projectId,
@@ -794,11 +944,13 @@ export const baseRef = (base: string): string => `refs/remotes/origin/${base}`;
  * Whether the workspace clone at `root` on `machineId` holds a design
  * system on its base branch (`base`): the project's, which its session
  * changes only through proposals and whose work is judged against it. One
- * the session's own commits made is its build.
+ * the session's own commits made, or its own task landed (`own`,
+ * {@link ownLandings}), is its build.
  */
 export const designOnBase = (
   run: Run,
-  workspace: { base: string; id: string; machineId: string; path: string }
+  workspace: { base: string; id: string; machineId: string; path: string },
+  own: OwnLanding[]
 ): Promise<boolean> =>
   repositoryStore(
     run,
@@ -807,45 +959,85 @@ export const designOnBase = (
       root: workspace.path,
       workspace: { id: workspace.id, path: workspace.path },
     },
-    baseRef(workspace.base)
+    baseRef(workspace.base),
+    own
   ).theirs();
 
-/** What an attempt reads first of the system, and what it fetches on demand (spec §5.7, "Use"; Open Design's order). */
-const READ_FIRST = `Read \`${DESIGN_DIR}/DESIGN.md\` and \`${DESIGN_DIR}/${STYLESHEET}\` first; \`${DESIGN_DIR}/${RESOLVER}\`, \`${DESIGN_DIR}/${MANIFEST}\`, fonts and specimens only as the work needs them.`;
+/** A design system's usage guide: an attempt is told of the system only when its clone holds one. */
+const GUIDES = ["SKILL.md", "DESIGN.md"] as const;
+/** What an attempt reads first of the system, with the guide (spec §5.7, "Use"; Open Design's order). */
+const FIRST = ["DESIGN.md", STYLESHEET] as const;
+/** What it fetches only as the work needs it. */
+const ON_DEMAND = [RESOLVER, MANIFEST] as const;
+/** The line between the files design/ holds and its SKILL.md's text, in the clone's answer. */
+const GUIDE_MARK = "cawco:skill-md";
+
+/** Files of design/ as a sentence names them: `a`, `a` and `b`, `a`, `b` and `c`. */
+const filesSaid = (files: readonly string[]): string => {
+  const quoted = files.map((file) => `\`${DESIGN_DIR}/${file}\``);
+  return quoted.length > 1
+    ? `${quoted.slice(0, -1).join(", ")} and ${quoted.at(-1)}`
+    : (quoted[0] ?? "");
+};
+
+/** The read-first line, naming only the files design/ holds; "" when it holds none of them. */
+const readFirst = (has: Set<string>): string => {
+  const first = FIRST.filter((file) => has.has(file));
+  const later = ON_DEMAND.filter((file) => has.has(file));
+  if (first.length === 0) {
+    return later.length > 0
+      ? `Read ${filesSaid(later)} only as the work needs them.`
+      : "";
+  }
+  return later.length > 0
+    ? `Read ${filesSaid(first)} first; ${filesSaid(later)} only as the work needs them.`
+    : `Read ${filesSaid(first)} first.`;
+};
 
 /**
  * An attempt's brief's `## Design system` section (dispatch.ts): the
  * project's system as the attempt's clone holds it, design/ at its root,
  * read inside its boundary as every command in a live clone is. Its usage
- * guide (design/SKILL.md) whole, then what to read first. Empty when the
- * clone holds no design/.
+ * guide (design/SKILL.md) whole, then what to read first, naming only the
+ * files that are there. Empty when design/ holds no guide (neither SKILL.md
+ * nor DESIGN.md): a design/ of tokens alone is no system to brief.
  */
 export const designSection = async (
   run: Run,
   clone: { id: string; machineId: string; path: string }
 ): Promise<string> => {
+  const files = [...GUIDES, STYLESHEET, ...ON_DEMAND];
   const read = await runIn(run, {
     machineId: clone.machineId,
     root: clone.path,
     workspace: { id: clone.id, path: clone.path },
   })(
-    `if [ -d ${DESIGN_DIR} ]; then echo system; if [ -f ${DESIGN_DIR}/SKILL.md ]; then cat ${DESIGN_DIR}/SKILL.md; fi; fi`
+    `for f in ${files.join(" ")}; do if [ -f ${DESIGN_DIR}/$f ]; then echo "$f"; fi; done; echo ${GUIDE_MARK}; if [ -f ${DESIGN_DIR}/SKILL.md ]; then cat ${DESIGN_DIR}/SKILL.md; fi`
   );
   if (read.exitCode !== 0) {
     throw failed("design/ could not be read in the attempt's clone", read);
   }
-  const [mark, ...rest] = read.stdout.split("\n");
-  if (mark !== "system") {
+  const lines = read.stdout.split("\n");
+  const mark = lines.indexOf(GUIDE_MARK);
+  const has = new Set(lines.slice(0, Math.max(mark, 0)));
+  if (!GUIDES.some((file) => has.has(file))) {
     return "";
   }
-  const guide = rest.join("\n").trim();
+  const guide = has.has("SKILL.md")
+    ? lines
+        .slice(mark + 1)
+        .join("\n")
+        .trim()
+    : "";
+  const first = readFirst(has);
   return [
     "## Design system",
     guide
       ? `This project has a design system, at \`${DESIGN_DIR}/\` in your clone. Its usage guide, \`${DESIGN_DIR}/SKILL.md\`:`
       : `This project has a design system, at \`${DESIGN_DIR}/\` in your clone.`,
     ...(guide ? [guide] : []),
-    READ_FIRST,
+    ...(first ? [first] : []),
+    "Then `design_map` for the components it builds from: mount them, never redraw them (the `component-canvas` skill).",
   ].join("\n\n");
 };
 
@@ -859,6 +1051,8 @@ const WHY_LIMIT = 500;
  */
 interface ProposalPlace {
   base?: string;
+  /** What the session's own task landed on `base` ({@link ownLandings}). */
+  own?: OwnLanding[];
   repo: RepositoryAt | null;
 }
 
@@ -879,6 +1073,8 @@ export const createDesignSystem = (deps: {
   online: (machineId: string) => boolean;
   /** Whether a task is design work (design-offers.ts `designShaped`, or the build itself). */
   designTask: (projectId: string, taskId: string) => Promise<boolean>;
+  /** Whether a task is open: neither done nor dropped. */
+  taskOpen: (projectId: string, taskId: string) => Promise<boolean>;
   /** Parks an ask for the person: the pending ledger, every dashboard, push. */
   park: (envelope: Envelope) => void;
   /** Takes a settled ask off the pending ledger. */
@@ -903,16 +1099,19 @@ export const createDesignSystem = (deps: {
     }
     const folder = projectRoot(projectId);
     if (existsSync(join(folder, DESIGN_DIR))) {
-      const read = Bun.spawnSync([
-        "git",
-        "-C",
-        folder,
-        "status",
-        "--porcelain",
-        "--untracked-files=all",
-        "--",
-        DESIGN_DIR,
-      ]);
+      const read = Bun.spawnSync(
+        [
+          "git",
+          "-C",
+          folder,
+          "status",
+          "--porcelain",
+          "--untracked-files=all",
+          "--",
+          DESIGN_DIR,
+        ],
+        { env: { ...process.env, ...GIT_LOCALE } }
+      );
       const line = uncommittedLine(
         "the project's folder",
         read.stdout.toString()
@@ -968,8 +1167,8 @@ export const createDesignSystem = (deps: {
     // A work item's session works in its workspace's clone, read inside its
     // boundary; the project's system there is what its base branch holds on
     // origin, never its own commits.
-    const own = workspaceOfSession(actor.id);
-    const workspace = own && !own.ended ? own.workspace : undefined;
+    const mine = workspaceOfSession(actor.id);
+    const workspace = mine && !mine.ended ? mine.workspace : undefined;
     const top = await deps.run(
       actor.machineId,
       actor.cwd,
@@ -992,9 +1191,27 @@ export const createDesignSystem = (deps: {
           ? { workspace: { id: inClone.id, path: inClone.path } }
           : {}),
       },
-      ...(inClone ? { base: baseRef(inClone.base) } : {}),
+      ...(inClone && mine
+        ? {
+            base: baseRef(inClone.base),
+            own: await ownOf(actor.projectId, mine.item),
+          }
+        : {}),
     };
   };
+
+  /** What `item`'s own task landed while it is open ({@link ownLandings}). */
+  const ownOf = async (
+    projectId: string,
+    item: WorkItemRow
+  ): Promise<OwnLanding[]> =>
+    item.taskId
+      ? ownLandings(
+          deps.db.projectAttempts(projectId),
+          item,
+          await deps.taskOpen(projectId, item.taskId)
+        )
+      : [];
 
   /**
    * The workspace a session's work item runs in, while that item is live:
@@ -1007,7 +1224,7 @@ export const createDesignSystem = (deps: {
     const item = row?.workItemId ? deps.db.workItem(row.workItemId) : undefined;
     const [workspace] = item ? deps.db.workspacesNamed(item.workspaceId) : [];
     return workspace && item
-      ? { workspace, ended: !isLive(item.state) }
+      ? { workspace, item, ended: !isLive(item.state) }
       : undefined;
   };
 
@@ -1023,7 +1240,7 @@ export const createDesignSystem = (deps: {
     message?: string
   ): DesignStore =>
     place.repo
-      ? repositoryStore(deps.run, place.repo, place.base)
+      ? repositoryStore(deps.run, place.repo, place.base, place.own)
       : folderStore(projectId, author, deps.folderChanged, session, message);
 
   /** The proposal as the person's ask: drawn as its diff, answered by Approve or Deny, where it was made too. */
@@ -1175,13 +1392,14 @@ export const createDesignSystem = (deps: {
      */
     write: async (
       actor: InstanceRow,
-      files: DesignFile[],
+      given: DesignFileIn[],
       why: string | undefined,
       toolUseId: string | undefined
     ): Promise<DesignWritten | Awaited<ReturnType<typeof propose>>> => {
       const place = await placeOf(actor);
       const projectId = actor.projectId as string;
       const store = storeAt(projectId, place, actor.id, actor.title ?? "CawCo");
+      const files = await withSources(store, given);
       if (await store.theirs()) {
         return propose(actor, projectId, place, files, why, toolUseId);
       }

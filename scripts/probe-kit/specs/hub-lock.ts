@@ -18,30 +18,26 @@ import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { readWithin } from "../../../packages/core/src/bounded";
+import { identifiedPid, signal } from "../../../packages/core/src/signal";
 import { freePortRange, until } from "../../scratch-fleet";
 import type { Kit, Spec } from "../kit";
 
 const ROOT = join(import.meta.dir, "..", "..", "..");
 const HUB_ENTRY = join(ROOT, "packages", "hub", "src", "index.ts");
 
+/** What a hub's lock names (hub db-lock.ts): its process, with its start and the boot. */
 interface Holder {
+  bootId?: string;
   pid?: number;
+  procStart?: string;
 }
 
 const holderOf = async (lock: string): Promise<Holder | undefined> =>
   JSON.parse(await readFile(lock, "utf8")) as Holder;
 
-const alive = (pid: number | undefined): boolean => {
-  if (pid === undefined) {
-    return false;
-  }
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch {
-    return false;
-  }
-};
+/** Whether the process a lock names still runs, and is still the one that took it. */
+const alive = async (holder: Holder | undefined): Promise<boolean> =>
+  holder !== undefined && (await identifiedPid(holder)) !== undefined;
 
 /** A hub's own ports: one for its listener, the rest for its previews. */
 const ports = async () => {
@@ -120,8 +116,8 @@ const spec: Spec = {
     const stale = await holderOf(lock);
     kit.check(
       "a hub killed with SIGKILL leaves its lock naming a dead process",
-      stale?.pid === first.pid && !alive(stale?.pid),
-      `lock pid ${stale?.pid}, alive ${alive(stale?.pid)}`
+      stale?.pid === first.pid && !(await alive(stale)),
+      `lock pid ${stale?.pid}, alive ${await alive(stale)}`
     );
     const next = fleet.launch("hub");
     await fleet.hubUp();
@@ -149,13 +145,19 @@ const spec: Spec = {
     try {
       const dev = await until(
         "the start script's hub holding the dev database",
-        async () => (existsSync(devLock) ? await holderOf(devLock) : undefined),
-        (holder) => alive(holder.pid),
+        async () => {
+          const holder = existsSync(devLock)
+            ? await holderOf(devLock)
+            : undefined;
+          const pid = holder ? await identifiedPid(holder) : undefined;
+          return pid === undefined ? undefined : { holder, pid };
+        },
+        () => true,
         90_000
       );
       kit.check(
         "the start script with no CAWCO_DB_PATH opens $XDG_DATA_HOME/cawco-dev/cawco.db",
-        alive(dev.pid),
+        await alive(dev.holder),
         `${devLock} names live pid ${dev.pid}`
       );
       kit.check(
@@ -163,9 +165,7 @@ const spec: Spec = {
         (await holderOf(lock))?.pid === next.pid,
         `lock pid ${(await holderOf(lock))?.pid}`
       );
-      if (dev.pid) {
-        process.kill(dev.pid, "SIGKILL");
-      }
+      signal(dev.pid, "SIGKILL");
     } finally {
       started.kill("SIGKILL");
       await started.exited;

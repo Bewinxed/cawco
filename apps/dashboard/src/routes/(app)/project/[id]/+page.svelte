@@ -4,7 +4,7 @@
    * lead's face, then the view; the view strip stands in the shell's bar on
    * a wide screen and under the head on a narrow one. On a phone (under
    * 640px) the page is the one scroller: the head scrolls away with the
-   * view, and the views, Needs you and New session stand in one bar docked
+   * view, and the views, Needs you and Ask Caw stand in one bar docked
    * at the foot where a session's composer docks (ViewBar). Board, Table and
    * Pipeline always; Calendar when a task carries a date; then each view
    * kept in `views/`, then each Caw drafted, marked `draft`, with Keep and
@@ -14,15 +14,18 @@
    * changed (`tasks.changed`: Caw filed one, an attempt moved one), on a
    * reconnect, and when the tab comes back.
    *
-   * The view and the open task live in the URL (`?view=`, `?task=`), so a
-   * link opens the same. Needs you is a filter, not a stage: the tasks whose
-   * stage is of kind `you`.
+   * The view, the open task and the open file of the project's folder live
+   * in the URL (`?view=`, `?task=`, `?file=`), so a link opens the same.
+   * Needs you is a filter, not a stage: the tasks whose stage is of kind
+   * `you`.
    *
    * A task opens in the page (DESIGN.md, The Open Page Rule): on a desk
    * beside the view it came from, in a resizable split (Split) whose width
    * and expansion the project keeps, the view live beside it, another card
    * swapping the task in place; under 900px it is its own page, with Back
-   * (a history entry of its own, so the browser's back is Back too).
+   * (a history entry of its own, so the browser's back is Back too). A file
+   * of the folder (FolderFile) opens the same way, in the task's place: one
+   * stands beside the view at a time.
    */
   import {
     BLOCK_PAGES,
@@ -48,6 +51,7 @@
     ProjectDecisions,
   } from "#lib/cawco/decisions/decisions.svelte.js";
   import {
+    failureSentence,
     type HubRead,
     failureWords as message,
     THREAD_SEND_UNREACHED,
@@ -65,6 +69,7 @@
   import CawFloat from "#lib/cawco/project/CawFloat.svelte";
   import CawSeat from "#lib/cawco/project/CawSeat.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
+  import FolderFile from "#lib/cawco/project/FolderFile.svelte";
   import NeedsYouChip from "#lib/cawco/project/NeedsYouChip.svelte";
   import ProjectHead from "#lib/cawco/project/ProjectHead.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
@@ -130,7 +135,11 @@
     viewsOf,
     viewTool,
   } from "#lib/cawco/views-api.js";
-  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
+  import {
+    Alert,
+    AlertAction,
+    AlertDescription,
+  } from "#lib/components/ui/alert/index.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button, buttonVariants } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -178,7 +187,9 @@
 
   /** A refused read, as a sentence with its status for support. */
   const refusal = (read: HubRead<unknown>): string | null =>
-    read.ok ? null : `${read.detail} (${read.status}).`;
+    read.ok ? null : failureSentence(read);
+  /** A reason that already ends as a sentence does. */
+  const SENTENCE_END = /[.!?]$/;
 
   // --- the tasks: what the hub answered, from the load and each re-read ------
 
@@ -202,6 +213,10 @@
   /** The task open beside the view, or as its own page on a phone: the URL's `?task=`. */
   const openTask = $derived(
     (page.shallow?.url ?? page.url).searchParams.get("task")
+  );
+  /** The folder's file open beside the view, or as its own page on a phone: the URL's `?file=`. */
+  const openFile = $derived(
+    (page.shallow?.url ?? page.url).searchParams.get("file")
   );
   let needsOnly = $state(false);
   let adding = $state(false);
@@ -305,6 +320,19 @@
   );
   /** You can talk to Caw, on or off: only a reason he cannot start (no machine) stops it. */
   const canTalk = $derived(lead.view !== null && !lead.view.problem);
+  /**
+   * Arrived on the project, its board and his view read: his panel opens as
+   * the person last left it here, else while the board is empty, so a
+   * project just made opens on Caw (PRD §5.6; CawLead.arrive).
+   */
+  $effect(() => {
+    if (list !== null && lead.view !== null) {
+      const blank = empty;
+      untrack(() => lead.arrive(blank));
+    }
+  });
+  /** His panel stands docked beside the page, which yields it its room (CawFloat). */
+  const docked = $derived(lead.open && lead.anchor !== null);
 
   /** The project's views, kept then drafted, once read. */
   let views = $state<ProjectView[]>([]);
@@ -393,7 +421,7 @@
    */
   const narrowQuery = new MediaQuery(NARROW_QUERY);
   /** Under 900px a task is its own page, not the split beside the view (`phone`). */
-  const sheetQuery = new MediaQuery("(max-width: 899px)");
+  const sheetQuery = new MediaQuery("(width < 900px)");
   /** Under 640px the page is the one scroller, not the pane (the styles' own line). */
   const pageScrollsQuery = new MediaQuery("(max-width: 639px)", false);
   const hosted = $derived(
@@ -452,8 +480,6 @@
       count: each.value === "decisions" ? decisions.waiting : 0,
     }))
   );
-  /** The head: the views bar's "+" opens its New session popover. */
-  let head = $state<ReturnType<typeof ProjectHead> | null>(null);
   let tab = $derived(data.view);
   /** The view on screen: the one asked for once it exists, the board meanwhile. */
   const current = $derived(
@@ -481,11 +507,15 @@
     page?: string | null;
   }
 
-  /** The view and the open task in the URL, so a link opens the same. */
+  /**
+   * The view and the open task or file in the URL, so a link opens the
+   * same. A task opened puts the file away; with none, the file open stays.
+   */
   function hrefOf(
     id: string | null,
     as: string = current,
-    place: DecisionsPlace = {}
+    place: DecisionsPlace = {},
+    file: string | null = id ? null : openFile
   ): string {
     const query = new URLSearchParams();
     if (as !== "board") {
@@ -503,6 +533,8 @@
     }
     if (id) {
       query.set("task", id);
+    } else if (file) {
+      query.set("file", file);
     }
     writeFilter(query, filter);
     const search = query.toString();
@@ -624,14 +656,29 @@
     goto(hrefOf(null), { shallow: true, replace: true, state: {} });
   }
 
+  /** Close on a desk, Back on a phone, for the folder's file: the view, as it stood. */
+  function closeFile() {
+    if (phone && page.state.fileOpened) {
+      history.back();
+      return;
+    }
+    goto(hrefOf(null, current, {}, null), {
+      shallow: true,
+      replace: true,
+      state: {},
+    });
+  }
+
   /**
-   * The task the split's side holds: the open one, kept while the side
-   * closes, so it leaves as it stood.
+   * What the split's side holds: the open file, else the open task, kept
+   * while the side closes, so it leaves as it stood.
    */
-  let sideTask = $state<string | null>(null);
+  let sideHeld = $state<{ file: string } | { task: string } | null>(null);
   $effect(() => {
-    if (openTask) {
-      sideTask = openTask;
+    if (openFile) {
+      sideHeld = { file: openFile };
+    } else if (openTask) {
+      sideHeld = { task: openTask };
     }
   });
   const viewWord = $derived(
@@ -1264,10 +1311,48 @@
 
   // --- what the page says --------------------------------------------------------
 
-  const unreadLine = $derived(
-    `The tasks for ${project?.name ?? "this project"} could not be read: ${
-      listProblem ?? "the hub did not answer."
-    } Nothing was changed.`
+  /**
+   * What of the project the hub didn't give, and why, as one sentence: a
+   * read that fails fails for the tasks, the stages and the views at once
+   * (a tunnel's 502), so it is said once, where the board would be, with
+   * one Retry that reads all of them again (owner: "why does the error show
+   * up in two places on the screen?").
+   */
+  const unread = $derived.by((): string | null => {
+    const parts = [
+      listProblem === null ? null : "tasks",
+      stagesProblem === null ? null : "stages",
+      viewsProblem === null ? null : "views",
+    ].filter((part) => part !== null);
+    const reason = (listProblem ?? stagesProblem ?? viewsProblem ?? "").trim();
+    if (parts.length === 0 || reason === "") {
+      return null;
+    }
+    const named =
+      parts.length > 1
+        ? `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)}`
+        : parts[0];
+    const why = `${reason.charAt(0).toUpperCase()}${reason.slice(1)}`;
+    return `The ${named} for ${project?.name ?? "this project"} couldn't be read. ${
+      SENTENCE_END.test(why) ? why : `${why}.`
+    } Nothing was changed.`;
+  });
+  /** Retry: the tasks, the stages, the views and Caw read again, together. */
+  let rereading = $state(false);
+  async function readAgain() {
+    rereading = true;
+    try {
+      await Promise.all([refresh(), readViews(), lead.read()]);
+    } finally {
+      rereading = false;
+    }
+  }
+  /** The pane says it in the board's place: its tasks are what's missing. */
+  const paneSaysUnread = $derived(
+    list === null &&
+      !shown.startsWith("view:") &&
+      shown !== "routines" &&
+      shown !== "decisions"
   );
   const unreadStages = $derived(
     `stages.md in the project folder does not read: ${(stages?.problems ?? []).join(" ")} Tasks keep their stages meanwhile; fix the file and the board takes its columns from it.`
@@ -1670,11 +1755,18 @@
     <div class="state">
       <EmptyState
         icon={IconToolTodo}
-        line={unreadLine}
+        line={unread ??
+          `The tasks for ${project?.name ?? "this project"} couldn't be read. Nothing was changed.`}
         title="Tasks are not available"
       >
         {#snippet action()}
-          <Button onclick={refresh} variant="outline">Retry</Button>
+          <Button
+            label="Retry"
+            onclick={readAgain}
+            pending={rereading}
+            pendingLabel="Retrying…"
+            variant="outline"
+          />
         {/snippet}
       </EmptyState>
     </div>
@@ -1682,11 +1774,13 @@
     {#if !lead.view}
       <Skeleton class="h-48 w-full max-w-xl rounded-[var(--radius-lg)]" />
     {:else if canTalk}
+      <!-- While his panel is open the project's starters are in it (CawFloat);
+           put away, they stand here and open it with their words. -->
       <div data-slot="caw-empty" class="state caw-empty">
         <EmptyState line={cawLine} title="Nothing on the board yet">
           {#snippet mark()}
             <!-- He stands here instead of sitting in the head, and is the
-                 same seat at 80: a press opens his panel over the page
+                 same seat at 80: a press opens his panel beside the page
                  (CawFloat). His switch is under the head's ⋯, empty board
                  or not. -->
             <div
@@ -1704,16 +1798,12 @@
             </div>
           {/snippet}
           {#snippet action()}
-            <!-- A starter opens his panel with its words in his composer;
-                 a press on one is no press outside the panel (CawFloat,
-                 data-caw-asks), so another starter replaces the words. -->
-            {#if starters.length > 0}
-              <div class="contents" data-caw-asks>
-                <StarterCards
-                  onpick={(text) => lead.ask(text, "board")}
-                  {starters}
-                />
-              </div>
+            <!-- A starter opens his panel with its words in his composer. -->
+            {#if starters.length > 0 && !lead.open}
+              <StarterCards
+                onpick={(text) => lead.ask(text, "board")}
+                {starters}
+              />
             {/if}
           {/snippet}
         </EmptyState>
@@ -1722,7 +1812,7 @@
       <div class="state">
         <EmptyState
           icon={IconToolTodo}
-          line="Add a task by hand while Caw can't start."
+          line="Add a task by hand while Caw can’t start."
           title="Nothing on the board yet"
         >
           {#snippet action()}
@@ -1786,148 +1876,178 @@
     </p>
   </div>
 {:else}
-  {#if phone && openTask && stages}
-    <!-- A phone: the task is its own page, with Back to the view. -->
-    <div data-slot="project-page" class="project-page task-only">
-      <TaskPane
-        {allowedFrom}
-        backLabel={project.name}
-        onchanged={changed}
-        onclose={closeTask}
-        onmove={(id, stage) => move(id, stage)}
-        onopen={openOne}
-        page
-        {projectId}
-        {stages}
-        taskId={openTask}
-        {tasks}
-      />
-    </div>
-  {:else}
-    <!-- The frame the phone's views bar docks in, over the page's foot. -->
-    <div class="project-frame">
-      <div
-        data-slot="project-page"
-        class={["project-page", fadeOn === "page" && "kit-edge-fade-block"]}
-      >
-        <ProjectHead
-          bind:this={head}
-          {lead}
-          {machine}
-          onask={canTalk ? ask : null}
-          onfilter={(anchor) => {
-            filterAnchor = anchor;
-            filterOpen = true;
-          }}
-          onnewtask={() => {
-            choose("board");
-            adding = true;
-          }}
-          onstages={stages?.source === "template"
-            ? (anchor) => {
-                stagesAnchor = anchor;
-                stagesOpen = true;
-              }
-            : null}
-          {project}
-          seated={!standing}
-        />
-
-        {#if lead.view?.problem}
-          <Alert data-id-page-notice class="notice" variant="warning">
-            <AlertDescription>{lead.view.problem}</AlertDescription>
-          </Alert>
-        {/if}
-        {#if stages && stages.problems.length > 0}
-          <Alert data-id-page-notice class="notice" variant="warning">
-            <AlertDescription>{unreadStages}</AlertDescription>
-          </Alert>
-        {:else if stagesProblem}
-          <Alert data-id-page-notice class="notice" variant="warning">
-            <AlertDescription>
-              The project's stages could not be read: {stagesProblem}
-            </AlertDescription>
-          </Alert>
-        {/if}
-        {#if list && list.problems.length > 0}
-          <Alert data-id-page-notice class="notice" variant="warning">
-            <AlertDescription>{list.problems.join(" ")}</AlertDescription>
-          </Alert>
-        {/if}
-        {#if viewsProblem}
-          <Alert data-id-page-notice class="notice" variant="warning">
-            <AlertDescription
-              >The project's views could not be read:
-              {viewsProblem}</AlertDescription
-            >
-          </Alert>
-        {/if}
-
-        {#if !hosted}
-          <!-- Under the head from 640px; a phone's views are its bar's. -->
-          <div class="under-head">{@render strip(false)}</div>
-        {/if}
-
-        {#if phone}
-          <!-- Under 900px a task is its own page: the view stands alone,
-                 the page's one scroller on a phone. -->
-          {@render viewPane()}
+  <!-- The page and Caw's panel docked beside it (CawFloat): beside the page
+       where it has the room for both, under it where it has not; the page
+       yields the panel its room, so it never covers a column or the head.
+       On a phone the panel is the bottom sheet, and the page keeps it all. -->
+  <div class="caw-host">
+    <div class="caw-docked" data-caw-open={docked || undefined}>
+      <div class="caw-page">
+        {#if phone && openFile}
+          <!-- A phone: the folder's file is its own page, with Back to the view. -->
+          <div data-slot="project-page" class="project-page task-only">
+            {#key openFile}
+              <FolderFile
+                backLabel={project.name}
+                onclose={closeFile}
+                page
+                path={openFile}
+                {projectId}
+              />
+            {/key}
+          </div>
+        {:else if phone && openTask && stages}
+          <!-- A phone: the task is its own page, with Back to the view. -->
+          <div data-slot="project-page" class="project-page task-only">
+            <TaskPane
+              {allowedFrom}
+              backLabel={project.name}
+              onchanged={changed}
+              onclose={closeTask}
+              onmove={(id, stage) => move(id, stage)}
+              onopen={openOne}
+              page
+              {projectId}
+              {stages}
+              taskId={openTask}
+              {tasks}
+            />
+          </div>
         {:else}
-          <Split
-            backLabel="Back to {viewWord}"
-            defaultWidth={40}
-            keys={{
-              width: `cawco.task.width.${projectId}`,
-              expanded: `cawco.task.expanded.${projectId}`,
-            }}
-            main={viewPane}
-            mainClass="view-pane-side"
-            open={!!openTask && !!stages}
-            side={taskSide}
-          />
+          <!-- The frame the phone's views bar docks in, over the page's foot. -->
+          <div class="project-frame">
+            <div
+              data-slot="project-page"
+              class={[
+                "project-page",
+                fadeOn === "page" && "kit-edge-fade-block",
+              ]}
+            >
+              <ProjectHead
+                {lead}
+                {machine}
+                onask={canTalk ? ask : null}
+                onfilter={(anchor) => {
+                  filterAnchor = anchor;
+                  filterOpen = true;
+                }}
+                onnewtask={() => {
+                  choose("board");
+                  adding = true;
+                }}
+                onstages={stages?.source === "template"
+                  ? (anchor) => {
+                      stagesAnchor = anchor;
+                      stagesOpen = true;
+                    }
+                  : null}
+                {project}
+                seated={!standing}
+              />
+
+              {#if lead.view?.problem}
+                <Alert data-id-page-notice class="notice" variant="warning">
+                  <AlertDescription>{lead.view.problem}</AlertDescription>
+                </Alert>
+              {/if}
+              {#if stages && stages.problems.length > 0}
+                <Alert data-id-page-notice class="notice" variant="warning">
+                  <AlertDescription>{unreadStages}</AlertDescription>
+                </Alert>
+              {/if}
+              {#if list && list.problems.length > 0}
+                <Alert data-id-page-notice class="notice" variant="warning">
+                  <AlertDescription>{list.problems.join(" ")}</AlertDescription>
+                </Alert>
+              {/if}
+              {#if unread && !paneSaysUnread}
+                <!-- The tasks stand, but the stages or the views didn't come: said
+               once, here, with its Retry. -->
+                <Alert data-id-page-notice class="notice" variant="warning">
+                  <AlertDescription>{unread}</AlertDescription>
+                  <AlertAction>
+                    <Button
+                      label="Retry"
+                      onclick={readAgain}
+                      pending={rereading}
+                      pendingLabel="Retrying…"
+                      size="sm"
+                      variant="outline"
+                    />
+                  </AlertAction>
+                </Alert>
+              {/if}
+
+              {#if !hosted}
+                <!-- Under the head from 640px; a phone's views are its bar's. -->
+                <div class="under-head">{@render strip(false)}</div>
+              {/if}
+
+              {#if phone}
+                <!-- Under 900px a task is its own page: the view stands alone,
+                 the page's one scroller on a phone. -->
+                {@render viewPane()}
+              {:else}
+                <Split
+                  backLabel="Back to {viewWord}"
+                  defaultWidth={40}
+                  keys={{
+                    width: `cawco.task.width.${projectId}`,
+                    expanded: `cawco.task.expanded.${projectId}`,
+                  }}
+                  main={viewPane}
+                  mainClass="view-pane-side"
+                  open={!!openFile || (!!openTask && !!stages)}
+                  side={sideCard}
+                />
+              {/if}
+            </div>
+            {#if !hosted}
+              <ViewBar
+                {current}
+                needs={needsYou.length}
+                needsOn={filtering}
+                onchoose={choose}
+                onnewsession={() => lead.newThread()}
+                ontoggleneeds={() => {
+                  needsOnly = !filtering;
+                }}
+                views={barViews}
+              >
+                {#snippet tools()}
+                  <!-- As the strip draws it on a narrow screen: its glyph and count
+                 while a filter stands; the head's ⋯ opens it. -->
+                  {#if filterHere && narrowed > 0}
+                    <TaskFilterPopover
+                      compact
+                      {filter}
+                      {find}
+                      onchange={setFilter}
+                      tasks={[...tasks, ...archived]}
+                    />
+                  {/if}
+                {/snippet}
+              </ViewBar>
+            {/if}
+            <!-- Outside the scroller, whose edge fade would mask it where it
+           floats: a fixed box is drawn under its ancestors' masks. -->
+            {#if shown === "board" || shown === "table"}
+              {@render bulkBar()}
+            {/if}
+          </div>
         {/if}
       </div>
-      {#if !hosted}
-        <ViewBar
-          {current}
-          needs={needsYou.length}
-          needsOn={filtering}
-          onchoose={choose}
-          onnewsession={(anchor) => head?.newSessionFrom(anchor)}
-          ontoggleneeds={() => {
-            needsOnly = !filtering;
-          }}
-          views={barViews}
-        >
-          {#snippet tools()}
-            <!-- As the strip draws it on a narrow screen: its glyph and count
-                 while a filter stands; the head's ⋯ opens it. -->
-            {#if filterHere && narrowed > 0}
-              <TaskFilterPopover
-                compact
-                {filter}
-                {find}
-                onchange={setFilter}
-                tasks={[...tasks, ...archived]}
-              />
-            {/if}
-          {/snippet}
-        </ViewBar>
-      {/if}
-      <!-- Outside the scroller, whose edge fade would mask it where it
-           floats: a fixed box is drawn under its ancestors' masks. -->
-      {#if shown === "board" || shown === "table"}
-        {@render bulkBar()}
-      {/if}
+      <CawFloat {lead} {projectId} projectName={project?.name ?? ""} />
     </div>
-  {/if}
-
-  <!-- Caw's panel floats over the page, from whichever seat stands. -->
-  <CawFloat {lead} {projectId} projectName={project?.name ?? ""} />
+  </div>
 {/if}
 
-{#snippet taskSide()}
-  {#if sideTask && stages}
+{#snippet sideCard()}
+  {#if sideHeld && "file" in sideHeld}
+    {#key sideHeld.file}
+      <FolderFile onclose={closeFile} path={sideHeld.file} {projectId} />
+    {/key}
+  {:else if sideHeld && stages}
     <TaskPane
       {allowedFrom}
       onchanged={changed}
@@ -1936,7 +2056,7 @@
       onopen={openOne}
       {projectId}
       {stages}
-      taskId={sideTask}
+      taskId={sideHeld.task}
       {tasks}
     />
   {/if}
@@ -2035,6 +2155,64 @@
 {/if}
 
 <style>
+  /* The page and Caw's panel (CawFloat): the host is the container the
+     panel's place is chosen by, so the rail's width counts. */
+  .caw-host {
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    block-size: 100%;
+    min-block-size: 0;
+    min-inline-size: 0;
+    container-type: inline-size;
+  }
+  .caw-docked {
+    display: grid;
+    flex: 1;
+    grid-template: "page" minmax(0, 1fr) / minmax(0, 1fr);
+    min-block-size: 0;
+  }
+  .caw-page {
+    grid-area: page;
+    display: flex;
+    flex-direction: column;
+    min-block-size: 0;
+    min-inline-size: 0;
+  }
+  /* Open where the page has no room beside it: a row of its own under the
+     page, the column's width, at most half the height, inside the page's
+     own inline padding and --space-6 over the foot, as a desk's stands. A
+     phone's panel is the bottom sheet, which takes no room of the page. */
+  @media (min-width: 640px) {
+    .caw-docked[data-caw-open] {
+      grid-template:
+        "page" minmax(0, 1fr)
+        "dock" min(var(--c-caw-panel-h), 50%)
+        / minmax(0, 1fr);
+    }
+    .caw-docked[data-caw-open] :global(.caw-dock) {
+      margin: 0 var(--space-5) var(--space-6);
+    }
+  }
+  /* Room for the board beside it: a column of its own at the page's end,
+     a conversation's width, from the head's top to --space-6 over the
+     foot, the page's own end padding between the two. The room is the
+     panel and the page at their narrowest, 938px, summed from the tokens
+     because a container query takes no var(): --c-panel-w (380px) and its
+     end margin, --space-6 (21px); the pane's inline padding, --space-7 and
+     --space-6 (25px, 21px); two of the board's columns at their narrowest
+     (TaskBoard `minmax(15rem, 22rem)`, 240px each) and the --space-3 (11px)
+     between. */
+  @container (min-width: 938px) {
+    .caw-docked[data-caw-open] {
+      grid-template:
+        "page dock" minmax(0, 1fr)
+        / minmax(0, 1fr) calc(var(--c-panel-w) + var(--space-6));
+    }
+    .caw-docked[data-caw-open] :global(.caw-dock) {
+      margin: var(--space-6) var(--space-6) var(--space-6) 0;
+    }
+  }
   /* What the page stands in: the box a phone's views bar docks at the foot of. */
   .project-frame {
     position: relative;
@@ -2239,15 +2417,11 @@
   .state {
     max-inline-size: 72ch;
   }
-  /* As wide as four starters across, so a desk shows them in one row. */
+  /* As wide as four starters across, so a desk shows them in one row; from
+     the board's start edge, as its columns would stand. */
   .caw-empty {
     inline-size: 100%;
-    margin-inline: auto;
     max-inline-size: var(--c-starters-w);
-  }
-  .caw-empty :global(.kit-empty) {
-    align-items: center;
-    text-align: center;
   }
   .caw-empty :global(.kit-empty-action) {
     align-self: stretch;
@@ -2270,7 +2444,7 @@
   }
   .caw-80 {
     display: grid;
-    place-items: center;
+    justify-items: start;
     margin-block-end: var(--space-3);
   }
   .first {
@@ -2291,7 +2465,7 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .strip,
     .pane {
       padding-inline: var(--space-5);

@@ -26,7 +26,9 @@
  * boxes touch. It is anchored to the element holding what it marks (core
  * ink.ts) and kept in the doc's `ink` as fractions of that element's box, so
  * it is drawn again from the element's box wherever the element stands now:
- * on load, on a resize, when the element itself resizes, after a re-publish.
+ * on load, on a resize, when the element itself resizes, when the page's
+ * content changes round it or a transition ends, after a re-publish; and
+ * never while nothing changes.
  * The element is found as a pin's is (core comments.ts `findAnchor`); a
  * page's group whose element is gone goes to `moved`. Its pins are pins.ts's.
  *
@@ -44,7 +46,7 @@ import { INK_LIMITS, type InkGroup, type InkPoint } from "@cawco/core/ink";
 import { getStroke } from "perfect-freehand";
 import type { Map as YMap } from "yjs";
 import { artifact } from "./artifact";
-import { clipOf, framesOf, rectOf } from "./frames";
+import { clipOf, framesOf, frameWindows, rectOf, sizesIn } from "./frames";
 import { newId } from "./id";
 import type { Pins } from "./pins";
 import type { InkChrome, Pick } from "./radial";
@@ -309,20 +311,53 @@ const pathOf = (points: Point[]): string => {
   return `${d} Z`;
 };
 
+/** The overlay's layers that hold a mark now (a stroke, a disc), each as its own draw said. */
+const holding = new Set<SVGSVGElement>();
+
+/** The overlay's own elements in the page: its host, and its ink and pin layers. */
+const OWN = "cawco-overlay, svg[data-cawco-ink], svg[data-cawco-pins]";
+/** Whether `node` is the overlay's own or stands in it (a node of a frame's document included). */
+const ownNode = (node: Node | null): boolean => {
+  const el =
+    node?.nodeType === Node.ELEMENT_NODE
+      ? (node as Element)
+      : (node?.parentElement ?? null);
+  return !!el?.closest(OWN);
+};
+/** Every change a mark's element may move by: nodes, attributes, words, anywhere in the document. */
+const MOVES: MutationObserverInit = {
+  attributes: true,
+  characterData: true,
+  childList: true,
+  subtree: true,
+};
+
 /**
- * The overlay's layers at the page's origin, each as big as the page's
- * scroll. The scroll is read with every layer folded away first: a layer
- * stands in the scroll it measures, so read as it is, one sized for a taller
- * layout (the page before it reflowed wider) would hold the page at that
- * height for good.
+ * The overlay's layers at the page's origin, each holding a mark as big as
+ * the page's scroll, and each holding none folded away. `layer`, about to
+ * be drawn, says whether it `holds` a mark. The scroll is read with every
+ * layer folded away first: a layer stands in the scroll it measures, so
+ * read as it is, one sized for a taller layout (the page before it reflowed
+ * wider) would hold the page at that height for good. While no layer holds
+ * a mark nothing is read: reading the scroll lays the whole page out there
+ * and then, before the browser would (a page of 300 sections: 50 ms of its
+ * style and layout as it opened, preview-bound 12), for nothing to draw.
  */
-export const fitToPage = () => {
+export const fitToPage = (layer: SVGSVGElement, holds: boolean) => {
+  if (holds) {
+    holding.add(layer);
+  } else {
+    holding.delete(layer);
+  }
   const layers = document.querySelectorAll<SVGSVGElement>(
     "svg[data-cawco-ink], svg[data-cawco-pins]"
   );
-  for (const layer of layers) {
-    layer.setAttribute("width", "0");
-    layer.setAttribute("height", "0");
+  for (const one of layers) {
+    one.setAttribute("width", "0");
+    one.setAttribute("height", "0");
+  }
+  if (holding.size === 0) {
+    return;
   }
   const root = document.documentElement;
   const width = String(
@@ -331,9 +366,9 @@ export const fitToPage = () => {
   const height = String(
     Math.max(root.scrollHeight, document.body?.scrollHeight ?? 0)
   );
-  for (const layer of layers) {
-    layer.setAttribute("width", width);
-    layer.setAttribute("height", height);
+  for (const one of holding) {
+    one.setAttribute("width", width);
+    one.setAttribute("height", height);
   }
 };
 
@@ -369,7 +404,68 @@ export function startInk(deps: InkDeps): Ink {
   const placed = new Map<string, { box: Box; anchor: Element | null }>();
   /** Each clipped group's clip in the page, px: the part of it that is drawn. */
   const clips = new Map<string, Box>();
-  const anchors = new ResizeObserver(() => later());
+  /**
+   * The elements groups stand on, each watched for its size from the draw
+   * that first places a group on it until no group stands on it. Never
+   * watched again on each draw: a ResizeObserver reports once whenever
+   * `observe()` starts, and that report drawing again would draw every frame.
+   * An element in a same-origin frame is watched from its own window
+   * (frames.ts `sizesIn`).
+   */
+  const watched = new Set<Element>();
+  /** Watches the elements newly stood on, and lets go of those no group stands on now. */
+  const watchAnchors = (standing: Set<Element>) => {
+    for (const el of watched) {
+      if (!standing.has(el)) {
+        sizesIn(el.ownerDocument, later)?.unobserve(el);
+        watched.delete(el);
+      }
+    }
+    for (const el of standing) {
+      if (!watched.has(el)) {
+        sizesIn(el.ownerDocument, later)?.observe(el);
+        watched.add(el);
+      }
+    }
+  };
+
+  /**
+   * What moves an element without resizing it or the page: content put in
+   * or taken out round it, a class, a style or words changed. While any
+   * mark stands (`holding`), every change to the page and to each
+   * same-origin frame's document but the overlay's own places the marks
+   * again on the next frame; with none, nothing is watched.
+   */
+  const moves = new MutationObserver((records) => {
+    if (records.some((record) => !ownNode(record.target))) {
+      later();
+    }
+  });
+  let watchingMoves = false;
+  const watchMoves = () => {
+    if (holding.size === 0) {
+      if (watchingMoves) {
+        moves.disconnect();
+        watchingMoves = false;
+      }
+      return;
+    }
+    for (const doc of [
+      document,
+      ...frameWindows(document).map((view) => view.document),
+    ]) {
+      moves.observe(doc, MOVES);
+    }
+    watchingMoves = true;
+  };
+  // A transition or an animation ended: what it moved stands where it ends.
+  const settledMotion = (event: Event) => {
+    if (holding.size > 0 && !ownNode(event.target as Node | null)) {
+      later();
+    }
+  };
+  document.addEventListener("transitionend", settledMotion, { capture: true });
+  document.addEventListener("animationend", settledMotion, { capture: true });
 
   // --- drawing --------------------------------------------------------------
 
@@ -483,6 +579,8 @@ export function startInk(deps: InkDeps): Ink {
       event.stopImmediatePropagation();
       layer.style.pointerEvents = "auto";
       layer.style.touchAction = "none";
+      // The stroke is drawn in the layer: it stands as big as the page while it is down.
+      fitToPage(layer, true);
       try {
         layer.setPointerCapture(event.pointerId);
       } catch {
@@ -792,7 +890,7 @@ export function startInk(deps: InkDeps): Ink {
 
   /** Whether a group whose element is gone may be moved aside now: a page the agent wrote, or a sheet of its components, laid out. */
   const settled = () =>
-    (artifact.kind() === "page" || artifact.kind() === "sheet") &&
+    (artifact.kind() === "page" || artifact.kind() === "component") &&
     document.readyState !== "loading";
 
   /** Whether a group no anchor finds is gone, not waiting on a frame still loading. */
@@ -805,16 +903,21 @@ export function startInk(deps: InkDeps): Ink {
         node.remove();
       }
     }
-    anchors.disconnect();
     placed.clear();
     clips.clear();
     if (onCanvas()) {
+      watchAnchors(new Set());
+      watchMoves();
       return;
     }
-    fitToPage();
     const { ink } = maps();
-    const brand = chrome.token("--brand-solid");
     const groups = [...ink.values()];
+    fitToPage(
+      layer,
+      groups.length > 0 || layer.querySelector("[data-live]") !== null
+    );
+    // Read only for a group to draw: a token is the page's style, read there and then.
+    const brand = groups.length > 0 ? chrome.token("--brand-solid") : "";
     const located = groups.map((group) => ({
       group,
       el: "selector" in group.anchor ? deps.locate(group.anchor)?.el : null,
@@ -823,6 +926,7 @@ export function startInk(deps: InkDeps): Ink {
       .filter(({ group, el }) => !el && goneFrom(group))
       .map(({ group }) => group);
     const found: InkGroup[] = [];
+    const standing = new Set<Element>();
     for (const { group, el } of located) {
       if (!el) {
         continue;
@@ -832,11 +936,14 @@ export function startInk(deps: InkDeps): Ink {
         found.push(reread);
       }
       drawGroup(group, el, brand);
+      standing.add(el);
     }
+    watchAnchors(standing);
     if (settled()) {
       settleGroups(found, gone);
     }
     deps.pins().draw();
+    watchMoves();
   }
 
   /**
@@ -858,7 +965,6 @@ export function startInk(deps: InkDeps): Ink {
    * drawn over what stands there.
    */
   function drawGroup(group: InkGroup, el: Element, brand: string) {
-    anchors.observe(el);
     const strokes = strokesInPage(group);
     const g = document.createElementNS(SVG, "g");
     g.setAttribute("data-ink-group", group.id);
@@ -998,7 +1104,7 @@ export function startInk(deps: InkDeps): Ink {
   const changed = () => draw();
   // The window resizes or the page grows: every group stands where its element is now.
   addEventListener("resize", later);
-  new ResizeObserver(() => later()).observe(document.documentElement);
+  sizesIn(document, later)?.observe(document.documentElement);
   if (document.readyState === "loading") {
     document.addEventListener("DOMContentLoaded", changed, { once: true });
   } else {

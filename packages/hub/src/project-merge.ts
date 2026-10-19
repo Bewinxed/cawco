@@ -27,6 +27,7 @@ import {
   writeFolderFiles,
 } from "./project-folder";
 import { fileTaskNumber, TaskDoc } from "./task-file";
+import { CHANGES, TRAILERS } from "./task-history";
 import { hubActor, STAGES_FILE, type Tasks } from "./tasks";
 
 export interface MergeDeps {
@@ -138,7 +139,16 @@ const copyOthers = async (
       missing.map((file) => ({ path: file.path, content: file.bytes })),
       {
         author: { name: "hub" },
-        message: `${dup.name}'s files, merged in: ${missing.map((file) => file.path).join(", ")}`,
+        // The hub's trailers (task-history.ts): a task file it carries over
+        // is the hub's own, so its start is never judged as a stray write.
+        message: [
+          `${dup.name}'s files, merged in: ${missing.map((file) => file.path).join(", ")}`,
+          "",
+          `${TRAILERS.actor}: hub`,
+          `${TRAILERS.mover}: hub`,
+          `${TRAILERS.what}: ${dup.name}'s files, merged in`,
+          `${TRAILERS.change}: ${CHANGES.merge}`,
+        ].join("\n"),
       }
     );
   }

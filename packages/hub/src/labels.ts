@@ -1,3 +1,5 @@
+import type { HarnessKind } from "@cawco/core";
+
 /**
  * How the hub names a session, everywhere it names one: peer frames, reports,
  * delegate rosters, the delegation tree, pushes, ask cards, work items.
@@ -6,11 +8,12 @@
  * `name#id8`. A session whose launch directory is unknown (its machine had no
  * record of its conversation, `instances.launch_dir`) may hold a folder its
  * CLI wandered into in `cwd`, so it is named by its title, else its harness
- * (`harness#id8`), and never by that folder.
+ * (`harness#id8`), and never by that folder. A routine or a design check
+ * runs on no harness (work-items.ts `Parent`): it is a `session`.
  */
 export interface LabelledRow {
   cwd: string;
-  harness?: string | null;
+  harness: HarnessKind | null;
   id: string;
   launchDir: "known" | "unread" | "unknown";
   title?: string | null;
@@ -26,7 +29,7 @@ export const sessionLabel = (
 ): { dir: string; name: string; tag: string } => {
   const id8 = row.id.slice(0, 8);
   if (row.launchDir === "unknown") {
-    const harness = row.harness || "session";
+    const harness = row.harness ?? "session";
     const dir = "launch folder unknown";
     return row.title
       ? { dir, name: row.title, tag: row.title }

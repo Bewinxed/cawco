@@ -13,6 +13,8 @@ import {
   type PreviewSource,
   readEnv,
 } from "@cawco/core";
+import { readWithin } from "@cawco/core/bounded";
+import { decisionHostFile } from "@cawco/core/decision-host";
 import { detach } from "@cawco/core/detach";
 import {
   cachePreview,
@@ -35,6 +37,8 @@ import {
   versionAssets,
   versionedFile,
 } from "@cawco/core/preview-proxy";
+import type { StageState } from "@cawco/core/stage";
+import { isStreamRelayPort } from "@cawco/core/stream-relay";
 import type { Server, ServerWebSocket, WebSocketHandler } from "bun";
 import { serveCanvas } from "./artifacts/canvas";
 import {
@@ -48,10 +52,12 @@ import {
 import {
   ARTIFACTS_ROOT,
   FLEET_PORTS,
+  LOCAL_DASHBOARD_PORT,
   PREVIEW_PORTS,
   PREVIEW_PORTS_TEXT,
 } from "./config";
 import type { PreviewsDb } from "./db/previews";
+import { DECISION_ASSETS } from "./decision-program";
 import {
   enter,
   lockedResponse,
@@ -60,6 +66,7 @@ import {
   passSession,
 } from "./preview-access";
 import { FolderRefusal, folderPath } from "./project-folder";
+import type { TailnetHttpsService } from "./tailnet-https";
 
 /**
  * A session's preview: the artifact its panel shows, and the machine and
@@ -88,6 +95,18 @@ export interface PreviewTarget {
 export const previewTargets = new Map<string, PreviewTarget>();
 
 /**
+ * A decision page's Preview of a session's dev-server preview or sheet: its
+ * target in {@link previewTargets} and its listener on an origin of its own
+ * are keyed by the embedded artifact, apart from every session's. A dev
+ * server and a stage serve from their root, so the page cannot show one under
+ * a path of its own origin; the machine keys its listener by the same key.
+ */
+const EMBED_PREFIX = "embed-";
+export const embedKey = (artifactId: string): string =>
+  `${EMBED_PREFIX}${artifactId}`;
+export const isEmbed = (key: string): boolean => key.startsWith(EMBED_PREFIX);
+
+/**
  * The dashboard origins this hub is reached from: each one a dashboard or an
  * artifact's tab opened its socket from (server.ts, from the origin the
  * dashboard's relay gated), and the operator's dashboard address. Only these
@@ -114,6 +133,8 @@ export const noteParent = (origin: string | undefined): void => {
 
 // The operator's own dashboard address, before any dashboard has connected.
 noteParent(readEnv(CAWCO_ENV.dashboardUrl));
+// The dashboard on every computer's loopback (core `localDashboardPort`).
+noteParent(`http://localhost:${LOCAL_DASHBOARD_PORT}`);
 
 /** Every origin that may frame a preview now. */
 export const previewParents = (): string[] => [...parents];
@@ -134,12 +155,13 @@ export const previewParents = (): string[] => [...parents];
  * (https, or localhost): over plain http to an address the page stays in the
  * dashboard's process, and WebKit runs no frame in a process of its own.
  */
-const PREVIEW_HEADERS = (): [string, string][] => [
+const PREVIEW_HEADERS = (ancestors: string[] = []): [string, string][] => [
   // `'self'` too: every ancestor is checked, and a page's own frames (an
-  // app's inner frame) have the preview's origin among theirs.
+  // app's inner frame) have the preview's origin among theirs. An embed's
+  // decision page is an ancestor of its own (`ancestors`).
   [
     "content-security-policy",
-    `frame-ancestors 'self' ${previewParents().join(" ")}`.trim(),
+    `frame-ancestors 'self' ${[...previewParents(), ...ancestors].join(" ")}`.trim(),
   ],
   ["origin-agent-cluster", "?1"],
 ];
@@ -148,8 +170,8 @@ const PREVIEW_HEADERS = (): [string, string][] => [
  * `answer` with {@link PREVIEW_HEADERS}. A response a hop made with headers
  * it holds fixed goes on as a copy.
  */
-const framedBy = (answer: Response): Response => {
-  const headers = PREVIEW_HEADERS();
+const framedBy = (answer: Response, ancestors: string[] = []): Response => {
+  const headers = PREVIEW_HEADERS(ancestors);
   try {
     for (const [name, value] of headers) {
       answer.headers.set(name, value);
@@ -198,7 +220,9 @@ export function previewFrame(
   target: Pick<PreviewTarget, "artifact" | "revision" | "source">,
   address: PreviewAddress | null,
   /** The session's artifacts by id, newest first. */
-  artifacts: string[]
+  artifacts: string[],
+  /** A sheet's stage as its doc keeps it; none for any other kind, or before it was told. */
+  stage: StageState | null = null
 ): PreviewFrame {
   return {
     kind: "preview",
@@ -209,6 +233,7 @@ export function previewFrame(
     ...(address ?? {}),
     source: target.source,
     revision: target.revision,
+    ...(stage ? { stage } : {}),
   };
 }
 
@@ -221,7 +246,9 @@ export function previewFrame(
 async function servePage(
   artifactId: string,
   pathname: string,
-  state: (artifactId: string) => string,
+  deps: Pick<PreviewListenerDeps, "program" | "state">,
+  /** The page's address as the browser asked for it: an embed's address is built from it. */
+  reachedAt: URL,
   /** Where the page stands on its origin: its root, or the Decisions tab's `/__cawco/page/<id>/`. */
   mount = "/"
 ): Promise<Response> {
@@ -262,11 +289,18 @@ async function servePage(
   if (!body.type.startsWith("text/html")) {
     return new Response(body, { headers });
   }
-  // The overlay hashes the page as it was written, before its files are keyed.
-  const page = injectOverlay(await body.text(), {
-    artifact: artifactId,
-    state: state(artifactId),
-  });
+  // The overlay hashes the page as it was written, before its files are
+  // keyed; a decision page's hash is its program's, and it carries what the
+  // artifacts its media show are now.
+  const program = deps.program(artifactId, reachedAt);
+  const injected = injectOverlay(
+    await body.text(),
+    { artifact: artifactId, state: deps.state(artifactId) },
+    program?.hash
+  );
+  const page = program
+    ? injected.replace("</head>", `${program.media}</head>`)
+    : injected;
   return new Response(
     versioned === null
       ? versionAssets(page, await folderKey(root), mount, pathname)
@@ -280,13 +314,28 @@ async function servePage(
  * canvas's host page. A sheet is its workspace's stage, relayed as a port
  * preview: its source names no page, and it never comes here.
  */
-const HUB_SERVES: Record<Exclude<ArtifactKind, "sheet">, typeof servePage> = {
+const HUB_SERVES: Record<
+  Exclude<ArtifactKind, "component">,
+  (
+    artifactId: string,
+    pathname: string,
+    deps: PreviewListenerDeps,
+    reachedAt: URL
+  ) => Promise<Response>
+> = {
   page: servePage,
   preview: servePage,
-  canvas: serveCanvas,
+  canvas: (artifactId, pathname, deps) =>
+    serveCanvas(artifactId, pathname, deps.state),
 };
 
 type ListenerSocket = PreviewSocket | ArtifactSocket;
+
+/** A preview origin's listener on its port: the plain one and its TLS twins, stopped together with their connections. */
+interface Listener {
+  port: number;
+  stop: () => Promise<void>;
+}
 
 const isArtifact = (
   socket: ServerWebSocket<ListenerSocket>
@@ -294,6 +343,12 @@ const isArtifact = (
 
 /** What a listener needs of the hub to serve a session's previews and artifacts. */
 export interface PreviewListenerDeps {
+  /** A Diagram of a decision page opened as a canvas in its session's panel (`/canvas`). */
+  canvasFrom: (
+    request: Request,
+    instanceId: string,
+    artifactId: string
+  ) => Promise<Response>;
   /** An artifact's kind; undefined when there is none. */
   kindOf: (artifactId: string) => ArtifactKind | undefined;
   /** The session that owns an artifact; undefined when there is none. */
@@ -301,9 +356,25 @@ export interface PreviewListenerDeps {
   picture: ReturnType<typeof artifactPicture>;
   /** The page's pictures of the person's marks, held for their delivery. */
   pictures: ReturnType<typeof artifactPictures>;
+  /**
+   * A decision page's program: its hash (the page's, for the overlay) and
+   * the script tag naming what the artifacts its Canvas and Preview pieces
+   * show are now, an embedded preview's address built from where the page
+   * was reached (`reachedAt`); null for any other page.
+   */
+  program: (
+    artifactId: string,
+    reachedAt: URL
+  ) => { hash: string; media: string } | null;
   /** Where a shown preview of a machine's is served now, its listener started when it has none. */
   reach: (instanceId: string) => Promise<PreviewReach>;
   send: ReturnType<typeof artifactSend>;
+  /** An artifact of the session's brought to the front of its panel from a page (`/show`: a decision page's Canvas, Open to draw). */
+  showFrom: (
+    request: Request,
+    instanceId: string,
+    artifactId: string
+  ) => Promise<Response>;
   socket: ReturnType<typeof artifactSocket>;
   /** A page artifact's doc as one base64 Yjs update, embedded in its overlay tag. */
   state: (artifactId: string) => string;
@@ -333,6 +404,12 @@ const joinArtifact = (
   }
   if (action === "/pictures") {
     return deps.pictures(request, instanceId, artifactId);
+  }
+  if (action === "/canvas") {
+    return deps.canvasFrom(request, instanceId, artifactId);
+  }
+  if (action === "/show") {
+    return deps.showFrom(request, instanceId, artifactId);
   }
   const screen = new URL(request.url).searchParams.get("screen") === "1";
   return server.upgrade(request, { data: { artifactId, screen } })
@@ -373,6 +450,82 @@ const ping = (): Response =>
       "content-type": "text/plain",
     },
   });
+
+/** The probe's answer when what serves the page doesn't answer the hub: 502, and why in the hub's words, which the pane says. */
+const pingFailed = (why: string): Response =>
+  Response.json(
+    { why },
+    {
+      status: 502,
+      headers: {
+        "access-control-allow-origin": "*",
+        "cache-control": "no-store",
+      },
+    }
+  );
+
+/** How long the machine's listener has to answer the ping's relay. Our call: under the pane's own 10 s for the whole probe. */
+const PING_RELAY_MS = 5000;
+
+/** A thrown fetch's short name for the pane: its code (`ECONNRESET`), else its kind. */
+const codeOf = (error: unknown): string => {
+  const { code } = (error ?? {}) as { code?: unknown };
+  if (typeof code === "string") {
+    return code;
+  }
+  return error instanceof Error ? error.name : String(error);
+};
+
+/**
+ * The ping on session `instanceId`'s origin: ok once whatever serves its
+ * page answers the hub. A page the hub serves, or no preview at all (the
+ * frame's own load says it is closed), is the hub's answer alone; a
+ * machine's preview is reached (started when no listener serves it) and its
+ * listener asked for its own ping, so a listener that is gone answers 502
+ * with why, and is forgotten as a request's is ({@link relay}).
+ */
+async function pingSession(
+  instanceId: string,
+  deps: PreviewListenerDeps
+): Promise<Response> {
+  const target = previewTargets.get(instanceId);
+  if (
+    !target ||
+    ("page" in target.source && target.artifact.kind !== "component")
+  ) {
+    return ping();
+  }
+  const reached = await deps.reach(instanceId);
+  if (!reached.ok) {
+    return reached.down === "closed" ? ping() : pingFailed(reached.error);
+  }
+  const at = reached.upstream;
+  const address = at.address.includes(":") ? `[${at.address}]` : at.address;
+  const failed = (cause: string, code: string): Response => {
+    previewFailed(
+      HOP,
+      instanceId,
+      `its machine's listener at ${address}:${at.port} didn't answer the ping: ${cause}`
+    );
+    deps.unreachable(instanceId, at);
+    return pingFailed(`its machine's listener didn't answer the hub (${code})`);
+  };
+  try {
+    const read = await readWithin(PING_RELAY_MS, (signal) =>
+      fetch(`http://${address}:${at.port}${PREVIEW_PING_PATH}`, {
+        headers: { [RELAY_HEADER]: at.token },
+        signal,
+      })
+    );
+    if (read.kind !== "answered") {
+      return failed(`no answer within ${read.after} ms`, "timeout");
+    }
+    await read.value.body?.cancel();
+    return ping();
+  } catch (error) {
+    return failed(causeOf(error), codeOf(error));
+  }
+}
 
 /** `cookie` without the dashboard's own (core `DASHBOARD_COOKIE`). */
 const appCookies = (header: string | null): string | null => {
@@ -489,6 +642,44 @@ async function relay(
   });
 }
 
+/**
+ * What the hub serves on a session's origin by an artifact's id, whatever
+ * the panel shows: a decision page's host bundle (`/__cawco/decision/`), a
+ * canvas (`/__cawco/canvas/<id>/`, `?embed=1` in a decision page) or a page
+ * (`/__cawco/page/<id>/`) of the session's own; null for any other path.
+ */
+async function artifactById(
+  url: URL,
+  instanceId: string,
+  deps: PreviewListenerDeps
+): Promise<Response | null> {
+  const { pathname } = url;
+  if (pathname.startsWith(DECISION_ASSETS)) {
+    return (
+      (await decisionHostFile(pathname.slice(DECISION_ASSETS.length))) ??
+      new Response("Not found", { status: 404 })
+    );
+  }
+  const canvas = pathname.match(CANVAS_PATH);
+  if (canvas) {
+    const [, artifactId, rest] = canvas;
+    const embed = url.searchParams.get("embed") === "1";
+    return deps.ownerOf(artifactId) === instanceId &&
+      deps.kindOf(artifactId) === "canvas"
+      ? serveCanvas(artifactId, rest, deps.state, embed)
+      : new Response("This session has no such canvas.", { status: 404 });
+  }
+  const paged = pathname.match(PAGE_PATH);
+  if (paged) {
+    const [, artifactId, rest] = paged;
+    return deps.ownerOf(artifactId) === instanceId &&
+      deps.kindOf(artifactId) === "page"
+      ? servePage(artifactId, rest, deps, url, `/__cawco/page/${artifactId}/`)
+      : new Response("This session has no such page.", { status: 404 });
+  }
+  return null;
+}
+
 /** One request to session `instanceId`'s preview origin, at its root; `direct` as {@link relay} takes it. */
 async function serveSession(
   request: Request,
@@ -500,7 +691,7 @@ async function serveSession(
   const url = new URL(request.url);
   const { pathname } = url;
   if (pathname === PREVIEW_PING_PATH) {
-    return ping();
+    return pingSession(instanceId, deps);
   }
   if (pathname === OVERLAY_PATH) {
     return overlayResponse(
@@ -513,21 +704,9 @@ async function serveSession(
   if (synced) {
     return joinArtifact(request, server, synced, instanceId, deps);
   }
-  const canvas = pathname.match(CANVAS_PATH);
-  if (canvas) {
-    const [, artifactId, rest] = canvas;
-    return deps.ownerOf(artifactId) === instanceId &&
-      deps.kindOf(artifactId) === "canvas"
-      ? serveCanvas(artifactId, rest, deps.state)
-      : new Response("This session has no such canvas.", { status: 404 });
-  }
-  const paged = pathname.match(PAGE_PATH);
-  if (paged) {
-    const [, artifactId, rest] = paged;
-    return deps.ownerOf(artifactId) === instanceId &&
-      deps.kindOf(artifactId) === "page"
-      ? servePage(artifactId, rest, deps.state, `/__cawco/page/${artifactId}/`)
-      : new Response("This session has no such page.", { status: 404 });
+  const byId = await artifactById(url, instanceId, deps);
+  if (byId) {
+    return byId;
   }
   if (hubsOwn(pathname)) {
     return new Response("Not found", { status: 404 });
@@ -537,11 +716,12 @@ async function serveSession(
     previewFailed(HOP, instanceId, "its session shows no preview");
     return downResponse("closed", 404);
   }
-  if ("page" in target.source && target.artifact.kind !== "sheet") {
+  if ("page" in target.source && target.artifact.kind !== "component") {
     return HUB_SERVES[target.artifact.kind](
       target.artifact.id,
       pathname,
-      deps.state
+      deps,
+      url
     );
   }
   // No listener serves it now (its machine restarted, or the last start
@@ -734,11 +914,18 @@ const probePattern = async (pattern: HostPattern): Promise<string | null> => {
  * domain loads the names; any other loads the ports (core `previewRoute`).
  * (The hub's own server is Elysia's, whose sockets run its lifecycle: a
  * previewed app's HMR socket cannot be upgraded there.)
+ *
+ * While the hub serves HTTPS on its machine's tailnet name
+ * (tailnet-https.ts), every listener has a TLS twin on each tailnet address,
+ * the same handler behind it, and a session's address names its origin on
+ * that name too (`tailnet`). Both bind with `reusePort`, which Linux needs on
+ * both sockets to let an address's listener stand beside the wildcard one.
  */
 export function createPreviewListeners(
   hostname: string,
   deps: PreviewListenerDeps,
-  db: PreviewsDb
+  db: PreviewsDb,
+  tailnet: Pick<TailnetHttpsService, "beside" | "origin">
 ) {
   const proxy = previewWebSocket as unknown as WebSocketHandler<ListenerSocket>;
   const websocket: WebSocketHandler<ListenerSocket> = {
@@ -758,7 +945,8 @@ export function createPreviewListeners(
     return downResponse("machine");
   };
   /**
-   * A listener on `port`, each request's session from `route`. `lock` (host
+   * A listener on `port`, each request's session from `route`, and its TLS
+   * twins on the tailnet addresses while those serve HTTPS. `lock` (host
    * mode, preview-access.ts): a request to a session's name needs that
    * session's pass, WebSocket upgrades too, but the dashboard's ping and the
    * entry that spends a ticket for one.
@@ -766,47 +954,73 @@ export function createPreviewListeners(
   const listen = (
     port: number,
     route: (request: Request) => string | undefined,
-    lock?: PassCookie
-  ): Server<ListenerSocket> =>
-    Bun.serve<ListenerSocket>({
+    lock?: PassCookie,
+    /** The origins that may frame what it serves beside the dashboards: an embed's decision page. */
+    ancestors: () => string[] = () => []
+  ): Listener => {
+    const fetch = async (
+      request: Request,
+      server: Server<ListenerSocket>
+    ): Promise<Response | undefined> => {
+      const instanceId = route(request);
+      const stopped = lock && atTheLock(request, lock, instanceId);
+      if (stopped) {
+        return framedBy(stopped);
+      }
+      // Port mode: every listener is one session's, so a route names it.
+      if (!instanceId) {
+        previewFailed(
+          HOP,
+          null,
+          `no session's preview at ${request.headers.get("host")}`
+        );
+        return framedBy(downResponse("closed", 404));
+      }
+      // A session's own port has no CDN in front of it; host mode's names
+      // (the lock's) may.
+      const answer = await serveSession(
+        request,
+        server,
+        instanceId,
+        deps,
+        lock === undefined
+      );
+      // Gzipped here, once, after the overlay tag is keyed.
+      return (
+        answer &&
+        compressed(
+          framedBy(await withKeyedOverlay(answer), ancestors()),
+          request.headers.get("accept-encoding")
+        )
+      );
+    };
+    const plain = Bun.serve<ListenerSocket>({
       hostname,
       port,
+      reusePort: true,
       websocket,
       error,
-      async fetch(request, server) {
-        const instanceId = route(request);
-        const stopped = lock && atTheLock(request, lock, instanceId);
-        if (stopped) {
-          return framedBy(stopped);
-        }
-        // Port mode: every listener is one session's, so a route names it.
-        if (!instanceId) {
-          previewFailed(
-            HOP,
-            null,
-            `no session's preview at ${request.headers.get("host")}`
-          );
-          return framedBy(downResponse("closed", 404));
-        }
-        // A session's own port has no CDN in front of it; host mode's names
-        // (the lock's) may.
-        const answer = await serveSession(
-          request,
-          server,
-          instanceId,
-          deps,
-          lock === undefined
-        );
-        // Gzipped here, once, after the overlay tag is keyed.
-        return (
-          answer &&
-          compressed(
-            framedBy(await withKeyedOverlay(answer)),
-            request.headers.get("accept-encoding")
-          )
-        );
-      },
+      fetch,
     });
+    const secure = tailnet.beside(port, (address, tls) =>
+      Bun.serve<ListenerSocket>({
+        hostname: address,
+        port,
+        tls,
+        reusePort: true,
+        websocket,
+        error,
+        fetch,
+      })
+    );
+    return {
+      port,
+      stop: (): Promise<void> => {
+        secure.close();
+        return plain.stop(true);
+      },
+    };
+  };
 
   let settings = db.settings();
   // A pattern stored before patterns carried their scheme took the client's
@@ -825,10 +1039,29 @@ export function createPreviewListeners(
       `[preview] ${HOP}: the host pattern ${was} now names its scheme, ${settings.pattern}; set https:// in Settings › Previews if those names are served over HTTPS.`
     );
   }
+  /**
+   * Whether no socket holds `port` on the listeners' address now: a bind
+   * without `reusePort`, closed at once. A listener binds with `reusePort`
+   * (its tailnet twin needs it), and such a bind succeeds silently on a port
+   * another process holds the same way, the kernel then splitting
+   * connections between the two: a scratch hub beside another took half of
+   * an embed's requests that way, its frame left on the browser's error page.
+   */
+  const unheld = (port: number): boolean => {
+    try {
+      Bun.serve({ hostname, port, fetch: () => new Response(null) }).stop(true);
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
   /** Each session's listener on its own port, by session. */
-  const sessions = new Map<string, Server<ListenerSocket>>();
+  const sessions = new Map<string, Listener>();
+  /** Each embedded preview's listener on its own port (not kept: an embed is made again as its page is served), by its key, with its session. */
+  const embeds = new Map<string, { listener: Listener; owner: string }>();
   /** Host mode's one listener. */
-  let byHost: Server<ListenerSocket> | undefined;
+  let byHost: Listener | undefined;
 
   /**
    * Serves `instanceId` on `port`: false when another process holds it
@@ -836,6 +1069,9 @@ export function createPreviewListeners(
    * so no other port would open either: it is thrown, in one sentence.
    */
   const serveOn = (instanceId: string, port: number): boolean => {
+    if (!unheld(port)) {
+      return false;
+    }
     let refused: unknown;
     try {
       sessions.set(
@@ -861,6 +1097,11 @@ export function createPreviewListeners(
     const fleet = FLEET_PORTS.get(port);
     if (fleet) {
       return `it is ${fleet} port`;
+    }
+    // A machine of the fleet may run the stream relay on these: TCP 3478
+    // sits inside the default range, and no preview ever takes it.
+    if (isStreamRelayPort(port)) {
+      return "it is the stream relay's port";
     }
     if (settings.mode === "host" && port === PREVIEW_PORTS.first) {
       return "it is host mode's listener port";
@@ -932,7 +1173,10 @@ export function createPreviewListeners(
       return value;
     }
     const port = Number(value);
-    return db.ports().find((row) => row.port === port)?.instanceId;
+    return (
+      db.ports().find((row) => row.port === port)?.instanceId ??
+      [...embeds].find(([, embed]) => embed.listener.port === port)?.[0]
+    );
   };
 
   /** Host mode's listener on the range's first port; why it didn't open, or null. */
@@ -945,7 +1189,9 @@ export function createPreviewListeners(
       previewFailed(HOP, null, why);
       return why;
     }
-    const fleet = FLEET_PORTS.get(PREVIEW_PORTS.first);
+    const fleet =
+      FLEET_PORTS.get(PREVIEW_PORTS.first) ??
+      (isStreamRelayPort(PREVIEW_PORTS.first) ? "the stream relay's" : null);
     if (fleet) {
       const why = `Port ${PREVIEW_PORTS.first} is ${fleet} port, so host-mode previews can't take it: set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
       previewFailed(HOP, null, why);
@@ -968,6 +1214,75 @@ export function createPreviewListeners(
     }
   };
 
+  /** A port that would not open for a reason no other port avoids, in one sentence. */
+  const portRefused = (port: number, thrown: unknown): PreviewRefusal =>
+    new PreviewRefusal(
+      503,
+      `Preview port ${port} didn't open on ${hostname} (${causeOf(thrown)}).`,
+      { cause: thrown }
+    );
+
+  /** An embed's listener on the lowest free preview port no session or other embed holds; refused when every port is taken. */
+  const openEmbed = (
+    key: string,
+    owner: string
+  ): { listener: Listener; owner: string } => {
+    const taken = new Set([
+      ...db.ports().map((row) => row.port),
+      ...[...embeds.values()].map((embed) => embed.listener.port),
+    ]);
+    for (
+      let port = PREVIEW_PORTS.first;
+      port <= PREVIEW_PORTS.last;
+      port += 1
+    ) {
+      if (taken.has(port) || barred(port) || !unheld(port)) {
+        continue;
+      }
+      try {
+        const opened = {
+          owner,
+          listener: listen(
+            port,
+            () => key,
+            undefined,
+            () => ancestorsOf(owner)
+          ),
+        };
+        embeds.set(key, opened);
+        return opened;
+      } catch (thrown) {
+        if ((thrown as { code?: unknown }).code !== "EADDRINUSE") {
+          throw portRefused(port, thrown);
+        }
+      }
+    }
+    throw new PreviewRefusal(
+      503,
+      `Every preview port (${PREVIEW_PORTS_TEXT}) is taken: end a session that has a preview or a canvas, then show this page again.`
+    );
+  };
+
+  /**
+   * The origins session `owner`'s decision page is served on, which may frame
+   * its embeds: its own port on any name it is reached by (a LAN address, the
+   * tailnet's name, its HTTPS twin), and in host mode its name.
+   */
+  const ancestorsOf = (owner: string): string[] => {
+    const port = sessions.get(owner)?.port;
+    const origins =
+      port === undefined ? [] : [`http://*:${port}`, `https://*:${port}`];
+    if (settings.mode === "host" && settings.pattern) {
+      const pattern = parsePattern(settings.pattern);
+      if (pattern.key === "session" || port !== undefined) {
+        origins.push(
+          originFor(pattern, pattern.key === "port" ? (port as number) : owner)
+        );
+      }
+    }
+    return origins;
+  };
+
   /** Each session that keeps a port and has no listener yet gets one on it (`bind`). */
   const bindKept = (): void => {
     for (const { instanceId } of db.ports()) {
@@ -984,7 +1299,7 @@ export function createPreviewListeners(
   /** Every listener stopped, each one's connections closed, before the mode changes. */
   const stopAll = async (): Promise<void> => {
     const stopping = [...sessions.values(), ...(byHost ? [byHost] : [])].map(
-      (server) => server.stop(true)
+      (listener) => listener.stop()
     );
     sessions.clear();
     byHost = undefined;
@@ -1014,6 +1329,8 @@ export function createPreviewListeners(
      */
     address(instanceId: string): PreviewAddress {
       const port = portOf(instanceId);
+      const secure = tailnet.origin(port);
+      const onTailnet = secure ? { tailnet: secure } : {};
       if (settings.mode === "host") {
         const pattern = parsePattern(settings.pattern ?? "");
         const origin = originFor(
@@ -1021,16 +1338,45 @@ export function createPreviewListeners(
           pattern.key === "port" ? port : instanceId
         );
         // core `PreviewAddress`: `host` is a bridge for readers before `origin`.
-        return { port, origin, host: new URL(origin).host };
+        return { port, origin, host: new URL(origin).host, ...onTailnet };
       }
-      return { port };
+      return { port, ...onTailnet };
+    },
+
+    /**
+     * An embedded preview's origin (`key`, {@link embedKey}) for session
+     * `owner`'s decision page: its listener on a free preview port of its
+     * own, started when it has none, which that session's origins may
+     * frame; in host mode its whole origin too, named by its key or port.
+     */
+    embed(key: string, owner: string): PreviewAddress {
+      const held = embeds.get(key) ?? openEmbed(key, owner);
+      const { port } = held.listener;
+      const secure = tailnet.origin(port);
+      const onTailnet = secure ? { tailnet: secure } : {};
+      if (settings.mode === "host") {
+        const pattern = parsePattern(settings.pattern ?? "");
+        const origin = originFor(pattern, pattern.key === "port" ? port : key);
+        return { port, origin, host: new URL(origin).host, ...onTailnet };
+      }
+      return { port, ...onTailnet };
+    },
+
+    /** Session `owner`'s embeds stop with it: their keys, so their machines' listeners stop too. */
+    releaseEmbeds(owner: string): string[] {
+      const gone = [...embeds].filter(([, embed]) => embed.owner === owner);
+      for (const [key, embed] of gone) {
+        detach(embed.listener.stop(), "embedded preview listener stop");
+        embeds.delete(key);
+      }
+      return gone.map(([key]) => key);
     },
 
     /** The session ended: its listener stops and its port is free again. */
     release(instanceId: string): void {
-      const server = sessions.get(instanceId);
-      if (server) {
-        detach(server.stop(true), "preview listener stop");
+      const listener = sessions.get(instanceId);
+      if (listener) {
+        detach(listener.stop(), "preview listener stop");
       }
       sessions.delete(instanceId);
       db.dropPort(instanceId);

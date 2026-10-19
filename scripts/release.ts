@@ -38,6 +38,11 @@ import {
   verifyManifest,
 } from "../packages/core/src/release-manifest";
 import { SESSIOND_V1 } from "../packages/core/src/sessiond";
+import {
+  listedPid,
+  signalGroup,
+  signal as signalPid,
+} from "../packages/core/src/signal";
 import { PINNED_BUN, TARGETS } from "./build-binary";
 import { publishRelease } from "./publish-release";
 import { signingPem, takeSigningKey, underSigningEnv } from "./release-signing";
@@ -166,11 +171,27 @@ async function groupMembers(group: number): Promise<number[]> {
     .filter(([pid, pgid]) => pgid === group && pid !== group)
     .map(([pid]) => pid as number);
 }
-const signalGroup = (group: number, signal: NodeJS.Signals): void => {
-  try {
-    process.kill(-group, signal);
-  } catch {
-    // ESRCH: the group has already ended.
+/**
+ * Sends `sig` to the group `group` names: through its leader while `ps`
+ * lists its pid with the start recorded, else, the leader gone, to each
+ * member `ps` lists in its group. A leader pid listed with another start is
+ * another process's now, and nothing is sent.
+ */
+const signalGroupOf = async (
+  group: Proc,
+  sig: NodeJS.Signals
+): Promise<void> => {
+  const leader = await startedOf(group.pid);
+  if (leader === group.started) {
+    signalGroup(listedPid(group.pid), sig);
+    return;
+  }
+  if (leader !== undefined) {
+    return;
+  }
+  for (const member of await groupMembers(group.pid)) {
+    // Gone since the reading, it is nothing to signal.
+    signalPid(listedPid(member), sig);
   }
 };
 /**
@@ -196,7 +217,7 @@ async function endGroup(group: Proc | undefined): Promise<void> {
   if (leader !== undefined && leader !== group.started) {
     return;
   }
-  signalGroup(group.pid, "SIGTERM");
+  await signalGroupOf(group, "SIGTERM");
   const deadline = performance.now() + STOP_GRACE_MS;
   while (performance.now() < deadline) {
     if (
@@ -210,7 +231,7 @@ async function endGroup(group: Proc | undefined): Promise<void> {
   console.error(
     `[release] command group ${group.pid} still running ${STOP_GRACE_MS / 1000}s after SIGTERM: killed`
   );
-  signalGroup(group.pid, "SIGKILL");
+  await signalGroupOf(group, "SIGKILL");
 }
 /** Ends every command in `groups`, at once: a holder's, or this run's own. */
 const endGroups = async (groups: Proc[] | undefined): Promise<void> => {

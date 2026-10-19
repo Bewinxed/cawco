@@ -436,12 +436,12 @@ public struct Notice: Identifiable, Equatable, Sendable {
     private static func movedLogins(_ accounts: [Account], signins: [Signin], machines: [MachineRow],
                                     providers: [Components.Schemas.ProviderChoice], seen: Set<String>) -> Notice? {
         let moved = signins.compactMap { signin -> (at: Double, member: Member)? in
-            guard let movedAt = signin.movedAt,
+            guard let movedAt = signin.movedAt, let movedFrom = signin.movedFrom,
                   let account = accounts.first(where: { $0.id == signin.accountId }),
                   let from = machines.first(where: { $0.machineId == signin.machineId }) else { return nil }
             let id = "moved-login:\(account.id):\(signin.machineId):\(Int64(movedAt))"
             guard !seen.contains(id) else { return nil }
-            let store = storeWords[signin.movedFrom ?? "claude"] ?? "Claude Code"
+            let store = storeWords[movedFrom] ?? movedFrom
             // Online machines that run its harnesses and aren't signed in to it yet (model.svelte.ts `movedLogins`).
             let uses = harnesses(of: account.provider, providers)
             let missing = machines.filter { machine in

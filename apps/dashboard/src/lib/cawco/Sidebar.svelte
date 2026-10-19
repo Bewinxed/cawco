@@ -44,8 +44,8 @@
   import { page } from "$app/state";
   import type { Activity } from "./activity";
   import {
+    type BoardRow,
     cawco,
-    type InstanceRow,
     isFailed,
     isResumable,
     isStale,
@@ -83,6 +83,7 @@
   import SessionHover from "./SessionHover.svelte";
   import SessionRow, { ROW_PILL } from "./SessionRow.svelte";
   import { sameRow } from "./same-row";
+  import { NAV_BADGE } from "./sidebar-rows";
   import { newSession } from "./spawn/new-session.svelte";
   import { stored } from "./storage";
   import { inLists, isThreadTab } from "./thread-tabs";
@@ -290,13 +291,7 @@
     })
   );
 
-  $effect(() => {
-    if (cawco.fleetRead) {
-      folderPrefs.migrateProjects(cawco.projects);
-    }
-  });
-
-  const projectsOf = (row: InstanceRow): string[] =>
+  const projectsOf = (row: BoardRow): string[] =>
     projectsFor(cawco.projects, row).map((project) => project.id);
 
   /**
@@ -323,10 +318,7 @@
     topsIn(new Map([...running, ...notRunning].map((row) => [row.id, row])))
   );
   const listed = $derived.by(() => {
-    const lists = new Map<
-      string,
-      { live: InstanceRow[]; resting: InstanceRow[] }
-    >();
+    const lists = new Map<string, { live: BoardRow[]; resting: BoardRow[] }>();
     const listOf = (id: string) => {
       let list = lists.get(id);
       if (!list) {
@@ -368,9 +360,9 @@
     return lists;
   });
 
-  const NOTHING: InstanceRow[] = [];
+  const NOTHING: BoardRow[] = [];
 
-  const sessionsOf = (project: ProjectRow): InstanceRow[] =>
+  const sessionsOf = (project: ProjectRow): BoardRow[] =>
     listed.get(project.id)?.live ?? NOTHING;
 
   /**
@@ -389,8 +381,8 @@
    */
 
   interface Split {
-    older: InstanceRow[];
-    recent: InstanceRow[];
+    older: BoardRow[];
+    recent: BoardRow[];
   }
   const NO_SPLIT: Split = { recent: NOTHING, older: NOTHING };
 
@@ -400,7 +392,7 @@
    * rows' menus act on. Activity and pulses are read by the rows themselves,
    * per row.
    */
-  const keep = (next: InstanceRow[], was: InstanceRow[] | undefined) =>
+  const keep = (next: BoardRow[], was: BoardRow[] | undefined) =>
     was !== undefined &&
     next.length === was.length &&
     next.every((row, i) => sameRow(row, was[i]))
@@ -444,9 +436,9 @@
    * whole on the side its top row is on, so a delegate of a recent session
    * folds under it rather than standing alone among the older ones.
    */
-  function splitRows(live: InstanceRow[], resting: InstanceRow[]): Split {
+  function splitRows(live: BoardRow[], resting: BoardRow[]): Split {
     const all = [...live, ...resting];
-    const trees = new Map<string, { rows: InstanceRow[]; top: InstanceRow }>();
+    const trees = new Map<string, { rows: BoardRow[]; top: BoardRow }>();
     for (const row of all) {
       const top = topOf(row);
       const held = trees.get(top.id);
@@ -462,8 +454,8 @@
       reading,
       PROJECT_WINDOW
     );
-    const recent: InstanceRow[] = [];
-    const older: InstanceRow[] = [];
+    const recent: BoardRow[] = [];
+    const older: BoardRow[] = [];
     for (const row of all) {
       (listedTops.has(topOf(row).id) ? recent : older).push(row);
     }
@@ -509,7 +501,7 @@
    * with no pulse yet falls back to the hub's own `updatedAt`, and one with
    * neither sorts to the bottom rather than pretending to be new.
    */
-  function lastAt(row: InstanceRow): number {
+  function lastAt(row: BoardRow): number {
     const pulse = cawco.pulseAt(row.id);
     if (pulse !== undefined) {
       return pulse;
@@ -541,13 +533,13 @@
    * Recency is the tiebreak under `name` and `state` alike: two idle sessions
    * in one project are still told apart by which one you touched last.
    */
-  function ordered(rows: InstanceRow[], key: string): InstanceRow[] {
+  function ordered(rows: BoardRow[], key: string): BoardRow[] {
     // Held (motion/held-order): activity never moves a row, and a settled
     // re-sort lands only while the pointer is away from the rail's lists.
     return heldOrder(key, sorted(rows), (row) => row.id);
   }
 
-  function sorted(rows: InstanceRow[]): InstanceRow[] {
+  function sorted(rows: BoardRow[]): BoardRow[] {
     const by = rail.sort;
     return [...rows].sort((a, b) => {
       // A project's threads with Caw come first, then its sessions (picks.md).
@@ -588,9 +580,9 @@
     older: Branch[];
     /** The rows under it that it lists. */
     recent: Branch[];
-    row: InstanceRow;
+    row: BoardRow;
     /** Every row under it, at any depth. */
-    under: InstanceRow[];
+    under: BoardRow[];
   }
 
   /**
@@ -598,7 +590,7 @@
    * {@link ordered} at every depth. Each parent shows its count and starts
    * folded; whether it is open is the reader's (open-trees).
    */
-  function branches(rows: InstanceRow[], key: string): Branch[] {
+  function branches(rows: BoardRow[], key: string): Branch[] {
     const lines = tree(rows, {
       order: (list, under) => ordered(list, `${key}:${under}`),
     });
@@ -657,11 +649,11 @@
   });
 
   /** The age column, and the full sentence behind it on hover. */
-  const ageOf = (row: InstanceRow): string => {
+  const ageOf = (row: BoardRow): string => {
     const at = lastAt(row);
     return at === 0 ? "" : formatAgeShort(at, now);
   };
-  const ageHint = (row: InstanceRow): string => {
+  const ageHint = (row: BoardRow): string => {
     const at = lastAt(row);
     return at === 0
       ? "No activity recorded"
@@ -670,7 +662,7 @@
 
   /* ---- helpers -------------------------------------------------------- */
 
-  const sessionName = (row: InstanceRow): string =>
+  const sessionName = (row: BoardRow): string =>
     row.title?.trim() ||
     row.cwd.split("/").filter(Boolean).pop() ||
     row.id.slice(0, 8);
@@ -905,9 +897,12 @@
                  the kit's active and hover inks are for a plain count, and
                  on the live fill the active one reads 3.3:1. -->
             <Sidebar.MenuBadge
-              class={cawco.blockedCount > 0
-                ? "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]!"
-                : "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]!"}
+              class={[
+                NAV_BADGE,
+                cawco.blockedCount > 0
+                  ? "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]!"
+                  : "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]!",
+              ].join(" ")}
               data-flip="pop box"
             >
               <MorphText text={String(fleetCount)} />

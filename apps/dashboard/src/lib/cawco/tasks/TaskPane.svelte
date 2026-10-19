@@ -23,11 +23,17 @@
    * The stage picker offers the moves the project's stages allow you from
    * where the task is; the rest are listed, disabled, so the stages read in
    * order. The hub checks the move again either way.
+   *
+   * A task one record with a GitHub or Linear issue (the hub's tracker.ts)
+   * names it under the title, its mark and its ref a link to it; when its
+   * last sync stopped short, the tracker's words under it, with Sync now.
    */
+  import { TRACKER_NAMES } from "@cawco/core";
   import { DECIDED_FIELD, decidedOf } from "@cawco/core/decisions";
-  import type { Snippet } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import { readDecision } from "#lib/cawco/decisions/decisions-api.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -61,6 +67,7 @@
     reviewOf,
     type StagesView,
     stageLabel,
+    syncTracker,
     type TaskEdge,
     type TaskHistoryEvent,
     type TaskSummary,
@@ -205,6 +212,20 @@
     titleProblem = null;
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the read sets its own state
     void read(id);
+  });
+  // The hub says this task changed, or the project's tasks naming none (its
+  // folder written by hand): the file is read again. Its times are whole
+  // seconds, so a change in the second of the last one (a tracker's sync
+  // beside you) shows the list no newer time; the frame still says it.
+  let heard = { id: "", changes: 0 };
+  $effect(() => {
+    const id = taskId;
+    const changes = cawco.taskChangedOf(projectId, id);
+    if (heard.id === id && heard.changes !== changes) {
+      // biome-ignore lint/complexity/noVoid: the read sets its own state
+      untrack(() => void read(id));
+    }
+    heard = { id, changes };
   });
   // The list says it changed (a move, a comment, an attempt or its result,
   // from anywhere): the file is read again.
@@ -480,6 +501,43 @@
         </h2>
       {/if}
       <RowFault again={saveTitle} reason={titleProblem} />
+      {#if shown?.issue}
+        {@const issue = shown.issue}
+        <div
+          data-slot="issue"
+          class="issue"
+          data-failed={issue.problem ? "" : undefined}
+          data-provider={issue.provider}
+        >
+          <p class="issue-line mark-line">
+            <span class="mark-cell"
+              ><ProviderLogo provider={issue.provider} /></span
+            >
+            {#if issue.url}
+              <span class="issue-words"
+                ><a href={issue.url} rel="noreferrer" target="_blank"
+                  >{issue.ref}</a
+                >
+                on {TRACKER_NAMES[issue.provider]}</span
+              >
+            {:else}
+              <span class="issue-words"
+                >Not on {TRACKER_NAMES[issue.provider]} yet</span
+              >
+            {/if}
+          </p>
+          <RowFault
+            again={async () => {
+              await syncTracker(projectId);
+              await read(taskId);
+            }}
+            againLabel="Sync now"
+            againPending="Syncing…"
+            data-issue-fault
+            reason={issue.problem}
+          />
+        </div>
+      {/if}
       {#if decided}
         <p data-slot="decided" class="decided">
           Decided on <a href={decided.href}
@@ -786,6 +844,34 @@
     color: var(--ink-muted);
   }
   .decided a {
+    color: var(--link-ink);
+  }
+  /* Its issue: a meta line under the title, the mark on its first line, its
+     ref a link; the tracker's words under it when its sync stopped short. */
+  .issue {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-inline-size: 0;
+  }
+  .issue-line {
+    display: flex;
+    align-items: flex-start;
+    gap: var(--space-2);
+    min-inline-size: 0;
+    margin: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .issue-line :global(svg) {
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
+  }
+  .issue-words {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+  }
+  .issue-words a {
     color: var(--link-ink);
   }
   .dates {

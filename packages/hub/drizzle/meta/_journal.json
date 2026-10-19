@@ -1625,6 +1625,125 @@
       "when": 1792250146592,
       "tag": "0231_task_comment_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 232,
+      "version": "6",
+      "when": 1792267142146,
+      "tag": "0232_artifact_source_place",
+      "breakpoints": true
+    },
+    {
+      "idx": 233,
+      "version": "6",
+      "when": 1792273737814,
+      "tag": "0233_work_item_landed",
+      "breakpoints": true
+    },
+    {
+      "idx": 234,
+      "version": "6",
+      "when": 1792299007153,
+      "tag": "0234_ssh_machines",
+      "breakpoints": true
+    },
+    {
+      "idx": 235,
+      "version": "6",
+      "when": 1792319380911,
+      "tag": "0235_drop_apple_gate",
+      "breakpoints": true
+    },
+    {
+      "idx": 244,
+      "version": "6",
+      "when": 1792339701751,
+      "tag": "0244_memory_facts",
+      "breakpoints": true
+    },
+    {
+      "idx": 245,
+      "version": "6",
+      "when": 1792356035942,
+      "tag": "0245_workspace_stage_for",
+      "breakpoints": true
+    },
+    {
+      "idx": 246,
+      "version": "6",
+      "when": 1792356139066,
+      "tag": "0246_chosen_modes",
+      "breakpoints": true
+    },
+    {
+      "idx": 247,
+      "version": "6",
+      "when": 1792356140066,
+      "tag": "0247_workspace_cut_from",
+      "breakpoints": true
+    },
+    {
+      "idx": 248,
+      "version": "6",
+      "when": 1792356141066,
+      "tag": "0248_ssh_machine_key",
+      "breakpoints": true
+    },
+    {
+      "idx": 249,
+      "version": "6",
+      "when": 1792356142066,
+      "tag": "0249_workarounds_gone",
+      "breakpoints": true
+    },
+    {
+      "idx": 250,
+      "version": "6",
+      "when": 1792356143066,
+      "tag": "0250_instances_harness",
+      "breakpoints": true
+    },
+    {
+      "idx": 251,
+      "version": "6",
+      "when": 1792356144066,
+      "tag": "0251_data_migrations",
+      "breakpoints": true
+    },
+    {
+      "idx": 252,
+      "version": "6",
+      "when": 1792356145066,
+      "tag": "0252_tracker_sync",
+      "breakpoints": true
+    },
+    {
+      "idx": 253,
+      "version": "6",
+      "when": 1792356146066,
+      "tag": "0253_last_error_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 254,
+      "version": "6",
+      "when": 1792360351049,
+      "tag": "0254_stream_relay",
+      "breakpoints": true
+    },
+    {
+      "idx": 255,
+      "version": "6",
+      "when": 1792360352049,
+      "tag": "0255_artifact_kind_component",
+      "breakpoints": true
+    },
+    {
+      "idx": 256,
+      "version": "6",
+      "when": 1792363420564,
+      "tag": "0256_stream_relay_why_command",
+      "breakpoints": true
     }
   ]
 }

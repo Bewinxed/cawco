@@ -37,6 +37,7 @@ import {
 } from "node:fs";
 import { link, mkdir, open, readFile, rename, unlink } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
+import { processGroup } from "./process-identity";
 
 export interface StateWriteOptions {
   /**
@@ -74,23 +75,20 @@ const TEMPORARY = /^\.(.+)\.cawco-(\d+)-[0-9a-f]{8}\.tmp$/;
 export const stateTemporaryTarget = (name: string): string | undefined =>
   TEMPORARY.exec(name)?.[1];
 
-const alive = (pid: number): boolean => {
-  try {
-    process.kill(pid, 0);
-    return true;
-  } catch (error) {
-    return (error as NodeJS.ErrnoException).code === "EPERM";
-  }
-};
-
 /**
  * Whether `name` is a write that never finished: a temporary file of this
  * module's whose writer is gone (a crash, a SIGKILL). Nothing reads one, and
- * the agent's sweep removes it.
+ * the agent's sweep removes it. Its writer is looked for in the system's own
+ * list (`/proc/<pid>` or `kinfo_proc`): one named by a pid no process can
+ * have here (0, 1) was never this module's, and is no write of its.
  */
 export const isStrayTemporary = (name: string): boolean => {
-  const pid = TEMPORARY.exec(name)?.[2];
-  return pid !== undefined && !alive(Number(pid));
+  const named = TEMPORARY.exec(name)?.[2];
+  if (named === undefined) {
+    return false;
+  }
+  const pid = Number(named);
+  return pid > 1 && processGroup(pid) === undefined;
 };
 
 const toBytes = (data: string | Uint8Array): Uint8Array =>

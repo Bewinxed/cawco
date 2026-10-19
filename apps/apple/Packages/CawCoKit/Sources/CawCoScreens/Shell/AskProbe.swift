@@ -104,7 +104,7 @@ enum AskProbe {
     /// Asks `question` from session `id`'s row; nil when the row is not on screen.
     private static func ask(_ name: String, _ id: String, _ shell: ShellController, home: HomeModel,
                             _ question: (InstanceRow, SessionMenuContext) -> SessionQuestion?) async -> Found? {
-        guard let found = await find(id, shell, home: home), let row = shell.hub.fleet.byId[id],
+        guard let found = await find(id, shell, home: home), let row = shell.hub.fleet.byId[id]?.session,
               let asked = question(row, shell.sessionMenus.at(found.place))
         else {
             log.error("\(name, privacy: .public) [\(id, privacy: .public)]: no row on screen to ask from")

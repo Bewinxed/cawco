@@ -316,8 +316,25 @@ public struct SigninStart: Decodable, Sendable {
     public let url: String?
     public let userCode: String?
     public let verificationUrl: String?
-    /// Epoch ms.
+    /// Epoch ms; absent when the provider gave the code no expiry.
     public let expiresAt: Double?
+    /// A question the provider's sign-in asks first (core `ProviderSigninPrompt`).
+    public let prompt: Prompt?
+
+    public struct Prompt: Decodable, Sendable, Equatable {
+        /// `select` or `text`.
+        public let kind: String
+        public let message: String
+        public let options: [Option]?
+        public let placeholder: String?
+        public let secret: Bool?
+    }
+
+    public struct Option: Decodable, Sendable, Equatable {
+        public let id: String
+        public let label: String
+        public let description: String?
+    }
 }
 
 /// How a sign-in (or a key on one machine) ended: `signed-in`, `mismatch`,
@@ -427,7 +444,13 @@ public extension HubConnection {
         try JSONDecoder().decode(SigninStart.self, from: try await accountsWrite(Self.signinPath(id, machineId), method: "POST"))
     }
 
-    /// Types the pasted code into Claude Code's login (`code`), or waits up to
+    /// Answers the question a provider's sign-in asks (an option's id, or the
+    /// text typed); the machine answers what it shows next.
+    func answerSignin(_ id: String, machineId: String, answer: String) async throws -> SigninStart {
+        try JSONDecoder().decode(SigninStart.self, from: try await accountsWrite(Self.signinPath(id, machineId) + "/answer", method: "POST", body: ["answer": answer]))
+    }
+
+    /// Types the pasted code into the machine's login (`code`), or waits up to
     /// a minute for a device code to be entered (no code).
     func completeSignin(_ id: String, machineId: String, code: String? = nil) async throws -> SigninAnswer {
         let body: [String: Any] = code.map { ["code": $0] } ?? [:]

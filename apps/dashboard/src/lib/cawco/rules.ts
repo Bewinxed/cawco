@@ -5,6 +5,7 @@ import type {
   RuleDraft,
   RuleRow,
 } from "@cawco/core";
+import { hubFailure } from "#lib/cawco/hub-read.js";
 
 /**
  * The dashboard's side of rules. Fetch wrappers in the shape `fleet.ts`
@@ -54,21 +55,9 @@ export const loadRuleActivity = (
     "load what this rule has caught"
   );
 
-/** Elysia refuses with a bare string; JSON only when something else went wrong. */
+/** What the hub said went wrong, in one sentence without its stop (hub-read `hubFailure`). */
 async function said(response: Response): Promise<string> {
-  const body = await response.text();
-  try {
-    const parsed: unknown = JSON.parse(body);
-    if (typeof parsed === "string") {
-      return parsed;
-    }
-    if (parsed && typeof parsed === "object" && "message" in parsed) {
-      return String((parsed as { message: unknown }).message);
-    }
-  } catch {
-    // Not JSON, which is the ordinary case: the string is the sentence.
-  }
-  return body || `the hub answered ${response.status}`;
+  return (await hubFailure(response)).detail;
 }
 
 async function send<T>(
@@ -78,7 +67,7 @@ async function send<T>(
 ): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
-    throw new Error(`Could not ${attempt} — ${await said(response)}.`);
+    throw new Error(`Could not ${attempt}. ${await said(response)}.`);
   }
   return (await response.json()) as T;
 }

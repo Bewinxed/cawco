@@ -38,7 +38,6 @@
   } = $props();
 
   const CHIP = "h-auto min-h-6 gap-1.5 px-2";
-  const columns = $derived(catalog.filter((spec) => !spec.dependencyOnly));
   let written = $state<Record<string, ToolPolicy>>({});
   const policyOf = (spec: ToolSpec): ToolPolicy =>
     written[spec.id] ?? policyFor(policies, spec.id);
@@ -274,7 +273,7 @@
   />
 {/snippet}
 
-{#if columns.length === 0}
+{#if catalog.length === 0}
   <EmptyState
     icon={IconTerminal}
     line="The hub's catalog is empty, so there is nothing to install yet."
@@ -304,7 +303,7 @@
             scope="col">Machine</Table.Head
           >
           <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-          {#each columns as spec (spec.id)}
+          {#each catalog as spec (spec.id)}
             {@const policy = policyOf(spec)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
@@ -387,7 +386,7 @@
                 </span>
               </span>
             </Table.Head>
-            {#each columns as spec (spec.id)}
+            {#each catalog as spec (spec.id)}
               <Table.Cell
                 class="group/cell border-l border-border px-[var(--space-4)] py-[var(--space-2)] whitespace-normal"
               >

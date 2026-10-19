@@ -15,7 +15,8 @@ export interface TranscriptVoice {
   face?: Snippet<[boolean]>;
   /** The files, and the id of the message that names them. */
   files?: Snippet<[string[], string]>;
-  tasks?: Snippet<[string[]]>;
+  /** The tasks, and the id of the message that names them (its reasons, whether it landed live). */
+  tasks?: Snippet<[string[], string]>;
 }
 
 const KEY = Symbol("transcript-voice");

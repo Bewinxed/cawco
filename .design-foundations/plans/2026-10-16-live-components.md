@@ -73,7 +73,7 @@ A story's `args` are the instance's props; a `render` is allowed only in the fra
 
 **On top of it, unchanged:** the overlay the hub already injects into every preview (`injectOverlay`, `packages/hub/src/preview.ts`). Picks (D19): the sheet is a choice, its stories the options; a pick stores `{ choice: <story file>, option: <export name> }` in the hub as today. Pins and comments (D20, tsk-3) anchor to elements by selector as today, plus `source` (§4). Pencil ink (D27) anchors to the deepest element under the stroke as today; its radial menu's Comment and Annotate produce pins carrying `source`. Nothing in D24–D27 changes.
 
-**The Excalidraw canvas (D24) is not the venue.** It does not lay out live DOM; a sheet is a `preview`-class artifact. A session that wants to sketch over a sheet draws with ink (D27), or the agent puts a PNG of the sheet (`artifact_read(png: true)`) onto a canvas. Kept from the merged spec: no pan-and-zoom surface of CawCo's own.
+**The Excalidraw canvas (D24) is not the venue.** It does not lay out live DOM; a sheet is a `preview`-class artifact. A session that wants to sketch over a sheet draws with ink (D27), or the agent puts a PNG of the sheet (`artifact_read(png: true)`) onto a canvas. The component canvas (2026-10-19, Projects §5.10 "The component canvas") is CawCo's pan-and-zoom surface for components: the stage's own page, its frames the real instances.
 
 ## 4. Source mapping per framework, and what a pin carries
 

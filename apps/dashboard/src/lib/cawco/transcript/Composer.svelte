@@ -107,7 +107,6 @@
     userTurnActions,
   } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
-  import { debugFault } from "../debug-fault";
   import { felt } from "../feel.svelte";
   import MentionField from "../find/MentionField.svelte";
   import { readAs } from "../find/mention.svelte";
@@ -1056,7 +1055,6 @@
     if (entries.length === 0) {
       return [];
     }
-    debugFault("composer-menu");
     const groups = new Map<
       string,
       { heading: string; rank: number; sub: string; entries: Entry[] }
@@ -4074,7 +4072,7 @@
      (docked at the bottom of the transcript pane) rather than viewport-fixed,
      so it sits ABOVE the thumb bar instead of overlapping it — the thumb bar
      owns the safe-area inset. */
-  @media (max-width: 900px) {
+  @media (width < 900px) {
     /* Clear the home indicator / gesture bar — the resting gap plus the safe
        area inset, so the composer never sits under the rounded-screen chrome. */
     .dock {

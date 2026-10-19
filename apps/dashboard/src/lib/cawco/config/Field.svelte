@@ -73,6 +73,10 @@
     font: var(--type-meta);
     color: var(--ink-muted);
   }
+  /* A hint is read whole: no word left alone on its last line. */
+  .hint {
+    text-wrap: pretty;
+  }
   .error {
     color: var(--status-fail-ink);
   }

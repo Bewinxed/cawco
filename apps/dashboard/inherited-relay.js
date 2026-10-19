@@ -33,7 +33,8 @@ export function applyRelayPeer(request) {
   return peer;
 }
 
-export async function listenInherited(httpServer, fd, ready) {
+/** `httpServer` answering on every inherited listening socket in `fds`, each relayed into it. */
+export async function listenInherited(httpServer, fds, ready) {
   const dir = join(tmpdir(), `cawco-dashboard-${process.pid}-${randomUUID()}`);
   mkdirSync(dir, { mode: 0o700 });
   const path = join(dir, "http.sock");
@@ -43,7 +44,7 @@ export async function listenInherited(httpServer, fd, ready) {
   });
   chmodSync(path, 0o600);
   const tunnels = new Set();
-  const listener = net.createServer({ allowHalfOpen: true }, (client) => {
+  const relay = (client) => {
     const token = randomUUID();
     peers.set(token, {
       address: client.remoteAddress,
@@ -104,15 +105,29 @@ export async function listenInherited(httpServer, fd, ready) {
     client.on("end", () => upstream.end());
     upstream.pipe(client);
     upstream.once("connect", () => client.resume());
+  };
+  let listening = 0;
+  const listeners = fds.map((fd) => {
+    const listener = net.createServer({ allowHalfOpen: true }, relay);
+    listener.on("error", (error) => {
+      httpServer.close();
+      throw error;
+    });
+    listener.listen({ fd }, () => {
+      listening += 1;
+      if (listening === fds.length) {
+        ready();
+      }
+    });
+    return listener;
   });
-  listener.on("error", (error) => {
-    httpServer.close();
-    throw error;
-  });
-  listener.listen({ fd }, ready);
   process.once("exit", () => rmSync(dir, { recursive: true, force: true }));
   return {
-    stopAccepting: () => listener.close(),
+    stopAccepting: () => {
+      for (const listener of listeners) {
+        listener.close();
+      }
+    },
     destroy: () => {
       for (const socket of tunnels) {
         socket.destroy();

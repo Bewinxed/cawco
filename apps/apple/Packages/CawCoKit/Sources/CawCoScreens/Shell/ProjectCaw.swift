@@ -129,6 +129,21 @@ final class ProjectCawSeat: UIControl {
     func configure(_ status: CawStatus, sentence: String) {
         if caw.status != status { caw.status = status }
         accessibilityValue = sentence
+        hold()
+    }
+
+    /// He holds his still while working when the reader turned his loop off (CawSeat.svelte `still`).
+    private func hold() {
+        caw.still = caw.status == .working && !CawLoopPreference.on
+    }
+
+    private lazy var loopWatch: NSObjectProtocol = NotificationCenter.default.addObserver(forName: CawLoopPreference.changed, object: nil, queue: .main) { [weak self] _ in
+        MainActor.assumeIsolated { self?.hold() }
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        _ = loopWatch
     }
 }
 

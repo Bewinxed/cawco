@@ -19,6 +19,7 @@ import type {
   ContinuationJob,
   DelegateEvent,
   InstanceRow,
+  LastErrorKind,
   PreviewSource,
   SessionPulse,
   Verb,
@@ -26,6 +27,12 @@ import type {
 } from "./index";
 import type { MoveJob } from "./move";
 import type { PermissionPresentation } from "./permission-presentation";
+import type { StageState } from "./stage";
+import {
+  onTailnet,
+  type TailnetHttps,
+  type TailnetOrigin,
+} from "./tailnet-https";
 import type { ThreadMessage, ThreadSummary } from "./threads";
 import type { UsageLimitsReading, UsageSpend } from "./usage";
 
@@ -61,7 +68,16 @@ export interface PreviewFrame {
   /** Identifies one successful open, including a rebuild of the same source. */
   revision: string;
   source?: PreviewSource;
+  /**
+   * A sheet's stage, or a workspace preview's server (`serve`), as its doc
+   * keeps it (`meta.stage`), the frame published
+   * again at the same revision on each change: for a panel that holds no doc
+   * of its own (the app's), as the dashboard's pane reads it from the doc.
+   */
+  stage?: StageState;
   state: "open" | "closed";
+  /** The session's origin on the tailnet name while the hub serves HTTPS there ({@link PreviewAddress}). */
+  tailnet?: TailnetOrigin;
 }
 
 /**
@@ -86,6 +102,12 @@ export interface PreviewAddress {
   origin?: string;
   /** The session's own preview port, listened on in either mode. */
   port: number;
+  /**
+   * The session's origin on the hub machine's tailnet name, while the hub
+   * serves HTTPS there (core tailnet-https.ts): on the tailnet addresses the
+   * port answers HTTPS alone.
+   */
+  tailnet?: TailnetOrigin;
 }
 
 /**
@@ -109,17 +131,23 @@ const under = (hostname: string, domain: string): boolean => {
  * Where a client loads a session's previews from, picked by where it
  * reached the hub or dashboard (`at`). Reached under host mode's domain
  * (the dashboard behind the same DNS or proxy as the pattern's names): the
- * origin the hub named, entered with a ticket (`byHost`). Reached any other
- * way (a tailnet name, a LAN address, localhost): that host and scheme on
- * the session's own port, with no ticket. Null when the hub named nothing
- * this client can load.
+ * origin the hub named, entered with a ticket (`byHost`). Reached over the
+ * tailnet while the hub serves HTTPS on its name (a tailnet address, the
+ * short name, the full one): the session's origin on that name, since the
+ * port answers HTTPS alone there; a client that reached the hub's own port
+ * over plain http (the app) loads it too. Reached any other way (a LAN
+ * address, `.local`, localhost): that host and scheme on the session's own
+ * port, with no ticket. Null when the hub named nothing this client can load.
  */
 export const previewRoute = (
-  address: { origin?: string; port?: number },
+  address: { origin?: string; port?: number; tailnet?: TailnetOrigin },
   at: { hostname: string; protocol: string }
 ): { origin: string; byHost: boolean } | null => {
   if (address.origin && under(at.hostname, hostModeDomain(address.origin))) {
     return { origin: address.origin, byHost: true };
+  }
+  if (address.tailnet && onTailnet(address.tailnet, at.hostname)) {
+    return { origin: address.tailnet.origin, byHost: false };
   }
   if (address.port) {
     const host =
@@ -188,12 +216,28 @@ export type PreviewSettings =
 
 /**
  * The socket an artifact's own tab (the dashboard's `/artifact/<id>`) follows
- * the session that made it on, `<path><instanceId>`: nothing else of the
- * fleet reaches that tab. It also carries the tab's `fs` envelopes (a page's
- * place picker browsing a machine's folders), answered on it as on the
- * dashboard's socket.
+ * the session that made it on, `<path><instanceId>/<artifactId>`: nothing
+ * else of the fleet reaches that tab. It also carries the tab's `fs`
+ * envelopes (a page's place picker browsing a machine's folders), answered on
+ * it as on the dashboard's socket.
  */
 export const ARTIFACT_SESSION_PATH = "/ws/artifact-session/";
+
+/**
+ * The codes the hub closes an artifact tab's socket with when it refuses it,
+ * the close's reason being the sentence the tab shows. A tab opens no socket
+ * again after one: what refused it stays true until the person acts.
+ */
+export const ARTIFACT_SESSION_REFUSED = {
+  /** The device is not paired, or its pairing was removed. */
+  unpaired: 4401,
+  /** The artifact was deleted, or the session that made it was. */
+  gone: 4404,
+} as const;
+
+/** What the hub says, closing an artifact tab's socket {@link ARTIFACT_SESSION_REFUSED}`.gone`. */
+export const ARTIFACT_GONE =
+  "This artifact is gone: it was deleted, or the session that made it was.";
 
 /**
  * Everything that tab reads of its session, whole, on open and again on
@@ -459,7 +503,20 @@ export interface HarnessFailed {
   harness: HarnessKind;
 }
 
+/**
+ * Why a machine's agent refused a control call or an `fs` request, typed
+ * where it refused it: `not-running`, the agent runs no process for the
+ * session (a session asleep, ended, or not this machine's); `missing`, the
+ * path an `fs` request names is not there (its error's `ENOENT`);
+ * `unknown`, any other refusal, its message as it was said.
+ */
+export type ControlRefusal =
+  | { kind: "not-running"; message: string }
+  | { kind: "missing"; message: string }
+  | { kind: "unknown"; message: string };
+
 export interface ControlResultFrame {
+  /** A refusal's words, as said; {@link refusal} is what a reader decides on. */
   error?: string;
   /** `listSessions` only, and only when some harness's listing threw: those harnesses, whose sessions `result` leaves out. */
   failed?: HarnessFailed[];
@@ -467,6 +524,8 @@ export interface ControlResultFrame {
   /** No `instanceId` when the call it answers was machine-scoped. */
   kind: "control_result";
   ok: boolean;
+  /** Why the machine's agent refused the call, typed; absent on an answer, and on a refusal the hub made itself. */
+  refusal?: ControlRefusal;
   requestId: string;
   result?: unknown;
   /** `listSessions` only, and only when some harness did not list in time: those harnesses, whose sessions `result` leaves out. */
@@ -479,6 +538,8 @@ export interface ErrorFrame {
   instanceId?: string;
   /** Hub-originated routing failures (e.g. target machine offline). */
   kind: "error";
+  /** A failed session's typed kind, when what failed typed it (core `KindedError`); `message` is its words. */
+  lastErrorKind?: LastErrorKind;
   message: string;
   requestId?: string;
   verb?: Verb;
@@ -567,6 +628,27 @@ export interface ProjectStopFrame {
   projectId: string;
 }
 
+/**
+ * Hub-originated: the hub is about to restart for an update, or no longer
+ * is. Sent to every dashboard the moment its own machine says it is
+ * installing (binary-update.ts `#tellHub`, before the helper restarts it),
+ * to each that connects while it does, and with `restart: null` when the
+ * install ends without restarting it. `withinMs` is relative, so no two
+ * clocks are compared: the dashboard makes it a deadline on its own, and
+ * reads the hub as on its way back, not unreachable, until it passes.
+ */
+export interface HubRestartFrame {
+  instanceId?: undefined;
+  kind: "hub.restart";
+  restart: {
+    reason: "update";
+    /** The build it restarts onto, when the machine named one. */
+    version: string | null;
+    /** How long from now it answers again, or the build before it does: the update's trial (UPDATE_TRIAL_MS). */
+    withinMs: number;
+  } | null;
+}
+
 export interface ProjectsChangedFrame {
   instanceId?: undefined;
   /**
@@ -588,6 +670,18 @@ export interface FleetUpstreamFrame {
   kind: "fleet.upstream";
   /** Whether agents may post to other people's repositories: off, ask the person first, or on. */
   upstream: import("./upstream-guard").UpstreamPosts;
+}
+
+/**
+ * Hub-originated: HTTPS on the hub machine's tailnet name changed state (hub
+ * tailnet-https.ts): a step came to need the person, they took it, or the
+ * name began or stopped answering. Every dashboard takes it at once, so its
+ * onboarding row in Needs you shows the step that stands, or ticks.
+ */
+export interface TailnetHttpsFrame {
+  instanceId?: undefined;
+  kind: "tailnet.https";
+  tailnet: TailnetHttps;
 }
 
 /**
@@ -618,6 +712,13 @@ export interface TasksChangedFrame {
    */
   kind: "tasks.changed";
   projectId: string;
+  /**
+   * The one task that changed, when the change named one (a move, a write,
+   * a comment); absent, any of them (its folder was written). An open task
+   * reads itself again on either: its times are whole seconds, so two
+   * changes in one second (a tracker's sync beside you) show no newer time.
+   */
+  taskId?: string;
 }
 
 export interface DecisionsChangedFrame {

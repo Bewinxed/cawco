@@ -17,6 +17,7 @@ import {
 import { readWithin } from "@cawco/core/bounded";
 import { writeStateFile } from "@cawco/core/state-file";
 import { delegationHubUrl } from "./delegation";
+import { provenFetch } from "./hub-proof";
 
 const attachmentsDir = (): string => join(homedir(), ".cawco", "attachments");
 
@@ -40,7 +41,10 @@ async function deliverFile(
   const read = await readWithin<{ bytes: Uint8Array } | { status: number }>(
     FETCH_TIMEOUT_MS,
     async (signal) => {
-      const response = await fetch(`${delegationHubUrl()}${file.ref}`, {
+      // As this machine, with its key's proof: a hub that requires paired
+      // devices, and the door of an SSH-added machine, take no request
+      // without one (hub hub-auth.ts).
+      const response = await provenFetch(`${delegationHubUrl()}${file.ref}`, {
         signal,
       });
       return response.ok

@@ -41,15 +41,15 @@ TMPDIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cawco-proof-tmp-$(printf %s "$out
 ln -sfn "$out/tmp" "$TMPDIR"
 export TMPDIR
 
-# The builds (scripts/binary/build-stage2.ts): build 1 from before keepers ran side by side, and two of this tree.
-export BASE=0.0.1-test.2 NEXT=0.0.1-test.3 LEGACY=0.0.1-test.1
+# The builds (scripts/binary/build-stage2.ts): two of this tree.
+export BASE=0.0.1-test.2 NEXT=0.0.1-test.3
 # The proof's own pace for the update's timed steps (packages/core/src/clock.ts, replaced in proof builds by
 # scripts/binary/proof-clock.ts): the trial window (180 s), the confirm hold (60 s), the first retry delay (60 s) and
-# how long a retiring keeper sits empty (20 s) run this many times faster. Builds 2 and 3 only: build 1 is old code.
+# how long a retiring keeper sits empty (20 s) run this many times faster.
 PROOF_TIME_SCALE=6
 # The stand-ins are as slow and as late as production gets, never faster: what reached the person on 2026-10-16 came
 # from slowness the rigs did not have.
-#  - A retiring keeper answers each `list` this late (proof-clock.ts RETIRING_LIST_MS, set in every machine's service
+#  - A retiring keeper answers each `list` this late (proof-list-pace.ts, set in every machine's service
 #    manager beside the pace above): past the agent's 2000 ms wait for a listing (agent keepers.ts LIST_TIMEOUT_MS),
 #    as a keeper slow to list did when a reattach gave up on it ("no keeper that answered holds …") and failed an item.
 #  - Through an update, the machine's Claude Code answers `--version` and `auth status` this late (claude-late.sh):
@@ -64,10 +64,10 @@ export CLAUDE_LATE_S
 
 # ---------------------------------------------------------------- which rigs run
 # A rig is a function rig_<name> below; its checks are its `check "<name>" …` lines.
-RIGS=(install spare legacy hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry pins workspace runaway memory capped)
+RIGS=(install held3455 spare hubself rollback migration swapkill agentdown keeperheld keeperkilled handover drain retry pins workspace runaway memory capped)
 # How many systemd machines each rig boots (its `machines` refuses any other count): what it holds of the host user's
 # inotify instances while it runs.
-declare -A RIG_MACHINES=([install]=2 [spare]=1 [legacy]=2 [hubself]=1 [rollback]=1 [migration]=1 [swapkill]=1
+declare -A RIG_MACHINES=([install]=2 [held3455]=1 [spare]=1 [hubself]=1 [rollback]=1 [migration]=1 [swapkill]=1
   [agentdown]=1 [keeperheld]=1 [keeperkilled]=1 [handover]=2 [drain]=2 [retry]=2 [pins]=1 [workspace]=2 [runaway]=1
   [memory]=1 [capped]=2)
 # THE HOST USER'S INOTIFY INSTANCES are every rig's to share. The kernel charges an instance to its user in each user
@@ -190,7 +190,7 @@ EOF
 orchestrate() {
   python3 -c 'import pexpect' 2> /dev/null || { echo "python3 with pexpect is needed to answer the installer's prompts (pip install pexpect)" >&2; exit 2; }
   command -v flock > /dev/null || { echo "flock (util-linux) is needed: one proof at a time builds into the image store" >&2; exit 2; }
-  for need in cawco-1 cawco-2 cawco-3 keys/test-release-private.pem keys/test-release-public.pem; do
+  for need in cawco-2 cawco-3 keys/test-release-private.pem keys/test-release-public.pem; do
     [[ -e "$bins/$need" ]] || { echo "missing $bins/$need: run build-stage2.ts first" >&2; exit 2; }
   done
   free_gb=$(df -BG --output=avail "$out" | tail -n 1 | tr -dc 0-9)
@@ -237,7 +237,6 @@ orchestrate() {
   feed() { local name=$1; shift; fixture release "$out/feeds/$name" "$@"; }
   feeds() {
     local pids=() rc=0 pid
-    feed legacy ok stable "$LEGACY" 1111111111111111111111111111111111111111 "$bins/cawco-1" "$key" 10 "$schema" & pids+=($!)
     feed base ok stable "$BASE" 2222222222222222222222222222222222222222 "$bins/cawco-2" "$key" 20 "$schema" & pids+=($!)
     feed next ok stable "$NEXT" 3333333333333333333333333333333333333333 "$bins/cawco-3" "$key" 30 "$schema" & pids+=($!)
     feed broken ok stable 0.0.1-test.10 1010101010101010101010101010101010101010 "$out/shared/broken-cawco" "$key" 31 "$schema" & pids+=($!)
@@ -746,15 +745,14 @@ start_loop() {
   done
 }
 # The machine's session keepers (packages/core/src/keepers.ts): each listens on an endpoint of its own beside the
-# machine's, sessiond-<build>.sock (legacy-sessiond-<build>.sock for one set aside from before keepers ran side by
-# side), and the machine's endpoint sessiond.sock is a symlink naming the current one, which every new start goes to.
+# machine's, sessiond-<build>.sock, and the machine's endpoint sessiond.sock is a symlink naming the current one,
+# which every new start goes to.
 keeper_list() { as_user "$1" sh -c 'printf "{\"type\":\"list\"}\n" | socat -t1 - UNIX-CONNECT:/run/user/1000/cawco/sessiond.sock | head -n 1'; }
 # What every keeper holds, current and retiring: one listing per line, each with the endpoint it answered on. The
-# machine's endpoint is listed when it is a keeper's own socket (a legacy keeper not yet handed over, as build 1
-# runs); as a symlink it names a keeper listed by its own endpoint.
+# machine's endpoint, a symlink, names a keeper listed by its own endpoint.
 keeper_lists() {
-  as_user "$1" sh -c 'for s in /run/user/1000/cawco/sessiond.sock /run/user/1000/cawco/sessiond-*.sock /run/user/1000/cawco/legacy-sessiond-*.sock; do
-    [ -S "$s" ] && [ ! -L "$s" ] || continue
+  as_user "$1" sh -c 'for s in /run/user/1000/cawco/sessiond-*.sock; do
+    [ -S "$s" ] || continue
     printf "{\"type\":\"list\"}\n" | socat -t1 - UNIX-CONNECT:"$s" 2> /dev/null | head -n 1 | sed "s|^{|{\"endpoint\":\"$(basename "$s")\",|"
   done'
 }
@@ -764,16 +762,15 @@ children_with() { keeper_lists "$1" | jsonl "d => d.flatMap(k => k.procs).filter
 children_total() { keeper_lists "$1" | jsonl "d => d.flatMap(k => k.procs).filter(p => p.alive).length"; }
 # The endpoint of the keeper holding a live child under the id (sessiond-<build>.sock), empty when none does.
 holder_of() { keeper_lists "$1" | jsonl "d => d.find(k => k.procs.some(p => p.alive && p.procId === '$2'))?.endpoint"; }
-# The current keeper's own endpoint, as the machine's endpoint names it (empty when it is a legacy keeper's own socket).
+# The current keeper's own endpoint, as the machine's endpoint names it.
 current_endpoint() { as_user "$1" sh -c 'readlink /run/user/1000/cawco/sessiond.sock || true'; }
 # A build's keeper's endpoint and unit (keeperService: what a unit name cannot carry becomes _).
 endpoint_of() { echo "sessiond-$1.sock"; }
 unit_of() { local v=$1; echo "cawco-sessiond-${v//[^A-Za-z0-9._-]/_}.service"; }
-# The current keeper's unit: its build's own, or a legacy keeper's cawco-sessiond.service.
+# The current keeper's unit: its build's own.
 current_unit() {
   local e
   e=$(current_endpoint "$1")
-  if [[ -z $e ]]; then echo cawco-sessiond.service; return; fi
   e=${e#sessiond-}
   unit_of "${e%.sock}"
 }
@@ -871,6 +868,8 @@ has_file() { as_user "$1" test -e "/home/cawco/.local/share/cawco/binary/$2"; }
 has_version() { as_user "$1" test -d "/home/cawco/.local/share/cawco/binary/versions/$2"; }
 custody_of() { hub_api /api/agents | json "d => d.find(a => a.machineId === '$1')?.custody?.state"; }
 apply_log_count() { as_user "$hubc" sh -c "grep -c '$1' /home/cawco/.local/share/cawco/binary/apply.log || true"; }
+# The machine has an IPv6 loopback (`::1` on lo), as the installer judges before it names [::1] in the dashboard socket.
+has_ipv6_loopback() { as_user "$1" grep -q '^00000000000000000000000000000001 ' /proc/net/if_inet6; }
 # A keeper that exits before it answers did not start: the handover gives it up at its first exit, not after systemd
 # has started it again every RestartSec= while the handover waited (run-3: build 6's keeper started every 2 s from
 # 23:08:31 until the handover gave up at 23:09:16).
@@ -893,7 +892,7 @@ export -f diagnose as_user put_executable user_exec proof_runner run_script need
   child_pids children_with children_total holder_of current_endpoint endpoint_of unit_of current_unit session_running \
   start_before survived starts_said accepted_ran_once keeper_pid stop_session untouched on_exit pids_under end_children \
   end_all_sessions keeper_dropin keeper_link current_link has_file has_version custody_of apply_log_count \
-  started_at_most_twice stub_when_staged settled
+  has_ipv6_loopback started_at_most_twice stub_when_staged settled
 
 # ---------------------------------------------------------------- a rig's machines
 
@@ -960,6 +959,14 @@ install_hub() {
   as_user "$hubc" sh /shared/installer.sh
   as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
   as_user "$hubc" curl -fsS -o /dev/null http://127.0.0.1:3000/
+  # The binary's dashboard serves every address its socket names: the loopback port too, and [::1] where the
+  # machine has it (the socket names it there alone). `/` answers 307 to /session, the page with the app's markup.
+  as_user "$hubc" curl -fsS http://127.0.0.1:3455/session | grep -q _app/immutable \
+    || { echo "ASSERTION FAILED: 127.0.0.1:3455 is not the dashboard"; return 1; }
+  if has_ipv6_loopback "$hubc"; then
+    as_user "$hubc" curl -fsS -g 'http://[::1]:3455/session' | grep -q _app/immutable \
+      || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
+  fi
   [[ "$(hub_api /health | json 'd => d.build?.version')" == "$version" ]]
   [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == "versions/$version" ]]
   as_user "$hubc" sh -c 'for tool in git bun node; do if command -v $tool > /dev/null; then echo "$tool appeared"; exit 1; fi; done; echo still-none'
@@ -1000,7 +1007,7 @@ sign_in() {
   wait_until 60 '[[ "$(hub_api /api/agents | json "d => d.filter(a => a.status === \"online\").length")" == '"$#"' ]]'
 }
 # A rig's fleet: its machines booted, the hub installed from the feed named (and the joined machine joined, when the
-# rig has one), and the machines given signed in. Every rig but the legacy one installs this tree's build, BASE.
+# rig has one), and the machines given signed in. Every rig installs this tree's build, BASE.
 fleet() {
   local feed_name=$1 version=$2 roles=$3 signed=${4:-}
   use_feed "$feed_name"
@@ -1168,12 +1175,75 @@ export -f signin_state signin_sampler claude_late claude_calls auth_reads_ended_
 # ---------------------------------------------------------------- install: a pristine machine installs the hub, and
 # another joins it. A nightly whose installer cannot bring up a hub (user units, linger, sudo openssl) or whose
 # Connect a machine is broken reaches no one.
+# The relay on two computers: the joined machine's agent reaches the hub across the rig's network and serves the
+# hub's dashboard on the joined machine's own loopback (agent hub-loopback.ts); the hub's own agent, which the hub's
+# register answer names its own computer (`hostsHub`), carries nothing there, where the dashboard socket is 3455.
+loopback_carried() {
+  need_hub
+  wait_until 60 'as_user "$joinerc" curl -fsS --max-time 5 http://127.0.0.1:3455/session | grep -q _app/immutable'
+  if has_ipv6_loopback "$joinerc"; then
+    as_user "$joinerc" curl -fsS --max-time 5 -g 'http://[::1]:3455/session' | grep -q _app/immutable \
+      || { echo "ASSERTION FAILED: the joined machine's [::1]:3455 is not the hub's dashboard"; return 1; }
+  fi
+  local joined own
+  joined=$(as_user "$joinerc" sh -c 'journalctl --user --no-pager -o cat -u cawco-agent.service | grep "\[hub loopback\]" || true')
+  own=$(as_user "$hubc" sh -c 'journalctl --user --no-pager -o cat -u cawco-agent.service | grep "\[hub loopback\]" || true')
+  echo "== the joined machine's agent"; echo "$joined"
+  echo "== the hub machine's agent"; echo "$own"
+  [[ "$joined" == *"the hub at $hub_ip is served on"* ]] \
+    || { echo "ASSERTION FAILED: the joined machine's agent says nothing of serving the hub at $hub_ip"; return 1; }
+  [[ "$own" == *"the hub says this is its own computer"* && "$own" != *"is served on"* ]] \
+    || { echo "ASSERTION FAILED: the hub machine's agent does not say the hub is its own computer, or serves it"; return 1; }
+}
+export -f loopback_carried
 rig_install() {
   use_feed base
   setup "boot the machines: hub joiner" machines hub joiner
   setup_done
   check "pristine container installs the hub, and the hub answers" "install_hub $BASE"
   check "a second container joins the hub" join_machine 600 "pristine container installs the hub, and the hub answers"
+  check "the joined machine's localhost:3455 is the hub's dashboard, carried by its agent; the hub's own agent carries nothing" loopback_carried 300 "a second container joins the hub"
+}
+
+# ---------------------------------------------------------------- held3455: something else holds 127.0.0.1:3455
+# before the hub installs. The loopback socket is a unit of its own, wanted by the dashboard: it fails alone, said in
+# its journal, and the dashboard comes up on 3000 without it (systemd hands a service no descriptors from a socket
+# that did not open: src/core/service.c `service_collect_fds`). Once the port is free, the dashboard's next start opens
+# it (its `Sockets=` is a `Wants=`, which a start or restart job pulls in: src/core/transaction.c).
+held_loopback_install() {
+  local version=$1
+  as_user "$hubc" systemd-run --user --unit=cawco-proof-holder socat TCP-LISTEN:3455,bind=127.0.0.1,reuseaddr,fork SYSTEM:'echo held'
+  # The holder answers a bare line with no HTTP headers, which curl reads only with --http0.9.
+  wait_until 20 '[[ "$(as_user "$hubc" curl -s --http0.9 --max-time 2 http://127.0.0.1:3455/ || true)" == *held* ]]'
+  as_user "$hubc" sh /shared/installer.sh
+  [[ "$(hub_api /health | json 'd => d.build?.version')" == "$version" ]]
+  as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3000/session | grep -q _app/immutable \
+    || { echo "ASSERTION FAILED: the dashboard does not answer on 3000 with 3455 held"; return 1; }
+  [[ "$(as_user "$hubc" systemctl --user is-active cawco-dashboard.service || true)" == active ]] \
+    || { echo "ASSERTION FAILED: the dashboard's service is not active"; return 1; }
+  [[ "$(as_user "$hubc" systemctl --user is-active cawco-dashboard.socket || true)" == active ]] \
+    || { echo "ASSERTION FAILED: the dashboard's own socket is not active"; return 1; }
+  local state socket_log service_log
+  state=$(as_user "$hubc" systemctl --user is-active cawco-dashboard-local.socket || true)
+  socket_log=$(as_user "$hubc" sh -c 'journalctl --user --no-pager -o cat -u cawco-dashboard-local.socket || true')
+  service_log=$(as_user "$hubc" sh -c 'journalctl --user --no-pager -o cat -u cawco-dashboard.service || true')
+  echo "== cawco-dashboard-local.socket: $state"; echo "$socket_log"
+  [[ $state != active && "$socket_log" == *"Address already in use"* ]] \
+    || { echo "ASSERTION FAILED: the loopback socket's failure on the held port is not in its journal"; return 1; }
+  [[ "$service_log" == *"no dashboard-local socket was handed over"* ]] \
+    || { echo "ASSERTION FAILED: the dashboard does not say it runs without its loopback socket"; return 1; }
+  as_user "$hubc" systemctl --user stop cawco-proof-holder
+  as_user "$hubc" systemctl --user restart cawco-dashboard.service
+  wait_until 30 'as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3455/session | grep -q _app/immutable'
+  [[ "$(as_user "$hubc" systemctl --user is-active cawco-dashboard-local.socket || true)" == active ]] \
+    || { echo "ASSERTION FAILED: the loopback socket did not open on the dashboard's next start"; return 1; }
+}
+export -f held_loopback_install
+rig_held3455() {
+  use_feed base
+  setup "boot the machine: hub" machines hub
+  setup_done
+  check "with 127.0.0.1:3455 held before the install, the hub installs and the dashboard answers on 3000, the loopback socket's failure in its journal; once the port is free the dashboard's next start opens it" "held_loopback_install $BASE"
 }
 
 # ---------------------------------------------------------------- spare: installs that must stop, on a machine
@@ -1242,105 +1312,38 @@ rig_spare() {
   check "a missing signature is refused and nothing changes" "refuse nosig 'could not download'"
 }
 
-# ---------------------------------------------------------------- legacy: the fleet's own first update. Both
-# machines are installed from build 1, from before keepers ran side by side: one keeper, cawco-sessiond.service, on
-# the machine's endpoint itself, and an agent unit that requires it. Each updates to this tree's build: build 1's
-# helper applies it, and this build's agent hands the keeper over beside it.
-install_now() {
-  need_hub
-  install_now_request "$hid"
-  wait_until 300 '[[ "$(build_version $hid)" == $BASE && "$(phase $hid)" == installed ]]'
-  as_user "$hubc" curl -fsS http://127.0.0.1:3456/health | grep -q '"ok":true'
-  [[ "$(as_user "$hubc" readlink /home/cawco/.local/share/cawco/binary/current)" == "versions/$BASE" ]]
-  # Build 1's keeper, from before keepers ran side by side, is handed over to this build's, its own unit's: the
-  # machine's endpoint names it, and the legacy keeper, holding nothing, goes with its unit.
-  wait_until 180 '[[ "$(current_endpoint "$hubc")" == "$(endpoint_of $BASE)" ]]'
-  wait_until 120 'as_user "$hubc" test ! -e /home/cawco/.config/systemd/user/cawco-sessiond.service'
-  [[ "$(as_user "$hubc" sh -c 'grep -c "cawco-sessiond" ~/.config/systemd/user/cawco-agent.service || true')" == 0 ]]
-  wait_until 60 '[[ -z "$(retiring $hid)" && "$(field $hid sessiondVersion)" == $BASE ]]'
-}
-joiner_starts_held() {
-  need_hub
-  on_exit '[[ $ROW_STATUS == 0 ]] || end_children "$joinerc" joinerpre-'
-  # Its own starts, the held one and every one the loop asked for, are read here only.
-  on_exit 'end_children "$joinerc" joinerheld-1 joinerstart-'
-  rm -f "$rigdir/stop-joiner" "$rigdir/accepted-joiner.txt"
-  [[ "$(wc -l < "$rigdir/joiner-before.txt")" == 2 ]]
-  # A start asked while the joined machine still runs build 1 and its hub this build is kept by the hub, not sent:
-  # build 1's agent would launch it with no credential and stop it before its first turn. It runs once the machine
-  # has installed this build.
-  start_session "$jid" joinerheld-1 > /dev/null
-  sleep 5
-  [[ "$(hub_api /api/instances | json "d => d.find(r => r.id === 'joinerheld-1')?.status")" == starting ]]
-  [[ -z "$(child_pids "$joinerc" joinerheld-1)" ]]
-  install_now_request "$jid" > /dev/null
-  start_loop "$jid" joinerstart "$rigdir/accepted-joiner.txt" "$rigdir/stop-joiner" &
-  loop=$!
-  # The loop stops before its starts are ended, or it would start more after.
-  on_exit 'touch "$rigdir/stop-joiner"; wait "$loop"'
-  # The machine's sessions are held by its session keeper, which no update restarts: the new build's keeper starts
-  # beside it and the update is complete, installed, when the new build runs. It is not complete while installing.
-  wait_until 300 '[[ "$(build_version $jid)" == $BASE && "$(phase $jid)" == installed ]]'
-  [[ "$(field $jid installedVersion)" == $BASE ]]
-  touch "$rigdir/stop-joiner"
-  wait "$loop"
-  accepted_ran_once "$jid" "$joinerc" joinerstart "$rigdir/accepted-joiner.txt"
-  wait_until 120 "session_running joinerheld-1"
-  [[ "$(child_pids "$joinerc" joinerheld-1)" =~ ^[0-9]+$ ]]
-}
-joiner_survived() {
-  need_hub
-  on_exit '[[ $ROW_STATUS == 0 ]] || end_children "$joinerc" joinerpre-'
-  survived "$joinerc" "$rigdir/joiner-before.txt"
-}
-# Build 1's update to this build was applied by build 1's helper, which left the legacy keeper where it was while it
-# held sessions; this build's agent then handed it over to this build's keeper, beside it, with those sessions on it.
-# When they end, the legacy keeper goes with its unit, killed outright and never told to drain: a keeper of that age
-# removes the machine's endpoint, now another keeper's, when it drains.
-legacy_handed_over() {
-  need_hub
-  local id pid
-  on_exit 'end_children "$joinerc" joinerpre-'
-  wait_until 180 '[[ "$(current_endpoint "$joinerc")" == "$(endpoint_of $BASE)" ]]'
-  [[ "$(as_user "$joinerc" readlink /home/cawco/.local/share/cawco/binary/keeper)" == "versions/$BASE" ]]
-  # The legacy keeper's socket was set aside under its build; it holds the sessions that ran before the update.
-  while read -r -u 3 id pid; do
-    [[ "$(holder_of "$joinerc" "$id")" == "legacy-sessiond-$LEGACY.sock" ]]
-  done 3< "$rigdir/joiner-before.txt"
-  # Its unit no longer starts with the machine, and the agent's unit no longer requires it: the new keeper's unit,
-  # enabled, requires the agent's from its own side.
-  [[ "$(as_user "$joinerc" systemctl --user is-enabled cawco-sessiond.service)" == disabled ]]
-  [[ "$(as_user "$joinerc" sh -c 'grep -c "cawco-sessiond" ~/.config/systemd/user/cawco-agent.service || true')" == 0 ]]
-  [[ "$(as_user "$joinerc" systemctl --user is-enabled "$(unit_of $BASE)")" == enabled ]]
-  [[ "$(as_user "$joinerc" systemctl --user show -p RequiredBy --value "$(unit_of $BASE)")" == *cawco-agent.service* ]]
-  # The state says installed, on this build's keeper, with the legacy keeper handing over what it holds; nothing owed.
-  wait_until 60 '[[ "$(phase $jid)" == installed && "$(field $jid sessiondVersion)" == $BASE && "$(retiring $jid)" == *"$LEGACY:"* ]]'
-  [[ -z "$(field $jid keeperOwed)" ]]
-  echo "retiring keepers: $(retiring $jid)"
-  # The sessions end; the legacy keeper goes with its unit, never told to drain.
-  end_children "$joinerc" joinerpre-
-  wait_until 180 '[[ -z "$(retiring $jid)" ]]'
-  wait_until 60 'as_user "$joinerc" test ! -e /home/cawco/.config/systemd/user/cawco-sessiond.service'
-  [[ "$(as_user "$joinerc" sh -c 'journalctl --user --no-pager -o cat -u cawco-sessiond.service | grep -c "draining children" || true')" == 0 ]]
-}
-export -f install_now joiner_starts_held joiner_survived legacy_handed_over
-rig_legacy() {
-  fleet legacy "$LEGACY" "hub joiner" "hub joiner"
-  # Sessions running on the joined machine before its update begins, started while it and its hub both run build 1.
-  setup "start two sessions on the joined machine" start_before "$jid" "$joinerc" "$rigdir/joiner-before.txt" joinerpre-1 joinerpre-2
-  use_feed base
-  setup "the hub learns this build" learn
-  setup_done
-  check "Install now applies the newer build" install_now
-  check "a session start requested while the joined machine installs runs once afterwards, one child, none lost" joiner_starts_held 900 "Install now applies the newer build"
-  check "a session already running on the joined machine before its update is the same process afterwards, re-attached and running" joiner_survived 600 "a session start requested while the joined machine installs runs once afterwards, one child, none lost"
-  check "a keeper from before keepers ran side by side, holding sessions, is handed over at the update: they run on there, the new build's keeper is the machine's, and it goes, undrained, once they end" legacy_handed_over 600 "a session already running on the joined machine before its update is the same process afterwards, re-attached and running"
-}
-
 # ---------------------------------------------------------------- hubself: the hub's own machine updates (the hub
 # restarts itself) with a child held on its keeper and sessions asked for while it installs.
+# Before it, the machine's units are put back to what builds before the loopback dashboard wrote: the dashboard's
+# socket on its network address alone, no loopback socket unit, no `Sockets=` in the dashboard's unit, no loopback
+# port in the hub's. So the update to NEXT carries units NEXT writes otherwise, and no `cawco service install` runs
+# after it. The agent's, the hub's and the dashboard's units are kept to compare after.
+units_before_loopback() {
+  as_user "$hubc" sh -c '
+    set -e
+    u=/home/cawco/.config/systemd/user
+    systemctl --user stop cawco-dashboard.service
+    systemctl --user disable --now cawco-dashboard-local.socket || true
+    rm -f $u/cawco-dashboard-local.socket
+    sed -i "/^Sockets=/d" $u/cawco-dashboard.service
+    sed -i "/^Environment=CAWCO_LOCAL_DASHBOARD_PORT=/d" $u/cawco-hub.service
+    cp $u/cawco-agent.service /tmp/agent-before.service
+    cp $u/cawco-hub.service /tmp/hub-before.service
+    cp $u/cawco-dashboard.service /tmp/dashboard-before.service
+    cp $u/cawco-dashboard.socket /tmp/dashboard-socket-before.socket
+    systemctl --user daemon-reload
+    systemctl --user restart cawco-dashboard.socket
+    systemctl --user start cawco-dashboard.service'
+  [[ "$(as_user "$hubc" grep -c '^ListenStream=' /home/cawco/.config/systemd/user/cawco-dashboard.socket)" == 1 ]] \
+    || { echo "ASSERTION FAILED: the dashboard's socket names more than its network address"; return 1; }
+  if as_user "$hubc" curl -fsS --max-time 5 -o /dev/null http://127.0.0.1:3455/; then
+    echo "ASSERTION FAILED: localhost:3455 answers before the update, so the update proves nothing"
+    return 1
+  fi
+}
 hub_self_update() {
   need_hub
+  units_before_loopback
   spawn_child "$hubc" held
   child=$(child_pids "$hubc" boundary-held)
   keeper=$(keeper_pid "$hubc")
@@ -1379,13 +1382,55 @@ held_survives() {
   wait_until 60 '[[ "$(retiring $hid)" == *"$BASE:"* ]]'
   echo "retiring keepers: $(retiring $hid)"
 }
-export -f hub_self_update hub_starts_held held_survives
+# After the update, with no `cawco service install`: NEXT wrote the loopback socket unit (127.0.0.1:3455, and
+# [::1]:3455 where the machine has ::1) and named it in the dashboard's `Sockets=`, the dashboard's own socket is as it
+# was, localhost:3455 is the dashboard, the hub's unit gained the loopback port and nothing else, the agent's unit is
+# as it was, and the apply log says NEXT wrote them.
+units_carried() {
+  need_hub
+  local u=/home/cawco/.config/systemd/user
+  local loopback="$u/cawco-dashboard-local.socket"
+  echo "== the loopback socket after the update"
+  as_user "$hubc" cat "$loopback"
+  as_user "$hubc" grep -qx 'ListenStream=127\.0\.0\.1:3455' "$loopback" \
+    || { echo "ASSERTION FAILED: no loopback socket unit names 127.0.0.1:3455"; return 1; }
+  as_user "$hubc" grep -qx 'Service=cawco-dashboard.service' "$loopback" \
+    || { echo "ASSERTION FAILED: the loopback socket starts no dashboard"; return 1; }
+  as_user "$hubc" grep -qx 'Sockets=cawco-dashboard.socket cawco-dashboard-local.socket' "$u/cawco-dashboard.service" \
+    || { echo "ASSERTION FAILED: the dashboard's unit names no loopback socket"; return 1; }
+  as_user "$hubc" cmp /tmp/dashboard-socket-before.socket "$u/cawco-dashboard.socket" \
+    || { echo "ASSERTION FAILED: the dashboard's own socket changed though nothing in it did"; return 1; }
+  wait_until 60 'as_user "$hubc" curl -fsS --max-time 5 http://127.0.0.1:3455/session | grep -q _app/immutable'
+  # [::1]:3455 exactly where the machine has an IPv6 loopback (cli service.ts `hasIpv6Loopback`).
+  if has_ipv6_loopback "$hubc"; then
+    as_user "$hubc" grep -qx 'ListenStream=\[::1\]:3455' "$loopback" \
+      || { echo "ASSERTION FAILED: the machine has ::1, and the loopback socket names no [::1]:3455"; return 1; }
+    as_user "$hubc" curl -fsS --max-time 5 -g 'http://[::1]:3455/session' | grep -q _app/immutable \
+      || { echo "ASSERTION FAILED: [::1]:3455 is not the dashboard"; return 1; }
+  elif as_user "$hubc" grep -q '^ListenStream=\[::1\]' "$loopback"; then
+    echo "ASSERTION FAILED: the machine has no ::1, and the loopback socket names one"
+    return 1
+  fi
+  local hub_diff
+  hub_diff=$(as_user "$hubc" sh -c "diff /tmp/hub-before.service $u/cawco-hub.service || true")
+  echo "== the hub's unit, before and after"
+  echo "$hub_diff"
+  [[ "$(grep -c '^[<>]' <<< "$hub_diff")" == 1 && "$hub_diff" == *"> Environment=CAWCO_LOCAL_DASHBOARD_PORT=3455"* ]] \
+    || { echo "ASSERTION FAILED: the hub's unit changed by more than its loopback port"; return 1; }
+  as_user "$hubc" cmp /tmp/agent-before.service "$u/cawco-agent.service" \
+    || { echo "ASSERTION FAILED: the agent's unit changed though nothing in it did"; return 1; }
+  (( $(apply_log_count "units $NEXT: units: .*rewrote") >= 1 )) \
+    || { echo "ASSERTION FAILED: the apply log says nothing of $NEXT rewriting the units"; return 1; }
+  as_user "$hubc" grep "units $NEXT" /home/cawco/.local/share/cawco/binary/apply.log
+}
+export -f units_before_loopback hub_self_update hub_starts_held held_survives units_carried
 rig_hubself() {
   fleet base "$BASE" hub hub
   setup "the hub's own machine updates, with a child held and sessions asked for while it installs" hub_self_update
   setup_done
   check "a session start requested while the hub's own machine installs runs once afterwards, one child, none lost" hub_starts_held 900
   check "a child held by the session keeper survives the update on that keeper, untouched, while the new build's keeper becomes the machine's" held_survives
+  check "the update rewrites the units from the build it installs: a loopback socket unit on 127.0.0.1:3455 (and [::1]:3455 where the machine has ::1), wanted by the dashboard, and localhost:3455 answers; the dashboard's own socket and the agent's unit are untouched, the hub's unit gains its loopback port alone; no service install run" units_carried
 }
 
 # ---------------------------------------------------------------- rollbacks, each on a hub of its own

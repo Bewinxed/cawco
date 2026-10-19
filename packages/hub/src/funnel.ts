@@ -36,7 +36,8 @@
  *   once.
  */
 import { hostname, userInfo } from "node:os";
-import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { Bounded } from "@cawco/core/bounded";
+import { firstLine, type Heard, type Ran, runTailscale } from "./tailscale-cli";
 
 /** The Funnel port the relay owns: one of the three Funnel allows, and nothing else of the hub's. */
 export const FUNNEL_PORT = 10_000;
@@ -73,26 +74,6 @@ export const wordsOf = (state: FunnelState): string => {
   }
 };
 
-interface Ran {
-  code: number | null;
-  missing?: true;
-  output: string;
-  stdout: string;
-}
-
-/** What a call printed so far, kept as it comes. */
-interface Heard {
-  stderr: string;
-  stdout: string;
-}
-
-const firstLine = (text: string) =>
-  text
-    .split("\n")
-    .map((line) => line.trim())
-    .find(Boolean)
-    ?.slice(0, 300) ?? "no output";
-
 export interface FunnelDeps {
   /** The CLI's path; `tailscale` on PATH unless named. */
   readonly bin?: string;
@@ -102,47 +83,9 @@ export const createFunnel = ({ bin = "tailscale" }: FunnelDeps = {}) => {
   const host = hostname();
   const user = userInfo().username;
 
-  /**
-   * One `tailscale` call within {@link CALL_MS}. What it printed is kept in
-   * `heard` as it comes, so a call let go unanswered still says what it
-   * printed (the approval URL it waits on).
-   */
-  const run = (
-    args: string[],
-    heard: Heard = { stdout: "", stderr: "" }
-  ): Promise<Bounded<Ran>> =>
-    readWithin(CALL_MS, async (signal) => {
-      let child: Bun.Subprocess<"ignore", "pipe", "pipe">;
-      try {
-        child = Bun.spawn([bin, ...args], {
-          stdin: "ignore",
-          stdout: "pipe",
-          stderr: "pipe",
-          signal,
-        });
-      } catch {
-        return { code: null, missing: true, output: "", stdout: "" };
-      }
-      const keep = async (
-        stream: ReadableStream<Uint8Array>,
-        into: keyof Heard
-      ) => {
-        const decoder = new TextDecoder();
-        for await (const chunk of stream) {
-          heard[into] += decoder.decode(chunk, { stream: true });
-        }
-      };
-      const [, , code] = await Promise.all([
-        keep(child.stdout, "stdout"),
-        keep(child.stderr, "stderr"),
-        child.exited,
-      ]);
-      return {
-        code,
-        output: `${heard.stdout}\n${heard.stderr}`,
-        stdout: heard.stdout,
-      };
-    });
+  /** One `tailscale` call within {@link CALL_MS} (tailscale-cli.ts). */
+  const run = (args: string[], heard?: Heard): Promise<Bounded<Ran>> =>
+    runTailscale(bin, args, CALL_MS, heard);
 
   /** "<what> did not answer within N s." */
   const noAnswer = (what: string, after: number): string =>

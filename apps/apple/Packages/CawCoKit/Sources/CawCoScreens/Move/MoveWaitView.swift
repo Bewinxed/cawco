@@ -228,7 +228,7 @@ final class MoveWaitView: UIView {
         foot.distribution = compact ? .fillEqually : .fill
     }
 
-    private static let working: Set<Components.Schemas.MoveStage> = [.approval, .snapshot, .clone, .lfs, .install, .start]
+    private static let working: Set<Components.Schemas.MoveStage> = [.approval, .snapshot, .clone, .lfs, .start]
 
     private static func phase(of step: Step, in job: Job) -> Phase {
         if job.stage == .started { return .done }
@@ -261,9 +261,6 @@ final class MoveWaitView: UIView {
         }
         if step == .lfs, phase == .active, let file = job.lfsFile, (job.lfs?.files ?? 0) > 1 {
             views.append(Self.file(file))
-        }
-        if step == .install, phase == .active || phase == .failed, let command = job.install?.command {
-            views.append(Self.mono(command))
         }
         if phase == .asking, let ask = job.ask {
             views.append(card(ask))
@@ -399,7 +396,6 @@ private struct Words {
         case .snapshot: "Snapshotting your work on \(source)"
         case .clone: job.fromHub ? "Cloning from the hub" : "Fetching from \(job.sourceName)"
         case .lfs: "Downloading large files"
-        case .install: "Installing dependencies"
         case .start: "Starting the session on \(target)"
         case .unrecognized: "Moving"
         }
@@ -424,8 +420,6 @@ private struct Words {
         case .lfs:
             guard let lfs = job.lfs else { return "Large files" }
             return "Large files · \(moveSize(lfs.bytes)) · \(plural(Int(lfs.files), "file"))"
-        case .install:
-            return "Dependencies installed"
         case .start:
             guard let moved = job.moved else { return "Ready on \(target)" }
             // A branch breaks before it, never at its slashes: "cawco/move/gearbox" is one word.

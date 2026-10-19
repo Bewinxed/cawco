@@ -4,12 +4,13 @@
  * person for review, and is approved. A second task is sent back with what
  * should change, and its next attempt is given those words.
  *
- * A project with the Apple gate on and the code stages (`review` is the
- * person's): a session there files two tasks with `task_create` and starts
- * each with `task_start` (as task-approval's filer does). One task's
- * attempt commits under apps/apple: with no Mac online, its finish_item is
- * answered with the gate's sentence and it waits with wait_item, the item
- * still running and the task never failed (apple-gate's (d)). A Mac comes
+ * A project whose gate.md declares CawCo's iOS build step (`needs: apple`)
+ * and the code stages (`review` is the person's): a session there files two
+ * tasks with `task_create` and starts each with `task_start` (as
+ * task-approval's filer does). One task's attempt commits under apps/apple:
+ * with no Mac online, its finish_item is answered with the gate's sentence
+ * and it waits with wait_item, the item still running and the task never
+ * failed. A Mac comes
  * online (a second scratch machine reporting darwin-arm64, a stub build
  * script in the project), the attempt finishes again, the gate's check
  * passes on the Mac, and the task reaches review.
@@ -25,6 +26,7 @@ import {
   type Reply,
   type Seen,
 } from "../../scratch-fleet";
+import { APPLE_GATE, declareGate, NO_MAC } from "../gate";
 import type { KitFleet } from "../kit";
 import { caw } from "./j1-check-in";
 import { callsInOrder, listedAs, say } from "./mock";
@@ -48,8 +50,6 @@ const FILE_TASK = /JOURNEY-TASK (\S+) (ios|notes)/;
 const START_TASK = /JOURNEY-START (tsk-\d+)/;
 /** Only an attempt's brief opens this way (work-items.ts). */
 const ATTEMPT = /attempt at (tsk-\d+), “([^”]+)”/;
-/** How the gate answers finish_item with no Mac online (apple-gate.ts). */
-const NO_MAC = "lands only once the iOS build compiles on a Mac";
 const AGAIN = "Comments since the last attempt";
 const GATE_CHECK = "iOS build compiles";
 /** The review's actions (TaskReview.svelte): Approve → its next stage, Send back → its stage. */
@@ -101,16 +101,12 @@ async function seed(fleet: KitFleet, data: Data): Promise<Seeded> {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ path: "stages.md", content: STAGES }),
   });
-  const gate = await fetch(`${fleet.base}/api/projects/${id}`, {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ appleGate: true }),
-  });
-  if (!(stages.ok && gate.ok)) {
+  if (!stages.ok) {
     throw new Error(
-      `the project's stages and gate: ${stages.status} ${await stages.text()}; ${gate.status} ${await gate.text()}`
+      `the project's stages: ${stages.status} ${await stages.text()}`
     );
   }
+  await declareGate(fleet.base, id, APPLE_GATE);
   return { projectId: id, repo };
 }
 

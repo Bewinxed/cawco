@@ -5,6 +5,12 @@
  * through the executor every command of the workspace runs through, so it
  * sees and writes what the workspace's commands do and listens on the
  * boundary's loopback, which the preview bridge reaches (`preview-bridge.ts`).
+ * A session with no workspace of its own has its stage in a place over the
+ * folder it works in (core `isPlace`, hub `stagePlaceRef`), and the stage
+ * runs in that place's stage clone (`stage-clone.ts`): a clone of the
+ * checkout cut from its HEAD with its uncommitted changes and kept in step
+ * with it, in a boundary of its own, so the toolchain writes its own tree
+ * and never the person's.
  *
  * One stage per toolchain root of a workspace's clone (the dir of its
  * `vite.config`, `astro.config` or `nuxt.config`), found from the sheet's
@@ -38,14 +44,19 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
-import type { PreviewSource, WorkspaceRef } from "@cawco/core";
+import { type PreviewSource, sheetWords, type WorkspaceRef } from "@cawco/core";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import { hostEnvironment } from "@cawco/core/session-env";
+import { type Pid, signalGroup, spawnedPid } from "@cawco/core/signal";
 import {
   AS_PAGE,
   COMPONENTS_PATH,
-  type Found,
+  type DesignCard,
+  type DesignMap,
+  type DesignQuery,
   HEALTH_PATH,
+  REPORT_PATH,
+  type RenderReport,
   SERVE_COMMAND_LIMIT,
   type ServeSpec,
   type SheetRead,
@@ -67,11 +78,28 @@ import {
   WEIGHT_PATH,
   WRITE_PATH,
 } from "@cawco/core/stage";
-import { ensureBoundary, shellQuote } from "./boundary";
+import { isPlace, stageCloneId } from "@cawco/core/workspace-policy";
+import {
+  BUN_SCRIPT_ENV,
+  bunScriptRuntime,
+  ensureBoundary,
+  shellQuote,
+} from "./boundary";
 import { excludeFromCheckout } from "./checkout-exclude";
 import { closeBridge, reachWorkspace } from "./preview-bridge";
+import {
+  copyBack,
+  inCloneTurn,
+  installStage,
+  isStageClone,
+  MIRROR_MS,
+  sameAsCheckout,
+  stageCloneOf,
+  syncStageClone,
+} from "./stage-clone";
 import { stageHost } from "./stage-host/build";
-import { workspaceRefs } from "./workspace-records";
+import { type RenderAsk, type Rendered, renderCanvas } from "./stage-render";
+import { keepPlace, workspaceRefs } from "./workspace-records";
 
 type Framework = "svelte" | "vue" | "react" | "solid" | "preact";
 
@@ -98,7 +126,9 @@ const SERVE_LET_GO_MS = (SERVE_BEAT_S + 7) * 1000;
  * a shell that writes a blank line to its stdout every {@link SERVE_BEAT_S}
  * seconds and, once that write fails (the daemon that reads it is gone, as
  * the stage host's beat finds), ends its whole process group, the server
- * with it. Otherwise it waits on the server and ends with its status, which
+ * with it: the group the runner's launch made the command's shell lead,
+ * named by that shell's own pid (`$$`, which a subshell keeps), never by
+ * `kill 0`. Otherwise it waits on the server and ends with its status, which
  * the daemon reads as a crash. SIGPIPE is ignored only after the server
  * started, so the server keeps its own.
  */
@@ -109,7 +139,7 @@ const serveScript = (command: string): string =>
     "} &",
     "s=$!",
     "trap '' PIPE",
-    `(while sleep ${SERVE_BEAT_S}; do echo 2>/dev/null || kill -TERM 0; done) &`,
+    `(while sleep ${SERVE_BEAT_S}; do echo 2>/dev/null || { [ "$$" -gt 1 ] && kill -TERM -- "-$$"; exit; }; done) &`,
     "b=$!",
     'wait "$s"',
     "r=$?",
@@ -129,11 +159,6 @@ const TOOLCHAINS: [RegExp, StageToolchain][] = [
   [/^nuxt\.config\.[cm]?[jt]s$/, "nuxt"],
   [/^vite\.config\.[cm]?[jt]s$/, "vite"],
 ];
-const TOOLCHAIN_NAME: Record<StageToolchain, string> = {
-  vite: "Vite",
-  astro: "Astro",
-  nuxt: "Nuxt",
-};
 /**
  * The Astro major the stage starts: Astro's `dev()` is its "Programmatic
  * Astro API (experimental)", whose "API signature may change"
@@ -169,6 +194,8 @@ type Runs =
   | { readonly command: string; readonly kind: "serve" };
 
 interface Stage {
+  /** The boundary it runs in: its workspace's own, or its place's stage clone's (`stage-clone.ts`). */
+  readonly boundary: WorkspaceRef;
   child?: ChildProcess;
   /** Where it runs from the clone's root: a sheet's toolchain root, a server's `cwd`. */
   readonly dir: string;
@@ -179,6 +206,8 @@ interface Stage {
   /** The last request, viewer or agent read: its idle time counts from here. */
   lastUse: number;
   message?: string;
+  /** A place's sheet stage's mirror of its checkout into its clone, while it is live ({@link mirrorWhileLive}). */
+  mirror?: ReturnType<typeof setInterval>;
   readonly port: number;
   /** Settles once it is `live`, or rejects with why it is not. */
   ready?: Promise<void>;
@@ -193,8 +222,97 @@ interface Stage {
   stopping: boolean;
   /** Open sockets through a preview of it. */
   viewers: number;
+  /** The workspace or place the hub names it by. */
   readonly workspace: WorkspaceRef;
 }
+
+/**
+ * Where a stage's files are: the workspace or place the hub names (`ref`),
+ * the folder its paths stand in for the stage (`folder`), and the boundary
+ * the stage runs in. A workspace's are its own clone; a place's, its stage
+ * clone (`stage-clone.ts`), brought in step with its checkout as it is read.
+ */
+interface Tree {
+  readonly boundary: WorkspaceRef;
+  readonly folder: string;
+  readonly ref: WorkspaceRef;
+}
+
+const treeOf = async (workspace: WorkspaceRef): Promise<Tree> =>
+  isPlace(workspace.id)
+    ? { ref: workspace, ...(await stageCloneOf(workspace)) }
+    : { ref: workspace, folder: workspace.path, boundary: workspace };
+
+/**
+ * A place's project, the one of the toolchain root at or above `from`,
+ * installed in its stage clone by its own package manager (stage-clone.ts
+ * `installStage`) before the stage reads what is installed. A workspace's
+ * is its delegate's to install.
+ */
+const installedFor = async (tree: Tree, from: string): Promise<void> => {
+  if (!isPlace(tree.ref.id)) {
+    return;
+  }
+  const root = upFrom(from, tree.folder).find(toolchainAt);
+  if (root) {
+    await installStage(tree.ref, tree, root);
+  }
+};
+
+/**
+ * Whether a sheet stage runs in place stage clone `id` (starting, waking or
+ * serving): its retirement waits (the hub's `stageRuns` says the same, as
+ * its frames had it).
+ */
+const stageIn = (id: string): Stage | undefined =>
+  [...stages.values()].find(
+    (stage) =>
+      stage.boundary.id === id &&
+      (stage.status === "starting" ||
+        stage.status === "waking" ||
+        stage.status === "live")
+  );
+
+/**
+ * An archive or discard of workspace `request.id` (workspace.ts `close`), a
+ * place's stage clone in its clone's turn: refused while a stage runs in it,
+ * and passing over every change that stands as in its checkout
+ * (stage-clone.ts `sameAsCheckout`), so only what the checkout lacks holds
+ * it. Any other workspace's stages end first: nothing of it is left to serve.
+ */
+export const closingStages = <T>(
+  request: { id?: string; path?: string; skip?: string[] } | null,
+  close: (request: unknown) => Promise<T>
+): Promise<T> => {
+  const id = request?.id;
+  if (!(id && isStageClone(id))) {
+    stopStages(id);
+    return close(request);
+  }
+  return inCloneTurn(id, async () => {
+    const running = stageIn(id);
+    if (running) {
+      throw new Error(
+        `Workspace ${id} was not archived: ${stageWords(running)} runs in it (${running.status}), so nothing was deleted.`
+      );
+    }
+    const same = request?.path ? await sameAsCheckout(id, request.path) : [];
+    return close({ ...request, skip: [...(request?.skip ?? []), ...same] });
+  });
+};
+
+/**
+ * The workspace whose network a preview's port is in: a place's sheet stage
+ * runs in its stage clone's boundary; every other port is in the network of
+ * the workspace the source names.
+ */
+export const networkOf = (source: {
+  stage?: unknown;
+  workspace?: string;
+}): string | undefined =>
+  source.workspace !== undefined && source.stage && isPlace(source.workspace)
+    ? stageCloneId(source.workspace)
+    : source.workspace;
 
 const stages = new Map<string, Stage>();
 
@@ -205,13 +323,18 @@ export const setStageSink = (send: (frame: StageFrame) => void): void => {
   sink = send;
 };
 
-const stateOf = (stage: Stage): StageState => ({
-  status: stage.status,
-  dir: stage.dir,
-  errors: stage.errors,
-  at: new Date().toISOString(),
-  ...(stage.message ? { message: stage.message } : {}),
-});
+const stateOf = (stage: Stage): StageState => {
+  const state = {
+    status: stage.status,
+    dir: stage.dir,
+    errors: stage.errors,
+    at: new Date().toISOString(),
+    ...(stage.message ? { message: stage.message } : {}),
+  };
+  return stage.runs.kind === "sheet"
+    ? { ...state, runs: "sheet", toolchain: stage.runs.toolchain }
+    : { ...state, runs: "serve" };
+};
 
 /** The stage in words: a sheet's by its toolchain root, a preview's server by its command and port. */
 const stageWords = (stage: Stage): string =>
@@ -269,15 +392,24 @@ const namedIn = (dir: string, named: [RegExp, string][]): string | null => {
   );
 };
 
-/** The story file a sheet names, inside the clone, absolute; refused when it is no story file there. */
-const storyPath = (workspace: WorkspaceRef, file: string): string => {
-  const abs = isAbsolute(file) ? file : resolve(workspace.path, file);
-  const inside = relative(workspace.path, abs);
+/**
+ * A path a session names (from its folder, or absolute in it), as it stands
+ * in the tree the stage serves; refused when it is outside that folder.
+ */
+const inTree = (tree: Tree, path: string, what: string): string => {
+  const inside = relative(tree.ref.path, resolve(tree.ref.path, path));
   if (inside.startsWith("..") || isAbsolute(inside)) {
     throw new StageRefusal(
-      `${file} is outside this workspace's clone (${workspace.path}): a sheet is a story file of the clone.`
+      `${path} is outside ${tree.ref.path}, the folder your stage runs on: ${what}`
     );
   }
+  return join(tree.folder, inside);
+};
+
+/** The story file a sheet names, in the tree the stage serves, absolute; refused when it is no story file there. */
+const storyPath = (tree: Tree, file: string): string => {
+  const abs = inTree(tree, file, "a sheet is a story file in it.");
+  const inside = relative(tree.folder, abs);
   if (!STORY_FILE.test(abs)) {
     throw new StageRefusal(
       `${file} is no story file: a sheet is a CSF 3 file named like Card.stories.ts beside its component.`
@@ -285,7 +417,7 @@ const storyPath = (workspace: WorkspaceRef, file: string): string => {
   }
   if (!existsSync(abs)) {
     throw new StageRefusal(
-      `${inside} does not exist in this workspace's clone. Write it, then call again.`
+      `${inside} does not exist in ${tree.ref.path}. Write it, then call again.`
     );
   }
   return abs;
@@ -310,15 +442,18 @@ function notInstalled(
   top: string,
   dir: string
 ): string | null {
-  const name = TOOLCHAIN_NAME[toolchain];
+  const name = sheetWords.toolchains[toolchain];
   const version = installed(toolchain, root, top);
   if (!version) {
     return `${name} isn't installed in ${dir}: run the project's install there, then call again.`;
   }
-  const major = Number(version.split(".")[0]);
-  // The stage's error capture and HMR are Vite's Environment API, Vite 6 on.
-  if (toolchain === "vite" && !(major >= 6)) {
-    return `Live components need Vite 6 or later, whose Environment API the stage runs on; ${dir} runs Vite ${version}.`;
+  const [major, minor] = version.split(".").map(Number);
+  // The stage's error capture and HMR are Vite's Environment API, Vite 6 on;
+  // its config loads by `configLoader: "native"`, which writes nothing into
+  // node_modules (stage-host/host.ts `startVite`): "Added as exprimental in
+  // vite@6.1.0" (github.com/vitejs/vite/discussions/20162).
+  if (toolchain === "vite" && !(major > 6 || (major === 6 && minor >= 1))) {
+    return `Live components need Vite 6.1 or later, whose Environment API and native config loading the stage runs on; ${dir} runs Vite ${version}.`;
   }
   if (toolchain === "astro" && major !== ASTRO_MAJOR) {
     return `The stage starts Astro through its experimental programmatic API, read for Astro ${ASTRO_MAJOR}; ${dir} runs Astro ${version}, whose API this CawCo hasn't read.`;
@@ -335,7 +470,7 @@ function notInstalled(
  * toolchain a sheet does not run on is refused by name.
  */
 function stageFor(
-  workspace: WorkspaceRef,
+  tree: Tree,
   story: string,
   rootOnly = false
 ): Omit<
@@ -348,9 +483,10 @@ function stageFor(
   | "stopping"
   | "viewers"
 > {
+  const top = tree.folder;
   let root: string | undefined;
   let toolchain: StageToolchain | null = null;
-  for (const at of upFrom(dirname(story), workspace.path)) {
+  for (const at of upFrom(dirname(story), top)) {
     toolchain = toolchainAt(at);
     if (toolchain) {
       root = at;
@@ -365,13 +501,13 @@ function stageFor(
   }
   if (!(root && toolchain)) {
     throw new StageRefusal(
-      `No vite.config, astro.config or nuxt.config is above ${relative(workspace.path, story)}, so it has no dev toolchain a sheet runs on. ${AS_PAGE}`
+      `No vite.config, astro.config or nuxt.config is above ${relative(top, story)}, so it has no dev toolchain a sheet runs on. ${AS_PAGE}`
     );
   }
-  const dir = relative(workspace.path, root) || ".";
+  const dir = relative(top, root) || ".";
   const deps = Object.assign(
     {},
-    ...upFrom(root, workspace.path)
+    ...upFrom(root, top)
       .reverse()
       .map((at) => readJson(join(at, "package.json")))
       .flatMap((pkg) => [
@@ -389,20 +525,24 @@ function stageFor(
       `${dir}'s package.json names none of Svelte, Vue, React, Solid or Preact, the frameworks a sheet mounts. ${AS_PAGE}`
     );
   }
-  const missing = notInstalled(toolchain, root, workspace.path, dir);
+  const missing = notInstalled(toolchain, root, top, dir);
   if (missing) {
-    throw new StageRefusal(missing);
-  }
-  const bun = upFrom(root, workspace.path).some(
-    (at) =>
-      existsSync(join(at, "bun.lock")) || existsSync(join(at, "bun.lockb"))
-  );
-  const runtime = Bun.which(bun ? "bun" : "node", {
-    PATH: hostEnvironment().PATH,
-  });
-  if (!runtime) {
     throw new StageRefusal(
-      `${bun ? "bun" : "node"} isn't on this machine's PATH, and ${dir}'s lockfile asks for it, so its stage can't start.`
+      tree.folder === tree.ref.path
+        ? missing
+        : `${missing} The stage runs in a clone of your checkout, ${root}, whose dependencies install inside its own boundary by the project's own package manager.`
+    );
+  }
+  // Every stage runs on the agent's own bun, whatever the lockfile: Vite's
+  // `native` config loader imports the project's config with the stage's
+  // runtime (stage-host/host.ts `startVite`), and bun reads what Vite's
+  // default bundler does (TS enums, extensionless relative imports,
+  // `__dirname` in ESM), where node strips types only ("TypeScript enum is
+  // not supported in strip-only mode", measured on node 26).
+  const runtime = bunScriptRuntime();
+  if (!existsSync(runtime)) {
+    throw new StageRefusal(
+      `The bun every stage runs on (${runtime}) isn't on this machine, so ${dir}'s stage can't start.`
     );
   }
   const kit = "@sveltejs/kit" in deps;
@@ -410,14 +550,15 @@ function stageFor(
   // story file anywhere else would load as a 403 (the spike's LibProbe).
   if (!rootOnly && kit && relative(join(root, "src"), story).startsWith("..")) {
     throw new StageRefusal(
-      `SvelteKit serves only ${dir}/src, so a sheet sits beside its component there; ${relative(workspace.path, story)} is outside it.`
+      `SvelteKit serves only ${dir}/src, so a sheet sits beside its component there; ${relative(top, story)} is outside it.`
     );
   }
-  const key = sheetKey(workspace.id, dir);
+  const key = sheetKey(tree.ref.id, dir);
   const hash = createHash("sha256").update(key).digest().readUInt32BE(0);
   return {
     key,
-    workspace,
+    workspace: tree.ref,
+    boundary: tree.boundary,
     root,
     dir,
     runs: {
@@ -474,6 +615,7 @@ function servedFor(
   return {
     key: serveKey(workspace.id, serve.port),
     workspace,
+    boundary: workspace,
     root,
     dir: inside || ".",
     runs: { kind: "serve", command },
@@ -496,7 +638,7 @@ async function askStage<T>(
 ): Promise<Bounded<T>> {
   const reached = await reachWorkspace(
     bridgeName(stage),
-    stage.workspace.id,
+    stage.boundary.id,
     stage.port
   );
   return readWithin(waitMs, async (signal) =>
@@ -577,22 +719,29 @@ async function writeHost(stage: Stage): Promise<void> {
 
 /** Ends a stage's process group: TERM to its executor, which hands it to the command inside the boundary; KILL after {@link KILL_GRACE_MS}. */
 function kill(stage: Stage): void {
-  const pid = stage.child?.pid;
+  const leader = stage.child ? spawnedPid(stage.child) : undefined;
   stage.child = undefined;
   clearInterval(stage.health);
   stage.health = undefined;
-  if (!pid) {
+  clearInterval(stage.mirror);
+  stage.mirror = undefined;
+  // No child, or one whose spawn made no process: nothing to signal.
+  if (leader === undefined) {
     return;
   }
-  const signal = (name: NodeJS.Signals) => {
-    try {
-      process.kill(-pid, name);
-    } catch {
-      // Gone already.
-    }
-  };
-  signal("SIGTERM");
-  setTimeout(() => signal("SIGKILL"), KILL_GRACE_MS).unref();
+  signalGroup(leader, "SIGTERM");
+  setTimeout(() => killLeft(stage, leader), KILL_GRACE_MS).unref();
+}
+
+/** The KILL after a stopped stage's grace, to whatever of its group is left; a refusal is said, and nothing is sent. */
+function killLeft(stage: Stage, leader: Pid): void {
+  try {
+    signalGroup(leader, "SIGKILL");
+  } catch (error) {
+    console.warn(
+      `[stage] ${stage.workspace.id} ${stage.root}: what is left of its group was not killed: ${error instanceof Error ? error.message : String(error)}`
+    );
+  }
 }
 
 /** The stage ended, or stopped answering, on its own: started again after its wait, or in `error` once its restarts are spent. */
@@ -647,6 +796,16 @@ const healthy = (stage: Stage, waitMs: number): Promise<Bounded<boolean>> =>
     stage.runs.kind === "serve" ? { redirect: "manual" } : {}
   ).catch(() => ({ kind: "answered", value: false }) as const);
 
+/**
+ * How long a stage runs with no viewer and no use before it sleeps: core's
+ * {@link STAGE_IDLE_MS}, unless a probe's scratch fleet names a shorter one
+ * in `CAWCO_STAGE_IDLE_MS` (session-sheet watches a stage clone retire once
+ * its stage sleeps). Read once, as the daemon starts.
+ */
+const IDLE_MS = process.env.CAWCO_STAGE_IDLE_MS
+  ? Number(process.env.CAWCO_STAGE_IDLE_MS)
+  : STAGE_IDLE_MS;
+
 /** Its health look and its sleep, every {@link STAGE_HEALTH_MS} while it is live. */
 function watch(stage: Stage): void {
   clearInterval(stage.health);
@@ -654,7 +813,7 @@ function watch(stage: Stage): void {
     if (stage.status !== "live") {
       return;
     }
-    if (stage.viewers === 0 && Date.now() - stage.lastUse > STAGE_IDLE_MS) {
+    if (stage.viewers === 0 && Date.now() - stage.lastUse > IDLE_MS) {
       sleep(stage);
       return;
     }
@@ -712,12 +871,42 @@ const hostWord = (line: string): HostWord | null => {
   }
 };
 
-/** It serves: `live`, its health look started, the hub told. */
+/**
+ * A place's sheet stage, while it is live: its clone brought in step with
+ * its checkout every {@link MIRROR_MS} (stage-clone.ts `syncStageClone`), so
+ * the session's edits reach the stage's watcher and an open sheet redraws.
+ * One mirror at a time; one that fails is logged, and the next tries again.
+ */
+function mirrorWhileLive(stage: Stage): void {
+  clearInterval(stage.mirror);
+  if (!(stage.runs.kind === "sheet" && isPlace(stage.workspace.id))) {
+    return;
+  }
+  let busy = false;
+  stage.mirror = setInterval(() => {
+    if (busy || stage.status !== "live") {
+      return;
+    }
+    busy = true;
+    syncStageClone(stage.workspace)
+      .catch((error: unknown) =>
+        console.warn(
+          `[stage] ${stage.key}: its clone did not follow ${stage.workspace.path}: ${error instanceof Error ? error.message : String(error)}`
+        )
+      )
+      .finally(() => {
+        busy = false;
+      });
+  }, MIRROR_MS);
+}
+
+/** It serves: `live`, its health look and its mirror started, the hub told. */
 const up = (stage: Stage) => {
   stage.status = "live";
   stage.message = undefined;
   stage.lastUse = Date.now();
   watch(stage);
+  mirrorWhileLive(stage);
   tell(stage);
 };
 
@@ -740,6 +929,7 @@ const commandOf = (stage: Stage): [string, Record<string, string>] =>
     ? [
         `exec ${shellQuote(stage.runs.runtime)} ${HOST_FILE}`,
         {
+          ...BUN_SCRIPT_ENV,
           CAWCO_STAGE: "1",
           CAWCO_STAGE_PORT: String(stage.port),
           CAWCO_STAGE_FRAMEWORK: stage.runs.framework,
@@ -813,6 +1003,13 @@ const servesBy = async (
 async function start(stage: Stage): Promise<void> {
   stage.stopping = false;
   if (stage.runs.kind === "sheet") {
+    // A place's stage starts on its checkout as it is now, installed: one
+    // woken after its sleep has missed every edit since, and its clone may
+    // have retired meanwhile (stage-clone.ts), which this cuts again.
+    if (isPlace(stage.workspace.id)) {
+      const clone = await stageCloneOf(stage.workspace);
+      await installStage(stage.workspace, clone, stage.root);
+    }
     await writeHost(stage);
   } else if (!(await letGo(stage, SERVE_LET_GO_MS))) {
     refusedStart(
@@ -820,7 +1017,7 @@ async function start(stage: Stage): Promise<void> {
       `port ${stage.port} in this workspace already answers, so something else serves it and \`${stage.runs.command}\` wasn't started. Stop that server, or serve on another port.`
     );
   }
-  const boundary = await ensureBoundary(stage.workspace);
+  const boundary = await ensureBoundary(stage.boundary);
   const [command, env] = commandOf(stage);
   const child = spawn(boundary.exec, [command], {
     cwd: stage.root,
@@ -919,7 +1116,7 @@ async function start(stage: Stage): Promise<void> {
     case "answered":
       return;
     case "unanswered": {
-      const why = `${stage.runs.kind === "sheet" ? TOOLCHAIN_NAME[stage.runs.toolchain] : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`;
+      const why = `${stage.runs.kind === "sheet" ? sheetWords.toolchains[stage.runs.toolchain] : `port ${stage.port}`} didn't answer within ${STAGE_READY_MS / 1000}s`;
       crashed(stage, why);
       throw new Error(why);
     }
@@ -937,6 +1134,9 @@ async function stageAtRoot(
 ): Promise<Stage> {
   let stage = stages.get(found.key);
   if (!stage) {
+    if (isPlace(found.workspace.id)) {
+      await keepPlace(found.workspace);
+    }
     stage = {
       ...found,
       status: "starting",
@@ -962,12 +1162,17 @@ async function stageAtRoot(
  */
 export async function ensureStage(
   workspace: WorkspaceRef,
-  file: string
+  file: string,
+  /** Every states file of the canvas (from the clone's root), whose report is read; omitted, `file` alone. */
+  files: string[] = [file]
 ): Promise<StageOpened> {
-  const story = storyPath(workspace, file);
-  const stage = await stageAtRoot(stageFor(workspace, story), "a sheet's read");
+  const tree = await treeOf(workspace);
+  const story = storyPath(tree, file);
+  await installedFor(tree, dirname(story));
+  const stage = await stageAtRoot(stageFor(tree, story), "a sheet's read");
   const rel = relative(stage.root, story);
-  const [sheet, weight] = await Promise.all([
+  const all = files.map((one) => relative(stage.root, storyPath(tree, one)));
+  const [sheet, weight, report] = await Promise.all([
     answerOf<SheetRead>(
       stage,
       `${STORIES_PATH}?file=${encodeURIComponent(rel)}`,
@@ -975,6 +1180,12 @@ export async function ensureStage(
       `read ${rel}'s stories`
     ),
     sheetWeight(stage, rel),
+    answerOf<RenderReport>(
+      stage,
+      `${REPORT_PATH}?${all.map((one) => `file=${encodeURIComponent(one)}`).join("&")}`,
+      READ_WAIT_MS,
+      "read what a browser drew"
+    ),
   ]);
   return {
     port: stage.port,
@@ -983,6 +1194,7 @@ export async function ensureStage(
     state: stateOf(stage),
     sheet,
     weight,
+    report,
   };
 }
 
@@ -1004,23 +1216,67 @@ async function sheetWeight(
  * A write to a sheet's story file (core `SheetWrite`, `file` from the
  * clone's root), made by its stage inside the workspace's boundary: the
  * lines it changed and the sheet as it reads after. The stage's watcher
- * sees the file change, and every page of the sheet redraws.
+ * sees the file change, and every page of the sheet redraws. A place's
+ * stage writes its clone, and the file is copied to the place's checkout in
+ * the same turn as its mirror (stage-clone.ts `copyBack`): the session reads
+ * the story file as the sheet shows it, and no mirror undoes the write.
  */
 export async function writeSheet(
   workspace: WorkspaceRef,
   write: SheetWrite
 ): Promise<SheetWritten> {
-  const story = storyPath(workspace, write.file);
-  const stage = await stageAtRoot(stageFor(workspace, story), "a write");
+  const tree = await treeOf(workspace);
+  const story = storyPath(tree, write.file);
+  await installedFor(tree, dirname(story));
+  const stage = await stageAtRoot(stageFor(tree, story), "a write");
   const rel = relative(stage.root, story);
-  const done = await answerOf<SheetWritten>(
-    stage,
-    WRITE_PATH,
-    READ_WAIT_MS,
-    `write ${rel}`,
-    { ...write, file: rel }
-  );
+  const written = () =>
+    answerOf<SheetWritten>(stage, WRITE_PATH, READ_WAIT_MS, `write ${rel}`, {
+      ...write,
+      file: rel,
+    });
+  const done = isPlace(workspace.id)
+    ? await inCloneTurn(tree.boundary.id, async () => {
+        const made = await written();
+        await copyBack(workspace, tree, join(stage.root, made.file));
+        return made;
+      })
+    : await written();
   return { ...done, file: join(stage.dir, done.file) };
+}
+
+/**
+ * A canvas of `ask.files` (each from the clone's root) drawn by the daemon in
+ * the machine's own Chromium on its workspace's stage (stage-render.ts),
+ * started or woken first: the stage's report once every section has drawn,
+ * a picture when asked. A use of the stage. Every file must stand on one
+ * toolchain root, the one stage a canvas page is served from.
+ */
+export async function renderStage(
+  workspace: WorkspaceRef,
+  ask: RenderAsk
+): Promise<Rendered> {
+  const tree = await treeOf(workspace);
+  const stories = ask.files.map((file) => storyPath(tree, file));
+  const stage = await stageAtRoot(
+    stageFor(tree, stories[0] as string),
+    "a render"
+  );
+  const files = stories.map((story) => relative(stage.root, story));
+  const outside = files.find((file) => file.startsWith(".."));
+  if (outside) {
+    throw new StageRefusal(
+      `${outside} is under another toolchain root than ${stage.dir}: a canvas's states files stand on one stage.`
+    );
+  }
+  const reached = await reachWorkspace(
+    bridgeName(stage),
+    stage.boundary.id,
+    stage.port
+  );
+  const rendered = await renderCanvas(reached, stage.port, { ...ask, files });
+  used(stage, "a render");
+  return rendered;
 }
 
 /**
@@ -1031,38 +1287,79 @@ export async function writeSheet(
  */
 export async function stageComponents(
   workspace: WorkspaceRef,
-  dir = "."
-): Promise<{ components: Found[]; dir: string }> {
-  const abs = resolve(workspace.path, dir);
-  if (relative(workspace.path, abs).startsWith("..")) {
-    throw new StageRefusal(`${dir} is outside this workspace's clone.`);
-  }
-  const root = upFrom(abs, workspace.path).find(toolchainAt);
-  if (!root) {
-    const found = rootsUnder(workspace.path);
+  ask: DesignQuery = {}
+): Promise<DesignMap> {
+  const dir = ask.dir ?? ".";
+  const tree = await treeOf(workspace);
+  const abs = inTree(tree, dir, "name a folder in it.");
+  if (!statSync(abs, { throwIfNoEntry: false })?.isDirectory()) {
     throw new StageRefusal(
-      found.length > 0
-        ? `${dir} is under no Vite, Astro or Nuxt root; this clone's are ${found.join(", ")}: name one as dir.`
-        : `This clone has no vite.config, astro.config or nuxt.config, so it has no components a sheet shows. ${AS_PAGE}`
+      `${dir} is no folder in ${workspace.path}: name one, from your folder's root.`
     );
   }
+  const root = upFrom(abs, tree.folder).find(toolchainAt);
+  if (!root) {
+    const found = rootsUnder(tree.folder);
+    throw new StageRefusal(
+      found.length > 0
+        ? `${dir} is under no Vite, Astro or Nuxt root; ${workspace.path}'s are ${found.join(", ")}: name one as dir.`
+        : `${workspace.path} has no vite.config, astro.config or nuxt.config, so it has no components a sheet shows. ${AS_PAGE}`
+    );
+  }
+  await installedFor(tree, root);
   // The stage is found from a file of the root: a file in it stands in for a story.
   const stage = await stageAtRoot(
-    stageFor(workspace, join(root, "package.json"), true),
+    stageFor(tree, join(root, "package.json"), true),
     "a components list"
   );
-  const { components } = await answerOf<{ components: Found[] }>(
+  // The map's folder from the toolchain root; the clone's root itself is the root's source folder.
+  const inRoot = ask.dir ? relative(root, abs) : "";
+  const query = new URLSearchParams();
+  for (const [key, value] of Object.entries({
+    dir: inRoot,
+    query: ask.query,
+    component: ask.component
+      ? relative(
+          root,
+          inTree(tree, ask.component, "name a component file in it.")
+        )
+      : undefined,
+    cursor: ask.cursor,
+    limit: ask.limit === undefined ? undefined : String(ask.limit),
+    detailed: ask.detailed ? "1" : undefined,
+  })) {
+    if (value) {
+      query.set(key, value);
+    }
+  }
+  const map = await answerOf<DesignMap>(
     stage,
-    COMPONENTS_PATH,
+    `${COMPONENTS_PATH}?${query}`,
     READ_WAIT_MS * 4,
-    "list its components"
+    "map its components"
   );
+  // Every file from the clone's root, as the session names them.
+  const fromClone = (file: string) => join(stage.dir, file);
+  const links = (value: DesignCard["usedIn"]) =>
+    Array.isArray(value)
+      ? value.map((one) => ({
+          ...one,
+          file: fromClone(one.file),
+          at: one.at && fromClone(one.at),
+        }))
+      : value;
   return {
-    dir: stage.dir,
-    components: components.map((one) => ({
-      ...one,
-      file: join(stage.dir, one.file),
-      sheets: one.sheets.map((sheet) => join(stage.dir, sheet)),
+    ...map,
+    root: stage.dir,
+    dir: fromClone(map.dir),
+    components: map.components.map((card) => ({
+      ...card,
+      file: fromClone(card.file),
+      usedIn: links(card.usedIn),
+      madeOf: links(card.madeOf),
+      ...(card.statesFiles
+        ? { statesFiles: card.statesFiles.map(fromClone) }
+        : {}),
     })),
   };
 }
@@ -1110,11 +1407,22 @@ const used = (stage: Stage, by: string): void => {
   stage.lastUse = Date.now();
 };
 
-/** Starts a stage that is not live (`waking` after sleep), or waits on its start under way; rejects with why it is in `error`. */
-async function wake(stage: Stage, by: string): Promise<void> {
+/**
+ * Starts a stage that is not live (`waking` after sleep), or waits on its
+ * start under way; rejects with why it is in `error`. One in `error` starts
+ * again only when `restart` (a person's load of its page, an agent's use);
+ * otherwise the refusal stands, so a page's background request never undoes
+ * the "didn't start" its pane shows.
+ */
+async function wake(stage: Stage, by: string, restart = true): Promise<void> {
   used(stage, by);
   if (stage.status === "live") {
     return;
+  }
+  if (stage.status === "error" && !restart) {
+    throw new StageRefusal(
+      `${stageWords(stage)} didn't start: ${stage.message ?? "it ended."}`
+    );
   }
   if (!stage.ready || stage.status === "error" || stage.status === "asleep") {
     stage.status = stage.slept ? "waking" : "starting";
@@ -1129,7 +1437,7 @@ async function wake(stage: Stage, by: string): Promise<void> {
     await stage.ready;
   } catch (error) {
     throw new StageRefusal(
-      `${stageWords(stage)} didn't start:${stage.message ?? (error instanceof Error ? error.message : String(error))}`,
+      `${stageWords(stage)} didn't start: ${stage.message ?? (error instanceof Error ? error.message : String(error))}`,
       { cause: error }
     );
   }
@@ -1195,18 +1503,22 @@ const keyOf = (source: PreviewSource): string | null => {
 /**
  * A preview's request for a stage's page: the stage woken when it sleeps,
  * and waited on, so a page opened after its stage slept or failed (Try
- * again) loads once it is live. A stage this daemon does not know (it
+ * again) loads once it is live. One in `error` starts again only for a
+ * page's own load (`navigation`). A stage this daemon does not know (it
  * restarted since) is found again from the source: the sheet's own file, or
  * the server's command. Nothing for a source no stage serves.
  */
-export async function wakeSource(source: PreviewSource): Promise<void> {
+export async function wakeSource(
+  source: PreviewSource,
+  navigation: boolean
+): Promise<void> {
   const key = keyOf(source);
   if (!(key && "port" in source && source.workspace)) {
     return;
   }
   const known = stages.get(key);
   if (known) {
-    await wake(known, "a preview's request");
+    await wake(known, "a preview's request", navigation);
     return;
   }
   const { workspace } = source;

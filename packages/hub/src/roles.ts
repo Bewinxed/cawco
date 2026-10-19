@@ -14,7 +14,8 @@
  *   of its project's tasks, folder and its own task's to-dos; changes to tasks and
  *   fleet settings go to its parent through handoff.
  * - **lead**: a project's Caw. Board tools only: tasks and to-dos, threads,
- *   drafting views, its project's folder on the hub and decision pages in it,
+ *   drafting views, its project's folder on the hub and decision pages in it
+ *   with their graph,
  *   its routines, its ingress and relays (opening a relay asks you),
  *   proposing approved actions, its own project's settings and memory
  *   (applied at once, or asked about first: project-settings.ts, memory.ts),
@@ -76,8 +77,8 @@ const TASK_WRITE = [
 ] as const;
 
 /**
- * Caw's own: a project's conversations with it, the views it drafts, and its
- * folder on the hub (caw.ts).
+ * Caw's own: a project's conversations with it, the views it drafts, and
+ * its folder on the hub (caw.ts).
  */
 export const CAW_TOOLS = [
   "thread_read",
@@ -163,6 +164,7 @@ const DELEGATE_SESSION = [
   "stop_delegate",
   "interrupt_delegate",
   "answer_delegate",
+  "discard_workspace",
   "show_image",
   ...ARTIFACT_TOOLS,
 ] as const;
@@ -179,6 +181,8 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     // An attempt at a task hands in its result (task-tools.ts).
     "task_result",
     "memory_note",
+    // What its project's past sessions said (session-prose.ts).
+    "memory_recall",
     // Its own project's folder, read only (caw.ts): what an earlier delegate
     // handed in, from any machine.
     "folder_read",
@@ -195,7 +199,8 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     ...CAW_TOOLS,
     "memory_note",
     "memory_propose",
-    // Decision pages: Caw builds them from his folder's decisions/<name>/page.html.
+    "memory_recall",
+    // Decision pages: Caw builds them from his folder's decisions/<name>/page.oui.
     ...ARTIFACT_TOOLS,
     ...ROUTINE,
     ...LEAD_OWN,
@@ -209,6 +214,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
     "stop_delegate",
     "interrupt_delegate",
     "answer_delegate",
+    "discard_workspace",
   ]),
   overseer: new Set([...TRIAGE_TOOLS, "task_read", "list_sessions"]),
   "web-facing": new Set([

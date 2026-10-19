@@ -141,6 +141,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         panes.onOpenProject = { [weak self] projectId in self?.go(.project(projectId)) }
         panes.onCheckMachines = { [weak self] source in self?.openMachines(from: source) }
         panes.onRetarget = { [weak self] from, to in self?.workspace.retarget(from, to: to) }
+        // An artifact's own tab learned its name: the strips draw it.
+        panes.onNamed = { [weak self] _ in self?.workspaceController.requestRefresh() }
         // The details' "N MCP" leads to the fleet's MCP configuration (`/config/mcp`).
         panes.onOpenMcp = { [weak self] in
             self?.dialogPresenter.dismiss(animated: true)
@@ -667,6 +669,14 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
                 line += " firstTab=\(box(tab.convert(tab.bounds, to: window)))"
             }
             line += " transcriptTop=\(top) gap=\(top - glass.maxY) label=\(caw.accessibilityLabel ?? "")"
+        }
+        // The phone's board bar: its cluster, his glass and Caw against the window's width.
+        if compact, compactNav.topViewController !== workspaceController, let window = compactCluster.window {
+            let box = { (v: UIView) -> String in
+                let r = v.convert(v.bounds, to: window)
+                return "\(r.minX),\(r.minY),\(r.width)x\(r.height)"
+            }
+            line += " boardBar cluster=\(box(compactCluster)) glass=\(box(compactCluster.glass)) caw=\(box(compactCluster.caw)) window=\(window.bounds.width) safeRight=\(window.safeAreaInsets.right)"
         }
         let probe = Logger(subsystem: "dev.cawco.app", category: "Probe")
         probe.notice("\(line, privacy: .public)")
@@ -1345,7 +1355,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     /// thread, else a new one, so what is said there reaches the thread the
     /// web shows.
     static func tabId(_ id: String, hub: HubConnection) -> String {
-        guard let row = hub.fleet.byId[id], row.role == .lead, let projectId = row.projectId else { return id }
+        guard let row = hub.fleet.byId[id]?.session, row.role == .lead, let projectId = row.projectId else { return id }
         return hub.threads.of(projectId).first.map { ThreadTabs.tabId($0.id) } ?? ThreadTabs.newTabId(projectId)
     }
 
@@ -1383,7 +1393,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         case let .run(run): openSession(run.rowId)
         case let .watch(notice): openSession(notice.instanceId)
         // Answered on its row; it opens nothing.
-        case .choice: break
+        case .choice, .tailnet: break
         }
     }
 
@@ -1763,9 +1773,15 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         case let .press(source): (instant, trigger) = (false, source)
         }
         if let open = jumpCard, open.open {
+            #if DEBUG
+            PreviewProbe.say("shell jump close")
+            #endif
             if instant { open.leaveByKey() } else { open.close() }
             return
         }
+        #if DEBUG
+        PreviewProbe.say("shell jump open")
+        #endif
         // One still fading out of the card, or folding back, comes back from where it has reached.
         let card = jumpCard ?? {
             let made = JumpCard(hub: hub, home: home)
@@ -1798,6 +1814,9 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     func perform(_ command: RootViewController.ShellCommand) {
         // ⌘K closes Jump at once, its own field typing or not.
         if command == .jump, let card = jumpCard, card.open {
+            #if DEBUG
+            PreviewProbe.say("shell jump close")
+            #endif
             card.leaveByKey()
             return
         }

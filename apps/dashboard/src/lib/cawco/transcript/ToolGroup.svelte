@@ -9,6 +9,7 @@
     resultField,
   } from "@cawco/core/tool-presentation";
   import { getContext, untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { SvelteMap, SvelteSet } from "svelte/reactivity";
   import { showArtifact } from "#lib/cawco/artifact-api.js";
   import { cawco, revealPreview } from "#lib/cawco/client.svelte.js";
@@ -50,6 +51,7 @@
    * as Prompt.svelte's permission fields, so the two surfaces read as one
    * idea.
    */
+  import PageThumb from "../preview/PageThumb.svelte";
   import type { Message } from "../types";
   import { useLedger } from "./arrivals.svelte";
   import DocThumb from "./DocThumb.svelte";
@@ -281,6 +283,35 @@
   ): boolean {
     return !!wanted && preview?.artifact?.id === wanted.id;
   }
+
+  /**
+   * The card on screen asks for its page's thumbnail, once per revision
+   * (PreviewPane takes it): a card nobody scrolls to, or one in a tab off
+   * screen, never costs the page a capture. A new revision watches it again,
+   * and the observer's first report asks again.
+   */
+  const wantsThumbnail =
+    (
+      record: () => (typeof cawco.previews)[string] | undefined
+    ): Attachment<HTMLElement> =>
+    (node) => {
+      const revision = record()?.revision;
+      if (!revision) {
+        return;
+      }
+      const watch = new IntersectionObserver((entries) => {
+        const preview = untrack(record);
+        if (
+          entries.some((entry) => entry.isIntersecting) &&
+          preview?.revision === revision &&
+          preview.thumbnailRevision !== revision
+        ) {
+          preview.thumbnailWanted = true;
+        }
+      });
+      watch.observe(node);
+      return () => watch.disconnect();
+    };
 </script>
 
 <div data-slot="tools" data-tool-group-rail-row class="tools rail-row">
@@ -393,6 +424,7 @@
               data-artifact={called?.id}
               data-share="preview:{m.instanceId}"
               data-share-ttl="10000"
+              {@attach wantsThumbnail(() => preview)}
             >
               <button
                 aria-busy={busy || undefined}
@@ -428,13 +460,7 @@
                 >
               </button>
               {#if preview?.thumbnail}
-                <div aria-hidden="true" class="artifact-thumb" inert>
-                  <Shot
-                    alt="Preview"
-                    size="thumb"
-                    src={`data:image/png;base64,${preview.thumbnail}`}
-                  />
-                </div>
+                <PageThumb thumbnail={preview.thumbnail} />
               {/if}
             </div>
             {#if openFailed.has(callId(m))}
@@ -624,7 +650,7 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
 
-    &:not(:has(.artifact-thumb)) {
+    &:not(:has(:global(.page-thumb))) {
       inline-size: fit-content;
     }
     @media (hover: hover) {
@@ -708,26 +734,6 @@
     & :global(svg) {
       inline-size: 12px;
       block-size: 12px;
-    }
-  }
-  .artifact-thumb {
-    inline-size: 90px;
-    block-size: 64px;
-    flex-shrink: 0;
-    overflow: hidden;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-
-    & :global(.box) {
-      block-size: 64px;
-      min-block-size: 0;
-    }
-    & :global(img) {
-      inline-size: 100%;
-      block-size: 64px;
-      object-fit: cover;
-      object-position: top;
     }
   }
   .shots {

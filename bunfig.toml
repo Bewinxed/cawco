@@ -1,0 +1,24 @@
+# The isolated linker's shared fallback directory, node_modules/.bun/node_modules,
+# lets an undeclared import reach whichever copy the last install task wrote
+# (oven-sh/bun#40355). svelte-eslint-parser declares no typescript and loads the
+# newest it can reach, which there is the API-less TS 7. Without the directory an
+# undeclared import fails, and TS 6 at the root is the only typescript reachable.
+# https://bun.com/docs/pm/isolated-installs
+#
+# A store package's own undeclared import is declared in the root package.json,
+# the one node_modules above the store, until bun ships packageExtensions
+# (oven-sh/bun#40053): bits-ui for vaul-svelte (huntabyte/vaul-svelte#130), and
+# drizzle-orm for drizzle-kit, whose `generate` imports drizzle-orm/version and
+# declares no dependency on it (packages/hub `db:generate`).
+# Inside a CawCo workspace bun's global store is on (its workspace bunfig), and
+# a package there realpaths into the cache, with no node_modules of ours above
+# it. So the dashboard resolves bits-ui from its own root whatever imports it:
+# vite.config.ts `resolve.dedupe`, and tsconfig.json `paths` for its types.
+# Bun's bundles do the same for react, which tunnel-rat imports undeclared
+# (pmndrs/tunnel-rat#24): core agent-react.ts resolves it from the agent package
+# in every Bun.build, so the root declares no react.
+[install]
+hoist = false
+# drizzle-kit loads drizzle-orm with a bare import() from its store dir; the root link
+# makes it reachable (drizzle-team/drizzle-orm#6156, open, no release fixes it).
+publicHoistPattern = ["drizzle-orm"]

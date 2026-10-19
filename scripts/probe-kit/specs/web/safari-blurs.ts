@@ -35,6 +35,7 @@ import { seedDecisions } from "../../../decisions-preview/seed";
 import { MACHINE, type Reply, type Seen, until } from "../../../scratch-fleet";
 import { answering, settled } from "../../answering";
 import {
+  COMPOSER_FIELD,
   type Kit,
   type KitFleet,
   open,
@@ -51,8 +52,8 @@ const QUESTION = "PROBE-QUESTION";
  * transition, drawn in software at 3x, took up to 906ms.
  */
 const ANSWERS_MS = 3000;
-/** The composer's field; its sizing mirror is a second textarea, hidden. */
-const FIELD = "textarea[role='combobox']:not([aria-hidden])";
+/** The composer's field (MentionField, a contenteditable combobox). */
+const FIELD = COMPOSER_FIELD;
 
 /** A turn that runs for a while; a question; every other one, a word. */
 const respond = (request: Seen): Reply => {
@@ -152,9 +153,7 @@ async function recallWheel(kit: Kit, bench: string) {
       await page.keyboard.press("Enter");
       await page.waitForTimeout(800);
       const taken = await page.evaluate(
-        (sel) =>
-          (document.querySelector(sel) as HTMLTextAreaElement | null)?.value ??
-          "",
+        (sel) => document.querySelector(sel)?.textContent?.trim() ?? "",
         FIELD
       );
       return {

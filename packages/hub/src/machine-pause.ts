@@ -43,6 +43,12 @@ export const PAUSE_ORIGIN = "machine-pause";
 /** How a caller has the hub run a command on a machine (server.ts `runOnMachine`). */
 export interface CommandOptions {
   /**
+   * The run is a step of a work item's landing gate, in these words: its
+   * machine runs it so (core `CommandRun.gate`), and a heavy run it starts
+   * there takes the next free slot before any other run.
+   */
+  readonly gate?: string;
+  /**
    * A run a pause cancels answers `cancelled`, for its caller to run again
    * where it chooses (the Apple build gate moves to a Mac not paused),
    * rather than waiting the pause out and running again where it was.
@@ -62,6 +68,14 @@ export interface CommandOptions {
    * paused until 00:57"); null once it waits no more.
    */
   readonly onWait?: (words: string | null) => void;
+  /**
+   * Its owner ended (a work item stopped while it landed): a run not started
+   * never starts, one waiting out a pause stops waiting, and one running is
+   * cancelled on its machine through the runner that started it
+   * (`CONTROL_CANCEL_COMMAND`, which ends its process group). Each throws
+   * {@link CommandStopped}.
+   */
+  readonly stop?: AbortSignal;
   /** What it is, as a pause that stops it counts it; a plain command when not said. */
   readonly what?: RunKind;
 }
@@ -72,6 +86,31 @@ export interface CommandOptions {
  * "Omars-MacBook-Pro is paused until 00:57").
  */
 export class WouldWait extends Error {}
+
+/**
+ * A run whose owner ended it ({@link CommandOptions.stop}): it was cancelled
+ * on its machine, or never started.
+ */
+export class CommandStopped extends Error {}
+
+/** Throws {@link CommandStopped} for `cmd` once its owner ended it (`how.stop`). */
+export const throwIfStopped = (how: CommandOptions, cmd: string): void => {
+  if (how.stop?.aborted) {
+    throw new CommandStopped(
+      `the ${how.what ?? "command"} was stopped with its owner: \`${cmd.slice(0, 120)}\``
+    );
+  }
+};
+
+/** Settles once `stop` is aborted; never when there is none. */
+export const whenStopped = (stop: AbortSignal | undefined): Promise<void> =>
+  new Promise((resolve) => {
+    if (stop?.aborted) {
+      resolve();
+      return;
+    }
+    stop?.addEventListener("abort", () => resolve(), { once: true });
+  });
 
 /** The longest a single timer is armed for; a later end is armed again from there. */
 const TIMER_MAX_MS = 24 * 60 * 60 * 1000;

@@ -69,6 +69,7 @@ import {
   Workflow,
   WorkflowEngine,
 } from "effect/workflow";
+import type { HubLifetimeShape } from "../lifetime";
 
 /** What a `w.*` call came back with, as the program is handed it. */
 export type Outcome = { result: unknown } | { failure: WorkflowFailure };
@@ -159,8 +160,6 @@ export interface WorkflowEngineHandle {
   ) => Promise<void>;
   /** Ends a run's execution: its live driver stops, a suspended one ends. */
   readonly interrupt: (runId: string) => Promise<void>;
-  /** Settles when the engine is up; rejects with why it could not start. */
-  readonly ready: Promise<void>;
   /**
    * What a run's call at `seq` recorded in the engine: the hash of the call,
    * and its outcome when the call was answered at once (an immediate call, a
@@ -180,6 +179,12 @@ export interface WorkflowEngineHandle {
   ) => Promise<void>;
   /** Starts a top-level run's execution; a no-op for one already started. */
   readonly start: (runId: string) => Promise<void>;
+  /**
+   * Starts the engine the first time anything needs it, and settles when it
+   * is up; rejects with why it could not start, or because the hub has closed.
+   * Every other call here goes through it.
+   */
+  readonly up: () => Promise<void>;
 }
 
 /** How a run ended, when it did not end with a result. */
@@ -839,13 +844,22 @@ const CryptoLive = Layer.succeed(Crypto.Crypto)(
 );
 
 /**
- * Starts the engine over the SQLite file at `dbPath`. It does not fall back:
- * an engine that cannot start leaves `ready` rejected with the reason, the
- * hub logs it, and no workflow runs.
+ * The engine over the SQLite file at `dbPath`. Nothing runs until something
+ * needs it (`up`): a serving hub starts it off the boot path, with the
+ * workflow resume (server.ts `offBoot`); a hub built only to be read
+ * (scripts/openapi.ts, scripts/hub-in-process.ts) never does unless a
+ * request it answers runs a workflow, so it opens no storage and leaves no
+ * cluster runner polling it.
+ *
+ * It does not fall back: an engine that cannot start leaves `up` rejected
+ * with the reason, the hub logs it, and no workflow runs. Once started it
+ * lives as long as the hub's `lifetime`, whose close disposes the runner and
+ * with it the storage poll.
  */
 export function createWorkflowEngine(
   dbPath: string,
-  host: EngineHost
+  host: EngineHost,
+  lifetime: HubLifetimeShape
 ): WorkflowEngineHandle {
   /** The driver of each run whose handler is running in this process. */
   const drivers = new Map<string, RunDriver>();
@@ -944,23 +958,50 @@ export function createWorkflowEngine(
     // one burst, so it never holds the write lock while drizzle runs.
     Layer.provideMerge(Layer.succeed(Scheduler.PreventSchedulerYield)(true))
   );
+  // Built by its first run, not here (ManagedRuntime builds its layer then).
   const runtime = ManagedRuntime.make(layer);
-  const ready = runtime.runPromise(Effect.void);
-  ready.catch((error: unknown) => {
-    console.error("[workflows] the workflow engine did not start:", error);
+  /** The runner's start, once something has needed it. */
+  let started: Promise<void> | undefined;
+  const up = (): Promise<void> => {
+    if (lifetime.closed()) {
+      return Promise.reject(
+        new Error("The hub has closed: its workflow engine does not run.")
+      );
+    }
+    if (!started) {
+      started = runtime.runPromise(Effect.void);
+      started.catch((error: unknown) => {
+        // A start the hub's close cut short is not a failure to start.
+        if (!lifetime.closed()) {
+          console.error(
+            "[workflows] the workflow engine did not start:",
+            error
+          );
+        }
+      });
+    }
+    return started;
+  };
+  lifetime.onClose(() => {
+    if (!started) {
+      return;
+    }
+    runtime.dispose().catch((error: unknown) => {
+      console.error("[workflows] the workflow engine did not stop:", error);
+    });
   });
 
   const executionIdOf = (runId: string) =>
     runtime.runPromise(CawcoRun.executionId({ runId }));
 
   return {
-    ready,
+    up,
     async start(runId) {
-      await ready;
+      await up();
       await runtime.runPromise(CawcoRun.execute({ runId }, { discard: true }));
     },
     async settle(runId, seq, kind, outcome) {
-      await ready;
+      await up();
       const executionId = await executionIdOf(runId);
       const name = `${seq}:${kind}`;
       await runtime.runPromise(
@@ -979,7 +1020,7 @@ export function createWorkflowEngine(
       );
     },
     async hold(runId, seq, hold, ms) {
-      await ready;
+      await up();
       const executionId = await executionIdOf(runId);
       await runtime.runPromise(
         Effect.gen(function* () {
@@ -996,11 +1037,11 @@ export function createWorkflowEngine(
     },
     async interrupt(runId) {
       drivers.get(runId)?.stop();
-      await ready;
+      await up();
       await runtime.runPromise(CawcoRun.interrupt(await executionIdOf(runId)));
     },
     async forget(runId) {
-      await ready;
+      await up();
       const executionId = await executionIdOf(runId);
       await runtime.runPromise(
         Effect.gen(function* () {
@@ -1015,7 +1056,7 @@ export function createWorkflowEngine(
       );
     },
     async recorded(runId, seq) {
-      await ready;
+      await up();
       const executionId = await executionIdOf(runId);
       const exit = await runtime.runPromise(
         Effect.gen(function* () {

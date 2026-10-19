@@ -52,6 +52,12 @@ import {
   type SessiondServerMessage,
 } from "@cawco/core/sessiond";
 import {
+  listedPid,
+  type Pid,
+  signal as signalPid,
+  spawnedPid,
+} from "@cawco/core/signal";
+import {
   type ChildGroup,
   type Children,
   JOIN_CHILDREN,
@@ -61,8 +67,9 @@ import {
   readGroup,
   removeGroup,
 } from "./cgroup";
+import { paceList } from "./list-pace";
 import { type Listed, processTable } from "./table";
-import { capChildTasks, START_ROOM, TASK_RESERVE, taskHeadroom } from "./tasks";
+import { capChildTasks, START_ROOM, spawnRefusal, TASK_RESERVE } from "./tasks";
 
 /**
  * Byte ceiling per child's replay window — our choice, design §6: lines are
@@ -144,14 +151,6 @@ const childEnvironment = (spec: ProcSpec): Record<string, string> => ({
   ...spec.env,
 });
 
-const signalPid = (pid: number, sig: NodeJS.Signals): void => {
-  try {
-    process.kill(pid, sig);
-  } catch {
-    // already gone
-  }
-};
-
 /** A live (or recently dead) child, plus the ring nobody else may reach. */
 interface Proc {
   alive: boolean;
@@ -162,6 +161,8 @@ interface Proc {
   exitCode: number | null;
   /** Cuts stdout into lines. Framing only. */
   lines: LineSplitter;
+  /** The child's pid, read once its spawn made it: a child with none never becomes a proc. */
+  pid: Pid;
   procId: string;
   ring: SessionRing<string>;
   signal: NodeJS.Signals | null;
@@ -197,12 +198,6 @@ export interface SessiondOptions {
   build?: BuildInfo;
   /** Where each child's own cgroup is made, which it joins before it execs (cgroup.ts). */
   children?: Children;
-  /**
-   * How late this keeper answers a `list` now, in ms. Absent: at once, as
-   * every published build answers (main.ts sets it only under the stage 2
-   * proof's pace, clock.ts `RETIRING_LIST_MS`).
-   */
-  listLate?: () => Promise<number>;
 }
 
 const DEFAULT_BUILD: BuildInfo = { version: "0.1.0", startedAt: Date.now() };
@@ -257,12 +252,9 @@ export class SessiondServer {
   /** The listener's close, begun when the drain starts and awaited by {@link close}. */
   #listenerClosed: Promise<void> | undefined;
 
-  readonly #listLate: (() => Promise<number>) | undefined;
-
   constructor(options: SessiondOptions = {}) {
     this.#build = options.build ?? DEFAULT_BUILD;
     this.#children = options.children;
-    this.#listLate = options.listLate;
   }
 
   /**
@@ -414,7 +406,7 @@ export class SessiondServer {
       this.#send(conn, {
         type: "proc.limit",
         procId: proc.procId,
-        pid: proc.child.pid ?? -1,
+        pid: proc.pid,
         group: group.name,
         limit,
         max,
@@ -440,7 +432,7 @@ export class SessiondServer {
   procs(): SessiondProcInfo[] {
     return [...this.#procs.values()].map((proc) => ({
       procId: proc.procId,
-      pid: proc.child.pid ?? -1,
+      pid: proc.pid,
       alive: proc.alive,
       ...(proc.exitCode === null ? {} : { exitCode: proc.exitCode }),
       ...(proc.signal === null ? {} : { signal: proc.signal }),
@@ -530,15 +522,7 @@ export class SessiondServer {
           build: this.#build,
           procs: this.procs(),
         });
-      if (!this.#listLate) {
-        answer();
-        return;
-      }
-      // Every list on a connection waits as long, so they answer in the order asked.
-      this.#listLate().then(
-        (ms) => (ms > 0 ? setTimeout(answer, ms) : answer()),
-        () => answer()
-      );
+      paceList(answer);
       return;
     }
 
@@ -695,13 +679,9 @@ export class SessiondServer {
         "spawn: procId and spec.command required"
       );
     }
-    const room = await taskHeadroom();
-    if (room && room.free < TASK_RESERVE + START_ROOM) {
-      return ack(
-        commandId,
-        "failed",
-        `${SESSIOND_PROCESS_LIMIT}: ${room.what}; a child starts with ${START_ROOM} free above the ${TASK_RESERVE} kept for the keeper`
-      );
+    const refused = await spawnRefusal();
+    if (refused) {
+      return ack(commandId, "failed", refused);
     }
     const existing = this.#procs.get(procId);
     // A spawn for a live procId is the agent's deliberate relaunch (the
@@ -772,10 +752,19 @@ export class SessiondServer {
       unmade();
       return refusedSpawn(commandId, error);
     }
+    const started = new Promise<Error | undefined>((resolve) => {
+      child.once("spawn", () => resolve(undefined));
+      child.once("error", (error) => resolve(error));
+    });
+    const pid = spawnedPid(child);
+    if (pid === undefined) {
+      return neverRan(commandId, started, unmade);
+    }
 
     const proc: Proc = {
       procId,
       child,
+      pid,
       tree: new Map(),
       ring: new SessionRing<string>(SESSIOND_RING_LINES),
       sizes: [],
@@ -797,18 +786,15 @@ export class SessiondServer {
     child.stdin.on("error", () => {
       /* a write to a stdin whose child already died is not an event */
     });
-    const started = await new Promise<Error | undefined>((resolve) => {
-      child.once("spawn", () => resolve(undefined));
-      child.once("error", (error) => resolve(error));
-    });
-    if (started) {
+    const failed = await started;
+    if (failed) {
       // It never ran: nobody's session, and no exit to announce.
       proc.alive = false;
       if (this.#procs.get(procId) === proc) {
         this.#procs.delete(procId);
       }
       unmade();
-      return refusedSpawn(commandId, started);
+      return refusedSpawn(commandId, failed);
     }
     if (group) {
       this.#groups.set(group.path, {
@@ -820,9 +806,7 @@ export class SessiondServer {
     }
     child.on("error", () => this.#reap(proc, null, null));
     child.on("exit", (code, signal) => this.#reap(proc, code, signal));
-    if (child.pid !== undefined) {
-      await capChildTasks(child.pid);
-    }
+    await capChildTasks(pid);
     return ack(commandId, "applied");
   }
 
@@ -894,8 +878,8 @@ export class SessiondServer {
    * one the kernel kills for memory is asked nothing first, and what it had
    * started is known only from the reading before.
    */
-  #survey(proc: Proc, table: Listed[]): number[] {
-    const root = proc.child.pid ?? -1;
+  #survey(proc: Proc, table: Listed[]): Pid[] {
+    const root = proc.pid;
     const byParent = new Map<number, Listed[]>();
     for (const row of table) {
       const siblings = byParent.get(row.ppid);
@@ -927,11 +911,11 @@ export class SessiondServer {
       }
     }
     proc.tree = running;
-    return [...running.keys()];
+    return [...running.keys()].map(listedPid);
   }
 
   /** {@link #survey} on a fresh reading of the process table. */
-  async #readTree(proc: Proc): Promise<number[]> {
+  async #readTree(proc: Proc): Promise<Pid[]> {
     return this.#survey(proc, await processTable());
   }
 
@@ -1236,6 +1220,20 @@ const refusedSpawn = (commandId: string, error: unknown): SessiondAck => {
         `${SESSIOND_PROCESS_LIMIT}: the kernel refused the fork (EAGAIN)`
       )
     : ack(commandId, "failed", `spawn: ${reasonOf(error)}`);
+};
+
+/**
+ * A spawn that made no process, and so no pid: node leaves its pid unset and
+ * says why in its `error`. Nobody's session, and nothing to signal.
+ */
+const neverRan = async (
+  commandId: string,
+  started: Promise<Error | undefined>,
+  unmade: () => void
+): Promise<SessiondAck> => {
+  const why = await started;
+  unmade();
+  return refusedSpawn(commandId, why ?? new Error("the spawn made no process"));
 };
 
 const toLine = (event: {

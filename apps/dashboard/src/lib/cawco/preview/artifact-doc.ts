@@ -9,6 +9,7 @@ import {
 import type { StageState } from "@cawco/core/stage";
 import { WebsocketProvider } from "y-websocket";
 import { Doc } from "yjs";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 
 /**
  * The pane's hold on an artifact's live document (Projects spec §5.10): the
@@ -94,9 +95,7 @@ export async function sendArtifact(
     }
   );
   if (!response.ok) {
-    throw new Error(
-      (await response.text()) || "The hub didn't take the picks. Send again."
-    );
+    throw await hubRefusal(response, "so the picks weren't taken. Send again.");
   }
 }
 

@@ -45,13 +45,23 @@ export const SAFE_GIT_FLAGS: readonly string[] = [
   "push.gpgSign=false",
 ];
 
-/** What git reads from its environment before any config. */
+/**
+ * The locale every git CawCo runs speaks in, whatever the host's is: what
+ * CawCo decides on git is its exit status and its plumbing's output, and the
+ * words it quotes to a person are then the same on every machine. In
+ * {@link SAFE_GIT_ENV}, and in each git environment built without it (a
+ * move's, a GitHub push's, a merge of two texts).
+ */
+export const GIT_LOCALE: Readonly<Record<string, string>> = { LC_ALL: "C" };
+
+/** What git reads from its environment before any config, and {@link GIT_LOCALE}. */
 export const SAFE_GIT_ENV: Readonly<Record<string, string>> = {
   GIT_PAGER: "cat",
   GIT_EDITOR: "true",
   GIT_SEQUENCE_EDITOR: "true",
   GIT_ASKPASS: "/usr/bin/true",
   GIT_TERMINAL_PROMPT: "0",
+  ...GIT_LOCALE,
 };
 
 const quote = (value: string): string => `'${value.replaceAll("'", "'\\''")}'`;

@@ -959,6 +959,16 @@ export interface BridgeRing {
   readonly seqs: Map<string, number>;
 }
 
+/**
+ * How a child ended, as sessiond reaped it (`#reap`, from the child's own
+ * `exit`): its exit code, or the signal that ended it. What a harness
+ * decides a process's end by, never its SDK's words for it.
+ */
+export interface ProcessExit {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+}
+
 /** The previous host's control traffic, which an attach does not replay. */
 const PREVIOUS_HOST_LINES: ReadonlySet<unknown> = new Set([
   "control_request",
@@ -1008,19 +1018,20 @@ export const sessiondBridge = (
   /** The keeper refused the child its input ({@link KeeperRefused}): told once. */
   refused: (error: KeeperRefused) => void,
   /**
-   * The child is gone: sessiond reported its end, or the spawn never started
-   * one. Told once. A host that detaches (closes its `Query`) is not told:
-   * the child goes on.
+   * The child is gone: sessiond reported its end, with how it ended (its
+   * exit code or signal), or the spawn never started one, or sessiond could
+   * not say how it ended (no `exit`). Told once. A host that detaches
+   * (closes its `Query`) is not told: the child goes on.
    */
-  ended: () => void
+  ended: (exit: ProcessExit | undefined) => void
 ): import("@anthropic-ai/claude-agent-sdk").SpawnedProcess => {
   const { attach } = ring;
   const events = new EventEmitter();
   let isEnded = false;
-  const end = (): void => {
+  const end = (exit?: ProcessExit): void => {
     if (!isEnded) {
       isEnded = true;
-      ended();
+      ended(exit);
     }
   };
   let killed = false;
@@ -1087,6 +1098,8 @@ export const sessiondBridge = (
    * that never arrived. A spawn that failed has said so already.
    */
   let refusal: KeeperRefused | null = null;
+  /** This transport's child's pid, once its keeper has listed it. */
+  let childPid: number | undefined;
   /**
    * After a refusal this transport asks nothing more of the keeper: the
    * session starts again under the same id, and a write, an end or a signal
@@ -1116,7 +1129,7 @@ export const sessiondBridge = (
     if (refusal) {
       return;
     }
-    refusal = new KeeperRefused(procId, reason);
+    refusal = new KeeperRefused(procId, reason, childPid);
     refused(refusal);
     events.emit("error", refusal);
   };
@@ -1155,7 +1168,7 @@ export const sessiondBridge = (
       exitCode = code;
       signalCode = sig;
       stdout.push(null);
-      end();
+      end(code === null && sig === null ? undefined : { code, signal: sig });
       // An `exit` with neither a code nor a signal is not one a process can
       // emit, and the SDK reads it as still running: its `waitForExit` waits
       // for another `exit` and never returns. A child whose end sessiond
@@ -1201,6 +1214,14 @@ export const sessiondBridge = (
     }
   }
 
+  /** Reads this transport's child's pid off its keeper's listing ({@link childPid}); a listing that fails names none. */
+  const listChild = async (): Promise<void> => {
+    const listed = await client.list().catch(() => undefined);
+    childPid = listed?.procs.find(
+      (proc) => proc.procId === procId && proc.alive
+    )?.pid;
+  };
+
   const started = (
     attach
       ? Promise.resolve().then(() => {
@@ -1219,17 +1240,23 @@ export const sessiondBridge = (
             env,
           })
           .then(() => client.subscribe(procId, listener, 0))
-  ).catch((error: unknown) => {
-    spawnFailed = true;
-    // An attach that could not subscribe leaves the child as it was.
-    if (!attach) {
-      end();
-    }
-    events.emit(
-      "error",
-      error instanceof Error ? error : new Error(String(error))
-    );
-  });
+  )
+    // This transport's child as its keeper lists it, before any write goes:
+    // every refusal follows a write or an end, so each names the process it
+    // was about ({@link KeeperRefused.pid}), never one started since under
+    // the same id. A listing that fails names none.
+    .then(listChild)
+    .catch((error: unknown) => {
+      spawnFailed = true;
+      // An attach that could not subscribe leaves the child as it was.
+      if (!attach) {
+        end();
+      }
+      events.emit(
+        "error",
+        error instanceof Error ? error : new Error(String(error))
+      );
+    });
 
   const kill = (sig: NodeJS.Signals): boolean => {
     killed = true;

@@ -15,6 +15,12 @@
  *    re-publish that moves the paragraph 200px down the path still covers
  *    the paragraph (≥ 90 % of the path's box inside it); after a re-publish
  *    that removes the paragraph, the group is in `moved`.
+ * 2b. At rest, with groups on the page, the ink layer draws none of them
+ *    again for a second (main drew each every frame: ink.ts observed its
+ *    anchors anew on each draw, and each observe reported once); a block put
+ *    in above the paragraph moves its ink down by the block's height, and
+ *    a left margin that resizes neither the paragraph nor the page moves
+ *    it right by the margin.
  * 3. The icon arrives at the stroke's last point over 280 ms, and leaves
  *    after two breaths (4 s) or when the next stroke starts.
  * 4. A press dragged from the icon opens 4 × 90° sectors at radius 56; the
@@ -551,6 +557,7 @@ const run = async (kit: Kit) => {
   await menuChecks(on, frame);
   await edgeChecks(on, frame);
   await eraserChecks(on, frame);
+  await idleChecks(on, frame);
   frame = await placeChecks(on, frame, id);
   await deliveredChecks(on, frame);
   await canvasChecks(on);
@@ -997,6 +1004,113 @@ const covered = (frame: Frame, groupId: string) =>
     },
     [groupId]
   );
+
+/** How long 2b's page is left alone while its ink layer is watched, ms. */
+const IDLE_MS = 1000;
+/** How far 2b moves the paragraph down, px. */
+const SHIFT_PX = 120;
+
+/**
+ * 2b. Ink costs nothing at rest: with groups on the page and nothing
+ * moving, the ink layer draws no group again for `IDLE_MS` (main drew each
+ * one every frame, its anchors observed anew on each draw); a block put in
+ * above the paragraph moves its ink down with it.
+ */
+const idleChecks = async (on: On, frame: Frame) => {
+  const groups = Object.values((await docOf(frame)).ink);
+  const gid = String(
+    groups.find(
+      (one) => (one.anchor as { selector?: string }).selector === "#para"
+    )?.id ?? ""
+  );
+  await on.page.waitForTimeout(500);
+  const drawn = await frame.evaluate(async (ms) => {
+    const layer = document.querySelector("svg[data-cawco-ink]");
+    let count = 0;
+    const watch = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const node of record.addedNodes) {
+          if (node instanceof Element && node.matches("g[data-ink-group]")) {
+            count += 1;
+          }
+        }
+      }
+    });
+    if (layer) {
+      watch.observe(layer, { childList: true });
+    }
+    await new Promise((resolve) => setTimeout(resolve, ms));
+    watch.disconnect();
+    return layer ? count : -1;
+  }, IDLE_MS);
+  on.kit.check(
+    `2b: with ${groups.length} ink group(s) on the page and nothing moving, the ink layer draws no group again over ${IDLE_MS} ms`,
+    groups.length > 0 && drawn === 0,
+    `groups drawn again ${drawn}`
+  );
+  const topOf = () =>
+    frame.evaluate(
+      ([id]) =>
+        document
+          .querySelector(`[data-ink-group="${id}"]`)
+          ?.getBoundingClientRect().top ?? null,
+      [gid]
+    );
+  const before = await topOf();
+  await frame.evaluate((px) => {
+    const block = document.createElement("div");
+    block.setAttribute("data-probe-shift", "");
+    block.style.height = `${px}px`;
+    document.querySelector("#para")?.before(block);
+  }, SHIFT_PX);
+  await on.page.waitForTimeout(300);
+  const after = await topOf();
+  const shifted = await covered(frame, gid);
+  await frame.evaluate(() =>
+    document.querySelector("[data-probe-shift]")?.remove()
+  );
+  await settle(on.page, 300);
+  on.kit.check(
+    `2b: a block put in above the paragraph moves its ink ${SHIFT_PX}px down with it`,
+    before !== null &&
+      after !== null &&
+      Math.abs(after - before - SHIFT_PX) <= 2 &&
+      shifted >= 0.9,
+    `ink top ${before} → ${after}; covered ${shifted.toFixed(3)}`
+  );
+  // A move that resizes neither the paragraph nor the page: its left margin.
+  const leftOf = () =>
+    frame.evaluate(
+      ([id]) =>
+        document
+          .querySelector(`[data-ink-group="${id}"]`)
+          ?.getBoundingClientRect().left ?? null,
+      [gid]
+    );
+  const from = await leftOf();
+  await frame.evaluate((px) => {
+    document
+      .querySelector<HTMLElement>("#para")
+      ?.style.setProperty("margin-left", `${px}px`);
+  }, SHIFT_PX / 3);
+  await on.page.waitForTimeout(300);
+  const to = await leftOf();
+  const aside = await covered(frame, gid);
+  await frame.evaluate(() =>
+    document
+      .querySelector<HTMLElement>("#para")
+      ?.style.removeProperty("margin-left")
+  );
+  await settle(on.page, 300);
+  on.kit.check(
+    `2b: the paragraph moved ${SHIFT_PX / 3}px right by its margin, its size and the page's as they were: its ink moves with it`,
+    from !== null &&
+      to !== null &&
+      Math.abs(to - from - SHIFT_PX / 3) <= 2 &&
+      aside >= 0.9,
+    `ink left ${from} → ${to}; covered ${aside.toFixed(3)}`
+  );
+};
 
 /** 2. Where the ink is kept, and that it stays on the paragraph. */
 const placeChecks = async (

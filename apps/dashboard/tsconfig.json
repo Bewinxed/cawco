@@ -2,7 +2,14 @@
   "extends": "$app/tsconfig",
   "compilerOptions": {
     "sourceMap": true,
-    "strict": true
+    "strict": true,
+    // vaul-svelte's types import bits-ui, which it never declares
+    // (huntabyte/vaul-svelte#130); from bun's global store no node_modules of
+    // ours is above it, so bits-ui resolves from here, as vite.config.ts's
+    // `resolve.dedupe` does for the bundle.
+    "paths": {
+      "bits-ui": ["./node_modules/bits-ui"]
+    }
   },
   "include": ["src"]
 }

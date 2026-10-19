@@ -11,7 +11,9 @@
  * - The agent and the judge crash. sessiond keeps the children across the
  *   agent's restart (ARCHITECTURE.md, the sessiond boundary), so the cost is
  *   a reconnect, and the alternative is an agent that keeps acting on a state
- *   it has just proven wrong.
+ *   it has just proven wrong. A law whose broken state is one workspace's
+ *   alone is repaired in that workspace instead, and never reaches here
+ *   (`live-workspace-judge-answers`).
  * - The hub throws: the frame or the request fails, the law is logged by
  *   name and raised as a red notice on every dashboard (hub laws.ts). One hub
  *   is the operator's only view, so a broken law never takes the board down.
@@ -52,6 +54,12 @@ export const LAWS = {
    * At the agent, on boundary.ts's beat (`judgesAnswer`): a workspace a
    * session's process runs in has a judge its hook names, of this build,
    * answering, whatever became of that session's attach (dad89261b).
+   *
+   * Not an `invariant()`: what it finds broken is one workspace's judge,
+   * which the agent repairs there (boundary.ts `repairJudge`: the judge
+   * started again, else what uses the workspace ended) and stays up. Its exit
+   * cut every other workspace's call off, and its start revived the same
+   * state, which the next close broke again (obelisk, 2026-10-18).
    *
    * Born red: boundary.ts `judgesAnswer` records its line.
    */

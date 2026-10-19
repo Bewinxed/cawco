@@ -1,8 +1,22 @@
 import {
   deriveTitleFromFirstMessage,
+  type HarnessKind,
   type InstanceRow,
   type NeutralSessionInfo,
 } from "@cawco/core";
+
+/**
+ * A row the lists draw: a session's, or a workflow run's or a Caw thread's
+ * drawn as one (workflow-runs.ts, thread-tabs.ts), which run on no harness of
+ * their own and say so with a null `harness`.
+ */
+export type BoardRow = Omit<InstanceRow, "harness"> & {
+  harness: HarnessKind | null;
+};
+
+/** Whether a drawn row is a session's: one a harness runs. */
+export const isSessionRow = (row: BoardRow): row is InstanceRow =>
+  row.harness !== null;
 
 interface SessionInstance {
   cwd?: string;
@@ -180,7 +194,7 @@ export function sessionTitle(
 /** {@link sessionTitle}, with the hub row looked up from the fleet's index. */
 export function catalogTitle(
   info: NeutralSessionInfo,
-  index: InstanceIndex<InstanceRow>,
+  index: InstanceIndex<BoardRow>,
   machineId: string
 ): string {
   return sessionTitle(

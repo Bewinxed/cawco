@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PermissionResult } from "@cawco/core";
+  import type { HarnessKind, PermissionResult } from "@cawco/core";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer, grown into any parked permission
@@ -86,6 +86,7 @@
     composerBindings,
   } from "./workspace/composer-dock.svelte";
   import { settleWhile } from "./workspace/dock.svelte";
+  import { layoutPolicy } from "./workspace/layout-policy.svelte";
   import { rebuildScheduler } from "./workspace/scheduler.svelte";
   import { workspace } from "./workspace/workspace.svelte";
 
@@ -113,7 +114,8 @@
     viewId: string;
     browsing: string | null;
     browsingCwd: string;
-    browsingHarness: string;
+    /** The stored conversation's harness; its address is none without it. */
+    browsingHarness: HarnessKind | undefined;
     visible: boolean;
     /** Its group's active tab (PaneHost). */
     active: boolean;
@@ -122,12 +124,12 @@
   } = $props();
 
   /**
-   * A named state stands in the middle of the transcript area, its mark,
-   * title and line centred in it, as the board's empty state stands: never
-   * a start-aligned block set in the middle.
+   * A named state stands where the transcript's first row would: from the
+   * area's top, on the transcript's start edge (Transcript `.tr`: --space-7,
+   * --space-5 under 900px wide). The owner: "I didn't say center the whole
+   * block! No sane ui developer does this".
    */
-  const STATEFUL =
-    "m-auto max-w-[46ch] items-center px-[var(--space-6)] text-center";
+  const STATEFUL = "px-(--space-7) [@media(width<900px)]:px-(--space-5)";
   let paneWidth = $state(0);
   /**
    * The side surface's share of this pane's width, in percent (SideSplit):
@@ -136,6 +138,8 @@
    */
   let previewShare = $state(0);
   const phone = $derived(paneWidth > 0 && paneWidth < 900);
+  /** The side surface is the bottom drawer, not the split (layoutPolicy.sideDrawer). */
+  const drawer = $derived(layoutPolicy.sideDrawer(paneWidth));
   let side = $state<ReturnType<typeof SideSplit>>();
   /** How far what stands on the composer rises past it: the transcript keeps that much room past its end. */
   let parkedRoom = $state(0);
@@ -330,7 +334,8 @@
     const id = viewId;
     const cwd = browsingCwd;
     const harness = browsingHarness;
-    const hint = browsing ? { machineId: browsing, cwd, harness } : null;
+    const hint =
+      browsing && harness ? { machineId: browsing, cwd, harness } : null;
     const running = isLive;
     // biome-ignore lint/complexity/noVoid: read-only dependency — Retry bumps `attempt` purely to re-run this effect
     void attempt;
@@ -1143,7 +1148,7 @@
   {:else if session}
     <SideSplit
       {active}
-      {phone}
+      phone={drawer}
       planOf={viewId}
       task={besideStages ? besideSurface : undefined}
       taskOpen={!!beside}

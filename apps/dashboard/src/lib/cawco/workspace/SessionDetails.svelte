@@ -28,7 +28,7 @@
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import { copyToClipboard } from "../copy";
   import HarnessLogo from "../HarnessLogo.svelte";
-  import { describingRow, ensureModels } from "../models.svelte";
+  import { describingRow } from "../models.svelte";
   import {
     CURVE,
     crossIn,
@@ -360,13 +360,6 @@
   const shownPermission = $derived(
     relaunching ? permissionBeforeRelaunch : (session?.permissionMode ?? null)
   );
-
-  $effect(() => {
-    const kind = harness;
-    if (kind) {
-      untrack(() => ensureModels(kind));
-    }
-  });
 
   function pending(slot: Slot) {
     if (slot === "account") {

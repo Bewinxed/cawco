@@ -122,8 +122,16 @@ then approve again.
 A scratch fleet whose spec delegates cuts workspaces, and every workspace runs
 inside a boundary made of user namespaces. Inside a delegate's own workspace
 no namespace can be made (`bwrap: No permissions to create a new namespace`,
-`podman info`: `cannot clone: Operation not permitted`), so such a spec fails
-there however it is written.
+`podman info`: `cannot clone: Operation not permitted`), and on macOS
+Seatbelt does not nest (`sandbox-exec: sandbox_apply: Operation not
+permitted`, exit 71), so such a spec fails there however it is written.
+
+Such a spec says so: its `host` field names why it starts boundaries
+(`host: "it delegates, so its fleet cuts workspaces"`). Run inside a
+workspace (`CAWCO_WORKSPACE` set), it is not run; the run prints
+`HOST <spec>: runs on the host …` with its command, lists it under `NOT RUN
+HERE`, and exits 3 when nothing failed. A spec that starts a boundary in one
+leg only and words that leg's refusal (comment-delivery) carries no `host`.
 
 Such a spec runs outside every boundary: from the shell of a session the
 person started, on a checkout of the delegate's commit. A delegate that

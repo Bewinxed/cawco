@@ -464,7 +464,6 @@ public final class SessionsStore {
         transcript.fault = nil
         transcript.missing = false
         hub.ledger.beginRead(id)
-        hub.tasks.refresh(id)
         hub.workItems.load(parent: id)
         readers[id] = Task { [weak self] in
             guard let self else { return }
@@ -548,7 +547,6 @@ public final class SessionsStore {
                 transcript.tail = page.tail
                 transcript.facts = page.facts
                 transcript.location = page._where
-                hub.tasks.refresh(id)
                 transcript.cursor = whole.cursor
                 // A new newest page is a new read: an older page still on its
                 // way was asked of the transcript as it stood before, and so
@@ -750,7 +748,6 @@ public final class SessionsStore {
                     transcript.blockRevision += 1
                     guard let raw = event["block"] else { continue }
                     let block: Components.Schemas.TranscriptBlock = try decode(raw)
-                    hub.tasks.ingest(id, toolName: block.metadata?.toolName)
                     if let parent = block.parentToolUseId {
                         if let at = transcript.branches.firstIndex(where: { $0.value1.toolUseId == parent }) {
                             upsert(block, into: &transcript.branches[at].value2.blocks, event: event)

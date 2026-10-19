@@ -10,7 +10,6 @@ import {
   join,
   relative as relativePath,
 } from "node:path";
-import { projectClaudeDir } from "@cawco/core/paths";
 import { SAFE_GIT_ENV, SAFE_GIT_FLAGS } from "@cawco/core/safe-git";
 import { writeStateFile } from "@cawco/core/state-file";
 import { resolveBin, toolEnv } from "./tools";
@@ -40,35 +39,6 @@ export const gitIn = async (
     return undefined;
   }
 };
-
-/**
- * The fixed lines earlier builds kept every deny name out of a clone's status
- * with, whoever made the file: srt's own names, unanchored, and the harness
- * project config at the root. They hid a user's own untracked `.vscode` or
- * `.mcp.json` too; each stand-in CawCo made is listed by its own anchored
- * line in CawCo's block now ({@link excludeStandIns}), and these go.
- */
-const RETIRED_LINES = new Set([
-  ".gitconfig",
-  ".gitmodules",
-  ".bashrc",
-  ".bash_profile",
-  ".zshrc",
-  ".zprofile",
-  ".profile",
-  ".ripgreprc",
-  ".mcp.json",
-  ".vscode",
-  ".idea",
-  projectClaudeDir("", "commands"),
-  projectClaudeDir("", "agents"),
-  ...["settings.json", "settings.local.json", "hooks"].map(
-    (name) => `/${projectClaudeDir("", name)}`
-  ),
-  "/opencode.json",
-  "/opencode.jsonc",
-  "/.opencode",
-]);
 
 /** Where CawCo's own lines in a clone's `info/exclude` begin and end: it rewrites what lies between. */
 const BLOCK_START =
@@ -144,9 +114,9 @@ export const excludedPaths = async (clone: string): Promise<string[]> => {
 /**
  * CawCo's block in a clone's `info/exclude`, written whole: one anchored line
  * for each of `paths` (relative to the clone), the stand-ins it made there,
- * so git never sees them and nothing else is hidden. The lines earlier builds
- * kept fixed ({@link RETIRED_LINES}) go; every other line stays as it is.
- * Written only when that changes it.
+ * so git never sees them and nothing else is hidden. Every line outside the
+ * block is someone else's and stays as it is. Written only when that changes
+ * it.
  */
 export const excludeStandIns = async (
   clone: string,
@@ -156,8 +126,7 @@ export const excludeStandIns = async (
   const before = await Bun.file(exclude)
     .text()
     .catch(() => "");
-  const { rest } = await readExclude(exclude);
-  const kept = rest.filter((line) => !RETIRED_LINES.has(line.trim()));
+  const kept = [...(await readExclude(exclude)).rest];
   while (kept.length > 0 && kept.at(-1) === "") {
     kept.pop();
   }

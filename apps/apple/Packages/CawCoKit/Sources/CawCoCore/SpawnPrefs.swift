@@ -5,9 +5,10 @@ import Observation
 /// What the new-session form was last set to
 /// (apps/dashboard/src/lib/cawco/spawnPrefs.svelte.ts). A reader who picks a
 /// model and a permission mode is saying how they work, not how one session
-/// starts, so a start that has no form of its own runs on these. Where a
-/// session runs is not a preference. Kept in UserDefaults under the web's
-/// key, as the JSON the web keeps in its browser storage.
+/// starts, so a start that has no form of its own runs on these. The form
+/// opens on the machine it last started a session on (`rememberedMachine`),
+/// only ever its id, never a folder. Kept in UserDefaults under the web's
+/// keys, as the JSON the web keeps in its browser storage.
 @MainActor
 @Observable
 public final class SpawnPrefs {
@@ -70,22 +71,64 @@ public final class SpawnPrefs {
         }
     }
 
-    /// The permission mode the New Session form shows before anything is
-    /// touched, for a spawn that has no form (`spawnDefaults`): the
-    /// remembered one unless the machine's harness cannot honour it, then the
-    /// first one it can. A harness that reports no modes at all (pi) has
-    /// none. With no form there is no Full Send warning to read: a remembered
-    /// Full Send gives Bypass (`unpicked`). No model: a spawn that names none
-    /// runs on its harness's own default.
-    public func formDefaults(harness: Harness, machine: MachineRow?) -> PermissionMode? {
+    private static let machineKey = "cawco-spawn-machine"
+
+    /// The machine the New Session form last started a session on, which it
+    /// opens on next; nil when it has started none (spawnPrefs.svelte.ts
+    /// `rememberedMachine`).
+    public var rememberedMachine: String? {
+        defaults.string(forKey: Self.machineKey).flatMap { $0.isEmpty ? nil : $0 }
+    }
+
+    /// Called with the machines a spawn from the form went out to: the first is the one it opens on next.
+    public func rememberMachine(_ machineIds: [String]) {
+        if let first = machineIds.first { defaults.set(first, forKey: Self.machineKey) }
+    }
+
+    /// What each mode is called (permission-modes.ts `LABELS`).
+    public static let modeNames = [
+        "default": "Ask first", "plan": "Plan first", "acceptEdits": "Accept edits",
+        "bypassPermissions": "Bypass", "fullSend": "Full Send",
+    ]
+
+    /// Why `mode` cannot go out to `machine`'s `harness`, or nil when it can
+    /// (permission-modes.ts `modeRefusal`): the machine has not reported that
+    /// harness yet, so which modes it takes is not known, or it reports modes
+    /// and this is not one of them. A harness that reports none (pi) is sent
+    /// none. A mode is never swapped for another: a start goes out on the
+    /// mode its person chose, or not at all.
+    public static func modeRefusal(machine: String, harness: String, mode: String, report: Components.Schemas.HarnessReport?) -> String? {
+        let name = ModelCatalog.harnessName(harness)
+        guard let report else {
+            return "\(machine) hasn't reported its \(name) yet, so which permission modes it takes isn't known."
+        }
+        let taken = report.capabilities.permissionModes.map(\.rawValue)
+        guard !taken.isEmpty, !taken.contains(mode) else { return nil }
+        return "\(machine)'s \(name) doesn't take \(modeNames[mode] ?? mode). Pick a mode it takes."
+    }
+
+    /// The permission mode a spawn that has no form starts on (`spawnDefaults`):
+    /// the remembered one, when the machine's harness takes it. With no form
+    /// there is no Full Send warning to read: a remembered Full Send gives
+    /// Bypass (`unpicked`). A harness that reports no modes at all (pi) is
+    /// given none. Throws the reason, and nothing starts, while the machine
+    /// has not reported the harness or does not take the mode
+    /// (`modeRefusal`). No model: a spawn that names none runs on its
+    /// harness's own default.
+    public func formDefaults(harness: Harness, machine: MachineRow?, machineId: String) throws -> PermissionMode? {
         let report = machine?.harnesses?.first { $0.harness.rawValue == harness.rawValue }
         let remembered = Self.unpicked(permissionMode)
-        guard let report else { return remembered }
-        let honoured = Set(report.capabilities.permissionModes.map(\.rawValue))
-        if honoured.isEmpty { return nil }
-        if honoured.contains(remembered.rawValue) { return remembered }
-        return Self.offeredModes.first { honoured.contains($0.rawValue) } ?? remembered
+        if let refused = Self.modeRefusal(machine: machine?.name ?? machineId, harness: harness.rawValue, mode: remembered.rawValue, report: report) {
+            throw SpawnRefused(reason: "\(refused) Nothing was started.")
+        }
+        return report?.capabilities.permissionModes.isEmpty == true ? nil : remembered
     }
+}
+
+/// Why a spawn did not go out, in the words the person reads.
+public struct SpawnRefused: LocalizedError {
+    public let reason: String
+    public var errorDescription: String? { reason }
 }
 
 extension HubConnection {
@@ -93,15 +136,27 @@ extension HubConnection {
     /// only when one was picked (none runs on the harness's own default,
     /// never an empty string), and a permission mode named exactly when its
     /// harness has modes. What the caller set stands; a mode it left out is
-    /// the one the New Session form shows by default.
-    public func explicit(machineId: String, _ payload: Components.Schemas.SpawnPayload) -> Components.Schemas.SpawnPayload {
-        let harness = payload.harness ?? .claude
+    /// the remembered one, when the machine takes it (`formDefaults`, which
+    /// throws why not, and nothing starts). Which modes a machine takes is
+    /// its report's, so a start waits for the report (the first fleet read,
+    /// a machine whose report is on its way) up to the control timeout; one
+    /// still missing then is the machine's own word.
+    public func explicit(machineId: String, _ payload: Components.Schemas.SpawnPayload) async throws -> Components.Schemas.SpawnPayload {
+        let fleet = fleet
+        _ = await observedUntil(.now + Self.controlTimeout) {
+            fleet.fleetRead && fleet.machines.first { $0.machineId == machineId }?.harnesses != nil
+        }
+        var payload = payload
+        // A start names its harness, and the hub refuses one that does not: nothing here names one for it.
+        guard let harness = payload.harness else { return payload }
         let machine = fleet.machines.first { $0.machineId == machineId }
         let report = machine?.harnesses?.first { $0.harness.rawValue == harness.rawValue }
-        var payload = payload
         // A harness with no permission modes is sent none, whatever the caller carried.
-        payload.permissionMode = report?.capabilities.permissionModes.isEmpty == true
-            ? nil : (payload.permissionMode ?? spawnPrefs.formDefaults(harness: harness, machine: machine))
+        if report?.capabilities.permissionModes.isEmpty == true {
+            payload.permissionMode = nil
+        } else if payload.permissionMode == nil {
+            payload.permissionMode = try spawnPrefs.formDefaults(harness: harness, machine: machine, machineId: machineId)
+        }
         payload.model = payload.model.flatMap { $0.isEmpty ? nil : $0 }
         return payload
     }
@@ -110,19 +165,18 @@ extension HubConnection {
     /// last set to, sends its first prompt when it has one, and remembers the
     /// settings it went out with (project/[id]/+page.svelte `startSession`,
     /// NewSessionDialog's `rememberSpawn`). Returns the new session's id.
-    /// Full Send is the exception: with no form its warning is never read,
-    /// so this start runs on Bypass, and the form keeps Full Send.
+    /// Its mode is the remembered one when the machine takes it, Full Send
+    /// starting on Bypass (`formDefaults`); the form keeps Full Send.
     @discardableResult
     public func spawnSession(machineId: String, cwd: String, projectId: String? = nil, prompt: String? = nil, scratch: Bool = false) async throws -> String {
         let prefs = spawnPrefs
         let (harness, model, mode, effort) = (prefs.harness, prefs.model, prefs.permissionMode, prefs.effort)
-        let payload = explicit(machineId: machineId, Components.Schemas.SpawnPayload(
+        let payload = try await explicit(machineId: machineId, Components.Schemas.SpawnPayload(
             cwd: cwd,
             effort: effort,
             harness: harness,
             instanceId: UUID().uuidString.lowercased(),
             model: model,
-            permissionMode: SpawnPrefs.unpicked(mode),
             projectId: projectId,
             scratch: scratch ? .init() : nil
         ))

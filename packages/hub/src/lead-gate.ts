@@ -21,9 +21,13 @@
  *    upstream-guard.ts), refused with the guard's reason rather than put on
  *    your card. One whose target only the place's git remotes name is left
  *    to the place's shims, which read them as it runs.
- * 3. **Size**: an edit that would take the wake past {@link FILES_PER_WAKE}
- *    files, or touches a file that is not docs, config or assets by its path,
- *    is refused: "file a task".
+ * 3. **Caw edits and size**: the files Caw may edit are the ones his project
+ *    declares (gate.md's `Caw edits:` globs, gate-file.ts). With a list, an
+ *    edit of a file it does not match is refused: "is not in this project's
+ *    Caw edits: file a task". With none, the edit goes to your Approve card,
+ *    its file neither refused nor guessed at; a gate.md that does not read
+ *    refuses it, naming its problems. An edit that would take the wake past
+ *    {@link FILES_PER_WAKE} files is refused: "file a task".
  * 4. **Reads run**: a shell line that only reads ({@link readOnly}: readers
  *    and reading git, `git fetch` of a named remote among them, output only
  *    into `/dev/null` or another descriptor) runs without asking whatever
@@ -33,11 +37,11 @@
  *    (a thread message, a view request, his own words straight into the
  *    session) with no outside text riding on it, and that has read no web
  *    content, also runs `git init`, `git add <paths>` and `git commit` where
- *    no one else works ({@link allowlisted}). Anything else (an edit, any
- *    other write, a line the gate cannot read; or those tidy writes in a turn
- *    an event, a routine, a report, a nudge, an inbox of outside events or a
- *    web read woke) raises the Approve card, the ask parked as any session's
- *    is.
+ *    no one else works ({@link allowlisted}), and an edit of a file his
+ *    project's Caw edits list. Anything else (an edit with no list, any other
+ *    write, a line the gate cannot read; or those writes in a turn an event,
+ *    a routine, a report, a nudge, an inbox of outside events or a web read
+ *    woke) raises the Approve card, the ask parked as any session's is.
  * 6. **Visible**: every call is a `lead_calls` row and a note in the thread
  *    his turn answers: the command, its exit, the files it touched; a
  *    refusal with why, your Deny as yours.
@@ -66,6 +70,7 @@ import {
   upstreamWrite,
 } from "@cawco/core/upstream-guard";
 import type { DbShape, LeadCallRow } from "./db";
+import type { CawEdits } from "./gate-file";
 import type { WebContext } from "./web-reads";
 import { readsWeb } from "./web-reads";
 
@@ -79,6 +84,14 @@ const SENDS_KEPT = 2000;
 /** What the gate answers a call: run it now, refuse it with words, or put it on your card. */
 export type GateVerdict =
   { kind: "allow" } | { kind: "deny"; message: string } | { kind: "card" };
+
+/**
+ * What {@link createLeadGate}'s `decide` answers: a verdict, or `withdrawn`
+ * for an edit whose ask was over before gate.md was read (the harness
+ * settled it, or its process ended): nothing is kept of it, and nothing
+ * parks it.
+ */
+export type GateDecision = GateVerdict | { kind: "withdrawn"; why: string };
 
 const GATED: ReadonlySet<string> = new Set([
   ...LEAD_GATED_TOOLS.claude,
@@ -1004,24 +1017,28 @@ const editFiles = (input: Record<string, unknown>): string[] => {
     : [];
 };
 
-const DOC = /\.(?:md|mdx|markdown|txt|rst|adoc|asciidoc|org)$/i;
-const CONFIG =
-  /\.(?:json|jsonc|json5|ya?ml|toml|ini|cfg|conf|properties|plist|env\.example|editorconfig)$/i;
-const CONFIG_NAMES =
-  /^(?:\.gitignore|\.gitattributes|\.editorconfig|\.npmrc|\.nvmrc|\.node-version|\.tool-versions|\.prettierrc|\.prettierignore|CODEOWNERS|LICENSE|NOTICE|AUTHORS|CHANGELOG|README)$/;
-const ASSET =
-  /\.(?:png|jpe?g|gif|webp|avif|svg|ico|icns|bmp|tiff?|heic|mp3|wav|ogg|m4a|mp4|mov|webm|woff2?|ttf|otf|pdf)$/i;
-/** Top-level folders a project keeps docs, config and assets in, by the usual names. */
-const KEPT_DIRS =
-  /^(?:docs?|documentation|assets|static|public|images|img|media|fonts|design|config|\.github)\//;
+/** Each `Caw edits:` glob, compiled once. */
+const GLOBS = new Map<string, Bun.Glob>();
+
+const globOf = (pattern: string): Bun.Glob => {
+  let glob = GLOBS.get(pattern);
+  if (!glob) {
+    glob = new Bun.Glob(pattern);
+    GLOBS.set(pattern, glob);
+  }
+  return glob;
+};
 
 /**
- * Whether a file, by its path in the place, is docs, config or assets: by
- * its extension or name (Markdown and text, JSON/YAML/TOML and the dotfiles
- * that configure tools, images, media and fonts), or a folder the project
- * keeps them in. Never anything under `.git`, and nothing outside the place.
+ * Whether a file, by its path in the place, is one the project declares its
+ * Caw edits (gate.md's `Caw edits:`, gate-file.ts): a glob of `globs`
+ * matches it. Never anything under `.git`, nothing outside the place, and
+ * no absolute path.
  */
-export const docsConfigOrAsset = (relative: string): boolean => {
+export const inCawEdits = (
+  relative: string,
+  globs: readonly string[]
+): boolean => {
   if (
     relative.startsWith("../") ||
     relative === ".." ||
@@ -1030,14 +1047,7 @@ export const docsConfigOrAsset = (relative: string): boolean => {
   ) {
     return false;
   }
-  const name = posix.basename(relative);
-  return (
-    DOC.test(name) ||
-    CONFIG.test(name) ||
-    CONFIG_NAMES.test(name) ||
-    ASSET.test(name) ||
-    KEPT_DIRS.test(relative)
-  );
+  return globs.some((glob) => globOf(glob).match(relative));
 };
 
 /** A file an edit names, relative to the place. */
@@ -1071,7 +1081,11 @@ const fresh = (): Wake => ({
 });
 
 export interface LeadGateDeps {
+  /** The files the lead's project declares its Caw edits (gate-file.ts `projectCawEdits`). */
+  readonly cawEdits: (projectId: string) => Promise<CawEdits>;
   readonly db: Pick<DbShape, "leadCalls">;
+  /** Why the ask is no longer one its session waits on (server.ts `askRefusal`, read again now); undefined while it is. */
+  readonly gone: (envelope: Envelope) => string | undefined;
   /** A note in the thread the lead's turn answers (caw.ts `noteCall`). */
   readonly note: (instanceId: string, note: ThreadNote) => void;
   /** Whether the lead's place is a shared checkout: one another live session uses, or the project's folder on the hub. */
@@ -1089,8 +1103,6 @@ const shortly = (text: string): string => {
   const line = text.split("\n")[0]?.trim() ?? "";
   return line.length > 80 ? `${line.slice(0, 79)}…` : line;
 };
-
-const EXIT_CODE = /Exit code (\d+)/;
 
 /** A tool result's text. */
 const resultText = (content: unknown): string => {
@@ -1133,11 +1145,28 @@ const sharedDenied = (call: Call, isShared: boolean): string | undefined => {
     : undefined;
 };
 
-/** Why an edit is refused by its size or its files, or nothing. */
-const editDenied = (call: Call, wake: Wake): string | undefined => {
-  const outside = call.files.filter((file) => !docsConfigOrAsset(file));
-  if (call.files.length === 0 || outside.length > 0) {
-    return `${outside.join(", ") || "That file"} is not docs, config or assets: your edits are docs, config and assets only. File a task.`;
+/**
+ * Why an edit is refused by its files or its size, or nothing: a file the
+ * project's Caw edits do not list, when it lists them; any edit while its
+ * gate.md does not read. With no list, its files are not judged here.
+ */
+const editDenied = (
+  call: Call,
+  wake: Wake,
+  edits: CawEdits
+): string | undefined => {
+  if (edits.kind === "unreadable") {
+    return `This project's gate.md does not read, so the files Caw edits are not known: ${edits.problems.join(" ")} Fix gate.md, or file a task.`;
+  }
+  const outside =
+    edits.kind === "declared"
+      ? call.files.filter((file) => !inCawEdits(file, edits.globs))
+      : [];
+  if (
+    edits.kind === "declared" &&
+    (call.files.length === 0 || outside.length > 0)
+  ) {
+    return `${outside.join(", ") || "That file"} is not in this project's Caw edits: file a task.`;
   }
   if (new Set([...wake.files, ...call.files]).size > FILES_PER_WAKE) {
     return `That would edit more than ${FILES_PER_WAKE} files in this wake: an edit that size is a task's. File a task.`;
@@ -1170,7 +1199,9 @@ const ranBody = (row: LeadCallRow, shell: boolean): string => {
   const approved = row.approved ? " · you approved it" : "";
   if (shell) {
     const files = row.files.length > 0 ? ` · ${row.files.join(", ")}` : "";
-    return `Exit ${row.exit ?? "not reported"}${approved}${files}`;
+    const exit =
+      row.exit === "failed" ? "Failed" : `Exit ${row.exit ?? "not reported"}`;
+    return `${exit}${approved}${files}`;
   }
   return `${row.exit === "failed" ? "Did not apply" : "Applied"}${approved}`;
 };
@@ -1211,22 +1242,41 @@ const guardLines = (text: string): string[] =>
     line.slice("cawco place-guard: ".length)
   );
 
-/** A ran call's exit, from its result: a shell's code, an edit's `ok` or `failed`. */
+/**
+ * A ran call's exit: an edit's `ok` or `failed` by its result's `is_error`;
+ * a shell's by the exit its harness hands over. OpenCode's `shell` result
+ * carries it as `metadata.exit` (its built-in's code, CawCo's bounded
+ * shell's code or signal; agent `toolResultOf` passes the metadata on as
+ * `structuredContent`), and a command that exits non-zero there is still a
+ * completed call. Claude Code's Bash result carries none (agent SDK 0.3.302
+ * `BashOutput`), only `is_error`: its shell is `0` or `failed`, and the
+ * number in the words the model reads is never read.
+ */
 const exitOf = (
   row: LeadCallRow,
-  block: { content: unknown; is_error?: boolean }
+  block: {
+    content: unknown;
+    is_error?: boolean;
+    structuredContent?: Record<string, unknown>;
+  }
 ): string => {
   if (!LEAD_SHELL_TOOLS.has(row.tool)) {
     return block.is_error ? "failed" : "ok";
   }
-  if (!block.is_error) {
-    return "0";
+  const exit = block.structuredContent?.exit;
+  if (typeof exit === "number" && Number.isFinite(exit)) {
+    return String(exit);
   }
-  return EXIT_CODE.exec(resultText(block.content))?.[1] ?? "failed";
+  if (typeof exit === "string" && exit) {
+    return exit;
+  }
+  return block.is_error ? "failed" : "0";
 };
 
 export const createLeadGate = ({
+  cawEdits,
   db,
+  gone,
   note,
   shared,
   thread,
@@ -1235,6 +1285,11 @@ export const createLeadGate = ({
 }: LeadGateDeps) => {
   /** Each lead's wake under way, by session. */
   const wakes = new Map<string, Wake>();
+  /**
+   * The edits waiting on their project's gate.md, by request: whose they
+   * are, and why the ask was over meanwhile, once it was.
+   */
+  const reading = new Map<string, { instanceId: string; over?: string }>();
   /** What each send the hub woke a lead with was: your words alone, or outside text, by its uuid (caw.ts `wake`). */
   const sends = new Map<string, "owner" | "outside">();
   const wakeOf = (instanceId: string): Wake => {
@@ -1259,8 +1314,16 @@ export const createLeadGate = ({
     return { shell, command: files.join(", "), files };
   };
 
-  /** The verdict on one of a lead's calls, from the rules in order: budget, shared checkout and upstream, size, wake source. */
-  const judge = (lead: InstanceRow, call: Call): GateVerdict => {
+  /**
+   * The verdict on one of a lead's calls, from the rules in order: budget,
+   * shared checkout and upstream, the project's Caw edits and size, wake
+   * source. `edits` is what the project declares, for an edit.
+   */
+  const judge = (
+    lead: InstanceRow,
+    call: Call,
+    edits: CawEdits
+  ): GateVerdict => {
     const wake = wakeOf(lead.id);
     wake.calls += 1;
     const isShared = shared(lead);
@@ -1269,7 +1332,7 @@ export const createLeadGate = ({
       (call.shell
         ? (sharedDenied(call, isShared) ??
           upstreamDenial(call.command, upstream(lead)))
-        : editDenied(call, wake));
+        : editDenied(call, wake, edits));
     if (refused) {
       return { kind: "deny", message: refused };
     }
@@ -1277,6 +1340,11 @@ export const createLeadGate = ({
       for (const file of call.files) {
         wake.files.add(file);
       }
+      // A file the project lists runs in a turn your words woke; with no
+      // list, or in any other turn, it is put to you.
+      return edits.kind === "declared" && yours(wake)
+        ? { kind: "allow" }
+        : { kind: "card" };
     }
     // A line that only reads runs whatever woke him; the tidy writes only
     // in a turn your words woke; anything else is put to you.
@@ -1340,7 +1408,12 @@ export const createLeadGate = ({
   /** One of a lead's tool results: a web read's makes his wake external; a ran call's says its exit. */
   const resulted = (
     instanceId: string,
-    block: { content: unknown; is_error?: boolean; tool_use_id: string }
+    block: {
+      content: unknown;
+      is_error?: boolean;
+      structuredContent?: Record<string, unknown>;
+      tool_use_id: string;
+    }
   ): void => {
     const wake = wakes.get(instanceId);
     if (wake?.reading.delete(block.tool_use_id)) {
@@ -1382,9 +1455,12 @@ export const createLeadGate = ({
      * A permission ask from `lead`, before it is parked: the gate's verdict,
      * or none for an ask that is not a lead's shell or edit call (it parks as
      * any ask). A replay of one already judged answers the same, and spends
-     * nothing again.
+     * nothing again. An edit's verdict waits on the project's gate.md read.
      */
-    decide(lead: InstanceRow, envelope: Envelope): GateVerdict | undefined {
+    async decide(
+      lead: InstanceRow,
+      envelope: Envelope
+    ): Promise<GateDecision | undefined> {
       const ask = envelope.payload as PermissionRequestFrame;
       const { requestId } = envelope;
       if (
@@ -1400,7 +1476,31 @@ export const createLeadGate = ({
         return verdictOf(known);
       }
       const call = describe(lead, ask);
-      const verdict = judge(lead, call);
+      let edits: CawEdits = { kind: "none" };
+      if (!call.shell) {
+        reading.set(requestId, { instanceId: lead.id });
+        // The read never throws: a failure is what gate.md says now.
+        edits = await cawEdits(lead.projectId).catch(
+          (error: unknown): CawEdits => ({
+            kind: "unreadable",
+            problems: [error instanceof Error ? error.message : String(error)],
+          })
+        );
+        const over = reading.get(requestId)?.over ?? gone(envelope);
+        reading.delete(requestId);
+        if (over) {
+          console.log(
+            `[lead-gate] ${lead.id} ${ask.toolName} withdrawn while gate.md was read (${over}): not judged, not parked: ${shortly(call.command)}`
+          );
+          return { kind: "withdrawn", why: over };
+        }
+      }
+      // A replay that came in while gate.md was read was judged by then.
+      const judged = db.leadCalls.ofRequest(requestId);
+      if (judged) {
+        return verdictOf(judged);
+      }
+      const verdict = judge(lead, call, edits);
       const row: LeadCallRow = {
         id: crypto.randomUUID(),
         projectId: lead.projectId,
@@ -1497,9 +1597,25 @@ export const createLeadGate = ({
       }
     },
 
-    /** A lead's process ended: its wake with it. */
+    /**
+     * An ask was settled by its harness (a `permission_settled` frame): one
+     * whose edit waits on gate.md is over, and is never parked.
+     */
+    settled(requestId: string): void {
+      const waiting = reading.get(requestId);
+      if (waiting) {
+        waiting.over ??= "its harness settled it";
+      }
+    },
+
+    /** A lead's process ended: its wake with it, and every ask of it waiting on gate.md. */
     ended(instanceId: string): void {
       wakes.delete(instanceId);
+      for (const waiting of reading.values()) {
+        if (waiting.instanceId === instanceId) {
+          waiting.over ??= "its process ended";
+        }
+      }
     },
   };
 };

@@ -102,7 +102,7 @@
     font: var(--type-meta);
     color: var(--ink-muted);
   }
-  @media (max-width: 900px) {
+  @media (width < 900px) {
     .st-value {
       font: var(--type-title);
     }

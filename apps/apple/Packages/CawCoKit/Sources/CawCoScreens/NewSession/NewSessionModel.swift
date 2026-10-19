@@ -489,7 +489,6 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
         built = true
         // The first list staggers in too, rather than standing there; a running session's list just stands.
         render(swap: runtime ? nil : 1)
-        ensure()
     }
 
     /// The list changed its own height (a runtime list hugs its rows).
@@ -508,14 +507,6 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
         picker.layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
     }
 
-    private func ensure() {
-        let harness = listHarness
-        Task { [weak self] in
-            guard let self else { return }
-            if await ModelCatalog.ensure(hub, harness: harness), harness == listHarness { render(swap: nil) }
-        }
-    }
-
     /// The form moved: a harness change swaps the list, anything else repaints it.
     func update(_ next: State) {
         let from = listHarness
@@ -532,7 +523,6 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
         render(swap: way)
         // A different catalogue entirely: the old offset would land mid-list.
         scroll.setContentOffset(.zero, animated: false)
-        ensure()
     }
 
     private func setQuery(_ text: String) {
@@ -607,7 +597,8 @@ final class ModelSectionView: UIView, UITextFieldDelegate {
         if custom {
             rows.addArrangedSubview(customRow())
         } else if shown.isEmpty {
-            rows.addArrangedSubview(MachinesPopover.note(q.isEmpty ? "No \(name) models reported yet" : "No \(name) models match \"\(query)\"", pad: 22))
+            let empty = ModelCatalog.unread(hub.fleet, harness: listHarness, machineIds: state.machineIds) ?? "No \(name) models reported yet"
+            rows.addArrangedSubview(MachinesPopover.note(q.isEmpty ? empty : "No \(name) models match \"\(query)\"", pad: 22))
         }
         for (i, entry) in shown.enumerated() {
             let reason = unavailable?(entry)

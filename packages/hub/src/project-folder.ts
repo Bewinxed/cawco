@@ -1705,6 +1705,43 @@ export const folderFileTimes = async (
   return await next;
 };
 
+const BLAME_HEAD = /^[0-9a-f]{40} \d+ (\d+)/;
+const AUTHOR_TIME = /^author-time (\d+)$/;
+
+/**
+ * When each line of a folder file was written, by git blame's author time
+ * (1-based line → time), and the file's own mtime for a line git has no
+ * date for (never committed, or a folder git cannot read).
+ */
+export const folderBlame = async (
+  projectId: string,
+  rawPath: string
+): Promise<{ lines: ReadonlyMap<number, Date>; mtime: Date }> => {
+  const rel = folderPath(rawPath);
+  const root = await forReading(projectId);
+  const { mtime } = await stat(join(root, rel));
+  const lines = new Map<number, Date>();
+  const blamed = await run(root, [
+    "blame",
+    "--line-porcelain",
+    "--",
+    rel,
+  ]).catch(() => undefined);
+  if (blamed?.code === 0) {
+    let line = 0;
+    for (const row of blamed.stdout.split("\n")) {
+      const at = BLAME_HEAD.exec(row);
+      const time = at ? undefined : AUTHOR_TIME.exec(row);
+      if (at) {
+        line = Number(at[1]);
+      } else if (time) {
+        lines.set(line, new Date(Number(time[1]) * 1000));
+      }
+    }
+  }
+  return { lines, mtime };
+};
+
 /** The files under `rawDir` whose content is not their last commit's: changed, or never committed. */
 export const folderUncommitted = async (
   projectId: string,

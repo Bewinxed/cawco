@@ -17,7 +17,7 @@ import {
   commentRead,
   commentReply,
   commentResolve,
-  componentsList,
+  designMap,
 } from "./artifacts/tools";
 import {
   type HandoffDeps,
@@ -460,6 +460,7 @@ export function handoffTools(deps: HandoffDeps) {
         "It runs on the harness, model and effort of a delegate type — `type`, the same catalog delegate uses, " +
         "'medium' when omitted; a named type's denied tools apply too — and answers tool permissions in `permissionMode`, this session's own mode when omitted, " +
         "where its harness has permission modes (pi has none, and refuses one). " +
+        "A session with no mode of its own (a pi session) must name `permissionMode` for a harness that has modes: with neither, nothing starts, and the refusal says a mode must be chosen. " +
         "Nothing is left to the machine's defaults. " +
         "It runs on this session's machine unless `machine` names another one of the fleet. " +
         "Use it when the user asks you to spin something off, or when work " +
@@ -522,7 +523,7 @@ export function handoffTools(deps: HandoffDeps) {
           ])
           .optional()
           .describe(
-            "How the new session answers tool permissions. Default: this session's own mode. Omit it for a harness without permission modes (pi)."
+            "How the new session answers tool permissions. Default: this session's own mode; when this session has none (pi), it must be named for a harness with modes, or nothing starts. Omit it for a harness without permission modes (pi)."
           ),
       },
       async ({
@@ -823,7 +824,9 @@ export function handoffTools(deps: HandoffDeps) {
     tool(
       "continue_session",
       "Continue another session (a stuck delegate) in a new one, from a summary by a model you choose; the " +
-        "named one is only read. Never this session: if your context is too big, say so.",
+        "named one is only read. Never this session: if your context is too big, say so. " +
+        "The new session answers tool permissions in `target_permission_mode`, this session's own mode when omitted; " +
+        "when this session has none (pi) and the target harness has modes, it must be named, or nothing starts.",
       {
         session: z
           .string()
@@ -853,6 +856,20 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .min(1)
           .describe("The model the new session runs on."),
+        // Never `fullSend`: only the owner puts a session in Full Send.
+        target_permission_mode: z
+          .enum([
+            "default",
+            "acceptEdits",
+            "bypassPermissions",
+            "plan",
+            "dontAsk",
+            "auto",
+          ])
+          .optional()
+          .describe(
+            "How the new session answers tool permissions. Default: this session's own mode; when this session has none (pi), it must be named for a target harness with modes, or nothing starts. Omit it for a target without permission modes (pi)."
+          ),
         note: z
           .string()
           .optional()
@@ -888,6 +905,21 @@ export function handoffTools(deps: HandoffDeps) {
       async ({ target }) => ({
         content: [
           { type: "text" as const, text: await actions.stopDelegate(target) },
+        ],
+      })
+    ),
+    tool(
+      "discard_workspace",
+      "Let go of a held workspace of YOUR delegates' whose work you will not continue: what it holds is saved to a carry in ~/.cawco/carries on its machine, then its clone goes.",
+      {
+        workspace: z.string().describe("Its id, as the hub's notice names it."),
+      },
+      async ({ workspace }) => ({
+        content: [
+          {
+            type: "text" as const,
+            text: await actions.discardWorkspace(workspace),
+          },
         ],
       })
     ),
@@ -1079,23 +1111,47 @@ export function handoffTools(deps: HandoffDeps) {
       artifactUpdate.name,
       artifactUpdate.description,
       artifactUpdate.input,
-      async ({ id, ...change }) =>
-        json(
+      async ({ id, statements, ...change }) => {
+        if (statements === undefined) {
+          // A component canvas's states file and its own spec have their own route.
+          const component = (
+            ["args", "story", "about", "edges", "group", "dials"] as const
+          ).some((key) => change[key] !== undefined);
+          return json(
+            await actions.artifactCall(
+              "PATCH",
+              `/${encodeURIComponent(id)}${component ? "/component" : ""}`,
+              change
+            )
+          );
+        }
+        if (Object.values(change).some((value) => value !== undefined)) {
+          throw new Error(
+            "statements revises a decision page alone: pass it without html, patch, elements, delete, mermaid, args or story."
+          );
+        }
+        return json(
           await actions.artifactCall(
-            "PATCH",
-            `/${encodeURIComponent(id)}`,
-            change
+            "POST",
+            `/${encodeURIComponent(id)}/statements`,
+            { statements }
           )
-        )
+        );
+      }
     ),
     tool(
       artifactRead.name,
       artifactRead.description,
       artifactRead.input,
-      async ({ id, since, png }) => {
+      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each optional read field into the query, and a picture into an image block
+      async ({ id, since, png, detail, story, state, render }) => {
         const query = new URLSearchParams({
           ...(since === undefined ? {} : { since: String(since) }),
           ...(png ? { png: "true" } : {}),
+          ...(detail ? { detail } : {}),
+          ...(story ? { story } : {}),
+          ...(state ? { state: JSON.stringify(state) } : {}),
+          ...(render ? { render: "true" } : {}),
         }).toString();
         let target = id;
         if (target === undefined) {
@@ -1134,16 +1190,22 @@ export function handoffTools(deps: HandoffDeps) {
       }
     ),
     tool(
-      componentsList.name,
-      componentsList.description,
-      componentsList.input,
-      async ({ dir }) =>
-        json(
+      designMap.name,
+      designMap.description,
+      designMap.input,
+      async (ask) => {
+        const query = new URLSearchParams(
+          Object.entries(ask)
+            .filter(([, value]) => value !== undefined)
+            .map(([key, value]): [string, string] => [key, String(value)])
+        ).toString();
+        return json(
           await actions.artifactCall(
             "GET",
-            `/components${dir ? `?dir=${encodeURIComponent(dir)}` : ""}`
+            `/design-map${query ? `?${query}` : ""}`
           )
-        ),
+        );
+      },
       {
         readOnlyHint: true,
         destructiveHint: false,
@@ -1286,8 +1348,8 @@ const DEFERRED_GROUPS: readonly { prefixes: string[]; what: string }[] = [
   },
   { prefixes: ["workflow_", "submit_result"], what: "workflows" },
   {
-    prefixes: ["artifact_", "comment_", "components_list"],
-    what: "artifacts you show, the person's pins on them, the components a sheet shows",
+    prefixes: ["artifact_", "comment_", "design_map"],
+    what: "artifacts you show, the person's pins on them; the components and their states on a canvas you build on and the person pins, design_map the library",
   },
   { prefixes: ["memory_"], what: "project memory" },
   { prefixes: ["thread_"], what: "your threads with the person" },

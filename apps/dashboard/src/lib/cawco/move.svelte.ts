@@ -7,12 +7,10 @@
  */
 import type { MoveEstimate, MoveJob, MoveRequest } from "@cawco/core";
 import { cawco, heardMove } from "./client.svelte";
+import { hubRefusal } from "./hub-read";
 
-/** The hub's refusal, in its own words, or the status when it gave none. */
-async function refusal(response: Response): Promise<Error> {
-  const words = (await response.text()).trim();
-  return new Error(words || `The hub answered ${response.status}.`);
-}
+/** The hub's refusal, in its one sentence (hub-read `hubRefusal`). */
+const refusal = (response: Response): Promise<Error> => hubRefusal(response);
 
 /**
  * What moving `projectId` to `machineId` takes: whether it is needed, where

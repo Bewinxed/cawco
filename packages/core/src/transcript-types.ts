@@ -12,6 +12,7 @@
  * flight — is {@link TranscriptTail}, and is all that moves between frames.
  */
 import type {
+  HarnessKind,
   NeutralStatus,
   PermissionMode,
   SendRecord,
@@ -79,6 +80,8 @@ export interface BlockMetadata {
     | import("./attachments").ShownFile
   >;
   compactError?: string;
+  /** {@link compactError} typed, as its harness typed the error ({@link import("./harness").CompactionFailure}). */
+  compactFailure?: import("./harness").CompactionFailure;
   /**
    * A compaction boundary read back from a harness that stores how it ended
    * (opencode): `failed` with the harness's words in `compactError`.
@@ -96,6 +99,13 @@ export interface BlockMetadata {
   /** The delegate's brief headline, carried beside {@link delegateInstanceId}. */
   delegateTitle?: string;
   /**
+   * A thread's note of Caw asking whether to build a design system: the
+   * project it is for, whose Build and Not now the note draws under it
+   * (EventThreadMessage `designOffer`, as a thread's blocks carry it on the
+   * dashboard and in the app).
+   */
+  designOffer?: { projectId: string };
+  /**
    * A failure card's heading (`ui.error`, `ui.session_error`); a missing
    * session's when unset on a session error, "Turn failed" otherwise.
    */
@@ -103,6 +113,12 @@ export interface BlockMetadata {
   exitCode?: number;
   handoffBrief?: string;
   handoffKind?: "handoff" | "start" | "delegate";
+  /**
+   * A `ui.system_note` that is a notice of the harness's in the user's role,
+   * typed where its normaliser read it: what a reader draws it from, never
+   * its `content`, which keeps its words for the shipped app.
+   */
+  harnessNote?: import("./harness").HarnessNote;
   hookName?: string;
   /** A stored transcript can name an image it no longer carries, hence the optional src. */
   images?: Array<{ mediaType: string; src?: string }>;
@@ -169,6 +185,12 @@ export interface BlockMetadata {
   trigger?: "manual" | "auto";
   /** Set when a `user.peer` is a workflow's notice: what happened, e.g. `step Build failed`. */
   workflowEvent?: string;
+  /**
+   * The workflow run a block is about, as its producer stamped it: a
+   * workflow's notice, by its tag; a `workflow_run` call, by the run its
+   * result started.
+   */
+  workflowRunId?: string;
 }
 
 /** One row of a transcript, as the hub built it. */
@@ -278,6 +300,7 @@ export interface TranscriptFacts {
     trigger: "manual" | "auto";
     result?: "success" | "failed";
     error?: string;
+    failure?: import("./harness").CompactionFailure;
   } | null;
   /** The last turn came back an error — the SDK's `is_error`. */
   lastTurnFailed: boolean;
@@ -363,7 +386,7 @@ export interface TranscriptPage {
 /** Where a transcript was found: the machine, folder, key and harness. */
 export interface TranscriptWhere {
   cwd: string;
-  harness: string;
+  harness: HarnessKind;
   machineId: string;
   sessionKey: string;
 }

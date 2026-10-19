@@ -110,7 +110,7 @@
             active={isActive}
             browsing={ctx?.machine ?? null}
             browsingCwd={ctx?.cwd ?? ""}
-            browsingHarness={ctx?.harness ?? "claude"}
+            browsingHarness={ctx?.harness}
             focused={isActive && leaf?.id === workspace.focusedLeafId}
             serverTail={id === entryId ? entryTail : null}
             viewId={id}

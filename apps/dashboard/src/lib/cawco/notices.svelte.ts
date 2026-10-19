@@ -7,6 +7,7 @@
  */
 import type { DamagedHubRecord } from "@cawco/core";
 import { SvelteSet } from "svelte/reactivity";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 
 class Notices {
   /** Notice ids acknowledged anywhere, plus this tab's own on their way to the hub. */
@@ -46,9 +47,9 @@ class Notices {
   async reset(): Promise<void> {
     const response = await fetch("/api/notices/reset", { method: "POST" });
     if (!response.ok) {
-      throw new Error(
-        (await response.text()) ||
-          `The hub answered ${response.status}, so the notices record was not reset. Try again.`
+      throw await hubRefusal(
+        response,
+        "so the notices record was not reset. Try again."
       );
     }
   }

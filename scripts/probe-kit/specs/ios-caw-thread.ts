@@ -5,7 +5,8 @@
  * iPhone and one on an iPad, each reading the app's DEBUG log lines:
  *
  * 1. Opened at `thread:<id>`, the app lists the thread's messages in the
- *    hub's order (`probe thread … messages N [author:words | …]`), an event
+ *    hub's order (`probe thread-message <id> <n>/<count> author:words`, a
+ *    line each, so no line grows with the thread), an event
  *    that woke him (its note's title) and his words naming a file among them
  *    (rows written into the hub's store: no turn here makes them).
  * 2. Words sent from the app's composer land in the hub's thread
@@ -18,6 +19,15 @@
  *    machine "hub" with no session row) stands there too and is approved there.
  * 6. A tapped push of his ask (its `cawco` data, routed as a tap is) opens
  *    the thread with the card on its composer.
+ * 7. His question whose options say more than their labels (a long question
+ *    over two described options, one description forty words, and Other;
+ *    then four bare options, more than three) lists them: PromptCardView's
+ *    DEBUG `options` line puts every row inside the card's width and each
+ *    description there in full, and the digits 2 and 4 pick Warm and the
+ *    fourth slot (the thread's pane offers the card's keys, as a session's
+ *    does); Return sends them, the hub records both, and the ask settles,
+ *    so the next device starts from a thread at rest. Four is the most
+ *    AskUserQuestion takes on Claude Code.
  *
  * Caw starts in his own place's boundary: run it on a host, outside any
  * CawCo workspace (inside one his start fails with EPERM).
@@ -85,6 +95,93 @@ const call = (
 const made = new Set<string>();
 const question = (tag: string) => `PROBE-VOICE-${tag}: which voice?`;
 
+/** Forty words: a description that wraps over lines in its row, never cut. */
+const LONG_DESCRIPTION =
+  "Say it warmly, as a friend would across a table in the evening, naming each person who helped, thanking them by what they did, and closing with one plain sentence about what the thread decided and what happens next week.";
+/** The bare options of the second question: as many as AskUserQuestion takes (2 to 4), more than three. */
+const SLOTS = ["Morning", "Noon", "Evening", "Night"];
+/**
+ * The ask whose options say more than their labels (PromptCardView's list
+ * form): a long question over two described options and Other, then a
+ * question of four bare options, more than three, listed too.
+ */
+const longAsk = (tag: string) => ({
+  questions: [
+    {
+      question: `PROBE-LONG-${tag}: which voice should the post that goes out to every reader of this thread tonight take, given everything the thread has said about tone, length and who it thanks?`,
+      header: "Voice",
+      multiSelect: false,
+      options: [
+        { label: "Plain", description: "Say it plainly." },
+        { label: "Warm", description: LONG_DESCRIPTION },
+      ],
+    },
+    {
+      question: `PROBE-SLOT-${tag}: when should it go out?`,
+      header: "Slot",
+      multiSelect: false,
+      options: SLOTS.map((label) => ({ label, description: "" })),
+    },
+  ],
+});
+/** His question for the marker `asking`: the long one, or the voice. */
+const askInput = (asking: string) =>
+  asking.endsWith("LONG")
+    ? longAsk(asking)
+    : {
+        questions: [
+          {
+            question: question(asking),
+            header: "Voice",
+            multiSelect: false,
+            options: [
+              { label: "Plain", description: "Say it plainly." },
+              { label: "Warm", description: "Say it warmly." },
+            ],
+          },
+        ],
+      };
+
+/** PromptCardView's DEBUG options line: the card's width, each question's form, each option's span and description length. */
+const OPTIONS_LINE = /^options ask=(\S+) card=([\d.]+) (.*)$/;
+const OPTION_SPAN = /o(\d+)\.(\d+)=(-?[\d.]+),(-?[\d.]+),(\d+)/g;
+/** 7: the long question's options as the card laid them out: listed, inside the card, every description whole. */
+const longVerdict = (kit: Kit, tag: string, line: string | undefined) => {
+  const parsed = line?.match(OPTIONS_LINE);
+  const rest = parsed?.[3] ?? "";
+  const card = Number(parsed?.[2] ?? 0);
+  const spans = [...rest.matchAll(OPTION_SPAN)].map((m) => ({
+    q: Number(m[1]),
+    k: Number(m[2]),
+    minX: Number(m[3]),
+    maxX: Number(m[4]),
+    chars: Number(m[5]),
+  }));
+  const inside = spans.every(
+    (one) => one.minX >= -0.5 && one.maxX <= card + 0.5
+  );
+  const said = (q: number, k: number) =>
+    spans.find((one) => one.q === q && one.k === k)?.chars ?? -1;
+  kit.check(
+    `7 ${tag}: options that say more than their labels, or more than three, are listed: no row's frame runs past the card's`,
+    rest.includes("q1=list") &&
+      rest.includes("q2=list") &&
+      spans.length === 2 + 1 + SLOTS.length + 1 &&
+      inside,
+    line ?? "no options line"
+  );
+  kit.check(
+    `7 ${tag}: every description stands in full under its label, the 40-word one too`,
+    said(1, 1) === "Say it plainly.".length &&
+      said(1, 2) === LONG_DESCRIPTION.length,
+    `Plain ${said(1, 1)}, Warm ${said(1, 2)} of ${LONG_DESCRIPTION.length} chars`
+  );
+};
+
+/** HID usages axe presses: the digits 1 to 9 are 30 to 38, Return 40. */
+const HID_DIGIT = (digit: number) => 29 + digit;
+const HID_RETURN = 40;
+
 /**
  * Caw's side, by the newest event: `PROBE-REPLY-X` answers with a
  * thread_reply, `PROBE-ASK-X` with his question, `PROBE-PROPOSE-X` with a
@@ -126,27 +223,19 @@ const respond = (request: Seen): Reply => {
       return text("Noted your pick.");
     }
     made.add(`ask ${asking}`);
-    return tool(ASK, {
-      questions: [
-        {
-          question: question(asking),
-          header: "Voice",
-          multiSelect: false,
-          options: [
-            { label: "Plain", description: "Say it plainly." },
-            { label: "Warm", description: "Say it warmly." },
-          ],
-        },
-      ],
-    });
+    return tool(ASK, askInput(asking));
   }
   if (proposing) {
     if (made.has(`propose ${proposing}`)) {
       return text("Asked.");
     }
     const proposal = call(request, PROPOSE, {
-      path: "AGENTS.md",
-      content: `# Caw threads\n\nPROBE-MEMORY-${proposing}: posts use the plain voice.\n`,
+      files: [
+        {
+          path: "AGENTS.md",
+          content: `# Caw threads\n\nPROBE-MEMORY-${proposing}: posts use the plain voice.\n`,
+        },
+      ],
       why: "The voice you chose.",
       ask: true,
     });
@@ -220,6 +309,37 @@ const SEEDED: {
     files: ["stages.md"],
   },
 ];
+
+/** ThreadViewController `probe`'s message line: its place among them, their count, and its words. */
+const MESSAGE_LINE = /^(\d+)\/(\d+) (.*)$/;
+
+/**
+ * The app's newest whole listing of the thread's messages, joined " | " in
+ * order: the pane logs each on its own line (`probe thread-message <id>
+ * <n>/<count> <author>:<words>`) whenever they change, so the newest block
+ * ending at `<count>/<count>` with every place before it is the listing.
+ */
+const listingOf = (heard: string[], threadId: string): string | undefined => {
+  const head = `probe thread-message ${threadId} `;
+  const lines = heard
+    .filter((line) => line.startsWith(head))
+    .map((line) => line.slice(head.length).match(MESSAGE_LINE))
+    .filter((m): m is RegExpMatchArray => !!m);
+  for (let end = lines.length - 1; end >= 0; end -= 1) {
+    const [, at, count] = lines[end];
+    if (at !== count) {
+      continue;
+    }
+    const block = lines.slice(end - Number(count) + 1, end + 1);
+    if (
+      block.length === Number(count) &&
+      block.every((m, i) => m[1] === String(i + 1) && m[2] === count)
+    ) {
+      return block.map((m) => m[3]).join(" | ");
+    }
+  }
+  return undefined;
+};
 
 const shown = (row: Row) =>
   `${row.author}:${(row.body ?? "").slice(0, 40).replaceAll("\n", " ")}`;
@@ -449,7 +569,7 @@ async function onDevice(
         `${AXE} tap -x ${Math.round(f.x + f.width / 2)} -y ${Math.round(f.y + f.height / 2)} --udid ${udid}`
       );
     };
-    /** The app's newest line about this thread. */
+    /** The app's newest line of the thread's state: its status, its count of messages, the asks on its composer. */
     const probeLine = () =>
       heard.findLast((l) => l.includes(`probe thread ${threadId} `));
     const listed = (want: (line: string) => boolean, label: string) =>
@@ -459,6 +579,17 @@ async function onDevice(
         (line) => !!line && want(line),
         90_000
       ).catch(() => probeLine());
+    /** The app's newest whole listing of the thread's messages, once `want` holds of it. */
+    const messagesListed = (
+      want: (listing: string) => boolean,
+      label: string
+    ) =>
+      until(
+        `${tag}: ${label}`,
+        () => listingOf(heard, threadId),
+        (listing) => !!listing && want(listing),
+        90_000
+      ).catch(() => listingOf(heard, threadId));
     const launch = (args: string) =>
       until(
         `${tag}: the app launched`,
@@ -473,7 +604,7 @@ async function onDevice(
     // 1. The thread lists the web's messages in order.
     await launch(`-open-session thread:${threadId}`);
     const hubOrder = ctx.rows().map(shown);
-    const first = await listed(
+    const first = await messagesListed(
       (l) => hubOrder.every((m) => l.includes(m)),
       "the thread's messages listed"
     );
@@ -528,7 +659,7 @@ async function onDevice(
 
     // 3. Caw's reply appears in the app's thread.
     await ctx.said("caw", `PROBE-REPLY-${TAG} done`);
-    const replied = await listed(
+    const replied = await messagesListed(
       (l) => l.includes(`caw:PROBE-REPLY-${TAG} done`),
       "Caw's reply in the thread"
     );
@@ -636,7 +767,7 @@ async function onDevice(
       `5 ${tag}: with two asks waiting, the thread's composer shows one card, the first, "1 of 2"`,
       !!proposed?.includes(`asks [${proposal?.requestId}]`) &&
         !!proposed?.includes("place 1 of 2"),
-      proposed
+      `proposal ${proposal?.requestId}, beside ${beside?.requestId}; ${proposed}`
     );
     await tap("prompt-approve");
     const settled = await until(
@@ -662,7 +793,7 @@ async function onDevice(
       `5 ${tag}: answered, the next ask moves in, "2 of 2"`,
       !!next?.includes(`asks [${beside?.requestId}]`) &&
         !!next?.includes("place 2 of 2"),
-      next
+      `beside ${beside?.requestId}; ${next}`
     );
     await tap("prompt-option-1-1");
     await tap("prompt-answer");
@@ -755,6 +886,80 @@ async function onDevice(
         },
       });
     }
+
+    // 7. Options that say more than their labels: listed, every description in full, inside the card; digits pick.
+    await ctx.idle();
+    await fleet.api(
+      `/api/projects/${ctx.projectId}/threads/${threadId}/messages`,
+      { body: `PROBE-ASK-${TAG}LONG which voice and when` }
+    );
+    const long = await until(
+      `${tag}: his long question parked`,
+      async () =>
+        (await ctx.pending()).find(
+          (a) =>
+            a.payload.toolName === ASK &&
+            a.payload.threadId === threadId &&
+            a.requestId !== again?.requestId
+        ),
+      Boolean,
+      120_000
+    ).catch(() => undefined);
+    const optionsLine = await until(
+      `${tag}: the long question's options laid out`,
+      () =>
+        heard.findLast(
+          (l) => !!long && OPTIONS_LINE.exec(l)?.[1] === long.requestId
+        ),
+      Boolean,
+      90_000
+    ).catch(() => undefined);
+    await capture("question-long");
+    longVerdict(kit, tag, optionsLine);
+    // Digits pick, the current question first: 2 is Warm, then the next question's 4.
+    const keyed = heard.length;
+    await sh(`${AXE} key ${HID_DIGIT(2)} --udid ${udid}`);
+    await Bun.sleep(800);
+    await sh(`${AXE} key ${HID_DIGIT(4)} --udid ${udid}`);
+    const picked = await until(
+      `${tag}: the digits' picks`,
+      () => {
+        const lines = heard.slice(keyed);
+        return (
+          lines.some((l) => l.startsWith('pick q=1 "Warm"')) &&
+          lines.some((l) => l.startsWith(`pick q=2 "${SLOTS[3]}"`))
+        );
+      },
+      Boolean,
+      15_000
+    ).catch(() => false);
+    kit.check(
+      `7 ${tag}: digits still pick in the listed rows`,
+      picked,
+      heard
+        .slice(keyed)
+        .filter((l) => l.startsWith("pick "))
+        .join(" | ") || "no pick"
+    );
+    // Return sends the picks, and the ask settles: the next device starts
+    // from a thread at rest (a minimized ask would still wait there, the
+    // oldest, and stand first on its composer).
+    await sh(`${AXE} key ${HID_RETURN} --udid ${udid}`);
+    const rested = await until(
+      `${tag}: the long question answered`,
+      async () =>
+        !(await ctx.pending()).some((a) => a.requestId === long?.requestId),
+      Boolean,
+      30_000
+    ).catch(() => false);
+    const answer = ctx
+      .rows()
+      .find((r) => r.answer?.includes("Warm") && r.answer.includes(SLOTS[3]));
+    kit.check(
+      `7 ${tag}: Return sends the digits' picks, and the ask settles`,
+      !!long && rested === true && !!answer,
+      `settled ${rested}; answer ${answer?.answer ?? "none"}`
+    );
   } finally {
     stream?.kill();
     await mkdir(kit.out, { recursive: true });

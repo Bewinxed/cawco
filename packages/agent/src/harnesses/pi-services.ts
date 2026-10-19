@@ -3,12 +3,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
   AuthState,
-  FleetConfig,
   FleetHoldings,
   FleetItemState,
   FleetSyncReport,
   HarnessCapabilities,
   HarnessReport,
+  MachineFleetConfig,
   ModelInfo,
   NeutralAssistantBlock,
   NeutralContentBlock,
@@ -479,11 +479,18 @@ export class PiProfile {
   async detect(): Promise<HarnessReport> {
     probeStarted();
     const installed = resolveBin("pi") !== undefined;
-    const models = installed
-      ? await modelCatalog().catch((error: unknown) => {
-          console.warn(`[pi] model catalog unavailable: ${error}`);
-        })
-      : undefined;
+    // One that cannot be read says why instead.
+    const read = installed
+      ? await modelCatalog().then(
+          (models) => ({ models }),
+          (error: unknown) => {
+            console.warn(`[pi] model catalog unavailable: ${error}`);
+            return {
+              modelsUnread: `pi didn't list its models (${error instanceof Error ? error.message : String(error)}).`,
+            };
+          }
+        )
+      : {};
     const names = installed
       ? await modelNames().catch((error: unknown) => {
           console.warn(`[pi] model names unavailable: ${error}`);
@@ -500,7 +507,7 @@ export class PiProfile {
       auth: this.auth,
       ...(credential?.reason ? { authReason: credential.reason } : {}),
       capabilities: PI_CAPABILITIES,
-      ...(models ? { models } : {}),
+      ...read,
       ...(names ? { modelNames: names } : {}),
     };
   }
@@ -710,7 +717,7 @@ export class PiProfile {
     return method === CONTROL_MODEL_CATALOG ? await modelCatalog() : undefined;
   }
 
-  async syncFleet(config: FleetConfig): Promise<FleetSyncReport> {
+  async syncFleet(config: MachineFleetConfig): Promise<FleetSyncReport> {
     const sidecar = await readSidecar(PI_SIDECAR);
     const report: FleetSyncReport = {
       mcp: {},
@@ -730,7 +737,7 @@ export class PiProfile {
     }
     const skills = await syncSkillFiles(
       PI_SKILLS,
-      config.skills ?? [],
+      config.skills,
       sidecar.skills,
       report.skills as NonNullable<FleetSyncReport["skills"]>
     );
@@ -778,22 +785,30 @@ export class PiProfile {
       const drift = skillDrift(held[name], recorded, recorded);
       let state: FleetItemState = { state: "applied" };
       if (held[name] === undefined) {
-        state = { state: "failed", detail: "not on disk" };
+        state = { state: "failed", cause: "absent", detail: "not on disk" };
       } else if (drift) {
-        state = { state: "failed", detail: drift };
+        state = { state: "failed", cause: "drifted", detail: drift };
       }
       (report.skills as NonNullable<FleetSyncReport["skills"]>)[name] = state;
     }
     if (sidecar.memory !== undefined) {
       const file = Bun.file(PI_MEMORY);
       const hash = (await file.exists()) ? hashText(await file.text()) : null;
-      report.memory =
-        hash === sidecar.memory
-          ? { state: "applied" }
-          : {
-              state: "failed",
-              detail: hash === null ? "not on disk" : "edited on this machine",
-            };
+      if (hash === sidecar.memory) {
+        report.memory = { state: "applied" };
+      } else if (hash === null) {
+        report.memory = {
+          state: "failed",
+          cause: "absent",
+          detail: "not on disk",
+        };
+      } else {
+        report.memory = {
+          state: "failed",
+          cause: "drifted",
+          detail: "edited on this machine",
+        };
+      }
     }
     return report;
   }

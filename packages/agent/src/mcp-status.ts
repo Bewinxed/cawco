@@ -1,6 +1,10 @@
 import { setTimeout as delay } from "node:timers/promises";
 import { type McpServerStatus, query } from "@anthropic-ai/claude-agent-sdk";
-import { type FleetSyncReport, mcpFleetState } from "@cawco/core";
+import {
+  type FleetItemState,
+  type FleetSyncReport,
+  mcpFleetState,
+} from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
 import { idle } from "./auth";
 import { ClaudeRefused, claudeToStart } from "./claude-version";
@@ -68,9 +72,12 @@ export const readMcpRuntime = async (
       throw error;
     }
     // Refused, it reads no server: each says why, and the rest of the sync goes on.
-    return Object.fromEntries(
-      names.map((name) => [name, { state: "failed", detail: error.message }])
-    );
+    const refused: FleetItemState = {
+      state: "failed",
+      cause: error.reason === "version" ? "cli-too-old" : "cli-missing",
+      detail: error.message,
+    };
+    return Object.fromEntries(names.map((name) => [name, refused]));
   }
   const handle = query({
     prompt: idle,
@@ -90,7 +97,7 @@ export const readMcpRuntime = async (
         return [
           name,
           unanswered !== undefined && (!status || status.status === "pending")
-            ? { state: "failed", detail: unanswered }
+            ? { state: "failed", cause: "timed-out", detail: unanswered }
             : mcpFleetState(status),
         ];
       })
@@ -150,6 +157,7 @@ export const readMcpRuntime = async (
         name,
         {
           state: "failed",
+          cause: "unknown",
           detail: error instanceof Error ? error.message : String(error),
         },
       ])

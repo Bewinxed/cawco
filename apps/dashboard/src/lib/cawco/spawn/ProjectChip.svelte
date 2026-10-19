@@ -280,9 +280,6 @@
         transform var(--dur-toggle) var(--ease-out);
     }
   }
-  .row.on {
-    background: var(--surface-fill);
-  }
   .tile {
     width: 24px;
     height: 24px;
@@ -385,5 +382,18 @@
     .field input {
       font-size: 1rem;
     }
+  }
+  /* The chosen project takes the selected wash, never the hover step. */
+  .row.on {
+    background: var(--selected-bg);
+    color: var(--selected-ink);
+  }
+  /* Its second line too: ink-subtle measures 4.23:1 on the wash by day,
+     selected-ink 4.73:1 (DESIGN.md Colors: Selected). */
+  .row.on .meta {
+    color: var(--selected-ink);
+  }
+  .row.on :global(svg.check) {
+    color: var(--selected-icon);
   }
 </style>

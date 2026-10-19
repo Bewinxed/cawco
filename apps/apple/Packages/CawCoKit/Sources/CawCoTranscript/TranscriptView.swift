@@ -35,6 +35,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// Opening another session or a run in its own view; the host routes it.
     public var onOpenSession: (String) -> Void = { _ in }
     public var onOpenRun: (String) -> Void = { _ in }
+    /// A project's task, opened beside its board (a design offer's filed task); the host routes it.
+    public var onOpenTask: (_ projectId: String, _ taskId: String) -> Void = { _, _ in }
     /// An artifact tool row's card was tapped: its input, the artifact to reveal once it is open.
     public var onOpenPreview: ([String: Any]) -> Void = { _ in }
     /// "Back to the fleet", from the state an unreachable id shows.
@@ -482,6 +484,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         env.runSteps = { [weak self] id in self.map { $0.steps(id) } ?? [] }
         env.openSession = { [weak self] id in self?.onOpenSession(id) }
         env.openRun = { [weak self] id in self?.onOpenRun(id) }
+        env.openTask = { [weak self] projectId, taskId in self?.onOpenTask(projectId, taskId) }
         env.openPreview = { [weak self] input in self?.onOpenPreview(input) }
         env.isTaken = { [weak self] id in self?.liftedQueued == id }
         env.replacement = { [weak self] id in self?.replacements[id] }
@@ -759,7 +762,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         // A voice names who answers (a project's Caw); else the harness does.
         if let voice {
             agent = voice.name
-        } else if let harness = transcript.facts?.harness ?? transcript.location?.harness {
+        } else if let harness = transcript.facts?.harness ?? transcript.location?.harness.rawValue {
             agent = ["claude": "Claude Code", "opencode": "opencode", "code": "opencode", "pi": "pi"][harness] ?? harness
         }
         // A revision of the hub's blocks is prepared off the main thread and

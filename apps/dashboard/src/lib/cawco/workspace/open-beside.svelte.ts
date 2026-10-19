@@ -12,15 +12,9 @@ import { tick } from "svelte";
 import { MediaQuery } from "svelte/reactivity";
 import { workingSet } from "../working-set.svelte";
 import { layoutPolicy } from "./layout-policy.svelte";
-import { workspace } from "./workspace.svelte";
+import { type AskedContext as Context, workspace } from "./workspace.svelte";
 
 const coarse = new MediaQuery("pointer: coarse");
-
-interface Context {
-  cwd?: string;
-  harness?: string;
-  machine?: string | null;
-}
 
 /**
  * The group the item put in front, waiting for the menu to finish closing:

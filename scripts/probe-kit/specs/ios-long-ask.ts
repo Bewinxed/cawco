@@ -226,14 +226,11 @@ const REST_S = 5;
 const REST_SHARE = 0.25;
 const AXE = "/opt/homebrew/bin/axe";
 /**
- * Whether axe can tap iOS 27: not from a workspace ("…remote-automation.uds:
- * Operation not permitted"); `PROBE_TAPS=1` where the spec runs outside one.
+ * axe's tap as a touch down and up: on Xcode 27 its default tap style
+ * reports success and delivers nothing, dtuhidd dropping the gesture
+ * (cameroncooke/AXe#71: "`--tap-style physical` is 3/3 under the same conditions").
  */
-const taps27 = process.env.PROBE_TAPS === "1";
-/** Whether axe can tap this run's simulator. */
-const taps = process.env.PROBE_IOS !== "27" || taps27;
-/** `ioreg -n Root -d1 -a`'s word that the console is locked. */
-const CONSOLE_LOCKED = /<key>IOConsoleLocked<\/key>\s*<true\/>/;
+const TAP = `${AXE} tap --tap-style physical`;
 const THREAD_HEAD = /^\s{4}\d+ Thread_/;
 const LOG_HEAD = /^.*?\[dev\.cawco\.app:[^\]]*\] /;
 const SPACES = /\s+/;
@@ -337,24 +334,6 @@ async function run(kit: Kit): Promise<void> {
   const { path: app, problem } = freshApp(ROOT);
   if (!kit.check("the app is built from this tree", !problem, problem ?? app)) {
     return;
-  }
-  // iOS 27's taps go through the simulator's remote automation, which can't
-  // attach while the Mac's console is locked ("Timed out creating the
-  // simulator remote automation session"); iOS 18.5's taps don't need it.
-  // Refused before anything is raised on a hub.
-  if (taps27) {
-    const locked = (await sh("ioreg -n Root -d1 -a")).match(CONSOLE_LOCKED);
-    if (
-      !kit.check(
-        "iOS 27's taps (PROBE_TAPS=1): the Mac's console is unlocked",
-        !locked,
-        locked
-          ? "IOConsoleLocked is true: unlock the Mac's console, then run again"
-          : "IOConsoleLocked is false"
-      )
-    ) {
-      return;
-    }
   }
   const liveAsk = process.env.PROBE_LIVE_ASK?.split("|");
   if (liveAsk && liveAsk.length >= 4) {
@@ -555,7 +534,7 @@ async function run(kit: Kit): Promise<void> {
         return false;
       }
       await sh(
-        `${AXE} tap -x ${Math.round(frame.x + frame.width / 2)} -y ${Math.round(frame.y + frame.height / 2)} --udid ${udid}`
+        `${TAP} -x ${Math.round(frame.x + frame.width / 2)} -y ${Math.round(frame.y + frame.height / 2)} --udid ${udid}`
       );
       return true;
     };
@@ -682,55 +661,51 @@ async function run(kit: Kit): Promise<void> {
       reach?: () => Promise<boolean>;
     }[] = [
       { name: "the ask's notification", args: `-push-route 'push:${route}'` },
-      ...(taps
-        ? [
-            {
-              // Home's "Needs you", the list that draws the ask's command
-              // on one line, sampled while it stands; then its row.
-              name: "Needs you",
-              args: "",
-              reach: async () => {
-                await pause(6000);
-                if (!(await tap((label) => label.startsWith("Needs you")))) {
-                  return false;
-                }
-                await pause(3000);
-                const list = launched
-                  ? await rest(launched, "needs-you-list")
-                  : { share: Number.NaN, frames: "" };
-                kit.check(
-                  `Needs you lists the long ask with the app at rest, its main thread busy under ${REST_SHARE * 100}%`,
-                  list.share < REST_SHARE,
-                  `main thread busy ${(list.share * 100).toFixed(1)}%${list.frames ? `: ${list.frames}` : ""}`
-                );
-                return await tap((label) => label.includes(INPUT.description));
-              },
-            },
-            {
-              // The navigation's projects, the session's row in its project
-              // by its title as the hub has it now.
-              name: "the navigation's session list",
-              args: "",
-              reach: async () => {
-                await pause(6000);
-                if (!(await tap("Open navigation"))) {
-                  return false;
-                }
-                await pause(2000);
-                // The drawer lists a project's sessions under its row (SidebarViewController, unless it is folded).
-                const title = await sessionTitle();
-                if (await tap((label) => label.includes(title))) {
-                  return true;
-                }
-                if (!(await tap((label) => label.startsWith(PROJECT)))) {
-                  return false;
-                }
-                await pause(3000);
-                return await tap((label) => label.includes(title));
-              },
-            },
-          ]
-        : []),
+      {
+        // Home's "Needs you", the list that draws the ask's command
+        // on one line, sampled while it stands; then its row.
+        name: "Needs you",
+        args: "",
+        reach: async () => {
+          await pause(6000);
+          if (!(await tap((label) => label.startsWith("Needs you")))) {
+            return false;
+          }
+          await pause(3000);
+          const list = launched
+            ? await rest(launched, "needs-you-list")
+            : { share: Number.NaN, frames: "" };
+          kit.check(
+            `Needs you lists the long ask with the app at rest, its main thread busy under ${REST_SHARE * 100}%`,
+            list.share < REST_SHARE,
+            `main thread busy ${(list.share * 100).toFixed(1)}%${list.frames ? `: ${list.frames}` : ""}`
+          );
+          return await tap((label) => label.includes(INPUT.description));
+        },
+      },
+      {
+        // The navigation's projects, the session's row in its project
+        // by its title as the hub has it now.
+        name: "the navigation's session list",
+        args: "",
+        reach: async () => {
+          await pause(6000);
+          if (!(await tap("Open navigation"))) {
+            return false;
+          }
+          await pause(2000);
+          // The drawer lists a project's sessions under its row (SidebarViewController, unless it is folded).
+          const title = await sessionTitle();
+          if (await tap((label) => label.includes(title))) {
+            return true;
+          }
+          if (!(await tap((label) => label.startsWith(PROJECT)))) {
+            return false;
+          }
+          await pause(3000);
+          return await tap((label) => label.includes(title));
+        },
+      },
     ];
     for (const way of ways) {
       const from = heard.length;
@@ -753,38 +728,17 @@ async function run(kit: Kit): Promise<void> {
         `${reached ? "" : "nothing to tap; "}${standingCard ? "card stood" : "no card"}; main thread busy ${(there.share * 100).toFixed(1)}%${there.frames ? `: ${there.frames}` : ""}`
       );
     }
-    // The chevron: tapped where axe reaches the simulator, else pressed by the app itself (`-open-ask-command`).
-    let opened: boolean;
-    if (taps) {
-      // Back on the session's own card, whichever way in came last.
-      const from = heard.length;
-      launched = (await relaunch(`-open-session ${asker}`)) ?? launched;
-      await until(
-        "the card",
-        () => said(from, "probe card "),
-        Boolean,
-        STAND_MS
-      ).catch(() => undefined);
-      await pause(2000);
-      opened = await tap("Show the whole command");
-    } else {
-      const from = heard.length;
-      launched =
-        (await relaunch(`-open-session ${asker} -open-ask-command`)) ??
-        launched;
-      opened = !!(await until(
-        "the command opened",
-        () =>
-          heard
-            .slice(from)
-            .find(
-              (line) =>
-                line.startsWith("probe opened ") && line.endsWith(" whole")
-            ),
-        Boolean,
-        STAND_MS
-      ).catch(() => undefined));
-    }
+    // The chevron, tapped back on the session's own card, whichever way in came last.
+    const back = heard.length;
+    launched = (await relaunch(`-open-session ${asker}`)) ?? launched;
+    await until(
+      "the card",
+      () => said(back, "probe card "),
+      Boolean,
+      STAND_MS
+    ).catch(() => undefined);
+    await pause(2000);
+    const opened = await tap("Show the whole command");
     await pause(2000);
     const open = await rest(launched, "opened");
     await sh(
@@ -795,25 +749,7 @@ async function run(kit: Kit): Promise<void> {
       opened && open.share < REST_SHARE,
       `${opened ? "opened" : "no chevron to tap"}; main thread busy ${(open.share * 100).toFixed(1)}%${open.frames ? `: ${open.frames}` : ""}`
     );
-    // Approve: tapped, else the app relaunched to approve the card as its Approve does (`-approve-asks`).
-    let approvedTap: boolean;
-    if (taps) {
-      approvedTap = await tap("Approve");
-    } else {
-      await sh(
-        `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -paywall-env sandbox -cawco-hub-url ${base} -open-session ${asker} -approve-asks >/dev/null`
-      );
-      approvedTap = !!(await until(
-        "the card's approval",
-        () => heard.find((line) => line.startsWith("probe approve ")),
-        Boolean,
-        STAND_MS
-      ).catch(() => undefined));
-      launched =
-        (await until("the app's pid", pid, Boolean, 30_000).catch(
-          () => undefined
-        )) ?? launched;
-    }
+    const approvedTap = await tap("Approve");
     const answered = await until(
       "the ask answered",
       async () => ((await pending()).includes("lost-scan") ? undefined : true),
@@ -891,12 +827,11 @@ const PROBE_PROMPT = [
  * own hub, with the app as TestFlight builds it (`PROBE_IOS_APP` names the
  * Release simulator build). A probe session of this spec's own, in default
  * mode in that project, asks for the long call; the app is measured with
- * that ask raised on iOS 27.0 (the owner's phone and OS: at rest from
- * launch, and with `PROBE_TAPS=1` from a shell outside a workspace, taps
- * too) and on iOS 18.5. Where it taps, notifications are allowed through
- * iOS's Allow, and the card is reached from its notification's banner, from
- * Needs you and from the drawer, then its whole command opened and its
- * Deny tapped. Only the probe's own ask is touched,
+ * that ask raised on iOS 27.0 (the owner's phone and OS) and on iOS 18.5.
+ * On each, notifications are allowed through iOS's Allow, and the card is
+ * reached from its notification's banner, from Needs you and from the
+ * drawer, then its whole command opened and its Deny tapped. Only the
+ * probe's own ask is touched,
  * found by its ids; the probe is stopped and archived at the end.
  */
 async function askLive(kit: Kit, app: string, live: LiveHub): Promise<void> {
@@ -1016,7 +951,7 @@ async function askLive(kit: Kit, app: string, live: LiveHub): Promise<void> {
   }
 }
 
-/** The Release app on one simulator against the live hub, the probe's ask raised; where it taps, reached each way (its notification, Needs you, the drawer), opened and denied. */
+/** The Release app on one simulator against the live hub, the probe's ask raised, reached each way (its notification, Needs you, the drawer), opened and denied. */
 async function onSimulator(
   kit: Kit,
   app: string,
@@ -1173,7 +1108,7 @@ async function onSimulator(
         return false;
       }
       await sh(
-        `${AXE} tap -x ${Math.round(frame.x + frame.width / 2)} -y ${Math.round(frame.y + frame.height / 2)} --udid ${udid}`
+        `${TAP} -x ${Math.round(frame.x + frame.width / 2)} -y ${Math.round(frame.y + frame.height / 2)} --udid ${udid}`
       );
       return true;
     };
@@ -1229,7 +1164,7 @@ async function onSimulator(
             at.includes(INPUT.description) ||
             at.includes("Probe: long ask")
           ) {
-            await sh(`${AXE} tap -x ${middle} -y ${y} --udid ${udid}`);
+            await sh(`${TAP} -x ${middle} -y ${y} --udid ${udid}`);
             return true;
           }
         }
@@ -1237,41 +1172,38 @@ async function onSimulator(
       }
       return false;
     };
-    const tapping = which === "18" || taps27;
-    if (tapping) {
-      // Notifications allowed as the owner's phone has them: iOS's own Allow,
-      // answered once for the app's bundle id. The Release app asks only from
-      // the hub sheet's "Turn on notifications", which is Pro's (a TestFlight
-      // install opens it; a simulator's Release app is unentitled and gets
-      // the paywall), so the Debug build of the same bundle asks
-      // (`-push-probe-register`, no hub named, so nothing registers anywhere),
-      // Allow is tapped, and the Release build is installed over it, keeping
-      // iOS's answer.
-      const debug = simulatorApp(ROOT);
-      const stale = staleApp(ROOT, debug);
-      let allowed = false;
-      if (!stale) {
-        await sh(`xcrun simctl install ${udid} "${debug}"`);
-        await sh(
-          `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -push-probe-register >/dev/null`
-        );
-        for (let look = 0; look < 15 && !allowed; look += 1) {
-          // biome-ignore lint/performance/noAwaitInLoops: one look for iOS's alert after another
-          await pause(2000);
-          allowed = await seen((label) => label === "Allow");
-        }
-        allowed = allowed && (await tap((label) => label === "Allow"));
+    // Notifications allowed as the owner's phone has them: iOS's own Allow,
+    // answered once for the app's bundle id. The Release app asks only from
+    // the hub sheet's "Turn on notifications", which is Pro's (a TestFlight
+    // install opens it; a simulator's Release app is unentitled and gets
+    // the paywall), so the Debug build of the same bundle asks
+    // (`-push-probe-register`, no hub named, so nothing registers anywhere),
+    // Allow is tapped, and the Release build is installed over it, keeping
+    // iOS's answer.
+    const debug = simulatorApp(ROOT);
+    const stale = staleApp(ROOT, debug);
+    let allowed = false;
+    if (!stale) {
+      await sh(`xcrun simctl install ${udid} "${debug}"`);
+      await sh(
+        `xcrun simctl launch --terminate-running-process ${udid} dev.cawco.app -push-probe-register >/dev/null`
+      );
+      for (let look = 0; look < 15 && !allowed; look += 1) {
+        // biome-ignore lint/performance/noAwaitInLoops: one look for iOS's alert after another
         await pause(2000);
-        await sh(
-          `xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true`
-        );
+        allowed = await seen((label) => label === "Allow");
       }
-      kit.check(
-        `live ${tag}: notifications allowed through iOS's Allow, as the owner allowed them`,
-        allowed,
-        stale ?? (allowed ? "Allow tapped" : "iOS's Allow never showed")
+      allowed = allowed && (await tap((label) => label === "Allow"));
+      await pause(2000);
+      await sh(
+        `xcrun simctl terminate ${udid} dev.cawco.app >/dev/null 2>&1 || true`
       );
     }
+    kit.check(
+      `live ${tag}: notifications allowed through iOS's Allow, as the owner allowed them`,
+      allowed,
+      stale ?? (allowed ? "Allow tapped" : "iOS's Allow never showed")
+    );
     await sh(`xcrun simctl install ${udid} "${app}"`);
     let id = await launch();
     await pause(20_000);
@@ -1284,12 +1216,6 @@ async function onSimulator(
       true,
       await rest(id, "launch")
     );
-    if (!tapping) {
-      kit.note(
-        `live ${tag} (Release): only from launch here; its taps need a shell outside a workspace (PROBE_TAPS=1)`
-      );
-      return;
-    }
     // The ask's notification, the app in the background: its banner tapped,
     // which opens the card through the notification centre's delegate
     // (AppDelegate `didReceive`, PushTaps `deliver`). The payload is the

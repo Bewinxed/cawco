@@ -93,6 +93,15 @@ public final class KitSegmented: UIControl {
         for (index, cell) in cells.enumerated() { cell.chosen = index == selectedIndex }
     }
 
+    /// Each segment at least this wide: a glyph-only group in a toolbar keeps
+    /// every segment a 44pt touch target (HIG Layout, "44x44 pt"). 0, as wide as its content.
+    public var segmentMinWidth: Double = 0 {
+        didSet {
+            for cell in cells { cell.minWidth.constant = segmentMinWidth }
+            setNeedsLayout()
+        }
+    }
+
     /// Shows `index` as chosen without announcing a change.
     public func select(_ index: Int?, animated: Bool = true) {
         guard index != selectedIndex else { return }
@@ -130,6 +139,12 @@ public final class KitSegmented: UIControl {
         private let mark: GlyphView?
         /// The glyph and the name, centred as the name alone was.
         private let content = UIStackView()
+        /// The segment's narrowest (`segmentMinWidth`).
+        lazy var minWidth: NSLayoutConstraint = {
+            let floor = widthAnchor.constraint(greaterThanOrEqualToConstant: 0)
+            floor.isActive = true
+            return floor
+        }()
         var chosen = false {
             didSet {
                 label.ink = chosen ? Palette.inkStrong : Palette.inkMuted

@@ -10,7 +10,11 @@
    * lists the session's artifacts (`held`), and the panel follows that frame
    * when the removed one was shown.
    */
-  import type { ArtifactKind, ArtifactSummary } from "@cawco/core";
+  import {
+    type ArtifactKind,
+    type ArtifactSummary,
+    artifactWords,
+  } from "@cawco/core";
   import type { Component } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
@@ -49,7 +53,7 @@
     page: IconArtifactPage,
     canvas: IconArtifactCanvas,
     preview: IconWindow,
-    sheet: IconArtifactSheet,
+    component: IconArtifactSheet,
   };
 
   let open = $state(false);
@@ -117,7 +121,7 @@
       },
       (error: Error) => {
         removing.delete(artifact.id);
-        toast.error(`${artifact.name} wasn't removed: ${error.message}`);
+        toast.error(artifactWords.notRemoved(artifact.name, error.message));
       }
     );
   }
@@ -240,20 +244,24 @@
           onSelect={() => choose(artifact)}
         >
           <Glyph />
-          <span
-            data-slot="row-name"
-            class="row-name"
-            id={part(artifact.id, "name")}>{artifact.name}</span
-          >
-          {#if artifact.promoted}
+          <span class="row-text" data-box>
             <span
-              data-slot="row-promoted"
-              class="row-promoted"
-              id={part(artifact.id, "promoted")}
-              title="Promoted into the project's folder at artifacts/{artifact.name}/"
-              >Promoted {artifact.promoted.commit.slice(0, 7)}</span
+              data-slot="row-name"
+              class="row-name"
+              id={part(artifact.id, "name")}>{artifact.name}</span
             >
-          {/if}
+            {#if artifact.promoted}
+              <span
+                data-slot="row-promoted"
+                class="row-promoted"
+                id={part(artifact.id, "promoted")}
+                title={artifactWords.promotedTitle(artifact.name)}
+                >{artifactWords.promoted(
+                  artifact.promoted.commit.slice(0, 7)
+                )}</span
+              >
+            {/if}
+          </span>
           {#if artifact.createdAt}
             <span
               data-slot="row-age"
@@ -263,7 +271,7 @@
             >
           {/if}
           <button
-            aria-label="Remove {artifact.name}"
+            aria-label={artifactWords.removeNamed(artifact.name)}
             class="row-remove"
             data-box
             disabled={removing.has(artifact.id)}
@@ -274,7 +282,7 @@
             onpointerdown={own}
             onpointerup={own}
             tabindex={-1}
-            title="Remove"
+            title={artifactWords.remove}
             type="button"
           >
             <IconTrash />
@@ -309,9 +317,15 @@
   /* The name is what a row is chosen by: it keeps its own width, and in a
      row too narrow for everything the promoted tag gives up its room first
      (its title and the row's name still say it). */
-  .row-name {
+  .row-text {
+    display: flex;
     flex: 1 1 auto;
+    gap: inherit;
     min-width: 0;
+  }
+  .row-name {
+    flex: 0 0 auto;
+    max-inline-size: 100%;
     overflow: clip;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -324,7 +338,7 @@
     font-variant-numeric: tabular-nums;
   }
   .row-promoted {
-    flex-shrink: 100;
+    flex: 0 1 auto;
     min-width: 0;
     overflow: clip;
     text-overflow: ellipsis;

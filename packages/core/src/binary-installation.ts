@@ -146,8 +146,7 @@ export const trialUnits = (
  * `<root>/keeper` -> `versions/<v>`, changed only by an atomic rename, like
  * `current`, and only by a keeper handover (`cawco binary-apply`). The keeper
  * of that build runs in a job of its own, from its build ({@link versionExecutable}), and the
- * machine's endpoint names it (keepers.ts). A legacy keeper's unit runs
- * `<root>/run sessiond`, which execs through this link.
+ * machine's endpoint names it (keepers.ts).
  */
 const VERSIONS_PREFIX = /^versions\//;
 export const keeperPath = (): string => join(binaryRoot(), "keeper");

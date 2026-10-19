@@ -12,6 +12,7 @@
  */
 import { readFileSync, watch } from "node:fs";
 import { join } from "node:path";
+import { listedPid, signal } from "../../packages/core/src/signal";
 
 const [clone, state] = process.argv.slice(2);
 if (!(clone && state)) {
@@ -23,12 +24,26 @@ const sandbox = Number.parseInt(
   readFileSync(join(state, "sandbox.pid"), "utf8"),
   10
 );
+/** Whether `sandbox` is still a bwrap, as /proc lists it: a pid on record names no other process. */
+const isBwrap = (): boolean => {
+  try {
+    return (
+      readFileSync(`/proc/${sandbox}/cmdline`, "utf8")
+        .split("\0")[0]
+        ?.endsWith("bwrap") ?? false
+    );
+  } catch {
+    return false;
+  }
+};
+if (!isBwrap()) {
+  console.error(`${state}/sandbox.pid names no running bwrap (${sandbox})`);
+  process.exit(1);
+}
 const watcher = watch(join(clone, ".git"), (_event, name) => {
   if (name && protectedNames.has(String(name))) {
-    try {
-      process.kill(sandbox, "SIGKILL");
-    } catch {
-      // already gone
+    if (isBwrap()) {
+      signal(listedPid(sandbox), "SIGKILL");
     }
     console.log(`killed sandbox ${sandbox}: .git/${name} changed on the host`);
     watcher.close();

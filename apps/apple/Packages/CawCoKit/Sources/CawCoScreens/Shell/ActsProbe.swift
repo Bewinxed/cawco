@@ -67,7 +67,7 @@ enum ActsProbe {
     private static func say(_ step: String, _ id: String, _ shell: ShellController) {
         let drawn = row(id, shell)?.probeState ?? "no row on screen"
         let hub = shell.hub
-        log.notice("\(step, privacy: .public) [\(id, privacy: .public)] row: \(drawn, privacy: .public) | hub: \(hub.fleet.byId[id]?.status.rawValue ?? "gone", privacy: .public) kind \(hub.fleet.byId[id]?.kind ?? "-", privacy: .public)")
+        log.notice("\(step, privacy: .public) [\(id, privacy: .public)] row: \(drawn, privacy: .public) | hub: \(hub.fleet.byId[id]?.status.rawValue ?? "gone", privacy: .public) kind \(hub.fleet.byId[id]?.session?.kind ?? "-", privacy: .public)")
     }
 
     /// Every item a menu would draw, with the words under it.
@@ -81,7 +81,7 @@ enum ActsProbe {
     }
 
     private static func menu(_ id: String, _ shell: ShellController, _ host: MenuHost) -> String {
-        guard let held = shell.hub.fleet.byId[id] else { return "no session" }
+        guard let held = shell.hub.fleet.byId[id]?.session else { return "no session" }
         return items(SessionMenus.live(held, context: shell.sessionMenus, copy: host)).joined(separator: " | ")
     }
 
@@ -196,7 +196,7 @@ enum ActsProbe {
         for id in ["p-fork", "p-arch-ok", "p-arch-busy", "p-del"] { say("finished", id, shell) }
         Task {
             await SessionMenus.runPending(.fork, id: "p-fork", host: host, hub: hub, work: {
-                try await hub.fork(machineId: "probe-mac", cwd: "/tmp/probe", sessionKey: "s-fork")
+                try await hub.fork(machineId: "probe-mac", cwd: "/tmp/probe", sessionKey: "s-fork", harness: .claude)
             }, then: { _ in })
         }
         await wait(0.3)

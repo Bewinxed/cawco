@@ -15,6 +15,7 @@ import { spawn } from "node:child_process";
 import { constants } from "node:os";
 import {
   HEAVY_RUN_HELD_ENV,
+  heavyGate,
   heavyWhere,
   releaseHeavySlot,
   takeHeavySlot,
@@ -31,6 +32,7 @@ export async function heavyRun(command: string): Promise<number> {
         pid: process.pid,
         where: heavyWhere(),
         command,
+        gate: heavyGate(),
       });
   const child = spawn("/bin/sh", ["-c", command], {
     stdio: "inherit",

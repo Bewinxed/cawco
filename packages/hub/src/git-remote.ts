@@ -21,6 +21,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, rm, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { detach } from "@cawco/core/detach";
+import { GIT_LOCALE } from "@cawco/core/safe-git";
 import { placeStreamedFile } from "@cawco/core/state-file";
 import { Elysia } from "elysia";
 import { HUB_DEBUG } from "./config";
@@ -61,8 +62,15 @@ export const bareRepoPath = (root: string, projectId: string): string =>
 export const lfsObjectPath = (lfsRoot: string, oid: string): string =>
   join(lfsRoot, "objects", oid.slice(0, 2), oid.slice(2, 4), oid);
 
+/** The hub's environment, git speaking {@link GIT_LOCALE}. */
+const gitEnv = (): Record<string, string | undefined> => ({
+  ...process.env,
+  ...GIT_LOCALE,
+});
+
 const run = async (argv: string[]): Promise<void> => {
   const child = Bun.spawn(argv, {
+    env: gitEnv(),
     stdin: "ignore",
     stdout: "ignore",
     stderr: "pipe",
@@ -82,6 +90,7 @@ const read = async (
   args: string[]
 ): Promise<string | undefined> => {
   const child = Bun.spawn(["git", "-C", repo, ...args], {
+    env: gitEnv(),
     stdin: "ignore",
     stdout: "pipe",
     stderr: "ignore",
@@ -266,6 +275,7 @@ export const gitRemoteRoutes = (deps: GitRemoteDeps) => {
     const env: Record<string, string> = {
       PATH: process.env.PATH ?? "/usr/bin:/bin",
       HOME: process.env.HOME ?? "/",
+      ...GIT_LOCALE,
       GIT_PROJECT_ROOT: deps.root,
       GIT_HTTP_EXPORT_ALL: "1",
       PATH_INFO: `/${projectId}.git/${service}`,

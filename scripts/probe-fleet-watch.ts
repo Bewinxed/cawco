@@ -3,7 +3,7 @@
  * A looping session raises exactly one triage run and one nudge; an idle
  * fleet spends nothing. On a scratch fleet (real hub, agent and sessiond on
  * loopback, Claude Code against the mock model), with Jev answered by a
- * mock the hub reaches on its TypeSafe route (`CAWCO_TYPESAFE_URL`, jev.ts).
+ * mock the hub reaches on its TypeSafe route (`fleet.standIns.typesafeUrl`, scripts/stand-ins).
  *
  * A looping session reads the same missing file again and again: the same
  * `Read` call 3 times in a row, and the same tool error 3 times.
@@ -125,7 +125,7 @@ const respond = (request: Seen): Reply => {
   return text("ok");
 };
 
-// ── Jev, as the hub reaches it on the TypeSafe route (CAWCO_TYPESAFE_URL) ───
+// ── Jev, as the hub reaches it on the TypeSafe route (standIns.typesafeUrl)───
 /** Every question the hub asked Jev: its keys, and when. */
 const jevHits: { at: number; keys: string[] }[] = [];
 const jev = Bun.serve({
@@ -163,7 +163,7 @@ const stuckAsks = (since = 0) =>
   jevHits.filter((hit) => hit.at >= since && hit.keys.includes("stuck")).length;
 
 const fleet = await scratchFleet({ name: "probe-fleet-watch", respond });
-fleet.env.CAWCO_TYPESAFE_URL = `http://127.0.0.1:${jev.port}/systemone`;
+fleet.standIns.typesafeUrl = `http://127.0.0.1:${jev.port}/systemone`;
 const home = fleet.env.HOME as string;
 const hubLog = () => fleet.logs("hub");
 const watchLines = async () =>

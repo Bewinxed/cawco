@@ -28,8 +28,8 @@
  *     when; nothing reaches the delegate.
  * p3. A new delegate for B waits in the tray with the reason; a delegate on
  *     A runs meanwhile.
- * B reports itself a Mac (`darwin-arm64`, as the apple-gate spec has it)
- * and the project's Apple build gate is on, so an item on A that commits
+ * B reports itself a Mac (`darwin-arm64`) and the project's gate.md
+ * declares CawCo's iOS build step (`needs: apple`), so an item on A that commits
  * under apps/apple has a landing gate step on B: the iOS build, a stub
  * `apps/apple/scripts/build-both.sh` here. That step is the hub's one
  * command on another machine.
@@ -60,6 +60,7 @@
 import { chmod, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { APPLE_GATE, declareGate, NO_MAC } from "../gate";
 import type { Kit, KitFleet, Spec } from "../kit";
 
 const B = "probe-b";
@@ -75,7 +76,7 @@ const SLEEP = /PROBE-SLEEP-([A-Z])/;
 const HELLO = "PROBE-HELLO-Q";
 const FINISH_C = "PROBE-FINISH-C";
 const FINISH_D = "PROBE-FINISH-D";
-/** The landing gate's iOS build step, as its lines name it (hub apple-gate.ts). */
+/** The landing gate's iOS build step, as its lines name it (the project's gate.md, probe-kit gate.ts). */
 const GATE = "iOS build compiles";
 /** The file each delegate commits: under apps/apple, so its gate builds on B. */
 const FILES = { C: "apps/apple/Checker.swift", D: "apps/apple/Long.swift" };
@@ -88,9 +89,6 @@ const STUB = `#!/usr/bin/env bash
 if [ -e ${FILES.D} ] && [ ! -e .p7-ran ]; then touch .p7-ran; sleep 600; fi
 echo ran-on-b
 `;
-/** finish_item's refusal while no Mac is online (hub apple-gate.ts `appleGateRefusal`). */
-const NO_MAC = "no apple-capable machine is online";
-
 /** The delegate's commit of `file`, before it finishes. */
 const commitCommand = (tag: string, file: string) =>
   [
@@ -314,16 +312,7 @@ const run = async (kit: Kit) => {
     machineId: B,
     path: repo,
   });
-  const gated = await fetch(`${fleet.base}/api/projects/${project.id}`, {
-    method: "PATCH",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({ appleGate: true }),
-  });
-  if (gated.status !== 200) {
-    throw new Error(
-      `the project's Apple build gate could not be turned on: ${gated.status} ${await gated.text()}`
-    );
-  }
+  await declareGate(fleet.base, project.id, APPLE_GATE);
   const parent = await fleet.spawn("claude", "Parent", repo, {
     projectId: project.id,
   });
@@ -900,9 +889,16 @@ const runningBuild = async (
     (status) => status.includes("paused"),
     10_000
   ).catch(() => undefined);
+  // It waits while gating on top of main, after finish_item (work-items
+  // landingHow, stepWaitWords); B shares its host's name with A, so it is
+  // named in words (core machineCalled), never "obelisk · 2".
   check(
-    "p7: the stopped build reads waiting: … paused until",
-    waiting?.startsWith("waiting:") === true && waiting.includes(words),
+    `p7: the stopped build reads: gating on top of main: the step “${GATE}” is waiting: … paused until`,
+    waiting?.startsWith(
+      `gating on top of main: the step “${GATE}” is waiting: `
+    ) === true &&
+      waiting.includes(words) &&
+      !waiting.includes(" · "),
     waiting ?? "no wait said"
   );
   const during = row();
@@ -935,4 +931,8 @@ const runningBuild = async (
   );
 };
 
-export default { name: "machine-pause", run } satisfies Spec;
+export default {
+  name: "machine-pause",
+  host: "its delegates cut workspaces on both machines",
+  run,
+} satisfies Spec;

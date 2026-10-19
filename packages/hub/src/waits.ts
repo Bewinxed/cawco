@@ -132,10 +132,7 @@ export const createWaits = ({ lifetime, projectIds, tasks }: WaitsDeps) => {
     if (holding.size === 0) {
       return;
     }
-    const { tasks: rows, tracker } = await tasks.list(projectId);
-    if (tracker !== "cawco") {
-      return;
-    }
+    const { tasks: rows } = await tasks.list(projectId);
     const now = Date.now();
     for (const task of rows) {
       const stage = holding.get(task.stage);

@@ -5,6 +5,6 @@ export function applyRelayPeer(request: IncomingMessage): {
 };
 export function listenInherited(
   server: Server,
-  fd: number,
+  fds: number[],
   ready: () => void
 ): Promise<{ stopAccepting: () => void; destroy: () => void }>;

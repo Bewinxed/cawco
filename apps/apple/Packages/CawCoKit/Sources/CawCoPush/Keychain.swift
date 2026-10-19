@@ -1,6 +1,5 @@
 public import CryptoKit
 import Foundation
-import Security
 public import Valet
 
 // What the app and its Notification Service Extension share in the Keychain:
@@ -41,7 +40,6 @@ public struct Pairing: Codable, Sendable {
 
     /// The kept pairing; made and kept now when there is none, unless `existing`.
     public static func kept(existing: Bool = false) throws -> Pairing {
-        try moveIntoSharedGroup()
         if let pairing = try stored() { return pairing }
         guard !existing else { throw Missing() }
         let secret = SymmetricKey(size: .bits256).withUnsafeBytes { Data($0) }.base64EncodedString()
@@ -64,22 +62,6 @@ public struct Pairing: Codable, Sendable {
             try PushKey.forget(pairingId: pairing.id)
         }
         try SharedKeychain.valet.removeObject(forKey: key)
-    }
-
-    /// A pairing made before the shared group sits in the app's own group
-    /// (service `dev.cawco.app.cawrier`), where the extension can't read it;
-    /// Cawrier and the hub already hold it, so it moves into the shared group
-    /// rather than being made again.
-    private static func moveIntoSharedGroup() throws {
-        guard try SharedKeychain.data(key) == nil else { return }
-        do {
-            try SharedKeychain.valet.migrateObjects(matching: [
-                kSecClass as String: kSecClassGenericPassword as String,
-                kSecAttrService as String: "dev.cawco.app.cawrier",
-            ], removeOnCompletion: true)
-        } catch KeychainError.itemNotFound {
-            return
-        }
     }
 }
 

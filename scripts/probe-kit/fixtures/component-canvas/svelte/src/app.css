@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+:root {
+  --radius: 8px;
+  --ground: light-dark(#ffffff, #16161a);
+  --ink: light-dark(#1c1c1f, #ececf0);
+  color-scheme: light dark;
+}
+
+body {
+  background-color: var(--ground);
+  color: var(--ink);
+  font-family: system-ui, sans-serif;
+}
+
+@layer kit {
+  .chip:hover {
+    background: light-dark(#e8e8ee, #2a2a33);
+  }
+}

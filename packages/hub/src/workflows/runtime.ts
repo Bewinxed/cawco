@@ -378,7 +378,7 @@ function questionNotice(
   if (spec.answerSchema) {
     how = `value: <a value matching the schema above>${options.length ? ', choice: "<label>"' : ""}`;
   }
-  return `${workflowNoticeMarker(workflow, "question")}run ${run.id} · step ${step.id}\n${spec.question ?? ""}\nOptions: ${labels}${other}${schema}\nAnswer with workflow_steer {runId: "${run.id}", action: {type: "answer", stepId: "${step.id}", ${how}}}.`;
+  return `${workflowNoticeMarker(workflow, "question", run.id)}run ${run.id} · step ${step.id}\n${spec.question ?? ""}\nOptions: ${labels}${other}${schema}\nAnswer with workflow_steer {runId: "${run.id}", action: {type: "answer", stepId: "${step.id}", ${how}}}.`;
 }
 
 /** An answer to a question: the option picked, a note, a typed value. */
@@ -931,7 +931,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       write(run);
       notify(
         run,
-        `${workflowNoticeMarker(nameOf(run), status)}run ${run.id} · ${durationText(Date.now() - run.startedAt.getTime())} · ${status === "done" ? receiptOf(result, "result") : failureText(failure ?? status)}`
+        `${workflowNoticeMarker(nameOf(run), status, run.id)}run ${run.id} · ${durationText(Date.now() - run.startedAt.getTime())} · ${status === "done" ? receiptOf(result, "result") : failureText(failure ?? status)}`
       );
       reportToParent(run);
       for (const instanceId of sessions) {
@@ -974,7 +974,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     serial(run.id, () => endRunSessions(run.id)).catch((error) => {
       notify(
         runOf(run.id),
-        `${workflowNoticeMarker(nameOf(run), "stop held")}run ${run.id} · The run could not finish stopping: ${reason(error)}.`
+        `${workflowNoticeMarker(nameOf(run), "stop held", run.id)}run ${run.id} · The run could not finish stopping: ${reason(error)}.`
       );
     });
   };
@@ -993,7 +993,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
           } catch (error) {
             notify(
               run,
-              `${workflowNoticeMarker(nameOf(run), "stop held")}run ${run.id} · Session ${instanceId} could not be ended because ${reason(error)}. The run launches nothing more and is not fully cancelled until its sessions are confirmed ended.`
+              `${workflowNoticeMarker(nameOf(run), "stop held", run.id)}run ${run.id} · Session ${instanceId} could not be ended because ${reason(error)}. The run launches nothing more and is not fully cancelled until its sessions are confirmed ended.`
             );
             return instanceId;
           }
@@ -1033,7 +1033,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         : failureText(current.failure ?? current.status);
     notify(
       run,
-      `${workflowNoticeMarker(nameOf(run), current.status)}run ${run.id} · ${took} · ${outcome}`
+      `${workflowNoticeMarker(nameOf(run), current.status, run.id)}run ${run.id} · ${took} · ${outcome}`
     );
     reportToParent(run);
     if (run.parentRunId && endingOf(runOf(run.parentRunId))) {
@@ -1050,7 +1050,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     deps.halt(run.machineId, instanceId).catch((error) => {
       notify(
         run,
-        `${workflowNoticeMarker(nameOf(run), "cleanup held")}run ${run.id} · Session ${instanceId} could not be ended because ${reason(error)}. Its stop is recorded and will be confirmed after its machine is ready.`
+        `${workflowNoticeMarker(nameOf(run), "cleanup held", run.id)}run ${run.id} · Session ${instanceId} could not be ended because ${reason(error)}. Its stop is recorded and will be confirmed after its machine is ready.`
       );
     });
   };
@@ -1096,7 +1096,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       workspace.path,
       workspace.machineId,
       `Supervise ${workflow.name}`,
-      `${workflowNoticeMarker(workflow.name, "supervisor brief")}Supervise workflow ${workflow.name}, run ${runId}.\n${workflow.description}\nYou receive a receipt for each step, checkpoint and the run's end: its status, attempt, time, a \`ref\`, and the result itself when it is 1,000 characters or less. Read more of a result only when you need it, with workflow_read {runId, ref, path}. Pass a result on to a later step as {{ref:N.path}} in what you hand the program; the hub fills it in when the step starts. A step that runs out of attempts is held for your decision, up to an hour: workflow_steer retry runs another attempt on the same session, fail hands the program the failure. Answer its questions and steer it with workflow_steer (note, retry, fail, answer, cancel); the program controls routing.`
+      `${workflowNoticeMarker(workflow.name, "supervisor brief", runId)}Supervise workflow ${workflow.name}, run ${runId}.\n${workflow.description}\nYou receive a receipt for each step, checkpoint and the run's end: its status, attempt, time, a \`ref\`, and the result itself when it is 1,000 characters or less. Read more of a result only when you need it, with workflow_read {runId, ref, path}. Pass a result on to a later step as {{ref:N.path}} in what you hand the program; the hub fills it in when the step starts. A step that runs out of attempts is held for your decision, up to an hour: workflow_steer retry runs another attempt on the same session, fail hands the program the failure. Answer its questions and steer it with workflow_steer (note, retry, fail, answer, cancel); the program controls routing.`
     );
   };
 
@@ -1288,7 +1288,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       case "now":
         return Date.now();
       case "notify": {
-        const text = `${workflowNoticeMarker(nameOf(run), "note")}run ${run.id} · ${String(args.text)}`;
+        const text = `${workflowNoticeMarker(nameOf(run), "note", run.id)}run ${run.id} · ${String(args.text)}`;
         if (run.supervisorInstanceId) {
           notify(run, text);
         } else {
@@ -1446,129 +1446,139 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     };
   };
 
-  const engine = createWorkflowEngine(deps.dbPath, {
-    run: (runId) => db.getWorkflowRun(runId),
-    async perform(runId, seq, kind, args) {
-      const run = runOf(runId);
-      let outcome: Outcome;
-      try {
-        outcome = { result: await perform(run, kind, args) };
-      } catch (error) {
-        outcome = { failure: failureOf(error) };
-      }
-      logCall(runId, seq, kind, args, outcome);
-      if (kind === "checkpoint" && "result" in outcome) {
-        const checkpoint = outcome.result as { data: unknown; label: string };
-        announce(runOf(runId), undefined, undefined, checkpoint);
-        notify(
-          runOf(runId),
-          `${workflowNoticeMarker(nameOf(run), `checkpoint ${checkpoint.label}`)}run ${runId} · ${receiptOf(checkpoint.data, seq)}`
-        );
-      } else {
+  const engine = createWorkflowEngine(
+    deps.dbPath,
+    {
+      run: (runId) => db.getWorkflowRun(runId),
+      async perform(runId, seq, kind, args) {
+        const run = runOf(runId);
+        let outcome: Outcome;
+        try {
+          outcome = { result: await perform(run, kind, args) };
+        } catch (error) {
+          outcome = { failure: failureOf(error) };
+        }
+        logCall(runId, seq, kind, args, outcome);
+        if (kind === "checkpoint" && "result" in outcome) {
+          const checkpoint = outcome.result as { data: unknown; label: string };
+          announce(runOf(runId), undefined, undefined, checkpoint);
+          notify(
+            runOf(runId),
+            `${workflowNoticeMarker(nameOf(run), `checkpoint ${checkpoint.label}`, runId)}run ${runId} · ${receiptOf(checkpoint.data, seq)}`
+          );
+        } else {
+          announce(runOf(runId));
+        }
+        return outcome;
+      },
+      async open(runId, seq, kind, args) {
+        const run = runOf(runId);
+        if (!active(run)) {
+          throw new Error("This workflow run has ended.");
+        }
+        switch (kind) {
+          case "run":
+          case "spawn":
+            if (!db.getWorkflowLog(runId, seq)) {
+              logCall(runId, seq, kind, args);
+            }
+            await steps.open(run, seq, stepIdFor(runId, seq), {
+              ...(args as unknown as StepSpecJson),
+            });
+            return {};
+          case "ask":
+            openAsk(run, seq, args as AskArgs);
+            return {};
+          case "sleep":
+            logCall(runId, seq, kind, args, {
+              result: { due: Date.now() + Math.max(0, Number(args.ms) || 0) },
+            });
+            announce(run);
+            return {};
+          case "workflow":
+            return await openChild(run, seq, args);
+          default:
+            throw new Error(`${kind} is not a call a run waits on.`);
+        }
+      },
+      askTimedOut(runId, seq) {
+        const run = db.getWorkflowRun(runId);
+        const step = db.getWorkflowStep(stepIdFor(runId, seq));
+        if (!(run && step?.status === "waiting")) {
+          return;
+        }
+        deps.settle(step.id);
+        step.status = "failed";
+        step.failure = "ask-timeout";
+        step.endedAt = new Date();
+        if (run.status === "waiting" && !stillWaiting(run, step.id)) {
+          run.status = "running";
+        }
+        settleLog(runId, seq, {
+          failure: {
+            name: "AskError",
+            kind: "timeout",
+            message: "ask-timeout",
+          },
+        });
+        write(run, step);
+      },
+      childOutcome: childOutcomeOf,
+      hold: (runId, seq) => steps.holdOf(stepIdFor(runId, seq)),
+      holdExpired(runId, seq, hold) {
+        const failure = steps.holdExpired(stepIdFor(runId, seq), hold);
+        if (!failure) {
+          return;
+        }
+        settleLog(runId, seq, { failure });
         announce(runOf(runId));
-      }
-      return outcome;
+        return { failure };
+      },
+      async seed(runId, seq, kind, args, hash) {
+        const run = runOf(runId);
+        const from: RerunFrom | undefined =
+          run.rerunFromRunId !== null && run.rerunBefore !== null
+            ? { runId: run.rerunFromRunId, before: run.rerunBefore }
+            : undefined;
+        if (!from || seq >= from.before) {
+          return;
+        }
+        const recorded = await engine.recorded(from.runId, seq);
+        if (!recorded) {
+          throw new Error(
+            `The run this one re-runs (${from.runId}) has no record of effect ${seq}; re-run it from an earlier step.`
+          );
+        }
+        if (recorded.hash !== hash) {
+          // A different call here: the driver refuses it as the workflow changed.
+          return { hash: recorded.hash, outcome: { result: null } };
+        }
+        const outcome = recorded.outcome ?? waitOutcome(from.runId, seq, kind);
+        logCall(runId, seq, kind, args, outcome);
+        announce(run);
+        return { hash: recorded.hash, outcome };
+      },
+      finished(runId, outcome) {
+        const run = db.getWorkflowRun(runId);
+        if (!run) {
+          return;
+        }
+        if ("failure" in outcome) {
+          const failure: WorkflowFailure = outcome.failure;
+          finish(
+            run,
+            "failed",
+            failure.kind
+              ? `${failure.kind}: ${failure.message}`
+              : failure.message
+          );
+        } else {
+          finish(run, "done", null, outcome.result ?? null);
+        }
+      },
     },
-    async open(runId, seq, kind, args) {
-      const run = runOf(runId);
-      if (!active(run)) {
-        throw new Error("This workflow run has ended.");
-      }
-      switch (kind) {
-        case "run":
-        case "spawn":
-          if (!db.getWorkflowLog(runId, seq)) {
-            logCall(runId, seq, kind, args);
-          }
-          await steps.open(run, seq, stepIdFor(runId, seq), {
-            ...(args as unknown as StepSpecJson),
-          });
-          return {};
-        case "ask":
-          openAsk(run, seq, args as AskArgs);
-          return {};
-        case "sleep":
-          logCall(runId, seq, kind, args, {
-            result: { due: Date.now() + Math.max(0, Number(args.ms) || 0) },
-          });
-          announce(run);
-          return {};
-        case "workflow":
-          return await openChild(run, seq, args);
-        default:
-          throw new Error(`${kind} is not a call a run waits on.`);
-      }
-    },
-    askTimedOut(runId, seq) {
-      const run = db.getWorkflowRun(runId);
-      const step = db.getWorkflowStep(stepIdFor(runId, seq));
-      if (!(run && step?.status === "waiting")) {
-        return;
-      }
-      deps.settle(step.id);
-      step.status = "failed";
-      step.failure = "ask-timeout";
-      step.endedAt = new Date();
-      if (run.status === "waiting" && !stillWaiting(run, step.id)) {
-        run.status = "running";
-      }
-      settleLog(runId, seq, {
-        failure: { name: "AskError", kind: "timeout", message: "ask-timeout" },
-      });
-      write(run, step);
-    },
-    childOutcome: childOutcomeOf,
-    hold: (runId, seq) => steps.holdOf(stepIdFor(runId, seq)),
-    holdExpired(runId, seq, hold) {
-      const failure = steps.holdExpired(stepIdFor(runId, seq), hold);
-      if (!failure) {
-        return;
-      }
-      settleLog(runId, seq, { failure });
-      announce(runOf(runId));
-      return { failure };
-    },
-    async seed(runId, seq, kind, args, hash) {
-      const run = runOf(runId);
-      const from: RerunFrom | undefined =
-        run.rerunFromRunId !== null && run.rerunBefore !== null
-          ? { runId: run.rerunFromRunId, before: run.rerunBefore }
-          : undefined;
-      if (!from || seq >= from.before) {
-        return;
-      }
-      const recorded = await engine.recorded(from.runId, seq);
-      if (!recorded) {
-        throw new Error(
-          `The run this one re-runs (${from.runId}) has no record of effect ${seq}; re-run it from an earlier step.`
-        );
-      }
-      if (recorded.hash !== hash) {
-        // A different call here: the driver refuses it as the workflow changed.
-        return { hash: recorded.hash, outcome: { result: null } };
-      }
-      const outcome = recorded.outcome ?? waitOutcome(from.runId, seq, kind);
-      logCall(runId, seq, kind, args, outcome);
-      announce(run);
-      return { hash: recorded.hash, outcome };
-    },
-    finished(runId, outcome) {
-      const run = db.getWorkflowRun(runId);
-      if (!run) {
-        return;
-      }
-      if ("failure" in outcome) {
-        const failure: WorkflowFailure = outcome.failure;
-        finish(
-          run,
-          "failed",
-          failure.kind ? `${failure.kind}: ${failure.message}` : failure.message
-        );
-      } else {
-        finish(run, "done", null, outcome.result ?? null);
-      }
-    },
-  });
+    deps.lifetime
+  );
 
   // --------------------------------------------------------------- public
 
@@ -1679,7 +1689,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       workflowId: string,
       options: LaunchOptions
     ): Promise<{ runId: string }> {
-      await engine.ready;
+      await engine.up();
       const run = await prepare(workflowId, options);
       try {
         await engine.start(run.id);
@@ -1892,13 +1902,14 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     forget: (runIds: string[]) =>
       Promise.all(runIds.map((runId) => engine.forget(runId))),
     /**
-     * At hub start, once the engine is up: running attempts get their timeout
-     * back, parked questions go back in the ledger, and every top-level run
-     * is made sure of an execution — the engine resumes the rest itself.
+     * At a serving hub's start (server.ts `offBoot`): starts the engine, then
+     * running attempts get their timeout back, parked questions go back in
+     * the ledger, and every top-level run is made sure of an execution — the
+     * engine resumes the rest itself.
      */
     async resume() {
       // The engine logs its own failure to start; with it down nothing runs.
-      const up = await engine.ready.then(
+      const up = await engine.up().then(
         () => true,
         () => false
       );

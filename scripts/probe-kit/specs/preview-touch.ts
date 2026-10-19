@@ -19,6 +19,13 @@
  *    page scrolls the page and leaves the drawer where it is.
  * 5. After a drawer drag and a viewport resize, (1) still holds.
  * 6. A tap in the page at the drawer's lower height leaves it open there.
+ * 7. The panel by screen, read from the DOM: the side sheet at an iPad's
+ *    regular width (coarse, 640px or wider) in a pane 640px or wider —
+ *    13" portrait and landscape, mini portrait — and a 1440 desk, the
+ *    composer beside it no narrower than the phone's; the drawer at a
+ *    390×844 phone, a 13" or 11" landscape split in two (the rail leaves
+ *    each group under 640px), and a 1000px desk (fine) whose pane is under
+ *    900px.
  *
  * Where a tap does not land, the check names what the engine hit at its
  * point (`elementFromPoint`) and the pointer-events up its ancestors.
@@ -352,7 +359,202 @@ const probe = async (kit: Kit) => {
     said.slice(0, 4).join(" | ") || "none"
   );
   await page.close();
+  const beside = await fleet.spawn("claude", "Beside", fleet.repo);
+  await layoutBySize(kit, base, session, beside);
   await iPhoneEngine(kit, `${base}/session/${session}`);
+};
+
+/**
+ * The artifact panel's layout for conversation `id`'s pane: the split's
+ * side pane, the bottom drawer, or neither; the pane's width, the
+ * conversation column's (the split's main pane) and its composer's.
+ */
+const layoutOf = (page: Page, id: string) =>
+  page.evaluate((paneId) => {
+    const pane = document.querySelector<HTMLElement>(
+      `[data-pane="${CSS.escape(paneId)}"]`
+    );
+    const shown = (root: ParentNode | null, selector: string) =>
+      [...(root?.querySelectorAll<HTMLElement>(selector) ?? [])].some((el) =>
+        el.checkVisibility()
+      );
+    const side = shown(
+      pane,
+      '[data-side-pane] [data-split-shown] iframe[title="Preview"]'
+    );
+    const drawer = shown(
+      document,
+      '[data-preview-sheet] iframe[title="Preview"]'
+    );
+    let layout = "none";
+    if (side && !drawer) {
+      layout = "side sheet";
+    } else if (drawer && !side) {
+      layout = "drawer";
+    } else if (side && drawer) {
+      layout = "both";
+    }
+    const box = pane?.getBoundingClientRect();
+    const column = pane?.querySelector<HTMLElement>(".main-pane");
+    // The group's composer: the visible one standing over this pane.
+    const composer = [
+      ...document.querySelectorAll<HTMLElement>('form[data-slot="cin"]'),
+    ]
+      .filter((el) => el.checkVisibility())
+      .map((el) => el.getBoundingClientRect())
+      .find(
+        (r) =>
+          box &&
+          r.left + r.width / 2 > box.left &&
+          r.left + r.width / 2 < box.right
+      );
+    return {
+      layout,
+      viewport: `${innerWidth}×${innerHeight}`,
+      pointer: matchMedia("(pointer: coarse)").matches ? "coarse" : "fine",
+      pane: Math.round(box?.width ?? 0),
+      column: column
+        ? Math.round(Number.parseFloat(getComputedStyle(column).width))
+        : 0,
+      composer: Math.round(composer?.width ?? 0),
+    };
+  }, id);
+
+/** The workspace restored: `ids` one group each, side by side. */
+const groupsAt = (page: Page, ids: string[]) =>
+  page.addInitScript((each) => {
+    const leaf = (id: string, i: number) => ({
+      t: "l",
+      id: `probe-${i}`,
+      tabs: [id],
+      active: id,
+      opened: null,
+    });
+    localStorage.setItem(
+      "cawco-workspace",
+      JSON.stringify({
+        v: 1,
+        root:
+          each.length === 1
+            ? leaf(each[0] ?? "", 0)
+            : {
+                t: "b",
+                id: "probe-split",
+                dir: "h",
+                kids: each.map(leaf),
+                sizes: each.map(() => 100 / each.length),
+              },
+        focusedLeaf: "probe-0",
+      })
+    );
+  }, ids);
+
+/**
+ * 7. The artifact panel by screen (DESIGN.md, Artifact panel: "the side
+ * sheet on a wide screen and an iPad's regular width, the bottom drawer on
+ * a phone"): a coarse pointer at the 640px phone breakpoint or wider is an
+ * iPad's regular width, and gets the side sheet in a pane 640px or wider,
+ * so two groups side by side are never squeezed into phone-narrow
+ * columns; a fine pointer gets the drawer in a pane under 900px. The
+ * preview the Chromium half opened stays open on `session`; `beside` is a
+ * second conversation for the second group. Where the side sheet stands,
+ * the composer is no narrower than the phone's.
+ */
+const layoutBySize = async (
+  kit: Kit,
+  base: string,
+  session: string,
+  beside: string
+) => {
+  const legs: {
+    groups: 1 | 2;
+    label: string;
+    size?: { height: number; width: number };
+    view: "ipad" | "ipadWide" | "phone" | "desk";
+    want: "side sheet" | "drawer";
+  }[] = [
+    // The phone first: its composer is the floor the side sheets are held to.
+    {
+      label: "a phone 390×844, coarse",
+      view: "phone",
+      groups: 1,
+      want: "drawer",
+    },
+    {
+      label: 'an iPad 13" portrait 1032×1376, coarse, one group',
+      view: "ipad",
+      groups: 1,
+      want: "side sheet",
+    },
+    {
+      label: "an iPad mini portrait 744×1133, coarse, one group",
+      view: "ipad",
+      size: { width: 744, height: 1133 },
+      groups: 1,
+      want: "side sheet",
+    },
+    {
+      label: 'an iPad 13" landscape 1376×1032, coarse, one group',
+      view: "ipadWide",
+      groups: 1,
+      want: "side sheet",
+    },
+    {
+      // The rail takes 228px first: each group is 574px, under the 640px line.
+      label: 'an iPad 13" landscape 1376×1032, coarse, two groups',
+      view: "ipadWide",
+      groups: 2,
+      want: "drawer",
+    },
+    {
+      label: 'an iPad 11" landscape 1194×834, coarse, two groups',
+      view: "ipadWide",
+      size: { width: 1194, height: 834 },
+      groups: 2,
+      want: "drawer",
+    },
+    {
+      label: "a desk 1000×900, fine, its pane under 900px",
+      view: "desk",
+      size: { width: 1000, height: 900 },
+      groups: 1,
+      want: "drawer",
+    },
+    {
+      label: "a desk 1440×900, fine",
+      view: "desk",
+      groups: 1,
+      want: "side sheet",
+    },
+  ];
+  let phoneComposer = 0;
+  for (const leg of legs) {
+    // biome-ignore lint/performance/noAwaitInLoops: one screen at a time
+    const page = await kit.page(leg.view);
+    if (leg.size) {
+      await page.setViewportSize(leg.size);
+    }
+    await groupsAt(page, leg.groups === 2 ? [session, beside] : [session]);
+    await open(page, `${base}/session/${session}`, 'iframe[title="Preview"]');
+    await settle(page, 800);
+    const seen = await layoutOf(page, session);
+    if (leg.view === "phone") {
+      phoneComposer = seen.composer;
+    }
+    kit.check(
+      `7: ${leg.label}: the artifact panel is the ${leg.want}`,
+      seen.layout === leg.want,
+      JSON.stringify(seen)
+    );
+    if (leg.want === "side sheet" && leg.view !== "desk") {
+      kit.check(
+        `7: ${leg.label}: beside the side sheet, the composer is no narrower than the phone's (${phoneComposer}px)`,
+        phoneComposer > 0 && seen.composer >= phoneComposer,
+        `column ${seen.column}px, composer ${seen.composer}px, the phone's ${phoneComposer}px`
+      );
+    }
+    await page.close();
+  }
 };
 
 /**

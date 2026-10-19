@@ -31,6 +31,7 @@ import {
   parseAgentFrontMatter,
 } from "@cawco/core";
 import type { Bounded } from "@cawco/core/bounded";
+import { hubFailure } from "#lib/cawco/hub-read.js";
 import { machineFs, onFleetFetch } from "./client.svelte";
 import type { ListedVersion } from "./config/PreviousVersions.svelte";
 
@@ -288,39 +289,12 @@ export function formatBytes(bytes: number): string {
   return `${mb < 10 ? mb.toFixed(1) : Math.round(mb)} MB`;
 }
 
-/**
- * What the hub said went wrong. Elysia answers a refused write with a bare
- * string, so the body is the sentence; the status is the fallback for a hub
- * that fell over without one.
- */
+/** A machine's own words' closing stops, dropped so they sit inside a sentence of ours. */
 const TRAILING_STOPS = /\.+$/;
 
+/** What the hub said went wrong, in one sentence without its stop (hub-read `hubFailure`). */
 async function said(response: Response): Promise<string> {
-  const body = (await response.text()).trim();
-  if (!body) {
-    return `the hub answered ${response.status}`;
-  }
-  try {
-    const parsed: unknown = JSON.parse(body);
-    if (typeof parsed === "string") {
-      return parsed;
-    }
-    if (parsed && typeof parsed === "object") {
-      const { message, error } = parsed as {
-        message?: unknown;
-        error?: unknown;
-      };
-      if (typeof message === "string") {
-        return message;
-      }
-      if (typeof error === "string") {
-        return error;
-      }
-    }
-  } catch {
-    // A plain-text refusal, which is Elysia's own default.
-  }
-  return body;
+  return (await hubFailure(response)).detail;
 }
 
 async function send<T>(
@@ -330,9 +304,7 @@ async function send<T>(
 ): Promise<T> {
   const response = await fetch(url, init);
   if (!response.ok) {
-    // The hub's own sentences end in a full stop; the one added here must not double it.
-    const reason = (await said(response)).replace(TRAILING_STOPS, "");
-    throw new Error(`Could not ${attempt} — ${reason}.`);
+    throw new Error(`Could not ${attempt}. ${await said(response)}.`);
   }
   return (await response.json()) as T;
 }
@@ -998,7 +970,7 @@ export async function saveMemory(
     return { ok: false, latest: (await response.json()) as FleetMemoryRow };
   }
   if (!response.ok) {
-    throw new Error(`Could not save the memory — ${await said(response)}.`);
+    throw new Error(`Could not save the memory. ${await said(response)}.`);
   }
   return { ok: true, memory: (await response.json()) as FleetMemoryRow };
 }
@@ -1019,7 +991,7 @@ export async function peekMemory(
   });
   if (!response.ok) {
     throw new Error(
-      `Could not read this machine's memory — ${await said(response)}.`
+      `Could not read this machine's memory. ${await said(response)}.`
     );
   }
   if (response.status === 204) {
@@ -1086,7 +1058,7 @@ export async function saveMemoryDoc(
     return { ok: false, latest: (await response.json()) as FleetMemoryDocRow };
   }
   if (!response.ok) {
-    throw new Error(`Could not save ${path} — ${await said(response)}.`);
+    throw new Error(`Could not save ${path}. ${await said(response)}.`);
   }
   return { ok: true, doc: (await response.json()) as FleetMemoryDocRow };
 }
@@ -1160,7 +1132,7 @@ export async function peekHook(
   });
   if (!response.ok) {
     throw new Error(
-      `Could not read this machine's script — ${await said(response)}.`
+      `Could not read this machine's script. ${await said(response)}.`
     );
   }
   if (response.status === 204) {

@@ -80,15 +80,14 @@ const placesOn = (
 /**
  * The hooks one machine is sent: every fleet-wide hook as it is, and each
  * project-bound hook once per place of its project on that machine, with
- * that place's path as its cwd. Undefined stays undefined — a hub that sends
- * no hooks means "converge nothing" to a daemon.
+ * that place's path as its cwd.
  */
 export const placedHooks = (
-  hooks: FleetHook[] | undefined,
+  hooks: FleetHook[],
   places: readonly PlacementPlace[],
   machineId: string
-): FleetHook[] | undefined =>
-  hooks?.flatMap((hook) =>
+): FleetHook[] =>
+  hooks.flatMap((hook) =>
     projectBound(hook)
       ? placesOn(places, hook.projectId as string, machineId).map((place) => ({
           ...hook,

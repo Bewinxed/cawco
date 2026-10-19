@@ -1,0 +1,37 @@
+{
+  "runs": [
+    "CSSAnimation mark-in 260ms linear"
+  ],
+  "frames": [
+    {
+      "fraction": 0,
+      "opacity": "0",
+      "scale": "0.25",
+      "filter": "blur(4px)"
+    },
+    {
+      "fraction": 0.25,
+      "opacity": "0.775382",
+      "scale": "0.831536",
+      "filter": "blur(0.898473px)"
+    },
+    {
+      "fraction": 0.5,
+      "opacity": "0.965983",
+      "scale": "0.974487",
+      "filter": "blur(0.13607px)"
+    },
+    {
+      "fraction": 0.75,
+      "opacity": "0.997362",
+      "scale": "0.998022",
+      "filter": "blur(0.010551px)"
+    },
+    {
+      "fraction": 1,
+      "opacity": "1",
+      "scale": "1",
+      "filter": "blur(0px)"
+    }
+  ]
+}

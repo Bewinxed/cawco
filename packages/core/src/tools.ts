@@ -18,11 +18,8 @@ export type ToolPlatform = "linux" | "darwin" | "win32";
  * is harder to reason about than one honest failure.
  */
 export interface ToolInstallMethod {
-  /**
-   * The install command, run through the Bun shell. Exactly one of `command`
-   * and `native` is set.
-   */
-  command?: string;
+  /** The install command, run through the Bun shell. */
+  command: string;
   /**
    * How a binary this method put on a machine is told apart, from where it
    * resolves. A tool already present is installed again only with the method
@@ -34,14 +31,16 @@ export interface ToolInstallMethod {
   /** Names the method in status and errors: 'curl script', 'npm', 'winget'. */
   label: string;
   /**
-   * The name of a routine the agent implements in code, for the installs a
-   * portable shell one-liner cannot express (resolving the right Node tarball
-   * for an arch, say). The escape hatch that keeps `command` honest.
+   * Set on no method. Declared only because installable TestFlight builds'
+   * schema has it (hub `openapi:check`); it goes in the change a TestFlight
+   * build is made from, with `ToolSpec.dependencyOnly` and `requires`.
    */
   native?: string;
   /**
    * A binary that must already be on the machine for this method to be
-   * eligible — 'npm', 'brew', 'winget'. Absent means always eligible.
+   * eligible — 'npm', 'brew', 'winget'. Absent means always eligible. CawCo
+   * never installs it: a machine without it takes the next method, or is told
+   * what is missing.
    */
   needs?: string;
   /**
@@ -69,21 +68,16 @@ export type ToolFootprint =
   | { kind: "dir"; path: string }
   | { kind: "npm-global" };
 
-/** A catalog tool another tool needs first, with the version floor it needs. */
+/** The shape of {@link ToolSpec.requires}, which no tool sets. */
 export interface ToolRequirement {
   id: string;
-  /** Semver floor, compared major-first against the probed version. */
   min?: string;
 }
 
 export interface ToolSpec {
   /** The executable whose presence means installed. */
   bin: string;
-  /**
-   * True for tools that exist only to satisfy a `requires` — they stay out of
-   * the policy list until something needs them, and the dashboard shows them
-   * only where they explain another tool's state.
-   */
+  /** Set on no tool; declared for installable apps only, as {@link ToolInstallMethod.native} is. */
   dependencyOnly?: boolean;
   /**
    * The one version this fleet runs, for a tool CawCo's own code is built
@@ -97,12 +91,7 @@ export interface ToolSpec {
   install: ToolInstallMethod[];
   /** What the dashboard calls it. */
   name: string;
-  /**
-   * Catalog tools that must be present first. A missing requirement installs
-   * automatically (depth 1 — requirements do not have requirements); one that
-   * is present but below `min` does not: silently replacing a machine's Node
-   * is ruder than telling the user exactly what is too old.
-   */
+  /** Set on no tool; declared for installable apps only, as {@link ToolInstallMethod.native} is. */
   requires?: ToolRequirement[];
   /** Probe for the version; the first `x.y.z` in its output is the answer. */
   versionCommand: string;
@@ -238,7 +227,6 @@ export const TOOL_CATALOG: ToolSpec[] = [
           "curl -fsSL https://opencode.ai/v2/install | bash -s -- --version {version} --no-modify-path",
       },
     ],
-    requires: [{ id: "node" }],
   },
   {
     id: "antigravity",
@@ -276,37 +264,6 @@ export const TOOL_CATALOG: ToolSpec[] = [
         needs: "powershell",
         command:
           'powershell -NoProfile -ExecutionPolicy Bypass -Command "irm https://antigravity.google/cli/install.ps1 | iex"',
-      },
-    ],
-  },
-  {
-    id: "node",
-    name: "Node.js",
-    homepage: "https://nodejs.org",
-    bin: "node",
-    versionCommand: "node --version",
-    dependencyOnly: true,
-    install: [
-      {
-        label: "brew",
-        platforms: ["darwin", "linux"],
-        needs: "brew",
-        command: "brew install node",
-      },
-      {
-        label: "winget",
-        platforms: ["win32"],
-        needs: "winget",
-        command:
-          "winget install --id OpenJS.NodeJS.LTS -e --silent --accept-package-agreements --accept-source-agreements",
-      },
-      // No brew and no sudo is the common Linux daemon: resolve the latest
-      // LTS tarball for this arch and unpack it into ~/.local — code, because
-      // no portable one-liner reads nodejs.org/dist/index.json honestly.
-      {
-        label: "official tarball",
-        platforms: ["linux"],
-        native: "node-tarball",
       },
     ],
   },

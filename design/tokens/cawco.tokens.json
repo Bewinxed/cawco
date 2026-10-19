@@ -1098,6 +1098,19 @@
         }
       }
     },
+    "border-row-outline": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklab",
+        "components": [0.6275, 0.003703, 0.016077]
+      },
+      "$description": "A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess and 3.47:1 on raised by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.47:1 on the recess.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "color-mix(in oklab, {color.neutral-8}, {color.neutral-9} 50%)"
+        }
+      }
+    },
     "input": {
       "$type": "color",
       "$value": "{color.neutral-7}"
@@ -1564,24 +1577,6 @@
           "css": "color-mix(in oklch, {color.status-fail-ink} 6%, transparent)"
         }
       }
-    },
-    "count-fill-live": {
-      "$type": "color",
-      "$value": "{color.status-live-glyph}",
-      "$description": "A work tab's count pill (WorkTabs, the app's CountChip): solid in its status hue, chosen or not, so the pill reads against any sheet it stands on (3:1 non-text or more on the chosen sheet, the recess, hover and press, in both themes) and its numeral in count-fill-ink holds 4.5:1 or more on it. The 6% and 10% washes it replaces measured about 1.05:1 against the sheet and read as a smudge."
-    },
-    "count-fill-done": {
-      "$type": "color",
-      "$value": "{color.status-done-glyph}"
-    },
-    "count-fill-fail": {
-      "$type": "color",
-      "$value": "{color.status-fail-glyph}"
-    },
-    "count-fill-ink": {
-      "$type": "color",
-      "$value": "{color.neutral-1}",
-      "$description": "A count pill's numeral: the lightest neutral by day, the darkest at night, against the status fill."
     },
     "presence-online": {
       "$type": "color",
@@ -3978,6 +3973,14 @@
       },
       "$description": "A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line (\"back in 4h 50m\", 82px in meta) stands on one line."
     },
+    "c-signin-pop-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 340,
+        "unit": "px"
+      },
+      "$description": "The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next."
+    },
     "c-caw-panel-h": {
       "$type": "dimension",
       "$value": {
@@ -4217,6 +4220,14 @@
         }
       }
     },
+    "c-new-project-field-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 570,
+        "unit": "px"
+      },
+      "$description": "New project's field at its widest: the session Composer under \"What are we working on?\", and the starter chips under it, which stand on that composer's column (the Composer's own --c-composer-w inside it)."
+    },
     "c-composer-w": {
       "$type": "dimension",
       "$value": {
@@ -4273,7 +4284,7 @@
         "value": 11,
         "unit": "rem"
       },
-      "$description": "A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (CawStarters)."
+      "$description": "A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (StarterCards)."
     },
     "c-starter-h": {
       "$type": "dimension",
@@ -4501,7 +4512,7 @@
     "tx-x-rail": {
       "$type": "dimension",
       "$value": "{space.space-2}",
-      "$description": "The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 at 900px wide and under (tx-x-rail-narrow)."
+      "$description": "The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 under 900px wide (tx-x-rail-narrow)."
     },
     "tx-x-rail-narrow": {
       "$type": "dimension",

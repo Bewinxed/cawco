@@ -16,7 +16,13 @@ import { rmSync } from "node:fs";
 import { readTranscriptTail, type Checkpoint } from "./file.ts";
 import { parseMany } from "./pool.ts";
 import { typeFilter } from "./scan.ts";
-import { type DocAuthor, extractDoc, type ExtractOptions, type TranscriptDoc } from "./text.ts";
+import {
+  DOC_TYPES,
+  type DocAuthor,
+  extractDoc,
+  type ExtractOptions,
+  type TranscriptDoc,
+} from "./text.ts";
 
 /**
  * A document is one record, deduplicated on its time, `doc_id` and harness
@@ -600,7 +606,7 @@ export class TranscriptIndex {
       // biome-ignore lint/performance/noAwaitInLoops: one batch's docs in memory at a time is the point
       const parsed = await parseMany(batch, {
         mode: "docs",
-        types: ["user", "assistant"],
+        types: [...DOC_TYPES],
         extract: options.extract,
         workers: options.workers,
       });
@@ -625,7 +631,7 @@ export class TranscriptIndex {
     }
 
     // Grown files: tail reads are small, run in-process.
-    const prefilter = typeFilter("user", "assistant");
+    const prefilter = typeFilter(...DOC_TYPES);
     for (const { path, checkpoint } of tailFiles) {
       let write: FileWrite;
       try {

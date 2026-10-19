@@ -161,6 +161,8 @@ public enum Palette {
     public static let borderCard = Palette.named("border-card")
     /// The outline button's edge, 3:1 against the raised surface it stands on, where the control edge measures 1.37:1 by day and 1.43:1 at night (the owner's pick, 'Strengthen to 3:1', WCAG 1.4.11): #958E84 on #FEFDFA, 3.19:1, by day; #766F66 on #23211E, 3.26:1, at night.
     public static let borderButtonOutline = Palette.named("border-button-outline")
+    /// A suggestion row's edge (StarterCards in Caw's panel): an outline button standing on the recess rather than the raised surface, 3:1 against the recess as the outline button's edge is against raised (WCAG 1.4.11): 3.22:1 on the recess and 3.47:1 on raised by day, where the outline button's edge measures 2.95:1 on the recess; at night the outline button's own, 3.47:1 on the recess.
+    public static let borderRowOutline = Palette.named("border-row-outline")
     public static let input = Palette.named("input")
     /// Inks. Subtle is the weakest mix that holds 4.5:1 on fill, hover and raised.
     public static let inkStrong = Palette.named("ink-strong")
@@ -239,12 +241,6 @@ public enum Palette {
     /// A near or over row's only tint: a faint wash of its status ink (owner: "the tints for yellow/red are too overwhelming").
     public static let meterWashNear = Palette.named("meter-wash-near")
     public static let meterWashOver = Palette.named("meter-wash-over")
-    /// A work tab's count pill (WorkTabs, the app's CountChip): solid in its status hue, chosen or not, so the pill reads against any sheet it stands on (3:1 non-text or more on the chosen sheet, the recess, hover and press, in both themes) and its numeral in count-fill-ink holds 4.5:1 or more on it. The 6% and 10% washes it replaces measured about 1.05:1 against the sheet and read as a smudge.
-    public static let countFillLive = Palette.named("count-fill-live")
-    public static let countFillDone = Palette.named("count-fill-done")
-    public static let countFillFail = Palette.named("count-fill-fail")
-    /// A count pill's numeral: the lightest neutral by day, the darkest at night, against the status fill.
-    public static let countFillInk = Palette.named("count-fill-ink")
     public static let presenceOnline = Palette.named("presence-online")
     public static let presenceAway = Palette.named("presence-away")
     public static let presenceOff = Palette.named("presence-off")
@@ -539,6 +535,8 @@ public enum Size {
     public static let cFindW: Double = 520
     /// A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line.
     public static let cPanelW: Double = 380
+    /// The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next.
+    public static let cSigninPopW: Double = 340
     /// Caw's panel floating over a project's page at its tallest (CawFloat): his head, a conversation's worth of rows and the composer, or the hero with his starters and earlier threads; shorter where the room under his seat is less.
     public static let cCawPanelH: Double = 640
     /// The shell's top bar at every width: 43px and its 1px hairline, the compact bar's height (Apple HIG, Toolbars). Hosted tabs stand on its floor, a tab row's height below its top.
@@ -597,6 +595,8 @@ public enum Size {
     /// How tall a permission card's diff of the change it asks for stands before it scrolls, as a share of the screen's height: open, and two fifths of the screen at most, so Approve and Deny stay in reach.
     public static let cAskDiffShare: Double = 0.4
     public static let cComposerPanel: Double = 50
+    /// New project's field at its widest: the session Composer under "What are we working on?", and the starter chips under it, which stand on that composer's column (the Composer's own --c-composer-w inside it).
+    public static let cNewProjectFieldW: Double = 570
     /// The group composer's column: its panel, the cards parked over it and its tray, and whatever stands in its place (a thread's lead-off line).
     /// At most this, in points: on the web the least of it and a share of its container (min).
     public static let cComposerW: Double = 720
@@ -604,7 +604,7 @@ public enum Size {
     public static let cSuggestChip: Double = 30
     public static let cSuggestRow: Double = 52
     public static let cSuggestRoom: Double = 59
-    /// A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (CawStarters).
+    /// A Caw starter card's narrowest: the empty state's cards fill each row at this width or wider (StarterCards).
     public static let cStarterW: Double = 176
     /// A Caw starter card's shortest: one line of words with its padding, a thumb's height on a phone.
     public static let cStarterH: Double = 56
@@ -653,7 +653,7 @@ public enum Size {
     public static let focusRingInset: Double = -2
     public static let materialBlur: Double = 20
     public static let scrimBlur: Double = 2
-    /// The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 at 900px wide and under (tx-x-rail-narrow).
+    /// The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 under 900px wide (tx-x-rail-narrow).
     public static let txXRail: Double = 7
     public static let txXRailNarrow: Double = 0
     /// The transcript's glyph cell (--w-glyph): the glyph column sits a space-3 past the rail, the text column a space-2 past the cell.

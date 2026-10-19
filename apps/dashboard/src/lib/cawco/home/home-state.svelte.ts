@@ -18,6 +18,7 @@ import type {
   NeutralSessionInfo,
   PairingRequest,
   ProjectCap,
+  TailnetHttps,
   WaitingMachine,
   WorkflowRun,
 } from "@cawco/core";
@@ -26,14 +27,16 @@ import {
   machineLabel,
   projectsFor,
   questionsOf,
+  tailnetWords,
   topsIn,
 } from "@cawco/core";
 import { UPSTREAM_WORDS } from "@cawco/core/upstream-guard";
+import { hubRefusal } from "#lib/cawco/hub-read.js";
 import {
   type BlockedRequest,
+  type BoardRow,
   cawco,
   type HubState,
-  type InstanceRow,
   isFailed,
   isStale,
 } from "../client.svelte";
@@ -106,7 +109,7 @@ const epochOf = (value: string | number | Date | null | undefined): number => {
 };
 
 /** When the owner last looked at it or archived it, on any device. */
-export const seenAt = (row: InstanceRow): number =>
+export const seenAt = (row: BoardRow): number =>
   clearedHere[row.id] === epochOf(row.seenAt)
     ? 0
     : Math.max(epochOf(row.seenAt), seenHere[row.id]?.through ?? 0);
@@ -144,11 +147,11 @@ async function postSeen(
     body: JSON.stringify({ ids, kind }),
   });
   if (!response.ok) {
-    let said = (await response.text()).trim();
+    let { message } = await hubRefusal(response);
     for (const id of ids) {
-      said = said.replaceAll(`${id}: `, "");
+      message = message.replaceAll(`${id}: `, "");
     }
-    throw new Error(said || `The hub answered ${response.status}.`);
+    throw new Error(message);
   }
   const { at } = (await response.json()) as { at: number | null };
   return at;
@@ -216,7 +219,7 @@ export function archive(ids: string[]): void {
  * and leaves keep-alive as it is. As archive's, the row moves on the hub's
  * answer, and a refusal stays on it.
  */
-export function unarchive(rows: InstanceRow[]): void {
+export function unarchive(rows: BoardRow[]): void {
   for (const row of rows) {
     // biome-ignore lint/complexity/noVoid: the row is the report; nothing awaits it
     void onRow(
@@ -375,6 +378,22 @@ export interface ChoiceItem {
 }
 
 /**
+ * HTTPS on the hub machine's tailnet name, while a step of the person's
+ * stands in its way (core tailnet-https.ts): the first such step, said in
+ * one line with its one button. The hub checks again on its own; once the
+ * step is taken the row ticks (`done`) for a moment, then leaves.
+ */
+export interface TailnetItem {
+  done: boolean;
+  key: string;
+  kind: "tailnet";
+  place: string;
+  raisedAt: undefined;
+  tailnet: TailnetHttps;
+  title: string;
+}
+
+/**
  * A device asking to pair (hub hub-auth.ts): approved here, it runs the
  * fleet as you. Its code is the one on that device's screen.
  */
@@ -428,6 +447,7 @@ export type NeedsItem =
   | ActionItem
   | WatchItem
   | ChoiceItem
+  | TailnetItem
   | PairingItem
   | AdmissionItem
   | TaskItem;
@@ -444,7 +464,7 @@ export interface RecentItem {
   at: number;
   href: string;
   info: NeutralSessionInfo | null;
-  instance: InstanceRow | null;
+  instance: BoardRow | null;
   key: string;
   machineId: string;
   place: string;
@@ -462,7 +482,7 @@ interface StoredEntry {
 
 /* ── Naming ────────────────────────────────────────────────────────── */
 
-export const instanceTitle = (row: InstanceRow): string =>
+export const instanceTitle = (row: BoardRow): string =>
   resolveSessionTitle({ title: row.title, cwd: row.cwd, id: row.id });
 
 /**
@@ -508,7 +528,7 @@ export function projectOf(
  * own machine and folder, a delegate in a worktree or on another machine
  * named no project, or another one.
  */
-export function projectOfRow(row: InstanceRow): string {
+export function projectOfRow(row: BoardRow): string {
   const top = topsIn(cawco.instanceIndex.byId)(row);
   return (
     projectsFor(cawco.projects, top)[0]?.name ??
@@ -550,7 +570,7 @@ export function placeOf(
     : machineName(machineId);
 }
 
-export function placeOfRow(row: InstanceRow): string {
+export function placeOfRow(row: BoardRow): string {
   const where = projectOfRow(row);
   return where
     ? `${machineName(row.machineId)} · ${where}`
@@ -656,8 +676,8 @@ function mergeByRecency(
  * session.
  */
 function namesAlike(
-  a: InstanceRow,
-  b: InstanceRow | undefined,
+  a: BoardRow,
+  b: BoardRow | undefined,
   running: ReadonlySet<string>
 ): boolean {
   if (a === b) {
@@ -673,7 +693,7 @@ function namesAlike(
 }
 
 /** When a session last moved: its pulse, else the hub's own update time. */
-export function lastAt(row: InstanceRow): number {
+export function lastAt(row: BoardRow): number {
   const pulse = cawco.pulseAt(row.id);
   if (pulse !== undefined) {
     return pulse;
@@ -690,7 +710,7 @@ export function lastAt(row: InstanceRow): number {
  * machine's clock, so it is never read here. A run or a thread: its own
  * last move, which the hub stamps.
  */
-function endedAt(row: InstanceRow): number | undefined {
+function endedAt(row: BoardRow): number | undefined {
   if (runIdOf(row.id) || threadIdOf(row.id)) {
     if (isFailed(row)) {
       return lastAt(row);
@@ -711,7 +731,7 @@ function endedAt(row: InstanceRow): number | undefined {
  * It ended and the owner has seen it or archived it since (`seenAt` at or
  * after the end): what Unarchive is offered for.
  */
-export function archivedRow(row: InstanceRow): boolean {
+export function archivedRow(row: BoardRow): boolean {
   const ended = endedAt(row);
   return ended !== undefined && ended <= seenAt(row);
 }
@@ -721,7 +741,7 @@ export function archivedRow(row: InstanceRow): boolean {
  * of "seen" — Finished lists exactly these, and a conversation in front of
  * the owner is marked seen exactly when it is one of these.
  */
-export function endedUnseen(row: InstanceRow): boolean {
+export function endedUnseen(row: BoardRow): boolean {
   const ended = endedAt(row);
   return ended !== undefined && ended > seenAt(row);
 }
@@ -734,12 +754,11 @@ const enteredWorking = new Map<string, number>();
  * (tree.ts `hasParent`). The one test the Delegates switch and the tabs'
  * counts both read.
  */
-export const isDelegate = (row: InstanceRow): boolean =>
+export const isDelegate = (row: BoardRow): boolean =>
   hasParent(row, (id) => cawco.instanceIndex.byId.has(id));
 
 /** The rail's delegates switch, kept: work handed off is listed only on request. */
-const listed = (row: InstanceRow): boolean =>
-  rail.delegates || !isDelegate(row);
+const listed = (row: BoardRow): boolean => rail.delegates || !isDelegate(row);
 
 /* ── The machines ──────────────────────────────────────────────────── */
 
@@ -834,7 +853,7 @@ class Home {
    * still doing something (core `archiveRefusal`, the rule the hub's
    * `/api/seen` holds too). A row that fails offers no archive anywhere.
    */
-  archivable(row: InstanceRow): boolean {
+  archivable(row: BoardRow): boolean {
     return (
       archiveRefusal(row.id, {
         // A session still starting is working, as the hub counts it.
@@ -1086,6 +1105,24 @@ class Home {
             },
           ]
         : [];
+    // HTTPS on the tailnet name: its step while one stands, its tick a moment after.
+    const tailnet = cawco.tailnetHttps;
+    const secured: NeedsItem[] =
+      tailnet &&
+      (tailnet.state === "needs" ||
+        (tailnet.state === "serving" && cawco.tailnetTicked))
+        ? [
+            {
+              kind: "tailnet",
+              key: "tailnet:https",
+              tailnet,
+              done: tailnet.state === "serving",
+              title: tailnetWords.title,
+              place: "Onboarding",
+              raisedAt: undefined,
+            },
+          ]
+        : [];
     // Devices asking to pair and machines waiting to be admitted
     // (hub-auth.svelte.ts): answered here or in Configure › Devices.
     const pairings: NeedsItem[] = hubAuth.requests.map((request) => ({
@@ -1128,6 +1165,7 @@ class Home {
       ...actions,
       ...watched,
       ...unanswered,
+      ...secured,
       ...pairings,
       ...admissions,
       ...waitingTasks,
@@ -1177,7 +1215,7 @@ class Home {
    * (WorkTabs) decides which delegates it lists, so a failed one is never
    * missed. A workflow run that has ended is one of them.
    */
-  readonly finished = $derived.by<InstanceRow[]>(() => {
+  readonly finished = $derived.by<BoardRow[]>(() => {
     if (choices.finished === "a") {
       return [];
     }
@@ -1201,7 +1239,7 @@ class Home {
    * listed whatever the switch says, so a failure is never missed; a blocked
    * one is never in a tab, it is a Needs-you card above them.
    */
-  #listedIn(all: InstanceRow[]): InstanceRow[] {
+  #listedIn(all: BoardRow[]): BoardRow[] {
     if (rail.delegates) {
       return all;
     }
@@ -1295,8 +1333,8 @@ class Home {
    * while no row has moved in a way `namesAlike` sees, so a turn ending —
    * a listed row's status and time — names nothing again.
    */
-  #named: InstanceRow[] = [];
-  readonly #namingRows = $derived.by<InstanceRow[]>(() => {
+  #named: BoardRow[] = [];
+  readonly #namingRows = $derived.by<BoardRow[]>(() => {
     const rows = cawco.instances;
     const running = this.#running;
     const was = this.#named;
@@ -1342,7 +1380,7 @@ class Home {
    * and one stopped before it had a transcript whose pulse or delegates
    * still say working.
    */
-  readonly #recentRows = $derived.by<InstanceRow[]>(() => {
+  readonly #recentRows = $derived.by<BoardRow[]>(() => {
     // What the tabs list, not all they hold: with the Delegates switch off
     // a tab holds a delegate it does not draw (one that ended unseen under a
     // parent the reader has since opened), and left out here too it had no

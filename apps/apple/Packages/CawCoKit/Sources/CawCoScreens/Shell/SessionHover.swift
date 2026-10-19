@@ -220,7 +220,7 @@ final class SessionHover: NSObject {
         let mark = SessionMarkView(tile: 17)
         mark.configure(id: id, place: row.map { $0.cwd.isEmpty ? id : $0.cwd } ?? id, status: .idle)
         let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-        title.text = row.map(hub.fleet.title) ?? "Session"
+        title.text = row.map { hub.fleet.title($0) } ?? "Session"
         title.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
         let head = UIStackView(arrangedSubviews: [mark, title, state(tone)])
         head.spacing = Space.space2

@@ -1,13 +1,21 @@
 import { existsSync, readdirSync } from "node:fs";
-import { homedir, platform } from "node:os";
+import { homedir, networkInterfaces, platform } from "node:os";
 import { join } from "node:path";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import type {
   MachineCapabilities,
   MachineCapability,
 } from "@cawco/core/capabilities";
+import { isPublicAddress } from "@cawco/core/public-address";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { CLAUDE_NOT_INSTALLED, resolveClaudeExecutable } from "./auth";
+import { mediaForwarding } from "./browser/media-forwarding";
+import {
+  findRuntime,
+  type Runtime,
+  runtimeInstallCommand,
+  runtimeMissing,
+} from "./browser/runtime";
 import { claudeHostVersion } from "./claude-version";
 import { opencodeBinary } from "./harnesses/opencode-client";
 import { probeStarted } from "./probe-count";
@@ -64,6 +72,17 @@ function playwrightBrowser(): string | undefined {
   }
   return undefined;
 }
+
+/** Every global unicast address of the machine's interfaces (a stream relay listens on one, Projects spec §5.11). */
+const publicAddresses = (): string[] => [
+  ...new Set(
+    Object.values(networkInterfaces()).flatMap((addresses) =>
+      (addresses ?? [])
+        .filter((one) => isPublicAddress(one.address))
+        .map((one) => one.address)
+    )
+  ),
+];
 
 function linuxInstall(pkg: string): string {
   if (resolveBin("apt-get")) {
@@ -151,6 +170,23 @@ async function readVersion(item: MachineCapability): Promise<void> {
   }
 }
 
+/**
+ * A found runtime's report: its socket and version, and what it forwards to
+ * the browser's media port (measured, once a start has measured it short);
+ * short of UDP and TCP, `reason` tells the person how to get them.
+ */
+async function foundRuntimeFacts(
+  runtime: Runtime
+): Promise<Pick<MachineCapability, "media" | "path" | "reason" | "version">> {
+  const forwarding = await mediaForwarding(runtime.endpoint);
+  return {
+    path: runtime.endpoint,
+    version: `${runtime.kind} ${runtime.version}`,
+    media: forwarding.media,
+    ...(forwarding.advice ? { reason: forwarding.advice } : {}),
+  };
+}
+
 /** Presence is read fresh on registration and every explicit probe. */
 export async function probeCapabilities(): Promise<MachineCapabilities> {
   probeStarted();
@@ -168,6 +204,12 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
   const nodeInstall =
     'curl -o- https://raw.githubusercontent.com/nvm-sh/nvm/v0.40.3/install.sh | bash && . "$HOME/.nvm/nvm.sh" && nvm install 24';
   const opencode = await opencodeBinary();
+  const runtime = await findRuntime();
+  const runtimeFacts =
+    "missing" in runtime
+      ? { reason: runtimeMissing() }
+      : await foundRuntimeFacts(runtime);
+  const addresses = publicAddresses();
   const opencodeAdvice = await installAdvice("opencode");
   const items: MachineCapability[] = [
     {
@@ -216,6 +258,23 @@ export async function probeCapabilities(): Promise<MachineCapabilities> {
         ? "brew install --cask google-chrome && brew install node@24"
         : `${node ? "node --version" : nodeInstall} && npx --yes playwright install --with-deps chromium`,
       ...(node ? {} : { reason: "Browser tools also require Node/npm" }),
+    },
+    {
+      // The browser's container runtime (browser/runtime.ts); without one the
+      // browser runs as a local Chromium (`browser` above).
+      id: "container-runtime",
+      available: !("missing" in runtime),
+      installCommand: runtimeInstallCommand(),
+      ...runtimeFacts,
+    },
+    {
+      id: "public-address",
+      available: addresses.length > 0,
+      addresses,
+      installCommand: "",
+      ...(addresses.length
+        ? {}
+        : { reason: "No interface of this machine holds a public address" }),
     },
     {
       id: "service-manager",

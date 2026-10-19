@@ -5,7 +5,9 @@ import { mkdir, readdir, stat, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { dirname, join, relative, resolve } from "node:path";
 import { buildStageHost } from "../packages/agent/src/stage-host/build";
+import { agentReact } from "../packages/core/src/agent-react";
 import { canvasHostAssets } from "../packages/core/src/canvas-host";
+import { decisionHostAssets } from "../packages/core/src/decision-host";
 
 export const PINNED_BUN = "1.4.3";
 export const TARGETS = [
@@ -230,6 +232,8 @@ export async function buildBinary(options: {
     ["stage/host.mjs", join(work, "stage-host.mjs")],
     // A canvas's host page, its bundle and Excalidraw's fonts (core canvas-host.ts).
     ...(await canvasHostAssets(join(work, "canvas"), filesUnder)),
+    // A decision page's host bundle and DialKit (core decision-host.ts).
+    ...(await decisionHostAssets(join(work, "decision"), filesUnder)),
     // Run as plain Bun as each workspace's judge, never as cawco (boundary.ts).
     ["boundary/judge.ts", join(ROOT, "packages/agent/src/boundary-judge.ts")],
     // Run as plain Bun by a macOS workspace's `log` shim (boundary.ts).
@@ -243,6 +247,9 @@ export async function buildBinary(options: {
       join(ROOT, "packages/agent/src/upstream-shim.ts"),
     ],
     ["boundary/upstream-guard.ts", join(work, "upstream-guard.ts")],
+    // A project's browser image's build context, sent to the machine's
+    // container runtime as it is (agent browser/image.ts).
+    ...(await filesUnder(join(ROOT, "packages/agent/browser"), "browser")),
   ] as [string, string][];
   const assetsSource = `${assets.map(([, path], i) => `import a${i} from ${JSON.stringify(path)} with { type: "file" };`).join("\n")}\nexport const binaryAssets = {${assets.map(([key], i) => `${JSON.stringify(key)}:a${i}`).join(",")}};`;
   const [platform, arch] = options.target.split("-");
@@ -272,7 +279,11 @@ export async function buildBinary(options: {
       autoloadBunfig: false,
     },
     minify: true,
-    external: ["playwright-core"],
+    // cpu-features: an optional native addon of ssh2 (dockerode's
+    // docker-modem loads it), built by no install here; ssh2 requires it
+    // inside a try and goes on without it, and the browser runtime speaks to
+    // unix sockets alone, never SSH.
+    external: ["playwright-core", "cpu-features"],
     define: {
       __CAWCO_RELEASE__: "true",
       __CAWCO_VERSION__: JSON.stringify(options.version),
@@ -280,6 +291,7 @@ export async function buildBinary(options: {
       "process.env.NODE_ENV": '"production"',
     },
     plugins: [
+      agentReact,
       {
         name: "owned-runtime-resources",
         setup(build) {
@@ -370,6 +382,15 @@ export async function buildBinary(options: {
               ),
               loader: "ts",
             }));
+            // And answer a retiring keeper's `list` as late as they set
+            // (scripts/binary/proof-list-pace.ts).
+            build.onLoad(
+              { filter: /packages\/sessiond\/src\/list-pace\.ts$/ },
+              () => ({
+                contents: `export * from ${JSON.stringify(join(ROOT, "scripts/binary/proof-list-pace.ts"))};`,
+                loader: "ts",
+              })
+            );
           }
           if (options.proof || options.stubHarness) {
             build.onLoad(

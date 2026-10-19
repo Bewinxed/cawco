@@ -36,9 +36,9 @@
  *   `shell` and the command in its metadata: a lead's call is the hub's
  *   gate's to decide. The server pins the built-in's description
  *   for the model, so a clone's session context gives it the boundary's. A
- *   location serves every session in its folder, so in a project lead's
- *   place the `shell` decides per session (`context.sessionID`): the lead's
- *   own sessions, the ones the agent records with that place (opencode-
+ *   location serves every session in its folder, so in a place (core
+ *   `isPlace`) the `shell` decides per session (`context.sessionID`): the
+ *   place's own sessions, the ones the agent records with that place (opencode-
  *   credentials.ts `workspace`), and any not recorded yet, run inside it;
  *   a person's session there runs through the built-in it replaces, which
  *   asks and runs on the host as it always does, with no judge.
@@ -66,7 +66,7 @@ import {
 } from "@cawco/core/paths";
 import { SESSION_CAWCO_ENV } from "@cawco/core/session-env";
 import { writeStateFile } from "@cawco/core/state-file";
-import { LEAD_PLACE_SUFFIX } from "@cawco/core/workspace-policy";
+import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import { JUDGE_SCRIPT } from "../boundary";
 import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import { readJson, writeJson } from "./fleet-common";
@@ -119,7 +119,7 @@ const machineDataHome = (): string =>
 const BOUNDED_SHELL_DESCRIPTION =
   "Runs a bash command inside this workspace's boundary, in the session's directory unless workdir says otherwise. The command can write only the clone, $TMPDIR (the workspace's own scratch dir: temp files go there, not /tmp) and the workspaces' own package cache; it reads nothing in the home dir outside the clone, toolchains and the user's git config, and none of the credentials CawCo, the harnesses and the machine's tools keep; it reaches any public host but none of the owner's machines (cawco tools reaches the hub's tools); it sees and signals only this workspace's processes, and cannot reach the service manager. Each call is a fresh shell. The output is stdout and stderr together, cut at 30000 characters.";
 
-/** The `shell` a person's session in a project lead's place sees: the built-in's, on this machine. */
+/** The `shell` a person's session in a place sees: the built-in's, on this machine. */
 const HOST_SHELL_DESCRIPTION =
   "Runs a bash command on this machine, in the session's directory unless workdir says otherwise. Each call is a fresh shell. The output is stdout and stderr together, cut at 30000 characters.";
 
@@ -218,14 +218,15 @@ const judgeIn = async (id, tool, input, directory) => {
   if (!verdict.ok) throw new Error(verdict.reason);
 };
 
-// The file a call's result says this server saved: its metadata names it
-// (\`truncated\`, \`outputPath\`) and its content's hint names it again
-// ("full output saved to <file>"), in this server's tool-output dir.
+// The file a call's result says this server saved, in this server's
+// tool-output dir: its metadata names it (\`truncated\`, \`outputPath\`).
+// Its content names the path again for the model, whatever words go with it,
+// and that path is what a copy replaces.
 const contentOf = (result) => (Array.isArray(result.content) ? result.content : [{ type: "text", text: String(result.content ?? "") }]);
 const savedOutputOf = (result) => {
   const file = result?.metadata?.outputPath;
   if (result?.metadata?.truncated !== true || typeof file !== "string" || dirname(file) !== toolOutput) return undefined;
-  return contentOf(result).some((block) => block?.type === "text" && block.text.includes("full output saved to " + file)) ? file : undefined;
+  return file;
 };
 // The result with the output it saved copied into its session's own folder
 // in workspace \`id\` (the agent's workspaceSpillDir, made as the session
@@ -268,9 +269,9 @@ const withoutSecret = (input) => {
   return rest;
 };
 
-// A project lead's place (the agent's isLeadPlace): a person's own folder,
-// bounded only for the lead's own sessions there.
-const leadPlaceSuffix = ${JSON.stringify(LEAD_PLACE_SUFFIX)};
+// A place (the agent's isPlace): a person's own folder, bounded only for
+// the sessions the agent put there.
+const placeSuffix = ${JSON.stringify(PLACE_SUFFIX)};
 
 const OUTPUT_LIMIT = 30000;
 // Runs \`file args\` as one \`shell\` call of the session: its env, its
@@ -283,7 +284,9 @@ const runShell = async (file, args, input, context, directory) => {
   const take = (chunk) => { output += chunk.toString(); };
   child.stdout.on("data", take);
   child.stderr.on("data", take);
-  const stop = () => { try { process.kill(-child.pid, "SIGKILL"); } catch {} };
+  // Its own group (\`detached\`), by a pid its spawn made: core's signal wall
+  // (signal.ts) cannot be imported here, so its rule is kept by hand.
+  const stop = () => { const pid = child.pid; if (!Number.isInteger(pid) || pid <= 1) return; try { process.kill(-pid, "SIGKILL"); } catch {} };
   let timedOut = false;
   const timer = setTimeout(() => { timedOut = true; stop(); }, timeout);
   context.signal.addEventListener("abort", stop, { once: true });
@@ -301,7 +304,7 @@ const runShell = async (file, args, input, context, directory) => {
 // The \`shell\` of a location a workspace holds. A session \`bounded\` there is
 // asked as the built-in asks (\`shell\`, the command its resource and in its
 // metadata, for CawCo's ask and a lead's gate), then runs the command inside
-// the workspace's boundary; any other (a person's session in a lead's place)
+// the workspace's boundary; any other (a person's session in a place)
 // runs it through \`host\`, the built-in this replaces, which asks and runs as
 // it always does on the host. No call runs without its ask.
 const boundedShell = (id, root, directory, bounded, host, permission) => ({
@@ -367,14 +370,14 @@ export default {
     const holding = workspaceOf(directory);
     const workspace = holding?.id;
     const state = workspace ? cawcoWorkspaces + "/" + workspace : undefined;
-    // In a lead's place, a session is bounded by it only when the agent put
-    // it there (its spawn named the place: the workspace its record names),
-    // or before the agent has recorded it at all, never unbounded on a
-    // guess. Every session in a clone is the clone's.
-    const leadPlace = workspace?.endsWith(leadPlaceSuffix) === true;
+    // In a place, a session is bounded by it only when the agent put it
+    // there (its spawn named the place: the workspace its record names), or
+    // before the agent has recorded it at all, never unbounded on a guess.
+    // Every session in a clone is the clone's.
+    const inPlace = workspace?.endsWith(placeSuffix) === true;
     const bounded = (sessionID) => {
       if (!holding) return false;
-      if (!leadPlace) return true;
+      if (!inPlace) return true;
       const held = sessionHeld(sessionID);
       return !held || held.workspace === workspace;
     };
@@ -447,9 +450,9 @@ export default {
           return { content: await written.text() };
         },
       });
-      // In a lead's place, the built-in runs a person's session's commands:
-      // taken from the editor before it is replaced, each time it replays.
-      if (holding) editor.add(boundedShell(holding.id, holding.root, directory, bounded, leadPlace ? editor.get("shell")?.execute : undefined, ctx.permission));
+      // In a place, the built-in runs a person's session's commands: taken
+      // from the editor before it is replaced, each time it replays.
+      if (holding) editor.add(boundedShell(holding.id, holding.root, directory, bounded, inPlace ? editor.get("shell")?.execute : undefined, ctx.permission));
     });
 
     // The workspace's scratch is a root of its chrome-devtools (and its clone:

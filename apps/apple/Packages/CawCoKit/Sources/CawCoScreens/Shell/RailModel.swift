@@ -6,7 +6,7 @@ typealias ProjectRow = Components.Schemas.GetApiProjects200Payload
 
 /// A session in the rail and the sessions it started (Sidebar.svelte `Branch`).
 struct RailBranch {
-    let row: InstanceRow
+    let row: BoardRow
     let children: [RailBranch]
     /// Every row under it, at any depth, and how many of those failed.
     let count: Int
@@ -39,8 +39,8 @@ enum RailModel {
         let machine: String
         let folder: String
         let title: String?
-        let updatedDate: Date?
-        let updatedText: String?
+        /// When the hub last moved it, ms epoch, while no pulse says so.
+        let updated: Double?
         let activity: Activity
         let recent: Bool
     }
@@ -55,7 +55,7 @@ enum RailModel {
         let sessions = hub.fleet.rows
         var live = 0
         var blocked = 0
-        let rows = (sessions + hub.fleet.runRows + hub.fleet.threadRows).enumerated().map { index, row in
+        let rows = (sessions.map(BoardRow.session) + hub.fleet.runRows + hub.fleet.threadRows).enumerated().map { index, row in
             let watchesActivity = row.isLive || row.isStale || sort == .state
             let activity = watchesActivity ? home.activity(row.id) : .idle
             if index < sessions.count, row.isLive {
@@ -63,17 +63,10 @@ enum RailModel {
                 if activity == .blocked { blocked += 1 }
             }
             let settled = watchesActivity ? hub.fleet.activityPulse(row.id)?.at : nil
-            var updated = 0.0
-            if let date = row.updatedAt?.value1 {
-                updated = date.timeIntervalSince1970 * 1000
-            } else if let text = row.updatedAt?.value2,
-                      let date = try? Date(text, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true)) {
-                updated = date.timeIntervalSince1970 * 1000
-            }
+            let updated = row.updatedMs
             return RowInput(id: row.id, status: row.status.rawValue, parent: row.parentInstanceId,
                      project: row.projectId, machine: row.machineId, folder: row.cwd,
-                     title: row.title, updatedDate: settled == nil ? row.updatedAt?.value1 : nil,
-                     updatedText: settled == nil ? row.updatedAt?.value2 : nil,
+                     title: row.title, updated: settled == nil ? updated : nil,
                      activity: sort == .state || !row.isLive ? activity : .idle,
                      recent: row.isLive || activity == .blocked || home.now - (settled ?? updated) < dayMs)
         }
@@ -95,15 +88,15 @@ enum RailModel {
         // What is running now, and what rests but can be picked up again.
         // A project's threads with its Caw are rows of it (Sidebar.svelte): running while he works
         // on one or waits on you in it, resting otherwise.
-        let running = fleet.rows.filter(\.isLive) + fleet.runRows.filter { $0.status == .running }
+        let running = fleet.rows.filter(\.isLive).map(BoardRow.session) + fleet.runRows.filter { $0.status == .running }
             + fleet.threadRows.filter { $0.status == .running }
-        let resting = fleet.rows.filter { $0.isListed && ($0.isResumable || $0.isStale || $0.isFailed) } + fleet.runRows.filter(\.isFailed)
-            + fleet.threadRows.filter { $0.status != .running }
+        let resting = fleet.rows.filter { $0.isListed && ($0.isResumable || $0.isStale || $0.isFailed) }.map(BoardRow.session)
+            + fleet.runRows.filter(\.isFailed) + fleet.threadRows.filter { $0.status != .running }
         /// The session a row's work belongs to (tree.ts `topsIn`): itself, or
         /// for a delegate the session at the top of its chain of parents,
         /// walked through the rows the rail lists.
         let known = Dictionary((running + resting).map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
-        func top(_ row: InstanceRow) -> InstanceRow {
+        func top(_ row: BoardRow) -> BoardRow {
             var seen: Set<String> = [row.id]
             var at = row
             while let up = at.parentInstanceId.flatMap({ known[$0] }), !seen.contains(up.id) {
@@ -116,13 +109,13 @@ enum RailModel {
         /// of the session at the top of its chain (`projectsFor`), so a
         /// delegate stands in its parent's projects, whatever machine and path
         /// it runs on itself.
-        func projectsOf(_ delegate: InstanceRow) -> [String] {
+        func projectsOf(_ delegate: BoardRow) -> [String] {
             let row = top(delegate)
             return ProjectPlaces.projectsFor(fleet.projects, machineId: row.machineId, cwd: row.cwd, projectId: row.projectId).map(\.id)
         }
 
-        var live: [String: [InstanceRow]] = [:]
-        var rest: [String: [InstanceRow]] = [:]
+        var live: [String: [BoardRow]] = [:]
+        var rest: [String: [BoardRow]] = [:]
         var liveIds = Set<String>()
         for row in running {
             liveIds.insert(row.id)
@@ -178,15 +171,15 @@ enum RailModel {
     }
 
     /// `splitRows`: a tree stays whole on the side its top row is on.
-    private static func split(_ live: [InstanceRow], _ resting: [InstanceRow], hub: HubConnection, home: HomeModel) -> ([InstanceRow], [InstanceRow]) {
+    private static func split(_ live: [BoardRow], _ resting: [BoardRow], hub: HubConnection, home: HomeModel) -> ([BoardRow], [BoardRow]) {
         var recentIds = Set(live.map(\.id))
         for row in resting where home.activity(row.id) == .blocked || home.now - hub.fleet.lastAt(row) < dayMs {
             recentIds.insert(row.id)
         }
         let all = live + resting
-        var byId: [String: InstanceRow] = [:]
+        var byId: [String: BoardRow] = [:]
         for row in all { byId[row.id] = row }
-        func top(_ row: InstanceRow) -> InstanceRow {
+        func top(_ row: BoardRow) -> BoardRow {
             var seen: Set<String> = [row.id]
             var at = row
             while let up = at.parentInstanceId.flatMap({ byId[$0] }), !seen.contains(up.id) {
@@ -195,8 +188,8 @@ enum RailModel {
             }
             return at
         }
-        var recent: [InstanceRow] = []
-        var older: [InstanceRow] = []
+        var recent: [BoardRow] = []
+        var older: [BoardRow] = []
         for row in all {
             if recentIds.contains(top(row).id) { recent.append(row) } else { older.append(row) }
         }
@@ -204,7 +197,7 @@ enum RailModel {
     }
 
     /// One comparator for every list in the rail (`sorted`); recency breaks every tie.
-    static func sorted(_ rows: [InstanceRow], hub: HubConnection, home: HomeModel, by sort: RailPrefs.Sort) -> [InstanceRow] {
+    static func sorted(_ rows: [BoardRow], hub: HubConnection, home: HomeModel, by sort: RailPrefs.Sort) -> [BoardRow] {
         let rank: [Activity: Int] = [.blocked: 0, .working: 1, .idle: 2]
         // Read each key once, not on every comparator call (the fleet's
         // pulse and generated row accessors were the sort's measured cost).
@@ -237,7 +230,7 @@ enum RailModel {
     }
 
     /// `branches`: the rows as the tree they are, siblings in the rail's order at every depth.
-    private static func branches(_ rows: [InstanceRow], hub: HubConnection, home: HomeModel, prefs: RailPrefs) -> [RailBranch] {
+    private static func branches(_ rows: [BoardRow], hub: HubConnection, home: HomeModel, prefs: RailPrefs) -> [RailBranch] {
         let ordered = sorted(rows, hub: hub, home: home, by: prefs.sort)
         let lines = tree(ordered.enumerated().map {
             TreeIndex(id: $0.element.id, parentInstanceId: $0.element.parentInstanceId, index: $0.offset)

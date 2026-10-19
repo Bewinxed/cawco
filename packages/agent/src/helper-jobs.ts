@@ -9,8 +9,14 @@
 import { readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { binaryRoot, helperIsLive } from "@cawco/core/binary-installation";
+import {
+  forgetLaunchdStart,
+  launchdEnded,
+  launchdJob,
+  launchdJobs,
+  launchdProgram,
+} from "@cawco/core/launchd";
 import { writeStateFile } from "@cawco/core/state-file";
-import { launchdState } from "./keeper-jobs";
 
 /** How long a launched helper has to take its lock; one that holds none after it has gone. */
 export const HELPER_START_MS = 10_000;
@@ -85,7 +91,7 @@ export async function launchHelper(
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
 <key>Label</key>${text(label)}
-<key>ProgramArguments</key><array>${argv.map(text).join("")}</array>
+<key>ProgramArguments</key><array>${launchdProgram(label, argv).map(text).join("")}</array>
 <key>EnvironmentVariables</key><dict>${forwarded.map(([key, value]) => `<key>${key}</key>${text(value)}`).join("")}</dict>
 <key>RunAtLoad</key><true/>
 </dict></plist>
@@ -115,14 +121,14 @@ export async function helperJobSays(job: HelperJob): Promise<string> {
   if (!job.label) {
     return "it ended";
   }
-  const state = await launchdState(job.label);
+  const state = await launchdJob(job.label);
   if (state === undefined) {
     return "launchd has no such job loaded";
   }
   if (state.pid !== undefined) {
     return `its process ${state.pid} still runs`;
   }
-  return state.ended ?? "launchd never ran it";
+  return launchdEnded(state) ?? "launchd never ran it";
 }
 
 /**
@@ -139,6 +145,7 @@ export async function removeFinishedHelpers(): Promise<void> {
   if (process.platform !== "darwin" || (await helperIsLive())) {
     return;
   }
+  const jobs = await launchdJobs();
   const files = (await readdir(binaryRoot())).filter(
     (name) => name.startsWith(PLIST_PREFIX) && name.endsWith(".plist")
   );
@@ -153,7 +160,7 @@ export async function removeFinishedHelpers(): Promise<void> {
       if (
         written === undefined ||
         Date.now() - written < HELPER_START_MS ||
-        (await launchdState(label))?.pid !== undefined
+        jobs.get(label)?.pid !== undefined
       ) {
         return;
       }
@@ -162,6 +169,7 @@ export async function removeFinishedHelpers(): Promise<void> {
         { stdout: "ignore", stderr: "ignore" }
       ).exited;
       await rm(path, { force: true });
+      await forgetLaunchdStart(label);
     })
   );
 }

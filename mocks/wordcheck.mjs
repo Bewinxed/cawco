@@ -307,6 +307,7 @@ const allText = Object.values(files).join("\n");
     "login",
     "log",
     "answer",
+    "ask",
     "send",
     "type",
     "clear",

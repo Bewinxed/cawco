@@ -14,8 +14,10 @@
  * A pin is placed again after every revision of the page by its anchor, in
  * one order ({@link findAnchor}): the element at its source's file:line
  * (among several written by that one line, the one its selector names that
- * still reads its text, else the one that reads it), then its selector, then
- * the first element holding its text; none of them,
+ * still reads its text, else the one that reads it), then its selector (one
+ * by identity as it is, one of places only while its element still reads
+ * its text, or its text and more as it streams on), then the first element
+ * holding its text; none of them,
  * and it waits in the moved tray (`movedAt`) until the person places it
  * again.
  *
@@ -112,8 +114,21 @@ export interface PageAnchor {
   /** The frames it stands in, outermost first, each by its selector in its parent's document; none at the top. */
   frames?: string[];
   selector: string;
-  /** On a sheet: its story file (from the toolchain root) and the story whose frame holds the element. */
-  sheet?: { file: string; story: string };
+  /**
+   * On a component canvas: its states file (from the toolchain root), the
+   * story whose frame holds the element, and the frame's state: the
+   * interaction it is forced into, its scheme and its width (px; null when it
+   * fits its content).
+   */
+  sheet?: {
+    file: string;
+    state?: {
+      interaction: "rest" | "hover" | "focus" | "pressed";
+      scheme: "light" | "dark" | "page";
+      width: number | null;
+    };
+    story: string;
+  };
   source: PreviewElement["source"];
   /** The element's text, at most {@link COMMENT_LIMITS.anchorText} characters. */
   text?: string;
@@ -500,9 +515,35 @@ export interface AnchorLookup<E, D> {
 }
 
 /**
+ * The attributes that name an element by what it is, not where it stands,
+ * after its `id`: a test id, and a decision card's choice and option. An
+ * anchor's selector starts at the nearest of the element and its ancestors
+ * one of them names alone ({@link stableSelector}).
+ */
+export const ANCHOR_IDENTITIES = [
+  "data-testid",
+  "data-cawco-choice",
+  "data-option",
+] as const;
+
+/**
+ * Whether a selector names its element by identity: it starts at an id or
+ * one of {@link ANCHOR_IDENTITIES}, so it finds the same element however
+ * the page moved round it. A path of places from the page's root
+ * (`body > section:nth-of-type(2) > h2:nth-of-type(1)`) names whatever
+ * stands there now.
+ */
+export const stableSelector = (selector: string): boolean =>
+  selector.startsWith("#") ||
+  ANCHOR_IDENTITIES.some((name) => selector.startsWith(`[${name}=`));
+
+/**
  * Where a mark stands in the page now, and by which part of its anchor: down
  * its frames, then its source's file:line, then its selector, then its text.
- * Null when none of them finds it: the mark goes to the moved tray.
+ * A selector of places alone finds its element only while that element
+ * still reads the anchor's text, or that text and more: one put in ahead
+ * of it stands at its place now, and is never the mark's. Null when none of them finds it: the mark
+ * goes to the moved tray.
  */
 export function findAnchor<E, D>(
   anchor: PageAnchor,
@@ -517,20 +558,32 @@ export function findAnchor<E, D>(
   }
   const { source } = anchor;
   const doc: D = within;
+  const stable = stableSelector(anchor.selector);
   const named = lookup.bySelector(doc, anchor.selector);
-  const text = anchor.text?.trim();
+  const text = anchor.text?.trim() ?? "";
+  /**
+   * Whether the element the selector names is the mark's: always by
+   * identity; by places only while it reads the anchor's text, or that text
+   * and more (a card whose words stream on).
+   */
+  const holds = (el: E) => {
+    const now = lookup.textOf(el);
+    return stable || now === text || (text !== "" && now.startsWith(text));
+  };
   if (source?.file && source.line !== null && source.of === "self") {
     const written = lookup.bySource(doc, source.file, source.line);
     if (written.length === 1) {
       return { by: "source", el: written[0] };
     }
     const among =
-      written.length > 1 ? amongWritten(written, named, text, lookup) : null;
+      written.length > 1
+        ? amongWritten(written, { el: named, holds }, text, lookup)
+        : null;
     if (among) {
       return among;
     }
   }
-  if (named) {
+  if (named && holds(named)) {
     return { by: "selector", el: named };
   }
   const found = text ? lookup.byText(doc, text) : null;
@@ -542,25 +595,26 @@ export function findAnchor<E, D>(
  * in a list: each card of a transcript), never merely the first: the one its
  * selector names that still reads its text; else the one instance that
  * reads its text, wherever the list moved it; else, when no one instance
- * does (a card whose text streams on), the one its selector names. Null
- * when its selector names none of them and no one of them reads its text.
+ * does, the one its selector names while that one holds the mark (by
+ * identity, or a card whose text streams on: `named.holds`). Null when no
+ * one of them reads its text and its selector names none that holds it.
  */
 function amongWritten<E, D>(
   written: E[],
-  named: E | null,
-  text: string | undefined,
+  named: { el: E | null; holds: (el: E) => boolean },
+  text: string,
   lookup: AnchorLookup<E, D>
 ): { by: "selector" | "text"; el: E } | null {
-  const reads = (el: E) => !!text && lookup.textOf(el) === text;
-  const isNamed = !!named && written.includes(named);
-  if (named && isNamed && reads(named)) {
-    return { by: "selector", el: named };
+  const reads = (one: E) => !!text && lookup.textOf(one) === text;
+  const el = named.el && written.includes(named.el) ? named.el : null;
+  if (el && reads(el)) {
+    return { by: "selector", el };
   }
   const reading = written.filter(reads);
   if (reading.length === 1) {
     return { by: "text", el: reading[0] };
   }
-  return named && isNamed ? { by: "selector", el: named } : null;
+  return el && named.holds(el) ? { by: "selector", el } : null;
 }
 
 /** A section's head and what its pin stands on: the element by selector, source, page and text, or a canvas's element. */
@@ -590,6 +644,11 @@ const standsOn = (pin: Pin, url: string): string[] => {
         ]
       : []),
     ...(chain ? [`- Inside: ${chain}`] : []),
+    ...(anchor.sheet?.state
+      ? [
+          `- State: ${anchor.sheet.story} · ${anchor.sheet.state.interaction} · ${anchor.sheet.state.scheme} · ${anchor.sheet.state.width === null ? "fit" : `${anchor.sheet.state.width}px`}`,
+        ]
+      : []),
     `- Page: ${url}`,
     ...(anchor.text?.trim()
       ? [`- Text: ${JSON.stringify(anchor.text.trim())}`]

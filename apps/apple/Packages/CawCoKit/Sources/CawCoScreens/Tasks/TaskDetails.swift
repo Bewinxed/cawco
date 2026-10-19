@@ -575,16 +575,24 @@ final class TaskLabelsPart: UIView {
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
         stack.addArrangedSubview(TaskSheetController.sectionHead("Labels", count: nil))
         var items: [UIView] = labels.map { label in
+            // The × inside the chip, in its ink (TaskLabels.svelte's remove in the Badge); the window gives it a finger's reach.
             let badge = KitBadge(label, variant: .secondary)
-            let remove = KitButton.make("", glyph: .close, variant: .ghost, height: .xs) { [weak self] in
+            let remove = UIButton(primaryAction: UIAction { [weak self] _ in
                 guard let self else { return }
                 save(labels.filter { $0 != label })
-            }
+            })
+            remove.setImage(Glyph.close.image.resized(to: Size.iconSm).withRenderingMode(.alwaysTemplate), for: .normal)
+            remove.tintColor = Palette.inkMuted
+            remove.translatesAutoresizingMaskIntoConstraints = false
+            NSLayoutConstraint.activate([
+                remove.widthAnchor.constraint(equalToConstant: Size.iconSm),
+                remove.heightAnchor.constraint(equalToConstant: Size.iconSm),
+            ])
             remove.accessibilityLabel = "Remove the label \(label)"
-            let pair = UIStackView(arrangedSubviews: [badge, remove])
-            pair.alignment = .center
-            pair.accessibilityIdentifier = "task-label-\(label)"
-            return pair
+            remove.accessibilityIdentifier = "task-label-remove-\(label)"
+            badge.end(with: remove)
+            badge.accessibilityIdentifier = "task-label-\(label)"
+            return badge
         }
         if adding {
             field.widthAnchor.constraint(equalToConstant: 128).isActive = true

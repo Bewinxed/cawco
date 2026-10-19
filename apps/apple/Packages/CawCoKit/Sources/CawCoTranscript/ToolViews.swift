@@ -21,8 +21,18 @@ class RailRow: UIView, FitsWidth {
     /// text is laid out at, before layout says it.
     var fitWidth: CGFloat? { didSet { if fitWidth != oldValue { widthChanged() } } }
 
-    /// The body's width: the row's, from the glyph column on.
-    var bodyWidth: CGFloat? { fitWidth.map { $0 - env.columns.glyph } }
+    /// The body's width: the row's, from the glyph column on (from its own edge when flush).
+    var bodyWidth: CGFloat? { fitWidth.map { $0 - (flush ? 0 : env.columns.glyph) } }
+
+    /// The row stands on its own edge with no rail beside it (SystemLine.svelte
+    /// `.note[data-code]`: `padding-inline-start: 0`, its box its one marker).
+    var flush = false {
+        didSet {
+            guard flush != oldValue else { return }
+            place()
+            widthChanged()
+        }
+    }
 
     /// The row stands at another width: what was laid out for the old one is again.
     func widthChanged() {}
@@ -57,8 +67,9 @@ class RailRow: UIView, FitsWidth {
 
     /// The columns at the width the row is drawn at.
     func place() {
-        lead?.constant = env.columns.glyph
+        lead?.constant = flush ? 0 : env.columns.glyph
         railLead?.constant = env.columns.rail
+        rail.isHidden = flush
         if Self.framed { setNeedsLayout() }
     }
 
@@ -265,7 +276,7 @@ final class ToolLineView: RailRow, Recycled, Disclosing, FrameRow {
         let current = previews?.byInstance[env.sessionId]
         let shown = artifact != nil && current.flatMap(PreviewKey.of) == artifact ? current : nil
         let opened = shown?.state == .open
-        preview.configure(input, shown: shown, opened: opened, openable: artifact != nil,
+        preview.configure(input, shown: shown, page: shown.flatMap { previews?.page($0) }, opened: opened, openable: artifact != nil,
                           opening: artifact.map { previews?.opening.contains($0) == true } ?? false,
                           failure: artifact.flatMap { previews?.openFailed[$0] }, width: bodyWidth) { [weak self] in
             self?.openArtifact(input, artifact: artifact, opened: opened)
@@ -598,18 +609,33 @@ final class CappedText: UIView {
 }
 
 /// An `artifact_create` or `artifact_show` call (ToolGroup `.preview-tool`):
-/// the artifact's card, its mark, name and place. A tap opens it in the
+/// the artifact's card. Its button part is the mark, the name (the page's
+/// own title once it has said one) wrapping whole, and its place on one
+/// line cut at its end; then the page's thumbnail, 90×64 from its top, once
+/// the panel has drawn it. With a thumbnail the card fills its row up to
+/// 440pt; without one it is as wide as what it says. A tap opens it in the
 /// session's preview; while that preview shows something else, or nothing,
 /// the card stands at half presence, as the web draws a preview this tab
 /// has not opened. A failed open is said under the card (`.open-fault`).
 final class PreviewCard: UIView {
     private let card = UIView()
-    private let title = LineLabel()
+    private let mark = UIView()
+    private let title = WrapLabel()
     private let path = LineLabel()
+    private let thumb = UIImageView()
     private let fault = WrapLabel(wrap: .pretty)
     private var onOpen: () -> Void = {}
     private var cardBottom: NSLayoutConstraint!
     private var faultBottom: NSLayoutConstraint!
+    private var cardWidth: NSLayoutConstraint!
+    /// The page's pictures in each scheme, as last configured: a scheme change picks again.
+    private var thumbnail: PreviewStore.PageThumbnail?
+    /// The picture the thumbnail was cut from and whether it was inset, so a repeat configure keeps the cut.
+    private var thumbFrom: (png: Data, inset: Bool)?
+
+    /// `.preview-tool` `padding: space-2`, `.artifact-open` `padding: space-2`: the words 16 in, the thumbnail 8.
+    private static let pad = Space.space2
+    private static let thumbSize = CGSize(width: 90, height: 64)
 
     init() {
         super.init(frame: .zero)
@@ -623,17 +649,39 @@ final class PreviewCard: UIView {
         card.layer.cornerRadius = Radius.radiusMd
         card.layer.cornerCurve = .continuous
         card.layer.borderWidth = 1
-        let mark = UIView()
         mark.translatesAutoresizingMaskIntoConstraints = false
         mark.backgroundColor = Palette.mark6
         mark.layer.cornerRadius = Radius.radiusXs
         let glyph = GlyphView(.window, size: Size.iconSm, tint: Palette.markGlyph)
         mark.addSubview(glyph)
+        path.lineBreakMode = .byTruncatingTail
         let words = UIStackView(arrangedSubviews: [title, path])
         words.axis = .vertical
-        let row = railLine([mark, words])
-        card.pin(row, insets: UIEdgeInsets(top: Space.space2 * 2, left: Space.space2 * 2, bottom: Space.space2 * 2, right: Space.space2 * 2))
+        words.alignment = .leading
+        let row = railLine([mark, words], spacing: Space.space2)
+        let opener = UIView()
+        opener.pin(row, insets: UIEdgeInsets(top: Self.pad, left: Self.pad, bottom: Self.pad, right: Self.pad))
+        // PageThumb.svelte: 90×64 in the well (`surface-well`, `border-well`) at `--radius-sm`, the page from its top.
+        thumb.translatesAutoresizingMaskIntoConstraints = false
+        thumb.backgroundColor = Palette.surfaceWell
+        thumb.layer.cornerRadius = Radius.radiusSm
+        thumb.layer.cornerCurve = .continuous
+        thumb.layer.borderWidth = 1
+        thumb.clipsToBounds = true
+        thumb.contentMode = .scaleToFill
+        thumb.isHidden = true
+        let line = UIStackView(arrangedSubviews: [opener, thumb])
+        line.spacing = Space.space2
+        line.alignment = .center
+        card.pin(line, insets: UIEdgeInsets(top: Self.pad, left: Self.pad, bottom: Self.pad, right: Self.pad))
         addSubview(card)
+        cardWidth = card.widthAnchor.constraint(equalToConstant: 0)
+        cardWidth.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            cardWidth,
+            thumb.widthAnchor.constraint(equalToConstant: Self.thumbSize.width),
+            thumb.heightAnchor.constraint(equalToConstant: Self.thumbSize.height),
+        ])
         // `.open-fault`: `margin: calc(-1 * --space-1) 0 --space-2` under the
         // card's own `--space-2`, at most the card's width.
         fault.translatesAutoresizingMaskIntoConstraints = false
@@ -663,12 +711,18 @@ final class PreviewCard: UIView {
             card.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.txPreviewMin),
         ])
         card.boxShadow = Shadow.shadowTile
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: PreviewCard, _: UITraitCollection) in view.paint() }
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: PreviewCard, _: UITraitCollection) in
+            view.paint()
+            view.showThumb()
+            // A scheme with a picture where the other had none (or none where it had one) sizes the card again.
+            if let fitted = view.fitted { view.fit(fitted.name, place: "", width: fitted.width) }
+        }
         paint()
     }
 
     private func paint() {
         card.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
+        thumb.layer.borderColor = Palette.borderWell.resolvedColor(with: traitCollection).cgColor
     }
 
     @available(*, unavailable)
@@ -676,20 +730,27 @@ final class PreviewCard: UIView {
 
     @objc private func open() { onOpen() }
 
-    /// `shown`: the session's preview frame when it is this call's artifact;
+    /// `shown`: the session's preview frame when it is this call's artifact,
+    /// and `page` what its page said of itself (its title, its thumbnail);
     /// `openable`: the call names an artifact (an `artifact_create` still
     /// running, or refused, names none); `width`: the row's body width.
-    func configure(_ input: [String: Any], shown: PreviewFrame?, opened: Bool, openable: Bool, opening: Bool,
-                   failure: String?, width: CGFloat?, onOpen: @escaping () -> Void) {
+    func configure(_ input: [String: Any], shown: PreviewFrame?, page: PreviewStore.ShownPage?, opened: Bool, openable: Bool,
+                   opening: Bool, failure: String?, width: CGFloat?, onOpen: @escaping () -> Void) {
         self.onOpen = openable && !opening ? onOpen : {}
         card.alpha = opened ? 1 : 0.5
-        // ToolGroup's `name`: the call's own (`artifact_create`'s), else the shown artifact's.
-        let name = (input["name"] as? String) ?? shown?.artifact.name ?? "Artifact"
-        title.attributedText = Styled.string(opening ? "Opening…" : name, TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingRoot)
+        // ToolGroup's label: the page's own title, else the call's name (`artifact_create`'s), else the shown artifact's.
+        let called = (input["name"] as? String) ?? shown?.artifact.name ?? "Artifact"
+        let name = page.flatMap { $0.title.isEmpty ? nil : $0.title } ?? called
+        let named = Styled.string(opening ? "Opening…" : name, TypeScale.typeLabel, color: Palette.inkStrong,
+                                  weight: TypeScale.weightStrong, leading: TypeScale.leadingRoot, lineBreak: .byCharWrapping)
+        title.attributedText = named
         let place = Self.place(input, shown: shown)
         path.attributedText = Styled.string(place, TypeScale.typeMeta, color: Palette.inkMuted, size: TypeScale.textMeta, leading: TypeScale.leadingRoot, mono: true)
         path.isHidden = place.isEmpty
         accessibilityLabel = place.isEmpty ? name : "\(name), \(place)"
+        thumbnail = page?.thumbnail
+        showThumb()
+        fit(named, place: place, width: width)
         accessibilityTraits = openable && !opening ? .button : [.button, .notEnabled]
         accessibilityValue = opening ? "Opening" : nil
         let said = failure.map { "Couldn't open \(name): \($0) Press it to try again." }
@@ -709,6 +770,60 @@ final class PreviewCard: UIView {
 
     /// The fault the card says now.
     private var saying: String?
+
+    /// The name and row width the card was last fitted to, for a scheme change to fit it again.
+    private var fitted: (name: NSAttributedString, width: CGFloat?)?
+
+    /// The thumbnail in the reader's scheme (PageThumb.svelte): the page from
+    /// its top (`object-fit: cover; object-position: top`). A page that looks
+    /// the same in both schemes stands inset in the well at night
+    /// (`padding: --space-1`, the picture at `--radius-xs`); a scheme with no
+    /// picture shows none.
+    private func showThumb() {
+        let night = traitCollection.userInterfaceStyle == .dark
+        let png = thumbnail?.picture(dark: night)
+        let inset = night && thumbnail?.single == true
+        guard png != thumbFrom?.png || inset != thumbFrom?.inset else { return }
+        guard let png, let image = UIImage(data: png), image.size.width > 0, image.size.height > 0 else {
+            thumbFrom = nil
+            thumb.image = nil
+            thumb.isHidden = true
+            return
+        }
+        thumbFrom = (png, inset)
+        let box = Self.thumbSize
+        let frame = inset ? CGRect(origin: .zero, size: box).insetBy(dx: Space.space1, dy: Space.space1) : CGRect(origin: .zero, size: box)
+        let scale = max(frame.width / image.size.width, frame.height / image.size.height)
+        let drawn = CGSize(width: image.size.width * scale, height: image.size.height * scale)
+        thumb.image = UIGraphicsImageRenderer(size: box).image { _ in
+            if inset {
+                UIBezierPath(roundedRect: frame, cornerRadius: Radius.radiusXs).addClip()
+            } else {
+                UIRectClip(frame)
+            }
+            image.draw(in: CGRect(x: frame.midX - drawn.width / 2, y: frame.minY, width: drawn.width, height: drawn.height))
+        }
+        thumb.isHidden = false
+    }
+
+    /// The card's width: with a thumbnail, the row's up to 440; without, as
+    /// wide as its name (`inline-size: fit-content`), which wraps whole once
+    /// it is wider than the row. The place never sets it (`contain: inline-size`).
+    private func fit(_ name: NSAttributedString, place _: String, width: CGFloat?) {
+        fitted = (name, width)
+        let most = min(CGFloat(Size.txPreviewMax), width ?? CGFloat(Size.txPreviewMax))
+        let chrome = Self.pad * 4 + Size.rowMark + Space.space2 + (thumb.isHidden ? 0 : Self.thumbSize.width + Space.space2)
+        let room = max(0, most - chrome)
+        let natural = ceil(name.boundingRect(with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                                             options: [.usesLineFragmentOrigin], context: nil).width)
+        let words = min(natural, room)
+        title.fitWidth = words
+        let next = thumb.isHidden ? words + chrome : most
+        guard abs(cardWidth.constant - next) > 0.5 else { return }
+        cardWidth.constant = next
+        // A title or a thumbnail that came after the row was measured: it is measured again.
+        if window != nil { remeasureRow() }
+    }
 
     /// Where the artifact is (source.ts `previewPlace`, the call's kind before
     /// it is shown): the shown preview's source; else the call's folder, its

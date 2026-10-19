@@ -19,6 +19,7 @@
 import { dlopen, FFIType, ptr } from "bun:ffi";
 import { readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { SESSIOND_PROCESS_LIMIT } from "@cawco/core/sessiond";
 
 /**
  * Tasks kept free for the keeper itself. Ours: the keeper runs about 20
@@ -45,6 +46,8 @@ export interface Headroom {
 }
 
 const NPROC_LINE = /^Max processes\s+(\S+)\s+(\S+)/m;
+/** What separates a `/proc/self/maps` line's fields; the sixth on is the mapped file's path. */
+const MAPS_FIELDS = /\s+/;
 const NUMERIC = /^\d+$/;
 const REAL_UID = /^Uid:\s+(\d+)/m;
 const THREADS = /^Threads:\s+(\d+)/m;
@@ -147,43 +150,122 @@ export async function taskHeadroom(): Promise<Headroom | undefined> {
   return rooms.sort((a, b) => a.free - b.free)[0];
 }
 
-let libc:
-  | ReturnType<
-      typeof dlopen<{
+interface Prlimit {
+  /** prlimit(2): 0 on success. */
+  prlimit: (pid: number, resource: number, limit: BigUint64Array) => number;
+}
+
+/**
+ * prlimit(2) from the C library this process itself runs on: the first file
+ * mapped into it (`/proc/self/maps`, the kernel's own list of what the process
+ * loaded) that exports the symbol, whatever that library is named (glibc's
+ * `libc.so.6`, musl's `ld-musl-*.so.1`). Undefined when none does.
+ */
+async function loadedPrlimit(): Promise<Prlimit | undefined> {
+  const maps = await readFile("/proc/self/maps", "utf8");
+  const files = new Set(
+    maps
+      .split("\n")
+      .map((line) => line.split(MAPS_FIELDS).slice(5).join(" "))
+      .filter((path) => path.startsWith("/"))
+  );
+  for (const file of files) {
+    try {
+      const library = dlopen(file, {
         prlimit: {
-          args: [FFIType.i32, FFIType.i32, FFIType.ptr, FFIType.ptr];
-          returns: FFIType.i32;
-        };
-      }>
-    >
+          args: [FFIType.i32, FFIType.i32, FFIType.ptr, FFIType.ptr],
+          returns: FFIType.i32,
+        },
+      });
+      return {
+        prlimit: (pid, resource, limit) =>
+          library.symbols.prlimit(pid, resource, ptr(limit), null),
+      };
+    } catch {
+      // Not a library, or one without prlimit: the next mapping.
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Whether this keeper can cap each child's tasks, settled once: it needs
+ * prlimit(2) only when it has a process limit to keep room under. The words
+ * of a refusal when it has the limit and its C library has no prlimit; then
+ * no child starts, since an uncapped child can take the room the keeper keeps
+ * for its own threads.
+ */
+let capping:
+  | Promise<{ kind: "caps"; call?: Prlimit } | { kind: "refused"; why: string }>
   | undefined;
+
+const settleCapping = (): NonNullable<typeof capping> => {
+  capping ??= (async () => {
+    if (process.platform !== "linux") {
+      return { kind: "caps" } as const;
+    }
+    const nproc = await nprocLimit();
+    if (!nproc || nproc.soft <= TASK_RESERVE) {
+      return { kind: "caps" } as const;
+    }
+    const call = await loadedPrlimit();
+    return call
+      ? ({ kind: "caps", call } as const)
+      : ({
+          kind: "refused",
+          why: `the keeper has a process limit of ${nproc.soft}, and the C library it runs on has no prlimit(2) to give a child a lower one`,
+        } as const);
+  })();
+  return capping;
+};
+
+/** Why this keeper starts no child, when it cannot cap a child's tasks; undefined when it can. */
+export async function childCapRefusal(): Promise<string | undefined> {
+  const settled = await settleCapping();
+  return settled.kind === "refused" ? settled.why : undefined;
+}
+
+/**
+ * Why the keeper starts no child now, in the words its spawn ack carries:
+ * it cannot cap a child's tasks ({@link childCapRefusal}), or the tightest
+ * limit leaves no room for a child to come up ({@link START_ROOM}) above
+ * what the keeper keeps for itself ({@link TASK_RESERVE}), said with
+ * {@link SESSIOND_PROCESS_LIMIT}. Undefined when a child may start.
+ */
+export async function spawnRefusal(): Promise<string | undefined> {
+  const uncapped = await childCapRefusal();
+  if (uncapped) {
+    return `spawn: no child starts here: ${uncapped}`;
+  }
+  const room = await taskHeadroom();
+  if (room && room.free < TASK_RESERVE + START_ROOM) {
+    return `${SESSIOND_PROCESS_LIMIT}: ${room.what}; a child starts with ${START_ROOM} free above the ${TASK_RESERVE} kept for the keeper`;
+  }
+  return undefined;
+}
 
 /**
  * Gives a child it has just started a user process limit {@link TASK_RESERVE}
  * below the keeper's own, so the child and all it starts can never take the
  * room the keeper keeps for its own threads: the kernel checks a new task
  * against the limit of the process creating it. Nothing to do where the
- * keeper has no such limit.
+ * keeper has no such limit. A spawn asks {@link childCapRefusal} before the
+ * child starts.
  */
 export async function capChildTasks(pid: number): Promise<void> {
-  if (process.platform !== "linux") {
+  const settled = await settleCapping();
+  if (settled.kind !== "caps" || !settled.call) {
     return;
   }
   const nproc = await nprocLimit();
-  if (!nproc || nproc.soft <= TASK_RESERVE) {
+  if (!nproc) {
     return;
   }
-  libc ??= dlopen("libc.so.6", {
-    prlimit: {
-      args: [FFIType.i32, FFIType.i32, FFIType.ptr, FFIType.ptr],
-      returns: FFIType.i32,
-    },
-  });
   const limit = new BigUint64Array([
     BigInt(nproc.soft - TASK_RESERVE),
     nproc.hard,
   ]);
-  if (libc.symbols.prlimit(pid, RLIMIT_NPROC, ptr(limit), null) !== 0) {
+  if (settled.call.prlimit(pid, RLIMIT_NPROC, limit) !== 0) {
     console.error(
       `[sessiond] child ${pid}: its process limit could not be lowered; it may use the keeper's reserve`
     );

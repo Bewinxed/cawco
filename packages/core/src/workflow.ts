@@ -314,6 +314,12 @@ export interface WorkflowGraph {
 }
 export interface Problem {
   edgeId?: string;
+  /**
+   * What the problem is, where a reader decides on it: `call-cycle`, a
+   * workflow that calls itself through the fleet's saved graphs. Absent on
+   * every other, whose `message` is all there is to say.
+   */
+  kind?: "call-cycle";
   line?: number;
   message: string;
   nodeId?: string;
@@ -1078,10 +1084,11 @@ export function validateWorkflow(
           continue;
         }
         if (ids.includes(child.id)) {
-          add(
-            `Workflow call cycle: ${[...names, child.name].join(" → ")}`,
-            call.id
-          );
+          problems.push({
+            kind: "call-cycle",
+            message: `Workflow call cycle: ${[...names, child.name].join(" → ")}`,
+            nodeId: call.id,
+          });
           continue;
         }
         walk(

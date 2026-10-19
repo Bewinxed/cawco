@@ -87,11 +87,12 @@
   /** No machine at all: the page is the guide alone, with nothing to list or start. */
   const noFleet = $derived(machinesThere === "none");
   /**
-   * In the rail, the block over the groups with nothing in it: the hub is
-   * live and read, so the status line is silent. It takes no room then, not
-   * its padding either.
+   * In the rail, the block over the groups with nothing in it: the status
+   * line says only that the first read is coming (the hub's connection is
+   * the band's, HubBand), so it is silent otherwise. It takes no room then,
+   * not its padding either.
    */
-  const bare = $derived(variant === "rail" && home.status === "connected");
+  const bare = $derived(variant === "rail" && home.status !== "reading");
   /**
    * What Caw's line says. "No sessions" is a claim, so it waits on the data:
    * while any machine has not answered, the line names who it is waiting

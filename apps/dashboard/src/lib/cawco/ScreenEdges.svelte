@@ -102,23 +102,25 @@
     background: var(--edge-bottom-background);
   }
 
+  /* What stands on each edge is said on the root by whoever holds it
+     (page-marks): the Shell's bar in `data-bar`, a scrim or the lightbox in
+     `data-scrim`, a kit sheet in `data-kit-sheet`. Asked of the page with
+     `:root:has(…)`, every element put in anywhere (a streamed message, a
+     morph's letters) restyled the root on its way in, at any depth the
+     argument named. */
+
   /* The session's tabs at the top: the phone's tab row under the floating
      bar, or the wide bar hosting them on their shelf. Under the narrow
-     query the bar draws itself raised even while hosting (Shell). */
-  /* The bar is read down its own line of parents, the page's root to the
-     Shell's (app.html's body div, Shell `.shell` > `.main` > `.top`): asked
-     as `:root:has(.top.floating)`, every style pass after anything went into
-     the page searched the whole document for it, twice — every streamed
-     message, every forced read in a tab switch. Down a line of children it
-     is four elements, and it is answered in the page the server sends. */
+     query the bar draws itself raised even while hosting (Shell). The
+     server's page has neither (no tabs before the workspace is read). */
   /* css-scope: reads the Shell's bar from the root to colour the top edge */
-  :global(:root:has(> body > div > .shell > .main > .top.floating)),
-  :global(:root:has(> body > div > .shell > .main > .top.hosting)) {
+  :global(:root[data-bar~="floating"]),
+  :global(:root[data-bar~="hosting"]) {
     --edge-top-under: var(--surface-shelf);
   }
-  @media (max-width: 899px), (pointer: coarse) and (orientation: portrait) {
+  @media (width < 900px), (pointer: coarse) and (orientation: portrait) {
     /* css-scope: reads the Shell's bar from the root to colour the top edge */
-    :global(:root:has(> body > div > .shell > .main > .top.hosting)) {
+    :global(:root[data-bar~="hosting"]) {
       --edge-top-under: var(--surface-raised);
     }
   }
@@ -126,8 +128,8 @@
   /* An open scrim, the kit's (`.kit-scrim`, portalled into the body) or
      the lightbox's (PhotoSwipe's root, its bg the scrim at full opacity). */
   /* css-scope: reads an open scrim from the root to colour both edges */
-  :global(:root:has(> body > .kit-scrim[data-state="open"])),
-  :global(:root:has(> body > .cawco-pswp.pswp--open)) {
+  :global(:root[data-scrim~="open"]),
+  :global(:root[data-scrim~="lightbox"]) {
     --edge-top-background: color-mix(
       in srgb,
       var(--background) var(--scrim-mix),
@@ -142,33 +144,20 @@
     --edge-bottom-fade: var(--dur-panel);
   }
   /* css-scope: times the edges to a closing scrim's fade */
-  :global(:root:has(> body > .kit-scrim[data-state="closed"])) {
+  :global(:root[data-scrim~="closed"]) {
     --edge-top-fade: var(--dur-exit);
     --edge-bottom-fade: var(--dur-exit);
   }
   /* A bottom sheet on the screen's foot is the bottom edge, at once, for as
      long as it is there: opening and closing it covers the foot. */
   /* css-scope: reads a kit bottom sheet from the root to colour the foot */
-  :global(
-    :root:has(
-      > body
-        > [data-slot="drawer-content"][data-placed][data-vaul-drawer-direction="bottom"]
-    )
-  ) {
+  :global(:root[data-kit-sheet~="bottom"]) {
     --edge-bottom-background: var(--surface-raised);
     --edge-bottom-fade: 1ms;
   }
   /* A side sheet: the strips step aside at once (see above). */
   /* css-scope: reads a kit side sheet from the root to set both edges */
-  :global(
-    :root:has(
-      > body
-        > [data-slot="sheet-content"]:is(
-          [data-side="left"],
-          [data-side="right"]
-        )[data-state="open"]
-    )
-  ) {
+  :global(:root[data-kit-sheet~="side"]) {
     --edge-top-background: var(--surface-raised);
     --edge-bottom-background: var(--surface-raised);
     --edge-shown: 0;
@@ -176,11 +165,7 @@
   }
   /* The phone's sidebar fills its sheet with its own ground (Shell). */
   /* css-scope: reads the Shell's sidebar sheet from the root */
-  :global(
-    :root:has(
-      > body > [data-slot="sheet-content"].rail-sheet[data-state="open"]
-    )
-  ) {
+  :global(:root[data-kit-sheet~="rail"]) {
     --edge-top-background: var(--sidebar);
     --edge-bottom-background: var(--sidebar);
   }

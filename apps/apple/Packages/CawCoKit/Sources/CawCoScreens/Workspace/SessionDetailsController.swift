@@ -203,11 +203,11 @@ public final class SessionDetailsController: ObservedViewController {
     // MARK: Derived (SessionDetails.svelte)
 
     private var fleet: FleetStore { hub.fleet }
-    private var row: InstanceRow? { fleet.byId[sessionId] }
+    private var row: InstanceRow? { fleet.byId[sessionId]?.session }
     private var facts: Components.Schemas.TranscriptFacts? { hub.sessions.transcripts[sessionId]?.facts }
     private var machineId: String? { row?.machineId }
     private var machine: MachineRow? { machineId.flatMap { id in fleet.machines.first { $0.machineId == id } } }
-    private var harness: String? { row?.harness ?? facts?.harness }
+    private var harness: String? { row?.harness.rawValue ?? facts?.harness }
     private var report: Components.Schemas.HarnessReport? { harness.flatMap { kind in machine?.harnesses?.first { $0.harness.rawValue == kind } } }
     private var cwd: String { row?.cwd ?? "" }
     private var model: String? { (facts?.model ?? row?.model).flatMap { $0.isEmpty ? nil : $0 } }
@@ -348,7 +348,7 @@ public final class SessionDetailsController: ObservedViewController {
         }
         guard let row else { return }
         // On its own conversation, or fresh under the same id before its first message.
-        let plan = HubConnection.Relaunch.of(sessionId: row.sessionId, lastError: row.lastError)
+        let plan = HubConnection.Relaunch.of(sessionId: row.sessionId, lastErrorKind: row.lastErrorKind, lastError: row.lastError)
         if case let .refused(reason) = plan {
             relaunchFailure = reason
             requestRefresh()
@@ -618,11 +618,6 @@ public final class SessionDetailsController: ObservedViewController {
         asked = sessionId
         readings.refreshContext(hub, sessionId, machineId)
         readings.loadMcp(hub, sessionId, machineId)
-        if let harness {
-            Task { [weak self, hub] in
-                if await ModelCatalog.ensure(hub, harness: harness) { self?.requestRefresh() }
-            }
-        }
     }
 
     /// A change that lands says so where it was made: a check on its line for

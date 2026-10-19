@@ -24,8 +24,8 @@ import {
   launchHelper,
   removeFinishedHelpers,
 } from "../../packages/agent/src/helper-jobs";
-import { launchdState } from "../../packages/agent/src/keeper-jobs";
 import { binaryRoot } from "../../packages/core/src/binary-installation";
+import { launchdJob, launchdStartPath } from "../../packages/core/src/launchd";
 
 if (process.platform !== "darwin") {
   throw new Error(
@@ -99,7 +99,7 @@ try {
   await removeFinishedHelpers();
   step(
     "a sweep right after a helper's launch leaves its job loaded and its plist in place",
-    (await launchdState(first.label ?? "")) !== undefined &&
+    (await launchdJob(first.label ?? "")) !== undefined &&
       (await present(plistOf(first))),
     first.name
   );
@@ -113,8 +113,8 @@ try {
     10_000
   );
   step(
-    "launchd says how the helper's job ended",
-    said,
+    "launchd says how the helper's job ended: status 0 with its start record is an exit 0, not a job never run",
+    said && (await present(launchdStartPath(first.label ?? ""))),
     await helperJobSays(first)
   );
 
@@ -122,9 +122,10 @@ try {
   await pastStartWindow(firstAt);
   await removeFinishedHelpers();
   step(
-    "a helper's job that ended is booted out, and its plist removed, by the next sweep",
-    (await launchdState(first.label ?? "")) === undefined &&
-      !(await present(plistOf(first)))
+    "a helper's job that ended is booted out, and its plist and start record removed, by the next sweep",
+    (await launchdJob(first.label ?? "")) === undefined &&
+      !(await present(plistOf(first))) &&
+      !(await present(launchdStartPath(first.label ?? "")))
   );
 
   // 3. A helper still running past its start window, holding no lock, is not ended by a sweep.
@@ -134,7 +135,7 @@ try {
   await until(marked("second.took-over"), 15_000);
   await pastStartWindow(secondAt);
   await removeFinishedHelpers();
-  const running = await launchdState(second.label ?? "");
+  const running = await launchdJob(second.label ?? "");
   step(
     "a helper launchd still runs past its start window is left running by a sweep",
     running?.pid !== undefined && (await present(plistOf(second))),
@@ -145,13 +146,13 @@ try {
     await until(marked("second.ended"), 20_000)
   );
   await until(
-    async () => (await launchdState(second.label ?? ""))?.pid === undefined,
+    async () => (await launchdJob(second.label ?? ""))?.pid === undefined,
     10_000
   );
   await removeFinishedHelpers();
   step(
     "once it has ended, the next sweep removes its job and plist",
-    (await launchdState(second.label ?? "")) === undefined &&
+    (await launchdJob(second.label ?? "")) === undefined &&
       !(await present(plistOf(second)))
   );
 } catch (error) {
@@ -168,6 +169,11 @@ try {
           ["launchctl", "bootout", `gui/${process.getuid?.()}/${job.label}`],
           { stdout: "ignore", stderr: "ignore" }
         ).exited
+    )
+  );
+  await Promise.all(
+    launched.map((job) =>
+      rm(launchdStartPath(job.label ?? ""), { force: true })
     )
   );
   await rm(scratch, { recursive: true, force: true });

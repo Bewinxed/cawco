@@ -55,9 +55,11 @@
  * `CAWCO_CAWRIER_ORIGIN` points every push at a stand-in for a local run.
  */
 import {
+  DELEGATE_TYPE_PROPOSAL_TOOL,
   DESIGN_PROPOSAL_TOOL,
   type Envelope,
   type FleetWatchNotice,
+  type HarnessKind,
   MEMORY_PROPOSAL_TOOL,
   machineLabel,
   type PairingRequest,
@@ -150,6 +152,8 @@ const FAILED = "Failed";
 const NOTE = "Note";
 /** A memory proposal's visible title (memory.ts): what it is, its project under it. */
 const MEMORY_PROPOSAL_NAME = "Memory proposal";
+/** Caw's delegate type proposal's visible title (memory.ts): what it is, its project under it. */
+const DELEGATE_TYPE_PROPOSAL_NAME = "Delegate type proposal";
 /** A design proposal's visible title (design-system.ts): what it is, its project under it. */
 const DESIGN_PROPOSAL_NAME = "Design system change";
 /** A project setting Caw asked about (project-settings.ts): what it is, its project under it. */
@@ -596,8 +600,8 @@ export interface PushServices {
   ) => Promise<{ kind: string | null; title: string } | undefined>;
 }
 
-/** Each harness as the operator knows it; a row without one is Claude Code. */
-const HARNESS_NAMES: Record<string, string> = {
+/** Each harness as the operator knows it. */
+const HARNESS_NAMES: Record<HarnessKind, string> = {
   claude: "Claude Code",
   opencode: "OpenCode",
   pi: "pi",
@@ -1163,7 +1167,7 @@ export const createPush = ({
     if (owned) {
       return owned;
     }
-    const harness = HARNESS_NAMES[row.harness ?? "claude"] ?? row.harness;
+    const harness = HARNESS_NAMES[row.harness];
     const host = db
       .listAgents()
       .find((agent) => agent.machineId === row.machineId)?.hostname;
@@ -1201,6 +1205,9 @@ export const createPush = ({
   ): string => {
     if (payload.toolName === MEMORY_PROPOSAL_TOOL) {
       return MEMORY_PROPOSAL_NAME;
+    }
+    if (payload.toolName === DELEGATE_TYPE_PROPOSAL_TOOL) {
+      return DELEGATE_TYPE_PROPOSAL_NAME;
     }
     if (payload.toolName === DESIGN_PROPOSAL_TOOL) {
       return DESIGN_PROPOSAL_NAME;

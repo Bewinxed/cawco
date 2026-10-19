@@ -155,7 +155,7 @@ final class RecentList {
         cell.row.menu = { [weak self] copy in
             guard let self, let context = sessionMenus?()?.at(place), let recent = listed[id] else { return nil }
             if let held = recent.instance {
-                guard BoardRun.runId(of: held.id) == nil, !ThreadTabs.isThread(held.id), let now = hub.fleet.byId[held.id] else { return nil }
+                guard let now = hub.fleet.byId[held.id]?.session else { return nil }
                 return SessionMenus.live(now, context: context, copy: copy)
             }
             let fleet = hub.fleet

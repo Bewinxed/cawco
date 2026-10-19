@@ -109,6 +109,7 @@ const SOLAR_ICONS = [
   "refresh-bold-duotone", // IconRefresh
   "settings-bold-duotone", // IconSettings
   "shield-bold-duotone", // IconShield
+  "shield-network-bold-duotone", // IconTailnetHttps
   "sidebar-minimalistic-line-duotone", // IconSidebar
   "sort-bold-duotone", // IconSort
   "sort-vertical-bold-duotone", // IconUnfold
@@ -138,6 +139,8 @@ const SOLAR_ICONS = [
   // The Sound switch.
   "volume-loud-bold-duotone", // Sound on
   "volume-cross-bold-duotone", // Sound off
+  "play-bold-duotone", // Caw's loop on (CawLoopSwitcher.svelte)
+  "pause-bold-duotone", // Caw's loop held
   // The task sheet (tasks/TaskSheet.svelte).
   "lock-keyhole-minimalistic-bold-duotone", // IconLock: waits on
   // The paywall's free-week rows (Today, Day 6; Day 7 is the lock above).
@@ -155,6 +158,8 @@ const SOLAR_ICONS = [
   "chat-round-dots-bold-duotone", // IconComment
   "pen-bold-duotone", // IconPen: the preview's Draw
   "restart-bold-duotone", // IconReopen
+  "undo-left-bold-duotone", // IconReset: a sheet inspector's prop back to its default
+  "sidebar-minimalistic-bold-duotone", // IconUndock: the panel's canvas back to the composer
   "map-point-bold-duotone", // IconMapPoint: the moved tray
   // Configure → Accounts (accounts/AccountEditor.svelte, AccountMachines.svelte, KeyPanel.svelte).
   "logout-2-bold-duotone", // IconLogout

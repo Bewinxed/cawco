@@ -42,8 +42,14 @@
 
   const now = (): string => new Date().toISOString();
 
+  /**
+   * A live message, as the store places one: pushed onto the array the
+   * transcript holds, and the session's revision moved (client.svelte.ts
+   * `rev`), which is what the transcript's build depends on for its rows.
+   */
   function push(m: Omit<Message, "instanceId">): void {
     session.messages.push({ instanceId: INSTANCE, ...m } as Message);
+    session.rev += 1;
   }
 
   /** One completed tool call. Consecutive ones fold into a single row. */
@@ -286,6 +292,7 @@
         session.messages = session.messages.filter(
           (message) => message.id !== id
         );
+        session.rev += 1;
       },
       user: (content: string) => {
         n += 1;
@@ -347,6 +354,7 @@
         session.messages = session.messages.filter(
           (message) => message.id !== id
         );
+        session.rev += 1;
       },
     };
   });

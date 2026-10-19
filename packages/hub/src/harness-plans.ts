@@ -37,7 +37,7 @@ export const harnessTasks = async (
   deps: HarnessPlanDeps,
   row: Row
 ): Promise<NeutralTask[]> => {
-  const harness = (row.harness ?? "claude") as HarnessKind;
+  const { harness } = row;
   if (harness !== "claude" || !(row.sessionId && deps.online(row.machineId))) {
     return [];
   }

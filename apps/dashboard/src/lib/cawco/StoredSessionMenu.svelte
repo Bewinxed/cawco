@@ -144,7 +144,7 @@
           openBeside(info.sessionId, {
             machine: machineId,
             cwd: info.cwd ?? "",
-            harness: info.harness ?? "claude",
+            harness: info.harness,
           })}
       >
         <IconColumns />

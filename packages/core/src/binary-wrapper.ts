@@ -1,5 +1,6 @@
 import { join } from "node:path";
 import { AGENT_BUNDLE_EXECUTABLE } from "./agent-bundle";
+import { LAUNCHD_START_XML } from "./launchd";
 import { writeStateFile } from "./state-file";
 
 /**
@@ -21,9 +22,7 @@ import { writeStateFile } from "./state-file";
  * folder: on macOS inside the build's own CawCo Agent.app (`EXE`, the shell
  * twin of binary-installation.ts `EXECUTABLE_IN_VERSION`). A
  * build's session keeper runs in a job of its own (keepers.ts), and not
- * through here. A legacy keeper's unit, from before
- * keepers ran side by side, still starts through `sessiond`, from the
- * `keeper` link, until the handover that retires it removes the unit.
+ * through here.
  *
  * Written by the installer, and afterwards only by a build the update helper
  * has confirmed ({@link writeWrapper}): the script that recovers a trial is
@@ -63,7 +62,12 @@ launch_decider() {
     plist="$ROOT/$label.plist"
     {
       printf '<?xml version="1.0" encoding="UTF-8"?>\\n<plist version="1.0"><dict><key>Label</key><string>%s</string>' "$label"
-      printf '<key>ProgramArguments</key><array><string>%s</string><string>binary-apply</string><string>--resume</string></array>' "$1"
+      # Its start record first, as every launchd job CawCo writes (launchd.ts launchdProgram).
+      printf '<key>ProgramArguments</key><array><string>/bin/sh</string><string>-c</string><string>'
+      cat <<'CAWCO_LAUNCHD_START'
+${LAUNCHD_START_XML}
+CAWCO_LAUNCHD_START
+      printf '</string><string>cawco-launchd-start</string><string>%s</string><string>%s</string><string>binary-apply</string><string>--resume</string></array>' "$HOME/.cawco/launchd/$label.start.json" "$1"
       printf '<key>EnvironmentVariables</key><dict>'
       while IFS='=' read -r key value; do
         printf '<key>%s</key><string>%s</string>' "$key" "$(printf '%s' "$value" | sed 's/&/\\&amp;/g;s/</\\&lt;/g;s/>/\\&gt;/g')"
@@ -87,7 +91,7 @@ EOF
 }
 # Only a unit's start looks for an orphaned trial: every other verb (a session's boundary hook runs through this
 # script on every shell call) goes straight to the build, and says nothing.
-case "$1" in hub | dashboard | up | sessiond) unit_start=1 ;; *) unit_start=0 ;; esac
+case "$1" in hub | dashboard | up) unit_start=1 ;; *) unit_start=0 ;; esac
 if [ "$unit_start" = 1 ] && [ -f "$TRIAL" ] && ! helper_live; then
   previous="$(sed -n 's/.*"previous":"\\([^"]*\\)".*/\\1/p' "$TRIAL")"
   version="$(sed -n 's/.*"version":"\\([^"]*\\)".*/\\1/p' "$TRIAL")"
@@ -95,9 +99,6 @@ if [ "$unit_start" = 1 ] && [ -f "$TRIAL" ] && ! helper_live; then
     echo "cawco: the trial of $version is open and no update helper is deciding it; starting one from $previous" >&2
     launch_decider "$ROOT/versions/$previous/$EXE" || echo "cawco: the update helper could not be started" >&2
   fi
-fi
-if [ "$1" = sessiond ]; then
-  exec "$ROOT/keeper/$EXE" sessiond
 fi
 exec "$ROOT/current/$EXE" "$@"
 `;

@@ -1,11 +1,14 @@
 /**
  * A project's decision pages (Projects spec §5.8, PRD §5.8): what the
  * project page's Decisions tab lists and opens. A page is a decision-page
- * artifact (the `decision-page` skill) built into the project's folder at
- * `decisions/<name>/`; its picks live in the artifact's document.
+ * artifact (the `decision-page` skill): an OpenUI Lang program over the
+ * decision library (decisions-library.ts), or, when a pick is something the
+ * person places or operates, an HTML page on the kit. In a project it is
+ * kept at `decisions/<name>/`; its picks live in the artifact's document.
  *
- * - **Progress** is its cards picked of its cards: the cards are the ids of
- *   its `[data-cawco-choice]` groups, read from the built page by the hub.
+ * - **Progress** is its cards picked of its cards: a program's `Decision`
+ *   statements ({@link readProgram}), or an HTML page's
+ *   `[data-cawco-choice]` groups, read from the built page by the hub.
  * - **State**, derived on read and never stored: `picking`, until the person
  *   sends (I'm done picking, or a comment) and nothing was picked after it;
  *   `sent`; `making`, while the session asked to Make tasks is on its turn;
@@ -16,10 +19,13 @@
  *   beside it is the record in words, for sessions to read why.
  * - **Tasks link back** by a field of the project's own on the task file:
  *   `decided: <page>#<card>` ({@link DECIDED_FIELD}).
- * - **The graph**, when the decisions form one: `decisions/decisions.json`,
- *   its cards, edges and groups; Caw edits the file, the person's drags
- *   save their places to it.
+ * - **The graph**, derived from the programs: every decision a card, an
+ *   edge from each decision its `after` names (`page#card` across pages),
+ *   a group per `Section`. The person's drags are theirs, not the
+ *   writer's: each page's artifact keeps its cards' places in its state
+ *   under {@link PLACES_KEY}, so they outlive revisions as picks do.
  */
+import type { ElementNode } from "@openuidev/lang-core";
 
 /** One option of a card, as the page labelled it. */
 export interface DecisionOption {
@@ -35,6 +41,8 @@ export interface DecisionOption {
 
 /** One card of a page, as the page drew it. */
 export interface DecisionCard {
+  /** The decisions it depends on: an id on its page, or `page#id` on another. */
+  after: string[];
   id: string;
   /** Its own mockup's id (`{{MK:<id>}}`), when it places one. */
   mockup: string | null;
@@ -42,6 +50,8 @@ export interface DecisionCard {
   multiple: boolean;
   options: DecisionOption[];
   question: string;
+  /** The Section it stands in, by its id; null outside one. */
+  section: string | null;
   /** Its why line; empty when it has none. */
   why: string;
 }
@@ -79,7 +89,7 @@ export interface DecisionPageSummary {
 }
 
 export interface DecisionsList {
-  /** `decisions/decisions.json` is in the folder: the decisions form a graph. */
+  /** The decisions form a graph: one names another in `after`, or stands in a Section. */
   graph: boolean;
   pages: DecisionPageSummary[];
   /** What could not be read, one sentence each. */
@@ -123,29 +133,45 @@ export interface DecisionPageRead extends DecisionPageSummary {
   sentAt: string | null;
 }
 
-/** One card on the graph: its page's card by id, and its place. */
+/** One card on the graph: its page's decision, and where it stands. */
 export interface GraphCard {
+  /** Its decision's id on its page. */
+  card: string;
+  /** `page#card`: one id across the project's pages. */
   id: string;
+  /** Its question. */
   name: string;
   /** The page it is a card of. */
   page: string;
-  /** Picked on its page: derived on read, never written to the file. */
-  picked?: boolean;
+  /** Picked on its page. */
+  picked: boolean;
   x: number;
   y: number;
 }
 
+/** A Section, as a frame round its cards. */
 export interface GraphGroup {
+  /** The graph ids of its cards. */
   cards: string[];
+  /** `page#section`. */
   id: string;
   name: string;
 }
 
-/** `decisions/decisions.json`. */
+/** The project's decisions as a graph, derived from its programs on each read. */
 export interface DecisionGraph {
   cards: GraphCard[];
+  /** From the decision depended on to the one that depends on it, by graph id. */
   edges: [string, string][];
   groups: GraphGroup[];
+  /** What could not be drawn, one sentence each: an `after` naming no decision. */
+  problems: string[];
+}
+
+/** One card's place on the graph, as the person dragged it. */
+export interface GraphPlace {
+  x: number;
+  y: number;
 }
 
 /** What the hub answers a send on a page: who heard it. */
@@ -171,8 +197,143 @@ export const decidedOf = (
   return found ? { page: found[1], card: found[2] } : null;
 };
 
-/** The graph file's path in the project's folder. */
-export const GRAPH_FILE = "decisions/decisions.json";
+/** The state key a page's artifact keeps its cards' places on the graph under: `{ [card]: { x, y } }`. */
+export const PLACES_KEY = "graph.places";
+
+/** The graph id of a page's card. */
+export const graphId = (page: string, card: string): string =>
+  `${page}#${card}`;
+
+/** What a program says of itself: its title and intro, its cards and Sections, and the media it names. */
+export interface ProgramRead {
+  /** The artifacts its Canvas and Preview pieces show, by id. */
+  artifacts: { component: "Canvas" | "Preview"; id: string }[];
+  cards: DecisionCard[];
+  /** The files its Image pieces show, as written. */
+  images: string[];
+  intro: string;
+  sections: { cards: string[]; id: string; title: string }[];
+  title: string;
+}
+
+const SLUG = /[^a-z0-9]+/g;
+const SLUG_ENDS = /^-+|-+$/g;
+
+const isElement = (value: unknown): value is ElementNode =>
+  typeof value === "object" &&
+  value !== null &&
+  (value as { type?: unknown }).type === "element";
+
+const text = (value: unknown): string =>
+  typeof value === "string" ? value : "";
+
+const strings = (value: unknown): string[] =>
+  Array.isArray(value)
+    ? value.filter((one): one is string => typeof one === "string")
+    : [];
+
+/** The elements an array prop holds; none when it holds something else. */
+const elementsOf = (value: unknown): ElementNode[] =>
+  Array.isArray(value) ? value.filter(isElement) : [];
+
+/** A Decision element as its card, its Options numbered by their place in it. */
+const cardOf = (
+  props: Record<string, unknown>,
+  section: string | null
+): DecisionCard => ({
+  id: text(props.id),
+  question: text(props.question),
+  why: text(props.why),
+  multiple: props.multiple === true,
+  mockup: null,
+  options: elementsOf(props.options).map((option, index) => ({
+    id: text(option.props.id),
+    keycap: index + 1,
+    label: text(option.props.label) || text(option.props.id),
+    line: text(option.props.line),
+    recommended: option.props.recommended === true,
+  })),
+  after: strings(props.after),
+  section,
+});
+
+/** A Section's id: its title as a slug, made its own on the page with `-2`, `-3`… */
+const sectionId = (title: string, taken: Set<string>): string => {
+  const base =
+    title.toLowerCase().replace(SLUG, "-").replace(SLUG_ENDS, "") || "section";
+  let id = base;
+  for (let n = 2; taken.has(id); n += 1) {
+    id = `${base}-${n}`;
+  }
+  taken.add(id);
+  return id;
+};
+
+/**
+ * A parsed program's cards, Sections and media, in page order (the root's
+ * tree as lang-core's parser leaves it: a static program's props are its
+ * values). Each Option's keycap is its place in its decision, as the card
+ * draws it.
+ */
+export const readProgram = (root: ElementNode | null): ProgramRead => {
+  const read: ProgramRead = {
+    title: "",
+    intro: "",
+    cards: [],
+    sections: [],
+    artifacts: [],
+    images: [],
+  };
+  if (root?.typeName !== "Decisions") {
+    return read;
+  }
+  read.title = text(root.props.title);
+  read.intro = text(root.props.intro);
+  const taken = new Set<string>();
+  /** A Decision: its card, in its Section's list, then the media on it and on its options. */
+  const decision = (
+    props: Record<string, unknown>,
+    section: string | null
+  ): void => {
+    const card = cardOf(props, section);
+    read.cards.push(card);
+    if (section) {
+      read.sections.at(-1)?.cards.push(card.id);
+    }
+    walk(props.media, section);
+    for (const option of elementsOf(props.options)) {
+      walk(option.props.media, section);
+    }
+  };
+  const walk = (value: unknown, section: string | null): void => {
+    if (Array.isArray(value)) {
+      for (const each of value) {
+        walk(each, section);
+      }
+      return;
+    }
+    if (!isElement(value)) {
+      return;
+    }
+    const { props, typeName } = value;
+    if (typeName === "Section") {
+      const title = text(props.title);
+      const id = sectionId(title, taken);
+      read.sections.push({ id, title, cards: [] });
+      walk(props.children, id);
+    } else if (typeName === "Decision") {
+      decision(props, section);
+    } else if (typeName === "Canvas" || typeName === "Preview") {
+      read.artifacts.push({ component: typeName, id: text(props.artifact) });
+    } else if (typeName === "Image") {
+      read.images.push(text(props.file));
+    } else {
+      walk(props.children, section);
+    }
+  };
+  walk(root.props.children, null);
+  return read;
+};
 
 const labelOf = (card: RecordCard, id: string): string =>
   card.options.find((option) => option.id === id)?.label ?? id;

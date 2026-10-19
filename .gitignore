@@ -81,3 +81,6 @@ assets/mascot/scripts/__pycache__/
 # testflight.py's bytecode, left by a check that runs its --dry-run.
 apps/apple/scripts/__pycache__/
 assets/mascot/scripts/.regress/
+
+# Captures a delegate takes for a reviewer: outputs of its item, never the repository.
+/caps/

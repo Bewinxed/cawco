@@ -6,6 +6,7 @@
   import { Dialog as SheetPrimitive } from "bits-ui";
   import type { ComponentProps, Snippet } from "svelte";
   import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
+  import { mirror } from "#lib/cawco/page-marks.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
   import { IconClose } from "#lib/icons.js";
@@ -43,6 +44,28 @@
     if (ref) {
       return dragToDismiss({ edge: side, dismiss: close, fade: () => scrim })(
         ref
+      );
+    }
+  });
+  /* An open side sheet holds part of each screen edge, the phone's sidebar
+     its own ground: said on the root for the edges (ScreenEdges, page-marks). */
+  $effect(() => {
+    if (ref) {
+      return mirror(
+        ref,
+        "root",
+        "data-kit-sheet",
+        ["data-side", "data-state", "class"],
+        (sheet) => {
+          const { side: at, state } = sheet.dataset;
+          if (state !== "open") {
+            return [];
+          }
+          return [
+            ...(at === "left" || at === "right" ? ["side"] : []),
+            ...(sheet.classList.contains("rail-sheet") ? ["rail"] : []),
+          ];
+        }
       );
     }
   });

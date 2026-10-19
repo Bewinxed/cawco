@@ -11,10 +11,19 @@
    * - Place: where it lives, which CawCo can't move, and its places: a
    *   checkout other than the primary can be removed, another added (a
    *   machine and a folder on it). The primary and the project's folder on
-   *   the hub say they can't be removed; a held workspace keeps its Continue
-   *   and Discard.
+   *   the hub say they can't be removed. A held workspace is its delegating
+   *   session's to continue or discard, never yours (hub work-items.ts
+   *   `heldNotice`).
    * - Repository: read from the folder's remote, said so.
    * - Work lands: where its attempts land when their task says nothing.
+   * - Landing checks: the steps the hub runs before work lands, read from
+   *   the project folder's gate.md (`GET /api/projects/:id/gate`), with a
+   *   link to edit the file.
+   * - Tasks: where they live (WORDS.md: tracker). CawCo's files alone, or
+   *   GitHub Issues or Linear through a connection, on one repository or
+   *   team: picked, then bound with Use. Bound, it names the target, the
+   *   connection, how many tasks are linked and how its sync stands, the
+   *   tracker's refusal in its words with Try again.
    * - Caw: his lead switch (CawLeadSwitch), its ways off with it.
    * - Review before done.
    *
@@ -24,24 +33,43 @@
    * (RowFault). Every value is the project as the hub last said it, which
    * `projects.changed` brings to every open dashboard.
    */
-  import { LANDS_MODES, type LandsMode, machineLabel } from "@cawco/core";
-  import AskHere from "#lib/cawco/AskHere.svelte";
-  import { Asker, type AskHereRequest } from "#lib/cawco/ask-here.svelte.js";
+  import {
+    type ConnectionView,
+    type DeclaredStep,
+    type IssueTracker,
+    LANDS_MODES,
+    type LandsMode,
+    machineLabel,
+    type ProjectGate,
+    TRACKER_NAMES,
+    type Tracker,
+    type TrackerBindingView,
+    type TrackerTarget,
+    type TrackerView,
+  } from "@cawco/core";
+  import { onMount } from "svelte";
   import {
     addProjectPlace,
-    archiveWorkspace,
     cawco,
     editProject,
-    type HeldPlace,
     type Machine,
     type ProjectRow,
     removeProjectPlace,
   } from "#lib/cawco/client.svelte.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
-  import { conversationHref } from "#lib/cawco/links.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
+  import {
+    folderFileHref,
+    readGate,
+    readTracker,
+    send,
+    setTracker,
+    syncTracker,
+    trackerTargets,
+  } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -50,6 +78,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import { IconChevronDown, IconPlus } from "#lib/icons.js";
+  import { formatDistanceToNow } from "#lib/utils/time.js";
   import CawLeadSwitch from "./CawLeadSwitch.svelte";
   import type { CawLead } from "./caw-lead.svelte";
 
@@ -108,6 +137,201 @@
   function askLands(next: LandsMode): void {
     landsTried = next;
     setLands(next);
+  }
+
+  /* ── Landing checks ─────────────────────────────────────────────── */
+
+  /** The project's gate.md as the hub last read it, read when the details open. */
+  type GateRead =
+    | { state: "reading" }
+    | { state: "failed"; reason: string }
+    | { state: "read"; gate: ProjectGate };
+
+  let gateRead = $state<GateRead>({ state: "reading" });
+  /** Which read is the latest: an older one answering late is dropped. */
+  let gateAsk = 0;
+
+  async function loadGate(projectId: string): Promise<void> {
+    gateAsk += 1;
+    const asked = gateAsk;
+    gateRead = { state: "reading" };
+    try {
+      const { gate } = await readGate(projectId);
+      if (asked === gateAsk) {
+        gateRead = { state: "read", gate };
+      }
+    } catch (error) {
+      if (asked === gateAsk) {
+        gateRead = { state: "failed", reason: failureWords(error) };
+      }
+    }
+  }
+
+  // Read again when the details show another project.
+  $effect(() => {
+    loadGate(project.id);
+  });
+
+  /** What the row draws: a declared gate naming no step reads as none. */
+  const gateShown = $derived.by(() => {
+    if (gateRead.state !== "read") {
+      return gateRead.state;
+    }
+    const { gate } = gateRead;
+    return gate.kind === "declared" && gate.steps.length === 0
+      ? "none"
+      : gate.kind;
+  });
+
+  const UNITS = [
+    { sec: 3600, unit: "h" },
+    { sec: 60, unit: "m" },
+  ] as const;
+  /** Seconds in the largest unit gate.md writes that holds them whole: 90s, 10m, 1h. */
+  const durationWords = (seconds: number): string => {
+    const fit = UNITS.find(({ sec }) => seconds % sec === 0);
+    return fit ? `${seconds / fit.sec}${fit.unit}` : `${seconds}s`;
+  };
+
+  /** A step's facts, those that apply, joined as its meta line says them. */
+  const stepFacts = (step: DeclaredStep): string =>
+    [
+      step.inputs?.length ? `on ${step.inputs.join(", ")}` : null,
+      step.needs ? `needs ${step.needs}` : null,
+      step.timeoutSec ? `within ${durationWords(step.timeoutSec)}` : null,
+      step.stopsRest ? "stops the rest if it fails" : null,
+    ]
+      .filter(Boolean)
+      .join(" · ");
+
+  /* ── Tasks: where they live ─────────────────────────────────────── */
+
+  /** The project's tracker as the hub last said it; null while it is read. */
+  let tracker = $state<TrackerView | null>(null);
+  let trackerFault = $state<string | null>(null);
+  /** The tracker picked and not yet bound: its form stands under the pick. */
+  let picking = $state<IssueTracker | null>(null);
+  /** The picked service's connections a tracker can use: an app or a key. */
+  let usable = $state<ConnectionView[] | null>(null);
+  let pickConnection = $state("");
+  let targets = $state<TrackerTarget[] | null>(null);
+  let targetsFault = $state<string | null>(null);
+  let pickTarget = $state("");
+  let binding = $state(false);
+  let bindFault = $state<string | null>(null);
+  const shownTracker = $derived<Tracker>(
+    picking ?? tracker?.tracker ?? "cawco"
+  );
+
+  onMount(() => {
+    readTracker(project.id).then(
+      (read) => {
+        tracker = read;
+      },
+      (error: unknown) => {
+        trackerFault = failureWords(error);
+      }
+    );
+  });
+
+  /**
+   * A connection's repositories or teams, the one bound now chosen, else the
+   * project's own repository, else the first.
+   */
+  async function readTargets(connection: string): Promise<void> {
+    targets = null;
+    targetsFault = null;
+    pickTarget = "";
+    if (!connection) {
+      return;
+    }
+    try {
+      const read = (await trackerTargets(connection)).targets;
+      if (pickConnection !== connection) {
+        return;
+      }
+      targets = read;
+      const own = project.remote?.startsWith("github.com/")
+        ? project.remote.slice("github.com/".length).toLowerCase()
+        : undefined;
+      const bound =
+        tracker?.binding?.provider === picking
+          ? tracker.binding.target
+          : undefined;
+      pickTarget =
+        read.find((each) => each.id === bound)?.id ??
+        read.find((each) => each.id.toLowerCase() === own)?.id ??
+        read[0]?.id ??
+        "";
+    } catch (error) {
+      targetsFault = failureWords(error);
+    }
+  }
+
+  /** Opens the binding's form for a tracker: its usable connections, then their targets. */
+  async function pick(next: Tracker): Promise<void> {
+    bindFault = null;
+    if (next === "cawco") {
+      picking = null;
+      if (tracker?.tracker !== "cawco") {
+        await bind({ tracker: "cawco" });
+      }
+      return;
+    }
+    picking = next;
+    usable = null;
+    try {
+      const { connections } = await send<{ connections: ConnectionView[] }>(
+        "/api/connections"
+      );
+      usable = connections.filter(
+        (each) =>
+          each.service.toLowerCase() === next &&
+          (each.auth === "app" || each.auth === "bearer")
+      );
+    } catch (error) {
+      bindFault = failureWords(error);
+      usable = [];
+    }
+    pickConnection =
+      usable.find((each) => each.name === tracker?.binding?.connection)?.name ??
+      usable[0]?.name ??
+      "";
+    await readTargets(pickConnection);
+  }
+
+  async function bind(
+    asked:
+      | { tracker: "cawco" }
+      | { connection: string; target: string; tracker: IssueTracker }
+  ): Promise<void> {
+    binding = true;
+    bindFault = null;
+    try {
+      tracker = await setTracker(project.id, asked);
+      picking = null;
+    } catch (error) {
+      bindFault = failureWords(error);
+    } finally {
+      binding = false;
+    }
+  }
+
+  async function syncNow(): Promise<void> {
+    tracker = await syncTracker(project.id);
+  }
+
+  /** How a binding's sync stands, in a few words. */
+  function syncWords(bound: TrackerBindingView): string {
+    if (bound.state === "syncing") {
+      return "Syncing…";
+    }
+    if (bound.state === "refused") {
+      return "Refused";
+    }
+    return bound.polledAt
+      ? `Synced ${formatDistanceToNow(new Date(bound.polledAt))}`
+      : "Synced";
   }
 
   /* ── Review before done ─────────────────────────────────────────── */
@@ -213,23 +437,6 @@
     }
   }
 
-  /**
-   * A held workspace's Discard asks in the list, beside its row (The Open
-   * Page Rule); Continue opens the session its work ran in.
-   */
-  const placeAsker = new Asker<AskHereRequest>();
-  async function askDiscard(placeId: string, held: HeldPlace, where: string) {
-    await placeAsker.ask({
-      at: placeId,
-      title: "Discard this held workspace?",
-      body: `Its clone holds ${held.holds}. Discard writes that to a carry on ${where} (in ~/.cawco/carries), then deletes the clone, its boundary and its records.`,
-      confirmLabel: "Discard",
-      destructive: true,
-      pendingLabel: "Discarding…",
-      run: () => archiveWorkspace(held.workspaceId, { discard: true }),
-    });
-  }
-
   /** Escape inside it folds it, and goes no further. */
   function escapes(node: HTMLElement) {
     const onKey = (event: KeyboardEvent) => {
@@ -329,29 +536,6 @@
                     >Its folder on the hub: it can't be removed, and goes when
                     the project does.</span
                   >
-                {/if}
-                {#if each.held}
-                  {@const held = each.held}
-                  <span class="holds">Held: {held.holds} · {held.size}</span>
-                  <span class="held-acts">
-                    {#if held.instanceId}
-                      <Button
-                        href={conversationHref(
-                          held.instanceId,
-                          cawco.instanceIndex
-                        )}
-                        size="xs"
-                        variant="secondary">Continue</Button
-                      >
-                    {/if}
-                    <Button
-                      onclick={() =>
-                        askDiscard(each.id, held, hostWords(each.machineId))}
-                      size="xs"
-                      variant="destructive">Discard</Button
-                    >
-                  </span>
-                  <AskHere asker={placeAsker} at={each.id} />
                 {/if}
                 <RowFault
                   again={() => remove(each.id)}
@@ -468,6 +652,225 @@
       </div>
     </div>
 
+    <!-- Landing checks: what the hub runs before work lands, as gate.md declares it. -->
+    <div data-slot="row" class="row" data-detail="gate" data-gate={gateShown}>
+      <p data-slot="project-details-label" class="label">Landing checks</p>
+      <div data-slot="value" class="value">
+        {#if gateRead.state === "reading"}
+          <p data-slot="note" class="note">Reading gate.md…</p>
+        {:else if gateRead.state === "failed"}
+          <RowFault
+            again={() => loadGate(project.id)}
+            data-gate-fault
+            reason={gateRead.reason}
+          />
+        {:else if gateRead.gate.kind === "unreadable"}
+          {#each gateRead.gate.problems as problem, at (at)}
+            <RowFault data-gate-problem reason={problem} />
+          {/each}
+          <p data-slot="note" class="note">
+            Until gate.md is fixed, nothing in this project lands.
+          </p>
+        {:else if gateRead.gate.kind === "declared" && gateRead.gate.steps.length > 0}
+          <!-- biome-ignore lint/a11y/noRedundantRoles: WebKit drops list semantics when list styles are removed; an explicit role="list" keeps them (scottohara.me/blog/2019/01/12/lists-and-safari.html) -->
+          <ol class="gate-steps" data-gate-steps role="list">
+            {#each gateRead.gate.steps as each, at (at)}
+              {@const facts = stepFacts(each)}
+              <li class="gate-check" data-gate-step>
+                <span class="gate-name">{each.name}</span>
+                {#if each.command !== each.name}
+                  <code class="gate-command">{each.command}</code>
+                {/if}
+                {#if facts}
+                  <span class="gate-facts">{facts}</span>
+                {/if}
+              </li>
+            {/each}
+          </ol>
+        {:else}
+          <p data-slot="note" class="note">
+            Landed with no checks: this project declares none.
+          </p>
+        {/if}
+        <Button
+          class="gate-edit"
+          data-gate-edit
+          href={folderFileHref(project.id, "gate.md")}
+          label="Edit gate.md"
+          size="xs"
+          variant="link"
+        />
+      </div>
+    </div>
+
+    <!-- Tasks: where they live; a tracker is picked, then bound with Use. -->
+    <div data-slot="row" class="row" data-detail="tracker">
+      <p data-slot="project-details-label" class="label" id="{uid}-tracker">
+        Tasks
+      </p>
+      <div data-slot="value" class="value">
+        <ToggleGroup.Root
+          aria-labelledby="{uid}-tracker"
+          class="trackers"
+          data-pending={binding ? "" : undefined}
+          type="single"
+          bind:value={
+            () => shownTracker,
+            (next) => {
+              if (next) {
+                pick(next as Tracker);
+              }
+            }
+          }
+        >
+          {#each ["cawco", "github", "linear"] as const as each (each)}
+            <ToggleGroup.Item value={each}
+              >{TRACKER_NAMES[each]}</ToggleGroup.Item
+            >
+          {/each}
+        </ToggleGroup.Root>
+        {#if picking}
+          {@const service = picking === "github" ? "GitHub" : "Linear"}
+          <form
+            data-slot="bind"
+            class="bind"
+            data-bind-form={picking}
+            onsubmit={(event) => {
+              event.preventDefault();
+              if (picking) {
+                bind({
+                  tracker: picking,
+                  connection: pickConnection,
+                  target: pickTarget,
+                });
+              }
+            }}
+            transition:unfold
+          >
+            {#if usable === null}
+              <p data-slot="note" class="note">
+                Reading the {service} connections…
+              </p>
+            {:else if usable.length === 0}
+              <p data-slot="note" class="note" data-no-connection>
+                No {service} connection a tracker can use yet: {picking ===
+                "github"
+                  ? "a GitHub App or a token"
+                  : "a Linear app or an API key"}.
+                <a href="/config/connections">Add one in Connections</a>.
+              </p>
+            {:else}
+              <NativeSelect.Root
+                aria-label="Connection"
+                class="bind-connection"
+                size="sm"
+                bind:value={
+                  () => pickConnection,
+                  (next) => {
+                    pickConnection = next;
+                    readTargets(next);
+                  }
+                }
+              >
+                {#each usable as each (each.name)}
+                  <NativeSelect.Option value={each.name}
+                    >{each.name} · {each.account}</NativeSelect.Option
+                  >
+                {/each}
+              </NativeSelect.Root>
+              {#if targets}
+                <NativeSelect.Root
+                  aria-label={picking === "github" ? "Repository" : "Team"}
+                  class="bind-target"
+                  size="sm"
+                  bind:value={pickTarget}
+                >
+                  {#each targets as each (each.id)}
+                    <NativeSelect.Option value={each.id}
+                      >{each.name}</NativeSelect.Option
+                    >
+                  {/each}
+                </NativeSelect.Root>
+              {:else if !targetsFault}
+                <p data-slot="note" class="note">
+                  Reading what {pickConnection} reaches…
+                </p>
+              {/if}
+            {/if}
+            <div class="add-acts">
+              <Button
+                label="Cancel"
+                onclick={() => {
+                  picking = null;
+                  bindFault = null;
+                }}
+                size="sm"
+                type="button"
+                variant="ghost"
+              />
+              <Button
+                disabled={!(pickConnection && pickTarget)}
+                label="Use {TRACKER_NAMES[picking]}"
+                pending={binding}
+                pendingLabel="Syncing…"
+                size="sm"
+                type="submit"
+              />
+            </div>
+          </form>
+          <RowFault
+            again={() => readTargets(pickConnection)}
+            data-targets-fault
+            reason={targetsFault}
+          />
+          <p data-slot="note" class="note">
+            New issues there become tasks here, and new tasks become issues.
+            Each task's title, description, labels, stage and comments stay one
+            with its issue.
+          </p>
+        {:else if tracker?.binding}
+          {@const bound = tracker.binding}
+          <!-- Its repository or team, and Change: another connection or target, its links kept for the same one. -->
+          <div class="bound-head">
+            <p class="fact bound mark-line" data-bound={bound.provider}>
+              <span class="mark-cell"
+                ><ProviderLogo provider={bound.provider} /></span
+              >
+              <a
+                class="bound-target"
+                href={bound.targetUrl}
+                rel="noreferrer"
+                target="_blank">{bound.targetName}</a
+              >
+            </p>
+            <Button
+              data-change-tracker
+              label="Change"
+              onclick={() => pick(bound.provider)}
+              size="xs"
+              variant="ghost"
+            />
+          </div>
+          <p data-slot="note" class="note" data-tracker-state={bound.state}>
+            Through {bound.connection} · {bound.linked}
+            {bound.linked === 1 ? "task" : "tasks"} linked · {syncWords(bound)}
+          </p>
+          <RowFault
+            again={syncNow}
+            againLabel="Sync now"
+            againPending="Syncing…"
+            data-tracker-fault
+            reason={bound.reason}
+          />
+        {:else if tracker}
+          <p data-slot="note" class="note">
+            Tasks live in the project's files alone.
+          </p>
+        {/if}
+        <RowFault data-bind-fault reason={bindFault ?? trackerFault} />
+      </div>
+    </div>
+
     <!-- Caw: his own switch, its ways off with it. -->
     <div data-slot="row" class="row" data-detail="caw">
       <p data-slot="project-details-label" class="label">Caw</p>
@@ -509,7 +912,7 @@
 
     <div data-slot="foot" class="foot">
       <!-- Each row commits on its own: Done only folds the tray, so it
-           stays quiet beside the head's New session. -->
+           stays quiet beside the head's Ask Caw. -->
       <Button
         data-details-done
         label="Done"
@@ -532,7 +935,7 @@
     padding-block: var(--space-1) var(--space-3);
     padding-inline: var(--space-7) var(--space-6);
   }
-  @media (max-width: 899px) {
+  @media (width < 900px) {
     .details {
       max-inline-size: none;
       padding-inline: var(--space-5);
@@ -582,8 +985,8 @@
   }
   .fact :global(.os) {
     flex: none;
-    inline-size: var(--icon-sm, 14px);
-    block-size: var(--icon-sm, 14px);
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
   }
   /* The whole folder, wrapping where it must: the head's line above cuts it
      short, so here it says what the line can't. */
@@ -677,15 +1080,6 @@
     font: var(--type-meta);
     color: var(--ink-subtle);
   }
-  .holds {
-    font: var(--type-meta);
-    color: var(--ink-strong);
-  }
-  .held-acts {
-    display: flex;
-    gap: var(--space-2);
-    padding-block-start: var(--space-1);
-  }
   .add {
     display: grid;
     grid-template-columns: minmax(0, 10rem) minmax(0, 1fr);
@@ -706,19 +1100,117 @@
       grid-template-columns: minmax(0, 1fr);
     }
   }
-  .value :global(.kit-segmented.lands) {
+  .value :global(.kit-segmented.lands),
+  .value :global(.kit-segmented.trackers) {
     flex-wrap: wrap;
     align-self: flex-start;
     max-inline-size: 100%;
   }
   /* Asked, not yet answered: the thumb breathes on the live-work loop. */
-  .value :global(.kit-segmented.lands[data-pending] .kit-thumb) {
+  .value :global(.kit-segmented.lands[data-pending] .kit-thumb),
+  .value :global(.kit-segmented.trackers[data-pending] .kit-thumb) {
     animation: details-breath var(--breath) var(--ease-in-out) infinite;
+  }
+  /* The binding's form: its connection and its repository or team, then Use. */
+  .bind {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: var(--space-2);
+    padding-block-start: var(--space-2);
+  }
+  .bind > .note {
+    grid-column: 1 / -1;
+    overflow-wrap: anywhere;
+  }
+  .bind :global(.bind-connection),
+  .bind :global(.bind-target) {
+    inline-size: 100%;
+  }
+  @container details (width < 30rem) {
+    .bind {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+  .note a,
+  .bound-target {
+    color: var(--link-ink);
+  }
+  /* The bound repository or team and its Change, as the places' head stands
+     their count and Add a place. */
+  .bound-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--space-2);
+    min-inline-size: 0;
+  }
+  /* Its mark on the first line of a name that wraps; as the head's flex
+     item it shrinks, so a long unbroken name never pushes Change off. */
+  .bound {
+    align-items: flex-start;
+    min-inline-size: 0;
+  }
+  .bound-target {
+    min-inline-size: 0;
+    overflow-wrap: anywhere;
+    text-decoration: none;
+  }
+  @media (hover: hover) {
+    .bound-target:hover {
+      text-decoration: underline;
+      text-underline-offset: 4px;
+    }
+  }
+  .bound :global(svg) {
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
   }
   @keyframes -global-details-breath {
     50% {
       opacity: 0.45;
     }
+  }
+  /* Landing checks: one entry per step, in gate.md's order; every line
+     wraps, a command or path breaking anywhere rather than overflowing. */
+  .gate-steps {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  /* A step's lines stand on their own line heights: one entry, set apart
+     from the next by the list's gap. */
+  .gate-check {
+    display: flex;
+    flex-direction: column;
+    min-inline-size: 0;
+  }
+  .gate-name {
+    min-inline-size: 0;
+    font: var(--type-label);
+    color: var(--ink-strong);
+    overflow-wrap: anywhere;
+  }
+  .gate-command {
+    min-inline-size: 0;
+    font: var(--type-meta);
+    font-family: var(--font-mono);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+    white-space: pre-wrap;
+  }
+  .gate-facts {
+    min-inline-size: 0;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+  }
+  /* A text link: its words start on the value column with the rest. */
+  .value :global(.gate-edit) {
+    align-self: flex-start;
+    padding-inline: 0;
   }
   .switch-line {
     display: flex;

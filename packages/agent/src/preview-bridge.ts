@@ -28,6 +28,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { socketPathProblem } from "@cawco/core/paths";
 import { DOWN_WORDS } from "@cawco/core/preview-proxy";
+import { signalGroup, spawnedPid } from "@cawco/core/signal";
+import { PLACE_SUFFIX } from "@cawco/core/workspace-policy";
 import type { Subprocess } from "bun";
 import { listeners, workspaceNetworks } from "./boundary";
 
@@ -77,7 +79,10 @@ const BRIDGE_START_MS = 3000;
 /** The most of a bridge's stderr kept, to say why it did not start. */
 const STDERR_KEPT = 2000;
 
-const WORKSPACE_ID = /^[0-9a-f-]{36}$/;
+/** A workspace's id, or a place's (core `isPlace`): a sheet's stage runs in either. */
+const WORKSPACE_ID = new RegExp(
+  `^(?:[0-9a-f-]{36}|[0-9a-f]{8}${PLACE_SUFFIX})$`
+);
 
 /**
  * What a bridge reaches: `port` of workspace `workspace`, in the network of
@@ -197,10 +202,10 @@ const killGroup = async (
   proc: Bridge["proc"],
   socket: string
 ): Promise<void> => {
-  try {
-    process.kill(-proc.pid, "SIGKILL");
-  } catch {
-    // The group is gone already.
+  // Its socket is bound, so `setsid` has made it its group's leader.
+  const leader = spawnedPid(proc);
+  if (leader !== undefined) {
+    signalGroup(leader, "SIGKILL");
   }
   await rm(socket, { force: true });
   await proc.exited;

@@ -6,7 +6,8 @@ import UIKit.UIGestureRecognizerSubclass
 import WebKit
 
 /// A session's preview (preview/PreviewPane.svelte): its header (the
-/// artifact's name and path, Send picks, the mode, Comments, Reload, Close) over the
+/// artifact's name as the title menu (ArtifactMenu.swift) and its path, Send
+/// picks, a sheet's Inspect, the mode, Comments, Reload, Close) over the
 /// page, which a web view loads from the session's own preview origin (a
 /// port of the hub's, or a host name of its own). The page carries the agent's
 /// overlay, which talks to its host as an iframe talks to the dashboard: the
@@ -15,19 +16,37 @@ import WebKit
 /// which the overlay joins itself on the path the hello names (Projects spec
 /// §5.10); the overlay draws the person's pins on the page, and the app
 /// reads them through the hub (§5.7) for their list and the open pin's card.
-final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, UIPencilInteractionDelegate {
+final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavigationDelegate, UIPencilInteractionDelegate, SideCard {
     private let hub: HubConnection
     let instanceId: String
 
     private var web: WKWebView!
-    private let titleLabel = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+    /// The head's first control: the shown artifact's name, which opens the session's artifacts.
+    private let titleButton = ArtifactTitleButton()
+    private weak var menu: ArtifactMenuController?
+    /// A sheet's Inspect (PreviewPane.svelte `.inspect`), pressed while its inspector stands.
+    private var inspectButton: UIButton!
+    /// The shown sheet's inspector state, one per sheet: another sheet starts with nothing unsaved.
+    private var inspection: SheetInspection?
+    private var inspector: SheetInspectorView?
+    /// Whether the person keeps the inspector open, for the session (`cawco-preview-inspect:<session>`).
+    private var inspectOpen = false
+    private var inspectKey: String { "cawco-preview-inspect:\(instanceId)" }
+    /// The web view's trailing edge: in from the well's by the inspector's width while it stands as a panel.
+    private var webTrailing: NSLayoutConstraint!
+    /// A page's `cawco.pickPlace()` waiting on the person: the request it answers (PreviewPane.svelte `picking`).
+    fileprivate var picking: PickAsk?
+    /// Its picker: over the well in a pane, or the house sheet in the phone's drawer.
+    fileprivate var placePick: PlacePickView?
+    fileprivate weak var placePickSheet: UIViewController?
     private let pathLabel = KitLabel(TypeScale.typeCode.with(points: TypeScale.typeMeta.points), ink: Palette.inkMuted)
     /// Send picks: the page's picks the session has not heard; pins and ink go by themselves.
     private var sendButton: UIButton!
     private var sending = false
     /// Comments: the open pins' list, floating over the page's top-right (PinList.svelte).
     private var pinsButton: UIButton!
-    private let pinsBadge = KitBadge("0")
+    /// Comments' open count (PreviewPane.svelte `.count`): tabular figures in the muted ink, after its word.
+    private let pinsBadge = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
     /// The mode, the kit's segmented control: Interact, Comment, Draw (PreviewPane.svelte `.modes`).
     private var modes: KitSegmented!
     private var reloadButton: UIButton!
@@ -64,6 +83,22 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private let cover = UIView()
     /// The cover's loading line, hidden once the cover has faded so its sweep stops.
     private let coverLine = SkeletonView(height: 11)
+    /// `.cover-state`: what a sheet's stage is doing while its page is on its way, under the line.
+    private let coverState = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
+    /// The current document finished loading: the cover may go, unless a sheet's stage still has a word for it.
+    private var pageLoaded = false
+
+    // A sheet's stage (live components), or a workspace preview's server, as its frame carries it (SheetStage.swift).
+    private var stage: StageState?
+    /// The port of the workspace preview's server the stage is; nil for a sheet's.
+    private var served: Int?
+    private var stageShown = SheetStageShown(nil, connected: false, served: nil)
+    /// `.sheet-dim`: the last good render, under the scrim, while it doesn't compile.
+    private let dim = UIView()
+    private let errorCard = SheetErrorCard()
+    private let down = SheetDownView()
+    /// Try again was pressed: pending until the page loads again, or fails to.
+    private var retrying = false
     private let failure = KitAlert(tone: .destructive)
     /// What the band's failure is of (PreviewPane.svelte `failure.again`):
     /// "send" clears when the picks are sent, "field" when the page keeps the
@@ -71,6 +106,16 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// else, goes again from Reload.
     private var failureOf: String?
     private var revision: String?
+    /// The line under the name, standing only while it has words to say.
+    private let pathRow = UIView()
+    /// What is on show is an artifact's page, which has no path of its own to say.
+    private var showsPage = false
+    /// The revision the overlay was asked to draw the card's thumbnail of.
+    private var capturedFor: String?
+
+    private func paintPath() {
+        pathRow.isHidden = pathLabel.text?.isEmpty ?? true
+    }
     private var artifactId: String?
     private var origin: URL?
     /// The pane's modes (core comments.ts `PreviewMode`): Interact, the page
@@ -78,6 +123,22 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// comment; Draw, a finger inks. A pencil inks in every mode.
     private enum Mode: String, CaseIterable {
         case interact, comment, draw
+
+        var name: String {
+            switch self {
+            case .interact: "Interact"
+            case .comment: "Comment"
+            case .draw: "Draw"
+            }
+        }
+
+        var glyph: Glyph {
+            switch self {
+            case .interact: .toolScreen
+            case .comment: .comment
+            case .draw: .pen
+            }
+        }
     }
 
     /// The mode, which the person chooses and nothing else does: kept for
@@ -146,17 +207,28 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     private var silence: Task<Void, Never>?
     /// How long a loaded page has for its overlay to answer the hello (PreviewPane.svelte `PAGE_SILENT_MS`).
     private static let silentAfter = Duration.seconds(3)
-    #if DEBUG
-    private var commentedAtLaunch = false
-    private var sentAtLaunch = false
-    private var repliedAtLaunch = false
-    #endif
 
-    init(hub: HubConnection, instanceId: String) {
+    /// `ownTab`: the artifact in a tab of its own (routes/artifact/[id], PreviewPane
+    /// `ownTab`), at the tab's width: no + or Open in new tab, and Close goes back to its session.
+    init(hub: HubConnection, instanceId: String, ownTab: Bool = false) {
         self.hub = hub
         self.instanceId = instanceId
+        self.ownTab = ownTab
         super.init(nibName: nil, bundle: nil)
     }
+
+    let ownTab: Bool
+    /// Open in new tab: the artifact `id` in a tab of its own.
+    var onOpenTab: (_ artifactId: String) -> Void = { _ in }
+    /// The panel gives its canvas back to the composer (its Undock, the canvas's own rail's): `folded`, as its chip.
+    var onGiveBack: (_ id: String, _ name: String, _ folded: Bool) -> Void = { _, _, _ in }
+    /// Close in its own tab: back to the session it belongs to.
+    var onBackToSession: () -> Void = {}
+    private var newCanvasButton: UIButton!
+    private var openTabButton: UIButton!
+    private var undockButton: UIButton!
+    /// The head's + is making a canvas.
+    private var making = false
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("PreviewController is built in code") }
@@ -169,25 +241,50 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // The identity gives way to the actions: its title is one line cut at
         // its tail, its path one line cut in its middle, and both stop 8pt
         // short of the first action.
-        titleLabel.lineBreakMode = .byTruncatingTail
         pathLabel.lineBreakMode = .byTruncatingMiddle
-        let identity = UIStackView(arrangedSubviews: [titleLabel, pathLabel])
+        titleButton.addAction(UIAction { [weak self] _ in self?.openMenu() }, for: .touchUpInside)
+        // The title control keeps its own width up to the head's room; the path under it gives way first.
+        let title = UIStackView(arrangedSubviews: [titleButton, UIView()])
+        // The path starts where the title control's glyph does.
+        let path = pathRow
+        path.hold(pathLabel, insets: UIEdgeInsets(top: 0, left: Space.space2, bottom: 0, right: 0))
+        path.isHidden = true
+        let identity = UIStackView(arrangedSubviews: [title, path])
         identity.axis = .vertical
         identity.isLayoutMarginsRelativeArrangement = true
-        identity.directionalLayoutMargins.leading = Space.space1
+        identity.directionalLayoutMargins.leading = 0
         identity.directionalLayoutMargins.trailing = 8 - Space.space1
-        for part in [identity, titleLabel, pathLabel] as [UIView] {
+        for part in [identity, title, titleButton, path, pathLabel] as [UIView] {
             part.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
             part.setContentHuggingPriority(.defaultLow, for: .horizontal)
         }
+        inspectButton = KitButton.make("", glyph: .tuning, variant: .ghost, height: .sm) { [weak self] in
+            guard let self else { return }
+            showInspector(!inspectOpen)
+        }
+        inspectButton.accessibilityLabel = Words.Artifacts.inspect
+        inspectButton.toolTip = Words.Artifacts.inspectTitle
+        // Pressed while the inspector stands (PreviewPane.svelte `.inspect[aria-pressed="true"]`: `--surface-fill`).
+        let restingInspect = inspectButton.configurationUpdateHandler
+        inspectButton.configurationUpdateHandler = { [weak self] button in
+            restingInspect?(button)
+            guard let self, inspectOpen, inspection != nil else { return }
+            button.configuration?.background.backgroundColor = Palette.surfaceFill
+        }
+        inspectOpen = UserDefaults.standard.string(forKey: inspectKey) == "open"
         sendButton = KitButton.make("Send picks", glyph: Glyph.send, variant: .ghost, height: .sm) { [weak self] in self?.send() }
         pinsButton = KitButton.make("Comments", glyph: .chat, variant: .ghost, height: .sm) { [weak self] in self?.openList() }
+        // The head's one control recipe (SideSurface `.side-head` buttons: `padding: 0 space-2`), so the name keeps its room.
+        for labelled in [sendButton!, pinsButton!] {
+            labelled.configuration?.contentInsets.leading = Space.space2
+            labelled.configuration?.contentInsets.trailing = Space.space2
+        }
         pinsBadge.isUserInteractionEnabled = false
         pinsBadge.isAccessibilityElement = false
         pinsButton.addSubview(pinsBadge)
         // The mode as the person left it for this session; Interact the first time.
         mode = UserDefaults.standard.string(forKey: modeKey).flatMap(Mode.init(rawValue:)) ?? .interact
-        modes = KitSegmented(["Interact", "Comment", "Draw"], glyphs: [.toolScreen, .comment, .pen],
+        modes = KitSegmented(Mode.allCases.map(\.name), glyphs: Mode.allCases.map(\.glyph),
                              selected: Mode.allCases.firstIndex(of: mode))
         modes.accessibilityLabel = "Preview mode"
         modes.addAction(UIAction { [weak self] _ in
@@ -207,20 +304,72 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         expandButton = KitButton.make("", glyph: .maximize, variant: .ghost, height: .sm) { [weak self] in self?.onExpand() }
         expandButton.accessibilityLabel = "Expand"
         expandButton.toolTip = "Expand"
-        closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in self?.close() }
+        closeButton = KitButton.make("", glyph: .close, variant: .ghost, height: .sm) { [weak self] in
+            guard let self else { return }
+            if ownTab { onBackToSession() } else { close() }
+        }
         closeButton.accessibilityLabel = "Close"
-        let head = UIStackView(arrangedSubviews: [identity, sendButton, modes, pinsButton, reload, expandButton, closeButton])
-        head.spacing = Space.space1
+        // The head's +: a new canvas, standing here at once (PreviewPane.svelte `newCanvas`).
+        newCanvasButton = KitButton.make("", glyph: .plus, variant: .ghost, height: .sm) { [weak self] in self?.newCanvas() }
+        newCanvasButton.accessibilityLabel = "New canvas"
+        newCanvasButton.toolTip = "New canvas"
+        // The same artifact, its doc and its tools, in a tab of its own.
+        openTabButton = KitButton.make("", glyph: .external, variant: .ghost, height: .sm) { [weak self] in
+            guard let self, let id = artifactId else { return }
+            onOpenTab(id)
+        }
+        openTabButton.accessibilityLabel = "Open in new tab"
+        openTabButton.toolTip = "Open in new tab"
+        // A canvas here goes back to the composer (`giveBack(false)`).
+        undockButton = KitButton.make("", glyph: .undock, variant: .ghost, height: .sm) { [weak self] in self?.giveBack(folded: false) }
+        undockButton.accessibilityLabel = "Undock"
+        undockButton.toolTip = "Undock"
+        // Glyph-only segments, each a touch target's width.
+        modes.segmentMinWidth = Self.target
+        // More: what the head has no room for, in the head's order (HIG Toolbars, "Add a More menu").
+        moreButton = KitButton.make("", glyph: .more, variant: .ghost, height: .sm) {}
+        moreButton.accessibilityLabel = "More"
+        moreButton.toolTip = "More"
+        moreButton.showsMenuAsPrimaryAction = true
+        moreButton.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
+            MainActor.assumeIsolated { done(self?.overflowMenu() ?? []) }
+        }])
+        // What More holds of Comments, its open count, stays on More (the pins' badge recipe).
+        moreBadge.isUserInteractionEnabled = false
+        moreBadge.isAccessibilityElement = false
+        moreBadge.tabular = true
+        moreBadge.translatesAutoresizingMaskIntoConstraints = false
+        moreButton.addSubview(moreBadge)
+        NSLayoutConstraint.activate([
+            moreBadge.centerYAnchor.constraint(equalTo: moreButton.topAnchor, constant: Space.space1),
+            moreBadge.leadingAnchor.constraint(equalTo: moreButton.centerXAnchor, constant: Space.space1),
+        ])
+        // The mode where its three segments have no room: the chosen one's glyph, a pick of three.
+        modePick = KitButton.make("", glyph: mode.glyph, variant: .ghost, height: .sm) {}
+        modePick.showsMenuAsPrimaryAction = true
+        modePick.menu = UIMenu(children: [UIDeferredMenuElement.uncached { [weak self] done in
+            MainActor.assumeIsolated { done(self.map { [$0.modeMenu()] } ?? []) }
+        }])
+        let controls: [(HeadItem, UIView)] = [
+            (.send, sendButton), (.newCanvas, newCanvasButton), (.undock, undockButton), (.openTab, openTabButton),
+            (.inspect, inspectButton), (.mode, modes), (.modePick, modePick), (.comments, pinsButton), (.reload, reload),
+            (.expand, expandButton),
+        ]
+        for (item, control) in controls { slots[item] = HeadSlot(control) }
+        moreSlot = HeadSlot(moreButton)
+        moreSlot.isHidden = true
+        let closeSlot = HeadSlot(closeButton)
+        let head = HeadRow(arrangedSubviews: [identity] + controls.compactMap { slots[$0.0] } + [moreSlot, closeSlot])
+        head.name = titleButton
         head.alignment = .center
         head.translatesAutoresizingMaskIntoConstraints = false
         dragArea = head
-        for control in [sendButton!, modes!, pinsButton!, reload, expandButton!, closeButton!] as [UIView] {
-            control.setContentHuggingPriority(.required, for: .horizontal)
-            control.setContentCompressionResistancePriority(.required, for: .horizontal)
-        }
+        for slot in slots.values { slot.isHidden = true }
+        pinsBadge.tabular = true
+        pinsBadge.translatesAutoresizingMaskIntoConstraints = false
         NSLayoutConstraint.activate([
             pinsBadge.centerYAnchor.constraint(equalTo: pinsButton.centerYAnchor),
-            pinsBadge.trailingAnchor.constraint(equalTo: pinsButton.trailingAnchor, constant: -(Space.space3 + 1)),
+            pinsBadge.trailingAnchor.constraint(equalTo: pinsButton.trailingAnchor, constant: -Space.space2),
         ])
 
         web = makeWeb()
@@ -239,6 +388,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         cover.isUserInteractionEnabled = false
         let line = coverLine
         cover.addSubview(line)
+        coverState.translatesAutoresizingMaskIntoConstraints = false
+        coverState.isHidden = true
+        cover.addSubview(coverState)
+        dim.translatesAutoresizingMaskIntoConstraints = false
+        dim.backgroundColor = Palette.scrim
+        dim.isUserInteractionEnabled = false
+        dim.isAccessibilityElement = false
+        for part in [dim, errorCard, down] as [UIView] {
+            part.alpha = 0
+            part.isHidden = true
+        }
+        down.onAgain = { [weak self] in self?.tryStageAgain() }
         failure.isHidden = true
         card.isHidden = true
         wellEdge.translatesAutoresizingMaskIntoConstraints = false
@@ -250,7 +411,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         stopped.translatesAutoresizingMaskIntoConstraints = false
         stopped.backgroundColor = Palette.surfaceWell
         stopped.isHidden = true
-        for part in [web!, cover, stopped, wellEdge, card, failure] as [UIView] { well.addSubview(part) }
+        // A page that stopped stands over a sheet's stage states: they were the page's.
+        for part in [web!, cover, dim, errorCard, down, stopped, wellEdge, card, failure] as [UIView] { well.addSubview(part) }
         placeWeb()
         NSLayoutConstraint.activate([
             stopped.topAnchor.constraint(equalTo: well.topAnchor),
@@ -268,7 +430,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // The grabber, `space-1` from the top, centred, 100×6 in the control
         // edge; its hit area is 44pt tall about it (vaul's handle hit area),
         // over the header, which yields to the header's actions.
-        grabArea.yields = [sendButton, modes, pinsButton, reload, expandButton, closeButton]
+        grabArea.yields = [titleButton] + head.arrangedSubviews.dropFirst()
         grabber.translatesAutoresizingMaskIntoConstraints = false
         grabber.backgroundColor = Palette.borderControl
         grabber.layer.cornerRadius = 3
@@ -320,6 +482,23 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             line.topAnchor.constraint(equalTo: cover.topAnchor, constant: Space.space5),
             line.leadingAnchor.constraint(equalTo: cover.leadingAnchor, constant: Space.space5),
             line.widthAnchor.constraint(equalTo: cover.widthAnchor, multiplier: 0.42),
+            // `.cover-state`: `space-3` under the line, the cover's own padding at its sides.
+            coverState.topAnchor.constraint(equalTo: line.bottomAnchor, constant: Space.space3),
+            coverState.leadingAnchor.constraint(equalTo: cover.leadingAnchor, constant: Space.space5),
+            coverState.trailingAnchor.constraint(lessThanOrEqualTo: cover.trailingAnchor, constant: -Space.space5),
+            dim.topAnchor.constraint(equalTo: well.topAnchor),
+            dim.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+            dim.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            dim.bottomAnchor.constraint(equalTo: well.bottomAnchor),
+            // `.sheet-error`: `space-3` from the well's sides and foot, at most 60% of it tall.
+            errorCard.leadingAnchor.constraint(equalTo: well.leadingAnchor, constant: Space.space3),
+            errorCard.trailingAnchor.constraint(equalTo: well.trailingAnchor, constant: -Space.space3),
+            errorCard.bottomAnchor.constraint(equalTo: well.bottomAnchor, constant: -Space.space3),
+            errorCard.heightAnchor.constraint(lessThanOrEqualTo: well.heightAnchor, multiplier: 0.6),
+            down.topAnchor.constraint(equalTo: well.topAnchor),
+            down.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+            down.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            down.bottomAnchor.constraint(equalTo: well.bottomAnchor),
             failure.leadingAnchor.constraint(equalTo: well.leadingAnchor),
             failure.trailingAnchor.constraint(equalTo: well.trailingAnchor),
             failure.bottomAnchor.constraint(equalTo: well.bottomAnchor),
@@ -418,8 +597,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         silence?.cancel()
         connected = false
         replaceWeb()
-        cover.alpha = 1
-        coverLine.isHidden = false
+        pageLoaded = false
+        paintCover(animated: false)
     }
 
     /// A web view for the page: its own cookie store, never shared with
@@ -428,14 +607,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .nonPersistent()
         configuration.userContentController.addUserScript(WKUserScript(source: Self.host, injectionTime: .atDocumentStart, forMainFrameOnly: true))
+        configuration.userContentController.addUserScript(WKUserScript(source: Self.viewport, injectionTime: .atDocumentStart, forMainFrameOnly: true))
         configuration.userContentController.add(WeakHandler(self), name: "cawco")
-        #if DEBUG
-        if PreviewProbe.on, let report = PreviewProbe.report {
-            configuration.userContentController.addUserScript(WKUserScript(source: report, injectionTime: .atDocumentEnd, forMainFrameOnly: true))
-        }
-        #endif
         configuration.allowsInlineMediaPlayback = true
-        let web = WKWebView(frame: .zero, configuration: configuration)
+        let web = PreviewPage(frame: .zero, configuration: configuration)
         web.navigationDelegate = self
         web.isOpaque = false
         web.backgroundColor = Palette.surfaceRecess
@@ -451,12 +626,13 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         return web
     }
 
-    /// The web view fills the well.
+    /// The web view fills the well, less the inspector's width while it stands beside the page as a panel.
     private func placeWeb() {
+        webTrailing = web.trailingAnchor.constraint(equalTo: well.trailingAnchor, constant: inspector?.layout == .panel ? -Size.cSheetInspectorW : 0)
         NSLayoutConstraint.activate([
             web.topAnchor.constraint(equalTo: well.topAnchor),
             web.leadingAnchor.constraint(equalTo: well.leadingAnchor),
-            web.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+            webTrailing,
             web.bottomAnchor.constraint(equalTo: well.bottomAnchor),
         ])
     }
@@ -551,10 +727,175 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             paintMode()
             paintPins()
         }
+        placeHeadItems()
         placeCard()
         #if DEBUG
         probeLayout()
         #endif
+    }
+
+    // MARK: The head's room (HIG Toolbars: "Prioritize only the most important items", the rest in a More menu)
+
+    /// The head's controls after the name, in DESIGN.md §5.10's order.
+    /// The head's controls after the name, in DESIGN.md §5.10's order;
+    /// `modePick` is the mode where its three segments have no room.
+    private enum HeadItem: String, CaseIterable {
+        case send, newCanvas, undock, openTab, inspect, mode, modePick, comments, reload, expand
+    }
+
+    /// Who keeps a place in the head when it is short of room, first to last:
+    /// the key action, then what a person reaches for on every page (its mode,
+    /// its Comments), then the panel's own (Expand, Reload), then what is
+    /// done now and then. The web's head has no such order (its only narrow
+    /// rule is Comments' word going under 640px): it is the app's own.
+    private static let priority: [HeadItem] = [.send, .mode, .comments, .expand, .reload, .inspect, .undock, .openTab, .newCanvas]
+    /// A touch target's side (HIG Layout: "44x44 pt").
+    private static let target = 44.0
+    /// The narrowest the artifact's name stands while controls go to More: its glyph and a dozen letters.
+    private static let nameFloor = 120.0
+
+    private var slots: [HeadItem: HeadSlot] = [:]
+    private var moreButton: UIButton!
+    private var moreSlot: HeadSlot!
+    private let moreBadge = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
+    private var modePick: UIButton!
+    /// The page holds picks the session has not heard, or they are going (Send picks stands).
+    private var sendWanted = false
+    /// What is on show is a canvas: its own tools, no mode or Comments, and Undock.
+    private var canvasShown = false
+    /// The controls the head has no room for, in its order: More holds them.
+    private var overflowed: [HeadItem] = []
+    /// The width the name keeps while controls go to More: its own, up to `nameFloor`.
+    private var nameKept = 0.0
+    /// The name at `nameKept` or wider: the room the head's placing kept for it, held over the controls' own widths.
+    private lazy var nameWidth: NSLayoutConstraint = {
+        let floor = titleButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 0)
+        floor.priority = UILayoutPriority(900)
+        floor.isActive = true
+        return floor
+    }()
+
+    /// Whether `item` belongs in this head at all, as the panel stands.
+    private func wants(_ item: HeadItem) -> Bool {
+        switch item {
+        case .send: sendWanted
+        case .newCanvas, .openTab: !ownTab
+        case .undock: canvasShown && !ownTab
+        case .inspect: inspection != nil
+        case .mode, .comments: !canvasShown
+        case .modePick: false
+        case .reload: true
+        case .expand: !ownTab && !drawer
+        }
+    }
+
+    /// Each control the panel wants stands in the head while the name keeps
+    /// its floor, by `priority`; what has no room goes to More, which then
+    /// stands before Close. The mode gives up its segments for its pick
+    /// before it goes. Close and the name always stand.
+    private func placeHeadItems() {
+        guard isViewLoaded, let head = dragArea as? UIStackView else { return }
+        let width = head.bounds.width
+        guard width > 0 else { return }
+        let wanted = HeadItem.allCases.filter(wants)
+        let room = { (item: HeadItem) in self.slots[item]?.fittingWidth ?? 0 }
+        nameKept = min(Self.nameFloor, titleButton.wholeWidth)
+        if nameWidth.constant != nameKept { nameWidth.constant = nameKept }
+        // The identity's own trailing margin stands with the name.
+        let name = nameKept + 8 - Space.space1
+        let close = Self.target
+        let all = wanted.reduce(0) { $0 + room($1) }
+        var shown = Set(wanted)
+        if name + all + close > width {
+            // First the room More takes, then each control by priority while it fits.
+            var left = width - name - close - Self.target
+            shown = []
+            for item in Self.priority where wanted.contains(item) {
+                let stands = item == .mode && room(.mode) > left ? HeadItem.modePick : item
+                guard room(stands) <= left else { continue }
+                shown.insert(stands)
+                left -= room(stands)
+            }
+        }
+        overflowed = wanted.filter { !shown.contains($0) && !($0 == .mode && shown.contains(.modePick)) }
+        for item in HeadItem.allCases {
+            let hidden = !shown.contains(item)
+            if slots[item]?.isHidden != hidden { slots[item]?.isHidden = hidden }
+        }
+        let moreHidden = overflowed.isEmpty
+        if moreSlot.isHidden != moreHidden { moreSlot.isHidden = moreHidden }
+        paintMore()
+    }
+
+    /// More's own words, and Comments' open count on it while it holds Comments.
+    private func paintMore() {
+        // As on Comments: the count stands always, 0 too.
+        // Run on every layout: each is written only when it changed, as a label's words lay the head out again.
+        let holds = overflowed.contains(.comments)
+        let count = "\(comments.open)"
+        if moreBadge.text != count { moreBadge.text = count }
+        if moreBadge.isHidden == holds { moreBadge.isHidden = !holds }
+        let words = holds ? "More, Comments \(count) open" : "More"
+        if moreButton.accessibilityLabel != words { moreButton.accessibilityLabel = words }
+    }
+
+    /// The three modes, the chosen one checked: the mode's pick, and More's when it holds the mode.
+    private func modeMenu() -> UIMenu {
+        let choices = Mode.allCases.map { choice in
+            UIAction(title: choice.name, image: choice.glyph.image, state: mode == choice ? .on : .off) { [weak self] _ in
+                self?.setMode(choice)
+            }
+        }
+        return UIMenu(title: "Preview mode", options: .displayInline, children: choices)
+    }
+
+    /// More's menu: the controls the head has no room for, in its order, each
+    /// doing what its button does; the mode as a choice of three with the
+    /// current one checked, Comments with its open count.
+    private func overflowMenu() -> [UIMenuElement] {
+        overflowed.compactMap { item -> UIMenuElement? in
+            switch item {
+            case .send:
+                let words = sending ? "Sending…" : "Send picks"
+                let action = UIAction(title: words, image: Glyph.send.image) { [weak self] _ in self?.send() }
+                if !sendButton.isEnabled { action.attributes = .disabled }
+                return action
+            case .newCanvas:
+                let action = UIAction(title: "New canvas", image: Glyph.plus.image) { [weak self] _ in self?.newCanvas() }
+                if making { action.attributes = .disabled }
+                return action
+            case .undock:
+                return UIAction(title: "Undock", image: Glyph.undock.image) { [weak self] _ in self?.giveBack(folded: false) }
+            case .openTab:
+                return UIAction(title: "Open in new tab", image: Glyph.external.image) { [weak self] _ in
+                    guard let self, let id = artifactId else { return }
+                    onOpenTab(id)
+                }
+            case .inspect:
+                return UIAction(title: Words.Artifacts.inspect, image: Glyph.tuning.image, state: inspectOpen ? .on : .off) { [weak self] _ in
+                    guard let self else { return }
+                    showInspector(!inspectOpen)
+                }
+            case .mode:
+                return modeMenu()
+            case .modePick:
+                return nil
+            case .comments:
+                let action = UIAction(title: "Comments", image: Glyph.chat.image) { [weak self] _ in self?.openList() }
+                action.subtitle = "\(comments.open) open"
+                return action
+            case .reload:
+                let action = UIAction(title: "Reload", image: Glyph.refresh.image) { [weak self] _ in self?.reload() }
+                // In Comment and Draw what would leave the page waits (`.mode-comment .other`).
+                if mode != .interact { action.attributes = .disabled }
+                return action
+            case .expand:
+                let back = expanded
+                return UIAction(title: back ? "Back to conversation" : "Expand", image: (back ? Glyph.minimize : Glyph.maximize).image) { [weak self] _ in
+                    self?.onExpand()
+                }
+            }
+        }
     }
 
     /// As the phone's drawer it wears the grabber, and its header stands
@@ -566,10 +907,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         self.drawer = drawer
         grabArea.isHidden = !drawer
         // The drawer has no Expand: it is the phone's sheet (SideSplit.svelte's `available` is a desk's).
-        expandButton.isHidden = drawer
+        placeHeadItems()
         if drawer { expanded = false }
         placeHead()
         placeCardConstraints()
+        // The inspector as the drawer has it, a sheet; beside the transcript, a panel.
+        placeInspector()
     }
 
     /// Drawn inside another surface (a task's review stage, PreviewPane.svelte
@@ -619,6 +962,22 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         wellBottom.constant = expanded ? 0 : -card
     }
 
+    /// The Plan | Preview switch at the head's start while the plan is open too (SideSurface.svelte `switcher`).
+    private weak var switcher: UIView?
+
+    func showSwitcher(_ next: UIView?) {
+        loadViewIfNeeded()
+        guard let head = dragArea as? UIStackView, next !== switcher || next?.superview !== head else { return }
+        // The one switch moves between the cards' heads: only its place in this head is taken down here.
+        if let switcher, switcher.superview === head { switcher.removeFromSuperview() }
+        switcher = next
+        if let next {
+            next.setContentHuggingPriority(.required, for: .horizontal)
+            next.setContentCompressionResistancePriority(.required, for: .horizontal)
+            head.insertArrangedSubview(next, at: 0)
+        }
+    }
+
     /// Something in the preview has the keyboard: the page, or the card's reply field.
     var holdsKeys: Bool {
         guard isViewLoaded else { return false }
@@ -634,6 +993,11 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// in the card goes first, then the card closes, then Comment or Draw
     /// goes back to Interact. False when none was there.
     func escape() -> Bool {
+        // The picker over the page goes first: Escape answers nothing (PlacePick.svelte).
+        if picking != nil {
+            cancelPick()
+            return true
+        }
         if openPin != nil, card.escape() {
             #if DEBUG
             PreviewProbe.say("preview escape ask")
@@ -660,9 +1024,24 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     func show() {
         guard isViewLoaded, let frame = hub.previews.byInstance[instanceId], frame.state == .open,
               let route = hub.previewRoute(frame) else { return }
+        // Every frame, the same revision's too: the title and its menu's list move on their own.
+        let artifact = frame.artifact
+        titleButton.show(kind: artifact.kind, name: artifact.name)
+        menu?.follow(held: frame.artifacts, shown: (artifact.id, artifact.kind, artifact.name))
         // Out of sight, the page waits to be seen.
         guard pageShown else { return }
         let origin = route.origin
+        // A sheet's stage or a workspace preview's server rides its frame,
+        // published again at the same revision on each change (core
+        // `PreviewFrame.stage`; PreviewPane.svelte `served`, `staged`).
+        let port = frame.source?.value1
+        let servedPort = port.flatMap { $0.serve != nil ? Int($0.port) : nil }
+        let shownStage = frame.artifact.kind == .component || servedPort != nil ? frame.stage : nil
+        if shownStage != stage || servedPort != served {
+            stage = shownStage
+            served = servedPort
+            paintStage()
+        }
         guard frame.revision != revision else { return }
         revision = frame.revision
         asleep = false
@@ -679,16 +1058,20 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             list?.dismiss(animated: true)
             paintPins()
             refresh()
+            adoptSheet(frame)
         }
-        titleLabel.text = frame.artifact.name
         pathLabel.text = Self.place(frame)
+        showsPage = frame.source?.value3 != nil
+        paintPath()
         self.origin = origin
         connected = false
-        // A canvas draws with its own tools: no modes over it.
-        modes.isHidden = frame.artifact.kind == .canvas
+        // A canvas draws with its own tools: no modes or Comments over it, and
+        // it can go back to the composer (`canUndock`).
+        canvasShown = frame.artifact.kind == .canvas
+        placeHeadItems()
         paintSend()
-        cover.alpha = 1
-        coverLine.isHidden = false
+        pageLoaded = false
+        paintCover(animated: false)
         byHost = route.byHost
         reentered = false
         enter(hub.previewStart(frame) ?? origin)
@@ -762,20 +1145,44 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         PreviewProbe.say("preview document")
         PreviewProbe.documents += 1
         #endif
+        // A pick the old page asked for has no page left to answer.
+        dropPick()
     }
 
     func webView(_: WKWebView, didFinish _: WKNavigation!) {
-        let fade = Motion.easeOut.animator(Motion.durControl) { self.cover.alpha = 0 }
-        // Faded out, its line stops sweeping; a load since brought the cover back.
+        pageLoaded = true
+        endRetry()
+        paintCover(animated: true)
+        // A load served the page again: the stopped state goes.
+        if !stopped.isHidden { showStopped(false) }
+        guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
+        loaded(frame.revision)
+    }
+
+    /// `.cover` and `.cover.ready`: it stands until the page has loaded and a
+    /// sheet's stage has nothing more to say on it, then fades over
+    /// `--dur-control`, and comes back as the stage gets a word again (a
+    /// restart under an open page). Faded out, its line stops sweeping.
+    private func paintCover(animated: Bool) {
+        let word = stageShown.waiting
+        coverState.text = word
+        coverState.isHidden = word == nil
+        cover.accessibilityElementsHidden = word == nil
+        let shown = !pageLoaded || word != nil
+        if shown { coverLine.isHidden = false }
+        let target: CGFloat = shown ? 1 : 0
+        guard cover.alpha != target else { return }
+        guard animated else {
+            cover.alpha = target
+            coverLine.isHidden = !shown
+            return
+        }
+        let fade = Motion.easeOut.animator(Motion.durControl) { self.cover.alpha = target }
         fade.addCompletion { [weak self] position in
             guard position == .end, let self, cover.alpha < 0.01 else { return }
             coverLine.isHidden = true
         }
         fade.startAnimation()
-        // A load served the page again: the stopped state goes.
-        if !stopped.isHidden { showStopped(false) }
-        guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
-        loaded(frame.revision)
     }
 
     /// PreviewPane.svelte `announce`, at the page's own `load` (the host
@@ -798,20 +1205,53 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             // stands unseen until its host says this (canvas.css `data-canvas-inset`).
             "inset": ["top": 0, "side": 0],
         ])
+        // A canvas here stands docked in the panel (stage.svelte.ts `tellPlace`, `at === "panel"`):
+        // its rail stays at its top, and its rail's Dock reads Undock.
+        if artifact.kind == .canvas {
+            deliver(["type": "cawco:place", "docked": true, "inset": ["top": 0, "side": 0]])
+        }
         #if DEBUG
-        PreviewProbe.say("preview hello theme=\(theme)")
+        PreviewProbe.say("preview hello theme=\(theme)\(artifact.kind == .canvas ? " place=docked" : "")")
         #endif
+    }
+
+    /// The head's +: a new canvas in the session, shown here at once (PreviewPane.svelte `newCanvas`).
+    private func newCanvas() {
+        guard !making else { return }
+        making = true
+        newCanvasButton.isEnabled = false
+        Task { [weak self, hub, instanceId] in
+            do {
+                let made = try await hub.createDraftCanvas(in: instanceId)
+                hub.openArtifact(made.id, in: instanceId)
+            } catch {
+                self?.failed("The canvas couldn't be made: \(error.localizedDescription). Try + again.", of: nil)
+            }
+            self?.making = false
+            self?.newCanvasButton.isEnabled = true
+        }
+    }
+
+    /// The canvas on show goes back to the composer (PreviewPane.svelte `giveBack`): Undock, or Done while it is docked.
+    private func giveBack(folded: Bool) {
+        guard !ownTab, let frame = hub.previews.byInstance[instanceId], frame.state == .open, frame.artifact.kind == .canvas else { return }
+        #if DEBUG
+        PreviewProbe.say("preview give back \(frame.artifact.id) folded=\(folded)")
+        #endif
+        onGiveBack(frame.artifact.id, frame.artifact.name, folded)
     }
 
     func webView(_: WKWebView, didFail _: WKNavigation!, withError error: any Error) {
         guard !enteredAgain(error), !Self.endedUnder(error) else { return }
         failed(error.localizedDescription, of: nil)
+        endRetry()
         loaded(revision)
     }
 
     func webView(_: WKWebView, didFailProvisionalNavigation _: WKNavigation!, withError error: any Error) {
         guard !enteredAgain(error), !Self.endedUnder(error) else { return }
         failed(error.localizedDescription, of: nil)
+        endRetry()
         loaded(revision)
     }
 
@@ -826,19 +1266,63 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// reads them the same way). The page is code an agent wrote: every
     /// field is checked and bounded.
     func userContentController(_: WKUserContentController, didReceive message: WKScriptMessage) {
-        // Read on the main thread: a message past `messageMost` is not the overlay's, and goes unread.
-        guard let said = message.body as? NSString, said.length <= Self.messageMost else { return }
+        // Read on the main thread: a message past `messageMost` is not the overlay's, and goes unread;
+        // its capture alone carries a picture, up to wire.ts `PNG_MAX` of base64.
+        guard let said = message.body as? NSString,
+              said.length <= (said.hasPrefix(#"{"type":"cawco:captured""#) ? Self.captureMost : Self.messageMost) else { return }
         guard let data = (said as String).data(using: .utf8),
               let body = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        if let ask = Self.pickPlaceAsk(body) {
+            // A second ask replaces one still open: the page asked again.
+            cancelPick()
+            openPick(ask)
+            return
+        }
         switch body["type"] as? String {
         case "cawco:loaded":
             hello()
         case "cawco:ready", "cawco:navigated":
-            if let at = (body["url"] as? String).flatMap(URL.init(string:)), at.host() == origin?.host(), at.port == origin?.port {
+            // A page's place is its artifact's own: no path stands under its name (PreviewPane.svelte `subtitle={page ? "" : …}`).
+            if !showsPage, let at = (body["url"] as? String).flatMap(URL.init(string:)), at.host() == origin?.host(), at.port == origin?.port {
                 pathLabel.text = at.path() + (at.query().map { "?\($0)" } ?? "")
+                paintPath()
             }
-            if let title = Self.text(body["title"], 300), !title.isEmpty { titleLabel.text = title }
-            if body["type"] as? String == "cawco:ready" { ready() }
+            // Its title, for the transcript's card (`preview.title`, wire.ts `previewTitle`).
+            if let revision, let title = Self.text(body["title"], 300) {
+                hub.previews.titled(instanceId, revision: revision, title: title)
+            }
+            if body["type"] as? String == "cawco:ready" {
+                ready()
+                // Once per revision the overlay draws the page for the card's thumbnail (PreviewPane.svelte `captured`).
+                if let revision, capturedFor != revision {
+                    capturedFor = revision
+                    deliver(["type": "cawco:capture"])
+                }
+            }
+        case "cawco:captured":
+            // Both schemes in one answer, the other drawn off screen (overlay schemes.ts).
+            if let revision, let thumbnail = Self.thumbnail(body) {
+                hub.previews.captured(instanceId, revision: revision, thumbnail: thumbnail)
+                #if DEBUG
+                PreviewProbe.say("preview captured revision=\(revision) bytes=\(thumbnail.light?.count ?? 0)+\(thumbnail.dark?.count ?? 0) single=\(thumbnail.single) title=\(hub.previews.pages[instanceId]?.title ?? "")")
+                #endif
+            }
+        case "cawco:undock":
+            // The docked canvas's own rail (CanvasStages.svelte `actions.undock`).
+            giveBack(folded: false)
+        case "cawco:done":
+            giveBack(folded: true)
+        case "cawco:sheet":
+            // A sheet's page said its stories and props: the inspector's controls.
+            if let said = SheetOnPage(body["sheet"]) {
+                #if DEBUG
+                PreviewProbe.say("inspector heard file=\(said.file) stories=\(said.stories.map(\.name).joined(separator: ",")) components=\(said.components.map { "\($0.name):\($0.props.map(\.name).joined(separator: "+"))" }.joined(separator: ","))")
+                #endif
+                inspection?.heard(said)
+                #if DEBUG
+                inspectAtLaunch()
+                #endif
+            }
         case "cawco:doc":
             // A pick, a note, a pin, the agent's patch or a Send's stamp: the pins and Send picks read again now.
             refresh()
@@ -866,6 +1350,15 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             placeCard()
         case "cawco:key":
             if let key = Self.text(body["key"], 10) { press(key) }
+        case "cawco:shortcut":
+            // One of the shell's combos the page left alone (overlay page.ts
+            // `leftToShell`): the shell runs it as from its own key command.
+            if let command = Self.shellCommand(body["name"]) {
+                #if DEBUG
+                PreviewProbe.say("preview shortcut \(Self.text(body["name"], 40) ?? "")")
+                #endif
+                (view.window?.rootViewController as? RootViewController)?.run(command)
+            }
         case "cawco:escape":
             // The page left Comment or Draw on its own Esc: the pane follows, and keeps it.
             setMode(.interact)
@@ -896,10 +1389,18 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         connected = true
         // In: a later lapse of its pass may enter again.
         reentered = false
+        // Compiled: the cover's "Compiling…" goes.
+        paintStage()
         #if DEBUG
         PreviewProbe.say("preview ready")
+        // The artifact's own tab: its page's overlay answered there, for this artifact.
+        if ownTab { PreviewProbe.say("artifact tab ready \(artifactId ?? "-") revision=\(revision ?? "-")") }
         PreviewMeter.ready(web)
         if byHost { PreviewProbe.lapse(web) }
+        if PreviewProbe.menuRemove != nil, !menuAtLaunch {
+            menuAtLaunch = true
+            openMenu()
+        }
         #endif
         paintSend()
         // The page's mode as the person left it, its pins shown or hidden, and the open card's pin tracked again.
@@ -907,17 +1408,98 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         if !pinsShown { deliver(["type": "cawco:pins-shown", "shown": false]) }
         if let openPin { deliver(["type": "cawco:track-pin", "id": openPin]) }
         if let revision { word(revision, failure: nil) }
+    }
+
+    // MARK: A sheet's stage
+
+    /// The stage on the pane: its word on the cover, its first compile error
+    /// on a card over the dimmed last render, or the stage that didn't start
+    /// where the page would be. Each appears and leaves as the web's
+    /// `appear` does: its opacity over `--dur-fade`, the same with or without
+    /// Reduce Motion, since nothing travels.
+    private func paintStage() {
+        guard isViewLoaded else { return }
+        let next = SheetStageShown(stage, connected: connected, served: served)
+        let before = stageShown
+        stageShown = next
+        paintCover(animated: true)
+        if let error = next.error { errorCard.show(error, more: next.more) }
+        if let down = next.down { self.down.show(down) }
+        appear(dim, next.error != nil)
+        appear(errorCard, next.error != nil)
+        appear(self.down, next.down != nil)
+        if next.waiting != before.waiting, let word = next.waiting {
+            // `role="status"`: the cover says what the stage is doing.
+            UIAccessibility.post(notification: .announcement, argument: word)
+        }
+        if (next.error != nil && before.error == nil) || (next.down != nil && before.down == nil) {
+            // `role="alert"`: what went wrong is read out as it stands.
+            UIAccessibility.post(notification: .layoutChanged, argument: next.error != nil ? errorCard : self.down)
+        }
         #if DEBUG
-        if PreviewProbe.commentAtLaunch, !commentedAtLaunch {
-            commentedAtLaunch = true
-            setMode(.comment)
-            if PreviewProbe.tapAtLaunch {
-                web.evaluateJavaScript(PreviewProbe.click) { value, error in
-                    PreviewProbe.say("preview probe click \((value as? String) ?? error?.localizedDescription ?? "?")")
-                }
+        if next != before {
+            let card = next.error.map(SheetStageShown.place) ?? "-"
+            PreviewProbe.say("preview stage status=\((stage?.value1?.status ?? stage?.value2?.status)?.rawValue ?? "-") cover=\(next.waiting ?? "-") card=\(card) down=\(next.down == nil ? "no" : "yes")")
+        }
+        if next.down != nil {
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                view.layoutIfNeeded()
+                PreviewProbe.say("preview stage-down again=\(PreviewProbe.centre(self.down.again))")
             }
         }
         #endif
+    }
+
+    /// The web's `transition:appear`, in and out: opacity alone over `--dur-fade`.
+    private func appear(_ part: UIView, _ shown: Bool) {
+        let target: CGFloat = shown ? 1 : 0
+        guard part.alpha != target || part.isHidden == shown else { return }
+        if shown { part.isHidden = false }
+        let fade = Motion.easeOut.animator(Motion.durFade) { part.alpha = target }
+        fade.addCompletion { position in
+            if position == .end, !shown { part.isHidden = true }
+        }
+        fade.startAnimation()
+    }
+
+    /// Try again on a stage that didn't start (PreviewPane.svelte `retry`):
+    /// the page loads again, which asks the stage to start again; pending
+    /// until that load ends.
+    private func tryStageAgain() {
+        retrying = true
+        down.pending(true)
+        reload()
+    }
+
+    private func endRetry() {
+        guard retrying else { return }
+        retrying = false
+        down.pending(false)
+    }
+
+    /// A shortcut's name as core's `SHELL_SHORTCUTS` names it, as the shell's command it runs.
+    private static func shellCommand(_ value: Any?) -> RootViewController.ShellCommand? {
+        switch value as? String {
+        case "new-session": .startSession
+        case "jump": .jump
+        case "split-right": .splitRight
+        case "split-down": .splitDown
+        default: nil
+        }
+    }
+
+    /// Whether the keyboard is in a preview's page: the page then has the
+    /// first claim on every key, as the dashboard's iframe has (overlay
+    /// page.ts `leftToShell`), so the app's own key commands stand down and
+    /// the page hands back, as `cawco:shortcut`, the shell's combos it left.
+    static var pageHoldsKeys: Bool {
+        var at = UIResponder.current as? UIView
+        while let view = at {
+            if view is PreviewPage { return true }
+            at = view.superview
+        }
+        return false
     }
 
     // MARK: The mode
@@ -948,6 +1530,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard isViewLoaded else { return }
         modes.namesShown = false
         modes.select(Mode.allCases.firstIndex(of: mode))
+        modePick.configuration?.image = mode.glyph.image.resized(to: Size.iconMd)
+        modePick.accessibilityLabel = "Preview mode"
+        modePick.accessibilityValue = mode.name
+        modePick.toolTip = "Preview mode: \(mode.name)"
         reloadButton.setNeedsUpdateConfiguration()
         paintWell()
     }
@@ -1008,10 +1594,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// J and K a step through the pins, Enter opens one, Esc closes.
     private func press(_ key: String) {
         switch key {
-        case "v" where !modes.isHidden: setMode(.interact)
-        case "c" where !modes.isHidden: setMode(.comment)
-        case "d" where !modes.isHidden: setMode(.draw)
-        case "C" where !modes.isHidden:
+        case "v" where !canvasShown: setMode(.interact)
+        case "c" where !canvasShown: setMode(.comment)
+        case "d" where !canvasShown: setMode(.draw)
+        case "C" where !canvasShown:
             pinsShown.toggle()
             deliver(["type": "cawco:pins-shown", "shown": pinsShown])
             paintPins()
@@ -1113,19 +1699,6 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         PreviewProbe.say("preview pins n=\(read.pins.count) open=\(read.open) picks=\(read.unsentPicks) sent=\(read.sentAt ?? "-") " + read.pins.map {
             "\($0.label)=\($0.moved ? "moved" : $0.resolved ? "resolved" : "open"):\($0.thread.count)\($0.unsent ? ":unsent" : "")"
         }.joined(separator: " "))
-        if PreviewProbe.sendAtLaunch, !sentAtLaunch, read.unsentPicks > 0, connected {
-            sentAtLaunch = true
-            send()
-        }
-        if PreviewProbe.replyAtLaunch, !repliedAtLaunch, let openPin, connected, !sending,
-           read.pins.first(where: { $0.id == openPin })?.sentAt != nil {
-            repliedAtLaunch = true
-            Task { [weak self] in
-                self?.reply("Make it bigger")
-                while self?.replying == true { try? await Task.sleep(for: .milliseconds(100)) }
-                self?.resolve(true)
-            }
-        }
         #endif
     }
 
@@ -1153,12 +1726,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// The head's Comments, its badge the open pins (PreviewPane.svelte `.comments`), and Send picks.
     private func paintPins() {
         guard isViewLoaded else { return }
+        // The open count stands always, 0 too, one `--btn-gap` after the word (or the glyph alone on a narrow pane).
         pinsBadge.text = "\(comments.open)"
-        pinsBadge.isHidden = comments.open == 0
         KitButton.setTitle(narrow ? "" : "Comments", of: pinsButton, variant: .ghost, height: .sm)
         pinsButton.accessibilityLabel = "Comments, \(comments.open) open\(pinsShown ? "" : ", pins hidden")"
-        let badge = comments.open == 0 ? 0 : pinsBadge.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width + Space.space1
-        pinsButton.configuration?.contentInsets.trailing = Space.space3 + 1 + badge
+        let badge = pinsBadge.intrinsicContentSize.width + Space.space1
+        pinsButton.configuration?.contentInsets.trailing = Space.space2 + badge
         paintSend()
     }
 
@@ -1169,11 +1742,20 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let picks = comments.unsentPicks > 0
         sendButton.configuration?.showsActivityIndicator = sending
         let words = sending ? "Sending…" : "Send picks"
-        KitButton.setTitle(words, of: sendButton, variant: .ghost, height: .sm)
+        // On a narrow pane its glyph alone, as Comments' word goes there: the name keeps its room beside the mode.
+        if narrow {
+            // No title at all: an empty one still keeps the gap after the glyph.
+            sendButton.configuration?.attributedTitle = nil
+        } else {
+            KitButton.setTitle(words, of: sendButton, variant: .ghost, height: .sm)
+        }
+        sendButton.accessibilityLabel = words
+        sendButton.toolTip = words
         #if DEBUG
         PreviewProbe.say("preview send words=\(picks ? words : "-")")
         #endif
-        sendButton.isHidden = !(picks || sending)
+        sendWanted = picks || sending
+        placeHeadItems()
         sendButton.isEnabled = connected && picks && !sending
         sendButton.accessibilityHint = "Sends the page's picks to the session"
     }
@@ -1227,6 +1809,12 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// Another pin's card is dismissed first (PreviewPane.svelte `openCard`).
     private func openCard(_ id: String, made: Bool = false) {
         if let open = openPin, open != id { closeCard(by: "another") }
+        // The card never stands under the Comments panel: it goes, as a row's
+        // own press puts it away, whichever way the card opens (J, K, Enter,
+        // a pin's disc on the page).
+        if let list, list.presentingViewController != nil, !list.isBeingDismissed {
+            list.dismiss(animated: true)
+        }
         if made { madePin = id }
         openPin = id
         focusedPin = id
@@ -1344,7 +1932,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         card.isHidden = false
         card.link = pinLink(pin.label)
         // The agent answers as the session the artifact belongs to (PreviewPane.svelte `ownerName`).
-        let agentName = hub.fleet.byId[instanceId].map(hub.fleet.title) ?? "The session"
+        let agentName = hub.fleet.byId[instanceId].map { hub.fleet.title($0) } ?? "The session"
         card.show(pin, agentName: agentName, live: live.contains(openPin), problem: cardError, replying: replying,
                   draft: drafts[openPin] ?? "")
         if outsidePress.view == nil, let window = view.window { window.addGestureRecognizer(outsidePress) }
@@ -1690,7 +2278,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         let centre = PreviewProbe.centre
         let words = mode == .comment ? "Interact" : "Comment"
         let toggle = segmentCentre(mode == .comment ? 0 : 1)
-        let sendWords = sendButton.configuration?.attributedTitle.map { String($0.characters) } ?? "?"
+        let sendWords = sendButton.accessibilityLabel ?? "?"
         let grab = grabArea.isHidden ? "none" : centre(grabber)
         let page = web.convert(web.bounds, to: nil)
         return "preview head comment=\(words)@\(toggle) mode=\(mode.rawValue) draw=\(segmentCentre(2)) pins=\(comments.open)@\(centre(pinsButton)) send=\(sendWords)@\(centre(sendButton)) reload=\(centre(reloadButton)) grabber=\(grab) web=\(Int(page.minX.rounded())),\(Int(page.minY.rounded())),\(Int(page.width.rounded())),\(Int(page.height.rounded()))"
@@ -1698,11 +2286,31 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     /// The centre of the mode's segment at `index` in the window: the segmented's width in three.
     private func segmentCentre(_ index: Int) -> String {
-        guard modes.window != nil, !modes.isHidden else { return "none" }
+        guard PreviewProbe.centre(modes) != "none" else { return "none" }
         let box = modes.convert(modes.bounds, to: nil)
         let third = Double(box.width) / 3
         let x = Double(box.minX) + third * (Double(index) + 0.5)
         return "\(Int(x.rounded())),\(Int(Double(box.midY).rounded()))"
+    }
+
+    /// `-menu-remove` and `-inspect-set` act once a launch.
+    private static var menuDone = false
+    private static var inspectDone = false
+    private var menuAtLaunch: Bool {
+        get { Self.menuDone }
+        set { Self.menuDone = newValue }
+    }
+
+    /// `-inspect-set`: the inspector opened, the prop set to the option named, Save, once.
+    private func inspectAtLaunch() {
+        guard let (name, value) = PreviewProbe.inspectSet, !Self.inspectDone, let inspection,
+              let prop = inspection.component?.props.first(where: { $0.name == name }),
+              let option = prop.options?.first(where: { $0.shown == value }) else { return }
+        Self.inspectDone = true
+        showInspector(true)
+        inspection.set(prop, option)
+        PreviewProbe.say("inspector set \(name)=\(value) story=\(inspection.chosen ?? "-")")
+        Task { await inspection.save() }
     }
 
     /// Expand's words and centre and Close's centre, for the session's `split` line.
@@ -1712,6 +2320,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
 
     /// The header as last logged on a layout: logged again only when it moved.
     private var laidHead = ""
+    private var laidRoom = ""
 
     /// The card and its question as last logged on a layout.
     private var laidCard: [String] = []
@@ -1726,6 +2335,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             laidHead = line
             PreviewProbe.say(line)
         }
+        probeRoom()
         DispatchQueue.main.async { [weak self] in
             guard let self, openPin != nil, !card.isHidden else { return }
             view.layoutIfNeeded()
@@ -1735,6 +2345,33 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
             now.forEach(PreviewProbe.say)
         }
     }
+
+    /// What of the head the name keeps, against the controls standing after
+    /// it (each by its slot's width, More and Close last) and what More holds,
+    /// as laid out: read on each layout and on the page's heartbeat, so a
+    /// head that settled after its first layout is read as it stands.
+    private func probeRoom() {
+        guard PreviewProbe.on, view.window != nil, let head = dragArea as? UIStackView, head.bounds.width > 0 else { return }
+        let shown = head.arrangedSubviews.dropFirst().filter { !$0.isHidden }.map { slot in
+            let name = slots.first { $0.value === slot }?.key.rawValue ?? (slot === moreSlot ? "more" : "close")
+            return "\(name):\(Int(slot.bounds.width.rounded()))x\(Int(slot.bounds.height.rounded()))"
+        }
+        let more = overflowed.isEmpty ? "-" : overflowed.map(\.rawValue).joined(separator: ",")
+        let badge = moreBadge.isHidden || moreSlot.isHidden ? "-" : moreBadge.text ?? "-"
+        let room = "preview head room width=\(Int(head.bounds.width)) title=\(Int(titleButton.bounds.width)) floor=\(Int(nameKept)) shown=\(shown.joined(separator: ",")) more=\(more) badge=\(badge)"
+        if room != laidRoom {
+            laidRoom = room
+            PreviewProbe.say(room)
+        }
+        // Where Open in new tab and More stand in the window, where a simulator touch lands.
+        let at = "preview head open-tab=\(PreviewProbe.centre(openTabButton)) more=\(PreviewProbe.centre(moreButton))"
+        if at != laidOpenTab {
+            laidOpenTab = at
+            PreviewProbe.say(at)
+        }
+    }
+
+    private var laidOpenTab = ""
 
     /// The open card's lines: its controls, its question, and its footer's
     /// buttons against the keyboard's top, all in the window's points.
@@ -1752,9 +2389,34 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         guard PreviewProbe.on, heartbeat == nil else { return }
         heartbeat = Timer.scheduledTimer(withTimeInterval: 0.7, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
-                self?.web.evaluateJavaScript("typeof report === 'function' && report()")
+                self?.web.evaluateJavaScript(Self.docRead) { value, _ in
+                    MainActor.assumeIsolated { self?.sayDoc(value as? String) }
+                }
+                self?.probeRoom()
             }
         }
+    }
+
+    /// The probe page's `report`, then the document as it stands: its clock's
+    /// origin (`performance.timeOrigin`, new with every load, so a reload is
+    /// seen even where no navigation is), and its artifact doc's elements,
+    /// drawn and not deleted (a canvas's; 0 on a page, -1 before the overlay joins).
+    private static let docRead = """
+    (() => {
+      if (typeof report === "function") report();
+      const doc = window.cawcoArtifact?.doc;
+      const elements = doc ? doc.getArray("elements").toArray().filter((entry) => entry.get("el")?.isDeleted !== true).length : -1;
+      return `origin=${Math.round(performance.timeOrigin)} elements=${elements} width=${innerWidth} scale=${(visualViewport?.scale ?? 1).toFixed(2)}`;
+    })()
+    """
+
+    private var saidDoc = ""
+
+    /// `preview doc …`, logged when it changed.
+    private func sayDoc(_ read: String?) {
+        guard let read, read != saidDoc else { return }
+        saidDoc = read
+        PreviewProbe.say("preview doc \(read)")
     }
 
     /// The probe's page posts `cawco:probe` with its state and the viewport
@@ -1785,6 +2447,30 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         (value as? String).map { String($0.prefix(max)) }
     }
 
+    /// The longest capture the page may post, in UTF-16 units: two pictures (each scheme) of wire.ts `PNG_MAX` of base64 and their envelope.
+    private static let captureMost = 2 * 4_000_000 + 1024
+
+    /// wire.ts `previewPng`: a base64 PNG of at most `PNG_MAX`, its bytes.
+    private static func png(_ value: Any?) -> Data? {
+        guard let text = value as? String, !text.isEmpty, text.count <= 4_000_000,
+              text.wholeMatch(of: /[A-Za-z0-9+\/]+={0,2}/) != nil else { return nil }
+        return Data(base64Encoded: text)
+    }
+
+    /// The overlay's `cawco:captured` (wire.ts `previewThumbnail`): `png` drawn
+    /// in `scheme`, `other` in the other scheme, or `single` when the page
+    /// draws the same in both; nil when it carries no picture.
+    private static func thumbnail(_ body: [String: Any]) -> PreviewStore.PageThumbnail? {
+        guard let shown = Self.png(body["png"]) else { return nil }
+        if body["single"] as? Bool == true {
+            return .init(light: shown, dark: shown, single: true)
+        }
+        let other = Self.png(body["other"])
+        return body["scheme"] as? String == "dark"
+            ? .init(light: other, dark: shown, single: false)
+            : .init(light: shown, dark: other, single: false)
+    }
+
     /// A pin's id (wire.ts `previewPinId`).
     private static func pinId(_ value: Any?) -> String? {
         guard let id = value as? String, id.wholeMatch(of: /[0-9a-f-]{36}/) != nil else { return nil }
@@ -1799,8 +2485,10 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     }
 
     /// source.ts `previewPlace`: a page by its name, a folder by its leaf, a dev server by its port.
+    /// The line under the name (PreviewPane.svelte `subtitle`): a page has none, a
+    /// folder its leaf, a dev server its port.
     private static func place(_ frame: PreviewFrame) -> String {
-        if let page = frame.source?.value3?.page { return page }
+        if frame.source?.value3 != nil { return "" }
         if let dir = frame.source?.value2?.dir { return (dir as NSString).lastPathComponent }
         if let port = frame.source?.value1?.port { return "localhost:\(Int(port))" }
         return ""
@@ -1810,6 +2498,22 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// what the page posts goes to the app, and what the app hands the page
     /// arrives at its message listeners from that same parent, on its own
     /// origin, as the overlay checks.
+    /// The page lays out at the panel's width, scale 1, as the web's iframe
+    /// lays it out: a page naming no viewport would otherwise stand at
+    /// Safari's default 980px and be drawn shrunk to the panel (Apple's
+    /// "Configuring the Viewport": "The default width is 980 pixels"). A
+    /// viewport the page names itself is parsed after this one and wins; a
+    /// re-publish's morph keeps this one (preview-overlay page.ts `kept`).
+    private static let viewport = """
+    (() => {
+      const meta = document.createElement("meta");
+      meta.setAttribute("data-cawco-host", "");
+      meta.name = "viewport";
+      meta.content = "width=device-width, initial-scale=1";
+      (document.head ?? document.documentElement)?.prepend(meta);
+    })();
+    """
+
     private static let host = """
     (() => {
       const listeners = new Set();
@@ -1818,7 +2522,9 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         // page posts to its parent stays in the page, never crossing to
         // the app's main thread.
         postMessage(data) {
-          if (!data || typeof data.type !== "string" || !data.type.startsWith("cawco:")) return;
+          // The one request the page makes of its host (`cawco.pickPlace`, a JSON-RPC ask) goes too.
+          const asks = !!data && data.jsonrpc === "2.0" && data.method === "cawco/pick-place";
+          if (!asks && (!data || typeof data.type !== "string" || !data.type.startsWith("cawco:"))) return;
           window.webkit.messageHandlers.cawco.postMessage(JSON.stringify(data));
         },
       };
@@ -1846,6 +2552,243 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
       };
     })();
     """
+}
+
+/// A page's JSON-RPC id, as wire.ts `previewPickPlace` takes it: a safe integer, or a string of at most 100.
+enum PickAsk {
+    case number(Int)
+    case text(String)
+
+    var json: Any {
+        switch self {
+        case let .number(id): id
+        case let .text(id): id
+        }
+    }
+}
+
+// MARK: A page's cawco.pickPlace()
+
+extension PreviewController {
+    /// The page's `cawco/pick-place` ask (wire.ts `previewPickPlace`), or nil when the message is not one.
+    fileprivate static func pickPlaceAsk(_ body: [String: Any]) -> PickAsk? {
+        guard body["jsonrpc"] as? String == "2.0", body["method"] as? String == "cawco/pick-place" else { return nil }
+        if let number = body["id"] as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID() {
+            let value = number.doubleValue
+            guard value.rounded() == value, abs(value) <= 9_007_199_254_740_991 else { return nil }
+            return .number(Int(value))
+        }
+        if let text = body["id"] as? String, text.count <= 100 { return .text(text) }
+        return nil
+    }
+
+    /// The picker for the page's ask (PlacePick.svelte): over the whole of
+    /// the well in a pane, as the web draws it there, opaque, above the page
+    /// and the inspector; in the phone's drawer, the house sheet
+    /// (HouseSheetController), the drawer's own sheet idiom.
+    fileprivate func openPick(_ ask: PickAsk) {
+        picking = ask
+        let pick = PlacePickView(hub: hub, titled: !drawer)
+        pick.onPick = { [weak self] place in
+            self?.answerPick(["machineId": place.machineId, "label": place.label, "path": place.path])
+        }
+        pick.onCancel = { [weak self] in self?.cancelPick() }
+        placePick = pick
+        if drawer {
+            let content = PlacePickSheetController(pick)
+            content.onGone = { [weak self] in self?.cancelPick() }
+            let sheet = HouseSheetController(content, title: Words.PlacePick.title, scroller: pick.scroll)
+            placePickSheet = sheet
+            present(sheet, animated: true) { [weak content] in
+                #if DEBUG
+                // The sheet stood: the form whole under its head, not the title alone.
+                guard let content else { return }
+                let box = content.view.convert(content.view.bounds, to: nil)
+                PreviewProbe.say("place pick sheet content=\(Int(box.minY)),\(Int(box.height)) form=\(Int(content.pick.scroll.contentSize.height))")
+                #endif
+            }
+        } else {
+            pick.alpha = 0
+            well.insertSubview(pick, belowSubview: card)
+            NSLayoutConstraint.activate([
+                pick.topAnchor.constraint(equalTo: well.topAnchor),
+                pick.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+                pick.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+                pick.bottomAnchor.constraint(equalTo: well.bottomAnchor),
+            ])
+            // `transition:appear`: its opacity over `--dur-fade`.
+            Motion.easeOut.animator(Motion.durFade) { pick.alpha = 1 }.startAnimation()
+            UIAccessibility.post(notification: .screenChanged, argument: pick)
+        }
+        #if DEBUG
+        PreviewProbe.say("place pick opened \(ask.json) as=\(drawer ? "sheet" : "well")")
+        if let placed = PreviewProbe.placePick {
+            Task { @MainActor [weak pick] in
+                try? await Task.sleep(for: .seconds(1))
+                pick?.pickForProbe(machineId: placed.machineId, path: placed.path)
+            }
+        }
+        #endif
+    }
+
+    /// The person's answer to the page, as a JSON-RPC result: the place, or null.
+    private func answerPick(_ result: [String: Any]?) {
+        guard let ask = picking else { return }
+        dropPick()
+        deliver(["jsonrpc": "2.0", "id": ask.json, "result": result.map { $0 as Any } ?? NSNull()])
+        #if DEBUG
+        let said = result.flatMap { try? JSONSerialization.data(withJSONObject: $0, options: [.sortedKeys, .withoutEscapingSlashes]) }
+            .map { String(decoding: $0, as: UTF8.self) } ?? "null"
+        PreviewProbe.say("place pick answered \(said)")
+        #endif
+    }
+
+    /// Cancel or Escape: the page hears null.
+    fileprivate func cancelPick() {
+        guard picking != nil else { return }
+        answerPick(nil)
+    }
+
+    /// The picker goes with no answer: a new document has no ask left to answer.
+    fileprivate func dropPick() {
+        picking = nil
+        if let sheet = placePickSheet {
+            placePickSheet = nil
+            sheet.dismiss(animated: true)
+        }
+        if let pick = placePick {
+            placePick = nil
+            guard pick.superview === well else { return }
+            let fade = Motion.easeOut.animator(Motion.durExit) { pick.alpha = 0 }
+            fade.addCompletion { _ in pick.removeFromSuperview() }
+            fade.startAnimation()
+        }
+    }
+}
+
+// MARK: A sheet's inspector, the artifacts' menu
+
+extension PreviewController {
+    /// The panel shows another artifact: a sheet gets its own inspector,
+    /// with nothing unsaved; anything else has none.
+    fileprivate func adoptSheet(_ frame: PreviewFrame) {
+        inspector?.removeFromSuperview()
+        inspector = nil
+        let id = frame.artifact.id
+        if frame.artifact.kind == .component {
+            inspection = SheetInspection(post: { [weak self] message in self?.deliver(message) },
+                                         write: { [weak self] change in
+                                             guard let self else { return }
+                                             try await hub.writeSheet(id, in: instanceId, change: change)
+                                             #if DEBUG
+                                             PreviewProbe.say("inspector wrote \(change)")
+                                             #endif
+                                         })
+        } else {
+            inspection = nil
+        }
+        placeHeadItems()
+        placeInspector()
+    }
+
+    /// Inspect (PreviewPane.svelte `showInspector`): kept for the session, as Comments is.
+    fileprivate func showInspector(_ open: Bool) {
+        inspectOpen = open
+        UserDefaults.standard.set(open ? "open" : "shut", forKey: inspectKey)
+        placeInspector()
+    }
+
+    /// The inspector as the panel stands: a right panel beside the page in a
+    /// pane, the page narrowed by its width; a sheet over the page's foot in
+    /// the phone's drawer, the page live above it. It slides in from its
+    /// edge over `--dur-panel` on the drawer curve and out over `--dur-exit`;
+    /// with less motion a fade.
+    fileprivate func placeInspector() {
+        guard isViewLoaded else { return }
+        inspectButton.setNeedsUpdateConfiguration()
+        inspectButton.accessibilityTraits = inspectOpen ? [.button, .selected] : .button
+        let layout: SheetInspectorView.Layout = drawer ? .sheet : .panel
+        let wanted = inspectOpen ? inspection : nil
+        if let inspector, inspector.inspection === wanted, inspector.layout == layout { return }
+        if let leaving = inspector {
+            inspector = nil
+            slide(leaving, in: false)
+        }
+        guard let wanted else {
+            webTrailing.constant = 0
+            return
+        }
+        let view = SheetInspectorView(inspection: wanted, layout: layout)
+        view.onClose = { [weak self] in self?.showInspector(false) }
+        well.insertSubview(view, belowSubview: card)
+        if layout == .panel {
+            NSLayoutConstraint.activate([
+                view.topAnchor.constraint(equalTo: well.topAnchor),
+                view.bottomAnchor.constraint(equalTo: well.bottomAnchor),
+                view.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+                view.widthAnchor.constraint(equalToConstant: Size.cSheetInspectorW),
+                view.widthAnchor.constraint(lessThanOrEqualTo: well.widthAnchor),
+            ])
+            webTrailing.constant = -Size.cSheetInspectorW
+        } else {
+            NSLayoutConstraint.activate([
+                view.leadingAnchor.constraint(equalTo: well.leadingAnchor),
+                view.trailingAnchor.constraint(equalTo: well.trailingAnchor),
+                view.bottomAnchor.constraint(equalTo: well.bottomAnchor),
+                view.heightAnchor.constraint(lessThanOrEqualTo: well.heightAnchor, multiplier: 0.6),
+            ])
+            webTrailing.constant = 0
+        }
+        inspector = view
+        slide(view, in: true)
+        #if DEBUG
+        DispatchQueue.main.async { [weak self, weak view] in
+            guard let self, let view else { return }
+            self.view.layoutIfNeeded()
+            let box = view.convert(view.bounds, to: nil)
+            let page = web.convert(web.bounds, to: nil)
+            PreviewProbe.say("inspector layout=\(layout) frame=\(Int(box.minX)),\(Int(box.minY)),\(Int(box.width)),\(Int(box.height)) web=\(Int(page.minX)),\(Int(page.minY)),\(Int(page.width)),\(Int(page.height))")
+        }
+        #endif
+    }
+
+    private func slide(_ part: SheetInspectorView, in arriving: Bool) {
+        view.layoutIfNeeded()
+        let away: CGAffineTransform = part.layout == .panel
+            ? CGAffineTransform(translationX: part.bounds.width, y: 0)
+            : CGAffineTransform(translationX: 0, y: part.bounds.height)
+        let calm = UIAccessibility.isReduceMotionEnabled
+        if arriving {
+            if calm { part.alpha = 0 } else { part.transform = away }
+            Motion.easeDrawer.animator(calm ? Motion.durFade : Motion.durPanel) {
+                part.alpha = 1
+                part.transform = .identity
+                self.view.layoutIfNeeded()
+            }.startAnimation()
+            UIAccessibility.post(notification: .screenChanged, argument: part)
+        } else {
+            let out = Motion.easeOut.animator(Motion.durExit) {
+                if calm { part.alpha = 0 } else { part.transform = away }
+                self.view.layoutIfNeeded()
+            }
+            out.addCompletion { _ in part.removeFromSuperview() }
+            out.startAnimation()
+        }
+    }
+
+    /// The title control's menu: the session's artifacts, newest first (ArtifactMenu.swift).
+    fileprivate func openMenu() {
+        guard let frame = hub.previews.byInstance[instanceId], frame.state == .open else { return }
+        let artifact = frame.artifact
+        let content = ArtifactMenuController(hub: hub, instanceId: instanceId, shown: (artifact.id, artifact.kind, artifact.name),
+                                             held: frame.artifacts)
+        menu = content
+        content.loadViewIfNeeded()
+        KitPopover.present(content, from: titleButton, in: self, align: .start, side: .bottom, offset: Space.space1)
+        #if DEBUG
+        PreviewProbe.say("artifact menu open")
+        #endif
+    }
 }
 
 extension PreviewController: UIGestureRecognizerDelegate {
@@ -1920,6 +2863,75 @@ final class GrabArea: UIControl {
             action.window != nil && !action.isHidden && action.bounds.contains(action.convert(point, from: self))
         }
     }
+}
+
+/// One head control in a touch target's room (HIG Layout: "44x44 pt"): at
+/// least 44pt square, `space-1` either side of the control, and a touch
+/// anywhere in it lands on the control's nearest point.
+final class HeadSlot: UIView {
+    let control: UIView
+
+    init(_ control: UIView) {
+        self.control = control
+        super.init(frame: .zero)
+        control.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(control)
+        let snug = widthAnchor.constraint(equalTo: control.widthAnchor, constant: Space.space1 * 2)
+        snug.priority = .defaultHigh
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: 44),
+            widthAnchor.constraint(greaterThanOrEqualToConstant: 44),
+            widthAnchor.constraint(greaterThanOrEqualTo: control.widthAnchor, constant: Space.space1 * 2),
+            snug,
+            control.centerXAnchor.constraint(equalTo: centerXAnchor),
+            control.centerYAnchor.constraint(equalTo: centerYAnchor),
+        ])
+        // The control keeps its own width, so the head's room goes to the name and nowhere else.
+        control.setContentHuggingPriority(.required, for: .horizontal)
+        control.setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) { fatalError("HeadSlot is built in code") }
+
+    /// The room the slot takes in the head, as its control stands now.
+    var fittingWidth: Double {
+        max(44, control.systemLayoutSizeFitting(UIView.layoutFittingCompressedSize).width + Space.space1 * 2)
+    }
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        guard !isHidden, alpha > 0.01, isUserInteractionEnabled, bounds.contains(point) else { return nil }
+        let box = control.frame.insetBy(dx: 1, dy: 1)
+        let near = CGPoint(x: min(max(point.x, box.minX), box.maxX), y: min(max(point.y, box.minY), box.maxY))
+        return control.hitTest(convert(near, to: control), with: event) ?? control
+    }
+}
+
+/// The head's row: a touch above or below the artifact's name, in the
+/// head's 44pt, is the name's (HIG Layout: "44x44 pt"), as each control's slot is.
+final class HeadRow: UIStackView {
+    weak var name: UIView?
+
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        guard let name, name.window != nil, hit == nil || !(hit is UIControl) else { return hit }
+        let at = convert(point, to: name)
+        guard bounds.contains(point), at.x >= 0, at.x <= name.bounds.width else { return hit }
+        return name
+    }
+}
+
+/// The preview's page: a web view of its own class, so whether the keyboard
+/// is in it (`PreviewKeys.pageHolds`) is told from any other web view's.
+final class PreviewPage: WKWebView {}
+
+/// The app's key commands ask this before they act (AppDelegate
+/// `canPerformAction`): while a preview's page has the keyboard, every key is
+/// the page's first, as on the web, and the page hands back the shell's own
+/// combos it leaves alone (`cawco:shortcut`).
+@MainActor
+public enum PreviewKeys {
+    public static var pageHolds: Bool { PreviewController.pageHoldsKeys }
 }
 
 /// Holds the preview weakly: a content controller retains its handlers.

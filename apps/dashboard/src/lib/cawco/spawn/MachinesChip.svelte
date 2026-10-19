@@ -180,9 +180,6 @@
         transform var(--dur-toggle) var(--ease-out);
     }
   }
-  .row.on {
-    background: var(--surface-fill);
-  }
   .row:disabled {
     cursor: not-allowed;
     opacity: 0.55;
@@ -243,5 +240,17 @@
     font: var(--type-meta);
     color: var(--ink-subtle);
     text-align: center;
+  }
+  /* A chosen machine takes the selected wash, never the hover step. */
+  .row.on {
+    background: var(--selected-bg);
+  }
+  /* Its name and its second line: ink-subtle measures 4.23:1 on the wash
+     by day, selected-ink 4.73:1 (DESIGN.md Colors: Selected). */
+  .row.on :global(:is([data-slot="name"], [data-slot="meta"])) {
+    color: var(--selected-ink);
+  }
+  .row.on :global(svg.check) {
+    color: var(--selected-icon);
   }
 </style>

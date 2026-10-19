@@ -49,7 +49,7 @@ import { type Kit, ROOT, type Spec } from "../kit";
 import { type Relay, relay } from "../relay";
 
 const AXE = "/opt/homebrew/bin/axe";
-/** iOS 18.5: where axe reaches the simulator from a workspace (ios-seen.ts). */
+/** iOS 18.5, the app's oldest target, as the other iOS specs run it. */
 const SIM = {
   runtime: "com.apple.CoreSimulator.SimRuntime.iOS-18-5",
   device: "iPhone 16 Pro",
@@ -422,7 +422,7 @@ async function answerLost(p: Probe): Promise<void> {
 async function refused(p: Probe): Promise<void> {
   // The hub's own refusal of a send (server.ts `inputRefusal`): its session's conversation is gone.
   p.fleet.write(
-    "UPDATE instances SET last_error = ? WHERE id = ?",
+    "UPDATE instances SET last_error = ?, last_error_kind = 'conversation-gone' WHERE id = ?",
     CLAUDE_CONVERSATION_GONE,
     p.session
   );

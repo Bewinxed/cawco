@@ -45,8 +45,9 @@
  *     5 MB PNG and a .txt are refused over the grid with their sentences,
  *     and nothing is added.
  *
- * The scratch hub builds the canvas page with `CAWCO_PROBE_HOOKS=1` (core
- * canvas-host.ts), which exposes the binding as `window.cawcoCanvasProbe`.
+ * A scratch fleet's hub builds the canvas page with its own `bindingMade`
+ * (scripts/stand-ins/canvas-bound.ts), which exposes the binding as
+ * `window.cawcoCanvasProbe`.
  */
 import type { CDPSession, Frame, Page } from "playwright-core";
 import { previewRoute } from "../../../packages/core/src/frames";
@@ -180,8 +181,6 @@ const setUp = async (kit: Kit): Promise<OnCanvas> => {
   const fleet = await kit.fleet(respond);
   fleet.launch("sessiond");
   await fleet.sessiondUp();
-  // The canvas page the hub builds shows the probe its binding (check 10).
-  fleet.env.CAWCO_PROBE_HOOKS = "1";
   fleet.launch("hub");
   await fleet.hubUp();
   fleet.fileAccount();
@@ -800,7 +799,7 @@ interface ProbeElement {
   y: number;
 }
 
-/** The page's binding as the probe hook shows it (scene.ts, `CAWCO_PROBE_HOOKS`). */
+/** The page's binding as a scratch fleet's page shows it (scripts/stand-ins/canvas-bound.ts). */
 interface CanvasProbe {
   api: {
     getAppState: () => {

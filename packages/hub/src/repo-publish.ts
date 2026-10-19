@@ -18,16 +18,16 @@
  *   project is then linked to it, as `link_repo` links one.
  */
 import {
-  CAWCO_ENV,
   CONTROL_PLACE_PUSH,
   type PlacePush,
   type ProjectSettingChange,
-  readEnv,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { GIT_LOCALE } from "@cawco/core/safe-git";
 import type { Connections } from "./connections";
 import type { ProjectRow } from "./db";
 import type { PlaceRepos } from "./place-repo";
+import { GITHUB_API } from "./upstreams";
 
 /** GitHub's rule for a repository's name. */
 const REPO_NAME = /^[A-Za-z0-9._-]{1,100}$/;
@@ -164,6 +164,7 @@ export const createRepoPublish = ({
           env: {
             PATH: process.env.PATH ?? "/usr/bin:/bin",
             HOME: process.env.HOME ?? "/",
+            ...GIT_LOCALE,
             GIT_TERMINAL_PROMPT: "0",
             GIT_CONFIG_COUNT: "1",
             GIT_CONFIG_KEY_0: "http.extraHeader",
@@ -213,9 +214,8 @@ export const createRepoPublish = ({
       false,
     ])) as PlacePush;
     const token = connections.githubToken(change.connection);
-    const api = readEnv(CAWCO_ENV.githubApi) ?? "https://api.github.com";
     const asked = await readWithin(API_MS, async (signal) => {
-      const response = await fetch(`${new URL(api).origin}/user/repos`, {
+      const response = await fetch(`${new URL(GITHUB_API).origin}/user/repos`, {
         method: "POST",
         headers: {
           Accept: "application/vnd.github+json",

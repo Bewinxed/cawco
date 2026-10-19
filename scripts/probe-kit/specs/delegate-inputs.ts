@@ -212,6 +212,7 @@ const handsOn = async (
 
 const spec: Spec = {
   name: "delegate-inputs",
+  host: "it delegates, so its fleet cuts workspaces",
   run: async (kit: Kit) => {
     const { check } = kit;
     const { fleet, home, parent, src } = await setUp(kit);

@@ -107,8 +107,7 @@ enum SessionMenus {
         first.append(pending("Fork", running: "Forking…", image: Glyph.structure.image, verb: .fork, id: id, status: status,
                              host: host, hub: hub, enabled: forkable != nil && machine != nil) {
             guard let key = forkable else { return nil }
-            return try await hub.fork(machineId: row.machineId, cwd: row.cwd, sessionKey: key,
-                                      harness: row.harness.flatMap { .init(rawValue: $0) } ?? .claude)
+            return try await hub.fork(machineId: row.machineId, cwd: row.cwd, sessionKey: key, harness: row.harness)
         } then: { forked in
             if let forked { context.open(forked) }
         })
@@ -197,7 +196,7 @@ enum SessionMenus {
         first.append(pending("Fork from here", running: "Forking…", image: Glyph.structure.image, verb: .fork, id: to,
                              status: row?.status.rawValue, host: host, hub: hub) {
             try await hub.fork(machineId: machineId, cwd: info.cwd ?? "", sessionKey: info.sessionId,
-                               harness: .init(rawValue: harness) ?? .claude)
+                               harness: info.harness)
         } then: { forked in
             if let forked { context.open(forked) }
         })
@@ -233,7 +232,7 @@ enum SessionMenus {
                     body: ["“\(title)” is removed from \(info.cwd.flatMap { $0.isEmpty ? nil : $0 } ?? "this machine"), for good. Nothing else on the machine is touched."],
                     confirmLabel: "Delete transcript", pendingLabel: "Deleting…", destructive: true
                 ) {
-                    try await deleteTranscript(hub: hub, machineId: machineId, sessionKey: info.sessionId, dir: info.cwd, harness: harness)
+                    try await deleteTranscript(hub: hub, machineId: machineId, sessionKey: info.sessionId, dir: info.cwd, harness: info.harness)
                 }), from: host, context: context)
             },
         ]
@@ -359,8 +358,9 @@ enum SessionMenus {
 
 
     /// client.svelte.ts `deleteTranscript`: the machine deletes it, then its catalog is read again.
-    private static func deleteTranscript(hub: HubConnection, machineId: String, sessionKey: String, dir: String?, harness: String?) async throws {
-        try await hub.deleteSession(machineId: machineId, sessionKey: sessionKey, dir: dir, harness: harness.flatMap { .init(rawValue: $0) })
+    private static func deleteTranscript(hub: HubConnection, machineId: String, sessionKey: String, dir: String?,
+                                         harness: Components.Schemas.HarnessKind) async throws {
+        try await hub.deleteSession(machineId: machineId, sessionKey: sessionKey, dir: dir, harness: harness)
         try await hub.reloadCatalog(machineId)
     }
 

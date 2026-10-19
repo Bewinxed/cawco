@@ -71,6 +71,7 @@
 import { join } from "node:path";
 import type { Subprocess } from "bun";
 import type { Browser, Page } from "playwright-core";
+import { spawnedPid } from "../packages/core/src/signal";
 import { ensureDeps } from "./lib/deps";
 import type { Reply, Seen } from "./scratch-fleet";
 
@@ -737,8 +738,9 @@ const teardown = () => {
   tornDown ??= (async () => {
     stream?.kill();
     await browser?.close().catch(() => undefined);
-    if (dashboard) {
-      await fleet.killTree(dashboard.pid, "SIGTERM").catch(() => undefined);
+    const dashboardPid = dashboard ? spawnedPid(dashboard) : undefined;
+    if (dashboardPid !== undefined) {
+      await fleet.killTree(dashboardPid, "SIGTERM").catch(() => undefined);
     }
     await fleet.close();
     proxy.stop();

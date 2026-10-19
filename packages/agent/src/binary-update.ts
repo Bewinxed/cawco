@@ -169,7 +169,7 @@ const readKeepers = (): Promise<
     endpoint: string;
     /** Its sessions: what an update the new agent cannot speak to it would wait on. */
     held: number;
-    keeper: { kind: "build" | "legacy"; version: string };
+    keeper: KeeperName;
     /** Every live child, a session, a workspace's boundary or an OpenCode server: what it must be rid of before it goes. */
     live: number;
   }[]
@@ -1403,8 +1403,7 @@ export class BinaryUpdater {
 
   /**
    * THE KEEPER FOLLOWS THE BUILD THIS AGENT RUNS, AND WAITS ON NOTHING. When
-   * the current keeper is not this build's own (a legacy keeper, or one of an
-   * earlier build), the update helper hands it over (`binary-apply
+   * the current keeper is not this build's own, the update helper hands it over (`binary-apply
    * <version> --keeper-only`): this build's keeper starts beside it and takes
    * every new session, and the one before keeps the sessions it holds until
    * each ends or sleeps (#tendKeepers). Nothing restarts, so nothing is
@@ -1456,7 +1455,7 @@ export class BinaryUpdater {
     }
     this.#handedAt = Date.now();
     console.info(
-      `[update] the session keeper ${current.keeper.version}${current.keeper.kind === "legacy" ? " (from before keepers ran side by side)" : ""} is handed over to ${runtimeVersion}'s`
+      `[update] the session keeper ${current.keeper.version} is handed over to ${runtimeVersion}'s`
     );
     await launchApplyHelper(["binary-apply", runtimeVersion, "--keeper-only"]);
   }

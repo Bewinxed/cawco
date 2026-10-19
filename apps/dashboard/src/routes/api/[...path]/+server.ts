@@ -47,15 +47,26 @@ const PARTIAL_CONTENT = 206;
  *
  * Under `vite dev` or `vite preview` this process's CAWCO_HUB_URL is the
  * required `CAWCO_DEV_HUB_URL`, set by vite.config.ts before this module
- * loads, so the default below is reached only by the production server.
+ * loads; the production server (serve.js) does not start without it. Read on
+ * the first request, not as the module loads: a build imports this module
+ * and talks to no hub.
  */
-const HUB_URL = (() => {
-  const raw = readEnv(CAWCO_ENV.hubUrl) || "http://localhost:3456";
-  const http = raw
-    .replace(WS_SCHEME, "http$1://")
-    .replace(TRAILING_WS_PATH, "");
-  return http.replace(TRAILING_SLASHES, "");
-})();
+let hubUrl: string | undefined;
+const hubOrigin = (): string => {
+  if (hubUrl === undefined) {
+    const raw = readEnv(CAWCO_ENV.hubUrl);
+    if (!raw) {
+      throw new Error(
+        `The dashboard's server has no ${CAWCO_ENV.hubUrl}, so it cannot reach the hub.`
+      );
+    }
+    hubUrl = raw
+      .replace(WS_SCHEME, "http$1://")
+      .replace(TRAILING_WS_PATH, "")
+      .replace(TRAILING_SLASHES, "");
+  }
+  return hubUrl;
+};
 
 /**
  * Proxy all API requests to the hub server
@@ -66,7 +77,7 @@ async function proxyToHub(
   clientAddress?: string
 ): Promise<Response> {
   const url = new URL(request.url);
-  const targetUrl = `${HUB_URL}/api/${path}${url.search}`;
+  const targetUrl = `${hubOrigin()}/api/${path}${url.search}`;
   const authorization = request.headers.get("authorization");
   // The person's paired-device cookie and nothing else of the browser's
   // (core hub-auth.ts): the hub reads who is calling from it.

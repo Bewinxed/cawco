@@ -229,19 +229,24 @@
     height: 16px;
   }
   @media (prefers-reduced-motion: no-preference) {
-    .side-head :global(:is(button, a):not([role="tab"]):active) {
+    /* `[data-pressed]`: a kit menu Trigger keeps its press while its menu takes focus (f5082a811). */
+    .side-head
+      :global(:is(button, a):not([role="tab"]):is(:active, [data-pressed])) {
       transform: scale(var(--press-scale));
     }
   }
+  /* A pressed button stands a step past the hover by day (the kit Toggle's
+     on state), and keeps it under the pointer. */
   .side-head :global(button[aria-pressed="true"]:not([role="tab"])) {
-    background: var(--surface-fill);
+    background: light-dark(var(--surface-fill-strong), var(--surface-fill));
     color: var(--ink-strong);
   }
   .side-head :global(button:disabled) {
     opacity: 0.5;
   }
   @media (hover: hover) {
-    .side-head :global(:is(button, a):not([role="tab"]):hover) {
+    .side-head
+      :global(:is(button, a):not([role="tab"], [aria-pressed="true"]):hover) {
       background: var(--surface-hover);
     }
   }

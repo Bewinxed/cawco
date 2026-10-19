@@ -3,14 +3,15 @@
    * A conversation and the surface beside it (PRD §5.2): the transcript in
    * one side of the resizable split (Split), and on the other, inset on the
    * preview sheet's recipe, what the conversation has to show — its plan,
-   * its preview, a task one of its cards opened, a project folder's file
-   * one of its chips opened, or more than one under a switch. On a desk it
-   * is the split. Under 900px each rises on its own: the preview or the
-   * file as a sheet standing on the composer (SideSheet), so the reader can
-   * write while it is up; the plan as the house bottom sheet
+   * its preview, a task one of its cards opened, or more than one under a
+   * switch. On a desk and at an iPad's regular width it is the split. On a
+   * phone, or in a desk's pane under 900px (layoutPolicy.sideDrawer), each
+   * rises on its own: the preview as a sheet standing on the composer
+   * (SideSheet), so the reader can write while it is up; the plan as the house bottom sheet
    * (the kit Drawer), from the screen's foot over the composer, as tall as
    * what it holds. A task there is its own page (the project page's
-   * `?task=`), never a sheet: the thread's cards link to it. A session and
+   * `?task=`), never a sheet: the thread's cards link to it, as a thread's
+   * file chips link to the page's `?file=`. A session and
    * a thread (whose plan is its project's lead's) draw it alike. A page can
    * stand its own surface there instead (`side`, a project's Caw dock): the
    * split on a desk, the kit's bottom sheet under 900px.
@@ -21,6 +22,7 @@
    * pane closes its own content; with nothing left the split collapses. Its
    * width and expansion are the conversation's own, kept across visits.
    */
+  import { sideWords } from "@cawco/core";
   import type { Snippet } from "svelte";
   import { untrack } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -38,7 +40,7 @@
   import SideSheet from "./SideSheet.svelte";
   import Split from "./Split.svelte";
 
-  type Shown = "plan" | "preview" | "task" | "file";
+  type Shown = "plan" | "preview" | "task";
 
   let {
     viewId,
@@ -49,8 +51,6 @@
     phone,
     taskOpen = false,
     task,
-    fileOpen = false,
-    file,
     share = $bindable(0),
     side,
     sideOpen = false,
@@ -73,20 +73,16 @@
      */
     active: boolean;
     visible: boolean;
-    /** Under 900px: the surface is a sheet, not a split. */
+    /**
+     * The surface is a sheet, not a split (layoutPolicy.sideDrawer): a phone,
+     * or a fine pointer's pane under 900px; an iPad's regular width splits a
+     * pane 640px or wider.
+     */
     phone: boolean;
     /** A task one of the conversation's cards opened stands beside it (a desk only). */
     taskOpen?: boolean;
     /** The task's card, handed the switch while another surface is open too. */
     task?: Snippet<[Snippet | undefined]>;
-    /**
-     * A file of the project's folder one of a thread's chips opened
-     * (FolderFile): beside the conversation on a desk, on the sheet over the
-     * composer under 900px.
-     */
-    fileOpen?: boolean;
-    /** The file's card, handed the switch while another surface is open too. */
-    file?: Snippet<[Snippet | undefined]>;
     /** The surface's share of the width, in percent: 0 while closed or a sheet. */
     share?: number;
     /**
@@ -116,16 +112,12 @@
   let planAsked = $state(false);
   const planOpen = $derived(planAsked && hasPlan);
   const taskShown = $derived(taskOpen && !!task && !phone);
-  const fileShown = $derived(fileOpen && !!file);
-  const open = $derived(
-    side ? sideOpen : previewOpen || planOpen || taskShown || fileShown
-  );
+  const open = $derived(side ? sideOpen : previewOpen || planOpen || taskShown);
   /** What is open, in the switch's order. */
   const opened = $derived<Shown[]>([
     ...(planOpen ? (["plan"] as const) : []),
     ...(previewOpen ? (["preview"] as const) : []),
     ...(taskShown ? (["task"] as const) : []),
-    ...(fileShown && !phone ? (["file"] as const) : []),
   ]);
   let tab = $state<Shown>("plan");
   /** The one on show: the one chosen while it is open, else the newest there is. */
@@ -149,14 +141,6 @@
     }
     taskWas = now;
   });
-  let fileWas = untrack(() => fileShown);
-  $effect(() => {
-    const now = fileShown;
-    if (now && !fileWas) {
-      tab = "file";
-    }
-    fileWas = now;
-  });
 
   /** Opens the surface on the plan: the plan's ring. */
   export function openPlan(): void {
@@ -172,9 +156,16 @@
   /** The surface beside the transcript, on screen or not. */
   const desktopOpen = $derived(open && !phone);
 
+  /**
+   * The sheet stays mounted while its conversation's tab is off screen,
+   * closed (SideSheet), so its preview keeps its page as a desk's split
+   * does (preview/loaded.svelte.ts holds or unloads it); only the sheet of
+   * the tab in front is open.
+   */
   let sheetMounted = $state(false);
+  const sheetOpen = $derived(previewOpen && visible && active);
   $effect(() => {
-    if (phone && (previewOpen || fileShown) && visible && active) {
+    if (phone && previewOpen) {
       sheetMounted = true;
       return;
     }
@@ -188,10 +179,9 @@
   });
 
   const LABEL: Record<Shown, string> = {
-    plan: "Plan",
-    preview: "Preview",
-    task: "Task",
-    file: "File",
+    plan: sideWords.plan,
+    preview: sideWords.preview,
+    task: sideWords.task,
   };
 </script>
 
@@ -204,7 +194,7 @@
     size="compact"
     value={shown}
   >
-    <TabsList aria-label="Beside the conversation">
+    <TabsList aria-label={sideWords.label}>
       {#each opened as each (each)}
         <TabItem label={LABEL[each]} value={each} />
       {/each}
@@ -218,8 +208,6 @@
     {@render side(false)}
   {:else if shown === "task" && taskShown && task}
     {@render task(switched)}
-  {:else if shown === "file" && fileShown && file}
-    {@render file(switched)}
   {:else if shown === "plan" && planOf && planOpen}
     <PlanPane
       instanceId={planOf}
@@ -246,33 +234,24 @@
 {/snippet}
 
 {#snippet sheets()}
-  {#if sheetMounted && phone && visible && active}
-    <!-- One sheet on the composer: the file while one is open, else the
-         preview; Escape closes the file from its own Close. -->
+  {#if sheetMounted && phone}
+    <!-- The preview's sheet on the composer. Off screen it stays, closed,
+         with its page held. -->
     <SideSheet
       content={root}
       instanceId={previewId}
-      onkeyescape={(event) => {
-        if (!fileShown) {
-          previewPane?.parentEscape(event);
-        }
-      }}
-      open={previewOpen || fileShown}
+      onkeyescape={(event) => previewPane?.parentEscape(event)}
+      open={sheetOpen}
     >
-      {#if fileShown && file}
-        <RegionBoundary region="file">
-          {@render file(undefined)}
-        </RegionBoundary>
-      {:else}
-        <RegionBoundary region="preview">
-          <PreviewPane
-            instanceId={previewId}
-            linkSession={previewId !== viewId}
-            sheet
-            bind:this={previewPane}
-          />
-        </RegionBoundary>
-      {/if}
+      <RegionBoundary region="preview">
+        <PreviewPane
+          instanceId={previewId}
+          linkSession={previewId !== viewId}
+          onScreen={visible && active}
+          sheet
+          bind:this={previewPane}
+        />
+      </RegionBoundary>
     </SideSheet>
   {/if}
   {#if side && phone && visible && active}

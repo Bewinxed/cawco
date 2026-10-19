@@ -13,7 +13,7 @@
  * the burst is delivered as one message carrying them
  * ({@link ArtifactServiceDeps.deliverMarks}).
  */
-import { readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import {
   type AgentRow,
@@ -54,26 +54,39 @@ import {
   type SendBody,
   type ThreadEntry,
 } from "@cawco/core/comments";
+import { type GraphPlace, PLACES_KEY } from "@cawco/core/decisions";
 import type { InkGroup } from "@cawco/core/ink";
 import { type FolderWeight, pageHash } from "@cawco/core/preview-proxy";
-import {
-  type Found,
-  type ServeSpec,
-  SHEET_PATH,
-  type SheetRead,
-  type SheetWeight,
-  type SheetWrite,
-  type SheetWritten,
-  type StageError,
-  type StageFrame,
-  type StageOpened,
-  type StageState,
-  type StoryOp,
+import type {
+  CanvasDial,
+  CanvasEdge,
+  CanvasSpec,
+  DesignMap,
+  DesignQuery,
+  RenderReport,
+  ServeSpec,
+  SheetRead,
+  SheetWeight,
+  SheetWrite,
+  SheetWritten,
+  StageError,
+  StageFrame,
+  StageOpened,
+  StageState,
+  StoryOp,
 } from "@cawco/core/stage";
 import { writeStateFileSync } from "@cawco/core/state-file";
 import { applyPatch, type Operation } from "rfc6902";
-import { Doc, encodeStateAsUpdate } from "yjs";
+import type { Doc } from "yjs";
 import type { ArtifactRow, ArtifactsDb } from "../db/artifacts";
+import {
+  type BuiltProgram,
+  mergeProgram,
+  PROGRAM_FILE,
+  ProgramRefusal,
+  readKept,
+  type StatementChange,
+} from "../decision-program";
 import { sessionLabel } from "../labels";
 import {
   changeFolderFiles,
@@ -87,6 +100,23 @@ import {
   deleteElements,
   screenJoined,
 } from "./canvas";
+import {
+  type CanvasInput,
+  COMPONENT_EXAMPLE,
+  canvasOf,
+  canvasPath,
+  canvasProblem,
+  errorsSaid,
+  movesSaid,
+  READ_HINT,
+  renderSaid,
+  type StateAsk,
+  specOf,
+  stateSaid,
+  storiesSaid,
+  unseen,
+  weightSaid,
+} from "./component";
 import type { ArtifactDocs } from "./docs";
 import { picturePath } from "./sync";
 
@@ -102,12 +132,28 @@ export class ArtifactRefusal extends Error {
   }
 }
 
+/** A program the hub can't keep, refused as the artifact's (decision-program.ts). */
+const refusedProgram = (error: ProgramRefusal): ArtifactRefusal =>
+  new ArtifactRefusal(error.status, error.message, { cause: error });
+
+/** Statements lang-core could not merge into the program: nothing was changed. */
+const unmerged = (error: unknown): ArtifactRefusal =>
+  new ArtifactRefusal(
+    422,
+    `The statements did not merge: ${error instanceof Error ? error.message : String(error)}. Nothing was changed.`,
+    { cause: error }
+  );
+
 /**
  * What a create or a re-create names: a page from `html` or `dir`, a
  * preview of `port` or `dir` on `machine`, opened at `path`, or a canvas
  * drawn from skeleton `elements` or `mermaid`; each kind's fields only.
  */
 export interface ArtifactInput {
+  /** A component canvas's one line of purpose, drawn under its name. */
+  about?: string | undefined;
+  /** A component canvas's dials: a CSS variable on every frame, or an arg. */
+  dials?: CanvasDial[] | undefined;
   dir?: string | undefined;
   /**
    * A canvas the person opened in the composer (a pen's swipe, Draw, ⌘⇧D,
@@ -115,10 +161,14 @@ export interface ArtifactInput {
    * and not shown in the panel by being made.
    */
   draft?: boolean | undefined;
+  /** A component canvas's layout edges between frames, by story. */
+  edges?: CanvasEdge[] | undefined;
   /** A canvas's skeleton elements (Excalidraw's `convertToExcalidrawElements`). */
   elements?: SkeletonElement[] | undefined;
-  /** A sheet's story file, from the session's clone's root or absolute. */
-  file?: string | undefined;
+  /** A component canvas's states file (or files, one section each), from the session's clone's root or absolute. */
+  file?: string | string[] | undefined;
+  /** A component canvas's groups: story → the parent story or heading it stands under. */
+  group?: Record<string, string> | undefined;
   html?: string | undefined;
   kind: ArtifactKind;
   machine?: string | undefined;
@@ -127,6 +177,8 @@ export interface ArtifactInput {
   name: string;
   path?: string | undefined;
   port?: number | undefined;
+  /** A decision page's OpenUI Lang program over the decision library (decision-program.ts). */
+  program?: string | undefined;
   /**
    * What serves a workspace's port (core `ServeSpec`): the command the
    * workspace's stage runs and keeps up on `port`, in `cwd` from the clone's
@@ -163,8 +215,12 @@ export type SkeletonElement = { id?: string; type: string } & Record<
 export type CanvasChange =
   { elements: SkeletonElement[] } | { delete: string[] } | { mermaid: string };
 
-/** What `artifact_update` changes on a page: exactly one of these. */
-export type PageChange = { html: string } | { patch: Operation[] };
+/**
+ * What `artifact_update` changes on a page: exactly one of these. A
+ * decision page's `statements` are merged into its program by name.
+ */
+export type PageChange =
+  { html: string } | { patch: Operation[] } | { statements: string };
 
 /** What `artifact_update` and the inspector's Save change on a sheet: one story's args, or one story op. */
 export type SheetChange =
@@ -179,16 +235,17 @@ export type SheetChange =
 
 /** The fields each kind takes, and what its refusal says it takes. */
 const KIND_FIELDS = {
-  page: { fields: ["html", "dir"], takes: "html or dir" },
+  page: { fields: ["program", "html", "dir"], takes: "program, html or dir" },
   preview: {
     fields: ["port", "dir", "path", "machine", "workspace", "serve"],
     takes: "port or dir",
   },
   canvas: { fields: ["elements", "mermaid"], takes: "elements or mermaid" },
-  sheet: { fields: ["file"], takes: "file" },
+  component: { fields: ["file"], takes: "file" },
 } as const;
 
 const INPUT_FIELDS = [
+  "program",
   "html",
   "file",
   "dir",
@@ -252,8 +309,12 @@ export interface ArtifactRead {
   deleted?: string[];
   /** A canvas the person opened in the composer and has not sent yet. */
   draft?: boolean;
-  /** A sheet's write: the story file, from the clone's root, and the 1-based lines it changed. */
-  edit?: { file: string; lines: { from: number; to: number } };
+  /** A sheet's write: the story file, from the clone's root, the 1-based lines it changed, and the formatter that shaped them. */
+  edit?: {
+    file: string;
+    formatted?: string | null;
+    lines: { from: number; to: number };
+  };
   id: string;
   kind: ArtifactKind;
   missing?: string[];
@@ -287,6 +348,24 @@ export interface ArtifactRead {
   wrote?: string[];
 }
 
+/**
+ * What a decision page's revision (`statements`) answers: what it changed,
+ * not the page. The person's picks are read with `artifact_read`.
+ */
+export interface Revised {
+  /** Its decisions now, by id, in page order. */
+  decisions: string[];
+  /** Components the library does not have, dropped and never drawn. */
+  dropped?: string[];
+  id: string;
+  /** Decisions the revision added or took out, by id; a removed one's pick is kept. */
+  moved: { added: string[]; removed: string[] };
+  pageHash: string;
+  revision: number;
+  /** Statements by name: new, rewritten, and dropped because nothing reaches them. */
+  statements: StatementChange;
+}
+
 /** A decision page's choice, as the kit marks it (`data-cawco-choice="<id>"`). */
 const CHOICE_ATTRIBUTE = /\bdata-cawco-choice="([^"]+)"/g;
 
@@ -317,10 +396,20 @@ export interface ArtifactStatus {
 }
 
 export interface Created {
+  /** A decision page's decisions, by id, in page order. */
+  decisions?: string[];
+  /** Components a decision page's program names that the library does not have: dropped, never drawn. */
+  dropped?: string[];
+  /** A component canvas's compile errors, from the modules its states files import. */
+  errors?: ReturnType<typeof errorsSaid>;
+  /** A component canvas's next reads, one line. */
+  hint?: string;
   /** Host mode's `name[:port]` beside `origin`: a bridge for readers before it (core `PreviewAddress`). */
   host?: string;
   id: string;
   kind: ArtifactKind;
+  /** A component canvas's flow moves, each with the animations it fired. */
+  moves?: ReturnType<typeof movesSaid>;
   name: string;
   /** A canvas made with nothing to draw says so. */
   note?: string;
@@ -336,12 +425,18 @@ export interface Created {
   /** A canvas's outline once drawn (core `canvasOutline`). */
   outline?: string;
   port?: number;
+  /** What a browser drew of a component canvas (the panel's, else the daemon's): each frame's state, and what it loads. */
+  render?: ReturnType<typeof renderSaid> & {
+    weight: ReturnType<typeof weightSaid>;
+  };
   /** Its live document on the hub's preview listener. */
   route: string;
   /** A sheet as its stage reads it: its stories with their args, its meta, and each component's props. */
   sheet?: SheetRead;
   /** A sheet's stage, or a served preview's server, as it stands once started. */
   stage?: StageState;
+  /** A draft canvas's origin on the tailnet name while the hub serves HTTPS there (core `PreviewAddress`). */
+  tailnet?: PreviewAddress["tailnet"];
   /** A folder preview's: what it loads at most, from its folder's files. */
   weight?: FolderWeight;
   /** Why it is not on screen, one sentence; only with `opened: false`. */
@@ -532,24 +627,74 @@ const patchedEntries = (
   return next;
 };
 
-/** A name for a preview made before artifacts had names: its port, or its folder's leaf. */
-export const legacyName = (place: string): string =>
-  place
-    .toLowerCase()
-    .replaceAll(/[^a-z0-9]+/g, "-")
-    .replaceAll(/^-+|-+$/g, "")
-    .slice(0, 63) || "preview";
+/** What `artifact_update` answers for a component canvas's write: nothing past the story it wrote (component canvas §4, G2). */
+export interface ComponentWritten {
+  file: string;
+  /** The project's formatter that shaped the lines, like "prettier 3.9.10"; null when the project has none. */
+  formatted: string | null;
+  lines: { from: number; to: number };
+  render: ReturnType<typeof renderSaid>["frames"] | "unseen";
+  story: { args: Record<string, unknown>; name: string } | null;
+}
+
+/** The story a story op names. */
+const storyOfOp = (op: StoryOp): string | null => {
+  if ("add" in op) {
+    return op.add;
+  }
+  if ("duplicate" in op) {
+    return op.as;
+  }
+  return "move" in op ? op.move : null;
+};
+
+/** How long a canvas just shown waits for the panel's page to draw it, and how often it looks. Ours: the page posts within a second of loading. */
+const PANEL_DRAW_MS = 4000;
+const PANEL_DRAW_POLL_MS = 500;
+
+/** What `artifact_read` asks of a component canvas beyond its picks (component canvas §4). */
+export interface ComponentReadAsk {
+  /** `story`: one story's args and code too. */
+  detail?: "summary" | "story";
+  /** A picture: of `state`'s frame, else the canvas, drawn by the daemon. */
+  png?: boolean;
+  /** Draw it now on the daemon's Chromium and answer that report. */
+  render?: boolean;
+  /** One frame's delta from rest, its transitions and parts. */
+  state?: StateAsk;
+  story?: string;
+}
 
 /** A sheet's place on its workspace's stage (core `PreviewSource`); null for any other artifact. */
 const sheetOf = (
   row: ArtifactRow
-): { dir: string; file: string; workspace: string } | null =>
-  row.kind === "sheet" &&
-  "port" in row.source &&
-  row.source.stage &&
-  row.source.workspace
-    ? { ...row.source.stage, workspace: row.source.workspace }
-    : null;
+): {
+  dir: string;
+  file: string;
+  /** Every states file of the canvas, from the clone's root: a section each. */
+  files: string[];
+  spec: CanvasSpec;
+  workspace: string;
+} | null => {
+  if (!(
+    row.kind === "component" &&
+    "port" in row.source &&
+    row.source.stage &&
+    row.source.workspace
+  )) {
+    return null;
+  }
+  const { stage } = row.source;
+  const { files, spec } = canvasOf(row.source.path ?? "");
+  return {
+    ...stage,
+    files: (files.length > 0 ? files : [stage.file]).map((one) =>
+      join(stage.dir, one)
+    ),
+    spec,
+    workspace: row.source.workspace,
+  };
+};
 
 /** A workspace preview's server (core `ServeSpec`): its workspace and port; null for any other artifact. */
 const servedOf = (
@@ -595,10 +740,6 @@ const errorSection = (error: StageError): string => {
   ].join("\n");
 };
 
-/** The sheet's page on its stage, its story file in the query with its slashes kept. */
-const sheetPath = (file: string): string =>
-  `${SHEET_PATH}?file=${encodeURIComponent(file).replaceAll("%2F", "/")}`;
-
 /** What `artifact_delete` and the panel's Remove answer: what the session's panel shows now, or null for nothing. */
 export interface Removed {
   showing: { id: string; kind: ArtifactKind; name: string } | null;
@@ -635,6 +776,18 @@ export type MarksOutcome = { ok: true } | { ok: false; reason: string };
  * panel it is in.
  */
 export type StageAt = { session: InstanceRow } | { workspace: string };
+
+/**
+ * What a page is built from: a decision page's `program` (with the folder
+ * its relative Image files are in, when it has one), inline `html`, a work
+ * folder's page.oui or page.html (`dir`), or the project folder's
+ * `decisions/<name>/`.
+ */
+export type PageFrom =
+  | { program: string; dir?: string | undefined }
+  | { html: string }
+  | { dir: string }
+  | { folder: true };
 
 export interface ArtifactServiceDeps {
   /** Closes session `instanceId`'s panel: it shows nothing, and every view of it hears so. */
@@ -700,9 +853,10 @@ export interface ArtifactServiceDeps {
   page: (
     instance: InstanceRow,
     name: string,
-    from: { html: string } | { dir: string } | { folder: true }
+    from: PageFrom
   ) => Promise<
-    { html: string } | { refused: string; status: ArtifactRefusal["status"] }
+    | { html: string; program?: BuiltProgram }
+    | { refused: string; status: ArtifactRefusal["status"] }
   >;
   /**
    * Session `instanceId`'s preview origin (preview.ts), its listener started
@@ -763,13 +917,23 @@ export interface ArtifactServiceDeps {
    */
   stage: (
     at: StageAt,
-    file: string
+    file: string,
+    files?: string[]
   ) => Promise<{ machineId: string; opened: StageOpened; workspace: string }>;
-  /** The components of the toolchain root `dir` names in session `instance`'s workspace (agent stage.ts `stageComponents`). */
+  /** The design map of session `instance`'s workspace (agent stage.ts `stageComponents`): its components, paged, or one's card. */
   stageComponents: (
     instance: InstanceRow,
-    dir: string | undefined
-  ) => Promise<{ components: Found[]; dir: string }>;
+    ask: DesignQuery
+  ) => Promise<DesignMap>;
+  /**
+   * A component canvas drawn by its workspace's daemon in the machine's own
+   * Chromium (agent stage.ts `renderStage`): the stage's report once every
+   * section drew, and a picture when asked.
+   */
+  stageRender: (
+    at: StageAt,
+    ask: { files: string[]; png?: boolean; spec?: CanvasSpec; state?: StateAsk }
+  ) => Promise<{ png?: string; report: RenderReport }>;
   /**
    * A write to a sheet's story file in its workspace, made by its stage
    * (agent stage.ts `writeSheet`): the lines it changed and the sheet after.
@@ -1049,8 +1213,61 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     }
   };
 
-  const writePage = (id: string, html: string) => {
-    writeStateFileSync(join(deps.root, id, "index.html"), html);
+  /**
+   * A page's files in its folder: its HTML, and a decision page's program
+   * and the files its Images show (an earlier revision's go first); an HTML
+   * page keeps no program.
+   */
+  const writePage = (id: string, html: string, program?: BuiltProgram) => {
+    const folder = join(deps.root, id);
+    rmSync(join(folder, "files"), { recursive: true, force: true });
+    rmSync(join(folder, PROGRAM_FILE), { force: true });
+    writeStateFileSync(join(folder, "index.html"), html);
+    if (program) {
+      writeStateFileSync(join(folder, PROGRAM_FILE), program.program);
+      for (const file of program.files) {
+        writeStateFileSync(join(folder, file.path), file.bytes);
+      }
+    }
+  };
+
+  /** A decision page's program as the hub keeps it; undefined for an HTML page or any other artifact. */
+  const programOf = (row: ArtifactRow): string | undefined => {
+    const file = join(deps.root, row.id, PROGRAM_FILE);
+    return row.kind === "page" && existsSync(file)
+      ? readFileSync(file, "utf8")
+      : undefined;
+  };
+
+  /**
+   * The artifacts a program's Canvas and Preview pieces name, each one of
+   * the panel owner's of the kind it shows: refused, every reason at once,
+   * when one is not.
+   */
+  const mediaHeld = (owner: InstanceRow, program: BuiltProgram) => {
+    const problems = program.read.artifacts.flatMap(({ component, id }) => {
+      const held = db.get(id);
+      const kinds: ArtifactKind[] =
+        component === "Canvas" ? ["canvas"] : ["page", "preview", "component"];
+      if (!held || held.instanceId !== owner.id) {
+        return [
+          `${component}("${id}"): this session's panel has no artifact ${id}.`,
+        ];
+      }
+      return kinds.includes(held.kind)
+        ? []
+        : [
+            `${component}("${id}") is ${named(held)}: a ${component} shows ${component === "Canvas" ? "a canvas" : "a page, a preview or a sheet"}.`,
+          ];
+    });
+    if (problems.length > 0) {
+      throw new ArtifactRefusal(
+        422,
+        problems.length === 1
+          ? (problems[0] ?? "")
+          : `The program has ${problems.length} problems:\n- ${problems.join("\n- ")}`
+      );
+    }
   };
 
   /** Writes the doc's meta for the artifact as the hub keeps it. */
@@ -1062,6 +1279,40 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       meta.set("revision", row.revision);
       if (hash !== null) {
         meta.set("pageHash", hash);
+      }
+    });
+  };
+
+  /** A page's hash: its program's for a decision page, else its HTML's; none for anything else. */
+  const pageHashOf = (
+    html: string | null,
+    program: BuiltProgram | undefined
+  ): string | null => {
+    if (program) {
+      return pageHash(program.program);
+    }
+    return html === null ? null : pageHash(html);
+  };
+
+  /**
+   * Where a decision page's relative Image files are read on a revision:
+   * the work folder it was published from (`dir`), kept in its doc's meta;
+   * none for one published inline or from the project's folder.
+   */
+  const keepProgramDir = (
+    row: ArtifactRow,
+    program: BuiltProgram | undefined,
+    dir: string | undefined
+  ) => {
+    if (!program) {
+      return;
+    }
+    docs.transact(row.id, "hub", (doc) => {
+      const meta = doc.getMap("meta");
+      if (dir === undefined) {
+        meta.delete("programDir");
+      } else {
+        meta.set("programDir", dir);
       }
     });
   };
@@ -1220,36 +1471,90 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return workspace;
   };
 
-  const pageHtml = async (
+  /**
+   * A page built from what a create names: its HTML, and a decision page's
+   * program, the artifacts its media show checked against `owner`'s panel.
+   */
+  const pageBuilt = async (
     instance: InstanceRow,
-    input: Pick<ArtifactInput, "name" | "html" | "dir">
-  ): Promise<string> => {
-    if (input.html !== undefined && input.dir !== undefined) {
-      throw new ArtifactRefusal(400, "A page takes html or dir, not both.");
-    }
-    if (
-      input.html === undefined &&
-      input.dir === undefined &&
-      !instance.projectId
-    ) {
+    input: Pick<ArtifactInput, "name" | "html" | "dir" | "program">,
+    owner: InstanceRow
+  ): Promise<{ html: string; program?: BuiltProgram }> => {
+    const given = [input.program, input.html, input.dir].filter(
+      (one) => one !== undefined
+    ).length;
+    if (given > 1) {
       throw new ArtifactRefusal(
         400,
-        "A page takes html, or dir with your work folder that holds page.html."
+        "A page takes one of program, html or dir."
       );
     }
-    let from: { html: string } | { dir: string } | { folder: true } = {
-      folder: true,
-    };
-    if (input.html !== undefined) {
+    if (given === 0 && !instance.projectId) {
+      throw new ArtifactRefusal(
+        400,
+        "A page takes program (a decision page, decision-page skill), html, or dir with your work folder."
+      );
+    }
+    let from: PageFrom = { folder: true };
+    if (input.program !== undefined) {
+      from = { program: input.program };
+    } else if (input.html !== undefined) {
       from = { html: input.html };
     } else if (input.dir !== undefined) {
       from = { dir: input.dir };
     }
-    const built = await deps.page(instance, input.name, from);
-    if ("refused" in built) {
-      throw new ArtifactRefusal(built.status, built.refused);
+    const page = await built(instance, input.name, from);
+    if (page.program) {
+      mediaHeld(owner, page.program);
     }
-    return built.html;
+    return page;
+  };
+
+  /** Refuses new HTML for what takes none: an artifact that is no page, or a decision page written as a program. */
+  const takesHtml = (row: ArtifactRow): void => {
+    if (row.kind !== "page") {
+      throw new ArtifactRefusal(
+        409,
+        `${row.name} is a ${row.kind}: only a page takes new HTML.`
+      );
+    }
+    if (programOf(row) !== undefined) {
+      throw new ArtifactRefusal(
+        409,
+        `${row.name} is a decision page written as a program: revise it with statements.`
+      );
+    }
+  };
+
+  /** What a create answers of a decision page: its decisions, and the components it dropped. */
+  const programAnswer = (
+    program: BuiltProgram | undefined
+  ): Pick<Created, "decisions" | "dropped"> => {
+    if (!program) {
+      return {};
+    }
+    return {
+      decisions: program.read.cards.map((card) => card.id),
+      ...(program.dropped.length > 0 ? { dropped: program.dropped } : {}),
+    };
+  };
+
+  /** `deps.page`'s build, its refusal (and a program's) thrown as the artifact's. */
+  const built = async (
+    instance: InstanceRow,
+    name: string,
+    from: PageFrom
+  ): Promise<{ html: string; program?: BuiltProgram }> => {
+    let page: Awaited<ReturnType<ArtifactServiceDeps["page"]>>;
+    try {
+      page = await deps.page(instance, name, from);
+    } catch (error) {
+      throw error instanceof ProgramRefusal ? refusedProgram(error) : error;
+    }
+    if ("refused" in page) {
+      throw new ArtifactRefusal(page.status, page.refused);
+    }
+    return page;
   };
 
   /*
@@ -1948,8 +2253,28 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     };
   };
 
-  /** Keeps the stage's state (and the sheet as it reads, when read) in the sheet's doc. */
-  const writeStage = (row: ArtifactRow, state: StageState, sheet?: SheetRead) =>
+  /**
+   * Keeps the stage's state (and the sheet as it reads, when read) in the
+   * artifact's doc, and the session's preview frame, when it shows the
+   * artifact, published again with it at the same revision: a panel with no
+   * doc of its own (the app's) hears each change there, as the dashboard's
+   * pane hears it in the doc.
+   */
+  const writeStage = (
+    row: ArtifactRow,
+    state: StageState,
+    sheet?: SheetRead
+  ) => {
+    stageWritten(row, state, sheet);
+    if (deps.showing(row.instanceId) === row.id) {
+      deps.relist(row.instanceId);
+    }
+  };
+  const stageWritten = (
+    row: ArtifactRow,
+    state: StageState,
+    sheet?: SheetRead
+  ) =>
     docs.transact(row.id, "hub", (doc) => {
       const meta = doc.getMap("meta");
       const mine = sheetState(row, state);
@@ -1965,7 +2290,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** The sheet's compile errors the session has not heard. */
   const errorsOwed = (row: ArtifactRow, doc: Doc): StageError[] => {
-    if (row.kind !== "sheet") {
+    if (row.kind !== "component") {
       return [];
     }
     const meta = doc.getMap("meta");
@@ -1994,7 +2319,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 
   /** What the person saved from a sheet's inspector that the session has not heard: one section each. */
   const savesOwed = (row: ArtifactRow, doc: Doc): string[] =>
-    row.kind === "sheet"
+    row.kind === "component"
       ? ((doc.getMap("meta").get("saves") as string[] | undefined) ?? [])
       : [];
 
@@ -2104,37 +2429,118 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     return {
       ...read(db.get(row.id) as ArtifactRow, undefined, ownersRead),
       sheet: edit.sheet,
-      edit: { file: edit.file, lines: edit.lines },
+      edit: { file: edit.file, lines: edit.lines, formatted: edit.formatted },
     };
   };
 
   /**
-   * Makes a sheet in `owner`'s panel (or opens the one of that name) on the
-   * stage of its maker's workspace, and shows it.
+   * The agent's write as `artifact_update` answers it (component canvas
+   * §4): the file, the lines written, the formatter that shaped them, the
+   * story with its args after, and its frames once a browser drew them again
+   * (a panel's page redraws within a second), else `unseen`.
+   */
+  const componentWritten = async (
+    row: ArtifactRow,
+    change: SheetChange,
+    written: ArtifactRead
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the story the write named, then its frames as the panel redraws them, bounded by a short wait
+  ): Promise<ComponentWritten> => {
+    const name = "args" in change ? change.args.story : storyOfOp(change.story);
+    const story = written.sheet?.stories.find((one) => one.name === name);
+    const sheet = sheetOf(row);
+    let frames: ComponentWritten["render"] = "unseen";
+    if (sheet && name && !("story" in change && "remove" in change.story)) {
+      const at: StageAt = { workspace: sheet.workspace };
+      const deadline = Date.now() + PANEL_DRAW_MS;
+      for (;;) {
+        // biome-ignore lint/performance/noAwaitInLoops: the panel redraws as Vite's HMR lands; one read at a time until it has
+        const { report } =
+          // biome-ignore lint/performance/noAwaitInLoops: the panel redraws as Vite's HMR lands; one read at a time until it has
+          (await deps.stage(at, sheet.files[0] as string, sheet.files)).opened;
+        if (!unseen(report, name)) {
+          frames = renderSaid(report).frames.filter(
+            (one) => one.story === name
+          );
+          break;
+        }
+        if (Date.now() > deadline) {
+          break;
+        }
+        await Bun.sleep(PANEL_DRAW_POLL_MS);
+      }
+    }
+    return {
+      file: written.edit?.file ?? "",
+      lines: written.edit?.lines ?? { from: 0, to: 0 },
+      formatted: written.edit?.formatted ?? null,
+      story: story ? { name: story.name, args: story.args } : null,
+      render: frames,
+    };
+  };
+
+  /**
+   * The report of a canvas just shown or written: the panel's, once its page
+   * has drawn (it posts within a second of loading), else the daemon's own
+   * draw in the machine's Chromium. A canvas is never answered `unseen` when
+   * a browser could have drawn it.
+   */
+  const drawnReport = async (
+    at: StageAt,
+    files: string[],
+    spec: CanvasSpec,
+    opened: StageOpened,
+    shownNow: boolean,
+    story?: string
+  ): Promise<RenderReport> => {
+    let { report } = opened;
+    const deadline = Date.now() + PANEL_DRAW_MS;
+    while (shownNow && unseen(report, story) && Date.now() < deadline) {
+      // biome-ignore lint/performance/noAwaitInLoops: the panel's page posts its report as it draws; one read at a time until it has
+      await Bun.sleep(PANEL_DRAW_POLL_MS);
+      ({ report } = (await deps.stage(at, files[0] as string, files)).opened);
+    }
+    return unseen(report, story)
+      ? (await deps.stageRender(at, { files, spec })).report
+      : report;
+  };
+
+  /**
+   * Makes a component canvas in `owner`'s panel (or opens the one of that
+   * name) on the stage of its maker's workspace, shows it, and answers what
+   * a browser drew of it: the panel's draw, else the daemon's.
    */
   const createSheet = async (
     making: Making,
     input: ArtifactInput
   ): Promise<Created> => {
     const { owner, maker } = making;
-    if (input.file === undefined) {
+    const asked = input.file === undefined ? [] : [input.file].flat();
+    if (asked.length === 0) {
       throw new ArtifactRefusal(
         400,
-        "A sheet takes file: the story file whose stories it shows, like src/lib/Card.stories.ts."
+        `A component canvas takes file: its states file, the .stories.ts beside the component (or a list, one section each). Example: ${COMPONENT_EXAMPLE}.`
       );
     }
+    const problem = canvasProblem(input, true);
+    if (problem) {
+      throw new ArtifactRefusal(400, problem);
+    }
+    const at: StageAt = { session: maker };
     const { machineId, opened, workspace } = await deps.stage(
-      { session: maker },
-      input.file
+      at,
+      asked[0] as string,
+      asked
     );
+    const spec = specOf(input.name, input);
+    const files = opened.report.sections.map((one) => one.file);
     const source: PreviewSource = {
       port: opened.port,
-      path: sheetPath(opened.file),
+      path: canvasPath(files, spec),
       workspace,
       stage: { dir: opened.dir, file: opened.file },
     };
     const now = new Date();
-    const before = db.byName(owner.id, "sheet", input.name);
+    const before = db.byName(owner.id, "component", input.name);
     const row = before
       ? (db.update(before.id, {
           source,
@@ -2148,7 +2554,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
           instanceId: owner.id,
           madeBy: maker.id,
           projectId: owner.projectId ?? null,
-          kind: "sheet",
+          kind: "component",
           name: input.name,
           machineId,
           source,
@@ -2169,40 +2575,69 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       throw new ArtifactRefusal(503, shown.why);
     }
     await handUp(making, before, row);
+    const owned = sheetOf(row);
+    const report = await drawnReport(
+      { workspace },
+      owned?.files ?? asked,
+      spec,
+      opened,
+      openedOf(shown).opened
+    );
     return {
       id: row.id,
       kind: row.kind,
       name: row.name,
       route: routeOf(row.id),
       ...openedOf(shown),
-      sheet: opened.sheet,
-      stage: sheetState(row, opened.state),
+      stage: { ...sheetState(row, opened.state), errors: [] },
+      render: { ...renderSaid(report), weight: weightSaid(opened.weight) },
+      moves: movesSaid(report),
+      errors: errorsSaid(sheetState(row, opened.state).errors),
+      hint: READ_HINT,
     };
   };
 
   /**
-   * A sheet as the session reads it: its picks, and its stories and stage
-   * read afresh on the workspace it was made in, which is a use that keeps
-   * the stage awake (or wakes it). A stage that can't be reached is read as
-   * the doc last had it, its status `error` with why. Its owner's read when
-   * `ownersRead`.
+   * A component canvas as the session reads it (component canvas §4): its
+   * picks and pins, its stage, what a browser drew (each frame's state), its
+   * moves, its stories with the interactions they reach, the person's dials
+   * and tuned motion; on asking, one story's args and code, one frame's
+   * computed-style delta, a fresh draw on the daemon, a picture. Read
+   * afresh on the workspace it was made in: a use that keeps the stage
+   * awake. A stage that can't be reached is read as the doc last had it,
+   * `error` with why. Its owner's read when `ownersRead`.
    */
   const readSheet = async (
     row: ArtifactRow,
     since?: number,
-    ownersRead = true
+    ownersRead = true,
+    ask: ComponentReadAsk = {}
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a canvas's read joins its stage, its report, the person's picks and each optional ask in one answer
   ): Promise<ArtifactRead> => {
     const sheet = sheetOf(row);
     let failure: string | null = null;
-    let weight: SheetWeight | null | undefined;
+    let opened: StageOpened | undefined;
+    let report: RenderReport | undefined;
+    let png: string | undefined;
     if (sheet) {
+      const at: StageAt = { workspace: sheet.workspace };
       try {
-        const { opened } = await deps.stage(
-          { workspace: sheet.workspace },
-          join(sheet.dir, sheet.file)
-        );
+        ({ opened } = await deps.stage(
+          at,
+          sheet.files[0] as string,
+          sheet.files
+        ));
         writeStage(row, opened.state, opened.sheet);
-        ({ weight } = opened);
+        ({ report } = opened);
+        if (ask.render || ask.png) {
+          const drawn = await deps.stageRender(at, {
+            files: sheet.files,
+            spec: sheet.spec,
+            ...(ask.state ? { state: ask.state } : {}),
+            ...(ask.png ? { png: true } : {}),
+          });
+          ({ report, png } = drawn);
+        }
       } catch (error) {
         failure = error instanceof Error ? error.message : String(error);
       }
@@ -2210,18 +2645,62 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     const meta = docs.doc(row.id).getMap("meta");
     const stage = meta.get("stage") as StageState | undefined;
     const sheetNow = meta.get("sheet") as SheetRead | undefined;
+    const base = read(row, since, ownersRead);
+    const {
+      dials,
+      tuned,
+      layout: _layout,
+      ...picks
+    }: Record<string, ReadEntry | undefined> = base.state;
+    const story = ask.story
+      ? sheetNow?.stories.find((one) => one.name === ask.story)
+      : undefined;
+    if (ask.story && !story) {
+      throw new ArtifactRefusal(
+        404,
+        `${row.name} has no story ${ask.story}; its stories are ${sheetNow?.stories.map((one) => one.name).join(", ") || "none"}.`
+      );
+    }
     return {
-      ...read(row, since, ownersRead),
-      ...(sheetNow ? { sheet: sheetNow } : {}),
-      ...(weight === undefined ? {} : { weight }),
+      ...base,
+      state: picks,
       ...(stage
         ? {
             stage: failure
-              ? { ...stage, status: "error" as const, message: failure }
-              : stage,
+              ? {
+                  ...stage,
+                  status: "error" as const,
+                  message: failure,
+                  errors: [],
+                }
+              : { ...stage, errors: [] },
           }
         : {}),
-    };
+      errors: errorsSaid(stage?.errors ?? []),
+      ...(report
+        ? {
+            render: renderSaid(report),
+            moves: movesSaid(report),
+            stories: storiesSaid(sheetNow, report),
+            ...(ask.state ? { frame: stateSaid(report, ask.state) } : {}),
+          }
+        : {}),
+      ...(opened ? { weight: opened.weight } : {}),
+      ...(dials === undefined ? {} : { dials: dials.value }),
+      ...(tuned === undefined ? {} : { tuned: tuned.value }),
+      ...(story && ask.detail === "story"
+        ? {
+            story: {
+              name: story.name,
+              args: story.args,
+              code: story.code,
+              meta: { args: sheetNow?.meta.args, code: sheetNow?.meta.code },
+            },
+          }
+        : {}),
+      ...(ask.png ? { png: png ?? null } : {}),
+      hint: READ_HINT,
+    } as ArtifactRead;
   };
 
   /** A canvas (or the composer's draft) and a sheet are each made their own way; a page or preview is null here, made by `create` itself. */
@@ -2234,13 +2713,17 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? Promise.resolve(createDraft(making.owner, input))
         : createCanvas(making, input);
     }
-    return input.kind === "sheet" ? createSheet(making, input) : null;
+    return input.kind === "component" ? createSheet(making, input) : null;
   };
 
-  /** A decision page's choice ids, as its HTML declares them; empty for any other page. */
+  /** A decision page's choice ids: its program's decisions, or as its HTML declares them; empty for any other page. */
   const choicesAsked = (row: ArtifactRow): string[] => {
     if (row.kind !== "page") {
       return [];
+    }
+    const program = programOf(row);
+    if (program !== undefined) {
+      return readKept(program).cards.map((card) => card.id);
     }
     let html: string;
     try {
@@ -2316,8 +2799,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ? {
             asked: asked.length,
             made: asked.filter((choice) => choice in state).length,
-            unsent: Object.values(state).filter(
-              (entry) => !sentAt || entry.at > sentAt
+            unsent: Object.entries(state).filter(
+              ([key, entry]) =>
+                key !== PLACES_KEY && (!sentAt || entry.at > sentAt)
             ).length,
           }
         : undefined;
@@ -2425,8 +2909,9 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       let source: PreviewSource = { page: input.name };
       let machineId: string | null = null;
       let html: string | null = null;
+      let program: BuiltProgram | undefined;
       if (input.kind === "page") {
-        html = await pageHtml(instance, input);
+        ({ html, program } = await pageBuilt(instance, input, making.owner));
       } else {
         ({ machineId, source } = previewSource(instance, input));
       }
@@ -2437,9 +2922,10 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       const stage = await serveFirst(source, machineId);
       const { before, row } = placed(making, input, { source, machineId });
       if (html !== null) {
-        writePage(row.id, html);
+        writePage(row.id, html, program);
       }
-      stampMeta(row, html === null ? null : pageHash(html));
+      stampMeta(row, pageHashOf(html, program));
+      keepProgramDir(row, program, input.dir);
       keepServed(row, before, stage);
       const shown = await show(row);
       if (!(shown.started || before) && input.kind === "preview") {
@@ -2457,6 +2943,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         ...openedOf(shown),
         ...(stage ? { stage } : {}),
         ...(weight ? { weight } : {}),
+        ...programAnswer(program),
       };
     },
 
@@ -2470,7 +2957,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     update: async (
       instanceId: string,
       id: string,
-      change: PageChange | CanvasChange
+      change: Exclude<PageChange, { statements: string }> | CanvasChange
     ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
       let row = ownedOrMade(instance, id);
@@ -2488,14 +2975,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
         return await updateCanvas(row, change, ownersRead);
       }
       if ("html" in change) {
-        if (row.kind !== "page") {
-          throw new ArtifactRefusal(
-            409,
-            `${row.name} is a ${row.kind}: only a page takes new HTML.`
-          );
-        }
-        const html = await pageHtml(instance, {
-          name: row.name,
+        takesHtml(row);
+        const { html } = await built(instance, row.name, {
           html: change.html,
         });
         row = db.update(row.id, nextRevision(row)) as ArtifactRow;
@@ -2536,6 +3017,124 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     },
 
     /**
+     * A decision page's revision: `statements` merged into its program by
+     * name (decision-program.ts `mergeProgram`), built and checked as a
+     * create's is, then every open view draws the new program in place, its
+     * picks, notes and pins kept by id. Answers what changed, not the page.
+     */
+    revise: async (
+      instanceId: string,
+      id: string,
+      statements: string
+    ): Promise<Revised> => {
+      const instance = sessionOf(instanceId);
+      let row = ownedOrMade(instance, id);
+      const existing = programOf(row);
+      if (existing === undefined) {
+        throw new ArtifactRefusal(
+          409,
+          row.kind === "page"
+            ? `${row.name} is an HTML page: revise it with html.`
+            : `${named(row)} takes no statements: they revise a decision page's program.`
+        );
+      }
+      let merged: ReturnType<typeof mergeProgram>;
+      try {
+        merged = mergeProgram(existing, statements);
+      } catch (error) {
+        throw unmerged(error);
+      }
+      const dir = docs.doc(row.id).getMap("meta").get("programDir");
+      const page = await built(instance, row.name, {
+        program: merged.merged,
+        dir: typeof dir === "string" ? dir : undefined,
+      });
+      const program = page.program as BuiltProgram;
+      mediaHeld(deps.instance(row.instanceId) ?? instance, program);
+      const before = new Set(readKept(existing).cards.map((card) => card.id));
+      const after = program.read.cards.map((card) => card.id);
+      row = db.update(row.id, nextRevision(row)) as ArtifactRow;
+      writePage(row.id, page.html, program);
+      const hash = pageHash(program.program);
+      stampMeta(row, hash);
+      return {
+        id: row.id,
+        revision: row.revision,
+        pageHash: hash,
+        statements: merged.change,
+        decisions: after,
+        moved: {
+          added: after.filter((card) => !before.has(card)),
+          removed: [...before].filter((card) => !after.includes(card)),
+        },
+        ...(program.dropped.length > 0 ? { dropped: program.dropped } : {}),
+      };
+    },
+
+    /**
+     * A decision page's program and what its media show now, for the page
+     * the hub serves (preview.ts `servePage`): the hash its overlay carries,
+     * and each artifact its Canvas and Preview pieces name, null once the hub
+     * no longer holds it. Null for any other page.
+     */
+    programServed: (
+      id: string
+    ): {
+      hash: string;
+      media: Record<string, { kind: ArtifactKind; name: string } | null>;
+    } | null => {
+      const row = db.get(id);
+      const program = row ? programOf(row) : undefined;
+      if (program === undefined) {
+        return null;
+      }
+      const media: Record<string, { kind: ArtifactKind; name: string } | null> =
+        {};
+      for (const { id: shown } of readKept(program).artifacts) {
+        const shownRow = db.get(shown);
+        media[shown] =
+          shownRow && shownRow.instanceId === row?.instanceId
+            ? { kind: shownRow.kind, name: shownRow.name }
+            : null;
+      }
+      return { hash: pageHash(program), media };
+    },
+
+    /**
+     * The person's places of a decision page's cards on the project's graph
+     * (decisions.ts `place`), kept in its state under `graph.places` by card
+     * id, so a revision keeps them as it keeps picks. The hub's write: the
+     * page's session hears nothing of it.
+     */
+    keepPlaces: (id: string, places: Record<string, GraphPlace>): void => {
+      const doc = docs.doc(id);
+      const entry: ChoiceEntry = {
+        options: [],
+        note: "",
+        value: places,
+        pageHash:
+          metaOf(doc).pageHash ?? newestHash(stateOf(doc)) ?? "0".repeat(64),
+        at: new Date().toISOString(),
+      };
+      const problem = choiceEntryProblem(PLACES_KEY, entry);
+      if (problem) {
+        throw new ArtifactRefusal(
+          413,
+          `The graph's places were not kept: ${problem}`
+        );
+      }
+      docs.transact(id, "hub", (live) =>
+        live.getMap("state").set(PLACES_KEY, entry)
+      );
+    },
+
+    /** A decision page's program as the hub keeps it; undefined for an HTML page, any other artifact, or none. */
+    program: (id: string): string | undefined => {
+      const row = db.get(id);
+      return row ? programOf(row) : undefined;
+    },
+
+    /**
      * The state, meta and sentAt; a canvas's outline and what the person
      * changed, with its picture when `png`; with no id, the session's
      * newest artifact. Its maker reads one it put in its parent's panel
@@ -2545,7 +3144,8 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       instanceId: string,
       id?: string,
       since?: number,
-      png = false
+      png = false,
+      ask: ComponentReadAsk = {}
     ): Promise<ArtifactRead> => {
       const instance = sessionOf(instanceId);
       const handed = id === undefined ? undefined : db.get(id);
@@ -2568,20 +3168,70 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
       if (row.kind === "canvas") {
         return readCanvas(row, since, png, ownersRead);
       }
-      return row.kind === "sheet"
-        ? await readSheet(row, since, ownersRead)
+      return row.kind === "component"
+        ? await readSheet(row, since, ownersRead, {
+            ...ask,
+            png: png || ask.png,
+          })
         : read(row, since, ownersRead);
     },
 
     /** `artifact_update` of a sheet by its owner or its maker: one story's args, or one story op, written by its stage. */
-    sheetUpdate: (
+    sheetUpdate: async (
       instanceId: string,
       id: string,
       change: SheetChange
-    ): Promise<ArtifactRead> => {
+    ): Promise<ComponentWritten> => {
       const instance = sessionOf(instanceId);
       const row = ownedOrMade(instance, id);
-      return writeSheet(row, change, "agent", row.instanceId === instance.id);
+      const written = await writeSheet(
+        row,
+        change,
+        "agent",
+        row.instanceId === instance.id
+      );
+      return componentWritten(row, change, written);
+    },
+
+    /**
+     * `artifact_update` of a component canvas's about, edges, groups or
+     * dials: its page's address changes, so the panel draws it again at
+     * the next revision. Answers what changed and the canvas's new spec.
+     */
+    canvasUpdate: async (
+      instanceId: string,
+      id: string,
+      input: CanvasInput
+    ): Promise<{ id: string; revision: number; spec: CanvasSpec }> => {
+      const instance = sessionOf(instanceId);
+      const row = ownedOrMade(instance, id);
+      const sheet = sheetOf(row);
+      if (!(sheet && "port" in row.source)) {
+        throw new ArtifactRefusal(
+          409,
+          `${row.name} is a ${row.kind}: about, edges, group and dials are a component canvas's.`
+        );
+      }
+      const problem = canvasProblem(input, false);
+      if (problem) {
+        throw new ArtifactRefusal(400, problem);
+      }
+      const spec = specOf(row.name, {
+        about: input.about ?? sheet.spec.about,
+        edges: input.edges ?? sheet.spec.edges,
+        group: input.group ?? sheet.spec.group,
+        dials: input.dials ?? sheet.spec.dials,
+      });
+      const { files } = canvasOf(row.source.path ?? "");
+      const next = db.update(row.id, {
+        source: { ...row.source, path: canvasPath(files, spec) },
+        revision: row.revision + 1,
+        updatedAt: new Date(),
+      }) as ArtifactRow;
+      if (deps.showing(next.instanceId) === next.id) {
+        await show(next);
+      }
+      return { id: next.id, revision: next.revision, spec };
     },
 
     /**
@@ -2595,12 +3245,45 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     ): Promise<ArtifactRead> =>
       writeSheet(own(sessionOf(instanceId), id), change, "person"),
 
-    /** `components_list`: the components of a toolchain root in the session's workspace, each with the sheets that show it. */
-    components: (
+    /** `design_map`: the session's workspace's components, paged, or one component's card (agent stage.ts `stageComponents`). */
+    designMap: (instanceId: string, ask: DesignQuery): Promise<DesignMap> =>
+      deps.stageComponents(sessionOf(instanceId), ask),
+
+    /**
+     * The artifact's doc as a person's view reads it (the dashboard pane's
+     * `viewOf`, artifact-doc.ts): its picks, and when they were last sent.
+     * For the app's panel, which holds no doc of its own (a sheet's stage
+     * reaches it on the preview frame). It is no read of the session's: its
+     * read cursor stays, and a sheet's stage is neither woken nor waited on.
+     */
+    viewOf: (
       instanceId: string,
-      dir: string | undefined
-    ): Promise<{ components: Found[]; dir: string }> =>
-      deps.stageComponents(sessionOf(instanceId), dir),
+      id: string
+    ): {
+      choices: Record<string, ChoiceEntry>;
+      sentAt: string | null;
+    } => {
+      const row = readable(sessionOf(instanceId), id);
+      const doc = docs.doc(row.id);
+      return {
+        choices: stateOf(doc),
+        sentAt:
+          (doc.getMap("meta").get("sentAt") as string | undefined) ?? null,
+      };
+    },
+
+    /**
+     * A sheet's stage or a workspace preview's server as its doc keeps it,
+     * for its preview frame (core `PreviewFrame.stage`); null for any other
+     * artifact.
+     */
+    stageFor: (id: string): StageState | null => {
+      const row = db.get(id);
+      return row && (row.kind === "component" || servedOf(row))
+        ? ((docs.doc(row.id).getMap("meta").get("stage") as
+            StageState | undefined) ?? null)
+        : null;
+    },
 
     /**
      * A workspace's stage changed (the daemon's {@link StageFrame}): each
@@ -2987,35 +3670,3 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
 };
 
 export type Artifacts = ReturnType<typeof createArtifacts>;
-
-/** A legacy canvas's entries as a doc's `state` update, with its meta. */
-export const legacyDoc = (
-  meta: {
-    kind: ArtifactKind;
-    name: string;
-    pageHash: string | null;
-    sentAt: string | null;
-  },
-  entries: Record<string, ChoiceEntry>
-): Uint8Array => {
-  const doc = new Doc();
-  doc.transact(() => {
-    const m = doc.getMap("meta");
-    m.set("kind", meta.kind);
-    m.set("name", meta.name);
-    m.set("revision", 1);
-    if (meta.pageHash) {
-      m.set("pageHash", meta.pageHash);
-    }
-    if (meta.sentAt) {
-      m.set("sentAt", meta.sentAt);
-    }
-    const state = doc.getMap("state");
-    for (const [key, entry] of Object.entries(entries)) {
-      state.set(key, entry);
-    }
-  });
-  const update = encodeStateAsUpdate(doc);
-  doc.destroy();
-  return update;
-};

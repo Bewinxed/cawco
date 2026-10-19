@@ -16,6 +16,7 @@ import type {
   ThreadSummary,
 } from "@cawco/core";
 import type { ProjectRow } from "./client.svelte";
+import type { BoardRow } from "./links";
 import { checkoutOf } from "./projects";
 
 const PREFIX = "thread:";
@@ -83,13 +84,15 @@ export const routineHref = (routine: {
 export function threadRowOf(
   thread: ThreadSummary,
   project: ProjectRow
-): InstanceRow {
+): BoardRow {
   const place = checkoutOf(project) ?? project.places[0];
   return {
     id: threadTabId(thread.id),
     machineId: place?.machineId ?? "hub",
     cwd: place?.path ?? `projects/${project.id}`,
+    harness: null,
     launchDir: "known",
+    kind: "mainline",
     projectId: thread.projectId,
     sessionId: null,
     status: thread.status === "ready" ? "sleeping" : "running",

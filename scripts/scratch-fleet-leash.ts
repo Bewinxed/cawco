@@ -37,19 +37,12 @@
  * last.
  */
 import { processLineage } from "../packages/core/src/process-identity";
+import { listedPid, ownPid, signal as send } from "../packages/core/src/signal";
 
 export const STARTER_ENV = "CAWCO_FLEET_STARTER";
 const EVERY_MS = 500;
 /** Readings after the first, at most, before the kill: each catches what forked before its freeze. */
 const MAX_READINGS = 8;
-
-const signal = (pid: number, name: NodeJS.Signals): void => {
-  try {
-    process.kill(pid, name);
-  } catch {
-    // gone already
-  }
-};
 
 /** Everything under `root` now: its descendants and the members of every group it or one of them leads. */
 export const treeOf = async (root: number): Promise<Set<number>> => {
@@ -88,17 +81,18 @@ const endAll = async (): Promise<void> => {
       break;
     }
     for (const pid of found) {
-      signal(pid, "SIGSTOP");
+      // Gone since the reading, it is nothing to freeze.
+      send(listedPid(pid), "SIGSTOP");
       frozen.add(pid);
     }
   }
   for (const pid of frozen) {
-    signal(pid, "SIGKILL");
+    send(listedPid(pid), "SIGKILL");
   }
   console.error(
     `[scratch-fleet] pid ${process.pid}: its starter is gone (parent now ${process.ppid}), so it ended the ${frozen.size} process(es) under it and itself`
   );
-  process.kill(process.pid, "SIGKILL");
+  send(ownPid(), "SIGKILL");
 };
 
 /**
@@ -125,7 +119,7 @@ if (Number.isInteger(starter) && starter > 0) {
         console.error(
           `[scratch-fleet] pid ${process.pid}: its starter is gone, and the processes under it could not be read: ${error instanceof Error ? error.message : String(error)}; it ends itself`
         );
-        process.kill(process.pid, "SIGKILL");
+        send(ownPid(), "SIGKILL");
       });
     }
   };

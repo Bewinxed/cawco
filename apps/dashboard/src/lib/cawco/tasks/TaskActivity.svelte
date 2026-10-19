@@ -87,9 +87,16 @@
     }
   }
 
+  /**
+   * One line of the stream. A change keys by its commit's sha: commit times
+   * are whole seconds, so two people making the same change in one second
+   * (you and a tracker's sync) share a time and words, never a key. A
+   * comment has no id of its own (task-file.ts): it keys by its time, to the
+   * millisecond, and its author.
+   */
   type Line =
-    | { kind: "comment"; at: number; who: string; text: string }
-    | { kind: "change"; at: number; who: string; text: string };
+    | { kind: "comment"; key: string; at: number; who: string; text: string }
+    | { kind: "change"; key: string; at: number; who: string; text: string };
   type Piece =
     { kind: "one"; line: Line } | { kind: "fold"; key: string; lines: Line[] };
 
@@ -140,7 +147,7 @@
     let run: Line[] = [];
     const flush = () => {
       if (run.length > 3) {
-        pieces.push({ kind: "fold", key: `fold-${run[0].at}`, lines: run });
+        pieces.push({ kind: "fold", key: `fold-${run[0].key}`, lines: run });
       } else {
         for (const line of run) {
           pieces.push({ kind: "one", line });
@@ -160,14 +167,22 @@
     return pieces;
   }
 
-  const said = $derived<Line[]>(
-    comments.map((comment) => ({
-      kind: "comment",
-      at: comment.at,
-      who: who(comment.author.name),
-      text: comment.text,
-    }))
-  );
+  const said = $derived.by<Line[]>(() => {
+    // Two by one author in one millisecond: the later counts up.
+    const seen = new Map<string, number>();
+    return comments.map((comment) => {
+      const key = `comment-${comment.at}-${comment.author.name}`;
+      const twins = seen.get(key) ?? 0;
+      seen.set(key, twins + 1);
+      return {
+        kind: "comment",
+        key: twins ? `${key}-${twins}` : key,
+        at: comment.at,
+        who: who(comment.author.name),
+        text: comment.text,
+      };
+    });
+  });
   /**
    * The stream in the history's own order. The hub writes each comment as
    * its own commit (`commented`), oldest first as the comments are, so each
@@ -188,6 +203,7 @@
       } else {
         lines.push({
           kind: "change",
+          key: event.commit,
           at: event.at,
           who: who(event.actor.name),
           text: changeOf(event),
@@ -262,7 +278,8 @@
     </p>
   {:else}
     <ol class="stream">
-      {#each pieces as piece (piece.kind === "one" ? `${piece.line.kind}-${piece.line.at}-${piece.line.text}` : piece.key)}
+      <!-- Comments are append-only: the hub puts back one taken out of the file by hand (tasks.ts strayComments). -->
+      {#each pieces as piece (piece.kind === "one" ? piece.line.key : piece.key)}
         {#if piece.kind === "one"}
           {@render line(piece.line)}
         {:else}
@@ -279,7 +296,7 @@
               </Collapsible.Trigger>
               <Collapsible.Content fade reveal>
                 <ol data-slot="inner" class="stream inner">
-                  {#each piece.lines as each (`${each.at}-${each.text}`)}
+                  {#each piece.lines as each (each.key)}
                     {@render line(each)}
                   {/each}
                 </ol>

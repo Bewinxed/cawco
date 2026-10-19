@@ -12,6 +12,8 @@
 import { accountMoveWords } from "./accounts";
 import { attachedFiles } from "./attachments";
 import type {
+  CompactionFailure,
+  HarnessNote,
   NeutralAssistantMessage,
   NeutralMessage,
   NeutralStatus,
@@ -128,8 +130,12 @@ export interface FrameMapping {
    * it — a skill that was deleted has to leave the menu too.
    */
   commands?: SlashCommand[];
-  /** How a compaction ended, on the `status` frame that closes it. */
-  compaction?: { result: "success" | "failed"; error?: string };
+  /** How a compaction ended, on the `status` frame that closes it; a failure typed in `failure`. */
+  compaction?: {
+    result: "success" | "failed";
+    error?: string;
+    failure?: CompactionFailure;
+  };
   /**
    * The cumulative cost a `result` frame reported, in dollars. Carried on every
    * result regardless of subtype, because only error results push a transcript
@@ -759,10 +765,17 @@ export function mapFrame(
           content: "Interrupted",
           metadata: { noteTitle: "Interrupted" },
         });
-      } else if (text && (agentId || systemNote(text))) {
+      } else if (
+        text &&
+        (agentId || harnessNoteOf(sdk.message) || systemNote(text))
+      ) {
         mapping.blocks.push({
           ...base,
-          ...userBody(text, transcriptUserImages(sdk.message)),
+          ...userBody(
+            text,
+            transcriptUserImages(sdk.message),
+            harnessNoteOf(sdk.message)
+          ),
         });
       }
       if (typeof content === "string") {
@@ -862,6 +875,7 @@ export function mapFrame(
             mapping.compaction = {
               result: sdk.compact_result,
               error: sdk.compact_error,
+              ...(sdk.compact_failure ? { failure: sdk.compact_failure } : {}),
             };
           }
           break;
@@ -946,6 +960,7 @@ export function mapFrame(
               trigger: sdk.compact_metadata?.trigger,
               compactResult: sdk.compact_metadata?.result,
               compactError: sdk.compact_metadata?.error,
+              compactFailure: sdk.compact_metadata?.failure,
             })
           );
           break;
@@ -1388,8 +1403,25 @@ export const storedAt = (entry: SessionMessage): string | undefined =>
  */
 function userBody(
   text: string,
-  images?: BlockMetadata["images"]
+  images?: BlockMetadata["images"],
+  harnessNote?: HarnessNote
 ): Pick<TranscriptBlock, "type" | "content" | "metadata"> {
+  // The harness's notice, typed: its note, and its words as `content` beside
+  // it, which the shipped app still reads.
+  if (harnessNote) {
+    return {
+      type: "ui.system_note",
+      content: text,
+      metadata: {
+        harnessNote,
+        noteKind: HARNESS_NOTE_KIND[harnessNote.kind],
+        noteTitle: harnessNote.title,
+        ...(harnessNote.toolUseId
+          ? { noteTaskToolId: harnessNote.toolUseId }
+          : {}),
+      },
+    };
+  }
   const note = systemNote(text);
   if (!note) {
     const { typed, attachments } = pastedText(text);
@@ -1445,33 +1477,27 @@ function pastedText(text: string): {
   return attachments.length ? { typed, attachments } : { typed };
 }
 
-const TASK_NOTIFICATION_SUMMARY = /<summary>([\s\S]*?)<\/summary>/;
-const TASK_NOTIFICATION_TOOL_USE_ID = /<tool-use-id>(\S+?)<\/tool-use-id>/;
 const LOCAL_COMMAND_NAME = /<command-name>([\s\S]*?)<\/command-name>/;
 
-/** Harness-injected content arrives with role "user" but is not the human. */
+/** The note kind a {@link HarnessNote} keeps for the readers that still name it so. */
+const HARNESS_NOTE_KIND: Record<HarnessNote["kind"], string> = {
+  "task-notification": "Task notification",
+  "system-reminder": "System reminder",
+};
+
+/** The typed notice its harness's normaliser put on a user message ({@link HarnessNote}), when it did. */
+const harnessNoteOf = (message: unknown): HarnessNote | undefined =>
+  (message as { harnessNote?: HarnessNote } | null | undefined)?.harnessNote;
+
+/**
+ * Harness-injected content arrives with role "user" but is not the human. A
+ * notice its harness typed ({@link HarnessNote}) is read off the message, never
+ * off its words; these are the rest.
+ */
 function systemNote(
   text: string
 ): { kind: string; title: string; taskToolId?: string } | null {
   const head = text.trimStart().slice(0, 200);
-  // Anchored, not `includes`: an operator who merely TYPES the tag mid-sentence
-  // ("fix the <task-notification> renderer") must keep their own voice — only a
-  // message the block itself opens is the harness speaking.
-  if (
-    head.startsWith("[SYSTEM NOTIFICATION") ||
-    head.startsWith("<task-notification>")
-  ) {
-    const summary = TASK_NOTIFICATION_SUMMARY.exec(text)?.[1]?.trim();
-    // The tool-use id names the Task call this notification echoes. When that
-    // call's branch is in the transcript, the branch already shows the same
-    // report — the renderer folds this note away on it.
-    const taskToolId = TASK_NOTIFICATION_TOOL_USE_ID.exec(text)?.[1];
-    return {
-      kind: "Task notification",
-      title: summary ?? firstPlainLine(text),
-      ...(taskToolId ? { taskToolId } : {}),
-    };
-  }
   // A slash command's local echo (`<local-command-caveat>`, `<command-name>`,
   // `<local-command-stdout>`): the harness's bookkeeping, not the human's words
   // — raw XML in a user bubble otherwise.
@@ -1482,9 +1508,6 @@ function systemNote(
   ) {
     const command = LOCAL_COMMAND_NAME.exec(text)?.[1]?.trim();
     return { kind: "Local command", title: command ?? firstPlainLine(text) };
-  }
-  if (head.startsWith("<system-reminder>")) {
-    return { kind: "System reminder", title: firstPlainLine(text) };
   }
   if (
     head.startsWith(
@@ -1536,9 +1559,7 @@ function compactSummaryNote(content: string, base: BlockBase): TranscriptBlock {
 
 /** A note's opening line, with the markup that wraps it taken back out. */
 function firstPlainLine(text: string): string {
-  const plain = text
-    .replace(/<[^>]+>/g, "")
-    .replace("[SYSTEM NOTIFICATION - NOT USER INPUT]", "");
+  const plain = text.replace(/<[^>]+>/g, "");
   const line = plain
     .split("\n")
     .map((each) => each.trim())
@@ -1673,7 +1694,11 @@ function injectedBlock(text: string, base: BlockBase): TranscriptBlock | null {
       ...base,
       type: "user.peer",
       content: notice.body,
-      metadata: { peerName: notice.workflow, workflowEvent: notice.event },
+      metadata: {
+        peerName: notice.workflow,
+        workflowEvent: notice.event,
+        ...(notice.runId ? { workflowRunId: notice.runId } : {}),
+      },
     };
   }
   const handoff = parseHandoffMarker(text);
@@ -1734,7 +1759,7 @@ export function sentRow(
     artifactNoticeBlock(text, base) ??
     injectedBlock(text, base) ?? {
       ...base,
-      ...userBody(text, transcriptUserImages(message)),
+      ...userBody(text, transcriptUserImages(message), harnessNoteOf(message)),
     }
   );
 }
@@ -1764,6 +1789,35 @@ export function personWords(entry: SessionMessage): string | null {
   ].filter(Boolean);
   return said.length ? said.join("\n") : null;
 }
+
+/** A `workflow_run` call, whichever harness named the tool (`mcp__cawco__…`, `cawco_…`). */
+const RUN_TOOL = /(?:^|_)workflow_run$/;
+
+/**
+ * The run a `workflow_run` call started, off its result: the hub's own
+ * answer, `{"runId": …}` as JSON (hub delegation-tools.ts), as a string or
+ * its first text block. Undefined for a result that is not that answer.
+ */
+const startedRun = (result: unknown): string | undefined => {
+  let text: unknown = result;
+  if (Array.isArray(result)) {
+    text = (result as { type?: unknown; text?: unknown }[]).find(
+      (block) => block.type === "text" && typeof block.text === "string"
+    )?.text;
+  }
+  if (typeof text !== "string") {
+    return;
+  }
+  let answer: unknown;
+  try {
+    answer = JSON.parse(text);
+  } catch {
+    // Not the hub's answer (a refusal in words): it started no run.
+    return;
+  }
+  const runId = (answer as { runId?: unknown } | null)?.runId;
+  return typeof runId === "string" ? runId : undefined;
+};
 
 /** Folds a tool result into the `tool.use` it answers; returns the block it changed. */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one dispatch over every tool-result shape a `tool.use` can be answered by
@@ -1821,9 +1875,15 @@ export function applyToolResult(
     }
   }
 
+  const runId =
+    !isError && RUN_TOOL.test(target.metadata?.toolName ?? "")
+      ? startedRun(result)
+      : undefined;
+
   target.metadata = {
     ...target.metadata,
     toolResult: result,
+    ...(runId ? { workflowRunId: runId } : {}),
     ...(target.metadata?.toolName === "apply_patch" &&
     typeof structuredContent?.diff === "string"
       ? { toolDiff: structuredContent.diff }
