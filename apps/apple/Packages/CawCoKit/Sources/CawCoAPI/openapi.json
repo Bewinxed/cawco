@@ -5475,6 +5475,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "const": "agent"
+            }
           }
         ],
         "operationId": "deleteApiInstancesByIdArtifactsByArtifact",
@@ -5485,6 +5494,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Removed"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "deleteApiInstancesByIdArtifactsByArtifact 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -6337,6 +6356,15 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "by",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "const": "agent"
+            }
           }
         ],
         "operationId": "postApiInstancesByIdArtifactsByArtifactShow",
@@ -6347,6 +6375,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiInstancesByIdArtifactsByArtifactShow200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdArtifactsByArtifactShow 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }

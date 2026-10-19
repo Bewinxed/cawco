@@ -9626,6 +9626,14 @@ export const createServer = (
     return frame;
   };
 
+  /**
+   * What the person last opened in each session's panel themselves (a press
+   * in the panel, the artifact menu, a pin's link), until the panel closes:
+   * what an agent's delete of something it showed over it goes back to
+   * (artifacts/service.ts `remove`). An agent's show never changes it.
+   */
+  const personShown = new Map<string, string>();
+
   const closePreview = async (
     instanceId: string
   ): Promise<
@@ -9637,6 +9645,7 @@ export const createServer = (
       closed: { instanceId, state: "closed" },
     } as const;
     nextPreviewGeneration(instanceId);
+    personShown.delete(instanceId);
     const target = previewTargets.get(instanceId);
     if (!target) {
       return closed;
@@ -10984,17 +10993,22 @@ export const createServer = (
         .map((project) => project.id),
     machines: () => db.listAgents(),
     // A page is the hub's: its target names no machine.
-    open: async (artifact) => {
+    open: async (artifact, by) => {
       const opened = await openPreview(
         artifact.instanceId,
         artifact.machineId ?? "",
         artifact.source,
         { id: artifact.id, kind: artifact.kind, name: artifact.name }
       );
-      return opened.ok
-        ? { ok: true, revision: opened.frame.revision }
-        : { ok: false, error: opened.error };
+      if (!opened.ok) {
+        return { ok: false, error: opened.error };
+      }
+      if (by === "person") {
+        personShown.set(artifact.instanceId, artifact.id);
+      }
+      return { ok: true, revision: opened.frame.revision };
     },
+    personShown: (instanceId) => personShown.get(instanceId),
     page: buildArtifactPage,
     sending: (instance, artifact, state) =>
       applySetupPicks(artifact, instance.projectId, state, {
@@ -11317,7 +11331,9 @@ export const createServer = (
         });
       }
       try {
-        return Response.json(await artifacts.show(instanceId, artifactId));
+        return Response.json(
+          await artifacts.show(instanceId, artifactId, "person")
+        );
       } catch (error) {
         if (error instanceof ArtifactRefusal) {
           return new Response(error.message, { status: error.status });
