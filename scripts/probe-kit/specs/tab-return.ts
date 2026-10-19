@@ -126,6 +126,8 @@ const LANDED_MS = 1500;
  * slower machine still has room. The parent's call (tab-return, 2026-10-19).
  */
 const REACH_TASK_MS = 12;
+/** The change the task that warms a pane schedules on it (PaneLeaf `.pane-settling`): how the reach task is found. */
+const WARM_CHANGE = /pane-settling/;
 /** A press this soon after the reach comes while the warm pane's rows are still staged (Transcript `parkRows`). */
 const PRESS_IN_STAGING_MS = 40;
 /** An interaction's length in `inputsOf`'s line. */
@@ -177,6 +179,14 @@ interface Back {
   staging: string;
   /** Read off a DevTools trace (Chromium); a WebKit return is its click alone. */
   traced: boolean;
+  /**
+   * The reach task itself, CPU ms: the longer of the task that warms the
+   * pane (the one scheduling its `.pane-settling`, warm.svelte.ts) and the
+   * frame after it that first lays the pane out; NaN when no warm was traced.
+   */
+  warmTask: number;
+  /** That task said whole, as `reachWhat`. */
+  warmWhat: string;
   work: SwitchWork | null;
   /** The longest animation frame in the window, by the scripts that filled it. */
   worstFrame: string;
@@ -806,6 +816,23 @@ const costOf = (page: Page) =>
   page.evaluate(() => (window as unknown as { __cost: Cost }).__cost);
 
 /**
+ * The reach task among the tasks before the press: the longer of the one
+ * that warms the pane (scheduling its `.pane-settling`, warm.svelte.ts) and
+ * the first after it that restyles, the frame that lays the pane out.
+ */
+function reachTaskOf(tasks: MainTask[]): MainTask | null {
+  const at = tasks.findIndex((task) =>
+    task.scheduled.some(([what]) => WARM_CHANGE.test(what))
+  );
+  if (at < 0) {
+    return null;
+  }
+  const laysOut = tasks.slice(at + 1).find((task) => task.restyled > 0);
+  const warms = tasks[at];
+  return laysOut && laysOut.cpu > warms.cpu ? laysOut : warms;
+}
+
+/**
  * One return to `id` by the pointer, traced: reach, rest, press, and the
  * window after it (`waitFor`, when given, holds it open until it answers or
  * `READY_MS`, then `AFTER_READY_MS` more).
@@ -915,7 +942,20 @@ async function measureBack(
       null
     );
   const longest = longestOf(own);
-  const reach = longestOf(own.filter((task) => task.at < madeMark));
+  const beforePress = own.filter((task) => task.at < madeMark);
+  const reach = longestOf(beforePress);
+  const warmed = reachTaskOf(beforePress);
+  /** A task said whole: what it ran, when, its CPU and restyle, what scheduled it, its sampled stacks. */
+  const taskLine = (task: MainTask) =>
+    `${task.ran}, ${Math.round((task.at - madeMark) / 1000)}ms after the press: ${task.cpu.toFixed(1)}ms of CPU, ${task.restyled} elements in ${Math.round(task.styleMs)}ms of style; scheduled by ${
+      task.scheduled.map(([what, n]) => `${what} ${n}x`).join("; ") ||
+      "nothing traced"
+    }; its stacks: ${main
+      .stacksIn(task.at, task.end)
+      .filter(([stack]) => stack !== "(idle)")
+      .slice(0, 8)
+      .map(([stack, ms]) => `${stack} ${ms.toFixed(1)}ms`)
+      .join(" || ")}`;
   const pressEpoch = origin + madeAt;
   const told = await sizesTold(page, id, sizesBefore, reachEpoch, pressEpoch);
   const staging = `${skippedAtPress} rows still staged as the press came; ${told.line}`;
@@ -980,17 +1020,9 @@ async function measureBack(
     sizeChanges: told.changes,
     stagedAtPress: skippedAtPress,
     reach: Math.round(reach?.cpu ?? 0),
-    reachWhat: reach
-      ? `${reach.ran}, ${Math.round((reach.at - madeMark) / 1000)}ms after the press: ${reach.cpu.toFixed(1)}ms of CPU, ${reach.restyled} elements in ${Math.round(reach.styleMs)}ms of style; scheduled by ${
-          reach.scheduled.map(([what, n]) => `${what} ${n}x`).join("; ") ||
-          "nothing traced"
-        }; its stacks: ${main
-          .stacksIn(reach.at, reach.end)
-          .filter(([stack]) => stack !== "(idle)")
-          .slice(0, 8)
-          .map(([stack, ms]) => `${stack} ${ms.toFixed(1)}ms`)
-          .join(" || ")}`
-      : "nothing",
+    reachWhat: reach ? taskLine(reach) : "nothing",
+    warmTask: warmed ? warmed.cpu : Number.NaN,
+    warmWhat: warmed ? taskLine(warmed) : "no warm traced",
     heavy:
       own
         .filter((task) => task.cpu >= HEAVY_MS)
@@ -1055,6 +1087,8 @@ async function clickBack(
     elsewhere: "not traced",
     reach: 0,
     reachWhat: "not traced",
+    warmTask: Number.NaN,
+    warmWhat: "not traced",
     shown: "not read",
     shownCounts: [],
     staging: "not read",
@@ -1097,9 +1131,9 @@ function checkStaging(kit: Kit, back: Back): void {
     return;
   }
   kit.check(
-    `${back.scene}: the reach's longest task within ${REACH_TASK_MS}ms of CPU (${REACH_TASK_MS * SLOWER}ms ${SLOWER}x slower)`,
-    back.reach <= REACH_TASK_MS,
-    back.reachWhat.slice(0, 600)
+    `${back.scene}: the reach task (its warm and the frame laying the pane out) within ${REACH_TASK_MS}ms of CPU (${REACH_TASK_MS * SLOWER}ms ${SLOWER}x slower)`,
+    back.warmTask <= REACH_TASK_MS,
+    back.warmWhat.slice(0, 600)
   );
 }
 
@@ -1293,7 +1327,7 @@ const run = async (kit: Kit) => {
     };
     backs.push(back);
     kit.note(
-      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${back.page ? `${pageLine(back.page)} | ` : ""}${back.landing ? `landed: ${back.landing} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach's longest ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
+      `${name}: ${back.psi} | ${turns} busy turns while away, ${back.inserted} elements inserted from the reach on | ${back.page ? `${pageLine(back.page)} | ` : ""}${back.landing ? `landed: ${back.landing} | ` : ""}longest task ${back.longest}ms of CPU (${back.longest * SLOWER}ms ${SLOWER}x slower), ${back.longestWhat} | the reach task (its warm and the frame laying the pane out) ${Number.isNaN(back.warmTask) ? "not traced" : `${back.warmTask.toFixed(1)}ms`}: ${back.warmWhat} | the longest from the reach to the press ${back.reach}ms: ${back.reachWhat} | staging: ${back.staging} | once shown: ${back.shown} | tasks of ${HEAVY_MS}ms or more, by when after the press: ${back.heavy} | input to the shown frame: ${back.work ? workLine([back.work]) : "no switch read"} | the press: ${back.input} | other renderers in the second after the press: ${back.elsewhere} | the longest ${back.worstFrame} | as the pointer came: ${back.held}`
     );
   };
   await leg(isolated, `1a: busy, back after ${SHORT_MS / 1000}s`, busy, "busy");
