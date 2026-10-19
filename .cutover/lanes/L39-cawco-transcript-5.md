@@ -26,11 +26,14 @@ removed: TranscriptSkeleton.svelte `--ln-w: 52%` custom property — a width, wr
 removed: Transcript.svelte `[data-slot="livetool"] [data-slot="rail-cell"] :global(svg)` — the live tool's icon takes `size-icon-md` as a class
 
 ## Tokens
-token: --c-measure 72ch — the running-text measure (DESIGN.md Typography: "Running text measures 60 to 72ch"), for a reasoning block, a skill's prose and the transcript skeleton's paragraphs; merged at integration as `c-measure`, written `max-w-c-measure`
+none (the reading measure is the merged `c-measure`, written `max-w-c-measure`)
+
+## Sanctioned overrides
+Checked: `npm view virtua version` is 0.53.5; the repo pins 0.53.4 (apps/dashboard/package.json:58), and 0.53.5's svelte sources write the same two properties at the same lines, so updating does not change them. virtua's README documents no option to leave either property unwritten. `Virtualizer`'s `itemProps.style` is spread after `visibility` (lib/svelte/ListItem.svelte:54–55), but whether a row is drawn is Row's `data-drawn`, which `itemAttrs` cannot see, and `parkRows` reads the item's inline `visibility` to tell an unmeasured row, so it is not a way around the bang.
+sanctioned: theme: component transcript-drawn-item — virtua 0.53.4 writes visibility inline at lib/svelte/ListItem.svelte:54 (`visibility: !hide || isSSR ? undefined : "hidden"`); https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier
+sanctioned: theme: component transcript-scroll-lock — virtua 0.53.4 writes pointer-events inline at lib/svelte/Virtualizer.svelte:186 (`"pointer-events": isScrolling ? "none" : undefined`); https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier
 
 ## Gaps
-gap: src/lib/tokens/theme.css (the theme components `transcript-drawn-item`, `transcript-scroll-lock` below) virtua writes `visibility` and `pointer-events` inline on its items and container, and no selector outranks an inline declaration, so those two rules need `!important`; they live in the theme file, not in this lane's files — Delta T
-gap: apps/dashboard/src/lib/cawco/MessageBody.svelte:32 `--measure: 74ch` — the skeleton's paragraphs read `c-measure` (72ch), so they match the real ones only once MessageBody takes the same token — DESIGN.md Typography (Body measure)
 gap: apps/dashboard/src/app.css:2121 `.rail-row`'s `padding-inline-start`, which SystemLine.svelte:478,533 `data-code:ps-0` undoes: a `.rail-row` without the rail belongs in app.css — DESIGN.md Layout
 gap: apps/dashboard/src/app.css:2100–2140 `.tx-columns`, `.rail-row`, `.rail-line`, `.rail-cell`, `.rail-hang` are plain classes these five files write as styles; they become theme utilities where app.css lives — Delta T (class is a style)
 
