@@ -174,8 +174,62 @@ function gridOf(args: { selector: string; grid: number }) {
     paint.fillRect(0, 0, 1, 1);
     return [...paint.getImageData(0, 0, 1, 1).data];
   };
+  // A text node's glyphs cover part of its box: a point on words is not read.
+  const onText = (hit: Element) =>
+    [...hit.childNodes].some(
+      (node) =>
+        node.nodeType === Node.TEXT_NODE &&
+        (node.textContent ?? "").trim() !== ""
+    );
+  /** Drawn through, or mixed with what is under it: a box not at full opacity, filtered or blended, here or out to the page. */
+  const mixed = (hit: Element) => {
+    for (let at: Element | null = hit; at; at = at.parentElement) {
+      const style = getComputedStyle(at);
+      if (
+        Number(style.opacity) < 1 ||
+        style.filter !== "none" ||
+        style.mixBlendMode !== "normal"
+      ) {
+        return true;
+      }
+    }
+    return false;
+  };
+  /**
+   * What the body paints that hit-testing passes through: `pointer-events:
+   * none` and inert boxes (HTML's inert is hit-tested as if it had none)
+   * that draw anything, a background, a border, an image or words. A point
+   * on one is not read: the hit is under it.
+   */
+  const unhit = [...body.querySelectorAll("*")]
+    .filter(
+      (el) =>
+        el.closest("[inert]") !== null ||
+        getComputedStyle(el).pointerEvents === "none"
+    )
+    .filter((el) => {
+      const style = getComputedStyle(el);
+      return (
+        style.visibility === "visible" &&
+        (rgba(style.backgroundColor)[3] !== 0 ||
+          style.backgroundImage !== "none" ||
+          style.borderStyle !== "none" ||
+          el instanceof SVGElement ||
+          el instanceof HTMLImageElement ||
+          el instanceof HTMLCanvasElement ||
+          onText(el))
+      );
+    })
+    .map((el) => el.getBoundingClientRect());
+  const underUnhit = (x: number, y: number) =>
+    unhit.some(
+      (box) => x >= box.left && x < box.right && y >= box.top && y < box.bottom
+    );
   /** The flat colour under a hit: the nearest box out from it with an opaque background and no image; null where that can't be told. */
   const paintedAt = (hit: Element): [number, number, number] | null => {
+    if (mixed(hit)) {
+      return null;
+    }
     for (
       let at: Element | null = hit;
       at && body.contains(at);
@@ -192,13 +246,6 @@ function gridOf(args: { selector: string; grid: number }) {
     }
     return null;
   };
-  // A text node's glyphs cover part of its box: a point on words is not read.
-  const onText = (hit: Element) =>
-    [...hit.childNodes].some(
-      (node) =>
-        node.nodeType === Node.TEXT_NODE &&
-        (node.textContent ?? "").trim() !== ""
-    );
   const name = (el: Element | null) =>
     el
       ? `${el.tagName.toLowerCase()}.${[...el.classList].join(".")}`
@@ -211,9 +258,10 @@ function gridOf(args: { selector: string; grid: number }) {
       ((rect.height - 4) * (Math.floor(at / args.grid) + 0.5)) / args.grid + 2;
     const hit = document.elementFromPoint(rect.left + x, rect.top + y);
     if (hit && body.contains(hit)) {
+      const page = { x: rect.left + x, y: rect.top + y };
       points.push({
-        page: { x: rect.left + x, y: rect.top + y },
-        rgb: onText(hit) ? null : paintedAt(hit),
+        page,
+        rgb: onText(hit) || underUnhit(page.x, page.y) ? null : paintedAt(hit),
         x,
         y,
       });
