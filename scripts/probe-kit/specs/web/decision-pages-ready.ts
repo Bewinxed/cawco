@@ -715,6 +715,25 @@ function readPage() {
       .map((one) => one.textContent?.trim() ?? "")
       .filter(Boolean),
     sideways: document.documentElement.scrollWidth - window.innerWidth,
+    // The smallest text any diagram draws, in px as seen: its font size
+    // times the drawing's scale (a diagram zoomed to fit a phone shrinks).
+    diagramText: Math.min(
+      ...[...document.querySelectorAll(".dp-card .diagram .draw svg")].flatMap(
+        (svg) => {
+          const box = (svg as SVGSVGElement).viewBox?.baseVal;
+          const scale =
+            box && box.width > 0
+              ? svg.getBoundingClientRect().width / box.width
+              : 1;
+          return [...svg.querySelectorAll("text")]
+            .filter((text) => (text.textContent ?? "").trim() !== "")
+            .map(
+              (text) =>
+                Number.parseFloat(getComputedStyle(text).fontSize) * scale
+            );
+        }
+      )
+    ),
     // A Mermaid subgraph is drawn by Pele as g.pele-cluster; the drawing is
     // the figure's .draw (its other svgs are the figure's own controls).
     groups: [...document.querySelectorAll(".dp-card .diagram .draw")].map(
@@ -979,6 +998,12 @@ const spec: Spec = {
               staggered.length === 0,
               JSON.stringify(staggered)
             );
+            if (said.groups.length > 0) {
+              kit.check(
+                `${one.name} ${leg}: every diagram's text reads at 12px or more, the house's smallest text (smallest ${r1(said.diagramText)}px)`,
+                Number.isFinite(said.diagramText) && said.diagramText >= 12
+              );
+            }
             const drawnFaults = embeds.flatMap(embedDrawFaults);
             kit.check(
               `${one.name} ${leg}: every embed draws the component itself, read in its own frame (${embeds.length} of ${embedded ?? 0} embeds: ${embeds.map((e) => `${e.file} ${e.shots.map((shot) => `${shot.story} ${shot.stats.width / SCALE}×${shot.stats.height / SCALE} (${shot.stats.matched} points its paint)`).join(" + ") || "none"}`).join("; ")})`,
