@@ -486,8 +486,7 @@
                 {@const file = job.lfsFile}
                 <div
                   class="grid grid-cols-(--file-cols) items-center gap-space-2"
-                  style:--file-cols="minmax(0, 1fr)
-                  var(--c-move-wait-file-bar-w) auto"
+                  style:--file-cols={"minmax(0, 1fr) var(--c-move-wait-file-bar-w) auto"}
                   in:unfold
                   out:unfold
                 >

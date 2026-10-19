@@ -819,8 +819,7 @@
             data-stop-tray-tone={status.tone}
             data-box
             style:--stat-away-indent={"calc(var(--mark-size, var(--space-5)) + var(--row-compact-gap))"}
-            style:--stat-min="calc(var(--icon-md) + var(--space-1) +
-            var(--c-stop-tray-status-w))"
+            style:--stat-min={"calc(var(--icon-md) + var(--space-1) + var(--c-stop-tray-status-w))"}
           >
             <span
               data-slot="glyph"

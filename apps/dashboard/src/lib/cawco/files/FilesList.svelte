@@ -395,8 +395,7 @@
      filling what its card or its drawer gives it. -->
 <div
   class="relative flex min-h-0 flex-1 flex-col"
-  style:--lead-pad="calc(var(--c-row-inset) - (var(--c-row-lead) -
-  var(--icon-md)) / 2)"
+  style:--lead-pad={"calc(var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2)"}
   style:--row-end="calc(var(--c-btn-h-xs) + var(--space-2))"
 >
   {#if nothing}
@@ -498,17 +497,12 @@
           class="grid min-h-0 flex-1 grid-rows-(--region-rows) content-box-start short-window:artifacts-floor-cards:artifacts-min-(--c-section-head-h) short-window:attachments-floor-one:attachments-min-(--seam-head-floor) short-window:attachments-floor-two:attachments-min-(--seam-head-floor) tall-window:artifacts-floor-cards:artifacts-min-(--cards-floor) tall-window:attachments-floor-one:attachments-min-(--one-floor) tall-window:attachments-floor-two:attachments-min-(--two-floor)"
           data-artifacts-floor={artifactsFloor}
           data-attachments-floor={attachmentsFloor}
-          style:--region-rows="minmax(var(--artifacts-min, min-content), auto)
-          minmax(var(--attachments-min, min-content), auto)"
+          style:--region-rows={"minmax(var(--artifacts-min, min-content), auto) minmax(var(--attachments-min, min-content), auto)"}
           style:--region-seam="calc(1px + 2 * var(--space-2))"
-          style:--seam-head-floor="calc(var(--c-section-head-h) +
-          var(--region-seam))"
-          style:--cards-floor="calc(var(--c-section-head-h) + 4 *
-          var(--c-artifact-row-h))"
-          style:--two-floor="calc(var(--c-section-head-h) + 2 *
-          var(--c-artifact-row-h) + var(--region-seam))"
-          style:--one-floor="calc(var(--c-section-head-h) +
-          var(--c-artifact-row-h) + var(--region-seam))"
+          style:--seam-head-floor={"calc(var(--c-section-head-h) + var(--region-seam))"}
+          style:--cards-floor={"calc(var(--c-section-head-h) + 4 * var(--c-artifact-row-h))"}
+          style:--two-floor={"calc(var(--c-section-head-h) + 2 * var(--c-artifact-row-h) + var(--region-seam))"}
+          style:--one-floor={"calc(var(--c-section-head-h) + var(--c-artifact-row-h) + var(--region-seam))"}
         >
           <section
             aria-labelledby="{uid}-artifacts"

@@ -562,10 +562,8 @@
                        header's inset (`--tx-diff-head-inline`). -->
                       <div
                         class="flex flex-col gap-space-2 mt-space-2 mb-space-3 ms-(--diffs-start)"
-                        style:--diffs-inset="calc(var(--tx-diff-head-inline) +
-                        1px)"
-                        style:--diffs-start="calc(var(--x-hang) -
-                        var(--diffs-inset))"
+                        style:--diffs-inset={"calc(var(--tx-diff-head-inline) + 1px)"}
+                        style:--diffs-start={"calc(var(--x-hang) - var(--diffs-inset))"}
                       >
                         {#if refusal}
                           <p

@@ -965,8 +965,7 @@
             data-slot="wall"
             class="grid grid-cols-(--wall-cols) gap-space-1"
             data-flyover-span
-            style:--wall-cols="repeat(2, auto var(--icon-sm) minmax(0, 1fr)
-            var(--icon-sm) auto)"
+            style:--wall-cols={"repeat(2, auto var(--icon-sm) minmax(0, 1fr) var(--icon-sm) auto)"}
           >
             {#each wall as block (block.org ?? "")}
               <div
@@ -1018,8 +1017,7 @@
             data-slot="wall"
             class="grid grid-cols-(--wall-cols) gap-space-1"
             data-flyover-span
-            style:--wall-cols="repeat(2, auto var(--icon-sm) minmax(0, 1fr)
-            var(--icon-sm) auto)"
+            style:--wall-cols={"repeat(2, auto var(--icon-sm) minmax(0, 1fr) var(--icon-sm) auto)"}
           >
             {@render cell(openCode, null, sideFor())}
           </div>

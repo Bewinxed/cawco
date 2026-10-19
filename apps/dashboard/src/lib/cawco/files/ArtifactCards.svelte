@@ -151,8 +151,7 @@
   class="relative grid auto-rows-line grid-flow-dense grid-cols-(--lane-tracks) items-box-start gap-x-space-2 px-(--gutter) pb-space-6"
   data-files-cards
   style:--card-min="var(--c-artifact-card-min)"
-  style:--gutter="calc((var(--c-row-inset) - (var(--c-row-lead) -
-  var(--icon-md)) / 2) - var(--space-1))"
+  style:--gutter={"calc((var(--c-row-inset) - (var(--c-row-lead) - var(--icon-md)) / 2) - var(--space-1))"}
   style:--lane-tracks="repeat({count}, minmax(0, 1fr))"
   {@attach highlight({
     rows: "[data-files-card]",

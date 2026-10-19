@@ -140,9 +140,7 @@
       aria-label="Loading workflows"
       class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
       role="status"
-      style:--cols="minmax(var(--c-workflow-name-col), 1fr)
-      var(--c-workflow-when-col) var(--c-workflow-when-col)
-      var(--c-workflow-count-col) var(--c-workflow-actions-col)"
+      style:--cols={"minmax(var(--c-workflow-name-col), 1fr) var(--c-workflow-when-col) var(--c-workflow-when-col) var(--c-workflow-count-col) var(--c-workflow-actions-col)"}
       style:--cols-cards="1fr auto"
       out:crossOut
     >
@@ -204,9 +202,7 @@
     <table
       aria-label="Workflows"
       class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
-      style:--cols="minmax(var(--c-workflow-name-col), 1fr)
-      var(--c-workflow-when-col) var(--c-workflow-when-col)
-      var(--c-workflow-count-col) var(--c-workflow-actions-col)"
+      style:--cols={"minmax(var(--c-workflow-name-col), 1fr) var(--c-workflow-when-col) var(--c-workflow-when-col) var(--c-workflow-count-col) var(--c-workflow-actions-col)"}
       style:--cols-cards="1fr auto"
       in:crossIn
     >

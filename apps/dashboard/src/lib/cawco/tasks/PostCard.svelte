@@ -85,8 +85,7 @@
         class="relative flex flex-col gap-space-2 rounded-md border border-border-hairline bg-surface-raised px-space-4 py-space-3 shadow-tile group-data-compact:px-space-3 group-data-compact:py-space-2 group-data-compact:shadow-none not-first:before:absolute not-first:before:start-(--joint-x) not-first:before:bottom-full not-first:before:h-(--joint-reach) not-first:before:w-space-row not-first:before:bg-border-control"
         data-part={index}
         style:--joint-reach="calc(var(--space-2) + 1px)"
-        style:--joint-x="calc(var(--space-4) + var(--c-mark) / 2 -
-        var(--space-row) / 2)"
+        style:--joint-x={"calc(var(--space-4) + var(--c-mark) / 2 - var(--space-row) / 2)"}
       >
         <div
           data-slot="who"

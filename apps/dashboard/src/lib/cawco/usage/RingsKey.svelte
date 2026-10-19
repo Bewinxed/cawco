@@ -28,8 +28,7 @@
 <div
   class="mark-line type-meta num grid grid-cols-(--key-cols) items-center gap-x-space-2 gap-y-space-1"
   style:--c={ring.color}
-  style:--key-cols="auto var(--c-rings-key-label-w) var(--c-rings-key-value-w)
-  minmax(0, 1fr)"
+  style:--key-cols={"auto var(--c-rings-key-label-w) var(--c-rings-key-value-w) minmax(0, 1fr)"}
 >
   {#each rows as row (row.id)}
     {#if row.glyph === "rim"}

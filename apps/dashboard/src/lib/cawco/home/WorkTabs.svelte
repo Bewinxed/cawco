@@ -772,8 +772,7 @@
       data-slot="head"
       class="mb-space-1 flex items-end justify-between gap-(--head-gap) border-b border-b-seam pt-space-1 pr-space-2 pb-0 pl-0"
       style:--head-gap="calc(var(--space-2) - var(--tight) * 0.09)"
-      style:--tight="clamp(0px, calc(var(--c-work-tabs-roomy-w) - 100cqw -
-      var(--space-4)), var(--c-work-tabs-squeeze))"
+      style:--tight={"clamp(0px, calc(var(--c-work-tabs-roomy-w) - 100cqw - var(--space-4)), var(--c-work-tabs-squeeze))"}
       style:--count-end="max(0px, var(--space-row) - var(--tight) * 0.06)"
     >
       <!-- The session tabs' folder tabs, hosted: no shelf, the chosen

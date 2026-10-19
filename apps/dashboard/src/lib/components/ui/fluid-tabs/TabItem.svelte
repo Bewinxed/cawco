@@ -320,8 +320,7 @@
       class="pick-inherit pointer-events-none absolute inset-y-0 start-(--fold-start) z-1 h-full w-(--fold-w) overflow-visible clip-path-(--fold-clip)"
       style:--fold-start="calc(-1 * var(--flare))"
       style:--fold-w="calc(100% + 2 * var(--flare))"
-      style:--fold-clip="inset(calc(-1 * var(--tab-rim-glow-room)) calc(-1 *
-      var(--tab-rim-glow-room)) 0)"
+      style:--fold-clip={"inset(calc(-1 * var(--tab-rim-glow-room)) calc(-1 * var(--tab-rim-glow-room)) 0)"}
       preserveAspectRatio="none"
       viewBox="0 0 {shape.box.width + 2 * shape.box.flare} {shape.box.height}"
     >

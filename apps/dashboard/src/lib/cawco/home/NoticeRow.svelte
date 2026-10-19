@@ -52,8 +52,7 @@
   data-nested={nested || undefined}
   style:--columns="var(--c-row-lead) minmax(0, 1fr)"
   style:--pad-block={nested ? "var(--space-1)" : "var(--space-3)"}
-  style:--x-ink="calc((var(--c-btn-h-xs) - var(--icon-sm)) / 2 + var(--icon-sm)
-  * 5.25 / 24)"
+  style:--x-ink={"calc((var(--c-btn-h-xs) - var(--icon-sm)) / 2 + var(--icon-sm) * 5.25 / 24)"}
 >
   <span data-slot="lead" class="grid size-c-row-lead place-items-center"
     >{@render lead()}</span
@@ -83,10 +82,8 @@
         class="touch-hit pointer-hit grid size-c-btn-h-xs cursor-pointer place-items-center rounded-xs border-none border-current bg-transparent p-0 text-ink-muted transition-tint-press motion-safe:active:transform-(--tpress) coarse:after:start-(--hit-start) coarse:after:end-(--hit-end) hover:bg-surface-hover hover:text-ink-strong"
         onclick={ondismiss}
         style:--tpress="scale(var(--press-scale))"
-        style:--hit-start="calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 -
-        var(--x-ink))"
-        style:--hit-end="calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 +
-        var(--x-ink))"
+        style:--hit-start={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 - var(--x-ink))"}
+        style:--hit-end={"calc((var(--c-btn-h-xs) - var(--c-btn-h-lg)) / 2 + var(--x-ink))"}
         type="button"
       >
         <IconClose aria-hidden="true" class="size-icon-sm" />

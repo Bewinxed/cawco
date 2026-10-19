@@ -163,8 +163,7 @@
   ]}
   data-safe-bottom
   style:--fade-len="var(--c-edge-fade-len)"
-  style:--list-max="min(var(--c-caw-list-h), calc(100dvh -
-  var(--c-caw-list-clear)))"
+  style:--list-max={"min(var(--c-caw-list-h), calc(100dvh - var(--c-caw-list-clear)))"}
   style:--list-max-phone={"calc(100dvh - var(--c-top-bar-h) - var(--space-3) - var(--safe-bottom) - var(--c-caw-list-clear-phone))"}
   style:--stuck-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--fade-start), var(--mask-opaque))"}
   {@attach reflow()}
@@ -263,8 +262,7 @@
             class="grid grid-cols-(--damaged-cols) items-box-start gap-x-space-2 gap-y-space-1 py-space-2 pe-space-3 ps-(--damaged-lead)"
             data-flip
             style:--damaged-cols="1fr auto"
-            style:--damaged-lead="calc(var(--space-3) + var(--c-row-lead) +
-            var(--space-3))"
+            style:--damaged-lead={"calc(var(--space-3) + var(--c-row-lead) + var(--space-3))"}
           >
             <p
               data-slot="words"
