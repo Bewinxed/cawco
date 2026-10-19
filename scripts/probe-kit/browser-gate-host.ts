@@ -20,6 +20,18 @@ const browsers = await import("../../packages/agent/src/browser/browsers");
 const gates = await import("../../packages/agent/src/browser/gate");
 const { readBrowser } = await import("../../packages/agent/src/browser/state");
 
+// SIGTERM stops it as the daemon's finalizer stops the registry
+// (daemon.ts): a move into a container under way is aborted, and its own
+// failure path awaited, before the process exits.
+process.on("SIGTERM", () => {
+  browsers
+    .stopBrowsers()
+    .catch((error: unknown) =>
+      console.warn(`[browser] the registry did not stop: ${String(error)}`)
+    )
+    .finally(() => process.exit(0));
+});
+
 interface Command {
   hidden?: boolean;
   id: number;

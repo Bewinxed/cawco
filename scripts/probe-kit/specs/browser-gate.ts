@@ -107,6 +107,81 @@ const evaluateAt = async (
   }
 };
 
+/** The Firebase Auth record the move carries, as its SDK keeps a signed-in user (`firebaseLocalStorageDb`). */
+const FIREBASE_KEY = "firebase:authUser:probe:[DEFAULT]";
+const FIREBASE_AT = 1_700_000_000_123;
+
+/** A page script making Firebase's database, its one record holding a nested object with a Date and an ArrayBuffer. */
+const firebaseSeed = (token: string): string => `(async () => {
+  const request = indexedDB.open("firebaseLocalStorageDb", 1);
+  request.onupgradeneeded = () => {
+    request.result.createObjectStore("firebaseLocalStorage", { keyPath: "fbase_key" });
+  };
+  const db = await new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const tx = db.transaction("firebaseLocalStorage", "readwrite");
+  tx.objectStore("firebaseLocalStorage").put({
+    fbase_key: ${JSON.stringify(FIREBASE_KEY)},
+    value: {
+      uid: "probe-user",
+      stsTokenManager: { refreshToken: ${JSON.stringify(token)}, expirationTime: ${FIREBASE_AT} },
+      createdAt: new Date(${FIREBASE_AT}),
+      raw: new Uint8Array([1, 2, 3, 250]).buffer,
+    },
+  });
+  await new Promise((resolve, reject) => {
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+  return "seeded";
+})()`;
+
+/** A page script answering Firebase's database as it stands: its schema, and its record with each value's type checked. */
+const FIREBASE_READ = `(async () => {
+  const request = indexedDB.open("firebaseLocalStorageDb");
+  const db = await new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const store = db.transaction("firebaseLocalStorage").objectStore("firebaseLocalStorage");
+  const record = await new Promise((resolve, reject) => {
+    const got = store.get(${JSON.stringify(FIREBASE_KEY)});
+    got.onsuccess = () => resolve(got.result);
+    got.onerror = () => reject(got.error);
+  });
+  const value = record && record.value;
+  const read = JSON.stringify({
+    version: db.version,
+    stores: Array.from(db.objectStoreNames),
+    keyPath: store.keyPath,
+    autoIncrement: store.autoIncrement,
+    key: record && record.fbase_key,
+    uid: value && value.uid,
+    stsTokenManager: value && value.stsTokenManager,
+    createdAt: value && value.createdAt instanceof Date ? value.createdAt.getTime() : "not a Date",
+    raw: value && value.raw instanceof ArrayBuffer ? Array.from(new Uint8Array(value.raw)) : "not an ArrayBuffer",
+  });
+  db.close();
+  return read;
+})()`;
+
+/** What {@link FIREBASE_READ} answers for the record {@link firebaseSeed} made. */
+const firebaseExpected = (token: string): string =>
+  JSON.stringify({
+    version: 1,
+    stores: ["firebaseLocalStorage"],
+    keyPath: "fbase_key",
+    autoIncrement: false,
+    key: FIREBASE_KEY,
+    uid: "probe-user",
+    stsTokenManager: { refreshToken: token, expirationTime: FIREBASE_AT },
+    createdAt: FIREBASE_AT,
+    raw: [1, 2, 3, 250],
+  });
+
 /** How the gate host prefixes its answers. */
 const HOST_LINE = "GATE-HOST ";
 
@@ -116,7 +191,10 @@ const HOST_LINE = "GATE-HOST ";
  */
 interface GateHost {
   call: (verb: string, args?: object) => Promise<unknown>;
+  /** SIGTERM, as the agent is stopped: it stops the registry first (browser-gate-host.ts). */
   end: () => void;
+  /** Its exit code, once it has exited. */
+  exited: Promise<number>;
 }
 
 const startGateHost = (env: Record<string, string>): GateHost => {
@@ -176,6 +254,7 @@ const startGateHost = (env: Record<string, string>): GateHost => {
         child.stdin.flush();
       }),
     end: () => child.kill(),
+    exited: child.exited,
   };
 };
 
@@ -689,13 +768,15 @@ const run = async (kit: Kit): Promise<void> => {
   });
   const gatePort = probe.port;
   probe.stop(true);
-  const gateHost = startGateHost({
+  const gateEnv = {
     ...(process.env as Record<string, string>),
     HOME: home,
     XDG_DATA_HOME: data,
     CAWCO_BROWSER_GATE_PORT: String(gatePort),
     DOCKER_HOST: dockerHost,
-  });
+  };
+  // The machine side, started again in the move's leg as an agent is.
+  let gateHost = startGateHost(gateEnv);
   try {
     await until(
       "both delegates started",
@@ -854,9 +935,10 @@ const run = async (kit: Kit): Promise<void> => {
     await shellChecks(kit, "local");
 
     // The runtime installed: the local browser moves into a container, its
-    // sign-ins carried. A cookie and a localStorage item are set on the local
-    // host over its own DevTools (the daemon's way in, never the gate), and
-    // read back the same way from the container's Chromium.
+    // sign-ins carried. A cookie, a localStorage item and a Firebase-shaped
+    // IndexedDB are set on the local host over its own DevTools (the
+    // daemon's way in, never the gate), and read back the same way from the
+    // container's Chromium.
     const carried = `carried-${Date.now()}`;
     const signedIn = await CdpLink.open(
       `http://127.0.0.1:${localPorts.devtools}`
@@ -879,9 +961,62 @@ const run = async (kit: Kit): Promise<void> => {
         "https://example.com/",
         `localStorage.setItem("cawco-carried", ${JSON.stringify(carried)})`
       );
+      await evaluateAt(signedIn, "https://example.com/", firebaseSeed(carried));
     } finally {
       signedIn.close();
     }
+
+    // A move cut short: the runtime back, and the agent stopped once the
+    // move's container stands and before the record's one write. Its stop
+    // aborts the move, whose failure path removes what it made.
+    const labelled = async () => {
+      const label = { label: [`dev.cawco.browser=${key}`] };
+      const containers = await runtime.docker.listContainers({
+        all: true,
+        filters: label,
+      });
+      const { Volumes } = await runtime.docker.listVolumes({ filters: label });
+      return { containers: containers.length, volumes: (Volumes ?? []).length };
+    };
+    await gateHost.call("runtime", { hidden: false });
+    const cut = await until(
+      `the move's container for ${key}, before its record is written`,
+      async () => {
+        const record = (await gateHost.call("record", { key })) as {
+          host?: string;
+        } | null;
+        if (record?.host !== "local") {
+          return "written";
+        }
+        return (await labelled()).containers > 0 ? "standing" : undefined;
+      },
+      Boolean,
+      300_000
+    ).catch(() => "never");
+    gateHost.end();
+    const exit = await gateHost.exited;
+    const afterStop = await labelled();
+    const stillLocal = (
+      (await readFile(
+        join(data, "cawco", "browsers", browserSlug(key), "record.json"),
+        "utf8"
+      ).then(
+        (text) => JSON.parse(text) as { host?: string },
+        () => ({})
+      )) as { host?: string }
+    ).host;
+    kit.check(
+      `the agent stopped mid-move (its container standing, the record unwritten): its stop removes the move's container and volume, and the record stays on the local host`,
+      cut === "standing" &&
+        afterStop.containers === 0 &&
+        afterStop.volumes === 0 &&
+        stillLocal === "local",
+      JSON.stringify({ cut, exit, afterStop, host: stillLocal })
+    );
+
+    // The agent started again: the move runs whole.
+    gateHost = startGateHost(gateEnv);
+    await gateHost.call("watch");
     await gateHost.call("runtime", { hidden: false });
     const moved = await until(
       `${key} live on the container host`,
@@ -895,7 +1030,7 @@ const run = async (kit: Kit): Promise<void> => {
       300_000
     ).catch(() => null);
     const at = moved?.container?.ports?.devtools;
-    let read: { cookie?: unknown; item?: unknown } = {};
+    let read: { cookie?: unknown; database?: unknown; item?: unknown } = {};
     if (at) {
       const container = await CdpLink.open(`http://127.0.0.1:${at}`);
       try {
@@ -914,6 +1049,11 @@ const run = async (kit: Kit): Promise<void> => {
             "https://example.com/",
             `localStorage.getItem("cawco-carried")`
           ),
+          database: await evaluateAt(
+            container,
+            "https://example.com/",
+            FIREBASE_READ
+          ),
         };
       } finally {
         container.close();
@@ -930,20 +1070,25 @@ const run = async (kit: Kit): Promise<void> => {
       () => false,
       () => true
     );
+    const afterMove = await labelled();
     const cookie = read.cookie as
       { httpOnly?: boolean; value?: string } | undefined;
     kit.check(
-      `the runtime back: ${key} moves into a container at rest, its httpOnly cookie and localStorage item read back from the container's Chromium over its own DevTools (127.0.0.1:${at}), and its local profile (${profile}) gone`,
+      `the runtime back: ${key} moves into a container at rest (one container), its httpOnly cookie, localStorage item and firebaseLocalStorageDb read back from the container's Chromium over its own DevTools (127.0.0.1:${at}), the database exactly, and its local profile (${profile}) gone`,
       moved?.host === "container" &&
+        afterMove.containers === 1 &&
         cookie?.value === carried &&
         cookie.httpOnly === true &&
         read.item === carried &&
+        read.database === firebaseExpected(carried) &&
         profileGone,
       JSON.stringify({
         host: moved?.host,
         state: moved?.state,
+        afterMove,
         cookie,
         item: read.item,
+        database: read.database,
         profileGone,
       })
     );

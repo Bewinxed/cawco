@@ -169,6 +169,7 @@ import {
   setBrowserSink,
   startBrowser,
   stopBrowser,
+  stopBrowsers,
   viewerSession,
   watchBrowsers,
 } from "./browser/browsers";
@@ -3215,6 +3216,10 @@ export const startDaemon = (rediscover = false) =>
           )
       )
     );
+    // A browser's move into a container under way as the agent stops is
+    // aborted and its own failure path awaited, so nothing it made is left
+    // on the runtime (browsers.ts `stopBrowsers`).
+    yield* Effect.addFinalizer(() => Effect.promise(() => stopBrowsers()));
     // The fleet's stream relay, when this machine runs it (browser/relay.ts):
     // started, stopped, its certificate renewed; read back from its container.
     setRelaySink(machineIdValue, (frame) =>

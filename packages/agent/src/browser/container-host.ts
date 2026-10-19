@@ -22,7 +22,7 @@
  */
 import { randomBytes } from "node:crypto";
 import { readWithin } from "@cawco/core/bounded";
-import type { BrowserRelay } from "@cawco/core/browser";
+import type { BrowserKey, BrowserRelay } from "@cawco/core/browser";
 import { BROWSER_SCREEN, browserSlug } from "@cawco/core/browser";
 import type { MediaPath } from "@cawco/core/capabilities";
 import { stunServer } from "@cawco/core/stream-relay";
@@ -262,7 +262,7 @@ export class ContainerHost implements BrowserHost {
     for (;;) {
       if (!container) {
         // biome-ignore lint/performance/noAwaitInLoops: each round waits on the container it made.
-        await this.#removeContainer(record);
+        await this.#removeContainer(record.key);
         container = await this.#create(
           record,
           image,
@@ -394,11 +394,11 @@ export class ContainerHost implements BrowserHost {
     };
   }
 
-  async #removeContainer(record: BrowserRecord): Promise<void> {
+  async #removeContainer(key: BrowserKey): Promise<void> {
     const named = await this.#docker
       .listContainers({
         all: true,
-        filters: { label: [`${BROWSER_LABEL}=${record.key}`] },
+        filters: { label: [`${BROWSER_LABEL}=${key}`] },
       })
       .catch(() => []);
     await Promise.all(
@@ -431,8 +431,33 @@ export class ContainerHost implements BrowserHost {
       });
   }
 
+  /**
+   * Every container and then every volume this runtime holds labelled with
+   * `key`, removed, whatever any record says: what a move into a container
+   * cut short left (the agent stopped, or was killed, before the record's
+   * one write). Matched by the label alone, never by a name's pattern.
+   */
+  async removeLabelled(key: BrowserKey): Promise<void> {
+    await this.#removeContainer(key);
+    const { Volumes } = await this.#docker.listVolumes({
+      filters: { label: [`${BROWSER_LABEL}=${key}`] },
+    });
+    await Promise.all(
+      (Volumes ?? []).map((volume) =>
+        this.#docker
+          .getVolume(volume.Name)
+          .remove()
+          .catch((error: unknown) => {
+            if (!notFound(error)) {
+              throw error;
+            }
+          })
+      )
+    );
+  }
+
   async remove(record: BrowserRecord): Promise<void> {
-    await this.#removeContainer(record);
+    await this.#removeContainer(record.key);
     await this.#docker
       .getVolume(record.container?.volume ?? containerName(record))
       .remove()

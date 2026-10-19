@@ -130,15 +130,17 @@ export class CdpLink {
     return new CdpLink(socket);
   }
 
+  /** One call, answered within `ms` (a page's script reading a whole database takes longer than a protocol call). */
   async call(
     method: string,
     params: Json = {},
-    sessionId?: string
+    sessionId?: string,
+    ms = CALL_MS
   ): Promise<Json> {
     const id = this.#next;
     this.#next += 1;
     const read = await readWithin(
-      CALL_MS,
+      ms,
       (signal) =>
         new Promise<Json>((resolve, reject) => {
           signal.addEventListener("abort", () => this.#waiting.delete(id));
@@ -154,7 +156,7 @@ export class CdpLink {
         })
     );
     if (read.kind === "unanswered") {
-      throw new Error(`${method} got no answer within ${CALL_MS / 1000} s.`);
+      throw new Error(`${method} got no answer within ${ms / 1000} s.`);
     }
     return read.value;
   }

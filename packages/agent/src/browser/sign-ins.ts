@@ -21,18 +21,37 @@
  * `FindStorageArea`). So each origin is opened on a page of the daemon's
  * own, its document answered empty by `Fetch.fulfillRequest` so no request
  * leaves the browser and no site's script runs, with service workers
- * bypassed. IndexedDB is not carried: CDP's IndexedDB domain writes nothing.
+ * bypassed.
+ *
+ * IndexedDB: CDP's IndexedDB domain reads but writes nothing, so on that same
+ * page the IndexedDB API itself reads every database of the origin and makes
+ * it again on the other side (sign-ins-page.ts), each database checked by
+ * reading it back. An origin whose databases encode past
+ * {@link IDB_CAP_CHARS} is not carried, and the log names it and its size.
  */
 import { CdpLink } from "./cdp-takeover";
+import { idbRead, idbWrite } from "./sign-ins-page";
+
+/**
+ * The most of one origin's IndexedDB that carries, in encoded characters:
+ * 32 MiB, far past any sign-in and inside one DevTools message. My own call:
+ * Chrome lets an origin keep "up to 60% of the total disk space"
+ * (web.dev/articles/storage-for-the-web), so no source caps a carry.
+ */
+export const IDB_CAP_CHARS = 32 * 1024 * 1024;
+
+/** How long a page's script may take to read or write an origin's databases. */
+const IDB_MS = 120_000;
 
 type Json = Record<string, unknown>;
 
 /** One cookie as `Storage.setCookies` takes it. */
 type CookieParam = Json & { name: string; value: string };
 
-/** What carries: the cookies, and each origin's localStorage items. */
+/** What carries: the cookies, each origin's localStorage items, and each origin's IndexedDB as one snapshot (sign-ins-page.ts). */
 export interface SignIns {
   cookies: CookieParam[];
+  databases: { origin: string; snapshot: string }[];
   storage: { items: [string, string][]; origin: string }[];
 }
 
@@ -140,14 +159,80 @@ const blankPage = async (
   await link.call("Fetch.enable", { patterns: [{ urlPattern: "*" }] }, session);
   return {
     session,
+    // Standing at `origin` once the page's own document says so: a script
+    // evaluated as the navigation commits can still run in the one before.
     open: async (origin) => {
       await link.call("Page.navigate", { url: `${origin}/` }, session);
+      const until = Date.now() + OPEN_MS;
+      while (
+        // biome-ignore lint/performance/noAwaitInLoops: polling the page's own origin.
+        (await evaluate(link, session, "location.origin", CALL_SHORT_MS)) !==
+        origin
+      ) {
+        if (Date.now() > until) {
+          throw new Error(`The page did not stand at ${origin}.`);
+        }
+        await Bun.sleep(OPEN_POLL_MS);
+      }
     },
     close: async () => {
       link.onEvent = () => undefined;
       await link.call("Target.closeTarget", { targetId });
     },
   };
+};
+
+/** How long a page has to stand at an origin it opens, and how often it is asked. */
+const OPEN_MS = 10_000;
+const OPEN_POLL_MS = 50;
+const CALL_SHORT_MS = 5000;
+
+/** `expression` evaluated on `session`'s page, its promise awaited: its value, or why it threw. */
+const evaluate = async (
+  link: CdpLink,
+  session: string,
+  expression: string,
+  ms: number
+): Promise<unknown> => {
+  const { result, exceptionDetails } = (await link.call(
+    "Runtime.evaluate",
+    { expression, awaitPromise: true, returnByValue: true },
+    session,
+    ms
+  )) as {
+    exceptionDetails?: { exception?: { description?: string }; text?: string };
+    result?: { value?: unknown };
+  };
+  if (exceptionDetails) {
+    throw new Error(
+      exceptionDetails.exception?.description ??
+        exceptionDetails.text ??
+        "the page's script threw"
+    );
+  }
+  return result?.value;
+};
+
+/**
+ * The page's origin's IndexedDB as one snapshot: undefined when it has no
+ * database, or when they encode past {@link IDB_CAP_CHARS}, which is said.
+ */
+const readDatabases = async (
+  link: CdpLink,
+  session: string,
+  origin: string
+): Promise<string | undefined> => {
+  const answer = String(
+    await evaluate(link, session, idbRead(IDB_CAP_CHARS), IDB_MS)
+  );
+  const read = JSON.parse(answer) as { databases?: unknown[]; over?: number };
+  if (read.over !== undefined) {
+    console.info(
+      `[browser] ${origin}'s IndexedDB was not carried: it encodes past ${read.over} characters, over the ${IDB_CAP_CHARS}-character cap`
+    );
+    return;
+  }
+  return read.databases?.length ? answer : undefined;
 };
 
 const storageId = (origin: string): Json => ({
@@ -167,6 +252,7 @@ export const readSignIns = async (devtools: string): Promise<SignIns> => {
     const cookies = cookiesOf(await link.call("Storage.getCookies"));
     const page = await blankPage(link);
     const storage: SignIns["storage"] = [];
+    const databases: SignIns["databases"] = [];
     try {
       for (const origin of originsOf(cookies)) {
         // biome-ignore lint/performance/noAwaitInLoops: one origin at a time on the one page.
@@ -194,6 +280,10 @@ export const readSignIns = async (devtools: string): Promise<SignIns> => {
         if (items.length > 0) {
           storage.push({ origin, items });
         }
+        const snapshot = await readDatabases(link, page.session, origin);
+        if (snapshot) {
+          databases.push({ origin, snapshot });
+        }
       }
     } finally {
       await page.close();
@@ -202,6 +292,7 @@ export const readSignIns = async (devtools: string): Promise<SignIns> => {
       cookies: cookies
         .filter((cookie) => !cookie.partitionKeyOpaque)
         .map(paramOf),
+      databases,
       storage,
     };
   } finally {
@@ -219,11 +310,16 @@ export const writeSignIns = async (
     if (signIns.cookies.length > 0) {
       await link.call("Storage.setCookies", { cookies: signIns.cookies });
     }
-    if (signIns.storage.length === 0) {
+    if (signIns.storage.length === 0 && signIns.databases.length === 0) {
       return;
     }
     const page = await blankPage(link);
     try {
+      for (const { origin, snapshot } of signIns.databases) {
+        // biome-ignore lint/performance/noAwaitInLoops: one origin at a time on the one page.
+        await page.open(origin);
+        await evaluate(link, page.session, idbWrite(snapshot), IDB_MS);
+      }
       for (const { origin, items } of signIns.storage) {
         // biome-ignore lint/performance/noAwaitInLoops: one origin at a time on the one page.
         await page.open(origin);
@@ -281,5 +377,23 @@ export const missingSignIns = async (
       }
     }
   }
+  const databases = new Map(
+    held.databases.flatMap(({ origin, snapshot }) =>
+      databasesOf(snapshot).map(
+        (one) => [`${origin} ${one.name}`, JSON.stringify(one)] as const
+      )
+    )
+  );
+  for (const { origin, snapshot } of signIns.databases) {
+    for (const one of databasesOf(snapshot)) {
+      if (databases.get(`${origin} ${one.name}`) !== JSON.stringify(one)) {
+        missing.push(`${origin}'s IndexedDB database ${one.name}`);
+      }
+    }
+  }
   return missing;
 };
+
+/** The databases of a snapshot, each as it was read: name, version, stores and records. */
+const databasesOf = (snapshot: string): { name: string }[] =>
+  (JSON.parse(snapshot) as { databases: { name: string }[] }).databases;

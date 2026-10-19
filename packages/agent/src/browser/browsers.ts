@@ -3,7 +3,7 @@
  * where the machine's runtime answers, a local Chromium where it has none. A
  * browser is made on the host that answers as it is first made. One made on
  * the local host moves into a container once a runtime answers, at rest,
- * its sign-ins carried by cookie and localStorage (sign-ins.ts), its local
+ * its sign-ins carried by cookie, localStorage and IndexedDB (sign-ins.ts), its local
  * profile removed only once the container holds them. A container browser
  * stays one for good: nothing of it is removed because a runtime was absent
  * for a while (a Mac's agent starting before Colima does); while its runtime
@@ -639,40 +639,73 @@ const atRest = (record: BrowserRecord): boolean =>
   !gateOf(record.key)?.held &&
   !starting.has(record.key);
 
+/** The move under way, if one is: aborted, and awaited, as the agent stops ({@link stopBrowsers}). */
+let moving: { abort: AbortController; done: Promise<void> } | undefined;
+/** The agent is stopping: no move starts. */
+let stopping = false;
+
+/** Throws once `signal` is aborted: the agent stops, and the move goes its failure path. */
+const goOn = (signal: AbortSignal): void => {
+  if (signal.aborted) {
+    throw new Error("the agent is stopping");
+  }
+};
+
+/**
+ * The registry's part of the agent's stop (daemon.ts's finalizer): no move
+ * starts from now on, and one under way is aborted and its own failure path
+ * awaited, so the container and volume it made are removed before the agent
+ * exits. A step under way (an image build among them) runs to its end first.
+ */
+export const stopBrowsers = async (): Promise<void> => {
+  stopping = true;
+  if (moving) {
+    moving.abort.abort();
+    await moving.done;
+  }
+};
+
 /**
  * The container `into` names made on `container`, `signIns` written into its
  * Chromium and read back from it, then its record written: the one write
- * that changes a moved browser's host. Any step failing removes the
- * container and volume it made, and says why.
+ * that changes a moved browser's host. First, whatever an earlier attempt
+ * cut short left labelled with its key is removed: a browser on the local
+ * host owns nothing on the runtime. Any step failing, or the agent stopping
+ * (`signal`), removes everything labelled with its key again, and says why.
  */
 const intoContainer = async (
   container: ContainerHost,
   into: BrowserRecord,
-  signIns: SignIns
+  signIns: SignIns,
+  signal: AbortSignal
 ): Promise<void> => {
   const { key, relay } = into;
-  let made: BrowserRecord | undefined;
+  await container.removeLabelled(key);
   try {
-    made = await container.start(into, {
+    goOn(signal);
+    const made = await container.start(into, {
       ...(relay && relayHolds(relay) ? { relay } : {}),
       progress: (progress) => {
         starting.set(key, progress);
         told();
       },
     });
+    goOn(signal);
     const at = container.devtoolsUrl(made);
     await writeSignIns(at, signIns);
+    goOn(signal);
     const missing = await missingSignIns(at, signIns);
     if (missing.length > 0) {
       throw new Error(
         `the container's Chromium does not hold ${missing.slice(0, 3).join(", ")}${missing.length > 3 ? ` and ${missing.length - 3} more` : ""}`
       );
     }
+    goOn(signal);
     await writeBrowser({ ...made, state: "live", lastUsedAt: Date.now() });
     gateFor(made);
   } catch (error) {
     await container
-      .remove(made ?? into)
+      .removeLabelled(key)
       .catch((removing: unknown) =>
         console.warn(
           `[browser] ${key}: the container made for its move was not removed: ${why(removing)}`
@@ -685,7 +718,7 @@ const intoContainer = async (
 /**
  * `key`'s browser, made on the local host while no runtime answered, moved
  * into a container now that `answering` does, at rest (`atRest`), under its
- * lock. Its sign-ins carry by cookie and localStorage (sign-ins.ts): read
+ * lock. Its sign-ins carry by cookie, localStorage and IndexedDB (sign-ins.ts): read
  * from the local Chromium (started for it when asleep), which then stops,
  * since the container takes the same ports; written into the container's
  * Chromium once it is live; and read back from it. Only then is the record
@@ -703,6 +736,14 @@ const moveIntoContainer = (
       return;
     }
     const container = new ContainerHost(answering);
+    const abort = new AbortController();
+    let settle = noop;
+    moving = {
+      abort,
+      done: new Promise<void>((resolve) => {
+        settle = resolve;
+      }),
+    };
     starting.set(key, { state: "starting" });
     told();
     try {
@@ -712,11 +753,13 @@ const moveIntoContainer = (
       }
       const signIns = await readSignIns(local.devtoolsUrl(from));
       await local.stop(from);
+      goOn(abort.signal);
       const { local: _local, why: _why, runtimeAway: _away, ...kept } = from;
       await intoContainer(
         container,
         { ...kept, host: "container", state: "asleep" },
-        signIns
+        signIns,
+        abort.signal
       );
       moveFailed.delete(key);
       const removed = await local.remove(from).then(
@@ -729,7 +772,7 @@ const moveIntoContainer = (
         }
       );
       console.info(
-        `[browser] ${key} moved into a container: ${signIns.cookies.length} cookie(s) and ${signIns.storage.length} origin(s)' localStorage carried${removed ? ", its local profile removed" : ""}`
+        `[browser] ${key} moved into a container: ${signIns.cookies.length} cookie(s), ${signIns.storage.length} origin(s)' localStorage and ${signIns.databases.length} origin(s)' IndexedDB carried${removed ? ", its local profile removed" : ""}`
       );
     } catch (error) {
       moveFailed.set(key, Date.now());
@@ -737,10 +780,14 @@ const moveIntoContainer = (
         `[browser] ${key} was not moved into a container, and stays on the local host: ${why(error)}`
       );
     } finally {
+      moving = undefined;
+      settle();
       starting.delete(key);
       told();
     }
   });
+
+const noop = (): void => undefined;
 
 /** Every local browser moved into a container now that `answering` answers, each at rest, a failed one a recheck later. */
 const moveLocals = async (
@@ -750,6 +797,7 @@ const moveLocals = async (
   const now = Date.now();
   for (const record of records) {
     if (
+      stopping ||
       !atRest(record) ||
       now - (moveFailed.get(record.key) ?? 0) < RUNTIME_RECHECK_MS
     ) {

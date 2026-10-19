@@ -764,13 +764,15 @@ function shuffledHex(): string[] {
 }
 
 /**
- * Every browser the agent whose HOME is `dir` recorded, gone: its container
- * removed with its volume, its local Chromium stopped. Read from that agent's
- * own records (agent browser/state.ts, `<HOME>/.local/share/cawco/browsers/
- * <slug>/record.json`), each for exactly what it names:
- * - a project's browser by the agent's own `ContainerHost.remove`: the
- *   containers labelled with its key (a project id this fleet's hub made, so
- *   no other fleet's) and the volume its record names;
+ * Every browser the agent whose HOME is `dir` recorded, gone: its containers
+ * removed with their volumes, then its local Chromium stopped. Read from that
+ * agent's own records (agent browser/state.ts, `<HOME>/.local/share/cawco/
+ * browsers/<slug>/record.json`), each key for exactly what it names:
+ * - a project's browser by the agent's own `ContainerHost.removeLabelled`:
+ *   every container and volume labelled `dev.cawco.browser=<key>` (a project
+ *   id this fleet's hub made, so no other fleet's), whatever host its record
+ *   names, so a move into a container the agent's stop cut short leaves
+ *   nothing behind;
  * - the machine's browser (`machine:scratch-fleet`, the one machine id every
  *   scratch fleet has, so two fleets at once share its label) by the
  *   container id and the volume its own record names, and nothing else;
@@ -800,7 +802,9 @@ async function removeFleetBrowsers(dir: string): Promise<void> {
     return;
   }
   const { findRuntime } = await import("../packages/agent/src/browser/runtime");
-  const runtime = records.some((one) => one.container)
+  const runtime = records.some(
+    (one) => one.container || one.key.startsWith("project:")
+  )
     ? await findRuntime()
     : undefined;
   for (const record of records) {
@@ -827,43 +831,53 @@ async function removeBrowser(
     | undefined
 ): Promise<string | undefined> {
   const gone: string[] = [];
+  const project = record.key.startsWith("project:");
+  if (project || record.container) {
+    if (!runtime || "missing" in runtime) {
+      gone.push(
+        `its containers not looked for: ${runtime && "missing" in runtime ? runtime.missing : "no runtime"}`
+      );
+    } else if (project) {
+      const { ContainerHost } =
+        await import("../packages/agent/src/browser/container-host");
+      await new ContainerHost(runtime).removeLabelled(record.key);
+      // Read again: what is still labelled with the key is said, never hidden.
+      const label = { label: [`dev.cawco.browser=${record.key}`] };
+      const containers = await runtime.docker.listContainers({
+        all: true,
+        filters: label,
+      });
+      const { Volumes } = await runtime.docker.listVolumes({ filters: label });
+      const left = containers.length + (Volumes ?? []).length;
+      gone.push(
+        left === 0
+          ? `every container and volume labelled dev.cawco.browser=${record.key} removed, none left`
+          : `${containers.length} container(s) and ${(Volumes ?? []).length} volume(s) labelled dev.cawco.browser=${record.key} still left`
+      );
+    } else if (record.container) {
+      const absent = (error: unknown) => {
+        if ((error as { statusCode?: number }).statusCode !== 404) {
+          throw error;
+        }
+      };
+      await runtime.docker
+        .getContainer(record.container.id)
+        .remove({ force: true })
+        .catch(absent);
+      await runtime.docker
+        .getVolume(record.container.volume)
+        .remove()
+        .catch(absent);
+      gone.push(
+        `its container ${record.container.id.slice(0, 12)} and volume ${record.container.volume} removed`
+      );
+    }
+  }
   if (record.local) {
     const { LocalHost } =
       await import("../packages/agent/src/browser/local-host");
     await new LocalHost().stop(record);
     gone.push("its local Chromium stopped");
-  }
-  if (!record.container) {
-    return gone.join(", ") || undefined;
-  }
-  if (!runtime || "missing" in runtime) {
-    gone.push(
-      `its container not removed: ${runtime && "missing" in runtime ? runtime.missing : "no runtime"}`
-    );
-    return gone.join(", ");
-  }
-  if (record.key.startsWith("project:")) {
-    const { ContainerHost } =
-      await import("../packages/agent/src/browser/container-host");
-    await new ContainerHost(runtime).remove(record);
-    gone.push("its container and volume removed");
-  } else {
-    const absent = (error: unknown) => {
-      if ((error as { statusCode?: number }).statusCode !== 404) {
-        throw error;
-      }
-    };
-    await runtime.docker
-      .getContainer(record.container.id)
-      .remove({ force: true })
-      .catch(absent);
-    await runtime.docker
-      .getVolume(record.container.volume)
-      .remove()
-      .catch(absent);
-    gone.push(
-      `its container ${record.container.id.slice(0, 12)} and volume ${record.container.volume} removed`
-    );
   }
   return gone.join(", ") || undefined;
 }
