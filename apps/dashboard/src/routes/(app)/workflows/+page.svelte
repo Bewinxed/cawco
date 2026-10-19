@@ -113,7 +113,6 @@
   </DropdownMenu.Root>
 {/snippet}
 
-<!-- literal: 24px, 44px, 64px, minmax(180px, 1fr) 110px 110px 60px 70px -->
 <!-- At 760px and under (`workflow-cards:`) the table becomes cards: each row
      its name over its age, its actions at the end of the second line. -->
 <div
@@ -141,16 +140,13 @@
       aria-label="Loading workflows"
       class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
       role="status"
-      style:--cols="minmax(180px, 1fr) 110px 110px 60px 70px"
+      style:--cols="minmax(var(--c-workflow-name-col), 1fr) var(--c-workflow-when-col) var(--c-workflow-when-col) var(--c-workflow-count-col) var(--c-workflow-actions-col)"
       style:--cols-cards="1fr auto"
-      style:--name-min="24px"
-      style:--name-min-coarse="44px"
-      style:--row-min="64px"
       out:crossOut
     >
       <thead class="workflow-cards:block workflow-cards:w-full">
         <tr
-          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted workflow-cards:hidden!"
+          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted workflow-cards:hidden"
           data-slot="heading"
         >
           <th class="font-medium" scope="col">Name</th>
@@ -166,12 +162,12 @@
       >
         {#each [0, 1, 2] as index (index)}
           <tr
-            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-t-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
+            class="grid min-h-c-workflow-row-h grid-cols-(--cols) items-center gap-space-3 border-t border-t-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
             data-slot="workflow-row"
           >
             <td
               data-slot="name"
-              class="grid min-h-(--name-min) coarse:min-h-(--name-min-coarse) coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
+              class="grid min-h-space-7 coarse:min-h-c-btn-h-lg coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
               ><Skeleton class="h-icon-md" width="title" /></td
             >
             <td><Skeleton class="h-icon-lg" width="short" /></td>
@@ -206,16 +202,13 @@
     <table
       aria-label="Workflows"
       class="block w-full rounded-lg bg-surface-raised p-space-3 shadow-tile"
-      style:--cols="minmax(180px, 1fr) 110px 110px 60px 70px"
+      style:--cols="minmax(var(--c-workflow-name-col), 1fr) var(--c-workflow-when-col) var(--c-workflow-when-col) var(--c-workflow-count-col) var(--c-workflow-actions-col)"
       style:--cols-cards="1fr auto"
-      style:--name-min="24px"
-      style:--name-min-coarse="44px"
-      style:--row-min="64px"
       in:crossIn
     >
       <thead class="workflow-cards:block workflow-cards:w-full">
         <tr
-          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted workflow-cards:hidden!"
+          class="grid grid-cols-(--cols) items-center gap-space-3 p-space-3 text-left text-size-label font-medium text-ink-muted workflow-cards:hidden"
           data-slot="heading"
         >
           <th class="font-medium" scope="col">Name</th>
@@ -228,13 +221,13 @@
       <tbody class="workflow-cards:block workflow-cards:w-full">
         {#each rows as { workflow, runs, last } (workflow.id)}
           <tr
-            class="grid min-h-(--row-min) grid-cols-(--cols) items-center gap-space-3 border-t border-t-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
+            class="grid min-h-c-workflow-row-h grid-cols-(--cols) items-center gap-space-3 border-t border-t-border-hairline p-space-3 workflow-cards:grid-cols-(--cols-cards)"
             data-slot="workflow-row"
           >
             <td>
               <a
                 data-slot="name"
-                class="grid min-h-(--name-min) coarse:min-h-(--name-min-coarse) coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
+                class="grid min-h-space-7 coarse:min-h-c-btn-h-lg coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
                 href="/workflows/{workflow.id}"
                 >{workflow.name}
                 <span class="wf-muted">{workflow.description}</span></a
@@ -258,7 +251,7 @@
             >
             <td class="workflow-cards:col-2 workflow-cards:row-2">
               <button
-                class="wf-btn workflow-cards:hidden!"
+                class="wf-btn workflow-cards:hidden"
                 data-slot="desktop"
                 disabled={!live}
                 onclick={(event) => {
@@ -274,8 +267,7 @@
               <details class="hidden workflow-cards:block" data-slot="mobile">
                 <summary
                   aria-label="Actions for {workflow.name}"
-                  class="pressable workflow-cards:flex workflow-cards:min-h-(--summary-min) workflow-cards:items-center"
-                  style:--summary-min="44px"
+                  class="pressable workflow-cards:flex workflow-cards:min-h-c-btn-h-lg workflow-cards:items-center"
                 >
                   Actions
                 </summary>

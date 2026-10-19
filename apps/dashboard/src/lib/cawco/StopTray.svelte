@@ -783,7 +783,7 @@
         data-slot="rin"
         class="min-w-0"
         style:--fault-end="var(--row-compact-pad-end)"
-        style:--fault-indent={"calc(var(--row-compact-gap) * 2 + var(--mark-size, 18px))"}
+        style:--fault-indent={"calc(var(--row-compact-gap) * 2 + var(--mark-size, var(--space-5)))"}
       >
         <div
           data-slot="row"
@@ -814,14 +814,12 @@
               {title}
             {/if}</span
           >
-          <!-- literal: 16px, 13ch -->
           <span
-            class="mark-line inline-flex min-w-(--stat-min) flex-none items-center gap-space-1 text-size-label font-medium whitespace-nowrap text-ink-muted @max-stop-tray/stop-tray:min-w-(--stat-min-narrow) @max-stop-tray/stop-tray:group-data-away:order-1 @max-stop-tray/stop-tray:group-data-away:basis-full @max-stop-tray/stop-tray:group-data-away:min-w-0 @max-stop-tray/stop-tray:group-data-away:ps-(--stat-away-indent) @max-stop-tray/stop-tray:group-data-away:pb-space-1"
+            class="mark-line inline-flex min-w-(--stat-min) flex-none items-center gap-space-1 text-size-label font-medium whitespace-nowrap text-ink-muted @max-stop-tray/stop-tray:min-w-c-stop-tray-status-w @max-stop-tray/stop-tray:group-data-away:order-1 @max-stop-tray/stop-tray:group-data-away:basis-full @max-stop-tray/stop-tray:group-data-away:min-w-0 @max-stop-tray/stop-tray:group-data-away:ps-(--stat-away-indent) @max-stop-tray/stop-tray:group-data-away:pb-space-1"
             data-stop-tray-tone={status.tone}
             data-box
-            style:--stat-away-indent={"calc(var(--mark-size, 18px) + var(--row-compact-gap))"}
-            style:--stat-min="calc(16px + var(--space-1) + 13ch)"
-            style:--stat-min-narrow="13ch"
+            style:--stat-away-indent={"calc(var(--mark-size, var(--space-5)) + var(--row-compact-gap))"}
+            style:--stat-min="calc(var(--icon-md) + var(--space-1) + var(--c-stop-tray-status-w))"
           >
             <span
               data-slot="glyph"
@@ -857,11 +855,10 @@
               ><MorphText text={status.word} /></span
             >
           </span>
-          <!-- literal: 3ch -->
           <span
             data-slot="num"
-            class="num w-(--trail-w) flex-none type-meta text-end whitespace-nowrap text-ink-muted"
-            style:--trail-w="3ch">{trailOf(row)}</span
+            class="num w-c-stop-tray-trail-w flex-none type-meta text-end whitespace-nowrap text-ink-muted"
+            >{trailOf(row)}</span
           >
         </div>
         <RowFault

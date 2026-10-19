@@ -88,8 +88,7 @@
        conversation. -->
   <div
     data-slot="artifact-tab"
-    class="flex h-(--tab-h) flex-col overflow-hidden bg-surface-page p-space-2"
-    style:--tab-h="100dvh"
+    class="flex h-dvh flex-col overflow-hidden bg-surface-page p-space-2"
   >
     {#if session.refused}
       <EmptyState icon={IconAlert} title="This artifact didn't open">
@@ -133,11 +132,9 @@
         aria-hidden="true"
         class="flex-1 rounded-lg bg-surface-recess p-space-5"
       >
-        <!-- literal: 42% -->
         <span
           data-slot="block"
-          class="kit-skeleton block h-space-3 w-(--block-w) rounded-xs"
-          style:--block-w="42%"
+          class="kit-skeleton block h-space-3 w-5/12 rounded-xs"
         ></span>
       </div>
     {/if}

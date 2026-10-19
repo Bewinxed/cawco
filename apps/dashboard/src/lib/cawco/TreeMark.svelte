@@ -164,9 +164,12 @@
       {#each [1, 2, 3] as i (i)}
         <span
           data-slot="tree-mark-card"
-          class="absolute inset-0 overflow-hidden rounded-xs bg-(--fill) bg-mark-overlay opacity-(--card-seen) origin-(--card-origin) transform-(--card-scale)"
+          class="absolute inset-0 overflow-hidden rounded-xs bg-(--fill) bg-mark-overlay opacity-(--card-seen) origin-(--card-origin) transform-(--card-scale) after:absolute after:inset-0 after:bg-mark-deck-shade after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-mark-deck-cast before:to-transparent before:translate-y-(--cast-y)"
           style:--i={i}
           style:--p="max(0, calc(var(--n) - var(--i) + 1))"
+          style:--shade-seen="calc(var(--p) * var(--deck-shade-step))"
+          style:--cast-h="calc(var(--deck-step) * 1.5)"
+          style:--cast-y="calc((var(--size) - var(--deck-step) - var(--size) * var(--deck-shrink) * var(--p)) / (1 - var(--deck-shrink) * var(--p)))"
           style:--card-seen="clamp(0, calc(var(--n) - var(--i) + 1), 1)"
           style:--card-origin={"50% calc(var(--size) + var(--deck-step) / var(--deck-shrink))"}
           style:--card-scale="scale(calc(1 - var(--deck-shrink) * var(--p)))"
@@ -188,16 +191,14 @@
        then only a pointer brings it. With a dot the face is cut away round
        it: a hole in its mask, filled while a working mark's echo beats
        (motion/echo's `data-beating`), when its dot is away too. -->
-  <!-- literal: 0.25px -->
   <span
     data-slot="tile"
     aria-hidden="true"
     class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:dur-toggle motion-safe:ease-out motion-safe:mark-pressed:press-by-(--press-scale) group-data-dot/mark:mask-(--hole-mask) mark-beating:mask-none"
-    style:--hole-edge="0.25px"
     style:--hole={dot
       ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
       : undefined}
-    style:--hole-mask={"radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--hole-edge)), var(--mask-opaque) calc(var(--hole) + var(--hole-edge)))"}
+    style:--hole-mask={"radial-gradient(circle at 100% 0, transparent calc(var(--hole) - var(--c-tree-mark-hole-edge)), var(--mask-opaque) calc(var(--hole) + var(--c-tree-mark-hole-edge)))"}
   >
     <span
       data-slot="tree-mark-rest"
@@ -210,12 +211,10 @@
         <!-- The count's box is fixed, and the morph (which animates its own
              box's width and height) is contained in it: nothing outside it
              is laid out as the figure changes, and 9 to 10 stays centred. -->
-        <!-- literal: 2ch, 1lh -->
         <span
           data-slot="num"
-          class="num inline-grid place-items-center w-(--num-w) h-(--num-h) type-meta leading-none contain-layout contain-size"
-          style:--num-w="2ch"
-          style:--num-h="1lh"><MorphText text={shown} /></span
+          class="num inline-grid place-items-center w-c-tree-mark-num-w h-lh type-meta leading-none contain-layout contain-size"
+          ><MorphText text={shown} /></span
         >
       {:else}
         {@render face()}
@@ -241,9 +240,12 @@
        its way to its row (motion/branch). Unseen at rest. -->
   <span
     aria-hidden="true"
-    class="absolute inset-0 overflow-hidden rounded-xs bg-(--skin-fill) bg-mark-overlay opacity-0 pointer-events-none"
+    class="absolute inset-0 overflow-hidden rounded-xs bg-(--skin-fill) bg-mark-overlay opacity-0 pointer-events-none after:absolute after:inset-0 after:bg-mark-deck-shade after:opacity-(--shade-seen) before:absolute before:z-1 before:inset-x-0 before:top-0 before:h-(--cast-h) before:bg-linear-to-b before:from-mark-deck-cast before:to-transparent before:translate-y-(--cast-y)"
     data-ride-skin
     style:--p="1"
+    style:--shade-seen="calc(var(--p) * var(--deck-shade-step))"
+    style:--cast-h="calc(var(--deck-step) * 1.5)"
+    style:--cast-y="calc((var(--size) - var(--deck-step) - var(--size) * var(--deck-shrink) * var(--p)) / (1 - var(--deck-shrink) * var(--p)))"
     style:--skin-fill="var(--pfill, var(--fill))"
   ></span>
   {#if dot}
@@ -318,7 +320,6 @@
          tap would be the row's own or the next row's: sideways at the name
          (--mark-hit-gap), up and down at the midpoint of the gap between
          rows (--mark-hit-max, less half that gap). -->
-    <!-- literal: 5px -->
     <!-- biome-ignore lint/a11y/useSemanticElements: it sits inside the row's link, and a <button> cannot nest in an <a>. -->
     <span
       data-slot="hit"
@@ -326,7 +327,7 @@
       aria-label={label}
       class="focus-inset touch-hit absolute z-4 -inset-x-(--reach) -top-(--reach) bottom-(--hit-foot) coarse:-bottom-(--reach) rounded-xs cursor-pointer coarse:hit-gap-x-(--hit-stop-x) coarse:hit-gap-y-(--hit-stop-y)"
       style:--reach="calc(var(--status-dot-size) / 2)"
-      style:--hit-max="var(--mark-hit-max, calc(5px + var(--tree-gap)))"
+      style:--hit-max="var(--mark-hit-max, calc(var(--space-1) + var(--tree-gap)))"
       style:--hit-foot={"calc(-1 * min(var(--n) * var(--deck-step) + var(--reach), var(--hit-max)))"}
       style:--hit-stop-x={"calc(2 * (var(--mark-hit-gap, var(--row-compact-gap)) - var(--reach)))"}
       style:--hit-stop-y={"calc(2 * (var(--hit-max) - var(--tree-gap) / 2 - var(--reach)))"}
@@ -341,37 +342,3 @@
     ></span>
   {/if}
 </span>
-
-<style>
-  /* residual: pseudo — each card's shade, darker with depth, and the shadow
-     the card in front casts on the band of this one that shows. The skin
-     wears the same. */
-  [data-slot="tree-mark-card"],
-  [data-ride-skin] {
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: var(--mark-deck-shade);
-      opacity: calc(var(--p) * var(--deck-shade-step));
-    }
-    &::before {
-      content: "";
-      position: absolute;
-      z-index: 1;
-      inset-inline: 0;
-      inset-block-start: 0;
-      block-size: calc(var(--deck-step) * 1.5);
-      background: linear-gradient(var(--mark-deck-cast), transparent);
-      transform: translateY(
-        calc(
-          (
-              var(--size) - var(--deck-step) - var(--size) *
-                var(--deck-shrink) * var(--p)
-            ) /
-            (1 - var(--deck-shrink) * var(--p))
-        )
-      );
-    }
-  }
-</style>
