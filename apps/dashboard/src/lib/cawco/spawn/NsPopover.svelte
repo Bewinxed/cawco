@@ -35,6 +35,7 @@
     gap = 0,
     align = "start",
     trapFocus = true,
+    pad = "roomy",
     anchor = null,
     label,
     triggerClass = "",
@@ -66,6 +67,11 @@
     gap?: number;
     align?: "start" | "end" | "center";
     trapFocus?: boolean;
+    /**
+     * The surface's inset: the sheet's own (`roomy`), or the ladder's 4px
+     * round a menu whose rows carry their own (`snug`, the trigger menu).
+     */
+    pad?: "roomy" | "snug";
     anchor?: { getBoundingClientRect: () => DOMRect } | HTMLElement | null;
     label?: string;
     triggerClass?: string;
@@ -181,7 +187,7 @@
         data-fit={fit || undefined}
         {align}
         aria-label={rest["aria-label"]}
-        class="ns-theme ns-pop"
+        class={["ns-theme ns-pop", pad === "snug" && "p-space-1"]}
         collisionPadding={8}
         customAnchor={anchor}
         id={`${id}-popover`}

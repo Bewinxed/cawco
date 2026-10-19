@@ -208,7 +208,7 @@
       </div>
       {#if choices.length > 0}
         <div
-          class="flex flex-col max-h-(--c-choice-list-max-h) overflow-y-auto"
+          class="flex flex-col max-h-c-choice-list-max-h overflow-y-auto"
           transition:unfold
         >
           <span data-slot="note" class="type-meta text-ink-muted">{words.severalSkills}</span>

@@ -99,7 +99,7 @@
         >
           <span
             data-slot="picker-chip-label"
-            class="flex-1 min-w-0 truncate"
+            class="flex-1 min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
             >{option.label}</span
           >
           {#if isChosen(option.value)}

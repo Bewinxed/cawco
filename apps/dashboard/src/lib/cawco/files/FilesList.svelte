@@ -521,7 +521,7 @@
                 class="grid w-c-row-lead flex-none place-items-center text-ink-muted"
                 data-box><IconLayers aria-hidden="true" class="size-icon-md" /></span
               >
-              <span class="min-w-0 truncate">Artifacts</span>
+              <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap">Artifacts</span>
               {#if artifactsCount}
                 <span
                   class="num type-meta ms-auto flex-none whitespace-nowrap text-ink-muted"
@@ -549,7 +549,7 @@
                 data-box
                 ><IconPaperclip aria-hidden="true" class="size-icon-md" /></span
               >
-              <span class="min-w-0 truncate">Attachments</span>
+              <span class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap">Attachments</span>
               {#if attachmentsCount}
                 <span
                   class="num type-meta ms-auto flex-none whitespace-nowrap text-ink-muted"
@@ -652,7 +652,7 @@
              card's edge, never past it. -->
         <div
           aria-busy={searching || undefined}
-          class="kit-edge-fade-block fade-len-(--c-edge-fade-len) min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          class="kit-edge-fade-block fade-len-c-edge-fade-len min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-artifacts-scroll"
           in:crossIn
@@ -731,7 +731,7 @@
         </p>
       {:else}
         <div
-          class="kit-edge-fade-block fade-len-(--c-edge-fade-len) min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
+          class="kit-edge-fade-block fade-len-c-edge-fade-len min-h-0 flex-auto -me-space-2 overflow-y-auto overscroll-contain pe-space-2 scrollbar-thin scrollbar-thumb-border-control scrollbar-track-transparent"
           data-files-scroll
           id="{uid}-attachments-scroll"
           in:crossIn

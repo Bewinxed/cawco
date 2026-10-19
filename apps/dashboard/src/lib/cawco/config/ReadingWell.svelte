@@ -8,7 +8,7 @@
 <p
   data-slot="well"
   aria-live="polite"
-  class="max-w-(--c-reading-measure) py-space-3 px-space-4 rounded-md bg-surface-recess type-body text-ink-strong transition-[background-color,color] dur-pop ease-out"
+  class="max-w-c-measure py-space-3 px-space-4 rounded-md bg-surface-recess type-body text-ink-strong transition-[background-color,color] dur-pop ease-out"
 >
   {@render children()}
 </p>

@@ -162,7 +162,7 @@
     overflowing && "kit-edge-fade-block",
   ]}
   data-safe-bottom
-  style:--fade-len="var(--c-caw-list-fade)"
+  style:--fade-len="var(--c-edge-fade-len)"
   style:--list-max="min(var(--c-caw-list-h), calc(100dvh - var(--c-caw-list-clear)))"
   style:--list-max-phone={"calc(100dvh - var(--c-top-bar-h) - var(--space-3) - var(--safe-bottom) - var(--c-caw-list-clear-phone))"}
   style:--stuck-fade={"linear-gradient(to bottom, transparent, var(--mask-opaque) var(--fade-start), var(--mask-opaque))"}

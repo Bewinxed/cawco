@@ -86,7 +86,7 @@
   >
     {#if status === "completed"}
       <IconTick
-        class="size-icon-md text-status-done-glyph motion-safe:animate-plan-tick motion-safe:tick-draw"
+        class="size-icon-md text-status-done-glyph motion-safe:animate-check-draw motion-safe:dash-unit"
       />
     {:else}
       <span

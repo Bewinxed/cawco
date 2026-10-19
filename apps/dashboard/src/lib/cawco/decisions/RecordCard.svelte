@@ -190,14 +190,14 @@
             <IconChevronDown
               data-chev
               aria-hidden="true"
-              class="transition-[scale] dur-panel ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
+              class="transition-[scale] dur-panel ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off *:vector-non-scaling"
               data-icon="inline-end"
             />
           </Button>
         </div>
         <div
           data-slot="fold"
-          class="group/fold grid max-w-full grid-rows-fold-shut transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-fold-open data-open:dur-panel motion-reduce:transition-off motion-reduce:data-open:dur-panel"
+          class="group/fold grid max-w-full grid-rows-shut transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-open data-open:dur-panel motion-reduce:transition-off motion-reduce:data-open:dur-panel"
           data-open={open || undefined}
           id="{fid}-others"
           inert={!open}

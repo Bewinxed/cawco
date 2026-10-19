@@ -23,7 +23,7 @@
   data-wrap={wrap || undefined}
 >
   <div class="mark-line flex items-center gap-space-2">
-    <Icon class="size-icon-md flex-none" style={`color:${hue}`} />
+    <Icon class="size-icon-md flex-none" data-box style={`color:${hue}`} />
     <span class="type-label">{label}</span>
   </div>
   {#if right}

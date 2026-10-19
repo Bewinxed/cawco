@@ -8,6 +8,10 @@
    * stays under the question in the refuser's words, the button the way to
    * try again, and only work that went closes it. Cancel and Escape put it
    * away; once the work is sent, it can't be called back, so Cancel waits.
+   *
+   * `indent` and `end`: where it starts and stops, to line up with the
+   * control above; a host that sets `--ask-indent` and `--ask-end` for every
+   * question inside it passes neither.
    */
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
@@ -22,12 +26,18 @@
     asker,
     at,
     class: className,
+    indent = "var(--ask-indent, 0)",
+    end = "var(--ask-end, 0)",
     ...rest
   }: {
     asker: Asker<AskHereRequest>;
     /** The control this place answers for: the question asked `at` it shows here. */
     at: string;
     class?: string;
+    /** Its inline-start inset: a space token or a calc() of tokens. */
+    indent?: string;
+    /** Its inline-end inset: a space token or a calc() of tokens. */
+    end?: string;
     /** Data attributes for the host's styling (`data-compact`). */
     [key: `data-${string}`]: unknown;
   } = $props();
@@ -103,8 +113,8 @@
       className
     )}
     data-ask={at}
-    style:--ask-end-in="var(--ask-end, 0)"
-    style:--ask-indent-in="var(--ask-indent, 0)"
+    style:--ask-end-in={end}
+    style:--ask-indent-in={indent}
     transition:unfold
     {@attach arrive}
   >

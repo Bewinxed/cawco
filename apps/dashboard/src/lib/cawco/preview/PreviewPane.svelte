@@ -2300,7 +2300,7 @@
   >
     <IconChat /><span class="in-form-compact:hidden">Comments</span>
     {#if openCount > 0}
-      <span data-slot="count" class="min-w-(--c-count-digit)"
+      <span data-slot="count" class="min-w-c-count-digit"
         >{openCount}</span
       >
     {/if}
@@ -2537,12 +2537,12 @@
     >
       <span
         data-slot="block"
-        class="kit-skeleton block h-space-3 w-2/5 rounded-xs animate-wait-grace-in group-data-ready/cover:animation-held"
+        class="kit-skeleton block h-space-3 w-2/5 rounded-xs animate-wait-grace-in group-data-ready/cover:animation-paused group-data-ready/cover:after:animation-paused"
       ></span>
       {#if stageWaiting}
         <!-- A sheet's stage on its way: the project's own dev toolchain (Vite, Astro or Nuxt), started or woken by the daemon. -->
         <p
-          class="mt-space-3 mx-0 mb-0 text-ink-muted type-meta animate-wait-grace-in group-data-ready/cover:animation-held"
+          class="mt-space-3 mx-0 mb-0 text-ink-muted type-meta animate-wait-grace-in group-data-ready/cover:animation-paused group-data-ready/cover:after:animation-paused"
         >
           {stageWaiting}
         </p>

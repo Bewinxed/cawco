@@ -218,11 +218,31 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 
 /* Inside a live tree mark while its dot beats (TreeMark). At the weight of
    the selector it came from, so it outranks the mark's hole mask. */
-@custom-variant mark-beating (&:is([data-tree-mark][data-dot="live"]:has([data-beating]) *));`;
+@custom-variant mark-beating (&:is([data-tree-mark][data-dot="live"]:has([data-beating]) *));
+
+/* Not hidden by its \`hidden\` attribute (a pane head's fitted controls). */
+@custom-variant unhidden (&:not([hidden]));
+
+/* A window too short for the Files lists' full floors, and one tall enough:
+   560px of height. */
+@custom-variant short-window {
+  @media (height < 560px) {
+    @slot;
+  }
+}
+@custom-variant tall-window {
+  @media (height >= 560px) {
+    @slot;
+  }
+}
+
+/* A <summary>'s marker in WebKit, which draws it as its own pseudo-element
+   (Tailwind's \`marker:\` is ::marker). */
+@custom-variant details-marker (&::-webkit-details-marker);`;
 
 /** Names Tailwind or the house already give a variant, or begin a functional one. */
 const RESERVED =
-  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|workflow-cards|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
+  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|workflow-cards|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|unhidden|short-window|tall-window|details-marker|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
 
 interface Pair {
   attr: string;

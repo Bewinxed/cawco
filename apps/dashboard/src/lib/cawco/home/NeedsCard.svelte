@@ -895,7 +895,7 @@
                     <span
                       data-slot="step-number"
                       aria-hidden="true"
-                      class="box-border grid size-full place-items-center rounded-pill border border-border-control type-meta leading-none num content-data-n"
+                      class="box-border grid size-full place-items-center rounded-pill border border-border-control type-meta leading-none num before:content-data-n"
                       data-n={index + 1}
                     ></span>
                   {/if}

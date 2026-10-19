@@ -417,7 +417,7 @@
   <div
     data-move-wait-empty={!cawThere || undefined}
     data-gone={job.stage === "cancelled" || undefined}
-    class="grid place-items-center min-h-(--c-move-wait-caw-h) group-data-phone/wait:min-h-(--c-move-wait-caw-h-phone) data-move-wait-empty:invisible data-gone:hidden"
+    class="grid place-items-center min-h-c-move-wait-caw-h group-data-phone/wait:min-h-c-move-wait-caw-h-phone data-move-wait-empty:invisible data-gone:hidden"
   >
     {#if cawThere}
       <Caw
@@ -436,7 +436,7 @@
   </div>
 
   {#if columnShown}
-    <div data-slot="column" class="grid gap-space-3 w-full max-w-(--c-move-wait-col-w)" in:crossIn>
+    <div data-slot="column" class="grid gap-space-3 w-full max-w-c-move-wait-col-w" in:crossIn>
       <ThinkingSteps>
         {#each rows as row, index (row.step)}
           <div
@@ -609,7 +609,7 @@
          the glyph column, the foot's whole width on a phone (design 2g). -->
     <div
       data-slot="foot"
-      class="flex flex-col items-start gap-space-1 w-full max-w-(--c-move-wait-col-w) group-data-phone/wait:mbs-auto"
+      class="flex flex-col items-start gap-space-1 w-full max-w-c-move-wait-col-w group-data-phone/wait:mbs-auto"
     >
       {#if cancellable}
         <Button

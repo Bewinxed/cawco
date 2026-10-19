@@ -268,7 +268,7 @@
     >
     {#if reason}
       <span
-        class="type-meta block max-w-(--c-pending-reason-w) text-status-fail-ink whitespace-normal wrap-anywhere"
+        class="type-meta block max-w-c-measure-meta text-status-fail-ink whitespace-normal wrap-anywhere"
         data-reason
         role="alert"
         transition:unfold>{reason}</span

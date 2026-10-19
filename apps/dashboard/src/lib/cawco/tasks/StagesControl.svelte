@@ -159,10 +159,11 @@
       again={applying === null && lastAsked
         ? () => apply(lastAsked as StagesTemplateView)
         : undefined}
-      data-stages-fault
+      end="var(--space-2)"
+      indent="var(--space-2)"
       reason={problem}
     />
-    <ul data-slot="list" data-stages-list class="m-0 flex list-none flex-col p-0">
+    <ul data-slot="list" class="m-0 flex list-none flex-col p-0">
       {#if templates}
         {#each templates as template (template.name)}
           <li>
@@ -193,7 +194,12 @@
                   .join(" → ")}
               </span>
             </button>
-            <AskHere asker={asks} at={template.name} />
+            <AskHere
+              asker={asks}
+              at={template.name}
+              end="var(--space-2)"
+              indent="var(--space-2)"
+            />
           </li>
         {/each}
       {:else if !problem}

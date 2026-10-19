@@ -235,7 +235,7 @@
         </Button>
         <div
           data-slot="what"
-          class="flex min-w-0 shrink grow basis-(--c-decision-head-what) flex-wrap items-center gap-x-space-3 gap-y-space-1"
+          class="flex min-w-0 shrink grow basis-c-decision-head-what flex-wrap items-center gap-x-space-3 gap-y-space-1"
         >
           <span
             data-slot="title"
@@ -343,7 +343,7 @@
       <Textarea
         data-note
         aria-label={words.noteLabel}
-        class="max-h-(--c-decision-note-max-h) min-h-c-composer-field flex-auto"
+        class="max-h-c-textarea-max-h min-h-c-composer-field flex-auto"
         look="note"
         oninput={() => {
           refusal = null;

@@ -629,7 +629,7 @@
     <button
       data-slot="fold-row"
       id={idOf(item.key)}
-      class="mark-line flex items-center gap-space-2 flex-none w-full h-(--c-find-line-h) px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-(--c-find-phone-h)"
+      class="mark-line flex items-center gap-space-2 flex-none w-full h-c-find-line-h px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-c-find-phone-h"
       aria-label={`${count} ${kindNoun(first, count)} match “${finder.asked}”, ${open ? "shown" : "folded"}`}
       aria-selected={activeKey === item.key}
       data-active={activeKey === item.key ? "" : undefined}
@@ -659,7 +659,7 @@
   {:else if item.t === "waiting"}
     <button
       id={idOf("waiting")}
-      class="mark-line flex items-center gap-space-2 flex-none w-full h-(--c-find-line-h) px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-(--c-find-phone-h)"
+      class="mark-line flex items-center gap-space-2 flex-none w-full h-c-find-line-h px-space-3 border-none border-current rounded-sm bg-transparent text-start type-label text-ink-row cursor-default active:bg-surface-fill group-data-phone/finder:h-c-find-phone-h"
       aria-selected={activeKey === "waiting"}
       data-active={activeKey === "waiting" ? "" : undefined}
       data-find-row
@@ -690,7 +690,7 @@
   {:else if item.t === "head"}
     <div
       data-slot="head"
-      class="flex-none h-(--c-find-head-h) px-space-3 type-caps leading-(--c-find-head-h) uppercase tracking-caps text-ink-muted truncate"
+      class="flex-none h-c-find-head-h px-space-3 type-caps leading-(--c-find-head-h) uppercase tracking-caps text-ink-muted truncate"
       data-flip
       role="presentation"
     >
@@ -701,7 +701,7 @@
   {:else if item.t === "coverage"}
     <div
       data-slot="coverage"
-      class="flex items-center flex-none h-(--c-find-head-h) px-space-3 type-meta text-ink-muted"
+      class="flex items-center flex-none h-c-find-head-h px-space-3 type-meta text-ink-muted"
       data-flip
     >
       {#if finder.missing.length > 0}
@@ -738,7 +738,7 @@
     >
       <Skeleton
         data-tall={item.tall || undefined}
-        class="h-c-btn-h data-tall:h-(--c-find-skeleton-tall)"
+        class="h-c-btn-h data-tall:h-c-find-skeleton-tall"
       />
     </div>
   {:else if item.t === "nothing"}

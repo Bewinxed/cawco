@@ -11,7 +11,7 @@
 
 <span
   data-slot="harness-logo"
-  class="inline-flex size-icon-md flex-none text-inherit"
+  class="inline-flex size-icon-md flex-none text-inherit *:size-full"
   data-harness-logo={harness}><Mark /></span
 >
 

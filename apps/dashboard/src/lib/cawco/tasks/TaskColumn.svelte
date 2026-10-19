@@ -166,13 +166,14 @@
         {/if}
         <RowFault
           again={fault?.again}
-          data-task-column-fault
+          end="var(--space-2)"
+          indent="var(--space-2)"
           reason={fault?.reason}
         />
       </li>
     {/each}
   </ol>
   {#if foot}
-    <div data-slot="foot" data-task-column-foot class="flex-none">{@render foot()}</div>
+    <div data-slot="foot" class="flex-none *:w-full">{@render foot()}</div>
   {/if}
 </section>

@@ -3302,6 +3302,90 @@
           "css": "none"
         }
       }
+    },
+    "shadow-knob": {
+      "$type": "shadow",
+      "$value": [
+        {
+          "color": "{color.neutral-8}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        },
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 3,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.shadow-tint}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 1,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 1,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 0,
+            "unit": "px"
+          }
+        },
+        {
+          "color": "{color.night-ring}",
+          "offsetX": {
+            "value": 0,
+            "unit": "px"
+          },
+          "offsetY": {
+            "value": 0,
+            "unit": "px"
+          },
+          "blur": {
+            "value": 0,
+            "unit": "px"
+          },
+          "spread": {
+            "value": 1,
+            "unit": "px"
+          },
+          "inset": true
+        }
+      ],
+      "$description": "The effort knob's and Browse's lifted block: a neutral-8 inner edge over shadow-raised's layers (DESIGN.md Effort chip)."
     }
   },
   "font": {
@@ -3725,6 +3809,14 @@
         },
         "lineHeight": 1
       }
+    },
+    "text-field-floor": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
+      "$description": "The 16px Field Rule's floor: no field's text under it on a phone, so iOS Safari never zooms into one."
     }
   },
   "space": {
@@ -5068,6 +5160,1047 @@
         "unit": "px"
       },
       "$description": "A compact session row's trailing inset: where every row in the rail ends."
+    },
+    "c-measure": {
+      "$type": "dimension",
+      "$value": {
+        "value": 576,
+        "unit": "px"
+      },
+      "$description": "Running text's measure (DESIGN.md Body: 60 to 72ch): a note, a hint, a rule's or hook's sentence, a fault's explanation, the expanded plan, a refused write.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "72ch"
+        }
+      }
+    },
+    "c-measure-short": {
+      "$type": "dimension",
+      "$value": {
+        "value": 480,
+        "unit": "px"
+      },
+      "$description": "Running text at the short end of DESIGN.md's 60 to 72ch, beside a control that takes the rest of the row.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "60ch"
+        }
+      }
+    },
+    "c-measure-meta": {
+      "$type": "dimension",
+      "$value": {
+        "value": 256,
+        "unit": "px"
+      },
+      "$description": "A meta line's measure under the thing it qualifies: a pending control's failure reason, an editor head's machines line.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "32ch"
+        }
+      }
+    },
+    "c-copy-box-line": {
+      "$type": "dimension",
+      "$value": {
+        "value": 160,
+        "unit": "px"
+      },
+      "$description": "A wrapping command's room before Copy drops under it (CopyBox).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "20ch"
+        }
+      }
+    },
+    "c-count-digit": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "A count's box keeps one digit's width, so a lone digit does not collapse it.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "1ch"
+        }
+      }
+    },
+    "c-rail-count-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
+      "$description": "The Configure rail's count column: three digits, so the dash and the figure hold one box.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "3ch"
+        }
+      }
+    },
+    "c-skeleton-x-height": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "A placeholder word's bar: the x-height of the text it stands in.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "1ex"
+        }
+      }
+    },
+    "c-code-chip-pad-x": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "Inline code's inline padding in prose (lib/prose.ts); prose-code-pad is its block padding."
+    },
+    "c-skeleton-age": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
+      "$description": "A relative age's placeholder (\"3d\"): two characters of its type role.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "2ch"
+        }
+      }
+    },
+    "c-textarea-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 200,
+        "unit": "px"
+      },
+      "$description": "A growing textarea's ceiling, past which it scrolls (DESIGN.md Textarea): the decision page's note, the mention field."
+    },
+    "c-number-field-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 64,
+        "unit": "px"
+      },
+      "$description": "A short number field: a reserve percentage, a limit (four digits and the field's pad)."
+    },
+    "c-port-field-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "rem"
+      },
+      "$description": "The Port field's column beside the SSH target in the connect form."
+    },
+    "c-btn-min-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "A primary action's least width, so its label swapping to a pending one keeps the button's size (Save, the session footer's action)."
+    },
+    "c-btn-gap": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "A button's icon-to-label gap (DESIGN.md Buttons: \"an 8px gap\")."
+    },
+    "c-btn-words-blur": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2,
+        "unit": "px"
+      },
+      "$description": "A pending label's outgoing words go soft as they fade (DESIGN.md Buttons, Pending: \"a 2px blur where motion is welcome\")."
+    },
+    "c-pointer-floor": {
+      "$type": "dimension",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
+      "$description": "The 24 Pointer Rule's floor (DESIGN.md Focus and hit areas): a small control's least hit box under a fine pointer."
+    },
+    "c-screen-margin": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
+      "$description": "The screen's margin a popover or a floating card keeps each side (DESIGN.md Breakpoints: \"popovers widen to the viewport less 24px\")."
+    },
+    "c-pop-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 320,
+        "unit": "px"
+      },
+      "$description": "A new-session popover's width."
+    },
+    "c-pop-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 440,
+        "unit": "px"
+      },
+      "$description": "A popover's height cap on a desk."
+    },
+    "c-pop-max-h-phone": {
+      "$type": "dimension",
+      "$value": {
+        "value": 420,
+        "unit": "px"
+      },
+      "$description": "A popover's height cap on a phone."
+    },
+    "c-tip-max-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 320,
+        "unit": "px"
+      },
+      "$description": "A chip tooltip's measure."
+    },
+    "c-scrollbar-thin": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "A thin WebKit scrollbar's thickness in a new-session scroller."
+    },
+    "c-comb-pitch": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$description": "The effort comb's tick pitch: a drawn pattern, not spacing."
+    },
+    "c-edge-fade-len": {
+      "$type": "dimension",
+      "$value": {
+        "value": 40,
+        "unit": "px"
+      },
+      "$description": "An edge fade at full length at every width, where the kit's phone 16px would show nothing (Files' scrollers, Caw's panel)."
+    },
+    "c-sheet-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 717.4,
+        "unit": "px"
+      },
+      "$description": "A sheet's height cap (DESIGN.md Drawer: \"It is as tall as its content, up to 85vh\").",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "85vh"
+        }
+      }
+    },
+    "c-peek-sheet-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 675.2,
+        "unit": "px"
+      },
+      "$description": "The peek sheet's height on a touch screen: fixed, so it holds its size from the first frame.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "80dvh"
+        }
+      }
+    },
+    "c-grabber-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 100,
+        "unit": "px"
+      },
+      "$description": "The drawer grabber's width (DESIGN.md Drawer: \"A 100×6 grabber\")."
+    },
+    "c-grabber-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$description": "The drawer grabber's height (DESIGN.md Drawer: \"A 100×6 grabber\")."
+    },
+    "c-lightbox-sheet-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 960,
+        "unit": "px"
+      },
+      "$description": "The lightbox's document sheet: a 60rem reading sheet, never wider than the viewport.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "min(100%, 60rem)"
+        }
+      }
+    },
+    "c-lightbox-sheet-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 725.84,
+        "unit": "px"
+      },
+      "$description": "The lightbox's document sheet's height cap.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "min(86dvh, 100%)"
+        }
+      }
+    },
+    "c-report-text-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 506.4,
+        "unit": "px"
+      },
+      "$description": "The tallest an error's whole text grows in its dialog before it scrolls.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "60vh"
+        }
+      }
+    },
+    "c-config-max-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 980,
+        "unit": "px"
+      },
+      "$description": "Configure's content measure: a section's body, an editor and its commit row."
+    },
+    "c-config-rail-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 232,
+        "unit": "px"
+      },
+      "$description": "The Configure rail's width."
+    },
+    "c-row-h-two": {
+      "$type": "dimension",
+      "$value": {
+        "value": 56,
+        "unit": "px"
+      },
+      "$description": "A section row with a meta line under its label (two lines; c-row-h is one)."
+    },
+    "c-detail-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "rem"
+      },
+      "$description": "The scrolling failure detail under a machine row."
+    },
+    "c-output-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "rem"
+      },
+      "$description": "The longest a pre of command or fault output grows before it scrolls."
+    },
+    "c-editor-well-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 320,
+        "unit": "px"
+      },
+      "$description": "A markdown editor's well, so it never collapses to its toolbar."
+    },
+    "c-choice-list-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 13,
+        "unit": "rem"
+      },
+      "$description": "A fetched skill's choice list before it scrolls."
+    },
+    "c-wf-textarea-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 90,
+        "unit": "px"
+      },
+      "$description": "A workflow form's textarea floor."
+    },
+    "c-setup-rail-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 184,
+        "unit": "px"
+      },
+      "$description": "Account setup's step rail."
+    },
+    "c-setup-machine-name-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 150,
+        "unit": "px"
+      },
+      "$description": "Account setup's machine-name column, so every machine row's controls start on one x."
+    },
+    "c-setup-code-basis": {
+      "$type": "dimension",
+      "$value": {
+        "value": 140,
+        "unit": "px"
+      },
+      "$description": "Account setup's pasted-code field's basis, under which it wraps below the link."
+    },
+    "c-setup-nickname-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 280,
+        "unit": "px"
+      },
+      "$description": "Account setup's nickname field's widest."
+    },
+    "c-setup-preview-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 360,
+        "unit": "px"
+      },
+      "$description": "Account setup's name preview card's widest."
+    },
+    "c-drag-dots-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
+      "$description": "A drag handle's width: two dot tiles."
+    },
+    "c-drag-dots-tile": {
+      "$type": "dimension",
+      "$value": {
+        "value": 5,
+        "unit": "px"
+      },
+      "$description": "A drag handle's dot pitch."
+    },
+    "c-drag-dots-edge": {
+      "$type": "dimension",
+      "$value": {
+        "value": 1.5,
+        "unit": "px"
+      },
+      "$description": "A drag handle's dot edge softness."
+    },
+    "fig-pad": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "px"
+      },
+      "$description": "The strategy figure's stage inset (accounts/figure.ts PAD): the build places lanes and captions from it."
+    },
+    "fig-chip": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "px"
+      },
+      "$description": "The strategy figure's chip side and bar height (figure.ts CHIP)."
+    },
+    "fig-cap-line": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
+      "$description": "The strategy figure's caption line height (figure.ts CAP_LINE)."
+    },
+    "fig-cap-foot": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "px"
+      },
+      "$description": "The strategy figure's caption distance from the stage's foot (figure.ts CAP_FOOT)."
+    },
+    "c-block-refused-basis": {
+      "$type": "dimension",
+      "$value": {
+        "value": 18,
+        "unit": "rem"
+      },
+      "$description": "A refused write's line: its wrap basis beside the Hidden menu."
+    },
+    "c-canvas-grab-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 160,
+        "unit": "px"
+      },
+      "$description": "The composer canvas's top grab strip."
+    },
+    "c-decision-head-what": {
+      "$type": "dimension",
+      "$value": {
+        "value": 14,
+        "unit": "rem"
+      },
+      "$description": "A decision page head's title group: how narrow it goes beside ‹ Decisions before it wraps."
+    },
+    "c-decision-graph-min-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 24,
+        "unit": "rem"
+      },
+      "$description": "The decisions graph's least height."
+    },
+    "c-decision-node-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 148,
+        "unit": "px"
+      },
+      "$description": "A decision card's width; the hub's graph layout assumes the same box (DecisionGraph CARD)."
+    },
+    "c-decision-node-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 56,
+        "unit": "px"
+      },
+      "$description": "A decision card's least height (DecisionGraph CARD.height)."
+    },
+    "c-artifact-card-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 148,
+        "unit": "px"
+      },
+      "$description": "The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name."
+    },
+    "c-work-tabs-roomy-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 260,
+        "unit": "px"
+      },
+      "$description": "The rail width at and above which the Working/Finished header needs no squeeze."
+    },
+    "c-work-tabs-squeeze": {
+      "$type": "dimension",
+      "$value": {
+        "value": 33,
+        "unit": "px"
+      },
+      "$description": "The most the Working/Finished header's spacing gives back, at the narrowest rail."
+    },
+    "c-caw-list-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 560,
+        "unit": "px"
+      },
+      "$description": "Caw's panel's list cap."
+    },
+    "c-caw-list-clear": {
+      "$type": "dimension",
+      "$value": {
+        "value": 120,
+        "unit": "px"
+      },
+      "$description": "The viewport room kept clear above Caw's panel's list on a wide screen."
+    },
+    "c-caw-list-clear-phone": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "The room kept clear under Caw's panel's list on a phone: the composer's row and the home indicator's gap."
+    },
+    "c-lead-card-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 416,
+        "unit": "px"
+      },
+      "$description": "The session card hung from Caw's seat (DESIGN.md: \"The card is 416px wide\")."
+    },
+    "c-lead-card-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 760,
+        "unit": "px"
+      },
+      "$description": "That card's height cap."
+    },
+    "c-move-wait-col-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 560,
+        "unit": "px"
+      },
+      "$description": "A staged move's wait column."
+    },
+    "c-move-wait-caw-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 128,
+        "unit": "px"
+      },
+      "$description": "Caw's slot over a move's wait on a desk."
+    },
+    "c-move-wait-caw-h-phone": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "Caw's slot over a move's wait on a phone."
+    },
+    "c-move-wait-file-bar-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "An in-flight large file's progress track."
+    },
+    "c-machines-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 20,
+        "unit": "rem"
+      },
+      "$description": "The glass's machines card."
+    },
+    "tab-rim-glow": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$description": "A session tab's rim glow radius (DESIGN.md Session tab status rim)."
+    },
+    "tab-rim-glow-room": {
+      "$type": "dimension",
+      "$value": {
+        "value": 24,
+        "unit": "px"
+      },
+      "$description": "How far past a folder tab's top and sides its rim's glow may draw before the fold's clip cuts it: four glow radii."
+    },
+    "c-find-row-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 52,
+        "unit": "px"
+      },
+      "$description": "A finder row's floor, two lines (DESIGN.md Find rows)."
+    },
+    "c-find-row-h-phone": {
+      "$type": "dimension",
+      "$value": {
+        "value": 56,
+        "unit": "px"
+      },
+      "$description": "A finder row's floor on a phone."
+    },
+    "c-find-line-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 40,
+        "unit": "px"
+      },
+      "$description": "A one-line finder row (Waiting for you, a folded kind)."
+    },
+    "c-find-phone-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 52,
+        "unit": "px"
+      },
+      "$description": "A phone's find field and one-line row."
+    },
+    "c-find-head-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 28,
+        "unit": "px"
+      },
+      "$description": "A finder group head and its coverage line."
+    },
+    "c-find-skeleton-tall": {
+      "$type": "dimension",
+      "$value": {
+        "value": 54,
+        "unit": "px"
+      },
+      "$description": "The skeleton standing for a finder row with its reason."
+    },
+    "c-head-who-basis": {
+      "$type": "dimension",
+      "$value": {
+        "value": 18,
+        "unit": "rem"
+      },
+      "$description": "A project head's name column: the width it holds before its actions wrap under it."
+    },
+    "c-project-details-measure": {
+      "$type": "dimension",
+      "$value": {
+        "value": 32,
+        "unit": "rem"
+      },
+      "$description": "The project details tray's content measure."
+    },
+    "c-project-details-label-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6.5,
+        "unit": "rem"
+      },
+      "$description": "The project details rows' label column."
+    },
+    "c-project-details-select-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "rem"
+      },
+      "$description": "The machine and connection select column of the details tray's add forms."
+    },
+    "c-ledger-when-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "rem"
+      },
+      "$description": "The Actions and Runs ledgers' When column."
+    },
+    "c-ledger-when-w-narrow": {
+      "$type": "dimension",
+      "$value": {
+        "value": 4.5,
+        "unit": "rem"
+      },
+      "$description": "The When column in a ledger under 400px."
+    },
+    "c-ledger-outcome-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 11,
+        "unit": "rem"
+      },
+      "$description": "The Runs ledger's Outcome column."
+    },
+    "c-ledger-outcome-w-narrow": {
+      "$type": "dimension",
+      "$value": {
+        "value": 8,
+        "unit": "rem"
+      },
+      "$description": "The Outcome column in a ledger under 400px."
+    },
+    "c-ledger-took-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 5,
+        "unit": "rem"
+      },
+      "$description": "The Runs ledger's Took column."
+    },
+    "c-side-grip-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "px"
+      },
+      "$description": "The side divider's hit width when the split is expanded."
+    },
+    "c-side-surface-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 320,
+        "unit": "px"
+      },
+      "$description": "A side surface's floor (SideSurface SIDE_FLOOR_PX)."
+    },
+    "c-new-session-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 980,
+        "unit": "px"
+      },
+      "$description": "The new-session dialog's widest (DESIGN.md: \"up to 980px wide\")."
+    },
+    "c-effort-track-h-phone": {
+      "$type": "dimension",
+      "$value": {
+        "value": 38,
+        "unit": "px"
+      },
+      "$description": "The effort track on a phone (DESIGN.md Effort chip: \"38px on a phone\")."
+    },
+    "c-model-list-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 300,
+        "unit": "px"
+      },
+      "$description": "The model list's viewport: fixed, so the section keeps its height while filtering."
+    },
+    "c-model-row-basis": {
+      "$type": "dimension",
+      "$value": {
+        "value": 12,
+        "unit": "rem"
+      },
+      "$description": "The width a model row keeps beside its chips before they drop to their own line."
+    },
+    "c-folder-list-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 196,
+        "unit": "px"
+      },
+      "$description": "The folder browser's list cap: five 36px rows and their gaps."
+    },
+    "c-prompt-grown-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 120,
+        "unit": "px"
+      },
+      "$description": "The first-prompt editor's grown height, fixed on a phone."
+    },
+    "c-page-column-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 34,
+        "unit": "rem"
+      },
+      "$description": "A page that stands as one centred column (the empty fleet, pairing): its width."
+    },
+    "c-page-line": {
+      "$type": "dimension",
+      "$value": {
+        "value": 26,
+        "unit": "rem"
+      },
+      "$description": "That column's sentence measure."
+    },
+    "c-hover-panel-room": {
+      "$type": "dimension",
+      "$value": {
+        "value": 320,
+        "unit": "px"
+      },
+      "$description": "The hover panel's height room when its caller gives none."
+    },
+    "c-status-mark": {
+      "$type": "dimension",
+      "$value": {
+        "value": 2.25,
+        "unit": "rem"
+      },
+      "$description": "An unlock outcome's mark box and its icon."
+    },
+    "c-inventory-text-basis": {
+      "$type": "dimension",
+      "$value": {
+        "value": 240,
+        "unit": "px"
+      },
+      "$description": "A machine inventory entry's words column, under which its Adopt button wraps below."
+    },
+    "c-empty-fleet-caw": {
+      "$type": "dimension",
+      "$value": {
+        "value": 80,
+        "unit": "px"
+      },
+      "$description": "The slot Caw stands in on the empty fleet (MachinesEmpty CAW_SIZE)."
+    },
+    "c-stat-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 10,
+        "unit": "rem"
+      },
+      "$description": "A generated view's stat tile floor."
+    },
+    "c-view-lead-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 9,
+        "unit": "rem"
+      },
+      "$description": "A generated table's lead column floor."
+    },
+    "c-bulk-labels-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 14,
+        "unit": "rem"
+      },
+      "$description": "The Label popover's list of a project's labels before it scrolls."
+    },
+    "c-post-media-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "rem"
+      },
+      "$description": "The tallest a post's picture or video stands under its card."
+    },
+    "c-board-col-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 15,
+        "unit": "rem"
+      },
+      "$description": "A task board column's narrowest (TaskBoard, ViewBoard, TaskNode)."
+    },
+    "c-board-col-max": {
+      "$type": "dimension",
+      "$value": {
+        "value": 22,
+        "unit": "rem"
+      },
+      "$description": "A task board column's widest, and the open Archived column's cap."
+    },
+    "c-task-key-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 6,
+        "unit": "rem"
+      },
+      "$description": "The key column of a task's Fields and Relations, so the two parts' values stand on one line."
+    },
+    "c-filter-label-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 3.5,
+        "unit": "rem"
+      },
+      "$description": "The Filter popover's name column."
+    },
+    "c-task-label-field-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 128,
+        "unit": "px"
+      },
+      "$description": "The new-label field in a task's label row."
+    },
+    "c-task-args-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 192,
+        "unit": "px"
+      },
+      "$description": "An approved action's argument block before it scrolls."
+    },
+    "c-task-output-compact-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "A compact task output's body cap."
+    },
+    "c-task-output-image-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 320,
+        "unit": "px"
+      },
+      "$description": "A task output image's height cap."
+    },
+    "c-task-output-video-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 384,
+        "unit": "px"
+      },
+      "$description": "A task output video's height cap."
+    },
+    "c-task-stage-skeleton-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "The stage control's placeholder while the task reads."
+    },
+    "c-task-edge-label-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "A task relation's name column (\"Found in\", \"Waited on by\")."
+    },
+    "c-task-candidates-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 224,
+        "unit": "px"
+      },
+      "$description": "The link picker's candidate list cap."
+    },
+    "c-task-col-id-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 104,
+        "unit": "px"
+      },
+      "$description": "The task ledger's Id column."
+    },
+    "c-task-col-stage-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 192,
+        "unit": "px"
+      },
+      "$description": "The task ledger's Stage column."
+    },
+    "c-task-col-labels-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 224,
+        "unit": "px"
+      },
+      "$description": "The task ledger's Labels column."
+    },
+    "c-task-col-todos-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 96,
+        "unit": "px"
+      },
+      "$description": "The task ledger's To-dos column."
+    },
+    "c-task-col-time-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 112,
+        "unit": "px"
+      },
+      "$description": "The task ledger's Created and Updated columns."
     }
   },
   "effect": {
@@ -5486,7 +6619,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-fade}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "Something stepping back in: its fade, and its visibility back at once (the composer's prompts, slots and controls when an ask lets go).",
@@ -5500,7 +6636,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-fade}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "Something stepping aside: its fade, and its visibility gone once the fade is done (the composer's parts under an ask, a drawing, a minimized pill).",
@@ -5514,7 +6653,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-exit}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "The composer's tray coming back: the exit's beat, its visibility back at once.",
@@ -5528,7 +6670,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-exit}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "The composer's tray leaving: the exit's beat, its visibility gone once the fade is done.",
@@ -5542,7 +6687,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-fade}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "A part that fades as it slides into place on the drawer curve (the composer's edit row, a question's parts).",
@@ -5556,7 +6704,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-control}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "A chip's fill and ink on the control's beat, and its press scale (transform) on the toggle's (the tree's count, a needs card's chip, a notice row).",
@@ -5570,7 +6721,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-control}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "transition-control, and the press's transform on the toggle's beat.",
@@ -5584,7 +6738,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-control}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "transition-control, and a swiped row's translate home on the exit's beat.",
@@ -5598,7 +6755,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-control}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "transition-control, and a ring drawn as a box-shadow on the same beat.",
@@ -5612,7 +6772,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-panel}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "A chip whose fill and ink settle on the panel's beat, its press (transform) on the toggle's (a rollout's state chip).",
@@ -5626,7 +6789,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-fade}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "A choice card's outline and fill on the fade's beat, its press (transform) on the control's (the account strategy picker).",
@@ -5640,7 +6806,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-fade}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-in-out}"
       },
       "$description": "A frame gliding between cards: its leading edge moves at once, its trailing edge a ghost's beat later, so it stretches then settles (the channel cards).",
@@ -5654,7 +6823,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-fade}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-in-out}"
       },
       "$description": "transition-frame-end-first's mirror, for a glide the other way.",
@@ -5668,7 +6840,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-panel}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "A side surface sliding in beside the main pane: its fade and travel on ease-out, its room (padding) on the drawer curve.",
@@ -5682,7 +6857,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-panel}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-in-out}"
       },
       "$description": "A usage ring's arc drawing to its new length, its stroke and fade on the toggle's beat.",
@@ -5696,7 +6874,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-morph}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-in-out}"
       },
       "$description": "A rail's selection tip gliding and resizing to its new item, fading on the control's beat.",
@@ -5710,7 +6891,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-panel}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-in-out}"
       },
       "$description": "A panel travelling to its new place on ease-in-out while it fades on ease-out (the new-session location panels).",
@@ -5724,7 +6908,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-toggle}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-in-out}"
       },
       "$description": "A panel moving and taking its new height on the toggle's beat, fading on the control's (the model list's panel).",
@@ -5738,7 +6925,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-toggle}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "A suggestion chip: its press on the toggle's beat, its tint and outline on the panel's, its ink on the control's.",
@@ -5752,7 +6942,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-toggle}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "A segmented control's thumb gliding and resizing to its tab, fading on the ghost's beat.",
@@ -5766,7 +6959,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-exit}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "A fold's inner panel fading and cross-blurring out of --fold-blur as it opens and shuts (UpdateCard, MovedLogins, RecordCard; the open state stretches it to the panel's beat). A transitioned filter can hang WebKit; these folds are each driven on WebKit by scripts/probe-kit/specs/web/safari-blurs.ts, so no other element takes this.",
@@ -5780,7 +6976,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-morph}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "A pending button's label and spinner cross-fading and cross-blurring as one replaces the other (the kit's pending-content), where motion is wanted. A transitioned filter can hang WebKit (scripts/probe-kit/specs/web/safari-blurs.ts); no other element takes this.",
@@ -5794,7 +6993,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-exit}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "The connection band (HubBand) going, with less motion: its fade and its visibility on the exit's beat, its tint and ink on the control's.",
@@ -5808,7 +7010,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-panel}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-drawer}"
       },
       "$description": "The connection band (HubBand) coming, with less motion: its fade and its visibility on the panel's beat and the drawer curve, its tint and ink on the control's.",
@@ -5822,7 +7027,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-exit}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "The connection band (HubBand) going back up under the bar: its travel, fade and visibility on the exit's beat, its tint and ink on the control's.",
@@ -5836,7 +7044,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-panel}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-drawer}"
       },
       "$description": "The connection band (HubBand) sliding down from under the bar: its travel, fade and visibility on the panel's beat and the drawer curve, its tint and ink on the control's.",
@@ -5850,7 +7061,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-exit}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-out}"
       },
       "$description": "The connection band's row (HubBand) shutting as the band goes back up: its grid row on the exit's beat.",
@@ -5864,7 +7078,10 @@
       "$type": "transition",
       "$value": {
         "duration": "{motion.dur-panel}",
-        "delay": { "value": 0, "unit": "ms" },
+        "delay": {
+          "value": 0,
+          "unit": "ms"
+        },
         "timingFunction": "{motion.ease-drawer}"
       },
       "$description": "The connection band's row (HubBand) opening from nothing as the band slides down: its grid row on the panel's beat and the drawer curve.",

@@ -71,7 +71,7 @@
          the grabber to the foot, which keeps the safe area clear itself
          (ThreadPane's docked composer). -->
     <Drawer.Content
-      class="h-(--c-sheet-max-h)"
+      class="h-c-sheet-max-h"
       data-caw-float-sheet
       pad="none"
       style="--drawer-max-height: var(--c-sheet-max-h)"

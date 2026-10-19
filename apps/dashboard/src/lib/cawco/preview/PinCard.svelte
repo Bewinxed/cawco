@@ -306,7 +306,7 @@
   style:--card-w="min(var(--c-pin-card-w), calc(100% - 16px))"
   style:--card-max="calc(100% - 16px)"
   style:--sheet-pb="calc(var(--space-3) + env(safe-area-inset-bottom, 0px))"
-  style:--field-fs="var(--text-input)"
+  style:--field-fs="var(--text-field-floor)"
   bind:offsetHeight={height}
   bind:offsetWidth={width}
 >

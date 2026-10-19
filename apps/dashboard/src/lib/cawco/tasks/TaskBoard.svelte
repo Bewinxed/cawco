@@ -150,7 +150,7 @@
   <div
     data-slot="board"
     class="kit-edge-fade grid h-full min-h-0 min-w-0 flex-auto auto-cols-(--cols) grid-flow-col gap-space-3 overflow-x-auto overflow-y-hidden overscroll-x-contain pb-space-3 max-phone:h-auto max-phone:auto-cols-(--cols-phone) max-phone:snap-x max-phone:snap-mandatory max-phone:group-data-rail-open:hidden"
-    style:--cols="minmax(var(--c-task-column-min), var(--c-task-column-max))"
+    style:--cols="minmax(var(--c-board-col-min), var(--c-board-col-max))"
     style:--cols-phone="calc(100% - var(--space-8))"
   >
     {#each stages as stage (stage.name)}
@@ -170,7 +170,7 @@
       <div
         data-slot="rail-open"
         class="mb-space-3 flex min-h-0 w-(--w) flex-none flex-col gap-space-1 max-phone:w-full"
-        style:--w="min(var(--c-task-column-max), 80%)"
+        style:--w="min(var(--c-board-col-max), 80%)"
       >
         <TaskColumn
           archived

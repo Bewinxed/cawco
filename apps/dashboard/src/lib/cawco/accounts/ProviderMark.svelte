@@ -21,7 +21,7 @@
   data-slot="mark"
   aria-hidden="true"
   data-mono={mono || undefined}
-  class="inline-grid h-(--mark-size) w-(--mark-size) flex-none place-items-center text-ink-strong data-mono:text-inherit"
+  class="inline-grid h-(--mark-size) w-(--mark-size) flex-none place-items-center text-ink-strong data-mono:text-inherit *:size-full"
   data-box
   style:--mark-size={`${size}px`}
 >

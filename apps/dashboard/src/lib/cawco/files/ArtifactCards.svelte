@@ -222,7 +222,7 @@
           aria-hidden="true"
           class="size-icon-md flex-none text-ink-muted"
         />
-        <span class="type-label min-w-0 flex-auto truncate">{artifact.name}</span>
+        <span class="type-label min-w-0 flex-auto overflow-clip text-ellipsis whitespace-nowrap">{artifact.name}</span>
       </span>
       <!-- Its words apart by the gap, never by spaces a flex row would drop. -->
       <span

@@ -43,7 +43,7 @@
     <!-- Read whole: a word breaks between words, never inside one, unless
          it alone is wider than the line. -->
     <code
-      class="min-w-0 grow basis-(--c-copy-box-line) overflow-hidden text-meta text-ellipsis whitespace-normal text-ink-strong"
+      class="min-w-0 grow basis-c-copy-box-line overflow-hidden text-meta text-ellipsis whitespace-normal text-ink-strong"
       title={text}
       >{#each words as word, index (index)}{#if index > 0}{" "}{/if}<span
           data-slot="word"
@@ -64,7 +64,7 @@
     type="button"
     variant="outline"
   >
-    <Documents aria-hidden="true" class="size-icon-sm text-ink-muted" />
+    <Documents aria-hidden="true" class="size-icon-sm text-ink-muted" data-box />
     <span aria-live="polite">{said}</span>
   </Button>
 </div>

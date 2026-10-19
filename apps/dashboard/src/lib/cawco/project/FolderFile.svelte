@@ -118,10 +118,10 @@
   </section>
 {:else}
   <SideSurface
-    class="folder-file"
     label="A file of the project's folder"
     {onclose}
     title={path}
+    titleCode
   >
     {@render body()}
   </SideSurface>

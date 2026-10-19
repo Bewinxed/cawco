@@ -244,7 +244,7 @@
         <button
           data-slot="browse"
           aria-expanded={browsing}
-          class="ns-in inline-flex h-c-btn-h-sm max-phone:h-c-row-h flex-none cursor-pointer items-center justify-start gap-space-2 rounded-sm border border-border-control bg-surface-recess px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong shadow-(--shadow-knob) enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
+          class="ns-in inline-flex h-c-btn-h-sm max-phone:h-c-row-h flex-none cursor-pointer items-center justify-start gap-space-2 rounded-sm border border-border-control bg-surface-recess px-space-3 font-body text-size-label leading-none font-medium whitespace-nowrap text-ink-strong shadow-knob enabled:hover:bg-surface-hover disabled:cursor-not-allowed"
           disabled={!machineId}
           id="session-browse"
           onclick={toggleBrowse}
@@ -307,7 +307,7 @@
             </div>
           </div>
           <div
-            class="fai-scroll grid max-h-(--c-folder-list-max-h) content-box-start gap-space-row overflow-auto overscroll-contain p-space-2"
+            class="fai-scroll grid max-h-c-folder-list-max-h content-box-start gap-space-row overflow-auto overscroll-contain p-space-2"
           >
             {#if canGoUp}
               <button

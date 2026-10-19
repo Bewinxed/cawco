@@ -130,7 +130,7 @@
     <span
       data-slot="glyph"
       aria-hidden="true"
-      class="grid flex-none place-items-center text-ink-muted"
+      class="grid flex-none place-items-center text-ink-muted *:size-icon-md"
       data-box><Glyph /></span
     >
     <h2

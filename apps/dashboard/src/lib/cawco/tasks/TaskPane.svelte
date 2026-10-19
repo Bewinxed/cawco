@@ -466,7 +466,7 @@
             </span>
           {/if}
         {:else}
-          <Skeleton class="h-c-btn-h-sm w-(--c-task-stage-skeleton-w)" />
+          <Skeleton class="h-c-btn-h-sm w-c-task-stage-skeleton-w" />
         {/if}
       </div>
       {#if titleDraft !== null}

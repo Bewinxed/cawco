@@ -114,11 +114,11 @@
   {@attach aboveKeyboard(() => body)}
 >
   {#if question}
-    <AskHere asker={question.asker} at="editor" class="max-w-(--c-editor-max-w)" />
+    <AskHere asker={question.asker} at="editor" class="max-w-c-config-max-w" />
   {/if}
   <div
     data-slot="inner"
-    class="flex items-center gap-space-2 max-w-(--c-editor-max-w) max-phone:flex-wrap max-phone:justify-end"
+    class="flex items-center gap-space-2 max-w-c-config-max-w max-phone:flex-wrap max-phone:justify-end"
   >
     {#if ondelete && deleteLabel}
       <Button
@@ -154,7 +154,7 @@
       {configureWords.cancel}
     </Button>
     <Button
-      class="min-w-(--c-btn-min-w)"
+      class="min-w-c-btn-min-w"
       disabled={down !== null || deleting || !canSave}
       {failed}
       label={saved ? configureWords.saved : saveLabel}

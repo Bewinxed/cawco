@@ -19,6 +19,10 @@
    * It unfolds and folds on its own `{#if}` (motion/fold, `unfold`): mounted
    * already holding a fault (a list row arriving), it stands still and the
    * list's own motion carries it.
+   *
+   * `indent` and `end`: where its words start and stop, to line up with the
+   * row above (`--fault-indent`, `--fault-end`); a host that sets those for
+   * every row inside it passes neither.
    */
   import { configureWords } from "@cawco/core";
   import type { Snippet } from "svelte";
@@ -36,6 +40,8 @@
     class: className,
     children,
     details,
+    indent,
+    end,
     ...rest
   }: {
     /** Why it did not go; nothing is drawn while it is empty. */
@@ -49,6 +55,10 @@
     class?: string;
     /** A fault that says itself, in place of the reason line. */
     children?: Snippet;
+    /** Its words' inline-start inset: a space token or a calc() of tokens. */
+    indent?: string;
+    /** Its words' inline-end inset: a space token or a calc() of tokens. */
+    end?: string;
     [attribute: `data-${string}`]: unknown;
   } = $props();
 
@@ -89,6 +99,8 @@
     data-slot="row-fault"
     data-row-fault
     class={cn("min-w-0", className)}
+    style:--fault-indent={indent}
+    style:--fault-end={end}
     {...rest}
     transition:unfold
   >

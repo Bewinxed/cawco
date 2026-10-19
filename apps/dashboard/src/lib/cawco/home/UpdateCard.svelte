@@ -395,7 +395,7 @@
               <IconChevronDown
                 data-chev
                 aria-hidden="true"
-                class="non-scaling-stroke transition-[scale] dur-panel ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
+                class="*:vector-non-scaling transition-[scale] dur-panel ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off"
                 data-icon="inline-end"
               />
             </Button>

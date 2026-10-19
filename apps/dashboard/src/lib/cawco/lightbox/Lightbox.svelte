@@ -224,7 +224,7 @@
 >
   <DialogPrimitive.Portal>
     <DialogOverlay
-      class="lightbox-leaving:animate-kit-fade-out"
+      class="data-lightbox-leaving:animate-kit-fade-out"
       data-lightbox-leaving={leaving || undefined}
     />
     <!-- Drawn through `child`: bits-ui then holds the body's lock only while
@@ -254,7 +254,7 @@
   {#if doc}
     {@const extension = extensionOf(doc.name)}
     <div
-      class="pointer-events-auto flex w-(--c-lightbox-sheet-w) max-h-(--c-lightbox-sheet-max-h) flex-col rounded-sm border border-border-hairline bg-surface-raised text-ink-strong shadow-tile"
+      class="pointer-events-auto flex w-c-lightbox-sheet-w max-h-c-lightbox-sheet-max-h flex-col rounded-sm border border-border-hairline bg-surface-raised text-ink-strong shadow-tile"
       bind:this={sheet}
       {@attach land(() => doc.share, {
         mode: "grow",

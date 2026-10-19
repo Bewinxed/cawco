@@ -91,7 +91,7 @@
     data-plan-pane-expanded={!!expand?.expanded || undefined}
     data-slot="body"
     class={[
-      "kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y pbs-space-1 pbe-space-4 flex flex-col gap-space-2 data-sheet:pbs-space-3 data-sheet:pbe-0 data-sheet:mask-(--sheet-fade) data-plan-pane-expanded:w-full data-plan-pane-expanded:max-w-(--c-plan-measure) data-plan-pane-expanded:mx-auto",
+      "kit-edge-fade-block flex-auto min-h-0 overflow-y-auto overscroll-contain touch-pan-y pbs-space-1 pbe-space-4 flex flex-col gap-space-2 data-sheet:pbs-space-3 data-sheet:pbe-0 data-sheet:mask-(--sheet-fade) data-plan-pane-expanded:w-full data-plan-pane-expanded:max-w-c-measure data-plan-pane-expanded:mx-auto",
       sheet && "kit-sheet-scroll",
     ]}
     style:--more-px="0"

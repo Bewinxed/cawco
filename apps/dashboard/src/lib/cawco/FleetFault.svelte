@@ -341,7 +341,7 @@
 
       <p
         data-slot="why"
-        class="max-w-(--c-measure-prose) text-size-body font-normal"
+        class="max-w-c-measure text-size-body font-normal"
       >
         {copy.why}
       </p>
@@ -395,7 +395,7 @@
       {#if group.faults[0]?.detail}
         {#if group.cause === "unknown"}
           <pre
-            class="max-h-(--c-output-max) overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{group.faults[0].detail}</pre>
+            class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{group.faults[0].detail}</pre>
         {:else}
           <button
             aria-expanded={disclosureOpen}
@@ -418,7 +418,7 @@
             {#each shown as fault (fault.scope + fault.key)}
               {#if fault.detail}
                 <pre
-                  class="max-h-(--c-output-max) overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"><span class="block text-ink-muted"
+                  class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"><span class="block text-ink-muted"
                     >{faultLabel(fault)}</span
                   >{fault.detail}</pre>
               {/if}
@@ -427,7 +427,7 @@
         {/if}
       {/if}
 
-      <p class="max-w-(--c-measure-prose) text-size-body font-normal">
+      <p class="max-w-c-measure text-size-body font-normal">
         {copy.fix}
       </p>
 

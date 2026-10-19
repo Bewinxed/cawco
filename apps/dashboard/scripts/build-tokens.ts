@@ -124,6 +124,99 @@ const RETIRED = new Set([
 ]);
 
 /**
+ * The house's animations, one `animate-<name>` each, every one on the motion
+ * tokens. A plain fade names app.css's `kit-fade-in` / `kit-fade-out`; the
+ * keyframes app.css keeps for script-built names (`breath`, `rail-label-in`,
+ * `kit-tip-fade`, ns-theme's `ns-in`, `ns-panel`) are named from there; the
+ * rest are below. Every travelling one is used under `motion-safe:`.
+ */
+const ANIMATIONS: Record<string, string> = {
+  // Live work breathes (DESIGN.md): one loop of --breath on ease-in-out.
+  "animate-breath": "breath var(--breath) var(--ease-in-out) infinite",
+  // Fades: a toast, a tip, a step, a scrim, a sheet under reduced motion.
+  "animate-kit-fade-out": "kit-fade-out var(--dur-exit) var(--ease-out) both",
+  "animate-kit-tip-fade": "kit-tip-fade var(--dur-menu) var(--ease-out)",
+  "animate-thinking-step-in":
+    "kit-fade-in var(--dur-menu) var(--ease-out) backwards",
+  "animate-sheet-fade-in": "kit-fade-in var(--dur-control) var(--ease-out)",
+  "animate-sheet-fade-out":
+    "kit-fade-out var(--dur-control) var(--ease-out) forwards",
+  // What waits out --dur-wait-grace before it shows, so a fast answer never
+  // flashes it: fading in, or (with reduced motion) at once.
+  "animate-wait-grace-in":
+    "kit-fade-in var(--dur-fade) var(--ease-out) var(--dur-wait-grace) both",
+  "animate-wait-grace-show": "kit-fade-in 1ms var(--dur-wait-grace) both",
+  // A tick draws itself along its stroke over --dur-toggle (DESIGN.md Ticks
+  // and dots), on a path of pathLength="1" with `dash-unit`; with reduced
+  // motion it only fades in.
+  "animate-check-in": "kit-fade-in var(--dur-toggle) var(--ease-out) both",
+  "animate-check-draw": "check-draw var(--dur-toggle) var(--ease-out) both",
+  // The rail's travelling label settling in as it re-labels.
+  "animate-rail-label-in": "rail-label-in var(--dur-exit) var(--ease-out) both",
+  // The thinking indicator (DESIGN.md Status displays): each of four words
+  // holds two breaths of an eight-breath cycle (`--word-delay` per word); the
+  // circle and the infinity trade places twice a three-breath loop; a band of
+  // strong ink crosses the word once a breath while the word inside it
+  // slides back, so only the light moves. An active step's words shimmer on
+  // the same breath.
+  "animate-thinking-word":
+    "thinking-word calc(var(--breath) * 8) var(--ease-out) var(--word-delay, 0s) infinite both",
+  "animate-thinking-circle":
+    "thinking-circle calc(var(--breath) * 3) var(--ease-in-out) infinite both",
+  "animate-thinking-lemniscate":
+    "thinking-lemniscate calc(var(--breath) * 3) var(--ease-in-out) infinite both",
+  "animate-thinking-sheen":
+    "thinking-sheen var(--breath) var(--ease-in-out) infinite",
+  "animate-thinking-sheen-hold":
+    "thinking-sheen-hold var(--breath) var(--ease-in-out) infinite",
+  "animate-step-shimmer":
+    "step-shimmer var(--breath) var(--ease-in-out) infinite",
+  // A config row the change just landed on flashes from 35% up.
+  "animate-row-flash":
+    "row-flash calc(var(--dur-fade) * 3) var(--ease-out) both",
+  // Cards and marks arriving: a pin's card, a mention's tip, an unlock's mark.
+  "animate-pin-card-in": "pin-card-in var(--dur-pop) var(--ease-out)",
+  "animate-mention-tip-in": "mention-tip-in var(--dur-menu) var(--ease-out)",
+  "animate-mark-in": "mark-in var(--dur-pop) var(--ease-out) both",
+  // A kit sheet slides in and out from its side (`--sheet-away`).
+  "animate-sheet-in": "sheet-in var(--dur-panel) var(--ease-drawer)",
+  "animate-sheet-out": "sheet-out var(--dur-exit) var(--ease-drawer) forwards",
+  // The new-session dialog (DESIGN.md New-session dialog): its sections fade
+  // up in turn (`--delay`), its card enters with ns-panel and leaves sinking
+  // and shrinking, its scrim fades.
+  "animate-ns-sec":
+    "ns-in var(--dur-pop) var(--ease-out) var(--delay, 0ms) backwards",
+  "animate-ns-card-in": "ns-panel var(--dur-panel) var(--ease-out) backwards",
+  "animate-ns-card-out": "ns-panel-out var(--dur-exit) var(--ease-out) both",
+  "animate-ns-scrim-in": "kit-fade-in var(--dur-panel) var(--ease-out) backwards",
+  "animate-ns-scrim-out": "kit-fade-out var(--dur-exit) var(--ease-out) both",
+};
+/** The keyframes the house's animations name that app.css does not keep. */
+const KEYFRAMES: Record<string, string> = {
+  "check-draw": "from {\n  stroke-dashoffset: 1;\n}\nto {\n  stroke-dashoffset: 0;\n}",
+  "thinking-word":
+    "0% {\n  opacity: 0;\n  transform: translateY(80%);\n}\n1.5%,\n25% {\n  opacity: 1;\n  transform: translateY(0);\n}\n26%,\n100% {\n  opacity: 0;\n  transform: translateY(-80%);\n}",
+  "thinking-circle":
+    "0%,\n50%,\n100% {\n  opacity: 1;\n  transform: none;\n}\n25%,\n75% {\n  opacity: 0;\n  transform: scale(1.15, 0.8);\n}",
+  "thinking-lemniscate":
+    "0%,\n50%,\n100% {\n  opacity: 0;\n  transform: scale(0.7, 1.1);\n}\n25%,\n75% {\n  opacity: 1;\n  transform: none;\n}",
+  "thinking-sheen": "to {\n  transform: translateX(-66.6667%);\n}",
+  "thinking-sheen-hold": "to {\n  transform: translateX(200%);\n}",
+  "step-shimmer":
+    "from {\n  background-position: 0% 0;\n}\nto {\n  background-position: 100% 0;\n}",
+  "row-flash": "from {\n  opacity: 0.35;\n}",
+  "pin-card-in":
+    "from {\n  opacity: 0;\n  transform: translateY(var(--pop-rise)) scale(var(--press-scale));\n}",
+  "mention-tip-in": "from {\n  opacity: 0;\n  scale: var(--press-scale);\n}",
+  "mark-in":
+    "from {\n  opacity: 0;\n  scale: 0.25;\n  filter: blur(var(--space-1));\n}",
+  "sheet-in": "from {\n  transform: var(--sheet-away);\n}",
+  "sheet-out": "to {\n  transform: var(--sheet-away);\n}",
+  "ns-panel-out":
+    "to {\n  transform: translateY(var(--space-2)) scale(var(--press-scale));\n  opacity: 0;\n}",
+};
+
+/**
  * Every literal width a container query reads (container queries cannot read
  * var()), named by its container; a container with two widths names each by
  * its width. Measured with
@@ -206,12 +299,15 @@ const theme = tailwindThemeCss(built.view, {
     "animate-spin": "spin var(--dur-loop) linear infinite",
     "animate-pulse": "pulse var(--dur-loop) var(--ease-in-out) infinite",
     "animate-ping": "ping var(--dur-loop) var(--ease-out) infinite",
+    ...ANIMATIONS,
   },
-  // Tailwind's own, which `--*: initial` clears with the keys that name them.
+  // Tailwind's own, which `--*: initial` clears with the keys that name
+  // them, then the house's.
   keyframes: {
     spin: "to {\n  transform: rotate(360deg);\n}",
     ping: "75%,\n100% {\n  transform: scale(2);\n  opacity: 0;\n}",
     pulse: "50% {\n  opacity: 0.5;\n}",
+    ...KEYFRAMES,
   },
 });
 const selection = built.view.byPath.get("color.selection");

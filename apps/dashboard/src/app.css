@@ -1,3 +1,15 @@
+/* One cascade order for the whole app, Tailwind's own with two more: tokens
+   in theme, element defaults in base, a library's own stylesheet in its
+   layer under the house's components (Svelte Flow's, `xyflow`), kit recipes
+   in components, single-purpose classes in utilities (with what has to
+   outrank the typography plugin, which writes there too), and in `overrides`
+   the few page-wide holds that outrank every utility on any element (a
+   field's type floor, a loop held still, the theme flip). A later layer
+   wins over an earlier one whatever the selectors' weight
+   (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer). Stated before
+   Tailwind's import, which declares its four first: a layer's place is
+   where it is first named. */
+@layer theme, base, xyflow, components, utilities, overrides;
 @import "tailwindcss" source(".");
 @import "@fontsource-variable/figtree";
 @import "@fontsource-variable/jetbrains-mono";
@@ -14,19 +26,13 @@
 @import "./lib/tokens/selection.css";
 /* The house's variants and one per attribute state (`bun run variants`). */
 @import "./lib/tokens/variants.css";
+/* Svelte Flow's stylesheet, once for every graph (the decisions graph, the
+   canvas map, a view's canvas), in its own layer under the house's rules. */
+@import "@xyflow/svelte/dist/style.css" layer(xyflow);
 @plugin "@tailwindcss/typography";
 /* The plugin's rules, minus the four that restyled a whole reply per block. */
 @config "../typography.config.ts";
 
-/* One cascade order for the whole app, Tailwind's own and one layer after
-   it: tokens in theme, element defaults in base, kit recipes in components,
-   single-purpose classes in utilities (with what has to outrank the
-   typography plugin, which writes there too), and in `overrides` the few
-   page-wide holds that outrank every utility on any element (a field's type
-   floor, a loop held still, the theme flip). A later layer wins over an
-   earlier one whatever the selectors' weight
-   (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer). */
-@layer theme, base, components, utilities, overrides;
 
 /* The screen's bottom inset, on the boxes that stand on the screen's bottom
    (data-safe-bottom), and nowhere else: not inherited, so the keyboard's
@@ -408,10 +414,10 @@
   textarea,
   select {
     @variant max-phone {
-      font-size: max(16px, 1em);
+      font-size: max(var(--text-field-floor), 1em);
     }
     @variant coarse {
-      font-size: max(16px, 1em);
+      font-size: max(var(--text-field-floor), 1em);
     }
   }
 
@@ -1549,7 +1555,7 @@
      which bits-ui writes whole on every placement; HangCard marks the
      wrapper it draws (`data-hang`). */
   [data-bits-floating-content-wrapper][data-hang] {
-    clip-path: inset(0 -120px -120px);
+    @apply clip-block-start;
   }
   /* Open and close are the card's own (`hang`): the kit's rise, scale and
      fade do not apply, and until it is placed it is held shut, up behind
@@ -2139,6 +2145,699 @@
   }
 }
 
+/* ---- Rules into DOM a component does not render: a library's (PhotoSwipe,
+   Svelte Flow, Streamdown), a script's (the strategy figure, the morph's
+   letters, the editors' chips) or a kit part's internals, which take no
+   class from the markup that hosts them. Each is anchored on the host's own
+   hook. */
+@layer components {
+  /* The strategy figure's stage (accounts/figure.ts builds it): lanes,
+     clocks, bars and chips at the build's own geometry (--fig-*). */
+  [data-slot="stage"] .dg {
+    position: absolute;
+    inset: 0;
+  }
+  [data-slot="stage"] .e {
+    position: absolute;
+    left: 0;
+    top: 0;
+  }
+  [data-slot="stage"] .ln-lbl {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    height: var(--space-4);
+    font: var(--type-meta);
+    font-weight: var(--weight-strong);
+    line-height: var(--space-4);
+    color: var(--ink-row);
+    white-space: nowrap;
+  }
+  [data-slot="stage"] .ln-lbl .nm {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  [data-slot="stage"] .ln-lbl .dot {
+    flex: none;
+    width: var(--space-2);
+    height: var(--space-2);
+    border-radius: var(--radius-pill);
+    background: var(--c);
+  }
+  [data-slot="stage"] .ln-lbl svg {
+    width: var(--icon-sm);
+    height: var(--icon-sm);
+    color: var(--ink-muted);
+  }
+  [data-slot="stage"] .clk {
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-xs);
+    font: var(--type-meta);
+    line-height: var(--space-4);
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+    color: var(--ink-muted);
+    white-space: nowrap;
+  }
+  [data-slot="stage"] .clkw {
+    border-radius: var(--radius-xs);
+    background: color-mix(in oklab, var(--c) 26%, transparent);
+    opacity: 0;
+  }
+  [data-slot="stage"] .blk {
+    font: var(--type-meta);
+    font-weight: var(--weight-strong);
+    line-height: var(--space-4);
+    text-align: right;
+    color: var(--data-bad);
+    white-space: nowrap;
+    opacity: 0;
+  }
+  [data-slot="stage"] :is(.bar, .hr, .fl, .gh, .pu) {
+    height: var(--fig-chip);
+    border-radius: var(--radius-hair);
+  }
+  [data-slot="stage"] .bar {
+    background: var(--surface-fill);
+  }
+  [data-slot="stage"] .hr {
+    background: color-mix(in oklab, var(--c) 42%, transparent);
+    opacity: 0;
+  }
+  [data-slot="stage"] .fl {
+    background: var(--c);
+    transform-origin: 0 50%;
+  }
+  [data-slot="stage"] .gh {
+    border: 1px dashed var(--c);
+    background: color-mix(in oklab, var(--c) 22%, transparent);
+    opacity: 0;
+  }
+  [data-slot="stage"] .chip {
+    width: var(--fig-chip);
+    height: var(--fig-chip);
+    border-radius: var(--radius-hair);
+    background: var(--c);
+    box-shadow: 0 0 0 2px var(--surface-recess);
+    offset-rotate: 0deg;
+    offset-anchor: 50% 50%;
+  }
+  /* A fork is its parent's chip drawn hollow: the same lane, no extra mark. */
+  [data-slot="stage"] .chip.child {
+    background: var(--surface-recess);
+    box-shadow:
+      inset 0 0 0 2px var(--c),
+      0 0 0 2px var(--surface-recess);
+  }
+  [data-slot="stage"] .tag {
+    padding: 0 var(--space-1);
+    border-radius: var(--radius-xs);
+    background: var(--surface-fill);
+    font: var(--type-caps);
+    line-height: var(--space-4);
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-row);
+    white-space: nowrap;
+  }
+  /* A caption wraps where the stage is narrow; the stage grows to hold it. */
+  [data-slot="stage"] .cap {
+    left: var(--fig-pad);
+    right: var(--fig-pad);
+    bottom: var(--fig-cap-foot);
+    top: auto;
+    font: var(--type-meta);
+    line-height: var(--fig-cap-line);
+    color: var(--ink-row);
+    text-wrap: pretty;
+  }
+
+  /* A joined row's duotone glyph: its status layer at the glyph's own
+     opacity (the icon's paths carry `opacity`, which no class reaches). */
+  [data-slot="glyph"] svg[data-duo] [opacity] {
+    opacity: var(--glyph-duo-status-opacity);
+  }
+
+  /* Svelte Flow's node and handle (the decisions graph): a card new to the
+     graph fades up where it lands, and the handles the edges need stay as
+     1px points nobody can grab. */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="decision-graph"] .svelte-flow__node-decision {
+      transition: opacity var(--dur-fade) var(--ease-out);
+
+      @starting-style {
+        opacity: 0;
+      }
+    }
+  }
+  [data-slot="decision-node"] .svelte-flow__handle {
+    inline-size: 1px;
+    block-size: 1px;
+    min-inline-size: 0;
+    min-block-size: 0;
+    border: 0;
+    background: transparent;
+    pointer-events: none;
+  }
+
+  /* PhotoSwipe's DOM (its root is appended to <body>), under the
+     `cawco-pswp` mainClass Lightbox passes it: its chrome on the house's
+     raised surface and hairline, 44px controls. */
+  .cawco-pswp {
+    --pswp-bg: var(--scrim);
+    --pswp-placeholder-bg: var(--surface-recess);
+    --pswp-icon-color: var(--ink-strong);
+    --pswp-error-text-color: var(--ink-muted);
+    color: var(--ink-strong);
+
+    & .pswp__bg {
+      backdrop-filter: blur(var(--scrim-blur));
+    }
+    & .pswp__top-bar {
+      gap: var(--space-2);
+      padding: var(--space-2);
+      block-size: auto;
+    }
+    & .pswp__button {
+      display: grid;
+      place-items: center;
+      inline-size: var(--c-top-bar-h);
+      block-size: var(--c-top-bar-h);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
+      color: var(--ink-strong);
+      opacity: 1;
+      overflow: visible;
+
+      & svg {
+        inline-size: var(--icon-lg);
+        block-size: var(--icon-lg);
+      }
+      @media (hover: hover) and (pointer: fine) {
+        &:hover {
+          background: var(--surface-hover);
+        }
+      }
+    }
+    & .pswp__button--arrow {
+      margin-block-start: calc(var(--c-top-bar-h) / -2);
+    }
+    & .pswp__button--arrow--prev {
+      inset-inline-start: var(--space-3);
+    }
+    & .pswp__button--arrow--next {
+      inset-inline-end: var(--space-3);
+    }
+    /* The counter is chrome like the buttons: their chip on the raised
+       surface inside a hairline, so the page under the scrim never reads
+       through it. */
+    & .pswp__counter {
+      display: grid;
+      place-items: center;
+      block-size: var(--c-top-bar-h);
+      margin: 0;
+      padding-inline: var(--space-3);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-raised);
+      font-size: var(--text-meta);
+      font-weight: var(--weight-body);
+      font-variant-numeric: tabular-nums;
+      color: var(--ink-strong);
+      text-shadow: none;
+      opacity: 1;
+    }
+    /* PhotoSwipe fades its own chrome with the zoom (`pswp--ui-visible`);
+       the description goes with it. */
+    & .pswp__description {
+      position: absolute;
+      inset-inline: var(--space-3);
+      inset-block-end: var(--space-3);
+      display: flex;
+      align-items: center;
+      gap: var(--space-3);
+      padding: var(--space-2) var(--space-3);
+      border: 1px solid var(--border-hairline);
+      border-radius: var(--radius-sm);
+      background: var(--surface-recess);
+      color: var(--ink-muted);
+      font-size: var(--text-meta);
+      font-weight: var(--weight-body);
+      opacity: 0;
+
+      & .lines {
+        display: flex;
+        flex-direction: column;
+        flex: 1;
+        min-inline-size: 0;
+        overflow-wrap: anywhere;
+      }
+      & .path {
+        font-family: var(--font-mono);
+      }
+      & a {
+        white-space: nowrap;
+        text-decoration: underline;
+        color: inherit;
+      }
+      @media (prefers-reduced-motion: no-preference) {
+        transition: opacity var(--dur-control) var(--ease-out);
+      }
+    }
+    &.pswp--ui-visible .pswp__description {
+      opacity: 1;
+    }
+  }
+
+  /* The letters the morph (ui/morph-text/morph.ts) writes into its box:
+     each a box of its own on one line, broken only at "\n". A digit rolls in
+     a slot that clips it on the block axis only (clip, unlike hidden, keeps
+     the text's baseline), so a glyph's overhang is never shaved. */
+  [data-slot="letters"] {
+    > :not(br) {
+      display: inline-block;
+      white-space: pre;
+    }
+    > [data-roll] {
+      overflow-x: visible;
+      overflow-y: clip;
+    }
+    > [data-roll] > span {
+      display: inline-block;
+    }
+  }
+
+  /* Streamdown (svelte-streamdown 4.2.1, the latest) writes its token and
+     block animation, and its token spans' inline-block and pre-wrap, into
+     each element's style attribute (dist/context.svelte.js
+     animationTextStyle / animationBlockStyle), and an inline declaration
+     yields only to an important one. The chunk fade in ui/markdown is the
+     only motion streamed text has, and inline, with the prose's own
+     white-space, a streamed paragraph lays out as the settled one does. */
+  [data-slot="md"] [style*="sd-"] {
+    animation: none !important;
+  }
+  [data-slot="md"] span[style*="sd-"] {
+    display: inline !important;
+    white-space: inherit !important;
+  }
+  /* A conversation turn's rendered words (MessageBody), in the body role and
+     the turn's rhythm. */
+  [data-slot="msg"] {
+    /* A paragraph after a paragraph, and a list in a list item, keep their
+       gap over the zero margins below (more specific, so first here). */
+    & p + p {
+      margin-block-start: var(--space-3);
+    }
+    & li > ul,
+    & li > ol {
+      margin-block-start: var(--space-1);
+    }
+    & :is(p, li, h1, h2, h3, h4, h5, h6) {
+      text-wrap-style: stable;
+    }
+    & p,
+    & ul,
+    & ol,
+    & blockquote {
+      margin-block: 0;
+    }
+    & li:where(:not(:first-child)) {
+      margin-block-start: var(--space-1);
+    }
+    & ul,
+    & ol {
+      padding-inline-start: var(--space-5);
+    }
+    & :not(pre) > code {
+      display: inline-block;
+      max-inline-size: 100%;
+      vertical-align: baseline;
+      font-family: var(--font-mono);
+      font-size: var(--text-label);
+      line-height: var(--leading-ui);
+      background: var(--code-bg);
+      box-shadow: inset 0 0 0 1px var(--border-hairline);
+      padding-block: 0;
+      padding-inline: var(--c-code-chip-pad-x);
+      border-radius: var(--radius-xs);
+      overflow-wrap: anywhere;
+    }
+    & .prose {
+      font-size: var(--text-body);
+      font-weight: var(--weight-body);
+      line-height: var(--leading-body);
+      color: var(--ink-strong);
+    }
+    & .prose > * {
+      margin-block-start: var(--space-3);
+    }
+    & .prose > :first-child {
+      margin-block-start: 0;
+    }
+    & .prose > :last-child {
+      margin-block-end: 0;
+    }
+    & .prose :is(h1, h2, h3, h4, h5, h6) {
+      font-size: var(--text-body);
+      line-height: var(--leading-ui);
+      font-weight: var(--weight-strong);
+      color: var(--ink-strong);
+    }
+    & .prose > :is(h1, h2, h3, h4, h5, h6):where(:not(:first-child)) {
+      margin-block-start: var(--space-5);
+    }
+    & .prose > pre {
+      font-family: var(--font-mono);
+      font-size: var(--text-label);
+      line-height: var(--leading-body);
+      background: var(--surface-recess);
+      border-radius: var(--radius-sm);
+      padding: var(--space-3);
+      overflow-x: auto;
+    }
+    & .prose > pre code {
+      background: none;
+      padding: 0;
+      font-size: inherit;
+    }
+  }
+  /* An instruction's markdown starts at its box: its first block gives back
+     the gap above it. */
+  [data-slot="instruction"] [data-slot="md"] > :first-child {
+    margin-block-start: 0;
+  }
+
+  /* The chips the editors' scripts make: a mention in Find's field
+     (`[data-mention-chip]`, `.mention-glyph`) and a reference in the
+     new-session prompt (PromptEditor's `.ns-chip`). */
+  [data-editor] [data-mention-chip] {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    max-inline-size: 100%;
+    margin-inline: 1px;
+    padding: 0 var(--space-2) 0 var(--space-1);
+    border-radius: var(--radius-xs);
+    background: var(--surface-recess);
+    box-shadow: inset 0 0 0 1px var(--border-hairline);
+    font: var(--type-label);
+    color: var(--ink-strong);
+    vertical-align: baseline;
+    white-space: nowrap;
+    cursor: default;
+    user-select: all;
+  }
+  [data-editor] .mention-glyph {
+    display: inline-grid;
+    place-items: center;
+    color: var(--status-idle-glyph);
+  }
+  [data-editor] .mention-glyph svg {
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
+  }
+  [data-editor] [data-mention-chip][data-tone="live"] .mention-glyph {
+    color: var(--status-live-glyph);
+  }
+  [data-editor] [data-mention-chip][data-tone="attn"] .mention-glyph {
+    color: var(--status-attn-glyph);
+  }
+  [data-editor] [data-mention-chip][data-tone="fail"] .mention-glyph {
+    color: var(--status-fail-glyph);
+  }
+  [data-slot="editor"] .ns-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    vertical-align: top;
+    block-size: calc(var(--prompt-lh) - 2px);
+    margin: 1px;
+    padding-inline: var(--space-1) var(--space-2);
+    border-radius: var(--radius-sm);
+    background: var(--surface-fill);
+    border: 1px solid var(--border-control);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
+    color: var(--ink-strong);
+    white-space: nowrap;
+    user-select: all;
+  }
+  [data-slot="editor"] .ns-chip-icon {
+    display: inline-flex;
+  }
+  [data-slot="editor"] .ns-chip-icon > svg {
+    inline-size: var(--icon-sm);
+    block-size: var(--icon-sm);
+  }
+
+  /* While a split's divider is dragged, no pane's iframe takes the pointer
+     from it. */
+  [data-split-resizing] iframe {
+    pointer-events: none;
+  }
+
+  /* Kit parts restyled by their host, until each part takes the look as a
+     variant of its own (wave 2): a ThinkingStep's glyph in its phase's ink
+     under MoveWait; WorkTabs' sizes on the fluid tabs; the preview's well
+     ring and its mode tabs' glyph-only segments; the view bar's trigger
+     words and filter trigger; the project details' asked toggle's breath;
+     the decisions' empty Caw's stretched action; a segmented radio's glyph. */
+  [data-slot="wait"]
+    [data-slot="row"][data-phase="done"]
+    [data-thinking-step-icon] {
+    color: var(--status-done-glyph);
+  }
+  [data-slot="wait"]
+    [data-slot="row"][data-phase="active"]
+    [data-thinking-step-icon] {
+    color: var(--ink-strong);
+  }
+  [data-slot="wait"]
+    [data-slot="row"][data-phase="failed"]
+    [data-thinking-step-icon] {
+    color: var(--status-fail-glyph);
+  }
+  [data-slot="wait"]
+    [data-slot="row"][data-phase="asking"]
+    [data-thinking-step-icon] {
+    color: var(--status-attn-glyph);
+  }
+  [data-slot="wait"]
+    [data-slot="row"][data-phase="stopped"]
+    [data-thinking-step-icon] {
+    color: var(--ink-muted);
+  }
+  /* A move step's label wraps, never truncates. */
+  [data-slot="wait"] [data-slot="row"] [data-slot="thinking-step-label"] {
+    overflow-wrap: anywhere;
+  }
+  [data-work-tabs][data-slot="tabs"] .ff-tabs-list {
+    --px: calc(var(--space-2) - var(--tight) * 0.09);
+    --text: var(--text-label);
+    --item: var(--space-8);
+    --sheet: light-dark(var(--surface-raised), var(--surface-hover));
+    --tab-hover: light-dark(
+      var(--surface-hover),
+      color-mix(in oklch, var(--surface-fill) 50%, transparent)
+    );
+    --tab-fill: var(--surface-recess);
+  }
+  /* A work tab is as wide as its label and its count, the label to its count
+     closer on a narrow rail. */
+  [data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="ff-tab"] {
+    --gap: max(0px, var(--space-row) - var(--tight) * 0.06);
+    min-inline-size: max-content;
+  }
+  /* A work tab after the first starts its label past the overlap. */
+  [data-work-tabs][data-slot="tabs"]
+    .ff-tabs-list
+    [data-slot="ff-tab"]
+    ~ [data-slot="ff-tab"] {
+    --px-start: calc(var(--overlap) + var(--px));
+  }
+  /* A work tab's label never gives way: the header's spacing does. */
+  [data-work-tabs][data-slot="tabs"] .ff-tabs-list [data-slot="hit"] {
+    flex-shrink: 0;
+  }
+  /* The preview's well: Comment and Draw turn its own border the accent,
+     inside its box, never a second ring; Interact leaves it as the page's
+     own. The ring eases except while the split slides. */
+  [data-side-well]:has(> [data-slot="pin-room"]) {
+    outline: var(--focus-ring-width) solid transparent;
+    outline-offset: var(--focus-ring-inset);
+
+    &:not(:where([data-split-sliding] *)) {
+      transition: outline-color var(--dur-control) var(--ease-in-out);
+    }
+    &:has(> [data-slot="pin-room"][data-mode]) {
+      outline-color: var(--accent);
+      cursor: crosshair;
+    }
+  }
+  /* The preview's mode control keeps its segments to their glyphs: each
+     name stays its accessible name and its title, never drawn. */
+  [data-slot="modes"] [data-slot="ff-tab"] [data-slot="tab-item-label"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  [data-slot="view-bar"] > [data-slot="select-trigger"] > .mark-text {
+    position: relative;
+    min-inline-size: 0;
+    overflow: clip;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  [data-slot="view-bar"] > [data-filter-trigger] {
+    flex: none;
+    min-inline-size: var(--c-composer-field);
+    inline-size: auto;
+    block-size: var(--c-composer-field);
+    border-radius: var(--bar-control-radius);
+  }
+  /* The project details' toggles breathe their thumb while the hub answers
+     (`data-pending`). */
+  @media (prefers-reduced-motion: no-preference) {
+    [data-project-details] [data-slot="toggle-group"][data-pending] .kit-thumb {
+      animation: breath var(--breath) var(--ease-in-out) infinite;
+    }
+  }
+  [data-slot="caw-empty"] .kit-empty-action {
+    align-self: stretch;
+  }
+  [data-slot="tab"][role="radio"] svg {
+    flex: none;
+  }
+
+  /* A side surface's head controls (SideSurface's head, whatever its host
+     puts there): a 30px ghost of the label role, muted at rest, the hover
+     fill under a resting pointer, pressed and on as the kit's. In this
+     layer, so a kit part's own utilities (ArtifactMenu's `face="title"`)
+     still win over it. */
+  [data-slot="side-head"] :is(button, a):not([role="tab"]) {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    min-width: var(--c-btn-h-sm);
+    height: var(--c-btn-h-sm);
+    padding: 0 var(--space-2);
+    border: 0;
+    border-radius: var(--radius-sm);
+    color: var(--ink-muted);
+    background: transparent;
+    cursor: pointer;
+    text-decoration: none;
+    font-family: inherit;
+    font-style: inherit;
+    line-height: inherit;
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      transform var(--dur-control) var(--ease-out),
+      opacity var(--dur-control) var(--ease-in-out);
+  }
+  [data-slot="side-head"] :is(button, a):not([role="tab"]) svg {
+    width: var(--icon-md);
+    height: var(--icon-md);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    [data-slot="side-head"]
+      :is(button, a):not([role="tab"]):is(:active, [data-pressed]) {
+      transform: scale(var(--press-scale));
+    }
+  }
+  [data-slot="side-head"] button[aria-pressed="true"]:not([role="tab"]) {
+    background: var(--surface-pressed);
+    color: var(--ink-strong);
+  }
+  [data-slot="side-head"] button:disabled {
+    opacity: 0.5;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    [data-slot="side-head"]
+      :is(button, a):not([role="tab"], [aria-pressed="true"]):hover {
+      background: var(--surface-hover);
+    }
+  }
+  [data-slot="side-head"] > :is(button, a) {
+    flex: none;
+  }
+  [data-slot="identity"] > * {
+    max-inline-size: 100%;
+  }
+  [data-slot="identity"][data-controlled]:has(
+      > [data-slot="subtitle"]:not([data-dropped])
+    )
+    > :is(button, a) {
+    block-size: auto;
+    padding-block: var(--space-1);
+  }
+  [data-slot="side-head"]:has([role="tablist"]:not([data-head-item] *))
+    [data-slot="identity"] {
+    --inset: var(--space-1);
+  }
+
+  /* A touch is the browser's to pan only across the axis a sheet leaves by,
+     on every element inside it: the browser reads touch-action from the
+     finger's element up to the nearest scroller, so a scrolling list in the
+     sheet would otherwise claim the drag that dismisses it
+     (motion/drag.svelte.ts). The sheet's children are its caller's. */
+  [data-slot="sheet-content"]:is([data-side="left"], [data-side="right"]) * {
+    touch-action: pan-y;
+  }
+  [data-slot="sheet-content"]:is([data-side="top"], [data-side="bottom"]) * {
+    touch-action: pan-x;
+  }
+}
+
+/* The preview's phone sheet (PreviewPane's `data-preview-sheet` drawer):
+   the whole pane, its grabber DESIGN.md's 100×6. Unlayered: vaul-svelte
+   ships its drawer and handle rules as unlayered :global styles
+   (components/drawer/drawer.svelte), and a layered rule never outranks an
+   unlayered one. */
+[data-preview-sheet][data-slot="drawer-content"] {
+  position: absolute;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  outline: none;
+}
+[data-preview-sheet][data-slot="drawer-content"][data-state="closed"] {
+  visibility: hidden;
+}
+[data-preview-sheet][data-slot="drawer-content"]::before,
+[data-preview-sheet][data-slot="drawer-content"] > div:first-child {
+  display: none;
+}
+[data-preview-sheet] [data-preview-grab][data-vaul-handle] {
+  touch-action: none;
+  position: absolute;
+  top: var(--space-1);
+  left: calc(50% - var(--c-grabber-w) / 2);
+  width: var(--c-grabber-w);
+  height: var(--c-grabber-h);
+  border-radius: var(--radius-pill);
+  background: var(--border-control);
+  margin: 0;
+  opacity: 1;
+}
+[data-preview-sheet] [data-vaul-handle-hitarea] {
+  height: var(--c-sheet-inspector-head-h);
+}
+
 /* ---- Rendered markdown. @tailwindcss/typography paints its own gray
    palette and type scale in the utilities layer; this restates both from the
    tokens, one layer-order later, so one rule serves both modes and
@@ -2571,6 +3270,247 @@
     in srgb,
     var(--action-solid) calc(var(--tint) + 6%),
     var(--surface-raised)
+  );
+}
+
+/* ---- What a converted component said that Tailwind has no utility for,
+   named for what it does (tailwindcss.com/docs/adding-custom-styles). */
+
+/* A field's control transition and its height, which carries each new line
+   (DESIGN.md Inputs and fields, Textarea: "a 120ms height transition"). */
+@utility transition-control-grow {
+  transition:
+    var(--transition-control),
+    height var(--dur-control) var(--ease-out);
+}
+
+/* A kit sheet under reduced motion: it fades in and out over the control's
+   beat instead of sliding (DESIGN.md Sheet: "with reduced motion it fades
+   over 120ms"), the sheet's own fade animations. */
+@utility sheet-fade {
+  animation: --theme(--animate-sheet-fade-in);
+  &[data-state="closed"] {
+    animation: --theme(--animate-sheet-fade-out);
+  }
+}
+
+/* The thinking indicator's light: three words wide, ink-strong at its
+   middle, fading to nothing 15% of its width either side. The 300% is the
+   band's geometry, paired with thinking-sheen's -66.6667% and
+   thinking-sheen-hold's 200%. */
+@utility sheen-band {
+  inline-size: 300%;
+  mask-image: linear-gradient(
+    90deg,
+    transparent 35%,
+    var(--mask-opaque) 50%,
+    transparent 65%
+  );
+}
+/* The light over an active thinking step's words: its muted ink, strong at
+   the middle of a band three times the words' width, clipped to the text.
+   The element sets its own ink transparent beside it. */
+@utility step-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    var(--ink-muted) 0% 35%,
+    var(--ink-strong) 50%,
+    var(--ink-muted) 65% 100%
+  );
+  background-size: 300% 100%;
+  background-repeat: repeat;
+  background-clip: text;
+}
+
+/* Rendered markdown that keeps the type of the text it stands in: prose-sm
+   restates its own size and colour on its root, so they are handed back;
+   block margins collapse, each block taking the gap above it and the first
+   giving it back, so the block is exactly as tall as its text. A utility:
+   @tailwindcss/typography writes `.prose` into the utilities layer, which a
+   components rule cannot outrank. */
+@utility markdown-plain {
+  & .prose {
+    font-size: inherit;
+    line-height: inherit;
+    color: inherit;
+  }
+  & :is(p, ul, ol) {
+    margin-block: 0;
+  }
+  & .prose > * {
+    margin-block: var(--space-1) 0;
+  }
+  & .prose > :first-child {
+    margin-block-start: 0;
+  }
+  & :is(ul, ol) {
+    padding-inline-start: var(--space-5);
+  }
+  & strong {
+    color: var(--ink-strong);
+  }
+  & code {
+    font-family: var(--font-mono);
+  }
+}
+
+/* A stroke drawn along its own length: the path carries pathLength="1", its
+   dash is the whole path, and `animate-check-draw` runs the dash's offset
+   from 1 to 0 (DESIGN.md Ticks and dots: "a checkbox tick draws itself along
+   its stroke"). The dash inherits, so an svg's class reaches its paths. */
+@utility dash-unit {
+  stroke-dasharray: 1;
+}
+/* A stroke that keeps its width whatever transform the svg is under (a
+   chevron flipping through scale-y 0). On the path itself: vector-effect
+   does not inherit (`*:vector-non-scaling` from the svg). */
+@utility vector-non-scaling {
+  vector-effect: non-scaling-stroke;
+}
+/* Caw's attention rim: round-capped arcs of the ring's width, each a dash of
+   its own path (pathLength="1"). */
+@utility rim-arc {
+  stroke-width: var(--c-caw-ring);
+  stroke-linecap: round;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+}
+
+/* A drag handle's dots: a tile of one soft dot. */
+@utility drag-dots {
+  background-image: radial-gradient(
+    circle,
+    var(--ink-subtle) 1px,
+    transparent var(--c-drag-dots-edge)
+  );
+  background-size: var(--c-drag-dots-tile) var(--c-drag-dots-tile);
+}
+
+/* A row's ghost controls rest on the strong fill under a resting pointer by
+   day; by night the kit's own hover is already that fill. */
+@utility ghost-rest-fill {
+  @media (hover: hover) and (pointer: fine) {
+    :root:not(.dark) & [data-ghost]:hover:not(:disabled) {
+      background-color: var(--surface-fill-strong);
+    }
+  }
+}
+
+/* A fold's one row, shut to nothing or open to its content, so the height
+   transitions on grid-template-rows. */
+@utility grid-rows-shut {
+  grid-template-rows: 0fr;
+}
+@utility grid-rows-open {
+  grid-template-rows: 1fr;
+}
+/* Words that take the rest of the row beside a part at its own width. */
+@utility grid-cols-fluid-auto {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+/* A glyph's column before words that take the rest. */
+@utility grid-cols-mark-fluid {
+  grid-template-columns: var(--icon-md) minmax(0, 1fr);
+}
+/* The artifact masonry's row unit: one pixel, each card spanning its height. */
+@utility auto-rows-line {
+  grid-auto-rows: 1px;
+}
+/* The connection band's rows: at least a small button's height; on a phone,
+   room for two lines. */
+@utility auto-rows-band {
+  grid-auto-rows: minmax(var(--c-btn-h-sm), auto);
+}
+@utility auto-rows-band-phone {
+  grid-auto-rows: minmax(max(var(--c-btn-h-sm), 2lh), auto);
+}
+/* A box clipped at its block-start edge only: a slot that cuts what slides
+   in from behind it while its shadow spills past its sides and foot. */
+@utility clip-block-start {
+  clip-path: inset(0 -100vw -100vw);
+}
+
+/* The hooks a component reads, set by its host: the Files lists' floors,
+   an edge fade's length, a hit area's edge. */
+@utility artifacts-min-* {
+  --artifacts-min: --value([*]);
+}
+@utility attachments-min-* {
+  --attachments-min: --value([*]);
+}
+@utility fade-len-* {
+  --fade-len: --value(--spacing-*, [*]);
+}
+@utility hit-edge-hair {
+  --hit-edge: 1px;
+}
+@utility tray-indent-* {
+  --ask-indent: --value(--spacing-*);
+  --fault-indent: --value(--spacing-*);
+}
+
+/* Text from an attribute, as Tailwind's own content utilities write it (so
+   `before:` keeps its content): a count's figure, an empty field's
+   placeholder. */
+@utility content-data-n {
+  --tw-content: attr(data-n);
+  content: var(--tw-content);
+}
+@utility content-placeholder {
+  --tw-content: attr(data-placeholder);
+  content: var(--tw-content);
+}
+
+/* Caw's mark: his still face shows until his animation plays over it. */
+@utility caw-mark-face {
+  & > [data-caw-face] {
+    display: block;
+  }
+  &[data-playing] > [data-caw-face] {
+    visibility: hidden;
+  }
+}
+
+/* A folder tab's drawn parts (fluid-tabs TabItem): the sheet's fill picked
+   in by `--pick`, its hover fill, the status rim's strength, glow, stroke
+   and ink, and the chosen tab's square-shouldered hit with its flared foot. */
+@utility paint-tab-sheet {
+  fill: color-mix(
+    in oklab,
+    var(--sheet) calc(var(--pick) * 100%),
+    var(--tab-fill, var(--surface-recess-deep))
+  );
+}
+@utility paint-tab-hover {
+  fill: var(--tab-hover, var(--surface-hover));
+}
+@utility rim-strength {
+  opacity: calc(
+    var(--rim-rest, 0) + (var(--rim-full, 0) - var(--rim-rest, 0)) *
+    var(--pick)
+  );
+}
+@utility rim-glow {
+  filter: drop-shadow(
+    0 0 var(--tab-rim-glow)
+      color-mix(in oklab, var(--rim-ink, transparent) 50%, transparent)
+  );
+}
+@utility rim-stroke-w {
+  stroke-width: calc(var(--rim-w, 1) * 2px);
+}
+@utility stop-rim-ink {
+  stop-color: var(--rim-ink, transparent);
+}
+@utility clip-tab-foot {
+  clip-path: shape(
+    from 0 100%,
+    arc to var(--flare) calc(100% - var(--flare)) of var(--flare) ccw,
+    line to var(--flare) 0,
+    line to calc(100% - var(--flare)) 0,
+    line to calc(100% - var(--flare)) calc(100% - var(--flare)),
+    arc to 100% 100% of var(--flare) ccw,
+    close
   );
 }
 

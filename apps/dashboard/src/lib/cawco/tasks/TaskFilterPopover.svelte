@@ -148,7 +148,7 @@
       <div data-slot="row" class="flex min-w-0 items-center gap-space-2">
         <span
           data-slot="name"
-          class="w-(--c-filter-label-w) flex-none type-label text-ink-muted"
+          class="w-c-filter-label-w flex-none type-label text-ink-muted"
           >Label</span
         >
         <Select.Root
@@ -175,7 +175,7 @@
       <div data-slot="row" class="flex min-w-0 items-center gap-space-2">
         <span
           data-slot="name"
-          class="w-(--c-filter-label-w) flex-none type-label text-ink-muted"
+          class="w-c-filter-label-w flex-none type-label text-ink-muted"
           >Type</span
         >
         <Select.Root

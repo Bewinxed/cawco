@@ -29,6 +29,7 @@
   {id}
   {onchange}
   {open}
+  pad="snug"
   rows="[data-fh]"
   trapFocus={false}
   width={300}

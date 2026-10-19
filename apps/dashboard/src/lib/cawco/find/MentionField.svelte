@@ -739,7 +739,7 @@
   bind:this={editor}
   data-phone={phone || undefined}
   class={[
-    "relative min-h-c-composer-field max-h-(--c-mention-field-max-h) overflow-y-auto py-space-2 type-body leading-ui text-ink-strong caret-brand-solid whitespace-pre-wrap wrap-anywhere no-scrollbar outline-off data-mention-field-empty:before:content-placeholder data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-subtle data-mention-field-empty:before:pointer-events-none",
+    "relative min-h-c-composer-field max-h-c-textarea-max-h overflow-y-auto py-space-2 type-body leading-ui text-ink-strong caret-brand-solid whitespace-pre-wrap wrap-anywhere no-scrollbar outline-off data-mention-field-empty:before:content-placeholder data-mention-field-empty:before:absolute data-mention-field-empty:before:text-ink-subtle data-mention-field-empty:before:pointer-events-none",
     className,
   ]}
   aria-activedescendant={mention.open && mention.active
@@ -779,7 +779,7 @@
        its ligatures as the role's shorthand left them. -->
   <div
     data-slot="tip"
-    class="fixed z-60 grid gap-space-row max-w-(--c-tip-max-w) py-space-2 px-space-3 rounded-sm bg-ink-solid text-on-ink type-meta -translate-x-1/2 translate-y-(--tip-shift-y) pointer-events-none animate-kit-tip-fade motion-safe:animate-mention-tip-in"
+    class="fixed z-60 grid gap-space-row max-w-c-tip-max-w py-space-2 px-space-3 rounded-sm bg-ink-solid text-on-ink type-meta -translate-x-1/2 translate-y-(--tip-shift-y) pointer-events-none animate-kit-tip-fade motion-safe:animate-mention-tip-in"
     role="tooltip"
     style:left={`${tip.x}px`}
     style:top={`${tip.y}px`}

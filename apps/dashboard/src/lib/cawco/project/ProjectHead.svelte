@@ -324,7 +324,7 @@
 >
   <div
     data-slot="who"
-    class="flex min-w-0 shrink grow basis-(--c-head-who-basis) items-center gap-space-3"
+    class="flex min-w-0 shrink grow basis-c-head-who-basis items-center gap-space-3"
   >
     <div
       data-slot="txt"

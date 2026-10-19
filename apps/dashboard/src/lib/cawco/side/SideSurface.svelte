@@ -52,6 +52,7 @@
     switcher,
     title,
     titleControl,
+    titleCode = false,
     subtitle,
     subtitleId,
     subtitleCode = false,
@@ -75,6 +76,8 @@
     title?: string;
     /** What is on show as a control (the artifact panel's menu), in the title's place; its words that keep their width marked `data-slot="name-lead"`, what trails them cut inside the name's box. */
     titleControl?: Snippet;
+    /** The title is a path or an identifier (a folder file's path), set as code. */
+    titleCode?: boolean;
     /** One line under it in meta ink (an artifact's ask), cut with an ellipsis, its whole text its title. */
     subtitle?: string;
     /** The line's id, for the control it describes. */
@@ -376,7 +379,10 @@
              (DESIGN.md, The Role, Not Size Rule). The title role is a
              sheet's own head (.kit-sheet-head), which stands over its
              content, not in a bar. -->
-        <span data-slot="title" class="truncate text-ink-strong type-label"
+        <span
+          data-slot="title"
+          data-code={titleCode || undefined}
+          class="truncate text-ink-strong type-label data-code:type-code"
           >{title}</span
         >
       {/if}

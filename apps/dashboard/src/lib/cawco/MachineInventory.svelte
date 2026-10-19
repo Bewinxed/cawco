@@ -103,7 +103,7 @@
   />
   <p
     data-slot="note"
-    class="max-w-(--c-inventory-measure) type-meta text-ink-muted"
+    class="max-w-c-measure type-meta text-ink-muted"
   >
     {words.inventoryNote}
   </p>
@@ -114,7 +114,7 @@
   {#if machines.length === 0}
     <p
       data-slot="note"
-      class="max-w-(--c-inventory-measure) type-meta text-ink-muted"
+      class="max-w-c-measure type-meta text-ink-muted"
     >
       <AddMachineLink>{words.noMachines}</AddMachineLink>{words.noMachinesAfter}
     </p>
@@ -150,7 +150,7 @@
             >
             <span
               data-slot="note"
-              class="max-w-(--c-inventory-measure) type-meta text-ink-muted"
+              class="max-w-c-measure type-meta text-ink-muted"
             >
               {#if open[machine.machineId]}
                 {words.hide}
@@ -165,7 +165,7 @@
             {#if reading[machine.machineId]}
               <p
                 data-slot="note"
-                class="mark-line flex max-w-(--c-inventory-measure) items-center gap-space-2 type-meta text-ink-muted"
+                class="mark-line flex max-w-c-measure items-center gap-space-2 type-meta text-ink-muted"
                 role="status"
               >
                 <Spinner class="shrink-0" /><span>{words.asking}</span>
@@ -177,7 +177,7 @@
             {:else if rows.length === 0}
               <p
                 data-slot="note"
-                class="max-w-(--c-inventory-measure) type-meta text-ink-muted"
+                class="max-w-c-measure type-meta text-ink-muted"
               >
                 {kind === "mcp" ? words.noMcpAtAll : words.noSkillsAtAll}
               </p>
@@ -193,7 +193,7 @@
                   >
                     <span
                       data-slot="text"
-                      class="flex min-w-0 grow basis-(--c-inventory-text-basis) flex-col gap-space-row"
+                      class="flex min-w-0 grow basis-c-inventory-text-basis flex-col gap-space-row"
                     >
                       <span
                         class="flex flex-wrap items-center gap-space-2"
@@ -220,7 +220,7 @@
                       {#if "description" in row && row.description}
                         <span
                           data-slot="note"
-                          class="line-clamp-2 max-w-(--c-inventory-measure) type-meta text-ink-muted"
+                          class="line-clamp-2 max-w-c-measure type-meta text-ink-muted"
                           >{row.description}</span
                         >
                       {/if}
@@ -241,7 +241,7 @@
                     {:else if taken.includes(row.name) && !row.managed}
                       <span
                         data-slot="note"
-                        class="max-w-(--c-inventory-measure) type-meta text-ink-muted"
+                        class="max-w-c-measure type-meta text-ink-muted"
                         >{words.inTheFleet}</span
                       >
                     {/if}

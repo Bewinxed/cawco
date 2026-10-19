@@ -31,7 +31,7 @@
 
 <div
   data-slot="finder-field"
-  class="group/field field-shell flex items-center flex-none gap-space-2 h-c-row-h ps-space-3 pe-space-1 border-b border-b-border-hairline data-phone:h-(--c-find-phone-h) data-phone:border-b-none data-phone:border-t data-phone:border-t-border-hairline"
+  class="group/field field-shell flex items-center flex-none gap-space-2 h-c-row-h ps-space-3 pe-space-1 border-b border-b-border-hairline data-phone:h-c-find-phone-h data-phone:border-b-none data-phone:border-t data-phone:border-t-border-hairline"
   data-phone={phone || undefined}
 >
   <SearchIcon

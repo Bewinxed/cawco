@@ -165,6 +165,26 @@
    the selector it came from, so it outranks the mark's hole mask. */
 @custom-variant mark-beating (&:is([data-tree-mark][data-dot="live"]:has([data-beating]) *));
 
+/* Not hidden by its `hidden` attribute (a pane head's fitted controls). */
+@custom-variant unhidden (&:not([hidden]));
+
+/* A window too short for the Files lists' full floors, and one tall enough:
+   560px of height. */
+@custom-variant short-window {
+  @media (height < 560px) {
+    @slot;
+  }
+}
+@custom-variant tall-window {
+  @media (height >= 560px) {
+    @slot;
+  }
+}
+
+/* A <summary>'s marker in WebKit, which draws it as its own pseudo-element
+   (Tailwind's `marker:` is ::marker). */
+@custom-variant details-marker (&::-webkit-details-marker);
+
 /* One per attribute state a component styles: [data-tone="fail"] is
    tone-fail:, [aria-expanded="false"] is aria-expanded-false:. */
 @custom-variant act-dismiss (&[data-act="dismiss"]);
@@ -398,6 +418,7 @@
 @custom-variant slot-hit (&[data-slot="hit"]);
 @custom-variant slot-hitl (&[data-slot="hitl"]);
 @custom-variant slot-icon-action (&[data-slot="icon-action"]);
+@custom-variant slot-identity (&[data-slot="identity"]);
 @custom-variant slot-inner (&[data-slot="inner"]);
 @custom-variant slot-input (&[data-slot="input"]);
 @custom-variant slot-input-group-control (&[data-slot="input-group-control"]);
@@ -430,6 +451,7 @@
 @custom-variant slot-model-pop (&[data-slot="model-pop"]);
 @custom-variant slot-modes (&[data-slot="modes"]);
 @custom-variant slot-more (&[data-slot="more"]);
+@custom-variant slot-more-count (&[data-slot="more-count"]);
 @custom-variant slot-more-slot (&[data-slot="more-slot"]);
 @custom-variant slot-msg (&[data-slot="msg"]);
 @custom-variant slot-name (&[data-slot="name"]);

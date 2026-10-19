@@ -97,29 +97,22 @@
   >
     <Table.Header>
       <Table.Row variant="band">
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         <Table.Head
           class="h-c-toolbar-ctl w-(--lead-w)"
-          scope="col"
           variant="caps"
           ><span class="sr-only">{words.columnService}</span></Table.Head
         >
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-        <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
+        <Table.Head class="h-c-toolbar-ctl" variant="caps"
           >{words.columnAction}</Table.Head
         >
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         <Table.Head
           data-slot="actions-table-col-status"
           class="h-c-toolbar-ctl w-c-routine-time-w"
-          scope="col"
           variant="caps">{words.columnStatus}</Table.Head
         >
-        <!-- biome-ignore lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
         <Table.Head
           data-slot="actions-table-col-when"
-          class="h-c-toolbar-ctl w-(--c-ledger-when-w)"
-          scope="col"
+          class="h-c-toolbar-ctl w-c-ledger-when-w"
           variant="caps">{words.columnWhen}</Table.Head
         >
       </Table.Row>

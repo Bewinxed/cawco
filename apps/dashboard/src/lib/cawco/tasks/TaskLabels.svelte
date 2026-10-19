@@ -70,7 +70,7 @@
       data-slot="task-labels-field"
       aria-label="New label"
       autocomplete="off"
-      class="h-c-badge-h w-(--c-task-label-field-w) rounded-xs border border-border-control bg-surface-raised px-space-1 type-label text-ink-strong"
+      class="h-c-badge-h w-c-task-label-field-w rounded-xs border border-border-control bg-surface-raised px-space-1 type-label text-ink-strong"
       list={listId}
       onblur={add}
       onkeydown={(event) => {

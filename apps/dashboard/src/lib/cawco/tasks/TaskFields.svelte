@@ -139,7 +139,7 @@
       <input
         data-slot="task-fields-field"
         aria-label="Field name"
-        class="h-c-btn-h-sm min-w-0 shrink grow-0 basis-(--c-task-key-w) rounded-sm border border-border-control bg-surface-raised px-space-2 type-code text-ink-strong"
+        class="h-c-btn-h-sm min-w-0 shrink grow-0 basis-c-task-key-w rounded-sm border border-border-control bg-surface-raised px-space-2 type-code text-ink-strong"
         placeholder="name"
         bind:value={newKey}
         {@attach (node) => node.focus()}

@@ -65,9 +65,25 @@ const SANCTIONED: readonly {
   {
     file: "apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte",
     kind: "bang",
-    text: /^motion-reduce:(animate|transition)-none$/,
+    text: /^motion-reduce:sheet-fade$/,
     reason:
-      "vaul-svelte (1.0.0-next.7) writes the drawer's transition inline (helpers.js set() → el.style) and ships its slide animations as unlayered :global rules, which outrank any layered utility; only an important utility turns them off under reduced motion",
+      "vaul-svelte (1.0.0-next.7, the latest next) ships its slide as unlayered :global rules (components/drawer/drawer.svelte:92, animation-name at four attributes' weight), which outrank any layered utility; only an important utility puts the reduced-motion fade over it",
+    docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
+  },
+  {
+    file: "apps/dashboard/src/lib/components/ui/drawer/drawer-content.svelte",
+    kind: "bang",
+    text: /^motion-reduce:transition-none$/,
+    reason:
+      "vaul-svelte writes the drawer's transition inline from script (use-drawer-root.svelte.js:335, helpers.js set() → el.style); only an important declaration outranks an inline style",
+    docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
+  },
+  {
+    file: "apps/dashboard/src/app.css",
+    kind: "important",
+    text: /^\s*(animation: none|display: inline|white-space: inherit) !important;$/,
+    reason:
+      "svelte-streamdown 4.2.1 (the npm latest) writes each streamed token's animation, inline-block and pre-wrap into its style attribute (dist/context.svelte.js:53–59, :67) and offers no mode without them; only an important declaration outranks an inline style",
     docs: "https://tailwindcss.com/docs/styling-with-utility-classes#using-the-important-modifier",
   },
 ];
@@ -128,7 +144,7 @@ for (const file of files) {
     if (svelte && STYLE_VAR.test(text)) {
       note(file, line, "style-var", text);
     }
-    if (IMPORTANT.test(text)) {
+    if (IMPORTANT.test(text) && !sanctioned(file, "important", text)) {
       note(file, line, "important", text);
     }
     if (!file.endsWith(".css")) {

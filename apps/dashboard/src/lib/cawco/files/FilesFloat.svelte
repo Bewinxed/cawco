@@ -159,7 +159,7 @@
   <section
     bind:this={node}
     aria-label={standing.name}
-    class="kit-pop fixed end-(--float-right) top-(--float-top) z-50 flex h-(--float-h) w-(--float-w) flex-col overflow-hidden border-border-row-outline p-0 inner-side-card:flex-1 inner-side-card:rounded-none inner-side-card:shadow-none"
+    class="kit-pop fixed end-(--float-right) top-(--float-top) z-50 flex h-(--float-h) w-(--float-w) flex-col overflow-hidden border-border-row-outline p-0 **:slot-side-card:flex-1 **:slot-side-card:rounded-none **:slot-side-card:shadow-none"
     data-files-float
     data-side="left"
     data-state={standing.open ? "open" : "closed"}

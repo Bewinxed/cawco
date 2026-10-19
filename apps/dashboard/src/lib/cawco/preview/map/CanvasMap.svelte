@@ -22,7 +22,6 @@
     Panel,
     SvelteFlow,
   } from "@xyflow/svelte";
-  import "@xyflow/svelte/dist/style.css";
   import { untrack } from "svelte";
   import { fetchCanvasMap } from "#lib/cawco/artifact-api.js";
   import { failureWords } from "#lib/cawco/hub-read.js";
@@ -338,7 +337,7 @@
     </div>
   {:else if !map}
     <p
-      class="m-0 p-space-5 text-ink-muted type-meta animate-wait-reveal motion-safe:animate-wait-reveal-motion"
+      class="m-0 p-space-5 text-ink-muted type-meta animate-wait-grace-show motion-safe:animate-wait-grace-in"
       role="status"
     >
       Reading the canvas's map

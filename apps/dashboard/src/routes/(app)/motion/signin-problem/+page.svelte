@@ -32,11 +32,11 @@
 </script>
 
 <div
-  class="ns-theme ns-pop mx-auto my-(--space-5)"
+  class="ns-theme ns-pop mx-auto my-space-5"
   data-bench
   style="--ns-pop-width: var(--c-signin-pop-w)"
 >
-  <div class="p-(--space-2)">
+  <div class="p-space-2">
     <SigninPanel expected={null} {flow} machine="bench" online />
   </div>
 </div>

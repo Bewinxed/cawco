@@ -223,7 +223,7 @@
         {#if labels.length > 0}
           <ul
             data-slot="known"
-            class="mx-0 mt-space-1 mb-0 flex max-h-(--c-bulk-labels-max-h) list-none flex-col overflow-y-auto p-0"
+            class="mx-0 mt-space-1 mb-0 flex max-h-c-bulk-labels-max-h list-none flex-col overflow-y-auto p-0"
             aria-label="The project's labels"
           >
             {#each labels as each (each)}

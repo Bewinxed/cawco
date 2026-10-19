@@ -9,12 +9,17 @@
 // Its own config, apart from eslint.config.mjs (the design system's rules,
 // which every lane runs on its files), run from the repository's root by
 // scripts/states-lint.ts (`bun run lint`), which reads the files in batches.
+import { plugin as shadcn } from "@shadcn/lint";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";
 import { defineConfig } from "eslint/config";
 import svelteParser from "svelte-eslint-parser";
+import { house } from "./eslint-plugin-house.mjs";
 
-const plugins = { "@typescript-eslint": tsPlugin };
+// The design system's plugins are registered and none of their rules run:
+// a file's `eslint-disable` naming one of their rules (eslint.config.mjs
+// runs them) then names a rule this config knows, not an undefined one.
+const plugins = { "@typescript-eslint": tsPlugin, shadcn, house };
 const rules = { "@typescript-eslint/switch-exhaustiveness-check": "error" };
 const typed = {
   projectService: true,
@@ -31,6 +36,9 @@ export default defineConfig([
       "**/.build-next/**",
     ],
   },
+  // A directive for the design system's rules is eslint.config.mjs's to
+  // judge (it runs them); here it is neither used nor unused.
+  { linterOptions: { reportUnusedDisableDirectives: "off" } },
   {
     files: ["apps/dashboard/src/**/*.ts", "packages/*/src/**/*.{ts,tsx}"],
     languageOptions: { parser: tsParser, parserOptions: typed },

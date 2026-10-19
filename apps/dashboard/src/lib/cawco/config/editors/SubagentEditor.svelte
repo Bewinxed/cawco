@@ -150,7 +150,7 @@ You are a <role>, working in one repository at a time.
     >
       {agent ? agent.name : front.name || "New subagent"}
     </h1>
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       The file is the definition. It lands at
       <span class="font-mono"
         >{userLayerLabel("agents", `${target ?? "name"}.md`)}</span
@@ -168,7 +168,7 @@ You are a <role>, working in one repository at a time.
     {#snippet right()}
       <span
         data-slot="num"
-        class="num type-meta max-w-(--c-measure) text-ink-muted"
+        class="num type-meta max-w-c-measure text-ink-muted"
         >{claims.join(" · ")}</span
       >
     {/snippet}
@@ -177,7 +177,7 @@ You are a <role>, working in one repository at a time.
         Not storable yet — {problem}.
       </p>
     {:else if front.description}
-      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
         {front.description}
       </p>
     {/if}

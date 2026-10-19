@@ -79,7 +79,7 @@
     files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
   };
   /** The viewport less a floating card's edge each side. */
-  const ROOM = "calc(100vw - 2 * var(--c-pop-edge))";
+  const ROOM = "calc(100vw - 2 * var(--c-screen-margin))";
   /** The viewport less the phone bar's leading edge and the trailing safe area. */
   const ROOM_NARROW =
     "calc(100vw - var(--c-bar-phone-edge) - env(safe-area-inset-right, 0px))";

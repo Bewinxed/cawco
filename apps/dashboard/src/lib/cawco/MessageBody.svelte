@@ -28,7 +28,7 @@
 
 <div
   data-slot="msg"
-  class="max-w-(--c-turn-measure) text-size-body leading-body font-normal text-ink-strong"
+  class="max-w-c-measure text-size-body leading-body font-normal text-ink-strong"
 >
   <Markdown {fades} {source} {streaming} />
 </div>

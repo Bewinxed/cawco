@@ -482,7 +482,7 @@
     {/if}
     <span
       data-slot="reach"
-      class="max-w-(--c-reach-max) truncate"
+      class="max-w-c-measure-meta truncate"
       title={reach.map((m) => machineLabel(m.hostname)).join(", ")}
       >{reach.length > 0
         ? reach.map((m) => machineLabel(m.hostname)).join(", ")
@@ -521,7 +521,7 @@
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconClock} label="When it runs">
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       One lifecycle event. The events with a matcher are the ones Claude Code
       lets you narrow further.
     </p>
@@ -543,7 +543,7 @@
     {#if shown("event")}
       <p class="type-meta text-status-fail-ink" in:appear>{wrong.event}</p>
     {:else if eventInfo}
-      <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+      <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
         Runs {eventInfo.blurb}.
       </p>
     {/if}
@@ -587,7 +587,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconPlay} label="What it runs">
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       CawCo writes this to every machine it applies to and registers it — no
       prompt, no approval, every time the event fires.
     </p>
@@ -841,7 +841,7 @@
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
-    <p data-slot="note" class="type-meta max-w-(--c-measure) text-ink-muted">
+    <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       Every machine in the fleet unless you narrow it to one project.
     </p>
     <div>
@@ -868,7 +868,7 @@
       {#if machines.length === 0}
         <p
           data-slot="note"
-          class="type-meta max-w-(--c-measure) text-ink-muted"
+          class="type-meta max-w-c-measure text-ink-muted"
         >
           <AddMachineLink>No machines yet</AddMachineLink>
           — this lands on the first one that registers.
@@ -877,7 +877,7 @@
         {#if applied.length > 0}
           <p
             data-slot="note"
-            class="type-meta max-w-(--c-measure) text-ink-muted"
+            class="type-meta max-w-c-measure text-ink-muted"
           >
             In sync on
             {applied.length}
@@ -958,7 +958,7 @@
               <RowFault reason={settleFailed[machine.machineId]} />
               {#if refused && item?.detail}
                 <pre
-                  class="max-h-(--c-detail-max) overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
+                  class="max-h-c-detail-max overflow-auto rounded-sm bg-surface-raised px-space-2 py-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap"
                   in:unfold
                   out:unfold>{item.detail}</pre>
               {/if}
@@ -975,7 +975,7 @@
                     {#if peeking[machine.machineId]}
                       <p
                         data-slot="note"
-                        class="mark-line flex items-center gap-space-2 type-meta max-w-(--c-measure) text-ink-muted"
+                        class="mark-line flex items-center gap-space-2 type-meta max-w-c-measure text-ink-muted"
                         role="status"
                         in:crossIn
                         out:crossOut
@@ -996,7 +996,7 @@
                     {:else if copies[machine.machineId] === null}
                       <p
                         data-slot="note"
-                        class="type-meta max-w-(--c-measure) text-ink-muted"
+                        class="type-meta max-w-c-measure text-ink-muted"
                         in:crossIn
                         out:crossOut
                       >

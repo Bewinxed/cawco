@@ -35,9 +35,9 @@
       for={id}>{label}</label
     >
     {#if typeof hint === "string"}
-      <span class="type-meta max-w-(--c-measure) text-ink-muted">{hint}</span>
+      <span class="type-meta max-w-c-measure text-ink-muted">{hint}</span>
     {:else if hint}
-      <span class="type-meta max-w-(--c-measure) text-ink-muted"
+      <span class="type-meta max-w-c-measure text-ink-muted"
         >{@render hint()}</span
       >
     {/if}

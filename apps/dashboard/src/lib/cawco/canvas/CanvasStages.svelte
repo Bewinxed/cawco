@@ -180,7 +180,7 @@
     class={[
       "group/grab absolute flex touch-none outline-off",
       handle === "top" &&
-        "start-1/2 top-0 h-c-btn-h-lg w-(--c-canvas-grab-w) -translate-x-1/2 cursor-ns-resize justify-center pt-space-1",
+        "start-1/2 top-0 h-c-btn-h-lg w-c-canvas-grab-w -translate-x-1/2 cursor-ns-resize justify-center pt-space-1",
       handle === "top-left" &&
         "top-0 size-c-btn-h-lg start-(--corner-in) cursor-nwse-resize transition-[opacity] dur-grow ease-out starting:opacity-0",
       handle === "top-right" &&
@@ -199,7 +199,7 @@
       class={[
         "group-focus-visible/grab:outline-(length:--focus-ring-width) group-focus-visible/grab:outline-offset-2 group-focus-visible/grab:outline-focus-ring group-focus-visible/grab:outline-solid",
         handle === "top" &&
-          "h-(--c-grabber-h) w-(--c-grabber-w) rounded-pill bg-border-control",
+          "h-c-grabber-h w-c-grabber-w rounded-pill bg-border-control",
         handle !== "top" &&
           "m-c-corner-grip-inset size-c-corner-grip-leg border-t-(length:--c-corner-grip-stroke) border-t-border-control",
         handle === "top-left" &&

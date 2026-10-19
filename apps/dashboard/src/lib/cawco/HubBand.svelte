@@ -278,7 +278,7 @@
      every phone screen. -->
 <div
   data-slot="hub-band-slot"
-  class="pointer-events-none relative z-10 grid flex-none grid-rows-shut clip-path-(--c-band-slot-clip) @container/hub-band data-open:grid-rows-open max-desk:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
+  class="pointer-events-none relative z-10 grid flex-none grid-rows-shut clip-block-start @container/hub-band data-open:grid-rows-open max-desk:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
   data-open={band ? "" : undefined}
 >
   <!-- The live region stands from the first markup, so assistive tech has
@@ -300,7 +300,7 @@
            width. -->
       <div
         data-slot="hub-band"
-        class="pointer-events-auto invisible grid auto-rows-band grid-cols-fill-auto items-center gap-x-space-3 border-b border-b-border-hairline bg-status-attn-bg py-space-2 ps-space-7 pe-space-6 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 shadow-tile @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:-translate-y-full motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
+        class="pointer-events-auto invisible grid auto-rows-band grid-cols-fluid-auto items-center gap-x-space-3 border-b border-b-border-hairline bg-status-attn-bg py-space-2 ps-space-7 pe-space-6 text-size-body font-normal text-status-attn-ink tabular-nums opacity-0 shadow-tile @max-phone/hub-band:auto-rows-band-phone data-open:visible data-open:opacity-100 tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink tone-live:bg-status-live-bg tone-live:text-status-live-ink motion-reduce:not-data-open:transition-band-hide motion-reduce:data-open:transition-band-show motion-safe:not-data-open:-translate-y-full motion-safe:not-data-open:transition-band-slide-hide motion-safe:data-open:translate-y-0 motion-safe:data-open:transition-band-slide-show"
         aria-hidden={band ? undefined : "true"}
         data-open={band ? "" : undefined}
         data-tone={tone}
