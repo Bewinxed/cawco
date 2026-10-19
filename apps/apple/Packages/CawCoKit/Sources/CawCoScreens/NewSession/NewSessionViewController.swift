@@ -665,7 +665,7 @@ public final class NewSessionViewController: ObservedViewController, UIViewContr
         case .cancelled:
             job = nil
             busy = false
-        case .filing, .starting, .summarising, .unrecognized:
+        case .filing, .starting, .summarising, .waiting, .unrecognized:
             break
         }
     }

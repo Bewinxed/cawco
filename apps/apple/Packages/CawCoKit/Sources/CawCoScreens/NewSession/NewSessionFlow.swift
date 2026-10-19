@@ -114,7 +114,7 @@ final class NewSessionFlow {
             case .cancelled:
                 detached[id] = nil
                 hub.acts.clear(entry.row)
-            case .filing, .starting, .summarising, .unrecognized:
+            case .filing, .starting, .summarising, .waiting, .unrecognized:
                 break
             }
         }
