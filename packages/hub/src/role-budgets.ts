@@ -13,6 +13,7 @@ import {
   type SessionRole,
 } from "@cawco/core";
 import { createActions } from "./actions";
+import { createBrowserAsks } from "./browser-tools";
 import { createCaw } from "./caw";
 import { createDelegationMcp } from "./delegation-mcp";
 import { createFleetWatch } from "./fleet-watch";
@@ -247,11 +248,19 @@ import type { Tasks } from "./tasks";
  * design system round asked in a chat), the read's words cut to make room
  * for it: about 5 tokens for each, inside the budgets above (worker 27,178,
  * delegate 9,557, lead 17,802 measured). No raise.
+ * 2026-10-19, after those: `browser_ask` (browser-tools.ts, Projects spec
+ * §5.11, the owner's approved browser take-over): a session asks the person
+ * to take over its browser for a sign-in, a code or a payment, with a
+ * reason and an origin. Three sentences and two one-line arguments, about
+ * 235 tokens for every role that drives a browser (worker 27,415,
+ * delegate 9,792, lead 18,044, web-facing 3,149 measured beside `verify`). Raised
+ * deliberately, by that, for the worker, the delegate and the lead;
+ * web-facing fits.
  */
 export const ROLE_TOOL_BUDGET: Record<SessionRole, number> = {
-  worker: 27_180,
-  delegate: 9560,
-  lead: 17_810,
+  worker: 27_420,
+  delegate: 9800,
+  lead: 18_050,
   overseer: 770,
   "web-facing": 3400,
   curator: 1200,
@@ -467,6 +476,16 @@ export const measureRoles = (): RoleSize[] => {
       machineIds: () => [],
       pairing: () => false,
     }),
+    // The browser ask, from the one list the server gives sessions.
+    browserTools: (actor) =>
+      createBrowserAsks({
+        browserFor: () => {
+          throw new Error("measuring");
+        },
+        park: () => undefined,
+        settle: () => undefined,
+        takeOver: () => Promise.reject(new Error("measuring")),
+      }).tools(actor),
   });
   try {
     return SESSION_ROLES.map((role) => {

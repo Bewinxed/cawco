@@ -30,6 +30,7 @@ typeOverrides:
     BlockMetadataTrigger: OpenEnums.BlockMetadataTrigger
     BlockPage: OpenEnums.BlockPage
     BlockWidth: OpenEnums.BlockWidth
+    BrowserHandedBackFrameWhy: OpenEnums.BrowserHandedBackFrameWhy
     BrowserHostKind: OpenEnums.BrowserHostKind
     BrowserRuntimeKind: OpenEnums.BrowserRuntimeKind
     BrowserState: OpenEnums.BrowserState

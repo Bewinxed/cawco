@@ -106,6 +106,7 @@ import { type ActionsDb, actionsDb } from "./actions";
 import { type ArtifactsDb, artifactsDb } from "./artifacts";
 import { type AtLimitDb, atLimitDb } from "./at-limit";
 import { type BlocksDb, blocksDb } from "./blocks";
+import { type BrowsersDb, browsersDb } from "./browsers";
 import { type ConnectionsDb, connectionsDb } from "./connections";
 import { type DesignChecksDb, designChecksDb } from "./design-checks";
 import { type DesignOffersDb, designOffersDb } from "./design-offers";
@@ -648,6 +649,8 @@ export interface DbShape {
   }) => void;
   /** The briefer documents a session has been handed, path → the hash it read (briefings.ts). */
   readonly briefingsHanded: (instanceId: string) => Map<string, string>;
+  /** The fleet's browsers, per machine (browsers.ts). */
+  readonly browsers: BrowsersDb;
   /** Whether nothing has been counted yet — the backfill's cue. */
   readonly capabilityUsageEmpty: () => boolean;
   /** Every usage row on or after `day` (`YYYY-MM-DD`). */
@@ -9043,6 +9046,7 @@ const make = async (path: string): Promise<DbShape> => {
     find: findDb(db),
     previews: previewsDb(db),
     streamRelay: streamRelayDb(db),
+    browsers: browsersDb(db),
     actions: actionsDb(db),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>

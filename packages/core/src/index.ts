@@ -1643,6 +1643,8 @@ export type FramePayload =
   | import("./accounts").AccountBorrowFrame
   /** Daemon-originated: the machine's runtime and every browser on it, whole, on each change. */
   | import("./browser").BrowserFrame
+  /** Daemon-originated: a take-over the daemon ended itself (no view for two minutes, or the browser stopped). */
+  | import("./browser").BrowserHandedBackFrame
   /** Daemon-originated: the stream relay on the machine, whole, on each change. */
   | import("./stream-relay").RelayFrame
   /** Hub-originated workflow run transition (§7.2). */
@@ -1698,10 +1700,15 @@ export type PreviewSource =
 
 /**
  * The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev
- * server or folder shown live, and a sheet: a story file's stories, each a
- * real component mounted by the project's own toolchain (core `stage.ts`).
+ * server or folder shown live, a sheet: a story file's stories, each a
+ * real component mounted by the project's own toolchain (core `stage.ts`),
+ * and the project's browser, listed for every session of the project (or of
+ * the machine, for the machine's browser). A browser's source is its key as
+ * a page (`{ page: "project:<id>" }`): the hub holds it, no machine's
+ * preview listener serves it, and every installed app reads that shape.
  */
-export type ArtifactKind = "page" | "canvas" | "preview" | "component";
+export type ArtifactKind =
+  "page" | "canvas" | "preview" | "component" | "browser";
 
 /** An artifact's name: lowercase letters, digits and dashes, like `onboarding`. */
 export const ARTIFACT_NAME = /^[a-z0-9][a-z0-9-]{0,62}$/;

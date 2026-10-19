@@ -130,6 +130,63 @@ export const BROWSER_STOP = "browser.stop";
 /** Hub → daemon: stop the browser of `key` and delete its profile (a forgotten project). */
 export const BROWSER_REMOVE = "browser.remove";
 
+/**
+ * Hub → daemon: the person takes over the browser of `key`, privately (the
+ * shield, agent `browser/shield.ts`): every agent connection cut and new
+ * ones refused, the asking workspace's page brought to the front, control
+ * given to the person. `workspaceId` is the asking session's workspace and
+ * `origin` the page it asked about, when a browser ask is taken; `viewer`
+ * is the person's neko session on the container host, once their view has
+ * one. Sent again (with the viewer, or after the daemon restarted) it keeps
+ * the take-over it holds and gives control to that viewer. Answers the
+ * {@link BrowserRow}.
+ */
+export const BROWSER_SHIELD = "browser.shield";
+export interface BrowserShieldArgs {
+  key: BrowserKey;
+  origin?: string;
+  requestId?: string;
+  viewer?: string;
+  workspaceId?: string;
+}
+
+/**
+ * Hub → daemon: the person hands the browser of `key` back: control taken
+ * from them, the front page loaded again by GET, the clipboard emptied,
+ * the gate open. Answers {@link BrowserHandback}.
+ */
+export const BROWSER_HANDBACK = "browser.handback";
+
+/** Hub → daemon: how many views of the browser of `key` are open now; with none for two minutes a take-over is handed back. */
+export const BROWSER_VIEWERS = "browser.viewers";
+export interface BrowserViewersArgs {
+  count: number;
+  key: BrowserKey;
+}
+
+/** How long a take-over stands with no view open before the daemon hands it back itself. */
+export const TAKEOVER_UNWATCHED_MS = 2 * 60_000;
+
+/** What a hand-back answers: the front page's origin, and nothing else of it. */
+export interface BrowserHandback {
+  key: BrowserKey;
+  /** The front page's origin as it was handed back; null when no page was in front. */
+  origin: string | null;
+  /** The browser ask the take-over answered, when it answered one. */
+  requestId?: string;
+}
+
+/**
+ * Daemon-originated: a take-over ended on the machine without the hub's
+ * hand-back (no view was open for {@link TAKEOVER_UNWATCHED_MS}, or the
+ * browser stopped), as the hub's own hand-back would have answered it.
+ */
+export interface BrowserHandedBackFrame extends BrowserHandback {
+  kind: "browser_handback";
+  machineId: string;
+  why: "unwatched" | "stopped";
+}
+
 /** Whether `value` is a {@link BrowserKey}. */
 export const isBrowserKey = (value: unknown): value is BrowserKey =>
   typeof value === "string" && BROWSER_KEY.test(value);

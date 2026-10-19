@@ -66,6 +66,12 @@ export const roleOf = (row: InstanceRow): SessionRole => {
  */
 const CORE = ["handoff", "send_to_user", "set_title", "open_items"] as const;
 
+/**
+ * Asking the person to take over the session's browser for a sign-in, a
+ * code or a payment (browser-tools.ts): every role that drives a browser.
+ */
+const BROWSER = ["browser_ask"] as const;
+
 /** The task tools every role but the worker's and the lead's is limited to. */
 const TASK_READ = ["task_read", "todo_write", "task_comment"] as const;
 
@@ -182,6 +188,7 @@ const DELEGATE_SESSION = [
 const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   delegate: new Set([
     ...CORE,
+    ...BROWSER,
     ...DELEGATE_SESSION,
     ...TASK_READ,
     // An attempt at a task hands in its result (task-tools.ts).
@@ -200,6 +207,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   ]),
   lead: new Set([
     ...CORE,
+    ...BROWSER,
     ...TASK_READ,
     ...TASK_WRITE,
     ...CAW_TOOLS,
@@ -225,6 +233,7 @@ const TOOLS: Record<Exclude<SessionRole, "worker">, ReadonlySet<string>> = {
   overseer: new Set([...TRIAGE_TOOLS, "task_read", "list_sessions"]),
   "web-facing": new Set([
     ...CORE,
+    ...BROWSER,
     ...TASK_READ,
     "finish_item",
     "wait_item",

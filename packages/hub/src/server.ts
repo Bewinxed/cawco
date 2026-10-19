@@ -327,6 +327,7 @@ import {
 } from "@cawco/core/binary-updates";
 import { sayNestedBoundaryFix } from "@cawco/core/boundary-nesting";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
+import type { BrowserFrame, BrowserHandedBackFrame } from "@cawco/core/browser";
 import { crossSiteRefusal, pageOrigin } from "@cawco/core/browser-gate";
 import { COMMENT_LIMITS } from "@cawco/core/comments";
 import { detach } from "@cawco/core/detach";
@@ -430,6 +431,8 @@ import { createBinaryUpdates } from "./binary-updates";
 import { blockRoutes, createBlocks } from "./blocks";
 import { bodyLimitRefusal } from "./body-limits";
 import { briefingsObserve } from "./briefings";
+import { createBrowserAsks } from "./browser-tools";
+import { browserRoutes, createBrowsers } from "./browsers";
 import {
   attemptTry,
   type Caw,
@@ -2928,6 +2931,54 @@ export const createServer = (
       },
     });
   };
+  // The fleet's browsers and the browser asks that wait on the person
+  // (browsers.ts, browser-tools.ts). Made before the settlement listener
+  // below, which withdraws the asks of sessions that ended.
+  const browsers = createBrowsers({
+    asks: () => browserAsks,
+    call: (machineId, method, args, timeoutMs) =>
+      callAgent(machineId, method, args, timeoutMs),
+    db: { artifacts: db.artifacts, browsers: db.browsers },
+    instance: (id) => db.getInstancesByIds([id])[0],
+    liveSessions: (machineId, projectId) =>
+      db
+        .listInstances()
+        .filter(
+          (row) =>
+            row.machineId === machineId &&
+            (row.projectId ?? null) === projectId &&
+            (row.status === "running" || row.status === "sleeping")
+        ),
+    machineName: (machineId) => machineName(machineId),
+    mint: (userId, ttlMs) => streamRelay.mint(userId, ttlMs),
+    open: async (artifact) => {
+      const opened = await openPreview(
+        artifact.instanceId,
+        artifact.machineId ?? "",
+        artifact.source,
+        { id: artifact.id, kind: artifact.kind, name: artifact.name }
+      );
+      return opened.ok ? { ok: true } : { ok: false, error: opened.error };
+    },
+    tell: (instanceId, text) => tellSession(instanceId, text, "browser"),
+    // The gate id its browser door is (agent door.ts): its workspace's,
+    // else the session's own.
+    workspaceOf: (row) => sessionWorkspace(row)?.id ?? row.id,
+  });
+  const browserAsks = createBrowserAsks({
+    browserFor: (actor) => browsers.browserFor(actor),
+    // Not kept across a restart: the call that waits on it ends with the hub.
+    park: (envelope) => parkForPerson(envelope),
+    settle: (requestId) => {
+      pending.resolve(requestId);
+    },
+    takeOver: async (requestId) => {
+      const ask = browserAsks.get(requestId);
+      if (ask) {
+        await browsers.takeover(ask.key, { requestId });
+      }
+    },
+  });
   /**
    * The session a workspace's held post is its ask: a project's Caw for his
    * place (caw.ts `leadPlaceRef`), else the session of the workspace's
@@ -3139,6 +3190,7 @@ export const createServer = (
     // An admin write whose ask left unanswered (its session ended) is refused.
     if (outcome === "cancelled") {
       adminAsks.withdrawn(parked.requestId);
+      browserAsks.withdrawn(parked.requestId);
     }
     registry.broadcast({
       verb: "frames",
@@ -11197,6 +11249,7 @@ export const createServer = (
         },
       }),
     showing: (instanceId) => previewTargets.get(instanceId)?.artifact.id,
+    listing: (instance) => browsers.listed(instance),
     // The same open, its list without what went: no pane reloads.
     relist: (instanceId) => {
       const target = previewTargets.get(instanceId);
@@ -16880,6 +16933,7 @@ export const createServer = (
       if (
         answerWorkflow(pending, requestId, result) ||
         adminAsks.answer(requestId, result) ||
+        browserAsks.answer(requestId, result) ||
         upstreamAsks.answer(requestId, result) ||
         moves.answer(requestId, result)
       ) {
@@ -20515,6 +20569,7 @@ export const createServer = (
     tasks,
     connections,
     hubTools,
+    browserTools: (actor, toolUseId) => browserAsks.tools(actor, toolUseId),
     workItemTask: (id) => db.workItem(id)?.taskId,
     workItemLands: (id) => db.workItem(id)?.lands,
     designBuild: (projectId, actor, stage) =>
@@ -22538,6 +22593,7 @@ export const createServer = (
         ),
         fleetChoicesRoutes(fleetChoices),
         streamRelayRoutes(streamRelay),
+        browserRoutes(browsers),
         projectFolderRoutes(
           (id) => db.listProjects().some((project) => project.id === id),
           (id) => {
@@ -27456,6 +27512,8 @@ export const createServer = (
               // The relay's machine back: a relay that should run starts again
               // (kept as it is when its container runs).
               streamRelay.connected(message.machineId);
+              // A take-over it held is sent again: its gate stays closed.
+              browsers.connected(message.machineId);
               // A question parked by a process that is gone cannot be answered:
               // the reply would arrive at a daemon with no such session. Drop them
               // with the sessions they belonged to, or they replay to every
@@ -28161,9 +28219,21 @@ export const createServer = (
                 );
                 break;
               }
-              // A machine's browsers, whole: the hub's browser registry is
-              // where they are read (Projects spec §5.11); no screen is sent them.
+              // A machine's browsers, whole: kept by the hub's browser registry
+              // (browsers.ts, Projects spec §5.11); no screen is sent them.
               if (kind === "browsers") {
+                browsers.heard(
+                  message.machineId,
+                  message.payload as BrowserFrame
+                );
+                break;
+              }
+              // A take-over its machine ended itself: the ask's call answers.
+              if (kind === "browser_handback") {
+                browsers.heardHandback({
+                  ...(message.payload as BrowserHandedBackFrame),
+                  machineId: message.machineId,
+                });
                 break;
               }
               // The stream relay on its machine: the relay's record follows it.

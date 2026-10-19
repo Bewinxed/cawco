@@ -1,4 +1,6 @@
 /** Named frame shapes keep schema and generated-client names independent of union order. */
+
+import type { BrowserKey } from "./browser";
 import type {
   FleetMcpServer,
   FleetPlugin,
@@ -359,7 +361,34 @@ export interface InstancesDeltaFrame {
   upserts: InstanceRow[];
 }
 
+/** The tool a browser ask parks under (hub browser-tools.ts). */
+export const BROWSER_ASK_TOOL = "mcp__cawco__browser_ask";
+
+/**
+ * A browser ask (Projects spec §5.11): a session asks the person to take
+ * over its project's browser, with one sentence of reason and the page's
+ * origin. It parks as a `permission_request` for {@link BROWSER_ASK_TOOL}
+ * carrying this beside the tool's input, so it lands in Needs you, the
+ * transcript and push as every ask does. Take over answers it as taken
+ * (`POST /api/browsers/:key/takeover`, an Approve from an app that has no
+ * Take over yet); Decline denies it with the person's words. The tool's
+ * call waits on until the person hands back.
+ */
+export interface BrowserAskFrame {
+  /** The browser artifact in the asking session's panel: Take over opens the panel on it. */
+  artifactId: string;
+  key: BrowserKey;
+  /** The machine the browser runs on: the asking session's. */
+  machineId: string;
+  /** The page's origin the agent named, `scheme://host[:port]`. */
+  origin: string;
+  /** One sentence: what the person is needed for. */
+  reason: string;
+}
+
 export interface PermissionRequestFrame {
+  /** A browser ask's browser, reason and origin; absent on every other ask. */
+  browserAsk?: BrowserAskFrame;
   harness: HarnessKind;
   input: Record<string, unknown>;
   instanceId: string;

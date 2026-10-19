@@ -38,6 +38,7 @@ export const KIND_WORDS = {
   page: ["page", "pages"],
   canvas: ["canvas", "canvases"],
   component: ["component", "components"],
+  browser: ["browser", "browsers"],
   decision: ["decision", "decisions"],
   commit: ["commit", "commits"],
   file: ["file", "files"],

@@ -120,6 +120,10 @@ const RULES: readonly [string, RegExp, Access][] = [
   ["POST", /^\/api\/session-identities\/install$/, "machine-proof"],
 ];
 
+/** A browser's take-over and hand-back (browsers.ts): the person's act alone, refused to a session in its own words. */
+const TAKEOVER_ROUTE = /^\/api\/browsers\/[^/]+\/(?:takeover|handback)$/;
+const TAKEOVER_REFUSED = "Only the person takes over";
+
 /** Machine routes that name a machine: a machine reaches them for itself alone. */
 const OWN_MACHINE: readonly RegExp[] = [
   /^\/api\/binary-updates\/machines\/([^/]+)\/state$/,
@@ -497,6 +501,9 @@ export const createHubAuth = ({
 
   /** The answer to a request its caller may not make, by what the caller is. */
   const refusal = (caller: Caller, method: string, path: string): Response => {
+    if (caller.kind === "session" && TAKEOVER_ROUTE.test(path)) {
+      return new Response(TAKEOVER_REFUSED, { status: 403 });
+    }
     if (caller.kind === "session") {
       return new Response(
         `A session's credential reaches its own tools and work items, never the person's routes: ${method} ${path} is the person's.`,

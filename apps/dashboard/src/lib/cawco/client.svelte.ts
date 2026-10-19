@@ -18,6 +18,7 @@ import type {
   AgentRow,
   ApprovedActionView,
   AvailableCommand,
+  BrowserAskFrame,
   BuildInfo,
   CawHarness,
   CawInitiated,
@@ -415,6 +416,8 @@ const listedInHistory = (info: NeutralSessionInfo): boolean =>
   info.tag !== CAWCO_SCRATCH_TAG;
 
 export interface PendingPermission {
+  /** A browser ask's browser, reason and origin (core `BrowserAskFrame`): its card offers Decline and Take over. */
+  browserAsk?: BrowserAskFrame;
   /**
    * When this device last heard the hub park it, in the order it hears
    * things ({@link askHeard}): a read of `/api/pending` asked for before
@@ -3406,6 +3409,10 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "browsers") {
     return;
   }
+  // A take-over the daemon ended itself travels machine → hub only; the hub answers the ask.
+  if (frame.kind === "browser_handback") {
+    return;
+  }
   // The stream relay's state travels machine → hub only; Settings › Browsers reads the hub's record.
   if (frame.kind === "stream_relay") {
     return;
@@ -3446,6 +3453,7 @@ function handleFrame(frame: FramePayload): void {
         raisedAt: frame.raisedAt,
         threadId: frame.threadId,
         originInstanceId: frame.originInstanceId,
+        browserAsk: frame.browserAsk,
       });
       break;
     }
@@ -8306,8 +8314,12 @@ export function permissionAnswer(
   request: PendingPermission,
   answer: PermissionAnswer
 ): PermissionResult {
+  // A browser ask's Decline carries the person's words alone, none here.
   if (answer === "deny") {
-    return { behavior: "deny", message: "User denied permission" };
+    return {
+      behavior: "deny",
+      message: request.browserAsk ? "" : "User denied permission",
+    };
   }
   return {
     behavior: "allow",

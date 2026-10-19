@@ -184,7 +184,8 @@ export interface ArtifactInput {
   /** A component canvas's groups: story → the parent story or heading it stands under. */
   group?: Record<string, string> | undefined;
   html?: string | undefined;
-  kind: ArtifactKind;
+  /** A browser artifact is the hub's alone (browsers.ts): no session makes one. */
+  kind: Exclude<ArtifactKind, "browser">;
   machine?: string | undefined;
   /** A canvas's Mermaid diagram. */
   mermaid?: string | undefined;
@@ -894,6 +895,11 @@ export interface ArtifactServiceDeps {
   ledProjects: (instance: InstanceRow) => string[];
   /** The hub's lifetime: the marks' delivery and the shown acks' keep run on it. */
   lifetime: HubLifetimeShape;
+  /**
+   * The session's panel is listed: the browser it uses gets its artifact
+   * there, made the first time (browsers.ts `listed`).
+   */
+  listing: (instance: InstanceRow) => void;
   /** The machines the hub knows. */
   machines: () => Pick<AgentRow, "machineId" | "hostname">[];
   /**
@@ -3025,8 +3031,11 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
   };
 
   return {
-    list: (instanceId: string): ArtifactSummary[] =>
-      db.ofInstance(sessionOf(instanceId).id).map(summaryOf),
+    list: (instanceId: string): ArtifactSummary[] => {
+      const instance = sessionOf(instanceId);
+      deps.listing(instance);
+      return db.ofInstance(instance.id).map(summaryOf);
+    },
 
     /**
      * Files' search over the session's artifacts, by the find engine's own

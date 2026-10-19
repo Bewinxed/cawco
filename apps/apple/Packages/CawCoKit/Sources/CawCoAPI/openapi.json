@@ -1062,6 +1062,248 @@
         }
       }
     },
+    "/api/browsers": {
+      "get": {
+        "operationId": "getApiBrowsers",
+        "responses": {
+          "200": {
+            "description": "getApiBrowsers 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiBrowsers200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/browsers/{key}/takeover": {
+      "post": {
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "requestId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "instanceId": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "viewer": {
+                    "minLength": 1,
+                    "maxLength": 200,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiBrowsersByKeyTakeover",
+        "responses": {
+          "200": {
+            "description": "postApiBrowsersByKeyTakeover 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiBrowsersByKeyTakeover200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiBrowsersByKeyTakeover 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/browsers/{key}/handback": {
+      "post": {
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiBrowsersByKeyHandback",
+        "responses": {
+          "200": {
+            "description": "postApiBrowsersByKeyHandback 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrowserHandback"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiBrowsersByKeyHandback 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/browsers/{key}/start": {
+      "post": {
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiBrowsersByKeyStart",
+        "responses": {
+          "200": {
+            "description": "postApiBrowsersByKeyStart 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrowserRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiBrowsersByKeyStart 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/browsers/{key}/stop": {
+      "post": {
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiBrowsersByKeyStop",
+        "responses": {
+          "200": {
+            "description": "postApiBrowsersByKeyStop 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BrowserRow"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiBrowsersByKeyStop 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/folder": {
       "get": {
         "parameters": [
@@ -26206,6 +26448,45 @@
           "types"
         ]
       },
+      "getApiBrowsers200": {
+        "type": "array",
+        "items": {
+          "allOf": [
+            {
+              "$ref": "#/components/schemas/StoredBrowser"
+            },
+            {
+              "type": "object",
+              "properties": {
+                "machineName": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "machineName"
+              ]
+            }
+          ]
+        }
+      },
+      "postApiBrowsersByKeyTakeover200": {
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "row": {
+            "$ref": "#/components/schemas/BrowserRow"
+          }
+        },
+        "required": [
+          "artifactId",
+          "row"
+        ]
+      },
       "getApiProjectsByIdGate200": {
         "type": "object",
         "properties": {
@@ -31712,6 +31993,12 @@
             "$ref": "#/components/schemas/HubAuthFrame"
           },
           {
+            "$ref": "#/components/schemas/BrowserFrame"
+          },
+          {
+            "$ref": "#/components/schemas/BrowserHandedBackFrame"
+          },
+          {
             "$ref": "#/components/schemas/StageFrame"
           },
           {
@@ -31847,9 +32134,6 @@
             "$ref": "#/components/schemas/AccountBorrowFrame"
           },
           {
-            "$ref": "#/components/schemas/BrowserFrame"
-          },
-          {
             "$ref": "#/components/schemas/RelayFrame"
           },
           {
@@ -31860,6 +32144,8 @@
           "propertyName": "kind",
           "mapping": {
             "hub_auth": "#/components/schemas/HubAuthFrame",
+            "browsers": "#/components/schemas/BrowserFrame",
+            "browser_handback": "#/components/schemas/BrowserHandedBackFrame",
             "stage": "#/components/schemas/StageFrame",
             "stage-clone": "#/components/schemas/StageCloneFrame",
             "fleet_mcp": "#/components/schemas/FleetMcpFrame",
@@ -31905,7 +32191,6 @@
             "move_progress": "#/components/schemas/MoveProgressFrame",
             "command_queue": "#/components/schemas/CommandQueueFrame",
             "account_borrow": "#/components/schemas/AccountBorrowFrame",
-            "browsers": "#/components/schemas/BrowserFrame",
             "stream_relay": "#/components/schemas/RelayFrame",
             "workflow": "#/components/schemas/WorkflowFrame"
           }
@@ -33520,6 +33805,229 @@
           "pulling",
           "starting",
           "stopped"
+        ]
+      },
+      "StoredBrowser": {
+        "description": "One browser as the hub keeps it.",
+        "type": "object",
+        "properties": {
+          "host": {
+            "$ref": "#/components/schemas/BrowserHostKind"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
+          },
+          "lastUsedAt": {
+            "type": "number"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/BrowserState"
+          },
+          "takeover": {
+            "description": "Who holds it privately: the asking workspace, `\"\"` when nobody asked; null while nobody does.",
+            "type": "object",
+            "properties": {
+              "by": {
+                "type": "string"
+              },
+              "requestId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "since": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "by",
+              "requestId",
+              "since"
+            ]
+          }
+        },
+        "required": [
+          "host",
+          "key",
+          "lastUsedAt",
+          "machineId",
+          "name",
+          "projectId",
+          "state"
+        ]
+      },
+      "BrowserHostKind": {
+        "description": "Which host runs a browser on its machine: a container where a runtime answers, a local Chromium where none does.",
+        "type": "string",
+        "enum": [
+          "container",
+          "local"
+        ]
+      },
+      "BrowserKey": {
+        "description": "Which browser: a project's, or the machine's for sessions outside any project.",
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^project:.*$"
+          },
+          {
+            "type": "string",
+            "pattern": "^machine:.*$"
+          }
+        ]
+      },
+      "BrowserState": {
+        "type": "string",
+        "enum": [
+          "asleep",
+          "building",
+          "failed",
+          "live",
+          "pulling",
+          "starting",
+          "stopping"
+        ]
+      },
+      "BrowserRow": {
+        "description": "One browser as its machine reports it.",
+        "type": "object",
+        "properties": {
+          "host": {
+            "$ref": "#/components/schemas/BrowserHostKind"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
+          },
+          "lastUsedAt": {
+            "description": "ms epoch of the last agent connection or viewer.",
+            "type": "number"
+          },
+          "name": {
+            "type": "string"
+          },
+          "ports": {
+            "$ref": "#/components/schemas/BrowserPorts",
+            "description": "One browser's ports; `http` and `media` are the container host's alone."
+          },
+          "progress": {
+            "description": "How far an image build is, while `state` is `pulling` or `building`.",
+            "type": "object",
+            "properties": {
+              "done": {
+                "type": "number"
+              },
+              "total": {
+                "type": "number"
+              },
+              "what": {
+                "type": "string",
+                "enum": [
+                  "image"
+                ]
+              }
+            },
+            "required": [
+              "done",
+              "total",
+              "what"
+            ]
+          },
+          "state": {
+            "$ref": "#/components/schemas/BrowserState"
+          },
+          "takeover": {
+            "description": "Who holds the browser privately, since when, and the ask it answers; null while no one does.",
+            "type": "object",
+            "properties": {
+              "by": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "since": {
+                "type": "number"
+              },
+              "requestId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "by",
+              "since"
+            ]
+          },
+          "viewers": {
+            "type": "number"
+          },
+          "why": {
+            "description": "Why it is `failed`, one sentence.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "host",
+          "key",
+          "lastUsedAt",
+          "name",
+          "state",
+          "viewers"
+        ]
+      },
+      "BrowserPorts": {
+        "description": "One browser's ports; `http` and `media` are the container host's alone.",
+        "type": "object",
+        "properties": {
+          "devtools": {
+            "type": "number"
+          },
+          "http": {
+            "type": "number"
+          },
+          "media": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "devtools"
+        ]
+      },
+      "BrowserHandback": {
+        "description": "What a hand-back answers: the front page's origin, and nothing else of it.",
+        "type": "object",
+        "properties": {
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
+          },
+          "origin": {
+            "description": "The front page's origin as it was handed back; null when no page was in front.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestId": {
+            "description": "The browser ask the take-over answered, when it answered one.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "origin"
         ]
       },
       "FolderListing": {
@@ -35211,9 +35719,10 @@
         ]
       },
       "ArtifactKind": {
-        "description": "The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev\nserver or folder shown live, and a sheet: a story file's stories, each a\nreal component mounted by the project's own toolchain (core `stage.ts`).",
+        "description": "The kinds of artifact (WORDS.md): HTML the agent wrote, a drawing, a dev\nserver or folder shown live, a sheet: a story file's stories, each a\nreal component mounted by the project's own toolchain (core `stage.ts`),\nand the project's browser, listed for every session of the project (or of\nthe machine, for the machine's browser). A browser's source is its key as\na page (`{ page: \"project:<id>\" }`): the hub holds it, no machine's\npreview listener serves it, and every installed app reads that shape.",
         "type": "string",
         "enum": [
+          "browser",
           "canvas",
           "component",
           "page",
@@ -53984,6 +54493,110 @@
           "waiting"
         ]
       },
+      "BrowserFrame": {
+        "description": "Daemon-originated: the machine's runtime and every browser on it, whole, on each change.",
+        "type": "object",
+        "properties": {
+          "browsers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BrowserRow"
+            }
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "browsers"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "runtime": {
+            "$ref": "#/components/schemas/BrowserRuntime"
+          }
+        },
+        "required": [
+          "browsers",
+          "kind",
+          "machineId",
+          "runtime"
+        ]
+      },
+      "BrowserRuntime": {
+        "description": "The machine's container runtime as the agent found it, or the sentence that names the install.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "$ref": "#/components/schemas/BrowserRuntimeKind"
+              },
+              "endpoint": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "endpoint",
+              "kind",
+              "version"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "missing": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "missing"
+            ]
+          }
+        ]
+      },
+      "BrowserHandedBackFrame": {
+        "description": "Daemon-originated: a take-over ended on the machine without the hub's\nhand-back (no view was open for {@link TAKEOVER_UNWATCHED_MS}, or the\nbrowser stopped), as the hub's own hand-back would have answered it.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "browser_handback"
+            ]
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "why": {
+            "$ref": "#/components/schemas/BrowserHandedBackFrameWhy"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
+          },
+          "origin": {
+            "description": "The front page's origin as it was handed back; null when no page was in front.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestId": {
+            "description": "The browser ask the take-over answered, when it answered one.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "kind",
+          "machineId",
+          "origin",
+          "why"
+        ]
+      },
       "StageFrame": {
         "description": "The daemon's word on each change of a stage: every artifact of the workspace's that previews its port hears it.",
         "type": "object",
@@ -54717,6 +55330,10 @@
       "PermissionRequestFrame": {
         "type": "object",
         "properties": {
+          "browserAsk": {
+            "$ref": "#/components/schemas/BrowserAskFrame",
+            "description": "A browser ask's browser, reason and origin; absent on every other ask."
+          },
           "harness": {
             "$ref": "#/components/schemas/HarnessKind"
           },
@@ -54781,6 +55398,38 @@
           "presentation",
           "requestId",
           "toolName"
+        ]
+      },
+      "BrowserAskFrame": {
+        "description": "A browser ask (Projects spec §5.11): a session asks the person to take\nover its project's browser, with one sentence of reason and the page's\norigin. It parks as a `permission_request` for {@link BROWSER_ASK_TOOL}\ncarrying this beside the tool's input, so it lands in Needs you, the\ntranscript and push as every ask does. Take over answers it as taken\n(`POST /api/browsers/:key/takeover`, an Approve from an app that has no\nTake over yet); Decline denies it with the person's words. The tool's\ncall waits on until the person hands back.",
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "description": "The browser artifact in the asking session's panel: Take over opens the panel on it.",
+            "type": "string"
+          },
+          "key": {
+            "$ref": "#/components/schemas/BrowserKey"
+          },
+          "machineId": {
+            "description": "The machine the browser runs on: the asking session's.",
+            "type": "string"
+          },
+          "origin": {
+            "description": "The page's origin the agent named, `scheme://host[:port]`.",
+            "type": "string"
+          },
+          "reason": {
+            "description": "One sentence: what the person is needed for.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactId",
+          "key",
+          "machineId",
+          "origin",
+          "reason"
         ]
       },
       "PermissionPresentation": {
@@ -56208,208 +56857,6 @@
           "requestId"
         ]
       },
-      "BrowserFrame": {
-        "description": "Daemon-originated: the machine's runtime and every browser on it, whole, on each change.",
-        "type": "object",
-        "properties": {
-          "browsers": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/BrowserRow"
-            }
-          },
-          "kind": {
-            "type": "string",
-            "enum": [
-              "browsers"
-            ]
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "runtime": {
-            "$ref": "#/components/schemas/BrowserRuntime"
-          }
-        },
-        "required": [
-          "browsers",
-          "kind",
-          "machineId",
-          "runtime"
-        ]
-      },
-      "BrowserRow": {
-        "description": "One browser as its machine reports it.",
-        "type": "object",
-        "properties": {
-          "host": {
-            "$ref": "#/components/schemas/BrowserHostKind"
-          },
-          "key": {
-            "$ref": "#/components/schemas/BrowserKey"
-          },
-          "lastUsedAt": {
-            "description": "ms epoch of the last agent connection or viewer.",
-            "type": "number"
-          },
-          "name": {
-            "type": "string"
-          },
-          "ports": {
-            "$ref": "#/components/schemas/BrowserPorts",
-            "description": "One browser's ports; `http` and `media` are the container host's alone."
-          },
-          "progress": {
-            "description": "How far an image build is, while `state` is `pulling` or `building`.",
-            "type": "object",
-            "properties": {
-              "done": {
-                "type": "number"
-              },
-              "total": {
-                "type": "number"
-              },
-              "what": {
-                "type": "string",
-                "enum": [
-                  "image"
-                ]
-              }
-            },
-            "required": [
-              "done",
-              "total",
-              "what"
-            ]
-          },
-          "state": {
-            "$ref": "#/components/schemas/BrowserState"
-          },
-          "takeover": {
-            "description": "Who holds the browser privately, since when, and the ask it answers; null while no one does.",
-            "type": "object",
-            "properties": {
-              "by": {
-                "type": [
-                  "null",
-                  "string"
-                ]
-              },
-              "since": {
-                "type": "number"
-              },
-              "requestId": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "by",
-              "since"
-            ]
-          },
-          "viewers": {
-            "type": "number"
-          },
-          "why": {
-            "description": "Why it is `failed`, one sentence.",
-            "type": "string"
-          }
-        },
-        "required": [
-          "host",
-          "key",
-          "lastUsedAt",
-          "name",
-          "state",
-          "viewers"
-        ]
-      },
-      "BrowserHostKind": {
-        "description": "Which host runs a browser on its machine: a container where a runtime answers, a local Chromium where none does.",
-        "type": "string",
-        "enum": [
-          "container",
-          "local"
-        ]
-      },
-      "BrowserKey": {
-        "description": "Which browser: a project's, or the machine's for sessions outside any project.",
-        "anyOf": [
-          {
-            "type": "string",
-            "pattern": "^project:.*$"
-          },
-          {
-            "type": "string",
-            "pattern": "^machine:.*$"
-          }
-        ]
-      },
-      "BrowserPorts": {
-        "description": "One browser's ports; `http` and `media` are the container host's alone.",
-        "type": "object",
-        "properties": {
-          "devtools": {
-            "type": "number"
-          },
-          "http": {
-            "type": "number"
-          },
-          "media": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "devtools"
-        ]
-      },
-      "BrowserState": {
-        "type": "string",
-        "enum": [
-          "asleep",
-          "building",
-          "failed",
-          "live",
-          "pulling",
-          "starting",
-          "stopping"
-        ]
-      },
-      "BrowserRuntime": {
-        "description": "The machine's container runtime as the agent found it, or the sentence that names the install.",
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "kind": {
-                "$ref": "#/components/schemas/BrowserRuntimeKind"
-              },
-              "endpoint": {
-                "type": "string"
-              },
-              "version": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "endpoint",
-              "kind",
-              "version"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "missing": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "missing"
-            ]
-          }
-        ]
-      },
       "RelayFrame": {
         "description": "Daemon-originated: the stream relay on this machine, whole, on each change.",
         "type": "object",
@@ -56976,6 +57423,13 @@
         "enum": [
           "auto",
           "manual"
+        ]
+      },
+      "BrowserHandedBackFrameWhy": {
+        "type": "string",
+        "enum": [
+          "stopped",
+          "unwatched"
         ]
       },
       "BrowserRuntimeKind": {

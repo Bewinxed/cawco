@@ -3723,6 +3723,42 @@ export const streamRelay = sqliteTable("stream_relay", {
 });
 
 /**
+ * The fleet's browsers (Projects spec §5.11, browsers.ts): one row per key
+ * per machine, as that machine's last `browsers` frame said, and who holds
+ * it privately. A project that runs on two machines has a browser on each.
+ * The hub reads it to list each browser in its sessions' panels and to send
+ * a take-over again to a machine that registers while one stands.
+ */
+export const browsers = sqliteTable(
+  "browsers",
+  {
+    key: text("key")
+      .$type<import("@cawco/core/browser").BrowserKey>()
+      .notNull(),
+    machineId: text("machine_id")
+      .notNull()
+      .references(() => agents.machineId, { onDelete: "cascade" }),
+    /** The project of a `project:` key; null for a machine's own browser. */
+    projectId: text("project_id"),
+    name: text("name").notNull(),
+    host: text("host")
+      .$type<import("@cawco/core/browser").BrowserHostKind>()
+      .notNull(),
+    state: text("state")
+      .$type<import("@cawco/core/browser").BrowserState>()
+      .notNull(),
+    /** The workspace whose browser ask the person took, or `""` for a take-over nobody asked for; null while nobody holds it. */
+    takeoverBy: text("takeover_by"),
+    /** The browser ask the take-over answers. */
+    takeoverRequestId: text("takeover_request_id"),
+    takeoverSince: timestamp("takeover_since"),
+    lastUsedAt: timestamp("last_used_at").notNull(),
+    updatedAt: timestamp("updated_at").notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.machineId, table.key] })]
+);
+
+/**
  * How previews are reached, fleet-wide (core `PreviewSettings`) — one row,
  * keyed `'preview'`, following the {@link spendSettings} precedent. No row
  * reads as port mode, which needs no setup.

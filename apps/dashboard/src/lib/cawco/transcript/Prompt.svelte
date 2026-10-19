@@ -40,6 +40,8 @@
     IconCheck,
     IconChevronDown,
     IconClose,
+    IconGlobe,
+    IconInteract,
     IconShield,
     IconTick,
   } from "#lib/icons.js";
@@ -51,6 +53,7 @@
     type PendingPermission,
     permissionAnswer,
   } from "../client.svelte";
+  import { hubRefusal } from "../hub-read";
   import { suggestedRule } from "../permission-summary";
   import { questionAnswer, questionDismissal } from "../question";
 
@@ -83,6 +86,70 @@
      */
     onanswer: (result: PermissionResult) => string | null;
   } = $props();
+
+  /**
+   * A browser ask (core `BrowserAskFrame`): Take over starts the private
+   * period (browsers.ts `/takeover`), which takes the ask off every screen
+   * and opens the session's panel on its browser; Decline answers the call,
+   * with the person's own words when "Other…" opened the field for them.
+   */
+  const browserAsk = $derived(request.browserAsk ?? null);
+  let declineOpen = $state(false);
+  let declineWords = $state("");
+  let declineField = $state<HTMLInputElement | null>(null);
+  /** What the hub refused the take-over with. */
+  let takeRefused = $state<string | null>(null);
+
+  async function takeOver(): Promise<void> {
+    if (!(answerable && browserAsk)) {
+      return;
+    }
+    pressed = "allow";
+    takeRefused = null;
+    try {
+      const response = await fetch(
+        `/api/browsers/${encodeURIComponent(browserAsk.key)}/takeover`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            requestId: request.requestId,
+            machineId: browserAsk.machineId,
+          }),
+        }
+      );
+      if (!response.ok) {
+        throw await hubRefusal(response);
+      }
+    } catch (error) {
+      takeRefused = `Couldn't take over. ${error instanceof Error ? error.message : String(error)}`;
+      pressed = null;
+    }
+  }
+
+  function declineBrowser(): void {
+    if (!answerable) {
+      return;
+    }
+    pressed = "deny";
+    commandId = onanswer({ behavior: "deny", message: declineWords.trim() });
+  }
+
+  /** What the card is, as a screen reader names it. */
+  const cardLabel = $derived.by(() => {
+    if (browserAsk) {
+      return `Browser ask from ${who}`;
+    }
+    return questions
+      ? `Question from ${asker}`
+      : `Permission request from ${who}`;
+  });
+
+  async function openDecline(): Promise<void> {
+    declineOpen = true;
+    await tick();
+    declineField?.focus();
+  }
 
   /** Names each question's lede, which labels its option group. */
   const claimId = $props.id();
@@ -656,9 +723,9 @@
      the hub refused the one sent and said why. A live region, so the
      refusal is heard. -->
 {#snippet wait()}
-  {#if refused}
+  {#if takeRefused ?? refused}
     <p data-wait data-slot="refused" class="wait refused" role="status">
-      {refused}
+      {takeRefused ?? refused}
     </p>
   {:else if pressed === null && offline}
     <p data-slot="wait" class="wait" role="status">
@@ -676,7 +743,9 @@
 {#snippet title(text: string)}
   <h2 class="part mark-line" style:--part="0">
     <span data-slot="glyph" aria-hidden="true" class="glyph" data-box>
-      {#if questions}
+      {#if browserAsk}
+        <IconGlobe />
+      {:else if questions}
         <IconAsk />
       {:else}
         <IconShield />
@@ -706,9 +775,7 @@
 <section
   data-prompt-shown={shown || undefined}
   data-slot="hitl"
-  aria-label={questions
-    ? `Question from ${asker}`
-    : `Permission request from ${who}`}
+  aria-label={cardLabel}
   class={["hitl", { shown }]}
   ontouchcancel={() => {
     swipe = null;
@@ -717,7 +784,89 @@
   ontouchstart={swipeStart}
   bind:this={card}
 >
-  {#if questions}
+  {#if browserAsk}
+    {@render title("Take over the browser")}
+    <!-- What the agent needs the person for, who asks, and the page's
+         origin in code type: the person checks where they will be typing
+         before they take over. -->
+    <div data-slot="body" class="body part" style:--part="1">
+      <p data-slot="lede" class="lede summary">{browserAsk.reason}</p>
+      <p
+        data-slot="browser-meta"
+        class="mb-(--space-2) flex min-w-0 flex-wrap items-baseline gap-x-(--space-2) text-(length:--text-meta) text-(--ink-muted)"
+      >
+        <span class="min-w-0 [overflow-wrap:anywhere]">{who}</span>
+        <code
+          data-slot="browser-origin"
+          class="min-w-0 [font:var(--type-code)] text-(--ink-strong) [overflow-wrap:anywhere]"
+          >{browserAsk.origin}</code
+        >
+      </p>
+      {#if declineOpen}
+        <!-- The person's own words with the decline, as a question's
+             "Other" field takes an answer of their own. -->
+        <Input
+          data-decline-words
+          aria-label="Your words with the decline"
+          class="other"
+          disabled={!answerable}
+          onkeydown={(event: KeyboardEvent) => {
+            if (event.key === "Enter" && !event.isComposing) {
+              event.preventDefault();
+              declineBrowser();
+            }
+          }}
+          placeholder="Your words…"
+          bind:ref={declineField}
+          bind:value={declineWords}
+        />
+      {/if}
+    </div>
+    <div data-slot="foot" class="foot part" style:--part="2">
+      <!-- The Peer Rule's transcript form: Take over and Decline at the
+           row's two ends, the one recessed fill, each outlined in its
+           tint; no third control between them. -->
+      <div data-slot="choice" class="choice">
+        <Button
+          class={grant}
+          data-browser-take
+          disabled={disabledOf("allow")}
+          failed={failedOf("allow")}
+          icon={IconInteract}
+          label="Take over"
+          onclick={takeOver}
+          pending={pendingOf("allow")}
+          pendingLabel="Taking over…"
+          variant="secondary"
+        />
+        <Button
+          class={refuse}
+          data-browser-decline
+          disabled={disabledOf("deny")}
+          failed={failedOf("deny")}
+          icon={IconClose}
+          label="Decline"
+          onclick={declineBrowser}
+          pending={pendingOf("deny")}
+          pendingLabel="Declining…"
+          variant="secondary"
+        />
+      </div>
+      {#if !declineOpen}
+        <div class="mt-(--space-2) flex justify-end">
+          <Button
+            class={dismiss}
+            data-browser-other
+            disabled={!answerable}
+            label="Other…"
+            onclick={openDecline}
+            variant="ghost"
+          />
+        </div>
+      {/if}
+      {@render wait()}
+    </div>
+  {:else if questions}
     {@render title(`Question from ${asker}`)}
     <div
       data-slot="body"

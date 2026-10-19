@@ -71,11 +71,16 @@ import {
 } from "@cawco/core/binary-updates";
 import { type Bounded, readWithin } from "@cawco/core/bounded";
 import {
+  BROWSER_HANDBACK,
   BROWSER_REMOVE,
+  BROWSER_SHIELD,
   BROWSER_START,
   BROWSER_STOP,
+  BROWSER_VIEWERS,
   type BrowserKey,
+  type BrowserShieldArgs,
   type BrowserStartArgs,
+  type BrowserViewersArgs,
   isBrowserKey,
 } from "@cawco/core/browser";
 import {
@@ -165,6 +170,13 @@ import {
   stopRelay,
   watchRelay,
 } from "./browser/relay";
+import {
+  browserViewers,
+  handBackBrowser,
+  restoreShields,
+  setShieldSink,
+  shieldBrowser,
+} from "./browser/shield";
 import { buildInfo } from "./build";
 import { probeCapabilities } from "./capabilities";
 import { convertWorktrees } from "./clone";
@@ -2010,6 +2022,7 @@ const attach = (
         frame.kind === "command_queue" ||
         frame.kind === "stage" ||
         frame.kind === "browsers" ||
+        frame.kind === "browser_handback" ||
         frame.kind === "stream_relay" ||
         frame.kind === "stage-clone"
       ) {
@@ -3064,11 +3077,40 @@ export const startDaemon = (rediscover = false) =>
     supervisor.registerDaemonFunction(BROWSER_REMOVE, async (args) =>
       removeBrowser(browserKeyOf(args))
     );
+    // The person takes a browser over privately and hands it back
+    // (browser/shield.ts); a take-over with no view for two minutes is
+    // handed back here, and the hub told.
+    setShieldSink(machineIdValue, (frame) =>
+      supervisor.emit({ verb: "frames", machineId: "", payload: frame })
+    );
+    supervisor.registerDaemonFunction(BROWSER_SHIELD, (args) =>
+      fenced()
+        ? Promise.reject(new Error(AGENT_RESTARTING))
+        : shieldBrowser({
+            ...(args as BrowserShieldArgs),
+            key: browserKeyOf(args),
+          })
+    );
+    supervisor.registerDaemonFunction(BROWSER_HANDBACK, async (args) =>
+      handBackBrowser(browserKeyOf(args))
+    );
+    supervisor.registerDaemonFunction(BROWSER_VIEWERS, (args) => {
+      const { count } = args as BrowserViewersArgs;
+      browserViewers(browserKeyOf(args), typeof count === "number" ? count : 0);
+      return Promise.resolve(true);
+    });
     yield* Effect.forkScoped(
       Effect.promise(() =>
-        watchBrowsers().catch((error: unknown) =>
-          console.warn(`[browser] not watched: ${String(error)}`)
-        )
+        // The take-overs held before a restart close their gates as the
+        // registry serves them, before any agent connects.
+        Promise.all([
+          restoreShields().catch((error: unknown) =>
+            console.warn(`[browser] take-overs not restored: ${String(error)}`)
+          ),
+          watchBrowsers().catch((error: unknown) =>
+            console.warn(`[browser] not watched: ${String(error)}`)
+          ),
+        ])
       )
     );
     // The fleet's stream relay, when this machine runs it (browser/relay.ts):

@@ -16,6 +16,7 @@
     IconChevronRight,
     IconClock,
     IconError,
+    IconGlobe,
     IconInfo,
     IconStop,
     IconSuccess,
@@ -146,6 +147,7 @@
     canvas: IconArtifactCanvas,
     preview: IconWindow,
     component: IconArtifactSheet,
+    browser: IconGlobe,
   };
   const ResponseGlyph = $derived(RESPONSE_GLYPHS[responses?.kind ?? "page"]);
   const responsesState = $derived.by(() => {

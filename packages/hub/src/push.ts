@@ -55,6 +55,7 @@
  * `CAWCO_CAWRIER_ORIGIN` points every push at a stand-in for a local run.
  */
 import {
+  BROWSER_ASK_TOOL,
   DELEGATE_TYPE_PROPOSAL_TOOL,
   DESIGN_PROPOSAL_TOOL,
   type Envelope,
@@ -118,7 +119,8 @@ const BACKGROUND_GAP_MS = 20 * 60_000;
  * question the app can answer inline goes as `question` with its options
  * sealed (`inlineOptions`): the app's notification service extension opens
  * them and gives that one push a category of its own, an action per option
- * and "Other…". A device asking to pair offers Approve and Deny.
+ * and "Other…". A device asking to pair offers Approve and Deny. A browser
+ * ask (browser-tools.ts) is opened: Take over happens in the panel.
  */
 export const PUSH_CATEGORIES = {
   permission: "CAWCO_PERMISSION",
@@ -130,8 +132,12 @@ export const PUSH_CATEGORIES = {
   attempt: "CAWCO_ATTEMPT",
   needs: "CAWCO_NEEDS",
   pairing: "CAWCO_PAIRING",
+  browser: "CAWCO_BROWSER",
   test: "CAWCO_TEST",
 } as const;
+
+/** A browser ask's visible body: its reason goes sealed. */
+const BROWSER_ASK_BODY = "Needs you in the browser";
 
 /** A question with more options than this is opened to be answered: three and "Other…" fill the four actions a category shows. */
 const MAX_INLINE_OPTIONS = 3;
@@ -612,6 +618,9 @@ const askCategory = (
   payload: Partial<PermissionRequestFrame>
 ): (typeof PUSH_CATEGORIES)[keyof typeof PUSH_CATEGORIES] => {
   const tool = payload.toolName ?? "";
+  if (tool === BROWSER_ASK_TOOL) {
+    return PUSH_CATEGORIES.browser;
+  }
   if (payload.requestKind === "question" || tool === "AskUserQuestion") {
     return PUSH_CATEGORIES.question;
   }
@@ -1251,6 +1260,7 @@ export const createPush = ({
       const { asker, summary } = (payload as PermissionRequestFrame)
         .presentation;
       const options = inlineOptions(payload, instanceId);
+      const browser = payload.toolName === BROWSER_ASK_TOOL;
       arrive({
         ask: true,
         instanceId: instanceId || null,
@@ -1261,7 +1271,8 @@ export const createPush = ({
             // A proposal and a project setting are named by what they are,
             // never by what they say.
             askTitle(row, payload, instanceId),
-            project
+            project,
+            browser ? BROWSER_ASK_BODY : undefined
           ),
           sealed: {
             ...alertOf(asker, project, summary),

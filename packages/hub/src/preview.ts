@@ -327,9 +327,30 @@ async function servePage(
 }
 
 /**
- * What the hub serves for an artifact it holds: a page's files, or a
- * canvas's host page. A sheet is its workspace's stage, relayed as a port
- * preview: its source names no page, and it never comes here.
+ * A browser artifact's frame on the preview origin: an empty page carrying
+ * the overlay, so a show is answered. The browser itself is drawn by the
+ * panel from its stream (Projects spec §5.11, the view), never served here.
+ */
+const serveBrowser = (
+  artifactId: string,
+  _pathname: string,
+  deps: PreviewListenerDeps
+): Promise<Response> =>
+  Promise.resolve(
+    new Response(
+      injectOverlay(
+        '<!doctype html><html><head><meta charset="utf-8"></head><body></body></html>',
+        { artifact: artifactId, state: deps.state(artifactId) }
+      ),
+      { headers: { "content-type": "text/html; charset=utf-8" } }
+    )
+  );
+
+/**
+ * What the hub serves for an artifact it holds: a page's files, a
+ * canvas's host page, or a browser's empty frame. A sheet is its
+ * workspace's stage, relayed as a port preview: its source names no page,
+ * and it never comes here.
  */
 const HUB_SERVES: Record<
   Exclude<ArtifactKind, "component">,
@@ -344,6 +365,7 @@ const HUB_SERVES: Record<
   preview: servePage,
   canvas: (artifactId, pathname, deps) =>
     serveCanvas(artifactId, pathname, deps.state),
+  browser: serveBrowser,
 };
 
 type ListenerSocket = PreviewSocket | ArtifactSocket;

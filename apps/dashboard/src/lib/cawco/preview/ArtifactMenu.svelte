@@ -25,6 +25,7 @@
     IconArtifactPage,
     IconArtifactSheet,
     IconChevronDown,
+    IconGlobe,
     IconTrash,
     IconWindow,
   } from "#lib/icons.js";
@@ -54,6 +55,7 @@
     canvas: IconArtifactCanvas,
     preview: IconWindow,
     component: IconArtifactSheet,
+    browser: IconGlobe,
   };
 
   let open = $state(false);

@@ -1800,6 +1800,13 @@
       "when": 1792411328322,
       "tag": "0264_account_org_id",
       "breakpoints": true
+    },
+    {
+      "idx": 265,
+      "version": "6",
+      "when": 1792411428322,
+      "tag": "0265_browsers",
+      "breakpoints": true
     }
   ]
 }

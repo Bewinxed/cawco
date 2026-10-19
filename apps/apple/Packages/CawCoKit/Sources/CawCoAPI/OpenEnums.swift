@@ -204,6 +204,7 @@ public enum OpenEnums {
 
     /// `#/components/schemas/ArtifactKind`.
     public enum ArtifactKind: OpenEnum {
+        case browser
         case canvas
         case component
         case page
@@ -213,6 +214,7 @@ public enum OpenEnums {
 
         public init(rawValue: String) {
             switch rawValue {
+            case "browser": self = .browser
             case "canvas": self = .canvas
             case "component": self = .component
             case "page": self = .page
@@ -223,6 +225,7 @@ public enum OpenEnums {
 
         public var rawValue: String {
             switch self {
+            case .browser: "browser"
             case .canvas: "canvas"
             case .component: "component"
             case .page: "page"
@@ -235,7 +238,7 @@ public enum OpenEnums {
             if case .unrecognized = self { true } else { false }
         }
 
-        public static let allCases: [Self] = [.canvas, .component, .page, .preview]
+        public static let allCases: [Self] = [.browser, .canvas, .component, .page, .preview]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)
@@ -895,6 +898,44 @@ public enum OpenEnums {
         }
 
         public static let allCases: [Self] = [.narrow, .wide]
+
+        public init(from decoder: any Decoder) throws {
+            self = try Self.decodeOpen(from: decoder)
+        }
+
+        public func encode(to encoder: any Encoder) throws {
+            try encodeOpen(to: encoder)
+        }
+    }
+
+    /// `#/components/schemas/BrowserHandedBackFrameWhy`.
+    public enum BrowserHandedBackFrameWhy: OpenEnum {
+        case stopped
+        case unwatched
+        /// A value this app does not know: a newer hub's.
+        case unrecognized(String)
+
+        public init(rawValue: String) {
+            switch rawValue {
+            case "stopped": self = .stopped
+            case "unwatched": self = .unwatched
+            default: self = .unrecognized(rawValue)
+            }
+        }
+
+        public var rawValue: String {
+            switch self {
+            case .stopped: "stopped"
+            case .unwatched: "unwatched"
+            case let .unrecognized(rawValue): rawValue
+            }
+        }
+
+        public var isUnrecognized: Bool {
+            if case .unrecognized = self { true } else { false }
+        }
+
+        public static let allCases: [Self] = [.stopped, .unwatched]
 
         public init(from decoder: any Decoder) throws {
             self = try Self.decodeOpen(from: decoder)

@@ -34,6 +34,7 @@
     IconArtifactCanvas,
     IconArtifactPage,
     IconArtifactSheet,
+    IconGlobe,
     IconWindow,
   } from "#lib/icons.js";
   import { theme } from "#lib/theme.svelte.js";
@@ -61,6 +62,7 @@
     canvas: IconArtifactCanvas,
     preview: IconWindow,
     component: IconArtifactSheet,
+    browser: IconGlobe,
   };
 
   /** A tall page is shown from its top, at 3:4 at the tallest. */

@@ -62,6 +62,7 @@
     IconError,
     IconExternal,
     IconFolder,
+    IconInteract,
     IconLock,
     IconMaximize,
     IconNeedsYou,
@@ -331,6 +332,17 @@
       ? `Couldn't send that answer. ${sent.reason}`
       : "Couldn't send that answer.";
   });
+  /** What an ask is, as its meta line names it. */
+  const askKind = (ask: {
+    isQuestion: boolean;
+    request: { browserAsk?: unknown };
+  }): string => {
+    if (ask.request.browserAsk) {
+      return "Browser ask";
+    }
+    return ask.isQuestion ? "Question" : "Permission";
+  };
+
   /** Which peer was pressed here, for its spinner. */
   let pressed = $state<PermissionAnswer | null>(null);
 
@@ -580,7 +592,7 @@
           >{item.request.presentation.asker}</span
         >
       {:else}
-        <span>{item.isQuestion ? "Question" : "Permission"}</span>
+        <span>{askKind(item)}</span>
       {/if}
       <span data-slot="dot" aria-hidden="true" class="dot">·</span>
       <span data-slot="machine" class="machine mark-line" data-box>
@@ -721,31 +733,33 @@
       {/if}
       <Button
         data-deny
-        aria-label="Deny {answered}"
+        aria-label="{item.request.browserAsk ? 'Decline' : 'Deny'} {answered}"
         class="peer deny"
         disabled={held || (answering && pressed !== "deny")}
         failed={answerRefused !== null && pressed === "deny"}
         icon={IconClose}
-        label="Deny"
+        label={item.request.browserAsk ? "Decline" : "Deny"}
         onclick={() => answer("deny")}
         {onkeydown}
         pending={answering && pressed === "deny"}
-        pendingLabel="Denying…"
+        pendingLabel={item.request.browserAsk ? "Declining…" : "Denying…"}
         size="sm"
         variant="secondary"
       />
       <Button
         data-approve
-        aria-label="Approve {answered}"
+        aria-label="{item.request.browserAsk
+          ? 'Take over'
+          : 'Approve'} {answered}"
         class="peer approve"
         disabled={held || (answering && pressed !== "allow")}
         failed={answerRefused !== null && pressed === "allow"}
-        icon={IconTick}
-        label="Approve"
+        icon={item.request.browserAsk ? IconInteract : IconTick}
+        label={item.request.browserAsk ? "Take over" : "Approve"}
         onclick={() => answer("allow")}
         {onkeydown}
         pending={answering && pressed === "allow"}
-        pendingLabel="Approving…"
+        pendingLabel={item.request.browserAsk ? "Taking over…" : "Approving…"}
         size="sm"
         variant="secondary"
       />

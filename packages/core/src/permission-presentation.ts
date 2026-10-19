@@ -12,6 +12,7 @@
  * exist (so a put says whether it adds or replaces).
  */
 import { type MemoryScope, scopeWords } from "./fleet";
+import { BROWSER_ASK_TOOL } from "./frames";
 import { commonEnds, editScript, linesOf } from "./line-diff";
 import { questionsOf } from "./question";
 import { UPSTREAM_POST_TOOL } from "./upstream-post";
@@ -1535,6 +1536,18 @@ export function presentPermission(
   }
   if (toolName === UPSTREAM_POST_TOOL) {
     return { ...who, ...upstreamPost(input) };
+  }
+  // A browser ask reads as its reason, the page's origin under it.
+  if (toolName === BROWSER_ASK_TOOL) {
+    return {
+      ...who,
+      summary: typeof input.reason === "string" ? input.reason : "",
+      changes: [],
+      fields:
+        typeof input.origin === "string"
+          ? [{ key: "origin", value: input.origin }]
+          : [],
+    };
   }
   const admin = CAWCO_ADMIN_WRITE.exec(toolName);
   // An MCP tool is never a harness's own, whatever it is called.
