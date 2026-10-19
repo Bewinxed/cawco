@@ -64,6 +64,7 @@
     "./git-dir": "./src/git-dir.ts",
     "./mount-table": "./src/mount-table.ts",
     "./safe-git": "./src/safe-git.ts",
+    "./permission-presentation": "./src/permission-presentation.ts",
     "./tool-presentation": "./src/tool-presentation.ts",
     "./session-env": "./src/session-env.ts",
     ".": {

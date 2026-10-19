@@ -413,11 +413,12 @@ private final class NeedRow: UIControl {
         switch item.kind {
         case let .ask(parked):
             // A held post (NeedsCard.svelte): its title is the row's, where
-            // it goes its one line, and the session that asked leads the place.
+            // it goes its one line, and the session that asked ends the place
+            // line, so a long name gives way before the machine's.
             let post = parked.presentation.post
             ask.text = post?.target ?? parked.summary
             if post != nil, let asker = HomeModel.asker(parked) {
-                place.text = "\(asker) · \(place.text ?? item.place)"
+                place.text = "\(place.text ?? item.place) · \(asker)"
             }
             // What runs, under why: Approve here is made on the command too.
             if post == nil, !parked.isQuestion, let line = parked.commandLine {
@@ -435,8 +436,10 @@ private final class NeedRow: UIControl {
                 let approve = KitButton.make("Approve", glyph: .tick, variant: .done, height: .sm) { [weak self] in
                     self?.onAnswer(parked, .allow)
                 }
-                deny.accessibilityLabel = "Deny \(parked.summary) on \(item.title)"
-                approve.accessibilityLabel = "Approve \(parked.summary) on \(item.title)"
+                // A held post by its title and where it goes (NeedsCard.svelte `answered`).
+                let answered = post.map { "\(item.title) to \($0.target)" } ?? "\(parked.summary) on \(item.title)"
+                deny.accessibilityLabel = "Deny \(answered)"
+                approve.accessibilityLabel = "Approve \(answered)"
                 deny.accessibilityIdentifier = "caw-need-deny"
                 approve.accessibilityIdentifier = "caw-need-approve"
                 for peer in [deny, approve] {

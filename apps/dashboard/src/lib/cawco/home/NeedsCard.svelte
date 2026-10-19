@@ -155,6 +155,19 @@
     }
   });
 
+  /**
+   * What Deny and Approve answer, as their names say it: a held post by its
+   * title and where it goes, any other ask by what it asks and whose it is.
+   */
+  const answered = $derived.by(() => {
+    if (item.kind !== "ask") {
+      return "";
+    }
+    return item.request.presentation.post
+      ? `${item.title} to ${item.ask}`
+      : `${item.ask} on ${item.title}`;
+  });
+
   /** An action's call, laid out: when, through what, the tool, and its arguments as JSON. */
   const call = $derived.by(() => {
     if (item.kind !== "action") {
@@ -708,7 +721,7 @@
       {/if}
       <Button
         data-deny
-        aria-label="Deny {item.ask} on {item.title}"
+        aria-label="Deny {answered}"
         class="peer deny"
         disabled={held || (answering && pressed !== "deny")}
         failed={answerRefused !== null && pressed === "deny"}
@@ -723,7 +736,7 @@
       />
       <Button
         data-approve
-        aria-label="Approve {item.ask} on {item.title}"
+        aria-label="Approve {answered}"
         class="peer approve"
         disabled={held || (answering && pressed !== "allow")}
         failed={answerRefused !== null && pressed === "allow"}
