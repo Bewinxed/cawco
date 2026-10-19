@@ -35,6 +35,22 @@ const machines = $derived<PaneMachine[]>(
 );
 
 export const fleetPane: PaneFleet = {
+  browserAsk: (instanceId, artifactId, key) => {
+    const asked = (cawco.session(instanceId)?.pending ?? []).find(
+      (one) =>
+        one.browserAsk &&
+        (one.browserAsk.artifactId === artifactId || one.browserAsk.key === key)
+    );
+    return asked?.browserAsk
+      ? { requestId: asked.requestId, browserAsk: asked.browserAsk }
+      : null;
+  },
+  browser: (key, machineId) =>
+    cawco.browsers &&
+    (cawco.browsers.find(
+      (one) => one.key === key && one.machineId === machineId
+    ) ??
+      null),
   preview: (instanceId) => cawco.previews[instanceId],
   session: (instanceId) => cawco.instanceIndex.byId.get(instanceId),
   get machines() {

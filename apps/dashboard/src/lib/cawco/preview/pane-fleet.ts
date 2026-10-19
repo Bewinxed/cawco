@@ -6,7 +6,8 @@
  * tab's one-session socket (artifact-session.svelte.ts, set by that tab).
  * The pane is the same component in both; it reads the store its tree set.
  */
-import type { PreviewFrame } from "@cawco/core";
+import type { BrowserAskFrame, PreviewFrame } from "@cawco/core";
+import type { BrowserKey, ListedBrowser } from "@cawco/core/browser";
 import { createContext } from "svelte";
 import type { FolderReader } from "#lib/components/features/DirectoryPicker.svelte";
 import type { PageThumbnail } from "./wire";
@@ -39,7 +40,31 @@ export interface PaneMachine {
   os: string;
 }
 
+/** A browser ask open in a session, as the pane reads it. */
+export interface PaneBrowserAsk {
+  browserAsk: BrowserAskFrame;
+  requestId: string;
+}
+
 export interface PaneFleet {
+  /**
+   * The browser `key` on `machineId` as the hub lists it, followed from the
+   * hub's frames: undefined until the store has heard them, null while that
+   * machine has reported none for the key.
+   */
+  browser: (
+    key: BrowserKey,
+    machineId: string
+  ) => ListedBrowser | null | undefined;
+  /**
+   * Session `instanceId`'s open browser ask for the browser of artifact
+   * `artifactId` or key `key`, or null while none is open.
+   */
+  browserAsk: (
+    instanceId: string,
+    artifactId: string,
+    key: BrowserKey
+  ) => PaneBrowserAsk | null;
   /** Closes the session's panel. */
   closePreview: (instanceId: string) => Promise<void>;
   /** A machine's folders, for a page's place picker. */

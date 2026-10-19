@@ -29,6 +29,7 @@
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import {
+    cawco,
     deleteProject,
     type ProjectRow,
     projectRunning,
@@ -56,6 +57,18 @@
   let unread = $state<string | null>(null);
   /** The latest read: an answer to an earlier one (a forget since replaced) is dropped. */
   let latest = 0;
+  /**
+   * How many machines hold a browser of the project (hub browsers.ts, the
+   * app's socket's `browser_list`): the forget removes each first, its
+   * sign-ins with it, so the tray names it.
+   */
+  const browsers = $derived(
+    project
+      ? (cawco.browsers ?? []).filter(
+          (row) => row.key === `project:${project.id}`
+        ).length
+      : 0
+  );
 
   /** Reads what runs for `asked`; the tray unfolds on the answer. */
   function read(asked: ProjectRow): void {
@@ -102,6 +115,13 @@
 
   const words = $derived.by((): StopWords => {
     const name = project?.name ?? "";
+    /** What else goes with it: its browser and the sign-ins kept there. */
+    let browser = "";
+    if (browsers === 1) {
+      browser = " Its browser and its sign-ins go.";
+    } else if (browsers > 1) {
+      browser = ` Its browsers on ${browsers} machines and their sign-ins go.`;
+    }
     return {
       title: `Forget ${name}?`,
       plain: "Forget",
@@ -114,12 +134,12 @@
       line: (phase, n, done) => {
         switch (phase) {
           case "none":
-            return "The grouping is removed. The checkout and its sessions stay on disk.";
+            return `The grouping is removed.${browser} The checkout and its sessions stay on disk.`;
           case "list":
-            return `${n} running ${plural(n, "session stops", "sessions stop")} first. The checkout and its sessions stay on disk.`;
+            return `${n} running ${plural(n, "session stops", "sessions stop")} first.${browser} The checkout and its sessions stay on disk.`;
           case "armed":
           case "stopping":
-            return "Transcripts and the checkout stay on disk.";
+            return `${browser.trim() ? `${browser.trim()} ` : ""}Transcripts and the checkout stay on disk.`;
           case "fail":
             return `${name} is kept until every session is stopped.`;
           default:

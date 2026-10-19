@@ -13,10 +13,8 @@
  * - Take over and Deny at the row's two ends, at least 44px apart and never
  *   less than `--space-8`, their fills computed equal, each in its own
  *   outline tint;
- * - "Other" is the question card's chip: choosing it opens the line beside
- *   it ("Your answer…", named "Your answer to: <reason>"), the card keeps its
- *   height and the peers' rects are the same before and after; Deny goes
- *   out on the socket as a deny carrying the line's words;
+ * - no "Other": Deny is the ask's one refusal, and goes out on the socket
+ *   as a deny;
  * - Take over posts `/api/browsers/<key>/takeover` with the ask's request
  *   id and machine; while it is out the button reads "Taking over…"; a
  *   refusal reads "Couldn't take over. …" and the peers do not move;
@@ -557,51 +555,24 @@ async function rest(
   await sweepCheck(kit, page, `${label} rest`, CARD);
   await capture(page, `${name}-${which}.png`);
 
-  // "Other": the question card's chip; its line opens beside it.
-  const before = card;
-  await page.locator(`${CARD} [data-slot="browser-other"] button`).click();
-  const field = page.locator(`${CARD} [data-other]`);
-  await field.waitFor();
-  await settle(page);
-  const after = await page.evaluate(measure);
-  const named = await field.evaluate((node) => ({
-    name: node.getAttribute("aria-label"),
-    placeholder: node.getAttribute("placeholder"),
-    chip:
-      document
-        .querySelector('[data-slot="browser-other"] button')
-        ?.textContent?.trim() ?? "",
-  }));
-  kit.check(
-    `${label}: "Other" opens the line beside it ("${named.placeholder}", named "${named.name}"), the card keeps its height and the peers do not move`,
-    !!after &&
-      named.chip === "Other" &&
-      named.placeholder === "Your answer…" &&
-      named.name === `Your answer to: ${reason}` &&
-      same(before.take, after.take) &&
-      same(before.deny, after.deny) &&
-      Math.abs(
-        before.card.bottom -
-          before.card.top -
-          (after.card.bottom - after.card.top)
-      ) < 0.5,
-    JSON.stringify({
-      before: [before.take, before.deny, before.card],
-      after: after && [after.take, after.deny, after.card],
-    })
+  // No "Other": Deny is the ask's one refusal.
+  const other = await page.evaluate(
+    (at) =>
+      !!document.querySelector(
+        `${at} [data-slot="browser-other"], ${at} [data-other]`
+      ) || (document.querySelector(at)?.textContent ?? "").includes("Other"),
+    CARD
   );
-  await field.fill("Not on this account");
-  await sweepCheck(kit, page, `${label} other`, CARD);
-  await capture(page, `${name}-${which}-other.png`);
+  kit.check(`${label}: no "Other" on the card`, !other, String(other));
   if (which === "short") {
-    await field.press("Enter");
+    await page.locator(`${CARD} [data-browser-deny]`).click();
     await page.waitForTimeout(800);
     const deny = sent.find(
       (raw) => raw.includes(requestId) && raw.includes('"deny"')
     );
     kit.check(
-      `${label}: Enter on the line goes out as a deny carrying its words`,
-      !!deny?.includes("Not on this account"),
+      `${label}: Deny goes out as a deny`,
+      !!deny,
       deny?.slice(0, 400) ?? `${sent.length} frames sent, none a deny`
     );
   }
