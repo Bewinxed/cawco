@@ -210,6 +210,7 @@ import { routedToParent } from "./transcript/present";
 import { holdsCompaction } from "./transcript/rows";
 import { speakerName } from "./transcript/speaker";
 import type { DelegateAskEvent, Message } from "./types";
+import { type MissedRead, TRY_AGAIN, unansweredWords } from "./unanswered";
 import { updates } from "./updates/updates.svelte";
 import {
   onBoard,
@@ -7020,22 +7021,29 @@ function ask<T>(
 export type Unanswered = Extract<Bounded<unknown>, { kind: "unanswered" }>;
 
 /**
- * What the person reads when `machineId` didn't answer in time, in the
- * existing copy's voice (WORDS.md: "nixbox stopped answering (timeout)").
- * `outcome` says what is now not known, when something is.
+ * What the person reads when a read of `machineId` didn't answer in time
+ * (unanswered.ts): what didn't answer and when it is asked again while the
+ * hub says the machine is online ({@link machineConnected}), "It may be
+ * offline" only once it has lost it.
  */
 export function didntAnswer(
   machineId: string,
   missed: Unanswered,
-  outcome?: string
+  words: Omit<MissedRead, "machine" | "online" | "after">
 ): string {
-  return `${machineName(machineId)} didn't answer within ${Math.round(missed.after / 1000)} s${outcome ? `, so ${outcome}` : ""}. It may be offline.`;
+  return unansweredWords({
+    machine: machineName(machineId),
+    online: machineConnected(machineId),
+    after: missed.after,
+    ...words,
+  });
 }
 
 /**
  * A read as an action the person started takes it, for the actions whose
  * one way to say something is the sentence they throw (a menu item, a
  * confirm dialog): the answer, or {@link didntAnswer}'s sentence thrown.
+ * `outcome` says what is now not known, when something is.
  */
 export function answeredOr<T>(
   machineId: string,
@@ -7046,7 +7054,9 @@ export function answeredOr<T>(
     case "answered":
       return read.value;
     case "unanswered":
-      throw new Error(didntAnswer(machineId, read, outcome));
+      throw new Error(
+        didntAnswer(machineId, read, { outcome, again: TRY_AGAIN })
+      );
     default: {
       const unhandled: never = read;
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
@@ -7122,7 +7132,7 @@ export async function loadCatalog(machineId: string): Promise<void> {
       case "unanswered":
         // The catalog it last listed stands.
         console.warn(
-          `[cawco] listSessions on ${machineId}: ${didntAnswer(machineId, listed)}`
+          `[cawco] listSessions on ${machineId}: ${didntAnswer(machineId, listed, { missed: "its list of stored sessions didn't come back", again: "The list it gave last stands until the next load." })}`
         );
         break;
       case "answered": {
@@ -7946,8 +7956,12 @@ export async function refreshContext(
     );
     switch (read.kind) {
       case "unanswered":
-        // The last reading stands; the details say why it is not newer.
-        target.contextError = didntAnswer(machineId, read);
+        // The last reading stands; the details say why it is not newer, and
+        // the next turn's end asks again (applyFacts).
+        target.contextError = didntAnswer(machineId, read, {
+          missed: "this session didn't report its context",
+          again: "It's asked again when its turn ends.",
+        });
         return;
       case "answered":
         break;
@@ -8041,7 +8055,7 @@ export async function refreshCommands(
       case "unanswered":
         // The menu keeps what it last heard; the next open asks again.
         console.warn(
-          `[cawco] supportedCommands on ${instanceId}: ${didntAnswer(machineId, read)}`
+          `[cawco] supportedCommands on ${instanceId}: ${didntAnswer(machineId, read, { missed: "this session didn't list its commands", again: "The menu asks again when it next opens." })}`
         );
         return;
       case "answered":
@@ -8123,7 +8137,7 @@ export async function loadMcpServers(
     switch (read.kind) {
       case "unanswered":
         console.warn(
-          `[cawco] mcpServerStatus on ${instanceId}: ${didntAnswer(machineId, read)}`
+          `[cawco] mcpServerStatus on ${instanceId}: ${didntAnswer(machineId, read, { missed: "this session didn't list its MCP servers", again: "It's asked again the next time the session goes live." })}`
         );
         break;
       case "answered":

@@ -108,6 +108,7 @@
   import AttachmentChips from "../transcript/AttachmentChips.svelte";
   import { ComposerDraft } from "../transcript/composer-draft.svelte";
   import { keepDraft } from "../transcript/keep-draft.svelte";
+  import { TRY_AGAIN } from "../unanswered";
   import { startForecast, usage } from "../usage/forecast.svelte";
   import { fmt, type Part } from "../usage/rings";
   import type { AccountTool } from "./AccountChip.svelte";
@@ -1434,11 +1435,10 @@
       case "answered":
         return "";
       case "unanswered":
-        return didntAnswer(
-          id,
-          read,
-          "whether the folder is there is not known"
-        );
+        return didntAnswer(id, read, {
+          outcome: "whether the folder is there is not known",
+          again: TRY_AGAIN,
+        });
       default: {
         const unhandled: never = read;
         throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);

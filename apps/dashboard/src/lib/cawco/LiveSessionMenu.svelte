@@ -66,6 +66,7 @@
   import { heldByMove } from "./move.svelte";
   import { stopOnRow } from "./session-acts.svelte";
   import { sessionName } from "./session-name";
+  import { TRY_AGAIN } from "./unanswered";
   import {
     canOpenBeside,
     focusAfterMenu,
@@ -276,11 +277,11 @@
         break;
       case "unanswered":
         body = [
-          didntAnswer(
-            instance.machineId,
-            read,
-            "what its worktree holds is not known"
-          ),
+          didntAnswer(instance.machineId, read, {
+            missed: "the read of its worktree didn't come back",
+            outcome: "what it holds is not known",
+            again: TRY_AGAIN,
+          }),
           `A discard stops the session and the worktree and transcript go. Any work in it is saved first, as a carry on ${where} (in ~/.cawco/carries).`,
         ];
         break;

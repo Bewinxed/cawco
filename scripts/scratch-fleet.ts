@@ -1457,6 +1457,17 @@ async function standUp(
 
   // ── The mock model endpoint ───────────────────────────────────────────
   const seen: Seen[] = [];
+  /** Token-count requests the mock got, and the hold a spec puts on their answers ({@link holdCountTokens}). */
+  const countTokens = { asked: 0, held: null as Promise<void> | null };
+  /** Holds every token-count answer, as a slow Anthropic would, until the release this answers is called. */
+  const holdCountTokens = (): (() => void) => {
+    const hold = Promise.withResolvers<void>();
+    countTokens.held = hold.promise;
+    return () => {
+      countTokens.held = null;
+      hold.resolve();
+    };
+  };
   const mock = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
@@ -1472,6 +1483,8 @@ async function standUp(
         tools?: { function?: { name?: string }; name?: string }[];
       };
       if (path.endsWith("/count_tokens")) {
+        countTokens.asked += 1;
+        await countTokens.held;
         return Response.json({ input_tokens: 100 });
       }
       // The person's words, in order: user messages, and the system
@@ -2699,6 +2712,9 @@ async function standUp(
     repo,
     workdir,
     seen,
+    /** How many token-count requests the mock has got so far. */
+    countTokensAsked: () => countTokens.asked,
+    holdCountTokens,
     authorize,
     launch,
     stop,

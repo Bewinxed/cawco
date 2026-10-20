@@ -71,6 +71,7 @@ import {
   CAWCO_ENV,
   CONTROL_BEGIN_ACCOUNT_LOGIN,
   CONTROL_COMPLETE_ACCOUNT_LOGIN,
+  CONTROL_CONTEXT_USAGE,
   CONTROL_FORGET_ACCOUNT,
   CONTROL_GET_TODOS,
   CONTROL_JOIN_ACCOUNT_LOGIN,
@@ -3109,6 +3110,15 @@ class ClaudeSession implements HarnessSession {
       // lower than what was asked.
       await this.#readEffort();
       return undefined;
+    }
+    // How full the window is, from the last answer's usage and the CLI's own
+    // estimates: "'summary' answers from the last response's usage and local
+    // estimates without per-category token-count API calls (default 'full')"
+    // (agent SDK 0.3.257 CHANGELOG). The full count waited on Anthropic's
+    // token-count API once per category, and on a busy machine (many
+    // sessions reading after every turn) ran past every reader's deadline.
+    if (method === CONTROL_CONTEXT_USAGE) {
+      return await this.#handle.getContextUsage({ detail: "summary" });
     }
     // The CLI is told its own mode (`fullSend` is its bypass); the session
     // takes the mode CawCo was asked for once the CLI is in it.

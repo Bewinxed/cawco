@@ -25,6 +25,7 @@
   import MachineAuthStatus from "./MachineAuthStatus.svelte";
   import { crossIn, crossOut } from "./motion/curves.svelte";
   import { unfold } from "./motion/fold.svelte";
+  import { TRY_AGAIN } from "./unanswered";
 
   let {
     machine,
@@ -112,11 +113,10 @@
           case "unanswered":
             phase = {
               kind: "error",
-              message: didntAnswer(
-                machine.machineId,
-                read,
-                "whether the keychain unlocked is not known"
-              ),
+              message: didntAnswer(machine.machineId, read, {
+                outcome: "whether the keychain unlocked is not known",
+                again: TRY_AGAIN,
+              }),
             };
             break;
           default: {

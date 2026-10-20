@@ -19,6 +19,7 @@
   import Search from "~icons/solar/magnifer-bold-duotone";
   import Refresh from "~icons/solar/refresh-bold-duotone";
   import { didntAnswer, machineFs } from "../client.svelte";
+  import { TRY_AGAIN } from "../unanswered";
   import Segmented from "./Segmented.svelte";
 
   let {
@@ -103,7 +104,10 @@
           break;
         case "unanswered":
           // The listing on screen stands; this says why it did not move.
-          listError = didntAnswer(machineId, read);
+          listError = didntAnswer(machineId, read, {
+            missed: "the folder's listing didn't come back",
+            again: TRY_AGAIN,
+          });
           return;
         default: {
           const unhandled: never = read;

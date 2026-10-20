@@ -26,6 +26,7 @@
   import { machineOs } from "./machine";
   import OsMark from "./OsMark.svelte";
   import { installTool, policyFor, setPolicy } from "./tools";
+  import { TRY_AGAIN } from "./unanswered";
 
   let {
     machines,
@@ -69,11 +70,10 @@
           break;
         case "unanswered":
           // The cell follows the hub's publish; this says the machine went quiet.
-          refused[key] = didntAnswer(
-            machine.machineId,
-            read,
-            "whether the install finished is not known"
-          );
+          refused[key] = didntAnswer(machine.machineId, read, {
+            outcome: "whether the install finished is not known",
+            again: TRY_AGAIN,
+          });
           break;
         default: {
           const unhandled: never = read;
