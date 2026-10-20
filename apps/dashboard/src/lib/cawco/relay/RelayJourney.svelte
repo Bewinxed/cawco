@@ -365,7 +365,7 @@
           class="size-icon-md text-status-fail-ink"
         />
       {:else if mark === "working"}
-        <Spinner aria-hidden="true" class="size-icon-md" role="none" />
+        <Spinner aria-hidden="true" role="none" />
       {:else}
         <!-- A step's number, no fill: in the muted ink on the control edge
              while it waits, in the strong ink on the outline button's edge

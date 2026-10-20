@@ -107,11 +107,7 @@
           {#if Glyph}
             <Glyph aria-hidden="true" class="size-icon-md" data-duo />
           {:else}
-            <Spinner
-              aria-hidden="true"
-              class="size-icon-md"
-              role="presentation"
-            />
+            <Spinner aria-hidden="true" role="presentation" />
           {/if}
         </span>
         <div data-slot="words" class="flex min-w-0 flex-col gap-space-row">

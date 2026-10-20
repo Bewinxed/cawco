@@ -14,6 +14,7 @@
   import { setPaneFleet } from "#lib/cawco/preview/pane-fleet.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Toaster } from "#lib/components/ui/sonner/index.js";
   import { IconAlert, IconEyeClosed } from "#lib/icons.js";
   import { page } from "$app/state";
@@ -132,10 +133,12 @@
         aria-hidden="true"
         class="flex-1 rounded-lg bg-surface-recess p-space-5"
       >
-        <span
+        <Skeleton
+          class="w-5/12"
           data-slot="block"
-          class="kit-skeleton block h-space-3 w-5/12 rounded-xs"
-        ></span>
+          line="body"
+          radius="text"
+        />
       </div>
     {/if}
   </div>

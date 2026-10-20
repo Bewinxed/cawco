@@ -160,9 +160,9 @@
           aria-hidden="true"
           class="flex flex-col gap-space-2"
         >
-          <Skeleton class="h-space-4 w-full" />
-          <Skeleton class="h-space-4 w-11/12" />
-          <Skeleton class="h-space-4 w-3/5" />
+          <Skeleton class="w-full" line="body" />
+          <Skeleton class="w-11/12" line="body" />
+          <Skeleton class="w-3/5" line="body" />
         </div>
       {:else if post}
         <PostCard {compact} {post} {projectId} />

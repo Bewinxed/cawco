@@ -752,9 +752,6 @@
     }
   }
 
-  /* The one skeleton (ui/skeleton): a --surface-fill block standing at the
-     size of what it waits for. One band of the raised surface crosses it
-     every 1.2s, transform only; without motion it sits still. */
   /* A scroller whose content runs past an edge fades that edge out — only
      that edge, only while there is more to scroll to. The fade lengths ride
      the scroller's own scroll: at the start nothing is behind, so the
@@ -926,29 +923,6 @@
     }
     to {
       --fade-end: 0px;
-    }
-  }
-
-  .kit-skeleton {
-    position: relative;
-    overflow: hidden;
-    border-radius: var(--radius-sm);
-    background: var(--surface-fill);
-
-    @media (prefers-reduced-motion: no-preference) {
-      &::after {
-        content: "";
-        position: absolute;
-        inset: 0;
-        translate: -100% 0;
-        background: linear-gradient(
-          90deg,
-          transparent 0 30%,
-          var(--skeleton-sheen) 50%,
-          transparent 70% 100%
-        );
-        animation: kit-skeleton-sweep var(--dur-loop) linear infinite;
-      }
     }
   }
 
@@ -4359,80 +4333,6 @@
   }
 }
 
-/* ---- The sweep across a thinking line: the kit's thinking indicator's
-   words and an active reasoning step's, each a `.shimmer` span. The words
-   are drawn by a band of their own ink, at a fifth of its strength by day
-   and lit at night, that crosses them every two seconds; under reduced
-   motion they stand plain. It came with shadcn-svelte's stylesheet,
-   unchanged here. */
-@property --shimmer-angle {
-  syntax: "<angle>";
-  inherits: true;
-  initial-value: 20deg;
-}
-@property --shimmer-image {
-  syntax: "*";
-  inherits: false;
-}
-@property --shimmer-text-fill {
-  syntax: "*";
-  inherits: false;
-}
-@utility shimmer {
-  --_spread: var(--shimmer-spread, calc(3ch + 40px));
-  --_base: currentColor;
-  --_highlight: var(
-    --shimmer-color,
-    oklch(from currentColor l c h / calc(alpha* 0.2))
-  );
-  background-image: var(
-    --shimmer-image,
-    linear-gradient(
-      calc(90deg + var(--shimmer-angle)),
-      var(--_base) calc(50% - var(--_spread)),
-      color-mix(in oklch, var(--_highlight), var(--_base) 50%)
-        calc(50% - var(--_spread) * 0.5),
-      var(--_highlight) 50%,
-      color-mix(in oklch, var(--_highlight), var(--_base) 50%)
-        calc(50% + var(--_spread) * 0.5),
-      var(--_base) calc(50% + var(--_spread))
-    )
-  );
-  background-repeat: no-repeat;
-  background-size: calc(200% + var(--_spread) * 2) 100%;
-  background-position: 0 0;
-  background-clip: text;
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: var(--shimmer-text-fill, transparent);
-  animation: tw-shimmer var(--shimmer-duration, 2s) linear infinite;
-
-  @variant dark {
-    --_highlight: var(
-      --shimmer-color,
-      oklch(from currentColor max(0.8, calc(l + 0.4)) c h / calc(alpha + 0.4))
-    );
-  }
-
-  &:where([dir="rtl"], [dir="rtl"] *) {
-    animation-direction: reverse;
-  }
-}
-@keyframes tw-shimmer {
-  from {
-    background-position: 100% 0;
-  }
-  to {
-    background-position: 0 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .shimmer {
-    animation: none;
-    background-image: none;
-    -webkit-text-fill-color: currentColor;
-  }
-}
-
 /* The two shared sheets, utilities under the names their consumers write:
    the new-session dialog's and the workflow pages' (each says how it keeps
    its cascade). Tailwind inlines an import where it stands, so these come
@@ -4514,11 +4414,6 @@
     transform: translateY(6px);
   }
 }
-@keyframes kit-skeleton-sweep {
-  to {
-    translate: 100% 0;
-  }
-}
 @keyframes kit-fade-in {
   from {
     opacity: 0;
@@ -4580,5 +4475,19 @@
 @keyframes kit-sheet-seam {
   to {
     border-block-end-color: var(--border-hairline);
+  }
+}
+
+/* wave 2: W3-loading */
+/* The skeleton's sweep (ui/skeleton, DESIGN.md Skeleton): one band crossing
+   the placeholder once per `--dur-loop`, turning linearly as every pending
+   loop does (The One Loop Rule), used only under `motion-safe:`. */
+@theme {
+  --animate-skeleton-sweep: kit-skeleton-sweep var(--dur-loop) linear infinite;
+
+  @keyframes kit-skeleton-sweep {
+    to {
+      translate: 100% 0;
+    }
   }
 }

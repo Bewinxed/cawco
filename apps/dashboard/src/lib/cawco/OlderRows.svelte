@@ -235,7 +235,7 @@
                 ><IconHistory class="size-icon-md" /></span
               >
               <span data-active={pending}
-                ><Spinner class="size-icon-sm" role="presentation" /></span
+                ><Spinner role="presentation" /></span
               >
             </span>
           {/snippet}

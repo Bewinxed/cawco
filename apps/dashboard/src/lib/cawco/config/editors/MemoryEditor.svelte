@@ -657,7 +657,7 @@
                         in:crossIn
                         out:crossOut
                       >
-                        <Spinner class="size-icon-md shrink-0" /><span
+                        <Spinner class="shrink-0" /><span
                           >{words.readingVersion}</span
                         >
                       </p>
@@ -830,7 +830,7 @@
                         in:crossIn
                         out:crossOut
                       >
-                        <Spinner class="size-icon-md shrink-0" /><span
+                        <Spinner class="shrink-0" /><span
                           >{words.readingCopy}</span
                         >
                       </p>

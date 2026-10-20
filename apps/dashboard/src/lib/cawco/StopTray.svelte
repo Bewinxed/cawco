@@ -842,11 +842,7 @@
                   {#if status.icon}
                     <status.icon aria-hidden="true" class="size-icon-md" />
                   {:else}
-                    <Spinner
-                      aria-hidden="true"
-                      class="size-icon-md"
-                      role="presentation"
-                    />
+                    <Spinner aria-hidden="true" role="presentation" />
                   {/if}
                 </span>
               {/key}

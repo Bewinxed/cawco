@@ -2175,9 +2175,9 @@
           <div
             class="flex flex-col gap-space-2 rounded-lg bg-surface-band p-space-2 inset-ring inset-ring-border-hairline"
           >
-            <Skeleton class="h-space-4 w-3/5" />
-            <Skeleton class="h-c-skeleton-card-h w-full" radius="chip" />
-            <Skeleton class="h-c-skeleton-card-h w-full" radius="chip" />
+            <Skeleton class="w-3/5" line="label" />
+            <Skeleton class="w-full" height="card" radius="chip" />
+            <Skeleton class="w-full" height="card" radius="chip" />
           </div>
         {/each}
       </div>

@@ -297,8 +297,8 @@
   {/if}
   {#if history === null && historyProblem === null && only === "all"}
     <div aria-hidden="true" class="flex flex-col gap-space-2">
-      <Skeleton class="h-space-4 w-2/3" />
-      <Skeleton class="h-space-4 w-1/2" />
+      <Skeleton class="w-2/3" line="body" />
+      <Skeleton class="w-1/2" line="body" />
     </div>
   {:else if pieces.length === 0}
     <p class="type-meta text-ink-muted">

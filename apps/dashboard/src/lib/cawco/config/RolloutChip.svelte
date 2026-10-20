@@ -138,7 +138,8 @@
       />
       <Spinner
         aria-hidden="true"
-        class="col-start-1 row-start-1 size-icon-sm flex-none"
+        box="small"
+        class="col-start-1 row-start-1 flex-none"
         data-for="busy"
         reveal="glyph-busy"
         role="presentation"

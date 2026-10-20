@@ -207,7 +207,7 @@
         >
           <span class="mark-cell">
             {#if note.tone === "busy"}
-              <Spinner aria-hidden="true" class="size-icon-sm flex-none" />
+              <Spinner aria-hidden="true" box="small" class="flex-none" />
             {:else if note.tone === "fail"}
               <IconWarningTriangle class="size-icon-sm flex-none" />
             {:else}

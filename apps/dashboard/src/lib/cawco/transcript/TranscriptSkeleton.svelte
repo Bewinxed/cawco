@@ -51,7 +51,8 @@
     >
       <Skeleton
         data-transcript-skeleton-mark
-        class="size-c-row-mark flex-none"
+        cell="mark"
+        class="flex-none"
         radius="text"
       /><Skeleton
         data-transcript-skeleton-name
@@ -86,7 +87,8 @@
     >
       <Skeleton
         data-transcript-skeleton-mark
-        class="size-c-row-mark flex-none"
+        cell="mark"
+        class="flex-none"
         radius="text"
       /><Skeleton
         data-transcript-skeleton-name
@@ -122,13 +124,14 @@
     {#each TOOLS as width (width)}
       <div class="min-h-(--tx-line) coarse:min-h-(--tx-line-touch) rail-line">
         <Skeleton data-rail-cell radius="text" cell="rail" data-box /><Skeleton
-          class="w-space-8 h-space-3 flex-none"
-          radius="text"
+          class="w-space-8 flex-none"
+          height="x-height"
+          radius="line"
           data-box
         />
         <Skeleton
-          class="h-space-3"
-          radius="text"
+          height="x-height"
+          radius="line"
           data-box
           style="width: {width}"
         />
@@ -145,7 +148,8 @@
     >
       <Skeleton
         data-transcript-skeleton-mark
-        class="size-c-row-mark flex-none"
+        cell="mark"
+        class="flex-none"
         radius="text"
       /><Skeleton
         data-transcript-skeleton-name

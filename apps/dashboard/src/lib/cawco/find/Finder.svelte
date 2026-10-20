@@ -736,10 +736,7 @@
       aria-hidden="true"
       data-flip
     >
-      <Skeleton
-        data-tall={item.tall || undefined}
-        class="h-c-btn-h data-tall:h-c-find-skeleton-tall"
-      />
+      <Skeleton height={item.tall ? "reason-row" : "control"} />
     </div>
   {:else if item.t === "nothing"}
     <div
@@ -836,7 +833,7 @@
         aria-hidden="true"
         data-flip
       >
-        <Skeleton class="h-c-btn-h" />
+        <Skeleton height="control" />
       </div>
       <div
         data-slot="skeleton-slot"
@@ -844,7 +841,7 @@
         aria-hidden="true"
         data-flip
       >
-        <Skeleton class="h-c-btn-h" />
+        <Skeleton height="control" />
       </div>
     {:else}
       {#each finder.waitingItems as item (`${item.kind}:${item.id}`)}

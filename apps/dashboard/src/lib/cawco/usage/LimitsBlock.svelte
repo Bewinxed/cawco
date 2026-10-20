@@ -200,7 +200,7 @@
   {#if !read}
     <div class="flex flex-col gap-space-3" data-slot="skeleton-rows">
       <Skeleton height="figure" width="name" />
-      <Skeleton class="h-icon-md w-3/4" />
+      <Skeleton class="w-3/4" line="body" />
       <div data-slot="grid" class="grid grid-cols-usage-tiles gap-space-3">
         {#each [0, 1, 2] as one (one)}
           <Skeleton class="w-full" height="chart" />

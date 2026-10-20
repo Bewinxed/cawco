@@ -372,7 +372,7 @@
           <span
             data-slot="doing"
             class="mark-line inline-flex items-center gap-space-1"
-            ><Spinner aria-hidden="true" class="size-icon-sm" />
+            ><Spinner aria-hidden="true" box="small" />
             <span>{renaming === null ? pending : "Renaming…"}</span></span
           >
         {:else}

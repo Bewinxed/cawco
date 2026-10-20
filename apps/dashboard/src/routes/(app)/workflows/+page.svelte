@@ -166,17 +166,32 @@
             <td
               data-slot="name"
               class="grid min-h-space-7 coarse:min-h-c-btn-h-lg coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
-              ><Skeleton class="h-icon-md" width="title" /></td
+              ><Skeleton
+                height="x-height"
+                radius="line"
+                type="label"
+                width="title"
+              /></td
             >
-            <td><Skeleton class="h-icon-lg" width="short" /></td>
+            <td><Skeleton height="badge" width="short" /></td>
             <td data-slot="age" class="workflow-cards:col-1"
-              ><Skeleton class="h-icon-md" width="label" /></td
+              ><Skeleton
+                height="x-height"
+                radius="line"
+                type="meta"
+                width="label"
+              /></td
             >
             <td data-slot="count" class="num workflow-cards:hidden"
-              ><Skeleton class="h-icon-md" width="glyph" /></td
+              ><Skeleton
+                height="x-height"
+                radius="line"
+                type="meta"
+                width="glyph"
+              /></td
             >
             <td class="workflow-cards:col-2 workflow-cards:row-2"
-              ><Skeleton class="h-space-8" width="word" /></td
+              ><Skeleton height="control" width="word" /></td
             >
           </tr>
         {/each}

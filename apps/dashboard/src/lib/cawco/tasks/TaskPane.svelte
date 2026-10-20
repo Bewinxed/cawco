@@ -466,7 +466,7 @@
             </span>
           {/if}
         {:else}
-          <Skeleton class="h-c-btn-h-sm w-c-task-stage-skeleton-w" />
+          <Skeleton class="w-c-task-stage-skeleton-w" height="control-sm" />
         {/if}
       </div>
       {#if titleDraft !== null}
@@ -598,10 +598,10 @@
         class="flex flex-col gap-space-2 mx-(--pane-inline)"
       >
         <Skeleton class="w-full" height="plot" radius="tile" />
-        <Skeleton class="mt-space-2 h-icon-md w-1/3" />
-        <Skeleton class="h-space-4 w-full" />
-        <Skeleton class="h-space-4 w-11/12" />
-        <Skeleton class="h-space-4 w-3/5" />
+        <Skeleton class="mt-space-2 w-1/3" line="label" />
+        <Skeleton class="w-full" line="body" />
+        <Skeleton class="w-11/12" line="body" />
+        <Skeleton class="w-3/5" line="body" />
       </div>
     {:else if view === "review"}
       <TaskReview

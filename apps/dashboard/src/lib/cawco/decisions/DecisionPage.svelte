@@ -301,7 +301,7 @@
       <p class="type-body py-space-5 text-ink-muted">{words.gone}</p>
     {:else}
       <div aria-hidden="true" class="p-space-5">
-        <Skeleton class="h-space-3 w-2/5" data-slot="block" radius="text" />
+        <Skeleton class="w-2/5" data-slot="block" line="body" radius="text" />
       </div>
     {/if}
   </div>
