@@ -3968,6 +3968,13 @@ export class OpencodeHarness implements Harness {
       if (this.#sessions.get(session.instanceId) !== session) {
         return;
       }
+      // The jobs that ended while nothing was subscribed go first: a missed
+      // turn's end, read next, says what still runs.
+      await session.reconcileBackground().catch((error: unknown) => {
+        console.warn(
+          `[opencode] ${session.instanceId}: its background jobs were not reconciled: ${errorText(error)}`
+        );
+      });
       await Promise.all([session.watchResumedTurn(), session.reconcileGates()]);
     }).finally(() => {
       this.#reconcileJobs.delete(session);
@@ -4956,6 +4963,10 @@ export class OpencodeHarness implements Harness {
     // turn's end, which the reconcile after its subscription comes up pays.
     if (spec.resume && !spec.resume.fork && turnWasOpen(sessionId)) {
       session.inheritOpenTurn();
+    }
+    // Its jobs in the background run on in the server; their ends wake it.
+    if (spec.resume && !spec.resume.fork) {
+      session.inheritBackground();
     }
     if (spec.reattachOnly === true) {
       session.sleepAfterRecovery();

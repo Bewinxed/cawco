@@ -14,6 +14,13 @@
  *   runs, past the push's look grace and its burst. Once the command ends,
  *   its end starts the session's next turn, which ends with nothing left:
  *   then one turn push goes.
+ * - (e) OpenCode's background job outlives an agent restart: the agent is
+ *   restarted while the job runs, and the turn the restarted agent sees end
+ *   before the job does sends no push; the turn the job's end starts sends
+ *   one (opencode-session.ts `inheritBackground`, `reconcileBackground`).
+ * - (f) OpenCode's background job ends while the agent is down: the
+ *   restarted agent reads the job's end from OpenCode's store, so a turn
+ *   after the restart pushes once.
  *
  * Delegating (legs a and b) cuts workspaces, so those run on the host:
  * turn-push-delegates.
@@ -41,6 +48,23 @@ const BG_SECONDS = 50;
 const QUIET_WATCH_MS = 25_000;
 /** How long a push that must come is waited for after its turn's end. */
 const PUSH_WAIT_MS = 60_000;
+
+/**
+ * How long the restart leg's command runs: past its first turn, an agent
+ * restart, a turn after it and that turn's quiet window.
+ */
+const RESTART_SECONDS = 150;
+const RESTART_TAG = "PROBE-RESTART-opencode";
+const AFTER_RESTART_TAG = "PROBE-AFTER-RESTART-opencode";
+/** How long the down leg's command runs: it ends while the agent is down. */
+const DOWN_SECONDS = 20;
+const DOWN_TAG = "PROBE-DOWN-opencode";
+const AFTER_DOWN_TAG = "PROBE-AFTER-DOWN-opencode";
+/** Each restart leg's opening words, and how long its command runs. */
+const RESTART_LEGS = new Map([
+  [RESTART_TAG, RESTART_SECONDS],
+  [DOWN_TAG, DOWN_SECONDS],
+]);
 
 const plainTag = (harness: Harness) => `PROBE-PLAIN-${harness}`;
 const bgTag = (harness: Harness) => `PROBE-BG-${harness}`;
@@ -142,9 +166,10 @@ export const atRest = async (fleet: KitFleet, id: string): Promise<void> => {
 
 /** The background command each harness's shell runs, as its tool takes it. */
 const backgroundCall = (
-  offered: readonly string[]
+  offered: readonly string[],
+  seconds: number
 ): { input: object; name: string } | undefined => {
-  const command = `sleep ${BG_SECONDS} && echo PROBE-BG-done`;
+  const command = `sleep ${seconds} && echo PROBE-BG-done`;
   if (offered.includes("Bash")) {
     return {
       name: "Bash",
@@ -166,19 +191,31 @@ const backgroundCall = (
 
 /** Whether each harness's background leg has made its call, by harness. */
 const called = new Set<Harness>();
+/** The restart legs whose session has started its command, by opening words. */
+const restartsCalled = new Set<string>();
 
 /**
  * Every session answers "ok"; a background leg's, asked its words the
- * first time, starts its command first.
+ * first time, starts its command first, as does each restart leg's.
  */
 const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return { everyMs: 5, words: ["Probe title"] };
   }
+  const restart = [...RESTART_LEGS].find(
+    ([tag]) => request.all.includes(tag) && !restartsCalled.has(tag)
+  );
+  const restartCall = restart
+    ? backgroundCall(request.toolNames, restart[1])
+    : undefined;
+  if (restart && restartCall && !request.afterTool) {
+    restartsCalled.add(restart[0]);
+    return { everyMs: 5, words: [], tool: restartCall };
+  }
   const leg = HARNESSES.find(
     (harness) => request.all.includes(bgTag(harness)) && !called.has(harness)
   );
-  const call = leg ? backgroundCall(request.toolNames) : undefined;
+  const call = leg ? backgroundCall(request.toolNames, BG_SECONDS) : undefined;
   if (leg && call && !request.afterTool) {
     called.add(leg);
     return { everyMs: 5, words: [], tool: call };
@@ -267,6 +304,119 @@ const backgroundLeg = async (
   );
 };
 
+/**
+ * (e) An OpenCode job in the background outlives an agent restart: the
+ * restarted agent's turn that ends while it runs sends no push; the turn
+ * its end starts sends one.
+ */
+const restartLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  phone: Phone,
+  cwd: string
+): Promise<void> => {
+  const id = await fleet.spawn("opencode", "Restart opencode", cwd);
+  const then = await fleet.logs("hub");
+  await fleet.send(id, `${RESTART_TAG}: start the long command.`);
+  const startedAt = Date.now();
+  await until(
+    "(e) the restart leg's command called",
+    () => restartsCalled.has(RESTART_TAG) || null,
+    Boolean,
+    120_000
+  );
+  await atRest(fleet, id);
+  await fleet.stop("agent");
+  fleet.launch("agent");
+  await fleet.agentUp();
+  await fleet.send(id, `${AFTER_RESTART_TAG}: say ok while it runs.`);
+  await until(
+    "(e) the turn after the restart answered",
+    () =>
+      fleet.seen.some(
+        (one) => one.tools && one.all.includes(AFTER_RESTART_TAG)
+      ) || null,
+    Boolean,
+    180_000
+  );
+  await atRest(fleet, id);
+  const restedAt = Date.now();
+  await Bun.sleep(QUIET_WATCH_MS);
+  const quietPushes = await phone.turns(id);
+  const elapsed = (Date.now() - startedAt) / 1000;
+  kit.check(
+    "(e) opencode: after an agent restart, its turn ended with its background command running, and no turn push went",
+    quietPushes === 0 && elapsed < RESTART_SECONDS,
+    `${quietPushes} turn push(es) by ${elapsed.toFixed(0)} s into a ${RESTART_SECONDS} s command (the turn after the restart ended ${((restedAt - startedAt) / 1000).toFixed(0)} s in); hub: ${await notifyLines(fleet, id, then)}`
+  );
+  const pushes = await until(
+    "(e) the push after the command ended",
+    () => phone.turns(id),
+    (count) => count > 0,
+    RESTART_SECONDS * 1000 + PUSH_WAIT_MS
+  ).catch(() => phone.turns(id));
+  kit.check(
+    "(e) opencode: once its command ended, the turn that ended with nothing left pushed once",
+    pushes === 1,
+    `${pushes} turn push(es); hub: ${await notifyLines(fleet, id, then)}`
+  );
+};
+
+/**
+ * (f) An OpenCode job in the background ends while the agent is down: the
+ * restarted agent reads its end from OpenCode's store, so a turn after the
+ * restart, with nothing left of its own, pushes once.
+ */
+const downLeg = async (
+  kit: Kit,
+  fleet: KitFleet,
+  phone: Phone,
+  cwd: string
+): Promise<void> => {
+  const id = await fleet.spawn("opencode", "Down opencode", cwd);
+  await fleet.send(id, `${DOWN_TAG}: start the short command.`);
+  const startedAt = Date.now();
+  await until(
+    "(f) the down leg's command called",
+    () => restartsCalled.has(DOWN_TAG) || null,
+    Boolean,
+    120_000
+  );
+  await atRest(fleet, id);
+  await fleet.stop("agent");
+  // The command ends, and OpenCode files its end, while no agent runs.
+  await Bun.sleep(
+    Math.max(0, startedAt + DOWN_SECONDS * 1000 + 10_000 - Date.now())
+  );
+  fleet.launch("agent");
+  await fleet.agentUp();
+  // Any push for a turn the agent missed lands before the count starts.
+  await Bun.sleep(QUIET_WATCH_MS);
+  const before = await phone.turns(id);
+  const then = await fleet.logs("hub");
+  await fleet.send(id, `${AFTER_DOWN_TAG}: say ok.`);
+  await until(
+    "(f) the turn after the restart answered",
+    () =>
+      fleet.seen.some((one) => one.tools && one.all.includes(AFTER_DOWN_TAG)) ||
+      null,
+    Boolean,
+    180_000
+  );
+  await atRest(fleet, id);
+  const pushes = await until(
+    "(f) the push after the restart",
+    async () => (await phone.turns(id)) - before,
+    (count) => count > 0,
+    PUSH_WAIT_MS
+  ).catch(async () => (await phone.turns(id)) - before);
+  kit.check(
+    "(f) opencode: its command ended while the agent was down, and its turn after the restart pushed once",
+    pushes === 1,
+    `${pushes} turn push(es) for the turn after the restart; hub: ${await notifyLines(fleet, id, then)}`
+  );
+};
+
 const spec: Spec = {
   name: "turn-push",
   run: async (kit: Kit) => {
@@ -291,6 +441,8 @@ const spec: Spec = {
         await plainLeg(kit, fleet, device, harness, cwd);
         await backgroundLeg(kit, fleet, device, harness, cwd);
       }
+      await restartLeg(kit, fleet, device, cwd);
+      await downLeg(kit, fleet, device, cwd);
       kit.note(`every push the phone took: ${device.ids().join(", ")}`);
     } finally {
       await device.stop();

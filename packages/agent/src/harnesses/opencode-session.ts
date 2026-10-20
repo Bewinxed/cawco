@@ -441,6 +441,38 @@ export const turnWasOpen = (sessionId: string): boolean =>
   loadOpenTurns().has(sessionId);
 
 /**
+ * Each OpenCode session's work running in the background
+ * (`OpencodeSession` `#background`), by its OpenCode session id. On disk
+ * because the jobs run on in the server across an agent restart, and the
+ * process that reattaches the session reads them here
+ * (`inheritBackground`), then drops those whose completion note the server
+ * stored meanwhile (`reconcileBackground`).
+ */
+const BACKGROUND_PATH = join(OPENCODE_DIR, "cawco-background.json");
+let backgroundJobs: Map<string, readonly string[]> | undefined;
+
+const loadBackground = (): Map<string, readonly string[]> => {
+  backgroundJobs ??= new Map(
+    Object.entries(
+      readRecordSync<Record<string, string[]>>(BACKGROUND_PATH) ?? {}
+    )
+  );
+  return backgroundJobs;
+};
+
+/** Records `sessionId`'s background jobs as they stand; none drops its entry. */
+const keepBackground = (sessionId: string, jobs: ReadonlySet<string>): void => {
+  const next = new Map(loadBackground());
+  if (jobs.size > 0) {
+    next.set(sessionId, [...jobs]);
+  } else if (!next.delete(sessionId)) {
+    return;
+  }
+  writeStateFileSync(BACKGROUND_PATH, JSON.stringify(Object.fromEntries(next)));
+  backgroundJobs = next;
+};
+
+/**
  * How a turn the stream missed ended, from what history holds after its
  * prompt: the outcome its `idle` message records; for a turn 1.x ran and
  * 2.0 converted, which keeps no `idle`, its last answer completed (ended on
@@ -1473,27 +1505,93 @@ export class OpencodeSession implements HarnessSession {
     if (metadata?.status !== "running") {
       return;
     }
+    let job: string | undefined;
     if (typeof metadata.shellID === "string") {
-      this.#background.add(`shell:${metadata.shellID}`);
+      job = `shell:${metadata.shellID}`;
     } else if (typeof metadata.sessionID === "string") {
-      this.#background.add(`subagent:${metadata.sessionID}`);
+      job = `subagent:${metadata.sessionID}`;
+    }
+    if (job && !this.#background.has(job)) {
+      this.#background.add(job);
+      keepBackground(this.#opencodeSessionId(), this.#background);
     }
   }
 
   /**
    * A job in the background ended: OpenCode puts its completion note in the
-   * session's inbox (`session.inbox.enqueued`, a `synthetic` item), whose
-   * metadata names it (`source` `shell` with its `shellID`, `subagent` with
-   * its `childID`), and that note starts the session's next turn.
+   * session's inbox (`session.inbox.enqueued`, a `synthetic` item) and its
+   * history (a `synthetic` message), whose metadata names it (`source`
+   * `shell` with its `shellID`, `subagent` with its `childID`); that note
+   * starts the session's next turn.
    */
   #backgroundEnded(metadata: Record<string, unknown> | undefined): void {
+    let job: string | undefined;
     if (metadata?.source === "shell" && typeof metadata.shellID === "string") {
-      this.#background.delete(`shell:${metadata.shellID}`);
+      job = `shell:${metadata.shellID}`;
     } else if (
       metadata?.source === "subagent" &&
       typeof metadata.childID === "string"
     ) {
-      this.#background.delete(`subagent:${metadata.childID}`);
+      job = `subagent:${metadata.childID}`;
+    }
+    if (job && this.#background.delete(job)) {
+      keepBackground(this.#opencodeSessionId(), this.#background);
+    }
+  }
+
+  /**
+   * Resumed by this process after another ran it: the jobs that process
+   * left running in the background ({@link keepBackground}), before any
+   * event of this session reaches here.
+   */
+  inheritBackground(): void {
+    for (const job of loadBackground().get(this.#opencodeSessionId()) ?? []) {
+      this.#background.add(job);
+    }
+  }
+
+  /**
+   * Drops the jobs that ended while nothing here was subscribed: each one's
+   * completion note is a `synthetic` message in the session's history.
+   * Read newest first, a page at a time (`message.list`, `type:
+   * "synthetic"`), until every job held is accounted for or history runs
+   * out. A read that fails leaves the jobs as they are, said on the log; the
+   * next reconcile reads again.
+   */
+  async reconcileBackground(): Promise<void> {
+    let cursor: string | undefined;
+    while (this.#background.size > 0) {
+      const page = cursor;
+      // biome-ignore lint/performance/noAwaitInLoops: each page's cursor comes from the one before it
+      const read = await askOpencode(
+        (options) =>
+          this.#client.message.list(
+            {
+              sessionID: this.#opencodeSessionId(),
+              type: "synthetic",
+              order: "desc",
+              limit: 100,
+              ...(page ? { cursor: page } : {}),
+            },
+            options
+          ),
+        this.#lifetime.signal
+      );
+      if (read.kind === "unanswered") {
+        console.warn(
+          `[opencode] ${this.instanceId}: its background jobs were not reconciled: ${notAnswered("the session's completion notes", read)}`
+        );
+        return;
+      }
+      for (const message of read.value.data) {
+        if (message.type === "synthetic") {
+          this.#backgroundEnded(message.metadata);
+        }
+      }
+      cursor = read.value.cursor.next ?? undefined;
+      if (!cursor) {
+        return;
+      }
     }
   }
 
