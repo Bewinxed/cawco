@@ -1335,6 +1335,29 @@ const lookOnce = (
   }
 };
 
+/**
+ * The heavy runs holding slots on this machine now, each once, as their
+ * records name them ({@link describeRuns}), read under the gate's lock as
+ * admission reads them ({@link lookAtSlots}, taking none); undefined when
+ * another run holds the gate this tick. The agent's hold on idle sleep counts
+ * these (agent awake.ts).
+ */
+export const heldHeavyRuns = (): string[] | undefined => {
+  const dir = slotsDir();
+  mkdirSync(dir, { recursive: true });
+  const gate = openLockFile(join(dir, "gate"), true);
+  if (!tryLock(gate)) {
+    closeSync(gate);
+    return;
+  }
+  try {
+    const { held } = lookAtSlots(dir, slotCount(), 0);
+    return [...new Set(held.map(describe))];
+  } finally {
+    unlock(gate);
+  }
+};
+
 /** Lets a run's taken slots go. */
 export const releaseHeavySlot = (taken: Pick<HeavyTaken, "fds">): void => {
   for (const fd of taken.fds) {

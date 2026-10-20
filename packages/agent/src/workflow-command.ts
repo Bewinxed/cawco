@@ -32,14 +32,20 @@ const EARLY_CANCEL_KEPT_MS = 24 * 60 * 60 * 1000;
 /** Why the runner ended a command itself. */
 type Stop = "expired" | "overflowed" | "cancelled";
 
-/** A command still running: the run the hub named it, and how it is ended. */
+/** A command still running: the run the hub named it, what it is in words, and how it is ended. */
 interface Running {
   readonly runId: string | undefined;
   readonly stop: (why: Stop) => void;
+  /** The landing gate's step it is ({@link CommandRun.gate}), else the command as {@link shownCommand} shows it. */
+  readonly words: string;
 }
 
 /** Every command still running. */
 const live = new Set<Running>();
+
+/** Every command the hub asked of this machine still running, in words: what the agent's hold on idle sleep counts (awake.ts). */
+export const commandsRunning = (): string[] =>
+  [...live].map((running) => running.words);
 
 /**
  * Runs cancelled before they ran (queued behind another command in their
@@ -382,6 +388,7 @@ export async function runWorkflowCommand(
     let said = "";
     const running: Running = {
       runId: named?.id,
+      words: named?.gate ?? `the command \`${shownCommand(cmd)}\``,
       stop: (why) => {
         // A spawn that made no process leaves nothing to signal.
         const leader = spawnedPid(child);

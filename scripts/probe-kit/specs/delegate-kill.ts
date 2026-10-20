@@ -27,6 +27,11 @@
  * f1. Its first foreground command also sends SIGTERM to a `sleep 600.051`
  *     the probe runs on the host, the user's own, outside every boundary:
  *     the boundary keeps its signals to itself, and that sleep runs on.
+ * w1. Linux: while its first commands run, within 20 s logind lists one
+ *     idle-sleep hold of the agent's (`systemd-inhibit --list`: CawCo,
+ *     idle:sleep, block-weak, its process under the fleet's HOME; agent
+ *     awake.ts).
+ * w2. Linux: within 20 s of s1, with nothing left running, it lists none.
  *
  * The hub's landing push is never cut by a delegate's interrupt (on macOS a
  * sweep leaves the agent's own commands' process trees running, read by
@@ -180,6 +185,8 @@ const PRE_TAG = {
   gone: { runner: "600.071", child: "600.072" },
   live: { runner: "600.073", child: "600.074" },
 } as const;
+/** How long the agent's hold on idle sleep may take to come or go: two of its looks (agent awake.ts `LOOK_MS`). */
+const AWAKE_MS = 20_000;
 /** What keeps the fourth delegate's turn, and so its workspace, open through the agent's restart. */
 const LIVE_TURN = "600.081";
 
@@ -423,6 +430,37 @@ const said = (found: Map<string, number[]>): string =>
 const of = (found: Map<string, number[]>, mark: Markers): string[] =>
   Object.values(mark).filter((one) => found.has(one));
 
+/**
+ * A row of `systemd-inhibit --list` that is a CawCo agent's hold on idle
+ * sleep (agent awake.ts): its who, uid, user, pid (the `systemd-inhibit`
+ * holding it), command, what, why and mode.
+ */
+const AWAKE_ROW =
+  /^\s*CawCo\s+\d+\s+\S+\s+(\d+)\s+\S+\s+idle:sleep\s+.*\sblock-weak\s*$/;
+
+/**
+ * Linux: logind's inhibitors now (`systemd-inhibit --list`), and those of
+ * them that are the scratch agent's: CawCo's idle-sleep holds whose process
+ * runs with the fleet's HOME, so the host's own agent's never count.
+ */
+const awakeHolds = async (
+  home: string
+): Promise<{ listing: string; mine: string[] }> => {
+  const listing = (
+    await Bun.$`systemd-inhibit --list --no-pager`.nothrow().quiet()
+  ).stdout.toString();
+  const rows = await Promise.all(
+    listing.split("\n").map(async (line) => {
+      const pid = AWAKE_ROW.exec(line)?.[1];
+      const environ = pid
+        ? await readFile(`/proc/${pid}/environ`, "utf8").catch(() => "")
+        : "";
+      return environ.split("\0").includes(`HOME=${home}`) ? [line.trim()] : [];
+    })
+  );
+  return { listing: listing.trim(), mine: rows.flat() };
+};
+
 /** One work item's row, as a leg reads its end. */
 interface ItemRow {
   error: string | null;
@@ -579,6 +617,8 @@ const firstLegs = async (rig: Rig): Promise<void> => {
       ms
     ).catch(() => alive());
 
+  /** w1 and w2 read logind, which only Linux has. */
+  const linux = process.platform === "linux";
   // f1's witness: the user's own process on the host, in a session of its own.
   const witness = Bun.spawn(
     ["perl", "-MPOSIX", "-e", "POSIX::setsid(); exec @ARGV", "sleep", WITNESS],
@@ -599,6 +639,20 @@ const firstLegs = async (rig: Rig): Promise<void> => {
     witnessLives,
     `the probe's sleep ${WITNESS} on the host (pid ${hostWitness}) is ${witnessLives ? "alive" : "gone"} after the delegate's command sent it SIGTERM`
   );
+  // w1
+  if (linux) {
+    const held = await until(
+      "the agent's hold on idle sleep listed",
+      () => awakeHolds(rig.home),
+      ({ mine }) => mine.length === 1,
+      AWAKE_MS
+    ).catch(() => awakeHolds(rig.home));
+    check(
+      "w1: while its commands run, logind lists the agent's one idle-sleep hold (CawCo, idle:sleep, block-weak)",
+      held.mine.length === 1,
+      `systemd-inhibit --list:\n${held.listing}`
+    );
+  }
   const before = await alive();
   const interruptedAt = Date.now();
   await command("interrupt", dId);
@@ -641,6 +695,21 @@ const firstLegs = async (rig: Rig): Promise<void> => {
     of(afterStop, legTwo).length === 0,
     `${Math.round((Date.now() - stoppedAt) / 1000)} s after: ${said(afterStop)}`
   );
+
+  // w2
+  if (linux) {
+    const left = await until(
+      "the agent's hold on idle sleep gone",
+      () => awakeHolds(rig.home),
+      ({ mine }) => mine.length === 0,
+      AWAKE_MS
+    ).catch(() => awakeHolds(rig.home));
+    check(
+      "w2: once nothing runs, logind lists no idle-sleep hold of the agent's",
+      left.mine.length === 0,
+      `${Math.round((Date.now() - stoppedAt) / 1000)} s after stop_delegate, systemd-inhibit --list:\n${left.listing}`
+    );
+  }
 };
 
 /** Whether `path` is there. */

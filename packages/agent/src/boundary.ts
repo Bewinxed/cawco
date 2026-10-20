@@ -3352,6 +3352,41 @@ const commandsIn = async (
 };
 
 /**
+ * The workspaces with a command running in their boundary now, or on its way
+ * in: {@link commandsIn} asked of each generation's marks, the current one's
+ * and every retiring one's, each marked pid's command line read alone rather
+ * than the machine's whole process list. The agent's hold on idle sleep
+ * counts these (awake.ts).
+ */
+export const workspacesWithCommands = async (): Promise<string[]> => {
+  const ids = await readdir(workspacesDir()).catch(() => [] as string[]);
+  const found = await Promise.all(
+    ids.map(async (id) => {
+      const generations = [
+        await readHeld(id).catch(() => undefined),
+        ...(await readRetiring(id)),
+      ].flatMap((held) => (held ? [held.gen] : []));
+      for (const gen of generations) {
+        // biome-ignore lint/performance/noAwaitInLoops: a workspace's generations are one or two, and the first with a command settles it
+        const marks = await readdir(commandsOf(id, gen)).catch(
+          () => [] as string[]
+        );
+        const seen = await Promise.all(
+          marks.map(async (name) => ({
+            pid: Number(name),
+            command: (await commandLineOf(Number(name))) ?? "",
+          }))
+        );
+        if (marks.length > 0 && (await commandsIn(seen, id, gen)).length > 0) {
+          return id;
+        }
+      }
+    })
+  );
+  return found.filter((id): id is string => id !== undefined);
+};
+
+/**
  * Linux: the ports the work of the older boundary `old` listens on, when a
  * newer generation of the workspace whose sandbox runs ({@link sandboxes})
  * listens on every one of them: its work was started again there (a
