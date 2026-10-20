@@ -34,6 +34,10 @@
    * draws once (motion/hung-shadow) as its border-image, under its own
    * surface (the `hung-surface` element), not a box-shadow; on a phone its
    * trailing side is the screen's edge, square with no edge drawn there.
+   * A phone is the `shell` container under the desk line (`@max-desk/shell`,
+   * as BarGlass reads it), never the window's: the card stands inside the
+   * shell it hangs in, so it takes its form from that shell's width in the
+   * app, in a canvas frame and in an embed alike.
    *
    * A card rehearsing its next face (GlassCard's `data-rehearsing`) is laid
    * out unseen.
@@ -47,7 +51,7 @@
           "motion-safe:will-change-[translate] motion-safe:not-data-[shown]:[translate:0_calc(-100%-var(--hang-reach,0px))]",
       },
       glass: {
-        true: "shadow-none max-desk:rounded-ee-none max-desk:after:border-e-0",
+        true: "@max-desk/shell:rounded-ee-none shadow-none @max-desk/shell:after:border-e-0",
       },
       /** The tab's menu hangs on the tab's own surface, as the session card's head is. */
       surface: { recess: "[--hang-surface:var(--surface-recess)]" },
@@ -87,7 +91,10 @@
    * A card on the bar's glass (`glass`) wears the hung shadow, the picture
    * of `--shadow-overlay-hung` the Shell draws once (motion/hung-shadow),
    * over its own surface (`hung-surface`), and on a phone its trailing side
-   * is the screen's edge, as the glass's is.
+   * is the screen's edge, as the glass's is. It is drawn where it is
+   * mounted, never portaled, so it stands in the `shell` container its site
+   * gives it (the Shell's layer, a states frame's) and takes its form from
+   * that shell's width.
    */
   import type {
     ContextMenu as ContextMenuPrimitive,
@@ -130,7 +137,10 @@
    * room under the glass. Each stands `c-pop-edge` in from the screen's edge
    * on either side (DESIGN.md, Breakpoints: popovers widen to the viewport
    * less 24px); on a phone each keeps the bar's `c-bar-phone-edge` on its
-   * leading side (the `glass` recipe squares the trailing one).
+   * leading side (the `glass` recipe squares the trailing one). The screen
+   * is the `shell` container the card stands in (Shell's, or a states
+   * frame's): its width `100cqi` and its phone `@max-desk/shell`, so a
+   * frame of a phone's width draws the phone's card on a desk's page.
    *
    * The session card (`details`, PaneTabs) holds its own head and body to
    * its edge and scrolls inside them: no padding, its overflow clipped and
@@ -139,18 +149,18 @@
    * and the safe area.
    */
   const FRAMES: Record<Frame, string> = {
-    caw: "w-(--frame-w) max-desk:w-(--frame-w-narrow) gap-0 p-space-2",
+    caw: "w-(--frame-w) @max-desk/shell:w-(--frame-w-narrow) gap-0 p-space-2",
     machines: "w-(--frame-w) gap-0",
-    jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 max-desk:h-(--frame-h) max-desk:w-(--frame-w-narrow)",
+    jump: "w-(--frame-w) max-h-(--frame-h) gap-0 p-0 @max-desk/shell:h-(--frame-h) @max-desk/shell:w-(--frame-w-narrow)",
     files: "flex w-(--frame-w) max-h-(--frame-h) flex-col gap-0 p-space-2",
     details:
       "flex max-h-[min(var(--c-details-card-max-h),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))] overflow-hidden overscroll-contain p-0 max-phone:max-h-[min(calc(100dvh-var(--c-top-bar-h)-2*var(--c-screen-margin)-var(--safe-bottom)),var(--bits-popover-content-available-height,var(--c-sheet-max-h)))]",
   };
-  /** The viewport less a floating card's edge each side. */
-  const ROOM = "calc(100vw - 2 * var(--c-screen-margin))";
-  /** The viewport less the phone bar's leading edge and the trailing safe area. */
+  /** The shell less a floating card's edge each side. */
+  const ROOM = "calc(100cqi - 2 * var(--c-screen-margin))";
+  /** The shell less the phone bar's leading edge and the trailing safe area. */
   const ROOM_NARROW =
-    "calc(100vw - var(--c-bar-phone-edge) - env(safe-area-inset-right, 0px))";
+    "calc(100cqi - var(--c-bar-phone-edge) - env(safe-area-inset-right, 0px))";
   /** The numbers each face's frame reads (`--frame-w`, `--frame-w-narrow`, `--frame-h`). */
   const FRAME_SIZES: Record<
     Frame,
@@ -518,6 +528,7 @@
 <Content
   data-glass-card={glass || undefined}
   {...kitSurface ? { motion: "hang" as const } : {}}
+  {...glass ? { portalProps: { disabled: true } } : {}}
   {...rest}
   class={cn(
     floatingSurface({ motion: "hang" }),

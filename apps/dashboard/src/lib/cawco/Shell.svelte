@@ -1398,8 +1398,17 @@
     </div>
   </div>
 
-  <!-- The glass's one card: Caw's panel, the machines, Jump or Files (bar-glass). -->
-  <GlassCard />
+  <!-- The glass's one card: Caw's panel, the machines, Jump or Files
+       (bar-glass). It takes its form from a `shell` container as the glass
+       does (HangCard `@max-desk/shell`, `100cqi`): this layer, as wide as
+       the shell above and drawn in place, not portaled. Not inside the shell
+       itself: a container is a stacking context, so a held toast or a sheet
+       on the page's own layers would stand over the card there; here it
+       stands on the floating layer as a portaled card did, at the window's
+       origin, so its fixed place is the window's. -->
+  <div class="@container/shell fixed inset-x-0 top-0 z-(--layer-float)">
+    <GlassCard />
+  </div>
   <!-- The file chosen in Files, floating on its leading side (a desk). -->
   {#if railed}
     <FilesFloat />

@@ -45,6 +45,7 @@
     permissionAnswer,
     takeOverBrowser,
   } from "../client.svelte";
+  import { hubSeam } from "../hub-seam";
   import OriginText from "../OriginText.svelte";
   import { suggestedRule } from "../permission-summary";
   import { questionAnswer, questionDismissal } from "../question";
@@ -410,8 +411,10 @@
   const row = $derived(cawco.instanceIndex.byId.get(request.instanceId));
   /** The session's machine is offline: the ask stands, its answer waits. */
   const offline = $derived(row ? isStale(row) : false);
+  /** The hub as this card reads it: the live client's, or a states file's stand-in. */
+  const hub = hubSeam();
   /** An answer can reach the daemon that asked: the hub is live, and its machine. */
-  const reachable = $derived(cawco.hub === "connected" && !offline);
+  const reachable = $derived(hub.state === "connected" && !offline);
   const answerable = $derived(pressed === null && reachable);
 
   /**

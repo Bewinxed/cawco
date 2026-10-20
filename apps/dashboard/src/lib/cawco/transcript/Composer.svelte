@@ -116,6 +116,7 @@
   import { readAs } from "../find/mention.svelte";
   import { mcpSignInIntent, signInToMcp } from "../fleet";
   import CawFace from "../home/CawFace.svelte";
+  import { hubSeam } from "../hub-seam";
   import { newId } from "../id";
   import { carriesFiles } from "../internal-drag";
   import { minimizedAsks } from "../minimized-asks.svelte";
@@ -293,9 +294,11 @@
     attach?: boolean;
   } = $props();
 
+  /** The hub this composer reads: the live client's, or a states file's stand-in. */
+  const hub = hubSeam();
   $effect(() => {
     if (suggest) {
-      loadSuggestSetting();
+      loadSuggestSetting(hub);
     }
   });
 

@@ -44,6 +44,10 @@
    * opens"), so it is opened once, unseen, just after the page has loaded,
    * and Caw's panel is what it holds at rest.
    *
+   * It is drawn where it is mounted, as every glass card is (HangCard
+   * `glass`): in the Shell's `shell` container layer, whose width its frame
+   * and its phone form read.
+   *
    * It is placed `fixed`, as the bar it hangs from stands. bits-ui places a
    * card only while it is open (use-floating: no `autoUpdate` while shut),
    * so the shut card keeps the place it had with the face it closed on:

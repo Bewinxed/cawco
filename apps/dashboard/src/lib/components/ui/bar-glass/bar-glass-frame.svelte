@@ -5,24 +5,41 @@
    * what the bar hands the glass, so no store is read. The head is a circle
    * in an item's box where Caw's head stands; Jump's glyph is the one
    * control, gone on the phone as the bar's is.
+   *
+   * What hangs from the glass (`children`, HangCard's frame) stands in the
+   * same shell, drawn in place: the shell is its fixed place's box
+   * (`contain: layout`, which a container has already, said so floating-ui
+   * places the card in it), as tall as `height` asks.
    */
+  import type { Snippet } from "svelte";
   import { IconSearch, IconServer } from "#lib/icons.js";
   import BarGlass from "./bar-glass.svelte";
 
   let {
     width,
+    height,
     joined = false,
     instant = false,
+    shell = $bindable(null),
+    children,
   }: {
     /** The frame's width, px: the shell container's. */
     width: number;
+    /** The frame's least height, px: room for what hangs from the glass. */
+    height?: number;
     joined?: boolean;
     instant?: boolean;
+    /** The shell container. */
+    shell?: HTMLElement | null;
+    /** What hangs from the glass, in the shell. */
+    children?: Snippet;
   } = $props();
 </script>
 
 <div
-  class="@container/shell w-(--frame-w) bg-surface-recess pbe-space-8"
+  bind:this={shell}
+  class="@container/shell contain-layout w-(--frame-w) min-h-(--frame-h) bg-surface-recess pbe-space-8"
+  style:--frame-h={height === undefined ? undefined : `${height}px`}
   style:--frame-w={`${width}px`}
 >
   <div
@@ -63,4 +80,5 @@
       </BarGlass>
     </div>
   </div>
+  {@render children?.()}
 </div>

@@ -485,13 +485,18 @@ function globalStyles(): string[] {
  * from its `render` when it has one (the framework's own idiom), else its
  * component with its args, and wrapped in its decorators, the story's
  * innermost and then the meta's, as Storybook's `decorateStory` does: each
- * is `(Story, context)`. Svelte's props are a `$state` object
+ * is `(Story, context)`. A decorator is the story's ancestor as Storybook
+ * nests them: what it sets in Svelte's context (`setContext`, a stand-in a
+ * states file provides) is the context the story inside it mounts with
+ * (`getAllContexts` where its children render, `mount`'s `context`), so
+ * each frame's component reads its own decorator's, never a store the
+ * frames on one page share. Svelte's props are a `$state` object
  * (`cawco:stage/svelte-props.js`, compiled by the project's own Svelte),
  * as its docs pass reactive props to `mount`; React's and Preact's render
  * again on the same root; Vue's and Solid's are their own reactive objects.
  */
 const ADAPTERS: Record<Framework, string> = {
-  svelte: `import { createRawSnippet, flushSync, mount, unmount } from "svelte";
+  svelte: `import { createRawSnippet, flushSync, getAllContexts, mount, unmount } from "svelte";
 import { reactive } from "${VIRTUAL_STAGE}svelte-props.js";
 export function mountStory(target, s) {
   const inner = () => (s.render ? s.render(s.args, s.context) : { Component: s.component, props: s.args }) ?? {};
@@ -515,14 +520,14 @@ export function mountStory(target, s) {
     },
   };
 }
-function mountSvelte(target, { Component, props = {}, child }) {
+function mountSvelte(target, { Component, props = {}, child }, context) {
   if (child) {
     props.children = createRawSnippet(() => ({
       render: () => '<div style="display:contents"></div>',
-      setup: (el) => mountSvelte(el, child),
+      setup: (el) => mountSvelte(el, child, getAllContexts()),
     }));
   }
-  const instance = mount(Component, { target, props });
+  const instance = mount(Component, { target, props, context });
   return () => unmount(instance);
 }`,
   vue: `import { createApp, h, reactive } from "vue";

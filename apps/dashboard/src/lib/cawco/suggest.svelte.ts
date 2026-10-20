@@ -5,6 +5,7 @@
  */
 
 import { hubRefusal } from "#lib/cawco/hub-read.js";
+import type { HubSeam } from "./hub-seam";
 import { send } from "./project-tasks";
 
 /**
@@ -45,15 +46,18 @@ export const suggestions = $state({ enabled: false });
 
 let loaded = false;
 
-/** Reads the setting the first time a composer needs it. */
-export function loadSuggestSetting(): void {
+/**
+ * Reads the setting the first time a composer needs it, through the hub
+ * that composer reads (hub-seam: the network, or a states file's stand-in).
+ */
+export function loadSuggestSetting(hub: HubSeam): void {
   if (loaded) {
     return;
   }
   loaded = true;
   // A hub away or restarting answers no setting: suggestions stay off, and
   // the read says why as every failed read does.
-  send<JevState>("/api/jev").then(
+  hub.read<JevState>("/api/jev").then(
     (state) => {
       suggestions.enabled = state.route !== null && state.suggestWhileTyping;
     },
