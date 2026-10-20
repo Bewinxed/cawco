@@ -2467,6 +2467,15 @@ class ClaudeSession implements HarnessSession {
           if (neutral.type === "result" && this.#lastRequestAt !== undefined) {
             neutral.lastRequestAt = this.#lastRequestAt;
           }
+          // What will wake it as the turn ends: the CLI's background tasks
+          // (its `background_tasks_changed` list, ambient ones left out) and
+          // the wake-ups its `Stop` hook listed just before this result.
+          if (neutral.type === "result") {
+            neutral.wakes = {
+              background: this.#background.size,
+              scheduled: this.#crons?.all ?? 0,
+            };
+          }
           // The turn its boundary hook failed in ends failed, in the hook's
           // words: the hub fails the work item on it and tells the parent.
           if (

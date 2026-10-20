@@ -31079,7 +31079,8 @@ export const createServer = (
                             push.turnEnded(
                               turnId,
                               text || harnessError,
-                              endedAt
+                              endedAt,
+                              neutral.wakes
                             );
                           }
                         }),

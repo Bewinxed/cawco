@@ -733,6 +733,13 @@ export class OpencodeSession implements HarnessSession {
   readonly #running = new Set<string>();
   /** A {@link #moveToBackground} request is in flight. */
   #movingToBackground = false;
+  /**
+   * The session's work running in the background ({@link #backgrounded}),
+   * by job: a shell command (`shell:<shellID>`) or a subagent
+   * (`subagent:<child session id>`), until its completion note
+   * ({@link #backgroundEnded}). Each one's end starts a turn of its own.
+   */
+  readonly #background = new Set<string>();
   /** A compaction is under way, by its message id. */
   #compacting: string | undefined;
   #busy = false;
@@ -875,6 +882,7 @@ export class OpencodeSession implements HarnessSession {
       opencodeGates: this.#seenGates.size + this.#resolvedGates.size,
       opencodeChildren: this.#childInfo.size + this.#childState.size,
       opencodeBoundCalls: this.#boundCalls.size,
+      opencodeBackground: this.#background.size,
     };
   }
 
@@ -1075,6 +1083,9 @@ export class OpencodeSession implements HarnessSession {
     switch (event.type) {
       case "session.inbox.enqueued":
         this.#inbox.set(event.data.inboxID, event.data.item.type);
+        if (event.data.item.type === "synthetic") {
+          this.#backgroundEnded(event.data.item.payload.metadata);
+        }
         // Any send behind a running tool call — the person's, a hand-off, a
         // report, a rule's reply — would wait for its end.
         if (event.data.item.type === "user" && this.#running.size > 0) {
@@ -1242,6 +1253,9 @@ export class OpencodeSession implements HarnessSession {
       case "session.tool.failed": {
         const { id, assistantMessageID } = event.data;
         this.#running.delete(id);
+        if (event.type === "session.tool.success") {
+          this.#backgrounded(event.data.metadata);
+        }
         this.#toolUse(assistantMessageID, id);
         this.#toolProgress(
           assistantMessageID,
@@ -1446,6 +1460,41 @@ export class OpencodeSession implements HarnessSession {
       .finally(() => {
         this.#movingToBackground = false;
       });
+  }
+
+  /**
+   * A tool call that answered while its work runs on in the background:
+   * OpenCode 2.0's shell tool called with `background: true`, or a shell
+   * command or subagent moved there ({@link #moveToBackground}), answers
+   * with `status: "running"` and the job's id in its result's metadata
+   * (`shellID`, or the subagent's `sessionID`).
+   */
+  #backgrounded(metadata: Record<string, unknown> | undefined): void {
+    if (metadata?.status !== "running") {
+      return;
+    }
+    if (typeof metadata.shellID === "string") {
+      this.#background.add(`shell:${metadata.shellID}`);
+    } else if (typeof metadata.sessionID === "string") {
+      this.#background.add(`subagent:${metadata.sessionID}`);
+    }
+  }
+
+  /**
+   * A job in the background ended: OpenCode puts its completion note in the
+   * session's inbox (`session.inbox.enqueued`, a `synthetic` item), whose
+   * metadata names it (`source` `shell` with its `shellID`, `subagent` with
+   * its `childID`), and that note starts the session's next turn.
+   */
+  #backgroundEnded(metadata: Record<string, unknown> | undefined): void {
+    if (metadata?.source === "shell" && typeof metadata.shellID === "string") {
+      this.#background.delete(`shell:${metadata.shellID}`);
+    } else if (
+      metadata?.source === "subagent" &&
+      typeof metadata.childID === "string"
+    ) {
+      this.#background.delete(`subagent:${metadata.childID}`);
+    }
   }
 
   #turnEnded(closing?: TurnClosing): void {
@@ -1734,6 +1783,7 @@ export class OpencodeSession implements HarnessSession {
       ...(this.#lastSent === undefined
         ? {}
         : { contextTokens: this.#lastSent }),
+      wakes: { background: this.#background.size, scheduled: 0 },
     });
     this.#costBase += turnCost;
     this.#steps.clear();

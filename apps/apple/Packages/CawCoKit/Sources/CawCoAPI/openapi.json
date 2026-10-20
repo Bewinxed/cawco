@@ -53884,6 +53884,10 @@
           },
           "uuid": {
             "type": "string"
+          },
+          "wakes": {
+            "$ref": "#/components/schemas/TurnWakes",
+            "description": "What the session has arranged to wake itself as the turn ends, set by\nits harness's adapter on every result it reads ({@link TurnWakes}). The\nhub pushes a finished turn to the person only when the session waits on\nnothing of its own (push.ts `turnEnded`)."
           }
         },
         "required": [
@@ -53928,6 +53932,22 @@
           "input",
           "model",
           "output"
+        ]
+      },
+      "TurnWakes": {
+        "description": "The work a session started that will wake it later, counted as a turn\nends: `background`, its own work still running in the background (a shell\ncommand or a monitor, a subagent moved to the background), whose end\nstarts a turn of its own; `scheduled`, the wake-ups it set itself (Claude\nCode's ScheduleWakeup, CronCreate and `/loop`). Every harness says both:\npi and OpenCode schedule nothing, so theirs is 0.",
+        "type": "object",
+        "properties": {
+          "background": {
+            "type": "number"
+          },
+          "scheduled": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "background",
+          "scheduled"
         ]
       },
       "NeutralSystemMessage": {

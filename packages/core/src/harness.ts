@@ -1182,6 +1182,26 @@ export interface NeutralResultMessage {
   turnUsage?: ModelTurnUsage[];
   type: "result";
   uuid?: string;
+  /**
+   * What the session has arranged to wake itself as the turn ends, set by
+   * its harness's adapter on every result it reads ({@link TurnWakes}). The
+   * hub pushes a finished turn to the person only when the session waits on
+   * nothing of its own (push.ts `turnEnded`).
+   */
+  wakes?: TurnWakes;
+}
+
+/**
+ * The work a session started that will wake it later, counted as a turn
+ * ends: `background`, its own work still running in the background (a shell
+ * command or a monitor, a subagent moved to the background), whose end
+ * starts a turn of its own; `scheduled`, the wake-ups it set itself (Claude
+ * Code's ScheduleWakeup, CronCreate and `/loop`). Every harness says both:
+ * pi and OpenCode schedule nothing, so theirs is 0.
+ */
+export interface TurnWakes {
+  background: number;
+  scheduled: number;
 }
 
 /** Claude reports uncached input separately from cache reads and writes. */
