@@ -33,11 +33,14 @@
     wait = "ping",
     approved = "swallow",
     expired = "park",
+    screen = false,
   }: {
     stop: PairingStopName;
     wait?: QrWait;
     approved?: ApprovedTake;
     expired?: ExpiredTake;
+    /** The whole screen, as the browser shows it: the panel's own 100dvh column, its own top inset. */
+    screen?: boolean;
   } = $props();
 
   const SECOND = 1000;
@@ -202,7 +205,7 @@
   const payload = $derived(verification(FIXTURE.hub, code));
 </script>
 
-<div class="stop">
+<div class="stop" data-screen={screen || undefined}>
   {#if control}
     <div class="controls">
       <Button
@@ -231,14 +234,17 @@
 
 <style>
   /* A phone's column of the screen: the panel's own width, never the
-     viewport's height. */
+     viewport's height; on `screen`, the whole screen as the browser has it. */
   .stop {
     display: grid;
     gap: var(--space-3);
     inline-size: 34rem;
     max-inline-size: 100%;
   }
-  .stop > :global([data-slot="pairing"]) {
+  .stop[data-screen] {
+    inline-size: 100%;
+  }
+  .stop:not([data-screen]) > :global([data-slot="pairing"]) {
     min-block-size: auto;
     padding-block: var(--space-6);
     border-radius: var(--radius-lg);

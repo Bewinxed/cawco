@@ -711,6 +711,8 @@
     --c-pair-w: calc(
       6 * var(--c-otp-cell-w) + 4 * var(--space-2) + var(--space-5)
     );
+    /* Where the pairing screen's column starts: a fixed inset from the screen's top, 12% of its height between space-8 and 160px (108px on a 900px screen). Anchored, not centred, so Caw and the words stay put while the code's places open and fold under them. */
+    --c-pair-top: clamp(var(--space-8), 12dvb, 160px);
     /* A ledger's toolbar zone, holding 32px controls 11px in. */
     --c-toolbar-zone: 55px;
     --c-toolbar-ctl: 32px;
