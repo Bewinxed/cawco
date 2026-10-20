@@ -484,6 +484,22 @@ export class Clock {
     return { faults, runs: all.length, start: first.start };
   }
 
+  /**
+   * Lets `runs` play on from where they stand, while the clock goes on
+   * holding every run that starts from here (a fold that waits for a
+   * colour's runs to land is caught as it starts): call it as a catch's
+   * action.
+   */
+  async playOn(runs: readonly Run[]): Promise<void> {
+    for (const run of runs) {
+      this.held.delete(run.id);
+      // biome-ignore lint/performance/noAwaitInLoops: one run at a time
+      await this.cdp
+        .send("Animation.setPaused", { animations: [run.id], paused: false })
+        .catch(() => undefined);
+    }
+  }
+
   /** Lets the clock run again: every held run plays out from where it stands. */
   async release(): Promise<void> {
     this.within = null;
