@@ -421,6 +421,7 @@ import {
 import { actionRoutes, createActions } from "./actions";
 import { createAdminAsks } from "./admin-asks";
 import { adminTools, isAdminWrite } from "./admin-tools";
+import { createAdmission } from "./admission";
 import { appleDiagnosticsRoutes } from "./apple-diagnostics";
 import { createArtifactSessions } from "./artifact-session";
 import { createArtifactDocs } from "./artifacts/docs";
@@ -23318,12 +23319,18 @@ export const createServer = (
     return state.midTurn || expires === null || expires > Date.now();
   };
 
+  /** The one ledger every move onto an account is charged against (admission.ts): at-limit, rebalance and the wake below. */
+  const admission = createAdmission(db);
+
   /**
    * A Claude session woken for a send with its cache cold is re-placed
    * first, by its kind's strategy: its first request re-reads its whole
    * context wherever it runs, so moving it costs nothing extra (fleet
    * history, at-limit check 3: own-account cold re-writes median 1.0 of the
-   * prompt, cross-organization 0.94). The move is owed to its launch
+   * prompt, cross-organization 0.94). It is charged against the target's
+   * room like every move (admission.ts), so a reset never takes a herd of
+   * waking sessions at once; one that does not fit wakes where it is, and
+   * one admitted onto its account in this window stays. The move is owed to its launch
    * ({@link relaunchAtTurnEnd}), which carries its conversation into the
    * new account's dir; its line is written once that has. A fork stays with
    * its origin, a session a person moved stays where they put it, and only
@@ -23341,7 +23348,8 @@ export const createServer = (
       relaunchAtTurnEnd.has(row.id) ||
       db.atLimit.hold(row.id) ||
       cacheWarm(row) ||
-      !db.accounts.routing(from.provider).atLimit.move
+      !db.accounts.routing(from.provider).atLimit.move ||
+      admission.admittedHere(row)
     ) {
       return;
     }
@@ -23358,8 +23366,21 @@ export const createServer = (
     }
     const accounts = db.accounts.list();
     const toName = accountNameAmong(to, accounts);
+    const verdict = admission.check(
+      row,
+      to,
+      cacheCarries(from, to),
+      Date.now()
+    );
+    if (!verdict.ok) {
+      console.info(
+        `[rebalance] ${sessionName(row)} wakes on ${accountNameAmong(from, accounts)}, not moved to ${toName}: its prompt cache is cold, so it re-reads its context wherever it wakes, but ${verdict.words}.`
+      );
+      return;
+    }
+    admission.charge(row, to, verdict);
     console.info(
-      `[rebalance] ${sessionName(row)} moves from ${accountNameAmong(from, accounts)} to ${toName} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${toName} is where placement puts it now. Its conversation is copied there before it starts.`
+      `[rebalance] ${sessionName(row)} moves from ${accountNameAmong(from, accounts)} to ${toName} as it wakes: its prompt cache is cold, so re-reading its context costs the same on either account, and ${toName} is where placement puts it now; ${verdict.words}. Its conversation is copied there before it starts.`
     );
     relaunchAtTurnEnd.set(row.id, {
       to: to.id,
@@ -23455,6 +23476,20 @@ export const createServer = (
       db.turnUsage.accountsUsedOn(row.machineId, Date.now() - SIGNIN_PROVEN_MS),
     idle: sessionIdle,
     warm: cacheWarm,
+    admission,
+    cacheExpiresAt: (row) => {
+      const expires = promptCacheExpiresAt(row, followupState(row).lastTurnAt);
+      return expires !== null && expires > Date.now() ? expires : null;
+    },
+    // A question or permission of its pending, or a top-level session a
+    // person wrote to last.
+    waitedOn: (row) =>
+      pending.list().some((ask) => ask.instanceId === row.id) ||
+      (!row.parentInstanceId &&
+        db
+          .sendsIn(row.id, ["read", "pending", "failed"])
+          .filter((send) => !(send.owed || isKeepAlive(send.body)))
+          .at(-1)?.body.origin?.kind === "human"),
     machineName,
     noticed: (notice) => {
       rebalanceNotices.unshift(notice);

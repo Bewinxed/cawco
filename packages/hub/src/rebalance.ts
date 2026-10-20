@@ -400,6 +400,7 @@ export interface RebalancerDeps {
   lookAtHolds: () => Promise<void>;
   ports: Pick<
     AtLimitPorts,
+    | "admission"
     | "changed"
     | "idle"
     | "machineName"
@@ -533,7 +534,13 @@ export const createRebalancer = (deps: RebalancerDeps) => {
    */
   const refused = new Set<string>();
 
-  /** `row` as it stands now, when it is still on `from`, running, not Caw's own with Caw off (at-limit `stays`), owing no move, not refused unchanged, and nothing else is acting on it. */
+  /**
+   * `row` as it stands now, when it is still on `from`, running, not Caw's
+   * own with Caw off (at-limit `stays`), owing no move, not refused
+   * unchanged, not admitted onto `from` in its current window (admission.ts
+   * `admittedHere`: another account freeing never moves it again), and
+   * nothing else is acting on it.
+   */
   const candidate = (row: LimitRow, from: Account): LimitRow | undefined => {
     const fresh = rowOf(row.id);
     if (
@@ -544,7 +551,8 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       ports.owed().has(row.id) ||
       acting.has(row.id) ||
       db.atLimit.hold(row.id) ||
-      db.atLimit.compaction(row.id)
+      db.atLimit.compaction(row.id) ||
+      ports.admission.admittedHere(fresh)
     ) {
       return undefined;
     }
@@ -606,6 +614,8 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       return "owed";
     }
     if (why) {
+      // It did not move: its admission goes with it.
+      ports.admission.refund(row.id);
       refused.add(row.id);
       console.warn(
         `[rebalance] ${ports.named(row)} stays on ${accountNameAmong(from, source.forecast.accounts)}, not moved to ${accountNameAmong(target, source.forecast.accounts)} ahead of its forecast run-out: ${why.why}. It isn't tried again until its next turn ends or an account signs in, leaves, or comes back from its bench.`
@@ -615,6 +625,38 @@ export const createRebalancer = (deps: RebalancerDeps) => {
     ports.note(row, move);
     going();
     return "moved";
+  };
+
+  /**
+   * Whether `row` fits onto `target` after the moves already admitted there
+   * (admission.ts): charged when it does. Its line says so either way,
+   * after `head` ("… It").
+   */
+  const admitted = (
+    from: Account,
+    row: LimitRow,
+    target: Account,
+    head: string,
+    why: string
+  ): boolean => {
+    const verdict = ports.admission.check(
+      row,
+      target,
+      cacheCarries(from, target),
+      Date.now()
+    );
+    const targetName = accountNameAmong(target, db.accounts.list());
+    if (!verdict.ok) {
+      console.info(
+        `${head} stays, not moved to ${targetName}: ${verdict.words}. The next look at the accounts, within 5 minutes, decides again.`
+      );
+      return false;
+    }
+    ports.admission.charge(row, target, verdict);
+    console.info(
+      `${head} moves to ${targetName} between turns: ${why}; ${verdict.words}.`
+    );
+    return true;
   };
 
   /**
@@ -699,9 +741,9 @@ export const createRebalancer = (deps: RebalancerDeps) => {
       );
       return "stop";
     }
-    console.info(
-      `${head}. It moves to ${targetName} between turns: ${allowed.why}.`
-    );
+    if (!admitted(source.from, fresh, target, `${head}. It`, allowed.why)) {
+      return "skip";
+    }
     const done = await carry(source, fresh, target, warm);
     // Owed or moved, its burn leaves `from` for `target`.
     if (done !== "skip") {

@@ -14,6 +14,8 @@ export interface LimitHold {
    */
   carry?: { since: number; to: string; why: string };
   instanceId: string;
+  /** Since when it is held, epoch ms; read only, a put keeps the first. */
+  since?: number;
   /** When it goes on: the earliest moment an account takes it again; null when none was named. */
   until: number | null;
 }
@@ -71,6 +73,7 @@ const toHold = (row: HoldRow): LimitHold => ({
   instanceId: row.instanceId,
   accountId: row.accountId,
   until: row.until?.getTime() ?? null,
+  since: row.createdAt.getTime(),
   ...(row.carry ? { carry: row.carry } : {}),
 });
 

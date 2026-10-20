@@ -22,6 +22,7 @@ import {
   WORK_IN_FLIGHT,
 } from "@cawco/core/binary-updates";
 import { detach } from "@cawco/core/detach";
+import { type Admission, usdWords } from "./admission";
 import { stoppedByCawOff } from "./caw-own";
 import type { DbShape } from "./db";
 import type { LimitHold } from "./db/at-limit";
@@ -148,6 +149,11 @@ export interface Frees {
 }
 
 export interface DecideInput {
+  /**
+   * When its prompt cache lapses on its own account (keep-alive.ts
+   * `promptCacheExpiresAt`): null when it is cold already or nothing says.
+   */
+  cacheExpiresAt: number | null;
   /** The last context size its harness reported; null when none has been. */
   contextTokens: number | null;
   current: Account;
@@ -209,9 +215,13 @@ export const cacheCarries = (a: Account, b: Account): boolean =>
  * room to move to waits until the earliest moment an account takes it again
  * (its own reset, or another's that comes first); a move that keeps the
  * cache ({@link cacheCarries}: one organization) moves whole whatever the
- * size; a reset within `waitMinutes` waits; anything else moves whole, and
- * a context of `moveWholeUnderK` or more is compacted once there. A context
- * never reported is not compacted: nothing says it is large.
+ * size; a reset within `waitMinutes`, or one that comes before its prompt
+ * cache lapses, waits: waiting then costs nothing, where a move re-reads
+ * its whole context cold. Anything else moves whole, as waiting would also
+ * be a cold re-read, and a context of `moveWholeUnderK` or more is
+ * compacted once there. A context never reported is not compacted: nothing
+ * says it is large. Whether the target still has room for it after the
+ * moves already admitted there is the admission's (admission.ts).
  */
 export const decideAtLimit = (input: DecideInput): AtLimitDecision => {
   const { policy, now, resetAt, target, current, contextTokens } = input;
@@ -236,7 +246,11 @@ export const decideAtLimit = (input: DecideInput): AtLimitDecision => {
       compact: false,
     };
   }
-  if (resetAt !== null && resetAt - now <= policy.waitMinutes * MINUTE_MS) {
+  if (
+    resetAt !== null &&
+    (resetAt - now <= policy.waitMinutes * MINUTE_MS ||
+      (input.cacheExpiresAt !== null && resetAt <= input.cacheExpiresAt))
+  ) {
     return { action: "wait", until, why: "soon" };
   }
   return {
@@ -315,6 +329,10 @@ export const refusedUntil = (
 export interface AtLimitPorts {
   /** The account `row` runs on now. */
   accountOf: (row: LimitRow) => string | undefined;
+  /** The one ledger every move onto an account is charged against (admission.ts), shared with the wake path. */
+  admission: Admission;
+  /** When `row`'s prompt cache lapses on its account; null when it is cold or nothing says (keep-alive.ts `promptCacheExpiresAt`). */
+  cacheExpiresAt: (row: LimitRow) => number | null;
   /**
    * Carries out the move a person asked of `row` ({@link handMove}) now,
    * between its turns: its conversation carried whole to that account, and
@@ -410,6 +428,12 @@ export interface AtLimitPorts {
   ) => string | null;
   /** Takes the line `id` out of `row`'s transcript. */
   unnote: (row: LimitRow, id: string) => void;
+  /**
+   * Whether a person waits on `row`: a question or permission of it is
+   * pending, or it is a top-level session whose last turn a person sent.
+   * Admission takes these first.
+   */
+  waitedOn: (row: LimitRow) => boolean;
   /** Whether `row`'s prompt cache is still warm: a move off its account then re-reads it. */
   warm: (row: LimitRow) => boolean;
 }
@@ -533,6 +557,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
           ? ports.nextFree(row, current.id)
           : undefined,
       contextTokens: row.contextTokens,
+      cacheExpiresAt: ports.cacheExpiresAt(row),
       resetAt,
       now,
     });
@@ -1103,6 +1128,118 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
   };
 
+  /** The target each session was last said to have no room for, so a held one's line is said once a target. */
+  const roomSaid = new Map<string, string>();
+
+  /** What waiting costs `row` on `current`, as a move's line says it beside what moving costs. */
+  const waitSide = (
+    row: LimitRow,
+    current: Account,
+    carries: boolean,
+    cause: Cause,
+    now: number
+  ): string => {
+    const from = accountNameAmong(current, db.accounts.list());
+    if (carries) {
+      return "one organization, so its cache carries and the move re-reads nothing cold";
+    }
+    if (cause === "refused") {
+      return `${from}'s sign-in is refused, so it can't go on there at all`;
+    }
+    if (cause === "credits") {
+      return `${from} says to leave its extra usage for an account with plan room`;
+    }
+    const reset = refusedUntil(
+      db.accounts.bench(now),
+      readingOf(current.id),
+      current.id,
+      row.model,
+      now
+    );
+    const expires = ports.cacheExpiresAt(row);
+    const cold = ports.admission.check(row, current, false, now).projected;
+    return `waiting for ${from}'s reset${reset === null ? "" : ` at ${clockWords(reset)}`} would re-read it cold too (${usdWords(cold.reReadUsd)}), as its cache ${expires === null || expires <= now ? "is cold already" : `lapses at ${clockWords(expires)}, before that`}`;
+  };
+
+  /** Says why `row` waits for its own reset: it comes before its cache lapses, so waiting costs nothing. */
+  const sayWarmWait = (
+    row: LimitRow,
+    current: Account,
+    until: number,
+    now: number
+  ): void => {
+    const from = accountNameAmong(current, db.accounts.list());
+    const expires = ports.cacheExpiresAt(row);
+    const cold = ports.admission.check(row, current, false, now).projected;
+    console.info(
+      `[at-limit] ${ports.named(row)} waits on ${from} for its reset at ${clockWords(until)}: ${expires !== null && until <= expires ? `its prompt cache lasts until ${clockWords(expires)}, past the reset, so waiting costs nothing more than its next turn` : "the reset is that close"}, where moving would re-read it cold for ${usdWords(cold.reReadUsd)}.`
+    );
+  };
+
+  /**
+   * `row` would move to `target`, but `target` has no room left for its
+   * re-read after the moves admitted there already: it stays held on
+   * `current` (until its own reset, each look deciding again), one whose
+   * sign-in was refused held as such, one on extra usage left going there.
+   */
+  const notAdmitted = (
+    row: LimitRow,
+    current: Account,
+    target: Account,
+    words: string,
+    cause: Cause,
+    now: number
+  ): void => {
+    if (cause === "credits") {
+      stillOnExtraUsage(row, current, "full");
+      return;
+    }
+    if (cause === "refused") {
+      holdRefused(row, current);
+    } else {
+      hold(row, current, {
+        action: "wait",
+        until: holdUntil(row, current, now),
+        why: "full",
+      });
+    }
+    if (roomSaid.get(row.id) === target.id) {
+      return;
+    }
+    roomSaid.set(row.id, target.id);
+    const accounts = db.accounts.list();
+    const from = accountNameAmong(current, accounts);
+    console.info(
+      `[at-limit] ${ports.named(row)} stays held on ${from}, not moved to ${accountNameAmong(target, accounts)}: ${words}. ${waitSide(row, current, false, cause, now)}, and it waits for the next account with room, or ${from}'s reset, whichever the next look finds first.`
+    );
+  };
+
+  /** A decision that keeps `row` where it is: held there, or, on extra usage, left going. */
+  const waits = (
+    row: LimitRow,
+    current: Account,
+    decision: Extract<AtLimitDecision, { action: "wait" }> | undefined,
+    cause: Cause,
+    now: number
+  ): void => {
+    settling.delete(row.id);
+    if (cause === "credits") {
+      stillOnExtraUsage(row, current, decision?.why);
+      return;
+    }
+    if (!decision) {
+      holdRefused(row, current);
+      return;
+    }
+    if (
+      decision.why === "soon" &&
+      db.atLimit.hold(row.id)?.until !== decision.until
+    ) {
+      sayWarmWait(row, current, decision.until, now);
+    }
+    hold(row, current, decision);
+  };
+
   /**
    * One try of {@link decideAndMove}, never to an account in `skip`: held,
    * left to settle, moved, or kept by its process (held as it was). The
@@ -1118,20 +1255,26 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     const now = Date.now();
     const decision = decideFor(row, current, now, cause, skip);
     if (!decision || decision.action === "wait") {
-      settling.delete(row.id);
-      if (cause === "credits") {
-        stillOnExtraUsage(row, current, decision?.why);
-      } else if (decision) {
-        hold(row, current, decision);
-      } else {
-        holdRefused(row, current);
-      }
+      waits(row, current, decision, cause, now);
       return undefined;
     }
     const target = db.accounts.get(decision.targetId);
     if (!target) {
       return undefined;
     }
+    const verdict = ports.admission.check(
+      row,
+      target,
+      decision.sameOrganization,
+      now
+    );
+    if (!verdict.ok) {
+      settling.delete(row.id);
+      notAdmitted(row, current, target, verdict.words, cause, now);
+      return undefined;
+    }
+    // Reserved now, before any await, so a second decision meanwhile counts it.
+    ports.admission.charge(row, target, verdict);
     // One on extra usage was answered, not stopped: its chip says nothing,
     // as at a rebalance's move.
     if (cause !== "credits") {
@@ -1141,6 +1284,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     // Only between turns: never inside a tool round, never over a turn
     // someone started since.
     if (!(await ports.idle(row))) {
+      ports.admission.refund(row.id);
       settle(
         row,
         current,
@@ -1155,6 +1299,10 @@ export const createAtLimit = (ports: AtLimitPorts) => {
       settling.delete(row.id);
     }
     db.atLimit.dropHold(row.id);
+    roomSaid.delete(row.id);
+    console.info(
+      `[at-limit] ${ports.named(row)} moves from ${accountNameAmong(current, db.accounts.list())} to ${accountNameAmong(target, db.accounts.list())}: ${waitSide(row, current, decision.sameOrganization, cause, now)}; moving, ${verdict.words}.`
+    );
     if (cause === "credits") {
       extraUsageSaid.delete(row.id);
       const accounts = db.accounts.list();
@@ -1167,6 +1315,7 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     if (!kept) {
       return undefined;
     }
+    ports.admission.refund(row.id);
     unmoved(row, current, target, kept.why, {
       // One on extra usage goes on there: nothing holds it.
       held: !kept.target && cause !== "credits",
@@ -1291,10 +1440,41 @@ export const createAtLimit = (ports: AtLimitPorts) => {
     }
   };
 
-  /** One look at every hold. */
+  /**
+   * The holds in the order admission takes them: sessions a person waits
+   * on first, then orchestrators with live children, then the rest; each
+   * group by how long it has been held.
+   */
+  const admissionOrder = (holds: LimitHold[]): LimitHold[] => {
+    const rows = db.listInstances();
+    const parents = new Set(
+      rows.flatMap((one) =>
+        one.parentInstanceId && !over(one) ? [one.parentInstanceId] : []
+      )
+    );
+    const byId = new Map(rows.map((one) => [one.id, one]));
+    const rank = (held: LimitHold): number => {
+      const row = byId.get(held.instanceId);
+      if (!row) {
+        return 3;
+      }
+      if (ports.waitedOn(row)) {
+        return 0;
+      }
+      return parents.has(row.id) ? 1 : 2;
+    };
+    return holds
+      .map((held) => ({ held, rank: rank(held) }))
+      .sort(
+        (a, b) => a.rank - b.rank || (a.held.since ?? 0) - (b.held.since ?? 0)
+      )
+      .map((one) => one.held);
+  };
+
+  /** One look at every hold, in admission order ({@link admissionOrder}). */
   const lookAtHolds = async (): Promise<void> => {
     const now = Date.now();
-    for (const held of db.atLimit.holds()) {
+    for (const held of admissionOrder(db.atLimit.holds())) {
       // biome-ignore lint/performance/noAwaitInLoops: each held session needs its own idle receipt before it is sent on
       await lookAt(held, now);
     }
