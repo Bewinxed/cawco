@@ -1,34 +1,49 @@
 <!--
-  The page (the root): Caw, the title, the count picked, every
-  decision and piece of media the program puts on it, and Send. The
-  kit's hero, meter and footer (page.css `.dp-hero`, `.dp-meter`, `.dp-done`).
+  The page (the root): one centred column on the recessed ground (DESIGN.md,
+  The Frame Recesses Rule), 21px in at a desk and 14px under a finger, its
+  groups 18px apart (Layout: "the groups of a page … stand 18px apart"). Its
+  head is the page head: Caw as the title's mark (The Mark Line Rule) and the
+  title. Then the offline notice when CawCo does not show the page, every
+  decision and piece of media the program puts on it, and the foot: a band
+  of the panel material standing at the window's foot (sticky, as the update
+  notice's footer is "never a scroll away"), clear of a host's docked
+  composer and the screen's bottom inset, with the count picked and its bar
+  at its start and Send at its end.
 
   The count and Send's label ("Send 3 picks": what goes) change in place
   through MorphText (DESIGN.md, The Steady Swap Rule), the count's digit
-  rolling. ⌘/Ctrl+Enter sends from anywhere on the page. The page's one
-  polite live region says what a card's pick and Continue did
-  (Decision.svelte), the count with Continue.
+  rolling. ⌘/Ctrl+Enter sends from anywhere on the page; Send wears the keys
+  on its keycaps. Sending, Send runs the kit's pending: its label stays, the
+  spinner stands over its start and a check holds once the hub has it
+  (Buttons, Pending). The page's one polite live region says what a card's
+  pick and Continue did (Decision.svelte), the count with Continue.
 
   At any moment one coral action shows, the next act (the owner's ruling
   on primary and secondary): while any card stands open Send is the kit's
   outline button, and the open card the person is working in has its
   Continue coral (Decision.svelte); once the last open card is decided Send
-  turns coral where it stands, the same button changing state, its fill,
-  edge and ink crossing over --dur-morph on ease-out (page.css). Change
-  takes it back the same way.
+  turns coral where it stands. Change takes it back the same way.
 -->
 <script lang="ts">
   import { pickOf, readProgram } from "@cawco/core/decisions";
   import type { ElementNode } from "@openuidev/lang-core";
   import { setContext } from "svelte";
   import type { Attachment } from "svelte/attachments";
-  import { SvelteSet } from "svelte/reactivity";
+  import { MediaQuery, SvelteSet } from "svelte/reactivity";
+  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import PendingContent from "#lib/components/ui/button/pending-content.svelte";
+  import { Kbd, KbdGroup } from "#lib/components/ui/kbd/index.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { IconSend, IconTick, IconWarningTriangle } from "#lib/icons.js";
   import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-ready.webp";
   import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-ready.webp";
-  import MorphText from "../../../components/ui/morph-text/morph-text.svelte";
+  import { frameObserver } from "../../frame-observer.js";
   import { CURVE, dur, motionOk } from "../../motion/curves.svelte";
+  import { morph } from "../../motion/morph.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { bridge, picks } from "./page.svelte.js";
+  import { scheme } from "./scheme.svelte.js";
 
   let {
     props,
@@ -52,46 +67,83 @@
   const count = $derived(
     cards.filter((card) => pickOf(card, picks.now[card.id]).picked).length
   );
-  /** The bar's share filled, in percent. */
-  const share = $derived(ids.length ? (100 * count) / ids.length : 0);
+  /** The bar's share filled, 0 to 1. */
+  const share = $derived(ids.length ? count / ids.length : 0);
   /**
-   * The bar's fill: one move with the count, so its width runs on the
-   * count's clock (MorphText's: --dur-morph on ease-out, started at the
-   * frame's own time as its letters are), from the width it is drawn at,
-   * so a change caught mid-way turns from there (L489). With less motion
-   * it lands at once (L517: a bar is travel, not a fade).
+   * The bar's fill, a scale along its track (the compositor's: Vercel's Web
+   * Interface Guidelines, "prioritize GPU-accelerated properties"): one move
+   * with the count, on the count's clock (MorphText's: --dur-morph on
+   * ease-out, started at the frame's own time as its letters are), from
+   * where it is drawn, so a change caught mid-way turns from there (L489).
+   * With less motion it lands at once (L517: a bar is travel, not a fade).
    */
   const fill: Attachment<HTMLElement> = (node) => {
     let run: Animation | undefined;
     let first = true;
     $effect(() => {
-      const to = `${share}%`;
+      const to = `${share} 1`;
       if (first) {
         first = false;
-        node.style.inlineSize = to;
+        node.style.scale = to;
         return;
       }
-      const from = `${node.getBoundingClientRect().width}px`;
+      const from = getComputedStyle(node).scale;
       run?.cancel();
-      node.style.inlineSize = to;
+      node.style.scale = to;
       if (!motionOk.current) {
         return;
       }
-      run = node.animate([{ inlineSize: from }, { inlineSize: to }], {
+      run = node.animate([{ scale: from }, { scale: to }], {
         duration: dur("--dur-morph"),
         easing: CURVE.out,
       });
       run.startTime = document.timeline.currentTime;
     });
   };
-  /** Send's label: what goes. */
-  const sendLabel = $derived(
-    count === 0
-      ? "Send picks"
-      : `Send ${count} ${count === 1 ? "pick" : "picks"}`
-  );
-  let sent = $state("");
+  /**
+   * How much of the window's foot the page's foot stands over (its height,
+   * over the docked composer's inset), as the page's own scroll padding: the
+   * browser's focus scrolling and a scroll into view stop above it, never
+   * under it (WCAG 2.4.11, Focus Not Obscured), as a sticky footer's
+   * scroller keeps its room (visible-viewport.svelte.ts `aboveKeyboard`).
+   * Read now, and a change in the next frame (frameObserver).
+   */
+  const footRoom: Attachment<HTMLElement> = (node) => {
+    const root = document.documentElement;
+    const read = () => {
+      root.style.scrollPaddingBlockEnd = `calc(var(--page-inset-bottom) + ${node.offsetHeight}px)`;
+    };
+    read();
+    const sizes = frameObserver(read);
+    sizes.observe(node);
+    return () => {
+      sizes.disconnect();
+      root.style.scrollPaddingBlockEnd = "";
+    };
+  };
   let sending = $state(false);
+  /** What the person has picked and written on each card, as one string. */
+  const standing = $derived(
+    JSON.stringify(
+      ids.map((one) => [
+        one,
+        picks.now[one]?.options ?? [],
+        picks.now[one]?.note ?? "",
+      ])
+    )
+  );
+  /** That, as it stood when the hub last took a send: while it still stands so, Send is spent. */
+  let sentPicks = $state<string | null>(null);
+  const spent = $derived(sentPicks !== null && sentPicks === standing);
+  /** Send's label: what goes, or that it went (morphing through the same MorphText as its count). */
+  const sendLabel = $derived.by(() => {
+    if (spent) {
+      return "Sent";
+    }
+    return count === 0
+      ? "Send picks"
+      : `Send ${count} ${count === 1 ? "pick" : "picks"}`;
+  });
   /** What the page's live region says now. */
   let said = $state("");
   /** The cards standing open, by id: any one keeps Send quiet. */
@@ -116,6 +168,15 @@
     working: () => working,
   });
 
+  /** Under a finger: Send is the large button (DESIGN.md, The 44 Touch Rule). */
+  const coarse = new MediaQuery("pointer: coarse");
+  /** The send key's modifier as this keyboard names it. */
+  const modifier =
+    typeof navigator !== "undefined" &&
+    /Mac|iPhone|iPad/.test(navigator.platform)
+      ? "⌘"
+      : "Ctrl";
+
   /** ⌘/Ctrl+Enter sends, wherever focus is on the page. */
   function sendKey(event: KeyboardEvent) {
     if (
@@ -135,9 +196,10 @@
       return;
     }
     sending = true;
+    const going = standing;
     try {
       await cawco.send();
-      sent = "Sent. Change anything and send again.";
+      sentPicks = going;
     } catch (error) {
       console.error("[decision-page] send failed:", error);
     } finally {
@@ -148,74 +210,79 @@
 
 <svelte:window onkeydown={sendKey} />
 
-<main class="dp">
-  <header class="dp-hero">
-    <span data-slot="caw">
-      <img alt="Caw" class="caw-light" height="72" src={cawLight} width="72" />
-      <img alt="" class="caw-dark" height="72" src={cawDark} width="72" />
+<!-- At least the window's height, its foot taking the room left above it: on a short page the foot stands at the window's foot as it does on a long one, never under the last card. -->
+<main
+  class="mx-auto flex min-h-dvh w-full min-w-0 max-w-c-decision-page-w flex-col gap-space-5 px-space-6 pt-space-6 pb-(--page-inset-bottom) coarse:px-space-4 coarse:pt-space-4"
+  data-slot="decision-page"
+>
+  <header
+    class="mark-line type-title flex min-w-0 items-start gap-space-3 py-space-2"
+    data-slot="page-head"
+  >
+    <span class="mark-cell">
+      <img
+        alt="Caw"
+        height="40"
+        src={scheme.now === "dark" ? cawDark : cawLight}
+        width="40"
+      />
     </span>
-    <div>
-      <h1>{String(props.title ?? "")}</h1>
-    </div>
-    <div class="dp-meter">
-      <span
-        ><b><MorphText text={String(count)} /></b> of
-        <span>{ids.length}</span> picked</span
-      >
-      <span class="dp-bar"><i {@attach fill}></i></span>
-    </div>
+    <h1
+      class="type-title mark-text min-w-0 text-balance text-ink-strong wrap-anywhere"
+    >
+      {String(props.title ?? "")}
+    </h1>
   </header>
   {#if !bridge()}
-    <p class="dp-offline">
-      Picks are kept only when CawCo shows this page: publish it with
-      artifact_create.
-    </p>
+    <Alert variant="warning">
+      <IconWarningTriangle />
+      <AlertDescription>
+        Picks are kept only when CawCo shows this page: publish it with <code
+          class="text-size-meta wrap-anywhere">artifact_create</code
+        >.
+      </AlertDescription>
+    </Alert>
   {/if}
   {@render renderNode(props.children)}
-  <footer class="dp-done">
-    <span>{sent}</span>
-    <button
+  <footer
+    {@attach morph()}
+    {@attach footRoom}
+    class="sticky bottom-(--page-inset-bottom) z-(--layer-sticky) -mx-space-6 mt-auto flex flex-wrap items-center justify-between gap-space-3 border-t border-border-hairline bg-material-panel px-space-6 pt-space-3 pb-safe-space-3 glass-backdrop coarse:-mx-space-4 coarse:px-space-4 reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
+    data-safe-bottom
+    data-slot="page-foot"
+  >
+    <p
+      class="mark-line type-meta num flex items-center gap-space-3 text-ink-muted"
+      data-slot="meter"
+    >
+      <span><MorphText text={String(count)} /> of {ids.length} picked</span>
+      <span
+        class="h-space-1 w-c-decision-meter-w overflow-hidden rounded-xs bg-surface-recess-deep"
+        data-box
+      >
+        <i
+          {@attach fill}
+          class="block h-full w-full origin-left bg-brand-solid rtl:origin-right"
+        ></i>
+      </span>
+    </p>
+    <Button
       aria-keyshortcuts="Meta+Enter Control+Enter"
-      class="dp-send"
-      data-quiet={opened.size > 0 ? "" : undefined}
-      disabled={sending || !bridge()}
+      data-send
+      disabled={!bridge()}
       onclick={send}
-      type="button"><MorphText text={sendLabel} /></button
+      pending={sending}
+      size={coarse.current ? "lg" : "default"}
+      variant={opened.size > 0 ? "outline" : "default"}
+      ><PendingContent
+        icon={spent ? IconTick : IconSend}
+        label={sendLabel}
+        pending={sending}
+      />{#if !spent}<KbdGroup aria-hidden="true" data-box
+          ><Kbd reach="keyboard">{modifier}</Kbd><Kbd reach="keyboard">↵</Kbd
+          ></KbdGroup
+        >{/if}</Button
     >
   </footer>
-  <p aria-live="polite" class="dp-said">{said}</p>
+  <p aria-live="polite" class="sr-only" data-slot="page-said">{said}</p>
 </main>
-
-<style>
-  /* tailwind: this file is bundled by Bun for the decision host page, which loads only the kit's page.css and tokens.css and has no Tailwind compiler, so a utility class here would have no CSS behind it — https://tailwindcss.com/docs/installation */
-  /* The page's scroller moves only where a fold rides it (Decision.svelte,
-     motion/scroll-on): the browser's scroll anchoring would jump it as a
-     card folds above the reader's view (the transcript's precedent). */
-  /* css-scope: the decision page's own document root is its scroller; this component is the page */
-  :global(:root) {
-    overflow-anchor: none;
-  }
-  /* The bar's fill moves on the count's clock (`fill`), not on the kit's
-     own transition, which a page without the host keeps. */
-  .dp-bar i {
-    transition: none;
-  }
-  /* Caw in the host's theme (the overlay's `data-theme`), else the OS's. */
-  .caw-dark {
-    display: none;
-  }
-  :global(:root[data-theme="dark"]) .caw-light {
-    display: none;
-  }
-  :global(:root[data-theme="dark"]) .caw-dark {
-    display: inline;
-  }
-  @media (prefers-color-scheme: dark) {
-    :global(:root:not([data-theme])) .caw-light {
-      display: none;
-    }
-    :global(:root:not([data-theme])) .caw-dark {
-      display: inline;
-    }
-  }
-</style>

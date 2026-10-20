@@ -340,7 +340,17 @@ export async function buildBinary(options: {
     // unix sockets alone, never SSH. lightningcss and browserslist: the
     // runtime pages' CSS compiler (core page-css.ts), which loads them on a
     // compile only; the binary carries every page prebuilt and compiles none.
-    external: ["cpu-features", "lightningcss", "browserslist"],
+    // postcss, @tailwindcss/postcss and unplugin-icons: the decision host's
+    // Tailwind compile and its icons (core decision-host.ts), loaded the same
+    // way; the binary carries the host prebuilt and never builds it.
+    external: [
+      "cpu-features",
+      "lightningcss",
+      "browserslist",
+      "postcss",
+      "@tailwindcss/postcss",
+      "unplugin-icons",
+    ],
     define: {
       __CAWCO_RELEASE__: "true",
       __CAWCO_VERSION__: JSON.stringify(options.version),

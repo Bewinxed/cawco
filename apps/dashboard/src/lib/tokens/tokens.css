@@ -1096,6 +1096,16 @@
     --c-decision-node-w: 148px;
     /* A decision card's least height (DecisionGraph CARD.height). */
     --c-decision-node-h: 56px;
+    /* A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between. */
+    --c-decision-page-w: 920px;
+    /* The least a decision card's question takes beside its decided line before that line wraps under it. */
+    --c-decision-question-basis: 240px;
+    /* The length of a decision page's count bar in its sticky foot, beside "1 of 5 picked". */
+    --c-decision-meter-w: 120px;
+    /* The narrowest a decision card's option column stands before the options stand one under another. */
+    --c-decision-option-min: 190px;
+    /* The tallest a decision card's media well draws its piece: a canvas, a frame and a diagram each fit to it (a diagram never under its words' 10px floor). */
+    --c-media-max-h: 80vb;
     /* The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name. */
     --c-artifact-card-min: 148px;
     /* The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest. */

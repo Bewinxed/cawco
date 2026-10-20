@@ -1,4 +1,9 @@
-<!-- A heading over some decisions: on the graph, the frame round them. -->
+<!--
+  A heading over some decisions (on the graph, the frame round them): its
+  title in the label role, muted, with no glyph; 25px above it (the page's
+  18px group gap and 7px of its own) and 11px under it, its cards 18px apart
+  as the page's groups are.
+-->
 <script lang="ts">
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
 
@@ -8,23 +13,15 @@
   }: OpenUIRenderProps<{ title: unknown; children: unknown[] }> = $props();
 </script>
 
-<section class="section" aria-label={String(props.title ?? "")}>
-  <h2 class="title">{String(props.title ?? "")}</h2>
-  {@render renderNode(props.children)}
+<section
+  aria-label={String(props.title ?? "")}
+  class="flex min-w-0 flex-col pt-space-2"
+  data-slot="section"
+>
+  <h2 class="type-label pb-space-3 text-ink-muted wrap-anywhere">
+    {String(props.title ?? "")}
+  </h2>
+  <div class="flex min-w-0 flex-col gap-space-5">
+    {@render renderNode(props.children)}
+  </div>
 </section>
-
-<style>
-  /* tailwind: this folder is bundled by Bun with no Tailwind build (core decision-host.ts), and Tailwind only generates CSS where it scans the source, so a utility here would draw nothing — https://tailwindcss.com/docs/detecting-classes-in-source-files */
-  .section {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-4);
-    min-inline-size: 0;
-  }
-  .title {
-    font: var(--type-label);
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-    padding-block-start: var(--space-4);
-  }
-</style>

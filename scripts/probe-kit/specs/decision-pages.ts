@@ -12,7 +12,9 @@
  *     built (Image, Diagram, Canvas, Preview, Dials) draws in the panel's
  *     frame, in light and dark, at 390 and 1440: its cards, each piece
  *     there and loaded, and an overflow sweep that finds nothing past the
- *     frame's width.
+ *     frame's width; every control reaching 44px under a finger at 390
+ *     (The 44 Touch Rule) and 24px under a mouse at 1440 (The 24 Pointer
+ *     Rule); every DialKit value field in the meta role, tabular Figtree.
  * (b) A pick writes `state.<id>` with the program's hash; a Comment pin and
  *     an ink stroke anchor by the card's id; a revision (statements) that
  *     puts a decision ahead keeps the pin on its card, the ink on its
@@ -66,6 +68,7 @@ import type { Frame, Locator, Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { readWithin } from "../../../packages/core/src/bounded";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
+import { pageReach } from "../decision-embeds";
 import {
   type Kit,
   type KitFleet,
@@ -93,6 +96,7 @@ const kept = (program: string) => `${program.trim()}\n`;
 
 const programOf = (ids: {
   canvas: string;
+  tall: string;
   image: string;
   mockup: string;
   site: string;
@@ -100,7 +104,7 @@ const programOf = (ids: {
 stack = Decision("stack", "Which stack does the launch page use?", [svelte, astro], "Today: the landing is plain HTML.", [shot, flow])
 svelte = Option("svelte", "SvelteKit", "The dashboard's own stack.", true, [], "Heavier than the plain page it replaces.")
 astro = Option("astro", "Astro", "Content first, islands where needed.", false, [seq], "A second stack to keep up.")
-host = Decision("host", "Where does the page run?", [hub, edge], "It ships with the hub today.", [sketch, tune], ["stack"])
+host = Decision("host", "Where does the page run?", [hub, edge], "It ships with the hub today.", [sketch, tallSketch, tune], ["stack"])
 hub = Option("hub", "The hub", "Nothing new to run.", true, [], "Readers far from the hub wait longer.")
 edge = Option("edge", "An edge host", "Closer to readers.", false, [motion], "One more host to run.")
 later = Section("Later", [plan])
@@ -114,6 +118,7 @@ flow = Diagram("flowchart LR\\nVisit[Visit] --> Read[Read] --> Join[Sign up]", "
 seq = Diagram("sequenceDiagram\\nReader->>Hub: open the page\\nHub-->>Reader: the page, live")
 gantt = Diagram("gantt\\ntitle Launch\\ndateFormat YYYY-MM-DD\\nsection Build\\nPage :a1, 2026-10-20, 5d\\nShip :after a1, 2d", "The plan")
 sketch = Canvas("${ids.canvas}", "The rough layout")
+tallSketch = Canvas("${ids.tall}", "The steps, top to bottom")
 motion = Preview("${ids.mockup}", "How it moves")
 tune = Dials("Card", {radius: [12, 0, 32], accent: "#e65d46"})`;
 
@@ -217,21 +222,21 @@ const foldOf = (frame: Frame, id: string) =>
     return {
       decided: !!root?.hasAttribute("data-decided"),
       // A decided card's line is its chosen options, named "Decided: …" for
-      // a screen reader; an open card's is its state line.
-      line: root?.hasAttribute("data-decided")
-        ? (root.querySelector("header .dp-picks")?.getAttribute("aria-label") ??
-          "")
-        : (root?.querySelector("header .dp-state")?.textContent?.trim() ?? ""),
+      // a screen reader; an open card's head is its question alone.
+      line:
+        root
+          ?.querySelector("header [data-slot=decided]")
+          ?.getAttribute("aria-label") ?? "",
       chips: [
         ...(root?.querySelectorAll<HTMLElement>("header [data-pick]") ?? []),
       ].map((one) => one.dataset.pick ?? ""),
       // Change as it stands: one fading out of an opening card is leaving.
       button:
         root
-          ?.querySelector(".dp-change:not([data-leaving])")
+          ?.querySelector("[data-leaves]:not([data-leaving]) [data-change]")
           ?.textContent?.trim() ?? "",
-      next: !!root?.querySelector(".dp-continue"),
-      body: seen(root?.querySelector(".dp-opts")),
+      next: !!root?.querySelector("[data-continue]"),
+      body: seen(root?.querySelector("[data-slot=options]")),
       options: [...(root?.querySelectorAll<HTMLElement>("[data-option]") ?? [])]
         .filter(seen)
         .map((one) => one.dataset.option ?? ""),
@@ -241,7 +246,7 @@ const foldOf = (frame: Frame, id: string) =>
       height: Math.round(root?.getBoundingClientRect().height ?? 0),
       focus: {
         option: active?.dataset.option ?? "",
-        button: active?.classList.contains("dp-change")
+        button: active?.hasAttribute("data-change")
           ? (active.textContent?.trim() ?? "")
           : "",
         inCard: !!(active && root?.contains(active)),
@@ -249,7 +254,7 @@ const foldOf = (frame: Frame, id: string) =>
         // first option, or Send with none left.
         onward:
           !!active &&
-          (active.matches(".dp-send") ||
+          (active.matches("[data-send]") ||
             (!!holder &&
               holder !== root &&
               !holder.hasAttribute("data-decided") &&
@@ -269,7 +274,7 @@ const inCard = (frame: Frame, selector: string | undefined, id: string) =>
 /** A card folded by a pick opened again with Change, so its media can be reached. */
 const unfold = async (_page: Page, frame: Frame, id: string) => {
   if ((await foldOf(frame, id)).decided) {
-    await pressIn(frame, `#decision-${id} .dp-change >> nth=0`);
+    await pressIn(frame, `#decision-${id} [data-change] >> nth=0`);
   }
 };
 
@@ -296,7 +301,9 @@ const frameWith = async (page: Page, cards: number): Promise<Frame> =>
     `the panel's frame drawing ${cards} cards`,
     async () => {
       const frame = await frameAt(page, FRAME);
-      return (await countIn(frame, "article.dp-card")) === cards ? frame : null;
+      return (await countIn(frame, "article[data-slot=decision]")) === cards
+        ? frame
+        : null;
     },
     Boolean,
     60_000
@@ -331,6 +338,73 @@ const overflowIn = (frame: Frame) =>
     };
   });
 
+/**
+ * Each Canvas piece's frame against its drawing (DESIGN.md item 12: "a
+ * canvas is its own box, width-fitted, capped at 80vb"): its box, its well's
+ * room and the cap, and the drawing's own bounds read from the canvas's doc
+ * in its frame, padded by its fitted view's 32px as the canvas host pads them
+ * (canvas-host scene.ts `sceneBox`).
+ */
+const canvasBoxes = (frame: Frame) =>
+  frame.evaluate(() =>
+    [
+      ...document.querySelectorAll<HTMLIFrameElement>(
+        'iframe[src*="/__cawco/canvas/"]'
+      ),
+    ].map((el) => {
+      const stage = el.closest("[data-slot=media-stage]");
+      const s = stage?.getBoundingClientRect();
+      const f = el.getBoundingClientRect();
+      let scene: { width: number; height: number } | null = null;
+      try {
+        const doc = (
+          el.contentWindow as unknown as {
+            cawcoArtifact?: {
+              doc: {
+                getArray: (name: string) => {
+                  toArray: () => { get: (key: string) => unknown }[];
+                };
+              };
+            };
+          } | null
+        )?.cawcoArtifact?.doc;
+        const els = (doc?.getArray("elements").toArray() ?? [])
+          .map(
+            (one) =>
+              one.get("el") as {
+                height: number;
+                isDeleted?: boolean;
+                width: number;
+                x: number;
+                y: number;
+              }
+          )
+          .filter((one) => one && !one.isDeleted);
+        if (els.length > 0) {
+          const left = Math.min(...els.map((one) => one.x));
+          const top = Math.min(...els.map((one) => one.y));
+          const right = Math.max(...els.map((one) => one.x + one.width));
+          const bottom = Math.max(...els.map((one) => one.y + one.height));
+          scene = { width: right - left, height: bottom - top };
+        }
+      } catch {
+        scene = null;
+      }
+      return {
+        caption:
+          el
+            .closest("figure")
+            ?.querySelector("[data-slot=media-caption]")
+            ?.textContent?.trim() ?? "",
+        box: { w: f.width, h: f.height },
+        room: s?.width ?? 0,
+        cap: Number.parseFloat(getComputedStyle(el).maxBlockSize),
+        off: s ? Math.abs(s.left + s.width / 2 - (f.left + f.width / 2)) : 99,
+        scene,
+      };
+    })
+  );
+
 /** Each media piece as the frame draws it. */
 const mediaIn = (frame: Frame) =>
   frame.evaluate(async () => {
@@ -348,19 +422,65 @@ const mediaIn = (frame: Frame) =>
     );
     return {
       image: img?.naturalWidth ?? 0,
-      diagrams: [...document.querySelectorAll(".draw svg.pele")].map(
-        (svg) => svg.getAttribute("class") ?? ""
-      ),
+      diagrams: [
+        ...document.querySelectorAll("[data-slot=diagram] svg.pele"),
+      ].map((svg) => svg.getAttribute("class") ?? ""),
       canvas: !!canvas?.contentDocument?.querySelector(".excalidraw canvas"),
       preview: preview?.contentDocument?.body?.textContent?.trim() ?? "",
       dials: document.querySelectorAll(".dialkit-root .dialkit-panel").length,
+      // Each DialKit panel stands in its card, in a well (decisions/host
+      // Dials.svelte), and nothing of DialKit's floats over the page.
+      dialsInline: [
+        ...document.querySelectorAll<HTMLElement>(".dialkit-root"),
+      ].every(
+        (root) =>
+          !!root.closest("[data-slot=decision] [data-slot=media]") &&
+          [root, ...root.querySelectorAll<HTMLElement>("*")].every(
+            (el) => getComputedStyle(el).position !== "fixed"
+          )
+      ),
+      // Each DialKit value field in the meta role, tabular Figtree (host.css):
+      // its face, size and figures as drawn, beside the size it should be:
+      // the meta role's, or for an <input> the house's field floor where
+      // that holds (design.css `@layer overrides`: under `max-phone`, below
+      // theme.css's 640px `--breakpoint-phone`, or a coarse pointer).
+      dialValues: (() => {
+        // Each token resolved to px on a probe in the page.
+        const px = (token: string) => {
+          const probe = document.createElement("span");
+          probe.style.fontSize = `var(${token})`;
+          document.body.append(probe);
+          const size = Number.parseFloat(getComputedStyle(probe).fontSize);
+          probe.remove();
+          return size;
+        };
+        const meta = px("--text-meta");
+        const floor = px("--text-field-floor");
+        const floored =
+          matchMedia("(width < 640px)").matches ||
+          matchMedia("(pointer: coarse)").matches;
+        return [
+          ...document.querySelectorAll<HTMLElement>(
+            ".dialkit-root :is(.dialkit-slider-value, .dialkit-slider-input, .dialkit-pad-value, .dialkit-color-value, .dialkit-color-css-input)"
+          ),
+        ].map((el) => {
+          const s = getComputedStyle(el);
+          return {
+            field: el.className.split(" ")[0] ?? "",
+            face: s.fontFamily.split(",")[0]?.trim() ?? "",
+            size: s.fontSize,
+            want: `${el.localName === "input" && floored ? Math.max(meta, floor) : meta}px`,
+            figures: s.fontVariantNumeric,
+          };
+        });
+      })(),
       faces: [...document.fonts]
         .filter((face) => face.status === "loaded")
         .map((face) => face.family),
       row: (() => {
-        const row = document.querySelector("#decision-plan .stack");
-        const words = row?.querySelector(".text");
-        const badge = row?.querySelector(".badge");
+        const row = document.querySelector("#decision-plan [data-slot=stack]");
+        const words = row?.querySelector("[data-slot=text]");
+        const badge = row?.querySelector("[data-slot=badge]");
         const rowStyle = row ? getComputedStyle(row) : null;
         const probe = document.createElement("span");
         probe.style.columnGap = "var(--space-3)";
@@ -378,13 +498,15 @@ const mediaIn = (frame: Frame) =>
           badge: badge ? getComputedStyle(badge).backgroundColor : "",
         };
       })(),
-      opens: [...document.querySelectorAll("figure.diagram")].map(
-        (figure) => !!figure.querySelector("button.open")
-      ),
+      opens: [
+        ...document.querySelectorAll(
+          "[data-slot=media]:has([data-slot=diagram])"
+        ),
+      ].map((figure) => !!figure.querySelector("[data-open-canvas]")),
       theme: document.documentElement.dataset.theme ?? "",
       site:
         document.querySelector<HTMLIFrameElement>(
-          "#decision-plan iframe.screen"
+          "#decision-plan iframe[data-shape=screen]"
         )?.src ?? "",
     };
   });
@@ -408,17 +530,17 @@ const wordsAt = async (page: Page, src: string): Promise<string> => {
 const diagramInk = (frame: Frame) =>
   frame.evaluate(() => {
     const probe = document.createElement("span");
-    probe.style.color = "var(--surface-page)";
+    probe.style.color = "var(--surface-raised)";
     document.body.append(probe);
     const surface = getComputedStyle(probe).color;
     probe.style.color = "var(--ink-strong)";
     const ink = getComputedStyle(probe).color;
     probe.remove();
     const node = document.querySelector(
-      ".draw svg.pele .pele-node :is(rect, path, polygon)"
+      "[data-slot=diagram] svg.pele .pele-node :is(rect, path, polygon)"
     );
     const label = document.querySelector(
-      ".draw svg.pele .pele-label, .draw svg.pele text"
+      "[data-slot=diagram] svg.pele .pele-label, [data-slot=diagram] svg.pele text"
     );
     return {
       surface,
@@ -550,6 +672,39 @@ const publish = async (
     drew.ok,
     (await drew.text()).slice(0, 300)
   );
+  // A second drawing of the other shape: taller than it is wide, drawn once
+  // its screen is up in the panel, as the first.
+  const tall = await make<{ id: string }>({
+    kind: "canvas",
+    does: "draw",
+    ask: "Draw the steps",
+    name: "launch-steps",
+  });
+  await until(
+    "the tall canvas's screen in the panel",
+    async () =>
+      countIn(
+        await frameAt(desk, 'iframe[title="Canvas"]'),
+        ".excalidraw canvas"
+      ),
+    (count) => count > 0,
+    120_000
+  );
+  const drewTall = await fetch(
+    `${fleet.base}/api/instances/${writer}/artifacts/${tall.id}`,
+    {
+      method: "PATCH",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        mermaid: "flowchart TD\nWrite --> Check --> Merge --> Ship",
+      }),
+    }
+  );
+  kit.check(
+    "the tall canvas is drawn from Mermaid",
+    drewTall.ok,
+    (await drewTall.text()).slice(0, 300)
+  );
   const mockup = await make<{ id: string }>({
     kind: "page",
     does: "judge",
@@ -583,6 +738,7 @@ const publish = async (
   });
   const program = programOf({
     canvas: canvas.id,
+    tall: tall.id,
     mockup: mockup.id,
     image,
     site: site.id,
@@ -654,6 +810,46 @@ const mediaLeg = async (
   ).catch(() => undefined);
   await settle(shown, 400);
   const media = await mediaIn(frame);
+  const canvases = await until(
+    `${leg}: each canvas sized from its drawing`,
+    () => canvasBoxes(frame),
+    (all) =>
+      all.length === 2 && all.every((one) => one.box.h > 0 && !!one.scene),
+    30_000
+  ).catch(() => canvasBoxes(frame));
+  // The frame the canvas's own fit fills: the drawing at the room's width
+  // less its 32px each side, the margin round it; past the cap, the cap's
+  // height and the width it allows.
+  const fitted = (one: (typeof canvases)[number]) => {
+    if (!one.scene) {
+      return null;
+    }
+    const m = 32;
+    const tall =
+      2 * m + (one.scene.height * (one.room - 2 * m)) / one.scene.width;
+    return tall <= one.cap
+      ? { w: one.room, h: tall }
+      : {
+          w: 2 * m + (one.scene.width * (one.cap - 2 * m)) / one.scene.height,
+          h: one.cap,
+        };
+  };
+  const shapes = canvases.map((one) => ({ ...one, want: fitted(one) }));
+  kit.check(
+    `(a) ${leg}: each canvas is its drawing's own box, width-fitted under the 80vb cap and centred in its well, a wide one and a tall one (${shapes.map((one) => `“${one.caption}” ${Math.round(one.box.w)}×${Math.round(one.box.h)}, its drawing ${one.scene ? `${Math.round(one.scene.width)}×${Math.round(one.scene.height)}` : "unread"}`).join("; ")})`,
+    shapes.length === 2 &&
+      shapes.some((one) => one.box.w > one.box.h) &&
+      shapes.some((one) => one.box.h > one.box.w) &&
+      shapes.every(
+        (one) =>
+          !!one.want &&
+          Math.abs(one.box.w - one.want.w) <= 1 &&
+          Math.abs(one.box.h - one.want.h) <= 1 &&
+          one.box.h <= one.cap + 0.5 &&
+          one.off <= 0.5
+      ),
+    JSON.stringify(shapes)
+  );
   const site = await until(
     `${leg}: the dev server live in the plan card`,
     () => wordsAt(shown, media.site),
@@ -681,14 +877,26 @@ const mediaLeg = async (
     })
   );
   kit.check(
-    `(a) ${leg}: three cards, the picture loaded, three diagrams, the canvas live, the mockup live, the DialKit panel up, in the host's theme`,
+    `(a) ${leg}: three cards, the picture loaded, three diagrams, the canvas live, the mockup live, the DialKit panel up in its card's well with nothing fixed over the page, in the host's theme`,
     media.image === 64 &&
       media.diagrams.length === 3 &&
       media.canvas &&
       media.preview.includes("slides") &&
       media.dials === 1 &&
+      media.dialsInline &&
       media.theme === theme,
     JSON.stringify(media)
+  );
+  kit.check(
+    `(a) ${leg}: every DialKit value field in the meta role, tabular Figtree, never DialKit's Geist Mono, a field at the house's 16px floor where it holds (${media.dialValues.map((one) => `${one.field} ${one.face} ${one.size} of ${one.want} ${one.figures}`).join(", ")})`,
+    media.dialValues.length > 0 &&
+      media.dialValues.every(
+        (one) =>
+          one.face.includes("Figtree") &&
+          one.size === one.want &&
+          one.figures === "tabular-nums"
+      ),
+    JSON.stringify(media.dialValues)
   );
   kit.check(
     `(a) ${leg}: the house faces loaded in the page, and a Row of Text and a Badge drawn on the host's own styles`,
@@ -703,7 +911,7 @@ const mediaLeg = async (
     JSON.stringify({ faces: media.faces, row: media.row })
   );
   const hero = await frame.evaluate(() => {
-    const head = document.querySelector(".dp-hero");
+    const head = document.querySelector("[data-slot=page-head]");
     return {
       h1: head?.querySelector("h1")?.textContent ?? null,
       after: head?.querySelectorAll("h1 ~ p, h1 ~ * p").length ?? -1,
@@ -724,7 +932,7 @@ const mediaLeg = async (
   const types = media.diagrams.map(typeOf);
   const ink = await diagramInk(frame);
   kit.check(
-    `(d) ${leg}: a flowchart, a sequence diagram and a Gantt chart drawn by Pele, its nodes on surface-page and its words in ink-strong`,
+    `(d) ${leg}: a flowchart, a sequence diagram and a Gantt chart drawn by Pele, its nodes raised on surface-raised (DESIGN.md: content sits raised on its well) and its words in ink-strong`,
     JSON.stringify(types.toSorted()) ===
       JSON.stringify(["flowchart", "gantt", "sequence"]) &&
       ink.fill === ink.surface &&
@@ -740,6 +948,22 @@ const mediaLeg = async (
         ["gantt", false],
       ]),
     JSON.stringify({ diagrams: media.diagrams, opens: media.opens })
+  );
+  // Every control of the page in the panel's frame, each piece's own
+  // (Open as canvas, Open to draw, the Dials controls) among them, a window
+  // at a time (decision-embeds.ts `pageReach`): under a finger each one's
+  // area reaches 44px (The 44 Touch Rule); at a desk 24px, drawn so or
+  // through its hit area (The 24 Pointer Rule); nothing spills.
+  const reach = await pageReach(frame);
+  const short = reach.controls.filter((one) =>
+    view === "phone" ? !one.touch : !one.pointer
+  );
+  kit.check(
+    `(a) ${leg}: every control reaches ${view === "phone" ? "44px under a finger" : "24px under a mouse"} and nothing spills (${reach.controls.length} controls: ${reach.controls.map((one) => `${one.name.slice(0, 40)} ${one.w}×${one.h}`).join(", ")})`,
+    reach.controls.some((one) => one.name.includes("Open to draw")) &&
+      short.length === 0 &&
+      reach.spills.length === 0,
+    [...short.map((one) => one.line), ...reach.spills].join("\n    ")
   );
   await shown.close();
 };
@@ -789,7 +1013,7 @@ const marks = async (on: On, frame: Frame) => {
     !!chosen && !chosen.decided && chosen.body,
     JSON.stringify(chosen)
   );
-  await pressIn(frame, "#decision-stack .dp-continue >> nth=0");
+  await pressIn(frame, "#decision-stack [data-continue] >> nth=0");
   const folded = await until(
     "the stack card folded",
     () => foldOf(frame, "stack"),
@@ -896,13 +1120,13 @@ const embedLeg = async (on: On, frame: Frame) => {
       frame.evaluate(() => ({
         clicked:
           document.querySelector<HTMLIFrameElement>(
-            "#decision-host .dp-optmedia iframe"
+            "#decision-host [data-slot=option-media] iframe"
           )?.contentDocument?.body?.dataset.clicked ?? "",
         marked: document
           .querySelector('[data-option="edge"]')
           ?.hasAttribute("data-cawco-picked"),
         inPick: !!document.querySelector(
-          '[data-option="edge"] iframe, [data-option] .dp-optmedia'
+          '[data-option="edge"] iframe, [data-option] [data-slot=option-media]'
         ),
       })),
     (seen) => seen.clicked === "yes",
@@ -921,7 +1145,7 @@ const embedLeg = async (on: On, frame: Frame) => {
 };
 
 /** The edge option's live embed, in the panel's frame. */
-const EMBED = "#decision-host .dp-optmedia iframe";
+const EMBED = "#decision-host [data-slot=option-media] iframe";
 
 /** What a page anchor names, as `[frames, selector]`, resolved in the panel's frame: its box in that frame's viewport, whether it stands in a frame, and its class. */
 interface Named {
@@ -1187,18 +1411,23 @@ const insertAhead = async (on: On, first: string) => {
       ?.getBoundingClientRect();
     const astro = document.querySelector('[data-option="astro"]');
     return {
-      first: document.querySelector("article.dp-card")?.id,
+      first: document.querySelector("article[data-slot=decision]")?.id,
       astro: astro?.hasAttribute("data-cawco-picked"),
+      // A program's option is its group's radio: its pick is aria-checked,
+      // and the overlay writes no aria-pressed on it (preview-overlay page.ts
+      // \`reflect\`).
+      checked: astro?.getAttribute("aria-checked"),
       pressed: astro?.getAttribute("aria-pressed"),
       stack: stack && { top: stack.top, bottom: stack.bottom },
       disc: disc && { x: disc.x + disc.width / 2, y: disc.y + disc.height / 2 },
     };
   });
   kit.check(
-    "(b) after the insert the new card leads, the pin stands on the stack card, and astro is still marked picked",
+    "(b) after the insert the new card leads, the pin stands on the stack card, and astro is still marked picked (aria-checked, no aria-pressed on a radio)",
     placed.first === "decision-audience" &&
       placed.astro === true &&
-      placed.pressed === "true" &&
+      placed.checked === "true" &&
+      placed.pressed === null &&
       !!placed.stack &&
       !!placed.disc &&
       placed.disc.y >= placed.stack.top - 16 &&
@@ -1476,7 +1705,7 @@ const foldLeg = async (on: On, theme: "light" | "dark") => {
   ).catch(() => null);
   // The page's media are still loading in: the tap waits for the layout to stand still.
   await settle(shown, 800);
-  await pressIn(frame, "#decision-stack .dp-change >> nth=0");
+  await pressIn(frame, "#decision-stack [data-change] >> nth=0");
   const opened = await until(
     `${theme}: the stack card open again`,
     () => foldOf(frame, "stack"),
@@ -1502,7 +1731,7 @@ const foldLeg = async (on: On, theme: "light" | "dark") => {
     !!before && JSON.stringify(after) === JSON.stringify(before),
     JSON.stringify({ before, after })
   );
-  await pressIn(frame, "#decision-stack .dp-continue >> nth=0");
+  await pressIn(frame, "#decision-stack [data-continue] >> nth=0");
   const again = await until(
     `${theme}: the stack card folded by Continue`,
     () => foldOf(frame, "stack"),
@@ -1562,7 +1791,7 @@ const reachLeg = async (on: On) => {
   const reach = () =>
     frame.evaluate(() => {
       const card = document.getElementById("decision-reach");
-      const change = card?.querySelector<HTMLElement>(".dp-change");
+      const change = card?.querySelector<HTMLElement>("[data-change]");
       const box = change?.getBoundingClientRect();
       const hit = change ? getComputedStyle(change, "::after") : null;
       const px = (value: string | undefined) => Number.parseFloat(value ?? "0");
@@ -1578,8 +1807,9 @@ const reachLeg = async (on: On) => {
           right: cardBox?.right ?? 0,
         },
         line:
-          card?.querySelector("header .dp-picks")?.getAttribute("aria-label") ??
-          "",
+          card
+            ?.querySelector("header [data-slot=decided]")
+            ?.getAttribute("aria-label") ?? "",
         chipsRight: Math.max(
           0,
           ...[...(card?.querySelectorAll("header [data-pick]") ?? [])].map(
@@ -1661,7 +1891,7 @@ const fitLeg = async (on: On, theme: "light" | "dark") => {
       frame.evaluate(
         () =>
           document.querySelector<HTMLIFrameElement>(
-            "#decision-fit .dp-optmedia iframe"
+            "#decision-fit [data-slot=option-media] iframe"
           )?.contentDocument?.body?.textContent ?? ""
       ),
     (words) => words.includes("slides"),
@@ -1673,10 +1903,10 @@ const fitLeg = async (on: On, theme: "light" | "dark") => {
     const root = document.documentElement;
     const cardBox = card?.getBoundingClientRect();
     const embed = card
-      ?.querySelector(".dp-optmedia iframe")
+      ?.querySelector("[data-slot=option-media] iframe")
       ?.getBoundingClientRect();
     const cost = card?.querySelector<HTMLElement>(
-      '[data-option="wide"] .dp-cost'
+      '[data-option-for="wide"][id$="-cost"]'
     );
     const line = cost
       ? Number.parseFloat(getComputedStyle(cost).lineHeight)
@@ -1719,15 +1949,16 @@ const fitLeg = async (on: On, theme: "light" | "dark") => {
   );
   const wide = await pickRead(frame, "wide");
   const plain = await pickRead(frame, "plain");
+  // A program's option is its group's radio (ui/option-group).
   const named = await frame
-    .getByRole("button", { name: FIT_LABEL, exact: true })
+    .getByRole("radio", { name: FIT_LABEL, exact: true })
     .count();
   kit.check(
-    `(g) 320 ${theme}: a pick is named by its label alone, its line, cost and Recommended its description`,
+    `(g) 320 ${theme}: a pick is named by its label alone (a radio of its card's group), its line, cost and Recommended its description`,
     named === 1 &&
-      wide.aria.startsWith(`- button "${FIT_LABEL}"`) &&
+      wide.aria.startsWith(`- radio "${FIT_LABEL}"`) &&
       wide.description === `Closer to readers. Cost: ${FIT_COST} Recommended` &&
-      plain.aria.startsWith('- button "The hub"') &&
+      plain.aria.startsWith('- radio "The hub"') &&
       plain.description ===
         "Nothing new to run. Cost: Readers far from the hub wait longer.",
     JSON.stringify({ named, wide, plain })
@@ -1758,10 +1989,10 @@ const openAsCanvas = async (on: On) => {
   await settle(desk, 300);
   // The page's foot holds the DialKit panel, floating: the button goes to the view's top, clear of it.
   await back
-    .locator("#decision-stack figure.diagram button.open")
+    .locator("#decision-stack [data-open-canvas]")
     .first()
     .evaluate((button) => button.scrollIntoView({ block: "start" }));
-  await pressIn(back, "#decision-stack figure.diagram button.open >> nth=0");
+  await pressIn(back, "#decision-stack [data-open-canvas] >> nth=0");
   const opened = await until(
     "the diagram's canvas",
     () =>
@@ -1878,7 +2109,8 @@ const waitChecks = async (on: On) => {
   const quickFrame = await frameWith(quick, 4);
   await until(
     "the embed framed",
-    () => quickFrame.locator("#decision-plan iframe.screen").count(),
+    () =>
+      quickFrame.locator("#decision-plan iframe[data-shape=screen]").count(),
     (count) => count > 0,
     30_000
   ).catch(() => 0);
@@ -1908,7 +2140,7 @@ const waitChecks = async (on: On) => {
   const heldFrame = await frameWith(held, 4);
   await until(
     "the embed framed after its held ping",
-    () => heldFrame.locator("#decision-plan iframe.screen").count(),
+    () => heldFrame.locator("#decision-plan iframe[data-shape=screen]").count(),
     (count) => count > 0,
     30_000
   ).catch(() => 0);
@@ -1937,7 +2169,8 @@ const openToDraw = async (on: On) => {
   // The show draws the page at a new revision: the pane swaps its frame, and
   // a card unfolded in the frame on its way out is folded in the one that
   // stays. Found again and opened until its Open to draw stands in view.
-  const OPEN = "#decision-host figure button.open";
+  const OPEN =
+    "#decision-host [data-slot=media] :is([data-open-canvas], [data-open-draw])";
   const frame = (await until(
     "the host card open, its Open to draw in view",
     async () => {
@@ -2055,7 +2288,7 @@ const burstLeg = async (on: On) => {
     const src = async () => {
       try {
         return await frame
-          .locator("#decision-where iframe.screen")
+          .locator("#decision-where iframe[data-shape=screen]")
           .first()
           .getAttribute("src", { timeout: 1000 });
       } catch {
@@ -2364,7 +2597,7 @@ const tapLeg = async (on: On) => {
     under?.top === "stages" && !!tapped && !tapped.decided && tapped.body,
     JSON.stringify({ under, tapped, heard })
   );
-  await frame.locator("#decision-tall .dp-continue").tap();
+  await frame.locator("#decision-tall [data-continue]").tap();
   const folded = await until(
     "the tall card folded by Continue",
     () => foldOf(frame, "tall"),
@@ -2383,7 +2616,7 @@ const tapLeg = async (on: On) => {
   // The card opened again by Change keeps its pick, and a tap on the
   // chosen option keeps it (the overlay's pick, preview-overlay pick.ts: a
   // one-pick choice is never let go), for a finger as for a mouse.
-  await frame.locator("#decision-tall .dp-change").tap();
+  await frame.locator("#decision-tall [data-change]").tap();
   await until(
     "the tall card open again",
     () => foldOf(frame, "tall"),
@@ -2411,7 +2644,7 @@ const tapLeg = async (on: On) => {
     (fold) => JSON.stringify(fold.marked) === '["skim"]',
     5000
   ).catch(() => null);
-  await frame.locator("#decision-tall .dp-continue").tap();
+  await frame.locator("#decision-tall [data-continue]").tap();
   const other = await until(
     "the tall card folded again by Continue",
     () => foldOf(frame, "tall"),

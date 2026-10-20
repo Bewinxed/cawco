@@ -936,6 +936,16 @@ public enum Size {
     public static let cDecisionNodeW: Double = 148
     /// A decision card's least height (DecisionGraph CARD.height).
     public static let cDecisionNodeH: Double = 56
+    /// A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between.
+    public static let cDecisionPageW: Double = 920
+    /// The least a decision card's question takes beside its decided line before that line wraps under it.
+    public static let cDecisionQuestionBasis: Double = 240
+    /// The length of a decision page's count bar in its sticky foot, beside "1 of 5 picked".
+    public static let cDecisionMeterW: Double = 120
+    /// The narrowest a decision card's option column stands before the options stand one under another.
+    public static let cDecisionOptionMin: Double = 190
+    /// The tallest a decision card's media well draws its piece: a canvas, a frame and a diagram each fit to it (a diagram never under its words' 10px floor).
+    public static let cMediaMaxH: Double = 675.2
     /// The artifact masonry's least card width: a thumbnail that still reads beside a dozen-character name.
     public static let cArtifactCardMin: Double = 148
     /// The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest.

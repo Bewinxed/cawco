@@ -72,7 +72,12 @@
 import type { Locator, Page } from "playwright-core";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import { Clock, type Run } from "../../anim";
-import { CAWCO_BRIDGE, startDecisionStage } from "../../decision-embeds";
+import {
+  CAWCO_BRIDGE,
+  pageReach,
+  startDecisionStage,
+} from "../../decision-embeds";
+import { traceMain } from "../../frames";
 import { type Kit, type Spec, settle } from "../../kit";
 
 const NAME = "pick";
@@ -115,9 +120,6 @@ const EIGHTH = 0.125;
 const OUT = "cubic-bezier(0.23, 1, 0.32, 1)";
 /** --ease-drawer as the engine writes it: motion/morph's tween. */
 const DRAWER = "cubic-bezier(0.32, 0.72, 0, 1)";
-/** What the page says once it has sent. */
-const SENT = "Sent. Change anything and send again.";
-
 const LEGS = [
   { view: "desk", theme: "light", label: "1440 light" },
   { view: "phone", theme: "dark", label: "390 dark (coarse)" },
@@ -159,7 +161,7 @@ const chipOf = (page: Page, id: string, option: string) =>
       const chip = document.querySelector<HTMLElement>(
         `#decision-${card} [data-option="${value}"]`
       );
-      const cap = chip?.querySelector(".dp-kc");
+      const cap = chip?.querySelector("[data-slot=kbd]");
       return {
         edge: chip ? getComputedStyle(chip).borderTopColor : "",
         fill: chip ? getComputedStyle(chip).backgroundColor : "",
@@ -173,7 +175,7 @@ const chipOf = (page: Page, id: string, option: string) =>
 const foldOf = (page: Page, id: string) =>
   page.evaluate((card) => {
     const root = document.getElementById(`decision-${card}`);
-    const body = root?.querySelector<HTMLElement>(".dp-body");
+    const body = root?.querySelector<HTMLElement>("[data-slot=decision-body]");
     const run = body?.getAnimations()[0];
     return {
       card: Math.round((root?.getBoundingClientRect().height ?? 0) * 10) / 10,
@@ -205,6 +207,26 @@ const foldOf = (page: Page, id: string) =>
     };
   }, id);
 
+/**
+ * A decided chip at rest in its head (DESIGN.md L633, "the actions centred
+ * on the pair"): beside the question, its middle on the question's first
+ * line; where the head wraps under a finger, on its own row at the head's
+ * start.
+ */
+const restsInHead = (at: {
+  copy: { x: number; y: number; h: number } | null;
+  header: { x: number } | null;
+  line: { y: number; lh: number } | null;
+  question: { y: number; h: number } | null;
+}) => {
+  if (!(at.copy && at.header && at.line && at.question)) {
+    return false;
+  }
+  return at.copy.y >= at.question.y + at.question.h - 0.5
+    ? Math.abs(at.copy.x - at.header.x) <= 0.5
+    : Math.abs(at.copy.y + at.copy.h / 2 - (at.line.y + at.line.lh / 2)) <= 0.5;
+};
+
 /** A box on screen, rounded to a tenth of a pixel. */
 interface Box {
   h: number;
@@ -214,9 +236,9 @@ interface Box {
 }
 
 /**
- * The flight of option `option` of card `id`: its keycap and label run on
- * the decided line (the copy), the run in its chip (the source), whether
- * the source is hidden, and the copy's own transform.
+ * The flight of option `option` of card `id`: its chip on the decided line
+ * (the copy, the chip carried whole), its chip in the options (the source),
+ * whether the source is hidden, and the copy's own transform.
  */
 const flightOf = (page: Page, id: string, option: string) =>
   page.evaluate(
@@ -234,16 +256,27 @@ const flightOf = (page: Page, id: string, option: string) =>
         `header [data-pick="${value}"]`
       );
       const source = root?.querySelector<HTMLElement>(
-        `[data-option="${value}"] > b`
+        `[data-option="${value}"]`
       );
       return {
-        copy: box(chip?.querySelector("b")),
+        copy: box(chip),
         source: box(source),
         sourceHidden: source
           ? getComputedStyle(source).visibility === "hidden"
           : false,
         transform: chip ? getComputedStyle(chip).transform : "",
         header: box(root?.querySelector("header")),
+        question: box(root?.querySelector("header h2")),
+        // The question's first line: its top and its line's height.
+        line: (() => {
+          const question = root?.querySelector("header h2");
+          return question
+            ? {
+                y: question.getBoundingClientRect().top,
+                lh: Number.parseFloat(getComputedStyle(question).lineHeight),
+              }
+            : null;
+        })(),
       };
     },
     [id, option] as const
@@ -296,7 +329,7 @@ const focusOf = (page: Page) =>
         active?.closest<HTMLElement>("[data-cawco-choice]")?.dataset
           .cawcoChoice ?? "",
       option: active?.dataset.option ?? "",
-      send: !!active?.matches(".dp-send"),
+      send: !!active?.matches("[data-send]"),
     };
   });
 
@@ -314,14 +347,14 @@ const toOption = async (page: Page, id: string, option: string) => {
 
 /** Card `id`'s Continue. */
 const continueOf = (page: Page, id: string) =>
-  page.locator(`#decision-${id} .dp-continue`);
+  page.locator(`#decision-${id} [data-continue]`);
 
 /** Brings card `id`'s Continue into the window, as a person scrolls to it. */
 const toContinue = async (page: Page, id: string) => {
   await page.evaluate(
     (card) =>
       document
-        .querySelector(`#decision-${card} .dp-continue`)
+        .querySelector(`#decision-${card} [data-continue]`)
         ?.scrollIntoView({ block: "center" }),
     id
   );
@@ -346,7 +379,8 @@ const pickIn = async (
 /** What the page's one live region says now. */
 const saidOf = (page: Page) =>
   page.evaluate(
-    () => document.querySelector(".dp-said")?.textContent?.trim() ?? ""
+    () =>
+      document.querySelector("[data-slot=page-said]")?.textContent?.trim() ?? ""
   );
 
 /** The options card `id` holds picked, its options that Tab reaches, and whether it shows Continue. */
@@ -363,7 +397,7 @@ const pickedIn = (page: Page, id: string) =>
       stops: options
         .filter((one) => one.tabIndex === 0)
         .map((one) => one.dataset.option ?? ""),
-      next: !!root?.querySelector(".dp-continue"),
+      next: !!root?.querySelector("[data-continue]"),
       decided: !!root?.hasAttribute("data-decided"),
     };
   }, id);
@@ -376,8 +410,8 @@ const pickedIn = (page: Page, id: string) =>
 const footOf = (page: Page, id: string) =>
   page.evaluate((card) => {
     const root = document.getElementById(`decision-${card}`);
-    const body = root?.querySelector<HTMLElement>(".dp-body");
-    const foot = root?.querySelector<HTMLElement>(".dp-foot");
+    const body = root?.querySelector<HTMLElement>("[data-slot=decision-body]");
+    const foot = root?.querySelector<HTMLElement>("[data-slot=decision-foot]");
     const t = (n: number) => Math.round(n * 1000) / 1000;
     if (!(root && body && foot)) {
       return {
@@ -598,7 +632,9 @@ async function liveFold(
     // starts watching (the page at rest).
     const scroller = document.scrollingElement as Element;
     const sized = new ResizeObserver(() => {
-      const body = root?.querySelector<HTMLElement>(".dp-body");
+      const body = root?.querySelector<HTMLElement>(
+        "[data-slot=decision-body]"
+      );
       const run = body?.getAnimations()[0];
       frames.push({
         t: Math.round(Number(document.timeline.currentTime) * 10) / 10,
@@ -622,7 +658,8 @@ async function liveFold(
       const root = document.getElementById(`decision-${card}`);
       return (
         root?.hasAttribute("data-decided") &&
-        root.querySelector(".dp-body")?.getAnimations().length === 0
+        root.querySelector("[data-slot=decision-body]")?.getAnimations()
+          .length === 0
       );
     },
     id,
@@ -727,8 +764,9 @@ const nextFrameOf = (page: Page, id: string) =>
               Math.round((root?.getBoundingClientRect().height ?? 0) * 10) / 10,
             body:
               Math.round(
-                (root?.querySelector(".dp-body")?.getBoundingClientRect()
-                  .height ?? 0) * 10
+                (root
+                  ?.querySelector("[data-slot=decision-body]")
+                  ?.getBoundingClientRect().height ?? 0) * 10
               ) / 10,
             decided: !!root?.hasAttribute("data-decided"),
             edge: chip ? getComputedStyle(chip).borderTopColor : "",
@@ -914,10 +952,14 @@ async function pickStep(
   await pressOn(page.locator('#decision-path [data-option="direct"]'), view);
   await settle(page, 400);
   const kept = await pickedIn(page, "path");
+  const keptSaid = await saidOf(page);
   kit.check(
-    `${label}: a press on the chosen option keeps it: still the pick, the card open, Continue standing`,
-    JSON.stringify(kept.picked) === '["direct"]' && !kept.decided && kept.next,
-    JSON.stringify(kept)
+    `${label}: a press on the chosen option keeps it: still the pick, the card open, Continue standing, and the live region says "Kept Straight to sign up"`,
+    JSON.stringify(kept.picked) === '["direct"]' &&
+      !kept.decided &&
+      kept.next &&
+      keptSaid === "Kept Straight to sign up",
+    JSON.stringify({ ...kept, said: keptSaid })
   );
 }
 
@@ -935,6 +977,25 @@ async function continueStep(
   tokens: Tokens
 ) {
   await toContinue(page, "path");
+  // Its ↵ hint only where there is an Enter to press (B9: "Show an Enter
+  // hint only where Enter is safe"; ui/kbd `reach: keyboard`), as Send's.
+  const hints = await page.evaluate(() =>
+    [
+      "#decision-path [data-continue] [data-slot=kbd]",
+      "[data-send] [data-slot=kbd]",
+    ].map(
+      (selector) =>
+        [...document.querySelectorAll(selector)].filter((key) =>
+          key.checkVisibility()
+        ).length
+    )
+  );
+  kit.check(
+    `${label}: Continue's ↵ and Send's keys stand only where there is a keyboard (${view === "phone" ? "none under a finger" : "shown under a mouse"}: Continue ${hints[0]}, Send ${hints[1]})`,
+    view === "phone"
+      ? hints[0] === 0 && hints[1] === 0
+      : hints[0] === 1 && hints[1] === 2
+  );
   const before = await foldOf(page, "path");
   const footBefore = await footOf(page, "path");
   const sourceBefore = (await flightOf(page, "path", "direct")).source;
@@ -961,28 +1022,25 @@ async function continueStep(
       : Number.NaN;
   // One clock: the body's fold, the card's padding, the head's change of
   // height and the option's flight (the Web Animations), and Change fading
-  // up (a CSS transition), one start, length and curve; the state line's
-  // fade (a CSS transition, --dur-exit) leaves its slot from that start.
+  // up (a CSS transition), one start, length and curve. An open card's head
+  // is its question alone (rule 15), so no state line leaves it.
   const webs = foldRuns.filter((run) => run.type === "WebAnimation");
   const [lead] = webs;
   const fades = foldRuns.filter(
     (run) => run.type === "CSSTransition" && run.name === "opacity"
   );
-  const stateFade = fades.find((run) => Math.abs(run.end - tokens.exit) < 1);
   const changeFade = fades.find((run) => Math.abs(run.end - tokens.settle) < 1);
   kit.check(
-    `${label}: Continue's fold is one clock, --dur-settle (${tokens.settle}ms) on --ease-crossfade: the body's height, margin and opacity, the card's padding, the head's change of height, the chosen option's flight and Change fading up start together, and the state line leaves its slot from that start over --dur-exit`,
-    webs.length === 4 &&
+    `${label}: Continue's fold is one clock, --dur-settle (${tokens.settle}ms) on --ease-crossfade: the body's height, margin and opacity, the card's padding, the head's change of height, the chosen option's flight and Change fading up start together`,
+    // The body's fold, the card's padding and the flight, and the head's
+    // change of height where the decided line is taller or shorter.
+    webs.length >= 3 &&
       !!lead &&
       !!changeFade &&
       sameClock([...webs, changeFade]).length === 0 &&
       Math.abs(lead.end - tokens.settle) < 1 &&
       lead.easing === CROSSFADE &&
-      webs.some((run) => run.name === "share-flight") &&
-      !!stateFade &&
-      stateFade.start !== null &&
-      lead.start !== null &&
-      Math.abs(stateFade.start - lead.start) <= 0.5,
+      webs.some((run) => run.name === "share-flight"),
     JSON.stringify({ runs: foldRuns.map(said) })
   );
   const seen = (at: string) =>
@@ -997,7 +1055,7 @@ async function continueStep(
     JSON.stringify({ footBefore, foot })
   );
   kit.check(
-    `${label}: the chosen option's keycap and label fly from its chip to the head on that clock (L485): at 0 on the chip, at ½ on its way, at 1 at rest in the head; its chip's run hidden while it flies`,
+    `${label}: the chosen option's keycap and label fly from its chip to the head on that clock (L485): at 0 on the chip, at ½ on its way, at 1 at rest in the head, centred on the question's first line (on its own row at the head's start where the head wraps); its chip hidden while it flies`,
     near(flight["0"]?.copy ?? null, sourceBefore) &&
       !!flight["0.5"]?.copy &&
       !!flight["0"]?.copy &&
@@ -1005,10 +1063,7 @@ async function continueStep(
       Math.abs(flight["0.5"].copy.y - flight["0"].copy.y) > 1 &&
       Math.abs(flight["0.5"].copy.y - flight["1"].copy.y) > 0.5 &&
       flight["1"].transform === "none" &&
-      !!flight["1"].header &&
-      flight["1"].copy.y >= flight["1"].header.y - 0.5 &&
-      flight["1"].copy.y + flight["1"].copy.h <=
-        flight["1"].header.y + flight["1"].header.h + 0.5 &&
+      restsInHead(flight["1"]) &&
       !!flight["0"]?.sourceHidden &&
       !!flight["0.5"]?.sourceHidden,
     JSON.stringify({ sourceBefore, flight })
@@ -1086,7 +1141,7 @@ async function changeStep(
   const backRuns = await clock.catchRuns(
     () =>
       page
-        .locator("#decision-path .dp-change")
+        .locator("#decision-path [data-change]")
         .dispatchEvent("click", { detail: 1 }),
     "#decision-path"
   );
@@ -1182,7 +1237,7 @@ async function liveSteps(
     page,
     clock,
     { id: "look", option: "card", view },
-    ".dp-meter"
+    "[data-slot=meter]"
   );
   kit.check(
     `${label}: the count's MorphText (L515) runs on its own clock, --dur-morph (${tokens.morph}ms) on ease-out, its digit rolling (at ½ in its slot) and its box holding the wider of the old and new words at 0, ½ and 1, landing on "2"`,
@@ -1220,7 +1275,7 @@ async function liveSteps(
     page,
     clock,
     { id: "radius", option: "soft", view },
-    ".dp-done"
+    "[data-send]"
   );
   kit.check(
     `${label}: Send's label morphs to what goes on that clock ("Send 2 picks" to "Send 3 picks"), its digit rolling and its box holding the wider words`,
@@ -1272,7 +1327,7 @@ async function leg(
   page.on("pageerror", (error) => errors.push(error.message.slice(0, 300)));
   await page.goto(url, { waitUntil: "load" });
   await page.waitForFunction(
-    () => document.querySelectorAll(".diagram svg").length >= 2,
+    () => document.querySelectorAll("[data-slot=diagram] svg").length >= 2,
     undefined,
     { timeout: 30_000 }
   );
@@ -1283,6 +1338,21 @@ async function leg(
   const open = await continueStep(kit, page, clock, view, label, tokens);
   await changeStep(kit, page, clock, view, label, tokens, open);
   await liveSteps(kit, page, clock, view, label, tokens);
+  // Every card decided: each decided line's Change, and Send, read a window
+  // at a time (decision-embeds.ts `pageReach`): under a finger each
+  // control's area reaches 44px (The 44 Touch Rule); at a desk 24px, drawn
+  // so or through its hit area (The 24 Pointer Rule); nothing spills.
+  const reach = await pageReach(page);
+  const short = reach.controls.filter((one) =>
+    view === "phone" ? !one.touch : !one.pointer
+  );
+  kit.check(
+    `${label}: every card decided, every control reaches ${view === "phone" ? "44px under a finger" : "24px under a mouse"} and nothing spills (${reach.controls.length} controls: ${reach.controls.map((one) => `${one.name.slice(0, 40)} ${one.w}×${one.h}`).join(", ")})`,
+    reach.controls.some((one) => one.name.includes("Change")) &&
+      short.length === 0 &&
+      reach.spills.length === 0,
+    [...short.map((one) => one.line), ...reach.spills].join("\n    ")
+  );
   kit.check(
     `${label}: the page reported no error`,
     errors.length === 0,
@@ -1305,7 +1375,7 @@ async function keyLeg(
   const keys = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
   await keys.goto(url, { waitUntil: "load" });
   await keys.waitForFunction(
-    () => document.querySelectorAll(".diagram svg").length >= 2,
+    () => document.querySelectorAll("[data-slot=diagram] svg").length >= 2,
     undefined,
     { timeout: 30_000 }
   );
@@ -1401,7 +1471,7 @@ async function keyLeg(
   );
   await keys.keyboard.press("Enter");
   await settle(keys, 100);
-  await keys.locator("#decision-path .dp-change").focus();
+  await keys.locator("#decision-path [data-change]").focus();
   await keys.keyboard.press("Enter");
   const keyBack = await nextFrameOf(keys, "path");
   const keyBackFocus = await focusOf(keys);
@@ -1428,15 +1498,40 @@ async function keyLeg(
       refoldFocus.option === "soft",
     JSON.stringify({ refold, refoldCard, refoldFocus })
   );
+  const goes = await keys.evaluate(
+    () =>
+      document
+        .querySelector("[data-send] [data-slot=morph-text]")
+        ?.textContent?.trim() ?? ""
+  );
   await keys.keyboard.press("Control+Enter");
   await settle(keys, 300);
-  const sent = await keys.evaluate(
-    () => document.querySelector(".dp-done > span")?.textContent?.trim() ?? ""
-  );
+  // Sent, Send runs the kit's pending (DESIGN.md L736, Buttons, Pending):
+  // the spinner, then its check in its slot held for --dur-hold, its label
+  // morphing to "Sent" (the X7 review's ruling: Send says it is done) and its
+  // keycaps gone while what went still stands; no "Sent." line of words is
+  // drawn beside it.
+  const sent = await keys.evaluate(() => {
+    const send = document.querySelector("[data-send]");
+    return {
+      check:
+        send?.querySelector("[data-slot=tick]")?.getAttribute("data-on") ??
+        null,
+      label:
+        send?.querySelector("[data-slot=morph-text]")?.textContent?.trim() ??
+        "",
+      keys: [...(send?.querySelectorAll("[data-slot=kbd]") ?? [])].length,
+      words: document.querySelector("[data-slot=page-foot]")?.textContent ?? "",
+    };
+  });
   kit.check(
-    `${label}: Ctrl+Enter sends from an option: the page says "${SENT}"`,
-    sent === SENT,
-    sent
+    `${label}: Ctrl+Enter sends from an option ("${goes}"): Send's pending ends on its check (L736), its label now "${sent.label}", ${sent.keys} keycaps, and no "Sent." line is drawn`,
+    sent.check === "true" &&
+      goes.startsWith("Send ") &&
+      sent.label === "Sent" &&
+      sent.keys === 0 &&
+      !sent.words.includes("Sent."),
+    JSON.stringify({ goes, ...sent })
   );
   await keys.close();
 }
@@ -1562,7 +1657,7 @@ async function readerLeg(
   });
   await page.goto(url, { waitUntil: "load" });
   await page.waitForFunction(
-    () => document.querySelectorAll(".diagram svg").length >= 2,
+    () => document.querySelectorAll("[data-slot=diagram] svg").length >= 2,
     undefined,
     { timeout: 30_000 }
   );
@@ -1665,7 +1760,9 @@ async function readerLeg(
     () =>
       new Promise<number[]>((done) => {
         const seen: number[] = [];
-        const body = document.querySelector("#decision-path .dp-body");
+        const body = document.querySelector(
+          "#decision-path [data-slot=decision-body]"
+        );
         const step = () => {
           seen.push(scrollY);
           if ((body?.getAnimations().length ?? 0) === 0 && seen.length > 2) {
@@ -1692,9 +1789,7 @@ async function readerLeg(
       landed.decided &&
       landed.body < 0.5 &&
       flight.transform === "none" &&
-      !!flight.copy &&
-      !!flight.header &&
-      flight.copy.y >= flight.header.y - 0.5,
+      restsInHead(flight),
     JSON.stringify({
       gesture,
       atHalf: half.scroll,
@@ -1750,7 +1845,7 @@ async function clampLeg(kit: Kit, url: string, label: string) {
   const page = await kit.page("desk", { theme: "light", init: [CAWCO_BRIDGE] });
   await page.goto(url, { waitUntil: "load" });
   await page.waitForFunction(
-    () => document.querySelectorAll(".diagram svg").length >= 2,
+    () => document.querySelectorAll("[data-slot=diagram] svg").length >= 2,
     undefined,
     { timeout: 30_000 }
   );
@@ -1813,7 +1908,9 @@ async function clampLeg(kit: Kit, url: string, label: string) {
       new Promise<{ most: number; scroll: number }[]>((done) => {
         const frames: { most: number; scroll: number }[] = [];
         const root = document.scrollingElement as Element;
-        const body = document.querySelector("#decision-radius .dp-body");
+        const body = document.querySelector(
+          "#decision-radius [data-slot=decision-body]"
+        );
         const step = () => {
           frames.push({
             scroll: root.scrollTop,
@@ -1869,7 +1966,7 @@ async function stillLeg(
   await still.emulateMedia({ reducedMotion: "reduce" });
   await still.goto(url, { waitUntil: "load" });
   await still.waitForFunction(
-    () => document.querySelectorAll(".diagram svg").length >= 2,
+    () => document.querySelectorAll("[data-slot=diagram] svg").length >= 2,
     undefined,
     { timeout: 30_000 }
   );
@@ -1917,8 +2014,9 @@ async function stillLeg(
   await stillClock.release();
   await still.waitForFunction(
     () =>
-      document.querySelector("#decision-path .dp-body")?.getAnimations()
-        .length === 0,
+      document
+        .querySelector("#decision-path [data-slot=decision-body]")
+        ?.getAnimations().length === 0,
     undefined,
     { timeout: 5000 }
   );
@@ -1952,22 +2050,39 @@ async function stillLeg(
   const headOf = () =>
     still.evaluate(() => {
       const card = document.getElementById("decision-path");
-      const picks = card?.querySelector<HTMLElement>("header .dp-picks");
-      const change = card?.querySelector<HTMLElement>("header .dp-change");
+      const picks = card?.querySelector<HTMLElement>(
+        "header [data-slot=decided]"
+      );
+      const change = card?.querySelector<HTMLElement>("header [data-change]");
+      // The opacity drawn: its own and each wrapper's up to the head.
+      const seen = (el: Element | null | undefined) => {
+        if (!el) {
+          return -1;
+        }
+        let o = 1;
+        for (
+          let at: Element | null = el;
+          at && at.localName !== "header";
+          at = at.parentElement
+        ) {
+          o *= Number(getComputedStyle(at).opacity);
+        }
+        return o;
+      };
       return {
-        picks: picks ? Number(getComputedStyle(picks).opacity) : -1,
-        change: change ? Number(getComputedStyle(change).opacity) : -1,
+        picks: seen(picks),
+        change: seen(change),
         decided: !!card?.hasAttribute("data-decided"),
       };
     });
   await still.evaluate(() =>
     document
-      .querySelector("#decision-path .dp-change")
+      .querySelector("#decision-path [data-change]")
       ?.scrollIntoView({ block: "center" })
   );
   await settle(still, 200);
   const backRuns = await stillClock.catchRuns(
-    () => pressOn(still.locator("#decision-path .dp-change"), view),
+    () => pressOn(still.locator("#decision-path [data-change]"), view),
     "#decision-path header"
   );
   await stillClock.seek(0.5);
@@ -2024,8 +2139,15 @@ const coralOf = (page: Page) =>
           one.closest<HTMLElement>("[data-cawco-choice]")?.dataset
             .cawcoChoice ?? "";
         return {
-          what: one.classList.contains("dp-send") ? "send" : `${card} continue`,
+          what: one.hasAttribute("data-send") ? "send" : `${card} continue`,
           inView: at.bottom > 0 && at.top < innerHeight && at.height > 0,
+          // Its keycaps as drawn on the coral: their fill and ink.
+          keys: [...one.querySelectorAll<HTMLElement>("[data-slot=kbd]")]
+            .filter((key) => key.checkVisibility())
+            .map((key) => {
+              const s = getComputedStyle(key);
+              return `${key.textContent?.trim() ?? ""} ${s.backgroundColor} on ${getComputedStyle(one).backgroundColor}, ink ${s.color}`;
+            }),
         };
       });
   });
@@ -2033,15 +2155,19 @@ const coralOf = (page: Page) =>
 /** Send as drawn: its fill, edge, ink, its highlight's opacity, and whether it is the node marked before. */
 const sendOf = (page: Page) =>
   page.evaluate(() => {
-    const send = document.querySelector<HTMLElement>(".dp-send");
+    const send = document.querySelector<HTMLElement>("[data-send]");
     const marked = (window as unknown as { kitSend?: Element }).kitSend;
     return {
       fill: send ? getComputedStyle(send).backgroundColor : "",
       edge: send ? getComputedStyle(send).borderTopColor : "",
       ink: send ? getComputedStyle(send).color : "",
-      highlight: send ? Number(getComputedStyle(send, "::before").opacity) : -1,
+      // The kit primary's top highlight is its gradient (bg-action-surface);
+      // the outline (quiet) draws none.
+      highlight: send
+        ? Number(getComputedStyle(send).backgroundImage !== "none")
+        : -1,
       same: !!send && send === marked,
-      quiet: !!send?.hasAttribute("data-quiet"),
+      quiet: !!send && getComputedStyle(send).backgroundImage === "none",
     };
   });
 
@@ -2049,8 +2175,10 @@ const sendOf = (page: Page) =>
  * One coral action at a time, the next act (the owner's ruling): across
  * load, each pick, each Continue, the last Continue, a Change and its
  * Continue again, the coral buttons shown are never more than one, and the
- * one is the next act. Send turns coral as one element, its fill, edge and
- * ink crossing on one clock (--dur-morph on ease-out), read at 0, ½ and 1.
+ * one is the next act. Send turns coral as one element, the kit Button
+ * changing variant: its fill, edge and ink crossing on one clock, the kit's
+ * colour change (DESIGN.md, Buttons: "hover and colour changes take
+ * 120ms", --dur-control on ease-out), read at 0, ½ and 1.
  */
 async function coralLeg(
   kit: Kit,
@@ -2062,12 +2190,12 @@ async function coralLeg(
   const page = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
   await page.goto(url, { waitUntil: "load" });
   await page.waitForFunction(
-    () => document.querySelectorAll(".diagram svg").length >= 2,
+    () => document.querySelectorAll("[data-slot=diagram] svg").length >= 2,
     undefined,
     { timeout: 30_000 }
   );
   await settle(page, 600);
-  const morph = await tokenMs(page, "--dur-morph");
+  const control = await tokenMs(page, "--dur-control");
   const steps: {
     coral: Awaited<ReturnType<typeof coralOf>>;
     next: string;
@@ -2096,13 +2224,13 @@ async function coralLeg(
   await toContinue(page, "radius");
   await page.evaluate(() => {
     (window as unknown as { kitSend?: Element | null }).kitSend =
-      document.querySelector(".dp-send");
+      document.querySelector("[data-send]");
   });
   const before = await sendOf(page);
   const clock = await Clock.on(page);
   const runs = await clock.catchRuns(
     () => pressOn(continueOf(page, "radius"), view),
-    ".dp-done"
+    "[data-slot=page-foot]"
   );
   const turn: Record<string, Awaited<ReturnType<typeof sendOf>>> = {};
   for (const at of [0, 0.5, 1]) {
@@ -2113,11 +2241,11 @@ async function coralLeg(
   await look("Continue radius (the last)", "send");
   await page.evaluate(() =>
     document
-      .querySelector("#decision-path .dp-change")
+      .querySelector("#decision-path [data-change]")
       ?.scrollIntoView({ block: "center" })
   );
   await settle(page, 200);
-  await pressOn(page.locator("#decision-path .dp-change"), view);
+  await pressOn(page.locator("#decision-path [data-change]"), view);
   await look("Change path", "path continue");
   await proceed("path");
   await look("Continue path again", "send");
@@ -2135,14 +2263,19 @@ async function coralLeg(
     steps.length === 9 && wrong.length === 0,
     JSON.stringify({ wrong, steps })
   );
+  // What a keycap draws on the coral: the kit Kbd's own look, which has no
+  // form for a primary button's fill (the lane's kit-swap on ui/kbd).
+  kit.note(
+    `${label}: the keycaps on the coral: ${[...new Set(steps.flatMap((one) => one.coral.flatMap((button) => button.keys)))].join("; ")}`
+  );
   const [h0, hHalf, h1] = [turn["0"], turn["0.5"], turn["1"]];
   kit.check(
-    `${label}: Send turns coral as one element on one clock (--dur-morph, ${morph}ms, on ease-out): its fill, edge, ink and highlight cross, quiet at 0, between at ½, coral at 1, the same node throughout and after`,
+    `${label}: Send turns coral as one element on one clock (--dur-control, ${control}ms, on ease-out, the kit Button's colour change): its fill, edge and ink cross, quiet at 0, between at ½, coral at 1 with its highlight, the same node throughout and after`,
     before.quiet &&
       runs.length >= 3 &&
       sameClock(runs).length === 0 &&
       runs.every(
-        (run) => Math.abs(run.end - morph) < 1 && run.easing === OUT
+        (run) => Math.abs(run.end - control) < 1 && run.easing === OUT
       ) &&
       !!h0 &&
       !!hHalf &&
@@ -2151,15 +2284,73 @@ async function coralLeg(
       h0.fill !== h1.fill &&
       hHalf.fill !== h0.fill &&
       hHalf.fill !== h1.fill &&
-      h0.highlight === 0 &&
-      hHalf.highlight > 0 &&
-      hHalf.highlight < 1 &&
       h1.highlight === 1 &&
       [h0, hHalf, h1].every((one) => one.same) &&
       !h1.quiet &&
       after.same &&
       !after.quiet,
     JSON.stringify({ before, runs: runs.map(said), turn, after })
+  );
+  await page.close();
+}
+
+/**
+ * The fold's frame cost: a pointer's Continue on the path card traced on
+ * the page's main thread (DevTools timeline), each task in the fold's 400ms
+ * with its layout, its style passes and its frame's other rendering (paint,
+ * composite and the rest), ms. Held to the 60Hz frame (16.7ms).
+ */
+async function costLeg(
+  kit: Kit,
+  url: string,
+  view: View,
+  theme: (typeof LEGS)[number]["theme"],
+  label: string
+) {
+  const page = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
+  await page.goto(url, { waitUntil: "load" });
+  await page.waitForFunction(
+    () => document.querySelectorAll("[data-slot=diagram] svg").length >= 2,
+    undefined,
+    { timeout: 30_000 }
+  );
+  await settle(page, 600);
+  await pickIn(page, "path", "direct", view);
+  await toContinue(page, "path");
+  const traced = await traceMain(
+    page,
+    async () => {
+      await page.evaluate(() => performance.mark("fold"));
+      await pressOn(continueOf(page, "path"), view);
+      await settle(page, 700);
+    },
+    { passes: true }
+  );
+  const start = traced.marks.find((one) => one.name === "fold")?.at ?? 0;
+  const frames = traced.tasks
+    .filter((task) => task.at >= start && task.at <= start + 500_000)
+    .map((task) => {
+      const style = task.passes
+        .filter((pass) => pass.name !== "Layout")
+        .reduce((sum, pass) => sum + pass.ms, 0);
+      const rendering = task.rendering.reduce((sum, [, ms]) => sum + ms, 0);
+      return {
+        layout: Math.round(task.layoutMs * 100) / 100,
+        style: Math.round(style * 100) / 100,
+        rendering: Math.round(rendering * 100) / 100,
+        total: Math.round((task.end - task.at) / 10) / 100,
+        top: task.rendering.slice(0, 3),
+      };
+    });
+  const worst = Math.max(0, ...frames.map((one) => one.total));
+  const median = (values: number[]) =>
+    values.length
+      ? values.toSorted((a, b) => a - b)[Math.floor(values.length / 2)]
+      : 0;
+  kit.check(
+    `${label}: the fold's frames, traced: ${frames.length} tasks over its 400ms, layout ${median(frames.map((one) => one.layout))}ms, style ${median(frames.map((one) => one.style))}ms, rendering (paint, composite and the rest) ${median(frames.map((one) => one.rendering))}ms at the median, the longest task ${worst}ms, under the 16.7ms frame`,
+    frames.length > 0 && worst < 16.7,
+    JSON.stringify(frames)
   );
   await page.close();
 }
@@ -2191,6 +2382,7 @@ const spec: Spec = {
       for (const { view, theme, label } of LEGS) {
         const url = stage.pageUrl(NAME, theme);
         await leg(kit, url, view, theme, label);
+        await costLeg(kit, url, view, theme, label);
         await coralLeg(kit, url, view, theme, label);
         await keyLeg(kit, url, view, theme, label);
         await stillLeg(kit, url, view, theme, label);

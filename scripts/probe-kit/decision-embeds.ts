@@ -19,19 +19,30 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import type { Page } from "playwright-core";
+import type { Frame, Page, Route } from "playwright-core";
 import { PNG } from "pngjs";
 import { buildStageHost } from "../../packages/agent/src/stage-host/build";
 import { decisionHostFile } from "../../packages/core/src/decision-host";
 import {
+  checkProgram,
   DECISION_ASSETS,
   programHost,
   scriptJson,
 } from "../../packages/hub/src/decision-program";
 import { FOLDER_FILE_LIMIT } from "../../packages/hub/src/project-folder";
+import {
+  LANDING,
+  LANDING_PICKS,
+  ONBOARDING,
+  ONBOARDING_PICKS,
+  PRICING,
+  PRICING_PICKS,
+  pageProgram,
+} from "../decisions-preview/seed";
 import { until } from "../scratch-fleet";
 import { type ShotRead, shootEmbedded } from "./canvas-shots";
 import { ROOT, settle, type Theme } from "./kit";
+import { reachOf } from "./surfaces/reach";
 
 declare global {
   interface Window {
@@ -50,7 +61,7 @@ declare global {
 export const APP = join(ROOT, "apps/dashboard");
 export const STAGE_START_MS = 240_000;
 /** An embed on a decision page: a Preview's live frame (dashboard decisions host Preview.svelte). */
-export const EMBED_FRAME = "figure.media iframe.frame";
+export const EMBED_FRAME = "[data-slot=media] iframe[data-slot=embed]";
 const PAGE_PATH = /^\/page\/([a-z-]+)\/(light|dark)\/$/;
 const TITLE = /Decisions\("([^"]*)"/;
 const STATES_EXT = /\.stories\.ts$/;
@@ -83,14 +94,21 @@ async function pickWiring(): Promise<string> {
  * enabled, and no offline notice. An init script: installed before the
  * page's own. A press on an option picks it through the overlay's own
  * handler, which `startDecisionStage` serves to every page (`PICK_PATH`).
+ * `seed`, when given (its init script's argument), is what the hub holds
+ * already: picks, notes and values the page opens on.
  */
-export function CAWCO_BRIDGE(): void {
+export function CAWCO_BRIDGE(
+  seed: Record<
+    string,
+    { note?: string; options: string[]; value?: unknown }
+  > = {}
+): void {
   interface Entry {
     note?: string;
     options: string[];
     value?: unknown;
   }
-  const state: Record<string, Entry> = {};
+  const state: Record<string, Entry> = structuredClone(seed);
   const listeners = new Set<(picks: Record<string, Entry>) => void>();
   const told = () => {
     for (const listener of listeners) {
@@ -625,7 +643,10 @@ export async function readEmbeds(
       named: src.searchParams.getAll("story"),
       caption: await handle.evaluate(
         (el) =>
-          el.closest("figure")?.querySelector("figcaption")?.textContent ?? ""
+          el
+            .closest("figure")
+            ?.querySelector("[data-slot=media-caption]")
+            ?.textContent?.trim() ?? ""
       ),
       box: { w: Math.round(box.width), h: Math.round(box.height) },
     });
@@ -1005,7 +1026,7 @@ function wholesOf(pictures: string): { from: number; to: number }[] {
  * foot was cut off (a 390 page read 5845px tall that stood 9124px).
  */
 export async function capturePage(page: Page, path: string): Promise<Capture> {
-  await scrollThrough(page);
+  await scrollThrough(page, () => settle(page, 300));
   const size = await page.evaluate(() => ({
     full: document.documentElement.scrollHeight,
     height: innerHeight,
@@ -1084,11 +1105,168 @@ export async function capturePage(page: Page, path: string): Promise<Capture> {
   return { files, paints: await embedPaints(page, out), picture: out, wholes };
 }
 
+/** One control of a page as the probe kit's reach reader read it (surfaces/reach.ts `reachOf`). */
+export interface ControlReach {
+  /** Its drawn box, CSS px. */
+  h: number;
+  /** Its line as `reachOf` wrote it, for a report. */
+  line: string;
+  /** Its element and its name: one key per control across the windows. */
+  name: string;
+  /** Every window that read it had a press 24px across it land on it: drawn that big, or reaching it (The 24 Pointer Rule). */
+  pointer: boolean;
+  /** Every window that read it had its 44px area land on it (The 44 Touch Rule). */
+  touch: boolean;
+  w: number;
+}
+
+/** Half the 44px a finger's area reaches (DESIGN.md, The 44 Touch Rule). */
+const TOUCH_HALF = 22;
+/** Half the 24px a mouse's area reaches (DESIGN.md, The 24 Pointer Rule). */
+const POINTER_HALF = 12;
+/** One side of a `reachOf` line: how far past its drawn edge a press landed, how far it had to, and what it met. */
+const SIDE =
+  /^(left|right|up|down) reach ([\d.]+) need ([\d.]+)(?: SHORT)? \(then (.*)\)$/;
+
+/**
+ * Whether a control's every side reaches 24px through its centre (The 24
+ * Pointer Rule: "a control drawn smaller than 24×24 reaches 24px through
+ * `.pointer-hit`, with the same midpoint stops"), from `reachOf`'s sides:
+ * each must reach the 24px box's edge, or the midpoint to a nearer
+ * neighbour (the lesser of that edge and the side's own 44px need, which is
+ * already the midpoint where a neighbour is nearer), or the page's edge.
+ */
+function reachesPointer(sides: string[], w: number, h: number): boolean {
+  return sides.every((one) => {
+    const [, side, reach = "0", need = "0", stop] = SIDE.exec(one) ?? [];
+    if (!side) {
+      return false;
+    }
+    const half = side === "left" || side === "right" ? w / 2 : h / 2;
+    const want = Math.max(0, Math.min(POINTER_HALF - half, Number(need)));
+    return want <= 0.5 || stop === "page edge" || Number(reach) >= want - 0.5;
+  });
+}
+
+/**
+ * Every control of the page open in `page`, read by the probe kit's reach
+ * reader (surfaces/reach.ts `reachOf`: a press through its centre 0.5px
+ * inside its 44px box lands on it, one 0.5px past it does not, the midpoint
+ * standing in where a neighbour is nearer), a window at a time down the
+ * page. A control is read in a window where its whole 44px box stands clear
+ * of the page's sticky foot, or inside the foot: what stands under the foot
+ * is the foot's to a finger there, and in reach a scroll later. Each control
+ * once, by its element and name (a short read in any window keeps it
+ * short), and beside them what spills its own box sideways or stands past
+ * the window's right edge (reachOf's own reading of a layout's fault).
+ */
+export async function pageReach(
+  page: Page | Frame
+): Promise<{ controls: ControlReach[]; spills: string[] }> {
+  // Its document's own frames (a page in the panel's frame paints on its
+  // own), then a moment for an embed's.
+  const rest = () =>
+    page.evaluate(
+      () =>
+        new Promise<void>((done) => {
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => setTimeout(done, 300))
+          );
+        })
+    );
+  const full = await scrollThrough(page, rest);
+  const height = await page.evaluate(() => innerHeight);
+  const controls = new Map<string, ControlReach>();
+  const spills = new Set<string>();
+  for (let top = 0; top < full; top += height / 2) {
+    await page.evaluate(
+      (y) => window.scrollTo(0, y),
+      Math.max(0, Math.min(top, full - height))
+    );
+    await rest();
+    const foot = await page.evaluate(() => {
+      const box = document.querySelector("[data-slot=page-foot]");
+      // Its own controls' boxes, as reachOf rounds them (to 0.5px).
+      const half = (n: number) => Math.round(n * 2) / 2;
+      return {
+        top: box?.getBoundingClientRect().top ?? Number.POSITIVE_INFINITY,
+        own: [...(box?.querySelectorAll("button, textarea, input") ?? [])].map(
+          (one) => {
+            const r = one.getBoundingClientRect();
+            return `${half(r.x)},${half(r.y)} ${half(r.width)}x${half(r.height)}`;
+          }
+        ),
+      };
+    });
+    for (const line of (await page.evaluate(reachOf)).split("\n")) {
+      takeReach(line, foot, controls, spills);
+    }
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await rest();
+  return { controls: [...controls.values()], spills: [...spills] };
+}
+
+/**
+ * One line of `reachOf` in a window whose sticky foot stands at `foot.top`
+ * with its own controls at `foot.own` (their boxes): a spill or a box past
+ * the window kept as it is (reachOf reports only a layout's fault); a
+ * control kept by its key where it is one of the foot's own or its 44px
+ * box stands clear of the foot, a short read over an earlier ok.
+ */
+function takeReach(
+  line: string,
+  foot: { own: string[]; top: number },
+  controls: Map<string, ControlReach>,
+  spills: Set<string>
+): void {
+  const [kind, tag, role, slot, name, at, size, , , , ...sides] =
+    line.split("\t");
+  if (!(kind && at && size)) {
+    return;
+  }
+  if (kind === "spill" || kind === "past") {
+    spills.add(line);
+    return;
+  }
+  const [, y = 0] = at.split(",").map(Number);
+  const [w = 0, h = 0] = size.split("x").map(Number);
+  if (
+    !foot.own.includes(`${at} ${size}`) &&
+    y + h / 2 + TOUCH_HALF > foot.top
+  ) {
+    return;
+  }
+  const key = [tag, role && `[${role}]`, slot && `[${slot}]`, ` ${name}`].join(
+    ""
+  );
+  const touch = kind === "ok";
+  const pointer = reachesPointer(sides, w, h);
+  const held = controls.get(key);
+  if (!held || (held.touch && !touch) || (held.pointer && !pointer)) {
+    controls.set(key, {
+      name: key,
+      w,
+      h,
+      touch: touch && (held?.touch ?? true),
+      pointer: pointer && (held?.pointer ?? true),
+      line,
+    });
+  }
+}
+
 /** How many passes over the page `scrollThrough` takes at most before it stops waiting for the height to hold. */
 const THROUGH_PASSES = 6;
 
-/** Scrolls `page` through, half a window at a time, until its height is the same after a pass as before it; back at the top. */
-async function scrollThrough(page: Page): Promise<void> {
+/**
+ * Scrolls `page` through, half a window at a time, until its height is the
+ * same after a pass as before it, waiting `rest` at each stop; back at the
+ * top. Its height as it held.
+ */
+async function scrollThrough(
+  page: Page | Frame,
+  rest: () => Promise<void>
+): Promise<number> {
   let tall = -1;
   for (let pass = 0; pass < THROUGH_PASSES; pass += 1) {
     const now = await page.evaluate(
@@ -1101,11 +1279,12 @@ async function scrollThrough(page: Page): Promise<void> {
     const step = await page.evaluate(() => Math.max(1, innerHeight / 2));
     for (let y = 0; y < tall; y += step) {
       await page.evaluate((top) => window.scrollTo(0, top), y);
-      await settle(page, 300);
+      await rest();
     }
   }
   await page.evaluate(() => window.scrollTo(0, 0));
-  await settle(page, 300);
+  await rest();
+  return tall;
 }
 
 /** Each embed's box on the page open in `page`, read in `png`, a picture of the whole page at the window's device scale. */
@@ -1118,7 +1297,10 @@ export async function embedPaints(page: Page, png: PNG): Promise<EmbedPaint[]> {
       const r = frame.getBoundingClientRect();
       return {
         embed:
-          frame.closest("figure")?.querySelector("figcaption")?.textContent ??
+          frame
+            .closest("figure")
+            ?.querySelector("[data-slot=media-caption]")
+            ?.textContent?.trim() ??
           frame.getAttribute("src") ??
           "",
         rect: {
@@ -1154,4 +1336,247 @@ export async function embedPaints(page: Page, png: PNG): Promise<EmbedPaint[]> {
     }
     return { embed, rect, flat: all ? most / all : 1 };
   });
+}
+
+// ---- Decision pages for the capture (surfaces/catalogue.ts `decision-host`)
+
+/**
+ * The origin a capture's decision pages stand on: no network behind it,
+ * every request to it answered on the page (`openCapturePage`). The hub tape
+ * holds no program page and none of the host's files, so these are served
+ * as the hub serves them, from this tree.
+ */
+export const CAPTURE_ORIGIN = "http://decisions.test";
+/** A dev server's preview origin that never answers its ping: Preview's wait (the catalogue holds it unanswered). */
+export const SILENT_ORIGIN = "http://decisions-site.test";
+/** A capture page's own path, and a file beside it. */
+const CAPTURE_PATH = /^\/page\/([a-z]+)\/(.*)$/;
+/** A page artifact a Preview embeds, on the page's own origin (Preview.svelte: `/__cawco/page/<id>/`). */
+const EMBEDDED_PAGE = /^\/__cawco\/page\/([0-9a-f-]{36})\/$/;
+
+/** The artifacts the media pages name: a page a Preview embeds, a dev server's preview, and ids no artifact has. */
+const CAPTURE_IDS = {
+  motion: idOf("capture-motion"),
+  site: idOf("capture-site"),
+  cards: idOf("capture-cards"),
+  gone: idOf("capture-gone"),
+  sketch: idOf("capture-sketch"),
+};
+
+/** A page artifact: a card that slides, as decision-pages' mockup. */
+const MOTION_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Motion</title>
+<style>body{margin:0;font:16px system-ui}.box{margin:16px;padding:16px;border-radius:12px;background:#eee}</style></head>
+<body><div class="box">A card that slides in</div></body></html>`;
+
+/** Every media piece the host draws but a canvas (which needs its own host and doc): a picture, three diagrams, a page embedded in an option, a Row of Text and a Badge, and Dials. */
+const MEDIA_PROGRAM = `root = Decisions("Shape the launch", [stack, host, later])
+stack = Decision("stack", "Which stack does the launch page use?", [svelte, astro], "Today: the landing is plain HTML.", [shot, flow])
+svelte = Option("svelte", "SvelteKit", "The dashboard's own stack.", true, [], "Heavier than the plain page it replaces.")
+astro = Option("astro", "Astro", "Content first, islands where needed.", false, [seq], "A second stack to keep up.")
+host = Decision("host", "Where does the page run?", [hub, edge], "It ships with the hub today.", [tune], ["stack"])
+hub = Option("hub", "The hub", "Nothing new to run.", true, [], "Readers far from the hub wait longer.")
+edge = Option("edge", "An edge host", "Closer to readers.", false, [motion], "One more host to run.")
+later = Section("Later", [plan])
+plan = Decision("plan", "When does the plan ship?", [now, after], "The waitlist opens with it.", [gantt, status], ["host"])
+status = Row([Text("Ships with the waitlist", "meta"), Badge("Planned", "attn")])
+now = Option("now", "With the page", "The waitlist opens with it.", true, [], "The page waits for the plan.")
+after = Option("after", "A week after", "The page ships first.", false, [], "The waitlist opens without it.")
+shot = Image("landing.png", "The landing as it stands: a title and one button", "Today's landing")
+flow = Diagram("flowchart LR\\nVisit[Visit] --> Read[Read] --> Join[Sign up]", "The reader's path")
+seq = Diagram("sequenceDiagram\\nReader->>Hub: open the page\\nHub-->>Reader: the page, live")
+gantt = Diagram("gantt\\ntitle Launch\\ndateFormat YYYY-MM-DD\\nsection Build\\nPage :a1, 2026-10-20, 5d\\nShip :after a1, 2d", "The plan")
+motion = Preview("${CAPTURE_IDS.motion}", "How it moves")
+tune = Dials("Card", {radius: [12, 0, 32], accent: "#e65d46"})
+`;
+
+/** Two cards whose Previews have not answered yet: a dev server's (a screen) and a component canvas's (which says its height only once it serves). */
+const WAIT_PROGRAM = `root = Decisions("Open the launch site", [site, parts])
+site = Decision("site", "Does the launch site read right?", [ship, hold], "It runs on the session's dev server.", [live])
+ship = Option("ship", "Ship it", "The site goes out as it runs.", true, [], "Nothing more is checked.")
+hold = Option("hold", "Hold it a day", "One more pass over the copy.", false, [], "The launch moves a day.")
+live = Preview("${CAPTURE_IDS.site}", "The site as it runs")
+parts = Decision("parts", "Do the site's cards read right?", [keepCards, redo], "They are drawn on the session's stage.", [cards])
+keepCards = Option("keep-cards", "Keep them", "The cards ship as drawn.", true, [], "Nothing more is drawn.")
+redo = Option("redo", "Draw them again", "A tighter card.", false, [], "A day more on the cards.")
+cards = Preview("${CAPTURE_IDS.cards}", "The site's cards")
+`;
+
+/** One card whose picture, canvas and preview are gone from the hub. */
+const GONE_PROGRAM = `root = Decisions("Keep the old layout", [old])
+old = Decision("old", "Keep the old layout?", [keep, drop], "Its pictures were cleared last week.", [shot, sketch, live])
+keep = Option("keep", "Keep it", "Nothing moves.", true, [], "The old layout stays a while.")
+drop = Option("drop", "Drop it", "The new layout ships.", false, [], "Its pictures are gone for good.")
+shot = Image("cleared.png", "The layout as it was", "The old layout")
+sketch = Canvas("${CAPTURE_IDS.sketch}", "The old sketch")
+live = Preview("${CAPTURE_IDS.gone}", "The old site")
+`;
+
+type Picks = Record<
+  string,
+  { note?: string; options: string[]; value?: unknown }
+>;
+
+/** Each capture page: its program, its files and artifacts as the hub serves them, and the picks the hub holds for it. */
+const CAPTURE_PAGES = {
+  landing: { program: pageProgram(LANDING), picks: LANDING_PICKS },
+  onboarding: { program: pageProgram(ONBOARDING), picks: ONBOARDING_PICKS },
+  pricing: { program: pageProgram(PRICING), picks: PRICING_PICKS },
+  media: {
+    program: MEDIA_PROGRAM,
+    files: { "landing.png": "files/0-landing.png" },
+    media: { [CAPTURE_IDS.motion]: { kind: "page", name: "motion" } },
+    picks: {},
+  },
+  wait: {
+    program: WAIT_PROGRAM,
+    media: {
+      [CAPTURE_IDS.site]: {
+        kind: "preview",
+        name: "launch-site",
+        embed: `${SILENT_ORIGIN}/`,
+      },
+      [CAPTURE_IDS.cards]: {
+        kind: "component",
+        name: "Card.stories.ts",
+        embed: `${SILENT_ORIGIN}/@cawco/canvas?file=src%2FCard.stories.ts`,
+      },
+    },
+    picks: {},
+  },
+  gone: { program: GONE_PROGRAM, picks: {} },
+} satisfies Record<
+  string,
+  {
+    files?: Record<string, string>;
+    media?: Record<string, unknown>;
+    picks: Picks;
+    program: string;
+  }
+>;
+
+export type CapturePage = keyof typeof CAPTURE_PAGES;
+
+/** A landing page as a picture: a title bar and one coral button on a cream page, 640×400. */
+function landingPicture(): Buffer {
+  const png = new PNG({ width: 640, height: 400 });
+  const paint = (
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    [r, g, b]: [number, number, number]
+  ) => {
+    for (let y = y0; y < y1; y += 1) {
+      for (let x = x0; x < x1; x += 1) {
+        const i = (y * png.width + x) * 4;
+        png.data[i] = r;
+        png.data[i + 1] = g;
+        png.data[i + 2] = b;
+        png.data[i + 3] = 255;
+      }
+    }
+  };
+  paint(0, 0, 640, 400, [244, 241, 236]);
+  paint(64, 120, 480, 160, [52, 48, 44]);
+  paint(64, 184, 360, 200, [140, 134, 126]);
+  paint(64, 240, 224, 288, [230, 93, 70]);
+  return PNG.sync.write(png);
+}
+
+let pickScript: Promise<string> | undefined;
+const capturePages = new WeakSet<Page>();
+
+/** One request to the capture's origin, answered as the hub would. */
+async function answerCapture(route: Route): Promise<void> {
+  const { pathname } = new URL(route.request().url());
+  if (pathname === PICK_PATH) {
+    pickScript ??= pickWiring();
+    return route.fulfill({
+      contentType: "text/javascript; charset=utf-8",
+      body: await pickScript,
+    });
+  }
+  if (pathname.startsWith(DECISION_ASSETS)) {
+    const file = await decisionHostFile(pathname.slice(DECISION_ASSETS.length));
+    return file
+      ? route.fulfill({
+          status: file.status,
+          headers: Object.fromEntries(file.headers),
+          body: Buffer.from(await file.arrayBuffer()),
+        })
+      : route.fulfill({ status: 404, body: "Not found" });
+  }
+  if (EMBEDDED_PAGE.exec(pathname)?.[1] === CAPTURE_IDS.motion) {
+    return route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: MOTION_PAGE,
+    });
+  }
+  const [, name = "", rest] = CAPTURE_PATH.exec(pathname) ?? [];
+  const held: {
+    files?: Record<string, string>;
+    media?: Record<string, unknown>;
+    program: string;
+  } | null = name in CAPTURE_PAGES ? CAPTURE_PAGES[name as CapturePage] : null;
+  if (held && rest === "") {
+    // As the hub serves it (decision-program.ts): the program it keeps once
+    // its check passes, the title that check read.
+    const checked = checkProgram(held.program);
+    return route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: programHost(
+        checked.program,
+        checked.read.title,
+        held.files ?? {}
+      ).replace(
+        "</body>",
+        `${scriptJson("cawco-media", held.media ?? {})}\n<script src="${PICK_PATH}"></script>\n</body>`
+      ),
+    });
+  }
+  if (held && rest && Object.values(held.files ?? {}).includes(rest)) {
+    return route.fulfill({ contentType: "image/png", body: landingPicture() });
+  }
+  return route.fulfill({ status: 404, body: "Not found" });
+}
+
+/**
+ * Capture page `name` opened on `page` as CawCo shows it: its program in the
+ * host page the hub serves (`programHost`, its files and artifacts beside
+ * it), the host built from this tree (`decisionHostFile`), the overlay's
+ * pick on its options, and the overlay's bridge holding the page's picks
+ * (`CAWCO_BRIDGE`, seeded); with `bridge: false`, opened as no CawCo shows
+ * it (the page offline). Answers once the page and its faces have drawn.
+ */
+export async function openCapturePage(
+  page: Page,
+  name: CapturePage,
+  { bridge = true }: { bridge?: boolean } = {}
+): Promise<void> {
+  // Once per page: the walk opens a surface's states one after another on
+  // its pass's page, and an init script stays on a page for good (a second
+  // bridge's `defineProperty` throws, and the first page's picks stood on
+  // every page after). So the one script reads which page it is on from
+  // its address: a capture page's own picks, none `?offline`.
+  if (!capturePages.has(page)) {
+    capturePages.add(page);
+    await page.route(`${CAPTURE_ORIGIN}/**`, answerCapture);
+    const seeds = Object.fromEntries(
+      Object.entries(CAPTURE_PAGES).map(([one, held]) => [one, held.picks])
+    );
+    await page.addInitScript({
+      content: `(() => {
+  const seeds = ${JSON.stringify(seeds)};
+  const at = ${CAPTURE_PATH}.exec(location.pathname);
+  if (location.origin !== ${JSON.stringify(CAPTURE_ORIGIN)} || !at || at[2] !== "" || !(at[1] in seeds) || new URLSearchParams(location.search).has("offline")) return;
+  (${CAWCO_BRIDGE.toString()})(seeds[at[1]]);
+})();`,
+    });
+  }
+  await page.goto(
+    `${CAPTURE_ORIGIN}/page/${name}/${bridge ? "" : "?offline"}`,
+    { waitUntil: "domcontentloaded" }
+  );
+  await page.locator("[data-slot=decision-page]").waitFor();
+  await page.evaluate(() => document.fonts.ready);
 }

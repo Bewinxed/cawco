@@ -145,170 +145,17 @@ a {
   font-size: var(--text-title);
   flex: 1 1 240px;
 }
-/* The head's one slot: the state line, and once the card is decided the
-   chosen options standing in it. The state line leaves its slot over
-   --dur-exit as they land (an opacity fade, so it runs with reduced motion
-   too); its words are never coral (DESIGN.md L580: coral marks the chosen
-   option, not words about it). */
-.dp-slot {
-  display: grid;
-  align-items: center;
-  min-inline-size: 0;
-}
-.dp-slot > * {
-  grid-area: 1 / 1;
-}
 .dp-state {
   font-size: var(--text-meta);
   color: var(--ink-muted);
   min-inline-size: 0;
   overflow-wrap: anywhere;
-  transition: opacity var(--dur-exit) var(--ease-out);
 }
-/* A picked card folds to its one line: the question, the chosen options and
-   Change. Its body stays mounted and folds shut (the host's Decision.svelte,
-   motion/fold); open, it lays out on the card's own gap. */
-.dp-card[data-decided] {
-  padding-block: var(--space-3);
-}
-.dp-card[data-decided] .dp-state {
-  opacity: 0;
-}
-/* The chosen options on the decided line: each the option chip's keycap and
-   label in its chosen look (DESIGN.md L905: "the coral edge (`brand-solid`),
-   a recessed fill and a keycap filled vermillion"), a mark of the pick and
-   no control; several wrap. */
-.dp-picks {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2);
-  min-inline-size: 0;
-}
-.dp-pick {
-  display: inline-flex;
-  align-items: center;
-  max-inline-size: 100%;
-  min-block-size: 30px;
-  padding-inline: var(--space-3);
-  border: 1px solid var(--brand-solid);
-  border-radius: var(--radius-sm);
-  background: var(--surface-recess);
-  color: var(--ink-strong);
-  font-size: var(--text-label);
-  line-height: var(--leading-label);
-  overflow-wrap: anywhere;
-}
-.dp-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-  min-inline-size: 0;
-}
-/* Change (a folded card): a quiet text button; under a finger its area
-   reaches 44px (DESIGN.md, The 44 Touch Rule), its drawn size unchanged. */
-.dp-change {
-  position: relative;
-  font: inherit;
-  font-size: var(--text-label);
-  color: var(--ink-muted);
-  background: none;
-  border: 0;
-  border-radius: var(--radius-sm);
-  padding: 0 var(--space-1);
-  cursor: pointer;
-  transition:
-    color var(--dur-control) var(--ease-out),
-    opacity var(--dur-settle) var(--ease-crossfade);
-}
-/* Change comes and goes on the turn's clock (Decision.svelte, a pointer's
-   Continue or Change: `data-moving`): it fades up where it lays out as the
-   card folds, and fades where it stood (`data-leaving`) as the card opens;
-   with less motion over --dur-fade. A pick that arrives stands at once. */
-.dp-card[data-moving] .dp-change {
-  @starting-style {
-    opacity: 0;
-  }
-}
-.dp-change[data-leaving] {
-  opacity: 0;
-}
-@media (prefers-reduced-motion: reduce) {
-  .dp-change {
-    transition:
-      color var(--dur-control) var(--ease-out),
-      opacity var(--dur-fade) var(--ease-out);
-  }
-}
-.dp-change:hover {
-  color: var(--ink-strong);
-}
-.dp-change:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
-}
-@media (pointer: coarse) {
-  .dp-change::after {
-    content: "";
-    position: absolute;
-    inset-block-start: 50%;
-    inset-inline-start: 50%;
-    inline-size: max(100%, 44px);
-    block-size: max(100%, 44px);
-    translate: -50% -50%;
-  }
-}
-/* Continue, at the foot of a card that holds a pick: the act that completes
-   the card. Its key stands on a keycap inside it after its word. It comes in
-   on the card's height tween; with less motion it fades in where it stands
-   (The Reduced Motion Rule). Its look is the page's coral action's, below. */
-.dp-foot {
-  display: flex;
-  justify-content: flex-end;
-}
-/* The Mark Line Rule: its word trimmed to its x-height beside the keycap. */
-.dp-continue > :not(.dp-kc) {
-  text-box: trim-both ex alphabetic;
-  padding-block: calc((1lh - 1ex) / 2);
-}
-/* The keycap on the coral takes the tint the kit's Kbd takes on a filled
-   surface (`on-brand` at 20%, kbd.svelte); on the outline, the kit's own
-   keycap (`surface-recess`, strong ink); it crosses with its button. */
-.dp-continue .dp-kc {
-  display: inline-grid;
-  place-items: center;
-  min-width: 17px;
-  height: 17px;
-  padding: 0 4px;
-  border-radius: var(--radius-xs);
-  background: color-mix(in oklab, var(--on-brand) 20%, transparent);
-  color: var(--on-action);
-  font-family: var(--font-mono);
-  font-size: var(--text-meta);
-  font-weight: var(--weight-body);
-  line-height: 1;
-  transition:
-    background-color var(--dur-morph) var(--ease-out),
-    color var(--dur-morph) var(--ease-out);
-}
-.dp-continue:where([data-quiet]) .dp-kc {
-  background: var(--surface-recess);
-  color: var(--ink-strong);
-}
-
-/* At any moment one coral action shows, the next act (the owner's ruling on
-   primary and secondary): Continue on the open card the person works in,
-   else Send once no card stands open (Decision.svelte, Decisions.svelte).
-   Coral is the kit's primary (DESIGN.md, Buttons; Coral Action: the
-   `action-surface` gradient over `action-solid`, `on-action` words); quiet
-   (`data-quiet`) is the kit's outline (raised surface, a
-   `border-button-outline` edge, strong ink). It is one button changing
-   state, never a swap: its fill, edge and ink cross over --dur-morph on
-   ease-out, and the coral's top highlight, a gradient (which does not
-   interpolate), fades on its own layer on that clock. Colour fades, so they
-   run with less motion too (L517). 36px, 10px radius, 14px padding, 8px
-   gap; 44px under a finger, the lg button (The 44 Touch Rule). A press
-   scales it to 0.97 (The Press Rule). */
-:is(.dp-continue, .dp-send) {
+/* Send, the page's coral action (DESIGN.md, Buttons; Coral Action: the
+   `action-surface` gradient over `action-solid`, `on-action` words): 36px,
+   10px radius, 14px padding, 8px gap; 44px under a finger, the lg button
+   (The 44 Touch Rule). A press scales it to 0.97 (The Press Rule). */
+.dp-send {
   position: relative;
   isolation: isolate;
   display: inline-flex;
@@ -323,83 +170,45 @@ a {
   color: var(--on-action);
   font: var(--type-button);
   cursor: pointer;
-  transition:
-    background-color var(--dur-morph) var(--ease-out),
-    border-color var(--dur-morph) var(--ease-out),
-    color var(--dur-morph) var(--ease-out);
+  transition: background-color var(--dur-control) var(--ease-out);
 }
-:is(.dp-continue, .dp-send)::before {
+.dp-send::before {
   content: "";
   position: absolute;
   inset: -1px;
   z-index: -1;
   border-radius: inherit;
   background-image: var(--action-surface);
-  transition: opacity var(--dur-morph) var(--ease-out);
-}
-:is(.dp-continue, .dp-send)[data-quiet] {
-  background-color: var(--surface-raised);
-  border-color: var(--border-button-outline);
-  color: var(--ink-strong);
-}
-:is(.dp-continue, .dp-send)[data-quiet]::before {
-  opacity: 0;
 }
 @media (hover: hover) and (pointer: fine) {
-  :is(.dp-continue, .dp-send):not([data-quiet], :disabled):hover {
+  .dp-send:not(:disabled):hover {
     background-color: var(--action-hover);
   }
-  :is(.dp-continue, .dp-send):not([data-quiet], :disabled):hover::before {
+  .dp-send:not(:disabled):hover::before {
     background-image: var(--action-surface-hover);
   }
-  :is(.dp-continue, .dp-send)[data-quiet]:not(:disabled):hover {
-    background-color: var(--surface-hover);
-  }
 }
-:is(.dp-continue, .dp-send):focus-visible {
+.dp-send:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
-:is(.dp-continue, .dp-send):disabled {
+.dp-send:disabled {
   opacity: 0.5;
   cursor: default;
 }
 @media (pointer: coarse) {
-  :is(.dp-continue, .dp-send) {
+  .dp-send {
     min-block-size: var(--c-btn-h-lg);
   }
 }
 @media (prefers-reduced-motion: no-preference) {
-  :is(.dp-continue, .dp-send) {
+  .dp-send {
     transition:
-      background-color var(--dur-morph) var(--ease-out),
-      border-color var(--dur-morph) var(--ease-out),
-      color var(--dur-morph) var(--ease-out),
+      background-color var(--dur-control) var(--ease-out),
       transform var(--dur-control) var(--ease-out);
   }
-  :is(.dp-continue, .dp-send):active:not(:disabled) {
+  .dp-send:active:not(:disabled) {
     transform: scale(var(--press-scale));
-  }
-}
-/* Continue's foot arrives on the card's height tween's clock (motion/morph:
-   --dur-morph on the drawer curve) and fades up with it, so no sliver of it
-   shows in the card's padding before the edge reaches it. */
-@media (prefers-reduced-motion: no-preference) {
-  .dp-card:not([data-instant]) .dp-foot {
-    transition: opacity var(--dur-morph) var(--ease-drawer);
-
-    @starting-style {
-      opacity: 0;
-    }
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .dp-card:not([data-instant]) .dp-foot {
-    transition: opacity var(--dur-fade) var(--ease-out);
-
-    @starting-style {
-      opacity: 0;
-    }
   }
 }
 .dp-why {
@@ -450,19 +259,6 @@ a {
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
   gap: var(--space-2);
 }
-/* A program page's option cell: the chip (the pick), then the option's own
-   media under it, outside the pick, live to the pointer. The two rows are
-   the grid's own (subgrid), so the chips of a row share one track and the
-   media theirs. */
-.dp-optcell {
-  display: grid;
-  grid-row: span 2;
-  grid-template-rows: subgrid;
-  min-inline-size: 0;
-}
-.dp-optmedia {
-  min-inline-size: 0;
-}
 /* The chip is DESIGN.md's option chip (app.css .kit-chip): at least 30px,
    8px radius, label type on the raised surface behind a control's edge,
    its keycap digit; hovered under a fine pointer it takes the hover fill.
@@ -498,7 +294,7 @@ a {
   outline-offset: 2px;
 }
 /* An option's keycap and label run, in its chip and on the decided line. */
-:is(.dp-opt, .dp-pick) b {
+.dp-opt b {
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -509,12 +305,12 @@ a {
    are trimmed to their x-height band and given the trimmed room back as
    padding, so centring the line puts their x-height's middle on the
    keycap's. The keycap is a box, centred as one. */
-:is(.dp-opt, .dp-pick) b > :not(.dp-kc) {
+.dp-opt b > :not(.dp-kc) {
   text-box: trim-both ex alphabetic;
   padding-block: calc((1lh - 1ex) / 2);
 }
 /* Each option's keycap: its digit in the card (page.js numbers them). */
-:is(.dp-opt, .dp-pick) .dp-kc {
+.dp-opt .dp-kc {
   display: inline-grid;
   place-items: center;
   flex: none;
@@ -572,7 +368,7 @@ a {
   border-color: var(--brand-solid);
   background: var(--surface-recess);
 }
-:is(.dp-opt[data-cawco-picked], .dp-pick) .dp-kc {
+.dp-opt[data-cawco-picked] .dp-kc {
   background: var(--chip-chosen-bg);
   color: var(--chip-chosen-ink);
 }
@@ -581,35 +377,9 @@ a {
 .dp-opt:active {
   background: var(--surface-fill);
 }
-/* A pick made from the keyboard lands in one frame, its chosen colour with
-   it (DESIGN.md L690: "A choice made from the keyboard … is instant, as
-   every keyboard action is"); the host's Decision.svelte sets
-   `data-instant` for that frame. */
-.dp-card[data-instant]
-  :is(.dp-opt, .dp-kc, .dp-tag, .dp-change, .dp-state, .dp-continue) {
-  transition: none;
-}
-.dp-card[data-instant] .dp-continue::before {
-  transition: none;
-}
 @media (prefers-reduced-motion: reduce) {
   .dp-bar i {
     transition: none;
-  }
-  /* Flights do not fly (DESIGN.md L517): the chosen option fades in on the
-     decided line where it stands, and fades there as the card opens. */
-  .dp-card:not([data-instant]) .dp-pick {
-    transition: opacity var(--dur-fade) var(--ease-out);
-
-    @starting-style {
-      opacity: 0;
-    }
-  }
-  .dp-picks {
-    transition: opacity var(--dur-fade) var(--ease-out);
-  }
-  .dp-picks[data-leaving] {
-    opacity: 0;
   }
 }
 
@@ -650,15 +420,4 @@ a {
   gap: var(--space-3);
   align-items: center;
   color: var(--ink-muted);
-}
-/* The page's one polite live region: heard, never drawn (clipped rather
-   than display: none, which would take it out of the accessibility tree). */
-.dp-said {
-  position: absolute;
-  inline-size: 1px;
-  block-size: 1px;
-  margin: -1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
 }

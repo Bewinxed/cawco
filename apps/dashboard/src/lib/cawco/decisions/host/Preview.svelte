@@ -6,8 +6,15 @@
   for it (hub server.ts `embedAt`), named in the page's media, at the shape
   of a screen. A component canvas draws the stories its `stories` names (every
   one when it names none) as the component alone, at their own size, and
-  says how tall it stands, so its frame is as tall as it. One the hub no
-  longer holds says so in words.
+  says how tall it stands, so its frame is as tall as it; the canvas's own
+  runtime centres each story at its own size, scales one wider than the
+  frame to fit it and scrolls one too wide at its words' floor sideways
+  under the house edge fade (runtime.ts `fitToEmbed`). Each stands in its
+  well. While the origin is asked, the well holds the frame's own height
+  where it is known (a screen's), else one status row, a skeleton until the
+  wait outlasts its grace and Caw and the line then (DESIGN.md, The Claim Of
+  Nothing Rule, The Real Wait Rule). One the hub no longer holds says so in
+  words where it would stand.
 -->
 <script lang="ts">
   import { CANVAS_EMBED_SIZE, canvasEmbedUrl } from "@cawco/core/stage";
@@ -15,8 +22,14 @@
     type FrameObserver,
     frameObserver,
   } from "#lib/cawco/frame-observer.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-working.webp";
+  import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-working.webp";
+  import { dur } from "../../motion/curves.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { served } from "./page.svelte.js";
+  import { scheme } from "./scheme.svelte.js";
+  import Well from "./Well.svelte";
 
   let {
     props,
@@ -32,6 +45,8 @@
   );
   let frame = $state<HTMLIFrameElement>();
   let tall = $state<number | null>(null);
+  /** It stands at a screen's shape, known before it serves: a dev server's preview or a sheet, not a component canvas, which says its own height. */
+  const screen = $derived(held?.kind !== "component");
   let watch: FrameObserver | undefined;
 
   /** A component canvas's own height, as it says it (agent canvas runtime `by=embed`): its frame is as tall. */
@@ -80,13 +95,8 @@
    */
   const PING_MS = 1000;
   const PINGS = 30;
-  /** `--dur-wait-grace` in ms, from the kit's tokens: a wait shows nothing before it (DESIGN.md, The Real Wait Rule). */
-  const grace = () =>
-    Number.parseFloat(
-      getComputedStyle(document.documentElement).getPropertyValue(
-        "--dur-wait-grace"
-      )
-    ) || 0;
+  /** `--dur-wait-grace` in ms, in the unit host.css writes it (motion `dur`: its minifier writes `1000ms` as `1s`): a wait shows nothing before it (DESIGN.md, The Real Wait Rule). */
+  const grace = () => dur("--dur-wait-grace");
   /**
    * An embed's address once its origin serves it: its ping (core
    * `PREVIEW_PING_PATH`, open to any page) answers ok when the machine's
@@ -148,63 +158,78 @@
   });
 </script>
 
-<figure class="dp-pane media">
+<Well caption={props.caption ? String(props.caption) : undefined}>
   {#if held?.kind === "page"}
     <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load measures the page, so the frame is as tall as it. -->
     <iframe
       bind:this={frame}
-      class="frame"
+      class={[
+        "block max-h-c-media-max-h w-full rounded-xs border-0 bg-surface-page",
+        tall === null && "aspect-16/10",
+      ]}
+      data-slot="embed"
       onload={sized}
       src={`/__cawco/page/${id}/`}
       style:block-size={tall === null ? undefined : `${tall}px`}
       title={held.name}
     ></iframe>
   {:else if held?.embed}
-    {#if ready}
-      <iframe
-        bind:this={frame}
-        class={["frame", tall === null ? "screen" : "drawn"]}
-        src={ready}
-        style:block-size={tall === null ? undefined : `${tall}px`}
-        title={held.name}
-      ></iframe>
-    {/if}
-    <!-- The live region stands from the start; its words come only once the wait has lasted. -->
-    <p class="gone" role="status">{waitLine}</p>
+    <!-- One box for the frame and its wait, at the frame's own height as soon as that is known. A dev server's preview or a sheet is a screen: it holds a screen's 16:10 from the start, a skeleton of it until the wait outlasts its grace, so nothing moves when it answers. A component canvas's height is known only once it says it (CANVAS_EMBED_SIZE), so until it serves it is one status row, a skeleton of its line before the grace. Past the grace Caw and the wait's line stand in the row (The Real Wait Rule), over the screen's place; once it serves, the row stands over the frame, empty. The live region is the row's one line throughout. -->
+    <div class="relative w-full">
+      {#if ready}
+        <iframe
+          bind:this={frame}
+          class={[
+            "block w-full rounded-xs border-0 bg-surface-page",
+            tall === null && "aspect-16/10 max-h-c-media-max-h",
+          ]}
+          data-shape={tall === null ? "screen" : "drawn"}
+          data-slot="embed"
+          src={ready}
+          style:block-size={tall === null ? undefined : `${tall}px`}
+          title={held.name}
+        ></iframe>
+      {:else if screen}
+        {#if slow}
+          <div class="aspect-16/10 max-h-c-media-max-h w-full"></div>
+        {:else}
+          <Skeleton class="w-full" height="picture" />
+        {/if}
+      {/if}
+      <div
+        class={[
+          "mark-line flex items-center justify-center gap-space-2",
+          ready || screen
+            ? "pointer-events-none absolute inset-0"
+            : "min-h-c-btn-h-lg",
+        ]}
+        data-slot="wait-row"
+      >
+        {#if !(ready || slow || screen)}
+          <Skeleton data-box line="meta" width="title" />
+        {/if}
+        {#if slow && !waited && !ready}
+          <img
+            alt=""
+            height="40"
+            src={scheme.now === "dark" ? cawDark : cawLight}
+            width="40"
+          />
+        {/if}
+        <p class="type-meta min-w-0 text-ink-muted wrap-anywhere" role="status">
+          {waitLine}
+        </p>
+      </div>
+    </div>
   {:else}
-    <p class="gone">
+    <!-- One line in its well where the preview would stand, never a slab of its size. -->
+    <p
+      data-slot="media-gone"
+      class="type-meta w-full text-ink-muted wrap-anywhere"
+    >
       {held
         ? `The ${held.kind} this card shows can't be opened here now.`
         : "What this card showed is gone."}
     </p>
   {/if}
-  {#if props.caption}<figcaption>{String(props.caption)}</figcaption>{/if}
-</figure>
-
-<style>
-  /* tailwind: this folder is bundled by Bun with no Tailwind build (core decision-host.ts), and Tailwind only generates CSS where it scans the source, so a utility here would draw nothing — https://tailwindcss.com/docs/detecting-classes-in-source-files */
-  .media {
-    min-inline-size: 0;
-  }
-  .frame {
-    display: block;
-    inline-size: 100%;
-    min-block-size: 12rem;
-    max-block-size: 80vb;
-    border: 0;
-    border-radius: var(--radius-md);
-    background: var(--surface-page);
-  }
-  .screen {
-    aspect-ratio: 16 / 10;
-  }
-  /* A component canvas that said its height: as tall as its frames; the page scrolls past it. */
-  .drawn {
-    min-block-size: 0;
-    max-block-size: none;
-  }
-  .gone {
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-</style>
+</Well>

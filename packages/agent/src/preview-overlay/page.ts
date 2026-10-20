@@ -322,7 +322,12 @@ function change(entry: ChoiceChange): Promise<void> {
   return Promise.resolve();
 }
 
-/** Marks each option in the page as picked or not, from the stored picks. */
+/**
+ * Marks each option in the page as picked or not, from the stored picks. A
+ * plain button option (an HTML page's toggle) says it with `aria-pressed`;
+ * one with a role of its own (a decision program's radio or checkbox, whose
+ * option group says `aria-checked`) keeps its role's state alone.
+ */
 function reflect() {
   const picks = artifact.state();
   for (const option of document.querySelectorAll("[data-option]")) {
@@ -333,7 +338,7 @@ function reflect() {
         option.getAttribute("data-option") ?? ""
       );
     option.toggleAttribute("data-cawco-picked", on);
-    if (option.localName === "button") {
+    if (option.localName === "button" && !option.hasAttribute("role")) {
       option.setAttribute("aria-pressed", String(on));
     }
   }
@@ -462,7 +467,8 @@ function takeInset(said: unknown) {
       ? `${value}px`
       : null;
   // `bottom`: what a host's docked composer covers of the page's foot (the
-  // Decisions tab's); the kit's page pads for it (page.css `.dp`).
+  // Decisions tab's); a decision page stands its sticky foot clear of it
+  // (decisions/host Decisions.svelte), an HTML page pads for it (page.css `.dp`).
   const bottom = px(inset.bottom);
   if (bottom !== null) {
     document.documentElement.style.setProperty("--page-inset-bottom", bottom);

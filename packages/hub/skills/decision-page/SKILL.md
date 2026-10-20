@@ -14,7 +14,15 @@ The page is a **page** artifact whose source is a program in OpenUI Lang over Ca
 - **Question**: the choice in the person's plain words ("How dense is the task row?"), never a component, story or id.
 - **Options**: 2–5 real answers. Each Option's `line` is what it gets them and its `cost` what it costs them, one line each.
 - **One Recommended**: exactly one option `recommended`, and the Decision's `why` is the one sentence that says why it.
-- **Pick plus note**: the card gives both; it asks nothing else.
+- **Pick plus note**: the card gives both; it asks nothing else. When the pick needs a reason, give the Decision's `note` what the note is for ("a reason for the rollback"); its button and field ask for that.
+- **The same facts for every option**: each line and each cost answers the same question in the same units, the Recommended option's cost included.
+- **A reason that can be checked**: the `why` names the fact that makes the Recommended option right (a number, a limit, what breaks), never only that it is better.
+- **A stable order**: options stand in their own order (today first, small to large); never move the Recommended one to the top.
+- **Say what it changes**: the question or the `why` says what the pick changes. Where something stands today, mark that option `current`.
+- **Restate what it rests on**: a card that depends on an earlier pick names that pick in its question or `why` ("With Astro picked, …").
+- **Words first**: the question, lines and costs carry the meaning; media shows it and never replaces it.
+- **Few options**: around five at most; split a bigger choice into two cards.
+- **Diagrams that fit the card**: a diagram reads without scrolling either way. Draw fewer steps, or split it into two; a long chain of steps reads left to right (`flowchart LR`).
 - **Dials** only for values on a picked option (its radius, its duration): add them to that card's media once it is decided.
 
 **Design options are drawn live.** The component canvas (`design-explore`, `component-canvas`) is your working drawing, never a page for the person. For a design choice, give each option a component canvas of its own: a states file holding that option's story (`Row.quiet.stories.ts`), opened with `artifact_create({ kind: "component", does: "judge", ask, file })`, and the Option's media a `Preview` of it naming the stories the card shows (`Preview(id, null, ["Review", "PhoneReview"])`): the person sees each one alone, at its own size and centred in the card (one wider than the card scaled down to fit it, and scrolling sideways where fitting would draw its words under 10px), none of the canvas's working chrome. A choice that isn't visual needs no media.

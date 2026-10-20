@@ -416,6 +416,8 @@
 @custom-variant slot-details-measure (&[data-slot="details-measure"]);
 @custom-variant slot-details-morph (&[data-slot="details-morph"]);
 @custom-variant slot-device (&[data-slot="device"]);
+@custom-variant slot-diagram (&[data-slot="diagram"]);
+@custom-variant slot-dials (&[data-slot="dials"]);
 @custom-variant slot-divider (&[data-slot="divider"]);
 @custom-variant slot-doc-head (&[data-slot="doc-head"]);
 @custom-variant slot-dock (&[data-slot="dock"]);

@@ -23,7 +23,9 @@
 //
 // Panels dock in the page's [data-cawco-dials] element and the timeline in
 // its [data-cawco-timeline] element when it has them (design-explore's
-// preview rail); a decision page's panel floats bottom-right.
+// preview rail); an HTML decision page's panel floats bottom-right. A
+// program's Dials piece draws its one panel's controls in its own well
+// (cawcoDialsIn), with DialKit's own control renderer.
 //
 // Every panel lives under the one "dials" key, by panel or timeline name,
 // each its values by path: { Card: { radius: 32, … }, Switch: { … } }.
@@ -99,30 +101,75 @@
     sync(store);
   };
 
-  /** The vanilla build's panel root and timeline dock, each made once. */
-  let rooted = false;
-  let docked = false;
-  const kit = () => {
+  /** The vanilla build, its store kept in CawCo's. */
+  const keptKit = () => {
     if (!window.DialKit) {
       throw new Error(
         "cawcoDials needs DialKit: the page loads vendor/dialkit first."
       );
     }
+    window.cawcoKeepDials(window.DialKit.DialStore);
+    return window.DialKit;
+  };
+
+  /** The vanilla build's panel root and timeline dock, each made once. */
+  let rooted = false;
+  let docked = false;
+  const kit = () => {
+    const dialKit = keptKit();
     if (!rooted) {
       rooted = true;
       const dock = document.querySelector("[data-cawco-dials]");
-      window.DialKit.createDialRoot(
+      dialKit.createDialRoot(
         dock
           ? { mode: "inline", target: dock, theme: "dark" }
           : { position: "bottom-right" }
       );
-      window.cawcoKeepDials(window.DialKit.DialStore);
     }
-    return window.DialKit;
+    return dialKit;
   };
 
   window.cawcoDials = (name, config, options) =>
     kit().createDialKit(name, config, options);
+
+  /**
+   * One panel's controls drawn in `target` and nowhere else, as an inline
+   * root draws a panel's (DialKit's own renderer, `mountControlRenderer`),
+   * in `theme` ("light" or "dark"; the root's `dataset.theme` follows a
+   * change). Returns the panel's controller and the root it drew in.
+   */
+  window.cawcoDialsIn = (target, name, config, options = {}) => {
+    const dialKit = keptKit();
+    const { theme = "light", ...rest } = options;
+    const panel = dialKit.createDialKit(name, config, rest);
+    const root = document.createElement("div");
+    root.className = "dialkit-root";
+    root.dataset.mode = "inline";
+    root.dataset.theme = theme;
+    const shell = document.createElement("div");
+    shell.className = "dialkit-panel";
+    shell.dataset.mode = "inline";
+    root.append(shell);
+    target.append(root);
+    const store = dialKit.DialStore;
+    const props = () => ({
+      panelId: panel.id,
+      controls: store.getPanel(panel.id)?.controls ?? [],
+      values: store.getValues(panel.id),
+    });
+    const renderer = dialKit.mountControlRenderer(shell, props());
+    const stop = store.subscribe(panel.id, () => renderer.update(props()));
+    return {
+      panel,
+      root,
+      destroy() {
+        stop();
+        renderer.destroy();
+        panel.destroy?.();
+        root.remove();
+      },
+    };
+  };
 
   window.cawcoTimeline = (name, config, options) => {
     const dialKit = kit();

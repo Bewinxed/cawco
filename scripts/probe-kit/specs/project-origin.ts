@@ -76,7 +76,11 @@ const drawnIn = async (tab: Page): Promise<Drawn> => {
     return { card: false, embed: "", gone: "" };
   }
   const gone = await page
-    .evaluate(() => document.querySelector(".gone")?.textContent?.trim() ?? "")
+    .evaluate(
+      () =>
+        document.querySelector("[data-slot=media-gone]")?.textContent?.trim() ??
+        ""
+    )
     .catch(() => "");
   const embeds = page.childFrames();
   const said = await Promise.all(
@@ -122,7 +126,7 @@ const pickIn = async (tab: Page, option: string): Promise<string> => {
   if (!frame) {
     return "no page frame";
   }
-  const change = frame.locator("#decision-leave .dp-change", {
+  const change = frame.locator("#decision-leave [data-change]", {
     hasText: "Change",
   });
   if ((await change.count()) > 0) {
