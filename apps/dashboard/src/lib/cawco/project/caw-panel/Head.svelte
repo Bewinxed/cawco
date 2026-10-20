@@ -9,8 +9,11 @@
    * - Caw's mark (28px, his still in his pose) in the 28px lead column, the
    *   words `space-3` after it (DESIGN.md, Caw's panel: one row grid).
    * - `who`: "Caw" over the thread's name, the thread's name a menu of his
-   *   other threads (the switcher). `name`: "Caw" alone; the thread's name
-   *   is the body's first row (Panel draws it).
+   *   other threads (the switcher), shown only while `named`: the name is
+   *   your first message's first line, so with that message in view it
+   *   would say it twice. A new thread, with no message yet, says "New
+   *   thread". `name`: "Caw" alone, never the thread's name.
+   * - Both list the threads in More, so switching never waits on the name.
    * - Beside "Caw", a fact you'd act on as a Badge (pin 12, applied): what
    *   waits on you, the budget, off. Nothing when there is nothing.
    * - Desk: a popover, which Escape and a press outside close (HIG,
@@ -43,6 +46,7 @@
     pose = "ready",
     wide = null,
     menu = false,
+    named = true,
   }: {
     form: "desk" | "phone";
     kind?: "who" | "name";
@@ -55,6 +59,8 @@
     wide?: { on: boolean; toggle: () => void } | null;
     /** More stands open in the frame. */
     menu?: boolean;
+    /** Your first message, the thread's name, is off screen: the name may stand here. */
+    named?: boolean;
   } = $props();
 
   /** More, held open in the frame: in the panel, no focus taken, no scroll locked, a press outside keeping it. */
@@ -101,7 +107,7 @@
         >
       {/if}
     </div>
-    {#if kind === "who"}
+    {#if kind === "who" && (named || thread === null)}
       <DropdownMenu.Root>
         <DropdownMenu.Trigger>
           {#snippet child({ props })}
@@ -166,7 +172,19 @@
           />
         {/snippet}
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end" class="min-inline-44" {...held}>
+      <DropdownMenu.Content
+        align="end"
+        class="max-inline-[min(var(--c-panel-w),calc(100vw-var(--space-6)))] min-inline-44"
+        {...held}
+      >
+        {#each THREADS as one (one)}
+          <DropdownMenu.Item
+            ><span class="min-inline-0 overflow-clip text-ellipsis whitespace-nowrap"
+              >{one}</span
+            ></DropdownMenu.Item
+          >
+        {/each}
+        <DropdownMenu.Separator />
         {#if phone}
           <DropdownMenu.Item
             ><IconPlus aria-hidden="true" /><span>New thread</span

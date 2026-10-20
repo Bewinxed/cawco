@@ -42,6 +42,7 @@
     READ_RAW,
     READ_RAW_LONG,
     SHIP,
+    SHIP_ON,
     SUGGESTIONS,
     SUGGESTIONS_LONG,
     THREAD,
@@ -68,6 +69,7 @@
     menu = false,
     lit = false,
     sized = null,
+    latest = false,
   }: {
     form: "desk" | "phone";
     scene: "thread" | "cant-read" | "cant-start" | "not-woken" | "empty";
@@ -86,6 +88,8 @@
     menu?: boolean;
     lit?: boolean;
     sized?: { w: number; h: number } | null;
+    /** The thread a few messages on, opened at its latest (Panel's `latest`). */
+    latest?: boolean;
   } = $props();
 
   /** The thread on show in each scene; null for a new one. */
@@ -127,11 +131,12 @@
   {peek}
   {pose}
   {resize}
+  {latest}
   {sized}
   {thread}
 >
   {#if scene === "thread"}
-    <Said messages={SHIP}>
+    <Said messages={latest ? SHIP_ON : SHIP}>
       {#snippet under(one)}
         {#if one.tasks}
           <FiledTasks form={tasks} tasks={landed ? filed : []} />

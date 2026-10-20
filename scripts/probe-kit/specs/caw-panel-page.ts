@@ -20,6 +20,9 @@
  *    leading side 12px in (DESIGN.md, Caw's panel).
  * 1c. In a frame cropped to the panel's top, every run of words ends above
  *    the fade at its cut. A miss counts as a spill.
+ * 1d. The head never names the thread while your first message, which is
+ *    its name (hub caw.ts `titleFrom`), stands in the room's view. A miss
+ *    counts as a spill.
  * 3. Nothing overlaps: no two runs of words in a frame cross, an ancestor
  *    and its own words aside; words a floating surface covers aren't drawn.
  *
@@ -209,10 +212,11 @@ const sweepPage = (file: string): Sweep => {
       ) {
         continue;
       }
-      words.push({ el, box });
       // The box that clips it across, and down unless that box scrolls.
       let across: Element = body;
       let down: Element | null = body;
+      // The scroller that clips it down, if one does.
+      let scroller: Element | null = null;
       for (
         let up = el.parentElement;
         up && up !== body;
@@ -222,12 +226,27 @@ const sweepPage = (file: string): Sweep => {
           across = up;
         }
         if (down === body && clips(up, "y")) {
-          down =
+          const scrolls =
             getComputedStyle(up).overflowY === "auto" ||
-            getComputedStyle(up).overflowY === "scroll"
-              ? null
-              : up;
+            getComputedStyle(up).overflowY === "scroll";
+          down = scrolls ? null : up;
+          scroller = scrolls ? up : null;
         }
+      }
+      // A run its scroller holds wholly out of view (a thread opened at its
+      // latest message, its first ones above the fold) isn't drawn: it
+      // crosses nothing. A run it holds partly in view is drawn only inside it: that part
+      // alone is what can cross another.
+      const view = scroller?.getBoundingClientRect();
+      if (!view) {
+        words.push({ el, box });
+      } else if (box.bottom > view.top && box.top < view.bottom) {
+        const top = Math.max(box.top, view.top);
+        const bottom = Math.min(box.bottom, view.bottom);
+        words.push({
+          el,
+          box: new DOMRect(box.left, top, box.width, bottom - top),
+        });
       }
       const a = across.getBoundingClientRect();
       if (box.left < a.left - 1 || box.right > a.right + 1) {
@@ -243,6 +262,18 @@ const sweepPage = (file: string): Sweep => {
       }
       if (box.right > bodyBox.right + 1 || box.left < bodyBox.left - 1) {
         out.spills.push(`${where}: ${name(el)} runs past the frame's width`);
+      }
+    }
+    // 1d. The head's thread name and your first message, never both in view.
+    const named = body.querySelector("[data-panel-thread]");
+    const first = body.querySelector("[data-panel-said] > li");
+    if (named && first && room) {
+      const r = room.getBoundingClientRect();
+      const f = first.getBoundingClientRect();
+      if (f.bottom > r.top + 1 && f.top < r.bottom - 1) {
+        out.spills.push(
+          `${where}: the head names the thread while your first message, its name, is in view`
+        );
       }
     }
     // 1c. A frame cropped to the panel's top (`peek`): every run of words

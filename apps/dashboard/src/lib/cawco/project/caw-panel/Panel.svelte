@@ -30,6 +30,12 @@
    * - `lit`: a resize grip drawn as it is under the pointer.
    * - `sized`: the size it opens at, as a drag or Wide panel left it (the
    *   size is kept when it reopens).
+   * - `latest`: the thread opens at its latest message, as the thread pane
+   *   does, the room scrolled to its end.
+   *
+   * A thread's name is your first message's first line (hub caw.ts `open`:
+   * `title: titleFrom(body)`), so the head names the thread only while that
+   * message is off screen; with it in view the name would say it twice.
    *
    * The phone's screen draws its own edge, so the panel's square trailing
    * side reads as standing on it.
@@ -62,6 +68,7 @@
     menu = false,
     lit = false,
     sized = null,
+    latest = false,
     children,
   }: {
     form: "desk" | "phone";
@@ -79,6 +86,7 @@
     lit?: boolean;
     /** The size it opens at: one a drag or Wide panel gave it, kept when it reopens. */
     sized?: { w: number; h: number } | null;
+    latest?: boolean;
     children?: Snippet;
   } = $props();
 
@@ -90,6 +98,31 @@
   /** The size a drag or Wide panel gave it; null at rest (the tokens). */
   // svelte-ignore state_referenced_locally
   let size = $state<{ w: number; h: number } | null>(sized);
+  /** The thread's room: what scrolls between the head and the message box. */
+  let room = $state<HTMLElement | null>(null);
+  /** Your first message, the thread's name, is in the room's view. */
+  let firstSeen = $state(false);
+  $effect(() => {
+    if (!room) {
+      return;
+    }
+    if (latest) {
+      room.scrollTop = room.scrollHeight;
+    }
+    const first = room.querySelector("[data-panel-said] > li");
+    if (!first) {
+      firstSeen = false;
+      return;
+    }
+    const watch = new IntersectionObserver(
+      ([entry]) => {
+        firstSeen = entry?.isIntersecting ?? false;
+      },
+      { root: room }
+    );
+    watch.observe(first);
+    return () => watch.disconnect();
+  });
   const REST_W = 380;
   const WIDE_W = 560;
   const wide = $derived(
@@ -105,26 +138,30 @@
 </script>
 
 {#snippet body()}
-  <Head {fact} {form} kind={head} {menu} {pose} {thread} {wide} />
+  <Head
+    {fact}
+    {form}
+    kind={head}
+    {menu}
+    named={!firstSeen}
+    {pose}
+    {thread}
+    {wide}
+  />
   <div
+    bind:this={room}
     class="kit-edge-fade-block relative min-block-0 flex-1 overflow-y-auto overscroll-contain bg-(--surface-recess) [scrollbar-gutter:stable]"
     data-panel-room
   >
     <div
       class={[
-        "flex min-block-full min-inline-0 flex-col gap-(--space-5) py-(--space-4)",
+        "flex min-block-full min-inline-0 flex-col gap-(--space-5) pbs-(--space-4)",
         phone ? "px-(--space-4)" : "px-(--space-3)",
+        // A crop's room ends under its fade: its last line stands clear of it.
+        peek === null ? "pbe-(--space-4)" : "pbe-[calc(var(--space-8)+var(--space-4))]",
         centre && "justify-center",
       ]}
     >
-      {#if head === "name" && thread}
-        <p
-          class="min-inline-0 text-(--ink-strong) text-label wrap-anywhere text-balance"
-          data-panel-thread-row
-        >
-          {thread}
-        </p>
-      {/if}
       {@render children?.()}
     </div>
   </div>

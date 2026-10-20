@@ -48,6 +48,31 @@ export const SHIP: Said[] = [
   },
 ];
 
+/**
+ * The same thread a few messages on, as it reads when you come back to it:
+ * the panel opens at its latest message, so your first one (the thread's
+ * name) is above the fold.
+ */
+export const SHIP_ON: Said[] = [
+  ...SHIP,
+  { id: "s3", who: "you", words: ["Can the changelog wait until Monday?"] },
+  {
+    id: "s4",
+    who: "caw",
+    words: [
+      "Yes. The launch email only links to it, so Monday still works. I've moved its due date; nothing else changes.",
+    ],
+  },
+  { id: "s5", who: "you", words: ["I'll send the pricing numbers tonight."] },
+  {
+    id: "s6",
+    who: "caw",
+    words: [
+      "Good. The pricing copy waits for them, and I'll start it as soon as they're in.",
+    ],
+  },
+];
+
 /** A thread whose last message didn't wake Caw. */
 export const ASKED: Said[] = [
   {
