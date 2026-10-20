@@ -473,6 +473,15 @@ const keepBackground = (sessionId: string, jobs: ReadonlySet<string>): void => {
 };
 
 /**
+ * `sessionId` is deleted, or its end is one nothing reattaches: its entry
+ * goes, as no process will read it again. A plain end keeps it; the
+ * session's resume reads which jobs ended meanwhile.
+ */
+export const forgetBackground = (sessionId: string): void => {
+  keepBackground(sessionId, new Set());
+};
+
+/**
  * How a turn the stream missed ended, from what history holds after its
  * prompt: the outcome its `idle` message records; for a turn 1.x ran and
  * 2.0 converted, which keeps no `idle`, its last answer completed (ended on

@@ -329,13 +329,18 @@ export interface Harness {
   detect(): Promise<MachineHarnessReport>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   dispose?(): Promise<void>;
-  /** Confirm a server session's turn and resources ended without adopting it. */
+  /**
+   * Confirm a server session's turn and resources ended without adopting it.
+   * `forget`: nothing will reattach it (a stop's `forget`), so
+   * what the harness kept to reattach it goes too.
+   */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches adapter methods
   endSession?(
     sessionKey: string,
     dir: string,
     instanceId?: string,
-    claimed?: readonly string[]
+    claimed?: readonly string[],
+    forget?: boolean
   ): Promise<void>;
   /**
    * The fleet content this harness's own copy holds on disk now, hashed as the

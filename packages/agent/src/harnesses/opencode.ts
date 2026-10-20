@@ -168,6 +168,7 @@ import {
 } from "./opencode-server";
 import {
   askOpencode,
+  forgetBackground,
   OpencodeSession,
   opencodeCatalog,
   splitModel,
@@ -4028,7 +4029,8 @@ export class OpencodeHarness implements Harness {
     sessionKey: string,
     dir: string,
     instanceId?: string,
-    claimed: readonly string[] = []
+    claimed: readonly string[] = [],
+    forget = false
   ): Promise<void> {
     if (
       claimed.includes(sessionKey) ||
@@ -4099,6 +4101,10 @@ export class OpencodeHarness implements Harness {
       throw new Error(
         "This session didn't end: this machine's OpenCode servers changed while CawCo was ending it. End it again."
       );
+    }
+    // Nothing reattaches it, so nothing reads its jobs again.
+    if (forget) {
+      forgetBackground(sessionKey);
     }
   }
 
@@ -5191,6 +5197,7 @@ export class OpencodeHarness implements Harness {
     ).session.remove({
       sessionID: sessionKey,
     });
+    forgetBackground(sessionKey);
   }
 
   async machine(method: string, _args: unknown[]): Promise<unknown> {
