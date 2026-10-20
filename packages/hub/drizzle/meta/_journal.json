@@ -1898,6 +1898,13 @@
       "when": 1792469538379,
       "tag": "0278_drop_cawco_todos_choice",
       "breakpoints": true
+    },
+    {
+      "idx": 279,
+      "version": "6",
+      "when": 1792476700454,
+      "tag": "0279_artifacts_project_key",
+      "breakpoints": true
     }
   ]
 }

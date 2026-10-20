@@ -3664,8 +3664,15 @@ export const artifacts = sqliteTable(
     heldFor: text("held_for").references((): AnySQLiteColumn => artifacts.id, {
       onDelete: "cascade",
     }),
-    /** The session's project when it made it; a page there is also written to `decisions/<name>/`. */
-    projectId: text("project_id"),
+    /**
+     * The session's project when it made it; a page there is also written
+     * to `decisions/<name>/`, and is the project's (served on its origin).
+     * A project's delete takes its pages first (db/index.ts
+     * `deleteProject`); anything else of it outlives it with no project.
+     */
+    projectId: text("project_id").references(() => projects.id, {
+      onDelete: "set null",
+    }),
     kind: text("kind").$type<import("@cawco/core").ArtifactKind>().notNull(),
     name: text("name").notNull(),
     /** What the person does on it (core `ARTIFACT_DOES`): pick, judge, try or draw. Every create names it; rows made before it were set to judge. */

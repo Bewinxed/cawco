@@ -8,7 +8,14 @@
  * have rows: a migration that empties one is caught here. Every foreign key
  * the schema declares stands in the migrated database with the same
  * ON DELETE and ON UPDATE ({@link foreignKeyDrift}). The journal's `when`
- * increases strictly with idx ({@link outOfOrder}).
+ * increases strictly with idx ({@link outOfOrder}). Once the hub has
+ * started, no row names a row that is not there (`PRAGMA
+ * foreign_key_check`): a hub that kept a port for a project no longer there
+ * died at every start (nightly 4627).
+ *
+ * `--db <path>`: the same over a copy of that database instead (a `.backup`
+ * of a live hub's), which is never written: hub start-up and migrations are
+ * proven on a copy of the live database before landing.
  */
 import { Database } from "bun:sqlite";
 import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
@@ -21,6 +28,9 @@ import { hubInProcess } from "./hub-in-process";
 const started = performance.now();
 const HUB = resolve(import.meta.dir, "..");
 const FIXTURE = join(HUB, "fixtures", "realistic-db.sqlite.gz");
+const at = process.argv.indexOf("--db");
+/** A database to check instead of the fixture, copied first; undefined: the fixture. */
+const GIVEN = at === -1 ? undefined : process.argv[at + 1];
 const scratch = mkdtempSync(join(tmpdir(), "cawco-migrations-"));
 
 /**
@@ -46,8 +56,22 @@ const read = (path: string) => {
         .get()?.n ?? 0,
     ])
   );
+  const applied = new Set(
+    rows.get("__drizzle_migrations")
+      ? sqlite
+          .query<{ at: number }, []>(
+            "SELECT created_at AS at FROM __drizzle_migrations"
+          )
+          .all()
+          .map((row) => Number(row.at))
+      : []
+  );
   sqlite.close();
-  return { rows, migrations: rows.get("__drizzle_migrations") ?? 0 };
+  return {
+    rows,
+    applied,
+    migrations: rows.get("__drizzle_migrations") ?? 0,
+  };
 };
 
 /** A foreign key as `table.col, … → target(col, …)`, the key both sides are matched by. */
@@ -164,7 +188,9 @@ try {
   mkdirSync(join(scratch, "home"));
   await Bun.write(
     dbPath,
-    Bun.gunzipSync(new Uint8Array(await Bun.file(FIXTURE).arrayBuffer()))
+    GIVEN
+      ? Bun.file(GIVEN)
+      : Bun.gunzipSync(new Uint8Array(await Bun.file(FIXTURE).arrayBuffer()))
   );
   const before = read(dbPath);
   const { hub, lifetime } = await hubInProcess(dbPath, join(scratch, "home"));
@@ -185,24 +211,55 @@ try {
   await answer("/api/agents");
   const project = projects[0]?.id;
   if (!project) {
-    throw new Error("The hub lists no project from the fixture's 12");
+    throw new Error("The hub lists no project from the database's");
   }
   await answer(`/api/projects/${project}/tasks`);
   await answer(`/api/projects/${project}/threads`);
   lifetime.close();
   const after = read(dbPath);
   const journal = entries.length;
-  if (after.migrations !== journal) {
+  // A given database is a live hub's: drizzle applies only what is newer
+  // than the newest it records, so that is what must be recorded after.
+  const newest = Math.max(0, ...before.applied);
+  const unapplied = entries.filter(
+    (entry) => entry.when > newest && !after.applied.has(entry.when)
+  );
+  if (GIVEN && unapplied.length) {
+    throw new Error(
+      `The database records none of ${unapplied.map((entry) => entry.tag).join(", ")}, newer than its newest before`
+    );
+  }
+  if (!GIVEN && after.migrations !== journal) {
     throw new Error(
       `The database records ${after.migrations} migrations; this commit has ${journal}`
     );
   }
+  // What a given database's start empties by itself, never a migration: the
+  // task index (project_task_*), rebuilt from project folders a copy does
+  // not carry, and the tool-call keys, kept 10 minutes past their answer
+  // (tool-call-keys.ts TOOL_CALL_KEY_KEPT_MS) and pruned as the hub starts.
+  const startEmpties = (name: string): boolean =>
+    !!GIVEN && (name.startsWith("project_task") || name === "tool_call_keys");
   const emptied = [...before.rows]
     .filter(([name, n]) => n > 0 && (after.rows.get(name) ?? 0) === 0)
+    .filter(([name]) => !startEmpties(name))
     .map(([name]) => name);
   if (emptied.length) {
     throw new Error(
       `A migration emptied ${emptied.join(", ")}, which the fixture had rows in`
+    );
+  }
+  const dangling = new Database(dbPath, { readwrite: true })
+    .query<{ parent: string; rowid: number; table: string }, []>(
+      "PRAGMA foreign_key_check"
+    )
+    .all();
+  if (dangling.length) {
+    throw new Error(
+      `${dangling.length} row${dangling.length === 1 ? "" : "s"} name a row that is not there once the hub started: ${dangling
+        .slice(0, 10)
+        .map((row) => `${row.table} rowid ${row.rowid} → ${row.parent}`)
+        .join("; ")}`
     );
   }
   const drift = await foreignKeyDrift(dbPath);
@@ -213,7 +270,7 @@ try {
   }
   const seeded = [...before.rows.values()].reduce((sum, n) => sum + n, 0);
   console.log(
-    `migrations:check: ${journal - before.migrations} migration${journal - before.migrations === 1 ? "" : "s"} applied over ${seeded} fixture rows; the hub answered ${answers.join(", ")}; ${((performance.now() - started) / 1000).toFixed(1)} s`
+    `migrations:check: ${after.migrations - before.migrations} migration${after.migrations - before.migrations === 1 ? "" : "s"} applied over ${seeded} ${GIVEN ? "rows of the given database" : "fixture rows"}; the hub answered ${answers.join(", ")}; ${((performance.now() - started) / 1000).toFixed(1)} s`
   );
 } finally {
   rmSync(scratch, { recursive: true, force: true });

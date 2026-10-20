@@ -887,6 +887,13 @@ export class PreviewRefusal extends Error {
   }
 }
 
+/** An origin whose session or project the hub no longer holds: let go, and said, never kept. */
+const ownerGone = (key: string): PreviewRefusal =>
+  new PreviewRefusal(
+    409,
+    `No session or project holds the preview origin ${key} now, so it serves nothing.`
+  );
+
 /**
  * The scheme the names are served on (`http` or `https`: how the proxy in
  * front of them serves them, never how a client reached the hub), then
@@ -1238,6 +1245,10 @@ export function createPreviewListeners(
     instanceId: string,
     opens: (port: number) => boolean
   ): number => {
+    // An origin whose session or project is gone holds no port: it is let go, never kept.
+    if (!db.ownerHeld(instanceId)) {
+      throw ownerGone(instanceId);
+    }
     const held = db.ports();
     const kept = held.find((row) => row.key === instanceId)?.port;
     let why = "";
@@ -1248,26 +1259,54 @@ export function createPreviewListeners(
       }
       why = refused ?? "another process holds it";
     }
-    const taken = new Set(held.map((row) => row.port));
+    const port = firstOpen(new Set(held.map((row) => row.port)), opens);
+    if (port === undefined) {
+      throw everyPortTaken();
+    }
+    if (!db.keepPort(instanceId, port)) {
+      // Its owner went while the listener opened.
+      release(instanceId);
+      throw ownerGone(instanceId);
+    }
+    if (kept !== undefined) {
+      console.warn(
+        `[preview] ${HOP}: preview of ${instanceId} moves from port ${kept} to ${port}: ${why}`
+      );
+    }
+    return port;
+  };
+
+  /** The lowest port of the range not `taken`, not barred, that `opens`; undefined when none does. */
+  const firstOpen = (
+    taken: Set<number>,
+    opens: (port: number) => boolean
+  ): number | undefined => {
     for (
       let port = PREVIEW_PORTS.first;
       port <= PREVIEW_PORTS.last;
       port += 1
     ) {
       if (!(taken.has(port) || barred(port)) && opens(port)) {
-        db.keepPort(instanceId, port);
-        if (kept !== undefined) {
-          console.warn(
-            `[preview] ${HOP}: preview of ${instanceId} moves from port ${kept} to ${port}: ${why}`
-          );
-        }
         return port;
       }
     }
-    throw new PreviewRefusal(
+  };
+
+  /** Every port of the range is held. */
+  const everyPortTaken = (): PreviewRefusal =>
+    new PreviewRefusal(
       503,
       `Every preview port (${PREVIEW_PORTS_TEXT}) is taken: end a session that has a preview or a canvas, then show this one again.`
     );
+
+  /** Origin `key`'s listener stops and its port is free again. */
+  const release = (key: string): void => {
+    const listener = sessions.get(key);
+    if (listener) {
+      detach(listener.stop(), "preview listener stop");
+    }
+    sessions.delete(key);
+    db.dropPort(key);
   };
 
   /** Session `instanceId`'s listener on its port. */
@@ -1522,15 +1561,8 @@ export function createPreviewListeners(
       return gone.map(([key]) => key);
     },
 
-    /** The session ended: its listener stops and its port is free again. */
-    release(instanceId: string): void {
-      const listener = sessions.get(instanceId);
-      if (listener) {
-        detach(listener.stop(), "preview listener stop");
-      }
-      sessions.delete(instanceId);
-      db.dropPort(instanceId);
-    },
+    /** The origin's owner ended (a session, a project): its listener stops and its port is free again. */
+    release,
 
     settings(): PreviewSettings {
       return settings.mode === "host"

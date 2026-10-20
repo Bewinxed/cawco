@@ -12267,8 +12267,10 @@ export const createServer = (
       });
     }
     let at: ReturnType<typeof previewListeners.embed>;
+    let ownPort: number;
     try {
       at = previewListeners.embed(key, owner, reachedAt);
+      ownPort = previewListeners.address(owner).port;
     } catch (error) {
       if (error instanceof PreviewRefusal) {
         console.warn(`[preview] ${error.message}`);
@@ -12277,7 +12279,6 @@ export const createServer = (
       throw error;
     }
     const path = row.source.path ?? "/";
-    const ownPort = previewListeners.address(owner).port;
     if (reachedAt.port === String(ownPort) || !at.origin) {
       return {
         embed: `${reachedAt.protocol}//${reachedAt.hostname}:${at.port}${path}`,
