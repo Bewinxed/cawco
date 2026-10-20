@@ -15,22 +15,33 @@ const listOk = reportList(lane);
 // ESLint's config covers the dashboard's source: the lane's present files under
 // apps/dashboard/src; a listed file its config does not match is skipped by
 // --no-warn-ignored rather than reported as a fatal problem.
-const files = lane.dashboardSrc.map((path) => path.replace(/^apps\/dashboard\//, ""));
+const DASHBOARD = /^apps\/dashboard\//;
+const files = lane.dashboardSrc.map((path) => path.replace(DASHBOARD, ""));
 if (files.length === 0) {
-  console.log(listOk ? "no files under apps/dashboard/src to lint\neslint-clean" : "list-failed");
+  console.log(
+    listOk
+      ? "no files under apps/dashboard/src to lint\neslint-clean"
+      : "list-failed"
+  );
   process.exit(listOk ? 0 : 1);
 }
-const run = Bun.spawnSync(["bunx", "eslint", "-f", "json", "--no-warn-ignored", ...files], {
-  cwd: "apps/dashboard",
-  stdout: "pipe",
-  stderr: "pipe",
-});
+const run = Bun.spawnSync(
+  ["bunx", "eslint", "-f", "json", "--no-warn-ignored", ...files],
+  {
+    cwd: "apps/dashboard",
+    stdout: "pipe",
+    stderr: "pipe",
+  }
+);
 const stderr = run.stderr.toString().trim();
 if (stderr) {
   console.log(`eslint stderr:\n${stderr.slice(-1500)}`);
 }
 
-let results: { filePath: string; messages: { line: number; ruleId: string | null; message: string }[] }[];
+let results: {
+  filePath: string;
+  messages: { line: number; ruleId: string | null; message: string }[];
+}[];
 try {
   results = JSON.parse(run.stdout.toString());
 } catch {
@@ -45,16 +56,18 @@ for (const file of results) {
   for (const message of file.messages) {
     const rule = message.ruleId ?? "fatal";
     byRule.set(rule, (byRule.get(rule) ?? 0) + 1);
-    problems.push(`${path}:${message.line} ${rule} ${message.message.slice(0, 140)}`);
+    problems.push(
+      `${path}:${message.line} ${rule} ${message.message.slice(0, 140)}`
+    );
   }
 }
 
 const tally = [...byRule].map(([rule, count]) => `${rule} ${count}`).join(", ");
-console.log(
-  problems.length
-    ? `${problems.join("\n")}\neslint-problems ${problems.length} (${tally})`
-    : listOk
-      ? `eslint-clean (${files.length} files)`
-      : "list-failed",
-);
+let verdict = "list-failed";
+if (problems.length) {
+  verdict = `${problems.join("\n")}\neslint-problems ${problems.length} (${tally})`;
+} else if (listOk) {
+  verdict = `eslint-clean (${files.length} files)`;
+}
+console.log(verdict);
 process.exit(problems.length || !listOk ? 1 : 0);
