@@ -211,12 +211,20 @@
   };
 
   /**
-   * The rows drawn: every step, in order, until the session starts; then the
-   * ready line alone, the others folding shut (the One Object Rule).
+   * The rows drawn: while the move waits on its yes, the ask alone (what
+   * "Move it" would run is its Details; nothing has run, so no step is drawn
+   * ahead of the answer); once it runs, every step, in order, until the
+   * session starts; then the ready line alone, the others folding shut (the
+   * One Object Rule).
    */
   const rows = $derived(
     job.steps
-      .filter((step) => job.stage !== "started" || step === "start")
+      .filter((step) => {
+        if (asking) {
+          return step === "approval";
+        }
+        return job.stage !== "started" || step === "start";
+      })
       .map((step) => {
         const phase = phaseOf(step);
         return { step, phase, label: labelOf(step, phase) };

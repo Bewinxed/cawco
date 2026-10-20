@@ -119,9 +119,13 @@
     <!-- The form's own measure, never past the window's gutter or the room
          bits-ui measures under the trigger; the recess tray under the
          raised body, as the dialog's card is. -->
+    <!-- A dialog that holds nothing (WAI-ARIA, dialog: `aria-modal` false):
+         its openers say they open one (`aria-haspopup="dialog"`), and
+         bits-ui's popover content carries no role of its own. -->
     <PopoverContent
       align="start"
       aria-label="New session"
+      aria-modal="false"
       customAnchor={hangsFrom}
       data-ns-popover
       gap="none"
@@ -137,6 +141,7 @@
         }
       }}
       onEscapeKeydown={(event) => form?.escapeStep(event)}
+      role="dialog"
       onOpenAutoFocus={(event) => {
         event.preventDefault();
         form?.focusPrompt();

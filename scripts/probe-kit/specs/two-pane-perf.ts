@@ -129,13 +129,13 @@ const PASS_SHARE = 1.1;
  * share cannot be told from its controls', and this tenth is that set's
  * slack.
  *
- * On record, inside the frame bound (48-72ms): the switch's frame can hold
- * a forced pass before its own, the Transcript's scroll handler (`dr` in
- * the build) reading `scrollTop`, `scrollHeight` and
+ * The switch's frame held a forced pass before its own, the Transcript's
+ * scroll handler reading `scrollTop`, `scrollHeight` and
  * `getBoundingClientRect` on the scroll event the shown pane's scroller
  * fires there ("1470 restyled: style 1089 by the frame … style 365 by
- * dr@C4RQvVKx.js:11:46306", one pane, a focus switch). tab-return's
- * assertions ride on that handler; it is left as it is.
+ * dr@C4RQvVKx.js:11:46306", one pane, a focus switch). That event is read
+ * after the frame now, in the task behind its rendering (Transcript
+ * `showing`), and every other scroll in its event, as before.
  *
  * DROPPED: dd9ff416d's invariant, "a switch restyles only what it shows"
  * (its 400, then 63de75506's 1.1x of the pane's elements in view): what the

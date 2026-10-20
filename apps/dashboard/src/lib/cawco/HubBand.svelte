@@ -40,10 +40,13 @@
    * the house morph.
    *
    * Under the drawer's line, where the bar is the phone's one row, the band
-   * stands at the top of the screen, over the bar, on every screen
-   * (JOURNEY.md: "The connection band persists at the top of the viewport
-   * across all mobile surfaces"): where the bar floats over a
-   * conversation's tabs, the bar and the tabs move down together under it.
+   * stands under the bar as it does on a desk, at the top of every phone
+   * screen (JOURNEY.md: "The connection band persists at the top of the
+   * viewport across all mobile surfaces"), the bar staying where it is.
+   * Where the bar floats over a conversation's tabs it is one row with them,
+   * so the band stands over that row and the bar and the tabs move down
+   * together under it: under the bar it would stand behind the bar's
+   * controls.
    *
    * The first connection is not a fault: `status` starts `disconnected`, a
    * socket not made yet reads like one that failed, so the band waits for
@@ -56,6 +59,7 @@
   import { onMount, untrack } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
+  import { IconRefresh } from "#lib/icons.js";
   import { browser } from "$app/env";
   import { cawco, hubSocketUrl, reconnectNow } from "./client.svelte";
   import { dur } from "./motion/curves.svelte";
@@ -274,11 +278,11 @@
      own clock, so the band's foot and the page's top move as one edge. The
      bar's foot is the band's top edge: it travels up under the bar, and its
      shadow still falls on the page. Under the drawer's line (DRAWER_QUERY)
-     it stands at the top of the screen, over the bar: the same place on
-     every phone screen. -->
+     a bar floating over a conversation's tabs (the Shell's `peer/top`,
+     `data-floating`) has the band over it instead, with its tabs. -->
 <div
   data-slot="hub-band-slot"
-  class="pointer-events-none relative z-(--layer-band) grid flex-none grid-rows-shut clip-block-start @container/hub-band data-open:grid-rows-open max-desk:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
+  class="pointer-events-none relative z-(--layer-band) grid flex-none grid-rows-shut clip-block-start @container/hub-band data-open:grid-rows-open max-desk:peer-data-floating/top:-order-1 motion-safe:not-data-open:transition-band-row-shut motion-safe:data-open:transition-band-row-open"
   data-open={band ? "" : undefined}
 >
   <!-- The live region stands from the first markup, so assistive tech has
@@ -332,9 +336,12 @@
             />{/key}
         </p>
         {#if pressable}
-          <!-- Pending in place while an attempt is out, whoever started it. -->
+          <!-- Pending in place while an attempt is out, whoever started it: its
+               rest glyph's slot takes the spinner and its words turn to
+               "Reconnecting…" (DESIGN.md, Pending), never a bare spinner. -->
           <Button
             failed={cawco.status !== "connecting"}
+            icon={IconRefresh}
             label="Reconnect now"
             onclick={reconnectNow}
             pending={cawco.status === "connecting"}

@@ -95,7 +95,9 @@
         Run this on the machine. It appears here as soon as the agent checks in.
       </p>
       {#if pairUrl}
-        <CopyBox label="Install command" text={installCommand(pairUrl)} />
+        <!-- Read before it is run: it wraps between its words, never cut
+             mid-URL (CopyBox `wrap`). -->
+        <CopyBox label="Install command" text={installCommand(pairUrl)} wrap />
       {:else if joinInfo.error}
         <p class="type-meta text-status-fail-ink" role="alert">
           {joinInfo.error}

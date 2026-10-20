@@ -1,7 +1,9 @@
 <script lang="ts">
   /**
    * A diff at full size, in the kit dialog: the file, what changed, and the
-   * layout (unified or split) as a segmented control. Each layout is drawn
+   * layout (unified or split) as a segmented control. It only shows, so it
+   * holds nothing (DESIGN.md, The Open Page Rule): no scrim, the page live
+   * under it, as tall as the diff up to the dialog's cap. Each layout is drawn
    * into its own layer, so switching cross-fades the new one in over the
    * old over --dur-control instead of redrawing in place.
    */
@@ -80,7 +82,7 @@
     body="document"
     bodyPad="flush"
     class="w-c-dialog-document-w"
-    height="cap"
+    modal={false}
     width="document"
   >
     <header
@@ -89,7 +91,9 @@
     >
       <div class="flex min-w-0 items-center gap-3">
         <div class="flex min-w-0 items-center gap-2">
-          <Dialog.Title look="path">{filePath}</Dialog.Title>
+          <!-- Cut from the start, as every path is: the leaf tells two
+               files apart (DESIGN.md, The Truncate Inside Rule). -->
+          <Dialog.Title look="path"><bdi>{filePath}</bdi></Dialog.Title>
           <CopyButton
             fit="square-24"
             size="icon-sm"

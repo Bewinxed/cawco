@@ -473,7 +473,7 @@ async function homeNests(
     kit,
     phone,
     "the home",
-    `li[data-slot="tree-node"]:has(> ${parentLine})`,
+    `li[data-tree-node]:has(> ${parentLine})`,
     [childLine],
     THREE
   );

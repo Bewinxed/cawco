@@ -103,11 +103,24 @@ const run = async (kit: Kit) => {
       cwd: folder,
     });
     const query = estimateQuery(String(round));
-    const first = asked(
-      await fleet.api<MoveEstimate>(
-        `/api/projects/${project.id}/move-estimate?${query}`
-      )
+    const estimate = await fleet.api<MoveEstimate>(
+      `/api/projects/${project.id}/move-estimate?${query}`
     );
+    const first = asked(estimate);
+    if (round === 1) {
+      // Where it moves is said once, by the title the lines stand under: a
+      // destination told apart from its namesakes was said twice.
+      const title = estimate.ask?.title ?? "";
+      const lines = estimate.ask?.lines ?? [];
+      // "Move <folder> to <destination>?", the destination as the hub names
+      // it among the fleet (core `machineCalled`).
+      const destination = title.slice(title.lastIndexOf(" to ") + 4, -1);
+      check(
+        "the ask names where it moves once, in its title",
+        destination.length > 0 && !lines.join(" ").includes(destination),
+        [title, ...lines].join(" / ")
+      );
+    }
     const isRepo = existsSync(join(folder, ".git"));
     check(
       `round ${round}: the estimate asked straight away asks no "git init" and no approval`,

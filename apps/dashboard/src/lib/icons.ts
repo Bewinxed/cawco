@@ -63,14 +63,20 @@ export { default as IconFileTable } from "~icons/solar/clipboard-list-bold-duoto
 export { default as IconReportFailed } from "~icons/solar/clipboard-remove-bold-duotone";
 export { default as IconClock } from "~icons/solar/clock-circle-bold-duotone";
 export { default as IconError } from "~icons/solar/close-circle-bold-duotone";
+/** A tab closed (its menu's Close). */
+export { default as IconCloseTab } from "~icons/solar/close-square-bold-duotone";
 export { default as IconToolCode } from "~icons/solar/code-2-bold-duotone";
 export { default as IconFileCode } from "~icons/solar/code-file-bold-duotone";
 export {
   default as IconTerminal,
   default as IconToolTerminal,
 } from "~icons/solar/code-square-bold-duotone";
+/** A tab split beside it, to the right (its menu's Split right). */
+export { default as IconSplitRight } from "~icons/solar/columns-2-bold-duotone";
 export { default as IconToolNavigate } from "~icons/solar/compass-bold-duotone";
 export { default as IconCopy } from "~icons/solar/copy-bold-duotone";
+/** The other tabs closed (its menu's Close others). */
+export { default as IconCloseOthers } from "~icons/solar/copy-close-bold-duotone";
 export { default as IconCpu } from "~icons/solar/cpu-bold-duotone";
 /** A screen tool's row; the preview pane's Interact mode (the page gets the pointer). */
 export {
@@ -196,6 +202,8 @@ export { default as IconRocket } from "~icons/solar/rocket-2-bold-duotone";
 /** Hooks: a lifecycle event branching into what runs. */
 export { default as IconHook } from "~icons/solar/routing-2-bold-duotone";
 /** A design system: the project's look, written down (StarterCards' `system`). */
+/** A tab split under it (its menu's Split down). */
+export { default as IconSplitDown } from "~icons/solar/rows-2-bold-duotone";
 export { default as IconRulerPen } from "~icons/solar/ruler-cross-pen-bold-duotone";
 export { default as IconJev } from "~icons/solar/scale-bold-duotone";
 export { default as IconServer } from "~icons/solar/server-2-bold-duotone";
@@ -216,6 +224,8 @@ export { default as IconSort } from "~icons/solar/sort-bold-duotone";
 export { default as IconUnfold } from "~icons/solar/sort-vertical-bold-duotone";
 export { default as IconCollapseOthers } from "~icons/solar/square-double-alt-arrow-up-bold-duotone";
 export { default as IconExternal } from "~icons/solar/square-top-down-bold-duotone";
+/** A tab moved to another group (its menu's Move to group). */
+export { default as IconMoveTab } from "~icons/solar/square-transfer-horizontal-bold-duotone";
 /** A release's New section (ReleaseNotes). */
 export { default as IconStars } from "~icons/solar/stars-bold-duotone";
 export { default as IconStop } from "~icons/solar/stop-bold-duotone";

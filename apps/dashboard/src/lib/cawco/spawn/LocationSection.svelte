@@ -206,9 +206,13 @@
     </Segmented>
   {/snippet}
 
+  <!-- It clips its corners and is no scroller (the browser's foot sticks
+       past it to the popover's), so as the section's grid item it takes no
+       width of its own content's: `min-w-0`, or the folder rows widened the
+       popover past a phone's edge. -->
   <div
     data-slot="location-section-field"
-    class="field-shell overflow-hidden rounded-md border border-border-control bg-surface-raised shadow-xs transition-control data-locked:bg-surface-recess"
+    class="field-shell min-w-0 overflow-clip rounded-md border border-border-control bg-surface-raised shadow-xs transition-control data-locked:bg-surface-recess"
     data-locked={locked || undefined}
   >
     <div
@@ -267,8 +271,14 @@
     <div inert={!browsing} {@attach folds(() => browsing, PANEL)}>
       <div class="min-h-0">
         <div class="border-t border-t-border-hairline bg-surface-recess">
+          <!-- The machine and the crumb on one line at every width. The folder
+               you are in stands whole at the crumb's end (its name ending in
+               an ellipsis only past the whole row); the folders above it
+               scroll sideways in the room left, opening at their end, the
+               one above yours: a right-to-left scroller starts at its right,
+               round a left-to-right run of crumbs. -->
           <div
-            class="flex max-phone:flex-wrap items-center gap-space-2 border-b border-b-border-hairline bg-surface-recess p-space-2 ps-space-3"
+            class="flex items-center gap-space-2 border-b border-b-border-hairline bg-surface-recess p-space-2 ps-space-3"
           >
             <span
               data-slot="machine"
@@ -280,31 +290,40 @@
               ></span><span>{machineName}</span></span
             >
             <div
-              class="flex max-phone:basis-full max-phone:flex-col min-w-0 flex-1 items-center max-phone:items-start gap-space-row font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-muted"
+              data-slot="crumbs"
+              class="flex min-w-0 flex-1 items-center gap-space-row whitespace-nowrap font-(family-name:--font-mono) text-size-label leading-label font-normal text-ink-muted"
             >
-              <div
-                class="fai-scroll flex max-phone:max-w-full min-w-0 items-center gap-space-row overflow-x-auto whitespace-nowrap"
-              >
-                {#each crumbs.slice(0, -1) as crumb (crumb.to)}
-                  <button
-                    data-slot="crumb"
-                    class="press-tint transition-control min-h-c-row-h min-w-c-row-h flex-none rounded-xs border-none border-current bg-transparent px-space-2 text-inherit hover:bg-surface-hover"
-                    onclick={() => list(crumb.to)}
-                    type="button"
+              {#if crumbs.length > 1}
+                <div
+                  data-slot="above"
+                  class="fai-scroll dir-rtl min-w-0 overflow-x-auto overscroll-x-contain"
+                >
+                  <div
+                    class="inline-flex items-center gap-space-row align-middle"
+                    dir="ltr"
                   >
-                    {crumb.label}
-                  </button>
-                  <span aria-hidden="true" class="text-neutral-8">/</span>
-                {/each}
-              </div>
+                    {#each crumbs.slice(0, -1) as crumb (crumb.to)}
+                      <button
+                        data-slot="crumb"
+                        class="press-tint transition-control min-h-c-row-h min-w-c-row-h flex-none rounded-xs border-none border-current bg-transparent px-space-2 text-inherit hover:bg-surface-hover"
+                        onclick={() => list(crumb.to)}
+                        type="button"
+                      >
+                        {crumb.label}
+                      </button>
+                      <span aria-hidden="true" class="text-neutral-8">/</span>
+                    {/each}
+                  </div>
+                </div>
+              {/if}
               <button
                 data-slot="crumb"
                 aria-current="location"
-                class="press-tint transition-control min-h-c-row-h min-w-c-row-h max-w-full flex-none rounded-xs border-none border-current bg-surface-lift p-space-2 text-start font-medium wrap-anywhere text-ink-strong"
+                class="press-tint transition-control min-h-c-row-h min-w-c-row-h max-w-full shrink-0 rounded-xs border-none border-current bg-surface-lift px-space-2 text-start font-medium text-ink-strong"
                 onclick={() => list(path)}
                 type="button"
               >
-                {crumbs.at(-1)?.label}
+                <span class="block truncate">{crumbs.at(-1)?.label}</span>
               </button>
             </div>
           </div>
@@ -366,8 +385,13 @@
               {/if}
             {/if}
           </div>
+          <!-- The foot stands whole on the popover's floor while what is
+               above it scrolls (the popover is held to the room it has, a
+               phone's above all): it sticks to the surface's foot, the one
+               scroller round it (the field clips, it does not scroll). -->
           <div
-            class="flex max-phone:flex-wrap items-center justify-between gap-space-2 border-t border-t-border-hairline bg-surface-lift p-space-2"
+            data-slot="browse-foot"
+            class="sticky bottom-0 flex max-phone:flex-wrap items-center justify-between gap-space-2 border-t border-t-border-hairline bg-surface-lift p-space-2"
           >
             <span
               data-slot="path"

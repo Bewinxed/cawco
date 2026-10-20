@@ -297,7 +297,9 @@ async function railLeg(kit: Kit, base: string) {
         scrims: document.querySelectorAll(
           '[data-slot="session-scrim"], [data-slot="dialog-overlay"], [data-slot="drawer-overlay"]'
         ).length,
-        pageAt: hit ? `${hit.localName}${hit.closest("#main-content") ? " in main" : ""}` : "none",
+        pageAt: hit
+          ? `${hit.localName}${hit.closest("#main-content") ? " in main" : ""}`
+          : "none",
         live: !!hit?.closest("#main-content") && !pop?.contains(hit),
         promptFocused:
           prompt !== null &&

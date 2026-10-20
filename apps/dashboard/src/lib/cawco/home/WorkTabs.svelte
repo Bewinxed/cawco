@@ -771,20 +771,19 @@
          step together: the gap to the Delegates switch and the head's
          trailing pad (both to nothing at the full squeeze: the switch's
          28px box keeps its glyph clear of the tabs and the edge), a tab's
-         inset, the room before and after a count. Past the tight steps the
-         words give way and the counts and the switch stand (DESIGN.md
-         Typography: "the name gives way first"; the artifact head's
-         narrowest forms): the label ends in its ellipsis, the head never
-         overflowing. Measured on this head: whole with a one-figure count
-         from the narrowest rail, 216px (Shell's RAIL_MIN), two figures from
-         227px, three from 240px. -->
+         inset, the room after a count. The room before a count stands at
+         --space-1 at every width, so a count never touches its word. Past
+         the tight steps the words give way and the counts and the switch
+         stand (DESIGN.md Typography: "the name gives way first"; the
+         artifact head's narrowest forms): the label ends in its ellipsis,
+         the head never overflowing. -->
     <div
       data-slot="head"
       class="mb-space-1 flex items-end justify-between gap-(--head-gap) border-b border-b-border-hairline pt-space-1 pr-(--head-end) pb-0 pl-0"
       style:--head-gap="max(0px, calc(var(--space-2) - var(--tight) * 0.2121))"
       style:--head-end="max(0px, calc(var(--space-2) - var(--tight) * 0.2121))"
       style:--tight={"clamp(0px, calc(var(--c-work-tabs-roomy-w) - 100cqw - var(--space-4)), var(--c-work-tabs-squeeze))"}
-      style:--count-start="max(0px, var(--space-1) - var(--tight) * 0.12)"
+      style:--count-start="var(--space-1)"
       style:--count-end="max(0px, var(--space-row) - var(--tight) * 0.06)"
     >
       <!-- The session tabs' folder tabs, hosted: no shelf, the chosen

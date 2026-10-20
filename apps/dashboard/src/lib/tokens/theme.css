@@ -425,6 +425,7 @@
   --spacing-c-icon-card-min: var(--c-icon-card-min);
   --spacing-c-sheet-max-h: var(--c-sheet-max-h);
   --spacing-c-peek-sheet-h: var(--c-peek-sheet-h);
+  --spacing-c-peek-sheet-w: var(--c-peek-sheet-w);
   --spacing-c-grabber-w: var(--c-grabber-w);
   --spacing-c-grabber-h: var(--c-grabber-h);
   --spacing-c-lightbox-sheet-w: var(--c-lightbox-sheet-w);
@@ -535,6 +536,7 @@
   --spacing-c-workflow-row-h: var(--c-workflow-row-h);
   --spacing-c-atts-max-h: var(--c-atts-max-h);
   --spacing-c-compaction-word-bleed: var(--c-compaction-word-bleed);
+  --spacing-c-give-way-min: var(--c-give-way-min);
   --spacing-c-elapsed-w: var(--c-elapsed-w);
   --spacing-c-composer-more-w: var(--c-composer-more-w);
   --spacing-c-composer-menu-max-h: var(--c-composer-menu-max-h);

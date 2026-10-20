@@ -5529,6 +5529,14 @@
         }
       }
     },
+    "c-peek-sheet-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 384,
+        "unit": "px"
+      },
+      "$description": "The peek sheet's width with a fine pointer, beside the page, and the room the page gives it at its trailing edge while it stands open (DESIGN.md Peek: \"a sheet from the right beside the home it was opened from\")."
+    },
     "c-grabber-w": {
       "$type": "dimension",
       "$value": {
@@ -6499,6 +6507,19 @@
       "$extensions": {
         "dev.cawco": {
           "css": "0.5em"
+        }
+      }
+    },
+    "c-give-way-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 48,
+        "unit": "px"
+      },
+      "$description": "The least of a head's part that gives way before it drops (DESIGN.md, The Truncate Inside Rule): six characters, a word's start and its ellipsis (a subagent's task and model).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "6ch"
         }
       }
     },

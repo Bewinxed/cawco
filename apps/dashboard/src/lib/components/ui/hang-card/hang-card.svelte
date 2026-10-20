@@ -510,8 +510,14 @@
 <!-- Mounted by bits-ui's forceMount and drawn while its presence says so,
      unless the site keeps it drawn (`forceMount`): the page has its pointer
      back at the dismissal (floating-presence). Its wrapper is marked a
-     hanging card's (`data-hang`), the cut app.css draws on it. A kit
-     surface is told it hangs, so it keeps only the fade of its own motion. -->
+     hanging card's (`data-hang`), the cut app.css draws on it, and stands
+     on the float layer itself (DESIGN.md, Layers: float stands over dock):
+     the wrapper is fixed, so the card's own layer counts only inside it,
+     and bits-ui's copy of that layer onto the wrapper, read a frame after
+     the card mounts, never landed on a card mounted shut (the glass's,
+     kept drawn), which a docked Question card then painted over (jump-peek,
+     phone). A kit surface is told it hangs, so it keeps only the fade of
+     its own motion. -->
 <Content
   data-glass-card={glass || undefined}
   {...kitSurface ? { motion: "hang" as const } : {}}
@@ -527,7 +533,12 @@
 >
   {#snippet child({ props, wrapperProps, open })}
     {#if forceMount || drawn(props)}
-      <div {...wrapperProps} data-hang style:pointer-events={pressable(open)}>
+      <div
+        {...wrapperProps}
+        class="z-(--layer-float)"
+        data-hang
+        style:pointer-events={pressable(open)}
+      >
         <div
           {...own(props)}
           style:--frame-w={frame ? FRAME_SIZES[frame].w : undefined}

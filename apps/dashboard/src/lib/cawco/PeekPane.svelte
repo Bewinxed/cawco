@@ -18,6 +18,7 @@
     planWords,
     questionsOf,
   } from "@cawco/core";
+  import { humanize, mcpParts } from "@cawco/core/tool-presentation";
   /**
    * The middle step of the board's loop: glance at the fleet, peek at one
    * session, dive into it. A peek answers "what is this one actually doing"
@@ -85,6 +86,7 @@
   import { toast } from "./toasts";
   import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
+  import { runIdOf } from "./workflow-runs";
 
   interface Props {
     /** Puts the peek away; the board keeps its place. */
@@ -163,6 +165,14 @@
     return ACTIVITY_LABEL[activity];
   });
   const tool = $derived(cawco.currentToolOf(target.viewId));
+  /**
+   * A tool by the name the transcript gives it (@cawco/core `describeTool`'s
+   * `tool-name` rule: an MCP tool's own name past its server, in words), not
+   * its identifier: "Ask user question", never "AskUserQuestion". A run's
+   * step is its title already.
+   */
+  const toolWord = (name: string): string =>
+    runIdOf(target.viewId) ? name : humanize(mcpParts(name)?.tool ?? name);
 
   const machine = $derived.by(() => {
     const machineId = session?.machineId || row?.machineId || "";
@@ -411,7 +421,7 @@
         class="mark-line flex min-w-0 items-center gap-1.5 text-ink-muted"
         data-box
       >
-        <span class="shrink-0 font-(family-name:--font-mono)">{tool.name}</span>
+        <span class="shrink-0">{toolWord(tool.name)}</span>
         <span class="shrink-0">·</span>
         <span
           class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap font-(family-name:--font-mono)"
@@ -567,8 +577,8 @@
         {#each tail as message, index (message.id ?? index)}
           {#if message.type === "tool.use" || message.type === "tool.handoff"}
             <p class="flex items-baseline gap-1.5 text-meta text-ink-muted">
-              <span class="shrink-0 font-(family-name:--font-mono)"
-                >{message.metadata?.toolName ?? message.content}</span
+              <span class="shrink-0"
+                >{toolWord(message.metadata?.toolName ?? message.content)}</span
               >
               {#if glanceOf(message)}
                 <span class="shrink-0">·</span>

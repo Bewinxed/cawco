@@ -4,13 +4,14 @@
 
   /** Its callers' looks: a title led by a glyph, a step apart, the glyph
       centred on the title's line box (`mark-line`); or a path, cut to one
-      line in the mono face at the label size. Read out but not drawn
+      line from its start (its leaf stays, wrapped in a `<bdi>`) in the mono
+      face at the label size. Read out but not drawn
       (`visible: false`) where the dialog's content names itself on screen. */
   export const dialogTitleVariants = tv({
     base: "text-title",
     variants: {
       lead: { glyph: "mark-line flex items-center gap-2" },
-      look: { path: "truncate font-mono text-label" },
+      look: { path: "dir-rtl truncate font-mono text-label" },
       visible: { true: "", false: "sr-only" },
     },
     defaultVariants: { visible: true },

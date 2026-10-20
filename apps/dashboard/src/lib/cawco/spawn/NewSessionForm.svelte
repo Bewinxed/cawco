@@ -1888,11 +1888,17 @@
         ><Bolt class="size-icon-sm" /></span
       >
     {/if}
+    <!-- Step 2's title is the move's question, "Move ~/code/chip to
+         obelisk?": it wraps whole, so its destination is never the part an
+         ellipsis takes (DESIGN.md, Don't: "send the reader away from where
+         they asked"; the question names where). The form's own names stay
+         on one line. -->
     <h2
       data-slot="title"
-      class="type-title tracking-title m-0 truncate text-ink-strong"
+      class="type-title tracking-title m-0 min-w-0 text-ink-strong not-data-wraps:truncate data-wraps:text-balance"
+      data-wraps={moveStep || undefined}
     >
-      <MorphText text={headTitle} />
+      <MorphText text={headTitle} wrap={moveStep} />
     </h2>
   </div>
   <Tip keys={moveStep ? undefined : "Esc"} label="Close">

@@ -88,6 +88,11 @@
     <span data-slot="chip-label" data-account-chip>{label}</span>
     <Down data-slot="chevron" />
   {/snippet}
+  <!-- Every row on one grid: a lead column, the words (its name in the
+       label role over a meta line), the tick. Auto has no mark of its own, so
+       its lead stands empty and its words start where every account's do. A
+       row out of reach fades its mark and name (DESIGN.md, Disabled: 50%
+       opacity); its meta line, which says why, stays whole in muted ink. -->
   <div
     data-slot="list"
     aria-label="Account"
@@ -98,16 +103,22 @@
     <button
       data-slot="option"
       aria-selected={tool.value === null}
-      class="group press-tint transition-control type-label grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:opacity-50"
+      class="group press-tint transition-control grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
       data-account-option="auto"
       onclick={() => pick(null)}
       role="option"
-      style:--cols="minmax(0, 1fr) var(--icon-md)"
+      style:--cols="var(--icon-md) minmax(0, 1fr) var(--icon-md)"
       type="button"
     >
-      <span class="min-w-0 wrap-anywhere"
-        >Auto{tool.auto.why ? ` · ${tool.auto.why}` : ""}</span
-      >
+      <span aria-hidden="true"></span>
+      <span data-slot="words" class="flex min-w-0 flex-col gap-space-row">
+        <span class="type-label">Auto</span>
+        {#if tool.auto.why}
+          <span class="type-meta text-ink-muted text-pretty"
+            >{tool.auto.why}</span
+          >
+        {/if}
+      </span>
       <Check
         class="size-icon-md text-selected-icon opacity-0 transition-[opacity] duration-(--dur-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
       />
@@ -116,7 +127,7 @@
       <button
         data-slot="option"
         aria-selected={tool.value === option.id}
-        class="group press-tint transition-control grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong disabled:opacity-50"
+        class="group press-tint transition-control grid min-h-c-row-h w-full grid-cols-(--cols) items-center gap-space-3 rounded-sm border-none border-current bg-transparent px-space-3 py-space-2 text-start text-ink-strong"
         data-account-option={option.id}
         disabled={option.disabled}
         onclick={() => pick(option.id)}
@@ -124,18 +135,25 @@
         style:--cols="var(--icon-md) minmax(0, 1fr) var(--icon-md)"
         type="button"
       >
-        {#if option.ring}
-          <Rings ring={option.ring} size={16} />
-        {:else}
-          <span
-            data-account-chip-lead
-            data-slot="dot"
-            class="size-space-2 flex-none justify-self-center rounded-pill bg-(--c)"
-            style:--c={option.color}
-          ></span>
-        {/if}
+        <span
+          data-slot="lead"
+          class="grid place-items-center group-disabled:opacity-50"
+        >
+          {#if option.ring}
+            <Rings ring={option.ring} size={16} />
+          {:else}
+            <span
+              data-account-chip-lead
+              data-slot="dot"
+              class="size-space-2 flex-none rounded-pill bg-(--c)"
+              style:--c={option.color}
+            ></span>
+          {/if}
+        </span>
         <span data-slot="words" class="flex min-w-0 flex-col gap-space-row">
-          <AccountName account={nameFields(option)} row wrap />
+          <span class="min-w-0 group-disabled:opacity-50"
+            ><AccountName account={nameFields(option)} row wrap /></span
+          >
           {#if option.line.length > 0}
             <span class="type-meta text-ink-muted"
               ><Words parts={option.line} /></span

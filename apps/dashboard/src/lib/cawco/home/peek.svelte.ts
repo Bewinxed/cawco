@@ -27,6 +27,20 @@ export const peekable = (): boolean => !drawer.current;
 /** A finger (an iPad): Peek's buttons always show, and their "Peek" tip never opens. */
 const coarse = new MediaQuery("(pointer: coarse)");
 
+/** A touch screen: the peek rises from the bottom as the drawer's recipe; with a fine pointer it comes in from the right. */
+const touch = new MediaQuery("(hover: none), (pointer: coarse)");
+
+/** Whether the peek is the touch screen's bottom drawer. */
+export const peekRises = (): boolean => touch.current;
+
+/**
+ * Whether the peek stands open beside the page, a fine pointer's sheet from
+ * the right: the page gives it its width at its trailing edge (the Shell's
+ * `data-peek-beside`), so what the page holds stays whole and usable beside
+ * it (DESIGN.md, Peek) instead of under it.
+ */
+export const peekBeside = (): boolean => peek.open && !touch.current;
+
 /**
  * Whether a Peek button's tooltip is off: on a coarse pointer a press would
  * leave it standing over the sheet it just opened, and there is no hover to
