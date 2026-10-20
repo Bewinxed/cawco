@@ -30,7 +30,7 @@
 <div class="flex min-h-0 flex-1 flex-col" {@attach reflow()}>
   <p
     data-slot="note"
-    class="wf-muted border-b border-b-border-hairline px-space-5 py-space-3 max-wide:px-space-4"
+    class="border-b border-b-border-hairline px-space-5 py-space-3 type-meta text-ink-muted max-wide:px-space-4"
   >
     {#if origin === "editor"}
       Compiled from this graph on save. Edit the graph to change it.
@@ -57,7 +57,7 @@
          come and go the house way (motion/rows). -->
     <section
       aria-label="Problems"
-      class="wf-stack max-h-c-wf-scroll-max-h gap-space-2 overflow-y-auto border-t border-t-border-hairline bg-surface-raised px-space-5 pt-space-4 pb-space-5 max-wide:px-space-4"
+      class="flex max-h-c-wf-scroll-max-h min-w-0 flex-col gap-space-2 overflow-y-auto border-t border-t-border-hairline bg-surface-raised px-space-5 pt-space-4 pb-space-5 max-wide:px-space-4"
       data-flip
       {@attach reflow()}
     >
@@ -65,9 +65,11 @@
         {#key problems.length > 0}
           <div class="col-start-1 row-start-1" transition:crossIn>
             {#if problems.length}
-              <h2 data-slot="num" class="num">Problems · {problems.length}</h2>
+              <h2 data-slot="num" class="num type-label">
+                Problems · {problems.length}
+              </h2>
             {:else}
-              <p class="wf-muted">
+              <p class="type-meta text-ink-muted">
                 The hub compiled and typechecked this program. No problems
                 found.
               </p>

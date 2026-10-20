@@ -226,21 +226,32 @@ const runningVersion = (): Plugin => ({
 
 // `/ws` is left to `server.proxy`, and HMR's upgrade to Vite.
 /**
- * A vendor component's own `<style>`, put in the libraries' `vendor` layer.
- * A library sheet loaded from a stylesheet takes the layer by
- * `@import … layer(vendor)` (app.css); these packages ship theirs as a Svelte
- * component's `<style>` instead, which the compiler emits unlayered, where it
- * would outrank every rule of the house, and which no `@import` reaches:
- * svelte-sonner 1.2.1 (Toaster.svelte) and vaul-svelte 1.0.0-next.7
- * (components/drawer/drawer.svelte). Each compiled sheet is wrapped in
- * `@layer vendor { … }` where it enters the build, every declaration as the
- * library wrote it, so app.css restyles their DOM from `components` by layer.
- * A library's `!important` keeps its strength: an important declaration in
- * an earlier layer wins (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer).
+ * A vendor component's own sheet, put in the libraries' `vendor` layer. These
+ * packages load theirs from their components, so it enters the build
+ * unlayered, where it would outrank every rule of the house, and no
+ * `@import … layer()` reaches it. Two ways in:
+ * - a Svelte component's `<style>`, which the compiler emits unlayered:
+ *   svelte-sonner 1.2.1 (Toaster.svelte) and vaul-svelte 1.0.0-next.7
+ *   (components/drawer/drawer.svelte);
+ * - a stylesheet a component imports from its script: Event Calendar 5.16.0
+ *   (src/Calendar.svelte: `import './styles/index.css'`). This transform runs
+ *   after Vite's own CSS plugin has inlined that sheet's `@import`s
+ *   (theme.css, toolbar.css, …), so the whole sheet takes the layer.
+ * Each sheet is wrapped in `@layer vendor { … }` where it enters the build,
+ * every declaration as the library wrote it, so app.css restyles their DOM
+ * from `components` by layer. A library's `!important` keeps its strength: an
+ * important declaration in an earlier layer wins
+ * (https://developer.mozilla.org/en-US/docs/Web/CSS/@layer).
  */
 const VENDOR_COMPONENT_SHEETS = ["svelte-sonner", "vaul-svelte"];
+const VENDOR_IMPORTED_SHEETS = ["@event-calendar/core/src/styles"];
+const pathPattern = (path: string): string =>
+  path.split("/").join("[\\\\/]");
 const VENDOR_COMPONENT_STYLE = new RegExp(
-  `[\\\\/]node_modules[\\\\/](?:${VENDOR_COMPONENT_SHEETS.join("|")})[\\\\/].*\\.svelte\\?.*type=style`
+  [
+    `[\\\\/]node_modules[\\\\/](?:${VENDOR_COMPONENT_SHEETS.join("|")})[\\\\/].*\\.svelte\\?.*type=style`,
+    `[\\\\/]node_modules[\\\\/](?:${VENDOR_IMPORTED_SHEETS.map(pathPattern).join("|")})[\\\\/][^\\\\/?]+\\.css(?:\\?|$)`,
+  ].join("|")
 );
 export const vendorComponentSheets = (): Plugin => ({
   name: "cawco-vendor-component-sheets",

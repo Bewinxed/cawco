@@ -1,9 +1,9 @@
 /* One cascade order for the whole app, Tailwind's own with two more: tokens
    in theme, element defaults in base, the libraries' own stylesheets in
-   `vendor` under the house's components (Event Calendar's below; Svelte
-   Flow's and Milkdown Crepe's by lib/vendor-css, loaded with what draws
-   them; svelte-sonner's and vaul-svelte's component sheets by vite.config.ts's
-   vendorComponentSheets), kit recipes
+   `vendor` under the house's components (Svelte Flow's and Milkdown
+   Crepe's by lib/vendor-css, loaded with what draws them; the sheets
+   svelte-sonner, vaul-svelte and Event Calendar load from their own
+   components by vite.config.ts's vendorComponentSheets), kit recipes
    in components, single-purpose classes in utilities (with what has to
    outrank the typography plugin, which writes there too), and in `overrides`
    the few page-wide holds that outrank every utility on any element (a
@@ -18,9 +18,6 @@
 @import "@fontsource-variable/jetbrains-mono";
 @import "@fontsource/fredoka/600.css";
 @import "@fontsource-variable/nunito";
-/* Event Calendar's sheet as the package exports it, in the libraries'
-   layer; the calendar view fills its variables from the tokens. */
-@import "@event-calendar/core/index.css" layer(vendor);
 /* Every token the app reads, generated from design/tokens/cawco.tokens.json
    (`bun run tokens`). This sheet defines none of its own. */
 @import "./lib/tokens/tokens.css";
@@ -4859,14 +4856,13 @@
   }
 }
 
-/* The two shared sheets, utilities under the names their consumers write:
-   the new-session dialog's and the workflow pages' (each says how it keeps
-   its cascade). Tailwind inlines an import where it stands, so these come
-   after the rules above, as .cutover/shared-sheets.md orders them. */
+/* The shared sheet, utilities under the names its consumers write: the
+   new-session dialog's (it says how it keeps its cascade). Tailwind inlines
+   an import where it stands, so it comes after the rules above, as
+   .cutover/shared-sheets.md orders it. */
 /* biome-ignore-start lint/correctness/noInvalidPositionAtImportRule: Tailwind's compiler inlines each import in place; the place is the cascade order */
 @import "./lib/cawco/spawn/ns-theme.css";
-@import "./lib/components/features/workflows/workflows.css";
-/* biome-ignore-end lint/correctness/noInvalidPositionAtImportRule: the imports above */
+/* biome-ignore-end lint/correctness/noInvalidPositionAtImportRule: the import above */
 
 /* ---- Motion is opt-in: every travelling transition and keyframe animation
    in this sheet and in the components sits under
@@ -4984,3 +4980,158 @@
 }
 
 /* The flip itself starts no element transitions: `overrides`, above. */
+
+/* wave 2: W7-sheets */
+/* Event Calendar's DOM (@event-calendar/core renders every element here;
+   none takes a class from us but the chips' `classNames`), on the calendar
+   view's host. Its own sheet is in `vendor`, so these win by layer. */
+@layer components {
+  [data-slot="view-calendar"] {
+    /* The library's palette, from the tokens, on `.ec`, where its sheet
+       declares it. Its sheet also pins `.ec` to `color-scheme: light`, which
+       would resolve every `light-dark()` token below to its day half at
+       night: the calendar takes the page's scheme instead. */
+    & .ec {
+      color-scheme: inherit;
+      --ec-bg-color: var(--surface-raised);
+      --ec-text-color: var(--ink-strong);
+      --ec-border-color: var(--border-hairline);
+      --ec-color-400: var(--border-control);
+      --ec-color-300: var(--border-hairline);
+      --ec-color-200: var(--surface-hover);
+      --ec-color-100: var(--surface-band);
+      --ec-color-50: var(--surface-band);
+      --ec-button-bg-color: var(--surface-raised);
+      --ec-button-border-color: var(--border-control);
+      --ec-button-text-color: var(--ink-strong);
+      --ec-button-active-bg-color: var(--surface-hover);
+      --ec-button-active-border-color: var(--border-control);
+      --ec-button-active-text-color: var(--ink-strong);
+      --ec-today-bg-color: var(--surface-band);
+      --ec-highlight-color: var(--surface-hover);
+      --ec-event-bg-color: var(--surface-raised);
+      --ec-event-text-color: var(--ink-strong);
+      --ec-bg-event-color: var(--surface-band);
+      --ec-bg-event-opacity: 1;
+      --ec-event-col-gap: var(--space-1);
+      --ec-now-indicator-color: var(--brand-solid);
+      --ec-popup-bg-color: var(--surface-raised);
+      color: var(--ink-strong);
+      font: var(--type-meta);
+    }
+    & .ec-toolbar {
+      margin-block-end: var(--space-3);
+    }
+    & .ec-title {
+      font: var(--type-title);
+    }
+    & .ec-button {
+      block-size: var(--c-btn-h-sm);
+      padding-inline: var(--space-3);
+      border-radius: var(--radius-md);
+      font: var(--type-label);
+      transition: background-color var(--dur-control) var(--ease-out);
+    }
+    & .ec-button-group .ec-button:first-child {
+      border-start-end-radius: 0;
+      border-end-end-radius: 0;
+    }
+    & .ec-button-group .ec-button:last-child {
+      border-start-start-radius: 0;
+      border-end-start-radius: 0;
+    }
+    & .ec-main {
+      border-radius: var(--radius-lg);
+      background: var(--surface-raised);
+      box-shadow: var(--shadow-tile);
+    }
+    & :is(.ec-day-head, .ec-slots, .ec-all-day) {
+      font: var(--type-meta);
+      color: var(--ink-muted);
+    }
+    /* A chip: as tall as the library makes its slot (a task is a half-hour
+       event, one slot), the title in the label role on one line, cut short
+       with an ellipsis where the slot is narrow. */
+    & .ec-event.chip {
+      padding: 0 var(--space-2);
+      align-items: center;
+      overflow: hidden;
+      border-radius: var(--radius-xs);
+      font: var(--type-label);
+      line-height: 1;
+      cursor: pointer;
+      box-shadow: none;
+    }
+    & .ec-time-grid .ec-event.chip .ec-event-body {
+      flex-direction: row;
+      align-items: center;
+      min-inline-size: 0;
+    }
+    /* In the week's grid the chip's place is its time: the title has the
+       whole line. The list keeps the time, in its own column. */
+    & .ec-time-grid .ec-event.chip .ec-event-time {
+      display: none;
+    }
+    & .ec-event.chip .ec-event-title {
+      min-inline-size: 0;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    & .ec-event.chip-set {
+      background: var(--surface-raised);
+      color: var(--ink-strong);
+      box-shadow: inset 0 0 0 1px var(--border-control);
+    }
+    & .ec-event.chip-done {
+      background: var(--status-done-bg);
+      color: var(--status-done-ink);
+    }
+    & .ec-event.chip-attn {
+      background: var(--status-attn-bg);
+      color: var(--status-attn-ink);
+    }
+    /* In the phone's list a chip is inset on both sides of its day: the
+       library sizes an event at its day's full width, so its width gives way
+       to the margins rather than pushing the far one past the card's edge. */
+    & .ec-list .ec-event.chip {
+      box-sizing: border-box;
+      inline-size: auto;
+      min-block-size: var(--c-btn-h-lg);
+      margin-inline: var(--space-2);
+    }
+    & .ec-event-time {
+      font-family: var(--font-mono);
+      font-variant-numeric: tabular-nums;
+      font-variant-ligatures: none;
+      margin-inline-end: var(--space-2);
+    }
+  }
+}
+/* Svelte Flow's attribution (@xyflow/svelte renders it) on every graph
+   canvas, in the meta role on the canvas's own ground in the subtle ink:
+   Svelte Flow's grey wash and grey link read as a stray box in dark. The
+   link reaches the 24px pointer floor (DESIGN.md, The 24 Pointer Rule) and
+   its ring sits on its own box. @xyflow's sheet is in `vendor`, under this. */
+@layer components {
+  :is(
+      [data-slot="workflow-canvas"],
+      [data-slot="view-canvas"],
+      [data-slot="decision-graph"],
+      [data-slot="canvas-map"]
+    )
+    .svelte-flow__attribution {
+    --xy-attribution-background-color: transparent;
+    font: var(--type-meta);
+
+    & a {
+      display: inline-flex;
+      align-items: center;
+      min-height: var(--c-pointer-floor);
+      color: var(--ink-subtle);
+
+      &:focus-visible {
+        outline-offset: var(--focus-ring-inset);
+      }
+    }
+  }
+}
