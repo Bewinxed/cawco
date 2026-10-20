@@ -2438,6 +2438,9 @@ export interface AccountsView {
   signins: AccountSignin[];
 }
 
+/** Reads of the accounts so far: only the newest one's answer is kept. */
+let accountsReads = 0;
+
 /** Who hears the hub's accounts signal (see {@link followAccounts}). */
 let accountsFollower: (() => void) | null = null;
 
@@ -2457,10 +2460,17 @@ export function followAccounts(follower: () => void): void {
  */
 export async function readAccounts(): Promise<void> {
   accountsFollower?.();
+  accountsReads += 1;
+  const ticket = accountsReads;
   const [view, providers] = await Promise.all([
     load<AccountsView>("/api/accounts"),
     load<ProviderChoice[]>("/api/accounts/providers"),
   ]);
+  // Reads overlap (every `usage` frame and every write asks again): only the
+  // newest one's answer is kept, so an older one landing last never stands.
+  if (ticket !== accountsReads) {
+    return;
+  }
   if (view && !equal(state.accounts, view)) {
     state.accounts = view;
   }
@@ -2765,7 +2775,8 @@ async function refresh(): Promise<boolean> {
   readThreads();
   // What the socket says about asks from here on is newer than the read.
   const readFrom = askHeard;
-  const mark = readLeaves();
+  const asked = projectsLeave();
+  const { mark } = asked;
   const [projects, pending, usage] = await Promise.all([
     load<ProjectRow[]>("/api/projects"),
     load<Envelope<FramePayload>[]>("/api/pending"),
@@ -2775,7 +2786,7 @@ async function refresh(): Promise<boolean> {
   ]);
 
   if (projects) {
-    keepProjects(projects, mark);
+    keepProjects(projects, asked);
   }
   if (usage && !heardSince("usage", mark)) {
     adoptUsageLimits(usage);
@@ -5834,7 +5845,7 @@ export async function editProject(
     upstreamPosts?: UpstreamPosts | null;
   }
 ): Promise<ProjectRow> {
-  const mark = readLeaves();
+  const asked = projectsLeave();
   const response = await fetch(`/api/projects/${projectId}`, {
     method: "PATCH",
     headers: { "Content-Type": "application/json" },
@@ -5844,15 +5855,15 @@ export async function editProject(
     throw await hubRefusal(response, "so it was not changed.");
   }
   const row = (await response.json()) as ProjectRow;
-  keepProject(row, mark);
+  keepProject(row, asked);
   return row;
 }
 
-/** A project as the hub just answered it to a request that left at `mark`, in the projects at once. */
-function keepProject(row: ProjectRow, mark: number): void {
+/** A project as the hub just answered it to the request `asked`, in the projects at once. */
+function keepProject(row: ProjectRow, asked: ProjectsAsked): void {
   keepProjects(
     state.projects.map((each) => (each.id === row.id ? row : each)),
-    mark
+    asked
   );
 }
 
@@ -5866,7 +5877,7 @@ export async function addProjectPlace(
   machineId: string,
   path: string
 ): Promise<ProjectRow> {
-  const mark = readLeaves();
+  const asked = projectsLeave();
   const response = await fetch(
     `/api/projects/${encodeURIComponent(projectId)}/places`,
     {
@@ -5879,7 +5890,7 @@ export async function addProjectPlace(
     throw await hubRefusal(response, "so it was not added.");
   }
   const row = (await response.json()) as ProjectRow;
-  keepProject(row, mark);
+  keepProject(row, asked);
   return row;
 }
 
@@ -6632,23 +6643,43 @@ export async function deleteProject(id: string): Promise<void> {
 
 /** Reads the projects again, as the hub has them now. */
 export async function readProjects(): Promise<void> {
-  const mark = readLeaves();
+  const asked = projectsLeave();
   const projects = await load<ProjectRow[]>("/api/projects");
   if (projects) {
-    keepProjects(projects, mark);
+    keepProjects(projects, asked);
   }
 }
 
+/** A request whose answer writes the projects: when it left, among frames and among those requests. */
+interface ProjectsAsked {
+  mark: number;
+  ticket: number;
+}
+/** Requests that write the projects, as they left, and the newest whose answer was kept. */
+let projectsAsked = 0;
+let projectsKept = 0;
+const projectsLeave = (): ProjectsAsked => {
+  projectsAsked += 1;
+  return { mark: readLeaves(), ticket: projectsAsked };
+};
+
 /**
- * The projects as a read that left at `mark` answered them. Each one's cap
- * is the `project.cap` frame's when one came for it since: the hub tells a
- * cap only when it moves, so an older one put back would stand.
+ * The projects as a request `asked` answered them. An answer to a request
+ * that left before the one last kept is dropped: every change of a project
+ * says `projects.changed`, so a read follows any change it missed. Each
+ * project's cap is the `project.cap` frame's when one came for it since the
+ * request left: the hub tells a cap only when it moves, so an older one put
+ * back would stand.
  */
-function keepProjects(projects: ProjectRow[], mark: number): void {
+function keepProjects(projects: ProjectRow[], asked: ProjectsAsked): void {
+  if (asked.ticket < projectsKept) {
+    return;
+  }
+  projectsKept = asked.ticket;
   const held = new Map(state.projects.map((row) => [row.id, row]));
   const answered = projects.map((row) => {
     const kept = held.get(row.id);
-    return kept && heardSince(`project.cap:${row.id}`, mark)
+    return kept && heardSince(`project.cap:${row.id}`, asked.mark)
       ? { ...row, cap: kept.cap }
       : row;
   });

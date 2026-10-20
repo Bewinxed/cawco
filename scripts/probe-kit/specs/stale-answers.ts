@@ -13,6 +13,7 @@
  * nothing to hold, and shows the delta's name.
  */
 import type { Page } from "playwright-core";
+import { readWithin } from "../../../packages/core/src/bounded";
 import type { Reply } from "../../scratch-fleet";
 import { until } from "../../scratch-fleet";
 import { type Kit, type Spec, settle } from "../kit";
@@ -57,9 +58,9 @@ const run = async (kit: Kit) => {
   await until(
     "the hub's row named before",
     async () =>
-      (await fleet.api<{ id: string; title?: string }[]>("/api/instances"))
-        .find((row) => row.id === session)
-        ?.title,
+      (
+        await fleet.api<{ id: string; title?: string }[]>("/api/instances")
+      ).find((row) => row.id === session)?.title,
     (title) => title === BEFORE,
     30_000
   );
@@ -110,10 +111,8 @@ const run = async (kit: Kit) => {
     60_000
   );
   // A page that reads the board over HTTP does so as the snapshot lands.
-  const read = await Promise.race([
-    answerTaken.then(() => true),
-    Bun.sleep(5000).then(() => false),
-  ]);
+  const taking = await readWithin(5000, () => answerTaken);
+  const read = taking.kind === "answered";
   kit.note(
     read
       ? "the page read /api/instances on connect: its answer, taken by the hub before the rename, is held"
