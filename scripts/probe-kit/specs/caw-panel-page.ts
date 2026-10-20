@@ -12,6 +12,9 @@
  *    (scrollWidth past clientWidth on an overflow that clips), a run cut
  *    with an ellipsis inside its own box (The Truncate Inside Rule) and a
  *    visually hidden one (sr-only) aside.
+ * 1a. In every frame with a message box, its dock lies in the flow and
+ *    the thread ends where the box's row begins: nothing passes under it.
+ *    A miss counts as a spill.
  * 1b. Every phone frame's panel is the real HangCard, in the frame, its top
  *    on Caw's glass's foot, its trailing side the screen's edge, its
  *    leading side 12px in (DESIGN.md, Caw's panel).
@@ -56,6 +59,8 @@ interface Sweep {
   hung: number;
   notDrawn: string[];
   overlaps: string[];
+  /** Frames whose message box was read as the panel's last row. */
+  rows: number;
   spills: string[];
 }
 
@@ -73,6 +78,7 @@ const sweepPage = (file: string): Sweep => {
     hangs: [],
     hung: 0,
     notDrawn: [],
+    rows: 0,
     overlaps: [],
     spills: [],
   };
@@ -102,6 +108,23 @@ const sweepPage = (file: string): Sweep => {
     // top on the glass's foot (the bar's floor line), its trailing side the
     // screen's edge, its leading side the 12px margin (DESIGN.md, Caw's
     // panel), measured in the frame's own pixels (the canvas may scale it).
+    // The message box is the panel's last row (decided, pin 22): its dock in
+    // the flow, and the thread's room ending where the box's row begins, so
+    // nothing passes under it.
+    const row = body.querySelector<HTMLElement>("[data-panel-composer]");
+    const dock = row?.querySelector<HTMLElement>('[data-slot="dock"]');
+    const room = body.querySelector<HTMLElement>("[data-panel-room]");
+    if (row && dock && room) {
+      out.rows += 1;
+      const { position } = getComputedStyle(dock);
+      const roomEnd = room.getBoundingClientRect().bottom;
+      const rowTop = row.getBoundingClientRect().top;
+      if (position !== "static" || roomEnd > rowTop + 1) {
+        out.spills.push(
+          `${where}: the message box isn't the last row (dock ${position}, the thread ends ${Math.round(roomEnd - rowTop)}px past the box's row)`
+        );
+      }
+    }
     const glass = body.querySelector<HTMLElement>("[data-panel-glass]");
     const screen = body.querySelector<HTMLElement>('[data-panel-form="phone"]');
     if (glass && screen) {

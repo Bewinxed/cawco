@@ -12,7 +12,7 @@ export default {
 /** Desk: nothing waits on you, so nothing stands beside his name. */
 export const Desk = {
   args: { form: "desk" },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
 };
 
 /** Desk: something waits on you, said beside his name. */
@@ -21,7 +21,7 @@ export const DeskWaiting = {
     form: "desk",
     fact: { text: "Waiting on your numbers", tone: "attn" },
   },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
 };
 
 /** Phone: hanging from his tab under the bar, Close last. */

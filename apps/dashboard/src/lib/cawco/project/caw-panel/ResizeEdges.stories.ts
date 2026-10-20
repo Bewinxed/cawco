@@ -12,5 +12,5 @@ export default {
 /** Desk: drag the panel's leading edge, its foot or their corner. */
 export const Desk = {
   args: {},
-  parameters: { viewport: 820 },
+  parameters: { viewport: 480 },
 };

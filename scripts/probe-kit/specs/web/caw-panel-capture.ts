@@ -13,6 +13,9 @@
  *    `shootEmbedded`), and only those stories.
  * 3. The page never scrolls sideways.
  * 4. No console error, the page and its canvases.
+ * 5. The page's own capture, taken window by window as the owner scrolls
+ *    it (decision-embeds.ts `capturePage`), paints every embed: no embed's
+ *    box is one flat colour (`blankEmbeds`).
  *
  * Writes each leg's whole page to
  * `.probe/decision-pages/caw-panel-{1440,390}-{light,dark}.png`, and
@@ -26,6 +29,9 @@ import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import {
+  blankEmbeds,
+  CAWCO_BRIDGE,
+  capturePage,
   EMBED_FRAME,
   embedDrawFaults,
   readEmbeds,
@@ -140,7 +146,7 @@ const spec: Spec = {
     const files = Object.fromEntries(
       Object.entries(FILES).map(([id, file]) => [
         id,
-        `${STATES}/${file}.stories.ts`,
+        [`${STATES}/${file}.stories.ts`],
       ])
     );
 
@@ -151,7 +157,8 @@ const spec: Spec = {
         for (const theme of THEMES) {
           const width = view === "desk" ? 1440 : 390;
           const leg = `${width === 1440 ? "1440×900" : "390×844"} ${theme}`;
-          const page = await kit.page(view, { theme });
+          // With the overlay's bridge, as CawCo shows the page: picks live, no offline notice.
+          const page = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
           const errors: string[] = [];
           page.on("console", (message) => {
             if (message.type() === "error") {
@@ -204,12 +211,23 @@ const spec: Spec = {
             errors.length === 0,
             [...new Set(errors)].slice(0, 12).join(" | ") || "none"
           );
+          // The whole page as the owner scrolls it, window by window (decision-embeds.ts
+          // `capturePage`: a full-page shot draws a cross-origin embed past the first window blank).
           const shot = join(OUT, `${NAME}-${width}-${theme}.png`);
-          await page.screenshot({
-            path: shot,
-            fullPage: true,
-            animations: "disabled",
-          });
+          const paints = await capturePage(page, shot);
+          const blank = blankEmbeds(paints);
+          check(
+            leg,
+            `the page's own capture paints every embed (${paints.length} of ${previews})`,
+            paints.length === previews && blank.length === 0,
+            blank.join(" | ") ||
+              paints
+                .map(
+                  (one) =>
+                    `${one.embed} at y ${one.rect.y}: ${Math.round(one.flat * 1000) / 10}% its commonest colour`
+                )
+                .join("; ")
+          );
           shots.push(shot.slice(ROOT.length + 1));
           await page.close();
         }

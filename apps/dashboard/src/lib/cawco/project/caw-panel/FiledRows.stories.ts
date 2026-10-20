@@ -13,13 +13,13 @@ export default {
 /** Desk: his reply, a moment before its tasks land. */
 export const Before = {
   args: { form: "desk", landed: false },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
 };
 
 /** Desk: three tasks landed, one after another. */
 export const Desk = {
   args: { form: "desk" },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
   from: "Before",
   play: async ({ update }: PlayContext) => {
     await update({ landed: true });

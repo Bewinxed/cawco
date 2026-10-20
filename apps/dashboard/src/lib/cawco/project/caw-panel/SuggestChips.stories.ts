@@ -12,7 +12,7 @@ export default {
 /** Desk: four suggestions. */
 export const Desk = {
   args: { form: "desk" },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
 };
 
 /** Phone: four suggestions. */

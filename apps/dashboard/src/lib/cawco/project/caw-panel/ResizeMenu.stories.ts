@@ -12,5 +12,5 @@ export default {
 /** Desk: open More and choose Wide panel. */
 export const Desk = {
   args: {},
-  parameters: { viewport: 820 },
+  parameters: { viewport: 480 },
 };

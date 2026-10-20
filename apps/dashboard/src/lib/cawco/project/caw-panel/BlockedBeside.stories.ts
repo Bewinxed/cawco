@@ -13,19 +13,19 @@ export default {
 /** Desk: the thread couldn't be read. */
 export const CantRead = {
   args: { form: "desk", scene: "cant-read" },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
 };
 
 /** Desk: Caw can't start, no machine is online. */
 export const CantStart = {
   args: { form: "desk", scene: "cant-start" },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
 };
 
 /** Desk: Show details opened on the hub's own words. */
 export const Details = {
   args: { form: "desk", scene: "cant-read", open: true },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
   from: "CantRead",
   play: async ({ canvas, userEvent }: PlayContext) => {
     await userEvent.click(canvas.getByText("Show details"));

@@ -12,5 +12,5 @@ export default {
 /** Desk: drag the L at the panel's free corner. */
 export const Desk = {
   args: {},
-  parameters: { viewport: 820 },
+  parameters: { viewport: 480 },
 };

@@ -12,7 +12,7 @@ export default {
 /** Desk: nothing waits on you, so the head says nothing past his name. */
 export const Desk = {
   args: { form: "desk" },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
 };
 
 /** Desk: the budget holds him, said beside his name. */
@@ -21,7 +21,7 @@ export const DeskBudget = {
     form: "desk",
     fact: { text: "Budget reached · resets in 4h", tone: "attn" },
   },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
 };
 
 /** Desk: Caw is off. */
@@ -30,5 +30,5 @@ export const DeskOff = {
     form: "desk",
     fact: { text: "Off · answers when you write", tone: "secondary" },
   },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
 };

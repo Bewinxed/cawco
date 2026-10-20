@@ -106,10 +106,14 @@
   </div>
   {#if composer !== null}
     <!-- The real message box as the panel's last row: its dock in the flow
-         at the row's width, its shell opaque (nothing passes under it). -->
+         at the row's width, its shell opaque (nothing passes under it).
+         Composer's own rules are unlayered (Svelte scoped), so a utility
+         reaching into it is marked important to win over them: unmarked,
+         its dock stayed `position: absolute` over the whole panel, the box
+         drawn over the thread's foot. -->
     <div
       class={[
-        "shrink-0 bg-(--surface-recess) pbs-(--space-1) [&_.kit-dock-shell]:bg-(--surface-raised) [&_.kit-dock-shell]:backdrop-filter-none [&_[data-slot=composer]]:mx-0 [&_[data-slot=composer]]:inline-full [&_[data-slot=dock]>.prompts]:hidden [&_[data-slot=dock]]:static [&_[data-slot=dock]]:z-auto [&_[data-slot=lift]]:hidden",
+        "shrink-0 bg-(--surface-recess) pbs-(--space-1) [&_.kit-dock-shell]:bg-(--surface-raised)! [&_.kit-dock-shell]:backdrop-filter-none! [&_[data-slot=composer]]:mx-0! [&_[data-slot=composer]]:inline-full! [&_[data-slot=dock]>.prompts]:hidden! [&_[data-slot=dock]]:static! [&_[data-slot=dock]]:z-auto! [&_[data-slot=lift]]:hidden!",
         phone
           ? "px-(--space-4) pbe-[calc(var(--space-4)+env(safe-area-inset-bottom,0px))]"
           : "px-(--space-2) pbe-(--space-2)",

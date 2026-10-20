@@ -12,7 +12,7 @@ export default {
 /** Desk: no machine is online. */
 export const Desk = {
   args: { form: "desk" },
-  parameters: { viewport: 440 },
+  parameters: { viewport: 402 },
 };
 
 /** Phone: no machine is online. */
