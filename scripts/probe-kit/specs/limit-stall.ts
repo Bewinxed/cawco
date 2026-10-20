@@ -71,6 +71,7 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import type { WorkItemSummary } from "../../../packages/core/src";
 import { CLAUDE_JSON_NAME } from "../../../packages/core/src/claude-dirs";
+import { recutLine } from "../../../packages/core/src/injected";
 import {
   ACCOUNT,
   MACHINE,
@@ -842,6 +843,28 @@ const oldSeen = (fleet: KitFleet, since: number): Seen[] =>
       !one.all.includes(RESTARTING)
   );
 
+/** How the hub's line that a session's clone was cut again opens (core injected.ts `recutLine`), up to its commit. */
+const RECUT_OPENING = recutLine("", "").split(", cut again at")[0] as string;
+
+/** The text of the user message in `request` that carries `marker`, its text parts joined. */
+const userTextWith = (request: Seen, marker: string): string | undefined => {
+  const { messages = [] } = JSON.parse(request.body) as {
+    messages?: { content: unknown; role: string }[];
+  };
+  return messages
+    .filter((one) => one.role === "user")
+    .map((one) =>
+      typeof one.content === "string"
+        ? one.content
+        : (Array.isArray(one.content) ? one.content : [])
+            .map((part: { text?: string; type?: string }) =>
+              part.type === "text" ? (part.text ?? "") : ""
+            )
+            .join("\n")
+    )
+    .find((said) => said.includes(marker));
+};
+
 /** What reached the model from the continued leg's new session. */
 const newSeen = (fleet: KitFleet): Seen[] =>
   fleet.seen.filter(
@@ -998,8 +1021,13 @@ const personAfter = async (
 ): Promise<void> => {
   await fleet.send(old, `${TYPED_AFTER}: typed on its page`);
   const sends = () =>
-    fleet.query<{ instance_id: string; reason: string | null; state: string }>(
-      "SELECT instance_id, state, reason FROM sent_messages WHERE body LIKE ?",
+    fleet.query<{
+      instance_id: string;
+      reason: string | null;
+      state: string;
+      uuid: string;
+    }>(
+      "SELECT uuid, instance_id, state, reason FROM sent_messages WHERE body LIKE ?",
       `%${TYPED_AFTER}%`
     );
   const typed = await until(
@@ -1008,14 +1036,45 @@ const personAfter = async (
     (rows) => rows.some((one) => one.state !== "pending"),
     60_000
   ).catch(sends);
-  const read = newSeen(fleet).some((one) => one.all.includes(TYPED_AFTER));
+  // Read is the harness taking it up; the model's request follows, later
+  // still when the session wakes in a clone cut again (r90l: asleep, its
+  // workspace retired, then recut before it woke).
+  const reached = await until(
+    "continued: the new session's request carries the person's send",
+    () => newSeen(fleet).find((one) => one.all.includes(TYPED_AFTER)),
+    Boolean,
+    60_000
+  ).catch(() => undefined);
+  const lastNew = newSeen(fleet).at(-1);
   kit.check(
     "continued: a person's send to the old id reaches the new session",
     typed.length === 1 &&
       typed[0]?.instance_id === target &&
       typed[0]?.state === "read" &&
-      read,
-    `${JSON.stringify(typed)}; the new session read it: ${read}`
+      !!reached,
+    `${JSON.stringify(typed)}; ${reached ? `the new session's request carries it: ${JSON.stringify(userTextWith(reached, TYPED_AFTER)?.slice(0, 400) ?? null)}` : `no request of the new session carries it; its newest (${newSeen(fleet).length} in all) asks ${JSON.stringify(lastNew?.last.slice(0, 400) ?? null)}`}`
+  );
+  // When the session woke in a clone cut again, the send it read first
+  // opens with the hub's line saying so (server.ts `toldRecut`), once.
+  const uuid = typed[0]?.uuid;
+  const recut = uuid
+    ? (await fleet.logs("hub"))
+        .split("\n")
+        .some(
+          (logged) =>
+            logged.startsWith(`[hub] send ${uuid} `) &&
+            logged.includes(
+              "opens with the hub's line that its clone was cut again"
+            )
+        )
+    : false;
+  const delivered = reached ? userTextWith(reached, TYPED_AFTER) : undefined;
+  const parts = delivered?.split(RECUT_OPENING).length;
+  const told = parts === undefined ? null : parts - 1;
+  kit.check(
+    "continued: the person's send carries the hub's recut line once when it woke the session in a clone cut again, and none otherwise",
+    told === (recut ? 1 : 0),
+    `the hub ${recut ? "said" : "never said"} send ${uuid ?? "none"} opens with its recut line; the message the model read carries it ${told ?? "(no message)"} time(s)`
   );
   const page = await fleet.api<{
     blocks: {
