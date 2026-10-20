@@ -2360,8 +2360,9 @@
     <Popover.Content
       data-pin-list-pop
       align="end"
-      class="w-(--pin-list-w) max-h-(--pin-list-h)"
+      class="w-(--pin-list-w)"
       gap="none"
+      height="room"
       pad="inset"
       bind:ref={listPanel}
       customAnchor={listYield?.side === "bottom" ? wellFoot : wellCorner}
@@ -2379,7 +2380,7 @@
       onOpenAutoFocus={(event) => event.preventDefault()}
       side={listYield?.side === "bottom" ? "top" : "bottom"}
       sideOffset={GUTTER}
-      style={`--pin-list-room: ${listRoom}px; --pin-list-pane: ${wellBox.w}px; --pin-list-w: clamp(var(--c-pin-list-min), calc(var(--pin-list-pane) * var(--c-pin-list-share)), min(var(--c-pin-list-max), calc(var(--pin-list-pane) - var(--space-4)))); --pin-list-h: min(calc(var(--pin-list-room) - var(--space-4)), var(--bits-popover-content-available-height, 100dvh))`}
+      style={`--pin-list-room: ${listRoom}px; --pin-list-pane: ${wellBox.w}px; --pin-list-w: clamp(var(--c-pin-list-min), calc(var(--pin-list-pane) * var(--c-pin-list-share)), min(var(--c-pin-list-max), calc(var(--pin-list-pane) - var(--space-4)))); --pop-max-h: min(calc(var(--pin-list-room) - var(--space-4)), var(--bits-popover-content-available-height, 100dvh))`}
       trapFocus={false}
     >
       <PinList

@@ -597,7 +597,7 @@
 {#if touch.current}
   <Drawer.Root bind:open={cawOpen}>
     <Drawer.Content pad="safe-bottom">
-      <Drawer.Title class="sr-only">Caw, lead of {project.name}</Drawer.Title>
+      <Drawer.Title visible={false}>Caw, lead of {project.name}</Drawer.Title>
       <CawPanel {lead} projectId={project.id} projectName={project.name} />
     </Drawer.Content>
   </Drawer.Root>

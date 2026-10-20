@@ -412,7 +412,7 @@
         <!-- What is on show is a name in a toolbar row of 30px label-type
              controls and the switch's label-type tabs: the label role
              (DESIGN.md, The Role, Not Size Rule). The title role is a
-             sheet's own head (.kit-sheet-head), which stands over its
+             sheet's own head (ui/drawer/drawer-header), which stands over its
              content, not in a bar. -->
         <span
           data-slot="title"
@@ -465,7 +465,7 @@
             >
           {/if}
         </DropdownMenu.Trigger>
-        <DropdownMenu.Content align="end" class="w-56">
+        <DropdownMenu.Content align="end" width="regular">
           {#each more as one, at (one.key)}
             {#if at > 0 && (one.group || more[at - 1]?.group)}
               <DropdownMenu.Separator />

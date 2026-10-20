@@ -1,5 +1,6 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
+  import { radioDot } from "#lib/components/ui/dropdown-menu/dropdown-menu-radio-item.svelte";
   import { cn, type WithoutChild } from "#lib/utils.js";
 
   let {
@@ -28,7 +29,7 @@
       class="absolute right-2 flex size-icon-md items-center justify-center pointer-events-none"
       data-box
     >
-      <span class="kit-dot" data-on={checked}></span>
+      <span class={radioDot} data-on={checked}></span>
     </span>
     {@render childrenProp?.({ checked })}
   {/snippet}

@@ -75,7 +75,7 @@
 
 <svelte:head><title>Overlays bench · CawCo</title></svelte:head>
 
-<main class="type-body grid gap-space-5 p-space-5 text-ink-strong">
+<main class="type-body relative grid grow gap-space-5 p-space-5 text-ink-strong">
   <div data-slot="openers" class="relative z-1 flex flex-wrap gap-space-2">
     {#if shows("sheet")}
       <Sheet.Root bind:open={open.sheet}>
@@ -225,10 +225,12 @@
   </div>
 
   <!-- The page: what a press after an overlay closes must reach, wherever
-       the overlay stood. The whole screen under the openers, so a press where
-       an overlay stood lands on it once the overlay has gone. -->
+       the overlay stood. The whole content area under the openers (its
+       positioned box, the shell's page), so a press where an overlay stood
+       lands on it once the overlay has gone, and the shell's own chrome (the
+       top bar, the burger) stays the shell's. -->
   <button
-    class="fixed inset-0 z-0 grid items-box-end justify-items-center border-none border-current bg-transparent p-space-5 text-ink-muted"
+    class="absolute inset-0 z-0 grid items-box-end justify-items-center border-none border-current bg-transparent p-space-5 text-ink-muted"
     data-page
     onclick={() => {
       counts.page += 1;

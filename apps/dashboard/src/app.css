@@ -56,7 +56,7 @@
   initial-value: 0;
 }
 
-/* A hanging card's neck (.kit-hang), registered so a glide to another
+/* A hanging card's neck (HangCard), registered so a glide to another
    anchor tweens the cut in its top edge as lengths. */
 @property --neck-start {
   syntax: "<length>";
@@ -1338,222 +1338,6 @@
     }
   }
 
-  /* Floating surfaces: popover, dropdown, select, context menu, toast. */
-  .kit-pop {
-    --kit-rise: 0 calc(-1 * var(--pop-rise));
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
-    padding: 6px;
-    color: var(--ink-strong);
-
-    &[data-side="top"] {
-      --kit-rise: 0 var(--pop-rise);
-    }
-    &[data-side="left"] {
-      --kit-rise: var(--pop-rise) 0;
-    }
-    &[data-side="right"] {
-      --kit-rise: calc(-1 * var(--pop-rise)) 0;
-    }
-    /* Open and close are transitions on data-state, not keyframes: a close
-       caught mid-open turns back from the opacity and scale it has reached.
-       It opens from its @starting-style (below) over --dur-pop and leaves
-       over --dur-exit; bits-ui holds it mounted until the transition ends
-       (it waits on getAnimations()). It grows from the trigger through
-       bits' transform-origin, which each kit content sets. With reduced
-       motion only the fade runs. */
-    transition: opacity var(--dur-pop) var(--ease-drawer);
-
-    &[data-state="closed"] {
-      opacity: 0;
-      transition-duration: var(--dur-exit);
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        opacity var(--dur-pop) var(--ease-drawer),
-        translate var(--dur-pop) var(--ease-drawer),
-        scale var(--dur-pop) var(--ease-drawer);
-
-      &[data-state="closed"] {
-        translate: var(--kit-rise);
-        scale: var(--pop-scale);
-      }
-    }
-  }
-
-  @starting-style {
-    .kit-pop[data-state="open"] {
-      opacity: 0;
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    @starting-style {
-      .kit-pop[data-state="open"] {
-        translate: var(--kit-rise);
-        scale: var(--pop-scale);
-      }
-    }
-  }
-
-  /* A floating surface that hangs from its anchor as one shape with it
-     (HangCard, motion/hang: the session card and a finger's tab menu from
-     their tab; Caw's panel, the machines and the Jump palette from the top
-     bar's glass). It stands on the anchor's foot. Its edge is drawn by `::after`
-     rather than its border, so its top can be cut across the anchor's span
-     and its flared foot (`--neck-start`, `--neck-end`, `--neck-flare-start`,
-     `--neck-flare-end`, in the card's own coordinates, written by the card
-     from `hang`). On a flush side (`data-flush`) its top corner is square.
-     Its overlay shadow is cut at its top edge, so none falls on the anchor
-     or darkens its foot into a seam. */
-  .kit-pop.kit-hang {
-    /* Its surface, named so the cut across its top edge is drawn in it
-       (`::before`); a card on another surface sets this, not `background`. */
-    --hang-surface: var(--surface-raised);
-    /* What runs on through the cut: the anchor's surface into the card's
-       top. The card's own surface unless its top is another (the session
-       card's head is its tab's). */
-    --hang-neck: var(--hang-surface);
-    /* Cut at its top edge only, with room for the whole overlay shadow past
-       the others (as the pulled menu's `drawPull`). */
-    position: relative;
-    border: 0;
-    background: var(--hang-surface);
-    clip-path: inset(
-      0 -120px -120px round 0 0 var(--radius-lg) var(--radius-lg)
-    );
-
-    &[data-flush="start"] {
-      border-start-start-radius: 0;
-    }
-    &[data-flush="end"] {
-      border-start-end-radius: 0;
-    }
-
-    &::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      z-index: 1;
-      border: 1px solid var(--border-control);
-      border-radius: inherit;
-      pointer-events: none;
-    }
-    /* The cut: across the neck, the edge's top row is the card's own
-       surface again, drawn over it. A flare's stroke (a band between radii
-       f and f + 1) meets the top edge along it, its last √(2f + 1) px in
-       the edge's own row: the cut starts on that band's outer circle
-       (`--neck-cut`, a shape written by every card through HangCard
-       through hang's `setNeck`), so the edge shows under it exactly where
-       the stroke crosses the row, antialiased as the anchor's own curve
-       is, and the curve runs on into the card's edge as one stroke. A
-       linear fade across the run drew the edge out too soon (0.27 where
-       the band still covers 0.49), a soft smear where the curve met the
-       card (owner: "has a blur or alias"). A clip, not a mask: a mask drew
-       the whole card's edge through a buffer of its own on every paint,
-       which was most of what was left of the frame Caw's panel started its
-       slide in. */
-    /* The cut stops short of a flush side's edge: there the anchor's
-       flank runs straight on down into the card's side, and its first
-       pixel is that side's edge, not the cut. */
-    &[data-flush="start"]::before {
-      --gap-from: 1px;
-    }
-    &[data-flush="end"]::before {
-      --gap-to: calc(var(--neck-end) - 1px);
-    }
-    &::before {
-      --gap-from: calc(var(--neck-start) - var(--neck-flare-start, 0px));
-      --gap-to: calc(var(--neck-end) + var(--neck-flare-end, 0px));
-      content: "";
-      position: absolute;
-      /* The neck is measured from the card's left edge (hang `neckAt`). */
-      top: 0;
-      left: var(--gap-from);
-      z-index: 2;
-      inline-size: calc(var(--gap-to) - var(--gap-from));
-      block-size: 1px;
-      background: var(--hang-neck);
-      clip-path: var(--neck-cut, none);
-      pointer-events: none;
-    }
-  }
-  /* A card or menu hanging from a folder tab (HangCard `tab`: the session
-     card, the tab's menu) is one silhouette with its tab (motion/hang-shape):
-     its edge, its tab's edge and the joint between them are one outline, one
-     stroke over both (`.hang-outline`), and its surface is cut to that
-     outline (`clip-path`, written every frame it moves). So it draws no
-     edge, cut or shadow of its own: no border (`::after`), no cut across the
-     neck (`::before`), no box-shadow (the outline layer casts the shape's).
-     It never slides: shut, it is cut to nothing, and it grows out of its
-     tab's foot. */
-  .kit-pop.kit-hang.tab-hang {
-    box-shadow: none;
-    clip-path: path("M 0 0 Z");
-    translate: none;
-    will-change: auto;
-
-    &::before,
-    &::after {
-      display: none;
-    }
-  }
-  /* The one outline a tab and its hang are drawn in (hang-outline.ts): over
-     the page, just over the card, never in the way of a press. */
-  .hang-outline {
-    position: fixed;
-    inset: 0;
-    inline-size: 100%;
-    block-size: 100%;
-    overflow: visible;
-    pointer-events: none;
-
-    & stop.edge {
-      stop-color: var(--border-control);
-    }
-    & feFlood.far {
-      flood-color: var(--shadow-tint-3);
-    }
-    & feFlood.near {
-      flood-color: var(--shadow-tint);
-    }
-  }
-  /* A card hanging from the top bar's glass (HangCard `glass`: Caw's panel,
-     the machines, the Jump palette). Its top shows its own surface across
-     the cut, so its shadow has no night ring (`shadow-overlay-hung`): the
-     ring is the edge's own pixel, hidden under the drawn edge, and across
-     the cut (and down a phone's screen edge, where no edge is drawn) it was
-     a seam. That shadow is a picture the Shell draws once
-     (motion/hung-shadow) and lays round the card as its border-image, not a
-     box-shadow: WebKit blurred the whole card again on every open, in the
-     frame its slide started on. The card's surface is an element of its
-     own over that picture (`.hung-surface`), as a box's background lies
-     over its box-shadow. */
-  .kit-pop.kit-hang.glass-card {
-    box-shadow: none;
-
-    & > .hung-surface {
-      position: absolute;
-      inset: 0;
-      z-index: -1;
-      border-radius: inherit;
-      background: var(--hang-surface);
-      pointer-events: none;
-    }
-  }
-  /* On a phone the glass is a tab tucked into the screen's trailing edge,
-     and the card hanging from it is too: its trailing side is the screen's
-     edge, square and with no edge drawn there, as the glass's. */
-  @media (width < 900px) {
-    .kit-pop.kit-hang.glass-card {
-      border-end-end-radius: 0;
-
-      &::after {
-        border-inline-end-width: 0;
-      }
-    }
-  }
   /* The cut the card comes down from behind (`hang`): its floating wrapper,
      cut at the card's top edge, the anchor's foot, with room for the whole
      overlay shadow past the others. It never moves, so the card's slide is
@@ -1563,40 +1347,6 @@
   [data-bits-floating-content-wrapper][data-hang] {
     @apply clip-block-start;
   }
-  /* Open and close are the card's own (`hang`): the kit's rise, scale and
-     fade do not apply, and until it is placed it is held shut, up behind
-     the cut. With reduced motion the kit's fade runs and the card stands
-     open. */
-  @media (prefers-reduced-motion: no-preference) {
-    .kit-pop.kit-hang,
-    .kit-pop.kit-hang[data-state="closed"] {
-      opacity: 1;
-      translate: none;
-      scale: none;
-      transition: none;
-    }
-    /* Shut: up past its own height by the reach of its shadow under it
-       (`--hang-reach`, the hung shadow's), so none of it is left under the
-       cut. */
-    .kit-pop.kit-hang:not(.tab-hang, [data-shown]) {
-      translate: 0 calc(-100% - var(--hang-reach, 0px));
-    }
-    /* Its own layer for as long as it is mounted: WebKit gave the card one
-       for its slide alone and took it away when the slide ended, and that
-       repainted the whole card, its shadow and its rows, in the frame it
-       landed in (75–80 ms in Playwright WebKit at 3x). */
-    .kit-pop.kit-hang:not(.tab-hang) {
-      will-change: translate;
-    }
-    @starting-style {
-      .kit-pop.kit-hang[data-state="open"] {
-        opacity: 1;
-        translate: none;
-        scale: none;
-      }
-    }
-  }
-
   /* Switch: a 32×18 track (24×14 small). Its hit area is .pointer-hit's
      24px on a pointer device and .touch-hit's 44px on a touch screen; the
      drawn track and the layout do not change. The knob travels --dur-toggle
@@ -1661,31 +1411,6 @@
       }
       &[data-on="true"] path {
         stroke-dashoffset: 0;
-      }
-    }
-  }
-
-  /* A radio item's dot: fades in and grows from .6. */
-  .kit-dot {
-    display: block;
-    inline-size: 6px;
-    block-size: 6px;
-    border-radius: var(--radius-pill);
-    background: currentColor;
-    opacity: 0;
-    transition: opacity var(--dur-control) var(--ease-out);
-
-    &[data-on="true"] {
-      opacity: 1;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      scale: 0.6;
-      transition:
-        opacity var(--dur-control) var(--ease-out),
-        scale var(--dur-control) var(--ease-out);
-
-      &[data-on="true"] {
-        scale: 1;
       }
     }
   }
@@ -1769,71 +1494,6 @@
     }
   }
 
-  /* Tooltip: solid ink, never coral. It fades in over --dur-fade, settling
-     2px toward its trigger; it leaves at once, so moving on is never held
-     up by the last one. With reduced motion only the fade runs. */
-  .kit-tip {
-    --kit-tip-from: 0 2px;
-    border-radius: var(--radius-sm);
-    background: var(--ink-solid);
-    color: var(--on-ink);
-    font: var(--type-meta);
-
-    &[data-side="bottom"] {
-      --kit-tip-from: 0 -2px;
-    }
-    &[data-side="left"] {
-      --kit-tip-from: 2px 0;
-    }
-    &[data-side="right"] {
-      --kit-tip-from: -2px 0;
-    }
-    &:is([data-state="delayed-open"], [data-state="instant-open"]) {
-      animation: kit-tip-fade var(--dur-fade) var(--ease-out) both;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      &:is([data-state="delayed-open"], [data-state="instant-open"]) {
-        animation: kit-tip-in var(--dur-fade) var(--ease-out) both;
-      }
-    }
-  }
-
-  /* Dialog: a recessed tray holding a raised body; 6 + 12 = 18, so the
-     corners are concentric. */
-  .kit-dialog {
-    border-radius: var(--radius-modal);
-    background: var(--surface-recess);
-    box-shadow: var(--shadow-overlay);
-    padding: 6px;
-
-    @media (prefers-reduced-motion: no-preference) {
-      &[data-state="open"] {
-        animation: kit-dialog-in var(--dur-panel) var(--ease-out) both;
-      }
-      &[data-state="closed"] {
-        animation: kit-dialog-out var(--dur-exit) var(--ease-out) both;
-      }
-    }
-  }
-
-  :where(.kit-dialog) .kit-dialog-body {
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    padding: 18px;
-  }
-
-  .kit-scrim {
-    background: var(--scrim);
-    backdrop-filter: blur(var(--scrim-blur));
-
-    &[data-state="open"] {
-      animation: kit-fade-in var(--dur-panel) var(--ease-out) both;
-    }
-    &[data-state="closed"] {
-      animation: kit-fade-out var(--dur-exit) var(--ease-out) both;
-    }
-  }
-
   /* vaul's own slide out (slideToBottom and its siblings) sets no fill
      mode, and bits-ui unmounts the sheet a frame after it finishes: that
      frame would paint the sheet back fully open. It holds the last frame. */
@@ -1885,68 +1545,11 @@
       var(--drawer-max-height, 85vh),
       var(--visible-height, 100dvh)
     );
-    /* What scrolls in the sheet (.kit-sheet-scroll) drives its header's
-       seam (.kit-sheet-head). */
+    /* What scrolls in the sheet (`kit-sheet-scroll`) drives its header's
+       seam (`sheet-seam`, ui/drawer/drawer-header). */
     timeline-scope: --sheet-scroll;
   }
 
-  /* A sheet's one header (ui/drawer/drawer-header, the New session sheet's
-     head): its title in the title role, then Close at the trailing edge. A
-     hairline under it comes in as what is under it scrolls, so a line
-     scrolled up under the title is cut on a seam, never left loose. */
-  .kit-sheet-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-    flex: none;
-    padding-block-end: var(--space-3);
-    border-block-end: 1px solid transparent;
-  }
-  /* The seam follows the sheet's scroll, inside a sheet: elsewhere the name
-     resolves to no timeline, which Chromium paints as the animation's end. */
-  [data-slot="drawer-content"] .kit-sheet-head {
-    animation: kit-sheet-seam linear both;
-    animation-timeline: --sheet-scroll;
-    animation-range: 0px var(--space-3);
-  }
-  @keyframes kit-sheet-seam {
-    to {
-      border-block-end-color: var(--border-hairline);
-    }
-  }
-  .kit-sheet-scroll {
-    scroll-timeline: --sheet-scroll block;
-  }
-  /* Close, in every sheet and dialog head: a 28px ghost with a 16px glyph,
-     reaching 44px under a finger through .touch-hit. A mouse never drags a
-     sheet; this and Escape put it away. */
-  .kit-sheet-close {
-    --hit-edge: 1px;
-    flex: none;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    inline-size: 28px;
-    block-size: 28px;
-    border: 1px solid transparent;
-    border-radius: var(--radius-sm);
-    background: transparent;
-    color: var(--ink-muted);
-    cursor: pointer;
-    transition: var(--transition-control);
-
-    & svg {
-      inline-size: 16px;
-      block-size: 16px;
-    }
-    @media (hover: hover) {
-      &:hover {
-        background: var(--surface-hover);
-        color: var(--ink-strong);
-      }
-    }
-  }
 
   /* Two icons sharing one slot; the outgoing icon animates out too. */
   .icon-swap {
@@ -3555,34 +3158,11 @@
   inherits: false;
 }
 @layer components {
-  .kit-pop[data-session-details-popover] {
-    display: flex;
-    max-height: min(
-      var(--c-details-card-max-h),
-      var(--bits-popover-content-available-height, var(--c-sheet-max-h))
-    );
-    overflow: hidden;
-    overscroll-behavior: contain;
-    padding: 0;
-
-    @variant max-phone {
-      max-height: min(
-        calc(
-          100dvh - var(--c-top-bar-h) - 2 * var(--c-screen-margin) -
-            var(--safe-bottom)
-        ),
-        var(--bits-popover-content-available-height, var(--c-sheet-max-h))
-      );
-    }
-  }
-  /* The tab's menu hangs on the tab's own surface, as the card's head is. */
-  .kit-pop.kit-hang[data-tab-menu] {
-    --hang-surface: var(--surface-recess);
-  }
   /* bits-ui rewrites where the card may stand a few times a frame as it opens
      and follows its tab; only the card reads those properties (its
-     max-height), so they stop at its children and restyle nothing inside. */
-  .kit-pop[data-session-details-popover] > * {
+     max-height, HangCard's `details` frame), so they stop at its children
+     and restyle nothing inside. */
+  [data-session-details-popover] > * {
     --bits-floating-transform-origin: initial;
     --bits-floating-available-width: initial;
     --bits-floating-available-height: initial;
@@ -4984,3 +4564,27 @@
 }
 
 /* The flip itself starts no element transitions: `overrides`, above. */
+
+/* wave 2: W5-overlays */
+/* What scrolls in a sheet names the scroll timeline (`--sheet-scroll`) its
+   header's seam follows (the kit drawer's `timeline-scope`, above): a
+   scroll-driven animation, which Tailwind has no utility for. */
+@utility kit-sheet-scroll {
+  scroll-timeline: --sheet-scroll block;
+}
+/* A sheet's header's seam (DESIGN.md, Drawer: "a seam under it that comes
+   in over the first 11px of the content's scroll"): its hairline comes in as
+   what is under it scrolls, so a line scrolled up under the title is cut on
+   a seam, never left loose. Inside a sheet only (ui/drawer/drawer-header's
+   `in-data-[slot=drawer-content]:`): elsewhere the name resolves to no
+   timeline, which Chromium paints as the animation's end. */
+@utility sheet-seam {
+  animation: kit-sheet-seam linear both;
+  animation-timeline: --sheet-scroll;
+  animation-range: 0px var(--space-3);
+}
+@keyframes kit-sheet-seam {
+  to {
+    border-block-end-color: var(--border-hairline);
+  }
+}

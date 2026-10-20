@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
   import { scrimMark } from "#lib/cawco/page-marks.js";
+  import { scrimVariants } from "#lib/components/ui/dialog/dialog-overlay.svelte";
   import { cn } from "#lib/utils.js";
 
   let {
@@ -18,7 +19,7 @@
 </script>
 
 <DrawerPrimitive.Overlay
-  class={cn("kit-scrim fixed inset-0 z-(--layer-float)", className)}
+  class={cn(scrimVariants(), "fixed inset-0 z-(--layer-float)", className)}
   data-slot="drawer-overlay"
   bind:ref
   {...restProps}

@@ -15,11 +15,12 @@
    * so Tab goes on from Files into it. Chosen from the keyboard, the focus
    * goes to the panel's name; the panel's own Close closes it and gives the
    * focus back to the artifact's card in Files. It comes and goes as every
-   * floating surface (`kit-pop`'s `data-state`), standing closed for
+   * floating surface (the kit's `floatingSurface`, on `data-state`), standing closed for
    * `--dur-exit` before it leaves the page.
    */
   import { untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
+  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { barGlass } from "../bar-glass.svelte";
   import { cawco } from "../client.svelte";
   import { dur } from "../motion/curves.svelte";
@@ -132,7 +133,7 @@
     };
     measure();
     const card = document.querySelector<HTMLElement>(
-      '.kit-pop[data-glass-card-frame="files-pop"]'
+      '[data-glass-card][data-glass-card-frame="files-pop"]'
     );
     const seen = new ResizeObserver(measure);
     if (card) {
@@ -159,7 +160,10 @@
   <section
     bind:this={node}
     aria-label={standing.name}
-    class="kit-pop fixed end-(--float-right) top-(--float-top) z-(--layer-float) flex h-(--float-h) w-(--float-w) flex-col overflow-hidden border-border-row-outline p-0 **:slot-side-card:flex-1 **:slot-side-card:rounded-none **:slot-side-card:shadow-none"
+    class={floatingSurface({
+      class:
+        "fixed end-(--float-right) top-(--float-top) z-(--layer-float) flex h-(--float-h) w-(--float-w) flex-col overflow-hidden border-border-row-outline p-0 **:slot-side-card:flex-1 **:slot-side-card:rounded-none **:slot-side-card:shadow-none",
+    })}
     data-files-float
     data-side="left"
     data-state={standing.open ? "open" : "closed"}

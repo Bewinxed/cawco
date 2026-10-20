@@ -44,11 +44,12 @@
        growing under the reader as the transcript lands. -->
   <Drawer.Content
     data-peek-sheet
-    class="vaul-drawer-direction-bottom:h-c-peek-sheet-h"
+    height="cap"
     pad="sheet-safe-bottom"
+    style="--drawer-max-height: var(--c-peek-sheet-h)"
   >
-    <Drawer.Title class="sr-only">Peek</Drawer.Title>
-    <Drawer.Description class="sr-only"
+    <Drawer.Title visible={false}>Peek</Drawer.Title>
+    <Drawer.Description visible={false}
       >The tail of one session. Open dives into it; closing keeps your place.</Drawer.Description
     >
     {#if peek.target}

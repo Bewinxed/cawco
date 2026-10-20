@@ -70,13 +70,8 @@
          along the top edge. The panel runs edge to edge inside it, from under
          the grabber to the foot, which keeps the safe area clear itself
          (ThreadPane's docked composer). -->
-    <Drawer.Content
-      class="h-c-sheet-max-h"
-      data-caw-float-sheet
-      pad="none"
-      style="--drawer-max-height: var(--c-sheet-max-h)"
-    >
-      <Drawer.Title class="sr-only">Caw, lead of {projectName}</Drawer.Title>
+    <Drawer.Content data-caw-float-sheet height="cap" pad="none">
+      <Drawer.Title visible={false}>Caw, lead of {projectName}</Drawer.Title>
       <div class="flex min-h-0 flex-auto flex-col overflow-hidden">
         {#key projectId}
           <CawThread {lead} {projectId} {projectName} />

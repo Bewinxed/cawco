@@ -550,15 +550,15 @@
    * The shadow of every card hanging from the glass (HangCard `glass`),
    * drawn ahead of any press (motion/hung-shadow): a picture of
    * `--shadow-overlay-hung` round its corners, the glass's trailing flank
-   * square and, on a phone, its foot at the screen's edge square (app.css
-   * `.glass-card`), drawn again for a new scheme, device ratio or width.
+   * square and, on a phone, its foot at the screen's edge square (HangCard's
+   * `glass` recipe), drawn again for a new scheme, device ratio or width.
    */
   $effect(() => {
     const look = [theme.resolved, deviceRatio.current, !railed] as const;
     const corner = Number.parseFloat(
       getComputedStyle(document.documentElement).getPropertyValue("--radius-lg")
     );
-    hangShadow(".kit-pop.glass-card", "--shadow-overlay-hung", [
+    hangShadow("[data-glass-card]", "--shadow-overlay-hung", [
       corner,
       0,
       look[2] ? 0 : corner,
@@ -1022,7 +1022,8 @@
            (--rail-sheet-close-room). -->
       <Sheet.Content
         data-rail-sheet
-        class="w-c-rail-sheet-w desk:hidden"
+        class="w-c-rail-sheet-w"
+        narrow
         pad="none"
         onCloseAutoFocus={(event) => {
           if (barGlass.open === "jump") {
@@ -1031,7 +1032,7 @@
         }}
         side="left"
       >
-        <Sheet.Header class="sr-only">
+        <Sheet.Header visible={false}>
           <Sheet.Title>Navigation</Sheet.Title>
         </Sheet.Header>
         {#if !railed}

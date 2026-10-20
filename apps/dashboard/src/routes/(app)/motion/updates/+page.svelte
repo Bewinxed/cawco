@@ -25,6 +25,10 @@
     updatedNotice,
   } from "#lib/cawco/updates/model.js";
   import UpdateTable from "#lib/cawco/updates/UpdateTable.svelte";
+  import { floatingSurface } from "#lib/components/ui/popover/index.js";
+
+  /** Caw's panel as the notices stand in it: the kit's floating surface at the panel's width. */
+  const panel = floatingSurface({ class: "w-c-panel-w" });
 
   /** Notes as every release writes them (docs/releases/README.md). */
   const NOTES = [
@@ -379,7 +383,7 @@
     data-states="notices"
   >
     {#each NOTICES as notice (notice.kind)}
-      <div class="kit-pop w-c-panel-w" data-notice={notice.kind}>
+      <div class={panel} data-notice={notice.kind}>
         <UpdateCard alone={false} {notice} onaction={noop} ondismiss={noop} />
       </div>
     {/each}
@@ -391,7 +395,7 @@
     class="grid grid-cols-(--notice-cols) items-box-start gap-space-5"
     data-states="notice-plain"
   >
-    <div class="kit-pop w-c-panel-w" data-notice="plain">
+    <div class={panel} data-notice="plain">
       <UpdateCard
         alone
         notice={UPDATED_PLAIN}
@@ -406,7 +410,7 @@
   </h1>
   <!-- As the panel has it: the row in a `reflow`, a row under it. -->
   <div
-    class="kit-pop w-c-panel-w"
+    class={panel}
     data-states="notice-reload"
     {@attach reflow()}
   >
@@ -430,7 +434,7 @@
     class="grid grid-cols-(--notice-cols) items-box-start gap-space-5"
     data-states="update-card"
   >
-    <div class="kit-pop w-c-panel-w">
+    <div class={panel}>
       <UpdateCard alone notice={UPDATED} onaction={noop} ondismiss={noop} />
     </div>
   </div>

@@ -6,7 +6,7 @@
  * (PaneTabs), Caw's panel, the machines and the Jump palette from the top
  * bar's glass.
  *
- * The card is a kit popover with the `kit-hang` recipe (app.css) and stands
+ * The card is a kit popover with HangCard's recipe (`hangCardVariants`) and stands
  * on its anchor's foot, at side offset 0. Its top edge is cut across the
  * anchor's span and the anchor's flared foot each side of it (the neck:
  * `--neck-start`, `--neck-end`, `--neck-flare-start`, `--neck-flare-end`, in
@@ -53,7 +53,7 @@
  * card, GlassCard) is placed the first time it opens and stays placed; every
  * open after that grows at once, and every close ends with it at rest up
  * behind the cut, past its own height by its shadow's reach under it, so
- * nothing it drew is left below the cut (`kit-hang` without `data-shown`).
+ * nothing it drew is left below the cut (HangCard without `data-shown`).
  */
 import { untrack } from "svelte";
 import type { Attachment } from "svelte/attachments";
@@ -113,7 +113,7 @@ const flareTail = (flare: number): number =>
   flare > 0 ? Math.sqrt(2 * flare + 1) : 0;
 
 /**
- * The cut across the card's top edge row (`kit-hang::before`, a 1px row from
+ * The cut across the card's top edge row (HangCard's `::before`, a 1px row from
  * one foot's tip to the other's), as a `shape()` in its own box: on a flared
  * side it starts on the flare's stroke's outer edge, the circle of radius
  * f + 1 from the row's foot at the tip to the row's top √(2f + 1) px in, so
@@ -135,7 +135,7 @@ function neckCut(neck: Neck): string {
   return `shape(from 0 100%, ${start}, line to calc(100% - ${tailEnd}px) 0, ${end}, close)`;
 }
 
-/** The neck as the card's style (`kit-hang`): its span, its flares, and the cut's shape. */
+/** The neck as the card's style (HangCard): its span, its flares, and the cut's shape. */
 const neckProperties = (neck: Neck): [string, string][] => [
   ["--neck-start", `${neck.start}px`],
   ["--neck-end", `${neck.end}px`],
@@ -432,7 +432,7 @@ function slideMotion(node: HTMLElement, options: Hang) {
   };
   /**
    * Shut and at rest: the card's own rules hold it up behind the cut
-   * (`kit-hang` without `data-shown`), its run let go.
+   * (HangCard without `data-shown`), its run let go.
    */
   const rest = () => {
     run?.cancel();

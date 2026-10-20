@@ -2,9 +2,15 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
-  /** Its callers' looks: a description at the body size. */
+  /** Its callers' looks: a description at the body size; read out but not
+      drawn (`visible: false`) on a sheet whose content says it on screen. */
   export const drawerDescriptionVariants = tv({
-    variants: { text: { body: "text-body" } },
+    base: "text-ink-muted text-label",
+    variants: {
+      text: { body: "text-body" },
+      visible: { true: "", false: "sr-only" },
+    },
+    defaultVariants: { visible: true },
   });
 
   export type DrawerDescriptionLooks = VariantProps<
@@ -20,16 +26,13 @@
     ref = $bindable(null),
     class: className,
     text,
+    visible,
     ...restProps
   }: DrawerPrimitive.DescriptionProps & DrawerDescriptionLooks = $props();
 </script>
 
 <DrawerPrimitive.Description
-  class={cn(
-    "text-ink-muted text-label",
-    drawerDescriptionVariants({ text }),
-    className
-  )}
+  class={cn(drawerDescriptionVariants({ text, visible }), className)}
   data-slot="drawer-description"
   bind:ref
   {...restProps}

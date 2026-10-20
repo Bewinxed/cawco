@@ -1797,6 +1797,7 @@
             sideOffset={0}
             class="min-w-(--menu-min)"
             style="--menu-min: max(var(--c-tab-menu-min), {menuMin}px)"
+            surface="recess"
             tab
             bind:joined={
               () => menuHung === tab.id,
@@ -1898,6 +1899,7 @@
       customAnchor={detailAnchor}
       data-safe-bottom
       folded={takeFolded}
+      frame="details"
       class="z-(--layer-float) w-(--hang-width)"
       style={cardPlace ? `--hang-width: ${cardPlace.width}px` : undefined}
       tab

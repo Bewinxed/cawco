@@ -3,11 +3,13 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks: an item titled in the strong ink at the label
-      size, whose description wraps under it a step below. */
+      size, whose description wraps under it a step below, the two lines on
+      a row's pitch (DESIGN.md, Layout: "a 44px row pitch"). */
   export const dropdownMenuPendingItemVariants = tv({
     variants: {
       look: {
-        titled: "gap-y-space-1 font-medium text-ink-strong text-size-label",
+        titled:
+          "min-h-c-row-h flex-wrap gap-y-space-1 font-medium text-ink-strong text-size-label",
       },
     },
   });

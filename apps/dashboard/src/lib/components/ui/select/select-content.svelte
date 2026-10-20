@@ -7,6 +7,7 @@
     pressable,
   } from "#lib/components/ui/floating-presence.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { floatingSurface } from "#lib/components/ui/popover/popover-content.svelte";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn, type WithoutChild } from "#lib/utils.js";
   import SelectPortal from "./select-portal.svelte";
@@ -41,7 +42,8 @@
 <SelectPortal {...portalProps}>
   <SelectPrimitive.Content
     class={cn(
-      "kit-pop relative isolate z-(--layer-float) min-w-36 origin-(--bits-select-content-transform-origin) overflow-y-auto overflow-x-hidden",
+      floatingSurface(),
+      "relative isolate z-(--layer-float) min-w-36 origin-(--bits-select-content-transform-origin) overflow-y-auto overflow-x-hidden",
       className
     )}
     data-slot="select-content"

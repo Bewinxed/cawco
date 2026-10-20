@@ -58,9 +58,9 @@
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="overflow-y-auto"
     gap="none"
     height="capped"
+    overflow="scroll"
     width="narrow"
   >
     <!-- The kit's ghost and pill: the pill is the choice, and a pick takes

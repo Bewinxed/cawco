@@ -645,7 +645,7 @@
         {@render body()}
       </div>
       {#if !joined}
-        <Drawer.Footer class="flex-col-reverse" pad="flush">
+        <Drawer.Footer pad="flush">
           {@render actions()}
         </Drawer.Footer>
       {/if}

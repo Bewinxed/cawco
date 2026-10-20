@@ -5,13 +5,15 @@
   /** Its callers' looks: a list of things one of which is current
       (`aria-current`, in the strong ink, over a destructive item's ink as
       the list's own rule was) and any of which may be busy (`aria-busy`,
-      at half). */
+      at half). An artifact's row stands on the artifact row's measure
+      (DESIGN.md, Files: "rows on the artifact row's measure (44px)"). */
   export const dropdownMenuItemVariants = tv({
     variants: {
       marks: {
         "current-busy":
           "aria-busy:opacity-50 aria-current:text-ink-strong aria-current:data-[variant=destructive]:text-ink-strong aria-current:data-[variant=destructive]:focus:text-ink-strong",
       },
+      row: { artifact: "min-h-c-artifact-row-h" },
     },
   });
 
@@ -30,6 +32,7 @@
     inset,
     variant = "default",
     marks,
+    row,
     ...restProps
   }: DropdownMenuPrimitive.ItemProps &
     DropdownMenuItemLooks & {
@@ -50,7 +53,7 @@
     "[&_svg:not([class*='size-'])]:size-icon-md",
     "[&_svg]:pointer-events-none [&_svg]:shrink-0",
     "px-2.5 data-[variant=destructive]:*:[svg]:text-error-9",
-    dropdownMenuItemVariants({ marks }),
+    dropdownMenuItemVariants({ marks, row }),
     className
   )}
   data-inset={inset}

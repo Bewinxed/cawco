@@ -190,11 +190,12 @@
   </Popover.Trigger>
   <Popover.Content
     align="start"
-    class="w-(--bits-popover-anchor-width) overflow-hidden"
+    class="w-(--bits-popover-anchor-width)"
     customAnchor={anchor}
     data-sessions-flyover
     frame="raised"
     gap="none"
+    overflow="clip"
     onCloseAutoFocus={keepFocus}
     onOpenAutoFocus={keepFocus}
     onpointerenter={rest}

@@ -77,7 +77,7 @@
 <Dialog.Root onOpenChangeComplete={(isOpen) => !isOpen && onClose()} bind:open>
   <Dialog.Content
     aria-label={`Diff: ${filePath}`}
-    bodyClass="flex h-full flex-col overflow-hidden"
+    body="document"
     bodyPad="flush"
     class="w-c-dialog-document-w"
     height="cap"

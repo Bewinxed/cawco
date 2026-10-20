@@ -36,7 +36,7 @@
   <Dialog.Content width="report">
     <div class="flex flex-col gap-space-7">
       <Dialog.Header>
-        <Dialog.Title class="mark-line flex items-center" gap="glyph">
+        <Dialog.Title lead="glyph">
           <IconAlert class="size-icon-md shrink-0 text-error-9" />
           <span>{title}</span>
         </Dialog.Title>
