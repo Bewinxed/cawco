@@ -294,6 +294,10 @@ html.cawco-embed :is(.cawco-section-head, .cawco-colhead, .cawco-frame-label, .c
 html.cawco-embed .cawco-grid { display: flex; flex-direction: column; align-items: center; gap: var(--space-3); }
 html.cawco-embed .cawco-frame { gap: 0; min-inline-size: 0; max-inline-size: 100%; }
 html.cawco-embed .cawco-frame[data-cawco-wide] { align-self: stretch; overflow-x: auto; overscroll-behavior-inline: contain; }
+/* Its fade is the house edge fade at its full 40px on every width (DESIGN.md: over words cut mid-word a phone's 16px reads as
+   a clip); a frame showing less than twice that has each fade cut to half of what it shows (the kit's caps), so the two meet
+   in its middle and never cross into a hard edge. */
+html.cawco-embed .cawco-frame[data-cawco-wide] { --fade-len: 40px; --fade-cap-start: 50%; --fade-cap-end: 50%; }
 html.cawco-embed .cawco-stand-in-body { max-inline-size: 100%; }
 html[data-cawco-phone][data-cawco-current] .cawco-frame:not([data-cawco-shown]), html[data-cawco-phone] .cawco-colhead, html[data-cawco-phone][data-cawco-current] .cawco-section:not([data-cawco-shown]) { display: none; }
 `;
