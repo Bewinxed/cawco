@@ -9,29 +9,16 @@ import { loadLane, reportList } from "./lane-list.ts";
 
 const list = loadLane();
 const listOk = reportList(list);
-const deferred = new Set(
-  [...list.laneText.matchAll(/^deferred-file:\s*(\S+)/gm)].map(
-    (match) => match[1]
-  )
-);
-const files = list.dashboardSrc.filter(
-  (path) => path.endsWith(".svelte") && !deferred.has(path)
-);
-console.log(
-  `deferred files: ${deferred.size}${deferred.size ? ` (${[...deferred].join(", ")})` : ""}`
-);
+const deferred = new Set([...list.laneText.matchAll(/^deferred-file:\s*(\S+)/gm)].map((match) => match[1]));
+const files = list.dashboardSrc.filter((path) => path.endsWith(".svelte") && !deferred.has(path));
+console.log(`deferred files: ${deferred.size}${deferred.size ? ` (${[...deferred].join(", ")})` : ""}`);
 if (files.length === 0) {
   console.log(listOk ? "no files left to check" : "list-failed");
   process.exit(listOk ? 0 : 1);
 }
 const run = Bun.spawnSync(
-  [
-    "bun",
-    "scripts/style-residual-check.ts",
-    ...(process.env.NOCAP ? ["--no-cap"] : []),
-    ...files,
-  ],
-  { stdout: "inherit", stderr: "inherit" }
+  ["bun", "scripts/style-residual-check.ts", ...(process.env.NOCAP ? ["--no-cap"] : []), ...files],
+  { stdout: "inherit", stderr: "inherit" },
 );
 if (!listOk) {
   console.log("list-failed");
