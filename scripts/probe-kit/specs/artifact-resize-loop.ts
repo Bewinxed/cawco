@@ -33,6 +33,12 @@
  *   first of them shows the sheet with its preview, and none shows the
  *   preview beside the conversation.
  *
+ * - Beside the session on a phone in WebKit, 390×844 and 430×932, where the
+ *   preview is the sheet over the composer ({@link runPhoneSheet}): open, its
+ *   floor is the screen's foot and the composer is under it; the composer
+ *   taking the focus sends it to its lower stop, on the composer; a keyboard
+ *   resizing the web view never drops it.
+ *
  * On opening and over every sweep, the page sent the hub no error report
  * and logged no ResizeObserver loop. A desk page draws its scrollbars as a
  * desk's Chromium does (the kit's `scrollbars`): the card starting to scroll
@@ -48,6 +54,7 @@
 import type { Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
+  COMPOSER,
   type Kit,
   type KitFleet,
   open,
@@ -139,7 +146,7 @@ interface Painted {
    * its parts paints.
    */
   composerTop: number | "none" | "undrawn";
-  /** The host's foot: the sheet's floor, where it stands. */
+  /** The host's foot less its clip: the sheet's floor, where it stands. */
   floor: number | null;
   /** The preview's card in the sheet on the composer. */
   sheet: boolean;
@@ -216,10 +223,22 @@ function paintedFrames() {
       '[data-slot="preview-sheet-host"]'
     );
     const hostBox = host?.getBoundingClientRect();
+    // What the host's clip takes off its foot (SideSheet: standing on the
+    // composer): the third value of its `inset()`, or its only one, read by
+    // its words (in the page, no module-level regex reaches it).
+    const clip = host ? getComputedStyle(host).clipPath : "";
+    const inset = clip.startsWith("inset(")
+      ? clip
+          .slice("inset(".length, clip.indexOf(")"))
+          .split(" ")
+          .filter(Boolean)
+          .map(Number.parseFloat)
+      : [];
+    const clipped = (inset.length >= 3 ? inset[2] : inset[0]) ?? 0;
     return {
       splitOpen: split.classList.contains("open"),
       sheetHost: hostBox ? hostBox.height : null,
-      floor: hostBox ? hostBox.bottom : null,
+      floor: hostBox ? hostBox.bottom - clipped : null,
       composerTop: drawnTop(split),
       beside: !!beside && beside.getBoundingClientRect().width > 0,
       sheet: !!document.querySelector(
@@ -632,6 +651,232 @@ export const runLeg = async (kit: Kit, base: string, leg: Leg) => {
   await page.context().close();
 };
 
+/** The phone preview sheet as drawn, read by {@link sheetReader}. */
+interface SheetNow {
+  /** The composer's drawn top, as SideSheet's `drawnTop` reads it; null with no part drawn. */
+  composerTop: number | null;
+  /** The composer's drawn parts each covered by the sheet at their middle (what `elementFromPoint` hits there is in the sheet). */
+  covered: { part: string; covered: boolean }[];
+  /** The sheet's floor: the host's foot less what its clip takes off it. */
+  floor: number;
+  /** The composer's field holds the focus. */
+  focused: boolean;
+  /** A press at the pill's middle lands in the composer: it stands in view. */
+  pillInView: boolean;
+  /** The screen's foot less the home indicator's room (`--safe-bottom` on the composer's dock). */
+  screenFloor: number;
+  /** The stop SideSheet says it stands at (`data-active-snap`). */
+  stop: string | null;
+  /** The sheet's drawn top. */
+  top: number | null;
+}
+
+declare global {
+  interface Window {
+    /** Each frame's floor and composer top while a keyboard rises. */
+    __floors?: { floor: number; composerTop: number | null }[];
+    /** The phone sheet as it stands now; null while it has no host. */
+    __sheetNow?: () => SheetNow | null;
+  }
+}
+
+/**
+ * Reads the phone's preview sheet as the engine draws it: its floor (the
+ * host's foot less its clip), the composer's drawn top, what a press on each
+ * of the composer's drawn parts lands on. Runs in the page before its own
+ * scripts.
+ */
+function sheetReader() {
+  const PARTS =
+    ":scope > .composer, .ask, .lift .kit-tray-chip, .suggest:has(.track), .progress-slot > *, .perch";
+  const drawn = (part: Element) =>
+    part.getBoundingClientRect().height > 0 &&
+    part.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+  const composerOf = () =>
+    [...document.querySelectorAll<HTMLElement>(".leaf > .dock .lift")]
+      .map((lift) => lift.parentElement)
+      .find((dock) => dock?.checkVisibility()) ?? null;
+  /**
+   * The bottom of an `inset()` clip: its third value, or its only one. In
+   * the page, so no module-level regex reaches it: read by its words.
+   */
+  const clipBottom = (clip: string) => {
+    if (!clip.startsWith("inset(")) {
+      return 0;
+    }
+    const values = clip
+      .slice("inset(".length, clip.indexOf(")"))
+      .split(" ")
+      .filter(Boolean)
+      .map(Number.parseFloat);
+    return (values.length >= 3 ? values[2] : values[0]) ?? 0;
+  };
+  const read = (): SheetNow | null => {
+    const host = document.querySelector<HTMLElement>(
+      '[data-slot="preview-sheet-host"]'
+    );
+    const content = document.querySelector("[data-preview-sheet]");
+    if (!(host && content)) {
+      return null;
+    }
+    const floor =
+      host.getBoundingClientRect().bottom -
+      clipBottom(getComputedStyle(host).clipPath);
+    const composer = composerOf();
+    const parts = composer
+      ? [...composer.querySelectorAll<HTMLElement>(PARTS)].filter(drawn)
+      : [];
+    const tops = parts.map((part) => part.getBoundingClientRect().top);
+    const hitIn = (box: DOMRect) =>
+      document.elementFromPoint(
+        box.left + box.width / 2,
+        box.top + box.height / 2
+      );
+    const pill = composer?.querySelector('form[data-slot="cin"]');
+    const pillHit = pill ? hitIn(pill.getBoundingClientRect()) : null;
+    const safeBottom = composer
+      ? Number.parseFloat(
+          getComputedStyle(composer).getPropertyValue("--safe-bottom")
+        ) || 0
+      : 0;
+    const sheet = content.querySelector('[data-slot="sheet"]');
+    return {
+      floor,
+      composerTop: tops.length > 0 ? Math.min(...tops) : null,
+      screenFloor: document.documentElement.clientHeight - safeBottom,
+      stop: host.getAttribute("data-active-snap"),
+      top: sheet ? sheet.getBoundingClientRect().top : null,
+      covered: parts.map((part) => ({
+        part: `${part.localName}.${[...part.classList].find((c) => !c.startsWith("svelte-")) ?? ""}`,
+        covered: !!content.contains(hitIn(part.getBoundingClientRect())),
+      })),
+      pillInView: !!(pill && pillHit && pill.contains(pillHit)),
+      focused: !!composer?.contains(document.activeElement),
+    };
+  };
+  window.__sheetNow = read;
+}
+
+/** A software keyboard's height on a phone, as the web view resizes for it (Brave). */
+const KEYBOARD = 336;
+
+/**
+ * The preview sheet on a phone, in WebKit (the owner's iPhone Safari's
+ * engine) at `view`, beside its session (`/session/<id>`), whose preview
+ * is open:
+ *
+ * - Open, the sheet's floor is the screen's foot less the home indicator's
+ *   room, and every part of the composer that paints (the pill, the tray's
+ *   chips, the suggestions, the plan's ring) is under the sheet.
+ * - The composer's field taking the focus sends the sheet to its lower
+ *   stop: its floor the composer's drawn top, and the pill in view.
+ * - Over a keyboard that resizes the web view (823d7d363), no frame drops
+ *   the sheet below where it stood, and it ends standing on the composer.
+ * - None of it posts an error to the hub or logs a ResizeObserver loop.
+ *
+ * No element pick on the web writes into the composer (comments.ts 6:
+ * selection.md is gone), so the pick's step down is not a leg.
+ */
+export const runPhoneSheet = async (
+  kit: Kit,
+  base: string,
+  leg: { session: string; view: "phone" | "phoneWide" }
+) => {
+  const page = await kit.page(leg.view, {
+    engine: "webkit",
+    init: [heldBack, sheetReader],
+  });
+  const { width, height } = page.viewportSize() ?? { width: 0, height: 0 };
+  const name = `phone ${width}×${height} WebKit, beside its session`;
+  const said = heard(page);
+  const start = await mark(page, said);
+  await open(page, `${base}/session/${leg.session}`, "[data-preview-sheet]");
+  await page
+    .frameLocator("[data-preview-sheet] iframe[title='Preview']")
+    .locator("h1")
+    .waitFor({ timeout: 60_000 });
+  await settle(page, 400);
+  await frames(page);
+  const now = () => page.evaluate(() => window.__sheetNow?.() ?? null);
+  const opened = await now();
+  kit.check(
+    `${name}: open, the sheet's floor is the screen's foot less the safe area, over the composer and its chips`,
+    !!opened &&
+      Math.abs(opened.floor - opened.screenFloor) <= 1 &&
+      opened.covered.length > 0 &&
+      opened.covered.every((part) => part.covered) &&
+      !opened.pillInView,
+    JSON.stringify(opened)
+  );
+  await page.locator(COMPOSER).first().focus();
+  await settle(page, 700);
+  await frames(page);
+  const focused = await now();
+  kit.check(
+    `${name}: the composer taking the focus sends the sheet to its lower stop, its floor the composer's drawn top, the pill in view`,
+    !!focused &&
+      focused.focused &&
+      focused.stop === "lower" &&
+      focused.composerTop !== null &&
+      Math.abs(focused.floor - focused.composerTop) <= 1 &&
+      focused.pillInView &&
+      !!opened?.top &&
+      !!focused.top &&
+      focused.top > opened.top,
+    JSON.stringify({ opened, focused })
+  );
+  // A keyboard that resizes the web view: every frame's floor read while
+  // the page lays itself out in the smaller viewport.
+  await page.evaluate(() => {
+    const floors: NonNullable<Window["__floors"]> = [];
+    window.__floors = floors;
+    const channel = new MessageChannel();
+    channel.port1.onmessage = () => {
+      const sheet = window.__sheetNow?.();
+      if (sheet) {
+        floors.push({ floor: sheet.floor, composerTop: sheet.composerTop });
+      }
+    };
+    const tick = () => {
+      if (floors.length < 120) {
+        channel.port2.postMessage(0);
+        requestAnimationFrame(tick);
+      }
+    };
+    requestAnimationFrame(tick);
+  });
+  await page.setViewportSize({ width, height: height - KEYBOARD });
+  await settle(page, 700);
+  await frames(page);
+  const typed = await now();
+  const floors = await page.evaluate(() => window.__floors ?? []);
+  const before = focused?.floor ?? 0;
+  const dropped = floors.filter((frame) => frame.floor > before + 1);
+  kit.check(
+    `${name}: over a keyboard that resizes the web view, no frame drops the sheet below where it stood, and it ends on the composer`,
+    !!typed &&
+      floors.length > 0 &&
+      dropped.length === 0 &&
+      typed.stop === "lower" &&
+      typed.composerTop !== null &&
+      Math.abs(typed.floor - typed.composerTop) <= 1 &&
+      typed.floor < before - KEYBOARD / 2,
+    JSON.stringify({ before, dropped: dropped.slice(0, 5), typed })
+  );
+  await page.setViewportSize({ width, height });
+  await settle(page, 400);
+  await frames(page);
+  await checkQuiet(
+    kit,
+    page,
+    said,
+    `${name}: opening the sheet, focusing the composer, a keyboard up and down`,
+    start,
+    await mark(page, said)
+  );
+  await page.context().close();
+};
+
 /** A fine pointer's desk window under the side sheet's 900px line. */
 const NARROW_DESK = { width: 860, height: 900 };
 
@@ -960,6 +1205,10 @@ const run = async (kit: Kit) => {
     return;
   }
   const base = await fleet.dashboard();
+  for (const view of ["phone", "phoneWide"] as const) {
+    // biome-ignore lint/performance/noAwaitInLoops: one page at a time, each its own report
+    await runPhoneSheet(kit, base, { session, view });
+  }
   for (const theme of ["light", "dark"] as const) {
     const legs: Leg[] = [
       {

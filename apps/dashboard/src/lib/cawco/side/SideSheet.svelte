@@ -1,13 +1,15 @@
 <script lang="ts">
   /**
-   * The preview on a phone (SideSplit): a sheet over the transcript,
-   * standing on the composer so the reader can write about the page while it
-   * is up (a selection lands as a chip there), at a usable middle snap or the
-   * full height. The preview closes it from its own header.
+   * The preview on a phone (SideSplit): a sheet over the transcript and
+   * the composer, down to the screen's foot, so the page has the composer's
+   * room too. When the reader takes the composer it steps down onto it, so
+   * what they write stands in view; dragged up, it covers it again. The
+   * preview closes it from its own header.
    */
   import { Portal } from "bits-ui";
   import type { Snippet } from "svelte";
   import { tick, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { Drawer as Vaul } from "vaul-svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
@@ -32,8 +34,9 @@
     children: Snippet;
   } = $props();
   /**
-   * How the sheet arrives, decided once as it mounts. It always settles on
-   * the middle snap, the page at a usable height. Opened by its card's
+   * How the sheet arrives, decided once as it mounts. It settles on its
+   * open stop (on the composer, the lower one, if the reader is writing
+   * there). Opened by its card's
    * Preview button in the transcript, it comes out of the card
    * (motion/share.svelte.ts, clipped open from the card's box over
    * --dur-panel on --ease-drawer) standing still at that snap: vaul's own
@@ -60,7 +63,7 @@
    * (`[data-vaul-handle-hitarea]`, below), the one part of it a finger
    * needs. An ask raised on the composer (a question, a permission) is the
    * reader's to answer, and the sheet standing over it hid it: while it is
-   * up the sheet folds to its tab on its floor, the ask card's top, and
+   * up the sheet folds to its tab on the ask card's top, and
    * opens again to the height it had once the ask is gone. Opened from the
    * tab meanwhile, it stands above the card.
    */
@@ -78,13 +81,55 @@
   }
   const share = untrack(() => `preview:${instanceId}`);
   const fromButton = untrack(() => waiting(share));
+  /**
+   * The sheet's stops, vaul's snap points, lowest first. The host reaches
+   * the screen's foot (less the home indicator's room), and each stop is a
+   * height shown over that foot.
+   *
+   * - `open`, where it opens: its floor the screen's foot, over the
+   *   composer, its chips, its suggestions and the plan's ring, its top the
+   *   composer's room above where `lower` stands.
+   * - `lower`, when the reader needs the composer (it takes the focus): its
+   *   floor the composer's drawn top, 60% of the visible height or all the
+   *   room above the composer. The composer's room under it is clipped off
+   *   the host, so the sheet steps down onto the composer and never floats
+   *   over its empty rows.
+   * - `full`: the whole host, its floor the screen's foot.
+   * - `tab`, while an ask is up (TAB, below).
+   *
+   * While an ask is up every stop stands on the ask's card, clipped as
+   * `lower` is.
+   */
+  type Stop = "tab" | "lower" | "open" | "full";
+  /**
+   * The sheet covers the composer on a phone only (DESIGN.md's phone
+   * breakpoint, 640px): in a desk's pane under 900px a mouse writes in the
+   * composer at any moment, and every stop stands on it there, opening on
+   * `lower`.
+   */
+  const covers = new MediaQuery("(width < 640px)");
   let snap = $state<number | string | null>(null);
   let viewportHeight = $state(0);
-  let availableHeight = $state(0);
-  const middle = $derived(
-    `${Math.min(viewportHeight * 0.6, availableHeight)}px`
-  );
-  let previousMiddle: string;
+  /** The host's height: from the safe area's top to the screen's foot. */
+  let hostHeight = $state(0);
+  /** The room above the composer's drawn top, from the safe area's top. */
+  let aboveComposer = $state(0);
+  /** The composer's room: from its drawn top to the screen's foot. */
+  let composerRoom = $state(0);
+  /** vaul reads a px snap point with parseInt: every one is whole. */
+  const px = (height: number) => `${Math.round(height)}px`;
+  /** Each stop's snap point, as vaul takes it. */
+  const values = $derived.by((): Record<Stop, number | string> => {
+    const middle = Math.min(viewportHeight * 0.6, aboveComposer);
+    const onIt = composerRoom + middle;
+    const over = onIt + composerRoom;
+    return {
+      tab: px(composerRoom + Number.parseFloat(TAB)),
+      lower: px(onIt),
+      open: Math.round(over) < Math.round(hostHeight) ? px(over) : 1,
+      full: 1,
+    };
+  });
   let host = $state<HTMLDivElement>();
   let drawer = $state<HTMLElement | null>(null);
   let handleStartY = 0;
@@ -95,30 +140,42 @@
     }
     // Vaul finishes its pointer-release transaction before accepting a new snap.
     await tick();
-    snap = snap === middle ? 1 : middle;
+    const rest = restStop();
+    snap = stop === rest ? values.full : values[rest];
   }
+  /** The stop the sheet rests at: over the composer on a phone, else on it. */
+  const restStop = (): Stop =>
+    covers.current && !asking && snapStops.includes("open") ? "open" : "lower";
   let snapPoints = $state<(number | string)[]>([0.6, 1]);
+  /** The stop each of `snapPoints` is, in order. */
+  let snapStops = $state<Stop[]>([]);
+  /** The stop the sheet stands at, as vaul last settled it. */
+  const stop = $derived<Stop | null>(
+    snap === null ? null : (snapStops[snapPoints.indexOf(snap)] ?? null)
+  );
+  /** An ask stands on the composer (its `.dock.asking`): the sheet is folded to its tab. */
+  let asking = $state(false);
+  /** The floor stands on the composer: the composer's room is clipped off the host. */
+  const onComposer = $derived(
+    asking || !covers.current || stop === "lower" || stop === "tab"
+  );
   /**
-   * How much of the sheet stands below the composer at its snap, clipped by
-   * the host: the card is that much shorter (`--sheet-hidden`), so its foot
-   * and its well's edge stand above the composer at the middle snap.
+   * How much of the sheet stands below its floor at its snap, clipped by the
+   * host: the card is that much shorter (`--sheet-hidden`), so its foot and
+   * its well's edge stand above the floor.
    */
   const hidden = $derived.by(() => {
-    if (snap === null || snap === 1) {
+    if (snap === null) {
       return 0;
     }
     const visible =
-      typeof snap === "number"
-        ? availableHeight * snap
-        : Number.parseFloat(snap);
-    return Math.max(0, availableHeight - visible);
+      typeof snap === "number" ? hostHeight * snap : Number.parseFloat(snap);
+    return Math.max(0, hostHeight - visible) + (onComposer ? composerRoom : 0);
   });
-  /** An ask stands on the composer (its `.dock.asking`): the sheet is folded to its tab. */
-  let asking = $state(false);
-  /** Where the sheet stood as the ask came up: the middle snap, the full height, or the tab. */
-  let beforeAsk: "middle" | number | string | null = null;
-  /** A snap the ask's coming or going moves the sheet to, once the snaps hold it. */
-  let moveTo: "middle" | number | string | null = null;
+  /** Where the sheet stood as the ask came up. */
+  let beforeAsk: Stop | null = null;
+  /** A stop the ask's coming or going moves the sheet to, once the snaps hold it. */
+  let moveTo: Stop | null = null;
   $effect(() => {
     const up = asking;
     untrack(() => {
@@ -126,10 +183,10 @@
         return;
       }
       if (up) {
-        // By its snap, not its pixels: the middle is a height in pixels,
-        // and the ask's card has already moved it by the time this runs.
-        beforeAsk = snap === 1 || snap === TAB ? snap : "middle";
-        moveTo = TAB;
+        // By its stop, not its pixels: the stops are heights in pixels,
+        // and the ask's card has already moved them by the time this runs.
+        beforeAsk = stop ?? "open";
+        moveTo = "tab";
       } else if (beforeAsk !== null) {
         moveTo = beforeAsk;
         beforeAsk = null;
@@ -141,33 +198,68 @@
    * the snaps as they now stand (it moves only to a snap it holds). Says
    * whether it did.
    */
-  function movedForAsk(nextMiddle: string): boolean {
+  function movedForAsk(): boolean {
     if (moveTo === null) {
       return false;
     }
-    const to = moveTo === "middle" ? nextMiddle : moveTo;
+    const to = moveTo;
     moveTo = null;
-    if (!snapPoints.includes(to)) {
+    const at = snapStops.indexOf(to);
+    if (at === -1) {
       return false;
     }
-    snap = to;
+    snap = snapPoints[at] ?? null;
     return true;
   }
+  /**
+   * The stops are heights in pixels: the one the sheet stands at keeps its
+   * place under the new geometry (`open` gone, the one it became: the whole
+   * host, or the composer off a phone, `onlyLower`).
+   */
+  function keep(
+    standing: Stop | null,
+    onlyLower: boolean,
+    next: Record<Stop, number | string>
+  ) {
+    if (!standing) {
+      return;
+    }
+    const kept = standing === "open" && onlyLower ? next.lower : next[standing];
+    if (snapPoints.includes(kept)) {
+      snap = kept;
+    }
+  }
+  /** The stops the sheet has now, lowest first, each with its snap point. */
+  function stopsNow(
+    tabbed: boolean,
+    phone: boolean,
+    next: Record<Stop, number | string>
+  ) {
+    let names: Stop[] = ["lower", "full"];
+    if (tabbed) {
+      names = ["tab", "lower", "full"];
+    } else if (phone) {
+      names = ["lower", "open", "full"];
+    }
+    // `open` is the whole host where the room allows no more.
+    return names.filter(
+      (name, at) => at === 0 || next[name] !== next[names[at - 1] as Stop]
+    );
+  }
   $effect(() => {
-    const dimensions = viewportHeight + availableHeight;
-    const nextMiddle = middle;
+    const dimensions = viewportHeight + hostHeight + composerRoom;
+    const next = values;
     const tabbed = asking;
+    const phone = covers.current;
     if (dimensions) {
       tick().then(async () => {
-        if (snap === previousMiddle) {
-          snap = nextMiddle;
-        }
-        previousMiddle = nextMiddle;
-        // The middle snap is viewport-relative; the composer shortens the host.
-        // The tab is a snap only while an ask is up.
-        snapPoints = tabbed ? [TAB, nextMiddle, 1] : [nextMiddle, 1];
+        const standing = stop;
+        const names = stopsNow(tabbed, phone, next);
+        snapPoints = names.map((name) => next[name]);
+        snapStops = names;
+        keep(standing, !(phone || tabbed), next);
         await tick();
-        if (movedForAsk(nextMiddle)) {
+        if (movedForAsk()) {
           return;
         }
         if (drawer && host && snap !== null) {
@@ -190,25 +282,40 @@
       });
     }
   });
-  // The sheet mounts at the middle snap, which is known once the space above
-  // the composer has been measured.
+  /** The composer standing over this conversation, once found. */
+  let composerNode: HTMLElement | undefined;
+  /** The reader is writing: the composer holds the focus. */
+  const writing = () =>
+    !!composerNode?.contains(document.activeElement) &&
+    document.activeElement !== document.body;
+  // The sheet mounts at its open stop, which is known once the composer and
+  // the screen's foot have been measured; on the composer if the reader is
+  // writing in it.
   let placed = false;
+  /** The stop the sheet mounted at. */
+  let firstStop: Stop = "open";
   $effect.pre(() => {
-    if (!placed && availableHeight) {
+    if (!placed && hostHeight) {
       placed = true;
-      snap = middle;
-      previousMiddle = middle;
+      firstStop = covers.current && !untrack(writing) ? "open" : "lower";
+      snap = untrack(() => values[firstStop]);
     }
   });
   /** Where vaul starts the sheet: at its snap when it comes out of the button. */
-  const initial = $derived(
-    fromButton ? `${availableHeight - Number.parseFloat(middle)}px` : undefined
-  );
+  const initial = $derived.by(() => {
+    if (!fromButton) {
+      return;
+    }
+    const at = values[firstStop];
+    const shown =
+      typeof at === "number" ? hostHeight * at : Number.parseFloat(at);
+    return `${hostHeight - shown}px`;
+  });
   $effect(() => {
     const request = cawco.previewRequests[instanceId];
     if (request !== undefined && placed) {
       untrack(() => {
-        snap = middle;
+        snap = values[writing() ? "lower" : restStop()];
       });
     }
   });
@@ -218,14 +325,16 @@
     if (!node) {
       return;
     }
-    // The sheet's floor is the top of the composer standing over this
+    // The lower stop's floor is the top of the composer standing over this
     // conversation — the tray row and the suggestion row on it — which is
-    // its group's composer, drawn outside the pane. A conversation that
-    // cannot be written to has none, and the floor is the pane's own foot,
-    // less the step the composer would have stood on.
+    // its group's composer, drawn outside the pane; the open stop's is the
+    // screen's foot it stands on, less the home indicator's room. A
+    // conversation that cannot be written to has none, and both floors are
+    // the pane's own foot, less the step the composer would have stood on.
     const composer = node
       .closest(".leaf")
       ?.querySelector<HTMLElement>(":scope > .dock .lift")?.parentElement;
+    composerNode = composer ?? undefined;
     const measure = () => {
       const box = node.getBoundingClientRect();
       const offset = Number.parseFloat(
@@ -247,14 +356,37 @@
         return;
       }
       // The visible area as published, a foreseen keyboard's included, so
-      // the middle snap is the same at the tap and once the keyboard is up.
+      // the lower stop is the same at the tap and once the keyboard is up.
       viewportHeight = untrack(() => visibleArea.height);
       const safeTop = frame
         ? Number.parseFloat(getComputedStyle(frame).top)
         : 0;
-      availableHeight = composerTop - safeTop;
+      // The composer stands at the foot of its pane's dock, clear of the
+      // home indicator by `--safe-bottom` (0 while a keyboard covers it).
+      const foot = composer?.offsetParent?.getBoundingClientRect().bottom;
+      const screenFloor =
+        composer && foot !== undefined
+          ? foot -
+            (Number.parseFloat(
+              getComputedStyle(composer).getPropertyValue("--safe-bottom")
+            ) || 0)
+          : composerTop;
+      const floor = Math.max(screenFloor, composerTop);
+      hostHeight = floor - safeTop;
+      aboveComposer = composerTop - safeTop;
+      composerRoom = floor - composerTop;
     };
     measure();
+    /**
+     * The reader takes the composer (its field focused): the sheet steps
+     * down to its lower stop on vaul's own curve, the composer in view to
+     * write in. It climbs back only when dragged.
+     */
+    const toComposer = () => {
+      if (placed && !onComposer && snapPoints.includes(values.lower)) {
+        snap = values.lower;
+      }
+    };
     // A resize is read in the frame after it too (frameObserver): measured
     // in the observer's callback, the sheet's new height (its host's)
     // resized the pane in it inside that delivery, at a depth the delivery
@@ -288,6 +420,7 @@
       composer.addEventListener("transitionend", remeasure);
       composer.addEventListener("introend", remeasure, { capture: true });
       composer.addEventListener("outroend", remeasure, { capture: true });
+      composer.addEventListener("focusin", toComposer);
     }
     window.addEventListener("resize", measure);
     window.visualViewport?.addEventListener("resize", measure);
@@ -298,6 +431,7 @@
       composer?.removeEventListener("transitionend", remeasure);
       composer?.removeEventListener("introend", remeasure, { capture: true });
       composer?.removeEventListener("outroend", remeasure, { capture: true });
+      composer?.removeEventListener("focusin", toComposer);
       window.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("resize", measure);
       window.visualViewport?.removeEventListener("scroll", measure);
@@ -309,16 +443,16 @@
   ><div
     data-slot="preview-sheet-host"
     class="preview-sheet-host"
-    data-active-snap={typeof snap === "string" ? 0.6 : snap}
-    style={`height:${availableHeight}px`}
+    data-active-snap={stop}
+    style={`height:${hostHeight}px;${onComposer && composerRoom > 0 ? `clip-path:inset(0 0 ${composerRoom}px 0)` : ""}`}
     bind:this={host}
   ></div></Portal
 >
-{#if host && availableHeight}
+{#if host && hostHeight}
   <!-- The kit's drawer (vaul): its content follows the finger 1:1 from the
-       handle and settles on the nearest snap on vaul's own curve. The
-       lowest snap is the middle one, so the page always stands at a usable
-       height; the header's Close is how the preview is put away, and
+       handle and settles on the nearest stop on vaul's own curve. The
+       lowest is the one on the composer, so the page always stands at a
+       usable height; the header's Close is how the preview is put away, and
        nothing behind it scales. It fills its host (inset 0), so it is
        `hosted`: the kit does not place it on the visible area. -->
   <Drawer.Root
@@ -386,7 +520,9 @@
 
 <style>
   /* css-scope .preview-sheet: the canvas stage finds this sheet by it */
-  /* Held by its top, as tall as the room above the composer. A height
+  /* Held by its top, as tall as the room down to the screen's foot (its
+     inline height; on the composer, its inline clip takes the composer's
+     room off its foot). A height
      between a top and a bottom is the fixed layer's container's, which
      WebKit walks through stale sizes for frames while a keyboard resizes the
      web view (Brave): a host held that way grew to 1106px and shrank by the
@@ -406,7 +542,7 @@
     overflow: clip;
     pointer-events: none;
   }
-  /* The sheet fills its host (the space above the composer) edge to edge,
+  /* The sheet fills its host (the room down to the screen's foot) edge to edge,
      so the kit content's inset card, its top margin, its height cap, its
      padding and its drawn grab bar give way to `.sheet`, which draws the
      surface and holds the vaul handle: the one box that comes out of the
