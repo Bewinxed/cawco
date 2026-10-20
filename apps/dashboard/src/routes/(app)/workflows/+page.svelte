@@ -15,6 +15,8 @@
     newNode,
     STARTER_PROGRAM,
   } from "#lib/components/features/workflows/workflow-ui.js";
+  import { Alert } from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
@@ -70,16 +72,15 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger disabled={!live || busy}>
       {#snippet child({ props })}
-        <button
+        <Button
           {...props}
-          class="wf-btn wf-primary"
           title={live
             ? undefined
             : "Can't create a workflow while the hub is unreachable"}
           type="button"
         >
           New workflow
-        </button>
+        </Button>
       {/snippet}
     </DropdownMenu.Trigger>
     <DropdownMenu.Content align={inEmptyState ? "start" : "end"} width="wide">
@@ -114,21 +115,23 @@
 <!-- At 760px and under (`workflow-cards:`) the table becomes cards: each row
      its name over its age, its actions at the end of the second line. -->
 <div
-  class="wf relative flex flex-1 flex-col gap-space-6 overflow-y-auto px-space-6 py-space-7 workflow-cards:px-space-4 workflow-cards:py-space-4"
+  class="relative flex min-w-0 flex-1 flex-col gap-space-6 overflow-y-auto px-space-6 py-space-7 type-body text-ink-strong workflow-cards:px-space-4 workflow-cards:py-space-4"
   data-slot="list-page"
 >
-  <header class="wf-row wf-spread">
+  <header class="flex flex-wrap items-center justify-between gap-space-2">
     <div>
-      <h1 class="mb-space-1">Workflows</h1>
-      <p class="wf-muted">Reusable steps across your fleet.</p>
+      <h1 class="mb-space-1 type-title">Workflows</h1>
+      <p class="type-meta text-ink-muted">Reusable steps across your fleet.</p>
     </div>
-    <div class="wf-row">{@render newMenu(false)}</div>
+    <div class="flex flex-wrap items-center gap-space-2">
+      {@render newMenu(false)}
+    </div>
   </header>
   <!-- An outage is said once, by the reconnect banner over the page: a read
        that failed for it adds no line while there are rows to keep showing,
        and a list that was never read says why it is empty. -->
   {#if errorMessage || (workflowState.error && (live || !rows.length))}
-    <p class="wf-error" role="alert">{errorMessage || workflowState.error}</p>
+    <Alert variant="destructive">{errorMessage || workflowState.error}</Alert>
   {/if}
   <!-- Until the first read is in, rows at the height the list's rows take
        stand where it will be; then the two cross-fade (the skeleton leaves
@@ -243,17 +246,22 @@
                 class="grid min-h-space-7 coarse:min-h-c-btn-h-lg coarse:content-center wrap-anywhere font-medium text-ink-strong workflow-cards:col-1"
                 href="/workflows/{workflow.id}"
                 >{workflow.name}
-                <span class="wf-muted">{workflow.description}</span></a
+                <span class="type-meta text-ink-muted"
+                  >{workflow.description}</span
+                ></a
               >
             </td>
             <td>
               {#if last}
                 <WorkflowStatus status={last.status} />
               {:else}
-                <span class="wf-muted">No runs</span>
+                <span class="type-meta text-ink-muted">No runs</span>
               {/if}
             </td>
-            <td data-slot="age" class="wf-muted workflow-cards:col-1">
+            <td
+              data-slot="age"
+              class="type-meta text-ink-muted workflow-cards:col-1"
+            >
               {last ? formatDistanceToNow(new Date(last.startedAt)) : "—"}
               <span class="hidden workflow-cards:inline" data-slot="mobile"
                 >{` · ${runs.length} ${runs.length === 1 ? "run" : "runs"}`}</span
@@ -263,29 +271,8 @@
               >{runs.length}</td
             >
             <td class="workflow-cards:col-2 workflow-cards:row-2">
-              <button
-                class="wf-btn workflow-cards:hidden"
-                data-slot="desktop"
-                disabled={!live}
-                onclick={(event) => {
-                  launch = { workflow, from: event.currentTarget };
-                }}
-                title={live
-                  ? undefined
-                  : "Can't run while the hub is unreachable"}
-                type="button"
-              >
-                Run
-              </button>
-              <details class="hidden workflow-cards:block" data-slot="mobile">
-                <summary
-                  aria-label="Actions for {workflow.name}"
-                  class="pressable workflow-cards:flex workflow-cards:min-h-c-btn-h-lg workflow-cards:items-center"
-                >
-                  Actions
-                </summary>
-                <button
-                  class="wf-btn"
+              <span class="contents workflow-cards:hidden" data-slot="desktop"
+                ><Button
                   disabled={!live}
                   onclick={(event) => {
                     launch = { workflow, from: event.currentTarget };
@@ -294,9 +281,31 @@
                     ? undefined
                     : "Can't run while the hub is unreachable"}
                   type="button"
+                  variant="outline"
                 >
                   Run
-                </button>
+                </Button></span
+              >
+              <details class="hidden workflow-cards:block" data-slot="mobile">
+                <summary
+                  aria-label="Actions for {workflow.name}"
+                  class="pressable workflow-cards:flex workflow-cards:min-h-c-btn-h-lg workflow-cards:items-center"
+                >
+                  Actions
+                </summary>
+                <Button
+                  disabled={!live}
+                  onclick={(event) => {
+                    launch = { workflow, from: event.currentTarget };
+                  }}
+                  title={live
+                    ? undefined
+                    : "Can't run while the hub is unreachable"}
+                  type="button"
+                  variant="outline"
+                >
+                  Run
+                </Button>
               </details>
             </td>
           </tr>

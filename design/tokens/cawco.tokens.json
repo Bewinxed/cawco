@@ -5534,14 +5534,6 @@
       },
       "$description": "A fetched skill's choice list before it scrolls."
     },
-    "c-wf-textarea-min": {
-      "$type": "dimension",
-      "$value": {
-        "value": 90,
-        "unit": "px"
-      },
-      "$description": "A workflow form's textarea floor."
-    },
     "c-setup-rail-w": {
       "$type": "dimension",
       "$value": {

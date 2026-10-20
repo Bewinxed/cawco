@@ -1031,8 +1031,6 @@
     --c-editor-well-min: 320px;
     /* A fetched skill's choice list before it scrolls. */
     --c-choice-list-max-h: 13rem;
-    /* A workflow form's textarea floor. */
-    --c-wf-textarea-min: 90px;
     /* Account setup's step rail. */
     --c-setup-rail-w: 184px;
     /* Account setup's machine-name column, so every machine row's controls start on one x. */

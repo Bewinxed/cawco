@@ -10,11 +10,14 @@
   import { runHref } from "#lib/cawco/workflow-runs.js";
   import { launchWorkflow } from "#lib/cawco/workflows.js";
   import DirectoryPicker from "#lib/components/features/DirectoryPicker.svelte";
-  import PendingContent, {
-    whileIdle,
-  } from "#lib/components/ui/button/pending-content.svelte";
+  import { Alert } from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
+  import * as NativeSelect from "#lib/components/ui/native-select/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { goto } from "$app/navigation";
 
   let {
@@ -143,20 +146,26 @@
     interactOutsideBehavior={busy ? "ignore" : "close"}
     width="form"
     bind:ref={content}
-    ><div class="wf wf-stack" data-slot="launch">
+    ><div
+      class="flex min-w-0 flex-col gap-space-4 type-body text-ink-strong"
+      data-slot="launch"
+    >
       <Dialog.Header
         ><Dialog.Title>Run {workflow.name}</Dialog.Title><Dialog.Description
           >Choose the inputs and workspace for this workflow run.</Dialog.Description
         ></Dialog.Header
       >
-      <form class="wf-stack" onsubmit={launch}>
+      <form class="flex min-w-0 flex-col gap-space-4" onsubmit={launch}>
         {#if fields.length}
           {#each fields as input (input.name)}
-            <label for="launch-{input.name}"
+            <label
+              class="flex flex-col gap-space-2 type-label text-ink-muted"
+              for="launch-{input.name}"
               >{input.label}
               {input.required ? " (required)" : ""}
               {#if input.type === "select"}
-                <select
+                <NativeSelect.Root
+                  class="w-full"
                   id="launch-{input.name}"
                   required={input.required}
                   bind:value={inputs[input.name]}
@@ -165,27 +174,31 @@
                   {#each input.options ?? [] as option (option)}
                     <option>{option}</option>
                   {/each}
-                </select>
+                </NativeSelect.Root>
               {:else if input.type === "path"}
-                <input
+                <Input
                   id="launch-{input.name}"
                   required={input.required}
                   bind:value={inputs[input.name]}
                 />
               {:else}
-                <textarea
+                <Textarea
                   id="launch-{input.name}"
                   required={input.required}
-                  rows="2"
-                  bind:value={inputs[input.name]}></textarea>
+                  rows={2}
+                  bind:value={inputs[input.name]}
+                />
               {/if}</label
             >
           {/each}
         {/if}
-        <div class="wf-well">
-          <h3>Workspace</h3>
-          <label
-            >Project<select
+        <div
+          class="flex flex-col gap-space-3 rounded-well bg-surface-recess p-space-2"
+        >
+          <h3 class="type-label">Workspace</h3>
+          <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+            >Project<NativeSelect.Root
+              class="w-full"
               onchange={(event) => {
                 const project = cawco.project(event.currentTarget.value);
                 const primary = project ? checkoutOf(project) : undefined;
@@ -199,10 +212,14 @@
               {#each cawco.projects.filter( (each) => checkoutOf(each) ) as project (project.id)}
                 <option value={project.id}>{project.name}</option>
               {/each}
-            </select></label
+            </NativeSelect.Root></label
           >
-          <label
-            >Machine<select required bind:value={machineId}>
+          <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+            >Machine<NativeSelect.Root
+              class="w-full"
+              required
+              bind:value={machineId}
+            >
               <option disabled value="">Choose a machine</option>
               {#each cawco.machines as machine (machine.machineId)}
                 <option
@@ -213,12 +230,13 @@
                   {machine.status === "online" ? "" : " · offline"}
                 </option>
               {/each}
-            </select></label
+            </NativeSelect.Root></label
           >
-          <label
-            >Directory<input
-              class="wf-mono"
+          <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+            >Directory<Input
+              face="mono"
               required
+              text="label"
               bind:value={workspace}
             /></label
           >
@@ -233,45 +251,38 @@
             />
           {/if}
         </div>
-        <label
-          >Supervisor<select bind:value={supervisor}>
+        <label class="flex flex-col gap-space-2 type-label text-ink-muted"
+          >Supervisor<NativeSelect.Root class="w-full" bind:value={supervisor}>
             <option value="">None</option>
             {#each types as type (type.name)}
               <option value={type.name}>{type.name}</option>
             {/each}
-          </select></label
+          </NativeSelect.Root></label
         >
         {#if errorMessage}
-          <p class="wf-error" role="alert">{errorMessage}</p>
+          <Alert variant="destructive">{errorMessage}</Alert>
         {/if}
-        <div class="wf-row wf-spread">
-          <button
-            class="wf-btn"
+        <div class="flex flex-wrap items-center justify-between gap-space-2">
+          <Button
             disabled={busy}
             onclick={() => {
               shown = false;
             }}
             type="button"
+            variant="outline"
           >
             Cancel
-          </button><button
-            aria-busy={busy || undefined}
-            aria-disabled={busy || undefined}
-            class="wf-btn wf-primary"
+          </Button><Button
             disabled={!(online && workspace && cawco.hub === "connected")}
-            onclick={whileIdle(() => busy, undefined)}
+            failed={errorMessage !== ""}
+            label="Start run"
+            pending={busy}
+            pendingLabel="Starting workflow run…"
             title={cawco.hub === "connected"
               ? undefined
               : "Can't start a run while the hub is unreachable"}
             type="submit"
-          >
-            <PendingContent
-              failed={errorMessage !== ""}
-              label="Start run"
-              pending={busy}
-              pendingLabel="Starting workflow run…"
-            />
-          </button>
+          />
         </div>
       </form>
     </div></Dialog.Content

@@ -25,14 +25,14 @@
     type WorkflowDetail,
     WorkflowProblems,
   } from "#lib/cawco/workflows.js";
-  import PendingContent, {
-    whileIdle,
-  } from "#lib/components/ui/button/pending-content.svelte";
+  import { Alert } from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "#lib/components/ui/dialog/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Resizable from "#lib/components/ui/resizable/index.js";
@@ -368,7 +368,10 @@
   /**
    * The palette's toggle folds it to its rail and back: every pane's width
    * glides together (paneforge marks the pane collapsing or expanding until
-   * its flex-grow transition ends; the stylesheet below runs it).
+   * its flex-grow transition ends; app.css's components rule
+   * `[data-slot="pane"] [data-pane-group]:has(> [data-pane-state="collapsing"],
+   * > [data-pane-state="expanding"]) > [data-pane]` runs it, with motion
+   * allowed).
    */
   function togglePalette() {
     if (paletteCollapsed) {
@@ -455,27 +458,28 @@
 {#snippet palette()}
   <div
     data-slot="palette"
-    class="wf-stack h-full overflow-y-auto px-space-3 py-space-4"
+    class="flex h-full min-w-0 flex-col gap-space-4 overflow-y-auto px-space-3 py-space-4"
     {@attach highlight({ rows: '[data-slot="palette-item"]' })}
   >
-    <div class="wf-row wf-spread">
-      <h2>
+    <div class="flex flex-wrap items-center justify-between gap-space-2">
+      <h2 class="type-label">
         <MorphText text={paletteCollapsed ? "Add" : "Nodes"} />
       </h2>
       {#if !narrow.current}
-        <button
+        <Button
           aria-label="Toggle palette"
-          class="wf-btn"
           onclick={togglePalette}
+          size="icon"
           type="button"
+          variant="outline"
         >
           {paletteCollapsed ? "›" : "‹"}
-        </button>
+        </Button>
       {/if}
     </div>
     {#each ["Flow", "Work", "People"] as group (group)}
-      <section class="wf-stack">
-        <h3>{group}</h3>
+      <section class="flex min-w-0 flex-col gap-space-4">
+        <h3 class="type-label">{group}</h3>
         {#each kinds.filter((entry) => entry.group === group) as entry (entry.kind)}
           <button
             data-slot="palette-item"
@@ -502,8 +506,8 @@
       </section>
     {/each}
     {#if !paletteCollapsed || narrow.current}
-      <section class="wf-stack" transition:crossIn>
-        <h3>Templates</h3>
+      <section class="flex min-w-0 flex-col gap-space-4" transition:crossIn>
+        <h3 class="type-label">Templates</h3>
         {#each types as type (type.name)}
           <button
             data-slot="palette-item"
@@ -548,16 +552,17 @@
 {#snippet canvas()}
   <div class="relative h-full min-h-c-graph-canvas-min flex-1">
     {#if bodyPath.length}
-      <button
-        class="wf-btn absolute top-space-2 start-space-2 z-5"
+      <Button
+        class="absolute top-space-2 start-space-2 z-5"
         onclick={() => {
           bodyPath = bodyPath.slice(0, -1);
           selected = undefined;
         }}
         type="button"
+        variant="outline"
       >
         Back to parent graph
-      </button>
+      </Button>
     {/if}
     <WorkflowCanvas
       canRedo={future.length > 0}
@@ -581,13 +586,13 @@
 {/snippet}
 <div
   data-slot="editor"
-  class="wf flex h-full min-h-0 flex-1 flex-col"
+  class="flex h-full min-h-0 min-w-0 flex-1 flex-col type-body text-ink-strong"
   bind:clientWidth={panelWidth}
 >
   <header
-    class="wf-stack border-b border-b-border-hairline bg-surface-raised px-space-5 py-space-3 max-wide:p-space-3"
+    class="flex min-w-0 flex-col gap-space-4 border-b border-b-border-hairline bg-surface-raised px-space-5 py-space-3 max-wide:p-space-3"
   >
-    <div class="wf-row wf-spread">
+    <div class="flex flex-wrap items-center justify-between gap-space-2">
       <div
         class="flex min-w-0 shrink grow basis-c-workflow-crumb items-center gap-space-2"
       >
@@ -595,31 +600,25 @@
           class="inline-flex min-h-c-btn-h-xs items-center text-ink-muted coarse:min-h-c-btn-h-lg"
           href="/workflows">Workflows</a
         ><span>/</span>
-        <input
-          class="max-w-c-workflow-name-max border-transparent text-size-body font-medium"
+        <Input
+          class="max-w-c-workflow-name-max"
           aria-label="Workflow name"
           disabled={!workflow}
           bind:value={name}
         />
       </div>
-      <div class="wf-row">
-        <button
-          aria-busy={pressed === "validate" || undefined}
-          aria-disabled={pressed === "validate" || undefined}
-          class="wf-btn"
+      <div class="flex flex-wrap items-center gap-space-2">
+        <Button
           disabled={!(workflow && live) || (saving && pressed !== "validate")}
-          onclick={whileIdle(() => pressed === "validate", validate)}
+          failed={errorMessage !== ""}
+          label="Validate"
+          onclick={validate}
+          pending={pressed === "validate"}
+          pendingLabel="Validating…"
           title={live ? undefined : "Can't save while the hub is unreachable"}
           type="button"
-        >
-          <PendingContent
-            failed={errorMessage !== ""}
-            label="Validate"
-            pending={pressed === "validate"}
-            pendingLabel="Validating…"
-          />
-        </button><button
-          class="wf-btn wf-primary"
+          variant="outline"
+        /><Button
           disabled={!(workflow && live) ||
             !!errorMessage ||
             dirty ||
@@ -635,11 +634,11 @@
           type="button"
         >
           Run workflow
-        </button>
+        </Button>
       </div>
     </div>
-    <div class="wf-row wf-spread">
-      <div class="wf-row">
+    <div class="flex flex-wrap items-center justify-between gap-space-2">
+      <div class="flex flex-wrap items-center gap-space-2">
         <Tabs.Root onValueChange={show} value={tab}>
           <Tabs.List aria-label="Workflow views">
             {#if origin === "editor"}
@@ -649,59 +648,54 @@
             <Tabs.Trigger value="runs">Runs</Tabs.Trigger>
           </Tabs.List>
         </Tabs.Root>
-        <!-- Narrow-only, by the stylesheet: the server renders this row
-             before any media query can be asked, and a row that gained two
-             buttons on hydration wrapped and pushed the page down. -->
+        <!-- Narrow-only, by the wrapper's display: the server renders this
+             row before any media query can be asked, and a row that gained
+             two buttons on hydration wrapped and pushed the page down. -->
         {#if tab === "editor"}
-          <button
-            class="wf-btn hidden max-wide:inline-flex"
-            onclick={() => {
-              paletteOpen = true;
-            }}
-            type="button"
+          <span class="hidden max-wide:contents"
+            ><Button
+              onclick={() => {
+                paletteOpen = true;
+              }}
+              type="button"
+              variant="outline"
+            >
+              + Add node
+            </Button><Button
+              data-slot="num"
+              figures="tabular"
+              onclick={openInspector}
+              type="button"
+              variant="outline"
+            >
+              Inspector · {problems.length}
+            </Button></span
           >
-            + Add node
-          </button><button
-            data-slot="num"
-            class="wf-btn num hidden max-wide:inline-flex"
-            onclick={openInspector}
-            type="button"
-          >
-            Inspector · {problems.length}
-          </button>
         {/if}
       </div>
       <span
         data-slot="num"
-        class="wf-muted num ms-auto w-c-workflow-save-w text-end"
+        class="num ms-auto w-c-workflow-save-w text-end type-meta text-ink-muted"
         role="status"><MorphText text={saveState} /></span
       >
     </div>
   </header>
   {#if errorMessage}
-    <div class="wf-error" role="alert">
+    <Alert variant="destructive">
       {errorMessage}
-      <button
-        aria-busy={pressed === "retry" || undefined}
-        aria-disabled={pressed === "retry" || undefined}
-        class="wf-btn"
-        onclick={whileIdle(
-          () => pressed === "retry",
-          () => persistFrom("retry")
-        )}
+      <Button
+        failed={errorMessage !== ""}
+        label="Retry save"
+        onclick={() => persistFrom("retry")}
+        pending={pressed === "retry"}
+        pendingLabel="Saving…"
         type="button"
-      >
-        <PendingContent
-          failed={errorMessage !== ""}
-          label="Retry save"
-          pending={pressed === "retry"}
-          pendingLabel="Saving…"
-        />
-      </button>
-    </div>
+        variant="outline"
+      />
+    </Alert>
   {/if}
   {#if !workflow}
-    <div class="wf-stack p-space-6">
+    <div class="flex min-w-0 flex-col gap-space-4 p-space-6">
       <Skeleton class="w-full" height="block" />
       <Skeleton class="w-full" height="block" />
     </div>
@@ -771,7 +765,7 @@
               <!-- A run that starts, or a filter that changes what is
                    listed, moves the rows the house way (motion/rows). -->
               <aside
-                class="wf-stack w-c-workflow-runs-w shrink-0 overflow-y-auto border-e border-e-border-hairline p-space-3 max-wide:w-full max-wide:border-e-0"
+                class="flex w-c-workflow-runs-w min-w-0 shrink-0 flex-col gap-space-4 overflow-y-auto border-e border-e-border-hairline p-space-3 max-wide:w-full max-wide:border-e-0"
                 {@attach reflow()}
               >
                 <!-- The kit's ghost and pill: hover glides, and the pill
@@ -779,7 +773,7 @@
                      here). -->
                 <div
                   data-slot="filters"
-                  class="wf-row"
+                  class="flex flex-wrap items-center gap-space-2"
                   {@attach highlight({
                     rows: '[data-slot="run-filter"]',
                     selected: '[aria-pressed="true"]',
@@ -787,22 +781,21 @@
                   })}
                 >
                   {#each [{ value: "all", label: "All" }, { value: "waiting", label: "Needs you" }, { value: "failed", label: "Failed" }] as item (item.value)}
-                    <button
+                    <Button
                       data-slot="run-filter"
                       aria-pressed={filter === item.value}
-                      class="wf-btn"
-                      data-variant="quiet"
                       onclick={() => {
                         filter = item.value;
                       }}
                       type="button"
+                      variant="ghost"
                     >
                       {item.label}
-                    </button>
+                    </Button>
                   {/each}
                 </div>
                 {#if !runs.length}
-                  <p class="wf-muted" data-flip>
+                  <p class="type-meta text-ink-muted" data-flip>
                     No workflow runs in this view.
                   </p>
                 {/if}
@@ -814,15 +807,17 @@
                     : undefined}
                   <a
                     data-slot="run-entry"
-                    class="wf-stack border-b border-b-border-hairline p-space-3 text-start text-inherit no-underline"
+                    class="flex min-w-0 flex-col gap-space-4 border-b border-b-border-hairline p-space-3 text-start text-inherit no-underline"
                     data-flip
                     href={runHref(run.id)}
                   >
-                    <div class="wf-row wf-spread">
+                    <div
+                      class="flex flex-wrap items-center justify-between gap-space-2"
+                    >
                       <span>{new Date(run.startedAt).toLocaleString()}</span>
                       <WorkflowStatus status={run.status} />
                     </div>
-                    <span class="wf-muted"
+                    <span class="type-meta text-ink-muted"
                       >{duration(run.startedAt, run.endedAt, now)}
                       {supervisor?.title
                         ? ` · from ${supervisor.title}`
@@ -853,9 +848,7 @@
       ><Dialog.Title>Add node</Dialog.Title><Dialog.Description
         >Choose a kind or a delegate template.</Dialog.Description
       >
-      <div class="wf">
-        {@render palette()}
-      </div></Dialog.Content
+      {@render palette()}</Dialog.Content
     ></Dialog.Root
   >
   <!-- The inspector rises as a drawer from the side the selected node is

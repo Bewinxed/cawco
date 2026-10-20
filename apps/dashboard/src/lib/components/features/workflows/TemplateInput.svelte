@@ -1,7 +1,9 @@
 <script lang="ts">
   import { popOut } from "#lib/cawco/motion/pop.svelte.js";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
 
   let {
     label,
@@ -16,7 +18,10 @@
     onchange: (value: string) => void;
     multiline?: boolean;
   } = $props();
-  let field = $state<HTMLTextAreaElement | HTMLInputElement>();
+  let textareaField = $state<HTMLTextAreaElement | null>(null);
+  let inputField = $state<HTMLInputElement | null>(null);
+  /** The one field drawn: the textarea when multiline, else the input. */
+  const field = $derived(multiline ? textareaField : inputField);
   const fieldId = $props.id();
   const closingBraces = /^\}\}/;
   let cursor = $state(0);
@@ -107,31 +112,36 @@
 </script>
 
 <div class="relative" bind:this={template}>
-  <label for={fieldId}
+  <label
+    class="flex flex-col gap-space-2 type-label text-ink-muted"
+    for={fieldId}
     >{label}
     {#if multiline}
-      <textarea
-        class="wf-mono"
+      <Textarea
+        face="mono"
         id={fieldId}
         onclick={() => {
           cursor = field?.selectionStart ?? 0;
         }}
         oninput={changed}
         onkeydown={key}
-        rows="7"
+        rows={7}
+        text="label"
         {value}
-        bind:this={field}></textarea>
+        bind:ref={textareaField}
+      />
     {:else}
-      <input
-        class="wf-mono"
+      <Input
+        face="mono"
         id={fieldId}
         onclick={() => {
           cursor = field?.selectionStart ?? 0;
         }}
         oninput={changed}
         onkeydown={key}
+        text="label"
         {value}
-        bind:this={field}
+        bind:ref={inputField}
       />
     {/if}
   </label>
