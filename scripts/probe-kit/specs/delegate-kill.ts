@@ -819,32 +819,93 @@ const heavyFiles = async (
       }))
   );
 
+/** `/proc/<pid>/status`'s `NStgid`: a process's pid in each pid namespace it is in, outermost first. */
+const NS_TGIDS = /^NStgid:\s*(.+)$/m;
+const SPACES = /\s+/;
+
+/**
+ * The pid process `pid` (as this probe sees it) has in the innermost pid
+ * namespace it is in, which is the pid its own shell reads as `$$`: on Linux
+ * the last of its `NStgid`, "the value in successively nested inner
+ * namespaces" (proc_pid_status(5)), so inside a boundary its pid in the
+ * boundary's own pid namespace; elsewhere its pid. None once it is gone.
+ */
+const innerPid = async (pid: number): Promise<number | undefined> => {
+  if (process.platform !== "linux") {
+    return pid;
+  }
+  const status = await readFile(`/proc/${pid}/status`, "utf8").catch(() => "");
+  const last = NS_TGIDS.exec(status)?.[1]?.trim().split(SPACES).at(-1);
+  return last ? Number(last) : undefined;
+};
+
+/** What names each heavy run of the gate leg in the process table: its name, and, once the leftover's shell has exec'd it, its `sleep`. */
+const RUN_SEEN: Record<string, readonly string[]> = {
+  [LEFT_RUN]: [LEFT_RUN, `sleep ${SLOT_LEFT}`],
+  [GATE_RUN]: [GATE_RUN],
+};
+
+/**
+ * This probe's pid for the process heavy run `record` names, while it is
+ * alive. A record holds the pid its run's shell had (`$$`, core
+ * heavy-run.ts), which inside a Linux boundary is its pid in the boundary's
+ * own pid namespace, where every boundary counts from 1: the process is the
+ * one whose command names the run and whose innermost pid is the record's.
+ */
+const hostPidOf = async (record: HeavyRecord): Promise<number | undefined> => {
+  const seen = RUN_SEEN[record.command] ?? [record.command];
+  const named = (await commandLines()).filter(
+    ({ pid, command }) =>
+      pid !== process.pid && seen.some((one) => command.includes(one))
+  );
+  const inner = await Promise.all(named.map(({ pid }) => innerPid(pid)));
+  return named.find((_, at) => inner[at] === record.pid)?.pid;
+};
+
+/** A heavy run as a slot's or a ticket's record names it, and its process here. */
+interface HeavyRun {
+  /** Its process's pid as this probe sees it ({@link hostPidOf}). */
+  host: number;
+  record: HeavyRecord;
+}
+
 /**
  * The run named `command` on a `slot` it holds or a `gate` ticket it waits
  * on, while that run is alive: a slot's record outlives its hold, and a
- * ticket its holder (core heavy-run.ts), so the run's pid decides.
+ * ticket its holder (core heavy-run.ts), so the run's process decides.
  */
 const heavyRun = async (
   dir: string,
   kind: "slot" | "gate",
   command: string
-): Promise<HeavyRecord | undefined> =>
-  (await heavyFiles(dir)).find(
-    ({ name, record }) =>
-      name.startsWith(`${kind}-`) &&
-      record?.command === command &&
-      isAlive(listedPid(record.pid))
-  )?.record;
+): Promise<HeavyRun | undefined> => {
+  const records = (await heavyFiles(dir)).flatMap(({ name, record }) =>
+    name.startsWith(`${kind}-`) && record?.command === command ? [record] : []
+  );
+  const hosts = await Promise.all(records.map(hostPidOf));
+  const at = hosts.findIndex((one) => one !== undefined);
+  const [found, here] = [records[at], hosts[at]];
+  return found && here !== undefined
+    ? { host: here, record: found }
+    : undefined;
+};
 
-/** The slots' dir in words, for a failing leg to say. */
-const heavySaid = async (dir: string): Promise<string> =>
-  (await heavyFiles(dir))
-    .map(({ name, record }) =>
-      record
-        ? `${name}: ${record.command} (pid ${record.pid}, ${isAlive(listedPid(record.pid)) ? "alive" : "gone"})`
-        : `${name}: no record`
-    )
-    .join("; ") || "empty";
+/** The slots' dir in words, for a failing leg to say: each record's pid as its run saw it, and its process here. */
+const heavySaid = async (dir: string): Promise<string> => {
+  const files = await heavyFiles(dir);
+  const hosts = await Promise.all(
+    files.map(({ record }) => (record ? hostPidOf(record) : undefined))
+  );
+  return (
+    files
+      .map(({ name, record }, at) =>
+        record
+          ? `${name}: ${record.command} (pid ${record.pid} where it ran, ${hosts[at] === undefined ? "gone" : `alive as pid ${hosts[at]} here`})`
+          : `${name}: no record`
+      )
+      .join("; ") || "empty"
+  );
+};
 
 /** g1, g2 and g3, on the gate delegate. */
 const gateLegs = async (rig: Rig): Promise<void> => {
@@ -910,12 +971,12 @@ const gateLegs = async (rig: Rig): Promise<void> => {
     (found) => !found.has(SLOT_LEFT),
     15_000
   ).catch(() => alive());
+  const leftNow = await hostPidOf(leftover.record);
+  const heldAtInterrupt = holding?.host === leftover.host;
   check(
     g1,
-    holding?.pid === leftover.pid &&
-      !isAlive(listedPid(leftover.pid)) &&
-      !afterGate.has(SLOT_LEFT),
-    `the slot was held by ${LEFT_RUN} (pid ${leftover.pid}) ${holding?.pid === leftover.pid ? "at the interrupt" : "until before the interrupt"}, ${GATE_RUN} queued behind it (${queued.gate ?? "no gate named"}, pid ${queued.pid}); ${Math.round((Date.now() - gInterruptedAt) / 1000)} s after: ${said(afterGate)}; the slots: ${await heavySaid(slots)}`
+    heldAtInterrupt && leftNow === undefined && !afterGate.has(SLOT_LEFT),
+    `the slot was held by ${LEFT_RUN} (pid ${leftover.record.pid} where it ran, ${leftover.host} here) ${heldAtInterrupt ? "at the interrupt" : "until before the interrupt"}, ${GATE_RUN} queued behind it (${queued.record.gate ?? "no gate named"}, pid ${queued.record.pid} where it ran, ${queued.host} here); ${Math.round((Date.now() - gInterruptedAt) / 1000)} s after: ${leftNow === undefined ? "the leftover is gone" : `the leftover is alive as pid ${leftNow}`}, markers ${said(afterGate)}; the slots: ${await heavySaid(slots)}`
   );
 
   // g2
