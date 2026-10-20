@@ -98,6 +98,9 @@ async function decode(page: Page, story: string): Promise<(string | null)[]> {
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one function serialized into the page, so everything it reads lives inside it
 function geometry(): string[] {
   const off: string[] = [];
+  /** The scale an embed draws the element's story at: its effective CSS zoom. */
+  const zoomOf = (el: Element): number =>
+    (el as Element & { currentCSSZoom?: number }).currentCSSZoom ?? 1;
   const paint = document.createElement("canvas").getContext("2d", {
     willReadFrequently: true,
   }) as CanvasRenderingContext2D;
@@ -154,19 +157,24 @@ function geometry(): string[] {
       }
     }
     for (const cell of frame.querySelectorAll(".otp .cell")) {
+      // A form wider than the page is drawn scaled (CSS zoom): sizes in the
+      // story's own px, and its 1px edge one page px however it snaps.
+      const zoom = zoomOf(cell);
       const box = cell.getBoundingClientRect();
       const style = getComputedStyle(cell);
-      if (Math.abs(box.width - w) > 0.5 || Math.abs(box.height - h) > 0.5) {
-        off.push(`${story}: box ${box.width}×${box.height}`);
+      if (
+        Math.abs(box.width / zoom - w) > 0.5 ||
+        Math.abs(box.height / zoom - h) > 0.5
+      ) {
+        off.push(`${story}: box ${box.width / zoom}×${box.height / zoom}`);
       }
       if (rgb(style.backgroundColor).join() !== recess.join()) {
         off.push(`${story}: box fill ${style.backgroundColor}`);
       }
       const edge = ratio(rgb(style.borderTopColor), surface(cell));
-      if (style.borderTopWidth !== "1px" || edge < 1.3) {
-        off.push(
-          `${story}: box edge ${style.borderTopWidth} at ${edge.toFixed(2)}:1`
-        );
+      const thick = Number.parseFloat(style.borderTopWidth) * zoom;
+      if (Math.abs(thick - 1) > 0.05 || edge < 1.3) {
+        off.push(`${story}: box edge ${thick}px at ${edge.toFixed(2)}:1`);
       }
     }
     const camera = frame.querySelector('[data-slot="camera"]');
@@ -192,7 +200,8 @@ function geometry(): string[] {
       const svg = card.querySelector("svg.code");
       if (svg) {
         const c = card.getBoundingClientRect();
-        const pad = Number.parseFloat(getComputedStyle(card).paddingTop);
+        const pad =
+          Number.parseFloat(getComputedStyle(card).paddingTop) * zoomOf(card);
         const s = svg.getBoundingClientRect();
         if (Math.abs(s.width - (c.width - 2 * pad)) > 0.5) {
           off.push(

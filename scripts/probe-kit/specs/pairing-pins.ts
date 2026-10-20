@@ -662,11 +662,14 @@ const spec: Spec = {
  */
 async function onScreen(kit: Kit, stage: string): Promise<void> {
   for (const view of ["desk", "phone"] as const) {
+    // The frame at the screen's own width (the canvas's `width`), so the
+    // panel lays out as that screen does: an embed draws a wider form scaled.
+    const width = view === "desk" ? 1440 : 390;
     // biome-ignore lint/performance/noAwaitInLoops: one screen at a time
     const page = await kit.page(view, { theme: "light", init: [slowTimers] });
     await open(
       page,
-      `${stage}/@cawco/canvas?file=${encodeURIComponent(STORIES)}&by=embed&story=DeniedOnScreen&scheme=light`,
+      `${stage}/@cawco/canvas?file=${encodeURIComponent(STORIES)}&by=embed&story=DeniedOnScreen&scheme=light&width=${width}`,
       '[data-cawco-story="DeniedOnScreen"] [data-slot="pairing"]'
     );
     await settle(page);

@@ -15,15 +15,22 @@
  *    DOM's paint, nothing over it.
  * 4. No embed shows the canvas's working chrome, each is as tall as what it
  *    draws, and no console error.
+ * 5. The page's own capture, window by window as CawCo shows it
+ *    (decision-embeds.ts `capturePage`), paints every embed. The four
+ *    captures and their manifest go to .probe/decision-pages/.
  *
  *   bun scripts/probe-kit/run.ts web pairing-page
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
-import { mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { createHash } from "node:crypto";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, relative } from "node:path";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import {
+  blankEmbeds,
+  capturePage,
   EMBED_FRAME,
+  type EmbedPaint,
   embedDrawFaults,
   readEmbeds,
   startDecisionStage,
@@ -31,6 +38,10 @@ import {
 import { type Kit, ROOT, type Spec, THEMES } from "../../kit";
 
 const OUT = join(ROOT, ".probe/pairing-page");
+/** The page's own captures, one a window size and theme, and their manifest. */
+const PAGES = join(ROOT, ".probe/decision-pages");
+/** The published page this program is, as the hub names it (artifact d02dc1de…). */
+const PAGE_ID = "d02dc1de";
 const NAME = "pairing-page";
 const DIR = "apps/dashboard/src/lib/cawco/pairing";
 const FILE = "src/lib/cawco/pairing/Pairing.stories.ts";
@@ -52,6 +63,15 @@ const spec: Spec = {
   run: async (kit: Kit) => {
     rmSync(OUT, { recursive: true, force: true });
     mkdirSync(OUT, { recursive: true });
+    rmSync(PAGES, { recursive: true, force: true });
+    mkdirSync(PAGES, { recursive: true });
+    const captures: {
+      embeds: EmbedPaint[];
+      file: string;
+      height: number;
+      theme: string;
+      viewport: { height: number; width: number };
+    }[] = [];
 
     let refusal = "";
     try {
@@ -68,7 +88,7 @@ const spec: Spec = {
     );
 
     const stage = await startDecisionStage(new Map([[NAME, PROGRAM]]), {
-      [CANVAS]: FILE,
+      [CANVAS]: [FILE],
     });
     try {
       for (const view of ["desk", "phone"] as const) {
@@ -129,12 +149,61 @@ const spec: Spec = {
               .slice(0, 12)
               .join("\n    ")
           );
+
+          const viewport = page.viewportSize() ?? { width: 0, height: 0 };
+          const file = join(PAGES, `pairing-${viewport.width}-${theme}.png`);
+          const paints = await capturePage(page, file);
+          const blank = blankEmbeds(paints);
+          kit.check(
+            `${leg}: the page's own capture paints every embed (${relative(ROOT, file)}; ${paints.map((one) => `“${one.embed}” ${Math.round(one.flat * 1000) / 10}%`).join(", ")} its commonest colour)`,
+            paints.length === previews.length && blank.length === 0,
+            blank.join("\n    ")
+          );
+          captures.push({
+            file: relative(PAGES, file),
+            theme,
+            viewport,
+            height: await page.evaluate(
+              () => document.documentElement.scrollHeight
+            ),
+            embeds: paints,
+          });
           await page.close();
         }
       }
     } finally {
       await stage.stop();
     }
+    const commit = Bun.spawnSync(["git", "rev-parse", "HEAD"], { cwd: ROOT })
+      .stdout.toString()
+      .trim();
+    const dirty =
+      Bun.spawnSync(["git", "status", "--porcelain"], { cwd: ROOT })
+        .stdout.toString()
+        .trim() !== "";
+    writeFileSync(
+      join(PAGES, "manifest.json"),
+      `${JSON.stringify(
+        {
+          page: PAGE_ID,
+          title: "How the pairing screen behaves",
+          program: {
+            file: join(DIR, "preview/page.oui"),
+            sha256: createHash("sha256").update(PROGRAM).digest("hex"),
+          },
+          canvas: { id: CANVAS, file: join("apps/dashboard", FILE) },
+          commit,
+          dirty,
+          captured: new Date().toISOString(),
+          captures,
+        },
+        null,
+        2
+      )}\n`
+    );
+    kit.note(
+      `captures: ${captures.map((one) => relative(ROOT, join(PAGES, one.file))).join(", ")}, ${relative(ROOT, join(PAGES, "manifest.json"))}`
+    );
   },
 };
 
