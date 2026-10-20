@@ -47,6 +47,38 @@ fixed: jump-open, 1440 (L666 Stacking: floating surfaces share `float`) — `ui/
 fixed: rail-sort, 390 (L647 "popovers widen to the viewport less 24px"; the popover's own `--space-5` gutter) — `ui/dropdown-menu/dropdown-menu-content.svelte` took no collisionPadding. Before: [198,435,192,175], its right edge on the screen's (390). After: `collisionPadding` defaults to `--space-5` as popover-content's does; menu 180,435 192×175, 18px from the trailing edge, phone light and dark; desk unmoved (161,369).
 fixed: section heads (task-open, 7 heads) — `ui/section-header/index.ts:18` `border-seam` → `border-border-hairline` (the coral seam dividers retire; L688 "border-hairline separates rows and regions"). After: `border-bottom 1px solid oklab(0.93584 0.00114568 0.010276)` light, `oklab(0.2948 0.00253095 0.00695373)` dark — border-hairline in both.
 
+## From X1's reads (parent hand-off)
+fixed: session-move-ask, 390 coarse (L934 The 44 Touch Rule) — `ui/collapsible/collapsible-trigger.svelte` had no `touch-hit`: before, "Details" 56×25 had no area (pointer-reread: "no `::after`, hit at +0.5 up / +0 down"). Now every trigger's recipe carries `touch-hit` (`opener` restates `static`, so its `::after` still covers its row). After: `::after` present, `top=-9.5625px bottom=-9.5625px` round the 24.9px box (44 tall); a press 21.5px over the centre lands on it, light and dark.
+route: X5 lib/cawco/move/MoveWait.svelte (session-move-ask) — under "Details" the "Don't move" button's own 44 area overlaps it from +15px below the centre (a press at +21.5 lands on "Don't move"): the cluster sets no `--hit-gap-y`, so the two areas don't stop at their midpoint (L934).
+
+## Review of cawco-audit/X2-overlays (149764303), answered once
+route: X5 lib/cawco/PeekPane.svelte (caw-panel-peek) #1 — "Needs you" drawn crimson beside a spark dot (L552, L590).
+holds: after integration (kit-swap lib/cawco/project/CawFloat.svelte:73, lib/cawco/project/ProjectHead.svelte:556) #2 — caw-on-panel, caw-on-decisions, project-caw and project-caw-settings phone sheets have no kit head yet. The kit head reads right where it is adopted: bench-overlays-rest phone drawer and sheet, one Close each on the title line (reads above), as session-plan and mac-readiness the reviewer names correct.
+route: X4 lib/cawco/project/CawFloat.svelte #2 — Caw's phone panel is a grabber drawer, where L710 has it hang from his tucked tab; and its own head ("Caw", +, expand) is label type with no Close.
+route: X3 routes/(app)/config/subagents/+page.svelte:199, routes/(app)/config/phone/+page.svelte, routes/(app)/config/skills/+page.svelte #3 — no action on "No subagents yet" (kit-swap line above); "Your devices will appear here…", "No marketplaces linked yet", "Nothing installed yet", "No machine has any subagent files yet" drawn as meta lines, not EmptyState.
+route: X4 lib/cawco/views/ViewRoutines.svelte:894 #3 — "No event sources yet…" as meta text, no action; and the caw-on-panel board empty "Nothing on the board yet" (routes/(app)/project/[id]/+page.svelte, EmptyState with no action beyond the head's).
+route: X5 lib/cawco/transcript/Transcript.svelte:3850 (bench-traffic, routes/(app)/motion/traffic) #3 — "No messages yet" is the transcript's EmptyState with no action (kit-swap line above).
+route: X5 lib/cawco/lightbox/Lightbox.svelte:229 #4 — the text lightbox is one flat panel with ~6px corners, not the dialog tray; kit-swap line above (onto `Dialog.Content`, which is also the phone sheet). Its phone text cut mid-word (note) goes with it.
+route: X5 lib/cawco/home/PeekSheet.svelte:35 #5 — Peek scrims the page; `modal={false}` (kit-swap line above, L505/L818).
+route: X4 the board's Review column (project-caw, task-open, task-review) #6 — filled with the coral-3 wash; coral is never a status (L580).
+route: X3 lib/cawco/config/SectionFrame.svelte:111 #7 — the page head's actions are drawn by SectionFrame (`flex flex-wrap items-start justify-between`), not a kit recipe: `items-center` centres them on the title/description pair, and on a title-only head (config-accounts) on the title alone. Read: hooks "New hook" centre y 89.5 against the pair's 97; accounts "Add account" 89.5 against the title's 84.
+route: X5 the transcript's tool row (region-failed-tabs phone, "R..") #8 — the verb gives way before the path (L625).
+route: X4 the task card title (task-open, task-review: "Audit the push pro") #8 — hard-clipped, no ellipsis (L625).
+route: X4 lib/cawco/views/ViewRoutines.svelte ("Event sources 0") and the board's column head ("Working 0") #9 — a count drawn at 0 (L725).
+route: X5 Caw's panel thread suggestion row (caw-on-decisions) #10 — no `border-row-outline` edge (L688); and (note) it wraps to four lines at 177px under a 515px line.
+route: X5 lib/cawco/PeekPane.svelte (caw-panel-peek) #11 — "AskUserQuestion" in Figtree, not the code role (L610).
+route: X5 lib/cawco/RegionBoundary.svelte:50 (note) — region-failed-tabs phone: the failure region overlaps the top bar and burger.
+route: X3 config-mcp-rest phone (note) — the row's "⋯" overflows the card edge.
+route: X4 usage-rest (note) — "back in 4h / 56m" wraps over two lines in a cell with room.
+route: X4 views-routines phone (note) — the header band stops at x≈197; rows truncate with room.
+route: X6 workflows-graph-branch desk (note) — Branch and Audit nodes overlap, End overlapped.
+route: X6 workflows-run (note) — the root run glyph ≈1.1:1 on its ground.
+route: X5 project-caw "Jump to latest" (note) — the pill covers message text.
+route: X4 task-open / task-review phone (note) — the detail ends ~75px over the foot; "Fields" helper cut mid-line.
+route: X3 config-accounts-routing (note) — content hard-cut above the sticky Cancel/Save bar, no edge fade.
+route: X5 lib/cawco/preview/PreviewPane.svelte:1026 (note) — sheet-inspect phone: "Outlin" cut by the inspector (the phone layout should be the sheet; kit-swap line above).
+fixed: bench-overlays-rest phone (note) — `routes/(app)/motion/overlays/+page.svelte` (mine): the openers' wrapping lines were spread over the 764px box by flex-wrap's `align-content: normal` (rows at y 62, 315, 574). `content-start`: after, rows at y 62, 99, 142 (the 7px `gap-space-2`), light and dark.
+
 ## interface-craft critique (Design Critique, over the engine reads above)
 fixed: L817 one header — every sheet the kit draws a head for has one name in the title role and one Close (closeCount 1 on drawer, sheet and dialog-sheet), Close on the title's line (middles equal to 0.1px), 16px in.
 fixed: L669 one scrim — a held surface over another adds no second wash or blur (project-caw-note: the upper scrim `bg rgba(0,0,0,0)`, `backdrop-filter none`).

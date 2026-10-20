@@ -78,7 +78,10 @@
 <main
   class="type-body relative grid grow gap-space-5 p-space-5 text-ink-strong"
 >
-  <div data-slot="openers" class="relative z-1 flex flex-wrap gap-space-2">
+  <div
+    data-slot="openers"
+    class="relative z-1 flex flex-wrap content-start gap-space-2"
+  >
     {#if shows("sheet")}
       <Sheet.Root bind:open={open.sheet}>
         <Sheet.Trigger data-open="sheet">

@@ -2,7 +2,13 @@
   import type { VariantProps } from "tailwind-variants";
   import { tv } from "#lib/utils.js";
 
+  /**
+   * Every trigger reaches 44 under a finger (DESIGN.md, The 44 Touch Rule:
+   * `.touch-hit`, its drawn size unchanged); `opener`'s press is its row's
+   * already, so it stays unpositioned and its `::after` covers the row.
+   */
   export const collapsibleTriggerVariants = tv({
+    base: "touch-hit",
     variants: {
       /**
        * The trigger by its role (DESIGN.md, Components). Its words and ink
@@ -25,7 +31,8 @@
         note: "rail-line inline-flex text-start",
         fold: "mark-line press-tint type-label inline-flex items-center gap-space-1 rounded-xs py-space-1 text-start text-ink-muted transition-[color] duration-(--dur-control) ease-out hover:text-ink-strong",
         chevron: "press-tint grid place-items-center text-ink-muted",
-        opener: "focus-inset block text-start after:absolute after:inset-0",
+        opener:
+          "focus-inset static block text-start after:absolute after:inset-0",
       },
     },
   });
