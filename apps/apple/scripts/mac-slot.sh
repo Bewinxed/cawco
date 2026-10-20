@@ -209,10 +209,11 @@ SLOT=${reply#SLOT }
 # type and runtime: a device that booted once, took the settings below, sat
 # through iOS's first-boot work (Photos, widgets, Spotlight and the rest:
 # minutes of several cores) until its data folder stopped changing, and shut
-# down. The clone carries the template's data folder, so it boots without
-# that work. A template is made on first need under the template lock and
+# down, its LaunchServices store deleted first (forget_containers). The clone
+# carries the template's data folder, so it boots without that work. A
+# template is made on first need under the template lock and
 # named for its device type, runtime build and TEMPLATE_VERSION ("CawCo
-# template iPhone-16-Pro 22F77 v1"): a runtime update or a new version makes a
+# template iPhone-16-Pro 22F77 v3"): a runtime update or a new version makes a
 # new one and deletes the old. While it is made it is the slot's simulator
 # ("CawCo slot <n>"), so a caller that dies leaves the keeper to delete it.
 # Bump TEMPLATE_VERSION when the settings change.
@@ -221,7 +222,9 @@ SLOT=${reply#SLOT }
 # thousands of files a look) ends about 2 min after boot; a second wave
 # (MobileAsset, CoreSpotlight, Avatar, dataaccessd) runs at 9 to 11 min; after
 # that a trickle of 0 to 3 files a look (xpc activity plists) never stops.
-TEMPLATE_VERSION=1
+# v3: the template keeps no LaunchServices store (forget_containers below).
+# v2 was skipped: templates named v2 were left by a trial without it.
+TEMPLATE_VERSION=3
 SETTLE_EVERY=15   # s between looks at the template's data folder
 SETTLE_FLOOR=720  # s settling (after boot finishes) before a look can count as quiet: past the second wave
 SETTLE_TRICKLE=3  # files written in a look that still count as quiet
@@ -265,8 +268,32 @@ settle() { # <udid>
   rm -f "$stamp"
   echo "mac-slot: $TEMPLATE settled after $waited s" >&2
 }
+# The device's LaunchServices store, when it has one. lsd writes it as the
+# device first boots, and it records each system app's data container
+# (Safari's among them) as an absolute path into this device's own folder.
+# A clone gets a copy of the file, so a clone of a template that kept it ran
+# Safari and every other system app against the template's folder:
+# `simctl get_app_container <clone> com.apple.mobilesafari data` answered the
+# template's path, and one slot's browsing came up in every later slot (a
+# stray tab, cookies). The SystemDataOnly- store beside it records no paths.
+lsd_store() { # <udid>
+  local data
+  data=$(device_field "$1" dataPath) && [[ -d $data ]] || fail "no data folder for $1"
+  compgen -G "$data/var/db/lsd/com.apple.LaunchServices-*.csstore" || true
+}
+# Deletes the booted template's LaunchServices store, so each clone's lsd
+# builds its own on first boot, with that clone's paths. The delete runs
+# inside the simulator (`simctl spawn`): a workspace boundary may read a
+# simulator's folder but not write it.
+forget_containers() { # <udid>
+  local store
+  store=$(lsd_store "$1") || exit 1
+  [[ -n $store ]] || fail "$TEMPLATE ($1) has no LaunchServices store to forget"
+  xcrun simctl spawn "$1" /bin/rm -f "$store" || fail "cannot delete $TEMPLATE's LaunchServices store ($store)"
+  [[ -z $(lsd_store "$1" || echo unreadable) ]] || fail "$TEMPLATE's LaunchServices store is still there after its delete: $store"
+}
 make_template() { # the new template's UDID
-  local udid
+  local udid store
   echo "mac-slot: making $TEMPLATE: first boot, then settling (minutes)" >&2
   udid=$(xcrun simctl create "CawCo slot $SLOT" "$TYPE" "$RUNTIME") || fail "cannot create a $TYPE on $RUNTIME for $TEMPLATE"
   xcrun simctl boot "$udid" || fail "cannot boot $TEMPLATE ($udid)"
@@ -277,7 +304,10 @@ make_template() { # the new template's UDID
     xcrun simctl spawn "$udid" defaults write com.apple.keyboard.preferences KeyboardDidShowProductivityTutorial -bool true &&
     xcrun simctl ui "$udid" appearance light || fail "cannot write $TEMPLATE's settings"
   settle "$udid"
+  forget_containers "$udid"
   xcrun simctl shutdown "$udid" || fail "cannot shut $TEMPLATE ($udid) down"
+  store=$(lsd_store "$udid") || exit 1
+  [[ -z $store ]] || fail "$TEMPLATE ($udid) wrote its LaunchServices store again as it shut down: $store"
   xcrun simctl rename "$udid" "$TEMPLATE" || fail "cannot name $udid $TEMPLATE"
   echo "$udid"
 }
