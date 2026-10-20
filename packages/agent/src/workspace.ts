@@ -35,6 +35,7 @@ import {
   WORKSPACE_GIT_TIMEOUT_MS,
 } from "@cawco/core";
 import { readWithin } from "@cawco/core/bounded";
+import { lockBy, openDirLock, unlock } from "@cawco/core/flock";
 import {
   forgetWorkspaceTmp,
   isSecretFileName,
@@ -286,19 +287,28 @@ const hubBase = async (git: Git, repo: string): Promise<string> => {
 const sourcing = new Map<string, Promise<unknown>>();
 
 /**
- * `work` on source repository `repo`, one at a time per repository. A
- * workspace's create writes the source's own `.git/config` (its `origin`,
- * the hub's credential helper, a pushed branch's tracking) and pushes its
- * branch as the hub's first; workspaces cut at once from one repository (a
- * group of delegates, a routine's runs) each did so side by side, and git
- * refused all but one: "could not lock config file .git/config: File exists"
- * (scratch fleet, 20 delegates at once, 2026-10-15), or "reference already
- * exists" for the push. Queued, each later one finds what the first wrote.
+ * `work` on source repository `repo`, one at a time per repository, by
+ * every process on this computer. A workspace's create may write the
+ * source's own `.git/config` (its `origin`, the hub's credential helper, a
+ * pushed branch's tracking) and push its branch as the hub's first;
+ * workspaces cut at once from one repository (a group of delegates, a
+ * routine's runs) each did so side by side, and git refused all but one:
+ * "could not lock config file .git/config: File exists" (scratch fleet, 20
+ * delegates at once, 2026-10-15), or "reference already exists" for the
+ * push. Queued, each later one finds what the first wrote. Within this agent
+ * they queue here; another process readying the same repository (a second
+ * agent whose place is the same checkout, as two machines of a scratch fleet
+ * on one computer are: link-under-load lane 2, 2026-10-20) is waited for on
+ * the lock of the repository's git directory ({@link holdingSource}).
  */
-const inSource = <T>(repo: string, work: () => Promise<T>): Promise<T> => {
+const inSource = <T>(
+  repo: string,
+  deadline: number,
+  work: () => Promise<T>
+): Promise<T> => {
   const mine = (sourcing.get(repo) ?? Promise.resolve())
     .catch(() => undefined)
-    .then(work);
+    .then(() => holdingSource(repo, deadline, work));
   sourcing.set(repo, mine);
   const forget = () => {
     if (sourcing.get(repo) === mine) {
@@ -307,6 +317,35 @@ const inSource = <T>(repo: string, work: () => Promise<T>): Promise<T> => {
   };
   mine.then(forget, forget);
   return mine;
+};
+
+/**
+ * `work` holding the lock of source repository `repo`'s git directory
+ * (`flock(2)` on the directory itself, so nothing is written into it), once
+ * any other process holding it lets it go, by the create's `deadline`.
+ */
+const holdingSource = async <T>(
+  repo: string,
+  deadline: number,
+  work: () => Promise<T>
+): Promise<T> => {
+  const gitDir = await gitUntil(deadline)(
+    repo,
+    "rev-parse",
+    "--path-format=absolute",
+    "--git-common-dir"
+  );
+  const fd = openDirLock(gitDir);
+  try {
+    if (!(await lockBy(fd, deadline))) {
+      throw new Error(
+        `${repo} was still being readied for a workspace by another process on this computer when this create's ${WORKSPACE_GIT_TIMEOUT_MS / 1000} s ran out.`
+      );
+    }
+    return await work();
+  } finally {
+    unlock(fd);
+  }
 };
 
 /**
@@ -326,7 +365,7 @@ const readySource = (
   deadline: number,
   declared: DeclaredLfs | undefined
 ): Promise<{ hub: string | undefined; known: string | undefined }> =>
-  inSource(repoRoot, async () => {
+  inSource(repoRoot, deadline, async () => {
     const plain = gitUntil(deadline);
     // A workspace starts from origin's default branch and lands there.
     let origin = await plain(repoRoot, "remote", "get-url", "origin").catch(

@@ -4,6 +4,7 @@ import {
   RESUMABLE_CAWCO_TOOLS,
 } from "@cawco/core/binary-updates";
 import { portHolder } from "@cawco/core/live-processes";
+import { HUB_AWAY_BOUND_MS, throughHubAway } from "./hub-away";
 import { PROOF_HEADER, proofHeaders } from "./hub-proof";
 import { HOSTED_PATH, mcpHost } from "./mcp-host";
 import {
@@ -22,11 +23,21 @@ const TOOL_WRITE_PATH =
 const DELEGATION_CALL_PATH = /^\/api\/delegation\/call\//;
 const STEP_RESULT_PATH = /^\/api\/workflow-steps\//;
 
-/** Relay only MCP and the generated tools' exact API routes; never arbitrary hub paths. */
+/** A shared fleet server's route on the hub, whose 502, 503 and 504 are the hub's own answers about that server. */
+const FLEET_PATH = /^\/mcp\/fleet\//;
+
+/**
+ * Relay only MCP and the generated tools' exact API routes; never arbitrary
+ * hub paths. A request to the hub's own tools waits through the hub being
+ * away (hub-away.ts {@link throughHubAway}): the hub answers none of them
+ * 502, 503 or 504 itself, so such an answer, or none, means the request
+ * never reached it, and it goes again. A fleet server's route does not wait:
+ * there the hub says 502 to 504 about the server (fleet-mcp.ts `forward`).
+ */
 async function relayMcp(
   request: Request,
   body: ArrayBuffer | undefined,
-  hubUrl: string
+  hubUrl: () => string
 ): Promise<Response> {
   const incoming = new URL(request.url);
   if (incoming.hostname !== "127.0.0.1") {
@@ -40,10 +51,6 @@ async function relayMcp(
       });
     }
   }
-  const hub = new URL(hubUrl);
-  hub.protocol = hub.protocol === "wss:" ? "https:" : "http:";
-  hub.pathname = incoming.pathname;
-  hub.search = incoming.search;
   const headers = new Headers(request.headers);
   headers.delete("Host");
   headers.delete("Connection");
@@ -52,12 +59,16 @@ async function relayMcp(
   // proof rides each call (hub hub-auth.ts `tool` routes), and a caller's
   // own copy of the header never passes.
   headers.delete(PROOF_HEADER);
-  const proof = await proofHeaders(request.method, hub.toString());
-  for (const [name, value] of Object.entries(proof)) {
-    headers.set(name, value);
-  }
-  try {
-    const response = await fetch(hub, {
+  const tryOnce = async (): Promise<Response> => {
+    const hub = new URL(hubUrl());
+    hub.protocol = hub.protocol === "wss:" ? "https:" : "http:";
+    hub.pathname = incoming.pathname;
+    hub.search = incoming.search;
+    const proof = await proofHeaders(request.method, hub.toString());
+    for (const [name, value] of Object.entries(proof)) {
+      headers.set(name, value);
+    }
+    return fetch(hub, {
       method: request.method,
       headers,
       body,
@@ -65,22 +76,39 @@ async function relayMcp(
       redirect: "error",
       timeout: false,
     });
-    const outgoing = new Headers(response.headers);
-    for (const name of [
-      "Content-Encoding",
-      "Content-Length",
-      "Connection",
-      "Transfer-Encoding",
-    ]) {
-      outgoing.delete(name);
+  };
+  let response: Response;
+  if (FLEET_PATH.test(incoming.pathname)) {
+    try {
+      response = await tryOnce();
+    } catch {
+      return new Response("The CawCo hub could not be reached.", {
+        status: 502,
+      });
     }
-    return new Response(response.body, {
-      status: response.status,
-      headers: outgoing,
-    });
-  } catch {
-    return new Response("The CawCo hub could not be reached.", { status: 502 });
+  } else {
+    const answer = await throughHubAway(tryOnce, request.signal);
+    if ("away" in answer) {
+      return new Response(
+        `The CawCo hub could not be reached within ${HUB_AWAY_BOUND_MS / 1000} s (last: ${answer.away}).`,
+        { status: 502 }
+      );
+    }
+    response = answer;
   }
+  const outgoing = new Headers(response.headers);
+  for (const name of [
+    "Content-Encoding",
+    "Content-Length",
+    "Connection",
+    "Transfer-Encoding",
+  ]) {
+    outgoing.delete(name);
+  }
+  return new Response(response.body, {
+    status: response.status,
+    headers: outgoing,
+  });
 }
 
 const parsed = (body: ArrayBuffer): unknown => {
@@ -342,7 +370,7 @@ export const startMcpGateway = async (hubUrl: () => string) => {
           : await request.arrayBuffer();
         const call = heldCall(url.pathname, body);
         if (call === undefined) {
-          return await relayMcp(request, body, hubUrl());
+          return await relayMcp(request, body, hubUrl);
         }
         if (fenced()) {
           return notStarted(body);
@@ -353,7 +381,7 @@ export const startMcpGateway = async (hubUrl: () => string) => {
         );
         try {
           return holdingUntilEnd(
-            await relayMcp(request, body, hubUrl()),
+            await relayMcp(request, body, hubUrl),
             release
           );
         } catch (error) {
