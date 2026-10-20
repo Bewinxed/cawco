@@ -38,6 +38,7 @@
   import { IconWarningTriangle } from "#lib/icons.js";
   import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-ready.webp";
   import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-ready.webp";
+  import { frameObserver } from "../../frame-observer.js";
   import { CURVE, dur, motionOk } from "../../motion/curves.svelte";
   import { morph } from "../../motion/morph.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
@@ -98,6 +99,27 @@
       });
       run.startTime = document.timeline.currentTime;
     });
+  };
+  /**
+   * How much of the window's foot the page's foot stands over (its height,
+   * over the docked composer's inset), as the page's own scroll padding: the
+   * browser's focus scrolling and a scroll into view stop above it, never
+   * under it (WCAG 2.4.11, Focus Not Obscured), as a sticky footer's
+   * scroller keeps its room (visible-viewport.svelte.ts `aboveKeyboard`).
+   * Read now, and a change in the next frame (frameObserver).
+   */
+  const footRoom: Attachment<HTMLElement> = (node) => {
+    const root = document.documentElement;
+    const read = () => {
+      root.style.scrollPaddingBlockEnd = `calc(var(--page-inset-bottom) + ${node.offsetHeight}px)`;
+    };
+    read();
+    const sizes = frameObserver(read);
+    sizes.observe(node);
+    return () => {
+      sizes.disconnect();
+      root.style.scrollPaddingBlockEnd = "";
+    };
   };
   /** Send's label: what goes. */
   const sendLabel = $derived(
@@ -204,6 +226,7 @@
   {@render renderNode(props.children)}
   <footer
     {@attach morph()}
+    {@attach footRoom}
     class="sticky bottom-(--page-inset-bottom) z-(--layer-sticky) -mx-space-6 flex flex-wrap items-center justify-between gap-space-3 border-t border-border-hairline bg-material-panel px-space-6 pt-space-3 pb-safe-space-3 glass-backdrop coarse:-mx-space-4 coarse:px-space-4 reduced-transparency:bg-surface-raised reduced-transparency:backdrop-filter-none"
     data-safe-bottom
     data-slot="page-foot"

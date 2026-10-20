@@ -742,8 +742,9 @@
   data-slot="decision"
   id={`decision-${id}`}
 >
+  <!-- Under a finger its rows open to 14px (DESIGN.md, The 44 Touch Rule: "clusters open their gap on touch"), and the note's row stands 18px under Change, so Change's 44px area and the note's edit's stand clear of each other, not touching at a midpoint a subpixel puts either side of. -->
   <header
-    class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2"
+    class="flex min-w-0 flex-wrap items-center gap-x-space-3 gap-y-space-2 coarse:gap-y-space-4"
     data-slot="decision-head"
   >
     <h2
@@ -799,7 +800,7 @@
       </div>
       {#if stored}
         <p
-          class="flex min-w-0 basis-full items-center gap-space-1 transition-opacity duration-(--dur-settle) ease-crossfade data-leaving:opacity-0 group-data-instant/card:transition-none motion-reduce:duration-(--dur-fade)"
+          class="flex min-w-0 basis-full items-center gap-space-1 transition-opacity duration-(--dur-settle) ease-crossfade data-leaving:opacity-0 group-data-instant/card:transition-none motion-reduce:duration-(--dur-fade) coarse:mt-space-1"
           data-leaves
           data-leaving={decided ? undefined : ""}
           data-slot="decided-note"
@@ -809,7 +810,7 @@
             aria-label="Edit the note"
             inert={!decided}
             onclick={editNote}
-            size="icon-xs"
+            size={coarse.current ? "icon-sm" : "icon-xs"}
             variant="ghost"><IconPen /></Button
           >
         </p>

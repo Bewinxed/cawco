@@ -12,6 +12,7 @@
  * against the same tape ("dev").
  */
 import type { Locator, Page, WebSocketRoute } from "playwright-core";
+import type { CapturePage } from "../decision-embeds";
 import { COMPOSER_FIELD } from "../kit";
 import {
   DELEGATE_TITLE,
@@ -386,6 +387,24 @@ const neverAnswered = async (
 };
 /** The decision page the cawco project's session made (its artifact's name). */
 const CHIP_DECISION = "chip-decision";
+
+/** A decision host page opened on `page` (decision-embeds.ts `openCapturePage`, loaded when a state runs). */
+const hostPage =
+  (name: CapturePage, options?: { bridge?: boolean }) =>
+  async (page: Page): Promise<void> => {
+    const { openCapturePage } = await import("../decision-embeds");
+    await openCapturePage(page, name, options);
+  };
+/** A host page's card, by its decision's id (Decision.svelte `id="decision-<id>"`). */
+const HOST_CARD = (id: string) => `#decision-${id}`;
+/** The host page's count of what is picked, in its foot. */
+const HOST_METER = "[data-slot=decision-page] [data-slot=meter]";
+/** Send picks, its work done: its check up (kit pending-content `tick`). */
+const HOST_SENT = "[data-send] [data-slot=tick][data-on=true]";
+/** A note's field, not the twin it measures its height on (motion/autosize.svelte.ts: `aria-hidden`). */
+const NOTE_FIELD = "textarea:not([aria-hidden])";
+/** A preview origin's ping (Preview.svelte), which a wait never hears answered. */
+const PING_PATH = /^\/__cawco\/ping$/;
 /** A pairing's start (hub-auth.svelte.ts `startPairing`), not its polls. */
 const PAIR_START = "**/api/pair";
 /** The dashboard's one socket, on the dashboard's own origin. */
@@ -2129,6 +2148,168 @@ export const SURFACES: Surface[] = [
         ready: {
           shows: `${VIEW_PANE}[data-view=decisions-graph] [data-slot=decisions][data-mode=graph]`,
         },
+      },
+    ],
+  },
+  {
+    // A decision page as its host draws it (decisions/host), opened as
+    // CawCo shows it but served from this tree with no hub
+    // (decision-embeds.ts `openCapturePage`): the hub tape holds no program
+    // page and none of the host's files. The decisions project's three
+    // programs as the scratch fleet publishes them (decisions-preview
+    // seed.ts) with the picks the hub holds for them, then a pick, its
+    // Continue, a note, a send, the page offline, every media piece but a
+    // canvas, Preview's wait and pieces whose artifacts are gone. Each state
+    // opens its page from a route the tape loads.
+    name: "decision-host",
+    serve: "built",
+    route: () => "/usage",
+    states: [
+      {
+        // 5 of 12 decided, each on its line; the rest open.
+        name: "landing",
+        act: hostPage("landing"),
+        root: "body",
+        ready: { shows: HOST_METER, says: /\b5 of 12 picked\b/ },
+      },
+      {
+        // In a Section, each card after the one before.
+        name: "onboarding",
+        act: hostPage("onboarding"),
+        root: "body",
+        ready: { shows: HOST_METER, says: /\b2 of 5 picked\b/ },
+      },
+      {
+        // All but one decided, one with a diagram, notes and a dial's values held.
+        name: "pricing",
+        act: hostPage("pricing"),
+        root: "body",
+        ready: { shows: HOST_METER, says: /\b5 of 6 picked\b/ },
+      },
+      {
+        // An option pressed: chosen, its card's Continue the one coral act.
+        name: "pick",
+        act: async (page) => {
+          await hostPage("landing")(page);
+          await page
+            .locator(`${HOST_CARD("under-hero")} [data-option]`)
+            .first()
+            .click();
+        },
+        root: "body",
+        inView: `${HOST_CARD("under-hero")} [data-continue]`,
+        ready: { shows: `${HOST_CARD("under-hero")} [data-continue]` },
+      },
+      {
+        // Continue pressed: the card folded to its decided line, the next one working.
+        name: "continue",
+        act: async (page) => {
+          await hostPage("landing")(page);
+          const card = HOST_CARD("under-hero");
+          await page.locator(`${card} [data-option]`).first().click();
+          await page.locator(`${card} [data-continue]`).click();
+          await page.locator(`${card}[data-decided]`).waitFor();
+        },
+        root: "body",
+        inView: HOST_CARD("under-hero"),
+        ready: {
+          shows: `${HOST_CARD("under-hero")}[data-decided] [data-slot=decided]`,
+        },
+      },
+      {
+        // A card's note opened and written in.
+        name: "note",
+        act: async (page) => {
+          await hostPage("landing")(page);
+          const note = `${HOST_CARD("under-hero")} [data-slot=note]`;
+          await page.locator(`${note} button`).first().click();
+          await page
+            .locator(`${note} ${NOTE_FIELD}`)
+            .fill("Short of a phone's width");
+        },
+        root: "body",
+        inView: `${HOST_CARD("under-hero")} [data-slot=note] ${NOTE_FIELD}`,
+        ready: {
+          shows: `${HOST_CARD("under-hero")} [data-slot=note] ${NOTE_FIELD}`,
+        },
+      },
+      {
+        // Send pressed: its check up, read before it leaves (--dur-hold).
+        name: "sent",
+        act: async (page) => {
+          await hostPage("landing")(page);
+          await page.locator("[data-send]").click();
+          await page.locator(HOST_SENT).waitFor();
+        },
+        heldFrame: true,
+        root: "body",
+        ready: { shows: HOST_SENT },
+      },
+      {
+        // Opened where CawCo doesn't show it: the offline notice, nothing pressable.
+        name: "offline",
+        act: hostPage("landing", { bridge: false }),
+        root: "body",
+        ready: {
+          shows: "[data-slot=decision-page] [data-slot=alert][role=alert]",
+        },
+      },
+      {
+        // A picture and a diagram in the first card's wells.
+        name: "media",
+        act: hostPage("media"),
+        root: "body",
+        ready: { shows: `${HOST_CARD("stack")} [data-slot=diagram] svg` },
+      },
+      {
+        // Dials in a well under the card they tune.
+        name: "dials",
+        act: hostPage("media"),
+        root: "body",
+        inView: `${HOST_CARD("host")} [data-slot=dials]`,
+        ready: {
+          shows: `${HOST_CARD("host")} [data-slot=dials] .dialkit-root`,
+        },
+      },
+      {
+        // A page embedded in an option, live in its frame.
+        name: "embed",
+        act: hostPage("media"),
+        root: "body",
+        inView: `${HOST_CARD("host")} [data-slot=option-media] iframe[data-slot=embed]`,
+        ready: {
+          shows: `${HOST_CARD("host")} [data-slot=option-media] iframe[data-slot=embed]`,
+        },
+      },
+      {
+        // A Gantt chart too wide for the well at its words' floor: it scrolls sideways.
+        name: "wide-diagram",
+        act: hostPage("media"),
+        root: "body",
+        inView: `${HOST_CARD("plan")} [data-slot=diagram]`,
+        ready: { shows: `${HOST_CARD("plan")} [data-slot=diagram] svg` },
+      },
+      {
+        // A dev server's preview past --dur-wait-grace with no answer: Caw and "Opening…".
+        name: "wait",
+        act: async (page) => {
+          const { SILENT_ORIGIN } = await import("../decision-embeds");
+          await neverAnswered(page, `${SILENT_ORIGIN}/**`, PING_PATH);
+          await hostPage("wait")(page);
+        },
+        root: "body",
+        inView: "[data-slot=media] p[role=status]",
+        ready: {
+          shows: "[data-slot=media] p[role=status]",
+          says: /^Opening the preview launch-site…$/,
+        },
+      },
+      {
+        // A picture, a canvas and a preview the hub no longer holds, each said in words.
+        name: "gone",
+        act: hostPage("gone"),
+        root: "body",
+        ready: { shows: "[data-slot=media-gone]" },
       },
     ],
   },

@@ -19,16 +19,26 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import type { Frame, Page } from "playwright-core";
+import type { Frame, Page, Route } from "playwright-core";
 import { PNG } from "pngjs";
 import { buildStageHost } from "../../packages/agent/src/stage-host/build";
 import { decisionHostFile } from "../../packages/core/src/decision-host";
 import {
+  checkProgram,
   DECISION_ASSETS,
   programHost,
   scriptJson,
 } from "../../packages/hub/src/decision-program";
 import { FOLDER_FILE_LIMIT } from "../../packages/hub/src/project-folder";
+import {
+  LANDING,
+  LANDING_PICKS,
+  ONBOARDING,
+  ONBOARDING_PICKS,
+  PRICING,
+  PRICING_PICKS,
+  pageProgram,
+} from "../decisions-preview/seed";
 import { until } from "../scratch-fleet";
 import { type ShotRead, shootEmbedded } from "./canvas-shots";
 import { ROOT, settle, type Theme } from "./kit";
@@ -84,14 +94,21 @@ async function pickWiring(): Promise<string> {
  * enabled, and no offline notice. An init script: installed before the
  * page's own. A press on an option picks it through the overlay's own
  * handler, which `startDecisionStage` serves to every page (`PICK_PATH`).
+ * `seed`, when given (its init script's argument), is what the hub holds
+ * already: picks, notes and values the page opens on.
  */
-export function CAWCO_BRIDGE(): void {
+export function CAWCO_BRIDGE(
+  seed: Record<
+    string,
+    { note?: string; options: string[]; value?: unknown }
+  > = {}
+): void {
   interface Entry {
     note?: string;
     options: string[];
     value?: unknown;
   }
-  const state: Record<string, Entry> = {};
+  const state: Record<string, Entry> = structuredClone(seed);
   const listeners = new Set<(picks: Record<string, Entry>) => void>();
   const told = () => {
     for (const listener of listeners) {
@@ -1414,4 +1431,237 @@ export async function embedPaints(page: Page, png: PNG): Promise<EmbedPaint[]> {
     }
     return { embed, rect, flat: all ? most / all : 1 };
   });
+}
+
+// ---- Decision pages for the capture (surfaces/catalogue.ts `decision-host`)
+
+/**
+ * The origin a capture's decision pages stand on: no network behind it,
+ * every request to it answered on the page (`openCapturePage`). The hub tape
+ * holds no program page and none of the host's files, so these are served
+ * as the hub serves them, from this tree.
+ */
+export const CAPTURE_ORIGIN = "http://decisions.test";
+/** A dev server's preview origin that never answers its ping: Preview's wait (the catalogue holds it unanswered). */
+export const SILENT_ORIGIN = "http://decisions-site.test";
+/** A capture page's own path, and a file beside it. */
+const CAPTURE_PATH = /^\/page\/([a-z]+)\/(.*)$/;
+/** A page artifact a Preview embeds, on the page's own origin (Preview.svelte: `/__cawco/page/<id>/`). */
+const EMBEDDED_PAGE = /^\/__cawco\/page\/([0-9a-f-]{36})\/$/;
+
+/** The artifacts the media pages name: a page a Preview embeds, a dev server's preview, and ids no artifact has. */
+const CAPTURE_IDS = {
+  motion: idOf("capture-motion"),
+  site: idOf("capture-site"),
+  gone: idOf("capture-gone"),
+  sketch: idOf("capture-sketch"),
+};
+
+/** A page artifact: a card that slides, as decision-pages' mockup. */
+const MOTION_PAGE = `<!doctype html><html lang="en"><head><meta charset="utf-8"><title>Motion</title>
+<style>body{margin:0;font:16px system-ui}.box{margin:16px;padding:16px;border-radius:12px;background:#eee}</style></head>
+<body><div class="box">A card that slides in</div></body></html>`;
+
+/** Every media piece the host draws but a canvas (which needs its own host and doc): a picture, three diagrams, a page embedded in an option, a Row of Text and a Badge, and Dials. */
+const MEDIA_PROGRAM = `root = Decisions("Shape the launch", [stack, host, later])
+stack = Decision("stack", "Which stack does the launch page use?", [svelte, astro], "Today: the landing is plain HTML.", [shot, flow])
+svelte = Option("svelte", "SvelteKit", "The dashboard's own stack.", true, [], "Heavier than the plain page it replaces.")
+astro = Option("astro", "Astro", "Content first, islands where needed.", false, [seq], "A second stack to keep up.")
+host = Decision("host", "Where does the page run?", [hub, edge], "It ships with the hub today.", [tune], ["stack"])
+hub = Option("hub", "The hub", "Nothing new to run.", true, [], "Readers far from the hub wait longer.")
+edge = Option("edge", "An edge host", "Closer to readers.", false, [motion], "One more host to run.")
+later = Section("Later", [plan])
+plan = Decision("plan", "When does the plan ship?", [now, after], "The waitlist opens with it.", [gantt, status], ["host"])
+status = Row([Text("Ships with the waitlist", "meta"), Badge("Planned", "attn")])
+now = Option("now", "With the page", "The waitlist opens with it.", true, [], "The page waits for the plan.")
+after = Option("after", "A week after", "The page ships first.", false, [], "The waitlist opens without it.")
+shot = Image("landing.png", "The landing as it stands: a title and one button", "Today's landing")
+flow = Diagram("flowchart LR\\nVisit[Visit] --> Read[Read] --> Join[Sign up]", "The reader's path")
+seq = Diagram("sequenceDiagram\\nReader->>Hub: open the page\\nHub-->>Reader: the page, live")
+gantt = Diagram("gantt\\ntitle Launch\\ndateFormat YYYY-MM-DD\\nsection Build\\nPage :a1, 2026-10-20, 5d\\nShip :after a1, 2d", "The plan")
+motion = Preview("${CAPTURE_IDS.motion}", "How it moves")
+tune = Dials("Card", {radius: [12, 0, 32], accent: "#e65d46"})
+`;
+
+/** One card whose Preview is a dev server that has not answered yet. */
+const WAIT_PROGRAM = `root = Decisions("Open the launch site", [site])
+site = Decision("site", "Does the launch site read right?", [ship, hold], "It runs on the session's dev server.", [live])
+ship = Option("ship", "Ship it", "The site goes out as it runs.", true, [], "Nothing more is checked.")
+hold = Option("hold", "Hold it a day", "One more pass over the copy.", false, [], "The launch moves a day.")
+live = Preview("${CAPTURE_IDS.site}", "The site as it runs")
+`;
+
+/** One card whose picture, canvas and preview are gone from the hub. */
+const GONE_PROGRAM = `root = Decisions("Keep the old layout", [old])
+old = Decision("old", "Keep the old layout?", [keep, drop], "Its pictures were cleared last week.", [shot, sketch, live])
+keep = Option("keep", "Keep it", "Nothing moves.", true, [], "The old layout stays a while.")
+drop = Option("drop", "Drop it", "The new layout ships.", false, [], "Its pictures are gone for good.")
+shot = Image("cleared.png", "The layout as it was", "The old layout")
+sketch = Canvas("${CAPTURE_IDS.sketch}", "The old sketch")
+live = Preview("${CAPTURE_IDS.gone}", "The old site")
+`;
+
+type Picks = Record<
+  string,
+  { note?: string; options: string[]; value?: unknown }
+>;
+
+/** Each capture page: its program, its files and artifacts as the hub serves them, and the picks the hub holds for it. */
+const CAPTURE_PAGES = {
+  landing: { program: pageProgram(LANDING), picks: LANDING_PICKS },
+  onboarding: { program: pageProgram(ONBOARDING), picks: ONBOARDING_PICKS },
+  pricing: { program: pageProgram(PRICING), picks: PRICING_PICKS },
+  media: {
+    program: MEDIA_PROGRAM,
+    files: { "landing.png": "files/0-landing.png" },
+    media: { [CAPTURE_IDS.motion]: { kind: "page", name: "motion" } },
+    picks: {},
+  },
+  wait: {
+    program: WAIT_PROGRAM,
+    media: {
+      [CAPTURE_IDS.site]: {
+        kind: "preview",
+        name: "launch-site",
+        embed: `${SILENT_ORIGIN}/`,
+      },
+    },
+    picks: {},
+  },
+  gone: { program: GONE_PROGRAM, picks: {} },
+} satisfies Record<
+  string,
+  {
+    files?: Record<string, string>;
+    media?: Record<string, unknown>;
+    picks: Picks;
+    program: string;
+  }
+>;
+
+export type CapturePage = keyof typeof CAPTURE_PAGES;
+
+/** A landing page as a picture: a title bar and one coral button on a cream page, 640×400. */
+function landingPicture(): Buffer {
+  const png = new PNG({ width: 640, height: 400 });
+  const paint = (
+    x0: number,
+    y0: number,
+    x1: number,
+    y1: number,
+    [r, g, b]: [number, number, number]
+  ) => {
+    for (let y = y0; y < y1; y += 1) {
+      for (let x = x0; x < x1; x += 1) {
+        const i = (y * png.width + x) * 4;
+        png.data[i] = r;
+        png.data[i + 1] = g;
+        png.data[i + 2] = b;
+        png.data[i + 3] = 255;
+      }
+    }
+  };
+  paint(0, 0, 640, 400, [244, 241, 236]);
+  paint(64, 120, 480, 160, [52, 48, 44]);
+  paint(64, 184, 360, 200, [140, 134, 126]);
+  paint(64, 240, 224, 288, [230, 93, 70]);
+  return PNG.sync.write(png);
+}
+
+let pickScript: Promise<string> | undefined;
+const capturePages = new WeakSet<Page>();
+
+/** One request to the capture's origin, answered as the hub would. */
+async function answerCapture(route: Route): Promise<void> {
+  const { pathname } = new URL(route.request().url());
+  if (pathname === PICK_PATH) {
+    pickScript ??= pickWiring();
+    return route.fulfill({
+      contentType: "text/javascript; charset=utf-8",
+      body: await pickScript,
+    });
+  }
+  if (pathname.startsWith(DECISION_ASSETS)) {
+    const file = await decisionHostFile(pathname.slice(DECISION_ASSETS.length));
+    return file
+      ? route.fulfill({
+          status: file.status,
+          headers: Object.fromEntries(file.headers),
+          body: Buffer.from(await file.arrayBuffer()),
+        })
+      : route.fulfill({ status: 404, body: "Not found" });
+  }
+  if (EMBEDDED_PAGE.exec(pathname)?.[1] === CAPTURE_IDS.motion) {
+    return route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: MOTION_PAGE,
+    });
+  }
+  const [, name = "", rest] = CAPTURE_PATH.exec(pathname) ?? [];
+  const held: {
+    files?: Record<string, string>;
+    media?: Record<string, unknown>;
+    program: string;
+  } | null = name in CAPTURE_PAGES ? CAPTURE_PAGES[name as CapturePage] : null;
+  if (held && rest === "") {
+    // As the hub serves it (decision-program.ts): the program it keeps once
+    // its check passes, the title that check read.
+    const checked = checkProgram(held.program);
+    return route.fulfill({
+      contentType: "text/html; charset=utf-8",
+      body: programHost(
+        checked.program,
+        checked.read.title,
+        held.files ?? {}
+      ).replace(
+        "</body>",
+        `${scriptJson("cawco-media", held.media ?? {})}\n<script src="${PICK_PATH}"></script>\n</body>`
+      ),
+    });
+  }
+  if (held && rest && Object.values(held.files ?? {}).includes(rest)) {
+    return route.fulfill({ contentType: "image/png", body: landingPicture() });
+  }
+  return route.fulfill({ status: 404, body: "Not found" });
+}
+
+/**
+ * Capture page `name` opened on `page` as CawCo shows it: its program in the
+ * host page the hub serves (`programHost`, its files and artifacts beside
+ * it), the host built from this tree (`decisionHostFile`), the overlay's
+ * pick on its options, and the overlay's bridge holding the page's picks
+ * (`CAWCO_BRIDGE`, seeded); with `bridge: false`, opened as no CawCo shows
+ * it (the page offline). Answers once the page and its faces have drawn.
+ */
+export async function openCapturePage(
+  page: Page,
+  name: CapturePage,
+  { bridge = true }: { bridge?: boolean } = {}
+): Promise<void> {
+  // Once per page: the walk opens a surface's states one after another on
+  // its pass's page, and an init script stays on a page for good (a second
+  // bridge's `defineProperty` throws, and the first page's picks stood on
+  // every page after). So the one script reads which page it is on from
+  // its address: a capture page's own picks, none `?offline`.
+  if (!capturePages.has(page)) {
+    capturePages.add(page);
+    await page.route(`${CAPTURE_ORIGIN}/**`, answerCapture);
+    const seeds = Object.fromEntries(
+      Object.entries(CAPTURE_PAGES).map(([one, held]) => [one, held.picks])
+    );
+    await page.addInitScript({
+      content: `(() => {
+  const seeds = ${JSON.stringify(seeds)};
+  const at = ${CAPTURE_PATH}.exec(location.pathname);
+  if (location.origin !== ${JSON.stringify(CAPTURE_ORIGIN)} || !at || at[2] !== "" || !(at[1] in seeds) || new URLSearchParams(location.search).has("offline")) return;
+  (${CAWCO_BRIDGE.toString()})(seeds[at[1]]);
+})();`,
+    });
+  }
+  await page.goto(
+    `${CAPTURE_ORIGIN}/page/${name}/${bridge ? "" : "?offline"}`,
+    { waitUntil: "domcontentloaded" }
+  );
+  await page.locator("[data-slot=decision-page]").waitFor();
+  await page.evaluate(() => document.fonts.ready);
 }

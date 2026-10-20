@@ -81,3 +81,4 @@ apps/dashboard/eslint.config.mjs
 scripts/style-residual-check.ts
 scripts/probe-kit/decision-embeds.ts
 apps/dashboard/src/lib/tokens/variants.css
+scripts/probe-kit/surfaces/catalogue.ts
