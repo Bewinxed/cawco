@@ -54,6 +54,24 @@ export const EMBED_FRAME = "figure.media iframe.frame";
 const PAGE_PATH = /^\/page\/([a-z-]+)\/(light|dark)\/$/;
 const TITLE = /Decisions\("([^"]*)"/;
 const STATES_EXT = /\.stories\.ts$/;
+/** Where a stage's page loads the overlay's own pick, wired to the stand-in bridge (`pickWiring`). */
+const PICK_PATH = "/__probe/pick.js";
+
+/** The overlay's pick (agent preview-overlay pick.ts) wired to `CAWCO_BRIDGE`, bundled for the page (decision-pick-wiring.ts). */
+async function pickWiring(): Promise<string> {
+  const built = await Bun.build({
+    entrypoints: [join(import.meta.dir, "decision-pick-wiring.ts")],
+    target: "browser",
+    format: "iife",
+  });
+  const [script] = built.outputs;
+  if (!(built.success && script)) {
+    throw new Error(
+      `The pick wiring did not build: ${built.logs.map(String).join("; ")}`
+    );
+  }
+  return script.text();
+}
 
 /**
  * The overlay's bridge as CawCo puts it on a page it shows (agent
@@ -63,7 +81,8 @@ const STATES_EXT = /\.stories\.ts$/;
  * page's `picks` listeners, and Send answered. With it the page draws as the
  * person sees it inside CawCo: its options and note live, Send picks
  * enabled, and no offline notice. An init script: installed before the
- * page's own.
+ * page's own. A press on an option picks it through the overlay's own
+ * handler, which `startDecisionStage` serves to every page (`PICK_PATH`).
  */
 export function CAWCO_BRIDGE(): void {
   interface Entry {
@@ -283,11 +302,17 @@ export async function startDecisionStage(
   stage.stdout.on("data", hear);
   stage.stderr.on("data", hear);
   const embedHost = embedOrigin(stagePort);
+  const picking = await pickWiring();
   const pages = Bun.serve({
     hostname: "127.0.0.1",
     port: 0,
     async fetch(request) {
       const { pathname } = new URL(request.url);
+      if (pathname === PICK_PATH) {
+        return new Response(picking, {
+          headers: { "content-type": "text/javascript; charset=utf-8" },
+        });
+      }
       if (pathname.startsWith(DECISION_ASSETS)) {
         return (
           (await decisionHostFile(pathname.slice(DECISION_ASSETS.length))) ??
@@ -312,7 +337,7 @@ export async function startDecisionStage(
       const title = program.match(TITLE)?.[1] ?? "";
       const html = programHost(program, title, {}).replace(
         "</body>",
-        `${scriptJson("cawco-media", media)}\n</body>`
+        `${scriptJson("cawco-media", media)}\n<script src="${PICK_PATH}"></script>\n</body>`
       );
       return new Response(html, {
         headers: { "content-type": "text/html; charset=utf-8" },
@@ -966,8 +991,14 @@ function wholesOf(pictures: string): { from: number; to: number }[] {
  * blocks of a card too big for one file, never through a block of words or
  * a picture (`cutsOf`). A file that can't fit fails by name. Answers the
  * files and each embed's box read in the whole picture.
+ *
+ * The page is first scrolled through, half a window at a time, until its
+ * height holds: an embed posts its height once it is in view, so a page
+ * measured before every embed was reached grows while it is shot, and its
+ * foot was cut off (a 390 page read 5845px tall that stood 9124px).
  */
 export async function capturePage(page: Page, path: string): Promise<Capture> {
+  await scrollThrough(page);
   const size = await page.evaluate(() => ({
     full: document.documentElement.scrollHeight,
     height: innerHeight,
@@ -1044,6 +1075,30 @@ export async function capturePage(page: Page, path: string): Promise<Capture> {
     };
   });
   return { files, paints: await embedPaints(page, out), picture: out, wholes };
+}
+
+/** How many passes over the page `scrollThrough` takes at most before it stops waiting for the height to hold. */
+const THROUGH_PASSES = 6;
+
+/** Scrolls `page` through, half a window at a time, until its height is the same after a pass as before it; back at the top. */
+async function scrollThrough(page: Page): Promise<void> {
+  let tall = -1;
+  for (let pass = 0; pass < THROUGH_PASSES; pass += 1) {
+    const now = await page.evaluate(
+      () => document.documentElement.scrollHeight
+    );
+    if (now === tall) {
+      break;
+    }
+    tall = now;
+    const step = await page.evaluate(() => Math.max(1, innerHeight / 2));
+    for (let y = 0; y < tall; y += step) {
+      await page.evaluate((top) => window.scrollTo(0, top), y);
+      await settle(page, 300);
+    }
+  }
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await settle(page, 300);
 }
 
 /** Each embed's box on the page open in `page`, read in `png`, a picture of the whole page at the window's device scale. */
