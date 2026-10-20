@@ -1027,6 +1027,20 @@ function wholesOf(pictures: string): { from: number; to: number }[] {
  */
 export async function capturePage(page: Page, path: string): Promise<Capture> {
   await scrollThrough(page, () => settle(page, 300));
+  // A box the page sticks to the window's edge (the decision host's Send
+  // picks bar) stands in every window it reaches, over the rows under it:
+  // stitched, those rows were never pictured. A sticky box takes its place
+  // in the flow whether it sticks or not, so unstuck (`static`) for the
+  // capture the page lays out the same and pictures it once, where it
+  // stands in the page; its own inline style comes back after.
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll<HTMLElement>("body *")) {
+      if (getComputedStyle(el).position === "sticky") {
+        el.dataset.captureStyle = el.getAttribute("style") ?? "";
+        el.style.setProperty("position", "static");
+      }
+    }
+  });
   const size = await page.evaluate(() => ({
     full: document.documentElement.scrollHeight,
     height: innerHeight,
@@ -1056,7 +1070,20 @@ export async function capturePage(page: Page, path: string): Promise<Capture> {
     const rows = Math.min(shot.height - skip, out.height - at(top));
     PNG.bitblt(shot, out, 0, skip, out.width, rows, 0, at(top));
   }
-  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.evaluate(() => {
+    for (const el of document.querySelectorAll<HTMLElement>(
+      "[data-capture-style]"
+    )) {
+      const style = el.dataset.captureStyle ?? "";
+      if (style) {
+        el.setAttribute("style", style);
+      } else {
+        el.removeAttribute("style");
+      }
+      delete el.dataset.captureStyle;
+    }
+    window.scrollTo(0, 0);
+  });
   // What a reviewer reads whole, never cut through: rows in device px.
   const wholes = (await page.evaluate(wholesOf, PICTURE)).map((one) => ({
     from: Math.floor(one.from * size.scale),
