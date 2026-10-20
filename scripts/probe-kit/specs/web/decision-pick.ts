@@ -11,20 +11,28 @@
  * 1. The pressed option shows chosen where it stands: its edge, fill and
  *    keycap change over --dur-control on ease-out, read at 0, ½ and 1 of
  *    that clock, landing on `brand-solid` and `chip-chosen-bg` (L905, L540).
- * 2. It holds for --dur-hold before the card folds.
- * 3. The fold: the body's height, margin and opacity and the card's padding
- *    on one clock (one start time, duration and easing: --dur-exit on
- *    --ease-out), read at 0, ½ and 1: the card from its open height to its
- *    decided line. The page's scroll rides that clock: at 0 where it stood
- *    before the press (no jump on the fold's frame), at ½ the fold's own
- *    eased progress of the way, at 1 where it lands, with the next card in
- *    view under the decided line.
- * 4. Change pressed with the fold held at ½ turns it back from the height
- *    drawn there (L489), opening over --dur-reveal, focus on the pick.
- * 5. Played live, a pick moves the page's scroll only forward on its way and
- *    never by the browser's anchoring; focus lands on the next open card's
- *    first option once the fold lands, past the last card on the first open
- *    one above it, and on Send when none is left.
+ *    The card folds once that colour has landed, never before.
+ * 2. The fold: the body's height, margin and opacity and the card's padding
+ *    on one clock (one start time, duration and easing: --dur-panel on the
+ *    drawer curve, L479, L856), read at 0, ½ and 1: the card from its open
+ *    height to its decided line. The page's scroll rides that clock: at 0
+ *    where it stood before the press (no jump on the fold's frame), at ½
+ *    the fold's own eased progress of the way, at 1 where it lands, with the
+ *    next card in view under the decided line.
+ * 3. Change pressed with the fold held at ½ turns it back from the height
+ *    drawn there (L489), opening over --dur-panel on the drawer curve, focus
+ *    on the pick.
+ * 4. Played live, a pick folds its card --dur-control after the press (the
+ *    chosen colour landing, no other wait), moves the page's scroll only
+ *    forward on its way and never by the browser's anchoring; focus lands on
+ *    the next open card's first option once the fold lands, past the last
+ *    card on the first open one above it, and on Send when none is left.
+ * 5. From the keyboard (L690: "A choice made from the keyboard … is
+ *    instant"): Enter on an option lands everything on the next frame, with
+ *    no animation under the card: its chosen colour, the card at its decided
+ *    line, the scroll where the fold would have taken it and focus on the
+ *    next open card's first option. Enter on Change opens it the same way,
+ *    focus on the pick.
  * 6. Reduced motion: the fold runs opacity alone (no height tween, no
  *    padding run), the scroll stands still while it fades and is placed at
  *    once where it lands, and focus still moves.
@@ -56,6 +64,11 @@ const PROGRAM = [
   `soft = Option("soft", "Soft", "16px corners.", true, [], "Less room at the corners.")`,
   `sharp = Option("sharp", "Sharp", "8px corners.", false, [], "Reads colder.")`,
 ].join("\n");
+
+/** --ease-drawer as the engine writes it. */
+const DRAWER = "cubic-bezier(0.32, 0.72, 0, 1)";
+/** --ease-out as the engine writes it. */
+const OUT = "cubic-bezier(0.23, 1, 0.32, 1)";
 
 const LEGS = [
   { view: "desk", theme: "light", label: "1440 light" },
@@ -136,6 +149,88 @@ const foldOf = (page: Page, id: string) =>
     };
   }, id);
 
+/** A box on screen, rounded to a tenth of a pixel. */
+interface Box {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+}
+
+/**
+ * The flight of option `option` of card `id`: its keycap and label run on
+ * the decided line (the copy), the run in its chip (the source), whether
+ * the source is hidden, and the copy's own transform.
+ */
+const flightOf = (page: Page, id: string, option: string) =>
+  page.evaluate(
+    ([card, value]) => {
+      const root = document.getElementById(`decision-${card}`);
+      const box = (el: Element | null | undefined) => {
+        if (!el) {
+          return null;
+        }
+        const r = el.getBoundingClientRect();
+        const t = (n: number) => Math.round(n * 10) / 10;
+        return { x: t(r.left), y: t(r.top), w: t(r.width), h: t(r.height) };
+      };
+      const chip = root?.querySelector<HTMLElement>(
+        `header [data-pick="${value}"]`
+      );
+      const source = root?.querySelector<HTMLElement>(
+        `[data-option="${value}"] > b`
+      );
+      return {
+        copy: box(chip?.querySelector("b")),
+        source: box(source),
+        sourceHidden: source
+          ? getComputedStyle(source).visibility === "hidden"
+          : false,
+        transform: chip ? getComputedStyle(chip).transform : "",
+        header: box(root?.querySelector("header")),
+      };
+    },
+    [id, option] as const
+  );
+
+/**
+ * Every element in card `id`'s head with words of its own, and the ones
+ * whose ink is a brand colour (DESIGN.md L580: coral marks the chosen
+ * option, never words about it).
+ */
+const brandWordsIn = (page: Page, id: string) =>
+  page.evaluate((card) => {
+    const inks = new Set(
+      ["--brand-ink", "--brand-solid", "--brand-ink-strong", "--link-ink"].map(
+        (token) => {
+          const probe = document.createElement("i");
+          probe.style.color = `var(${token})`;
+          document.body.append(probe);
+          const colour = getComputedStyle(probe).color;
+          probe.remove();
+          return colour;
+        }
+      )
+    );
+    const head = document.querySelector(`#decision-${card} header`);
+    const worded = [...(head?.querySelectorAll<HTMLElement>("*") ?? [])].filter(
+      (el) =>
+        [...el.childNodes].some(
+          (node) => node.nodeType === Node.TEXT_NODE && node.textContent?.trim()
+        )
+    );
+    return {
+      words: worded.length,
+      brand: worded
+        .filter((el) => inks.has(getComputedStyle(el).color))
+        .map((el) => `${el.className}: ${el.textContent?.trim()}`),
+    };
+  }, id);
+
+/** Whether `a` and `b` stand on one place, within `px`. */
+const near = (a: Box | null, b: Box | null, px = 1.5) =>
+  !!a && !!b && Math.abs(a.x - b.x) <= px && Math.abs(a.y - b.y) <= px;
+
 /** Where focus stands: the card and option it is on, or Send. */
 const focusOf = (page: Page) =>
   page.evaluate(() => {
@@ -169,11 +264,33 @@ async function liveFold(page: Page, id: string, option: string) {
   await toOption(page, id, option);
   await page.evaluate((card) => {
     const seen: number[] = [];
-    const held = window as unknown as { kitScrolls?: number[] };
+    const held = window as unknown as {
+      kitFoldAt?: number;
+      kitPressAt?: number;
+      kitScrolls?: number[];
+    };
     held.kitScrolls = seen;
+    held.kitPressAt = undefined;
+    held.kitFoldAt = undefined;
+    addEventListener(
+      "click",
+      () => {
+        held.kitPressAt = performance.now();
+      },
+      { capture: true, once: true }
+    );
+    const root = document.getElementById(`decision-${card}`);
+    const turn = new MutationObserver(() => {
+      if (root?.hasAttribute("data-decided")) {
+        held.kitFoldAt = performance.now();
+        turn.disconnect();
+      }
+    });
+    if (root) {
+      turn.observe(root, { attributeFilter: ["data-decided"] });
+    }
     const step = () => {
       seen.push(scrollY);
-      const root = document.getElementById(`decision-${card}`);
       const body = root?.querySelector<HTMLElement>(".dp-body");
       if (
         root?.hasAttribute("data-decided") &&
@@ -198,11 +315,68 @@ async function liveFold(page: Page, id: string, option: string) {
     { timeout: 10_000 }
   );
   await settle(page, 200);
-  const scrolls = await page.evaluate(
-    () => (window as unknown as { kitScrolls: number[] }).kitScrolls
-  );
-  return { scrolls, focus: await focusOf(page) };
+  const { scrolls, foldAfter } = await page.evaluate(() => {
+    const held = window as unknown as {
+      kitFoldAt?: number;
+      kitPressAt?: number;
+      kitScrolls: number[];
+    };
+    return {
+      scrolls: held.kitScrolls,
+      foldAfter:
+        held.kitFoldAt !== undefined && held.kitPressAt !== undefined
+          ? Math.round(held.kitFoldAt - held.kitPressAt)
+          : null,
+    };
+  });
+  return { scrolls, foldAfter, focus: await focusOf(page) };
 }
+
+/** Card `id` on the frame after a key: its runs, its height, the scroll and where the fold's landing would put it, and focus. */
+const nextFrameOf = (page: Page, id: string) =>
+  page.evaluate(
+    (card) =>
+      new Promise<{
+        body: number;
+        card: number;
+        decided: boolean;
+        edge: string;
+        runs: string[];
+        scroll: number;
+        target: number;
+      }>((done) =>
+        requestAnimationFrame(() => {
+          const root = document.getElementById(`decision-${card}`);
+          const scroller = document.scrollingElement as Element;
+          const chip = root?.querySelector<HTMLElement>("[data-cawco-picked]");
+          const top =
+            (root?.getBoundingClientRect().top ?? 0) +
+            scroller.scrollTop -
+            (root
+              ? Number.parseFloat(getComputedStyle(root).scrollMarginTop) || 0
+              : 0);
+          const most = scroller.scrollHeight - scroller.clientHeight;
+          done({
+            runs: (root?.getAnimations({ subtree: true }) ?? []).map(
+              (run) =>
+                `${run.constructor.name} ${(run as CSSTransition).transitionProperty ?? run.id}`
+            ),
+            card:
+              Math.round((root?.getBoundingClientRect().height ?? 0) * 10) / 10,
+            body:
+              Math.round(
+                (root?.querySelector(".dp-body")?.getBoundingClientRect()
+                  .height ?? 0) * 10
+              ) / 10,
+            decided: !!root?.hasAttribute("data-decided"),
+            edge: chip ? getComputedStyle(chip).borderTopColor : "",
+            scroll: Math.round(scroller.scrollTop * 10) / 10,
+            target: Math.round(Math.min(Math.max(0, top), most) * 10) / 10,
+          });
+        })
+      ),
+    id
+  );
 
 /** Whether a run of scroll readings only ever moves one way. */
 const oneWay = (scrolls: number[]) => {
@@ -234,25 +408,13 @@ async function leg(
   await settle(page, 600);
   const clock = await Clock.on(page);
   const control = await tokenMs(page, "--dur-control");
-  const hold = await tokenMs(page, "--dur-hold");
-  const exit = await tokenMs(page, "--dur-exit");
-  const reveal = await tokenMs(page, "--dur-reveal");
+  const panel = await tokenMs(page, "--dur-panel");
   const edge = await tokenColour(page, "--brand-solid");
   const keycap = await tokenColour(page, "--chip-chosen-bg");
 
   // 1. Chosen where it stands.
   await toOption(page, "path", "direct");
   const open = await foldOf(page, "path");
-  await page.evaluate(() => {
-    const held = window as unknown as { kitPressAt?: number };
-    addEventListener(
-      "click",
-      () => {
-        held.kitPressAt = performance.now();
-      },
-      { capture: true, once: true }
-    );
-  });
   const chosenRuns = await clock.catchRuns(
     () => page.locator('#decision-path [data-option="direct"]').click(),
     '#decision-path [data-option="direct"]'
@@ -263,91 +425,121 @@ async function leg(
     chip[String(at)] = await chipOf(page, "path", "direct");
   }
   const chosenClock = clock.oneClock();
-  // The chosen state stands at its end, and the clock goes on holding: the
-  // fold starts --dur-hold after the press, inside the next catch.
+  // The chosen colour stands held at its end: the card waits on it.
   const before = await foldOf(page, "path");
-  const sincePress = await page.evaluate(
-    () =>
-      performance.now() -
-      ((window as unknown as { kitPressAt?: number }).kitPressAt ?? 0)
-  );
-  const foldRuns = await clock
-    .catchRuns(
-      () =>
-        page.waitForFunction(
-          () =>
-            document
-              .getElementById("decision-path")
-              ?.hasAttribute("data-decided"),
-          undefined,
-          { timeout: 5000 }
-        ),
-      "#decision-path",
-      5000
-    )
-    .catch((error: Error) => {
-      throw new Error(
-        `${error.message}; the catch began ${Math.round(sincePress)}ms after the press, the card then ${JSON.stringify(before)}; the page said: ${errors.join(" | ") || "nothing"}`
-      );
-    });
   kit.check(
-    `${label}: the pressed option turns chosen where it stands, its edge, fill and keycap over --dur-control on ease-out, landing on brand-solid and chip-chosen-bg`,
+    `${label}: the pressed option turns chosen where it stands, its edge, fill and keycap over --dur-control on ease-out, landing on brand-solid and chip-chosen-bg, the card open until that colour lands`,
     chosenRuns.length > 0 &&
       chosenRuns.every(
-        (run) =>
-          Math.abs(run.end - control) < 1 &&
-          run.easing === "cubic-bezier(0.23, 1, 0.32, 1)"
+        (run) => Math.abs(run.end - control) < 1 && run.easing === OUT
       ) &&
       chosenClock.faults.length === 0 &&
       chip["1"]?.edge === edge &&
       chip["1"]?.keycap === keycap &&
-      chip["0"]?.keycap !== keycap,
+      chip["0"]?.keycap !== keycap &&
+      !before.decided,
     JSON.stringify({
       runs: chosenRuns.map((r) => `${r.type} ${r.name} ${r.end}ms ${r.easing}`),
       chip,
       edge,
       keycap,
       chosenClock,
+      decidedWhileHeld: before.decided,
     })
   );
 
-  // 2 and 3. The hold, then the fold on one clock with the scroll riding it.
-  const held = await page.evaluate(
-    () =>
-      performance.now() -
-      ((window as unknown as { kitPressAt?: number }).kitPressAt ?? 0)
-  );
+  // 2. The colour lands (its own runs played to their end), and the fold
+  // starts on one clock with the chosen option's flight and the scroll.
+  const sourceBefore = (await flightOf(page, "path", "direct")).source;
+  const inkHeld = await brandWordsIn(page, "path");
+  const foldRuns = await clock
+    .catchRuns(
+      async () => {
+        await clock.playOn(chosenRuns);
+        await page.waitForFunction(
+          () =>
+            document
+              .getElementById("decision-path")
+              ?.hasAttribute("data-decided"),
+          undefined,
+          { timeout: 5000 }
+        );
+      },
+      "#decision-path",
+      5000
+    )
+    .catch((error: Error) => {
+      throw new Error(
+        `${error.message}; the card then ${JSON.stringify(before)}; the page said: ${errors.join(" | ") || "nothing"}`
+      );
+    });
   const fold: Record<string, Awaited<ReturnType<typeof foldOf>>> = {};
+  const flight: Record<string, Awaited<ReturnType<typeof flightOf>>> = {};
   for (const at of [0, 0.5, 1]) {
     await clock.seek(at);
     fold[String(at)] = await foldOf(page, "path");
+    flight[String(at)] = await flightOf(page, "path", "direct");
   }
-  const foldClock = clock.oneClock();
+  const inkDecided = await brandWordsIn(page, "path");
   const half = fold["0.5"];
   const ridden =
     half && fold["0"] && fold["1"] && half.progress !== null
       ? fold["0"].scroll + (fold["1"].scroll - fold["0"].scroll) * half.progress
       : Number.NaN;
+  // One clock: the body's fold, the card's padding and the option's flight
+  // (the Web Animations), one start, length and curve; the state line's
+  // fade (a CSS transition, --dur-exit) leaves its slot from that start.
+  const webs = foldRuns.filter((run) => run.type === "WebAnimation");
+  const [lead] = webs;
+  const stateFade = foldRuns.find(
+    (run) => run.type === "CSSTransition" && run.name === "opacity"
+  );
+  const exit = await tokenMs(page, "--dur-exit");
+  const what = (r: (typeof foldRuns)[number]) =>
+    `${r.type} ${r.name || "(web)"} start ${r.start} ${r.end}ms ${r.easing}`;
   kit.check(
-    `${label}: the chosen option holds for --dur-hold (${hold}ms) before the card folds`,
-    held >= hold - 50 && held <= hold + 400,
-    `${Math.round(held)}ms from the press to the fold`
+    `${label}: the fold is one clock, --dur-panel (${panel}ms) on the drawer curve: the body's height, margin and opacity, the card's padding and the chosen option's flight start together, and the state line leaves its slot from that start over --dur-exit`,
+    webs.length === 3 &&
+      !!lead &&
+      webs.every(
+        (run) =>
+          run.start !== null &&
+          lead.start !== null &&
+          Math.abs(run.start - lead.start) <= 0.5 &&
+          Math.abs(run.end - panel) < 1 &&
+          run.easing === DRAWER
+      ) &&
+      webs.some((run) => run.name === "share-flight") &&
+      !!stateFade &&
+      stateFade.start !== null &&
+      lead.start !== null &&
+      Math.abs(stateFade.start - lead.start) <= 0.5 &&
+      Math.abs(stateFade.end - exit) < 1,
+    JSON.stringify({ runs: foldRuns.map(what) })
   );
   kit.check(
-    `${label}: the fold is one clock, --dur-exit on ease-out: the body's height, margin and opacity and the card's padding start together`,
-    foldClock.faults.length === 0 &&
-      foldClock.runs >= 2 &&
-      foldRuns.every(
-        (run) =>
-          Math.abs(run.end - exit) < 1 &&
-          run.easing === "cubic-bezier(0.23, 1, 0.32, 1)"
-      ),
-    JSON.stringify({
-      runs: foldRuns.map(
-        (r) => `${r.type} ${r.name} start ${r.start} ${r.end}ms ${r.easing}`
-      ),
-      foldClock,
-    })
+    `${label}: the chosen option's keycap and label fly from its chip to the head on that clock (L485): at 0 on the chip, at ½ on its way, at 1 at rest in the head; its chip's run hidden while it flies`,
+    near(flight["0"]?.copy ?? null, sourceBefore) &&
+      !!flight["0.5"]?.copy &&
+      !!flight["0"]?.copy &&
+      !!flight["1"]?.copy &&
+      Math.abs(flight["0.5"].copy.y - flight["0"].copy.y) > 1 &&
+      Math.abs(flight["0.5"].copy.y - flight["1"].copy.y) > 0.5 &&
+      flight["1"].transform === "none" &&
+      !!flight["1"].header &&
+      flight["1"].copy.y >= flight["1"].header.y - 0.5 &&
+      flight["1"].copy.y + flight["1"].copy.h <=
+        flight["1"].header.y + flight["1"].header.h + 0.5 &&
+      !!flight["0"]?.sourceHidden &&
+      !!flight["0.5"]?.sourceHidden,
+    JSON.stringify({ sourceBefore, flight })
+  );
+  kit.check(
+    `${label}: no words in the card's head are in a brand ink, held chosen and decided (L580)`,
+    inkHeld.brand.length === 0 &&
+      inkDecided.brand.length === 0 &&
+      inkDecided.words > 0,
+    JSON.stringify({ inkHeld, inkDecided })
   );
   kit.check(
     `${label}: the card folds from its open height to its decided line (0, ½, 1)`,
@@ -395,19 +587,24 @@ async function leg(
   await settle(page, 400);
   const backFocus = await focusOf(page);
   kit.check(
-    `${label}: Change at ½ turns the fold back from the height drawn there, open over --dur-reveal, focus on the pick`,
+    `${label}: Change at ½ turns the fold back from the height drawn there, open over --dur-panel on the drawer curve, the head's chip closing back into its option on that clock, focus on the pick`,
     !!back["0"] &&
       !!back["1"] &&
       Math.abs(back["0"].card - drawn.card) < 1.5 &&
       Math.abs(back["1"].body - open.body) < 1.5 &&
-      backRuns.some((run) => Math.abs(run.end - reveal) < 1) &&
+      backRuns.filter(
+        (run) =>
+          run.type === "WebAnimation" &&
+          Math.abs(run.end - panel) < 1 &&
+          run.easing === DRAWER
+      ).length >= 3 &&
       backFocus.card === "path" &&
       backFocus.option === "direct",
     JSON.stringify({
       drawn: drawn.body,
       open: open.body,
       back,
-      runs: backRuns.map((r) => `${r.type} ${r.name} ${r.end}ms`),
+      runs: backRuns.map((r) => `${r.type} ${r.name} ${r.end}ms ${r.easing}`),
       backFocus,
     })
   );
@@ -415,8 +612,11 @@ async function leg(
   // 5. Played live: the scroll only moves on its way, focus goes on.
   const look = await liveFold(page, "look", "card");
   kit.check(
-    `${label}: a pick played live moves the scroll one way only, and focus lands on the next open card's first option`,
-    oneWay(look.scrolls) &&
+    `${label}: a pick played live folds its card once its chosen colour has landed (--dur-control, ${control}ms, after the press, and no longer), moves the scroll one way only, and focus lands on the next open card's first option`,
+    look.foldAfter !== null &&
+      look.foldAfter >= control - 5 &&
+      look.foldAfter <= control + 60 &&
+      oneWay(look.scrolls) &&
       look.focus.card === "radius" &&
       look.focus.option === "soft",
     JSON.stringify(look)
@@ -436,8 +636,68 @@ async function leg(
     JSON.stringify(last)
   );
   await page.close();
+}
 
-  // 6. Reduced motion.
+/** 5. From the keyboard: everything in one frame. */
+async function keyLeg(
+  kit: Kit,
+  url: string,
+  view: (typeof LEGS)[number]["view"],
+  theme: (typeof LEGS)[number]["theme"],
+  label: string
+) {
+  const keys = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
+  await keys.goto(url, { waitUntil: "load" });
+  await keys.waitForFunction(
+    () => document.querySelectorAll(".diagram svg").length >= 2,
+    undefined,
+    { timeout: 30_000 }
+  );
+  await settle(keys, 600);
+  const edge = await tokenColour(keys, "--brand-solid");
+  await toOption(keys, "path", "direct");
+  const keyOpen = await foldOf(keys, "path");
+  await keys.locator('#decision-path [data-option="direct"]').focus();
+  await keys.keyboard.press("Enter");
+  const keyPick = await nextFrameOf(keys, "path");
+  const keyFocus = await focusOf(keys);
+  kit.check(
+    `${label}: Enter on an option lands it on the next frame: no animation under the card, its chosen colour, the card at its decided line, the scroll at the fold's landing, focus on the next open card's first option`,
+    keyPick.runs.length === 0 &&
+      keyPick.decided &&
+      keyPick.edge === edge &&
+      keyPick.body < 0.5 &&
+      keyPick.card < 120 &&
+      Math.abs(keyPick.scroll - keyPick.target) <= 1 &&
+      Math.abs(keyPick.scroll - keyOpen.scroll) > 20 &&
+      keyFocus.card === "look" &&
+      keyFocus.option === "card",
+    JSON.stringify({ before: keyOpen.scroll, keyPick, keyFocus })
+  );
+  await keys.locator("#decision-path .dp-change").focus();
+  await keys.keyboard.press("Enter");
+  const keyBack = await nextFrameOf(keys, "path");
+  const keyBackFocus = await focusOf(keys);
+  kit.check(
+    `${label}: Enter on Change opens the card on the next frame, no animation under it, focus on the pick`,
+    keyBack.runs.length === 0 &&
+      !keyBack.decided &&
+      Math.abs(keyBack.body - keyOpen.body) < 1.5 &&
+      keyBackFocus.card === "path" &&
+      keyBackFocus.option === "direct",
+    JSON.stringify({ open: keyOpen.body, keyBack, keyBackFocus })
+  );
+  await keys.close();
+}
+
+/** 6. Reduced motion. */
+async function stillLeg(
+  kit: Kit,
+  url: string,
+  view: (typeof LEGS)[number]["view"],
+  theme: (typeof LEGS)[number]["theme"],
+  label: string
+) {
   const still = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
   await still.emulateMedia({ reducedMotion: "reduce" });
   await still.goto(url, { waitUntil: "load" });
@@ -449,18 +709,25 @@ async function leg(
   await settle(still, 600);
   const stillClock = await Clock.on(still);
   await toOption(still, "path", "direct");
-  await still.locator('#decision-path [data-option="direct"]').click();
+  // The chosen colour still fades (a colour change, L517): caught as the
+  // press starts it, then let play on, so the fold it waits for is caught.
+  const stillChosen = await stillClock.catchRuns(
+    () => still.locator('#decision-path [data-option="direct"]').click(),
+    '#decision-path [data-option="direct"]'
+  );
   const stillOpen = await foldOf(still, "path");
   const stillRuns = await stillClock.catchRuns(
-    () =>
-      still.waitForFunction(
+    async () => {
+      await stillClock.playOn(stillChosen);
+      await still.waitForFunction(
         () =>
           document
             .getElementById("decision-path")
             ?.hasAttribute("data-decided"),
         undefined,
         { timeout: 5000 }
-      ),
+      );
+    },
     "#decision-path",
     5000
   );
@@ -517,7 +784,10 @@ const spec: Spec = {
     const stage = await startDecisionStage(new Map([[NAME, PROGRAM]]), {});
     try {
       for (const { view, theme, label } of LEGS) {
-        await leg(kit, stage.pageUrl(NAME, theme), view, theme, label);
+        const url = stage.pageUrl(NAME, theme);
+        await leg(kit, url, view, theme, label);
+        await keyLeg(kit, url, view, theme, label);
+        await stillLeg(kit, url, view, theme, label);
       }
     } finally {
       await stage.stop();

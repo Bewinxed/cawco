@@ -6,7 +6,9 @@
   pin's selector holds on to across revisions. Its note goes to the hub a
   moment after typing stops; the state line follows the stored picks.
 
-  A picked card folds to one line, "Decided: <option>" with Change, and its
+  A picked card folds to one line: its question, then the chosen option
+  itself (its keycap and label in the chosen look, L905; "Decided: <option>"
+  is its accessible name), then Change, and its
   body (why, media, options, note) folds shut but stays mounted, so the
   overlay's marks, the media's frames and a Dials panel stay. The fold is
   this view's own: the picks the hub keeps, and artifact_read, are the same.
@@ -16,17 +18,25 @@
   here (core `pickOf`, as the graph and the count read it): the card stands
   open, its kept options counted, never folded to an empty "Decided:".
 
-  The pick the person makes moves (DESIGN.md, The Stay In Context Rule):
-  the option shows chosen where it stands for `--dur-hold` ("How long a done
-  state stays up"), then the body folds shut over `--dur-exit` on
-  `--ease-out` (a disclosure folding shut, `--dur-reveal`'s role) while the
-  card's padding and the page's scroll ride the same clock, the scroll
-  bringing the next open card in under the decided line; focus goes to that
-  card's first option once the fold lands, or to Send when none is left.
-  Change opens it again over `--dur-reveal`, from the height it is drawn at.
-  A pick that arrives (a reload, another device, a revision) stands at
-  once. With reduced motion the body fades and its height lands at the end,
-  where the scroll is placed (motion/fold, motion/scroll-on).
+  The pick a pointer makes moves (DESIGN.md, The Stay In Context Rule): the
+  option turns chosen where it stands, and once its colour has landed (its
+  own colour runs, `--dur-control`, L732) the body folds shut over
+  `--dur-panel` on the drawer curve (L479: "container size changes"; L856, a
+  queued message folding to its tag) while, on that clock, the chosen
+  option's keycap and label fly from its chip to the head (L485, The One
+  Object Rule, motion/share: the source hidden while its copy flies), the
+  state line leaves its slot over `--dur-exit`, and the card's padding and
+  the page's scroll ride the fold, the scroll bringing the next open card
+  in under the decided line; focus goes to that card's first option once
+  the fold lands, or to Send when none is left. Change opens it again the
+  same way, from the height it is drawn at, each head chip closing back
+  into its option. A pick, Change or Done made from the keyboard lands in
+  one frame, with no colour fade, fold, flight or scroll travel (L690: "A
+  choice made from the keyboard … is instant, as every keyboard action
+  is"). A pick that arrives (a reload, another device, a revision) stands
+  at once. With reduced motion the body fades and its height lands at the
+  end, where the scroll is placed, and the head chip fades in where it
+  stands (L517: "flights do not fly").
 -->
 <script lang="ts">
   import { pickOf } from "@cawco/core/decisions";
@@ -35,6 +45,7 @@
   import { fold, landFold } from "../../motion/fold.svelte";
   import { morph } from "../../motion/morph.svelte";
   import { scrollOnClock } from "../../motion/scroll-on";
+  import { closeInto, departBox, land } from "../../motion/share.svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { bridge, picks } from "./page.svelte.js";
 
@@ -87,46 +98,94 @@
 
   /** Change reopened it, or the person is picking several: it stays open until a pick or Done. */
   let open = $state(false);
-  /** The person's pick, shown chosen where it stands before the card folds. */
+  /** A pointer's pick, its chosen colour landing before the card folds. */
   let holding = $state(false);
+  /**
+   * A keyboard's pick, Change or Done under way: everything it changes
+   * lands in one frame, the chosen colour with no fade (`data-instant`,
+   * page.css) and the card's height with no tween.
+   */
+  let instant = $state(false);
   const decided = $derived(pick.picked && !open && !holding);
-  const decidedLine = $derived(
+  /** The chosen options as the head shows them: each with its keycap, its place in the card. */
+  const chips = $derived(
     options
+      .map((option, at) => ({ ...option, keycap: at + 1 }))
       .filter((option) => chosen.includes(option.id))
-      .map((option) => option.label)
-      .join(", ")
   );
+  const decidedLine = $derived(chips.map((chip) => chip.label).join(", "));
+  /** The head's chips stand on while they close back into their options (Change). */
+  let returning = $state(false);
+  /** The key an option's keycap and label travel under, between its chip and the head. */
+  const shareKey = (option: string) => `decision:${id}:${option}`;
+  /** An option's keycap and label run in the grid: what flies to the head and back. */
+  const runOf = (option: string) =>
+    body?.querySelector<HTMLElement>(
+      `[data-option="${CSS.escape(option)}"] > b`
+    ) ?? null;
 
   let card = $state<HTMLElement>();
   let body = $state<HTMLDivElement>();
 
-  /** The person moved this card (a pick, Done, Change): its next turn moves. */
-  let acted = false;
-  let held: ReturnType<typeof setTimeout> | undefined;
-  $effect(() => () => clearTimeout(held));
+  /**
+   * How the person moved this card (a pick, Done, Change), for its next
+   * turn: a pointer's moves, a key's lands at once; none, it stands.
+   */
+  let acted: "key" | "pointer" | null = null;
+  /** The pick whose chosen colour is landing: a newer one, or none, lets it go. */
+  let colourPick = 0;
 
-  // A pick the person makes is shown chosen for --dur-hold, then folds a
-  // one-pick card; a several-pick card stays open while they pick in it,
-  // until Done. Only their own press on an option moves it: the overlay's
-  // other writes to the page's doc (a pin re-anchored as the card opens)
-  // leave it as it is. The press is armed before its pick is written: the
-  // overlay writes on the click at the window, and a browser's own click
-  // runs the microtasks after each listener, so the pick is drawn before
-  // any listener on the card hears the click.
+  /**
+   * Lets the card fold once the chosen option's colour has landed: the
+   * chip's own colour runs (page.css, --dur-control on ease-out), read from
+   * the engine, so a slowed or held clock holds the fold with them.
+   */
+  function foldOnceChosen() {
+    colourPick += 1;
+    const mine = colourPick;
+    const chip = body?.querySelector<HTMLElement>(
+      `[data-option="${CSS.escape(chosen[0] ?? "")}"]`
+    );
+    const runs = chip?.getAnimations({ subtree: true }) ?? [];
+    Promise.allSettled(runs.map((run) => run.finished)).then(() => {
+      if (mine === colourPick) {
+        holding = false;
+      }
+    });
+  }
+
+  /** Lets go of `instant` once the frame it landed in has been drawn. */
+  const afterInstant = () =>
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        instant = false;
+      })
+    );
+
+  // A pick the person makes folds a one-pick card; a several-pick card
+  // stays open while they pick in it, until Done. Only their own press on
+  // an option moves it: the overlay's other writes to the page's doc (a pin
+  // re-anchored as the card opens) leave it as it is. The press is armed
+  // before its pick is written: the overlay writes on the click at the
+  // window, and a browser's own click runs the microtasks after each
+  // listener, so the pick is drawn before any listener on the card hears
+  // the click.
   let picking = false;
+  let keyed = false;
   let seen = "";
   $effect(() => {
     const now = chosen.join("\n");
     if (picking && now !== seen) {
       picking = false;
-      clearTimeout(held);
-      holding = chosen.length > 0;
-      if (holding) {
+      colourPick += 1;
+      holding = false;
+      if (chosen.length > 0) {
         open = false;
-        acted = true;
-        held = setTimeout(() => {
-          holding = false;
-        }, dur("--dur-hold"));
+        acted = keyed ? "key" : "pointer";
+        if (!keyed) {
+          holding = true;
+          foldOnceChosen();
+        }
       }
     }
     seen = now;
@@ -139,14 +198,15 @@
     const onOption = (event: Event) =>
       !!(event.target as Element | null)?.closest("[data-option]");
     const arm = (event: Event) => {
+      const key = event instanceof KeyboardEvent;
       if (
         !onOption(event) ||
-        (event instanceof KeyboardEvent &&
-          event.key !== "Enter" &&
-          event.key !== " ")
+        (key && event.key !== "Enter" && event.key !== " ")
       ) {
         return;
       }
+      keyed = key;
+      instant = key;
       if (multiple) {
         open = true;
       } else {
@@ -159,7 +219,11 @@
       if (onOption(event)) {
         setTimeout(() => {
           picking = false;
+          keyed = false;
         });
+        if (instant) {
+          afterInstant();
+        }
       }
     };
     group.addEventListener("pointerdown", arm, true);
@@ -248,37 +312,66 @@
       padFrom = getComputedStyle(card).paddingBlockStart;
       headFrom = headOf(card);
       hadFocus = card.contains(document.activeElement);
+      // A pointer's pick: each chosen option's run departs from its chip,
+      // hidden while its copy flies to the head (motion/share).
+      if (decided && acted === "pointer") {
+        for (const chip of chips) {
+          const run = runOf(chip.id);
+          if (run) {
+            departBox(shareKey(chip.id), run, false);
+          }
+        }
+      }
     }
   });
+
+  /**
+   * Change: each head chip closes back into its option's run on the fold's
+   * clock (motion/share `closeInto`), the run hidden until it lands, so the
+   * screen shows one of each; then the head lets them go.
+   */
+  function closeBack(box: HTMLElement, ms: number) {
+    if (!returning) {
+      return;
+    }
+    const flights = [
+      ...box.querySelectorAll<HTMLElement>("header [data-pick]"),
+    ].flatMap((chip) => {
+      const target = runOf(chip.dataset.pick ?? "");
+      const flight = target ? closeInto(chip, target, ms) : undefined;
+      if (!(target && flight)) {
+        return [];
+      }
+      target.style.visibility = "hidden";
+      const show = () => {
+        target.style.visibility = "";
+      };
+      return [flight.finished.then(show, show)];
+    });
+    Promise.all(flights).then(() => {
+      returning = false;
+    });
+  }
 
   let first = true;
   let padRun: Animation | undefined;
   let stopRide: (() => void) | undefined;
-  $effect(() => {
-    const shut = decided;
-    const node = body;
-    const box = card;
-    if (!(node && box)) {
-      return;
-    }
-    const turned = shut !== wasDecided;
-    wasDecided = shut;
-    const gap = Number.parseFloat(getComputedStyle(box).rowGap) || 0;
-    if (first || !(turned && acted)) {
-      first = false;
-      landFold(node, !shut, { fade: true, gap });
-      // Focus in a card shut by a pick from elsewhere goes to its Change.
-      if (turned && shut && hadFocus) {
-        box.querySelector<HTMLElement>(".dp-change")?.focus();
-      }
-      return;
-    }
-    acted = false;
-    stopRide?.();
-    padRun?.cancel();
-    const ms = dur(shut ? "--dur-exit" : "--dur-reveal");
-    const easing = ease("--ease-out");
-    const to = shut ? landing(node, gap, box) : null;
+
+  /**
+   * A pointer's turn, moving: the body folds over --dur-panel on the drawer
+   * curve, the card's padding and the page's scroll (`to`, when it shuts)
+   * on its clock; shut, focus goes on once it lands; open, the head's chips
+   * fly home.
+   */
+  function moveTurn(
+    node: HTMLElement,
+    box: HTMLElement,
+    shut: boolean,
+    gap: number,
+    to: number | null
+  ) {
+    const ms = dur("--dur-panel");
+    const easing = ease("--ease-drawer");
     // The body starts from its drawn height less what the head grew by as
     // it turned, so the card stands at the height it was drawn at on the
     // fold's first frame (DESIGN.md, The Nothing Jumps Rule).
@@ -302,6 +395,7 @@
       );
     }
     if (!shut) {
+      closeBack(box, ms);
       return;
     }
     const landed = () => nextStop(box)?.focus({ preventScroll: true });
@@ -310,11 +404,63 @@
     } else {
       landed();
     }
+  }
+
+  $effect(() => {
+    const shut = decided;
+    const node = body;
+    const box = card;
+    if (!(node && box)) {
+      return;
+    }
+    const turned = shut !== wasDecided;
+    wasDecided = shut;
+    const gap = Number.parseFloat(getComputedStyle(box).rowGap) || 0;
+    const how = turned ? acted : null;
+    if (first || how === null) {
+      first = false;
+      landFold(node, !shut, { fade: true, gap });
+      // Focus in a card shut by a pick from elsewhere goes to its Change.
+      if (turned && shut && hadFocus) {
+        box.querySelector<HTMLElement>(".dp-change")?.focus();
+      }
+      return;
+    }
+    acted = null;
+    stopRide?.();
+    padRun?.cancel();
+    const to = shut ? landing(node, gap, box) : null;
+    if (how === "key") {
+      // The keyboard's turn lands in this frame: the body shut or open, the
+      // page where the fold would have taken it, focus on.
+      landFold(node, !shut, { fade: true, gap });
+      if (to !== null) {
+        (document.scrollingElement ?? document.documentElement).scrollTop = to;
+        nextStop(box)?.focus({ preventScroll: true });
+      }
+      return;
+    }
+    moveTurn(node, box, shut, gap, to);
   });
 
+  /**
+   * A keyboard's press on Change or Done: a click with no pointer behind it
+   * (UI Events: a click's `detail` counts the pointer's presses, 0 for a key).
+   */
+  const turnedBy = (event: MouseEvent) => {
+    const key = event.detail === 0;
+    acted = key ? "key" : "pointer";
+    instant = key;
+    if (key) {
+      afterInstant();
+    }
+  };
+
   /** Opens the card again, focus on its first picked option. */
-  async function reopen() {
-    acted = true;
+  async function reopen(event: MouseEvent) {
+    turnedBy(event);
+    // A pointer's Change: the head's chips stand on while they fly home.
+    returning = acted === "pointer" && motionOk.current;
     open = true;
     await tick();
     body
@@ -350,25 +496,56 @@
 
 <article
   bind:this={card}
-  {@attach morph()}
+  {@attach morph({ still: () => instant })}
   class="dp-card"
   data-cawco-choice={id}
   data-cawco-multiple={multiple ? "" : undefined}
   data-decided={decided ? "" : undefined}
+  data-instant={instant ? "" : undefined}
   id={`decision-${id}`}
 >
   <header>
     <h2>{question}</h2>
+    <!-- One slot: the state line leaves it as the chosen options land in it. -->
+    <span class="dp-slot">
+      <span aria-hidden={decided ? "true" : undefined} class="dp-state"
+        >{stateLine}</span
+      >
+      {#if decided || returning}
+        <!-- biome-ignore lint/a11y/useSemanticElements: a mark of the pick, named for a screen reader; no control is inside it. -->
+        <span
+          aria-label={`Decided: ${decidedLine}`}
+          class="dp-picks"
+          role="group"
+        >
+          {#each chips as chip (chip.id)}
+            <span
+              {@attach land(() => (decided ? shareKey(chip.id) : undefined), {
+                mode: "grow",
+                anchor: "b",
+                now: true,
+              })}
+              aria-hidden="true"
+              class="dp-pick"
+              data-pick={chip.id}
+              ><b
+                ><span class="dp-kc">{chip.keycap}</span><span
+                  >{chip.label}</span
+                ></b
+              ></span
+            >
+          {/each}
+        </span>
+      {/if}
+    </span>
     {#if decided}
-      <span class="dp-state on">Decided: {decidedLine}</span>
       <button class="dp-change" onclick={reopen} type="button">Change</button>
     {:else}
-      <span class={["dp-state", picked > 0 && "on"]}>{stateLine}</span>
       {#if pick.picked && !holding}
         <button
           class="dp-change"
-          onclick={() => {
-            acted = true;
+          onclick={(event) => {
+            turnedBy(event);
             open = false;
           }}
           type="button">Done</button

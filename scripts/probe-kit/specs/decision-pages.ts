@@ -31,7 +31,8 @@
  * (f) An HTML decision page (a pick the person operates: a range) still
  *     works: its option's pick and its range's value are kept, and the
  *     Decisions tab reads its card from the built page.
- * (g) A pick folds its card to one line ("Decided: Astro", Change), its body
+ * (g) A pick folds its card to one line (the chosen option's chip, named
+ *     "Decided: Astro", and Change), its body
  *     and the turned-down option folded away, focus on the next open card's
  *     first option, or Send with none left; in light and dark,
  *     Change reopens it with focus on the pick and the hub's picks the same
@@ -214,7 +215,15 @@ const foldOf = (frame: Frame, id: string) =>
     const holder = active?.closest<HTMLElement>("[data-cawco-choice]");
     return {
       decided: !!root?.hasAttribute("data-decided"),
-      line: root?.querySelector("header .dp-state")?.textContent?.trim() ?? "",
+      // A decided card's line is its chosen options, named "Decided: …" for
+      // a screen reader; an open card's is its state line.
+      line: root?.hasAttribute("data-decided")
+        ? (root.querySelector("header .dp-picks")?.getAttribute("aria-label") ??
+          "")
+        : (root?.querySelector("header .dp-state")?.textContent?.trim() ?? ""),
+      chips: [
+        ...(root?.querySelectorAll<HTMLElement>("header [data-pick]") ?? []),
+      ].map((one) => one.dataset.pick ?? ""),
       button: root?.querySelector(".dp-change")?.textContent?.trim() ?? "",
       body: seen(root?.querySelector(".dp-opts")),
       options: [...(root?.querySelectorAll<HTMLElement>("[data-option]") ?? [])]
@@ -770,9 +779,10 @@ const marks = async (on: On, frame: Frame) => {
     10_000
   ).catch(() => null);
   kit.check(
-    "(g) a pick folds its card to one line, Decided: Astro and Change, its body and the turned-down option hidden, focus on the next open card's first option or Send",
+    "(g) a pick folds its card to one line, the chosen option's chip (named Decided: Astro) and Change, its body and the turned-down option hidden, focus on the next open card's first option or Send",
     !!folded &&
       folded.line === "Decided: Astro" &&
+      JSON.stringify(folded.chips) === '["astro"]' &&
       folded.button === "Change" &&
       folded.options.length === 0 &&
       folded.focus.onward,
@@ -1549,7 +1559,15 @@ const reachLeg = async (on: On) => {
           client: card.clientWidth,
           right: cardBox?.right ?? 0,
         },
-        line: card?.querySelector("header .dp-state")?.textContent ?? "",
+        line:
+          card?.querySelector("header .dp-picks")?.getAttribute("aria-label") ??
+          "",
+        chipsRight: Math.max(
+          0,
+          ...[...(card?.querySelectorAll("header [data-pick]") ?? [])].map(
+            (one) => one.getBoundingClientRect().right
+          )
+        ),
       };
     });
   const wide = await reach();
@@ -1567,10 +1585,12 @@ const reachLeg = async (on: On) => {
   await settle(phone, 400);
   const narrow = await reach();
   kit.check(
-    "(g) 320: a fold of three long unbroken labels stays inside its card, Change on it",
+    "(g) 320: a fold of three long unbroken labels stays inside its card, its chosen chips and Change on it",
     !!narrow.card &&
       !!narrow.box &&
       narrow.line.includes("Theweeklynewsletter") &&
+      narrow.chipsRight > 0 &&
+      narrow.chipsRight <= narrow.card.right &&
       narrow.card.scroll <= narrow.card.client &&
       narrow.box.right <= narrow.card.right,
     JSON.stringify(narrow)

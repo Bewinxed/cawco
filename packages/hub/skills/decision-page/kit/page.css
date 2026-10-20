@@ -142,20 +142,58 @@ a {
   font-size: var(--text-title);
   flex: 1 1 240px;
 }
+/* The head's one slot: the state line, and once the card is decided the
+   chosen options standing in it. The state line leaves its slot over
+   --dur-exit as they land (an opacity fade, so it runs with reduced motion
+   too); its words are never coral (DESIGN.md L580: coral marks the chosen
+   option, not words about it). */
+.dp-slot {
+  display: grid;
+  align-items: center;
+  min-inline-size: 0;
+}
+.dp-slot > * {
+  grid-area: 1 / 1;
+}
 .dp-state {
   font-size: var(--text-meta);
   color: var(--ink-muted);
   min-inline-size: 0;
   overflow-wrap: anywhere;
+  transition: opacity var(--dur-exit) var(--ease-out);
 }
-.dp-state.on {
-  color: var(--brand-ink);
-}
-/* A picked card folds to its one line: the question, "Decided: <option>"
-   and Change. Its body stays mounted and folds shut (the host's
-   Decision.svelte, motion/fold); open, it lays out on the card's own gap. */
+/* A picked card folds to its one line: the question, the chosen options and
+   Change. Its body stays mounted and folds shut (the host's Decision.svelte,
+   motion/fold); open, it lays out on the card's own gap. */
 .dp-card[data-decided] {
   padding-block: var(--space-3);
+}
+.dp-card[data-decided] .dp-state {
+  opacity: 0;
+}
+/* The chosen options on the decided line: each the option chip's keycap and
+   label in its chosen look (DESIGN.md L905: "the coral edge (`brand-solid`),
+   a recessed fill and a keycap filled vermillion"), a mark of the pick and
+   no control; several wrap. */
+.dp-picks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  min-inline-size: 0;
+}
+.dp-pick {
+  display: inline-flex;
+  align-items: center;
+  max-inline-size: 100%;
+  min-block-size: 30px;
+  padding-inline: var(--space-3);
+  border: 1px solid var(--brand-solid);
+  border-radius: var(--radius-sm);
+  background: var(--surface-recess);
+  color: var(--ink-strong);
+  font-size: var(--text-label);
+  line-height: var(--leading-label);
+  overflow-wrap: anywhere;
 }
 .dp-body {
   display: flex;
@@ -291,22 +329,24 @@ a {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
-.dp-opt b {
+/* An option's keycap and label run, in its chip and on the decided line. */
+:is(.dp-opt, .dp-pick) b {
   display: flex;
   align-items: center;
   gap: var(--space-2);
+  min-inline-size: 0;
   font-weight: var(--weight-strong);
 }
 /* The Mark Line Rule (DESIGN.md; app.css .mark-line): the label's words
    are trimmed to their x-height band and given the trimmed room back as
    padding, so centring the line puts their x-height's middle on the
    keycap's. The keycap is a box, centred as one. */
-.dp-opt b > :not(.dp-kc) {
+:is(.dp-opt, .dp-pick) b > :not(.dp-kc) {
   text-box: trim-both ex alphabetic;
   padding-block: calc((1lh - 1ex) / 2);
 }
 /* Each option's keycap: its digit in the card (page.js numbers them). */
-.dp-opt .dp-kc {
+:is(.dp-opt, .dp-pick) .dp-kc {
   display: inline-grid;
   place-items: center;
   flex: none;
@@ -364,7 +404,7 @@ a {
   border-color: var(--brand-solid);
   background: var(--surface-recess);
 }
-.dp-opt[data-cawco-picked] .dp-kc {
+:is(.dp-opt[data-cawco-picked], .dp-pick) .dp-kc {
   background: var(--chip-chosen-bg);
   color: var(--chip-chosen-ink);
 }
@@ -373,9 +413,25 @@ a {
 .dp-opt:active {
   background: var(--surface-fill);
 }
+/* A pick made from the keyboard lands in one frame, its chosen colour with
+   it (DESIGN.md L690: "A choice made from the keyboard … is instant, as
+   every keyboard action is"); the host's Decision.svelte sets
+   `data-instant` for that frame. */
+.dp-card[data-instant] :is(.dp-opt, .dp-kc, .dp-tag, .dp-change, .dp-state) {
+  transition: none;
+}
 @media (prefers-reduced-motion: reduce) {
   .dp-bar i {
     transition: none;
+  }
+  /* Flights do not fly (DESIGN.md L517): the chosen option fades in on the
+     decided line where it stands. */
+  .dp-card:not([data-instant]) .dp-pick {
+    transition: opacity var(--dur-fade) var(--ease-out);
+
+    @starting-style {
+      opacity: 0;
+    }
   }
 }
 
