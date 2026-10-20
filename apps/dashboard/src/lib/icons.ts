@@ -89,7 +89,7 @@ export {
 /** The failure mark: something went wrong (failed, errored, broke). */
 export { default as IconError } from "~icons/solar/danger-circle-bold";
 export { default as IconAlert } from "~icons/solar/danger-circle-bold-duotone";
-export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bold-duotone";
+export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bold";
 // A new thread: a conversation of two. Its full-weight marks are as large as
 // a menu's other glyphs' (an add mark inside a tile read smaller beside them).
 export { default as IconChatAdd } from "~icons/solar/dialog-2-bold-duotone";

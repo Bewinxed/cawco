@@ -34,7 +34,7 @@ private final class TaskDrag: NSObject {
 final class TaskCardView: UIControl {
     private(set) var task: TaskSummary?
     private let idLabel = KitLabel(TaskCardView.mono, ink: Palette.inkSubtle)
-    private let problemGlyph = GlyphView(.warning, size: Size.iconSm, tint: Palette.inkMuted)
+    private let problemGlyph = GlyphView(.warning, size: Size.iconMd, tint: Palette.inkMuted)
     private let failed = KitBadge("Failed", variant: .fail, glyph: .failed)
     private let cantStartWaits = KitBadge("Can't start", variant: .attn, glyph: .blocked)
     private let cantStartBroke = KitBadge("Can't start", variant: .fail, glyph: .failed)

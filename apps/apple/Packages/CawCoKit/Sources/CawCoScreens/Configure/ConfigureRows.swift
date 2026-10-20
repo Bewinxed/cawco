@@ -134,7 +134,7 @@ final class RolloutChip: UIButton {
                     self?.openFault?(FaultGroup([fault]))
                 }
             case "applied":
-                return UIAction(title: machine.name, subtitle: subtitle, image: Glyph.check.image.resized(to: 16), attributes: .disabled) { _ in }
+                return UIAction(title: machine.name, subtitle: subtitle, image: Glyph.passed.image.resized(to: 16), attributes: .disabled) { _ in }
             default:
                 return UIAction(title: "Sync \(machine.name)", subtitle: subtitle, image: Glyph.refresh.image.resized(to: 16),
                                 attributes: online ? [] : .disabled) { [weak self] _ in self?.sync(machine) }

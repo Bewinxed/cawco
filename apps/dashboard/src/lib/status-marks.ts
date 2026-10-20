@@ -3,7 +3,8 @@
  * The failure mark and the blocked mark), each the solid bold cut. Failed,
  * needs you, passed, working, sleeping, pause, blocked, unreachable, update
  * waits, update available, a run with nothing to say (minus), a machine
- * away, and the joined row's locked and heads-up marks.
+ * away, the warning mark (a heads-up where the failure mark would stand),
+ * and the joined row's locked and heads-up marks.
  *
  * A status mark is never under 16px (DESIGN.md, Sizes): a Solar mark is 1.5
  * of 24 units, so at 12px it is 0.75px on a 1× screen and vanishes; 16px is
@@ -18,6 +19,7 @@ export const STATUS_MARKS: ReadonlySet<string> = new Set([
   "clock-circle-bold",
   "cloud-cross-bold",
   "danger-circle-bold",
+  "danger-triangle-bold",
   "download-bold",
   "forbidden-circle-bold",
   "hand-shake-bold",

@@ -260,9 +260,11 @@
     display: inline-flex;
     color: var(--ink-muted);
   }
+  /* The warning mark, a status mark: 16px (DESIGN.md, Sizes), inside the
+     head's badge-high line. */
   .problem :global(svg) {
-    inline-size: var(--icon-sm);
-    block-size: var(--icon-sm);
+    inline-size: var(--icon-md);
+    block-size: var(--icon-md);
   }
   .title {
     display: -webkit-box;

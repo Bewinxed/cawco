@@ -49,7 +49,7 @@ import type { AgentRow, Envelope } from "../../../packages/core/src/index";
 import { WIRE_PROTOCOL } from "../../../packages/core/src/stream";
 import { until } from "../../scratch-fleet";
 import { colours, contrast, dx, dy, px, type Raster, type Rgb } from "../ink";
-import { type Kit, open, ROOT, type Spec, settle } from "../kit";
+import { type Kit, open, ROOT, type Spec, settle, VIEWS } from "../kit";
 
 const APP = join(ROOT, "apps/dashboard");
 const CARD = "src/lib/cawco/tasks/TaskCard.stories.ts";
@@ -720,6 +720,7 @@ const sweep = async (
 /** The bench's surfaces, each held to 16×16 and its words' x-height. */
 const SURFACES = [
   "task-card",
+  "task-card-problem",
   "task-table",
   "view-pipeline",
   "view-made",
@@ -735,6 +736,14 @@ const SURFACES = [
 ] as const;
 
 /** The surfaces drawing more than one mark: run-status's five states, section-row's failure and spinner. */
+/**
+ * The row a surface's wordless mark is centred in, where it is not the
+ * surface's component: the task card's warning mark, on its head's line.
+ */
+const ROWS: Partial<Record<(typeof SURFACES)[number], string>> = {
+  "task-card-problem": "[data-slot='head']",
+};
+
 const EXPECT: Partial<Record<(typeof SURFACES)[number], number>> = {
   "run-status": 5,
   "section-row": 2,
@@ -814,18 +823,119 @@ const checkRailRows = async (kit: Kit, page: Page, theme: string) => {
   );
 };
 
+/** What check 9 reads of the rollout chip and its Sync button. */
+interface SyncRead {
+  /** The button and its machine's line: their heights, and the button's overhang past the line. */
+  button: number;
+  /** The chip: its height, and how far its content overflows it. */
+  chip: { h: number; over: number };
+  /** The chip's row (SectionRow's head): its height. */
+  chipRow: number;
+  /** Sync's rest glyph and its pending spinner, as laid out. */
+  glyph: { h: number; w: number };
+  /** The button's label: its height (one line is one label line). */
+  label: number;
+  line: number;
+  /** The glyph's middle less the label's x-height middle. */
+  off: number;
+  overhang: number;
+  spinner: { h: number; w: number };
+}
+
+/**
+ * 9: the Sync button's glyph and pending spinner are 16×16, the glyph's
+ * middle on its label's x-height, the button inside its machine's line, and
+ * the chip one line in its row, at `view`'s width in `theme`.
+ */
+const checkSync = async (
+  kit: Kit,
+  theme: "light" | "dark",
+  view: "desk" | "phone"
+) => {
+  const bench = await kit.bench();
+  const page = await kit.page(view, { theme });
+  await open(page, `${bench}/motion/status-marks`, "[data-bench]");
+  await settle(page, 400);
+  await page.locator("[data-surface='rollout'] .rollout-chip").click();
+  await page.waitForSelector('[data-slot="popover-content"] .sync');
+  await settle(page, 400);
+  const read: SyncRead = await page.evaluate(() => {
+    const size = (el: Element | null) => {
+      const style = el ? getComputedStyle(el) : null;
+      return {
+        h: style ? Number.parseFloat(style.height) : Number.NaN,
+        w: style ? Number.parseFloat(style.width) : Number.NaN,
+      };
+    };
+    const chip = document.querySelector(
+      "[data-surface='rollout'] .rollout-chip"
+    ) as HTMLElement;
+    const chipRow = chip.closest("[data-slot='controls']")?.parentElement;
+    const sync = document.querySelector(
+      '[data-slot="popover-content"] .sync'
+    ) as HTMLElement;
+    const line = sync.closest("[data-slot='machine'] > .line") as HTMLElement;
+    const glyph = sync.querySelector("[data-active='true'] svg");
+    const spinner = sync.querySelector("svg.animate-spin");
+    const label = sync.querySelector(".kit-text") as HTMLElement;
+    const ex = document.createElement("span");
+    ex.style.cssText =
+      "display:inline-block;inline-size:0;block-size:1ex;padding:0;margin:0;border:0";
+    label.prepend(ex);
+    const e = ex.getBoundingClientRect();
+    ex.remove();
+    const g = glyph?.getBoundingClientRect();
+    const b = sync.getBoundingClientRect();
+    const l = line.getBoundingClientRect();
+    return {
+      chip: {
+        h: chip.getBoundingClientRect().height,
+        over: chip.scrollWidth - chip.clientWidth,
+      },
+      chipRow: chipRow?.getBoundingClientRect().height ?? Number.NaN,
+      glyph: size(glyph),
+      spinner: size(spinner),
+      off: g ? (g.top + g.bottom) / 2 - (e.top + e.bottom) / 2 : Number.NaN,
+      button: b.height,
+      line: l.height,
+      overhang: Math.max(l.top - b.top, b.bottom - l.bottom, 0),
+      label: label.getBoundingClientRect().height,
+    };
+  });
+  const at2 = (n: number) => n.toFixed(2);
+  kit.check(
+    `9 (${theme}, ${VIEWS[view].width}) Sync: glyph ${at2(read.glyph.w)}×${at2(read.glyph.h)}, spinner ${at2(read.spinner.w)}×${at2(read.spinner.h)}, the glyph's middle ${read.off >= 0 ? "+" : ""}${at2(read.off)} off its label's x-height; button ${at2(read.button)} in its ${at2(read.line)} line (${at2(read.overhang)} past it), its label one ${at2(read.label)} line`,
+    [read.glyph.w, read.glyph.h, read.spinner.w, read.spinner.h].every(
+      (n) => Math.abs(n - 16) < 0.01
+    ) &&
+      Math.abs(read.off) <= 0.5 &&
+      read.overhang < 0.01 &&
+      Math.abs(read.button - 26) < 0.01 &&
+      read.label < 20
+  );
+  kit.check(
+    `9 (${theme}, ${VIEWS[view].width}) the rollout chip: ${at2(read.chip.h)} tall, ${at2(read.chip.over)} of it past its box, in its ${at2(read.chipRow)} row (one line, nothing past it)`,
+    Math.abs(read.chip.h - 26) < 0.01 && read.chip.over <= 0
+  );
+  await page.close();
+};
+
 /** 7: every swept surface on the bench, in `theme`. */
 const checkBench = async (kit: Kit, theme: "light" | "dark") => {
   const bench = await kit.bench();
   const page = await kit.page("desk", { theme });
   await open(page, `${bench}/motion/status-marks`, "[data-bench]");
   await settle(page, 400);
-  const marks = await sweep(page, "[data-surface]");
   for (const surface of SURFACES) {
     checkSwept(
       kit,
       `(${theme}) ${surface}`,
-      marks.filter((m) => m.surface === surface),
+      await sweep(
+        page,
+        `[data-surface='${surface}']`,
+        null,
+        ROWS[surface] ?? null
+      ),
       EXPECT[surface] ?? 1
     );
   }
@@ -1046,8 +1156,9 @@ const checkAccounts = async (kit: Kit, theme: "light" | "dark") => {
   checkSwept(
     kit,
     `(${theme}) account-list-row`,
+    // Ada's failure mark, and the key account's warning mark: signed in nowhere.
     await sweep(page, ".arow", "account-list-row", ".arow"),
-    1
+    2
   );
 
   // Ada's machines: obelisk's row says Someone else.
@@ -1115,6 +1226,9 @@ const spec: Spec = {
   run: async (kit: Kit) => {
     for (const theme of SCHEMES) {
       await checkBench(kit, theme);
+      for (const view of ["desk", "phone"] as const) {
+        await checkSync(kit, theme, view);
+      }
       await checkAccounts(kit, theme);
     }
     const stage = await startStage();

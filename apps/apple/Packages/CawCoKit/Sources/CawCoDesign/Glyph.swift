@@ -25,7 +25,12 @@ public enum Glyph: String, CaseIterable, Sendable {
     case attention = "hand-shake-bold"
     /// Caw's Needs you section head, beside the Notices bell: not a status.
     case attentionSection = "hand-shake-bold-duotone"
-    case warning = "danger-triangle-bold-duotone"
+    /// The warning mark: a heads-up where the failure mark would stand (a
+    /// problem to look at, an outcome nobody knows): a status mark.
+    case warning = "danger-triangle-bold"
+    /// Bypass permissions' mode glyph and the incompatible hub's empty state:
+    /// not a status.
+    case danger = "danger-triangle-bold-duotone"
     case structure = "structure-bold-duotone"
     case structureOn = "structure-bold"
     case chevronRight = "alt-arrow-right-linear"
@@ -207,7 +212,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     public var isStatusMark: Bool {
         switch self {
         case .attention, .away, .blocked, .failed, .minusCircle, .passed, .pause, .sleeping, .unreachable,
-             .updateAvailable, .updateWaits, .working:
+             .updateAvailable, .updateWaits, .warning, .working:
             true
         default:
             false

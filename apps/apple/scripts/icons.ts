@@ -164,6 +164,7 @@ const SOLAR_ICONS = [
   "bug-bold-duotone", // IconBug
   // Forget's tray (StopTray.svelte `Away`): a session whose machine is away, a status mark.
   "cloud-cross-bold",
+  "danger-triangle-bold",
   // The preview's pins (preview/PreviewPane.svelte, PinCard.svelte, PinList.svelte).
   "chat-round-dots-bold-duotone", // IconComment
   "pen-bold-duotone", // IconPen: the preview's Draw

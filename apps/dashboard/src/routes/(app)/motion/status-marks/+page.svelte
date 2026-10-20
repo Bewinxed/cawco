@@ -67,6 +67,16 @@
     ...changes,
   });
   const youTask = task({});
+  /** A task with a problem to look at: the warning mark in its head. */
+  const problemTask = task({
+    id: "tsk-13",
+    number: 13,
+    title: "Publish the docs",
+    stage: "todo",
+    kind: "todo",
+    needsYou: false,
+    problem: "Its stage's hook did not run.",
+  });
   /** The made view lists a task by what it made. */
   const madeTask = task({ outputs: ["notes/release.md"] });
   const stages: Stage[] = [
@@ -90,7 +100,7 @@
   } as unknown as Account;
 
   // A machine that refused the skill: the chip's failure mark, and the
-  // machine's own in its list.
+  // machine's own in its list; one that has said nothing: its Sync button.
   const machines = [
     {
       machineId: "m-1",
@@ -105,6 +115,13 @@
       os: "darwin-arm64",
       status: "online",
       fleet: { skills: { review: { state: "applied" } } },
+    },
+    {
+      machineId: "m-3",
+      hostname: "lattice",
+      os: "linux-x64",
+      status: "online",
+      fleet: { skills: {} },
     },
   ] as unknown as Machine[];
 
@@ -163,6 +180,15 @@
       kindOf={() => "you"}
       movable={false}
       task={youTask}
+    />
+  </section>
+
+  <section class="surface" data-surface="task-card-problem">
+    <TaskCard
+      href="?task=tsk-13"
+      kindOf={() => "todo"}
+      movable={false}
+      task={problemTask}
     />
   </section>
 
@@ -232,8 +258,22 @@
     </ul>
   </section>
 
-  <section class="surface" data-surface="rollout">
-    <RolloutChip kind="skills" {machines} name="review" what="review" />
+  <!-- The chip as the skills page stands it: in its row's controls, beside
+       the row's switch. -->
+  <section class="surface wide" data-surface="rollout">
+    <ul class="rows">
+      <SectionRow
+        enabled
+        icon={IconSkill}
+        meta="A skill · 2 files"
+        name="review"
+        ontoggle={() => undefined}
+      >
+        {#snippet rollout()}
+          <RolloutChip kind="skills" {machines} name="review" what="review" />
+        {/snippet}
+      </SectionRow>
+    </ul>
   </section>
 
   <section class="surface" data-surface="update-card">

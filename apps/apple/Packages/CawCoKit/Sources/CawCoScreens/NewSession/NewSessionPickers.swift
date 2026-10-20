@@ -436,7 +436,7 @@ struct PermissionLook {
         case "default": return PermissionLook(name: name, desc: desc, glyph: .rules, hue: Palette.hueGreen500)
         case "plan": return PermissionLook(name: name, desc: desc, glyph: .notes, hue: Palette.hueCyan500)
         case "acceptEdits": return PermissionLook(name: name, desc: desc, glyph: .toolWrite, hue: Palette.hueBlue500)
-        case "bypassPermissions": return PermissionLook(name: name, desc: desc, glyph: .warning, hue: Palette.hueOrange500)
+        case "bypassPermissions": return PermissionLook(name: name, desc: desc, glyph: .danger, hue: Palette.hueOrange500)
         // The consequential grant's shield in its warning ink: a wider grant than Bypass.
         case "fullSend": return PermissionLook(name: name, desc: desc, glyph: .shield, hue: Palette.statusAttnInk)
         default: return PermissionLook(name: name, desc: desc, glyph: .rules, hue: Palette.inkSubtle)

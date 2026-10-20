@@ -343,18 +343,15 @@
   .mark.fail {
     color: var(--status-fail-ink);
   }
-  /* A machine's status mark and a refusal's failure mark are 16px, inside
-     the 44px line and the meta line's 16.2px box; Sync's glyph is its
-     12px button glyph. */
+  /* A machine's status mark, a refusal's failure mark, and Sync's glyph and
+     its pending spinner are 16px (DESIGN.md, Sizes: 16px in controls;
+     Spinner), inside the 44px line, the meta line's 16.2px box and the
+     26px button. */
   .mark :global(svg),
-  .note :global(svg) {
+  .note :global(svg),
+  .sync :global(svg) {
     inline-size: var(--icon-md);
     block-size: var(--icon-md);
-    flex: none;
-  }
-  .sync :global(svg) {
-    width: 12px;
-    height: 12px;
     flex: none;
   }
   .sync {
@@ -362,7 +359,7 @@
     align-items: center;
     gap: 4px;
     --btn-gap: 4px;
-    --btn-icon: 12px;
+    --btn-icon: var(--icon-md);
     height: 26px;
     padding: 0 8px;
     border-radius: var(--radius-sm);

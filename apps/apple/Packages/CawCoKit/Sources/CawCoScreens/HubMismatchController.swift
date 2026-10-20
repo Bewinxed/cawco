@@ -32,7 +32,7 @@ final class HubMismatchController: UIViewController {
         actions.spacing = Space.space2
         actions.alignment = .center
         let state = KitEmptyState(
-            icon: .warning,
+            icon: .danger,
             title: HubConnection.Incompatible.title,
             line: incompatible.message(host: hub.address?.host() ?? "your hub"),
             action: actions
