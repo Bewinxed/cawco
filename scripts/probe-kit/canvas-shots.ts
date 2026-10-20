@@ -194,13 +194,11 @@ function gridOf(args: { selector: string; grid: number }) {
     }
     const start = Number.parseFloat(style.getPropertyValue("--fade-start"));
     const end = Number.parseFloat(style.getPropertyValue("--fade-end"));
-    if (
-      !(
-        at.classList.contains("kit-edge-fade") &&
-        Number.isFinite(start) &&
-        Number.isFinite(end)
-      )
-    ) {
+    if (!(
+      at.classList.contains("kit-edge-fade") &&
+      Number.isFinite(start) &&
+      Number.isFinite(end)
+    )) {
       return true;
     }
     const box = at.getBoundingClientRect();
