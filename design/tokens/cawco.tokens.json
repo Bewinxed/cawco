@@ -4249,10 +4249,10 @@
     "c-new-session-pop-w": {
       "$type": "dimension",
       "$value": {
-        "value": 568,
+        "value": 569,
         "unit": "px"
       },
-      "$description": "The New Session form as a popover at its trigger (the session strip's \"+\", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it (\"Opus 5.5 claude-opus-5-5\"), which wraps at 564px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own."
+      "$description": "The New Session form as a popover at its trigger (the session strip's \"+\", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it (\"Opus 5.5 claude-opus-5-5\"), with the chosen one's run settings at its end, which wrap under it at 568px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own."
     },
     "c-panel-w": {
       "$type": "dimension",

@@ -42,7 +42,7 @@ import { MACHINE, type Reply, until } from "../../../scratch-fleet";
 import { Clock } from "../../anim";
 import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
 
-const PLUS = '[data-slot="strip-new"] .tnew';
+const PLUS = '[data-slot="strip-new"] [data-tnew]';
 const POPOVER = "[data-ns-popover]";
 const SHEET = "[data-session-card][data-vaul-drawer]";
 const DIALOG = "[data-session-card]:not([data-vaul-drawer])";
@@ -915,7 +915,7 @@ async function modelessSession(fleet: KitFleet, name: string): Promise<string> {
 /** Each of the reader's turns on the page, with the controls its actions offer. */
 const turnActions = (page: Page) =>
   page.evaluate(() =>
-    [...document.querySelectorAll(".turn.you")].map(
+    [...document.querySelectorAll('[data-slot="turn"][data-you]')].map(
       (one) =>
         `${(one.querySelector('[data-slot="words"]')?.textContent ?? "").trim().slice(0, 24)}: ${[
           ...one.querySelectorAll("[data-slot='actions'] button"),
@@ -957,11 +957,7 @@ async function forkHereLeg(kit: Kit, base: string, source: string) {
     await page.close();
     return;
   }
-  await fork
-    .locator(
-      "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' turn ')][1]"
-    )
-    .hover();
+  await fork.locator('xpath=ancestor::*[@data-slot="turn"][1]').hover();
   await fork.click();
   const shown = await page
     .waitForSelector(POPOVER, { state: "visible", timeout: 15_000 })
@@ -1055,9 +1051,9 @@ async function reviveLeg(
     ({ pick, sent }) => {
       const pop = document.querySelector(pick);
       // The message's own row: its words, and what it says under them.
-      const row = [...document.querySelectorAll(".turn.you")].find((one) =>
-        (one.textContent ?? "").includes(sent)
-      );
+      const row = [
+        ...document.querySelectorAll('[data-slot="turn"][data-you]'),
+      ].find((one) => (one.textContent ?? "").includes(sent));
       const button = [
         ...(row?.querySelectorAll<HTMLElement>("[data-slot='action']") ?? []),
       ].find((one) =>
