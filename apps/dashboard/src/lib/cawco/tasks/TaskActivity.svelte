@@ -313,9 +313,7 @@
         {:else}
           <li data-slot="fold">
             <Collapsible.Root>
-              <Collapsible.Trigger
-                class="group press-tint mark-line flex w-full cursor-pointer items-center gap-space-1 rounded-sm border-none border-current bg-transparent px-0 py-space-1 type-label text-start text-ink-muted"
-              >
+              <Collapsible.Trigger class="group w-full" look="fold">
                 <IconChevronRight
                   data-chev
                   aria-hidden="true"

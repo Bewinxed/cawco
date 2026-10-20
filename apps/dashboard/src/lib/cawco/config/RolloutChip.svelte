@@ -117,9 +117,9 @@
     aria-label="{what}: on {applied} of {machines.length} machines{failed > 0
       ? `, ${failed} refused`
       : ''}"
-    class="mark-line inline-flex h-c-btn-h-xs flex-none items-center gap-space-1 rounded-sm bg-surface-recess px-space-2 type-meta whitespace-nowrap text-ink-muted transition-[background-color,color] dur-panel ease-out not-data-fail:hover:bg-surface-hover data-fail:bg-status-fail-bg data-fail:text-status-fail-ink motion-safe:active:scale-(--press-scale)"
+    class="flex-none"
     data-fail={failed > 0 ? "" : undefined}
-    motion="settle"
+    look="state"
   >
     <span
       data-slot="glyph"

@@ -1620,7 +1620,7 @@
           <!-- No tabindex of its own: the box is `display: contents` and
                never takes focus, and one made it a focusable child of the
                tablist that is not a tab (axe, aria-required-children). -->
-          <ContextMenu.Trigger class="contents" tabindex={null}>
+          <ContextMenu.Trigger box="none" tabindex={null}>
             <TabItem
               aria-expanded={menuFor === tab.id}
               aria-haspopup="menu"

@@ -271,7 +271,7 @@
 
 <div data-slot="peek" class="flex min-h-0 flex-1 flex-col overflow-hidden">
   <ContextMenu.Root>
-    <ContextMenu.Trigger class="contents">
+    <ContextMenu.Trigger box="none">
       <header class="flex items-start gap-2 px-4 py-3">
         <div class="min-w-0 flex-1">
           <h2

@@ -177,10 +177,8 @@
   }}
 />
 
-<Collapsible.Root class="flex flex-col" onOpenChange={toggle} {open}>
-  <Collapsible.Trigger
-    class="mark-line flex items-center gap-1.5 self-start text-meta text-ink-muted transition-colors hover:text-ink-strong"
-  >
+<Collapsible.Root onOpenChange={toggle} {open}>
+  <Collapsible.Trigger look="fold">
     <IconFolder class="size-icon-md" />
     <span>Browse</span>
   </Collapsible.Trigger>

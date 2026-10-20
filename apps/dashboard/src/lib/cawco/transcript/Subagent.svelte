@@ -80,7 +80,8 @@
          On a touch screen it is the card's only control, so a real target. -->
     <Collapsible.Trigger
       data-bhead
-      class="group/bhead rail-line press-tint min-h-c-mark coarse:min-h-c-btn-h-lg w-full flex-auto min-w-0 text-size-label font-medium bg-transparent border-none border-current rounded-xs p-0 text-inherit cursor-pointer text-start transition-[color] dur-control ease-out"
+      class="group/bhead w-full flex-auto"
+      look="head"
     >
       <!-- The per-session identity sprite, on its --mark-N hue square,
            filling the glyph cell. -->

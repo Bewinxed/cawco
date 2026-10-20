@@ -100,14 +100,11 @@
     aria-label={compacting
       ? "Compacting context"
       : `Context ${shown}% used. Show the breakdown.`}
-    class={[
-      "mark-line flex h-7 shrink-0 items-center gap-1.5 rounded-sm px-1.5 text-label tabular-nums hover:bg-neutral-2 transition-[background-color,color] duration-(--dur-control) ease-out",
-      compacting && "text-ink-strong",
-      !compacting && band === "critical" && "text-error-9",
-      !compacting && band === "warn" && "text-warning-9",
-      !(compacting || band === "critical" || band === "warn") &&
-        "text-ink-muted",
-    ]}
+    class="shrink-0"
+    data-compacting={compacting || undefined}
+    data-critical={band === "critical" || undefined}
+    data-warn={band === "warn" || undefined}
+    look="meter"
     title={meterTitle}
   >
     {#if compacting}

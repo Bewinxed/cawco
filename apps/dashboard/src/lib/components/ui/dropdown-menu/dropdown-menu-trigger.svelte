@@ -4,13 +4,27 @@
 
   /**
    * Its callers' looks. `face`: its words' face. `title`: a pane head's
-   * title, the name of what is on show (the artifact switcher): the label
-   * role and the strong ink, as the head's own title (SideSurface `.title`;
-   * DESIGN.md, The Role, Not Size Rule).
+   * title, the name of what is on show (the artifact switcher), its glyph
+   * and chevron on its words' line: the label role and the strong ink, as
+   * the head's own title (SideSurface `.title`; DESIGN.md, The Role, Not
+   * Size Rule, The Mark Line Rule). `count`: a glyph and the count it
+   * holds on one line (a pane head's More), its look its head's control's
+   * (app.css `side-head`). `look`: the trigger by its role.
+   * `attach`: the composer's Attach (DESIGN.md, Composer: "34px Attach
+   * (raised, control edge) … at the concentric 5px radius. They scale to
+   * 0.97 on press"); while the composer's controls are inert under an ask
+   * (`group/ctrls`), its edge is the outline button's and it lifts.
    */
   export const dropdownMenuTriggerVariants = tv({
     variants: {
-      face: { title: "type-label text-ink-strong" },
+      face: {
+        title: "mark-line min-w-0 type-label text-ink-strong",
+        count: "mark-line",
+      },
+      look: {
+        attach:
+          "grid size-c-composer-field cursor-pointer place-items-center rounded-xs border border-border-control hit-edge-hair bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:pressed:scale-(--press-scale) group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs",
+      },
     },
   });
 
@@ -35,6 +49,7 @@
     variant,
     size,
     face,
+    look,
     onpointerdown,
     ...restProps
   }: DropdownMenuPrimitive.TriggerProps &
@@ -89,7 +104,7 @@
   class={cn(
     "touch-hit",
     (variant || size) && buttonVariants({ variant, size }),
-    dropdownMenuTriggerVariants({ face }),
+    dropdownMenuTriggerVariants({ face, look }),
     className
   )}
   data-pressed={pressed || undefined}

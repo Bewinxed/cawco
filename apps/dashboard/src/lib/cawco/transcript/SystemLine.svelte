@@ -190,8 +190,7 @@
 
 <!-- Every line here is a rail row (app.css `rail-row`): its mark in the
      glyph cell, its words at the text column, a disclosure chevron after the
-     words, and whatever opens under it hung at the text column. A woke-Caw
-     note stands in the same place with no rail (`rail-place`). -->
+     words, and whatever opens under it hung at the text column. -->
 {#if harness}
   <!-- Harness plumbing, folded onto the rail: the summary and how it went on
        one quiet line, the report itself behind it. -->
@@ -205,9 +204,7 @@
         <!-- The harness fold: a notification the operator never wrote, on
              the same rail as every other note: the summary, how it went,
              and the report one click behind them. -->
-        <Collapsible.Trigger
-          class="inline-flex bg-transparent border-none border-current p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start max-w-full rail-line"
-        >
+        <Collapsible.Trigger class="max-w-full" look="note">
           <span data-slot="rail-cell" class="rail-cell"
             ><IconInfo class="size-icon-sm" /></span
           >
@@ -484,22 +481,13 @@
     </p>
   </div>
 {:else if foldCommand || foldBody}
-  <!-- An event that woke a project's Caw is code: its line stands in a 1px
-       dashed box in the control edge (design §1, SystemLine), and the box is
-       its one marker — no rail beside it, the box on the row's own edge. -->
   <div
     data-tx-rail
     data-slot="note"
-    class={[
-      "group/note text-size-label font-medium text-ink-muted",
-      wokeCaw ? "rail-place" : "rail-row",
-    ]}
-    data-code={wokeCaw || undefined}
+    class="text-size-label font-medium text-ink-muted rail-row"
   >
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
-      <Collapsible.Trigger
-        class="inline-flex bg-transparent border-none border-current p-0 text-ink-muted text-size-label font-medium cursor-pointer text-start group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line"
-      >
+      <Collapsible.Trigger look="note">
         <span data-slot="rail-cell" class="rail-cell"
           ><IconInfo class="size-icon-sm" /></span
         >
@@ -549,15 +537,9 @@
   <div
     data-tx-rail
     data-slot="note"
-    class={[
-      "group/note text-size-label font-medium text-ink-muted",
-      wokeCaw ? "rail-place" : "rail-row",
-    ]}
-    data-code={wokeCaw || undefined}
+    class="text-size-label font-medium text-ink-muted rail-row"
   >
-    <span
-      class="inline-flex max-w-full text-size-label font-medium text-ink-muted group-data-code/note:px-space-2 group-data-code/note:border group-data-code/note:border-dashed group-data-code/note:border-border-control group-data-code/note:rounded-xs rail-line"
-    >
+    <span class="inline-flex max-w-full rail-line">
       <span data-slot="rail-cell" class="rail-cell"
         ><IconInfo class="size-icon-sm" /></span
       >

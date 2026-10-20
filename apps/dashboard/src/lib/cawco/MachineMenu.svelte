@@ -127,7 +127,7 @@
 </script>
 
 <ContextMenu.Root>
-  <ContextMenu.Trigger class="contents">
+  <ContextMenu.Trigger box="none">
     {@render children()}
   </ContextMenu.Trigger>
 

@@ -24,9 +24,7 @@
     </p>
   {/each}
   <Collapsible.Root bind:open>
-    <Collapsible.Trigger
-      class="mark-line press-tint inline-flex items-center gap-space-1 justify-self-box-start min-h-space-7 p-0 border-none border-current rounded-xs bg-transparent type-label text-ink-muted cursor-pointer hover:text-ink-strong"
-    >
+    <Collapsible.Trigger class="justify-self-box-start" look="fold">
       <span>Details</span>
       <span
         data-slot="chev"

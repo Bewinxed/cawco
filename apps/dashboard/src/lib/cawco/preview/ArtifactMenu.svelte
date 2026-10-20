@@ -220,8 +220,9 @@
   <DropdownMenu.Trigger
     data-artifact-trigger
     aria-describedby={line ? lineId : undefined}
-    class="mark-line max-w-full min-w-0 type-label text-ink-strong"
+    class="max-w-full"
     data-artifact={shown.id}
+    face="title"
     title={line || undefined}
   >
     {@const Glyph = GLYPHS[shown.kind]}

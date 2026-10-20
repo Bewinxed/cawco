@@ -174,8 +174,9 @@
   <Popover.Trigger
     aria-label={label}
     badge
-    class="pressable touch-hit h-icon-md min-w-icon-md flex-none cursor-pointer overflow-visible px-space-1 text-ink-row type-meta leading-none num"
+    class="flex-none"
     data-sessions-chip
+    look="count"
     onkeydown={() => {
       byPointer = false;
     }}

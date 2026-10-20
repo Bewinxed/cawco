@@ -427,7 +427,8 @@
     >
       <Collapsible.Trigger
         data-bhead
-        class="group/bhead rail-line press-tint min-h-c-mark coarse:min-h-c-row-h flex-auto min-w-0 text-size-label font-medium bg-transparent border-none border-current rounded-xs p-0 text-inherit cursor-pointer text-start transition-[color] dur-control ease-out"
+        class="group/bhead flex-auto"
+        look="head"
       >
         <!-- The mark the delegate tray's chip flies out of, the first time
              this card leaves the view (tray.svelte.ts): the delegate's
