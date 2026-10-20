@@ -5767,10 +5767,10 @@
     "c-work-tabs-roomy-w": {
       "$type": "dimension",
       "$value": {
-        "value": 260,
+        "value": 280,
         "unit": "px"
       },
-      "$description": "The rail width at and above which the Working/Finished header needs no squeeze."
+      "$description": "The rail width at and above which the Working/Finished header needs no squeeze: measured, the narrowest rail at which both labels stand whole beside three-digit counts at rest."
     },
     "c-work-tabs-squeeze": {
       "$type": "dimension",
