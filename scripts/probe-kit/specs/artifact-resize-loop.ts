@@ -760,6 +760,127 @@ function sheetReader() {
 /** A software keyboard's height on a phone, as the web view resizes for it (Brave). */
 const KEYBOARD = 336;
 
+/** The fractions of the sheet's move it is seeked to. */
+const SCRUB = [0, 0.5, 1];
+
+/** One animation on the sheet's host (its clip) or on the sheet (vaul's move), as the engine runs it. */
+interface Run {
+  duration: number | string | null;
+  /** The effect's easing and its first keyframe's: a CSS transition carries its curve on one of them. */
+  easing: string | null;
+  keyframeEasing: string | null;
+  kind: string;
+  on: "clip" | "sheet";
+  start: number | null;
+}
+
+/**
+ * Moves the sheet between its stops (`focus`: the composer's field takes
+ * the focus; `grab`: a tap on the grabber), lets the move start, pauses
+ * every animation on the sheet and its host, and seeks them together to
+ * each fraction of their duration (SCRUB), reading the floor and the
+ * sheet's top at each. WebKit has no DevTools Animation domain, so the
+ * clock is seeked through the Web Animations API, in the page. Then it lets
+ * them run on to their end.
+ */
+const scrub = (page: Page, act: "focus" | "grab") =>
+  page.evaluate(
+    async ({ does, fractions, field }) => {
+      const host = document.querySelector('[data-slot="preview-sheet-host"]');
+      const sheet = document.querySelector("[data-preview-sheet]");
+      if (does === "focus") {
+        document.querySelector<HTMLElement>(field)?.focus();
+      } else {
+        document.querySelector<HTMLElement>("[data-preview-grab]")?.click();
+      }
+      await new Promise<void>((done) =>
+        requestAnimationFrame(() => requestAnimationFrame(() => done()))
+      );
+      const runs = document.getAnimations().filter((each) => {
+        const target = (each.effect as KeyframeEffect | null)?.target;
+        return (
+          (target === host || target === sheet) && each.playState === "running"
+        );
+      });
+      for (const each of runs) {
+        each.pause();
+      }
+      const described = runs.map((each) => {
+        const effect = each.effect as KeyframeEffect | null;
+        const timing = effect?.getTiming();
+        return {
+          on: (effect?.target === host ? "clip" : "sheet") as "clip" | "sheet",
+          kind: each.constructor.name,
+          start: each.startTime === null ? null : Number(each.startTime),
+          duration:
+            timing?.duration === undefined ? null : String(timing.duration),
+          easing: timing?.easing ?? null,
+          keyframeEasing: effect?.getKeyframes()[0]?.easing ?? null,
+        };
+      });
+      const at: { fraction: number; floor: number; top: number }[] = [];
+      for (const fraction of fractions) {
+        for (const each of runs) {
+          const duration = Number(each.effect?.getTiming().duration ?? 0);
+          each.currentTime = duration * fraction;
+        }
+        const now = window.__sheetNow?.();
+        at.push({
+          fraction,
+          floor: now?.floor ?? Number.NaN,
+          top: now?.top ?? Number.NaN,
+        });
+      }
+      for (const each of runs) {
+        each.play();
+      }
+      return { runs: described, at };
+    },
+    { does: act, fractions: SCRUB, field: COMPOSER }
+  );
+
+/**
+ * The scrub's verdict: the sheet's move and the clip run on one clock (the
+ * same start, duration and easing, one each), the floor and the sheet's top
+ * at the stops' places at 0 and 1, and at 0.5 both the same share of their
+ * way along.
+ */
+const oneClock = (
+  scrubbed: Awaited<ReturnType<typeof scrub>>,
+  from: { floor: number; top: number },
+  to: { floor: number; top: number }
+) => {
+  const clip = scrubbed.runs.filter((each: Run) => each.on === "clip");
+  const sheet = scrubbed.runs.filter((each: Run) => each.on === "sheet");
+  const [a] = clip;
+  const [b] = sheet;
+  const clocked =
+    clip.length === 1 &&
+    sheet.length === 1 &&
+    !!a &&
+    !!b &&
+    a.start !== null &&
+    a.start === b.start &&
+    a.duration === b.duration &&
+    a.easing === b.easing &&
+    a.keyframeEasing === b.keyframeEasing;
+  const [start, middle, end] = scrubbed.at;
+  const near = (x: number, y: number) => Math.abs(x - y) <= 1;
+  const placed =
+    !!start &&
+    !!end &&
+    near(start.floor, from.floor) &&
+    near(start.top, from.top) &&
+    near(end.floor, to.floor) &&
+    near(end.top, to.top);
+  const share = (at: number, a0: number, a1: number) => (at - a0) / (a1 - a0);
+  const floorShare = middle ? share(middle.floor, from.floor, to.floor) : -1;
+  const topShare = middle ? share(middle.top, from.top, to.top) : -1;
+  const together =
+    floorShare > 0 && floorShare < 1 && Math.abs(floorShare - topShare) < 0.03;
+  return { ok: clocked && placed && together, floorShare, topShare };
+};
+
 /**
  * The preview sheet on a phone, in WebKit (the owner's iPhone Safari's
  * engine) at `view`, beside its session (`/session/<id>`), whose preview
@@ -772,6 +893,8 @@ const KEYBOARD = 336;
  *   stop: its floor the composer's drawn top, and the pill in view.
  * - Over a keyboard that resizes the web view (823d7d363), no frame drops
  *   the sheet below where it stood, and it ends standing on the composer.
+ * - Both moves (the focus down, a tap on the grabber back up) run the
+ *   host's clip on vaul's own clock, seeked to 0, 0.5 and 1 ({@link scrub}).
  * - None of it posts an error to the hub or logs a ResizeObserver loop.
  *
  * No element pick on the web writes into the composer (comments.ts 6:
@@ -808,10 +931,23 @@ export const runPhoneSheet = async (
       !opened.pillInView,
     JSON.stringify(opened)
   );
-  await page.locator(COMPOSER).first().focus();
+  const down = await scrub(page, "focus");
   await settle(page, 700);
   await frames(page);
   const focused = await now();
+  const downClock =
+    opened && focused
+      ? oneClock(
+          down,
+          { floor: opened.floor, top: opened.top ?? Number.NaN },
+          { floor: focused.floor, top: focused.top ?? Number.NaN }
+        )
+      : null;
+  kit.check(
+    `${name}: stepping down onto the composer, the clip rises with the sheet on vaul's clock (one start, duration and easing; seeked to 0, 0.5 and 1, the floor and the top the same share along)`,
+    !!downClock?.ok,
+    JSON.stringify({ ...down, ...downClock })
+  );
   kit.check(
     `${name}: the composer taking the focus sends the sheet to its lower stop, its floor the composer's drawn top, the pill in view`,
     !!focused &&
@@ -866,11 +1002,34 @@ export const runPhoneSheet = async (
   await page.setViewportSize({ width, height });
   await settle(page, 400);
   await frames(page);
+  // The grabber tapped on the composer: the sheet climbs back over it, the
+  // clip falling with it.
+  const lowered = await now();
+  const up = await scrub(page, "grab");
+  await settle(page, 700);
+  await frames(page);
+  const raised = await now();
+  const upClock =
+    lowered && raised
+      ? oneClock(
+          up,
+          { floor: lowered.floor, top: lowered.top ?? Number.NaN },
+          { floor: raised.floor, top: raised.top ?? Number.NaN }
+        )
+      : null;
+  kit.check(
+    `${name}: the grabber tapped, the sheet climbs back to its open stop over the composer, the clip falling with it on vaul's clock`,
+    !!raised &&
+      raised.stop === "open" &&
+      Math.abs(raised.floor - raised.screenFloor) <= 1 &&
+      !!upClock?.ok,
+    JSON.stringify({ lowered, raised, ...up, ...upClock })
+  );
   await checkQuiet(
     kit,
     page,
     said,
-    `${name}: opening the sheet, focusing the composer, a keyboard up and down`,
+    `${name}: opening the sheet, focusing the composer, a keyboard up and down, the grabber tapped`,
     start,
     await mark(page, said)
   );

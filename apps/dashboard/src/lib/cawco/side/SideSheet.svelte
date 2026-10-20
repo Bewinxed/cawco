@@ -172,6 +172,90 @@
       typeof snap === "number" ? hostHeight * snap : Number.parseFloat(snap);
     return Math.max(0, hostHeight - visible) + (onComposer ? composerRoom : 0);
   });
+  /** The host's clip at `room`: the composer's room off its foot, or none. */
+  const insetOf = (room: number) => `inset(0px 0px ${room}px 0px)`;
+  /** The clip's own run, while the sheet moves between a floor and the other. */
+  let clipRun: Animation | null = null;
+  /** Whether the floor stood on the composer the last time it was drawn. */
+  let wasOnComposer: boolean | null = null;
+  /**
+   * The floor moves with the sheet: stepping down onto the composer, the
+   * clip rises from the screen's foot to the composer's top as vaul slides
+   * the sheet; climbing back, it falls again. vaul moves the sheet by a CSS
+   * transition on its transform, so the clip is run on that transition's
+   * own clock: its duration, its easing and its start, read from it. A
+   * sheet that does not move (an ask folding it, a re-place under a new
+   * geometry, which sets no transition) changes its clip at once, and one
+   * whose move is cut short (the keyboard's re-place) takes its clip's end.
+   */
+  $effect(() => {
+    const now = onComposer;
+    const node = host;
+    if (!node) {
+      return;
+    }
+    const before = wasOnComposer;
+    wasOnComposer = now;
+    if (before === null || before === now) {
+      return;
+    }
+    const room = untrack(() => composerRoom);
+    // A clip caught mid-run turns back from where it stands.
+    const from = clipRun
+      ? getComputedStyle(node).clipPath
+      : insetOf(before ? room : 0);
+    clipRun?.cancel();
+    clipRun = null;
+    tick().then(() => {
+      const sheet = drawer;
+      const moving = sheet
+        ?.getAnimations()
+        .find(
+          (each): each is CSSTransition =>
+            each instanceof CSSTransition &&
+            each.transitionProperty === "transform" &&
+            each.playState === "running"
+        );
+      if (!(moving && node.isConnected && wasOnComposer === now)) {
+        return;
+      }
+      const timing = moving.effect?.getTiming();
+      const [first] =
+        (moving.effect as KeyframeEffect | null)?.getKeyframes() ?? [];
+      const run = node.animate(
+        [
+          { clipPath: from, easing: first?.easing ?? "linear" },
+          { clipPath: insetOf(now ? room : 0) },
+        ],
+        {
+          duration: timing?.duration,
+          delay: timing?.delay,
+          easing: timing?.easing,
+        }
+      );
+      // One clock: the clip starts when the sheet's move does, once that
+      // start is known (a transition still pending has none yet).
+      if (moving.startTime === null) {
+        // A move cut short before it starts rejects `ready` (its cancel
+        // finishes the clip below).
+        moving.ready.then(
+          () => {
+            run.startTime = moving.startTime;
+          },
+          () => undefined
+        );
+      } else {
+        run.startTime = moving.startTime;
+      }
+      moving.addEventListener("cancel", () => run.finish(), { once: true });
+      run.addEventListener("finish", () => {
+        if (clipRun === run) {
+          clipRun = null;
+        }
+      });
+      clipRun = run;
+    });
+  });
   /** Where the sheet stood as the ask came up. */
   let beforeAsk: Stop | null = null;
   /** A stop the ask's coming or going moves the sheet to, once the snaps hold it. */
