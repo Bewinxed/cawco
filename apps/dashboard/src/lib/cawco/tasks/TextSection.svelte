@@ -8,6 +8,7 @@
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Markdown } from "#lib/components/ui/markdown/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { Textarea } from "#lib/components/ui/textarea/index.js";
 
   let {
@@ -45,7 +46,7 @@
 </script>
 
 <section class="flex flex-col gap-space-2">
-  <h3 class="kit-section-head min-h-c-btn-h-xs m-0 px-0">
+  <h3 class={sectionHeadVariants({ inset: "flush" })}>
     <span>{heading}</span>
     {#if draft === null}
       <Button

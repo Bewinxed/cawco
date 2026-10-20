@@ -8,6 +8,7 @@
   import { labelOf } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   import { Badge } from "#lib/components/ui/badge/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconClose, IconPlus } from "#lib/icons.js";
 
   let {
@@ -95,7 +96,7 @@
   {:else}
     <button
       data-slot="add"
-      class="kit-chip touch-hit mark-line inline-flex h-c-badge-h items-center gap-space-row px-space-1 type-label text-ink-muted"
+      class={chipVariants({ class: "touch-hit" })}
       onclick={() => {
         adding = true;
       }}

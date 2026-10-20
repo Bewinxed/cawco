@@ -50,7 +50,10 @@
   // One ghost glides from item to item under the pointer and arrow keys.
   $effect(() => {
     if (ref) {
-      return highlight({ rows: ".kit-item", hovered: "[data-highlighted]" })(
+      return highlight({
+        rows: "[data-menu-item]",
+        hovered: "[data-highlighted]",
+      })(
         ref
       );
     }

@@ -32,6 +32,7 @@
   import type { TransitionConfig } from "svelte/transition";
   import { failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
@@ -1194,7 +1195,12 @@
     aria-controls={failed ? shelfId : panelId}
     aria-expanded={failed ? shelf === "failed" : openKey === item.id}
     aria-label="{item.title}, {stateWords(chip)}"
-    class="group/chip kit-tray-chip touch-hit flex-initial min-w-c-tray-chip-min max-w-c-tray-chip-max data-end:ms-auto status-failed:text-status-fail-ink status-needs:text-status-attn-ink status-failed:before:bg-status-fail-bg status-needs:before:bg-status-attn-bg motion-safe:data-fly:not-data-finished:before:animate-arrive-late motion-reduce:data-fly:animate-arrive data-finished:before:animate-finish"
+    class={chipVariants({
+      variant: "tray",
+      class:
+        "group/chip touch-hit flex-initial min-w-c-tray-chip-min max-w-c-tray-chip-max data-end:ms-auto status-failed:text-status-fail-ink status-needs:text-status-attn-ink status-failed:before:bg-status-fail-bg status-needs:before:bg-status-attn-bg motion-safe:data-fly:not-data-finished:before:animate-arrive-late motion-reduce:data-fly:animate-arrive data-finished:before:animate-finish",
+    })}
+    data-tray-chip
     data-delegate-tray-tone={tone}
     data-finished={(tone === "done" && (item.endedAt ?? 0) > mountedAt) ||
       undefined}
@@ -1528,7 +1534,12 @@
             aria-controls={shelfId}
             aria-expanded={shelf === "more"}
             aria-label="{hidden.length} more delegates"
-            class="kit-tray-chip touch-hit flex-none min-w-0 w-c-tray-more-w justify-center num data-needs:text-status-attn-ink data-needs:before:bg-status-attn-bg"
+            class={chipVariants({
+              variant: "tray",
+              class:
+                "touch-hit flex-none min-w-0 w-c-tray-more-w justify-center num data-needs:text-status-attn-ink data-needs:before:bg-status-attn-bg",
+            })}
+            data-tray-chip
             data-flip="pop"
             data-key="more"
             onclick={(event) => onpress("more", event)}
@@ -1554,7 +1565,12 @@
             aria-controls={shelfId}
             aria-expanded={shelf === "failed"}
             aria-label="{failures.length} failed delegates"
-            class="kit-tray-chip touch-hit flex-none min-w-0 max-w-c-tray-chip-max whitespace-nowrap ms-auto text-status-fail-ink before:bg-status-fail-bg"
+            class={chipVariants({
+              variant: "tray",
+              class:
+                "touch-hit flex-none min-w-0 max-w-c-tray-chip-max whitespace-nowrap ms-auto text-status-fail-ink before:bg-status-fail-bg",
+            })}
+            data-tray-chip
             data-flip="pop"
             data-key="failed"
             onclick={(event) => onpress("failed", event)}

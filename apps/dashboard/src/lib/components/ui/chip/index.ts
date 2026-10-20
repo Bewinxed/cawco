@@ -1,0 +1,48 @@
+import type { VariantProps } from "tailwind-variants";
+import { tv } from "#lib/utils.js";
+
+/**
+ * The kit's chip (DESIGN.md, Permission gate: "option chips (30px, 8px
+ * radius, keycap digits)"; Typography: the label role for chips). A chip is
+ * written on the element its caller already has (a button, a bits-ui toggle
+ * item, a record's span), so the part is its recipe, applied as a class.
+ *
+ * - `option`: a choice, 30px tall including its edge under every pointer (a
+ *   finger's 44px is `touch-hit` on the chip, never a taller chip), wrapping
+ *   its label line by line. A pick is the element's own state: a toggle
+ *   pressed (`aria-pressed`), a radio checked (`aria-checked`), or a record
+ *   of what was picked (`data-chosen`). Picked, it takes the coral edge, a
+ *   recessed fill and an inverted keycap, never a size or weight change (a
+ *   pick never reflows the row) and never the attn hue: selection is not a
+ *   warning. Only a chip that can be pressed (an enabled button) hovers.
+ * - `tray`: a chip on the tray row standing on the composer (the delegate
+ *   tray's, the plan's, a raised ask's), at the row's chip height, on the
+ *   attachment chip's surface drawn as its own layer (`::before`), so a
+ *   caller tints that layer (`before:bg-status-attn-bg`, by a state variant
+ *   or outright) and the hover never paints over a tint: the hover only moves
+ *   the layer's resting fill (`--tray-chip-fill`). A compact standalone
+ *   control, it scales on press (DESIGN.md, The Press Rule).
+ */
+export const chipVariants = tv({
+  base: "mark-line inline-flex items-center rounded-sm type-label text-ink-strong",
+  variants: {
+    variant: {
+      option:
+        "hit-edge-hair min-h-c-btn-h-sm max-w-full gap-space-2 border border-border-control bg-surface-raised px-space-3 py-space-1 text-start motion-safe:transition-[border-color,background-color] motion-safe:dur-control motion-safe:ease-out enabled:cursor-pointer enabled:not-aria-pressed:not-aria-checked:hover:bg-surface-hover aria-pressed:border-brand-solid aria-pressed:bg-surface-recess aria-checked:border-brand-solid aria-checked:bg-surface-recess data-chosen:border-brand-solid data-chosen:bg-surface-recess aria-pressed:[&_.kit-keycap]:bg-chip-chosen-bg aria-pressed:[&_.kit-keycap]:text-chip-chosen-ink aria-checked:[&_.kit-keycap]:bg-chip-chosen-bg aria-checked:[&_.kit-keycap]:text-chip-chosen-ink data-chosen:[&_.kit-keycap]:bg-chip-chosen-bg data-chosen:[&_.kit-keycap]:text-chip-chosen-ink",
+      tray: "pointer-events-auto relative isolate h-c-tray-chip cursor-pointer touch-manipulation touch-callout-none select-none gap-c-pill-gap border-0 bg-transparent px-space-2 [--tray-chip-fill:var(--surface-raised)] transition-[color] dur-control ease-out motion-safe:transition-[color,transform] motion-safe:active:[transform:scale(var(--press-scale))] can-hover:hover:[--tray-chip-fill:var(--surface-hover)] before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:bg-(color:--tray-chip-fill) before:shadow-tile before:transition-[background-color] before:dur-control before:ease-out *:[svg]:size-icon-md *:[svg]:flex-none",
+    },
+  },
+  defaultVariants: { variant: "option" },
+});
+
+/**
+ * A row of option chips, wrapping whole chips onto the next line. Under a
+ * finger the rows stand 14px apart, so each chip's 44px `touch-hit` area
+ * (30 drawn + 7 above + 7 below) meets its neighbour's at the midpoint
+ * instead of overlapping it.
+ */
+export const chipsVariants = tv({
+  base: "flex flex-wrap gap-space-2 hit-gap-x-space-2 hit-gap-y-(--space-2) coarse:gap-y-space-4 coarse:hit-gap-y-(--space-4)",
+});
+
+export type ChipVariant = VariantProps<typeof chipVariants>["variant"];

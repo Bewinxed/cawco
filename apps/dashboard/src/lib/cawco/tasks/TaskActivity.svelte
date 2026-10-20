@@ -22,6 +22,7 @@
   } from "#lib/cawco/project-tasks.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { IconChevronRight, IconHistory } from "#lib/icons.js";
   import { formatDistanceToNow } from "#lib/utils/time.js";
@@ -277,7 +278,7 @@
 
 <section data-slot="activity" class="flex flex-col gap-space-2">
   <div class="flex items-end gap-space-2">
-    <h3 class="kit-section-head m-0 min-h-c-btn-h-xs flex-auto px-0">
+    <h3 class={sectionHeadVariants({ inset: "flush", class: "flex-auto" })}>
       Activity
     </h3>
     <Choice

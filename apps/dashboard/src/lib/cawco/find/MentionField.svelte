@@ -254,7 +254,7 @@
       span.dataset.tip = chip.tip;
       span.dataset.tone = row.state.tone;
       span.setAttribute("aria-label", `${chip.label}, ${chip.tip}`);
-      const glyph = span.querySelector(".mention-glyph") as HTMLElement;
+      const glyph = span.querySelector("[data-mention-glyph]") as HTMLElement;
       glyph.replaceChildren();
       const mounted = mount(row.glyph, { target: glyph });
       chips.set(span, () => unmount(mounted));
@@ -498,7 +498,11 @@
     span.setAttribute("role", "img");
     span.setAttribute("aria-label", `${chip.label}, ${chip.tip}`);
     const glyph = document.createElement("span");
-    glyph.className = "mention-glyph";
+    // The glyph in its chip's status ink (the chip's own `data-tone`), at
+    // the 16px icon size; its hook is its own attribute, as the chip's is.
+    glyph.className =
+      "inline-grid place-items-center text-status-idle-glyph [&_svg]:size-icon-md [[data-tone=live]>&]:text-status-live-glyph [[data-tone=attn]>&]:text-status-attn-glyph [[data-tone=fail]>&]:text-status-fail-glyph";
+    glyph.setAttribute("data-mention-glyph", "");
     glyph.setAttribute("aria-hidden", "true");
     span.append(glyph, document.createTextNode(chip.label));
     const mounted = mount(chip.glyph, { target: glyph });

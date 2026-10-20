@@ -169,6 +169,7 @@
 
 {#if steps.length > 0}
   <ul
+    data-nest
     class="kit-nest m-0 mt-space-1 flex min-w-0 list-none flex-col gap-space-row py-0 pr-0 pl-(--nest-pad)"
     {@attach nestFrom(glyph, STEP_GLYPH)}
     {@attach reflow()}

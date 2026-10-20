@@ -129,10 +129,10 @@
       },
       /** Its figures in tabular widths. */
       figures: { tabular: "tabular-nums" },
-      /** Standing where a section head's count goes (app.css
-          `.kit-section-head > .count`): pushed to the end, and the meta face,
-          tabular figures and subtle ink under the button's own. */
-      head: { count: "count" },
+      /** Standing where a section head's count goes (ui/section-header
+          `sectionHeadVariants`): pushed to the end in tabular figures, in the
+          button's own face and ink. */
+      head: { count: "ms-auto tabular-nums" },
       /** While its page is open (`aria-current="page"`), the selected tint
           (filling under the edge) and ink, at rest and under the pointer,
           crossing over --dur-control; its press scales at once, and the

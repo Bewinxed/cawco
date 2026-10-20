@@ -7,6 +7,7 @@
    * empty-string option (picked when nothing is) clears them.
    */
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "#lib/components/ui/popover/index.js";
@@ -86,7 +87,11 @@
         <button
           data-slot="item"
           aria-selected={isChosen(option.value)}
-          class="kit-item flex items-center gap-space-2 w-full px-space-3 text-start type-label text-ink-strong focus-inset"
+          class={menuItemVariants({
+            class:
+              "flex items-center gap-space-2 w-full px-space-3 text-start type-label text-ink-strong focus-inset",
+          })}
+          data-menu-item
           onclick={() => {
             onpick(option.value);
             // One of several stays open for the next.

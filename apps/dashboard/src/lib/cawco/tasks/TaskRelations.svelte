@@ -14,6 +14,8 @@
   } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { IconChevronDown, IconClose, IconLink } from "#lib/icons.js";
@@ -114,7 +116,7 @@
 
 <section class="flex flex-col gap-space-2">
   <div class="flex items-end gap-space-2">
-    <h3 class="kit-section-head flex-auto min-h-c-btn-h-xs m-0 px-0">
+    <h3 class={sectionHeadVariants({ inset: "flush", class: "flex-auto" })}>
       Relations
     </h3>
     <Popover.Root bind:open>
@@ -147,7 +149,10 @@
             {#each candidates as each (each.id)}
               <li>
                 <button
-                  class="kit-item flex items-center gap-space-2 w-full text-start"
+                  class={menuItemVariants({
+                    class: "flex items-center gap-space-2 w-full text-start",
+                  })}
+                  data-menu-item
                   onclick={async () => {
                     open = false;
                     query = "";

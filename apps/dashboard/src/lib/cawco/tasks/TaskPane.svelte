@@ -37,6 +37,7 @@
   import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { sectionHeadVariants } from "#lib/components/ui/section-header/index.js";
   import {
     TabItem,
     Tabs,
@@ -673,7 +674,7 @@
         />
 
         <section class="flex flex-col gap-space-2">
-          <h3 class="kit-section-head min-h-c-btn-h-xs m-0 px-0">Labels</h3>
+          <h3 class={sectionHeadVariants({ inset: "flush" })}>Labels</h3>
           <TaskLabels
             {known}
             labels={shown.labels}
@@ -701,10 +702,13 @@
 
         {#if shown.attempts.length > 0 || flags.startProblem}
           <section class="flex flex-col gap-space-2">
-            <h3 class="kit-section-head min-h-c-btn-h-xs m-0 px-0">
+            <h3 class={sectionHeadVariants({ inset: "flush" })}>
               Sessions
               {#if shown.attempts.length > 0}
-                <span data-num data-slot="count" class="count num"
+                <span
+                  data-num
+                  data-slot="count"
+                  class="num ms-auto type-meta text-ink-subtle"
                   >{shown.attempts.length}</span
                 >
               {/if}

@@ -43,12 +43,6 @@
 
 @layer components {
   /* foreign-dom */
-  .ns-theme *,
-  .ns-theme *::before,
-  .ns-theme *::after {
-    box-sizing: border-box;
-  }
-  /* foreign-dom */
   .ns-theme button {
     font: inherit;
     color: inherit;
@@ -154,36 +148,61 @@
   }
 }
 
-/* One-shot entrance for rows/badges (the design's `nsIn`); interruptible
-   transitions are used everywhere the user can retrigger quickly. */
-@keyframes ns-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
+/* The dialog's one-shot entrances (DESIGN.md, New-session dialog: "Sections
+   fade up 8px in a stagger"; it "enters with `ns-panel`"), on the theme
+   (tailwindcss.com/docs/animation#customizing-your-theme). Inline, because
+   each reads a duration the dialog sets on `.ns-theme`, not on the root.
+   Interruptible transitions are used everywhere the user can retrigger
+   quickly; these run once, as do the popover's open and close (`ns-pop`). */
+@theme inline {
+  --animate-ns-in: ns-in var(--ns-row-ms) var(--ease-out) backwards;
+  --animate-ns-check: ns-check var(--ns-check-ms) var(--ease-out) both;
+  --animate-ns-panel: ns-panel var(--dur-fade) var(--ease-out) both;
+  --animate-ns-pop-in: ns-pop-in var(--dur-pop) var(--ease-drawer) both;
+  --animate-ns-pop-out: ns-pop-out var(--dur-exit) var(--ease-out) both;
+
+  @keyframes ns-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
-  to {
-    opacity: 1;
-    transform: none;
+  @keyframes ns-check {
+    from {
+      opacity: 0;
+      transform: scale(0.5);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
-}
-@keyframes ns-check {
-  from {
-    opacity: 0;
-    transform: scale(0.5);
+  @keyframes ns-panel {
+    from {
+      opacity: 0;
+      transform: translateY(6px);
+    }
+    to {
+      opacity: 1;
+      transform: none;
+    }
   }
-  to {
-    opacity: 1;
-    transform: none;
+  @keyframes ns-pop-out {
+    to {
+      opacity: 0;
+      scale: var(--pop-scale);
+    }
   }
-}
-@keyframes ns-panel {
-  from {
-    opacity: 0;
-    transform: translateY(6px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
+  @keyframes ns-pop-in {
+    from {
+      opacity: 0;
+      scale: var(--pop-scale);
+      translate: 0 calc(-1 * var(--pop-rise));
+    }
   }
 }
 
@@ -193,7 +212,7 @@
 @utility ns-in {
   @variant motion-safe {
     :where(.ns-theme &) {
-      animation: ns-in var(--ns-row-ms) var(--ease-out) backwards;
+      animation: --theme(--animate-ns-in inline);
       animation-delay: var(--delay, 0ms);
     }
   }
@@ -202,7 +221,7 @@
 @utility ns-check {
   @variant motion-safe {
     :where(.ns-theme &) {
-      animation: ns-check var(--ns-check-ms) var(--ease-out) both;
+      animation: --theme(--animate-ns-check inline);
     }
   }
 }
@@ -210,7 +229,7 @@
 @utility ns-panel {
   @variant motion-safe {
     :where(.ns-theme &) {
-      animation: ns-panel var(--dur-fade) var(--ease-out) both;
+      animation: --theme(--animate-ns-panel inline);
     }
   }
 }
@@ -400,10 +419,10 @@
   }
   @variant motion-safe {
     :where(.ns-theme&[data-state="closed"]) {
-      animation: ns-pop-out var(--dur-exit) var(--ease-out) both;
+      animation: --theme(--animate-ns-pop-out inline);
     }
     :where(.ns-theme&[data-state="open"]) {
-      animation: ns-pop-in var(--dur-pop) var(--ease-drawer) both;
+      animation: --theme(--animate-ns-pop-in inline);
     }
   }
   :where(.ns-theme&[data-morph]) {
@@ -430,19 +449,6 @@
     max-width: calc(100vw - 2 * var(--c-screen-margin));
     max-height: none;
     overflow: visible;
-  }
-}
-@keyframes ns-pop-out {
-  to {
-    opacity: 0;
-    scale: var(--pop-scale);
-  }
-}
-@keyframes ns-pop-in {
-  from {
-    opacity: 0;
-    scale: var(--pop-scale);
-    translate: 0 calc(-1 * var(--pop-rise));
   }
 }
 

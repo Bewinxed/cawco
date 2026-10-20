@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Select as SelectPrimitive } from "bits-ui";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import { IconTick } from "#lib/icons.js";
   import { cn, type WithoutChild } from "#lib/utils.js";
 
@@ -15,9 +16,11 @@
 
 <SelectPrimitive.Item
   class={cn(
-    "kit-item relative flex w-full cursor-default select-none items-center gap-2.5 pr-space-8 pl-2.5 text-label outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+    menuItemVariants(),
+    "relative flex w-full cursor-default select-none items-center gap-2.5 pr-space-8 pl-2.5 text-label outline-hidden data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
     className
   )}
+  data-menu-item
   data-slot="select-item"
   {value}
   bind:ref

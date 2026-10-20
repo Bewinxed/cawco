@@ -405,6 +405,10 @@
   --spacing-c-scrollbar-thin: var(--c-scrollbar-thin);
   --spacing-c-comb-pitch: var(--c-comb-pitch);
   --spacing-c-edge-fade-len: var(--c-edge-fade-len);
+  --spacing-c-edge-fade-len-phone: var(--c-edge-fade-len-phone);
+  /* Switches with its context: no literal maps to it. */
+  --spacing-c-menu-item-h: var(--c-menu-item-h);
+  --spacing-c-icon-card-min: var(--c-icon-card-min);
   --spacing-c-sheet-max-h: var(--c-sheet-max-h);
   --spacing-c-peek-sheet-h: var(--c-peek-sheet-h);
   --spacing-c-grabber-w: var(--c-grabber-w);

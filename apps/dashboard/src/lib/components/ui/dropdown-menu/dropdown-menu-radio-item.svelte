@@ -1,5 +1,6 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import { cn, type WithoutChild } from "#lib/utils.js";
 
   let {
@@ -12,9 +13,11 @@
 
 <DropdownMenuPrimitive.RadioItem
   class={cn(
-    "kit-item relative flex cursor-default select-none items-center gap-2.5 pr-space-8 pl-2.5 text-label outline-hidden data-[disabled]:pointer-events-none data-inset:pl-9.5 data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    menuItemVariants(),
+    "relative flex cursor-default select-none items-center gap-2.5 pr-space-8 pl-2.5 text-label outline-hidden data-[disabled]:pointer-events-none data-inset:pl-9.5 data-[disabled]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     className
   )}
+  data-menu-item
   data-slot="dropdown-menu-radio-item"
   bind:ref
   {...restProps}

@@ -33,6 +33,7 @@
   import { onMount, tick, untrack } from "svelte";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { chipsVariants, chipVariants } from "#lib/components/ui/chip/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
   import {
@@ -854,12 +855,12 @@
       >
         <ToggleGroup.Root
           aria-label={`Other answer to: ${browserAsk.reason}`}
-          class="kit-chips flex-none"
+          class={chipsVariants({ class: "flex-none" })}
           type="single"
           value={otherAt === 0 ? OTHER : ""}
         >
           <ToggleGroup.Item
-            class="kit-chip touch-hit"
+            class={chipVariants({ class: "touch-hit" })}
             onclick={(event: MouseEvent) => {
               event.preventDefault();
               openOther(0);
@@ -1021,7 +1022,10 @@
             {@const live = ownsKeys && qi === current && i < 9}
             <ToggleGroup.Item
               aria-keyshortcuts={live ? String(i + 1) : undefined}
-              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-auto-fluid group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0"
+              class={chipVariants({
+                class:
+                  "touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-auto-fluid group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0",
+              })}
               onkeydown={optionKey}
               type="button"
               value={opt.label}
@@ -1034,7 +1038,10 @@
             {@const live = ownsKeys && qi === current}
             <ToggleGroup.Item
               aria-keyshortcuts={live ? String(own + 1) : undefined}
-              class="kit-chip touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-auto-fluid group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0"
+              class={chipVariants({
+                class:
+                  "touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-auto-fluid group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0",
+              })}
               onclick={(event: MouseEvent) => {
                 event.preventDefault();
                 openOther(qi);
@@ -1049,8 +1056,8 @@
         {/snippet}
         <!-- One tab stop per question; focus in it makes it the one the
              digits answer, and the rail moves to it. -->
-        <!-- The chip row is the kit's option-chip recipe (.kit-chips /
-             .kit-chip in app.css); the card only sets where it sits. The list
+        <!-- The chip row is the kit's option-chip recipe (ui/chip
+             `chipsVariants` / `chipVariants`); the card only sets where it sits. The list
              form is the chip recipe grown to one full-width row per option:
              one column the card's width (`minmax(0, 1fr)`), each row
              standing its keycap on the label's first line. -->
@@ -1058,7 +1065,10 @@
           <ToggleGroup.Root
             data-list={list || undefined}
             aria-labelledby="{claimId}-q{qi}"
-            class="group/qopts kit-chips mt-space-row mb-space-2 data-list:grid data-list:grid-cols-1"
+            class={chipsVariants({
+              class:
+                "group/qopts mt-space-row mb-space-2 data-list:grid data-list:grid-cols-1",
+            })}
             onfocusin={() => {
               current = qi;
             }}
@@ -1073,7 +1083,10 @@
           <ToggleGroup.Root
             data-list={list || undefined}
             aria-labelledby="{claimId}-q{qi}"
-            class="group/qopts kit-chips mt-space-row mb-space-2 data-list:grid data-list:grid-cols-1"
+            class={chipsVariants({
+              class:
+                "group/qopts mt-space-row mb-space-2 data-list:grid data-list:grid-cols-1",
+            })}
             onfocusin={() => {
               current = qi;
             }}

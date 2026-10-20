@@ -55,7 +55,7 @@
   const COMPOSER_PARTS = [
     ':scope > [data-slot="composer"]',
     '[data-slot="ask"]',
-    '[data-slot="lift"] .kit-tray-chip',
+    '[data-slot="lift"] [data-tray-chip]',
     '[data-slot="suggest"]:has([data-slot="track"])',
     '[data-slot="progress-slot"] > *',
     '[data-slot="perch"]',

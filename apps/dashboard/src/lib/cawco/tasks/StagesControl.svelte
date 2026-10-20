@@ -22,6 +22,7 @@
   } from "#lib/cawco/project-tasks.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import * as Popover from "#lib/components/ui/popover/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
@@ -169,7 +170,11 @@
           <li>
             <button
               aria-expanded={asks.pending?.at === template.name}
-              class="kit-item flex h-auto w-full flex-col items-stretch gap-space-row px-space-3 py-space-2 text-start hover:enabled:bg-surface-hover disabled:opacity-50"
+              class={menuItemVariants({
+                class:
+                  "flex h-auto w-full flex-col items-stretch gap-space-row px-space-3 py-space-2 text-start hover:enabled:bg-surface-hover disabled:opacity-50",
+              })}
+              data-menu-item
               disabled={applying !== null}
               onclick={() => {
                 lastAsked = template;

@@ -16,6 +16,7 @@
   import type { StageKind } from "#lib/cawco/project-tasks.js";
   import { Badge } from "#lib/components/ui/badge/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
   import { IconChevronDown, IconUser } from "#lib/icons.js";
 
   let {
@@ -87,7 +88,7 @@
           data-slot="chosen"
           class="flex max-w-full min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
         >
-          <span data-slot="sel" class="kit-chip kit-chip-chosen cursor-default">
+          <span data-slot="sel" class={chipVariants()} data-chosen>
             <span class="kit-keycap">{option.keycap}</span><span
               data-slot="record-card-label">{option.label}</span
             >
@@ -217,7 +218,7 @@
                   data-slot="other"
                   class="flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1"
                 >
-                  <span class="kit-chip opacity-50">
+                  <span class={chipVariants({ class: "opacity-50" })}>
                     <span class="kit-keycap">{option.keycap}</span><span
                       data-slot="record-card-label">{option.label}</span
                     >

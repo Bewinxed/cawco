@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Command as CommandPrimitive } from "bits-ui";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import { IconTick } from "#lib/icons.js";
   import { cn } from "#lib/utils.js";
 
@@ -13,9 +14,11 @@
 
 <CommandPrimitive.Item
   class={cn(
-    "group/command-item kit-item relative flex cursor-default select-none items-center gap-2 px-2.5 text-label outline-hidden data-[disabled=true]:pointer-events-none data-selected:text-ink-strong data-[disabled=true]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 data-selected:*:[svg]:text-ink-strong",
+    menuItemVariants(),
+    "group/command-item relative flex cursor-default select-none items-center gap-2 px-2.5 text-label outline-hidden data-[disabled=true]:pointer-events-none data-selected:text-ink-strong data-[disabled=true]:opacity-50 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0 data-selected:*:[svg]:text-ink-strong",
     className
   )}
+  data-menu-item
   data-slot="command-item"
   bind:ref
   {...restProps}

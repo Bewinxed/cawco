@@ -5393,6 +5393,30 @@
       },
       "$description": "An edge fade at full length at every width, where the kit's phone 16px would show nothing (Files' scrollers, Caw's panel)."
     },
+    "c-edge-fade-len-phone": {
+      "$type": "dimension",
+      "$value": {
+        "value": 16,
+        "unit": "px"
+      },
+      "$description": "wave 2: W8-app-recipes. The house edge fade's length under 640px (kit-edge-fade, kit-edge-fade-block): short enough to read as an edge on a phone's narrow view, not a band across the content. Sits between the ladder's 14 and 18, so it is its own token."
+    },
+    "c-menu-item-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 32,
+        "unit": "px"
+      },
+      "$description": "wave 2: W8-app-recipes. A floating surface's row (ui/menu-item): 32px on a fine pointer, 44px on a coarse one (cawco.coarse.tokens.json; DESIGN.md, The 44 Touch Rule). A row height, not spacing, so not space-8."
+    },
+    "c-icon-card-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 160,
+        "unit": "px"
+      },
+      "$description": "wave 2: W8-app-recipes. The narrowest an icon card stands in its grid (ui/icon-card), the track floor of the auto-fit columns."
+    },
     "c-sheet-max-h": {
       "$type": "dimension",
       "$value": {

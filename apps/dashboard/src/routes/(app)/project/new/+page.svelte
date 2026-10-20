@@ -38,6 +38,7 @@
   import TemplateCards from "#lib/cawco/project/TemplateCards.svelte";
   import Composer from "#lib/cawco/transcript/Composer.svelte";
   import { ComposerDraft } from "#lib/cawco/transcript/composer-draft.svelte.js";
+  import { chipsVariants, chipVariants } from "#lib/components/ui/chip/index.js";
   import { goto } from "$app/navigation";
 
   /** Caw's side here, on the page and over a card. */
@@ -216,12 +217,14 @@
     <div class="relative w-full max-w-(--c-new-project-field-w)">
       <div
         data-slot="chips"
-        class="kit-chips px-(--chips-px) max-desk:px-space-3"
+        class={chipsVariants({
+          class: "px-(--chips-px) max-desk:px-space-3",
+        })}
         style:--chips-px="calc((100% - var(--c-composer-w)) / 2)"
       >
         {#each STARTERS as text (text)}
           <button
-            class="kit-chip touch-hit"
+            class={chipVariants({ class: "touch-hit" })}
             onclick={() => starter(text)}
             type="button"
           >

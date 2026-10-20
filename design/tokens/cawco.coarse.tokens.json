@@ -26,6 +26,14 @@
           "css": "calc({size.c-tray-chip} + {size.c-tray-gap})"
         }
       }
+    },
+    "c-menu-item-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 44,
+        "unit": "px"
+      },
+      "$description": "wave 2: W8-app-recipes. A floating surface's row under a finger (DESIGN.md, The 44 Touch Rule: \"Menu items and nav rows are 44px tall on touch\")."
     }
   }
 }

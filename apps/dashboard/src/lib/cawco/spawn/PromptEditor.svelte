@@ -150,9 +150,12 @@
     chip.contentEditable = "false";
     chip.dataset.chip = item.key;
     chip.dataset.serial = item.serial;
-    chip.className = "ns-chip";
+    // A reference on the prompt's line: one line box tall less its 1px
+    // margin each side, so a line holding chips keeps the prompt's leading.
+    chip.className =
+      "m-px inline-flex h-[calc(var(--prompt-lh)-2px)] items-center gap-space-1 rounded-sm border border-border-control bg-surface-fill ps-space-1 pe-space-2 align-top font-body text-label leading-none font-medium whitespace-nowrap text-ink-strong select-all";
     const mark = document.createElement("span");
-    mark.className = "ns-chip-icon";
+    mark.className = "inline-flex *:[svg]:size-icon-sm";
     mark.style.color = item.hue ?? "";
     chip.append(mark);
     chips.set(chip, mount(item.icon, { target: mark, props: item.props }));

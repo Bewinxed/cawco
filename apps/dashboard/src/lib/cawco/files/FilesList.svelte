@@ -36,6 +36,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import EmptyState from "#lib/components/ui/empty/empty-state.svelte";
   import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   import Skeleton from "#lib/components/ui/skeleton/skeleton.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tabs from "#lib/components/ui/tabs/index.js";
@@ -758,7 +759,11 @@
                 {#if file.open.kind === "file"}
                   {#if file.open.href}
                     <a
-                      class="kit-item relative flex min-h-c-artifact-row-h w-full cursor-pointer items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset"
+                      class={menuItemVariants({
+                        class:
+                          "relative flex min-h-c-artifact-row-h w-full cursor-pointer items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
+                      })}
+                      data-menu-item
                       download={file.name}
                       href={file.open.href}
                       title={file.name}
@@ -771,7 +776,11 @@
                          plain row, and Show in conversation still finds
                          where it was sent. -->
                     <span
-                      class="kit-item relative flex min-h-c-artifact-row-h w-full cursor-default items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset"
+                      class={menuItemVariants({
+                        class:
+                          "relative flex min-h-c-artifact-row-h w-full cursor-default items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
+                      })}
+                      data-menu-item
                       title={file.name}
                     >
                       {@render attachmentFace(file)}
@@ -779,7 +788,11 @@
                   {/if}
                 {:else}
                   <button
-                    class="kit-item relative flex min-h-c-artifact-row-h w-full cursor-pointer items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset"
+                    class={menuItemVariants({
+                      class:
+                        "relative flex min-h-c-artifact-row-h w-full cursor-pointer items-center gap-c-row-inset border-none border-current bg-transparent ps-(--lead-pad) pe-(--row-end) text-start text-ink-strong no-underline select-none focus-inset",
+                    })}
+                    data-menu-item
                     onclick={(event) =>
                       openAttachment(file, event.currentTarget)}
                     title={file.name}
