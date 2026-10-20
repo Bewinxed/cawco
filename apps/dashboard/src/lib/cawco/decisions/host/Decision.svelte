@@ -12,9 +12,12 @@
   this view's own: the picks the hub keeps, and artifact_read, are the same.
   A one-pick card folds when the person's pick in it is stored; a
   several-pick card stays open while they pick, and folds on Done. Change
-  reopens it.
+  reopens it. A stored pick on an option a revision took out is no pick
+  here (core `pickOf`, as the graph and the count read it): the card stands
+  open, its kept options counted, never folded to an empty "Decided:".
 -->
 <script lang="ts">
+  import { pickOf } from "@cawco/core/decisions";
   import { setContext, tick } from "svelte";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { bridge, picks } from "./page.svelte.js";
@@ -49,7 +52,15 @@
   /** Its id: each option's parts are named under it, ids that hold across revisions. */
   setContext("decision-id", () => id);
 
-  const chosen = $derived(picks.now[id]?.options ?? []);
+  /**
+   * The stored pick as core `pickOf` reads it, as the graph and the count
+   * do: an option a revision took out is no pick on this card.
+   */
+  const pick = $derived(pickOf({ options }, picks.now[id]));
+  /** The options picked that the card still offers. */
+  const chosen = $derived(
+    (picks.now[id]?.options ?? []).filter((one) => order.includes(one))
+  );
   const picked = $derived(chosen.length);
   const stateLine = $derived.by(() => {
     if (picked === 0) {
@@ -60,7 +71,7 @@
 
   /** Change reopened it, or the person is picking several: it stays open until a pick or Done. */
   let open = $state(false);
-  const decided = $derived(picked > 0 && !open);
+  const decided = $derived(pick.picked && !open);
   const decidedLine = $derived(
     options
       .filter((option) => chosen.includes(option.id))
@@ -170,7 +181,7 @@
       <button class="dp-change" onclick={reopen} type="button">Change</button>
     {:else}
       <span class={["dp-state", picked > 0 && "on"]}>{stateLine}</span>
-      {#if picked > 0}
+      {#if pick.picked}
         <button
           class="dp-change"
           onclick={() => {
