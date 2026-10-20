@@ -7,7 +7,7 @@
  * here as held-post-row starts it), embedded through an origin that answers
  * the embed's ping as the hub's preview origin does, its HTTP and HMR
  * socket forwarded to the stage. The specs that read a decision page's
- * embeds (decision-embed, decision-pages-ready) stand on this.
+ * embeds (decision-embed) stand on this.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one embed at a time, as the person scrolls to each
 import { spawn } from "node:child_process";
