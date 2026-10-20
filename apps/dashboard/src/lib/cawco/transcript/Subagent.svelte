@@ -102,7 +102,7 @@
       <span
         data-slot="chev"
         aria-hidden="true"
-        class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/bhead:rotate-90"
+        class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-state-open/bhead:rotate-90"
         data-box><IconChevronRight class="size-icon-sm block" /></span
       >
       {#if title !== branch.subagentType}

@@ -29,7 +29,7 @@
       <span
         data-slot="chev"
         aria-hidden="true"
-        class="inline-grid motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out data-open:rotate-90"
+        class="inline-grid motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out data-open:rotate-90"
         data-open={open || undefined}
         data-box><IconChevronRight class="size-icon-sm" /></span
       >

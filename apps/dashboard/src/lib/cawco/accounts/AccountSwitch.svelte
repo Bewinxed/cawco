@@ -120,7 +120,7 @@
               <AccountName {account} row />
             {/if}
             <IconCheck
-              class="size-icon-md text-selected-icon opacity-0 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
+              class="size-icon-md text-selected-icon opacity-0 group-aria-selected:opacity-100 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
             />
           </button>
         {/each}

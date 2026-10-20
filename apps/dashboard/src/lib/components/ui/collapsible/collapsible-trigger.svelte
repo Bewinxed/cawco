@@ -21,9 +21,9 @@
        *   row (the row is `relative`).
        */
       look: {
-        head: "rail-line press-tint min-h-c-mark coarse:min-h-c-btn-h-lg min-w-0 rounded-xs text-start text-size-label font-medium transition-[color] dur-control ease-out",
+        head: "rail-line press-tint min-h-c-mark coarse:min-h-c-btn-h-lg min-w-0 rounded-xs text-start text-size-label font-medium transition-[color] duration-(--dur-control) ease-out",
         note: "rail-line inline-flex text-start",
-        fold: "mark-line press-tint inline-flex items-center gap-space-1 rounded-xs py-space-1 text-start type-label text-ink-muted transition-[color] dur-control ease-out hover:text-ink-strong",
+        fold: "mark-line press-tint inline-flex items-center gap-space-1 rounded-xs py-space-1 text-start type-label text-ink-muted transition-[color] duration-(--dur-control) ease-out hover:text-ink-strong",
         chevron: "grid place-items-center text-ink-muted press-tint",
         opener: "focus-inset block text-start after:absolute after:inset-0",
       },

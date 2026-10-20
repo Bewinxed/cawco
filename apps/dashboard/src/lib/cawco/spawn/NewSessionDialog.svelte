@@ -1930,12 +1930,12 @@
             <span
               data-slot="glyph"
               data-close
-              class="col-start-1 row-start-1 grid place-items-center transition-[opacity] dur-control ease-out group-data-back:opacity-0"
+              class="col-start-1 row-start-1 grid place-items-center transition-[opacity] duration-(--dur-control) ease-out group-data-back:opacity-0"
               ><X /></span
             >
             <span
               data-slot="glyph"
-              class="col-start-1 row-start-1 grid place-items-center opacity-0 transition-[opacity] dur-control ease-out group-data-back:opacity-100"
+              class="col-start-1 row-start-1 grid place-items-center opacity-0 transition-[opacity] duration-(--dur-control) ease-out group-data-back:opacity-100"
               ><IconChevronLeft /></span
             >
           </span>

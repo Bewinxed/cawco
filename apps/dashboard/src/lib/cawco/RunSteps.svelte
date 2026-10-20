@@ -212,7 +212,7 @@
           {#if tab}
             <a
               aria-label="Open {titleOf(step)}"
-              class="touch-hit focus-inset grid size-space-7 flex-none place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out coarse:min-h-c-btn-h-lg hover:bg-surface-hover hover:text-brand-ink"
+              class="touch-hit focus-inset grid size-space-7 flex-none place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out coarse:min-h-c-btn-h-lg hover:bg-surface-hover hover:text-brand-ink"
               href={tab}
               title="Open {titleOf(step)}"
             >

@@ -391,7 +391,7 @@
     <div class="min-h-0">
       <div
         data-slot="repo"
-        class="grid gap-space-2 transition-[opacity] dur-panel ease-out motion-safe:transition-panel-travel"
+        class="grid gap-space-2 transition-[opacity] duration-(--dur-panel) ease-out motion-safe:transition-panel-travel"
         style:transform={`translateY(${mode === "repo" ? "0px" : "calc(-1 * var(--pop-rise))"})`}
         style:opacity={mode === "repo" ? 1 : 0}
         style:pointer-events={mode === "repo" ? "auto" : "none"}

@@ -130,7 +130,7 @@
         <span class="flex min-w-0 items-center justify-end gap-space-3">
           {#if shown !== "signed-in"}
             <span
-              class="mark-line inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-ink-muted transition-[color] dur-panel ease-out state-mismatch:text-status-attn-ink"
+              class="mark-line inline-flex items-center gap-space-1 type-meta whitespace-nowrap text-ink-muted transition-[color] duration-(--dur-panel) ease-out state-mismatch:text-status-attn-ink"
               data-state={shown}
             >
               {#if shown === "mismatch"}

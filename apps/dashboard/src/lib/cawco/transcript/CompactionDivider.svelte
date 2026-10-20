@@ -170,7 +170,7 @@
   aria-label={row.brief === null || failed
     ? undefined
     : `Compacted, ${open ? "hide" : "show"} the summary`}
-  class="group/divider divider-chevron flex items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink transition-[color] dur-control ease-out hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
+  class="group/divider divider-chevron flex items-center gap-space-2 w-full min-h-c-btn-h-sm mt-space-2 p-0 border-none border-current bg-transparent type-meta text-brand-ink transition-[color] duration-(--dur-control) ease-out hover:enabled:text-brand-ink-strong data-failed:block data-failed:text-start data-failed:text-status-fail-ink focus-inset touch-hit"
   disabled={row.brief === null || failed}
   onclick={() => disclosed.set(!open)}
   type="button"
@@ -192,7 +192,7 @@
   <!-- Mirrored, so both arms run outward from the word. -->
   <span
     style:--arm-clip="inset(0 calc(var(--chev) * var(--room)) 0 0)"
-    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
+    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:duration-(--dur-fade) motion-reduce:group-data-settled/divider:ease-out"
   >
     <svg
       aria-hidden="true"
@@ -201,7 +201,7 @@
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
-        class="wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] dur-control ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
+        class="wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--dur-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
       /></svg
     >
   </span>
@@ -220,7 +220,7 @@
     ><!-- Caw's slot: his still's box, its middle on the word's x-height; as
           wide as Caw at work while it runs, closing to his mark's box as it
           ends, on the line's clock. --><span
-      class="relative inline-block align-middle w-(--tx-compact-caw) h-(--tx-compact-caw) me-c-pill-gap group-data-live/divider:w-(--tx-compacting-caw) motion-safe:transition-[inline-size,margin-inline-end] motion-safe:dur-panel motion-safe:ease-out"
+      class="relative inline-block align-middle w-(--tx-compact-caw) h-(--tx-compact-caw) me-c-pill-gap group-data-live/divider:w-(--tx-compacting-caw) motion-safe:transition-[inline-size,margin-inline-end] motion-safe:duration-(--dur-panel) motion-safe:ease-out"
       data-caw
       >{#if working}
         <span class="absolute top-1/2 left-1/2 block leading-0 -translate-1/2"
@@ -279,14 +279,14 @@
   >
   <span
     style:--arm-clip="inset(0 0 0 calc(var(--chev) * var(--room)))"
-    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:dur-fade motion-reduce:group-data-settled/divider:ease-out"
+    class="@container flex-1 min-w-0 clip-path-(--arm-clip) group-data-failed/divider:hidden motion-safe:transition-[clip-path] motion-safe:duration-(--chev-dur) motion-safe:ease-(--chev-ease) motion-reduce:group-data-live/divider:opacity-0 motion-reduce:group-data-settled/divider:transition-[opacity] motion-reduce:group-data-settled/divider:duration-(--dur-fade) motion-reduce:group-data-settled/divider:ease-out"
   >
     <svg aria-hidden="true" class="block w-full h-(--tx-compact-wave)"
       ><path
         d={WAVE}
         style:--run="calc((100cqi - 2px) * 1.08)"
         style:--wave-stroke="max(var(--dpx, 1px), round(1px, var(--dpx, 1px)))"
-        class="wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] dur-control ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
+        class="wave-dash fill-none stroke-(--line) stroke-(length:--wave-stroke) transition-[stroke] duration-(--dur-control) ease-out motion-safe:group-data-arriving/divider:animate-wave-arrive motion-safe:group-data-settled/divider:animate-wave-draw motion-safe:group-data-live/divider:animate-wave-breathe"
       /></svg
     >
   </span>

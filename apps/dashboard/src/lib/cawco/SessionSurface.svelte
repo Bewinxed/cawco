@@ -582,7 +582,7 @@
            conversation is never kept waiting on him. The line under him
            cross-fades in one cell. -->
       <div
-        class="relative flex flex-auto items-center justify-center bg-surface-recess type-body text-ink-muted transition-[background-color] dur-fade ease-out data-over:pointer-events-none data-over:absolute data-over:inset-0 data-over:z-1 data-over:bg-transparent"
+        class="relative flex flex-auto items-center justify-center bg-surface-recess type-body text-ink-muted transition-[background-color] duration-(--dur-fade) ease-out data-over:pointer-events-none data-over:absolute data-over:inset-0 data-over:z-1 data-over:bg-transparent"
         data-over={!detailShown || undefined}
       >
         {#if machinesThere}

@@ -15,6 +15,11 @@
  *    (https://tailwindcss.com/docs/upgrade-guide): "Buttons now use `cursor:
  *    default` instead of `cursor: pointer` to match the default browser
  *    behavior."
+ *  - a house `dur-*` class: it set only `transition-duration`, so Tailwind's
+ *    own `transition-[…]` sorted after it reset the duration to the default
+ *    through `--tw-duration`. A transition's duration is Tailwind's
+ *    `duration-(--dur-*)` (https://tailwindcss.com/docs/transition-duration:
+ *    "`transition-duration: var(<custom-property>)`"), which sets both.
  * Prints `file:line: text` under the rule each match breaks; exits 1 on any.
  */
 import { resolve } from "node:path";
@@ -38,6 +43,10 @@ const RULES: { name: string; pattern: string; fixed?: boolean }[] = [
   {
     name: "a pointer cursor is banned: a control keeps the default arrow (Tailwind v4 upgrade guide, Buttons use the default cursor)",
     pattern: "(^|[^-[:alnum:]])cursor-pointer([^-[:alnum:]]|$)|cursor[[:space:]]*:[[:space:]]*pointer",
+  },
+  {
+    name: "a dur-* class is banned: a transition's duration is duration-(--dur-*), which sets --tw-duration for a transition-[…] after it",
+    pattern: "(^|[^-[:alnum:]])dur-[a-z]",
   },
 ];
 
@@ -64,7 +73,7 @@ for (const [i, rule] of RULES.entries()) {
 }
 console.log(
   found === 0
-    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no pointer cursor"
+    ? "style greps: no transition-all, no filter in a transition list, no has-[.class], no pointer cursor, no dur-* class"
     : `style greps: ${found} match${found === 1 ? "" : "es"}`
 );
 process.exit(found === 0 ? 0 : 1);

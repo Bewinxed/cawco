@@ -73,7 +73,7 @@
             </h2>
             {#if hasRouting(group.accounts.length)}
               <a
-                class="mark-line type-label inline-flex flex-none items-center gap-space-row rounded-xs text-link-ink no-underline transition-[opacity] dur-control ease-out hover:text-link-hover active:opacity-72"
+                class="mark-line type-label inline-flex flex-none items-center gap-space-row rounded-xs text-link-ink no-underline transition-[opacity] duration-(--dur-control) ease-out hover:text-link-hover active:opacity-72"
                 data-box
                 data-flip="pop"
                 href="/config/accounts/{encodeURIComponent(

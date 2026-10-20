@@ -384,7 +384,7 @@
     data-pane-leaf-shown={railShown || undefined}
     data-slot="rail"
     aria-hidden="true"
-    class="pointer-events-none absolute inset-y-0 start-0 z-2 w-space-row bg-ink-muted opacity-0 data-pane-leaf-shown:opacity-50 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
+    class="pointer-events-none absolute inset-y-0 start-0 z-2 w-space-row bg-ink-muted opacity-0 data-pane-leaf-shown:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
   ></span>
 
   {#if !hosted}
@@ -405,7 +405,7 @@
     <div
       data-slot="drop-preview"
       aria-hidden="true"
-      class="pointer-events-none absolute z-3 border border-border-control bg-surface-hover opacity-90 motion-safe:transition-[inset] motion-safe:dur-morph motion-safe:ease-in-out"
+      class="pointer-events-none absolute z-3 border border-border-control bg-surface-hover opacity-90 motion-safe:transition-[inset] motion-safe:duration-(--dur-morph) motion-safe:ease-in-out"
       style:inset={previewInset}
       transition:previewFade
     ></div>

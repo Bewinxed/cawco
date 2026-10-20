@@ -215,7 +215,7 @@
       >
         <circle cx="12" cy="12" opacity="0.25" r="9" stroke-width="2.5" />
         <circle
-          class="origin-center -rotate-90 transform-view transition-[stroke-dasharray] dur-pop ease-out motion-reduce:transition-off"
+          class="origin-center -rotate-90 transform-view transition-[stroke-dasharray] duration-(--dur-pop) ease-out motion-reduce:transition-off"
           data-slot="ring-arc"
           cx="12"
           cy="12"
@@ -249,7 +249,7 @@
     class="has-data-reason:inline-flex has-data-reason:flex-col has-data-reason:items-box-start"
     ><span
       data-slot="label-text"
-      class="transition-[opacity] dur-morph ease-out covered-true:opacity-0"
+      class="transition-[opacity] duration-(--dur-morph) ease-out covered-true:opacity-0"
       data-covered={covered}
       >{#if swapsLabel && Icon === undefined}
         <!-- No rest icon: its pending wording is never drawn (the spinner
@@ -265,11 +265,11 @@
         <span class="inline-grid justify-items-start" data-slot="words"
           ><span
             aria-hidden={pending || undefined}
-            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
+            class="col-start-1 row-start-1 transition-[opacity] duration-(--dur-morph) ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
             data-active={!pending}><MorphText text={label} /></span
           ><span
             aria-hidden={!pending || undefined}
-            class="col-start-1 row-start-1 transition-[opacity] dur-morph ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
+            class="col-start-1 row-start-1 transition-[opacity] duration-(--dur-morph) ease-out motion-safe:transition-morph-fade active-false:opacity-0 motion-safe:active-false:blur-(--c-btn-words-blur)"
             data-active={pending}>{pendingLabel}</span
           ></span
         >

@@ -441,7 +441,7 @@
              clock. -->
         <div
           data-split-shown={open || undefined}
-          class="w-full min-w-c-side-surface-min p-space-3 opacity-0 transform-(--surface-off) transition-[opacity] dur-panel ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:dur-panel data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
+          class="w-full min-w-c-side-surface-min p-space-3 opacity-0 transform-(--surface-off) transition-[opacity] duration-(--dur-panel) ease-out group-data-split-expanded/split:p-0 motion-safe:transition-[opacity,transform] motion-safe:duration-(--dur-panel) data-split-shown:opacity-100 data-split-shown:transform-(--surface-on) data-split-shown:ease-out motion-safe:in-data-split-sliding:data-split-shown:transition-split-surface"
           style:--surface-off="translateX(var(--space-7))"
           style:--surface-on="translateX(0)"
           in:surfaceIn

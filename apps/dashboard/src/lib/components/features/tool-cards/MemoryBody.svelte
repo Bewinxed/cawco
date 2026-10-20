@@ -252,7 +252,7 @@
             >
             <span
               data-slot="chev"
-              class="flex-none grid place-items-center text-ink-muted transition-[rotate] dur-control ease-out motion-reduce:transition-off group-state-open:rotate-90"
+              class="flex-none grid place-items-center text-ink-muted transition-[rotate] duration-(--dur-control) ease-out motion-reduce:transition-off group-state-open:rotate-90"
               data-box><IconChevronRight class="size-icon-sm block" /></span
             >
           </Collapsible.Trigger>

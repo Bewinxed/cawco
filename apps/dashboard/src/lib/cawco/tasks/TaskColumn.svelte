@@ -82,7 +82,7 @@
 <section
   data-slot="column"
   aria-label="{label}, {count} {count === 1 ? 'task' : 'tasks'}"
-  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] dur-control ease-out data-closed:opacity-50 not-kind-you:data-over:bg-surface-hover kind-you:bg-brand-wash inset-ring inset-ring-border-hairline"
+  class="group/col flex min-h-0 flex-col max-phone:snap-start gap-space-1 rounded-lg bg-surface-band p-space-1 transition-[background-color,opacity] duration-(--dur-control) ease-out data-closed:opacity-50 not-kind-you:data-over:bg-surface-hover kind-you:bg-brand-wash inset-ring inset-ring-border-hairline"
   data-closed={closed ? "" : undefined}
   data-kind={kind ?? "none"}
   data-over={over ? "" : undefined}

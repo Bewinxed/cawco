@@ -40,7 +40,7 @@
     <i
       data-slot="dot"
       aria-hidden="true"
-      class="col-(--area) row-(--area) size-space-3 rounded-pill bg-(--c) transition-[background-color] dur-fade ease-out"
+      class="col-(--area) row-(--area) size-space-3 rounded-pill bg-(--c) transition-[background-color] duration-(--dur-fade) ease-out"
       style:--area="dot"
       style:--c={hueVar(account.hue)}
     ></i>
@@ -54,7 +54,7 @@
     >
     {#if problem}
       <span
-        class="mark-line col-(--area) row-(--area) flex min-w-0 items-center gap-space-1 type-meta text-status-attn-ink transition-[color] dur-panel ease-out"
+        class="mark-line col-(--area) row-(--area) flex min-w-0 items-center gap-space-1 type-meta text-status-attn-ink transition-[color] duration-(--dur-panel) ease-out"
         data-flip
         style:--area="problem"
       >

@@ -839,7 +839,7 @@
             {...tip}
             aria-label="Delegates"
             aria-pressed={rail.delegates}
-            class="focus-inset touch-hit mb-space-row inline-grid size-c-bar-item flex-none place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted transition-[background-color,color] dur-control ease-out hover:bg-surface-hover hover:text-ink-strong data-on:text-ink-strong"
+            class="focus-inset touch-hit mb-space-row inline-grid size-c-bar-item flex-none place-items-center rounded-sm border-none border-current bg-transparent text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out hover:bg-surface-hover hover:text-ink-strong data-on:text-ink-strong"
             data-on={rail.delegates || undefined}
             onclick={() => rail.setDelegates(!rail.delegates)}
             type="button"
@@ -902,7 +902,7 @@
               data-machine={id}
             >
               <hr
-                class="absolute inset-x-0 top-0 bottom-auto mx-(--seam-inset) h-px border-0 bg-seam opacity-0 transition-[opacity] dur-fade ease-out [[data-slot=group][data-filled]~[data-slot=group][data-filled]>&]:opacity-100"
+                class="absolute inset-x-0 top-0 bottom-auto mx-(--seam-inset) h-px border-0 bg-seam opacity-0 transition-[opacity] duration-(--dur-fade) ease-out [[data-slot=group][data-filled]~[data-slot=group][data-filled]>&]:opacity-100"
               />
               {@render header(
                 entry.group,

@@ -194,7 +194,7 @@
   <span
     data-slot="tile"
     aria-hidden="true"
-    class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:dur-toggle motion-safe:ease-out motion-safe:mark-pressed:press-by-(--press-scale) group-data-dot/mark:mask-(--hole-mask) mark-beating:mask-none"
+    class="absolute inset-0 grid place-items-center rounded-xs bg-(--fill) bg-mark-overlay group-data-bare/mark:bg-transparent group-data-bare/mark:bg-none motion-safe:scale-(--press-by) motion-safe:transition-[--press-by] motion-safe:duration-(--dur-toggle) motion-safe:ease-out motion-safe:mark-pressed:press-by-(--press-scale) group-data-dot/mark:mask-(--hole-mask) mark-beating:mask-none"
     style:--hole={dot
       ? "calc(var(--status-dot-size) / 2 + var(--status-dot-cut))"
       : undefined}
@@ -202,7 +202,7 @@
   >
     <span
       data-slot="tree-mark-rest"
-      class="col-start-1 row-start-1 inline-grid place-items-center opacity-(--swap-shown) transition-[--swap-away] dur-control ease-out motion-safe:scale-(--swap-scale) motion-safe:blur-(--swap-blur) group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-away-1 group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-away-1"
+      class="col-start-1 row-start-1 inline-grid place-items-center opacity-(--swap-shown) transition-[--swap-away] duration-(--dur-control) ease-out motion-safe:scale-(--swap-scale) motion-safe:blur-(--swap-blur) group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-away-1 group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-away-1"
       style:--swap-shown="calc(1 - var(--swap-away))"
       style:--swap-scale="calc(1 - 0.75 * var(--swap-away))"
       style:--swap-blur="calc(var(--space-1) * var(--swap-away))"
@@ -223,13 +223,13 @@
     {#if parent && !faceAlways}
       <span
         data-slot="chev"
-        class="col-start-1 row-start-1 inline-grid place-items-center size-icon-sm opacity-(--swap-shown) transition-[--swap-away] dur-control ease-out motion-safe:scale-(--swap-scale) motion-safe:blur-(--swap-blur) swap-away-1 group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-away-0 group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-away-0"
+        class="col-start-1 row-start-1 inline-grid place-items-center size-icon-sm opacity-(--swap-shown) transition-[--swap-away] duration-(--dur-control) ease-out motion-safe:scale-(--swap-scale) motion-safe:blur-(--swap-blur) swap-away-1 group-data-open/mark:group-not-data-status-count/mark:group-not-data-face-always/mark:swap-away-0 group-hover/mark:group-data-switch/mark:group-not-data-face-always/mark:swap-away-0"
         style:--swap-shown="calc(1 - var(--swap-away))"
         style:--swap-scale="calc(1 - 0.75 * var(--swap-away))"
         style:--swap-blur="calc(var(--space-1) * var(--swap-away))"
         ><!-- Open, the chevron points down at the rows. --><ChevronIcon
           aria-hidden="true"
-          class="size-full rotate-(--swap-turn) motion-safe:transition-[--swap-turn] motion-safe:dur-toggle motion-safe:ease-out"
+          class="size-full rotate-(--swap-turn) motion-safe:transition-[--swap-turn] motion-safe:duration-(--dur-toggle) motion-safe:ease-out"
           style={open ? "--swap-turn: 90deg" : undefined}
         /></span
       >

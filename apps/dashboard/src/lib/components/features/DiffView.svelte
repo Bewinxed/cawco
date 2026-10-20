@@ -150,7 +150,7 @@
     {:else}
       {#key attempt}
         <div
-          class="row-start-1 col-start-1 min-w-0 overflow-auto motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out data-veiled:invisible data-veiled:opacity-0"
+          class="row-start-1 col-start-1 min-w-0 overflow-auto motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out data-veiled:invisible data-veiled:opacity-0"
           style:max-block-size={cap}
           data-veiled={!drawn || undefined}
           {@attach draw(attempt)}

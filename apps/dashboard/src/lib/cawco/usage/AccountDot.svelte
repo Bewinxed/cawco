@@ -41,7 +41,7 @@
         data-account-dot-dot
         {...tip}
         aria-label="On {name}"
-        class="inline-block size-space-2 flex-none rounded-pill bg-(color:--c) align-middle transition-[background-color] dur-panel ease-out data-inline:me-space-1"
+        class="inline-block size-space-2 flex-none rounded-pill bg-(color:--c) align-middle transition-[background-color] duration-(--dur-panel) ease-out data-inline:me-space-1"
         data-account-dot={account.id}
         data-box
         data-inline={inline || undefined}

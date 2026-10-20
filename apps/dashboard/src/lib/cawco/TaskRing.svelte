@@ -61,7 +61,7 @@
     width={box}
   >
     <g
-      class="transform-fill origin-center transition-[opacity,scale] dur-exit ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:dur-control motion-reduce:shown-false:scale-100"
+      class="transform-fill origin-center transition-[opacity,scale] duration-(--dur-exit) ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:duration-(--dur-control) motion-reduce:shown-false:scale-100"
       data-shown={!finished}
     >
       <circle
@@ -74,7 +74,7 @@
       />
       <!-- Wound from the top, as a clock is read. -->
       <circle
-        class="transform-view origin-center -rotate-90 transition-[stroke-dasharray] dur-pop ease-out motion-reduce:dur-control"
+        class="transform-view origin-center -rotate-90 transition-[stroke-dasharray] duration-(--dur-pop) ease-out motion-reduce:duration-(--dur-control)"
         cx={box / 2}
         cy={box / 2}
         fill="none"
@@ -86,7 +86,7 @@
       />
     </g>
     <g
-      class="transform-fill origin-center text-success-9 transition-[opacity,scale] dur-exit ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:dur-control motion-reduce:shown-false:scale-100"
+      class="transform-fill origin-center text-success-9 transition-[opacity,scale] duration-(--dur-exit) ease-out shown-false:scale-60 shown-false:opacity-0 motion-reduce:duration-(--dur-control) motion-reduce:shown-false:scale-100"
       data-shown={finished}
     >
       <polyline

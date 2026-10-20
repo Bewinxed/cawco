@@ -128,7 +128,7 @@
     </span>
     <span
       data-slot="text"
-      class="flex min-w-0 flex-auto flex-col gap-space-row transition-opacity dur-panel ease-out group-data-off/row:opacity-55 max-phone:basis-(--text-basis)"
+      class="flex min-w-0 flex-auto flex-col gap-space-row transition-opacity duration-(--dur-panel) ease-out group-data-off/row:opacity-55 max-phone:basis-(--text-basis)"
       style:--text-basis="calc(100% - var(--c-mark) - var(--space-3))"
     >
       <span

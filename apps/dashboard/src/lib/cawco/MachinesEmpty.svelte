@@ -66,7 +66,7 @@
   <!-- The states share this cell: the one leaving is pinned in it (crossOut). -->
   <div
     data-slot="body"
-    class="relative w-full transition-[opacity] dur-fade ease-out group-data-leaving:opacity-0"
+    class="relative w-full transition-[opacity] duration-(--dur-fade) ease-out group-data-leaving:opacity-0"
   >
     {#key fleet}
       <!-- mark-line: a column; the machine cards stand under the words -->

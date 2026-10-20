@@ -519,7 +519,7 @@
               {#each stripMarks as ring, i (ring.id)}
                 <span
                   data-slot="slot"
-                  class="absolute top-0 grid transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
+                  class="absolute top-0 grid transition-[inset-inline-start] duration-(--dur-reveal) ease-in-out motion-reduce:transition-off"
                   style:inset-inline-start={slotAt(
                     i,
                     stripMarks.length + (stripMore > 0 ? 1 : 0)
@@ -535,7 +535,7 @@
                 <span
                   data-slot="slot"
                   data-more
-                  class="absolute top-0 grid h-icon-md min-w-icon-md place-items-center type-meta num text-ink-muted transition-[inset-inline-start] dur-reveal ease-in-out motion-reduce:transition-off"
+                  class="absolute top-0 grid h-icon-md min-w-icon-md place-items-center type-meta num text-ink-muted transition-[inset-inline-start] duration-(--dur-reveal) ease-in-out motion-reduce:transition-off"
                   data-strip-more
                   style:inset-inline-start={slotAt(
                     stripMarks.length,
@@ -778,7 +778,7 @@
     data-slot="cell-d"
     {...props}
     aria-label={cellLabel(ring, c, shown)}
-    class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] dur-fade ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
+    class="relative col-span-5 grid min-w-0 grid-cols-subgrid grid-rows-(--cell-rows) content-box-start items-box-start rounded-sm p-space-1 transition-[background-color] duration-(--dur-fade) ease-out data-carrying:inset-ring data-carrying:inset-ring-border-button-outline not-data-lit:data-limit:bg-meter-wash-over data-lit:bg-surface-hover motion-reduce:transition-off"
     data-account={ring.id}
     data-bind={ring.bind}
     data-carrying={(c !== null && ring.id === c.carry?.id) || undefined}

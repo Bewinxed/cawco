@@ -51,7 +51,7 @@
      `reflow` list (the rail, the board's queue) the chip still pops in and
      out as a whole (motion/rows). -->
 <span
-  class="mark-line type-label inline-flex items-center gap-space-1 rounded-pill bg-(color:--chip-bg) px-space-2 py-space-1 whitespace-nowrap text-(color:--chip-ink) transition-[background-color,color] dur-panel ease-out"
+  class="mark-line type-label inline-flex items-center gap-space-1 rounded-pill bg-(color:--chip-bg) px-space-2 py-space-1 whitespace-nowrap text-(color:--chip-ink) transition-[background-color,color] duration-(--dur-panel) ease-out"
   data-flip="pop"
   style:--chip-bg="var(--status-{tone}-bg)"
   style:--chip-ink="var(--status-{tone}-ink)"

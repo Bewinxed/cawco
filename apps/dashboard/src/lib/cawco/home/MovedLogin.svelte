@@ -61,7 +61,7 @@
            of 24). -->
       <a
         data-slot="todo"
-        class="mark-line me-(--hang) ms-auto inline-flex items-center gap-space-row rounded-xs type-meta text-link-ink no-underline whitespace-nowrap transition-[opacity] dur-control ease-out hover:text-link-hover active:opacity-72"
+        class="mark-line me-(--hang) ms-auto inline-flex items-center gap-space-row rounded-xs type-meta text-link-ink no-underline whitespace-nowrap transition-[opacity] duration-(--dur-control) ease-out hover:text-link-hover active:opacity-72"
         href="/config/accounts/{one.account.id}"
         onclick={onchoose}
         style:--hang="calc(-12px * 8.25 / 24)"

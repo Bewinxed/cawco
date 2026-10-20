@@ -109,7 +109,7 @@
         >Auto{tool.auto.why ? ` · ${tool.auto.why}` : ""}</span
       >
       <Check
-        class="size-icon-md text-selected-icon opacity-0 transition-[opacity] dur-control ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+        class="size-icon-md text-selected-icon opacity-0 transition-[opacity] duration-(--dur-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
       />
     </button>
     {#each tool.options as option (option.id)}
@@ -143,7 +143,7 @@
           {/if}
         </span>
         <Check
-          class="size-icon-md text-selected-icon opacity-0 transition-[opacity] dur-control ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
+          class="size-icon-md text-selected-icon opacity-0 transition-[opacity] duration-(--dur-control) ease-out group-aria-selected:opacity-100 motion-reduce:transition-off"
         />
       </button>
     {/each}

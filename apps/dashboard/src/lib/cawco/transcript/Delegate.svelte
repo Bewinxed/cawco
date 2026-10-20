@@ -443,13 +443,13 @@
           ><Sprite class="size-space-3 block text-mark-glyph" /></span
         >
         <span
-          class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-brand-ink flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap transition-[color] dur-control ease-out"
+          class="font-(family-name:--font-mono) text-ink-strong group-hover/bhead:text-brand-ink flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap transition-[color] duration-(--dur-control) ease-out"
           >{label}</span
         >
         <span
           data-slot="chev"
           aria-hidden="true"
-          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/bhead:rotate-90"
+          class="size-icon-sm flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-state-open/bhead:rotate-90"
           data-box><IconChevronRight class="size-icon-sm block" /></span
         >
         <!-- Its words on their x-height in the box (.mark-text): the trim's
@@ -494,7 +494,7 @@
              past the trim's room given back, so the box keeps its height. A phase
              change carries its tone across with its words. -->
         <span
-          class="mark-text ms-auto flex-none text-size-meta font-normal num rounded-xs py-(--pill-py) px-space-2 bg-status-idle-bg text-status-idle-ink whitespace-nowrap transition-[background-color,color] dur-control ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-attn:bg-status-attn-bg tone-attn:text-status-attn-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink"
+          class="mark-text ms-auto flex-none text-size-meta font-normal num rounded-xs py-(--pill-py) px-space-2 bg-status-idle-bg text-status-idle-ink whitespace-nowrap transition-[background-color,color] duration-(--dur-control) ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-attn:bg-status-attn-bg tone-attn:text-status-attn-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink tone-fail:bg-status-fail-bg tone-fail:text-status-fail-ink"
           data-tone={tone}
           data-delegate-tone={tone}
           data-box
@@ -526,7 +526,7 @@
       {#if id}
         <a
           aria-label="Open {label} in its own view"
-          class="touch-hit flex-none size-c-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] dur-control ease-out hover:text-brand-ink hover:bg-surface-hover"
+          class="touch-hit flex-none size-c-mark grid place-items-center rounded-xs text-ink-muted transition-[color,background] duration-(--dur-control) ease-out hover:text-brand-ink hover:bg-surface-hover"
           href={conversationHref(id, cawco.instanceIndex)}
           title="Open {label} in its own view"
         >

@@ -1095,7 +1095,7 @@
         <button
           data-slot="burger"
           aria-label="Open navigation"
-          class="desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] dur-control ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-(--burger-start) max-desk:mt-(--burger-top) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
+          class="desk:hidden size-c-btn-h-lg -ms-space-2 grid place-items-center border-none border-current bg-transparent rounded-sm text-ink-strong transition-[background] duration-(--dur-control) ease-in-out hover:bg-surface-hover motion-safe:active:scale-(--press-scale) max-desk:self-start max-desk:ms-(--burger-start) max-desk:mt-(--burger-top) max-desk:text-ink-muted max-desk:group-data-floating/top:pointer-events-auto"
           onclick={() => {
             railOpen = true;
           }}
@@ -1153,7 +1153,7 @@
                        it: a hairline rail down the leading edge. -->
                   <span
                     aria-hidden="true"
-                    class="absolute inset-y-0 start-0 w-space-row bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
+                    class="absolute inset-y-0 start-0 w-space-row bg-ink-muted opacity-0 z-2 pointer-events-none group-data-focused/col:opacity-50 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
                   ></span>
                   <RegionBoundary region="tabs">
                     <PaneTabs hosted {leaf} />

@@ -16,8 +16,8 @@
     variants: {
       look: {
         split:
-          "motion-safe:data-sliding:dur-panel flex min-h-0 min-w-0 motion-safe:data-sliding:data-opening:ease-drawer motion-safe:data-sliding:transition-[flex-grow] motion-safe:data-sliding:ease-in-out",
-        grid: "motion-safe:pane-keyed:dur-control flex min-h-0 min-w-0 overflow-hidden motion-safe:pane-keyed:transition-[flex-grow] motion-safe:pane-keyed:ease-out",
+          "motion-safe:data-sliding:duration-(--dur-panel) flex min-h-0 min-w-0 motion-safe:data-sliding:data-opening:ease-drawer motion-safe:data-sliding:transition-[flex-grow] motion-safe:data-sliding:ease-in-out",
+        grid: "motion-safe:pane-keyed:duration-(--dur-control) flex min-h-0 min-w-0 overflow-hidden motion-safe:pane-keyed:transition-[flex-grow] motion-safe:pane-keyed:ease-out",
       },
     },
   });

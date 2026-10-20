@@ -135,7 +135,7 @@
         <span data-slot="chev" class="inline-flex flex-none" data-box
           ><IconChevron
             aria-hidden="true"
-            class="size-icon-sm group-data-open/move:rotate-90 motion-safe:transition-[rotate] motion-safe:dur-toggle motion-safe:ease-in-out"
+            class="size-icon-sm group-data-open/move:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--dur-toggle) motion-safe:ease-in-out"
           /></span
         >
       {/if}</span
@@ -144,7 +144,7 @@
   </button>
   <p
     data-slot="detail"
-    class="grid grid-rows-shut opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-open group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-open peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-open group-hover/move:opacity-100 @phone:grid-rows-open @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:dur-toggle motion-safe:ease-out"
+    class="grid grid-rows-shut opacity-0 text-center type-meta text-ink-subtle group-data-open/move:grid-rows-open group-data-open/move:opacity-100 peer-focus-visible/line:grid-rows-open peer-focus-visible/line:opacity-100 group-hover/move:grid-rows-open group-hover/move:opacity-100 @phone:grid-rows-open @phone:opacity-100 motion-safe:transition-[grid-template-rows,opacity] motion-safe:duration-(--dur-toggle) motion-safe:ease-out"
   >
     <span class="overflow-hidden">{words.detail}</span>
   </p>

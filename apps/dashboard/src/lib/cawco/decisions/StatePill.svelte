@@ -23,7 +23,7 @@
 
 <span
   data-slot="state-pill"
-  class="type-label inline-flex h-c-pill-h max-w-full flex-none items-center gap-c-pill-gap rounded-pill px-space-3 whitespace-nowrap transition-[background-color,color] dur-panel ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink"
+  class="type-label inline-flex h-c-pill-h max-w-full flex-none items-center gap-c-pill-gap rounded-pill px-space-3 whitespace-nowrap transition-[background-color,color] duration-(--dur-panel) ease-out tone-live:bg-status-live-bg tone-live:text-status-live-ink tone-done:bg-status-done-bg tone-done:text-status-done-ink"
   data-tone={tone}
   {title}
 >

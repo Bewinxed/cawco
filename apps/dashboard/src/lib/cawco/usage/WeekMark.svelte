@@ -31,7 +31,7 @@
   <circle class="fill-border-control" cx="5" cy="5" r="5" />
   <!-- A sector: a stroke as wide as its circle's diameter fills the disc from the centre out. -->
   <circle
-    class="fill-none arc-week origin-center -rotate-90 transition-[stroke-dashoffset] dur-panel ease-in-out motion-reduce:transition-off"
+    class="fill-none arc-week origin-center -rotate-90 transition-[stroke-dashoffset] duration-(--dur-panel) ease-in-out motion-reduce:transition-off"
     cx="5"
     cy="5"
     pathLength="100"

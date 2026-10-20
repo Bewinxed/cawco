@@ -74,7 +74,7 @@
 >
   <span
     data-slot="fill"
-    class="absolute inset-y-0 start-0 w-(--fill-w) rounded-hair bg-meter-calm group-state-near/bar:bg-meter-near group-state-over/bar:bg-meter-over group-state-reached/bar:bg-meter-over group-state-stale/bar:bg-meter-stale motion-safe:transition-[inline-size] motion-safe:dur-morph motion-safe:ease-drawer"
+    class="absolute inset-y-0 start-0 w-(--fill-w) rounded-hair bg-meter-calm group-state-near/bar:bg-meter-near group-state-over/bar:bg-meter-over group-state-reached/bar:bg-meter-over group-state-stale/bar:bg-meter-stale motion-safe:transition-[inline-size] motion-safe:duration-(--dur-morph) motion-safe:ease-drawer"
     style:--fill-w="calc(var(--share) * 100%)"
     style:--share={shown / 100}
   ></span>

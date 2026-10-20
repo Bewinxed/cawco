@@ -113,13 +113,13 @@
         "value-hover":
           "coarse:opacity-100 opacity-0 not-disabled:focus-visible:opacity-100 coarse:disabled:opacity-100 disabled:opacity-0 disabled:focus-visible:opacity-100 group-[:hover]/value:not-disabled:opacity-100 group-[:hover]/value:disabled:opacity-100",
         "row-hover":
-          "can-hover:dur-control can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
+          "can-hover:duration-(--dur-control) can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:not-disabled:focus-visible:opacity-100 can-hover:disabled:opacity-0 can-hover:disabled:focus-visible:opacity-100 can-hover:group-hover:not-disabled:opacity-100 can-hover:group-hover:disabled:opacity-100",
         /* In reach whenever its row (`group/row`) is under the pointer or
            holds the focus anywhere in it, not only on the button itself
            (Files' Show in conversation, DESIGN.md Files: "shown on the
            row's hover and focus and always under a finger"). */
         "row-reach":
-          "can-hover:dur-control can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:group-focus-within/row:not-disabled:opacity-100 can-hover:group-hover/row:not-disabled:opacity-100",
+          "can-hover:duration-(--dur-control) can-hover:opacity-0 can-hover:transition-[opacity] can-hover:ease-out can-hover:group-focus-within/row:not-disabled:opacity-100 can-hover:group-hover/row:not-disabled:opacity-100",
       },
       /** Its words and mark along its width, once it is wider than they
           are: from the start, as a row of a list does (a directory's row,

@@ -192,21 +192,21 @@
             <IconChevronDown
               data-chev
               aria-hidden="true"
-              class="transition-[scale] dur-panel ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off *:vector-non-scaling"
+              class="transition-[scale] duration-(--dur-panel) ease-out group-aria-expanded/button:-scale-y-100 motion-reduce:transition-off *:vector-non-scaling"
               data-icon="inline-end"
             />
           </Button>
         </div>
         <div
           data-slot="fold"
-          class="group/fold grid max-w-full grid-rows-shut transition-[grid-template-rows] dur-exit ease-out data-open:grid-rows-open data-open:dur-panel motion-reduce:transition-off motion-reduce:data-open:dur-panel"
+          class="group/fold grid max-w-full grid-rows-shut transition-[grid-template-rows] duration-(--dur-exit) ease-out data-open:grid-rows-open data-open:duration-(--dur-panel) motion-reduce:transition-off motion-reduce:data-open:duration-(--dur-panel)"
           data-open={open || undefined}
           id="{fid}-others"
           inert={!open}
         >
           <div
             data-slot="fold-inner"
-            class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:dur-panel motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:dur-fade motion-reduce:group-data-open/fold:dur-panel"
+            class="min-h-0 overflow-hidden opacity-0 blur-(--fold-blur) transition-fold-fade group-data-open/fold:opacity-100 group-data-open/fold:filter-none motion-safe:group-data-open/fold:duration-(--dur-panel) motion-reduce:filter-none motion-reduce:transition-[opacity] motion-reduce:duration-(--dur-fade) motion-reduce:group-data-open/fold:duration-(--dur-panel)"
           >
             <div class="flex flex-col gap-space-2 pt-space-3">
               {#if card.why}

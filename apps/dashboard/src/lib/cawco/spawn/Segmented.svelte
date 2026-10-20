@@ -57,7 +57,7 @@
   <span
     data-slot="thumb"
     aria-hidden="true"
-    class="pointer-events-none absolute inset-y-space-1 start-space-1 w-(--thumb-w) translate-x-(--thumb-x) rounded-sm bg-surface-lift shadow-raised motion-safe:transition-[translate] motion-safe:dur-pop motion-safe:ease-in-out"
+    class="pointer-events-none absolute inset-y-space-1 start-space-1 w-(--thumb-w) translate-x-(--thumb-x) rounded-sm bg-surface-lift shadow-raised motion-safe:transition-[translate] motion-safe:duration-(--dur-pop) motion-safe:ease-in-out"
     style:--thumb-w={"calc((100% - 2 * var(--space-1) - (var(--n) - 1) * var(--space-row)) / var(--n))"}
     style:--thumb-x={`calc(${index} * (100% + var(--space-row)))`}
   ></span>

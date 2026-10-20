@@ -303,7 +303,7 @@
         type="button"
       >
         <IconChevronRight
-          class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
+          class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
         />
         <span>{expanded ? "Hide" : "Details"}</span>
       </button>
@@ -398,7 +398,7 @@
             type="button"
           >
             <IconChevronRight
-              class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
+              class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
             />
             <span>What it said</span>
           </button>

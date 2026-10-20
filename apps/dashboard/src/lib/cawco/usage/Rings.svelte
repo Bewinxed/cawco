@@ -128,7 +128,7 @@
     r={geometry.rd.toFixed(3)}
   />
   <circle
-    class="fill-none stroke-(--c) origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
+    class="fill-none stroke-(--c) origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:duration-(--dur-settle) group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-arc="disc"
@@ -148,7 +148,7 @@
     stroke-width={geometry.w.toFixed(3)}
   />
   <circle
-    class="fill-none arc-week origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
+    class="fill-none arc-week origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:duration-(--dur-settle) group-data-refill/rings:ease-out group-data-stale/rings:opacity-(--account-stale-opacity) motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-arc="rim"
@@ -160,7 +160,7 @@
     style:stroke-dashoffset={off(rim)}
   />
   <circle
-    class="fill-none stroke-account-reserved origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:dur-settle group-data-refill/rings:ease-out not-data-off:group-data-stale/rings:opacity-(--account-stale-opacity) data-off:opacity-0 motion-reduce:transition-off"
+    class="fill-none stroke-account-reserved origin-center -rotate-90 transition-ring-arc group-data-refill/rings:transition-[stroke-dashoffset] group-data-refill/rings:duration-(--dur-settle) group-data-refill/rings:ease-out not-data-off:group-data-stale/rings:opacity-(--account-stale-opacity) data-off:opacity-0 motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-off={reserve === null || Math.min(rim, reserve) <= 0 || undefined}
@@ -171,7 +171,7 @@
     style:stroke-dashoffset={off(reserve === null ? 0 : Math.min(rim, reserve))}
   />
   <circle
-    class="fill-none arc-ground origin-center -rotate-90 transition-[opacity] dur-toggle ease-out data-off:opacity-0 motion-reduce:transition-off"
+    class="fill-none arc-ground origin-center -rotate-90 transition-[opacity] duration-(--dur-toggle) ease-out data-off:opacity-0 motion-reduce:transition-off"
     cx="12"
     cy="12"
     data-off={reserve === null || undefined}

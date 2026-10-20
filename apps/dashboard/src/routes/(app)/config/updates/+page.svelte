@@ -231,7 +231,7 @@
           >
             <IconChevronRight
               data-chev
-              class="size-icon-sm transition-[rotate] dur-control ease-out group-aria-expanded:rotate-90"
+              class="size-icon-sm transition-[rotate] duration-(--dur-control) ease-out group-aria-expanded:rotate-90"
             />
             <span>What's new in {displayVersion(release.version)}</span>
           </button>

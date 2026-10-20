@@ -1324,7 +1324,7 @@ public enum Motion {
     public static let easeOut = TimingCurve(x1: 0.23, y1: 1, x2: 0.32, y2: 1)
     public static let easeInOut = TimingCurve(x1: 0.77, y1: 0, x2: 0.175, y2: 1)
     public static let easeDrawer = TimingCurve(x1: 0.32, y1: 0.72, x2: 0, y2: 1)
-    /// Two states trading places where they stand: a folder tab's choice, over dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching.
+    /// Two states trading places where they stand: a folder tab's choice, over --dur-settle (its lean, sheet, title ink and rim travel together). CSS ease-in-out, the curve transitions.dev gives icon and text swaps. At 400ms its steepest 1/60s frame moves 7.2% of the change; every other house curve moves more than an eighth in one frame there (ease-out 17.6%, ease-in-out 19.7%, ease-drawer 17.2%, ease-arrive 16.4%, ease-figure 16.9%), which reads as the change lurching.
     public static let easeCrossfade = TimingCurve(x1: 0.42, y1: 0, x2: 0.58, y2: 1)
     /// A small mark arriving beside what it belongs to (the compaction divider's chevron): it leaves at once and takes most of its time settling, so a 160ms entrance reads as motion where ease-out reads as a swap.
     public static let easeArrive = TimingCurve(x1: 0.2, y1: 0, x2: 0, y2: 1)
@@ -1389,7 +1389,7 @@ public enum Motion {
     /// The existing motion/spring.ts response for non-paging surface settlement. Paging uses UIScrollView's system mechanics. Also a folder tab's choice, on ease-crossfade (the owner's pick, "Slow · 400ms").
     /// In seconds.
     public static let durSettle: TimeInterval = 0.4
-    /// A disclosure growing open (collapsible-content); it folds shut over dur-exit.
+    /// A disclosure growing open (collapsible-content); it folds shut over --dur-exit.
     /// In seconds.
     public static let durReveal: TimeInterval = 0.24
     /// How long a done state stays up.
@@ -1403,7 +1403,7 @@ public enum Motion {
     /// In seconds.
     public static let breath: TimeInterval = 2
     public static let pressScale: Double = 0.97
-    /// How far Caw shrinks as he fades out, from any drawing, over dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms.
+    /// How far Caw shrinks as he fades out, from any drawing, over --dur-fade on ease-out, and the size a Caw whose status has no drawn enter fades in from, over --dur-pop. Material 3, Easing and duration: exit transitions are faster than enters, 200ms.
     public static let leaveScale: Double = 0.97
     public static let popScale: Double = 0.92
     /// How far each card of a session mark's deck shows below the one in front (SessionMark).

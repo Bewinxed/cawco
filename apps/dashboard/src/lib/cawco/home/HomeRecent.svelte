@@ -103,7 +103,7 @@
     >
       <span
         data-slot="chev"
-        class="inline-flex group-aria-expanded/disclosure:rotate-90 motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out"
+        class="inline-flex group-aria-expanded/disclosure:rotate-90 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out"
         data-box><IconChevronRight class="size-icon-sm" /></span
       >
       <span>Recent</span>

@@ -753,7 +753,7 @@
      snapped instead of transitioned, or none, it never hung). -->
 {#snippet title(text: string)}
   <h2
-    class="mark-line flex items-center gap-space-2 mb-space-2 text-size-label font-medium text-ink-strong opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+    class="mark-line flex items-center gap-space-2 mb-space-2 text-size-label font-medium text-ink-strong opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
     style:--part="0"
     style:--part-delay="calc(var(--part) * var(--dur-stagger))"
   >
@@ -828,7 +828,7 @@
          typing before they take over. -->
     <div
       data-slot="body"
-      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
@@ -903,7 +903,7 @@
     </div>
     <div
       data-slot="foot"
-      class="flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="flex-none pt-space-1 opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
@@ -959,7 +959,7 @@
          past the card. -->
     <div
       data-slot="body"
-      class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="group/body kit-edge-fade-block relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
       data-railed={questions.length > 1 || undefined}
       style:--part="1"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
@@ -969,7 +969,7 @@
         <span
           data-slot="rail"
           aria-hidden="true"
-          class="absolute top-0 start-0 w-px bg-brand-solid pointer-events-none motion-safe:transition-[translate,block-size] motion-safe:dur-control motion-safe:ease-drawer"
+          class="absolute top-0 start-0 w-px bg-brand-solid pointer-events-none motion-safe:transition-[translate,block-size] motion-safe:duration-(--dur-control) motion-safe:ease-drawer"
           style:block-size="{rail.height}px"
           style:translate="0 {rail.top}px"
         ></span>
@@ -1121,7 +1121,7 @@
     </div>
     <div
       data-slot="foot"
-      class="flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="flex-none pt-space-1 opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
@@ -1159,7 +1159,7 @@
          iOS; secrets in the fields are already hidden. -->
     <div
       data-slot="body"
-      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="relative flex-auto min-h-0 min-w-0 overflow-y-auto overscroll-contain opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="1"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >
@@ -1210,7 +1210,7 @@
               variant="ghost"
             >
               <IconChevronDown
-                class="motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-drawer group-data-open/cmd:rotate-180"
+                class="motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-drawer group-data-open/cmd:rotate-180"
               />
             </Button>
           {/if}
@@ -1257,7 +1257,7 @@
     </div>
     <div
       data-slot="foot"
-      class="flex-none pt-space-1 opacity-0 transition-[opacity] dur-fade ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="flex-none pt-space-1 opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >

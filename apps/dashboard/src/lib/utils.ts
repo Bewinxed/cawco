@@ -73,7 +73,6 @@ const twMergeConfig = {
       "grid-rows": [{ "grid-rows": ["shut", "open"] }],
       "grid-cols": [{ "grid-cols": ["fluid-auto", "mark-fluid"] }],
       "auto-rows": [{ "auto-rows": ["line", "band", "band-phone"] }],
-      duration: [{ dur: durations }],
       "animation-duration": [{ "anim-dur": durations }],
       "animation-delay": [{ "anim-delay": durations }, "arrive-delay"],
       "type-role": [{ type: utilities("type") }],

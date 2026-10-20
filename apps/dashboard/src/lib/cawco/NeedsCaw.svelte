@@ -600,7 +600,7 @@
     data-slot="rim"
     data-foot={low || undefined}
     aria-hidden="true"
-    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible data-foot:transition-[opacity] data-foot:dur-exit data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:not-group-data-instant/tools:data-foot:dur-pop group-data-instant/tools:data-foot:transition-off"
+    class="pointer-events-none absolute start-1/2 top-1/2 size-c-btn-h -translate-1/2 overflow-visible data-foot:transition-[opacity] data-foot:duration-(--dur-exit) data-foot:ease-out group-data-joined/tools:data-foot:opacity-0 group-data-joined/tools:not-group-data-instant/tools:data-foot:duration-(--dur-pop) group-data-instant/tools:data-foot:transition-off"
     data-count={count}
     viewBox="0 0 {RING_BOX} {RING_BOX}"
   >
@@ -688,7 +688,7 @@
            press's squash, it was work in the frame that press was waiting
            on. -->
       <span
-        class="pointer-events-none grid place-items-center motion-safe:will-change-transform motion-safe:transition-[transform] motion-safe:dur-toggle motion-safe:ease-out motion-safe:data-pressed:transform-(--mug-squash)"
+        class="pointer-events-none grid place-items-center motion-safe:will-change-transform motion-safe:transition-[transform] motion-safe:duration-(--dur-toggle) motion-safe:ease-out motion-safe:data-pressed:transform-(--mug-squash)"
         data-pressed={pressed || undefined}
         style:--mug-squash="scale(var(--press-scale))"
       >

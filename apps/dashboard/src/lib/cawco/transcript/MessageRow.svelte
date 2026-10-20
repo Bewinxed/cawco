@@ -577,7 +577,7 @@
            strength, so the run reads as one surface. -->
       <div
         data-slot="words"
-        class="flow-root group-data-ghost/turn:opacity-(--ghost-presence) motion-safe:transition-[opacity] motion-safe:dur-menu motion-safe:ease-out"
+        class="flow-root group-data-ghost/turn:opacity-(--ghost-presence) motion-safe:transition-[opacity] motion-safe:duration-(--dur-menu) motion-safe:ease-out"
         bind:this={words}
         {@attach land(() => (grouped ? sent : undefined), {
           ms: dur("--dur-pop"),
@@ -655,7 +655,7 @@
                   data-flipped={actionsFlipped || undefined}
                   data-pending={forkPending || retrying || undefined}
                   data-shown={actionsShown || undefined}
-                  class="flex gap-space-2 absolute top-0 end-(--pad) z-1 -translate-y-full opacity-0 pointer-events-none transition-[opacity] dur-control ease-out group-data-grouped/turn:top-space-2 group-data-grouped/turn:bg-surface-raised group-data-grouped/turn:rounded-md group-data-grouped/turn:data-flipped:top-0 group-data-grouped/turn:data-flipped:translate-none group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto can-hover:data-pending:opacity-100 can-hover:data-pending:pointer-events-auto coarse:data-shown:opacity-100 coarse:data-shown:pointer-events-auto"
+                  class="flex gap-space-2 absolute top-0 end-(--pad) z-1 -translate-y-full opacity-0 pointer-events-none transition-[opacity] duration-(--dur-control) ease-out group-data-grouped/turn:top-space-2 group-data-grouped/turn:bg-surface-raised group-data-grouped/turn:rounded-md group-data-grouped/turn:data-flipped:top-0 group-data-grouped/turn:data-flipped:translate-none group-hover/turn:opacity-100 group-hover/turn:pointer-events-auto can-hover:group-focus-within/turn:opacity-100 can-hover:group-focus-within/turn:pointer-events-auto can-hover:data-pending:opacity-100 can-hover:data-pending:pointer-events-auto coarse:data-shown:opacity-100 coarse:data-shown:pointer-events-auto"
                   {@attach placeActions}
                 >
                   {#if canEdit || offered.edit === "queued"}
@@ -781,7 +781,7 @@
           inert={!open}
           data-open={open || undefined}
           style:--fail-delay="calc(var(--dur-control) / 3)"
-          class="grid grid-rows-shut opacity-0 data-open:grid-rows-open data-open:opacity-100 data-open:mt-space-2 motion-safe:transition-[grid-template-rows,opacity,margin-block-start] motion-safe:dur-pop motion-safe:ease-out motion-safe:delay-(--fail-delay)"
+          class="grid grid-rows-shut opacity-0 data-open:grid-rows-open data-open:opacity-100 data-open:mt-space-2 motion-safe:transition-[grid-template-rows,opacity,margin-block-start] motion-safe:duration-(--dur-pop) motion-safe:ease-out motion-safe:delay-(--fail-delay)"
         >
           <div class="overflow-hidden min-h-0">
             {#if failed || retried}

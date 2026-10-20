@@ -46,9 +46,9 @@
   data-grouped={grouped || undefined}
   data-lifted={lifted || undefined}
   class={[
-    "relative isolate flow-root ms-(--well-x) px-(--pad) py-space-2 data-lifted:py-0 motion-safe:transition-[padding-block] motion-safe:dur-panel motion-safe:ease-drawer",
+    "relative isolate flow-root ms-(--well-x) px-(--pad) py-space-2 data-lifted:py-0 motion-safe:transition-[padding-block] motion-safe:duration-(--dur-panel) motion-safe:ease-drawer",
     "before:absolute before:inset-0 before:-z-1 before:rounded-well-r before:border before:border-well-edge before:bg-surface-recess-deep motion-safe:before:transition-well-surface theme-flip:before:transition-none data-grouped:before:-inset-bs-px data-grouped:before:border-bs-0 data-grouped:before:rounded-ss-none data-grouped:before:rounded-se-none data-runs-on:before:border-be-transparent data-runs-on:before:rounded-ee-none data-runs-on:before:rounded-es-none data-lifted:before:opacity-0",
-    "after:absolute after:inset-x-(--pad) after:-inset-bs-px after:h-px after:bg-seam after:opacity-0 motion-safe:after:transition-[opacity] motion-safe:after:dur-pop motion-safe:after:ease-out theme-flip:after:transition-none not-data-lifted:data-grouped:after:opacity-100 data-lifted:after:opacity-0",
+    "after:absolute after:inset-x-(--pad) after:-inset-bs-px after:h-px after:bg-seam after:opacity-0 motion-safe:after:transition-[opacity] motion-safe:after:duration-(--dur-pop) motion-safe:after:ease-out theme-flip:after:transition-none not-data-lifted:data-grouped:after:opacity-100 data-lifted:after:opacity-0",
     extra,
   ]}
   {...rest}

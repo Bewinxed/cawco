@@ -37,7 +37,7 @@
 >
   <span
     aria-hidden="true"
-    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-btn-h translate-y-(--fill-y) rounded-sm bg-surface-fill opacity-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:dur-control motion-safe:ease-in-out"
+    class="pointer-events-none absolute inset-x-space-1 top-space-1 h-c-btn-h translate-y-(--fill-y) rounded-sm bg-surface-fill opacity-0 data-shown:opacity-100 motion-safe:transition-[translate] motion-safe:duration-(--dur-control) motion-safe:ease-in-out"
     data-shown={items.length > 0 || undefined}
     style:--fill-y={`calc(${index} * (var(--c-btn-h) + var(--space-row)))`}
   ></span>

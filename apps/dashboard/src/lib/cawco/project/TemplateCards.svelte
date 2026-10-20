@@ -212,7 +212,7 @@
       <div
         data-slot="peek"
         aria-hidden="true"
-        class="pointer-events-none absolute top-0 left-0 z-3 motion-safe:data-placed:transition-[translate] motion-safe:data-placed:dur-panel motion-safe:data-placed:ease-drawer"
+        class="pointer-events-none absolute top-0 left-0 z-3 motion-safe:data-placed:transition-[translate] motion-safe:data-placed:duration-(--dur-panel) motion-safe:data-placed:ease-drawer"
         data-share={peekShare}
         data-placed={placed || undefined}
         style:translate="{peekAt.x}px {peekAt.y}px"

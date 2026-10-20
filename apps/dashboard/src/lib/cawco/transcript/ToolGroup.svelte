@@ -537,7 +537,7 @@
                    is unchanged. -->
               <span
                 data-slot="chev"
-                class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-state-open/trow:rotate-90"
+                class="flex-none grid place-items-center text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-state-open/trow:rotate-90"
                 data-box><IconChevronRight class="size-icon-md block" /></span
               >
             </button>

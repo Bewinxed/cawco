@@ -86,7 +86,7 @@
       <div
         data-slot="well"
         data-dim={flow.phase === "expired" || undefined}
-        class="flex items-center rounded-sm bg-code-bg px-space-4 py-space-3 transition-[opacity] dur-fade ease-out data-dim:opacity-50"
+        class="flex items-center rounded-sm bg-code-bg px-space-4 py-space-3 transition-[opacity] duration-(--dur-fade) ease-out data-dim:opacity-50"
         in:openPlace
       >
         <span class="sr-only">{words.said(flow.code ?? "")}</span>

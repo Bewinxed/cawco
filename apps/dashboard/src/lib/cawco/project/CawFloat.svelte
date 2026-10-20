@@ -86,7 +86,7 @@
        drawer curve; with less motion it only fades. -->
   <aside
     aria-label="Caw, lead of {projectName}"
-    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@min-[938px]:mt-space-6 in-data-caw-open:@min-[938px]:mr-space-6 in-data-caw-open:@min-[938px]:mb-space-6 in-data-caw-open:@min-[938px]:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile transition-[opacity,translate] dur-panel ease-drawer starting:opacity-0 motion-safe:starting:translate-x-(--pop-rise)"
+    class="grid-area-dock in-data-caw-open:phone:mx-space-5 in-data-caw-open:phone:mt-0 in-data-caw-open:phone:mb-space-6 in-data-caw-open:@min-[938px]:mt-space-6 in-data-caw-open:@min-[938px]:mr-space-6 in-data-caw-open:@min-[938px]:mb-space-6 in-data-caw-open:@min-[938px]:ml-0 flex min-h-0 min-w-0 flex-col overflow-hidden rounded-lg bg-surface-raised shadow-tile transition-[opacity,translate] duration-(--dur-panel) ease-drawer starting:opacity-0 motion-safe:starting:translate-x-(--pop-rise)"
     data-caw-dock
     {@attach dock}
   >

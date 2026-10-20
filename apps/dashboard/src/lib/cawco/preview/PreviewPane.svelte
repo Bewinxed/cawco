@@ -2494,7 +2494,7 @@
         data-ready={!current || loaded || undefined}
         data-panel-inspector={(inspecting && inspectorLayout === "panel") ||
           undefined}
-        class="absolute inset-0 scheme-light scheme-dark:scheme-dark bg-(color:--frame-ground) block size-full border-none border-current opacity-0 transition-[opacity] dur-control ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
+        class="absolute inset-0 scheme-light scheme-dark:scheme-dark bg-(color:--frame-ground) block size-full border-none border-current opacity-0 transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-100 data-panel-inspector:w-(--frame-w)"
         style:--frame-w="calc(100% - var(--c-sheet-inspector-w))"
         allow="clipboard-write"
         inert={!current}
@@ -2531,7 +2531,7 @@
       data-ready={((loaded || standing !== null) && !stageWaiting) || undefined}
       data-slot="cover"
       aria-hidden={stageWaiting ? undefined : "true"}
-      class="group/cover absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] dur-control ease-out data-ready:opacity-0"
+      class="group/cover absolute inset-0 p-space-5 bg-surface-recess pointer-events-none transition-[opacity] duration-(--dur-control) ease-out data-ready:opacity-0"
       role={stageWaiting ? "status" : undefined}
     >
       <Skeleton

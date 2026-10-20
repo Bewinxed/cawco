@@ -137,7 +137,7 @@
         data-slot="strategy-picker-card"
         aria-checked={checked}
         aria-label={words.card(strategy.label, strategy.line)}
-        class="group flex min-w-0 flex-col gap-space-3 rounded-lg border border-border-well bg-surface-raised p-space-3 text-start transition-[border-color,background-color] dur-fade ease-out not-aria-checked:hover:border-border-control aria-checked:border-focus-ring aria-checked:bg-strategy-card-picked focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) motion-safe:transition-pick-card motion-safe:active:transform-(--card-press)"
+        class="group flex min-w-0 flex-col gap-space-3 rounded-lg border border-border-well bg-surface-raised p-space-3 text-start transition-[border-color,background-color] duration-(--dur-fade) ease-out not-aria-checked:hover:border-border-control aria-checked:border-focus-ring aria-checked:bg-strategy-card-picked focus-visible:outline-(length:--focus-ring-width) focus-visible:outline-solid focus-visible:outline-focus-ring focus-visible:outline-offset-(--focus-ring-offset) motion-safe:transition-pick-card motion-safe:active:transform-(--card-press)"
         style:--card-press="scale(var(--press-scale))"
         onclick={(event) => {
           if (
@@ -164,10 +164,10 @@
         >
           <span
             aria-hidden="true"
-            class="grid size-icon-md flex-none place-items-center rounded-pill border-2 border-neutral-8 transition-[border-color] dur-fade ease-out group-aria-checked:border-selected-icon"
+            class="grid size-icon-md flex-none place-items-center rounded-pill border-2 border-neutral-8 transition-[border-color] duration-(--dur-fade) ease-out group-aria-checked:border-selected-icon"
           >
             <span
-              class="size-space-2 scale-50 rounded-pill bg-selected-icon opacity-0 transition-[scale,opacity] dur-toggle ease-out group-aria-checked:scale-100 group-aria-checked:opacity-100"
+              class="size-space-2 scale-50 rounded-pill bg-selected-icon opacity-0 transition-[scale,opacity] duration-(--dur-toggle) ease-out group-aria-checked:scale-100 group-aria-checked:opacity-100"
             ></span>
           </span>
           <span

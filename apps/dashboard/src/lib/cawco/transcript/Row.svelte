@@ -463,7 +463,7 @@
 <div
   data-slot="row"
   data-continues={continues || undefined}
-  class="flow-root data-marked:relative data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-x-space-2 data-marked:before:inset-y-0 data-marked:before:rounded-well data-marked:before:bg-selection data-marked:before:starting:opacity-0 marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:dur-panel motion-safe:data-marked:before:ease-out"
+  class="flow-root data-marked:relative data-marked:before:pointer-events-none data-marked:before:absolute data-marked:before:-inset-x-space-2 data-marked:before:inset-y-0 data-marked:before:rounded-well data-marked:before:bg-selection data-marked:before:starting:opacity-0 marked-off:before:opacity-0 motion-safe:data-marked:before:transition-opacity motion-safe:data-marked:before:duration-(--dur-panel) motion-safe:data-marked:before:ease-out"
   data-marked={marked}
   data-row={rowKey}
   bind:this={node}

@@ -107,7 +107,7 @@
   {#snippet words()}
     <span
       data-slot="name"
-      class="flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong transition-[color] dur-control ease-out group-hover/words:text-brand-ink"
+      class="flex-initial min-w-0 overflow-clip text-ellipsis whitespace-nowrap text-ink-strong transition-[color] duration-(--dur-control) ease-out group-hover/words:text-brand-ink"
       >{name}</span
     >
     <span

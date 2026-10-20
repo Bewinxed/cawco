@@ -23,7 +23,7 @@
       },
       look: {
         attach:
-          "grid size-c-composer-field place-items-center rounded-xs border border-border-control hit-edge-hair bg-surface-raised text-ink-muted transition-[background-color,color] dur-control ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:pressed:scale-(--press-scale) group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs",
+          "grid size-c-composer-field place-items-center rounded-xs border border-border-control hit-edge-hair bg-surface-raised text-ink-muted transition-[background-color,color] duration-(--dur-control) ease-out motion-safe:transition-[background-color,color,scale] hover:bg-surface-hover hover:text-ink-strong motion-safe:pressed:scale-(--press-scale) group-inert/ctrls:not-aria-invalid:border-border-button-outline group-inert/ctrls:shadow-xs",
       },
     },
   });

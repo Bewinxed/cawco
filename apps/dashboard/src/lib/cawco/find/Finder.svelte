@@ -650,7 +650,7 @@
         {kindNoun(first, count)} match “{finder.asked}”</span
       >
       <ChevronRight
-        class="flex-none size-icon-md text-ink-muted motion-safe:transition-[rotate] motion-safe:dur-toggle motion-safe:ease-in-out data-open:rotate-90"
+        class="flex-none size-icon-md text-ink-muted motion-safe:transition-[rotate] motion-safe:duration-(--dur-toggle) motion-safe:ease-in-out data-open:rotate-90"
         aria-hidden="true"
         data-box
         data-open={open || undefined}

@@ -322,7 +322,7 @@
           {alt}
           data-cached={cached || undefined}
           data-loaded={loaded === src || undefined}
-          class="block max-w-full max-h-(--tx-shot) object-contain opacity-0 data-loaded:opacity-100 not-data-cached:transition-[opacity] not-data-cached:dur-control not-data-cached:ease-out group-data-thumb/shot:w-full group-data-thumb/shot:h-full group-data-thumb/shot:object-cover group-data-sized/frame:w-full group-data-sized/frame:h-full"
+          class="block max-w-full max-h-(--tx-shot) object-contain opacity-0 data-loaded:opacity-100 not-data-cached:transition-[opacity] not-data-cached:duration-(--dur-control) not-data-cached:ease-out group-data-thumb/shot:w-full group-data-thumb/shot:h-full group-data-thumb/shot:object-cover group-data-sized/frame:w-full group-data-sized/frame:h-full"
           data-caption={caption}
           data-path={path}
           data-shot={size}

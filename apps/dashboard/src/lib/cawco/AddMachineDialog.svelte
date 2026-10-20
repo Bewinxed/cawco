@@ -426,7 +426,7 @@
               <IconChevronRight
                 data-chev
                 aria-hidden="true"
-                class="size-icon-md flex-none motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-open:rotate-90"
+                class="size-icon-md flex-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-open:rotate-90"
               /><span>Output</span>
             </summary>
             <pre
@@ -547,7 +547,7 @@
               <IconChevronRight
                 data-chev
                 aria-hidden="true"
-                class="size-icon-md flex-none motion-safe:transition-[rotate] motion-safe:dur-control motion-safe:ease-out group-open:rotate-90"
+                class="size-icon-md flex-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-open:rotate-90"
               />
               <span>This hub's SSH key</span>
             </summary>

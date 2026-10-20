@@ -182,9 +182,9 @@
       handle === "top" &&
         "start-1/2 top-0 h-c-btn-h-lg w-c-canvas-grab-w -translate-x-1/2 cursor-ns-resize justify-center pt-space-1",
       handle === "top-left" &&
-        "top-0 size-c-btn-h-lg start-(--corner-in) cursor-nwse-resize transition-[opacity] dur-grow ease-out starting:opacity-0",
+        "top-0 size-c-btn-h-lg start-(--corner-in) cursor-nwse-resize transition-[opacity] duration-(--dur-grow) ease-out starting:opacity-0",
       handle === "top-right" &&
-        "top-0 size-c-btn-h-lg end-(--corner-in) cursor-nesw-resize justify-end transition-[opacity] dur-grow ease-out starting:opacity-0",
+        "top-0 size-c-btn-h-lg end-(--corner-in) cursor-nesw-resize justify-end transition-[opacity] duration-(--dur-grow) ease-out starting:opacity-0",
     ]}
     data-canvas-stages-grab={handle}
     onkeydown={(event) => stage.grab?.key(handle, event)}

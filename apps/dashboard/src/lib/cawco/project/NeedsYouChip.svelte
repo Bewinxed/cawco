@@ -28,7 +28,7 @@
   data-slot="needs"
   aria-pressed={on}
   class={[
-    "mark-line type-label inline-flex h-c-btn-h-sm flex-none items-center gap-space-2 rounded-md border border-transparent bg-status-attn-bg px-space-3 text-status-attn-ink transition-[background-color,color,border-color] dur-control ease-out motion-safe:active:transform-(--tpress) aria-pressed:border-status-attn-glyph",
+    "mark-line type-label inline-flex h-c-btn-h-sm flex-none items-center gap-space-2 rounded-md border border-transparent bg-status-attn-bg px-space-3 text-status-attn-ink transition-[background-color,color,border-color] duration-(--dur-control) ease-out motion-safe:active:transform-(--tpress) aria-pressed:border-status-attn-glyph",
     className,
   ]}
   style:--tpress="scale(var(--press-scale))"

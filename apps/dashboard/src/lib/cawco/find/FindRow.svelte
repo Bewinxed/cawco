@@ -141,7 +141,7 @@
       type="button"
     >
       <ChevronDown
-        class="size-icon-md motion-safe:transition-[rotate] motion-safe:dur-toggle motion-safe:ease-in-out group-aria-expanded/disclose:rotate-180"
+        class="size-icon-md motion-safe:transition-[rotate] motion-safe:duration-(--dur-toggle) motion-safe:ease-in-out group-aria-expanded/disclose:rotate-180"
       />
     </button>
   {/if}

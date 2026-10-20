@@ -724,7 +724,7 @@
         >
           <button
             aria-expanded={listOpen}
-            class="group press-tint mark-line type-label -mx-space-1 inline-flex items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] dur-control ease-out hover:bg-surface-hover"
+            class="group press-tint mark-line type-label -mx-space-1 inline-flex items-center gap-space-1 rounded-xs border-none border-current bg-transparent px-space-1 py-space-row text-ink-strong transition-[background-color] duration-(--dur-control) ease-out hover:bg-surface-hover"
             data-places-toggle
             onclick={() => {
               listOpen = !listOpen;
@@ -736,7 +736,7 @@
             >
             <IconChevronDown
               data-chev
-              class="size-icon-sm text-ink-muted transition-[rotate] dur-control ease-out group-aria-expanded:rotate-180"
+              class="size-icon-sm text-ink-muted transition-[rotate] duration-(--dur-control) ease-out group-aria-expanded:rotate-180"
             />
           </button>
           {#if !adding}

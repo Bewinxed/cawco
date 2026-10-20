@@ -373,7 +373,7 @@
   data-expanded-recessed={(expanded && recessed) || undefined}
   data-recessed={recessed || undefined}
   aria-label={label}
-  class="group/card @container flex h-full min-h-0 min-w-0 flex-col rounded-lg bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:dur-panel motion-safe:in-data-split-sliding:ease-drawer {className}"
+  class="group/card @container flex h-full min-h-0 min-w-0 flex-col rounded-lg bg-surface-raised px-space-2 pt-0 pb-space-2 shadow-drawer data-side-surface-expanded:rounded-none data-side-surface-expanded:px-0 data-side-surface-expanded:pt-space-3 data-side-surface-expanded:pb-0 data-side-surface-expanded:shadow-none data-side-surface-expanded:not-data-recessed:px-(--expanded-inset) in-data-preview-sheet:h-auto in-data-preview-sheet:max-h-(--card-max) in-data-preview-sheet:flex-1 in-data-preview-sheet:shadow-none motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer {className}"
   style:--expanded-inset="calc(var(--space-3) + var(--space-2))"
   style:--card-max="calc(100% - var(--sheet-hidden, 0px))"
   bind:this={section}
@@ -498,7 +498,7 @@
          edge at night). -->
     <div
       data-side-well
-      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:dur-panel motion-safe:in-data-split-sliding:ease-drawer"
+      class="relative flex min-h-0 flex-1 flex-col overflow-hidden rounded-sm border border-border-well bg-surface-well group-data-side-surface-expanded/card:rounded-none group-data-side-surface-expanded/card:border-x-0 group-data-side-surface-expanded/card:border-b-0 motion-safe:in-data-split-sliding:transition-[padding,border-radius,border-width,box-shadow] motion-safe:in-data-split-sliding:duration-(--dur-panel) motion-safe:in-data-split-sliding:ease-drawer"
       bind:this={well}
     >
       {@render children()}

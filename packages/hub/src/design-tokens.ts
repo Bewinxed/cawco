@@ -697,8 +697,13 @@ function themeKeys(
   return keys;
 }
 
+/**
+ * An animation's duration and delay on the duration steps: Tailwind has no
+ * utility for either. A transition's duration is Tailwind's own
+ * `duration-(--dur-*)`, which also sets `--tw-duration`, so a
+ * `transition-[…]` after it keeps it.
+ */
 const DURATION_UTILITIES: ThemeUtility[] = [
-  ["dur-*", ["transition-duration: --value(--duration-*);"]],
   ["anim-dur-*", ["animation-duration: --value(--duration-*);"]],
   // Tailwind's `delay-*` is the transition's; an animation's start waits on
   // the same steps.

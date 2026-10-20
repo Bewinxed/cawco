@@ -1268,10 +1268,6 @@
   }
 }
 
-@utility dur-* {
-  transition-duration: --value(--duration-*);
-}
-
 @utility anim-dur-* {
   animation-duration: --value(--duration-*);
 }

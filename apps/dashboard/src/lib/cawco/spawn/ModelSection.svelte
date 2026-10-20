@@ -411,7 +411,7 @@
         <span
           data-slot="fill"
           aria-hidden="true"
-          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 rounded-sm bg-selected-bg transition-[opacity] dur-control ease-out motion-safe:transition-panel-resize"
+          class="pointer-events-none absolute top-space-1 right-space-1 left-space-1 rounded-sm bg-selected-bg transition-[opacity] duration-(--dur-control) ease-out motion-safe:transition-panel-resize"
           style:transform={`translateY(calc(${modelIdx} * (var(--c-row-h) + var(--space-row))))`}
           style:height={`${chosenHeight}px`}
           style:opacity={hiOpacity}

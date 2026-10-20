@@ -66,7 +66,7 @@
     <span class="text-label text-ink-strong">Try it</span>
     <span
       aria-live="polite"
-      class="text-meta transition-colors dur-pop ease-out {firing
+      class="text-meta transition-colors duration-(--dur-pop) ease-out {firing
         ? 'text-success-9'
         : 'text-ink-muted'}"
       role="status"

@@ -17,7 +17,7 @@
 <span
   data-slot="tile"
   aria-hidden="true"
-  class="grid size-(--tile) flex-none place-items-center rounded-sm bg-(--c)/18 text-(color:--c) transition-[background-color,color] dur-fade ease-out"
+  class="grid size-(--tile) flex-none place-items-center rounded-sm bg-(--c)/18 text-(color:--c) transition-[background-color,color] duration-(--dur-fade) ease-out"
   style:--c={hueVar(hue)}
   style:--tile={`${size}px`}
 >

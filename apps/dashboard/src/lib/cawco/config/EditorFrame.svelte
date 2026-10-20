@@ -220,7 +220,7 @@
       >
         <div
           data-slot="slot"
-          class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0 data-veiled:invisible data-veiled:opacity-0 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
+          class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0 data-veiled:invisible data-veiled:opacity-0 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
           data-veiled={veiled || undefined}
         >
           {@render children()}
@@ -229,7 +229,7 @@
           <div
             data-slot="slot"
             aria-hidden="true"
-            class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0 motion-safe:transition-[opacity] motion-safe:dur-control motion-safe:ease-out"
+            class="col-start-1 row-start-1 flex flex-col gap-space-5 min-w-0 motion-safe:transition-[opacity] motion-safe:duration-(--dur-control) motion-safe:ease-out"
             out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
           >
             <SkeletonRows fill={card !== null} />

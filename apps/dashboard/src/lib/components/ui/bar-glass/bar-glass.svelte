@@ -66,7 +66,7 @@
   <span
     data-slot="join"
     aria-hidden="true"
-    class="absolute inset-bs-0 -inset-be-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] dur-exit ease-out join-radius-(--join-round) group-data-joined/tools:opacity-100 group-data-joined/tools:not-group-data-instant/tools:dur-pop group-data-instant/tools:transition-off before:absolute before:inset-0 before:bg-surface-raised before:clip-join @max-desk/shell:-inset-be-(--caw-neck) @max-desk/shell:join-radius-(--tools-round) @max-desk/shell:clip-path-(--join-edge-phone) @max-desk/shell:before:clip-join-phone"
+    class="absolute inset-bs-0 -inset-be-px -start-(--f) end-0 pointer-events-none opacity-0 bg-border-control clip-path-(--join-edge) transition-[opacity] duration-(--dur-exit) ease-out join-radius-(--join-round) group-data-joined/tools:opacity-100 group-data-joined/tools:not-group-data-instant/tools:duration-(--dur-pop) group-data-instant/tools:transition-off before:absolute before:inset-0 before:bg-surface-raised before:clip-join @max-desk/shell:-inset-be-(--caw-neck) @max-desk/shell:join-radius-(--tools-round) @max-desk/shell:clip-path-(--join-edge-phone) @max-desk/shell:before:clip-join-phone"
     style:--f="var(--flare)"
     style:--h="calc(100% - 1px)"
     style:--join-round="calc(var(--c-btn-h) / 2)"

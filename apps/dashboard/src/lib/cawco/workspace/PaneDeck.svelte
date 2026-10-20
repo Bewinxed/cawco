@@ -104,7 +104,7 @@
            reduced motion, not none: the fades stay, the movement goes. -->
       <div
         data-pane-lift
-        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:dur-panel motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:dur-pick-up motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-off before:pointer-events-none before:absolute before:inset-0 before:rounded-lg before:opacity-0 before:shadow-overlay before:transition-[opacity] before:dur-panel before:ease-in-out before:will-change-opacity group-data-lifted/deck:before:opacity-100 group-data-lifted/deck:before:dur-pick-up group-data-lifted/deck:before:ease-out motion-reduce:before:transition-off"
+        class="relative flex min-h-0 min-w-0 flex-auto rounded-none transform-(--lift-rest) will-change-transform motion-safe:transition-[transform,border-radius] motion-safe:duration-(--dur-panel) motion-safe:ease-in-out motion-safe:group-data-lifted/deck:rounded-lg motion-safe:group-data-lifted/deck:transform-(--lift-up) motion-safe:group-data-lifted/deck:duration-(--dur-pick-up) motion-safe:group-data-lifted/deck:ease-out motion-reduce:transition-off before:pointer-events-none before:absolute before:inset-0 before:rounded-lg before:opacity-0 before:shadow-overlay before:transition-[opacity] before:duration-(--dur-panel) before:ease-in-out before:will-change-opacity group-data-lifted/deck:before:opacity-100 group-data-lifted/deck:before:duration-(--dur-pick-up) group-data-lifted/deck:before:ease-out motion-reduce:before:transition-off"
         style:--lift-rest="scale(1)"
         style:--lift-up="scale(var(--press-scale))"
       >
@@ -125,14 +125,14 @@
   {#if workspace.leaves.length > 1}
     <div
       aria-hidden="true"
-      class="pointer-events-none absolute top-1/2 right-space-3 z-5 -translate-y-1/2 opacity-0 transition-[opacity] dur-control ease-out group-data-lifted/deck:opacity-100"
+      class="pointer-events-none absolute top-1/2 right-space-3 z-5 -translate-y-1/2 opacity-0 transition-[opacity] duration-(--dur-control) ease-out group-data-lifted/deck:opacity-100"
     >
       <div class="flex flex-col gap-space-2" transition:fadeDots>
         {#each workspace.leaves as leaf (leaf.id)}
           <span class="flex" transition:fadeDots>
             <span
               data-slot="dot"
-              class="size-space-2 rounded-pill bg-ink-muted opacity-50 transition-[height,opacity] dur-toggle ease-out data-dot-on:h-space-5 data-dot-on:bg-ink-strong data-dot-on:opacity-100 motion-reduce:transition-[opacity] motion-reduce:dur-toggle"
+              class="size-space-2 rounded-pill bg-ink-muted opacity-50 transition-[height,opacity] duration-(--dur-toggle) ease-out data-dot-on:h-space-5 data-dot-on:bg-ink-strong data-dot-on:opacity-100 motion-reduce:transition-[opacity] motion-reduce:duration-(--dur-toggle)"
               data-dot-on={leaf.id === workspace.focusedLeafId || undefined}
             ></span>
           </span>

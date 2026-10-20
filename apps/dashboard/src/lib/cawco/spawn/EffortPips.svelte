@@ -167,7 +167,7 @@
   data-embedded={embedded || undefined}
 >
   <div
-    class="col-start-1 row-start-1 grid content-box-start transition-[opacity] dur-pop ease-out"
+    class="col-start-1 row-start-1 grid content-box-start transition-[opacity] duration-(--dur-pop) ease-out"
     style:opacity={n ? 1 : 0.55}
     style:pointer-events={n ? "auto" : "none"}
   >
@@ -196,7 +196,7 @@
       >
         <div
           data-slot="knob"
-          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-space-2 font-body text-size-label leading-none font-medium text-ink-muted capitalize num shadow-knob transition-[color,opacity] pointer-events-none dur-control ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
+          class="grid h-full shrink-0 place-items-center rounded-sm bg-surface-lift px-space-2 font-body text-size-label leading-none font-medium text-ink-muted capitalize num shadow-knob transition-[color,opacity] pointer-events-none duration-(--dur-control) ease-out whitespace-nowrap group-not-data-ready:transition-none data-active:text-ink-strong"
           data-active={active || undefined}
           style:--bars={n}
           style:opacity={n ? 1 : 0.7}
@@ -238,7 +238,7 @@
                   />
                   <rect
                     data-slot="bar-fill"
-                    class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:dur-morph motion-safe:ease-out group-not-data-ready:transition-none"
+                    class="origin-bottom transform-(--t) transform-fill fill-ink-strong motion-safe:transition-[transform] motion-safe:delay-(--delay) motion-safe:duration-(--dur-morph) motion-safe:ease-out group-not-data-ready:transition-none"
                     height="10"
                     rx="1"
                     style={`--delay:${barDelay(i)}ms`}
@@ -264,7 +264,7 @@
       {#each pips as pip, i (i)}
         <span
           data-slot="pip"
-          class="pointer-events-none absolute top-1/2 size-space-1 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-ink-strong transition-[opacity] dur-control ease-out group-not-data-ready:transition-none motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
+          class="pointer-events-none absolute top-1/2 size-space-1 -translate-x-1/2 -translate-y-1/2 rounded-pill bg-ink-strong transition-[opacity] duration-(--dur-control) ease-out group-not-data-ready:transition-none motion-safe:transition-[left,opacity] motion-safe:duration-(--pip-durs) motion-safe:ease-(--pip-eases)"
           style:--pip-durs="var(--ns-fill-ms), var(--dur-control)"
           style:--pip-eases="var(--ease-in-out), var(--ease-out)"
           style:left={`calc(var(--kw) / 2 + ${pip.frac} * (100% - var(--kw)))`}

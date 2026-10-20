@@ -195,7 +195,7 @@
        The 4px bridge between the panel and its trigger is its `after:`. -->
   <div
     {...rest}
-    class="pointer-events-auto absolute start-0 bottom-(--panel-bottom) z-2 w-max origin-(--panel-origin-above) translate-x-(--panel-x) rounded-lg border border-border-control bg-surface-raised shadow-overlay side-right:fixed side-right:start-(--x) side-right:top-0 side-right:bottom-auto side-right:z-(--layer-float) side-right:origin-(--panel-origin-right) side-right:translate-x-0 side-right:translate-y-(--top) motion-safe:data-gliding:transition-[translate] motion-safe:data-gliding:dur-morph motion-safe:data-gliding:ease-drawer side-above:after:absolute side-above:after:inset-x-0 side-above:after:top-full side-above:after:h-space-1 side-right:after:absolute side-right:after:inset-y-0 side-right:after:end-full side-right:after:w-space-1"
+    class="pointer-events-auto absolute start-0 bottom-(--panel-bottom) z-2 w-max origin-(--panel-origin-above) translate-x-(--panel-x) rounded-lg border border-border-control bg-surface-raised shadow-overlay side-right:fixed side-right:start-(--x) side-right:top-0 side-right:bottom-auto side-right:z-(--layer-float) side-right:origin-(--panel-origin-right) side-right:translate-x-0 side-right:translate-y-(--top) motion-safe:data-gliding:transition-[translate] motion-safe:data-gliding:duration-(--dur-morph) motion-safe:data-gliding:ease-drawer side-above:after:absolute side-above:after:inset-x-0 side-above:after:top-full side-above:after:h-space-1 side-right:after:absolute side-right:after:inset-y-0 side-right:after:end-full side-right:after:w-space-1"
     data-gliding={gliding || undefined}
     data-side={side}
     style:--panel-bottom="calc(100% + var(--space-1) + var(--rise, 0px))"

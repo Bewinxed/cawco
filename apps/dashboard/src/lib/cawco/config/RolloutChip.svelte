@@ -124,16 +124,16 @@
     <span
       data-slot="glyph"
       aria-hidden="true"
-      class="group inline-grid w-icon-sm flex-none glyph-none:w-0 glyph-none:-me-space-1 motion-safe:transition-[width,margin] motion-safe:dur-control motion-safe:ease-out"
+      class="group inline-grid w-icon-sm flex-none glyph-none:w-0 glyph-none:-me-space-1 motion-safe:transition-[width,margin] motion-safe:duration-(--dur-control) motion-safe:ease-out"
       data-box
       data-glyph={glyph}
     >
       <IconWarningTriangle
-        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-fail:opacity-100 motion-safe:transition-opacity motion-safe:dur-control motion-safe:ease-out"
+        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-fail:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--dur-control) motion-safe:ease-out"
         data-for="fail"
       />
       <IconCheck
-        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-done:opacity-100 motion-safe:transition-opacity motion-safe:dur-control motion-safe:ease-out"
+        class="col-start-1 row-start-1 size-icon-sm flex-none opacity-0 group-glyph-done:opacity-100 motion-safe:transition-opacity motion-safe:duration-(--dur-control) motion-safe:ease-out"
         data-for="done"
       />
       <Spinner
