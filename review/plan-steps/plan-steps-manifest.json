@@ -1,0 +1,2339 @@
+{
+  "page": "plan-steps",
+  "cards": [
+    {
+      "question": "How should a plan show its steps?",
+      "why": "Recommended: Crew first, because it is the stack you asked for: which delegate is working on which step, and how far each has got, shows before you read a single step.",
+      "options": [
+        {
+          "id": "one-list",
+          "text": "1 One list Every step in order; a step opens in place to its description, and a step that waits says what it waits for. Cost: With several delegates at work it is the longest list, and you read who works on what row by row.",
+          "recommended": false
+        },
+        {
+          "id": "lanes",
+          "text": "2 Lanes Steps that run at the same time stand side by side in columns, with a line from each step to the steps that wait for it; the line to a working delegate pulses. Cost: Two columns squeeze each step to a few words a line, and on a phone a step opens on a page of its own.",
+          "recommended": false
+        },
+        {
+          "id": "crew-first",
+          "text": "3 Crew first Recommended Who needs you and who is working come first, each with a progress line that pulses while it moves; the to-dos below show who is on each. Cost: A working delegate shows twice, at the top and on its to-do, and you change its step from the to-do, not from the top.",
+          "recommended": true
+        }
+      ]
+    }
+  ],
+  "legs": {
+    "1440×900 light": {
+      "height": 4358,
+      "drawings": [
+        {
+          "caption": "1 · One list",
+          "top": 198,
+          "width": 842,
+          "full": true,
+          "tall": 680
+        },
+        {
+          "caption": "2 · Lanes",
+          "top": 936,
+          "width": 842,
+          "full": true,
+          "tall": 677
+        },
+        {
+          "caption": "3 · Crew first",
+          "top": 1671,
+          "width": 842,
+          "full": true,
+          "tall": 677
+        }
+      ],
+      "files": [
+        ".probe/decision-pages/plan-steps-1440-light-1.png",
+        ".probe/decision-pages/plan-steps-1440-light-2.png"
+      ],
+      "embeds": [
+        {
+          "file": "OneList",
+          "named": ["Device"],
+          "box": {
+            "w": 818,
+            "h": 680
+          },
+          "tall": 680,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 680,
+              "left": 229,
+              "right": 589,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 14,
+              "words": 3380,
+              "drawings": 72
+            }
+          ]
+        },
+        {
+          "file": "Lanes",
+          "named": ["Device"],
+          "box": {
+            "w": 818,
+            "h": 677
+          },
+          "tall": 677,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 677,
+              "left": 229,
+              "right": 589,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 14,
+              "words": 3380,
+              "drawings": 72
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Device"],
+          "box": {
+            "w": 818,
+            "h": 677
+          },
+          "tall": 677,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 677,
+              "left": 229,
+              "right": 589,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 14,
+              "words": 4204,
+              "drawings": 104
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Opened"],
+          "box": {
+            "w": 854,
+            "h": 667
+          },
+          "tall": 667,
+          "frames": [
+            {
+              "story": "Opened",
+              "h": 667,
+              "left": 247,
+              "right": 607,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 14,
+              "words": 4204,
+              "drawings": 104
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Badge"],
+          "box": {
+            "w": 854,
+            "h": 69
+          },
+          "tall": 69,
+          "frames": [
+            {
+              "story": "Badge",
+              "h": 69,
+              "left": 247,
+              "right": 607,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 14,
+              "words": 222,
+              "drawings": 4
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Pulse"],
+          "box": {
+            "w": 854,
+            "h": 293
+          },
+          "tall": 293,
+          "frames": [
+            {
+              "story": "Pulse",
+              "h": 293,
+              "left": 247,
+              "right": 607,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 13,
+              "words": 666,
+              "drawings": 24
+            }
+          ]
+        }
+      ],
+      "frames": {
+        "OneList.stories.ts:Device": {
+          "kinds": ["desk"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [243],
+              "words": [264]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "Lanes.stories.ts:Device": {
+          "kinds": ["desk"],
+          "bands": [
+            [
+              {
+                "top": 192,
+                "left": 243
+              },
+              {
+                "top": 192,
+                "left": 415
+              }
+            ]
+          ],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": ["a1>a2", "a1>a3", "a2>a6", "a3>a6"],
+            "drawn": ["a1>a2", "a1>a3", "a2>a6", "a3>a6"],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 5,
+              "tiles": [243],
+              "words": [264]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": true,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Device": {
+          "kinds": ["desk"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [243],
+              "words": [264]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Opened": {
+          "kinds": ["desk"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [261],
+              "words": [282]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Badge": {
+          "kinds": ["step"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [],
+          "acts": [],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Pulse": {
+          "kinds": ["delegate"],
+          "bands": [],
+          "badges": [],
+          "sweeps": [
+            {
+              "label": "Start",
+              "centre": 0.1
+            },
+            {
+              "label": "Middle",
+              "centre": 0.5
+            },
+            {
+              "label": "End",
+              "centre": 0.9
+            }
+          ],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [
+            {
+              "label": "Start",
+              "ink": "oklch(0.7689 0.0085 80.05)",
+              "fill": "oklch(0.495 0.014 74)",
+              "ratio": 2.94
+            },
+            {
+              "label": "Middle",
+              "ink": "oklch(0.7689 0.0085 80.05)",
+              "fill": "oklch(0.495 0.014 74)",
+              "ratio": 2.94
+            },
+            {
+              "label": "End",
+              "ink": "oklch(0.7689 0.0085 80.05)",
+              "fill": "oklch(0.495 0.014 74)",
+              "ratio": 2.94
+            }
+          ],
+          "columns": [],
+          "acts": [],
+          "cut": []
+        }
+      }
+    },
+    "1440×900 dark": {
+      "height": 4358,
+      "drawings": [
+        {
+          "caption": "1 · One list",
+          "top": 198,
+          "width": 842,
+          "full": true,
+          "tall": 680
+        },
+        {
+          "caption": "2 · Lanes",
+          "top": 936,
+          "width": 842,
+          "full": true,
+          "tall": 677
+        },
+        {
+          "caption": "3 · Crew first",
+          "top": 1671,
+          "width": 842,
+          "full": true,
+          "tall": 677
+        }
+      ],
+      "files": [
+        ".probe/decision-pages/plan-steps-1440-dark-1.png",
+        ".probe/decision-pages/plan-steps-1440-dark-2.png"
+      ],
+      "embeds": [
+        {
+          "file": "OneList",
+          "named": ["Device"],
+          "box": {
+            "w": 818,
+            "h": 680
+          },
+          "tall": 680,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 680,
+              "left": 229,
+              "right": 589,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 14,
+              "words": 3380,
+              "drawings": 72
+            }
+          ]
+        },
+        {
+          "file": "Lanes",
+          "named": ["Device"],
+          "box": {
+            "w": 818,
+            "h": 677
+          },
+          "tall": 677,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 677,
+              "left": 229,
+              "right": 589,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 14,
+              "words": 3380,
+              "drawings": 72
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Device"],
+          "box": {
+            "w": 818,
+            "h": 677
+          },
+          "tall": 677,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 677,
+              "left": 229,
+              "right": 589,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 14,
+              "words": 4204,
+              "drawings": 104
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Opened"],
+          "box": {
+            "w": 854,
+            "h": 667
+          },
+          "tall": 667,
+          "frames": [
+            {
+              "story": "Opened",
+              "h": 667,
+              "left": 247,
+              "right": 607,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 14,
+              "words": 4204,
+              "drawings": 104
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Badge"],
+          "box": {
+            "w": 854,
+            "h": 69
+          },
+          "tall": 69,
+          "frames": [
+            {
+              "story": "Badge",
+              "h": 69,
+              "left": 247,
+              "right": 607,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 14,
+              "words": 222,
+              "drawings": 4
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Pulse"],
+          "box": {
+            "w": 854,
+            "h": 293
+          },
+          "tall": 293,
+          "frames": [
+            {
+              "story": "Pulse",
+              "h": 293,
+              "left": 247,
+              "right": 607,
+              "w": 360,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 1,
+              "state": "drawn",
+              "type": 13,
+              "words": 666,
+              "drawings": 24
+            }
+          ]
+        }
+      ],
+      "frames": {
+        "OneList.stories.ts:Device": {
+          "kinds": ["desk"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [243],
+              "words": [264]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "Lanes.stories.ts:Device": {
+          "kinds": ["desk"],
+          "bands": [
+            [
+              {
+                "top": 192,
+                "left": 243
+              },
+              {
+                "top": 192,
+                "left": 415
+              }
+            ]
+          ],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": ["a1>a2", "a1>a3", "a2>a6", "a3>a6"],
+            "drawn": ["a1>a2", "a1>a3", "a2>a6", "a3>a6"],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 5,
+              "tiles": [243],
+              "words": [264]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": true,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Device": {
+          "kinds": ["desk"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [243],
+              "words": [264]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Opened": {
+          "kinds": ["desk"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [261],
+              "words": [282]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Badge": {
+          "kinds": ["step"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [],
+          "acts": [],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Pulse": {
+          "kinds": ["delegate"],
+          "bands": [],
+          "badges": [],
+          "sweeps": [
+            {
+              "label": "Start",
+              "centre": 0.1
+            },
+            {
+              "label": "Middle",
+              "centre": 0.5
+            },
+            {
+              "label": "End",
+              "centre": 0.9
+            }
+          ],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [
+            {
+              "label": "Start",
+              "ink": "oklch(0.9184 0.0102 81.6)",
+              "fill": "oklch(0.778 0.012 78)",
+              "ratio": 1.58
+            },
+            {
+              "label": "Middle",
+              "ink": "oklch(0.9184 0.0102 81.6)",
+              "fill": "oklch(0.778 0.012 78)",
+              "ratio": 1.58
+            },
+            {
+              "label": "End",
+              "ink": "oklch(0.9184 0.0102 81.6)",
+              "fill": "oklch(0.778 0.012 78)",
+              "ratio": 1.58
+            }
+          ],
+          "columns": [],
+          "acts": [],
+          "cut": []
+        }
+      }
+    },
+    "390×844 light": {
+      "height": 4599,
+      "drawings": [
+        {
+          "caption": "1 · One list",
+          "top": 222,
+          "width": 334,
+          "full": true,
+          "tall": 582
+        },
+        {
+          "caption": "2 · Lanes",
+          "top": 862,
+          "width": 334,
+          "full": true,
+          "tall": 614
+        },
+        {
+          "caption": "3 · Crew first",
+          "top": 1535,
+          "width": 334,
+          "full": true,
+          "tall": 617
+        }
+      ],
+      "files": [
+        ".probe/decision-pages/plan-steps-390-light-1.png",
+        ".probe/decision-pages/plan-steps-390-light-2.png"
+      ],
+      "embeds": [
+        {
+          "file": "OneList",
+          "named": ["Device"],
+          "box": {
+            "w": 310,
+            "h": 582
+          },
+          "tall": 582,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 582,
+              "left": 0,
+              "right": 310,
+              "w": 310,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.861,
+              "state": "drawn",
+              "type": 12.1,
+              "words": 3385,
+              "drawings": 70
+            }
+          ]
+        },
+        {
+          "file": "Lanes",
+          "named": ["Device"],
+          "box": {
+            "w": 310,
+            "h": 614
+          },
+          "tall": 614,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 614,
+              "left": 0,
+              "right": 310,
+              "w": 310,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.861,
+              "state": "drawn",
+              "type": 11.2,
+              "words": 1363,
+              "drawings": 38
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Device"],
+          "box": {
+            "w": 310,
+            "h": 617
+          },
+          "tall": 617,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 617,
+              "left": 0,
+              "right": 310,
+              "w": 310,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.861,
+              "state": "drawn",
+              "type": 11.2,
+              "words": 1304,
+              "drawings": 41
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Opened"],
+          "box": {
+            "w": 338,
+            "h": 590
+          },
+          "tall": 590,
+          "frames": [
+            {
+              "story": "Opened",
+              "h": 590,
+              "left": 0,
+              "right": 338,
+              "w": 338,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.939,
+              "state": "drawn",
+              "type": 13.1,
+              "words": 4204,
+              "drawings": 104
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Badge"],
+          "box": {
+            "w": 338,
+            "h": 64
+          },
+          "tall": 64,
+          "frames": [
+            {
+              "story": "Badge",
+              "h": 64,
+              "left": 0,
+              "right": 338,
+              "w": 338,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.939,
+              "state": "drawn",
+              "type": 13.1,
+              "words": 222,
+              "drawings": 4
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Pulse"],
+          "box": {
+            "w": 338,
+            "h": 275
+          },
+          "tall": 275,
+          "frames": [
+            {
+              "story": "Pulse",
+              "h": 275,
+              "left": 0,
+              "right": 338,
+              "w": 338,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.939,
+              "state": "drawn",
+              "type": 12.2,
+              "words": 666,
+              "drawings": 24
+            }
+          ]
+        }
+      ],
+      "frames": {
+        "OneList.stories.ts:Device": {
+          "kinds": ["phone"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": false
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [12],
+              "words": [30]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "Lanes.stories.ts:Device": {
+          "kinds": ["phone"],
+          "bands": [
+            [
+              {
+                "top": 251,
+                "left": 12
+              },
+              {
+                "top": 251,
+                "left": 160
+              }
+            ]
+          ],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": ["a1>a2", "a1>a3", "a2>a6", "a3>a6"],
+            "drawn": ["a1>a2", "a1>a3", "a2>a6", "a3>a6"],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 5,
+              "tiles": [12],
+              "words": [30]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": true,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Device": {
+          "kinds": ["phone"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": false
+            }
+          ],
+          "sweeps": [],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [12],
+              "words": [30]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Opened": {
+          "kinds": ["desk"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [13],
+              "words": [33]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Badge": {
+          "kinds": ["step"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [],
+          "acts": [],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Pulse": {
+          "kinds": ["delegate"],
+          "bands": [],
+          "badges": [],
+          "sweeps": [
+            {
+              "label": "Start",
+              "centre": 0.1
+            },
+            {
+              "label": "Middle",
+              "centre": 0.5
+            },
+            {
+              "label": "End",
+              "centre": 0.9
+            }
+          ],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [
+            {
+              "label": "Start",
+              "ink": "oklch(0.7689 0.0085 80.05)",
+              "fill": "oklch(0.495 0.014 74)",
+              "ratio": 2.94
+            },
+            {
+              "label": "Middle",
+              "ink": "oklch(0.7689 0.0085 80.05)",
+              "fill": "oklch(0.495 0.014 74)",
+              "ratio": 2.94
+            },
+            {
+              "label": "End",
+              "ink": "oklch(0.7689 0.0085 80.05)",
+              "fill": "oklch(0.495 0.014 74)",
+              "ratio": 2.94
+            }
+          ],
+          "columns": [],
+          "acts": [],
+          "cut": []
+        }
+      }
+    },
+    "390×844 dark": {
+      "height": 4599,
+      "drawings": [
+        {
+          "caption": "1 · One list",
+          "top": 222,
+          "width": 334,
+          "full": true,
+          "tall": 582
+        },
+        {
+          "caption": "2 · Lanes",
+          "top": 862,
+          "width": 334,
+          "full": true,
+          "tall": 614
+        },
+        {
+          "caption": "3 · Crew first",
+          "top": 1535,
+          "width": 334,
+          "full": true,
+          "tall": 617
+        }
+      ],
+      "files": [
+        ".probe/decision-pages/plan-steps-390-dark-1.png",
+        ".probe/decision-pages/plan-steps-390-dark-2.png"
+      ],
+      "embeds": [
+        {
+          "file": "OneList",
+          "named": ["Device"],
+          "box": {
+            "w": 310,
+            "h": 582
+          },
+          "tall": 582,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 582,
+              "left": 0,
+              "right": 310,
+              "w": 310,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.861,
+              "state": "drawn",
+              "type": 12.1,
+              "words": 3385,
+              "drawings": 70
+            }
+          ]
+        },
+        {
+          "file": "Lanes",
+          "named": ["Device"],
+          "box": {
+            "w": 310,
+            "h": 614
+          },
+          "tall": 614,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 614,
+              "left": 0,
+              "right": 310,
+              "w": 310,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.861,
+              "state": "drawn",
+              "type": 11.2,
+              "words": 1363,
+              "drawings": 38
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Device"],
+          "box": {
+            "w": 310,
+            "h": 617
+          },
+          "tall": 617,
+          "frames": [
+            {
+              "story": "Device",
+              "h": 617,
+              "left": 0,
+              "right": 310,
+              "w": 310,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.861,
+              "state": "drawn",
+              "type": 11.2,
+              "words": 1304,
+              "drawings": 41
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Opened"],
+          "box": {
+            "w": 338,
+            "h": 590
+          },
+          "tall": 590,
+          "frames": [
+            {
+              "story": "Opened",
+              "h": 590,
+              "left": 0,
+              "right": 338,
+              "w": 338,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.939,
+              "state": "drawn",
+              "type": 13.1,
+              "words": 4204,
+              "drawings": 104
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Badge"],
+          "box": {
+            "w": 338,
+            "h": 64
+          },
+          "tall": 64,
+          "frames": [
+            {
+              "story": "Badge",
+              "h": 64,
+              "left": 0,
+              "right": 338,
+              "w": 338,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.939,
+              "state": "drawn",
+              "type": 13.1,
+              "words": 222,
+              "drawings": 4
+            }
+          ]
+        },
+        {
+          "file": "CrewFirst",
+          "named": ["Pulse"],
+          "box": {
+            "w": 338,
+            "h": 275
+          },
+          "tall": 275,
+          "frames": [
+            {
+              "story": "Pulse",
+              "h": 275,
+              "left": 0,
+              "right": 338,
+              "w": 338,
+              "wide": false,
+              "scrolls": 0,
+              "scrollable": false,
+              "zoom": 0.939,
+              "state": "drawn",
+              "type": 12.2,
+              "words": 666,
+              "drawings": 24
+            }
+          ]
+        }
+      ],
+      "frames": {
+        "OneList.stories.ts:Device": {
+          "kinds": ["phone"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": false
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [12],
+              "words": [30]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "Lanes.stories.ts:Device": {
+          "kinds": ["phone"],
+          "bands": [
+            [
+              {
+                "top": 251,
+                "left": 12
+              },
+              {
+                "top": 251,
+                "left": 160
+              }
+            ]
+          ],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": ["a1>a2", "a1>a3", "a2>a6", "a3>a6"],
+            "drawn": ["a1>a2", "a1>a3", "a2>a6", "a3>a6"],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 5,
+              "tiles": [12],
+              "words": [30]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": true,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Device": {
+          "kinds": ["phone"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": false
+            }
+          ],
+          "sweeps": [],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [12],
+              "words": [30]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Opened": {
+          "kinds": ["desk"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": true,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [
+            {
+              "rows": 7,
+              "tiles": [13],
+              "words": [33]
+            }
+          ],
+          "acts": [
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "fable-calendar-21c",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            },
+            {
+              "row": "a11y-check-44e",
+              "inRow": true,
+              "ownLine": false,
+              "atStart": true
+            }
+          ],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Badge": {
+          "kinds": ["step"],
+          "bands": [],
+          "badges": [
+            {
+              "glyph": true,
+              "id": "tsk-14",
+              "inSight": true
+            }
+          ],
+          "sweeps": [],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [],
+          "columns": [],
+          "acts": [],
+          "cut": []
+        },
+        "CrewFirst.stories.ts:Pulse": {
+          "kinds": ["delegate"],
+          "bands": [],
+          "badges": [],
+          "sweeps": [
+            {
+              "label": "Start",
+              "centre": 0.1
+            },
+            {
+              "label": "Middle",
+              "centre": 0.5
+            },
+            {
+              "label": "End",
+              "centre": 0.9
+            }
+          ],
+          "opened": false,
+          "moving": [],
+          "squeezed": [],
+          "crossings": [],
+          "wires": {
+            "expected": [],
+            "drawn": [],
+            "unpainted": []
+          },
+          "pulseInk": [
+            {
+              "label": "Start",
+              "ink": "oklch(0.9184 0.0102 81.6)",
+              "fill": "oklch(0.778 0.012 78)",
+              "ratio": 1.58
+            },
+            {
+              "label": "Middle",
+              "ink": "oklch(0.9184 0.0102 81.6)",
+              "fill": "oklch(0.778 0.012 78)",
+              "ratio": 1.58
+            },
+            {
+              "label": "End",
+              "ink": "oklch(0.9184 0.0102 81.6)",
+              "fill": "oklch(0.778 0.012 78)",
+              "ratio": 1.58
+            }
+          ],
+          "columns": [],
+          "acts": [],
+          "cut": []
+        }
+      }
+    }
+  },
+  "checks": [
+    {
+      "check": "the hub's check keeps the program",
+      "passed": true,
+      "output": "kept"
+    },
+    {
+      "check": "1440×900 light: every embed draws the stories its Preview names (OneList Device drawn; Lanes Device drawn; CrewFirst Device drawn; CrewFirst Opened drawn; CrewFirst Badge drawn; CrewFirst Pulse drawn)",
+      "passed": true,
+      "output": "6 of 6 embeds, each its named stories drawn"
+    },
+    {
+      "check": "1440×900 light: the plan card's lead opens \"Recommended: Crew first, because …\"",
+      "passed": true,
+      "output": "Recommended: Crew first, because it is the stack you asked for: which delegate is working on which step, and how far each has got, shows before you read a single step."
+    },
+    {
+      "check": "1440×900 light: the options' drawings stand one under another at the card's full width (842px), each captioned with its option, in their order (\"1 · One list\" 842px, \"2 · Lanes\" 842px, \"3 · Crew first\" 842px; drawn at 1, 1, 1; the page 4358px tall)",
+      "passed": true,
+      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":198,\"width\":842,\"full\":true,\"tall\":680},{\"caption\":\"2 · Lanes\",\"top\":936,\"width\":842,\"full\":true,\"tall\":677},{\"caption\":\"3 · Crew first\",\"top\":1671,\"width\":842,\"full\":true,\"tall\":677}],\"zooms\":[1,1,1]}"
+    },
+    {
+      "check": "1440×900 light: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
+      "passed": true,
+      "output": "{\"found\":true,\"first\":\"If one still looks wrong, pin it.\",\"quotes\":[\"“am i not able to click on these to expand and drill down and see the description of each ?”\",\"“glpyhs for task ids or?”\",\"“make the lines pulse while they're progressing”\",\"“I'm sure you can do this design better, with better animations, lines, icons, and typography and layout”\"],\"drawings\":3,\"picks\":0,\"pinsCard\":false}"
+    },
+    {
+      "check": "1440×900 light: each option draws one frame, the one this screen shows, the desk's (OneList desk, Lanes desk, CrewFirst desk)",
+      "passed": true,
+      "output": "OneList desk\n    Lanes desk\n    CrewFirst desk"
+    },
+    {
+      "check": "1440×900 light: Lanes stands the steps that run at the same time side by side (2 columns at x 243, 415, tops 192, 192)",
+      "passed": true,
+      "output": "[[{\"top\":192,\"left\":243},{\"top\":192,\"left\":415}]]"
+    },
+    {
+      "check": "1440×900 light: each way's steps stand their status tiles in one column and their words in one (OneList 7 rows, tiles at 243, words at 264; Lanes 5 rows, tiles at 243, words at 264; CrewFirst 7 rows, tiles at 243, words at 264)",
+      "passed": true,
+      "output": "[{\"one\":\"OneList\",\"at\":{\"rows\":7,\"tiles\":[243],\"words\":[264]}},{\"one\":\"Lanes\",\"at\":{\"rows\":5,\"tiles\":[243],\"words\":[264]}},{\"one\":\"CrewFirst\",\"at\":{\"rows\":7,\"tiles\":[243],\"words\":[264]}}]"
+    },
+    {
+      "check": "1440×900 light: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (OneList fable-calendar-21c, OneList a11y-check-44e, Lanes fable-calendar-21c own line, Lanes a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e)",
+      "passed": true,
+      "output": "[{\"way\":\"OneList\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"OneList\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"Lanes\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":true,\"atStart\":true},{\"way\":\"Lanes\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true}]"
+    },
+    {
+      "check": "1440×900 light: Lanes draws a line for each step's dependency, each one painted (4 lines for 4 dependencies, 0 unpainted)",
+      "passed": true,
+      "output": "{\"missing\":[],\"unpainted\":[]}"
+    },
+    {
+      "check": "1440×900 light: no line crosses a box, in any drawing (0 crossings)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 light: no words are cut without an ellipsis, in any drawing",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 light: every row's words have at least 64px of room, in every drawing (0 squeezed)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 light: every row in every drawing stands at its place when read, no slide held on it (0 off their places)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 light: the pins section's first fix draws the date picker opened to its description (open)",
+      "passed": true,
+      "output": "{\"opened\":true}"
+    },
+    {
+      "check": "1440×900 light: the pins section's second fix draws the to-do that became a task wearing the task's glyph and id, in sight (glyph tsk-14 in sight)",
+      "passed": true,
+      "output": "[{\"glyph\":true,\"id\":\"tsk-14\",\"inSight\":true}]"
+    },
+    {
+      "check": "1440×900 light: the pins section's third fix draws the pulse at three named moments, its band at 10%, 50% and 90% of the fill (Start 10%, Middle 50%, End 90%)",
+      "passed": true,
+      "output": "[{\"label\":\"Start\",\"centre\":0.1},{\"label\":\"Middle\",\"centre\":0.5},{\"label\":\"End\",\"centre\":0.9}]"
+    },
+    {
+      "check": "1440×900 light: the pulse is light running along the line, its band brighter than the fill at every moment (Start 2.94:1, Middle 2.94:1, End 2.94:1)",
+      "passed": true,
+      "output": "[{\"label\":\"Start\",\"ink\":\"oklch(0.7689 0.0085 80.05)\",\"fill\":\"oklch(0.495 0.014 74)\",\"ratio\":2.94},{\"label\":\"Middle\",\"ink\":\"oklch(0.7689 0.0085 80.05)\",\"fill\":\"oklch(0.495 0.014 74)\",\"ratio\":2.94},{\"label\":\"End\",\"ink\":\"oklch(0.7689 0.0085 80.05)\",\"fill\":\"oklch(0.495 0.014 74)\",\"ratio\":2.94}]"
+    },
+    {
+      "check": "1440×900 light: no console errors, the page and its canvases",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 light: nothing scrolls the page sideways (1440 wide in 1440)",
+      "passed": true,
+      "output": "1440px of content in a 1440px view"
+    },
+    {
+      "check": "1440×900 light: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-1440-light-1.png 1006 KiB, rows 0–2768, plan-steps-1440-light-2.png 633 KiB, rows 2768–4358; 2880×8716)",
+      "passed": true,
+      "output": "every file whole and within the limit"
+    },
+    {
+      "check": "1440×900 light: the page's own capture paints every embed (46.6%, 46.6%, 46.6%, 48.9%, 57.5%, 57.6% their commonest colour)",
+      "passed": true,
+      "output": "6 of 6 embeds painted"
+    },
+    {
+      "check": "1440×900 dark: every embed draws the stories its Preview names (OneList Device drawn; Lanes Device drawn; CrewFirst Device drawn; CrewFirst Opened drawn; CrewFirst Badge drawn; CrewFirst Pulse drawn)",
+      "passed": true,
+      "output": "6 of 6 embeds, each its named stories drawn"
+    },
+    {
+      "check": "1440×900 dark: the plan card's lead opens \"Recommended: Crew first, because …\"",
+      "passed": true,
+      "output": "Recommended: Crew first, because it is the stack you asked for: which delegate is working on which step, and how far each has got, shows before you read a single step."
+    },
+    {
+      "check": "1440×900 dark: the options' drawings stand one under another at the card's full width (842px), each captioned with its option, in their order (\"1 · One list\" 842px, \"2 · Lanes\" 842px, \"3 · Crew first\" 842px; drawn at 1, 1, 1; the page 4358px tall)",
+      "passed": true,
+      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":198,\"width\":842,\"full\":true,\"tall\":680},{\"caption\":\"2 · Lanes\",\"top\":936,\"width\":842,\"full\":true,\"tall\":677},{\"caption\":\"3 · Crew first\",\"top\":1671,\"width\":842,\"full\":true,\"tall\":677}],\"zooms\":[1,1,1]}"
+    },
+    {
+      "check": "1440×900 dark: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
+      "passed": true,
+      "output": "{\"found\":true,\"first\":\"If one still looks wrong, pin it.\",\"quotes\":[\"“am i not able to click on these to expand and drill down and see the description of each ?”\",\"“glpyhs for task ids or?”\",\"“make the lines pulse while they're progressing”\",\"“I'm sure you can do this design better, with better animations, lines, icons, and typography and layout”\"],\"drawings\":3,\"picks\":0,\"pinsCard\":false}"
+    },
+    {
+      "check": "1440×900 dark: each option draws one frame, the one this screen shows, the desk's (OneList desk, Lanes desk, CrewFirst desk)",
+      "passed": true,
+      "output": "OneList desk\n    Lanes desk\n    CrewFirst desk"
+    },
+    {
+      "check": "1440×900 dark: Lanes stands the steps that run at the same time side by side (2 columns at x 243, 415, tops 192, 192)",
+      "passed": true,
+      "output": "[[{\"top\":192,\"left\":243},{\"top\":192,\"left\":415}]]"
+    },
+    {
+      "check": "1440×900 dark: each way's steps stand their status tiles in one column and their words in one (OneList 7 rows, tiles at 243, words at 264; Lanes 5 rows, tiles at 243, words at 264; CrewFirst 7 rows, tiles at 243, words at 264)",
+      "passed": true,
+      "output": "[{\"one\":\"OneList\",\"at\":{\"rows\":7,\"tiles\":[243],\"words\":[264]}},{\"one\":\"Lanes\",\"at\":{\"rows\":5,\"tiles\":[243],\"words\":[264]}},{\"one\":\"CrewFirst\",\"at\":{\"rows\":7,\"tiles\":[243],\"words\":[264]}}]"
+    },
+    {
+      "check": "1440×900 dark: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (OneList fable-calendar-21c, OneList a11y-check-44e, Lanes fable-calendar-21c own line, Lanes a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e)",
+      "passed": true,
+      "output": "[{\"way\":\"OneList\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"OneList\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"Lanes\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":true,\"atStart\":true},{\"way\":\"Lanes\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true}]"
+    },
+    {
+      "check": "1440×900 dark: Lanes draws a line for each step's dependency, each one painted (4 lines for 4 dependencies, 0 unpainted)",
+      "passed": true,
+      "output": "{\"missing\":[],\"unpainted\":[]}"
+    },
+    {
+      "check": "1440×900 dark: no line crosses a box, in any drawing (0 crossings)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 dark: no words are cut without an ellipsis, in any drawing",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 dark: every row's words have at least 64px of room, in every drawing (0 squeezed)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 dark: every row in every drawing stands at its place when read, no slide held on it (0 off their places)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 dark: the pins section's first fix draws the date picker opened to its description (open)",
+      "passed": true,
+      "output": "{\"opened\":true}"
+    },
+    {
+      "check": "1440×900 dark: the pins section's second fix draws the to-do that became a task wearing the task's glyph and id, in sight (glyph tsk-14 in sight)",
+      "passed": true,
+      "output": "[{\"glyph\":true,\"id\":\"tsk-14\",\"inSight\":true}]"
+    },
+    {
+      "check": "1440×900 dark: the pins section's third fix draws the pulse at three named moments, its band at 10%, 50% and 90% of the fill (Start 10%, Middle 50%, End 90%)",
+      "passed": true,
+      "output": "[{\"label\":\"Start\",\"centre\":0.1},{\"label\":\"Middle\",\"centre\":0.5},{\"label\":\"End\",\"centre\":0.9}]"
+    },
+    {
+      "check": "1440×900 dark: the pulse is light running along the line, its band brighter than the fill at every moment (Start 1.58:1, Middle 1.58:1, End 1.58:1)",
+      "passed": true,
+      "output": "[{\"label\":\"Start\",\"ink\":\"oklch(0.9184 0.0102 81.6)\",\"fill\":\"oklch(0.778 0.012 78)\",\"ratio\":1.58},{\"label\":\"Middle\",\"ink\":\"oklch(0.9184 0.0102 81.6)\",\"fill\":\"oklch(0.778 0.012 78)\",\"ratio\":1.58},{\"label\":\"End\",\"ink\":\"oklch(0.9184 0.0102 81.6)\",\"fill\":\"oklch(0.778 0.012 78)\",\"ratio\":1.58}]"
+    },
+    {
+      "check": "1440×900 dark: no console errors, the page and its canvases",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "1440×900 dark: nothing scrolls the page sideways (1440 wide in 1440)",
+      "passed": true,
+      "output": "1440px of content in a 1440px view"
+    },
+    {
+      "check": "1440×900 dark: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-1440-dark-1.png 1015 KiB, rows 0–2796, plan-steps-1440-dark-2.png 611 KiB, rows 2796–4358; 2880×8716)",
+      "passed": true,
+      "output": "every file whole and within the limit"
+    },
+    {
+      "check": "1440×900 dark: the page's own capture paints every embed (44.4%, 44.4%, 44.4%, 46.7%, 57.3%, 57.5% their commonest colour)",
+      "passed": true,
+      "output": "6 of 6 embeds painted"
+    },
+    {
+      "check": "390×844 light: every embed draws the stories its Preview names (OneList Device drawn; Lanes Device drawn; CrewFirst Device drawn; CrewFirst Opened drawn; CrewFirst Badge drawn; CrewFirst Pulse drawn)",
+      "passed": true,
+      "output": "6 of 6 embeds, each its named stories drawn"
+    },
+    {
+      "check": "390×844 light: the plan card's lead opens \"Recommended: Crew first, because …\"",
+      "passed": true,
+      "output": "Recommended: Crew first, because it is the stack you asked for: which delegate is working on which step, and how far each has got, shows before you read a single step."
+    },
+    {
+      "check": "390×844 light: the options' drawings stand one under another at the card's full width (334px), each captioned with its option, in their order (\"1 · One list\" 334px, \"2 · Lanes\" 334px, \"3 · Crew first\" 334px; drawn at 0.861, 0.861, 0.861; the page 4599px tall)",
+      "passed": true,
+      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":222,\"width\":334,\"full\":true,\"tall\":582},{\"caption\":\"2 · Lanes\",\"top\":862,\"width\":334,\"full\":true,\"tall\":614},{\"caption\":\"3 · Crew first\",\"top\":1535,\"width\":334,\"full\":true,\"tall\":617}],\"zooms\":[0.861,0.861,0.861]}"
+    },
+    {
+      "check": "390×844 light: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
+      "passed": true,
+      "output": "{\"found\":true,\"first\":\"If one still looks wrong, pin it.\",\"quotes\":[\"“am i not able to click on these to expand and drill down and see the description of each ?”\",\"“glpyhs for task ids or?”\",\"“make the lines pulse while they're progressing”\",\"“I'm sure you can do this design better, with better animations, lines, icons, and typography and layout”\"],\"drawings\":3,\"picks\":0,\"pinsCard\":false}"
+    },
+    {
+      "check": "390×844 light: each option draws one frame, the one this screen shows, the phone's (OneList phone, Lanes phone, CrewFirst phone)",
+      "passed": true,
+      "output": "OneList phone\n    Lanes phone\n    CrewFirst phone"
+    },
+    {
+      "check": "390×844 light: Lanes stands the steps that run at the same time side by side (2 columns at x 12, 160, tops 251, 251)",
+      "passed": true,
+      "output": "[[{\"top\":251,\"left\":12},{\"top\":251,\"left\":160}]]"
+    },
+    {
+      "check": "390×844 light: each way's steps stand their status tiles in one column and their words in one (OneList 7 rows, tiles at 12, words at 30; Lanes 5 rows, tiles at 12, words at 30; CrewFirst 7 rows, tiles at 12, words at 30)",
+      "passed": true,
+      "output": "[{\"one\":\"OneList\",\"at\":{\"rows\":7,\"tiles\":[12],\"words\":[30]}},{\"one\":\"Lanes\",\"at\":{\"rows\":5,\"tiles\":[12],\"words\":[30]}},{\"one\":\"CrewFirst\",\"at\":{\"rows\":7,\"tiles\":[12],\"words\":[30]}}]"
+    },
+    {
+      "check": "390×844 light: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (OneList fable-calendar-21c, OneList a11y-check-44e, Lanes fable-calendar-21c own line, Lanes a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e)",
+      "passed": true,
+      "output": "[{\"way\":\"OneList\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"OneList\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"Lanes\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":true,\"atStart\":true},{\"way\":\"Lanes\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true}]"
+    },
+    {
+      "check": "390×844 light: Lanes draws a line for each step's dependency, each one painted (4 lines for 4 dependencies, 0 unpainted)",
+      "passed": true,
+      "output": "{\"missing\":[],\"unpainted\":[]}"
+    },
+    {
+      "check": "390×844 light: no line crosses a box, in any drawing (0 crossings)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 light: no words are cut without an ellipsis, in any drawing",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 light: every row's words have at least 64px of room, in every drawing (0 squeezed)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 light: every row in every drawing stands at its place when read, no slide held on it (0 off their places)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 light: the pins section's first fix draws the date picker opened to its description (open)",
+      "passed": true,
+      "output": "{\"opened\":true}"
+    },
+    {
+      "check": "390×844 light: the pins section's second fix draws the to-do that became a task wearing the task's glyph and id, in sight (glyph tsk-14 in sight)",
+      "passed": true,
+      "output": "[{\"glyph\":true,\"id\":\"tsk-14\",\"inSight\":true}]"
+    },
+    {
+      "check": "390×844 light: the pins section's third fix draws the pulse at three named moments, its band at 10%, 50% and 90% of the fill (Start 10%, Middle 50%, End 90%)",
+      "passed": true,
+      "output": "[{\"label\":\"Start\",\"centre\":0.1},{\"label\":\"Middle\",\"centre\":0.5},{\"label\":\"End\",\"centre\":0.9}]"
+    },
+    {
+      "check": "390×844 light: the pulse is light running along the line, its band brighter than the fill at every moment (Start 2.94:1, Middle 2.94:1, End 2.94:1)",
+      "passed": true,
+      "output": "[{\"label\":\"Start\",\"ink\":\"oklch(0.7689 0.0085 80.05)\",\"fill\":\"oklch(0.495 0.014 74)\",\"ratio\":2.94},{\"label\":\"Middle\",\"ink\":\"oklch(0.7689 0.0085 80.05)\",\"fill\":\"oklch(0.495 0.014 74)\",\"ratio\":2.94},{\"label\":\"End\",\"ink\":\"oklch(0.7689 0.0085 80.05)\",\"fill\":\"oklch(0.495 0.014 74)\",\"ratio\":2.94}]"
+    },
+    {
+      "check": "390×844 light: no console errors, the page and its canvases",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 light: nothing scrolls the page sideways (390 wide in 390)",
+      "passed": true,
+      "output": "390px of content in a 390px view"
+    },
+    {
+      "check": "390×844 light: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-390-light-1.png 998 KiB, rows 0–3825, plan-steps-390-light-2.png 260 KiB, rows 3825–4599; 780×9198)",
+      "passed": true,
+      "output": "every file whole and within the limit"
+    },
+    {
+      "check": "390×844 light: the page's own capture paints every embed (93.1%, 91.9%, 93.1%, 90.1%, 85.5%, 56.9% their commonest colour)",
+      "passed": true,
+      "output": "6 of 6 embeds painted"
+    },
+    {
+      "check": "390×844 dark: every embed draws the stories its Preview names (OneList Device drawn; Lanes Device drawn; CrewFirst Device drawn; CrewFirst Opened drawn; CrewFirst Badge drawn; CrewFirst Pulse drawn)",
+      "passed": true,
+      "output": "6 of 6 embeds, each its named stories drawn"
+    },
+    {
+      "check": "390×844 dark: the plan card's lead opens \"Recommended: Crew first, because …\"",
+      "passed": true,
+      "output": "Recommended: Crew first, because it is the stack you asked for: which delegate is working on which step, and how far each has got, shows before you read a single step."
+    },
+    {
+      "check": "390×844 dark: the options' drawings stand one under another at the card's full width (334px), each captioned with its option, in their order (\"1 · One list\" 334px, \"2 · Lanes\" 334px, \"3 · Crew first\" 334px; drawn at 0.861, 0.861, 0.861; the page 4599px tall)",
+      "passed": true,
+      "output": "{\"labels\":[\"One list\",\"Lanes\",\"Crew first\"],\"drawings\":[{\"caption\":\"1 · One list\",\"top\":222,\"width\":334,\"full\":true,\"tall\":582},{\"caption\":\"2 · Lanes\",\"top\":862,\"width\":334,\"full\":true,\"tall\":614},{\"caption\":\"3 · Crew first\",\"top\":1535,\"width\":334,\"full\":true,\"tall\":617}],\"zooms\":[0.861,0.861,0.861]}"
+    },
+    {
+      "check": "390×844 dark: \"Fixed from your pins\" is a section with no pick, its first line \"If one still looks wrong, pin it.\", 4 pins quoted, 3 drawings",
+      "passed": true,
+      "output": "{\"found\":true,\"first\":\"If one still looks wrong, pin it.\",\"quotes\":[\"“am i not able to click on these to expand and drill down and see the description of each ?”\",\"“glpyhs for task ids or?”\",\"“make the lines pulse while they're progressing”\",\"“I'm sure you can do this design better, with better animations, lines, icons, and typography and layout”\"],\"drawings\":3,\"picks\":0,\"pinsCard\":false}"
+    },
+    {
+      "check": "390×844 dark: each option draws one frame, the one this screen shows, the phone's (OneList phone, Lanes phone, CrewFirst phone)",
+      "passed": true,
+      "output": "OneList phone\n    Lanes phone\n    CrewFirst phone"
+    },
+    {
+      "check": "390×844 dark: Lanes stands the steps that run at the same time side by side (2 columns at x 12, 160, tops 251, 251)",
+      "passed": true,
+      "output": "[[{\"top\":251,\"left\":12},{\"top\":251,\"left\":160}]]"
+    },
+    {
+      "check": "390×844 dark: each way's steps stand their status tiles in one column and their words in one (OneList 7 rows, tiles at 12, words at 30; Lanes 5 rows, tiles at 12, words at 30; CrewFirst 7 rows, tiles at 12, words at 30)",
+      "passed": true,
+      "output": "[{\"one\":\"OneList\",\"at\":{\"rows\":7,\"tiles\":[12],\"words\":[30]}},{\"one\":\"Lanes\",\"at\":{\"rows\":5,\"tiles\":[12],\"words\":[30]}},{\"one\":\"CrewFirst\",\"at\":{\"rows\":7,\"tiles\":[12],\"words\":[30]}}]"
+    },
+    {
+      "check": "390×844 dark: every Answer and Retry stands on its own row, at its line's start where it takes a line of its own (OneList fable-calendar-21c, OneList a11y-check-44e, Lanes fable-calendar-21c own line, Lanes a11y-check-44e, CrewFirst fable-calendar-21c, CrewFirst a11y-check-44e)",
+      "passed": true,
+      "output": "[{\"way\":\"OneList\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"OneList\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"Lanes\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":true,\"atStart\":true},{\"way\":\"Lanes\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"fable-calendar-21c\",\"inRow\":true,\"ownLine\":false,\"atStart\":true},{\"way\":\"CrewFirst\",\"row\":\"a11y-check-44e\",\"inRow\":true,\"ownLine\":false,\"atStart\":true}]"
+    },
+    {
+      "check": "390×844 dark: Lanes draws a line for each step's dependency, each one painted (4 lines for 4 dependencies, 0 unpainted)",
+      "passed": true,
+      "output": "{\"missing\":[],\"unpainted\":[]}"
+    },
+    {
+      "check": "390×844 dark: no line crosses a box, in any drawing (0 crossings)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 dark: no words are cut without an ellipsis, in any drawing",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 dark: every row's words have at least 64px of room, in every drawing (0 squeezed)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 dark: every row in every drawing stands at its place when read, no slide held on it (0 off their places)",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 dark: the pins section's first fix draws the date picker opened to its description (open)",
+      "passed": true,
+      "output": "{\"opened\":true}"
+    },
+    {
+      "check": "390×844 dark: the pins section's second fix draws the to-do that became a task wearing the task's glyph and id, in sight (glyph tsk-14 in sight)",
+      "passed": true,
+      "output": "[{\"glyph\":true,\"id\":\"tsk-14\",\"inSight\":true}]"
+    },
+    {
+      "check": "390×844 dark: the pins section's third fix draws the pulse at three named moments, its band at 10%, 50% and 90% of the fill (Start 10%, Middle 50%, End 90%)",
+      "passed": true,
+      "output": "[{\"label\":\"Start\",\"centre\":0.1},{\"label\":\"Middle\",\"centre\":0.5},{\"label\":\"End\",\"centre\":0.9}]"
+    },
+    {
+      "check": "390×844 dark: the pulse is light running along the line, its band brighter than the fill at every moment (Start 1.58:1, Middle 1.58:1, End 1.58:1)",
+      "passed": true,
+      "output": "[{\"label\":\"Start\",\"ink\":\"oklch(0.9184 0.0102 81.6)\",\"fill\":\"oklch(0.778 0.012 78)\",\"ratio\":1.58},{\"label\":\"Middle\",\"ink\":\"oklch(0.9184 0.0102 81.6)\",\"fill\":\"oklch(0.778 0.012 78)\",\"ratio\":1.58},{\"label\":\"End\",\"ink\":\"oklch(0.9184 0.0102 81.6)\",\"fill\":\"oklch(0.778 0.012 78)\",\"ratio\":1.58}]"
+    },
+    {
+      "check": "390×844 dark: no console errors, the page and its canvases",
+      "passed": true,
+      "output": "none"
+    },
+    {
+      "check": "390×844 dark: nothing scrolls the page sideways (390 wide in 390)",
+      "passed": true,
+      "output": "390px of content in a 390px view"
+    },
+    {
+      "check": "390×844 dark: the page's capture is files a delegate can hand over, each RGB and at most 1 MiB, its whole picture pixel for pixel (plan-steps-390-dark-1.png 1003 KiB, rows 0–3825, plan-steps-390-dark-2.png 261 KiB, rows 3825–4599; 780×9198)",
+      "passed": true,
+      "output": "every file whole and within the limit"
+    },
+    {
+      "check": "390×844 dark: the page's own capture paints every embed (93.2%, 91.9%, 93.1%, 89.3%, 85.5%, 56.9% their commonest colour)",
+      "passed": true,
+      "output": "6 of 6 embeds painted"
+    }
+  ]
+}
