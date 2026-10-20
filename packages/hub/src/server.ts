@@ -21352,6 +21352,7 @@ export const createServer = (
     if (!row) {
       return { kind: "refused", reason: "This session is gone." };
     }
+    const uuid = crypto.randomUUID();
     try {
       const record = deliverSend({
         verb: "send",
@@ -21361,7 +21362,7 @@ export const createServer = (
           instanceId,
           message: {
             type: "user",
-            uuid: crypto.randomUUID(),
+            uuid,
             message: { role: "user", content: text },
             parent_tool_use_id: null,
             origin,
@@ -21370,7 +21371,7 @@ export const createServer = (
       });
       return record?.state === "failed"
         ? { kind: "refused", reason: record.reason ?? "The send failed." }
-        : { kind: "taken" };
+        : { kind: "taken", uuid };
     } catch (error) {
       return {
         kind: "refused",
@@ -21436,6 +21437,7 @@ export const createServer = (
     goOnFrom,
     lifetime,
     plans,
+    sendFailed: (uuid) => db.sendRecord(uuid)?.state === "failed",
     tell: tellPlan,
     wakeCaw: async (projectId, text) => {
       const woke = await caw.wakeOnce(projectId, { by: "you", text });
@@ -23140,6 +23142,10 @@ export const createServer = (
     sayNestedBoundaryFix(reason);
     workflowRuntime.observe(instanceId, reason);
     losePending(instanceId, kind !== "conversation-gone", reason);
+    // What it was told of the person's plan changes goes on to a new session.
+    if (kind === "conversation-gone") {
+      planChanges?.cannotGoOn(instanceId, reason);
+    }
     escalateRoutedAsks(instanceId);
     push.sessionFailed(instanceId, reason);
     publishInstances(machineId);

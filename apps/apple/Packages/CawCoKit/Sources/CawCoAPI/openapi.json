@@ -9378,6 +9378,280 @@
         }
       }
     },
+    "/api/instances/{id}/plan/edits": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "reword"
+                      },
+                      "step": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "content": {
+                        "minLength": 1,
+                        "maxLength": 4000,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "step",
+                      "content"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "add"
+                      },
+                      "content": {
+                        "minLength": 1,
+                        "maxLength": 4000,
+                        "type": "string"
+                      },
+                      "after": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "content"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "remove"
+                      },
+                      "step": {
+                        "minLength": 1,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "step"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "comment"
+                      },
+                      "step": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "text": {
+                        "minLength": 1,
+                        "maxLength": 4000,
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "step",
+                      "text"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "tick"
+                      },
+                      "step": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "done": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "step",
+                      "done"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "const": "move"
+                      },
+                      "step": {
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      "by": {
+                        "type": "string",
+                        "enum": [
+                          -1,
+                          1
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind",
+                      "step",
+                      "by"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdPlanEdits",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdPlanEdits 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SessionPlan"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiInstancesByIdPlanEdits 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiInstancesByIdPlanEdits 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiInstancesByIdPlanEdits 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiInstancesByIdPlanEdits 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "postApiInstancesByIdPlanEdits 413",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "415": {
+            "description": "postApiInstancesByIdPlanEdits 415",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdPlanEdits 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiInstancesByIdPlanEdits 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiInstancesByIdPlanEdits 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiInstancesByIdPlanEdits 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/projects/{id}/dispatch": {
       "get": {
         "parameters": [
@@ -27251,13 +27525,13 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
+          "id": {
+            "type": "string"
+          },
           "origin": {
             "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "name": {
-            "type": "string"
-          },
-          "id": {
             "type": "string"
           },
           "createdAt": {
@@ -27323,13 +27597,13 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
+          "id": {
+            "type": "string"
+          },
           "origin": {
             "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "name": {
-            "type": "string"
-          },
-          "id": {
             "type": "string"
           },
           "createdAt": {
@@ -27381,13 +27655,13 @@
               "$ref": "#/components/schemas/Problem"
             }
           },
+          "id": {
+            "type": "string"
+          },
           "origin": {
             "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "name": {
-            "type": "string"
-          },
-          "id": {
             "type": "string"
           },
           "createdAt": {
@@ -27633,11 +27907,11 @@
               ]
             }
           },
-          "status": {
-            "$ref": "#/components/schemas/WorkflowRunStatus"
-          },
           "id": {
             "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkflowRunStatus"
           },
           "machineId": {
             "type": "string"
@@ -27800,11 +28074,11 @@
           {
             "type": "object",
             "properties": {
-              "status": {
-                "$ref": "#/components/schemas/WorkflowRunStatus"
-              },
               "id": {
                 "type": "string"
+              },
+              "status": {
+                "$ref": "#/components/schemas/WorkflowRunStatus"
               },
               "machineId": {
                 "type": "string"
@@ -28124,6 +28398,9 @@
           {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string"
+              },
               "status": {
                 "$ref": "#/components/schemas/InstanceStatus"
               },
@@ -28151,9 +28428,6 @@
                   "null",
                   "string"
                 ]
-              },
-              "id": {
-                "type": "string"
               },
               "machineId": {
                 "type": "string"
@@ -28371,6 +28645,9 @@
             {
               "type": "object",
               "properties": {
+                "id": {
+                  "type": "string"
+                },
                 "status": {
                   "$ref": "#/components/schemas/InstanceStatus"
                 },
@@ -28398,9 +28675,6 @@
                     "null",
                     "string"
                   ]
-                },
-                "id": {
-                  "type": "string"
                 },
                 "machineId": {
                   "type": "string"
@@ -29634,10 +29908,10 @@
             "appleGate": {
               "type": "boolean"
             },
-            "name": {
+            "id": {
               "type": "string"
             },
-            "id": {
+            "name": {
               "type": "string"
             },
             "remote": {
@@ -29862,10 +30136,10 @@
           "appleGate": {
             "type": "boolean"
           },
-          "name": {
+          "id": {
             "type": "string"
           },
-          "id": {
+          "name": {
             "type": "string"
           },
           "remote": {
@@ -30077,10 +30351,10 @@
           "appleGate": {
             "type": "boolean"
           },
-          "name": {
+          "id": {
             "type": "string"
           },
-          "id": {
+          "name": {
             "type": "string"
           },
           "remote": {
@@ -30312,10 +30586,10 @@
           "appleGate": {
             "type": "boolean"
           },
-          "name": {
+          "id": {
             "type": "string"
           },
-          "id": {
+          "name": {
             "type": "string"
           },
           "remote": {
@@ -30499,10 +30773,10 @@
           "appleGate": {
             "type": "boolean"
           },
-          "name": {
+          "id": {
             "type": "string"
           },
-          "id": {
+          "name": {
             "type": "string"
           },
           "remote": {
@@ -38239,10 +38513,10 @@
         "description": "An element under a pin, as the overlay describes it, without its markup.",
         "type": "object",
         "properties": {
-          "text": {
+          "id": {
             "type": "string"
           },
-          "id": {
+          "text": {
             "type": "string"
           },
           "page": {
@@ -39423,6 +39697,13 @@
         "description": "What `GET /api/instances/:id/plan` answers, and what the live frames keep\na client's copy equal to.",
         "type": "object",
         "properties": {
+          "changes": {
+            "description": "The person's latest changes to it, newest last.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanChange"
+            }
+          },
           "source": {
             "description": "Always `cawco`: the steps are CawCo's list on every harness. Still sent\nbecause the apps on TestFlight 20261015 through 20261018 decode it as\nrequired (hub openapi.ts's wire check); it goes in the change that\nexpires those builds.",
             "type": "string",
@@ -39458,6 +39739,106 @@
           "steps"
         ]
       },
+      "PlanChange": {
+        "description": "A person's change, recorded on the plan in their words and told to its receiver.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When the person made it, ISO 8601.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/PlanEditKind"
+          },
+          "step": {
+            "description": "The step it changed (the step added, for `add`).",
+            "type": "string"
+          },
+          "to": {
+            "$ref": "#/components/schemas/PlanReceiver"
+          },
+          "toldAt": {
+            "description": "When it went to {@link to} in a message, ISO 8601; absent while it waits.",
+            "type": "string"
+          },
+          "undelivered": {
+            "description": "Why it reached no one, when nothing could take it.",
+            "type": "string"
+          },
+          "was": {
+            "description": "The step's words before the change; for `add`, the step it follows (\"\" at the top).",
+            "type": "string"
+          },
+          "words": {
+            "description": "The person's words: the new words, the added step, the comment; `done` or\n`not done` for a tick; `up` or `down` for a move; \"\" for a removal.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "id",
+          "kind",
+          "step",
+          "to",
+          "was",
+          "words"
+        ]
+      },
+      "PlanEditKind": {
+        "type": "string",
+        "enum": [
+          "add",
+          "comment",
+          "move",
+          "remove",
+          "reword",
+          "tick"
+        ]
+      },
+      "PlanReceiver": {
+        "description": "Who hears a change to a session's plan: the session itself, the session\nthat delegated it (a delegate's plan is its parent's to pass on), or the\nproject's Caw (a task attempt's plan: he dispatched it).",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "session"
+                ]
+              },
+              "instanceId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instanceId",
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "caw"
+                ]
+              },
+              "projectId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "projectId"
+            ]
+          }
+        ]
+      },
       "PlanSpec": {
         "description": "The session's spec, as it last wrote it.",
         "type": "object",
@@ -39479,6 +39860,13 @@
         "description": "One step of a session's plan: an ACP plan entry, with an id and a nesting depth.",
         "type": "object",
         "properties": {
+          "comments": {
+            "description": "The person's comments on it, oldest first; kept by id across the session's writes.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanComment"
+            }
+          },
           "content": {
             "type": "string"
           },
@@ -39487,7 +39875,7 @@
             "type": "number"
           },
           "id": {
-            "description": "Stable within one list: the writer's, or the step's place.",
+            "description": "Stable within one list: the writer's, the step's place, or `you-…` for one the person added.",
             "type": "string"
           },
           "priority": {
@@ -39495,6 +39883,10 @@
           },
           "status": {
             "$ref": "#/components/schemas/PlanStepStatus"
+          },
+          "waitsOn": {
+            "$ref": "#/components/schemas/PlanWait",
+            "description": "It waits on the person's pick on a decision page."
           }
         },
         "required": [
@@ -39504,12 +39896,47 @@
           "status"
         ]
       },
+      "PlanComment": {
+        "description": "The person's comment on a step, in their words.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When they wrote it, ISO 8601.",
+            "type": "string"
+          },
+          "text": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "text"
+        ]
+      },
       "PlanStepStatus": {
         "type": "string",
         "enum": [
           "completed",
           "in_progress",
           "pending"
+        ]
+      },
+      "PlanWait": {
+        "description": "A step waiting on the person's choice: the card it asked on a decision\npage, set by the session as it asks (`todo_write`'s `waitsOn`). The plan\ndraws it \"Waiting on you\" with a link to the card; it stops waiting when\nthe page's Send carries a pick for that card.",
+        "type": "object",
+        "properties": {
+          "artifactId": {
+            "description": "The page's artifact id.",
+            "type": "string"
+          },
+          "card": {
+            "description": "The decision's id on the page (`data-cawco-choice`, an OpenUI `Decision`'s id).",
+            "type": "string"
+          }
+        },
+        "required": [
+          "artifactId",
+          "card"
         ]
       },
       "DispatchView": {
@@ -43336,13 +43763,13 @@
         "description": "A workflow as the list carries it: everything but its program, which only\nthe workflow's own read serves. The graph stays: the editor resolves a\ncalled workflow's Start inputs from it, and the app's launch form reads it.",
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string"
+          },
           "origin": {
             "$ref": "#/components/schemas/WorkflowOrigin"
           },
           "name": {
-            "type": "string"
-          },
-          "id": {
             "type": "string"
           },
           "createdAt": {
@@ -44187,11 +44614,11 @@
         "description": "A run as a workflow's run list carries it: what the clients' lists read,\nnone of its graph, inputs, result, state or log. The rest is the run's own read.",
         "type": "object",
         "properties": {
-          "status": {
-            "$ref": "#/components/schemas/WorkflowRunStatus"
-          },
           "id": {
             "type": "string"
+          },
+          "status": {
+            "$ref": "#/components/schemas/WorkflowRunStatus"
           },
           "machineId": {
             "type": "string"
@@ -52437,6 +52864,13 @@
             "enum": [
               "plan.snapshot"
             ]
+          },
+          "changes": {
+            "description": "The person's latest changes to it, newest last.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PlanChange"
+            }
           },
           "source": {
             "description": "Always `cawco`: the steps are CawCo's list on every harness. Still sent\nbecause the apps on TestFlight 20261015 through 20261018 decode it as\nrequired (hub openapi.ts's wire check); it goes in the change that\nexpires those builds.",

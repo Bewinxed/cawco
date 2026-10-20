@@ -122,6 +122,7 @@ typeOverrides:
     PinKind: OpenEnums.PinKind
     PlaceKind: OpenEnums.PlaceKind
     PlacementStrategy: OpenEnums.PlacementStrategy
+    PlanEditKind: OpenEnums.PlanEditKind
     PlanStepPriority: OpenEnums.PlanStepPriority
     PlanStepStatus: OpenEnums.PlanStepStatus
     PostApiInstancesByIdAccount200State: OpenEnums.PostApiInstancesByIdAccount200State

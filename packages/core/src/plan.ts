@@ -119,8 +119,7 @@ export type PlanEdit =
  * project's Caw (a task attempt's plan: he dispatched it).
  */
 export type PlanReceiver =
-  | { kind: "session"; instanceId: string }
-  | { kind: "caw"; projectId: string };
+  { kind: "session"; instanceId: string } | { kind: "caw"; projectId: string };
 
 /** A person's change, recorded on the plan in their words and told to its receiver. */
 export interface PlanChange {

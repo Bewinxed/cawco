@@ -713,10 +713,10 @@ export interface DbShape {
   readonly clearOpenRouterConnection: () => void;
   /** Closes the connection: the hub's lifetime's last release (lifetime.ts). */
   readonly close: () => void;
-  /** Marks changes told (`at`), or reaching no one (`undelivered`). */
+  /** Marks changes told (`at`, by the message `sent` to a session), or reaching no one (`undelivered`). */
   readonly closePlanChanges: (
     ids: readonly string[],
-    outcome: { at: Date } | { undelivered: string }
+    outcome: { at: Date; sent?: string } | { undelivered: string }
   ) => void;
   /** The session's turn ended. */
   readonly closeTurn: (id: string) => void;
@@ -1505,7 +1505,10 @@ export interface DbShape {
     }
   ) => PublicInstanceRow | undefined;
   /** A plan's latest `limit` changes, oldest first. */
-  readonly planChangesOf: (instanceId: string, limit: number) => PlanChangeRow[];
+  readonly planChangesOf: (
+    instanceId: string,
+    limit: number
+  ) => PlanChangeRow[];
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
   readonly previews: PreviewsDb;
   /** The harness conversations a session had before the one it runs now, oldest first (`instance_conversations`). */
@@ -1955,6 +1958,8 @@ export interface DbShape {
     instanceId: string,
     states: SentMessageRow["state"][]
   ) => SentMessageRow[];
+  /** The changes told to `receiver` by a message still on record (core `PlanChange`, `sent_uuid`). */
+  readonly sentPlanChanges: (receiver: string) => PlanChangeRow[];
   /** What a harness session has cost, in dollars, by the usage its machine reported. */
   readonly sessionCostUsd: (sessionId: string) => number;
   readonly sessionIdentity: (
@@ -7133,9 +7138,7 @@ const make = async (path: string): Promise<DbShape> => {
       db
         .selectDistinct({ receiver: planChanges.receiver })
         .from(planChanges)
-        .where(
-          and(isNull(planChanges.toldAt), isNull(planChanges.undelivered))
-        )
+        .where(and(isNull(planChanges.toldAt), isNull(planChanges.undelivered)))
         .all()
         .map((row) => row.receiver),
     closePlanChanges: (ids, outcome) => {
@@ -7145,12 +7148,32 @@ const make = async (path: string): Promise<DbShape> => {
       db.update(planChanges)
         .set(
           "at" in outcome
-            ? { toldAt: outcome.at, undelivered: null }
-            : { undelivered: outcome.undelivered, toldAt: null }
+            ? {
+                toldAt: outcome.at,
+                sentUuid: outcome.sent ?? null,
+                undelivered: null,
+              }
+            : {
+                undelivered: outcome.undelivered,
+                toldAt: null,
+                sentUuid: null,
+              }
         )
         .where(inArray(planChanges.id, [...ids]))
         .run();
     },
+    sentPlanChanges: (receiver) =>
+      db
+        .select()
+        .from(planChanges)
+        .where(
+          and(
+            eq(planChanges.receiver, receiver),
+            isNotNull(planChanges.sentUuid)
+          )
+        )
+        .orderBy(asc(planChanges.at), asc(planChanges.id))
+        .all(),
     unsettledPlanChanges: (instanceId) =>
       db
         .select()

@@ -1,7 +1,7 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "0bf7c177-4f0d-44b6-aed4-a9fc03982e63",
+  "id": "cf275a85-8d5e-41b7-bfe1-930c105cb5da",
   "prevId": "41cd9406-c4bb-46ad-8a58-02d632f75eab",
   "tables": {
     "account_bench": {
@@ -6305,6 +6305,13 @@
         "told_at": {
           "name": "told_at",
           "type": "integer",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "sent_uuid": {
+          "name": "sent_uuid",
+          "type": "text",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

@@ -11,6 +11,7 @@ CREATE TABLE `plan_changes` (
 	`words` text NOT NULL,
 	`at` integer NOT NULL,
 	`told_at` integer,
+	`sent_uuid` text,
 	`settled` integer DEFAULT false NOT NULL,
 	`undelivered` text
 );

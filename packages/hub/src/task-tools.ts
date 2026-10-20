@@ -16,6 +16,7 @@ import {
   type LandsMode,
   PLAN_STEP_PRIORITIES,
   PLAN_STEP_STATUSES,
+  type PlanWait,
   RESULT_ARTIFACT_KINDS,
   type ResultArtifact,
   type ResultArtifactKind,
@@ -239,25 +240,33 @@ const stepParameter = () =>
       .int()
       .min(0)
       .optional()
-      .describe("0: top level; one more than its parent step."),
+      .describe("0 at the top; one more per level."),
     id: z
       .string()
       .trim()
       .min(1)
       .optional()
-      .describe("Your id for it; left out, its position (2, 2.1)."),
+      .describe("Left out: its position (2, 2.1)."),
     priority: z.enum(PLAN_STEP_PRIORITIES).optional(),
     waitsOn: z
-      .object({
-        artifact: z.string().trim().min(1),
-        card: z.string().trim().min(1),
-      })
-      .nullable()
+      .string()
       .optional()
-      .describe(
-        "It waits on the person's pick: the decision page's artifact id and the card's id. Left out: kept; null: cleared."
-      ),
+      .describe("Card it waits on: <artifact>#<card>; '' clears."),
   });
+
+/** A step's `waitsOn` as written: `<artifact id>#<card>`, or '' to clear it. */
+const waitOf = (written: string): PlanWait | null => {
+  if (written === "") {
+    return null;
+  }
+  const at = written.indexOf("#");
+  if (at <= 0 || at === written.length - 1) {
+    throw new Error(
+      `waitsOn “${written}” names no card: write the page's artifact id, #, and the card's id.`
+    );
+  }
+  return { artifactId: written.slice(0, at), card: written.slice(at + 1) };
+};
 
 /**
  * Steps as written, nested by depth: each one at most one deeper than the
@@ -282,13 +291,7 @@ const stepsOf = (
       status: step.status,
       depth,
       ...(step.priority ? { priority: step.priority } : {}),
-      ...(step.waitsOn === undefined
-        ? {}
-        : {
-            waitsOn: step.waitsOn
-              ? { artifactId: step.waitsOn.artifact, card: step.waitsOn.card }
-              : null,
-          }),
+      ...(step.waitsOn === undefined ? {} : { waitsOn: waitOf(step.waitsOn) }),
     };
   });
 };
@@ -582,34 +585,28 @@ export function taskTools(context: TaskToolContext | undefined) {
     ),
     tool(
       "todo_write",
-      "Two scopes. Your plan: `steps` replaces your step list (pending, in_progress or completed; `depth` nests; `waitsOn` names the decision-page card a step waits on), `spec` your spec (markdown: what you build and how, decisions and why); returns your plan and the person's changes to it you have not heard. A task's to-dos: tick, untick, add or reword them by id (td-3) or position (2.1) on your work item's task (a session the operator started names any); all land together. Every compaction lists them.",
+      "Two scopes. Your plan: `steps` replaces your step list (pending, in_progress or completed; `depth` nests), `spec` your spec (markdown: what you build, how, and why); returns your plan. A task's to-dos: tick, untick, add or reword by id (td-3) or position (2.1) on your work item's task (an operator's session names any); all land together. Every compaction lists them.",
       {
         steps: z
           .array(stepParameter())
           .optional()
           .describe("The whole list, in order."),
         spec: z.string().optional().describe("The whole document."),
-        task: z
-          .string()
-          .optional()
-          .describe("Like tsk-12. Defaults to your work item's."),
+        task: z.string().optional().describe("Like tsk-12; yours by default."),
         tick: lines("To-dos done."),
-        untick: lines("To-dos not done after all."),
+        untick: lines("Not done after all."),
         add: z
           .array(
             z.object({
               text: z.string().describe("One line."),
-              under: z
-                .string()
-                .optional()
-                .describe("The to-do it is a step of."),
+              under: z.string().optional().describe("Its parent to-do."),
             })
           )
           .optional(),
         edit: z
           .array(z.object({ todo: z.string(), text: z.string() }))
           .optional()
-          .describe("New words for a to-do."),
+          .describe("New words."),
       },
       async ({ task, steps, spec, ...changes }) => {
         if (steps !== undefined || spec !== undefined) {
