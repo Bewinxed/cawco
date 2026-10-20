@@ -158,6 +158,14 @@ export interface SetupAsk {
    * person's ask in a thread of a project that has one (`project_setup`).
    */
   from: "prompt" | "offer" | "ask";
+  /**
+   * The Setup thread's first message as it reads, which the wake carries as
+   * a thread's wake carries your words (caw.ts `yourWords`): the person's
+   * words (`prompt`), or the note of the offer it was made from (`offer`).
+   * None on the person's ask (`ask`), answered inside the wake that carried
+   * their words.
+   */
+  opened?: string;
   /** It has its checkout already (made from a folder): no card asks for its place. */
   placed: boolean;
   projectName: string;
@@ -182,7 +190,7 @@ const openingOf = (ask: SetupAsk): string => {
     ask.from === "prompt"
       ? ", and their words are the first message of the Setup thread"
       : " from a session's offer, noted in the Setup thread"
-  } (thread ${ask.threadId}). ${ask.template ? `They picked the ${ask.template} template.` : "They picked no template; start from the code template unless their words say otherwise."} Set the project up with them.`;
+  } (thread ${ask.threadId})${ask.opened ? `:\n\n${ask.opened}\n\n` : ". "}${ask.template ? `They picked the ${ask.template} template.` : "They picked no template; start from the code template unless their words say otherwise."} Set the project up with them.`;
 };
 
 const fleetCards = `- \`fleet-delegates\`: "Delegates instead of subagents" — sessions hand work to CawCo's delegates rather than their harness's own subagents. Options \`on\` labelled "Use delegates" (recommended) and \`off\` labelled "Keep subagents".

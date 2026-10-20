@@ -12,12 +12,10 @@
  *   split standing shows the preview's sheet, none shows it beside the
  *   conversation, and opening posts and logs no loop.
  *
- * The project's first thread is its Setup thread: Caw is woken with the
- * setup event, which names the thread and leaves the person's words in it
- * for him to read (setup.ts `openingOf`), so a marker there never reaches
- * the mock model. The thread is opened, Caw's answer in it waited for, and
- * the marker sent as the person's next message, which wakes him with its
- * words (caw.ts "You wrote in the thread").
+ * The project's first thread is its Setup thread, and the person's words in
+ * it open it: Caw is woken with the setup event, which carries them
+ * (setup.ts `openingOf`), so the request the model is sent for that wake
+ * holds them, and the marker in them reaches it.
  *
  * Caw starts in a bounded place of the project's, so this spec's fleet
  * starts a boundary, which no workspace can (README "A spec that delegates
@@ -33,6 +31,7 @@ import {
   DESK_SWEEP,
   fleetUp,
   made,
+  modelRequests,
   runLeg,
   runNarrow,
 } from "./artifact-resize-loop";
@@ -53,28 +52,29 @@ const spec: Spec = {
       cwd: src,
       caw: true,
     });
-    const thread = (
-      await fleet.api<{ thread: { id: string } }>(
-        `/api/projects/${project.id}/threads`,
-        { body: "Set it up as it comes." }
-      )
-    ).thread.id;
-    await until(
-      "Caw answered in the Setup thread",
-      () =>
-        fleet.query<{ n: number }>(
-          "SELECT count(*) AS n FROM thread_messages WHERE thread_id = ? AND author = 'caw'",
-          thread
-        )[0]?.n ?? 0,
-      (count) => count > 0,
-      180_000
-    );
-    const id = await made(kit, "2", "chip-wraps-caw", () =>
-      fleet.api(`/api/projects/${project.id}/threads/${thread}/messages`, {
-        body: "PROBE-CALL:2",
-      })
-    );
-    if (!id) {
+    let thread = "";
+    const id = await made(kit, "2", "chip-wraps-caw", async () => {
+      thread = (
+        await fleet.api<{ thread: { id: string } }>(
+          `/api/projects/${project.id}/threads`,
+          { body: "PROBE-CALL:2" }
+        )
+      ).thread.id;
+      const setup = (await until(
+        "Caw's setup wake reaching the model",
+        () => modelRequests().find((text) => text.includes("Event setup:")),
+        Boolean,
+        180_000
+      )) as string;
+      const opening = setup.slice(setup.indexOf("Event setup:"));
+      kit.check(
+        "Caw's setup wake carries the person's words: the request the model is sent for it names the Setup thread and holds its first message",
+        opening.includes(`(thread ${thread})`) &&
+          opening.includes("PROBE-CALL:2"),
+        opening.slice(0, 400)
+      );
+    });
+    if (!(id && thread)) {
       return;
     }
     // The thread's tab, and its row's link (links.ts `rowHref`).

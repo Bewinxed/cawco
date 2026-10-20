@@ -24,8 +24,10 @@
  *   some heights and not at both ends.
  * - Beside the session in a fine pointer's desk window 860 wide, where the
  *   pane is under 900px and the preview is the sheet on the composer
- *   (layoutPolicy.sideDrawer), opened from a link once the board lists it,
- *   so the session's pane mounts with its preview already open: every frame
+ *   (layoutPolicy.sideDrawer), opened from its row in the navigation the
+ *   bar's burger opens (the session runs in a project's checkout, and the
+ *   navigation lists it under the project), so the session's pane mounts
+ *   with its preview already open: every frame
  *   painted from the one the split first stands in is read (a task posted
  *   from each frame's callbacks runs once that frame is painted), and the
  *   first of them shows the sheet with its preview, and none shows the
@@ -44,7 +46,7 @@
  *   bun scripts/probe-kit/run.ts artifact-resize-loop
  */
 import type { Page } from "playwright-core";
-import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import {
   type Kit,
   type KitFleet,
@@ -72,6 +74,10 @@ const PAGE = `<!doctype html>
 </html>`;
 
 const asks = new Map<string, { input: object; name: string }>();
+/** Each request a session's turn sent the model, its whole text, in order. */
+const requests: string[] = [];
+/** The requests the model was sent so far ({@link requests}). */
+export const modelRequests = (): readonly string[] => requests;
 const issued = new Set<string>();
 const answered = new Map<string, string>();
 
@@ -99,6 +105,7 @@ const respond = (request: Seen): Reply => {
   if (!request.tools) {
     return text("Probe title");
   }
+  requests.push(request.all);
   const marker = [...request.all.matchAll(COMMAND)].at(-1)?.[1];
   const ask = marker ? asks.get(marker) : undefined;
   if (!(marker && ask)) {
@@ -626,14 +633,21 @@ const NARROW_DESK = { width: 860, height: 900 };
 
 /**
  * In a fine pointer's desk window 860 wide, where the preview is the sheet on
- * the composer: the board opened first (`/`), until it lists the
- * conversation's row (`path`'s link): the fleet's frame that lists it carries
- * every session's preview, so the dashboard holds its preview open. Then the
- * conversation opened from a link (SvelteKit routes the click in the page),
- * so its pane (`pane`, its tab's id) mounts with the preview already open.
- * The first frame painted with that pane's split standing already shows the
- * sheet with its preview, none shows the preview beside the conversation,
- * and opening sent and logged no loop.
+ * the composer: the conversation opened as a person there opens it. The
+ * board (`/`), then the navigation the bar's burger opens under the rail's
+ * 900px line (Shell), where each project lists its conversations, a thread
+ * with its Caw or a session, running or at rest (Sidebar): its row (`path`'s
+ * link) stands there once the fleet's frame that lists it has come, and that
+ * frame carries every session's preview, so the dashboard holds its preview
+ * open. The row pressed, SvelteKit routes it in the page and the sheet goes
+ * as it does, so the conversation's pane (`pane`, its tab's id) mounts with
+ * the preview already open. The first frame painted with that pane's split
+ * standing already shows the sheet with its preview, none shows the preview
+ * beside the conversation, and opening sent and logged no loop.
+ *
+ * The board's own lists are not where to find it: they draw one tab at a
+ * time (Working, by default), and Recent folded, so a conversation at rest
+ * has a row on the board only while it reads as working for a moment.
  */
 export const runNarrow = async (
   kit: Kit,
@@ -648,24 +662,17 @@ export const runNarrow = async (
   await page.setViewportSize(NARROW_DESK);
   const said = heard(page);
   const start = await mark(page, said);
-  await page.goto(`${base}/`, { waitUntil: "domcontentloaded" });
-  await page.waitForSelector(`a[href="${leg.path}"]`, {
-    state: "attached",
-    timeout: 60_000,
-  });
+  await open(page, `${base}/`, '[data-slot="burger"]');
+  // A press before the page hydrates is held and replayed (app.html).
+  await page.locator('[data-slot="burger"]').click();
+  const row = page.locator(`[data-rail-sheet] a[href="${leg.path}"]`);
+  await row.waitFor({ state: "visible", timeout: 60_000 });
   await settle(page);
   const before = await page.evaluate(() => window.__painted?.length ?? 0);
-  await page.evaluate(
-    ({ href, pane }) => {
-      window.__paintPane = pane;
-      const link = document.createElement("a");
-      link.href = href;
-      link.textContent = "Its conversation";
-      document.body.append(link);
-      link.click();
-    },
-    { href: leg.path, pane: leg.pane }
-  );
+  await page.evaluate((pane) => {
+    window.__paintPane = pane;
+  }, leg.pane);
+  await row.click();
   /** The preview's page drew in the sheet: its heading stands in the sheet's frame. */
   const sheetLoaded = await page
     .frameLocator("[data-preview-sheet] iframe[title='Preview']")
@@ -706,7 +713,7 @@ export const runNarrow = async (
     JSON.stringify({
       sheetLoaded,
       sheetHolds,
-      framesBeforeTheLink: before,
+      framesBeforeTheRow: before,
       documentsLoaded: routed,
       frames: painted.length,
       firstFrames: painted.slice(0, 7),
@@ -754,7 +761,7 @@ export const runNarrow = async (
     kit,
     page,
     said,
-    `${leg.name}: opening the board, then the conversation from a link, in a ${NARROW_DESK.width}px desk window`,
+    `${leg.name}: opening the board, then the conversation from the navigation, in a ${NARROW_DESK.width}px desk window`,
     start,
     opened
   );
@@ -824,6 +831,14 @@ const TALL_SWEEP = [...sweep(900, 240, 20), ...sweep(260, 900, 20)].map(
 
 const run = async (kit: Kit) => {
   const fleet = await fleetUp(kit);
+  // The session runs in a project's checkout, so the navigation lists it
+  // under that project ({@link runNarrow}); no Caw is asked to set it up.
+  await fleet.api("/api/projects", {
+    name: "Chip wraps",
+    machineId: MACHINE,
+    cwd: fleet.repo,
+    caw: false,
+  });
   const session = await fleet.spawn("claude", "Chip wraps", fleet.repo);
   const id = await made(kit, "1", "chip-wraps", () =>
     fleet.send(session, "PROBE-CALL:1")

@@ -498,6 +498,12 @@ const eventRow = (note: ThreadNote) => ({
   event: note.event,
 });
 
+/** A thread message as a wake carries it: your words, or a note's title over its body. */
+const openedOf = (line: ThreadMessageRow): string =>
+  line.author === "event"
+    ? [line.noteTitle, line.body].filter(Boolean).join("\n\n")
+    : line.body;
+
 /** An attempt's end, in the word an event note reads. */
 const ENDED: Record<ItemEnd, string> = {
   done: "landed",
@@ -2163,13 +2169,19 @@ export const createCaw = ({
     template: StagesTemplate | null,
     {
       change = [],
+      opened,
       stages,
-    }: { change?: readonly SetupPart[]; stages?: string } = {}
+    }: {
+      change?: readonly SetupPart[];
+      opened?: string;
+      stages?: string;
+    } = {}
   ): string =>
     setupEvent({
       askFleet: !fleetChoicesSet() || change.includes("fleet"),
       askUpstream: !upstreamAnswered() || change.includes("upstream"),
       from,
+      ...(opened === undefined ? {} : { opened }),
       placed:
         !change.includes("place") &&
         project.places.some((place) => place.kind === "checkout"),
@@ -2182,7 +2194,9 @@ export const createCaw = ({
 
   /**
    * Wakes the project's Caw with its setup event: your words (your prompt,
-   * or the offer you accepted), so on or off. When Caw cannot start for a
+   * or the offer you accepted), so on or off. The Setup thread's first
+   * message goes with it as it reads, with what rode with your words, as a
+   * thread's wake carries them ({@link yourWords}). When Caw cannot start for a
    * reason the thread already states (no machine online: the thread's
    * composer says so), nothing is added; any other failure, the spend cap's
    * included, is noted in it. `machineOnline` tries again.
@@ -2193,10 +2207,27 @@ export const createCaw = ({
     from: "prompt" | "offer",
     template: StagesTemplate | null
   ): void => {
+    const [first] = db.threadMessages(threadId);
+    let carried: Carried | undefined;
+    try {
+      carried = first?.author === "you" ? carriedOf(first) : undefined;
+    } catch (error) {
+      // A picture your words carried is no longer stored (a setup tried
+      // again long after): the thread says so, and nothing wakes him.
+      noteIn(project.id, threadId, {
+        title: "Caw · could not start",
+        body: error instanceof Error ? error.message : String(error),
+        event: { kind: "caw", what: "could-not-start" },
+      });
+      return;
+    }
     wake(project.id, {
       by: "you",
       threadId,
-      text: setupText(project, threadId, from, template),
+      text: setupText(project, threadId, from, template, {
+        ...(first ? { opened: openedOf(first) } : {}),
+      }),
+      ...(carried?.images || carried?.attachments ? { carried } : {}),
     }).catch((error: unknown) => {
       // No machine for him (the composer says so), or the project was
       // deleted meanwhile: nothing to say.
