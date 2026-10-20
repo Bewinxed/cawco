@@ -37,6 +37,11 @@
  *    answered "offline" and made no row (leg 3's, sent as leg 2's cut ended;
  *    leg 3 starts there still).
  *
+ * Throughout, no request through the second machine's link is cut for
+ * waiting on the hub (relay.ts `idleCuts`), and the run ends without Bun's
+ * "Bun.serve() timed out a request after 10 seconds": leg 3's broken answer
+ * was held open until the relay's 10 s idle timeout cut it.
+ *
  *   bun scripts/probe-kit/run.ts source-burst
  */
 import { readFileSync } from "node:fs";
@@ -441,6 +446,17 @@ const spec: Spec = {
     await handOnce(legs, parent);
     await loseSend(legs);
     await startThroughCut(legs);
+    check(
+      "no request through the second machine's link is cut for waiting on the hub: the relay, standing in for that link, has no idle timeout of its own",
+      between.idleCuts.length === 0,
+      between.idleCuts
+        .map(
+          (one) =>
+            `${one.method} ${one.path} left after ${Math.round(one.idleMs / 1000)} s with nothing passing`
+        )
+        .join(" | ")
+        .slice(0, 1200)
+    );
     between.stop();
   },
 };

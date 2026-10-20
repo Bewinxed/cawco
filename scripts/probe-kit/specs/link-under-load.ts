@@ -27,6 +27,10 @@
  *   known", "Completion is unknown").
  * - The hub's reads of the machines meet their deadlines under the load:
  *   no "did not answer within", no "didn't answer within".
+ * - No request through the second machine's link is cut for waiting on the
+ *   hub (relay.ts `idleCuts`): the relay stood in for that link with Bun's
+ *   10 s idle timeout, and every run ended "Bun.serve() timed out a request
+ *   after 10 seconds" (r60 to r77).
  *
  *   bun scripts/probe-kit/run.ts link-under-load
  */
@@ -352,6 +356,17 @@ const spec: Spec = {
       "every read of the machines meets its deadline under the load",
       late.length === 0,
       late.slice(0, 5).join(" | ")
+    );
+    check(
+      "no request through the second machine's link is cut for waiting on the hub: the relay, standing in for that link, has no idle timeout of its own",
+      between.idleCuts.length === 0,
+      between.idleCuts
+        .map(
+          (one) =>
+            `${one.method} ${one.path} left after ${Math.round(one.idleMs / 1000)} s with nothing passing`
+        )
+        .join(" | ")
+        .slice(0, 1200)
     );
     between.stop();
   },
