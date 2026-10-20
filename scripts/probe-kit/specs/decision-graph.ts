@@ -283,12 +283,20 @@ const run = async (kit: Kit) => {
   await tab.reload();
   await tab.waitForSelector("#decision-shape header .dp-state");
   const pickedHead = await cardHead(tab, "shape");
+  // A folded card names its pick on its decided line, the chosen options'
+  // group (Decision.svelte `aria-label={`Decided: ${decidedLine}`}`).
+  const decidedLine = await tab.evaluate(
+    () =>
+      document
+        .querySelector(
+          "#decision-shape header :is([data-slot=decided], .dp-picks)"
+        )
+        ?.getAttribute("aria-label") ?? ""
+  );
   kit.check(
     '(g) a pick on an option the card offers folds it to "Decided: Per machine"',
-    repicked.ok &&
-      pickedHead.line === "Decided: Per machine" &&
-      pickedHead.decided,
-    JSON.stringify(pickedHead)
+    repicked.ok && decidedLine === "Decided: Per machine" && pickedHead.decided,
+    JSON.stringify({ ...pickedHead, decidedLine })
   );
   await tab.close();
 
