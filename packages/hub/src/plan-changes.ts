@@ -50,7 +50,8 @@ import { FolderRefusal, refused } from "./project-folder";
 
 /** What became of a message to a session about its plan's changes. */
 export type PlanTold =
-  | { kind: "taken" }
+  /** Its send's uuid: a send its session's gone conversation fails is carried on ({@link PlanChanges.cannotGoOn}). */
+  | { kind: "taken"; uuid: string }
   /** It cannot go on: its conversation or its workspace is gone. */
   | { kind: "ended"; reason: string }
   | { kind: "refused"; reason: string };
@@ -63,6 +64,7 @@ export interface PlanChangesDeps {
     | "closePlanChanges"
     | "getInstancesByIds"
     | "project"
+    | "sentPlanChanges"
     | "sessionPlan"
     | "untoldPlanChanges"
     | "untoldPlanReceivers"
@@ -76,6 +78,8 @@ export interface PlanChangesDeps {
   goOnFrom: (row: InstanceRow, opening: string) => Promise<string>;
   lifetime: HubLifetimeShape;
   plans: Plans;
+  /** Whether the send under this uuid failed (its record says so). */
+  sendFailed: (uuid: string) => boolean;
   /** The person's words to a session, through the one send path (`PLAN_ORIGIN`). */
   tell: (instanceId: string, text: string) => PlanTold;
   /** The person's words to a project's Caw (caw.ts `wakeOnce`, by you): undefined once he has them, else why not. */
@@ -161,7 +165,9 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
     const [owner] = db.getInstancesByIds([instanceId]);
     const who = owner ? named(owner) : `session ${instanceId.slice(0, 8)}`;
     if (to.kind === "caw") {
-      const item = owner?.workItemId ? db.workItem(owner.workItemId) : undefined;
+      const item = owner?.workItemId
+        ? db.workItem(owner.workItemId)
+        : undefined;
       return {
         whose: `the plan of ${who}, an attempt at task ${item?.taskId ?? "of this project"}`,
         next: "The attempt has not heard this. Decide whether to tell it (handoff), start a new attempt, or reshape the task.",
@@ -258,7 +264,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
       const told = deps.tell(to.instanceId, text);
       switch (told.kind) {
         case "taken":
-          db.closePlanChanges(ids, { at: new Date() });
+          db.closePlanChanges(ids, { at: new Date(), sent: told.uuid });
           break;
         case "refused":
           db.closePlanChanges(ids, { undelivered: told.reason });
@@ -292,7 +298,7 @@ export const createPlanChanges = (deps: PlanChangesDeps) => {
    * when it is a project's Caw, his project's. Undefined when it is owed
    * nothing.
    */
-const foldInto = (instanceId: string): string | undefined => {
+  const foldInto = (instanceId: string): string | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
     const keys = [
       receiverKey({ kind: "session", instanceId }),
@@ -356,13 +362,43 @@ const foldInto = (instanceId: string): string | undefined => {
     },
 
     /**
+     * `instanceId` cannot go on: starting it found its conversation gone,
+     * and what it was sent failed. The changes whose message failed so go
+     * on to a new session from it, as a change to a session known to have
+     * ended does.
+     */
+    cannotGoOn(instanceId: string, reason: string): void {
+      const key = receiverKey({ kind: "session", instanceId });
+      detach(
+        inOrder(key, async () => {
+          const rows = db
+            .sentPlanChanges(key)
+            .filter((row) => row.sentUuid && deps.sendFailed(row.sentUuid));
+          if (rows.length === 0) {
+            return;
+          }
+          await goOn(
+            rowOf(instanceId),
+            reason,
+            message(receiverOfKey(key), rows),
+            rows.map((row) => row.id)
+          );
+          plansMoved(rows);
+        }),
+        "plan changes carried on"
+      );
+    },
+
+    /**
      * At the hub's start: a quiet window the last process left open goes on,
      * for each receiver still owed a change that starts it.
      */
     resume(): void {
       for (const key of db.untoldPlanReceivers()) {
         if (
-          db.untoldPlanChanges(key).some((row) => PLAN_WAKING_EDITS.has(row.kind))
+          db
+            .untoldPlanChanges(key)
+            .some((row) => PLAN_WAKING_EDITS.has(row.kind))
         ) {
           arm(key);
         }

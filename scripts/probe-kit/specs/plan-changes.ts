@@ -14,9 +14,10 @@
  *     turn, started by a message of the person's, carries it;
  * (7) the page's Send with a pick for the card clears the step's wait;
  * (4a) stopped, a reword reopens the same session with the change;
- * (4b) Claude Code only, whose conversation can be gone: with its transcript
- *     gone, a reword starts a new session in the same folder, opening on the
- *     change and the old session's records, its plan copied.
+ * (4b) Claude Code only, whose conversation can be gone: its transcript
+ *     removed while it is stopped, a reword's wake finds the conversation
+ *     gone, and a new session in the same folder goes on from it, opening on
+ *     the change and the old session's records, its plan copied.
  *
  * On main there is no `POST /api/instances/:id/plan/edits`: every leg fails.
  * Runs inside a workspace or on the host alike: it delegates nothing.
@@ -177,7 +178,7 @@ const writes = async (leg: Leg): Promise<void> => {
           id: "s3",
           content: "Pick the colour",
           status: "pending",
-          waitsOn: { artifact: leg.page, card: CARD },
+          waitsOn: `${leg.page}#${CARD}`,
         },
       ],
     },
@@ -411,24 +412,11 @@ const goesOn = async (leg: Leg): Promise<void> => {
     "SELECT session_id FROM instances WHERE id = ?",
     leg.session
   );
-  await leg.fleet.stop("agent");
   const gone = await removeTranscript(leg.fleet.home, row?.session_id ?? "");
-  leg.fleet.launch("agent");
-  await leg.fleet.agentUp();
-  const marked = await until(
-    leg.label("its conversation reads gone"),
-    () =>
-      leg.fleet.query<{ kind: string | null }>(
-        "SELECT last_error_kind AS kind FROM instances WHERE id = ?",
-        leg.session
-      )[0],
-    (now) => now?.kind === "conversation-gone",
-    60_000
-  ).catch(() => undefined);
   leg.kit.check(
-    leg.label("(4b) staged: its transcript removed and its conversation gone"),
-    gone > 0 && marked !== undefined,
-    `${gone} transcript file(s) removed; kind ${marked?.kind}`
+    leg.label("(4b) staged: its transcript removed"),
+    gone > 0,
+    `${gone} transcript file(s) removed`
   );
   const goneAt = Date.now();
   const words = "Ship it behind a flag";

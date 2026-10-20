@@ -137,7 +137,9 @@ const undoes = (steps: WrittenStep[], change: PlanChangeRow): boolean => {
 };
 
 /** One change as a message says it: what the person did, in their words. */
-export const changeLine = (change: Pick<PlanChangeRow, "kind" | "was" | "words">): string => {
+export const changeLine = (
+  change: Pick<PlanChangeRow, "kind" | "was" | "words">
+): string => {
   switch (change.kind) {
     case "reword":
       return `Reworded “${change.was}” to: “${change.words}”`;
@@ -578,6 +580,7 @@ export const createPlans = (deps: PlansDeps) => {
         words,
         at,
         toldAt: null,
+        sentUuid: null,
         settled,
         undelivered: null,
       };

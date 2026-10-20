@@ -3667,6 +3667,12 @@ export const planChanges = sqliteTable(
     /** When it went to its receiver in a message; null while it waits. */
     toldAt: timestamp("told_at"),
     /**
+     * The uuid of the message that carried it to a session, until that
+     * session is known to have taken it or gone on: a message its session's
+     * gone conversation failed is carried on to a new session.
+     */
+    sentUuid: text("sent_uuid"),
+    /**
      * The plan's own session has written its steps since, or was told why a
      * write of them was refused: a later write no longer checks against it.
      * Set at once for a change its own session never hears (a delegate's
