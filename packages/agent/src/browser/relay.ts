@@ -856,6 +856,21 @@ const runningAsAsked = async (
   return { ports: await listenerBound(runtime, tls), tls };
 };
 
+/**
+ * The machine's network changed: a live relay's frame told again with the
+ * machine's own addresses read now, so the hub mints every browser's
+ * credential with the reach the relay has (relay-urls.ts). Nothing is told
+ * while the relay is not live, or when its addresses are the same (`tell`
+ * sends a frame only when it changed).
+ */
+export const relayReachChanged = (): Promise<void> =>
+  serial(async () => {
+    if (current.state !== "live") {
+      return;
+    }
+    tell({ ...current, reach: await reachNow() });
+  });
+
 /** The relay live: told with the machine's own addresses, and answered as its frame. */
 const liveFrame = async (
   ports: RelayPorts,

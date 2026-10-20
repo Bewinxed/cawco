@@ -22,9 +22,9 @@
  * 3. the relay-to-relay path proven, not assumed: `turnutils_uclient -y`
  *    (two clients sending to each other's relayed address, its help text
  *    read first) from coturn's image on the media network against .2, and
- *    from the runtime's default network against P through the published
- *    listener, with a minted credential: every packet back, none lost, none
- *    dropped, no "denied" in coturn's log;
+ *    the same exchange from this machine's own process through the published
+ *    listener at P (a viewer's way in), with a minted credential: every
+ *    packet back, none lost, none dropped, no "denied" in coturn's log;
  * 4. no port of the relay range is bound on this machine, and a STUN binding
  *    to P:<first of the range> is unanswered;
  * 5. a STUN binding answered on UDP and TCP 443 (and TLS with a name) through
@@ -592,7 +592,146 @@ const uclient = async (
   }
 };
 
-/** Assertion 3: relay to relay inside coturn, from the media network against its seat and from another network through the published listener. */
+/** How many datagrams each side of {@link clientToClient} sends the other. */
+const C2C_COUNT = 10;
+const C2C_MS = 10_000;
+const C2C_GAP_MS = 20;
+
+/** One side of {@link clientToClient}: its relayed address, the permission for the other's, and how many of the other's datagrams it heard. */
+interface C2cSide {
+  error?: string;
+  heard: number;
+  permission?: number | "granted";
+  relayed?: { ip: string; port: number };
+}
+
+/**
+ * What turnutils_uclient's `-y` does, from this machine's own process: two
+ * allocations through `url` (a viewer's own way in, the published listener
+ * at P), each given a permission for the other's relayed address and sending
+ * it {@link C2C_COUNT} datagrams. Both relayed addresses are P, so every
+ * datagram goes relay to relay inside coturn.
+ */
+const clientToClient = (
+  url: string,
+  user: { username: string; credential: string }
+): Promise<{ a: C2cSide; b: C2cSide }> =>
+  new Promise((resolve) => {
+    const sides = {
+      a: { heard: 0 } as C2cSide,
+      b: { heard: 0 } as C2cSide,
+    };
+    const clients: Partial<Record<"a" | "b", ReturnType<typeof connect>>> = {};
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let done = false;
+    const finish = () => {
+      if (done) {
+        return;
+      }
+      done = true;
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
+      for (const client of Object.values(clients)) {
+        try {
+          client?.close();
+        } catch {
+          // already closed
+        }
+      }
+      resolve(sides);
+    };
+    const other = (name: "a" | "b") => (name === "a" ? "b" : "a");
+    const settled = () => {
+      if (sides.a.heard >= C2C_COUNT && sides.b.heard >= C2C_COUNT) {
+        finish();
+      }
+    };
+    /** Both allocated: each asks a permission for the other's relayed address. */
+    const permit = () => {
+      for (const name of ["a", "b"] as const) {
+        const peer = sides[other(name)].relayed;
+        if (peer) {
+          clients[name]?.createPermission({ ip: peer.ip, port: 0 });
+        }
+      }
+    };
+    /** `name`'s permission answered: granted, it sends its datagrams. */
+    const permitted = (name: "a" | "b", code: number | "granted") => {
+      sides[name].permission = code;
+      const peer = sides[other(name)].relayed;
+      if (code !== "granted" || !peer) {
+        finish();
+        return;
+      }
+      for (let at = 0; at < C2C_COUNT; at += 1) {
+        timers.push(
+          setTimeout(
+            () => clients[name]?.send(peer, Buffer.from(`c2c-${name}`)),
+            at * C2C_GAP_MS
+          )
+        );
+      }
+    };
+    for (const name of ["a", "b"] as const) {
+      clients[name] = connect(
+        url,
+        {
+          username: user.username,
+          password: user.credential,
+          autoRefresh: false,
+        },
+        (error, connected) => {
+          if (error) {
+            sides[name].error = said(error);
+            finish();
+            return;
+          }
+          connected.on("allocate:success", (msg) => {
+            sides[name].relayed = msg.getAttribute(0x00_16) as
+              { ip: string; port: number } | undefined;
+            if (sides.a.relayed && sides.b.relayed) {
+              permit();
+            }
+          });
+          connected.on("allocate:error", (_msg, err) => {
+            sides[name].error =
+              `allocation refused ${(err as { code?: number } | undefined)?.code}`;
+            finish();
+          });
+          connected.on("create_permission:success", () =>
+            permitted(name, "granted")
+          );
+          connected.on("create_permission:error", (_msg, err) =>
+            permitted(name, (err as { code?: number } | undefined)?.code ?? 0)
+          );
+          connected.on("data", (_peer, data) => {
+            if (Buffer.from(data).toString() === `c2c-${other(name)}`) {
+              sides[name].heard += 1;
+              settled();
+            }
+          });
+          connected.on("error", (err) => {
+            sides[name].error = said(err);
+            finish();
+          });
+          connected.allocate();
+        }
+      );
+    }
+    timers.push(setTimeout(finish, C2C_MS));
+  });
+
+/**
+ * Assertion 3: relay to relay inside coturn. turnutils_uclient `-y` on the
+ * media network against coturn's own address; then the same from this
+ * machine's own process through the published listener at P, the way every
+ * viewer and every other machine's browser comes in. That second run is the
+ * spec's own client, not uclient in a container: a rootless Podman's
+ * container reaches its own host's address only through pasta's mapped one
+ * ("By default, IPv4 and IPv6 addresses and routes ... are copied from the
+ * host", podman-run(1)), which no other fleet machine ever uses.
+ */
 const relayToRelay = async (
   kit: Kit,
   relay: Relay,
@@ -612,72 +751,90 @@ const relayToRelay = async (
     return;
   }
   const fresh = await minted(args);
-  const legs: {
-    from: string;
-    server: string;
-    port: number;
-    network?: string;
-  }[] = [
-    {
-      from: `${on.network.name}, against coturn's ${on.media}`,
-      server: on.media,
-      port: STREAM_RELAY_PORT,
-      network: on.network.name,
-    },
-    {
-      from: `the runtime's default network, against P ${args.address} through the published listener`,
-      server: args.address,
-      port: on.port,
-    },
-  ];
-  for (const leg of legs) {
-    const since = Math.floor(Date.now() / 1000) - 1;
-    // biome-ignore lint/performance/noAwaitInLoops: one run at a time, each read against coturn's log since it began.
-    const run = await uclient(
-      docker,
-      relay.RELAY_IMAGE,
-      [
-        "-y",
-        "-c",
-        "-n",
-        "10",
-        "-u",
-        fresh.username,
-        "-w",
-        fresh.credential,
-        "-p",
-        String(leg.port),
-        leg.server,
-      ],
-      leg.network
-    );
-    const lines = run.out.split("\n");
-    const totals = lines
-      .map((line) => TOTALS.exec(line))
-      .filter((one) => one !== null)
-      .at(-1);
-    const lost = lines
-      .map((line) => LOST.exec(line))
-      .filter((one) => one !== null)
-      .at(-1);
-    const sent = Number(totals?.[1] ?? 0);
-    const received = Number(totals?.[2] ?? Number.NaN);
-    const denied = (await coturnLines(on.container, since)).filter((line) =>
-      DENIED.test(line)
-    );
-    for (const line of denied.slice(-20)) {
-      kit.note(`coturn: ${line.trim()}`);
-    }
-    kit.check(
-      `3 · turnutils_uclient -y from ${leg.from}: sent ${sent}, received ${received}, lost ${lost?.[1] ?? "?"}, dropped ${lost?.[2] ?? "?"}; ${denied.length} "denied" lines in coturn's log${on.where}`,
-      sent > 0 &&
-        received === sent &&
-        lost?.[1] === "0" &&
-        lost[2] === "0" &&
-        denied.length === 0,
-      lines.slice(-30).join("\n")
-    );
+  const since = await secondAfter();
+  const run = await uclient(
+    docker,
+    relay.RELAY_IMAGE,
+    [
+      "-y",
+      "-c",
+      "-n",
+      "10",
+      "-u",
+      fresh.username,
+      "-w",
+      fresh.credential,
+      "-p",
+      String(STREAM_RELAY_PORT),
+      on.media,
+    ],
+    on.network.name
+  );
+  const lines = run.out.split("\n");
+  const totals = lines
+    .map((line) => TOTALS.exec(line))
+    .filter((one) => one !== null)
+    .at(-1);
+  const lost = lines
+    .map((line) => LOST.exec(line))
+    .filter((one) => one !== null)
+    .at(-1);
+  const sent = Number(totals?.[1] ?? 0);
+  const received = Number(totals?.[2] ?? Number.NaN);
+  const uclientDenied = await deniedSince(kit, on, since);
+  kit.check(
+    `3 · turnutils_uclient -y on ${on.network.name} against coturn's ${on.media}: sent ${sent}, received ${received}, lost ${lost?.[1] ?? "?"}, dropped ${lost?.[2] ?? "?"}; ${uclientDenied} "denied" lines in coturn's log${on.where}`,
+    sent > 0 &&
+      received === sent &&
+      lost?.[1] === "0" &&
+      lost[2] === "0" &&
+      uclientDenied === 0,
+    lines.slice(-30).join("\n")
+  );
+  const hostSince = await secondAfter();
+  const sides = await clientToClient(
+    `turn:${on.host}:${on.port}?transport=udp`,
+    fresh
+  );
+  const hostDenied = await deniedSince(kit, on, hostSince);
+  const sideWords = (side: C2cSide) =>
+    `relayed ${side.relayed ? `${side.relayed.ip}:${side.relayed.port}` : `nothing (${side.error ?? "no answer"})`}, permission ${side.permission ?? "not asked"}, heard ${side.heard} of ${C2C_COUNT}`;
+  kit.check(
+    `3 · two clients of this machine's own process through the published listener at P ${args.address}:${on.port}, each sending the other's relayed address ${C2C_COUNT} datagrams: a ${sideWords(sides.a)}; b ${sideWords(sides.b)}; ${hostDenied} "denied" lines in coturn's log${on.where}`,
+    [sides.a, sides.b].every(
+      (side) =>
+        side.relayed?.ip === args.address &&
+        side.permission === "granted" &&
+        side.heard === C2C_COUNT
+    ) && hostDenied === 0,
+    JSON.stringify(sides)
+  );
+};
+
+/**
+ * A second (s epoch) no line of coturn's before now falls in: the logs'
+ * `since` counts whole seconds, so this waits into the next one, and a
+ * leg's read of coturn's log holds none of the 403s the permission checks
+ * before it asked for.
+ */
+const secondAfter = async (): Promise<number> => {
+  await Bun.sleep(1000 - (Date.now() % 1000) + 50);
+  return Math.floor(Date.now() / 1000);
+};
+
+/** How many of coturn's lines since `since` name a denial, each printed. */
+const deniedSince = async (
+  kit: Kit,
+  on: Listener,
+  since: number
+): Promise<number> => {
+  const denied = (await coturnLines(on.container, since)).filter((line) =>
+    DENIED.test(line)
+  );
+  for (const line of denied.slice(-20)) {
+    kit.note(`coturn: ${line.trim()}`);
   }
+  return denied.length;
 };
 
 /** What this machine binds on UDP for each port of the relay range: /proc where it has one, else netstat (a Mac). */

@@ -31,7 +31,8 @@
  * - 9 · another fleet machine's browser, stood up by this spec: a neko of the
  *   same image on a bridge network of its own (not the media network), given
  *   the URL list relay-urls.ts composes for another machine (the relay's LAN
- *   URL through the published listener, then its public ones), reached by a
+ *   URL first, then its public ones), each reaching this machine through the
+ *   runtime's host-gateway and the published listener, reached by a
  *   relay-only viewer straight on its own signaling: the selected pair relay
  *   to relay, both addresses P;
  * - the daemon is told the view count as a socket opens (1) and closes (0);
@@ -96,6 +97,10 @@ const OTHER_NETWORK = "cawco-stream-probe-other";
 const OTHER_NEKO = "cawco-stream-probe-neko";
 /** The neko's media port inside its container: never published. */
 const OTHER_MEDIA_PORT = 52_000;
+/** The name leg 9's neko reaches this machine by: the runtime's host-gateway. */
+const HOST_ALIAS = "cawco-relay-host";
+/** The host part of a `stun:<address>:` URL. */
+const STUN_HOST = /^stun:[^:]+:/;
 /** How long a viewer's credential lasts (hub browser-routes.ts). */
 const VIEWER_TTL_S = 12 * 60 * 60;
 const TAP_PAGE =
@@ -1202,9 +1207,22 @@ const otherMachineLeg = async (
     machineId: "another-fleet-machine",
     relayMedia: relay.media,
   });
+  // The relay's machine is this one, so the stand-in neko names this
+  // machine's address the way a container reaches its own host: through the
+  // runtime's host-gateway ("This resolves to an IP address the container
+  // can use to connect to the host", podman-run(1) --add-host), not the
+  // LAN address itself, which a rootless Podman's pasta copies into the
+  // container ("IPv4 and IPv6 addresses and routes ... are copied from the
+  // host"). Each URL still comes in through the published listener, 443
+  // read as its stand-in. Another fleet machine names the LAN address as
+  // composed; this leg checks that order below.
   const urls = composed.map((url) =>
-    url.replace(`:${STREAM_RELAY_PORT}?`, `:${relay.port}?`)
+    url
+      .replace(`:${STREAM_RELAY_PORT}?`, `:${relay.port}?`)
+      .replace(`turn:${relay.reachLan[0]}:`, `turn:${HOST_ALIAS}:`)
+      .replace(`turn:${relay.address}:`, `turn:${HOST_ALIAS}:`)
   );
+  const nekoStun = stun.replace(STUN_HOST, `stun:${HOST_ALIAS}:`);
   const passwords = {
     admin: randomBytes(18).toString("base64url"),
     user: randomBytes(18).toString("base64url"),
@@ -1235,7 +1253,7 @@ const otherMachineLeg = async (
       `NEKO_WEBRTC_NAT1TO1=${address}`,
       `NEKO_WEBRTC_ICESERVERS_BACKEND=${JSON.stringify([
         { urls, username: browser.username, credential: browser.credential },
-        { urls: [stun] },
+        { urls: [nekoStun] },
       ])}`,
       `NEKO_WEBRTC_ICESERVERS_FRONTEND=${JSON.stringify([
         {
@@ -1249,6 +1267,7 @@ const otherMachineLeg = async (
     NetworkingConfig: placed.NetworkingConfig,
     HostConfig: {
       NetworkMode: placed.NetworkMode,
+      ExtraHosts: [`${HOST_ALIAS}:host-gateway`],
       PortBindings: {
         "8080/tcp": [{ HostIp: "127.0.0.1", HostPort: String(http) }],
       },
@@ -1281,7 +1300,7 @@ const otherMachineLeg = async (
       to: relay.port,
     });
     kit.note(
-      `9 · the stand-in neko at ${address} on ${network.name} (${network.subnet}), given ${JSON.stringify(urls)} (relay-urls.ts for another machine: ${JSON.stringify(composed)}, 443 read as the stand-in ${relay.port})`
+      `9 · the stand-in neko at ${address} on ${network.name} (${network.subnet}), given ${JSON.stringify(urls)} (relay-urls.ts for another machine: ${JSON.stringify(composed)}, 443 read as the stand-in ${relay.port}, this machine named as ${HOST_ALIAS}, the runtime's host-gateway)`
     );
     kit.check(
       `9 · relay-urls.ts names the relay's LAN URL first for another machine on its LAN: ${composed[0]}`,
