@@ -1,0 +1,45 @@
+short	a		skip	"Skip to content"	-1,-1	28x14		no ::after; overflow hidden/hidden	contrast 13.62	left reach 0 need 8 (then page edge)	right reach 0 need 8 SHORT (then button[burger] "Open navigation")	up reach 0 need 15 (then page edge)	down reach 0 need 15 SHORT (then button[burger] "Open navigation")
+ok	button		burger	"Open navigation"	-1,4	44x44		no ::after; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 6.02	left reach 0 need 0 (then page edge)	right reach 0 need 0 (then header[top])	up reach 0.5 need 0 (then header[top])	down reach 0 need 0 (then div)
+ok	a		crumb	"Configure"	50,-0.5	88x44		no ::after; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 13.62	left reach 0.5 need 0 (then header[top])	right reach 0 need 0 (then div[slot])	up reach 0 need 0 (then page edge)	down reach 0 need 0 (then div)
+ok	button		tooltip-trigger	"Needs you, 5 · 1 notice"	358,8	32x32		::after 44pxx44px at -12px,-6px pointer-events auto; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 13.62	left reach 12.5 need 6 (then div[slot])	right reach 0 need 6 (then page edge)	up reach 6.5 need 6 (then div[right])	down reach 5.5 need 6 (then div)
+ok	button		button	"Cancel"	274,72	73x36		::after 71.1719pxx44px at 0px,-5px pointer-events auto; overflow visible/visible	contrast 13.62	left reach 0.5 need 0 (then header[head])	right reach 0 need 0 (then div[body])	up reach 4.5 need 4 (then div[body])	down reach 3.5 need 4 (then div[body])
+short	input		input-group-control	"API key"	44,223	270x36		no ::after; overflow clip/clip	contrast 13.62	left reach 0.5 need 0 (then div[input-group])	right reach 0 need 0 (then button[button] "Show key")	up reach 0.5 need 4 SHORT (then section)	down reach 0 need 4 SHORT (then form[keys])
+ok	button		button	"Show key"	314,229	24x24		::after 44pxx44px at -11px,-11px pointer-events auto; overflow visible/visible	contrast 13.62	left reach 10.5 need 0 (then input[input-group-control] "API key")	right reach 9.5 need 10 (then div[input-group-addon])	up reach 10.5 need 10 (then section)	down reach 9.5 need 10 (then form[keys])
+short	button	checkbox	checkbox	""	43,280	16x16		::after 44pxx44px at -15px,-15px pointer-events auto; overflow visible/visible clipped by div[step-box] (overflow hidden/hidden)	contrast 5.15	left reach 4.5 need 14 SHORT (then div[body])	right reach 13.5 need 14 (then label)	up reach 14.5 need 10.5 (then form[keys])	down reach 5.5 need 10.5 SHORT (then button[checkbox])
+short	button	checkbox	checkbox	""	43,316.5	16x16		::after 44pxx44px at -15px,-15px pointer-events auto; overflow visible/visible clipped by div[step-box] (overflow hidden/hidden)	contrast 5.15	left reach 4.5 need 14 SHORT (then div[body])	right reach 13.5 need 14 (then label)	up reach 14.5 need 10.5 (then button[checkbox])	down reach 13.5 need 10.5 (then form[keys])
+short	button		button	"Send key Sending…"	43,353	77x30		::after 74.9688pxx44px at 0px,-8px pointer-events none; overflow visible/visible clipped by div[step-box] (overflow hidden/hidden)	contrast 5.15	left reach 0 need 0 (then div[send])	right reach 0 need 0 (then div[send])	up reach 0 need 7 SHORT (then div[send])	down reach 0 need 7 SHORT (then footer[foot])
+ok	button		button	"Back"	188.5,394	60.5x36		::after 58.4531pxx44px at 0px,-5px pointer-events auto; overflow visible/visible	contrast 13.62	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 4.5 need 4 (then footer[foot])	down reach 3.5 need 4 (then footer[foot])
+short	button		button	"Continue Saving…"	260,394	87x36		::after 84.8906pxx44px at 0px,-5px pointer-events none; overflow visible/visible	contrast 13.62	left reach 0 need 0 (then div)	right reach 0 need 0 (then div[body])	up reach 0 need 4 SHORT (then div)	down reach 0 need 4 SHORT (then footer[foot])
+short	button		button	"Ask me first Saving…"	69,14	303x30		::after 301pxx44px at 0px,-8px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 12.62	left reach 0 need 0 (then svg)	right reach 0 need 0 (then button[tooltip-trigger] "Needs you, 5 · 1 notice")	up reach 0 need 7 SHORT (then div[slot])	down reach 0 need 7 SHORT (then div)
+short	button		button	"Let agents post upstream Saving…"	69,58	303x30		::after 301pxx44px at 0px,-8px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 12.62	left reach 0 need 0 (then header[head])	right reach 0 need 0 (then div)	up reach 0 need 7 SHORT (then div[body])	down reach 0 need 7 SHORT (then h1[title])
+short	button		button	"Clear all 1 notices"	318,113.5	64x24		::after 61.8438pxx44px at 0px,-11px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 0 (then div[body])	right reach 0 need 0 (then div)	up reach 0 need 10 SHORT (then div[body])	down reach 0 need 10 SHORT (then div[body])
+short	button		x	"Dismiss all 1 rebalances"	356.5,145.5	24x24		::after 44pxx44px at -18.625px,-10px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 10 SHORT (then div[body])	right reach 0 need 10 SHORT (then div)	up reach 0 need 4 SHORT (then div[body])	down reach 0 need 10 SHORT (then div[body])
+short	button		x	"Dismiss Second added on obelisk-of-light"	356.5,213	24x24		::after 44pxx44px at -18.625px,-10px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 10 SHORT (then div[body])	right reach 0 need 10 SHORT (then div)	up reach 0 need 10 SHORT (then div[body])	down reach 0 need 10 SHORT (then div[body])
+spill	a		skip	"Skip to content"	-1,-1	28x14	scroll 124 client 28 overflow-x hidden right 27 of 390
+spill	div		shell-main	"Configure Add account Cancel Provider Sign in Na"	0,0	390x844	scroll 392 client 390 overflow-x hidden right 390 of 390
+spill	header		top	"Configure"	0,0	390x44	scroll 392 client 390 overflow-x visible right 390 of 390
+spill	div		right	""	358,0	32x43	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	div		tools	""	358,8	32x32	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	button		tooltip-trigger	"Needs you, 5 · 1 notice"	358,8	32x32	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	span			""	362,12	24x24	scroll 28 client 24 overflow-x visible right 386 of 390
+spill	span			""	364,11	24x24	scroll 26 client 24 overflow-x visible right 388 of 390
+spill	span			""	364,11	24x24	scroll 26 client 24 overflow-x visible right 388 of 390
+past	svg		rim	""	356,6	36x36	scroll 36 client 36 overflow-x visible right 392 of 390
+past	svg		rim	""	356,6	36x36	scroll 36 client 36 overflow-x visible right 392 of 390
+spill	div			"Provider Sign in Name it 302.AI obelisk-of-light"	43,129	304x301	scroll 308 client 304 overflow-x visible right 347 of 390
+spill	div		slot	"Provider Sign in Name it 302.AI obelisk-of-light"	43,129	304x301	scroll 308 client 304 overflow-x visible right 347 of 390
+spill	div		host	"Provider Sign in Name it 302.AI obelisk-of-light"	43,129	304x301	scroll 308 client 304 overflow-x visible right 347 of 390
+spill	div			"Provider Sign in Name it 302.AI obelisk-of-light"	43,129	304x301	scroll 308 client 304 overflow-x visible right 347 of 390
+spill	span		name	"Provider"	49,147	1x1	scroll 51 client 1 overflow-x hidden right 50 of 390
+spill	span		name	"Name it"	167,147	1x1	scroll 46 client 1 overflow-x hidden right 168 of 390
+spill	div			"302.AI obelisk-of-light obelisk-of-light Send ke"	43,179	304x251	scroll 308 client 304 overflow-x visible right 347 of 390
+spill	section			"302.AI obelisk-of-light obelisk-of-light Send ke"	43,179	304x204	scroll 307 client 304 overflow-x visible right 347 of 390
+spill	form		keys	"obelisk-of-light obelisk-of-light Send key Sendi"	43,223	304x160	scroll 307 client 304 overflow-x visible right 347 of 390
+spill	div	group	input-group	""	43,223	304x36	scroll 306 client 302 overflow-x visible right 347 of 390
+spill	button		button	"Show key"	314,229	24x24	scroll 33 client 22 overflow-x visible right 338 of 390
+spill	button	checkbox	checkbox	""	43,280	16x16	scroll 29 client 14 overflow-x visible right 59 of 390
+spill	button	checkbox	checkbox	""	43,316	16x16	scroll 29 client 14 overflow-x visible right 59 of 390
+spill	span			"Sending…"	107,358	1x1	scroll 55 client 1 overflow-x hidden right 108 of 390
+spill	span			"Saving…"	331,404	1x1	scroll 50 client 1 overflow-x hidden right 332 of 390
+spill	span			"Saving…"	254,19	1x1	scroll 47 client 1 overflow-x hidden right 255 of 390
+spill	span			"Saving…"	293,63	1x1	scroll 47 client 1 overflow-x hidden right 294 of 390

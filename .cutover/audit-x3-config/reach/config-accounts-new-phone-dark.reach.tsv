@@ -1,0 +1,47 @@
+short	a		skip	"Skip to content"	-1,-1	28x14		no ::after; overflow hidden/hidden	contrast 13.24	left reach 0 need 8 (then page edge)	right reach 0 need 8 SHORT (then button[burger] "Open navigation")	up reach 0 need 15 (then page edge)	down reach 0 need 15 SHORT (then button[burger] "Open navigation")
+ok	button		burger	"Open navigation"	-1,4	44x44		no ::after; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 7.96	left reach 0 need 0 (then page edge)	right reach 0 need 0 (then header[top])	up reach 0.5 need 0 (then header[top])	down reach 0 need 0 (then div)
+ok	a		crumb	"Configure"	50,-0.5	88x44		no ::after; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 13.24	left reach 0.5 need 0 (then header[top])	right reach 0 need 0 (then div[slot])	up reach 0 need 0 (then page edge)	down reach 0 need 0 (then div)
+ok	button		tooltip-trigger	"Needs you, 5 · 1 notice"	358,8	32x32		::after 44pxx44px at -12px,-6px pointer-events auto; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 13.24	left reach 12.5 need 6 (then div[slot])	right reach 0 need 6 (then page edge)	up reach 6.5 need 6 (then div[right])	down reach 5.5 need 6 (then div)
+ok	button		button	"Cancel"	274,72	73x36		::after 71.1719pxx44px at 0px,-5px pointer-events auto; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then header[head])	right reach 0 need 0 (then div[body])	up reach 4.5 need 4 (then div[body])	down reach 3.5 need 4 (then div[body])
+short	input		input	"Search providers"	43,179	304x36		no ::after; overflow clip/clip	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 4 SHORT (then div)	down reach 0 need 4 SHORT (then section)
+ok	button			"Claude"	43,250	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 0 (then h3[ghead])	down reach 0 need 0 (then button)
+ok	button			"Anthropic Console"	43,295	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 0 (then li)	down reach 0 need 0 (then button)
+ok	button			"GitHub Copilot"	43,340	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 0 (then li)	down reach 0 need 0 (then button)
+ok	button			"Kimi For Coding"	43,385	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 0 (then li)	down reach 0 need 0 (then button)
+ok	button			"Meta"	43,430	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 0 (then li)	down reach 0 need 0 (then button)
+ok	button			"ChatGPT"	43,475	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 0 (then li)	down reach 0 need 0 (then button)
+ok	button			"Radius"	43,520	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 0 (then li)	down reach 0 need 0 (then button)
+ok	button			"xAI"	43,565	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 0 (then li)	down reach 0 need 0 (then h3[ghead])
+ok	button			"302.AI"	43,644	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 0 (then h3[ghead])	down reach 0 need 0 (then button)
+ok	button			"Abacus"	43,689	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 0 (then li)	down reach 0 need 0 (then button)
+ok	button			"abliteration.ai"	43,734	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0.5 need 0 (then li)	down reach 0 need 0 (then footer[foot])
+ok	button			"above.dev"	43,779	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0 need 0 (then footer[foot])	down reach 0 need 0 (then footer[foot])
+ok	button			"AgentRouter"	43,824	304x44		no ::after; overflow visible/visible	contrast 13.24	left reach 0 need 0 (then page edge)	right reach 0 need 0 (then page edge)	up reach 0 need 0 (then footer[foot])	down reach 0 need 0 (then page edge)
+short	button		button	"Back"	188.5,787	60.5x36		::after 58.4531pxx44px at 0px,-5px pointer-events none; overflow visible/visible	contrast 13.24	left reach 0 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0 need 4 SHORT (then div)	down reach 0 need 0.5 (then footer[foot])
+short	button		button	"Continue Saving…"	260,787	87x36		::after 84.8906pxx44px at 0px,-5px pointer-events none; overflow visible/visible	contrast 5.48	left reach 0 need 0 (then div)	right reach 0 need 0 (then div)	up reach 0 need 4 SHORT (then div)	down reach 0 need 0.5 (then footer[foot])
+short	button		button	"Ask me first Saving…"	69,14	303x30		::after 301pxx44px at 0px,-8px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 14.17	left reach 0 need 0 (then svg)	right reach 0 need 0 (then button[tooltip-trigger] "Needs you, 5 · 1 notice")	up reach 0 need 7 SHORT (then div[slot])	down reach 0 need 7 SHORT (then div)
+short	button		button	"Let agents post upstream Saving…"	69,58	303x30		::after 301pxx44px at 0px,-8px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 14.17	left reach 0 need 0 (then header[head])	right reach 0 need 0 (then div)	up reach 0 need 7 SHORT (then div[body])	down reach 0 need 7 SHORT (then h1[title])
+short	button		button	"Clear all 1 notices"	318,113.5	64x24		::after 61.8438pxx44px at 0px,-11px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 7.96	left reach 0 need 0 (then div[body])	right reach 0 need 0 (then div)	up reach 0 need 10 SHORT (then div[body])	down reach 0 need 10 SHORT (then div[body])
+short	button		x	"Dismiss all 1 rebalances"	356.5,145.5	24x24		::after 44pxx44px at -18.625px,-10px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 7.96	left reach 0 need 10 SHORT (then div[body])	right reach 0 need 10 SHORT (then div)	up reach 0 need 4 SHORT (then div[body])	down reach 0 need 10 SHORT (then div[body])
+short	button		x	"Dismiss Second added on obelisk-of-light"	356.5,213	24x24		::after 44pxx44px at -18.625px,-10px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 7.96	left reach 0 need 10 SHORT (then div[body])	right reach 0 need 10 SHORT (then div)	up reach 0 need 10 SHORT (then div[body])	down reach 0 need 10 SHORT (then div[body])
+spill	a		skip	"Skip to content"	-1,-1	28x14	scroll 124 client 28 overflow-x hidden right 27 of 390
+spill	div		shell-main	"Configure Add account Cancel Provider Sign in Na"	0,0	390x844	scroll 392 client 390 overflow-x hidden right 390 of 390
+spill	header		top	"Configure"	0,0	390x44	scroll 392 client 390 overflow-x visible right 390 of 390
+spill	div		right	""	358,0	32x43	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	div		tools	""	358,8	32x32	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	button		tooltip-trigger	"Needs you, 5 · 1 notice"	358,8	32x32	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	span			""	362,12	24x24	scroll 28 client 24 overflow-x visible right 386 of 390
+spill	span			""	364,11	24x24	scroll 26 client 24 overflow-x visible right 388 of 390
+spill	span			""	364,11	24x24	scroll 26 client 24 overflow-x visible right 388 of 390
+past	svg		rim	""	356,6	36x36	scroll 36 client 36 overflow-x visible right 392 of 390
+past	svg		rim	""	356,6	36x36	scroll 36 client 36 overflow-x visible right 392 of 390
+spill	div			"Provider Sign in Name it Sign in Claude Anthropi"	43,129	304x11451	scroll 308 client 304 overflow-x visible right 347 of 390
+spill	div		slot	"Provider Sign in Name it Sign in Claude Anthropi"	43,129	304x11451	scroll 308 client 304 overflow-x visible right 347 of 390
+spill	div		host	"Provider Sign in Name it Sign in Claude Anthropi"	43,129	304x11451	scroll 308 client 304 overflow-x visible right 347 of 390
+spill	div			"Provider Sign in Name it Sign in Claude Anthropi"	43,129	304x11451	scroll 308 client 304 overflow-x visible right 347 of 390
+spill	span		name	"Sign in"	145,147	1x1	scroll 39 client 1 overflow-x hidden right 146 of 390
+spill	span		name	"Name it"	179,147	1x1	scroll 46 client 1 overflow-x hidden right 180 of 390
+spill	div			"Sign in Claude Anthropic Console GitHub Copilot "	43,179	304x11401	scroll 308 client 304 overflow-x visible right 347 of 390
+spill	span			"Saving…"	331,797	1x1	scroll 50 client 1 overflow-x hidden right 332 of 390
+spill	span			"Saving…"	254,19	1x1	scroll 47 client 1 overflow-x hidden right 255 of 390
+spill	span			"Saving…"	293,63	1x1	scroll 47 client 1 overflow-x hidden right 294 of 390

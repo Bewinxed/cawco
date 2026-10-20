@@ -1,0 +1,22 @@
+short	a		skip	"Skip to content"	-1,-1	28x14		no ::after; overflow hidden/hidden	contrast 13.62	left reach 0 need 8 (then page edge)	right reach 0 need 8 SHORT (then button[burger] "Open navigation")	up reach 0 need 15 (then page edge)	down reach 0 need 15 SHORT (then button[burger] "Open navigation")
+ok	button		burger	"Open navigation"	-1,4	44x44		no ::after; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 6.02	left reach 0 need 0 (then page edge)	right reach 0 need 0 (then header[top])	up reach 0.5 need 0 (then header[top])	down reach 0 need 0 (then div)
+ok	button		tooltip-trigger	"Needs you, 5 · 1 notice"	358,8	32x32		::after 44pxx44px at -12px,-6px pointer-events auto; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 13.62	left reach 12.5 need 6 (then div[slot])	right reach 0 need 6 (then page edge)	up reach 6.5 need 6 (then div[right])	down reach 5.5 need 6 (then div)
+ok	a		button	"Back to MCP servers"	21,201	157.5x36		::after 155.344pxx44px at 0px,-5px pointer-events auto; overflow visible/visible	contrast 5.15	left reach 0.5 need 0 (then div)	right reach 0 need 0 (then div[empty])	up reach 4.5 need 4 (then div[empty])	down reach 3.5 need 4 (then div[empty])
+short	button		button	"Ask me first Saving…"	69,14	303x30		::after 301pxx44px at 0px,-8px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 12.62	left reach 0 need 0 (then span[morph-text])	right reach 0 need 0 (then button[tooltip-trigger] "Needs you, 5 · 1 notice")	up reach 0 need 7 SHORT (then div[slot])	down reach 0 need 7 SHORT (then div)
+short	button		button	"Let agents post upstream Saving…"	69,58	303x30		::after 301pxx44px at 0px,-8px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 12.62	left reach 0 need 0 (then div[empty])	right reach 0 need 0 (then div)	up reach 0 need 7 SHORT (then div)	down reach 0 need 7 SHORT (then div[empty])
+short	button		button	"Clear all 1 notices"	318,113.5	64x24		::after 61.8438pxx44px at 0px,-11px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 0 (then div[empty])	right reach 0 need 0 (then div)	up reach 0 need 10 SHORT (then div[empty])	down reach 0 need 10 SHORT (then div[empty])
+short	button		x	"Dismiss all 1 rebalances"	356.5,145.5	24x24		::after 44pxx44px at -18.625px,-10px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 10 SHORT (then p[empty-line])	right reach 0 need 10 SHORT (then div)	up reach 0 need 4 SHORT (then div[empty])	down reach 0 need 10 SHORT (then p[empty-line])
+short	button		x	"Dismiss Second added on obelisk-of-light"	356.5,213	24x24		::after 44pxx44px at -18.625px,-10px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 10 SHORT (then div[empty])	right reach 0 need 10 SHORT (then div)	up reach 0 need 10 SHORT (then div[empty])	down reach 0 need 10 SHORT (then div[empty])
+spill	a		skip	"Skip to content"	-1,-1	28x14	scroll 124 client 28 overflow-x hidden right 27 of 390
+spill	div		shell-main	"Oauth Sign-in didn't finish Could not finish the"	0,0	390x844	scroll 392 client 390 overflow-x hidden right 390 of 390
+spill	header		top	"Oauth"	0,0	390x44	scroll 392 client 390 overflow-x visible right 390 of 390
+spill	div		right	""	358,0	32x43	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	div		tools	""	358,8	32x32	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	button		tooltip-trigger	"Needs you, 5 · 1 notice"	358,8	32x32	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	span			""	362,12	24x24	scroll 28 client 24 overflow-x visible right 386 of 390
+spill	span			""	364,11	24x24	scroll 26 client 24 overflow-x visible right 388 of 390
+spill	span			""	364,11	24x24	scroll 26 client 24 overflow-x visible right 388 of 390
+past	svg		rim	""	356,6	36x36	scroll 36 client 36 overflow-x visible right 392 of 390
+past	svg		rim	""	356,6	36x36	scroll 36 client 36 overflow-x visible right 392 of 390
+spill	span			"Saving…"	254,19	1x1	scroll 47 client 1 overflow-x hidden right 255 of 390
+spill	span			"Saving…"	293,63	1x1	scroll 47 client 1 overflow-x hidden right 294 of 390

@@ -1,0 +1,29 @@
+short	button			"Undo"	313,68	48x24		no ::after; overflow visible/visible	contrast 13.62	left reach 0.5 need 0 (then li)	right reach 0 need 0 (then li)	up reach 0.5 need 10 SHORT (then li)	down reach 0 need 10 SHORT (then li)
+short	a		skip	"Skip to content"	-1,-1	28x14		no ::after; overflow hidden/hidden	contrast 13.62	left reach 0 need 8 (then page edge)	right reach 0 need 8 SHORT (then button[burger] "Open navigation")	up reach 0 need 15 (then page edge)	down reach 0 need 15 SHORT (then button[burger] "Open navigation")
+ok	button		burger	"Open navigation"	-1,4	44x44		no ::after; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 6.02	left reach 0 need 0 (then page edge)	right reach 0 need 0 (then header[top])	up reach 0.5 need 0 (then header[top])	down reach 0 need 0 (then li)
+ok	a		crumb	"Configure"	50,-0.5	88x44		no ::after; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 13.62	left reach 0.5 need 0 (then header[top])	right reach 0 need 0 (then div[slot])	up reach 0 need 0 (then page edge)	down reach 0 need 0 (then li)
+short	button		tooltip-trigger	"Needs you, 5 · 1 notice"	358,8	32x32		::after 44pxx44px at -12px,-6px pointer-events auto; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 13.62	left reach 12.5 need 6 (then div[slot])	right reach 0 need 6 (then page edge)	up reach 6.5 need 6 (then div[right])	down reach 0 need 6 SHORT (then li)
+ok	button		popover-trigger	"New document"	43,130	150.5x36		::after 148.328pxx44px at 0px,-5px pointer-events auto; overflow visible/visible	contrast 5.15	left reach 0.5 need 0 (then div[body])	right reach 0 need 0 (then header[head])	up reach 4.5 need 4 (then header[head])	down reach 3.5 need 4 (then div[body])
+short	input		input	"Filter memory files"	43,187	304x36		no ::after; overflow clip/clip	contrast 13.62	left reach 0.5 need 0 (then div[body])	right reach 0 need 0 (then div[body])	up reach 0.5 need 4 SHORT (then div[body])	down reach 0 need 4 SHORT (then div[slot])
+short	a			"~/.claude/CLAUDE.md"	80,249	133x19		::after 318pxx56px at 0px,0px pointer-events auto; overflow hidden/hidden	contrast 13.62	left reach 23 need 0 (then nothing)	right reach 23 need 0 (then nothing)	up reach 9 need 12.5 SHORT (then div[slot])	down reach 23 need 12.5 (then nothing)
+short	button		button	"Ask me first Saving…"	69,14	303x30		::after 301pxx44px at 0px,-8px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 12.62	left reach 0 need 0 (then svg)	right reach 0 need 0 (then button[tooltip-trigger] "Needs you, 5 · 1 notice")	up reach 0 need 7 SHORT (then div[slot])	down reach 0 need 7 SHORT (then li)
+short	button		button	"Let agents post upstream Saving…"	69,58	303x30		::after 301pxx44px at 0px,-8px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 12.62	left reach 0 need 0 (then div)	right reach 0 need 0 (then li)	up reach 0 need 7 SHORT (then li)	down reach 0 need 7 SHORT (then div)
+short	button		button	"Clear all 1 notices"	318,113.5	64x24		::after 61.8438pxx44px at 0px,-11px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 0 (then header[head])	right reach 0 need 0 (then div)	up reach 0 need 10 SHORT (then div[body])	down reach 0 need 10 SHORT (then div[body])
+short	button		x	"Dismiss all 1 rebalances"	356.5,145.5	24x24		::after 44pxx44px at -18.625px,-10px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 10 SHORT (then div[body])	right reach 0 need 10 SHORT (then div)	up reach 0 need 4 SHORT (then div[body])	down reach 0 need 10 SHORT (then div[body])
+short	button		x	"Dismiss Second added on obelisk-of-light"	356.5,213	24x24		::after 44pxx44px at -18.625px,-10px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 10 SHORT (then div[body])	right reach 0 need 10 SHORT (then div)	up reach 0 need 10 SHORT (then div[body])	down reach 0 need 10 SHORT (then div[body])
+spill	a		skip	"Skip to content"	-1,-1	28x14	scroll 124 client 28 overflow-x hidden right 27 of 390
+spill	div		shell-main	"Configure Memory files CLAUDE.md and the model d"	0,0	390x844	scroll 392 client 390 overflow-x hidden right 390 of 390
+spill	header		top	"Configure"	0,0	390x44	scroll 392 client 390 overflow-x visible right 390 of 390
+spill	div		right	""	358,0	32x43	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	div		tools	""	358,8	32x32	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	button		tooltip-trigger	"Needs you, 5 · 1 notice"	358,8	32x32	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	span			""	362,12	24x24	scroll 28 client 24 overflow-x visible right 386 of 390
+spill	span			""	364,11	24x24	scroll 26 client 24 overflow-x visible right 388 of 390
+spill	span			""	364,11	24x24	scroll 26 client 24 overflow-x visible right 388 of 390
+past	svg		rim	""	356,6	36x36	scroll 36 client 36 overflow-x visible right 392 of 390
+past	svg		rim	""	356,6	36x36	scroll 36 client 36 overflow-x visible right 392 of 390
+spill	div			"~/.claude/CLAUDE.md The fleet keeps no memory ye"	43,187	304x121	scroll 311 client 304 overflow-x visible right 347 of 390
+spill	div		slot	"~/.claude/CLAUDE.md The fleet keeps no memory ye"	43,187	304x121	scroll 311 client 304 overflow-x visible right 347 of 390
+spill	span		meta	"The fleet keeps no memory yet — write one, or ad"	80,272	267x16	scroll 389 client 267 overflow-x hidden right 347 of 390
+spill	span			"Saving…"	254,19	1x1	scroll 47 client 1 overflow-x hidden right 255 of 390
+spill	span			"Saving…"	293,63	1x1	scroll 47 client 1 overflow-x hidden right 294 of 390

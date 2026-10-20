@@ -1,0 +1,36 @@
+short	a		skip	"Skip to content"	-1,-1	28x14		no ::after; overflow hidden/hidden	contrast 13.62	left reach 0 need 8 (then page edge)	right reach 0 need 8 SHORT (then button[burger] "Open navigation")	up reach 0 need 15 (then page edge)	down reach 0 need 15 SHORT (then button[burger] "Open navigation")
+ok	button		burger	"Open navigation"	-1,4	44x44		no ::after; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 6.02	left reach 0 need 0 (then page edge)	right reach 0 need 0 (then header[top])	up reach 0.5 need 0 (then header[top])	down reach 0 need 0 (then main)
+ok	button		tooltip-trigger	"Needs you, 5 · 1 notice"	358,8	32x32		::after 44pxx44px at -12px,-6px pointer-events auto; overflow visible/visible clipped by div[shell-main] (overflow hidden/hidden)	contrast 13.62	left reach 12.5 need 6 (then div[slot])	right reach 0 need 6 (then page edge)	up reach 6.5 need 6 (then div[right])	down reach 5.5 need 6 (then main)
+ok	button	radio		"Stable Tagged releases. Each one ran as a Nightl"	39,237.5	166.5x176		no ::after; overflow visible/visible	contrast 13.62	left reach 0.5 need 0 (then section[updates-page-card])	right reach 0 need 0 (then div "Channel")	up reach 0.5 need 0 (then div)	down reach 0 need 0 (then section[updates-page-card])
+ok	button	radio		"Nightly Every build of main. The newest work, le"	216.5,237.5	166.5x176		no ::after; overflow visible/visible	contrast 13.62	left reach 0.5 need 0 (then div "Channel")	right reach 0 need 0 (then section[updates-page-card])	up reach 0.5 need 0 (then div)	down reach 0 need 0 (then section[updates-page-card])
+ok	button	radio		"Stable Tagged releases. Each one ran as a Nightl"	39,582	166.5x176		no ::after; overflow visible/visible	contrast 13.62	left reach 0.5 need 0 (then section[updates-page-card])	right reach 0 need 0 (then div "Channel")	up reach 0.5 need 0 (then div)	down reach 0 need 0 (then section[updates-page-card])
+ok	button	radio		"Nightly Every build of main. The newest work, le"	216.5,582	166.5x176		no ::after; overflow visible/visible	contrast 13.62	left reach 0.5 need 0 (then div "Channel")	right reach 0 need 0 (then section[updates-page-card])	up reach 0.5 need 0 (then div)	down reach 0 need 0 (then section[updates-page-card])
+short	button		button	"Ask me first Saving…"	69,14	303x30		::after 301pxx44px at 0px,-8px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 12.62	left reach 0 need 0 (then span[morph-text])	right reach 0 need 0 (then button[tooltip-trigger] "Needs you, 5 · 1 notice")	up reach 0 need 7 SHORT (then div[slot])	down reach 0 need 7 SHORT (then main)
+short	button		button	"Let agents post upstream Saving…"	69,58	303x30		::after 301pxx44px at 0px,-8px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 12.62	left reach 0 need 0 (then h1)	right reach 0 need 0 (then h1)	up reach 0 need 7 SHORT (then main)	down reach 0 need 7 SHORT (then main)
+short	button		button	"Clear all 1 notices"	318,113.5	64x24		::after 61.8438pxx44px at 0px,-11px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 0 (then p)	right reach 0 need 0 (then p)	up reach 0 need 10 SHORT (then section[updates-page-card])	down reach 0 need 10 SHORT (then p)
+short	button		x	"Dismiss all 1 rebalances"	356.5,145.5	24x24		::after 44pxx44px at -18.625px,-10px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 10 SHORT (then div)	right reach 0 need 10 SHORT (then div)	up reach 0 need 4 SHORT (then section[updates-page-card])	down reach 0 need 10 SHORT (then div)
+short	button		x	"Dismiss Second added on obelisk-of-light"	356.5,213	24x24		::after 44pxx44px at -18.625px,-10px pointer-events none; overflow visible/visible clipped by div[list] (overflow auto/auto)	contrast 6.02	left reach 0 need 10 SHORT (then div)	right reach 0 need 10 SHORT (then div)	up reach 0 need 10 SHORT (then div)	down reach 0 need 0 (then button)
+spill	a		skip	"Skip to content"	-1,-1	28x14	scroll 124 client 28 overflow-x hidden right 27 of 390
+spill	div		shell-main	"Motion Channel cards The fleet follows Stable; S"	0,0	390x844	scroll 392 client 390 overflow-x hidden right 390 of 390
+spill	header		top	"Motion"	0,0	390x44	scroll 392 client 390 overflow-x visible right 390 of 390
+spill	div		right	""	358,0	32x43	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	div		tools	""	358,8	32x32	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	button		tooltip-trigger	"Needs you, 5 · 1 notice"	358,8	32x32	scroll 34 client 32 overflow-x visible right 390 of 390
+spill	span			""	362,12	24x24	scroll 28 client 24 overflow-x visible right 386 of 390
+spill	span			""	364,11	24x24	scroll 26 client 24 overflow-x visible right 388 of 390
+spill	span			""	364,11	24x24	scroll 26 client 24 overflow-x visible right 388 of 390
+past	svg		rim	""	356,6	36x36	scroll 36 client 36 overflow-x visible right 392 of 390
+past	svg		rim	""	356,6	36x36	scroll 36 client 36 overflow-x visible right 392 of 390
+spill	main		shell-content	"Channel cards The fleet follows Stable; Stable c"	0,44	390x800	scroll 422 client 390 overflow-x hidden right 390 of 390
+spill	div		swap	"Channel cards The fleet follows Stable; Stable c"	0,44	390x800	scroll 422 client 390 overflow-x visible right 390 of 390
+spill	div			"Channel cards The fleet follows Stable; Stable c"	0,44	390x800	scroll 422 client 390 overflow-x visible right 390 of 390
+past	main			"Channel cards The fleet follows Stable; Stable c"	0,44	422x4194	scroll 422 client 422 overflow-x visible right 422 of 390
+past	h1			"Channel cards"	21,65	380x23	scroll 380 client 380 overflow-x visible right 401 of 390
+past	section		updates-page-card	"The fleet follows Stable; Stable chosen. Stable "	21,106	380x326	scroll 380 client 380 overflow-x visible right 401 of 390
+spill	span			""	42,147	160x160	scroll 203 client 160 overflow-x visible right 202 of 390
+past	section		updates-page-card	"The fleet follows Nightly; Stable chosen. Stable"	21,450	380x326	scroll 380 client 380 overflow-x visible right 401 of 390
+spill	span			""	42,491	160x160	scroll 203 client 160 overflow-x visible right 202 of 390
+past	h1			"Update cell, rows 1 to 13"	21,794	380x23	scroll 380 client 380 overflow-x visible right 401 of 390
+past	section		updates-page-card	"nixbox Linux · offline — Omars-MacBook-Pro macOS"	21,834	380x1388	scroll 380 client 380 overflow-x visible right 401 of 390
+spill	span			"Saving…"	254,19	1x1	scroll 47 client 1 overflow-x hidden right 255 of 390
+spill	span			"Saving…"	293,63	1x1	scroll 47 client 1 overflow-x hidden right 294 of 390
