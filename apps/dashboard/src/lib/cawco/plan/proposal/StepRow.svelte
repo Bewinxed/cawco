@@ -422,5 +422,10 @@
       inline-size: auto;
       text-align: start;
     }
+    /* The words are the row's last column: their press tint keeps to the
+       row, bleeding only toward the tile. */
+    .words {
+      margin-inline-end: 0;
+    }
   }
 </style>

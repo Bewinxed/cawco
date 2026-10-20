@@ -438,6 +438,11 @@
       inline-size: auto;
       text-align: start;
     }
+    /* The words are the row's last column: their press tint keeps to the
+       row, bleeding only toward the tile. */
+    .words {
+      margin-inline-end: 0;
+    }
     /* The state's glyph gives its width back: the row's tile says the
        status in its corner, and the words in their state's ink. */
     .standing .mark-cell {
