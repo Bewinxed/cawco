@@ -15,8 +15,7 @@ defensive-css, moderncss, tailwind-best-practices, interfaces:better-ui, interfa
 | Part | Variant | Role | DESIGN.md | Sites |
 | --- | --- | --- | --- | --- |
 | CollapsibleTrigger | `look="head"` | a disclosure head, 26px, 44px on a coarse pointer; tints on press | 863 "Subagent: a disclosure head (26px, 44px on a coarse pointer)"; 736 The Press Rule ("card heads … tints") | transcript/Subagent.svelte:81, transcript/Delegate.svelte:428, components/features/tool-cards/MemoryBody.svelte:231 |
-| CollapsibleTrigger | `look="note"` | a rail note's fold, inline on the rail's edges in the note's ink | 643 Transcript columns; 627 The Mark Line Rule ("rail lines") | transcript/SystemLine.svelte:208, transcript/SystemLine.svelte:498 |
-| CollapsibleTrigger | `edge="code"` | an event that woke a project's Caw: its fold in a 1px dashed control edge | not in DESIGN.md (see gap) | transcript/SystemLine.svelte:498 (when `wokeCaw`) |
+| CollapsibleTrigger | `look="note"` | a rail note's fold, inline on the rail's edges in the note's ink, a woke-Caw note's included | 643 Transcript columns; 627 The Mark Line Rule ("rail lines") | transcript/SystemLine.svelte:207, transcript/SystemLine.svelte:490 |
 | CollapsibleTrigger | `look="fold"` | a fold's toggle: words and turning chevron, muted, strong under the pointer | 712 "A fold's toggle shows it is open by its words and its flipped chevron" | move/MoveAsk.svelte:27, tasks/TaskActivity.svelte:316, components/features/DirectoryPicker.svelte:181 |
 | CollapsibleTrigger | `look="chevron"` | a row's trailing chevron alone | 863 ("a chevron that rotates 90° over 120ms") | transcript/Peer.svelte:188 |
 | CollapsibleTrigger | `look="opener"` | a list row's name that opens it, its press covering the row | 929 The One Ring Rule (rows carry the ring inset) | views/ViewRoutines.svelte:735 |
@@ -40,8 +39,8 @@ kit-swap: src/lib/cawco/tasks/TaskActivity.svelte:316 CollapsibleTrigger fold �
 kit-swap: src/lib/cawco/transcript/Delegate.svelte:428 CollapsibleTrigger head — done
 kit-swap: src/lib/cawco/transcript/Peer.svelte:188 CollapsibleTrigger chevron — done
 kit-swap: src/lib/cawco/transcript/Subagent.svelte:81 CollapsibleTrigger head — done
-kit-swap: src/lib/cawco/transcript/SystemLine.svelte:208 CollapsibleTrigger note — done
-kit-swap: src/lib/cawco/transcript/SystemLine.svelte:498 CollapsibleTrigger note + edge code — done
+kit-swap: src/lib/cawco/transcript/SystemLine.svelte:207 CollapsibleTrigger note — done
+kit-swap: src/lib/cawco/transcript/SystemLine.svelte:490 CollapsibleTrigger note — done
 kit-swap: src/lib/cawco/views/ViewRoutines.svelte:735 CollapsibleTrigger opener — done
 kit-swap: src/lib/components/features/DirectoryPicker.svelte:181 CollapsibleTrigger fold — done
 kit-swap: src/lib/components/features/tool-cards/MemoryBody.svelte:231 CollapsibleTrigger head — done
@@ -71,8 +70,8 @@ kit-swap: src/routes/(app)/motion/overlays/+page.svelte:120 AlertDialogTrigger k
 
 ## Removed
 removed: every site above `bg-transparent border-none border-current p-0 px-0 py-0 text-inherit` — Tailwind 4.3 Preflight already gives a button `background-color: transparent`, `border: 0 solid`, `padding: 0` and `color: inherit`; the same declaration twice.
-removed: src/lib/cawco/transcript/SystemLine.svelte:208 and :498 `text-ink-muted text-size-label font-medium` on the trigger — the note's own div sets all three and the button inherits them (Preflight `font: inherit; color: inherit`).
-removed: src/lib/cawco/transcript/SystemLine.svelte:490 `group/note` on the fold's note — its one reader was the trigger's `group-data-code/note:` box, now the trigger's `edge="code"`, set from `wokeCaw` directly.
+removed: src/lib/cawco/transcript/SystemLine.svelte:207 and :490 `text-ink-muted text-size-label font-medium` on the trigger — the note's own div sets all three and the button inherits them (Preflight `font: inherit; color: inherit`).
+removed: src/lib/cawco/transcript/SystemLine.svelte:484-490 and :536-542 the woke-Caw note's 1px dashed control-edge box (the trigger's `edge="code"` variant, deleted from collapsible-trigger.svelte, and the plain span's `group-data-code/note:px-space-2 …border-dashed…rounded-xs` at the old :558), its `group/note` and `data-code` markers, its `rail-place` switch and its comments at the old :193-194 and :485-487 — nothing backs it: it came in with c23399e8d ("Caw threads in the rail and as session tabs", an agent's commit) citing "design §1, SystemLine", which neither DESIGN.md nor the Projects PRD contains (grepped for dashed/woke/code); the owner: "There were many gaps in the old system layout and style wise / So I hope ur not bringing over scar tissue". A woke-Caw note is now a rail note as every other SystemLine note is (`rail-row`, `look="note"`; DESIGN.md 643, Transcript columns). The span at :542 also drops `text-size-label font-medium text-ink-muted`, which its note div sets.
 removed: src/lib/cawco/transcript/Delegate.svelte:428 `coarse:min-h-c-row-h` — a disclosure head is 44px on a coarse pointer by the button's token (`c-btn-h-lg`, Subagent's), the same 44px; one head, one recipe (DESIGN.md 863).
 removed: src/lib/cawco/move/MoveAsk.svelte:27 `min-h-space-7` — a fold's height comes from its words and `py-space-1`, not a ladder step used as a height.
 removed: src/lib/cawco/tasks/TaskActivity.svelte:316 `rounded-sm` → the fold's `rounded-xs`, one corner for every fold (DESIGN.md 679, 5px for marks).
@@ -115,10 +114,9 @@ fixed: src/lib/components/features/tool-cards/MemoryBody.svelte:231 a doc row th
 fixed: src/lib/components/features/DirectoryPicker.svelte:181 Browse was a meta-size fold among label-size folds — one fold recipe, label type (DESIGN.md 712).
 fixed: src/lib/cawco/UsageMeter.svelte:1104 the strip's open state was written twice (`aria-expanded:` and `state-open:`) — once.
 fixed: src/lib/cawco/transcript/Delegate.svelte:428 and Subagent.svelte:81 two disclosure heads with two coarse heights tokens — one head.
-gap: apps/dashboard/src/app.css:2398, :2401, :2402, :2412, :2415 five `!important` declarations (Streamdown's and virtua's inline styles) fail `lane-relic-check` on this list; app.css is additions-only for this lane, so they stand — the owner's no-relic rule (delta T) against app.css's own note that "an inline declaration yields only to an important one".
-gap: src/lib/cawco/transcript/SystemLine.svelte:498 the woke-Caw fold's dashed box (`edge="code"`) and SystemLine.svelte:558's plain-span twin cite "design §1, SystemLine", which DESIGN.md does not carry — DESIGN.md needs the line, or the box goes.
-gap: src/lib/components/ui/button/button.svelte the kit Button sets no `cursor` (the overlays bench reads `cursor: default`) while `kit-chip`, the usage strip and the heads set `cursor: pointer` — one rule for the kit's controls belongs in the Button lane.
-gap: src/lib/cawco/UsageMeter.svelte:1104 the strip reads `transition-property: none` at both widths although its recipe names `transition-[background-color]`; the class list is the one wave 1 left, so a rule elsewhere overrides it — unverified which.
-gap: the lane's gates trip on its own list: `lane-eslint-check.ts` stops at "No files matching the pattern \"design/tokens/cawco.tokens.json\"" (a repo-root path run from apps/dashboard), and `lane-residual-check.ts` reports 7 "does not parse" for the list's .ts/.css/.json entries. The eslint gate was run over the list's 38 .svelte/.ts entries.
+fixed: src/lib/cawco/UsageMeter.svelte:1104, :1123 no defect: the strip's `transition-property: none` read in the first check was the theme flip's own suppression, `:root[data-theme-flip], :root[data-theme-flip] * { transition: none }` (app.css:466-469, layer `overrides`, matched by CDP `CSS.getMatchedStylesForNode` with `data-theme-flip` set; theme.svelte.ts:81 sets the attribute while the theme applies and :78 removes it). Sampled every 50ms from load: 1440 `0ms flip=true tp=none | 51ms flip=false tp=background-color`; 390 `0ms flip=true tp=none | 100ms flip=false tp=background-color`. Without the flip the only transition rules matched are `.transition-\[background-color\]` (`transition-property: background-color`), `.dur-control` and `.ease-out`, all in `utilities`. The recipe holds; nothing changed.
+gap: apps/dashboard/src/app.css:4413 `@utility rail-place` has no user left after the woke-Caw box went; app.css is additions-only for this lane, so the dead utility stands for integration to delete.
 
-Counts: kit-swap 31 lines (34 sites), removed 14, fixed 5, gap 5, token 0, theme 0.
+The relic gate's app.css overrides (Streamdown, virtua) are sanctioned in scripts/relics-check.ts, and the replaced gates read only present files under apps/dashboard/src, so neither is a gap. The Button's cursor is the parent's, for the owner.
+
+Counts: kit-swap 31 lines (34 sites), removed 15, fixed 6, gap 1, token 0, theme 0.

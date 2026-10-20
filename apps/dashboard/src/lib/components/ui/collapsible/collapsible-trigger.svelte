@@ -36,11 +36,6 @@
           "grid cursor-pointer place-items-center text-ink-muted press-tint",
         opener: "focus-inset block cursor-pointer text-start after:absolute after:inset-0",
       },
-      /** An event that woke a project's Caw is code: its fold stands in a
-          1px dashed box in the control edge, the box its one marker. */
-      edge: {
-        code: "rounded-xs border border-dashed border-border-control px-space-2",
-      },
     },
   });
 
@@ -58,13 +53,12 @@
     class: className,
     skin,
     look,
-    edge,
     ...restProps
   }: CollapsiblePrimitive.TriggerProps & CollapsibleTriggerLooks = $props();
 </script>
 
 <CollapsiblePrimitive.Trigger
-  class={cn(collapsibleTriggerVariants({ skin, look, edge }), className)}
+  class={cn(collapsibleTriggerVariants({ skin, look }), className)}
   data-slot="collapsible-trigger"
   bind:ref
   {...restProps}
