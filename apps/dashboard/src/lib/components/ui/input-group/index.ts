@@ -13,10 +13,6 @@ export {
   default as InputGroupInput,
 } from "./input-group-input.svelte";
 export {
-  default as Text,
-  default as InputGroupText,
-} from "./input-group-text.svelte";
-export {
   default as Textarea,
   default as InputGroupTextarea,
 } from "./input-group-textarea.svelte";

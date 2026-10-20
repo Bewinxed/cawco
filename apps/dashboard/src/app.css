@@ -320,6 +320,47 @@
     accent-color: var(--action-solid);
   }
 
+  /* A native range is a groove with the act's thumb: its track sits below
+     the surface on `surface-recess-deep` in both themes (DESIGN.md, Depth:
+     the groove recesses), never the engine's own track, which turns
+     near-white at night. */
+  input[type="range"] {
+    appearance: none;
+    background: transparent;
+
+    &::-webkit-slider-runnable-track {
+      block-size: var(--space-1);
+      border-radius: var(--radius-pill);
+      background: var(--surface-recess-deep);
+    }
+    &::-moz-range-track {
+      block-size: var(--space-1);
+      border-radius: var(--radius-pill);
+      background: var(--surface-recess-deep);
+    }
+    &::-moz-range-progress {
+      block-size: var(--space-1);
+      border-radius: var(--radius-pill);
+      background: var(--action-solid);
+    }
+    &::-webkit-slider-thumb {
+      appearance: none;
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+      margin-block-start: calc((var(--space-1) - var(--icon-md)) / 2);
+      border: none;
+      border-radius: var(--radius-pill);
+      background: var(--action-solid);
+    }
+    &::-moz-range-thumb {
+      inline-size: var(--icon-md);
+      block-size: var(--icon-md);
+      border: none;
+      border-radius: var(--radius-pill);
+      background: var(--action-solid);
+    }
+  }
+
   /* The one focus indicator (tokens: --focus-ring*). An outline, so it
      tracks each element's own radius and survives forced colours; never a
      box-shadow ring, a border-colour change or a background on focus as

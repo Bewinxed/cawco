@@ -101,4 +101,40 @@ Interface-craft critique (engine reads):
 - holds: L729 destructive ink ≥ 8.35:1 everywhere it stands, both themes.
 - gap: none known in the kit that X1 can fix; the site lines above are the area lanes'.
 
+## Review of cawco-audit/X1-controls (fb078a4ef): answers
+
+Reads: scratch drivers on the probe kit's tape at b1254aaa9 + these fixes (desk 1440 fine, phone 390 coarse).
+
+- fixed: #1 primary 2px short (L733/L231/L245). Cause: the Button base clips its fill to the padding box (`bg-clip-padding`), and the primary's 1px border is transparent, so its fill painted 1px in from every edge while an outline's border paints its box. The boxes were already equal (Answer 122x30 beside Dismiss 67x30). Fix: the `default` variant fills to its border box (`bg-clip-border`, as the answer variants do). Read (`background-clip` and box): session-question and home-rest Answer 122x30 border-box beside Dismiss 67x30; config-accounts-account Save changes 116x36 border-box beside Cancel 73x36; views-decision-page Ask Caw 84x36 border-box beside Spin off 78x36; home-rest phone Start session 354x44 border-box; in desk light, desk dark and phone dark.
+- holds (after integration): #3 the 30px inputs are Input `size="sm"` (site-needs above, plus lib/cawco/transcript/DelegateTray.svelte:1411, found by this pass).
+- site-needs: #3 Select/NativeSelect `size="sm"` (30px) drops, so the field draws 36 (L749 the input's look, L252): lib/cawco/accounts/StrategyPicker.svelte:188 (config-accounts-routing Probe select, read NativeSelect 95x30 `data-size=sm`), lib/cawco/preview/SheetInspector.svelte:244 (sheet-inspect Calm, read 128x30 sm), lib/cawco/preview/SheetInspector.svelte:367 (sheet-inspect size, read 267x30 sm), lib/cawco/tasks/TaskPane.svelte:435 (task-open Ready, read Select trigger 87x30 sm), lib/cawco/tasks/NewTaskForm.svelte:101, lib/cawco/tasks/TaskFilterPopover.svelte:162, :189, :212, :232, lib/cawco/preview/PlacePick.svelte:108, routes/(app)/usage/+page.svelte:185, lib/cawco/project/ProjectDetails.svelte:611, :648, :825, :948, :1245, :1265.
+- holds / route X3: #3 config-hooks-editor "Event" and config-skills-fetch "Scope" are not selects: each is the kit setting chip (`button[data-slot=popover-trigger]`, chip `setting`, 150x30 and 231x30) opening a popover, which DESIGN.md draws at 30 (New-session dialog: "Setting chips are 30px"). Whether a form field there is a setting or a select (36) is X3's: lib/cawco/config/PickerChip.svelte.
+- note: a setting chip as a popover trigger reads `touch-hit` twice: ui/popover's trigger adds it to every trigger (popover-trigger.svelte:66) and the chip now carries it. The same area either way; ui/popover's owner may drop its own for chip triggers.
+- fixed: #4 board-label's black ▼. It is the kit Input with a datalist (`input[list="bulk-labels-…"]`, 164x36), whose dropdown arrow Blink draws (`::-webkit-calendar-picker-indicator`). The Input now draws the house sort-vertical glyph where a field has a `list` (`IconUnfold`, 16x16 in `ink-muted`: read `oklch(0.495 0.014 74)` light, `oklch(0.778 0.012 78)` dark), the engine's arrow kept under it at opacity 0 so it still opens the list (the class is on the field, its rule in the utilities layer).
+- route: #5 the sheet-inspect calm|loud groove (1144,203 100x28) is ui/fluid-tabs (`div[data-slot=ff-tabs-list][role=tablist]`), not ui/toggle-group: a kit part not on X1's list, to its owner (site lib/cawco/preview/SheetInspector.svelte).
+- fixed: #6 the slider track at night. With `appearance: auto` the engine drew its own dark-scheme track (`color-scheme: dark` read on the range and the root). `@layer base` now draws every native range: `appearance: none`, a 4px track on `surface-recess-deep` (pill radius), a 16px thumb in `action-solid`, Gecko's progress in `action-solid`. Ink read at the track's unfilled end: dark rgb(20, 18, 17) = `oklch(0.184 0.004 70)` (`--surface-recess-deep` at night); light rgb(232, 228, 221) = `oklch(0.92 0.011 83)`; `appearance: none` on all three.
+- route: #2 X3 — lib/cawco/config/EditorFooter.svelte:124 (Remove account, Delete rule, Delete everywhere: `variant="ghost" tone="muted"`) and routes/(app)/config/models/+page.svelte:430 (Remove key: `variant="outline"`) → `variant="destructive"`. project-forget's coral is lib/cawco/StopTray.svelte:965 (X5, routed).
+- route: #7 X3 — the chosen-channel tick on config-updates-rest and bench-updates-rest (`svg[data-slot=check]`).
+- route: notes — session-attached ✕ over ".txt": X5 (AttachmentChips); config-delegate-types-editor effort row past the card: X3 (Choice.svelte:24 `max-w-full`, already logged); bench-updates-rest frames: X3.
+- fixed (from X0-coverage): ui/select's content stops at the room bits-ui measures (`max-h-(--bits-select-content-available-height)`). Read on usage-rest's Project select in a 1440x190 viewport: content y 102..190, `max-height: 88px`; its list scrolls 50/128 with the down button shown; after a wheel `scrollTop` 78 and the up button shown. (X0's `usage-project-pick-many` entry is not in this tree's catalogue; the short viewport makes the same overflow.)
+
+### Unused kit parts (from X0-coverage)
+deleted-file: apps/dashboard/src/lib/components/ui/field/index.ts
+deleted-file: apps/dashboard/src/lib/components/ui/field/field.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/field/field-content.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/field/field-description.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/field/field-group.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/field/field-label.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/field/field-legend.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/field/field-separator.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/field/field-set.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/field/field-title.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/input-group/input-group-text.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/kbd/kbd-group.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/select/select-group.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/select/select-group-heading.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/select/select-label.svelte
+deleted-file: apps/dashboard/src/lib/components/ui/select/select-separator.svelte
+
+integration: delete Select size sm after the site swaps
 integration: delete Input size sm after the site swaps

@@ -46,6 +46,7 @@
     HTMLInputAttributes,
     HTMLInputTypeAttribute,
   } from "svelte/elements";
+  import { IconUnfold } from "#lib/icons.js";
   import { cn, type WithElementRef } from "#lib/utils.js";
 
   type InputType = Exclude<HTMLInputTypeAttribute, "file">;
@@ -100,11 +101,22 @@
     "disabled:opacity-50 aria-invalid:border-error-9",
     "dark:aria-invalid:border-error-9/50",
   ];
+  /**
+   * A field with suggestions (a `list`, its datalist) shows the house's
+   * sort-vertical glyph where the engine draws its own dropdown arrow, as
+   * a select does (DESIGN.md, Inputs and fields, Select trigger); the
+   * engine's arrow stays under it, unseen, and still opens the list.
+   */
+  const suggests = $derived(!!restProps.list);
   /** Its classes: with an area, the caller's placement sizes the area and
       the field fills it; without one, they are the field's. */
   const fieldClass = $derived(
     area
-      ? cn(own, looks.field())
+      ? cn(
+          own,
+          looks.field(),
+          suggests && "[&::-webkit-calendar-picker-indicator]:opacity-0"
+        )
       : cn(own, looks.box(), looks.field(), className)
   );
 
@@ -145,11 +157,23 @@
   <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the field's touch area round it; the field itself is the control and takes the focus. -->
   <!-- biome-ignore lint/a11y/useKeyWithClickEvents: a keyboard reaches the field itself; only a finger lands on the area. -->
   <span
-    class={cn("touch-hit inline-flex w-full min-w-0", looks.box(), className)}
+    class={cn(
+      "touch-hit inline-flex w-full min-w-0",
+      suggests && "relative",
+      looks.box(),
+      className
+    )}
     data-slot="input-area"
     onclick={focusField}
   >
     {@render control()}
+    {#if suggests}
+      <IconUnfold
+        aria-hidden="true"
+        class="pointer-events-none absolute top-1/2 right-space-3 size-icon-md -translate-y-1/2 text-ink-muted"
+        data-slot="input-suggests"
+      />
+    {/if}
   </span>
 {:else}
   {@render control()}

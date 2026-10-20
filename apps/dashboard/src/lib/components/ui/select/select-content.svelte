@@ -38,13 +38,15 @@
   });
 </script>
 
-<!-- Mounted by bits-ui's forceMount and drawn while its presence says so:
+<!-- At most the room bits-ui measures between the trigger and the
+     viewport's edge (`--bits-select-content-available-height`), so a long
+     list scrolls inside it and its scroll buttons show. Mounted by bits-ui's forceMount and drawn while its presence says so:
      the page has its pointer back at the dismissal (floating-presence). -->
 <SelectPortal {...portalProps}>
   <SelectPrimitive.Content
     class={cn(
       floatingSurface(),
-      "relative isolate z-(--layer-float) min-w-36 origin-(--bits-select-content-transform-origin) overflow-y-auto overflow-x-hidden",
+      "relative isolate z-(--layer-float) max-h-(--bits-select-content-available-height) min-w-36 origin-(--bits-select-content-transform-origin) overflow-y-auto overflow-x-hidden",
       className
     )}
     data-slot="select-content"
