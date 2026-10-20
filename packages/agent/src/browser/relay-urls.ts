@@ -59,7 +59,10 @@ export const relayUrlsFor = (
   const local = [tailnet, lan].flatMap((address) =>
     address ? [turnUrl(address, "udp"), turnUrl(address, "tcp")] : []
   );
-  return [...local, ...relay.urls];
+  // Each URL once, where it first stands: a relay whose public address is
+  // also its LAN one (a LAN-only fleet) names the same URL twice, and each
+  // repeat would cost the browser another allocation of the relay's 249.
+  return [...new Set([...local, ...relay.urls])];
 };
 
 /**

@@ -1288,12 +1288,18 @@ const otherMachineLeg = async (
   // host"). Each URL still comes in through the published listener, 443
   // read as its stand-in. Another fleet machine names the LAN address as
   // composed; this leg checks that order below.
-  const urls = composed.map((url) =>
-    url
-      .replace(`:${STREAM_RELAY_PORT}?`, `:${relay.port}?`)
-      .replace(`turn:${relay.reachLan[0]}:`, `turn:${HOST_ALIAS}:`)
-      .replace(`turn:${relay.address}:`, `turn:${HOST_ALIAS}:`)
-  );
+  // Each once, as relay-urls.ts gives them: the LAN and the public URL name
+  // the same host here once both read as the alias.
+  const urls = [
+    ...new Set(
+      composed.map((url) =>
+        url
+          .replace(`:${STREAM_RELAY_PORT}?`, `:${relay.port}?`)
+          .replace(`turn:${relay.reachLan[0]}:`, `turn:${HOST_ALIAS}:`)
+          .replace(`turn:${relay.address}:`, `turn:${HOST_ALIAS}:`)
+      )
+    ),
+  ];
   const nekoStun = stun.replace(STUN_HOST, `stun:${HOST_ALIAS}:`);
   const passwords = {
     admin: randomBytes(18).toString("base64url"),
@@ -1374,10 +1380,12 @@ const otherMachineLeg = async (
     kit.note(
       `9 · the stand-in neko at ${address} on ${network.name} (${network.subnet}), given ${JSON.stringify(urls)} (relay-urls.ts for another machine: ${JSON.stringify(composed)}, 443 read as the stand-in ${relay.port}, this machine named as ${HOST_ALIAS}, the runtime's host-gateway)`
     );
+    const repeated = composed.filter((url, at) => composed.indexOf(url) !== at);
     kit.check(
-      `9 · relay-urls.ts names the relay's LAN URL first for another machine on its LAN: ${composed[0]}`,
+      `9 · relay-urls.ts names the relay's LAN URL first for another machine on its LAN, each URL once (${composed.length} URLs${repeated.length ? `, repeated: ${repeated.join(", ")}` : ""}): ${composed[0]}`,
       composed[0] ===
-        `turn:${relay.reachLan[0]}:${STREAM_RELAY_PORT}?transport=udp`,
+        `turn:${relay.reachLan[0]}:${STREAM_RELAY_PORT}?transport=udp` &&
+        repeated.length === 0,
       JSON.stringify(composed)
     );
     await relayPair(kit, leg, {
