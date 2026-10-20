@@ -179,6 +179,9 @@
           },
           "multiple": {
             "type": "boolean"
+          },
+          "note": {
+            "type": "string"
           }
         },
         "required": [
@@ -212,6 +215,9 @@
           },
           "cost": {
             "type": "string"
+          },
+          "current": {
+            "type": "boolean"
           }
         },
         "required": [

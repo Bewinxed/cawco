@@ -38,7 +38,7 @@
   <div
     bind:this={stage}
     class={[
-      "flex min-w-0 items-center-safe justify-center-safe",
+      "relative flex min-w-0 items-center-safe justify-center-safe",
       wide && "kit-edge-fade overflow-x-auto overscroll-x-contain",
     ]}
     data-slot="media-stage"

@@ -21,8 +21,8 @@ Arguments marked with ? are optional. Sub-components can be inline or referenced
 
 Decisions(title: string, children: (Section | Decision | Dials | any)[]) — The page: its title, Caw, the count picked, Send picks. The root.
 Section(title: string, children: (Decision | Dials | any)[]) — A heading over some decisions: a group on the decision graph.
-Decision(id: string, question: string, options: Option[], why?: string, media?: (any | Dials)[], after?: string[], multiple?: boolean) — One question the person picks on: a card with its options and a note. Once picked and the person presses Continue, it folds to one line.
-Option(id: string, label: string, line?: string, recommended?: boolean, media?: any[], cost?: string) — One answer to a decision, in a few words.
+Decision(id: string, question: string, options: Option[], why?: string, media?: (any | Dials)[], after?: string[], multiple?: boolean, note?: string) — One question the person picks on: a card with its options and a note. Once picked and the person presses Continue, it folds to one line.
+Option(id: string, label: string, line?: string, recommended?: boolean, media?: any[], cost?: string, current?: boolean) — One answer to a decision, in a few words.
 Image(file: string, alt: string, caption?: string) — A picture: a file beside the program in your work folder, or an absolute path on your machine (a generate_image result).
 Diagram(mermaid: string, caption?: string) — A Mermaid diagram, drawn on the house look: any type Mermaid has (flowchart, sequenceDiagram, gantt, stateDiagram-v2, erDiagram, classDiagram, mindmap, timeline…).
 Canvas(artifact: string, caption?: string) — A drawing: a canvas artifact you made with artifact_create (kind canvas), shown at its box.

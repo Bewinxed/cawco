@@ -69,3 +69,8 @@ scripts/probe-kit/specs/web/decision-embed.ts
 scripts/probe-kit/specs/decision-pages.ts
 scripts/probe-kit/specs/decision-graph.ts
 scripts/probe-kit/specs/project-origin.ts
+packages/core/src/decisions-library.ts
+packages/core/src/decisions-spec.json
+packages/agent/src/preview-overlay/page.ts
+packages/agent/src/canvas-host/host.tsx
+packages/agent/src/canvas-host/scene.ts

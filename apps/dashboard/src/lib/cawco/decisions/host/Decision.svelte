@@ -1,57 +1,61 @@
 <!--
-  One decision: the kit's card (RECIPES.md, page.css `.dp-card`). The card
-  carries its id twice: `data-cawco-choice`, which the overlay's bridge
-  picks on (a click on an option's `data-option` stores it, and the
-  overlay marks it `data-cawco-picked`), and `id="decision-<id>"`, which a
-  pin's selector holds on to across revisions. Its note goes to the hub a
-  moment after typing stops; the state line follows the stored picks.
+  One decision: a raised card on the page's recessed ground (DESIGN.md, The
+  Frame Recesses Rule; --radius-panel, a decision page's panels; the tile
+  shadow, no border; 18px in, 14px under a finger, 11px once decided). The
+  card carries its id twice: `data-cawco-choice`, which the overlay's bridge
+  picks on (a click on an option's `data-option` stores it, pick.ts), and
+  `id="decision-<id>"`, which a pin's selector holds on to across revisions.
+  Its head is its question alone while it stands open; decided, the chosen
+  option itself stands at its end, then Change.
 
   A pick selects and waits for Continue (the owner: "follow the pattern of
-  waiting for a continue press"). The option takes its chosen look where it
-  stands (L905, its colour over `--dur-control`) and the card stays open: a
-  press on another option moves the pick, a press on the chosen one keeps it
-  (the overlay's pick.ts), and a several-pick card toggles each. Once the
+  waiting for a continue press"). Its options are the kit's option group
+  (ui/option-group: one tab stop, the arrows and Home/End move focus and
+  never pick; a click, Space or the option's digit picks; Enter goes to the
+  card's Continue and never picks). The option takes its chosen look where
+  it stands, a press on another moves the pick, a press on the chosen one
+  keeps it ("Kept <option>"), and a several-pick card toggles each. Once the
   card holds a pick, Continue (the primary button, ↵ on its keycap) grows
-  out of its foot on the card's own height tween (motion/morph; with
-  reduced motion it fades in where it stands), and leaves folded shut with
-  the body.
+  out of its foot on the card's own height tween (motion/morph; with reduced
+  motion it fades in where it stands), and leaves folded shut with the body.
 
   Continue, or Enter, folds the card to one line: its question, then the
-  chosen option itself (its keycap and label in the chosen look; "Decided:
-  <option>" is its accessible name), then Change. Its body (why, media,
-  options, note, Continue) folds shut but stays mounted, so the overlay's
-  marks, the media's frames and a Dials panel stay. The fold is this view's
-  own: the picks the hub keeps, and artifact_read, are the same. Change
-  reopens it in place, its pick standing chosen; Continue folds it back
-  unchanged. A stored pick on an option a revision took out is no pick here
-  (core `pickOf`, as the graph and the count read it): the card stands
-  open, its kept options counted, never folded to an empty "Decided:". A
-  pick that arrives (a reload, another device, a revision) stands decided
-  at once.
+  chosen option's chip itself ("Decided: <option>" its accessible name),
+  then Change, and under them the note quoted with its edit mark when there
+  is one. Its body (why, media, options, note, Continue) folds shut but stays
+  mounted, so the overlay's marks, the media's frames and a Dials panel stay.
+  The fold is this view's own: the picks the hub keeps, and artifact_read,
+  are the same. Change reopens it in place, its pick standing chosen;
+  Continue folds it back unchanged. A stored pick on an option a revision
+  took out is no pick here (core `pickOf`, as the graph and the count read
+  it): the card stands open, its kept options counted, never folded to an
+  empty "Decided:". A pick that arrives (a reload, another device, a
+  revision) stands decided at once.
 
   A pointer's Continue moves (DESIGN.md, The Stay In Context Rule): the
   body folds shut over `--dur-settle` on `--ease-crossfade` while, on that
-  clock, the chosen option's keycap and label fly from its chip to the head
+  clock, each chosen option's chip flies whole from the options to the head
   (L485, The One Object Rule, motion/share: the source hidden while its
-  copy flies), the state line leaves its slot over `--dur-exit`, and the
-  card's padding and the page's scroll ride the fold, the scroll bringing
-  the next open card in under the decided line; focus goes to that card's
-  first option once the fold lands, or to Send when none is left. Change
-  opens it again the same way, from the height it is drawn at, each head
-  chip closing back into its option. A pick, Continue or Change made from
-  the keyboard lands in one frame, with no colour fade, fold, flight or
-  scroll travel (L690: "A choice made from the keyboard … is instant, as
-  every keyboard action is"). With reduced motion the body fades and its
-  height lands at the end, where the scroll is placed, and the head chip
-  fades in where it stands, and fades there as Change opens the card
+  copy flies), and the card's padding and the page's scroll ride the fold,
+  the scroll bringing the next open card in under the decided line; focus
+  goes to that card's first option once the fold lands, or to Send when none
+  is left. Change opens it again the same way, from the height it is drawn
+  at, each head chip closing back into its option. A pick, Continue or
+  Change made from the keyboard lands in one frame, with no colour fade,
+  fold, flight or scroll travel (L690: "A choice made from the keyboard … is
+  instant, as every keyboard action is"). With reduced motion the body fades
+  and its height lands at the end, where the scroll is placed, and the head
+  chip fades in where it stands, and fades there as Change opens the card
   (L517: "flights do not fly").
 
-  Keys: the card's options are one tab stop, and the arrows move focus
-  among them and never pick (WAI-ARIA APG, roving tabindex); Space, or an
-  option's digit while focus is in its card, picks; Enter continues once
-  the card holds a pick and never picks; ⌘/Ctrl+Enter sends (Decisions).
-  The page's one polite live region hears "Picked <option>" on a pick and
-  "Decided: <option>" with the count on Continue.
+  "Add a note" folds into the note's field and the field back into it on
+  one clock (open over `--dur-pop`, shut over `--dur-exit`, The Fast Exit
+  Rule), inside the card's height tween; its words name what the note is for
+  when the program says (`note`).
+
+  The page's one polite live region hears "Picked <option>" on a pick,
+  "Kept <option>" on a press on the chosen one, and "Decided: <option>" with
+  the count on Continue.
 
   The clock is page-length travel (the card's height and the page's scroll
   move a thousand pixels and more), so it runs on the one house curve that
@@ -64,6 +68,13 @@
 <script lang="ts">
   import { pickOf } from "@cawco/core/decisions";
   import { getContext, setContext, tick } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { chipVariants } from "#lib/components/ui/chip/index.js";
+  import { Kbd } from "#lib/components/ui/kbd/index.js";
+  import { OptionGroup } from "#lib/components/ui/option-group/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { IconPen } from "#lib/icons.js";
   import { dur, ease, motionOk } from "../../motion/curves.svelte";
   import { fold, landFold } from "../../motion/fold.svelte";
   import { morph } from "../../motion/morph.svelte";
@@ -82,9 +93,18 @@
     why?: unknown;
     media?: unknown[];
     multiple?: unknown;
+    note?: unknown;
   }> = $props();
 
-  type OptionNode = { props?: { id?: unknown; label?: unknown } } | null;
+  type OptionNode = {
+    props?: {
+      id?: unknown;
+      label?: unknown;
+      line?: unknown;
+      cost?: unknown;
+      media?: unknown[];
+    };
+  } | null;
 
   const id = $derived(String(props.id ?? ""));
   const question = $derived(String(props.question ?? ""));
@@ -93,7 +113,13 @@
     (Array.isArray(props.options) ? props.options : []).map((option) => {
       const held = (option as OptionNode)?.props;
       const optionId = String(held?.id ?? "");
-      return { id: optionId, label: String(held?.label ?? optionId) };
+      return {
+        id: optionId,
+        label: String(held?.label ?? optionId),
+        line: !!held?.line,
+        cost: !!held?.cost,
+        media: Array.isArray(held?.media) && held.media.length > 0,
+      };
     })
   );
   /** Each option's id in order: an option's keycap is its place. */
@@ -101,6 +127,20 @@
   setContext("decision-options", () => order);
   /** Its id: each option's parts are named under it, ids that hold across revisions. */
   setContext("decision-id", () => id);
+  /**
+   * The rows every option of the card stands on (the chip, its line, its
+   * cost, its media): one track each that any option fills, shared across
+   * the columns, so every chip, line, cost and media starts on one line.
+   */
+  const rows = $derived.by(() => {
+    let at = 1;
+    const next = (any: boolean) => (any ? ++at : 0);
+    const line = next(options.some((option) => option.line));
+    const cost = next(options.some((option) => option.cost));
+    const media = next(options.some((option) => option.media));
+    return { line, cost, media, span: at };
+  });
+  setContext("decision-rows", () => rows);
 
   /**
    * The stored pick as core `pickOf` reads it, as the graph and the count
@@ -111,25 +151,20 @@
   const chosen = $derived(
     (picks.now[id]?.options ?? []).filter((one) => order.includes(one))
   );
-  const picked = $derived(chosen.length);
-  const stateLine = $derived.by(() => {
-    if (picked === 0) {
-      return "Not picked";
-    }
-    return picked > 1 ? `${picked} picked` : "Picked";
-  });
 
   /** The person is picking in it, or Change reopened it: it stays open until Continue. */
   let open = $state(false);
   /**
    * A keyboard's pick, Continue or Change under way: everything it changes
-   * lands in one frame, the chosen colour with no fade (`data-instant`,
-   * page.css) and the card's height with no tween.
+   * lands in one frame, the chosen colour with no fade (`data-instant`) and
+   * the card's height with no tween.
    */
   let instant = $state(false);
-  /** A pointer's Continue or Change under way: what comes and goes in the head fades on its clock (page.css). */
+  /** A pointer's Continue or Change under way: what comes and goes in the head fades on its clock. */
   let moving = $state(false);
   const decided = $derived(pick.picked && !open);
+  /** Under a finger: Continue is the large button (DESIGN.md, The 44 Touch Rule). */
+  const coarse = new MediaQuery("pointer: coarse");
   /** The page's one polite live region and its count (Decisions.svelte). */
   const page = getContext<
     | {
@@ -149,13 +184,6 @@
     page?.stand(card, !decided);
     return () => page?.stand(card, false);
   });
-  /** The option focus last stood on in this card: Tab's stop among them. */
-  let focusedOption = $state("");
-  /** The option Tab reaches: the one focus last stood on, else the pick, else the first. */
-  const tabStop = $derived(
-    order.includes(focusedOption) ? focusedOption : (chosen[0] ?? order[0])
-  );
-  setContext("decision-stop", () => tabStop);
   /** The chosen options as the head shows them: each with its keycap, its place in the card. */
   const chips = $derived(
     options
@@ -165,12 +193,12 @@
   const decidedLine = $derived(chips.map((chip) => chip.label).join(", "));
   /** The head's chips stand on while they close back into their options (Change). */
   let returning = $state(false);
-  /** The key an option's keycap and label travel under, between its chip and the head. */
+  /** The key an option's chip travels under, between the options and the head. */
   const shareKey = (option: string) => `decision:${id}:${option}`;
-  /** An option's keycap and label run in the grid: what flies to the head and back. */
-  const runOf = (option: string) =>
+  /** An option's chip in the options: what flies to the head and back. */
+  const chipOf = (option: string) =>
     body?.querySelector<HTMLElement>(
-      `[data-option="${CSS.escape(option)}"] > b`
+      `[data-option="${CSS.escape(option)}"]`
     ) ?? null;
 
   let card = $state<HTMLElement>();
@@ -191,13 +219,15 @@
     );
 
   // A press on an option holds the card open: its pick selects and waits
-  // for Continue. Only the person's own press says "Picked": the overlay's
-  // other writes to the page's doc (a pin re-anchored as the card opens)
-  // and a pick from elsewhere say nothing. The press is armed before its
-  // pick is written: the overlay writes on the click at the window, and a
-  // browser's own click runs the microtasks after each listener, so the
-  // pick is drawn before any listener on the card hears the click.
+  // for Continue. Only the person's own press speaks: the overlay's other
+  // writes to the page's doc (a pin re-anchored as the card opens) and a
+  // pick from elsewhere say nothing. The press is armed before its pick is
+  // written: the overlay writes on the click at the window, and a browser's
+  // own click runs the microtasks after each listener, so the pick is drawn
+  // before any listener on the card hears the click.
   let pressed = false;
+  /** What the card held when the press began: a press on it keeps it. */
+  let held: string[] = [];
   let seen = "";
   $effect(() => {
     const now = chosen.join("\n");
@@ -212,118 +242,80 @@
   /** A press on an option, by a key or a pointer, about to write its pick. */
   function arm(key: boolean) {
     pressed = true;
+    held = [...chosen];
     instant = key;
     open = true;
     page?.work(id);
   }
+  /** The option a press on its chip or its words is for, if any. */
+  const optionAt = (event: Event): string | null => {
+    const at = (event.target as Element | null)?.closest(
+      "[data-option], [data-option-for]"
+    );
+    return (
+      at?.getAttribute("data-option") ??
+      at?.getAttribute("data-option-for") ??
+      null
+    );
+  };
   $effect(() => {
     const group = body;
     if (!group) {
       return;
     }
-    const onOption = (event: Event) =>
-      !!(event.target as Element | null)?.closest("[data-option]");
     const pointed = (event: Event) => {
-      if (onOption(event)) {
+      if (optionAt(event) !== null) {
         arm(false);
       }
     };
+    // Space and an option's digit pick (the group presses the option); armed
+    // here, in capture, before the group's own keys run.
+    const keyed = (event: KeyboardEvent) => {
+      const target = event.target as Element | null;
+      if (
+        decided ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        !target?.closest("[data-option]")
+      ) {
+        return;
+      }
+      if (event.key === " " || (event.key >= "1" && event.key <= "9")) {
+        arm(true);
+      }
+    };
     // A press that wrote no pick (a drag off the option) arms nothing past
-    // its click; a task later, after the pick's own effects have run.
-    const disarm = (event: Event) => {
-      if (onOption(event)) {
-        setTimeout(() => {
-          pressed = false;
-        });
-        if (instant) {
-          afterInstant();
-        }
+    // its click; a task later, after the pick's own effects have run. A
+    // press on the one chosen option of a one-pick card keeps it.
+    const clicked = (event: Event) => {
+      const option = optionAt(event);
+      if (option === null) {
+        return;
+      }
+      if (pressed && !multiple && held.length === 1 && held[0] === option) {
+        const label = options.find((one) => one.id === option)?.label;
+        page?.say(`Kept ${label ?? option}`);
+      }
+      setTimeout(() => {
+        pressed = false;
+      });
+      if (instant) {
+        afterInstant();
       }
     };
-    const stood = (event: FocusEvent) => {
-      const option = (event.target as Element | null)?.closest("[data-option]");
-      if (option) {
-        focusedOption = option.getAttribute("data-option") ?? "";
-      }
-      page?.work(id);
-    };
+    const stood = () => page?.work(id);
     group.addEventListener("pointerdown", pointed, true);
-    group.addEventListener("click", disarm, true);
+    group.addEventListener("keydown", keyed, true);
+    group.addEventListener("click", clicked, true);
     group.addEventListener("focusin", stood);
-    // The card's keys, heard as they bubble from its options (`keyed`).
-    group.addEventListener("keydown", keyed);
     return () => {
       group.removeEventListener("pointerdown", pointed, true);
-      group.removeEventListener("click", disarm, true);
+      group.removeEventListener("keydown", keyed, true);
+      group.removeEventListener("click", clicked, true);
       group.removeEventListener("focusin", stood);
-      group.removeEventListener("keydown", keyed);
     };
   });
-
-  /** The arrows' steps through a card's options: back or on, across or down. */
-  const STEPS: Record<string, number> = {
-    ArrowDown: 1,
-    ArrowLeft: -1,
-    ArrowRight: 1,
-    ArrowUp: -1,
-  };
-  const DIGIT = /^[1-9]$/;
-  /** Whether `target` takes typing: a digit, Space or Enter there is a letter. */
-  const takesTyping = (target: Element) =>
-    (target instanceof HTMLElement && target.isContentEditable) ||
-    ["INPUT", "TEXTAREA", "SELECT"].includes(target.tagName);
-  const optionEls = () => [
-    ...(body?.querySelectorAll<HTMLButtonElement>(
-      "[data-option]:not(:disabled)"
-    ) ?? []),
-  ];
-
-  /**
-   * The card's keys, heard while focus is in it: the arrows move focus
-   * among its options and never pick; Space on an option picks it (the
-   * button's own click) and an option's digit picks that option; Enter on
-   * an option continues once the card holds a pick, and never picks.
-   */
-  function keyed(event: KeyboardEvent) {
-    const target = event.target as Element | null;
-    if (
-      decided ||
-      event.defaultPrevented ||
-      event.altKey ||
-      event.ctrlKey ||
-      event.metaKey ||
-      !target ||
-      takesTyping(target)
-    ) {
-      return;
-    }
-    const option = target.closest<HTMLElement>("[data-option]");
-    const step = STEPS[event.key];
-    if (option && step) {
-      event.preventDefault();
-      const all = optionEls();
-      const at = all.indexOf(option as HTMLButtonElement);
-      all[(at + step + all.length) % all.length]?.focus();
-    } else if (option && event.key === "Enter") {
-      // The button's own Enter would click it, a pick: it continues instead.
-      event.preventDefault();
-      if (pick.picked) {
-        proceed("key");
-      }
-    } else if (option && event.key === " ") {
-      arm(true);
-    } else if (DIGIT.test(event.key)) {
-      const named = body?.querySelector<HTMLButtonElement>(
-        `[data-option="${CSS.escape(order[Number(event.key) - 1] ?? "")}"]:not(:disabled)`
-      );
-      if (named) {
-        event.preventDefault();
-        arm(true);
-        named.focus();
-        named.click();
-      }
-    }
-  }
 
   /** Continue: the card folds to its decided line, said with the count. */
   function proceed(by: "key" | "pointer") {
@@ -351,12 +343,13 @@
     );
   }
 
-  /** Where focus goes once the card has folded: the next open card's first option, else Send. */
+  /** Where focus goes once the card has folded: the next open card's option that holds its tab stop, else Send. */
   function nextStop(from: HTMLElement): HTMLElement | null {
     const [next] = openCardsAfter(from);
     return (
-      next?.querySelector<HTMLElement>("[data-option]:not(:disabled)") ??
-      document.querySelector<HTMLElement>(".dp-send:not(:disabled)")
+      next?.querySelector<HTMLElement>(
+        '[data-option][tabindex="0"]:not(:disabled)'
+      ) ?? document.querySelector<HTMLElement>("[data-send]:not(:disabled)")
     );
   }
 
@@ -394,16 +387,9 @@
     if (next) {
       to = top(cards.indexOf(next) === cards.indexOf(from) + 1 ? from : next);
     } else {
-      const foot = document.querySelector(".dp-done");
-      if (foot) {
-        to = Math.max(
-          to,
-          foot.getBoundingClientRect().bottom +
-            scroller.scrollTop +
-            gap -
-            scroller.clientHeight
-        );
-      }
+      // Send in view: the page's foot stands sticky at the window's foot, so
+      // the page's end is what has to come into view.
+      to = scroller.scrollHeight - scroller.clientHeight;
     }
     const most = scroller.scrollHeight - scroller.clientHeight;
     [node.style.height, node.style.marginBottom, node.style.overflow] = was;
@@ -413,8 +399,8 @@
 
   // The card as it stands before it turns, read before the page changes:
   // its padding (a decided card is slimmer), its head's height and the
-  // margin under it (the decided line may wrap to more lines than the state
-  // line, or fewer; a turn under way holds the difference in that margin),
+  // margin under it (the decided line may wrap to more lines than the open
+  // head, or fewer; a turn under way holds the difference in that margin),
   // where the head's chosen options and Change stand in the card, and
   // whether focus was in it.
   let padFrom = "";
@@ -425,9 +411,9 @@
   let wasDecided = false;
   const headOf = (box: HTMLElement) =>
     box.querySelector("header")?.getBoundingClientRect().height ?? 0;
-  /** The parts of the head that leave it as the card opens: its chosen options and Change. */
+  /** The parts of the head that leave it as the card opens: its decided line. */
   const leavingParts = (box: HTMLElement) => [
-    ...box.querySelectorAll<HTMLElement>("header :is(.dp-picks, .dp-change)"),
+    ...box.querySelectorAll<HTMLElement>("header [data-leaves]"),
   ];
   $effect.pre(() => {
     if (decided !== wasDecided && card) {
@@ -446,13 +432,13 @@
         };
       });
       hadFocus = card.contains(document.activeElement);
-      // A pointer's pick: each chosen option's run departs from its chip,
-      // hidden while its copy flies to the head (motion/share).
+      // A pointer's Continue: each chosen option's chip departs from the
+      // options, hidden while its copy flies to the head (motion/share).
       if (decided && acted === "pointer") {
         for (const chip of chips) {
-          const run = runOf(chip.id);
-          if (run) {
-            departBox(shareKey(chip.id), run, false);
+          const source = chipOf(chip.id);
+          if (source) {
+            departBox(shareKey(chip.id), source, false);
           }
         }
       }
@@ -460,9 +446,9 @@
   });
 
   /**
-   * Change: each head chip closes back into its option's run on the fold's
-   * clock (motion/share `closeInto`), the run hidden until it lands, so the
-   * screen shows one of each; then the head lets them go.
+   * Change: each head chip closes back into its option's chip on the fold's
+   * clock (motion/share `closeInto`), the option's chip hidden until it
+   * lands, so the screen shows one of each; then the head lets them go.
    */
   function closeBack(box: HTMLElement, ms: number, easing: string) {
     if (!returning) {
@@ -470,7 +456,7 @@
     }
     if (!motionOk.current) {
       // Flights do not fly (DESIGN.md L517): the chosen options and Change
-      // fade where they stand (page.css, `data-leaving`), and go once faded.
+      // fade where they stand (`data-leaving`), and go once faded.
       const fades = leavingParts(box).flatMap((part) =>
         part.getAnimations({ subtree: true })
       );
@@ -482,7 +468,7 @@
     const flights = [
       ...box.querySelectorAll<HTMLElement>("header [data-pick]"),
     ].flatMap((chip) => {
-      const target = runOf(chip.dataset.pick ?? "");
+      const target = chipOf(chip.dataset.pick ?? "");
       const flight = target ? closeInto(chip, target, ms, easing) : undefined;
       if (!(target && flight)) {
         return [];
@@ -504,10 +490,10 @@
   let stopRide: (() => void) | undefined;
 
   /**
-   * The head's chosen options and Change, opening: each stands out of the
-   * head's flow where it was drawn while it leaves (the options flying home,
-   * Change fading), so the head takes its open height from the turn's first
-   * frame and never jumps when they go. Shutting, they stand in it again.
+   * The head's decided line, opening: it stands out of the head's flow
+   * where it was drawn while it leaves (the chips flying home, Change
+   * fading), so the head takes its open height from the turn's first frame
+   * and never jumps when they go. Shutting, it stands in it again.
    */
   function standAside(box: HTMLElement, opening: boolean) {
     const edge = getComputedStyle(box);
@@ -600,7 +586,7 @@
       landFold(node, !shut, { fade: true, gap });
       // Focus in a card shut by a pick from elsewhere goes to its Change.
       if (turned && shut && hadFocus) {
-        box.querySelector<HTMLElement>(".dp-change")?.focus();
+        box.querySelector<HTMLElement>("[data-change]")?.focus();
       }
       return;
     }
@@ -624,11 +610,14 @@
   });
 
   /**
-   * A keyboard's press on Change or Continue: a click with no pointer behind it
-   * (UI Events: a click's `detail` counts the pointer's presses, 0 for a key).
+   * A keyboard's press on Change, Continue or the note's buttons: a click
+   * with no pointer behind it (UI Events: a click's `detail` counts the
+   * pointer's presses, 0 for a key).
    */
+  const pressBy = (event: MouseEvent) =>
+    event.detail === 0 ? "key" : "pointer";
   const turnedBy = (event: MouseEvent) => {
-    const key = event.detail === 0;
+    const key = pressBy(event) === "key";
     acted = key ? "key" : "pointer";
     instant = key;
     moving = !key;
@@ -636,8 +625,6 @@
       afterInstant();
     }
   };
-  const pressBy = (event: MouseEvent) =>
-    event.detail === 0 ? "key" : "pointer";
 
   /** Opens the card again, focus on its first picked option. */
   async function reopen(event: MouseEvent) {
@@ -647,11 +634,7 @@
     returning = acted === "pointer";
     open = true;
     await tick();
-    body
-      ?.querySelector<HTMLElement>(
-        `[data-option="${CSS.escape(chosen[0] ?? "")}"]`
-      )
-      ?.focus({ preventScroll: true });
+    chipOf(chosen[0] ?? "")?.focus({ preventScroll: true });
   }
 
   const stored = $derived(picks.now[id]?.note ?? "");
@@ -676,100 +659,241 @@
       }
     }, 700);
   }
+
+  /** What the note is for, in the program's words, else a note. */
+  const noteFor = $derived(props.note ? String(props.note) : "a note");
+  /** The note stands open: asked for, or written. */
+  let noteAsked = $state(false);
+  const noteOpen = $derived(noteAsked || stored !== "");
+  let noteAdd = $state<HTMLDivElement>();
+  let noteField = $state<HTMLDivElement>();
+  let field = $state<HTMLTextAreaElement | null>(null);
+  let noteKey = false;
+  let noteFirst = true;
+  // "Add a note" and the field fold on one clock, the field opening over
+  // --dur-pop and shutting over --dur-exit (The Fast Exit Rule), the card's
+  // height tween following them (motion/morph); a key's press lands at once.
+  $effect(() => {
+    const shown = noteOpen;
+    const add = noteAdd;
+    const fieldBox = noteField;
+    if (!(add && fieldBox)) {
+      return;
+    }
+    if (noteFirst || noteKey) {
+      noteFirst = false;
+      noteKey = false;
+      landFold(add, !shown, { fade: true });
+      landFold(fieldBox, shown, { fade: true });
+      return;
+    }
+    const clock = {
+      ms: dur(shown ? "--dur-pop" : "--dur-exit"),
+      easing: ease("--ease-out"),
+      fade: true,
+    };
+    fold(add, !shown, clock);
+    fold(fieldBox, shown, clock);
+  });
+  async function askNote(event: MouseEvent) {
+    noteKey = pressBy(event) === "key";
+    noteAsked = true;
+    await tick();
+    field?.focus({ preventScroll: true });
+  }
+  /** Edit mark on the decided line: the card opens with its note in hand. */
+  async function editNote(event: MouseEvent) {
+    await reopen(event);
+    noteAsked = true;
+    await tick();
+    field?.focus({ preventScroll: true });
+  }
+  async function noteDone(event: MouseEvent) {
+    noteKey = pressBy(event) === "key";
+    noteAsked = false;
+    await tick();
+    if (!noteOpen) {
+      noteAdd?.querySelector<HTMLElement>("button")?.focus();
+    }
+  }
 </script>
 
 <article
   bind:this={card}
   {@attach morph({ still: () => instant })}
-  class="dp-card"
+  class="group/card relative flex min-w-0 scroll-mt-space-4 flex-col gap-space-5 rounded-panel bg-surface-raised p-space-5 shadow-tile coarse:p-space-4 data-decided:py-space-3"
   data-cawco-choice={id}
   data-cawco-multiple={multiple ? "" : undefined}
   data-decided={decided ? "" : undefined}
   data-instant={instant ? "" : undefined}
   data-moving={moving ? "" : undefined}
+  data-slot="decision"
   id={`decision-${id}`}
 >
-  <header>
-    <h2>{question}</h2>
-    <!-- One slot: the state line leaves it as the chosen options land in it. -->
-    <span class="dp-slot">
-      <span aria-hidden={decided ? "true" : undefined} class="dp-state"
-        >{stateLine}</span
-      >
-      {#if decided || returning}
-        <!-- biome-ignore lint/a11y/useSemanticElements: a mark of the pick, named for a screen reader; no control is inside it. -->
-        <span
-          aria-label={`Decided: ${decidedLine}`}
-          class="dp-picks"
-          data-leaving={decided ? undefined : ""}
-          role="group"
-        >
-          {#each chips as chip (chip.id)}
-            <span
-              {@attach land(() => (decided ? shareKey(chip.id) : undefined), {
-                mode: "grow",
-                anchor: "b",
-                now: true,
-                ms: dur("--dur-settle"),
-                easing: ease("--ease-crossfade"),
-              })}
-              aria-hidden="true"
-              class="dp-pick"
-              data-pick={chip.id}
-              ><b
-                ><span class="dp-kc">{chip.keycap}</span><span
-                  >{chip.label}</span
-                ></b
-              ></span
-            >
-          {/each}
-        </span>
-      {/if}
-    </span>
+  <header
+    class="flex min-w-0 flex-wrap items-start gap-x-space-3 gap-y-space-2"
+    data-slot="decision-head"
+  >
+    <h2
+      class="type-title min-w-0 flex-1 basis-c-decision-question-basis text-balance text-ink-strong wrap-anywhere"
+    >
+      {question}
+    </h2>
     {#if decided || returning}
-      <!-- Opening, Change fades out where it stood while the chosen options fly home. -->
-      <button
-        class="dp-change"
+      <!-- The decided line: the chosen options' chips, then Change, centred on the question's first line. Opening, the chips fly home and Change fades where it stood; with reduced motion the chips fade too. -->
+      <div
+        class="mark-cell type-title"
+        data-leaves
         data-leaving={decided ? undefined : ""}
-        inert={!decided}
-        onclick={reopen}
-        type="button">Change</button
       >
+        <div class="flex items-center gap-space-2">
+          <!-- biome-ignore lint/a11y/useSemanticElements: a mark of the pick, named for a screen reader; no control is inside it. -->
+          <span
+            aria-label={`Decided: ${decidedLine}`}
+            class="flex flex-wrap items-center gap-space-2 motion-reduce:transition-opacity motion-reduce:duration-(--dur-fade) motion-reduce:ease-out motion-reduce:in-data-leaving:opacity-0 motion-reduce:starting:opacity-0 group-data-instant/card:transition-none"
+            data-slot="decided"
+            role="group"
+          >
+            {#each chips as chip (chip.id)}
+              <span
+                {@attach land(() => (decided ? shareKey(chip.id) : undefined), {
+                  mode: "grow",
+                  now: true,
+                  ms: dur("--dur-settle"),
+                  easing: ease("--ease-crossfade"),
+                })}
+                aria-hidden="true"
+                class={chipVariants({ variant: "option" })}
+                data-chosen
+                data-pick={chip.id}
+                ><Kbd data-box look="keycap">{chip.keycap}</Kbd><span
+                  class="min-w-0 wrap-anywhere">{chip.label}</span
+                ></span
+              >
+            {/each}
+          </span>
+          <span
+            class="transition-opacity duration-(--dur-settle) ease-crossfade in-data-leaving:opacity-0 group-data-moving/card:starting:opacity-0 motion-reduce:duration-(--dur-fade) motion-reduce:ease-out group-data-instant/card:transition-none"
+          >
+            <Button
+              data-change
+              inert={!decided}
+              onclick={reopen}
+              size="sm"
+              variant="ghost">Change</Button
+            >
+          </span>
+        </div>
+      </div>
+      {#if stored}
+        <p
+          class="flex min-w-0 basis-full items-center gap-space-1 transition-opacity duration-(--dur-settle) ease-crossfade data-leaving:opacity-0 group-data-instant/card:transition-none motion-reduce:duration-(--dur-fade)"
+          data-leaves
+          data-leaving={decided ? undefined : ""}
+          data-slot="decided-note"
+        >
+          <q class="type-meta min-w-0 text-ink-muted wrap-anywhere">{stored}</q>
+          <Button
+            aria-label="Edit the note"
+            inert={!decided}
+            onclick={editNote}
+            size="icon-xs"
+            variant="ghost"><IconPen /></Button
+          >
+        </p>
+      {/if}
     {/if}
   </header>
-  <div bind:this={body} class="dp-body" inert={decided}>
-    {#if props.why}<p class="dp-why">{String(props.why)}</p>{/if}
+  <div
+    bind:this={body}
+    class="@container flex min-w-0 flex-col gap-space-5"
+    data-slot="decision-body"
+    inert={decided}
+  >
+    {#if props.why}
+      <p
+        class="type-body max-w-c-measure text-pretty text-ink-muted wrap-anywhere"
+        data-slot="why"
+      >
+        {String(props.why)}
+      </p>
+    {/if}
     {#if Array.isArray(props.media) && props.media.length > 0}
-      <div class={["dp-show", props.media.length !== 2 && "solo"]}>
+      <!-- Two media side by side in equal columns once the card's body holds two at a readable width; one, or three and more, one under another. -->
+      <div
+        class={[
+          "grid min-w-0 grid-cols-1 gap-space-3",
+          props.media.length === 2 && "@media-split:grid-cols-2",
+        ]}
+        data-slot="decision-media"
+      >
         {@render renderNode(props.media)}
       </div>
     {/if}
-    <!-- biome-ignore lint/a11y/useSemanticElements: the kit's option grid (page.css .dp-opts); a fieldset's legend would say the question twice. -->
-    <div aria-label={question} class="dp-opts" role="group">
-      {@render renderNode(props.options)}
-    </div>
-    <label class="dp-note"
-      >Note<textarea
-        bind:value={note}
-        disabled={!bridge()}
-        oninput={typed}
-        onblur={() => {
-          typing = false;
-        }}
-        placeholder="Anything to add"
-        rows="1"></textarea></label
+    <OptionGroup
+      aria-label={question}
+      bind:value={() => chosen, () => undefined}
+      class="w-full"
+      disabled={!bridge()}
+      {multiple}
+      onenter={() => {
+        if (pick.picked) {
+          proceed("key");
+        }
+      }}
     >
+      <div
+        class="grid w-full min-w-0 grid-cols-fit-c-decision-option-min gap-space-3"
+        data-slot="options"
+      >
+        {@render renderNode(props.options)}
+      </div>
+    </OptionGroup>
+    <div data-slot="note">
+      <div bind:this={noteAdd}>
+        <Button
+          disabled={!bridge()}
+          onclick={askNote}
+          size="sm"
+          variant="ghost">Add {noteFor}</Button
+        >
+      </div>
+      <div bind:this={noteField}>
+        <div class="flex flex-col gap-space-2">
+          <div class="flex items-center justify-between gap-space-2">
+            <label class="type-label text-ink-muted" for={`note-${id}`}
+              >Note</label
+            >
+            <Button onclick={noteDone} size="sm" variant="ghost">Done</Button>
+          </div>
+          <Textarea
+            bind:ref={field}
+            bind:value={note}
+            disabled={!bridge()}
+            id={`note-${id}`}
+            onblur={() => {
+              typing = false;
+            }}
+            oninput={typed}
+            placeholder={props.note ? String(props.note) : "Anything to add"}
+            rows={1}
+          />
+        </div>
+      </div>
+    </div>
     {#if pick.picked}
       <!-- Continue grows out of the card's foot on its height tween (morph) and folds shut with the body. -->
-      <div class="dp-foot">
-        <button
+      <div
+        class="flex justify-end group-data-instant/card:transition-none motion-safe:transition-opacity motion-safe:duration-(--dur-morph) motion-safe:ease-drawer motion-safe:starting:opacity-0 motion-reduce:transition-opacity motion-reduce:duration-(--dur-fade) motion-reduce:starting:opacity-0"
+        data-slot="decision-foot"
+      >
+        <Button
           aria-keyshortcuts="Enter"
-          class="dp-continue"
-          data-quiet={page && page.working() !== id ? "" : undefined}
-          onclick={(event) => proceed(pressBy(event))}
-          type="button"
-          ><span>Continue</span><span aria-hidden="true" class="dp-kc">↵</span
-          ></button
+          data-continue
+          onclick={(event: MouseEvent) => proceed(pressBy(event))}
+          size={coarse.current ? "lg" : "default"}
+          variant={page && page.working() !== id ? "outline" : "default"}
+          >Continue<Kbd aria-hidden="true">↵</Kbd></Button
         >
       </div>
     {/if}

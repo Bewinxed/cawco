@@ -8,6 +8,7 @@
  * Excalidraw's and canvas.css, is no import of this module's: Lightning CSS
  * compiles it (core canvas-host.ts `SHEETS`), and index.html links it.
  */
+import { CANVAS_EMBED_SIZE } from "@cawco/core/stage";
 import { Excalidraw } from "@excalidraw/excalidraw";
 import type { ExcalidrawElement } from "@excalidraw/excalidraw/element/types";
 import type {
@@ -36,7 +37,13 @@ import { Icon } from "./icons";
 import { guardImages } from "./images";
 import { tokenMs } from "./motion";
 import { Rail } from "./rail";
-import { bindScene, type CanvasInk, fitScene, tokenHex } from "./scene";
+import {
+  bindScene,
+  type CanvasInk,
+  fitScene,
+  sceneBox,
+  tokenHex,
+} from "./scene";
 
 declare global {
   interface Window {
@@ -252,6 +259,46 @@ const loaded = (api: ExcalidrawImperativeAPI): Promise<void> =>
     });
   });
 
+/**
+ * Embedded, the canvas is the frame of its drawing: it tells the page that
+ * holds it the drawing's shape (`sceneBox`, its size at zoom 1 with the
+ * fitted view's margin) as Preview's component canvases tell theirs
+ * (`CANVAS_EMBED_SIZE`), on load and whenever the drawing changes, and
+ * stands the drawing fitted to the frame the page sizes from it (decisions
+ * /host Canvas.svelte), again whenever that frame changes size. Only an
+ * element's change or the view's own size moves it, never a scroll or a zoom
+ * of its own, so a fit never answers itself.
+ */
+function tellShape(api: ExcalidrawImperativeAPI): () => void {
+  let told = "";
+  let versions = -1;
+  let view = "";
+  const tell = () => {
+    const box = sceneBox(api);
+    const said = box ? `${box.width} ${box.height}` : "";
+    if (box && said !== told) {
+      told = said;
+      postToHost({
+        type: CANVAS_EMBED_SIZE,
+        width: box.width,
+        height: box.height,
+        margin: box.margin,
+      });
+    }
+    fitScene(api);
+  };
+  tell();
+  return api.onChange((elements, state) => {
+    const now = elements.reduce((sum, el) => sum + el.version, 0);
+    const size = `${state.width} ${state.height}`;
+    if (now !== versions || size !== view) {
+      versions = now;
+      view = size;
+      tell();
+    }
+  });
+}
+
 function Empty({ onDraw }: { onDraw: () => void }) {
   return (
     <div className="canvas-empty">
@@ -385,6 +432,7 @@ function Host() {
     }
     let bound: ReturnType<typeof bindScene> | null = null;
     let gone = false;
+    let stopTelling: (() => void) | undefined;
     // The host asks for the picture before it sends or folds the canvas.
     const asked = async (event: MessageEvent) => {
       if (!heardFromHost(event) || event.data?.type !== "cawco:picture") {
@@ -401,7 +449,9 @@ function Host() {
         ink,
         dark: () => schemeStore.now() === "dark",
       });
-      if (fitted.current === false) {
+      if (EMBEDDED) {
+        stopTelling = tellShape(api);
+      } else if (fitted.current === false) {
         fitted.current = true;
         fitScene(api);
       }
@@ -410,6 +460,7 @@ function Host() {
     return () => {
       gone = true;
       window.removeEventListener("message", asked);
+      stopTelling?.();
       bound?.destroy();
     };
   }, [api, generation, ink]);

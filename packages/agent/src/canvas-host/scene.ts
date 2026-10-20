@@ -551,37 +551,71 @@ const FIT_MARGIN = 32;
 const FIT_ZOOM = { min: 0.25, max: 1.5 };
 
 /**
- * Fits the drawing to the view when the canvas opens: its box centred with
- * {@link FIT_MARGIN} round it, the zoom held to {@link FIT_ZOOM}; the view
- * moves, never an element. An empty canvas stays at the origin, zoom 1.
+ * A drawing's box: its centre in scene units, and its size drawn at zoom 1
+ * with the room a fitted view keeps round it (`margin`, view px at any zoom)
+ * included each side.
  */
-export const fitScene = (api: ExcalidrawImperativeAPI): void => {
+export interface SceneBox {
+  cx: number;
+  cy: number;
+  height: number;
+  margin: number;
+  width: number;
+}
+
+/**
+ * The drawing's box: every element's bounds, with {@link FIT_MARGIN} round
+ * them, the room a drawing fitted to a view keeps (`fitScene`); null for an
+ * empty canvas. The one reading of a drawing's shape: the view fits it, and
+ * an embedded canvas tells its frame its shape by it (host.tsx).
+ */
+export const sceneBox = (api: ExcalidrawImperativeAPI): SceneBox | null => {
   const boxes = api
     .getSceneElements()
     .map((el) => boxOf(el as Parameters<typeof boxOf>[0]));
   if (boxes.length === 0) {
-    return;
+    return null;
   }
   const left = Math.min(...boxes.map((box) => box.x));
   const top = Math.min(...boxes.map((box) => box.y));
   const right = Math.max(...boxes.map((box) => box.x + box.width));
   const bottom = Math.max(...boxes.map((box) => box.y + box.height));
+  return {
+    cx: (left + right) / 2,
+    cy: (top + bottom) / 2,
+    width: Math.max(1, right - left) + 2 * FIT_MARGIN,
+    height: Math.max(1, bottom - top) + 2 * FIT_MARGIN,
+    margin: FIT_MARGIN,
+  };
+};
+
+/**
+ * Fits the drawing to the view: its box ({@link sceneBox}, the margin round
+ * it) centred, the zoom held to {@link FIT_ZOOM}; the view moves, never an
+ * element. An empty canvas stays at the origin, zoom 1.
+ */
+export const fitScene = (api: ExcalidrawImperativeAPI): void => {
+  const box = sceneBox(api);
+  if (!box) {
+    return;
+  }
   const { width, height } = api.getAppState();
+  const room = 2 * box.margin;
   const zoom = Math.min(
     FIT_ZOOM.max,
     Math.max(
       FIT_ZOOM.min,
       Math.min(
-        (width - 2 * FIT_MARGIN) / Math.max(1, right - left),
-        (height - 2 * FIT_MARGIN) / Math.max(1, bottom - top)
+        (width - room) / (box.width - room),
+        (height - room) / (box.height - room)
       )
     )
   );
   api.updateScene({
     appState: {
       zoom: { value: zoom as AppState["zoom"]["value"] },
-      scrollX: width / (2 * zoom) - (left + right) / 2,
-      scrollY: height / (2 * zoom) - (top + bottom) / 2,
+      scrollX: width / (2 * zoom) - box.cx,
+      scrollY: height / (2 * zoom) - box.cy,
     },
     captureUpdate: CaptureUpdateAction.NEVER,
   });

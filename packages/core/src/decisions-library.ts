@@ -201,6 +201,10 @@ export const decisionLibrary = <C>(
           "Its design, drawn live under its pick, which the person can operate."
         ),
       cost: z.string().optional().describe("What it costs them, in one line."),
+      current: z
+        .boolean()
+        .optional()
+        .describe("What stands today: its card shows it as Current."),
     })
   );
   const Decision = define(
@@ -230,6 +234,12 @@ export const decisionLibrary = <C>(
         .boolean()
         .optional()
         .describe("Several options may be picked."),
+      note: z
+        .string()
+        .optional()
+        .describe(
+          'What the note is for, in the person\'s words ("a reason for the rollback"): its button reads "Add <note>" and its field asks for it.'
+        ),
     })
   );
   const Section = define(

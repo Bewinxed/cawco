@@ -20,7 +20,7 @@
  * DialKit with the kit's dials.js, loaded only by a page that has Dials.
  */
 import { mkdir, readFile, rm } from "node:fs/promises";
-import { join, normalize } from "node:path";
+import { dirname, join, normalize, resolve } from "node:path";
 import { SveltePlugin } from "bun-plugin-svelte";
 import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
@@ -38,6 +38,27 @@ const KIT_DIR = new URL("../../hub/skills/decision-page/kit/", import.meta.url)
   .pathname;
 /** Where the page loads the bundle's chunks and files from, on any preview origin. */
 const PUBLIC_PATH = "/__cawco/decision/";
+
+const RAW = /\?raw$/;
+
+/**
+ * Vite's `?raw` import, which the kit's class merging reads the token theme
+ * by (lib/utils.ts): the file's text as its default export, as Bun's text
+ * loader gives one.
+ */
+const rawImports: Bun.BunPlugin = {
+  name: "raw imports",
+  setup(build) {
+    build.onResolve({ filter: RAW }, ({ path, importer }) => ({
+      path: resolve(dirname(importer), path.replace(RAW, "")),
+      namespace: "raw",
+    }));
+    build.onLoad({ filter: /.*/, namespace: "raw" }, async ({ path }) => ({
+      contents: await readFile(path, "utf8"),
+      loader: "text",
+    }));
+  },
+};
 
 /** The core package's own folder: unplugin-icons finds its icon sets (`@iconify-json/*`) from it. */
 const CORE_DIR = new URL("../", import.meta.url).pathname;
@@ -57,17 +78,134 @@ async function iconsPlugin(): Promise<Bun.BunPlugin> {
     import("unplugin-icons"),
     import("svelte/compiler"),
   ]);
-  return icons.bun({
-    collectionsNodeResolvePath: CORE_DIR,
-    compiler: {
-      extension: "js",
-      compiler: (svg: string) => {
-        const open = svg.indexOf(">", svg.indexOf("<svg "));
-        const component = `<script>const{...p}=$props()</script>${svg.slice(0, open)} {...p}>${svg.slice(open + 1)}`;
-        return compile(component, { generate: "client", dev: false }).js.code;
+  return iconIdsOnly(
+    icons.bun({
+      collectionsNodeResolvePath: CORE_DIR,
+      compiler: {
+        extension: "js",
+        compiler: (svg: string) => {
+          const open = svg.indexOf(">", svg.indexOf("<svg "));
+          const component = `<script>const{...p}=$props()</script>${svg.slice(0, open)} {...p}>${svg.slice(open + 1)}`;
+          return compile(component, { generate: "client", dev: false }).js
+            .code;
+        },
       },
+    })
+  );
+}
+
+/** bun-plugin-svelte's namespace for a component's styles: `import "bun-svelte:<name>.css"`, which it appends to the component's JS. */
+const SVELTE_STYLES = "bun-svelte";
+
+/**
+ * bun-plugin-svelte, with each component's styles kept out of Bun's CSS
+ * bundler and put in `styles` instead, Bun getting an empty module in their
+ * place. The host's components and the kit's draw in utilities and carry
+ * none (the cutover's style checks hold them to it); what arrives is a
+ * library's own sheet (bits-ui's, reached through the kit's checkbox), which
+ * the host's sheet puts in the libraries' layer, as the dashboard's build
+ * does (vite.config.ts `vendorComponentSheets`). Pinned to the plugin
+ * version it was read in (0.0.6, src/index.ts); one that loads them
+ * otherwise fails the build here.
+ */
+function svelteStylesApart(styles: string[]): Bun.BunPlugin {
+  const plugin = SveltePlugin({ development: false });
+  return {
+    name: `${plugin.name}, styles apart`,
+    setup(build) {
+      let taken = false;
+      const builder: Bun.PluginBuilder = new Proxy(build, {
+        get(target, key, receiver) {
+          if (key === "onLoad") {
+            return (
+              options: Bun.PluginConstraints,
+              load: Parameters<Bun.PluginBuilder["onLoad"]>[1]
+            ) => {
+              if (options.namespace !== SVELTE_STYLES) {
+                target.onLoad(options, load);
+                return builder;
+              }
+              taken = true;
+              target.onLoad(options, async (args) => {
+                const loaded = await load(args);
+                if (
+                  !(loaded && "contents" in loaded) ||
+                  typeof loaded.contents !== "string"
+                ) {
+                  throw new Error(
+                    `bun-plugin-svelte loaded ${args.path} without its CSS as text: read its src/index.ts again`
+                  );
+                }
+                styles.push(loaded.contents);
+                return { contents: "", loader: "js" };
+              });
+              return builder;
+            };
+          }
+          const value = Reflect.get(target, key, receiver);
+          return typeof value === "function"
+            ? (...args: unknown[]) => {
+                const returned = value.apply(target, args);
+                return returned === target ? builder : returned;
+              }
+            : value;
+        },
+      });
+      plugin.setup(builder);
+      if (!taken) {
+        throw new Error(
+          `bun-plugin-svelte registered no loader in the "${SVELTE_STYLES}" namespace: read its src/index.ts again`
+        );
+      }
     },
-  });
+  };
+}
+
+/** The module ids unplugin-icons answers: `~icons/<set>/<name>` (and its `virtual:` form). */
+const ICON_ID = /^(?:~|virtual:)icons\//;
+
+/**
+ * unplugin's Bun adapter (3.4.0, `getBunPlugin`) hears every module: it
+ * registers `onResolve` and a `file`-namespace `onLoad` with `filter: /.*\/`
+ * whatever its plugin answers, and Bun 1.4.3 panics ("index out of bounds:
+ * the len is 0 but the index is 0") once such an `onLoad` meets a file it
+ * loads as a file (a Caw still, `.webp`). unplugin-icons resolves its own ids
+ * alone and loads them in its own namespace, so its resolver is registered
+ * for those ids and its `file` loader, which loads nothing, is left out.
+ */
+function iconIdsOnly(plugin: Bun.BunPlugin): Bun.BunPlugin {
+  return {
+    name: plugin.name,
+    setup(build) {
+      const narrowed: Bun.PluginBuilder = new Proxy(build, {
+        get(target, key, receiver) {
+          if (key === "onResolve") {
+            return (
+              options: Bun.PluginConstraints,
+              resolve: Parameters<Bun.PluginBuilder["onResolve"]>[1]
+            ) => {
+              target.onResolve({ ...options, filter: ICON_ID }, resolve);
+              return narrowed;
+            };
+          }
+          if (key === "onLoad") {
+            return (
+              options: Bun.PluginConstraints,
+              load: Parameters<Bun.PluginBuilder["onLoad"]>[1]
+            ) => {
+              if ((options.namespace ?? "file") !== "file") {
+                target.onLoad(options, load);
+              }
+              return narrowed;
+            };
+          }
+          const value = Reflect.get(target, key, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+      return plugin.setup(narrowed);
+    },
+  };
 }
 
 /**
@@ -90,11 +228,12 @@ async function tailwindHostSheet(): Promise<string> {
 
 /**
  * Builds the host's files, by name: Bun's bundle of its JS, Svelte
- * compiled for the browser in production mode, and `host.css`. A host
- * component draws in utilities only: a `<style>` of its own would reach
- * Bun's CSS bundler, which `pageFiles` refuses.
+ * compiled for the browser in production mode, and `host.css`: the house's
+ * sheet, then the libraries' component styles in their layer. Every style
+ * rule in it stands in a layer, or the build fails.
  */
 export async function buildDecisionHost(): Promise<Map<string, Blob>> {
+  const vendor: string[] = [];
   const result = await bundled("The decision host", {
     entrypoints: [join(HOST_DIR, "host.ts")],
     target: "browser",
@@ -103,8 +242,9 @@ export async function buildDecisionHost(): Promise<Map<string, Blob>> {
     minify: true,
     conditions: ["browser", "production"],
     plugins: [
+      rawImports,
       await iconsPlugin(),
-      SveltePlugin({ development: false }),
+      svelteStylesApart(vendor),
       agentReact,
     ],
     define: { "process.env.NODE_ENV": '"production"' },
@@ -121,6 +261,10 @@ export async function buildDecisionHost(): Promise<Map<string, Blob>> {
   await refuseSchemeLowering("The decision host", result.outputs);
   const css = await compileSheets([
     { name: HOST_CSS, css: await tailwindHostSheet() },
+    {
+      name: "cawco:vendor-components.css",
+      css: `@layer vendor {\n${vendor.join("\n")}\n}\n`,
+    },
   ]);
   const unlayered = await unlayeredRules(css);
   if (unlayered.length > 0) {

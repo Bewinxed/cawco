@@ -961,6 +961,14 @@
 @utility grid-cols-auto-fluid {
   grid-template-columns: auto minmax(0, 1fr);
 }
+/* As many equal columns as fit at a least width each (never wider than
+   the grid), the rest shared: `grid-cols-fit-c-decision-option-min`. */
+@utility grid-cols-fit-* {
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(min(100%, --value(--spacing-*)), 1fr)
+  );
+}
 /* A well's surface easing its edge and radius as it lands, its opacity on
    the drawer's curve. */
 @utility transition-well-surface {
