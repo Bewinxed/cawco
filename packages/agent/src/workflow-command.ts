@@ -15,7 +15,7 @@ import {
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { asAgentCommand, ensureBoundary } from "./boundary";
+import { agentCommandStarted, ensureBoundary } from "./boundary";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
@@ -355,32 +355,9 @@ export async function runWorkflowCommand(
     throw new Error("runCommand's workspace must be { id, path }.");
   }
   const [file, args] = await commandLine(cmd, workspace, named);
-  // Never a session's: in a workspace, no session's sweep runs beside it
-  // (boundary.ts `asAgentCommand`).
-  return isWorkspaceRef(workspace)
-    ? asAgentCommand(workspace.id, () =>
-        runCommand(file, args, cwd, cmd, timeoutMs, named)
-      )
-    : runCommand(file, args, cwd, cmd, timeoutMs, named);
-}
-
-/** {@link runWorkflowCommand}'s run of `file` with `args` in `cwd`, `cmd` as the hub named it. */
-const runCommand = (
-  file: string,
-  args: string[],
-  cwd: string,
-  cmd: string,
-  timeoutMs: unknown,
-  named: CommandRun | undefined
-): Promise<CommandResult> => {
-  // Cancelled while it waited its turn, its boundary or a sweep: it never starts.
+  // Cancelled while it waited its turn or its boundary: it never starts.
   if (named && cancelledEarly.delete(named.id)) {
-    return Promise.resolve({
-      cancelled: true,
-      exitCode: 143,
-      stdout: "",
-      stderr: "",
-    });
+    return { cancelled: true, exitCode: 143, stdout: "", stderr: "" };
   }
   return new Promise((resolve, reject) => {
     const child = spawn(file, args, {
@@ -438,6 +415,13 @@ const runCommand = (
     if (spawnedPid(child) !== undefined) {
       live.add(running);
     }
+    // Never a session's: a session's sweep of its workspace leaves what it
+    // runs there running (boundary.ts `agentCommandStarted`).
+    const executor = spawnedPid(child);
+    const letGo =
+      isWorkspaceRef(workspace) && executor !== undefined
+        ? agentCommandStarted(workspace.id, executor)
+        : undefined;
     const clock = commandClock(
       typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS,
       named?.queueMaxMs ?? QUEUE_WAIT_MAX_MS,
@@ -478,6 +462,7 @@ const runCommand = (
     child.on("error", (error) => {
       clock.stop();
       live.delete(running);
+      letGo?.();
       reject(error);
     });
     // A stopped command's KILL still comes after its leader closes: what is
@@ -485,6 +470,7 @@ const runCommand = (
     child.on("close", (code) => {
       clock.stop();
       live.delete(running);
+      letGo?.();
       if (stopped === "overflowed") {
         return;
       }
@@ -496,4 +482,4 @@ const runCommand = (
       });
     });
   });
-};
+}

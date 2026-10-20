@@ -435,6 +435,16 @@ export const seatbeltProfile = (
   return [
     "(version 1)",
     "(allow default)",
+    // A command signals its own boundary's processes alone. Measured on the
+    // Mac (2026-10-20), from inside a sandbox started as a keeper starts one
+    // and through a live workspace's executor: kill(pid, 0) over every pid
+    // was let through for its own processes and for zombies only (xnu
+    // kern_sig.c `kill` answers 0 for a zombie before any permission check,
+    // and nothing reaches one); SIGCONT was refused to its keeper, the
+    // keeper's other child, an unrelated process of the user and an
+    // ancestor. The kernel adds no exemption of its own: xnu mac_process.c
+    // `mac_proc_check_signal` hands every signal to the policy,
+    // `MAC_CHECK(proc_check_signal, …)`.
     "(deny signal)",
     "(allow signal (target same-sandbox))",
     ...reads.map(

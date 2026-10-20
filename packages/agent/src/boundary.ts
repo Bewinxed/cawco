@@ -147,10 +147,12 @@ import {
 import {
   commandLine as commandLineOf,
   commandLines,
+  type ProcessLineage,
   processArgs,
   processLineage,
   processStart,
   seatbeltLetsLookUp,
+  seatbeltLetsWrite,
 } from "@cawco/core/process-identity";
 import {
   embeddedFile,
@@ -225,6 +227,7 @@ import {
   socketPlace,
   toolDoorOf,
 } from "./tool-door";
+import { workspaceRecords } from "./workspace-records";
 
 /** A running boundary, as a harness uses it. */
 export interface Boundary {
@@ -3066,34 +3069,22 @@ const inBoundaries = (seen: readonly Pick<Seen, "pid">[]): number[] =>
 const answering = (bounded: readonly number[], name: string): number[] =>
   bounded.filter((pid) => seatbeltLetsLookUp(pid, name) === true);
 
-/** How many times {@link killAnswering} reads and kills before it stops: enough for a process forked between a reading and its kill. */
+/** How many times {@link killReading} reads and kills before it stops: enough for a process forked between a reading and its kill. */
 const KILL_PASSES = 5;
 
 /**
- * macOS: SIGKILLs every process that answers to `name` and to none of the
- * names `keep` lists ({@link answering}), reading the kernel again after
- * each round until a reading finds none it has not killed already, so a
- * process forked between a reading and its parent's kill goes too. Nothing
- * off macOS: there a sandbox's processes end with its outer bwrap
- * ({@link stopBoundary}). Answers the pids it killed.
+ * SIGKILLs every process `read` reads, reading again after each round until
+ * a reading finds none it has not killed already, so a process forked
+ * between a reading and its parent's kill goes too. Answers the pids it
+ * killed.
  */
-const killAnswering = async (
-  name: string,
-  keep: readonly string[] = []
+const killReading = async (
+  read: () => Promise<number[]>
 ): Promise<number[]> => {
-  if (process.platform !== "darwin") {
-    return [];
-  }
   const killed = new Set<number>();
   for (let pass = 0; pass < KILL_PASSES; pass += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: each round reads the process table the round before left
-    const fresh = answering(inBoundaries(await processLineage()), name).filter(
-      (pid) =>
-        !(
-          killed.has(pid) ||
-          keep.some((other) => seatbeltLetsLookUp(pid, other) === true)
-        )
-    );
+    const fresh = (await read()).filter((pid) => !killed.has(pid));
     if (fresh.length === 0) {
       break;
     }
@@ -3104,6 +3095,137 @@ const killAnswering = async (
   }
   return [...killed];
 };
+
+/** A keychain service every boundary's profile refuses (boundary-policy.ts `KEYCHAIN_MACH_SERVICES`). */
+const REFUSED_SERVICE = "com.apple.SecurityServer";
+
+/**
+ * macOS: whether process `pid` runs under a profile one of this install's
+ * boundaries started with BEFORE PROFILES CARRIED MEMBERSHIP NAMES
+ * ({@link MEMBERSHIP_PREFIX}), which no name of this build's reaches: a
+ * boundary's own profile (it refuses {@link REFUSED_SERVICE}, lets its
+ * processes write the workspaces' cache `cache`, which every boundary of
+ * this install's HOME writes and nothing else is let, and refuses `home`
+ * itself) that lets the bare prefix be looked up, which every profile since
+ * refuses. Measured on the Mac (2026-10-20): of 552 sandboxed processes, 11
+ * read so, each a boundary runner (`/bin/bash --norc --noprofile -c
+ * fifo=$1 …`), and no other app's process or another HOME's boundary did.
+ */
+const preTag = (pid: number, cache: string, home: string): boolean =>
+  seatbeltLetsLookUp(pid, REFUSED_SERVICE) === false &&
+  seatbeltLetsWrite(pid, cache) === true &&
+  seatbeltLetsWrite(pid, home) === false &&
+  seatbeltLetsLookUp(pid, MEMBERSHIP_PREFIX) === true;
+
+/**
+ * macOS: ENDS WHAT A BOUNDARY STARTED BEFORE MEMBERSHIP NAMES LEFT RUNNING
+ * ONCE ITS WORKSPACE IS GONE ({@link preTag}): the processes no name of this
+ * build's reaches, which an update found running (boundary runners a retired
+ * keeper left to launchd, and what their commands left). Each boundary's
+ * profile lets its processes write its own clone or place folder alone, so a
+ * pre-tag process whose profile writes no folder of a workspace this machine
+ * holds is one whose workspace is gone, and is killed ({@link killReading});
+ * one whose workspace is still here is left as it is, its boundary's own
+ * handover, close or archive its end, and is looked at again until its
+ * workspace goes. Nothing is ended unless every workspace's records read
+ * whole. Answers how many pre-tag processes are left, each of a workspace
+ * still here; undefined when the records did not read whole.
+ */
+const endPreTagLeftovers = async (): Promise<number | undefined> => {
+  const cache = await realpath(workspaceCacheDir()).catch(() => undefined);
+  if (!cache) {
+    // No boundary of this install has started on this machine.
+    return 0;
+  }
+  const home = await realpath(homedir());
+  const records = await workspaceRecords();
+  if (records.unread.length > 0) {
+    return;
+  }
+  const folders = (
+    await Promise.all(
+      records.refs.map((ref) => realpath(ref.path).catch(() => undefined))
+    )
+  ).filter((folder): folder is string => folder !== undefined);
+  const found = async () =>
+    (await processLineage())
+      .map((row) => row.pid)
+      .filter((pid) => pid !== process.pid && preTag(pid, cache, home));
+  const ended = await killReading(async () =>
+    (await found()).filter(
+      (pid) =>
+        !folders.some((folder) => seatbeltLetsWrite(pid, folder) === true)
+    )
+  );
+  const left = await found();
+  if (ended.length > 0) {
+    console.info(
+      `[workspace] what boundaries started before this build's membership names left running once their workspace was gone is ended: pid ${ended.join(", ")}${left.length > 0 ? `; pid ${left.join(", ")} of a workspace still here run on` : ""}`
+    );
+  }
+  return left.length;
+};
+
+/** The pre-tag look's timer ({@link lookAtPreTag}), while one is left. */
+let preTagTimer: ReturnType<typeof setInterval> | undefined;
+
+/**
+ * macOS: ends pre-tag leftovers ({@link endPreTagLeftovers}) as the agent
+ * starts, and each {@link QUIET_SWEEP_MS} after while any pre-tag process is
+ * left; once none is, never again.
+ */
+const lookAtPreTag = (): void => {
+  if (process.platform !== "darwin" || preTagTimer) {
+    return;
+  }
+  let looking = false;
+  const look = () => {
+    if (looking) {
+      return;
+    }
+    looking = true;
+    endPreTagLeftovers()
+      .then((left) => {
+        if (left === undefined) {
+          console.warn(
+            "[workspace] a workspace's records are damaged, so no boundary started before this build's membership names is ended on this look"
+          );
+        } else if (left === 0 && preTagTimer) {
+          clearInterval(preTagTimer);
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn(
+          `[workspace] boundaries started before this build's membership names could not be looked at: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+      .finally(() => {
+        looking = false;
+      });
+  };
+  preTagTimer = setInterval(look, QUIET_SWEEP_MS);
+  preTagTimer.unref();
+  look();
+};
+
+/**
+ * macOS: SIGKILLs every process that answers to `name` and to none of the
+ * names `keep` lists ({@link answering}, {@link killReading}). Nothing off
+ * macOS: there a sandbox's processes end with its outer bwrap
+ * ({@link stopBoundary}). Answers the pids it killed.
+ */
+const killAnswering = (
+  name: string,
+  keep: readonly string[] = []
+): Promise<number[]> =>
+  process.platform === "darwin"
+    ? killReading(async () =>
+        answering(inBoundaries(await processLineage()), name).filter(
+          (pid) =>
+            !keep.some((other) => seatbeltLetsLookUp(pid, other) === true)
+        )
+      )
+    : Promise.resolve([]);
 
 /**
  * Whether `command` runs the executor `exec`: as `<exec> …`, or as the
@@ -3165,8 +3287,9 @@ const busyOld = async (
  * Where each executor marks the command it runs in generation `gen` of
  * workspace `id`: a file named for its pid, made before it looks at the gate
  * and removed as it exits, or as it goes through to a newer generation
- * ({@link execScript}). In the generation's own dir, which nothing inside
- * the boundary writes.
+ * ({@link execScript}), holding its request's dir once it has one, written
+ * before it hands the request to the runner ({@link agentWork}). In the
+ * generation's own dir, which nothing inside the boundary writes.
  */
 const commandsOf = (id: string, gen: string): string =>
   join(generationDir(id, gen), "commands");
@@ -3312,19 +3435,135 @@ interface Worker {
   readonly pid: number;
   readonly ppid: number;
   readonly started: string;
+  readonly startSeconds: number;
 }
 
-/** {@link workers} of workspace `id` alone, by pid, off one reading of the process table; on macOS `bounded` is its processes in a boundary ({@link inBoundaries}). */
+/**
+ * The executors of the agent's own commands running in each workspace now,
+ * by pid (workflow-command.ts `runWorkflowCommand`: a landing's push and
+ * gate steps, the hub's checks and git reads, a workflow's command): none is
+ * a session's ({@link agentWork}).
+ */
+const agentExecutors = new Map<string, Set<number>>();
+
+/**
+ * Counts executor `pid`, which the agent started, as one of its own commands
+ * in workspace `id` ({@link agentExecutors}); answers what lets it go once
+ * the command has ended.
+ */
+export const agentCommandStarted = (id: string, pid: number): (() => void) => {
+  const theirs = agentExecutors.get(id) ?? new Set<number>();
+  theirs.add(pid);
+  agentExecutors.set(id, theirs);
+  return () => {
+    theirs.delete(pid);
+    if (theirs.size === 0 && agentExecutors.get(id) === theirs) {
+      agentExecutors.delete(id);
+    }
+  };
+};
+
+/**
+ * macOS: what inside workspace `id`'s boundaries no session sweep takes, off
+ * one reading of the process table (`rows`, `lines`) and the agent's own
+ * executors as they stand after it (`agent`), so that every executor of the
+ * agent's the table holds is among them. Read by lineage, which the kernel
+ * shows for every process, Apple's binaries among them, where it withholds
+ * their environment:
+ *
+ * - its runners (`generations`) and their plumbing: each runner's child (a
+ *   request's subshell, which waits on its command and writes its status:
+ *   killed, the command's executor would wait for that status for ever), and
+ *   each child of one of those in its own process group (the `cat`s copying
+ *   the command's output, and its launch before it leads a group of its own,
+ *   {@link LAUNCH}). Each ends with its command;
+ * - THE AGENT'S OWN COMMANDS, the hub's landing among them, which a sweep
+ *   never cuts: each by its request's dir, which its executor writes into its
+ *   mark ({@link commandsOf}), where nothing inside writes, before it hands
+ *   the request to the runner, and which the command's launch, a request
+ *   subshell's child, names as its last argument: that launch, every process
+ *   below it by parent, and every process of its group launchd adopted. What
+ *   one of them moved out of its tree with `setsid` or a double fork is not
+ *   among them; it was born while its command ran, and no sweep ends it before
+ *   that command has ended ({@link endWorkspaceWork}).
+ */
+const agentWork = async (
+  id: string,
+  generations: readonly Pick<Held, "gen" | "pid">[],
+  rows: ReadonlyMap<number, ProcessLineage>,
+  lines: readonly { command: string; pid: number }[],
+  agent: readonly number[]
+): Promise<Set<number>> => {
+  const runners = new Set(generations.map((generation) => generation.pid));
+  const spared = new Set(runners);
+  const subshells = new Set<number>();
+  for (const row of rows.values()) {
+    if (runners.has(row.ppid)) {
+      subshells.add(row.pid);
+      spared.add(row.pid);
+    }
+  }
+  for (const row of rows.values()) {
+    const parent = rows.get(row.ppid);
+    if (parent && subshells.has(parent.pid) && row.pgid === parent.pgid) {
+      spared.add(row.pid);
+    }
+  }
+  const requests = (
+    await Promise.all(
+      agent.flatMap((executor) =>
+        generations.map((generation) =>
+          readFile(
+            join(commandsOf(id, generation.gen), String(executor)),
+            "utf8"
+          ).then(
+            (text) => text.trim(),
+            () => ""
+          )
+        )
+      )
+    )
+  ).filter(Boolean);
+  const leaders = new Set(
+    lines
+      .filter(
+        (line) =>
+          subshells.has(rows.get(line.pid)?.ppid ?? 0) &&
+          requests.some((request) => line.command.endsWith(` ${request}`))
+      )
+      .map((line) => line.pid)
+  );
+  const tree = new Set(leaders);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const row of rows.values()) {
+      if (
+        !tree.has(row.pid) &&
+        (tree.has(row.ppid) || (leaders.has(row.pgid) && row.ppid === 1))
+      ) {
+        tree.add(row.pid);
+        grew = true;
+      }
+    }
+  }
+  for (const pid of tree) {
+    spared.add(pid);
+  }
+  return spared;
+};
+
+/** {@link workers} of workspace `id` alone, by pid, off one reading of the process table (`seen`, `rows`, `lines`); on macOS `bounded` is its processes in a boundary ({@link inBoundaries}). */
 const workOf = async (
   id: string,
   seen: Seen[],
+  rows: ReadonlyMap<number, ProcessLineage>,
   lines: readonly { command: string; pid: number }[],
   bounded: readonly number[]
 ): Promise<number[]> => {
   const held = await readHeld(id).catch(() => undefined);
   const generations = [...(held ? [held] : []), ...(await readRetiring(id))];
-  const work = executors(lines, id);
   if (process.platform === "linux") {
+    const work = executors(lines, id);
     const places = await Promise.all(
       generations.map((generation) => readPlace(id, generation.gen))
     );
@@ -3338,11 +3577,12 @@ const workOf = async (
     }
     return work;
   }
-  const runners = new Set(generations.map((generation) => generation.pid));
-  work.push(
-    ...answering(bounded, membershipName(id)).filter((pid) => !runners.has(pid))
-  );
-  return work;
+  const agent = [...(agentExecutors.get(id) ?? [])];
+  const spared = await agentWork(id, generations, rows, lines, agent);
+  return [
+    ...executors(lines, id).filter((pid) => !agent.includes(pid)),
+    ...answering(bounded, membershipName(id)).filter((pid) => !spared.has(pid)),
+  ];
 };
 
 /**
@@ -3350,15 +3590,18 @@ const workOf = async (
  * or of the workspaces `only` names, the boundary's own reading of it
  * ({@link busyOld}): on Linux everything that descends from a generation's
  * sandbox init and was not there when its runner was ready ({@link inTree}),
- * on macOS everything that answers to the workspace's name but its runners
- * ({@link answering}); and on both every executor on its way into one
- * ({@link executors}), which runs on the host as its session's shell's
- * child. A place (a person's own folder) is left out: its sessions are the
- * person's own.
+ * and every executor on its way into one ({@link executors}), which runs on
+ * the host as its session's shell's child; on macOS everything that answers
+ * to the workspace's name and every executor on its way in, but its runners,
+ * their plumbing and the agent's own commands ({@link agentWork}). A place
+ * (a person's own folder) is left out: its sessions are the person's own.
  */
 const workers = async (
   only?: readonly string[]
-): Promise<Map<number, Worker>> => {
+): Promise<{
+  rows: ReadonlyMap<number, ProcessLineage>;
+  work: Map<number, Worker>;
+}> => {
   const ids = (
     only ?? (await readdir(workspacesDir()).catch(() => [] as string[]))
   ).filter((id) => !isPlace(id));
@@ -3375,7 +3618,7 @@ const workers = async (
   const bounded = inBoundaries(seen);
   const work = new Set(
     (
-      await Promise.all(ids.map((id) => workOf(id, seen, lines, bounded)))
+      await Promise.all(ids.map((id) => workOf(id, seen, rows, lines, bounded)))
     ).flat()
   );
   const found = new Map<number, Worker>();
@@ -3385,7 +3628,7 @@ const workers = async (
       found.set(pid, row);
     }
   }
-  return found;
+  return { rows, work: found };
 };
 
 /**
@@ -3402,7 +3645,7 @@ const workers = async (
  * the hub (a landing's push), is not this session's.
  */
 const sessionWork = async (instanceId: string): Promise<Worker[]> => {
-  const work = await workers();
+  const { work } = await workers();
   const mark = `${CAWCO_ENV.instanceId}=${instanceId}`;
   const named = await Promise.all(
     [...work.keys()].map(async (pid) => ({
@@ -3434,20 +3677,32 @@ const sessionWork = async (instanceId: string): Promise<Worker[]> => {
 /**
  * macOS: what session `instanceId` left running in its workspace
  * `workspace`: all of that workspace's work ({@link workers}: every process
- * that answers to its name but its runners, and every executor on its way
- * in), but a process whose environment names another session. The kernel
+ * that answers to its name and every executor on its way in, but its
+ * runners, their plumbing and the agent's own commands, by lineage,
+ * {@link agentWork}), but a process whose environment names another
+ * session. The kernel
  * withholds the environment of every Apple platform binary (`/bin/sleep`,
  * `/bin/bash`, git, xcodebuild: "env 0" read on the Mac), so the session's
  * own `CAWCO_INSTANCE_ID` cannot be what finds its work there, as it is on
  * Linux; the workspace is the session's, and what in it says it is another
- * session's is that one's. The agent's own commands in it (a landing's) are
- * kept apart by time instead ({@link besideAgentCommands}).
+ * session's is that one's. Split by birth (`now`, `later`) against the
+ * earliest of the agent's own commands running there (`agents`, their
+ * executors): what was born before it is none of theirs.
  */
 const workspaceWork = async (
   instanceId: string,
   workspace: string
-): Promise<Worker[]> => {
-  const work = await workers([workspace]);
+): Promise<{ agents: number[]; later: Worker[]; now: Worker[] }> => {
+  const { rows, work } = await workers([workspace]);
+  // Read after the process table: every executor of the agent's it holds is here.
+  const agents = [...(agentExecutors.get(workspace) ?? [])].filter((pid) =>
+    rows.has(pid)
+  );
+  const since = Math.min(
+    ...agents.map(
+      (pid) => rows.get(pid)?.startSeconds ?? Number.POSITIVE_INFINITY
+    )
+  );
   const named = `${CAWCO_ENV.instanceId}=`;
   const own = `${named}${instanceId}`;
   const others = await Promise.all(
@@ -3460,91 +3715,53 @@ const workspaceWork = async (
     )
   );
   const theirs = new Set(others);
-  return [...work.values()].filter((one) => !theirs.has(one.pid));
-};
-
-/**
- * How many of the agent's own commands run in each workspace now
- * ({@link asAgentCommand}), and what resolves as the last of them ends.
- */
-const agentCommands = new Map<
-  string,
-  { count: number; ended: PromiseWithResolvers<void> }
->();
-
-/** Each workspace's session sweep under way ({@link besideAgentCommands}): an agent command there waits for it. */
-const sweeps = new Map<string, Promise<void>>();
-
-/**
- * Runs `run`, one of the agent's own commands in workspace `id` (workflow-
- * command.ts `runWorkflowCommand`: a landing's git steps and gate steps, the
- * hub's checks and git reads, a workflow's command), once no session sweep
- * of the workspace is under way, and counts it as running there until it
- * ends: none is a session's, and on macOS a sweep can tell no process of it
- * from the session's ({@link workspaceWork}), so a sweep waits for it
- * ({@link besideAgentCommands}).
- */
-export const asAgentCommand = async <T>(
-  id: string,
-  run: () => Promise<T>
-): Promise<T> => {
-  for (let sweep = sweeps.get(id); sweep; sweep = sweeps.get(id)) {
-    // biome-ignore lint/performance/noAwaitInLoops: waits out each sweep that starts before this command does
-    await sweep;
-  }
-  const underWay = agentCommands.get(id) ?? {
-    count: 0,
-    ended: Promise.withResolvers<void>(),
+  const mine = [...work.values()].filter((one) => !theirs.has(one.pid));
+  return {
+    agents,
+    now: mine.filter((one) => one.startSeconds < since),
+    later: mine.filter((one) => one.startSeconds >= since),
   };
-  underWay.count += 1;
-  agentCommands.set(id, underWay);
-  try {
-    return await run();
-  } finally {
-    underWay.count -= 1;
-    if (underWay.count === 0) {
-      agentCommands.delete(id);
-      underWay.ended.resolve();
-    }
-  }
 };
 
+/** How often {@link endWorkspaceWork} looks whether the agent's commands it waits for have ended. */
+const AGENT_LOOK_MS = 200;
+
 /**
- * macOS: runs `sweep`, a session sweep of workspace `id`, once none of the
- * agent's own commands runs there, and holds every one that would start
- * there until it is over ({@link asAgentCommand}). THE HUB'S LANDING IS
- * NEVER CUT BY A SWEEP: its push and every other step of it run in the
- * workspace as the agent's commands, none of whose processes a macOS sweep
- * could tell from the session's, so the sweep waits for each to end, and the
- * next waits for the sweep (seconds: {@link WORK_GRACE_MS} and
- * {@link KILL_WAIT_MS}). The session's own work ends all the same, once the
- * step under way does; meanwhile the session's own lane holds what comes for
- * it next (session.ts queues a session's controls in order), so nothing it
- * starts after is swept.
+ * macOS: {@link endSessionWork} in workspace `workspace`. What was born
+ * before the earliest of the agent's own commands running there is ended at
+ * once, a leftover holding the heavy-run slot a landing gate's step waits
+ * for among it, so the gate runs. What was born since may be one of those
+ * commands' own, moved out of its tree ({@link agentWork}): it is ended once
+ * the commands running then have, a landing's push and gate step run to
+ * their end, and so on while the agent's commands come. Meanwhile the
+ * session's lane holds its next turn (session.ts queues a session's controls
+ * in order), so nothing it starts after is swept.
  */
-const besideAgentCommands = async <T>(
-  id: string,
-  sweep: () => Promise<T>
-): Promise<T> => {
-  for (let other = sweeps.get(id); other; other = sweeps.get(id)) {
-    // biome-ignore lint/performance/noAwaitInLoops: one sweep of a workspace at a time
-    await other;
-  }
-  const done = Promise.withResolvers<void>();
-  sweeps.set(id, done.promise);
-  try {
-    for (
-      let underWay = agentCommands.get(id);
-      underWay;
-      underWay = agentCommands.get(id)
-    ) {
-      // biome-ignore lint/performance/noAwaitInLoops: waits until no agent command runs in the workspace
-      await underWay.ended.promise;
+const endWorkspaceWork = async (
+  instanceId: string,
+  workspace: string
+): Promise<{ ended: number[]; left: number[] }> => {
+  const ended = new Set<number>();
+  const left = new Set<number>();
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: one round per set of the agent's commands it waits out
+    const round = await endWork(
+      async () => (await workspaceWork(instanceId, workspace)).now
+    );
+    for (const pid of round.ended) {
+      ended.add(pid);
     }
-    return await sweep();
-  } finally {
-    sweeps.delete(id);
-    done.resolve();
+    for (const pid of round.left) {
+      left.add(pid);
+    }
+    const { agents, later } = await workspaceWork(instanceId, workspace);
+    if (later.length === 0) {
+      return { ended: [...ended], left: [...left] };
+    }
+    while (agents.some((pid) => agentExecutors.get(workspace)?.has(pid))) {
+      // biome-ignore lint/performance/noAwaitInLoops: waits for the agent's commands running then to end
+      await Bun.sleep(AGENT_LOOK_MS);
+    }
   }
 };
 
@@ -3562,9 +3779,9 @@ const stillRunning = async (ones: readonly Worker[]): Promise<Worker[]> => {
  * they left behind with `&`, `nohup`, `setsid` or a double fork, and the
  * executors still on their way in: on Linux each found by the session's
  * name in its environment ({@link sessionWork}), on macOS all the work of
- * its workspace `workspace` that names no other session, once none of the
- * agent's own commands runs there ({@link workspaceWork},
- * {@link besideAgentCommands}); a place (a person's own folder) is never
+ * its workspace `workspace` that names no other session, the agent's own
+ * commands there left running, the hub's landing among them
+ * ({@link endWorkspaceWork}); a place (a person's own folder) is never
  * swept. The boundary runs on, and the session keeps its transcript, clone
  * and files, so a later message resumes it there. What an interrupt and a
  * stop of a session do (session.ts), on every harness: Claude Code ends a
@@ -3589,9 +3806,7 @@ export const endSessionWork = (
   if (!workspace || isPlace(workspace)) {
     return Promise.resolve({ ended: [], left: [] });
   }
-  return besideAgentCommands(workspace, () =>
-    endWork(() => workspaceWork(instanceId, workspace))
-  );
+  return endWorkspaceWork(instanceId, workspace);
 };
 
 /** {@link endSessionWork}'s ending of the work `read` reads, read again for its kill. */
@@ -5204,8 +5419,9 @@ let quietTimer: ReturnType<typeof setInterval> | undefined;
 /**
  * Starts looking for quiet boundaries every {@link QUIET_SWEEP_MS}
  * ({@link sweepQuiet}), with what the daemon knows holds a workspace, and
- * then at every live workspace's judge ({@link judgesAnswer}). Once per
- * agent.
+ * then at every live workspace's judge ({@link judgesAnswer}); and on macOS
+ * ends what boundaries started before this build's membership names left
+ * once their workspace went ({@link lookAtPreTag}). Once per agent.
  */
 export const watchQuietBoundaries = (given: BoundaryHolders): void => {
   holders = given;
@@ -5213,6 +5429,7 @@ export const watchQuietBoundaries = (given: BoundaryHolders): void => {
   if (quietTimer) {
     return;
   }
+  lookAtPreTag();
   let looking = false;
   quietTimer = setInterval(() => {
     if (looking) {
@@ -5505,6 +5722,9 @@ if [ -n "$session" ] && [ -s "$notice" ] && mv "$notice" "$notice.$$" 2>/dev/nul
   rm -f "$notice.$$"
 fi
 req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
+# The mark names the request before the runner hears of it: the agent tells
+# its own commands' processes inside by it.
+{ printf '%s\\n' "$req" > "$mark"; } 2>/dev/null
 printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
 {

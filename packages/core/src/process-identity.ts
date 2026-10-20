@@ -193,10 +193,15 @@ const sandboxCheck = (
 
 /** `dlsym`'s `RTLD_DEFAULT` (<dlfcn.h>: `((void *) -2)`): every image loaded. */
 const RTLD_DEFAULT = BigInt.asUintN(64, -2n);
-/** `SANDBOX_FILTER_GLOBAL_NAME` (WebKit SandboxSPI.h: `= 2`): the filter a `mach-lookup` rule's `global-name` is. */
-const SANDBOX_FILTER_GLOBAL_NAME = 2;
-/** The operation asked of, NUL-ended. */
-const MACH_LOOKUP = Buffer.from("mach-lookup\0");
+/**
+ * The operations asked of, each NUL-ended, with the filter its rules name
+ * (WebKit SandboxSPI.h's `enum sandbox_filter_type`: `SANDBOX_FILTER_PATH`
+ * second, `SANDBOX_FILTER_GLOBAL_NAME = 2`).
+ */
+const OPERATIONS = {
+  lookUp: { operation: Buffer.from("mach-lookup\0"), filter: 2 },
+  write: { operation: Buffer.from("file-write-data\0"), filter: 1 },
+} as const;
 /** `sandbox_check`'s answers: the operation allowed, or denied. */
 const SANDBOX_ALLOWS = 0;
 const SANDBOX_DENIES = 1;
@@ -211,20 +216,24 @@ const SANDBOX_DENIES = 1;
 let noReport: number | undefined;
 
 /**
- * macOS: whether process `pid`'s Seatbelt profile lets it look up the Mach
- * service `name` (`mach-lookup` of `global-name`), as the kernel judges it
- * now, whatever the process's environment, parent, session or binary: the
- * profile is the one its sandbox was made with, which every process it
- * forks and execs inherits and none can leave or replace ("sandbox_apply:
- * Operation not permitted" inside one, measured). An unsandboxed process is
- * let look up anything. Undefined when there is no such process. Asking
- * needs no privilege: the Mac answered for every process, another user's
- * included.
+ * macOS: whether process `pid`'s Seatbelt profile lets it `what` (`lookUp`:
+ * `mach-lookup` of the Mach service `name`; `write`: `file-write-data` at
+ * the path `name`), as the kernel judges it now, whatever the process's
+ * environment, parent, session or binary: the profile is the one its sandbox
+ * was made with, which every process it forks and execs inherits and none
+ * can leave or replace ("sandbox_apply: Operation not permitted" inside one,
+ * measured). An unsandboxed process is let do anything. Undefined when there
+ * is no such process. Asking needs no privilege: the Mac answered for every
+ * process, another user's included. A path is judged as it is now: one that
+ * is not there reads as denied (measured: a profile's own writable dir
+ * answered 0, a path under it that did not exist 1), so only a path that is
+ * there is asked of.
  */
-export function seatbeltLetsLookUp(
+const seatbeltLets = (
   pid: number,
+  what: keyof typeof OPERATIONS,
   name: string
-): boolean | undefined {
+): boolean | undefined => {
   if (noReport === undefined) {
     const at = lib().symbols.dlsym(
       RTLD_DEFAULT,
@@ -237,18 +246,31 @@ export function seatbeltLetsLookUp(
     }
     noReport = readMemory.u32(at, 0);
   }
+  const { operation, filter } = OPERATIONS[what];
   const answer = sandboxCheck(
     pid,
-    MACH_LOOKUP,
+    operation,
     // Its one bit lies apart from every filter type's, so the sum is their OR.
-    SANDBOX_FILTER_GLOBAL_NAME + noReport,
+    filter + noReport,
     Buffer.from(`${name}\0`)
   );
   if (answer === SANDBOX_ALLOWS) {
     return true;
   }
   return answer === SANDBOX_DENIES ? false : undefined;
-}
+};
+
+/** macOS: whether process `pid`'s Seatbelt profile lets it look up the Mach service `name` ({@link seatbeltLets}). */
+export const seatbeltLetsLookUp = (
+  pid: number,
+  name: string
+): boolean | undefined => seatbeltLets(pid, "lookUp", name);
+
+/** macOS: whether process `pid`'s Seatbelt profile lets it write at `path`, which must be there ({@link seatbeltLets}). */
+export const seatbeltLetsWrite = (
+  pid: number,
+  path: string
+): boolean | undefined => seatbeltLets(pid, "write", path);
 
 const decoder = new TextDecoder();
 
@@ -847,6 +869,8 @@ export interface ProcessLineage {
   ppid: number;
   /** Its start, as `ps -o lstart=` prints it on both systems. */
   started: string;
+  /** Its start, in epoch seconds. */
+  startSeconds: number;
 }
 
 /**
@@ -864,14 +888,17 @@ export async function processLineage(): Promise<ProcessLineage[]> {
       (await linuxPids()).map(
         async (pid): Promise<ProcessLineage | undefined> => {
           const fields = (await linuxStat(pid))?.fields;
-          return fields?.[19]
-            ? {
-                pid,
-                ppid: Number(fields[1]),
-                pgid: Number(fields[2]),
-                started: lstart(linuxStartSeconds(boot, fields[19])),
-              }
-            : undefined;
+          if (!fields?.[19]) {
+            return;
+          }
+          const startSeconds = linuxStartSeconds(boot, fields[19]);
+          return {
+            pid,
+            ppid: Number(fields[1]),
+            pgid: Number(fields[2]),
+            started: lstart(startSeconds),
+            startSeconds,
+          };
         }
       )
     );
@@ -882,6 +909,7 @@ export async function processLineage(): Promise<ProcessLineage[]> {
     ppid: info.ppid,
     pgid: info.pgid,
     started: lstart(info.startSeconds),
+    startSeconds: info.startSeconds,
   }));
 }
 
