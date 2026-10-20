@@ -14,7 +14,7 @@ export const delegateTypesWords = {
   add: "New delegate type",
   emptyTitle: "No delegate types yet",
   emptyLine:
-    "A fresh hub seeds five on first read; delete all of them and this is what is left.",
+    "Presets a session picks from when it hands work on, so each delegate starts with the right harness, model and tools.",
   remove: "Delete delegate type",
   /** The fleet's group; each project's own types follow under its name. */
   fleet: "The fleet",

@@ -7,7 +7,7 @@
    */
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
-  import { IconLaptop, IconServer } from "#lib/icons.js";
+  import { IconLaptop } from "#lib/icons.js";
   import { addMachine } from "../join/join.svelte";
 
   let {
@@ -22,11 +22,9 @@
   {#snippet action()}
     <Button
       aria-haspopup="dialog"
+      label="Add machine"
       onclick={() => addMachine.show()}
       variant="outline"
-    >
-      <IconServer />
-      <span>Add machine</span>
-    </Button>
+    />
   {/snippet}
 </EmptyState>

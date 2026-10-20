@@ -21,6 +21,8 @@
  *   file, which takes the document it links with it and leaves the scoped
  *   one: both back;
  * - a rule: back with the date it was made, so it stands where it stood;
+ *   and the Waiting on an answer filter, which goes off as the last waiting
+ *   rule goes, so the list never strands behind a chip that has gone;
  * - a connection with its key: back signed in, its projects with it.
  *
  * Then the trash itself, through the hub: an entry outlives a hub restart;
@@ -243,6 +245,7 @@ const probe = async (kit: Kit) => {
   await mcpServer(on);
   await memory(on);
   await rule(on);
+  await rulesWaiting(on);
   await connection(on);
   await toastFade(on);
   await page.close();
@@ -713,6 +716,79 @@ async function rule({ kit, fleet, page, base }: On) {
       made.createdAt && (await rowShown(page, made.name)),
     `made ${made.createdAt}, back ${JSON.stringify(ruleBack.value.find((one) => one.id === made.id))}`
   );
+}
+
+/**
+ * The rules' Waiting on an answer filter never strands the list: two rules,
+ * one with a session waiting on it (its fire seeded as the hub keeps one);
+ * with the filter on, only that one shows. Deleting it takes the count to
+ * 0: the chip goes, the filter goes off with it, and the other rule stands
+ * with no "No rule is waiting" in its place.
+ */
+async function rulesWaiting({ kit, fleet, page, base }: On) {
+  const CHIP = 'button[aria-label="Show only rules waiting on an answer"]';
+  const make = async (name: string) =>
+    (
+      JSON.parse(
+        (
+          await hubCall(fleet, "POST", "/api/rules", {
+            ...RULE_TEMPLATES[0].draft,
+            name,
+          })
+        ).text
+      ) as { id: string; name: string }
+    ).id;
+  const waiting = await make("probe-waiting");
+  const quiet = await make("probe-quiet");
+  fleet.write(
+    "INSERT INTO rule_state (id, rule_id, instance_id, status, fire_count, total_fires, last_fired_at) VALUES (?, ?, ?, 'pending', 1, 1, ?)",
+    `${waiting}:probe-session`,
+    waiting,
+    "probe-session",
+    Date.now()
+  );
+  await open(page, `${base}/config/rules`, CHIP);
+  await page.locator(CHIP).click();
+  const read = () =>
+    page.evaluate((chip) => {
+      const button = document.querySelector(chip);
+      const names = [...document.querySelectorAll("[data-row-name]")].map(
+        (row) => row.getAttribute("data-row-name") ?? ""
+      );
+      return {
+        chip: button !== null,
+        pressed: button?.getAttribute("aria-pressed") ?? null,
+        waiting: names.includes("probe-waiting"),
+        quiet: names.includes("probe-quiet"),
+        stranded:
+          document.body.textContent?.includes(
+            "No rule is waiting on an answer"
+          ) ?? false,
+      };
+    }, CHIP);
+  const filtered = await read();
+  const held = async () =>
+    (await fleet.api<{ rules: { id: string }[] }>("/api/rules")).rules.some(
+      (one) => one.id === waiting
+    );
+  await deleteFromMenu(page, "probe-waiting", "Delete rule", held);
+  await rowGone(page, "probe-waiting");
+  // The other rule shows only once the filter is off; a filter left on
+  // never shows it, and the wait runs out.
+  await rowShown(page, "probe-quiet");
+  const after = await read();
+  kit.check(
+    "rules: with Waiting on an answer on, only the waiting rule shows; deleting it takes the count to 0, the chip and the filter go together, and the other rule stands, nothing stranded",
+    filtered.chip &&
+      filtered.pressed === "true" &&
+      filtered.waiting &&
+      !filtered.quiet &&
+      !after.chip &&
+      after.quiet &&
+      !after.stranded,
+    JSON.stringify({ filtered, after })
+  );
+  await hubCall(fleet, "DELETE", `/api/rules/${quiet}`);
 }
 
 /** A connection, with its key. */

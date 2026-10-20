@@ -22,6 +22,7 @@
   } from "#lib/icons.js";
   import { didntAnswer, type Machine } from "./client.svelte";
   import NoMachines from "./config/NoMachines.svelte";
+  import { EMPTY_LINES } from "./empty-asks";
   import { machineOs } from "./machine";
   import OsMark from "./OsMark.svelte";
   import { installTool, policyFor, setPolicy } from "./tools";
@@ -280,11 +281,11 @@
        the line says so, and the way by hand is updating the hub. -->
   <EmptyState
     icon={IconTerminal}
-    line="This hub's build carries no tools to install. They ship with CawCo, so updating the hub brings them."
+    line={EMPTY_LINES.cliTools}
     title="Nothing to install"
   >
     {#snippet action()}
-      <Button href="/config/updates" variant="outline">Open Updates</Button>
+      <Button href="/config/updates" label="Open Updates" variant="outline" />
     {/snippet}
   </EmptyState>
 {:else if machines.length === 0}

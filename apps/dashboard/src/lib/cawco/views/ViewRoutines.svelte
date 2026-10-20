@@ -1,10 +1,11 @@
 <script lang="ts">
-  import { routinesWords as words } from "@cawco/core";
+  import { CAW_NO_MACHINE, routinesWords as words } from "@cawco/core";
   import { untrack } from "svelte";
   import type { ProjectBlocks } from "#lib/cawco/blocks/arrangement.svelte.js";
   import BlockPage, {
     type BlockItem,
   } from "#lib/cawco/blocks/BlockPage.svelte";
+  import CantStart from "#lib/cawco/CantStart.svelte";
   import { cawco, startThread, threadsOf } from "#lib/cawco/client.svelte.js";
   import RowMenu, { type RowAction } from "#lib/cawco/config/RowMenu.svelte";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
@@ -16,7 +17,6 @@
   } from "#lib/cawco/hub-read.js";
   import { idForWords, type SentWords } from "#lib/cawco/id.js";
   import { addMachine } from "#lib/cawco/join/join.svelte.js";
-  import { CAW_NO_MACHINE } from "#lib/cawco/project/caw-lead.svelte.js";
   import { GLYPHS } from "#lib/cawco/project/StarterCards.svelte";
   /**
    * A project's routines: what runs on its own (Routines), what fires it
@@ -98,7 +98,6 @@
     IconPauseCircle,
     IconPin,
     IconPlay,
-    IconServer,
     IconShield,
     IconTrash,
   } from "#lib/icons.js";
@@ -953,14 +952,21 @@
         </EmptyState>
       {:else}
         <!-- Caw makes routines and can't start (The Empty Starts Work
-             Rule's second sentence): the line says why, and its one action
-             is the way by hand, a machine for him to start on. -->
+             Rule's second sentence): the line says what the page is for, his
+             reason stands in its own line over the way by hand, a machine
+             for him to start on, as every can't-start empty state has it. -->
         <EmptyState
-          action={addMachineByHand}
           icon={IconClock}
-          line={words.emptyOff(cawProblem ?? words.away)}
+          line={words.emptyWhat(project.name)}
           title={words.empty}
-        />
+        >
+          {#snippet action()}
+            <CantStart
+              byHand={addMachineByHand}
+              reason={cawProblem ?? CAW_NO_MACHINE}
+            />
+          {/snippet}
+        </EmptyState>
       {/if}
     </div>
   {:else}
@@ -1020,12 +1026,10 @@
 {#snippet addMachineByHand()}
   <Button
     aria-haspopup="dialog"
+    label="Add machine"
     onclick={() => addMachine.show()}
     variant="outline"
-  >
-    <IconServer />
-    <span>Add machine</span>
-  </Button>
+  />
 {/snippet}
 
 {#snippet connectSource()}

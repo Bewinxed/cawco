@@ -90,11 +90,21 @@ export const routinesWords = {
 
   // The empty Routines block.
   empty: "No routines yet",
+  /** What the empty page is for: its line whether or not Caw can start. */
+  emptyWhat: (project: string) =>
+    `Caw runs work for ${project} on a schedule, or when something happens.`,
+  /** Caw can start: what the page is for, then what to tell him over his composer. */
   emptyCaw: (project: string) =>
     `Caw runs work for ${project} on a schedule, or when something happens. Say what, and when.`,
-  emptyOff: (problem: string) =>
-    `Caw makes routines, and he can't start: ${problem}.`,
-  away: "his machine is away",
+  /**
+   * The app's empty page while Caw can't start (RoutinesPane.swift): what
+   * the page is, then his reason as he gives it, a whole sentence saying why
+   * and what to do (CAW_NO_MACHINE, his view's `problem`), never restated.
+   * The dashboard stands `emptyWhat` over his reason's own line instead.
+   */
+  emptyOff: (problem: string) => `Caw makes routines. ${problem}`,
+  /** His reason while none was given: the same sentence, his machine away. */
+  away: "His machine is away, so he can't start. Bring it online and he can.",
   startersLabel: "Routines to ask Caw for",
   noSources:
     "No event sources yet. Caw connects one when a routine should start on an event, like a merged pull request.",

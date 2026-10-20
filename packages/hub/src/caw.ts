@@ -60,6 +60,7 @@ import {
   type BlockPage,
   BOARD_ONLY_DENIED_TOOLS,
   CAW_DENIED_TOOLS,
+  CAW_NO_MACHINE,
   type CawInitiated,
   type CawNotWokenReason,
   type CawRunning,
@@ -1207,9 +1208,7 @@ export const createCaw = ({
     if (standing(project) || checkoutFor(project)) {
       return null;
     }
-    return online()
-      ? null
-      : "No machine is online, so Caw can't start. Bring a machine online, then write here.";
+    return online() ? null : CAW_NO_MACHINE;
   };
 
   /**
@@ -1269,11 +1268,7 @@ export const createCaw = ({
   ): Promise<{ lead: InstanceRow; sent: string | undefined }> => {
     const place =
       (await placeFor(project)) ??
-      refuse(
-        409,
-        problemOf(project) ??
-          "No machine is online, so Caw can't start. Bring a machine online, then write here."
-      );
+      refuse(409, problemOf(project) ?? CAW_NO_MACHINE);
     const instanceId = crypto.randomUUID();
     cawDenied(project.cawHarness);
     await spawn(

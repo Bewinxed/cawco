@@ -67,6 +67,30 @@ export const FLEET_ASKS = {
   },
 } as const;
 
+/**
+ * The lines of the empty states whose surfaces have no words file of their
+ * own, one source for each surface and its states file (EmptyStarts). A
+ * line says what its action doesn't (Text is earned), and offers the ask
+ * only while it can start.
+ */
+export const EMPTY_LINES = {
+  /** Configure › Hooks and Rules, their starters listed under the empty state. */
+  starters: (kind: "hooks" | "rules", canStart: boolean): string =>
+    `${canStart ? "Ask for one, or start" : "Start"} from a starter below — they are ordinary ${kind} once added, and you can change every part of them.`,
+  /** Configure › Rules filtered to Waiting on an answer, with none waiting. */
+  rulesNoneWaiting:
+    "Every session a rule spoke to has answered it, so none is waiting.",
+  /** Configure › Memory files, a filter nothing matches. */
+  memoryNoMatch:
+    "The filter looks at file paths, so try part of a folder or a file name.",
+  /** Configure › Command-line tools, a hub whose build carries no catalog. */
+  cliTools:
+    "This hub's build carries no tools to install. They ship with CawCo, so updating the hub brings them.",
+  /** A transcript with no messages: the composer's keys, which the ask doesn't say. */
+  transcript:
+    "Send the first instruction below — / lists this session's commands, @ names a machine or session.",
+} as const;
+
 /** The New Session form, its first prompt these words, hanging from the press. */
 export function askNewSession(
   words: string,

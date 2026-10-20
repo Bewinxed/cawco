@@ -163,10 +163,11 @@
           reason={NO_SESSION_CAN_START}
         >
           {#snippet byHand()}
-            <Button href="/config/mcp/new" variant="outline">
-              <IconPlus />
-              <span>{words.add}</span>
-            </Button>
+            <Button
+              href="/config/mcp/new"
+              label={words.add}
+              variant="outline"
+            />
           {/snippet}
         </EmptyAsk>
       {/snippet}

@@ -13,7 +13,7 @@ export const memoryWords = {
   list: "Memory files",
   filter: "Filter files…",
   filterLabel: "Filter memory files",
-  noMatch: (filter: string) => `No file matches “${filter}”.`,
+  noMatch: (filter: string) => `No file matches “${filter}”`,
   everySession: "Loaded into every session",
   noMemory:
     "The fleet keeps no memory yet — write one, or adopt a machine's copy",

@@ -19,26 +19,28 @@
 <script lang="ts">
   /**
    * The states file's seam (EmptyStarts.stories.ts): each empty state the
-   * rule covers, drawn with the real EmptyState and EmptyAsk and the words
-   * its own surface uses, so each can be judged without its page's live
-   * store. A press here goes nowhere; on its surface it puts the words
-   * where they go (empty-asks.ts).
+   * rule covers, drawn with the real EmptyState, EmptyAsk and CantStart and
+   * the words its own surface reads (core's words, empty-asks.ts), so each
+   * can be judged without its page's live store. A press here goes nowhere;
+   * on its surface it puts the words where they go.
    */
   import {
+    CAW_NO_MACHINE,
     delegateTypesWords,
     mcpWords,
     memoryWords,
     routinesWords,
   } from "@cawco/core";
+  import CantStart from "#lib/cawco/CantStart.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import EmptyAsk from "#lib/cawco/EmptyAsk.svelte";
   import {
     askLabel,
+    EMPTY_LINES,
     FLEET_ASKS,
     firstAskLabel,
     NO_SESSION_CAN_START,
   } from "#lib/cawco/empty-asks.js";
-  import { CAW_NO_MACHINE } from "#lib/cawco/project/caw-lead.svelte.js";
   import { stageLabel } from "#lib/cawco/project-tasks.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
@@ -46,9 +48,7 @@
     IconChat,
     IconClock,
     IconHook,
-    IconPlus,
     IconSearch,
-    IconServer,
     IconTerminal,
   } from "#lib/icons.js";
   import EmptyState from "./empty-state.svelte";
@@ -78,38 +78,20 @@
 </script>
 
 {#snippet addMachine()}
-  <Button aria-haspopup="dialog" variant="outline">
-    <IconServer />
-    <span>Add machine</span>
-  </Button>
+  <Button aria-haspopup="dialog" label="Add machine" variant="outline" />
 {/snippet}
 
 <div class="w-full min-w-0" data-empty-site={site}>
-  {#if site === "hooks"}
+  {#if site === "hooks" || site === "rules"}
     <EmptyState
-      icon={sectionOf("hooks").icon}
-      line="Start from one of these — they are ordinary hooks once added, and you can change every part of them."
-      title="Nothing runs yet"
+      icon={sectionOf(site).icon}
+      line={EMPTY_LINES.starters(site, canStart)}
+      title={site === "hooks" ? "Nothing runs yet" : "Nothing is watching yet"}
     >
       {#snippet action()}
         <EmptyAsk
           {canStart}
-          label={askLabel(FLEET_ASKS.hooks.what)}
-          onask={nowhere}
-          reason={NO_SESSION_CAN_START}
-        />
-      {/snippet}
-    </EmptyState>
-  {:else if site === "rules"}
-    <EmptyState
-      icon={sectionOf("rules").icon}
-      line="Start from one of these — they are ordinary rules once added, and you can change every part of them."
-      title="Nothing is watching yet"
-    >
-      {#snippet action()}
-        <EmptyAsk
-          {canStart}
-          label={askLabel(FLEET_ASKS.rules.what)}
+          label={askLabel(FLEET_ASKS[site].what)}
           onask={nowhere}
           reason={NO_SESSION_CAN_START}
         />
@@ -118,11 +100,11 @@
   {:else if site === "rules-waiting"}
     <EmptyState
       icon={sectionOf("rules").icon}
-      line="Every session that was told something has answered for it."
+      line={EMPTY_LINES.rulesNoneWaiting}
       title="No rule is waiting on an answer"
     >
       {#snippet action()}
-        <Button variant="outline">Remove the filter</Button>
+        <Button label="Remove the filter" variant="outline" />
       {/snippet}
     </EmptyState>
   {:else if site === "mcp"}
@@ -139,10 +121,7 @@
           reason={NO_SESSION_CAN_START}
         >
           {#snippet byHand()}
-            <Button variant="outline">
-              <IconPlus />
-              <span>{mcpWords.add}</span>
-            </Button>
+            <Button label={mcpWords.add} variant="outline" />
           {/snippet}
         </EmptyAsk>
       {/snippet}
@@ -150,11 +129,11 @@
   {:else if site === "memory-no-match"}
     <EmptyState
       icon={IconSearch}
-      line="Try fewer letters, or clear the filter."
+      line={EMPTY_LINES.memoryNoMatch}
       title={memoryWords.noMatch(filter)}
     >
       {#snippet action()}
-        <Button variant="outline">Remove the filter</Button>
+        <Button label="Remove the filter" variant="outline" />
       {/snippet}
     </EmptyState>
   {:else if site === "delegate-types"}
@@ -171,10 +150,7 @@
           reason={NO_SESSION_CAN_START}
         >
           {#snippet byHand()}
-            <Button variant="outline">
-              <IconPlus />
-              <span>{delegateTypesWords.add}</span>
-            </Button>
+            <Button label={delegateTypesWords.add} variant="outline" />
           {/snippet}
         </EmptyAsk>
       {/snippet}
@@ -182,18 +158,17 @@
   {:else if site === "cli-tools"}
     <EmptyState
       icon={IconTerminal}
-      line="This hub's build carries no tools to install. They ship with CawCo, so updating the hub brings them."
+      line={EMPTY_LINES.cliTools}
       title="Nothing to install"
     >
       {#snippet action()}
-        <Button variant="outline">Open Updates</Button>
+        <Button label="Open Updates" variant="outline" />
       {/snippet}
     </EmptyState>
   {:else if site === "session-blank"}
     <EmptyState
       pad="transcript"
       icon={IconChat}
-      line="Write the first message below."
       title="Nothing has been said here yet"
     >
       {#snippet action()}
@@ -203,7 +178,7 @@
   {:else if site === "transcript-empty"}
     <EmptyState
       icon={IconChat}
-      line="Send the first instruction below — / lists this session's commands, @ names a machine or session."
+      line={EMPTY_LINES.transcript}
       title="No messages yet"
     >
       {#snippet action()}
@@ -212,11 +187,14 @@
     </EmptyState>
   {:else if site === "routines-caw-away"}
     <EmptyState
-      action={addMachine}
       icon={IconClock}
-      line={routinesWords.emptyOff(CAW_NO_MACHINE)}
+      line={routinesWords.emptyWhat(project)}
       title={routinesWords.empty}
-    />
+    >
+      {#snippet action()}
+        <CantStart byHand={addMachine} reason={CAW_NO_MACHINE} />
+      {/snippet}
+    </EmptyState>
   {:else if site === "sources"}
     <EmptyState
       icon={IconHook}
@@ -245,8 +223,9 @@
           href="/project/{encodeURIComponent(project)}?ask={encodeURIComponent(
             `Make a view called ${stageLabel(view)} for this project.`
           )}"
-          variant="outline">Ask Caw for this view</Button
-        >
+          label="Ask Caw for this view"
+          variant="outline"
+        />
       {/snippet}
     </EmptyState>
   {:else}
@@ -256,7 +235,7 @@
       title="This view didn't open"
     >
       {#snippet action()}
-        <Button variant="outline">Retry</Button>
+        <Button label="Retry" variant="outline" />
       {/snippet}
     </EmptyState>
   {/if}

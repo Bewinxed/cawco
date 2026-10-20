@@ -52,7 +52,7 @@
     type SessionState,
   } from "../client.svelte";
   import EmptyAsk from "../EmptyAsk.svelte";
-  import { askFirst, firstAskLabel } from "../empty-asks";
+  import { askFirst, EMPTY_LINES, firstAskLabel } from "../empty-asks";
   import { crossIn, dur, ease, motionOk, rise } from "../motion/curves.svelte";
   import { BLEED } from "../motion/rows.svelte";
   import { carry, waiting } from "../motion/share.svelte";
@@ -3908,7 +3908,7 @@
            Session form in its folder with the same words. -->
       <EmptyState
         icon={IconChat}
-        line="Send the first instruction below — / lists this session's commands, @ names a machine or session."
+        line={EMPTY_LINES.transcript}
         title="No messages yet"
       >
         {#snippet action()}

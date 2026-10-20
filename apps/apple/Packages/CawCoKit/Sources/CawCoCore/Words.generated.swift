@@ -1509,15 +1509,23 @@ public enum Words {
 
         public static let empty = "No routines yet"
 
+        /// What the empty page is for: its line whether or not Caw can start.
+        public static func emptyWhat(project: String) -> String {
+            "Caw runs work for \(project) on a schedule, or when something happens."
+        }
+
+        /// Caw can start: what the page is for, then what to tell him over his composer.
         public static func emptyCaw(project: String) -> String {
             "Caw runs work for \(project) on a schedule, or when something happens. Say what, and when."
         }
 
+        /// The app's empty page while Caw can't start (RoutinesPane.swift): what the page is, then his reason as he gives it, a whole sentence saying why and what to do (CAW_NO_MACHINE, his view's `problem`), never restated. The dashboard stands `emptyWhat` over his reason's own line instead.
         public static func emptyOff(problem: String) -> String {
-            "Caw makes routines, and he can't start: \(problem)."
+            "Caw makes routines. \(problem)"
         }
 
-        public static let away = "his machine is away"
+        /// His reason while none was given: the same sentence, his machine away.
+        public static let away = "His machine is away, so he can't start. Bring it online and he can."
 
         public static let startersLabel = "Routines to ask Caw for"
 
@@ -1963,7 +1971,7 @@ public enum Words {
 
         public static let emptyTitle = "No delegate types yet"
 
-        public static let emptyLine = "A fresh hub seeds five on first read; delete all of them and this is what is left."
+        public static let emptyLine = "Presets a session picks from when it hands work on, so each delegate starts with the right harness, model and tools."
 
         public static let remove = "Delete delegate type"
 
@@ -2225,7 +2233,7 @@ public enum Words {
         public static let filterLabel = "Filter memory files"
 
         public static func noMatch(filter: String) -> String {
-            "No file matches “\(filter)”."
+            "No file matches “\(filter)”"
         }
 
         public static let everySession = "Loaded into every session"

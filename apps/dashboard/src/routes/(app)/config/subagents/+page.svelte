@@ -202,10 +202,11 @@
       title="No subagents yet"
     >
       {#snippet action()}
-        <Button href="/config/subagents/new" variant="outline">
-          <IconPlus />
-          <span>Write a subagent</span>
-        </Button>
+        <Button
+          href="/config/subagents/new"
+          label="Write a subagent"
+          variant="outline"
+        />
       {/snippet}
     </EmptyState>
   {:else}

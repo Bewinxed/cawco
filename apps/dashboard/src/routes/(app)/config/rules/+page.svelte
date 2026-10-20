@@ -10,6 +10,7 @@
   import {
     askLabel,
     askNewSession,
+    EMPTY_LINES,
     FLEET_ASKS,
     NO_SESSION_CAN_START,
     sessionCanStart,
@@ -44,6 +45,14 @@
     rules.reduce((sum, rule) => sum + rule.stats.pending, 0)
   );
   let waitingOnly = $state(false);
+  // The filter's chip stands only while a rule waits: the last answer turns
+  // the filter off with it, so the list never stands behind a chip that has
+  // gone (the empty state's Remove the filter covers the frame between).
+  $effect(() => {
+    if (pendingTotal === 0) {
+      waitingOnly = false;
+    }
+  });
   const shown = $derived(
     waitingOnly ? rules.filter((rule) => rule.stats.pending > 0) : rules
   );
@@ -143,7 +152,7 @@
          write one from scratch" under it being the way by hand. -->
     <EmptyState
       icon={section.icon}
-      line="Start from one of these — they are ordinary rules once added, and you can change every part of them."
+      line={EMPTY_LINES.starters("rules", sessionCanStart())}
       title="Nothing is watching yet"
     >
       {#snippet action()}
@@ -197,7 +206,7 @@
          filter on them. -->
     <EmptyState
       icon={section.icon}
-      line="Every session that was told something has answered for it."
+      line={EMPTY_LINES.rulesNoneWaiting}
       title="No rule is waiting on an answer"
     >
       {#snippet action()}
@@ -205,8 +214,9 @@
           onclick={() => {
             waitingOnly = false;
           }}
-          variant="outline">Remove the filter</Button
-        >
+          label="Remove the filter"
+          variant="outline"
+        />
       {/snippet}
     </EmptyState>
   {:else}

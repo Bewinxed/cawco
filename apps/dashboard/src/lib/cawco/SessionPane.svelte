@@ -1252,7 +1252,6 @@
               <EmptyState
                 pad="transcript"
                 icon={IconChat}
-                line="Write the first message below."
                 title="Nothing has been said here yet"
               >
                 {#snippet action()}

@@ -10,6 +10,16 @@ import type {
   UserQuestion,
 } from "./harness";
 
+/**
+ * Why Caw can't start when no machine is online, and how to fix it, in the
+ * error formula's order (WORDS.md): the hub's refusal and his view's
+ * `problem`, his panel's alert, and an empty Routines or Event sources
+ * page's reason. Its next step names no place and no writing, as it stands
+ * where his composer may or may not.
+ */
+export const CAW_NO_MACHINE =
+  "No machine is online, so Caw can't start. Bring one online and he can.";
+
 /** A project's Caw, as `GET`/`PATCH /api/projects/:id/caw` answer it. */
 export interface CawView {
   /**

@@ -23,7 +23,11 @@
    * composer. He stands there instead of on the composer; your first words
    * send him from the hero to his seat on it.
    */
-  import type { PermissionResult, ThreadMessage } from "@cawco/core";
+  import {
+    CAW_NO_MACHINE,
+    type PermissionResult,
+    type ThreadMessage,
+  } from "@cawco/core";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -65,7 +69,6 @@
   import { failureWords, THREAD_SEND_UNREACHED, unreachable } from "./hub-read";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
-  import { CAW_NO_MACHINE } from "./project/caw-lead.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
   import {
     listTasks,

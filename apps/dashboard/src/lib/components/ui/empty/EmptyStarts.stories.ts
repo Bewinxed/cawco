@@ -3,9 +3,10 @@
  * action (Component Story Format 3, live components): each as its surface
  * draws it, through EmptyStarts' seam, with the words that surface uses.
  * A fleet ask names the New Session form's agent; a session's own, its own
- * agent; a project's, Caw. Where the work can't start, why and the way by
- * hand. The meta's args are every story's; a story's own args are what it
- * changes.
+ * agent; a project's, Caw. Where the work can't start, why stands in its
+ * own line over the way by hand. Every action is words alone, the block's
+ * mark its one glyph (DESIGN.md, Empty). The meta's args are every story's;
+ * a story's own args are what it changes.
  */
 import EmptyStarts from "./EmptyStarts.svelte";
 
@@ -22,11 +23,14 @@ export default {
 /** Configure › Hooks, nothing yet: ask a new session for a hook. */
 export const Hooks = { args: { site: "hooks" } };
 
-/** Configure › Hooks with no machine online: why, the starters below being the way by hand. */
+/** Configure › Hooks with no machine online: the line offers the starters alone, and why no ask stands. */
 export const HooksNoMachine = { args: { site: "hooks", canStart: false } };
 
 /** Configure › Rules, nothing yet: ask a new session for a rule. */
 export const Rules = { args: { site: "rules" } };
+
+/** Configure › Rules with no machine online: the starters alone, and why. */
+export const RulesNoMachine = { args: { site: "rules", canStart: false } };
 
 /** Configure › Rules filtered to Waiting on an answer, none waiting: remove the filter. */
 export const RulesNoneWaiting = { args: { site: "rules-waiting" } };
@@ -51,7 +55,7 @@ export const DelegateTypesNoMachine = {
 /** Configure › Command-line tools, a hub with no catalog: why no session can fill it, and Updates. */
 export const CliTools = { args: { site: "cli-tools" } };
 
-/** A session nothing has been said in: ask its own agent about its folder. */
+/** A session nothing has been said in: its title, and the ask to its own agent alone. */
 export const SessionBlank = { args: { site: "session-blank" } };
 
 /** An OpenCode session nothing has been said in: the ask names OpenCode. */
@@ -62,7 +66,7 @@ export const SessionBlankOpenCode = {
 /** A transcript with no messages: ask its own agent about its folder. */
 export const TranscriptEmpty = { args: { site: "transcript-empty" } };
 
-/** A project's Routines with Caw unable to start: why, and Add machine by hand. */
+/** A project's Routines with Caw unable to start: what the page is for, then why, over Add machine. */
 export const RoutinesCawAway = { args: { site: "routines-caw-away" } };
 
 /** Event sources, none yet: ask Caw for one. */
@@ -94,6 +98,12 @@ export const MemoryNoMatchPhone = {
 /** On a phone, Delegate types with no machine online. */
 export const DelegateTypesNoMachinePhone = {
   args: { site: "delegate-types", canStart: false },
+  parameters: { viewport: "phone" },
+};
+
+/** On a phone, a project's Routines with a long name and Caw unable to start. */
+export const RoutinesCawAwayPhone = {
+  args: { site: "routines-caw-away", project: LONG },
   parameters: { viewport: "phone" },
 };
 

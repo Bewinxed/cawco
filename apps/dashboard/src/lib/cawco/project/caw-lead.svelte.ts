@@ -25,6 +25,7 @@
  */
 
 import {
+  CAW_NO_MACHINE,
   type CawInitiated,
   type CawView,
   type HarnessKind,
@@ -80,14 +81,6 @@ function breathMs(): number {
   const value = Number.parseFloat(token);
   return (token.endsWith("ms") ? value : value * 1000) * 4;
 }
-
-/**
- * Why Caw cannot start, when no machine is online: the one reason the hub
- * gives (caw.ts `problemOf`: his standing session and every checkout he
- * starts in need one).
- */
-export const CAW_NO_MACHINE =
-  "No machine is online, so Caw can’t start. Bring a machine online, then write here.";
 
 /** What the head's line says when Caw has something: words, or his ask as a link. */
 export type CawWords =

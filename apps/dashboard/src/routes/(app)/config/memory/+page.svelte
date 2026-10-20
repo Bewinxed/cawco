@@ -19,6 +19,7 @@
   import SectionRow from "#lib/cawco/config/SectionRow.svelte";
   import { sectionOf } from "#lib/cawco/config/sections.js";
   import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
+  import { EMPTY_LINES } from "#lib/cawco/empty-asks.js";
   import { type FleetMemoryDocRow, formatBytes } from "#lib/cawco/fleet.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
   import { orderMachines } from "#lib/cawco/rail.svelte.js";
@@ -188,7 +189,7 @@
          one made up to match a search. Its one action lifts the filter. -->
     <EmptyState
       icon={IconSearch}
-      line="Try fewer letters, or clear the filter."
+      line={EMPTY_LINES.memoryNoMatch}
       title={words.noMatch(filter.trim())}
     >
       {#snippet action()}
@@ -196,8 +197,9 @@
           onclick={() => {
             filter = "";
           }}
-          variant="outline">Remove the filter</Button
-        >
+          label="Remove the filter"
+          variant="outline"
+        />
       {/snippet}
     </EmptyState>
   {/if}

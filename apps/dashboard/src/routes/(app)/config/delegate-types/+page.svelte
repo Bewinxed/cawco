@@ -112,10 +112,11 @@
             reason={NO_SESSION_CAN_START}
           >
             {#snippet byHand()}
-              <Button href="/config/delegate-types/new" variant="outline">
-                <IconPlus />
-                <span>{words.add}</span>
-              </Button>
+              <Button
+                href="/config/delegate-types/new"
+                label={words.add}
+                variant="outline"
+              />
             {/snippet}
           </EmptyAsk>
         {/snippet}

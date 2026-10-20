@@ -114,12 +114,17 @@
     <EmptyState icon={IconAlert} line={problem} title="This view didn't open">
       {#snippet action()}
         {#if missing}
-          <Button href={askHref} variant="outline">Ask Caw for this view</Button
-          >
+          <Button
+            href={askHref}
+            label="Ask Caw for this view"
+            variant="outline"
+          />
         {:else}
-          <Button onclick={() => read(projectId, name)} variant="outline"
-            >Retry</Button
-          >
+          <Button
+            label="Retry"
+            onclick={() => read(projectId, name)}
+            variant="outline"
+          />
         {/if}
       {/snippet}
     </EmptyState>

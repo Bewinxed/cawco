@@ -839,7 +839,7 @@ Release notes (the panel's row, Configure › Updates) name each section with a 
 A compact tinted row, never a slab: 10px radius, 10×12px padding, body type, an optional 16px glyph spanning the title and description. Variants: default (recess), destructive, warning, success and info (each its status pair). No border.
 
 ### Empty, loading and skeleton states
-- **Empty** (`ui/empty`): a 20px Solar duotone mark in muted ink, a title in the title role, one body line in muted ink up to 60ch saying why, and at most one action. It sits on the column the content would have started on, with 21px of block padding.
+- **Empty** (`ui/empty`): a 20px Solar duotone mark in muted ink, a title in the title role, one body line in muted ink up to 60ch saying why, and its one action (The Empty Starts Work Rule). The mark is the block's one glyph, so its action is words alone: the kit's outline button with no leading icon, the ask and the way by hand alike, and where the work can't start, why stands in its own meta line over that button. It sits on the column the content would have started on, with 21px of block padding.
 - **Skeleton** (`ui/skeleton`): a `surface-fill` block at exactly the size of what it stands for, with an 8px radius. One band of the raised surface at 60% crosses it every 1.2s, by transform only; without motion it sits still. Board skeleton rows are 44px (83px on a phone) with a header band in `surface-band`.
 - **Spinner:** a 16px ring at 25% with a 25% arc, turning once per 1.2s loop. It is used inside a pending button's slot, as a toast's loading icon, and where a wait is under the skeleton threshold.
 

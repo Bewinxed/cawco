@@ -13,6 +13,7 @@
   import {
     askLabel,
     askNewSession,
+    EMPTY_LINES,
     FLEET_ASKS,
     NO_SESSION_CAN_START,
     sessionCanStart,
@@ -114,7 +115,7 @@
          write one from scratch" under it being the way by hand. -->
     <EmptyState
       icon={section.icon}
-      line="Start from one of these — they are ordinary hooks once added, and you can change every part of them."
+      line={EMPTY_LINES.starters("hooks", sessionCanStart())}
       title="Nothing runs yet"
     >
       {#snippet action()}
