@@ -522,6 +522,11 @@ export prefix="cawco-proof-$RIG-$$"
 export net="$prefix-net" hubc="$prefix-hub" joinerc="$prefix-joiner" freshc="$prefix-fresh" releasec="$prefix-release"
 subnet="10.231.$((10 + RIG_NUMBER))"
 export release_ip=$subnet.2 hub_ip=$subnet.3 joiner_ip=$subnet.4 fresh_ip=$subnet.5
+# The hub's first preview port, its port's next (hub config.ts PREVIEW_PORTS, no CAWCO_PREVIEW_PORTS here), and the
+# host-mode name its Settings save checks resolves (preview.ts probePattern): the rig's network has no DNS, so the hub
+# machine's hosts file answers it as localtest.me's public DNS does, 127.0.0.1 ("The entire domain name
+# localtest.me—and all wildcard entries—point to 127.0.0.1", weblogs.asp.net/owscott/introducing-testing-domain-localtest-me).
+export preview_first=3457 preview_name="p-3457.localtest.me"
 export feed="http://$release_ip:8000/ok"
 export key="$bins/keys/test-release-private.pem"
 
@@ -979,7 +984,7 @@ machines() {
     python3 -m http.server 8000 --directory /srv/release --bind "$release_ip" > /dev/null || return 1
   for role in "$@"; do
     case $role in
-      hub) boot "$hubc" "$hub_ip" hub & ;;
+      hub) boot "$hubc" "$hub_ip" hub linger --add-host "$preview_name:127.0.0.1" & ;;
       joiner) boot "$joinerc" "$joiner_ip" joiner linger --security-opt unmask=ALL & ;;
       fresh) boot "$freshc" "$fresh_ip" fresh nolinger & ;;
     esac
@@ -2148,11 +2153,12 @@ ws_preview_says() { as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$(c
 # Host mode, the owner's: one listener on the preview range's first port routes each request by its Host, a name of
 # the fleet's pattern (preview.ts sessionOfHost), behind the lock (preview-access.ts). Set as Settings › Previews and
 # Caw's admin_previews_write set it (PUT /api/preview-settings), localtest.me names (every one is 127.0.0.1 in public
-# DNS, which the hub's save checks one of), on https as host mode takes them (a proxy in front serves TLS; here curl
-# reaches the listener's plain port); $1 host or port.
+# DNS; the save checks one of them resolves, which the hub machine's hosts file answers here: $preview_name), on https
+# as host mode takes them (a proxy in front serves TLS; here curl reaches the listener's plain port); $1 host or port.
 ws_preview_mode() {
   local first body
   first=$(hub_api /api/preview-settings | json 'd => d.ports.split(/\D+/)[0]')
+  [[ $first == "$preview_first" ]] || { echo "the hub's first preview port is $first, and the hub machine's hosts file names $preview_name: correct preview_first"; return 1; }
   body="{\"mode\":\"$1\"}"
   [[ $1 == port ]] || body="{\"mode\":\"host\",\"pattern\":\"https://p-{port}.localtest.me:$first\"}"
   as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' -X PUT http://127.0.0.1:3456/api/preview-settings -H 'content-type: application/json' -d "$body"
