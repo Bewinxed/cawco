@@ -502,6 +502,8 @@
 @custom-variant slot-note (&[data-slot="note"]);
 @custom-variant slot-now (&[data-slot="now"]);
 @custom-variant slot-older-rows-box (&[data-slot="older-rows-box"]);
+@custom-variant slot-option (&[data-slot="option"]);
+@custom-variant slot-option-group (&[data-slot="option-group"]);
 @custom-variant slot-order (&[data-slot="order"]);
 @custom-variant slot-page-head (&[data-slot="page-head"]);
 @custom-variant slot-page-thumb (&[data-slot="page-thumb"]);

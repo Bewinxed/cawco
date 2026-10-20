@@ -13,14 +13,17 @@
        * chips (30px, 8px radius, keycap digits)"): the code face at the meta
        * size in strong ink (Typography, Code: "code, commands, paths, tool
        * names, keycaps"), on the spacing ladder's 18px; filled vermillion with
-       * a white digit when its chip is picked (Colors, Chosen option:
-       * `chip-chosen-bg`, `chip-chosen-ink`: ui/chip's `option` sets them),
-       * the fill turning over --dur-control where motion is welcome.
+       * a white digit when its option is picked (Colors, Chosen option:
+       * `chip-chosen-bg`, `chip-chosen-ink`), read off the option it stands
+       * in (`group/option`: ui/chip's `option`, every ui/option-group item):
+       * checked, pressed or a record of the pick (`data-chosen`). The fill
+       * turns over --dur-control where motion is welcome. It shows under
+       * every pointer: a finger's option still wears its key.
        */
       look: {
         key: "in-data-[slot=tooltip-content]:bg-[var(--on-brand)]/20 in-data-[slot=tooltip-content]:text-[var(--on-brand)] dark:in-data-[slot=tooltip-content]:bg-surface-page/10",
         keycap:
-          "inline-grid h-space-5 min-w-space-5 flex-none place-items-center font-mono text-ink-strong leading-none motion-safe:[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)]",
+          "inline-grid h-space-5 min-w-space-5 flex-none place-items-center font-mono text-ink-strong leading-none group-aria-checked/option:bg-chip-chosen-bg group-aria-checked/option:text-chip-chosen-ink group-aria-pressed/option:bg-chip-chosen-bg group-aria-pressed/option:text-chip-chosen-ink group-data-chosen/option:bg-chip-chosen-bg group-data-chosen/option:text-chip-chosen-ink motion-safe:[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)]",
       },
       /** Its figures in tabular widths (DESIGN.md, The Tabular Figure Rule). */
       figures: { tabular: "tabular-nums" },

@@ -1,15 +1,3 @@
-<script lang="ts" module>
-  /**
-   * The digits belong to exactly one card. The composer can park several
-   * requests at once, and two question cards both answering "2" is worse than
-   * neither answering it — so question cards register here in mount order and
-   * the first one standing owns the keyboard. This is the `shortcuts` prop the
-   * old card took from its parent, kept inside the component instead: the
-   * composer that renders the stack should not have to know the rule.
-   */
-  const claimants = $state<symbol[]>([]);
-</script>
-
 <script lang="ts">
   import type {
     PermissionResult,
@@ -29,17 +17,16 @@
    * its body and its foot come up, fading and rising, one after the other
    * as the shape grows (`shown`), and sink back as it folds.
    */
-  import { ToggleGroup } from "bits-ui";
-  import { onMount, tick, untrack } from "svelte";
+  import { tick, untrack } from "svelte";
   import { frameObserver } from "#lib/cawco/frame-observer.js";
   import DiffView from "#lib/components/features/DiffView.svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  import {
-    chipsVariants,
-    chipVariants,
-  } from "#lib/components/ui/chip/index.js";
   import { Input } from "#lib/components/ui/input/index.js";
   import { Kbd } from "#lib/components/ui/kbd/index.js";
+  import {
+    OptionGroup,
+    OptionGroupItem,
+  } from "#lib/components/ui/option-group/index.js";
   import {
     IconAsk,
     IconCheck,
@@ -50,7 +37,6 @@
     IconShield,
     IconTick,
   } from "#lib/icons.js";
-  import { isTyping } from "#lib/utils/typing.js";
   import {
     cawco,
     commandRecord,
@@ -225,25 +211,19 @@
   const allAnswered = $derived(!!questions && questions.every(isAnswered));
 
   /**
-   * Which question the digits answer. A card usually asks one thing and this
-   * never moves; when it asks several, it is the question keyboard focus is
-   * in, and without focus in the card the first question still unanswered.
-   * Only that question's keycaps are lit — a keycap that cannot be pressed is
-   * the defect this whole handler exists to fix.
+   * The question being answered: the one keyboard focus is in, and after a
+   * pick the first question still unanswered.
    */
   let current = $state(0);
 
   /**
-   * Each question's options are one bits-ui toggle group (WAI-ARIA's
-   * composite widget): one tab stop per question, the arrows moving inside
-   * it, Space or Enter pressing the option under focus — `single` for a
-   * question with one answer, `multiple` for a multi-select. Not RadioGroup:
-   * its arrows pick the option they land on once the question has an answer
-   * (bits-ui 2.19 `RadioGroupItemState.onfocus`), so an arrow would change
-   * the answer and move the card on; here an arrow only moves.
+   * Each question's options are one kit option group (ui/option-group): one
+   * tab stop per question, the arrows moving inside it, a click, Space or
+   * the option's digit picking, Enter answering once every question has an
+   * answer. A digit is heard only while focus is in its question's group.
    *
-   * "Other" is one of its group's chips, under a value no option label can
-   * be, so the arrows reach it too.
+   * "Other" is one of its group's options, under a value no option label
+   * can be, so the arrows and its digit reach it too.
    */
   const OTHER = "\u0000other";
 
@@ -259,7 +239,7 @@
   /** Focus to a question's tab stop: the option it last left from, or its first. */
   async function focusQuestion(index: number): Promise<void> {
     await tick();
-    const group = card?.querySelectorAll("[data-toggle-group-root]")[index];
+    const group = card?.querySelectorAll('[data-slot="option-group"]')[index];
     group?.querySelector<HTMLElement>('[tabindex="0"]')?.focus();
   }
 
@@ -291,13 +271,13 @@
   }
 
   /**
-   * A single answer, picked: re-picking the chosen option clears it (the
-   * group's own toggle), so a mis-keyed digit is undoable with the same digit
-   * rather than only by picking something else.
+   * A single answer, picked. Pressing the chosen option keeps it (the
+   * group never toggles a pick off); a mis-pick is undone by picking
+   * another.
    */
   function setSingle(index: number, label: string): void {
     const q = questions?.[index];
-    if (!(q && answerable)) {
+    if (!(q && answerable && label)) {
       return;
     }
     current = index;
@@ -306,9 +286,7 @@
     if (otherAt === index) {
       otherAt = null;
     }
-    if (label) {
-      advance();
-    }
+    advance();
   }
 
   /** A multi-select's options, as its group holds them; the reader's own words stay among them. */
@@ -325,63 +303,10 @@
     };
   }
 
-  /** A digit's press: the option wearing that keycap, toggled as its chip would be. */
-  function toggle(index: number, label: string): void {
-    const q = questions?.[index];
-    if (!q) {
-      return;
-    }
-    if (!q.multiSelect) {
-      setSingle(index, answers[q.question] === label ? "" : label);
-      return;
-    }
-    const list = pressedOf(q, index);
-    setMulti(
-      index,
-      list.includes(label) ? list.filter((l) => l !== label) : [...list, label]
-    );
-  }
-
-  /**
-   * The keys an option takes before its group does. Once every question has
-   * an answer, Enter sends — the window's handler does it, so the group must
-   * not press the option under focus first. ↑/↓ step through the options as
-   * ←/→ do: the chips wrap, so either axis means "the next one", and a
-   * horizontal group reads only ←/→, so the step goes to it as its own key.
-   */
-  const CROSS_STEPS: Record<string, number | undefined> = {
-    ArrowDown: 1,
-    ArrowUp: -1,
-  };
-
-  function optionKey(event: KeyboardEvent): void {
-    if (event.key === "Enter" && allAnswered) {
-      event.preventDefault();
-      return;
-    }
-    const step = CROSS_STEPS[event.key];
-    const chip = event.target;
-    if (!(step && chip instanceof HTMLElement)) {
-      return;
-    }
+  /** "Other" opens its field instead of being picked: its answer is what is written there. */
+  function pressOther(event: MouseEvent, index: number): void {
     event.preventDefault();
-    const forward = step > 0 !== (getComputedStyle(chip).direction === "rtl");
-    chip.dispatchEvent(
-      new KeyboardEvent("keydown", {
-        key: forward ? "ArrowRight" : "ArrowLeft",
-        bubbles: true,
-      })
-    );
-  }
-
-  /** "Other" opens its field instead of pressing: its answer is what is written there. */
-  function otherChipKey(event: KeyboardEvent, index: number): void {
-    if (event.key === " " || (event.key === "Enter" && !allAnswered)) {
-      event.preventDefault();
-      openOther(index);
-      return;
-    }
-    optionKey(event);
+    openOther(index);
   }
 
   const isSelected = (question: string, label: string): boolean => {
@@ -523,35 +448,22 @@
   const disabledOf = (choice: Choice): boolean =>
     pressed === null ? !reachable : !pendingOf(choice);
 
-  /* Only a question card claims the digits, and only one of them at a time. */
-  const claim = Symbol("prompt");
-  onMount(() => {
-    if (!questions) {
-      return;
-    }
-    claimants.push(claim);
-    return () => {
-      const at = claimants.indexOf(claim);
-      if (at !== -1) {
-        claimants.splice(at, 1);
-      }
-    };
-  });
-  const ownsKeys = $derived(!!questions && claimants[0] === claim);
-
   /**
-   * Which question the digits answer, said where the eye is: a hairline
-   * rail on that question's lede, in the selection frame's ink. Every
-   * question's keycaps look alike, so with more than one question this is
-   * the one mark of where a digit lands. It moves as the digits do (an
-   * answer moves them on), gliding as the house highlight's selection pill
-   * does; with reduced motion it is simply there.
+   * Which question is being answered, said where the eye is: a hairline
+   * rail on that question's lede, in the selection frame's ink, while
+   * focus is in the card's options. Every question's keycaps look alike, so
+   * with more than one question this is the one mark of where a digit
+   * lands. It moves as focus does (a pick moves it on), gliding as the
+   * house highlight's selection pill does; with reduced motion it is simply
+   * there.
    */
   const ledes = $state<HTMLElement[]>([]);
+  /** Focus is on one of the card's options. */
+  let choosing = $state(false);
   let rail = $state<{ top: number; height: number } | null>(null);
   $effect(() => {
     const node = ledes[current];
-    if (!(node && ownsKeys && questions && questions.length > 1)) {
+    if (!(node && choosing && questions && questions.length > 1)) {
       rail = null;
       return;
     }
@@ -566,93 +478,14 @@
     return () => sizes.disconnect();
   });
 
-  /**
-   * The keys the card already advertises: a digit picks the option wearing that
-   * keycap on the `current` question, Enter sends once every question has an
-   * answer. Tab, Shift+Tab, the arrows and Space are the option groups' own
-   * (bits-ui's roving focus); these are the rest. While the card is on screen
-   * they reach it from its own pane (its workspace group, `[data-leaf]`, or
-   * Caw's panel floating over a project's page, `[data-caw-panel]`, which no
-   * workspace group holds), from nothing at all (focus fallen to the body,
-   * as it does when an answered card's button leaves), and from any part of
-   * the shell that is no one else's. Another pane, another card, a dialog or
-   * a menu keeps its own keys, and while a modal stands nothing focused is
-   * its, not the card's.
-   * Escape is never one of them: it closes menus, dialogs and peeks all over
-   * the page, and a question is put down only by its own Dismiss button. A
-   * test script's Escape on a page with nothing focused once dismissed the
-   * owner's parked question through here.
-   *
-   * They are inert while the reader is writing (`isTyping`) — which is what
-   * lets "2" mean an option here and a character in the composer — inert under
-   * a modifier, so browser and OS chords still reach their owners, and inert
-   * whenever the buttons are, so the `answerable` latch is the single gate on
-   * answering: an answer cannot be keyed in twice, or into a dead socket.
-   */
   let card = $state<HTMLElement | null>(null);
-  /** Surfaces that hold keys of their own: another pane, card, dialog or menu. */
-  const OWNERS =
-    "[data-leaf], [data-caw-panel], [data-slot='hitl'], dialog, [role='dialog'], [role='alertdialog'], [role='menu'], [role='listbox']";
-  /** A modal standing over the page: what nothing focused belongs to while it does. */
-  const MODAL = "[aria-modal='true'], dialog[open]";
-  const heard = (target: EventTarget | null): boolean => {
-    if (!card || card.closest("[inert]") || !card.checkVisibility()) {
-      return false;
-    }
-    const pane = card.closest("[data-leaf], [data-caw-panel]") ?? card;
-    if (target instanceof Node && pane.contains(target)) {
-      return true;
-    }
-    if (
-      !(target instanceof Element) ||
-      target === document.body ||
-      target === document.documentElement
-    ) {
-      const modal = document.querySelector(MODAL);
-      return !modal || modal.contains(card);
-    }
-    return !target.closest(OWNERS);
-  };
 
-  function handleKeydown(event: KeyboardEvent): void {
-    if (!(ownsKeys && answerable && heard(event.target))) {
-      return;
-    }
-    if (event.metaKey || event.ctrlKey || event.altKey || isTyping()) {
-      return;
-    }
-    if (event.key >= "1" && event.key <= "9") {
-      const options = questions?.[current]?.options ?? [];
-      const at = Number(event.key) - 1;
-      // The keycap after the last option is the reader's own answer.
-      if (at === options.length) {
-        event.preventDefault();
-        openOther(current);
-        return;
-      }
-      const option = options[at];
-      if (!option) {
-        return;
-      }
-      event.preventDefault();
-      toggle(current, option.label);
-      return;
-    }
-    if (event.key === "Enter" && allAnswered && !onButton(event.target)) {
-      event.preventDefault();
+  /** Enter on an option: the card's answer, once every question has one. */
+  function enter(): void {
+    if (allAnswered) {
       submitQuestion();
     }
   }
-
-  /**
-   * A button of its own under focus — Dismiss, the minimize chevron, a row in
-   * the transcript — keeps its Enter: focused on Dismiss, Enter dismisses
-   * rather than sends. The option chips are the card's own answer and send.
-   */
-  const onButton = (target: EventTarget | null): boolean =>
-    target instanceof Element &&
-    !!target.closest("button, a[href]") &&
-    !target.closest("[data-toggle-group-root]");
 
   function submitQuestion(): void {
     if (!(answerable && allAnswered)) {
@@ -713,8 +546,6 @@
     }
   }
 </script>
-
-<svelte:window onkeydown={handleKeydown} />
 
 <!-- Under the buttons, one line when there is something the buttons cannot
      say: the session's machine or the socket cannot carry an answer yet, or
@@ -864,28 +695,21 @@
         data-slot="browser-other"
         class="mb-space-2 flex h-c-input-h min-w-0 items-center gap-space-2"
       >
-        <ToggleGroup.Root
+        <OptionGroup
           aria-label={`Other answer to: ${browserAsk.reason}`}
-          class={chipsVariants({ class: "flex-none" })}
-          type="single"
-          value={otherAt === 0 ? OTHER : ""}
+          class="flex-none"
+          value={otherAt === 0 ? [OTHER] : []}
         >
-          <ToggleGroup.Item
-            class={chipVariants({ class: "touch-hit" })}
-            onclick={(event: MouseEvent) => {
-              event.preventDefault();
-              openOther(0);
-            }}
-            onkeydown={(event: KeyboardEvent) => otherChipKey(event, 0)}
-            type="button"
+          <OptionGroupItem
+            onclick={(event) => pressOther(event, 0)}
             value={OTHER}
           >
             <span
               data-slot="opt-label"
               class="min-w-0 wrap-anywhere text-pretty">Other</span
             >
-          </ToggleGroup.Item>
-        </ToggleGroup.Root>
+          </OptionGroupItem>
+        </OptionGroup>
         {#if otherAt === 0}
           <Input
             data-other
@@ -1021,94 +845,59 @@
             >
           {/if}
         {/snippet}
-        <!-- The chips stand flush in a scroller that clips (the body), so the
-             kit's ring sits on each chip's own border box (The One Ring
-             Rule) rather than outside it, where the scroller's edge would
-             cut it. In the list form each row sizes its own two columns:
-             the keycap's cell at its own width, standing on the label's
-             first line (`.mark-cell`), and the words in the rest, which may
-             shrink to nothing and wrap. -->
-        {#snippet chips()}
+        <!-- One tab stop per question; focus in it makes it the one the
+             digits answer, and the rail moves to it. The options are the
+             kit's option group (ui/option-group: a row of option chips, or
+             in the list form one full-width row per option, each sizing its
+             two columns: the keycap's cell at its own width, standing on
+             the label's first line (`.mark-cell`), and the words in the
+             rest, which may shrink to nothing and wrap). The chips stand
+             flush in a scroller that clips (the body), so each option's
+             ring sits on its own border box (The One Ring Rule), as the
+             kit's option draws it. The card only sets where it sits. -->
+        <OptionGroup
+          aria-labelledby="{claimId}-q{qi}"
+          class="mt-space-row mb-space-2"
+          layout={list ? "list" : "chips"}
+          multiple={q.multiSelect}
+          onenter={enter}
+          onfocusin={() => {
+            current = qi;
+            choosing = true;
+          }}
+          onfocusout={(event: FocusEvent) => {
+            choosing =
+              event.relatedTarget instanceof Element &&
+              !!card?.contains(event.relatedTarget) &&
+              !!event.relatedTarget.closest('[data-slot="option-group"]');
+          }}
+          bind:value={
+            () => pressedOf(q, qi),
+            (labels) =>
+              q.multiSelect
+                ? setMulti(qi, labels)
+                : setSingle(qi, labels.find((l) => l !== OTHER) ?? "")
+          }
+        >
           {#each q.options as opt, i (opt.label)}
-            {@const live = ownsKeys && qi === current && i < 9}
-            <ToggleGroup.Item
-              aria-keyshortcuts={live ? String(i + 1) : undefined}
-              class={chipVariants({
-                class:
-                  "touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-auto-fluid group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0",
-              })}
-              onkeydown={optionKey}
-              type="button"
+            <OptionGroupItem
+              digit={i < 9 ? i + 1 : undefined}
               value={opt.label}
             >
               {@render face(i + 1, opt.label, opt.description?.trim())}
-            </ToggleGroup.Item>
+            </OptionGroupItem>
           {/each}
           <!-- The reader's own answer, written in the field it opens. -->
           {#if own < 9}
-            {@const live = ownsKeys && qi === current}
-            <ToggleGroup.Item
-              aria-keyshortcuts={live ? String(own + 1) : undefined}
-              class={chipVariants({
-                class:
-                  "touch-hit focus-inset group-data-list/qopts:grid group-data-list/qopts:grid-cols-auto-fluid group-data-list/qopts:items-box-start group-data-list/qopts:min-w-0",
-              })}
-              onclick={(event: MouseEvent) => {
-                event.preventDefault();
-                openOther(qi);
-              }}
-              onkeydown={(event: KeyboardEvent) => otherChipKey(event, qi)}
-              type="button"
+            <OptionGroupItem
+              digit={own + 1}
+              onclick={(event) => pressOther(event, qi)}
               value={OTHER}
             >
               {@render face(own + 1, "Other")}
-            </ToggleGroup.Item>
+            </OptionGroupItem>
           {/if}
-        {/snippet}
-        <!-- One tab stop per question; focus in it makes it the one the
-             digits answer, and the rail moves to it. -->
-        <!-- The chip row is the kit's option-chip recipe (ui/chip
-             `chipsVariants` / `chipVariants`); the card only sets where it sits. The list
-             form is the chip recipe grown to one full-width row per option:
-             one column the card's width (`minmax(0, 1fr)`), each row
-             standing its keycap on the label's first line. -->
-        {#if q.multiSelect}
-          <ToggleGroup.Root
-            data-list={list || undefined}
-            aria-labelledby="{claimId}-q{qi}"
-            class={chipsVariants({
-              class:
-                "group/qopts mt-space-row mb-space-2 data-list:grid data-list:grid-cols-1",
-            })}
-            onfocusin={() => {
-              current = qi;
-            }}
-            type="multiple"
-            bind:value={
-              () => pressedOf(q, qi), (labels) => setMulti(qi, labels)
-            }
-          >
-            {@render chips()}
-          </ToggleGroup.Root>
-        {:else}
-          <ToggleGroup.Root
-            data-list={list || undefined}
-            aria-labelledby="{claimId}-q{qi}"
-            class={chipsVariants({
-              class:
-                "group/qopts mt-space-row mb-space-2 data-list:grid data-list:grid-cols-1",
-            })}
-            onfocusin={() => {
-              current = qi;
-            }}
-            type="single"
-            bind:value={
-              () => pressedOf(q, qi)[0] ?? "", (label) => setSingle(qi, label)
-            }
-          >
-            {@render chips()}
-          </ToggleGroup.Root>
-        {/if}
+        </OptionGroup>
         {#if otherAt === qi}
           <!-- The reader's own answer, a field under the choices it stands
                in for, before the card's actions: the kit's field, on the
@@ -1127,9 +916,14 @@
         {/if}
       {/each}
     </div>
+    <!-- Under a finger the answer row stands as far under the last options
+         as the option rows stand apart (ui/chip `chipsVariants`, 14px: the
+         group's 7px foot and this 7px), so the last option's 44px area and
+         Answer's meet at the midpoint instead of Answer's taking the
+         option's lower edge (DESIGN.md, The 44 Touch Rule). -->
     <div
       data-slot="foot"
-      class="flex-none pt-space-1 opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
+      class="flex-none pt-space-1 coarse:pt-space-2 opacity-0 transition-[opacity] duration-(--dur-fade) ease-out motion-safe:translate-y-(--pop-rise) group-data-prompt-shown/hitl:opacity-100 group-data-prompt-shown/hitl:translate-none motion-safe:transition-fade-slide group-data-prompt-shown/hitl:delay-(--part-delay)"
       style:--part="2"
       style:--part-delay="calc(var(--part) * var(--dur-stagger))"
     >

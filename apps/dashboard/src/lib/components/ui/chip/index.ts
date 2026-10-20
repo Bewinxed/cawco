@@ -11,10 +11,13 @@ import { tv } from "#lib/utils.js";
  *   finger's 44px is `touch-hit` on the chip, never a taller chip), wrapping
  *   its label line by line. A pick is the element's own state: a toggle
  *   pressed (`aria-pressed`), a radio checked (`aria-checked`), or a record
- *   of what was picked (`data-chosen`). Picked, it takes the coral edge, a
- *   recessed fill and an inverted keycap, never a size or weight change (a
- *   pick never reflows the row) and never the attn hue: selection is not a
- *   warning. Only a chip that can be pressed (an enabled button) hovers.
+ *   of what was picked (`data-chosen`). Picked, it takes the coral edge and
+ *   a recessed fill, never a size or weight change (a pick never reflows
+ *   the row) and never the attn hue: selection is not a warning. The chip
+ *   is its keycap's `group/option`, so the keycap (ui/kbd `keycap`) inverts
+ *   on the pick by its own recipe, the same in every density of option
+ *   (ui/option-group). Only a chip that can be pressed (an enabled button)
+ *   hovers.
  * - `tray`: a chip on the tray row standing on the composer (the delegate
  *   tray's, the plan's, a raised ask's), at the row's chip height, on the
  *   attachment chip's surface drawn as its own layer (`::before`), so a
@@ -49,7 +52,7 @@ export const chipVariants = tv({
   variants: {
     variant: {
       option:
-        "hit-edge-hair min-h-c-btn-h-sm max-w-full gap-space-2 border border-border-control bg-surface-raised px-space-3 py-space-1 text-start enabled:not-aria-pressed:not-aria-checked:hover:bg-surface-hover aria-checked:border-brand-solid aria-checked:bg-surface-recess aria-pressed:border-brand-solid aria-pressed:bg-surface-recess data-chosen:border-brand-solid data-chosen:bg-surface-recess data-chosen:**:data-[slot=kbd]:bg-chip-chosen-bg data-chosen:**:data-[slot=kbd]:text-chip-chosen-ink aria-pressed:**:data-[slot=kbd]:bg-chip-chosen-bg aria-pressed:**:data-[slot=kbd]:text-chip-chosen-ink aria-checked:**:data-[slot=kbd]:bg-chip-chosen-bg aria-checked:**:data-[slot=kbd]:text-chip-chosen-ink motion-safe:transition-[border-color,background-color] motion-safe:duration-(--dur-control) motion-safe:ease-out",
+        "group/option hit-edge-hair min-h-c-btn-h-sm max-w-full gap-space-2 border border-border-control bg-surface-raised px-space-3 py-space-1 text-start enabled:not-aria-pressed:not-aria-checked:hover:bg-surface-hover aria-checked:border-brand-solid aria-checked:bg-surface-recess aria-pressed:border-brand-solid aria-pressed:bg-surface-recess data-chosen:border-brand-solid data-chosen:bg-surface-recess motion-safe:transition-[border-color,background-color] motion-safe:duration-(--dur-control) motion-safe:ease-out",
       tray: "touch-callout-none before:bg-(color:--tray-chip-fill) pointer-events-auto relative isolate h-c-tray-chip touch-manipulation select-none gap-c-pill-gap border-0 bg-transparent px-space-2 transition-[color] duration-(--dur-control) ease-out [--tray-chip-fill:var(--surface-raised)] before:absolute before:inset-0 before:-z-1 before:rounded-inherit before:border before:border-border-hairline before:shadow-tile before:transition-[background-color] before:duration-(--dur-control) before:ease-out motion-safe:transition-[color,transform] can-hover:hover:[--tray-chip-fill:var(--surface-hover)] motion-safe:active:[transform:scale(var(--press-scale))] *:[svg]:size-icon-md *:[svg]:flex-none",
       setting:
         "h-c-btn-h-sm max-w-full gap-space-2 whitespace-nowrap border border-border-control variant-static:border-border-hairline bg-surface-raised variant-static:bg-surface-recess px-space-2 leading-none transition-control can-hover:enabled:not-variant-static:hover:bg-surface-hover aria-disabled:opacity-50 *:data-[slot=chevron]:size-icon-sm **:data-[slot=chip-label]:min-w-0 **:data-[slot=chip-label]:overflow-hidden **:data-[slot=chip-label]:text-ellipsis *:data-[slot=chevron]:text-ink-subtle motion-safe:transition-control-press motion-safe:enabled:not-aria-busy:pressed:[transform:scale(var(--press-scale))] *:[svg]:not-data-[slot=chevron]:size-icon-md *:[svg]:flex-none",
