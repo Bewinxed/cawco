@@ -2,9 +2,11 @@
   /**
    * The New Session form as a popover at the trigger pressed (the session
    * strip's "+", a project's Spin off): the kit popover, hanging from the
-   * trigger and as wide as the dialog's card, so the form is laid out as it
-   * is there, its height capped at the room under the trigger with the
-   * form's body scrolling. Esc or a press outside closes it and the focus
+   * trigger, `c-new-session-pop-w` wide (the narrowest the form's own rows
+   * hold one line at), its height capped at the room under the trigger with
+   * the form's body scrolling. As the dialog's card does, the popover is the
+   * frame and recesses, and the form's body stands raised on it (DESIGN.md,
+   * The Frame Recesses Rule). Esc or a press outside closes it and the focus
    * goes back to the trigger; the prompt takes the keys as it opens. Under
    * 640px it is the dialog's bottom sheet (NewSessionDialog).
    */
@@ -43,12 +45,13 @@
     }}
     {open}
   >
-    <!-- The dialog card's measure (DESIGN.md, New-session dialog: up to
-         980px), never past the room bits-ui measures under the trigger. -->
+    <!-- The form's own measure, never past the window's gutter or the room
+         bits-ui measures under the trigger; the recess tray under the
+         raised body, as the dialog's card is. -->
     <PopoverContent
       align="start"
       aria-label="New session"
-      class="ns-theme max-h-[calc(var(--bits-popover-content-available-height)-2px)] w-[min(980px,calc(100vw-48px))] gap-0"
+      class="ns-theme max-h-[calc(var(--bits-popover-content-available-height)-2px)] w-[min(var(--c-new-session-pop-w),calc(100vw-48px))] gap-0 bg-(--surface-recess)"
       customAnchor={anchor}
       data-ns-popover
       onCloseAutoFocus={(event) => {

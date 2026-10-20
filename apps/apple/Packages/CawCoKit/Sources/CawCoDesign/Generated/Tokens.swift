@@ -559,6 +559,8 @@ public enum Size {
     public static let cToolbarCtl: Double = 32
     /// Find, as the glass's card on a desk: wide enough that a row's meta line ("Needs you · cockpit · delegate of Orchestrate cockpit fleet · linux", 12px meta) stands on one line beside a 16px glyph, and narrow enough to leave the page live beside it at 1055px (docs/tom/find-and-mention-chosen.md).
     public static let cFindW: Double = 520
+    /// The New Session form as a popover at its trigger (the session strip's "+", a project's Spin off; NewSessionPopover): the narrowest at which the form's own rows hold one line each, measured by probe-kit strip-new-session. Its widest row is the model list's, a model's name with its id beside it ("Opus 5.5 claude-opus-5-5"), which wraps at 564px; the prompt's placeholder is cut at 536px. The composer's chips wrap by design. The centred dialog keeps its 980px and the phone sheet its own.
+    public static let cNewSessionPopW: Double = 568
     /// A side panel or a wide popover: Caw's panel, and the usage popover, whose dial wall needs four 86px cells so the longest time line ("back in 4h 50m", 82px in meta) stands on one line.
     public static let cPanelW: Double = 380
     /// The account sign-in popover on a machine's row (AccountMachines' NsPopover), which the /motion/signin-problem bench mounts SigninPanel in: the open-link button and its hint on one row, the code field and Done on the next.

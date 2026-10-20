@@ -58,6 +58,8 @@
     answeredOr,
     cawco,
     didntAnswer,
+    type ForkSource,
+    forkSession,
     machineFs,
     placementFor,
     projectAtFolder,
@@ -402,8 +404,8 @@
    * session's provider's accounts are signed in on the chosen machine: Auto
    * with placement's reason, and each account with its rings and a key
    * line. Not on a continuation: its request (the hub's `continueBody`) has
-   * no account to carry a pick in. A fork never comes through this form; it
-   * starts from a session's menu and runs on its parent's account.
+   * no account to carry a pick in. Not on a fork either: it runs on its
+   * parent's account.
    */
   const accountTool = $derived.by((): AccountTool | null => {
     const provider = placement?.provider;
@@ -422,7 +424,7 @@
     const own = (cawco.accounts?.accounts ?? [])
       .filter((one) => one.provider === provider && signedIn.has(one.id))
       .sort((a, b) => a.order - b.order);
-    if (continueFrom || own.length < 2) {
+    if (continueFrom || forking || own.length < 2) {
       return null;
     }
     const { now } = usage;
@@ -548,6 +550,8 @@
       : `${cwd.trim().replace(/\/+$/, "")}/${repoPath(repo).split("/").pop() ?? ""}`
   );
   const project = $derived(cawco.projects.find((row) => row.id === projectId));
+  /** A fork its source had no mode for (spawn/new-session `startFork`): Start forks it. Never on a continuation. */
+  const forking = $derived(continueFrom ? undefined : prefill?.fork);
   /**
    * The project of the session being continued: the hub starts the new
    * session in it whatever the form says, so it is named, not picked. Null
@@ -949,6 +953,9 @@
     if (continueFrom) {
       return "Continue";
     }
+    if (forking) {
+      return "Fork";
+    }
     if (moving) {
       return moveStep ? "Move it" : "Move & start";
     }
@@ -995,6 +1002,10 @@
       ? fullSendCopy(harness)?.warning
       : undefined
   );
+  /** The harness the form opens on: a fork's own (it goes on in its conversation's), else the last start's. */
+  function openingHarness(): HarnessKind {
+    return prefill?.fork?.harness ?? spawnPrefs.harness;
+  }
   $effect(() => {
     if (!open) {
       return;
@@ -1014,7 +1025,8 @@
       machinesTouched = false;
       remembered = rememberedMachine();
       cwd = continueFrom?.cwd || prefill?.cwd || primary?.path || "";
-      ({ harness, permissionMode } = spawnPrefs);
+      harness = openingHarness();
+      ({ permissionMode } = spawnPrefs);
       fullSendCarried = permissionMode === "fullSend";
       summarizerHarness = spawnPrefs.harness;
       summarizerModel = "";
@@ -1205,7 +1217,32 @@
       clearTimeout(timer);
     };
   });
+  /**
+   * Why a fork can't go as the form stands: it branches its conversation
+   * where that conversation is, so on its machine alone, in its folder and
+   * on its harness. "" when it can.
+   */
+  function forkHeld(): string {
+    if (
+      !forking ||
+      (machineIds.length === 1 &&
+        machineIds[0] === forking.machineId &&
+        cwd.trim() === forking.cwd &&
+        harness === forking.harness &&
+        repo === undefined)
+    ) {
+      return "";
+    }
+    const where =
+      cawco.machines.find((row) => row.machineId === forking.machineId)
+        ?.hostname ?? forking.machineId;
+    return `A fork runs where its session ran: ${forking.harness} on ${where}, in ${tilde(forking.cwd)}.`;
+  }
   function validate() {
+    const held = forkHeld();
+    if (held) {
+      return held;
+    }
     if (!machineIds.length) {
       return "Choose a machine to run this session on.";
     }
@@ -1461,6 +1498,9 @@
     target: string,
     draft: SessionDraft
   ): Promise<string> {
+    if (forking) {
+      return await forkOne(target, draft, forking);
+    }
     const toAttach = attachable(draft.projectId, target);
     const started = await spawnSession({
       machineId: target,
@@ -1486,6 +1526,27 @@
       started,
       "whether the session started is not known"
     );
+  }
+  /** Forks `source` on the form's picks; a hub that did not answer throws saying so. */
+  async function forkOne(
+    target: string,
+    draft: SessionDraft,
+    source: ForkSource
+  ): Promise<string> {
+    const forked = await forkSession({
+      ...source,
+      ...(modeless || draft.permissionMode === null
+        ? {}
+        : { permissionMode: draft.permissionMode }),
+      ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
+      ...(draft.effort ? { effort: draft.effort } : {}),
+      prompt: draft.prompt,
+      extras: draft.extras,
+    });
+    if (forked.kind === "unchosen") {
+      throw new Error("Choose a permission mode for the fork.");
+    }
+    return answeredOr(target, forked, "whether the fork started is not known");
   }
   /**
    * What holds Start before anything is sent, saying why: a file still on
@@ -1666,7 +1727,10 @@
     if (moveStep && moveEstimated?.ask) {
       return moveEstimated.ask.title;
     }
-    return continueFrom ? "Continue session" : "New session";
+    if (continueFrom) {
+      return "Continue session";
+    }
+    return forking ? "Fork session" : "New session";
   });
   const readingMorph = morph();
 

@@ -382,8 +382,11 @@
       const url = new URL(page.url.href);
       url.searchParams.delete("spawn");
       url.searchParams.delete("cwd");
+      // The dialog has the focus by now: a navigation hands it to <body>
+      // unless told to leave it alone (SvelteKit 3's `reset: false`, which
+      // leaves the scroll where it is too).
       // biome-ignore lint/complexity/noVoid: the dialog is already open; the URL cleanup is a courtesy
-      void goto(url, { replace: true });
+      void goto(url, { replace: true, reset: false });
     });
   });
   /**

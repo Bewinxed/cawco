@@ -21,14 +21,22 @@
  *     (the hub's row for it).
  * And the same form in its dialog, where an opener has no trigger (the
  * rail's Start session, at 1440): the card holds the focus, and Esc closes
- * it, the focus back on the opener.
+ * it, the focus back on the opener. From a `?spawn=` link the card keeps the
+ * focus through the link's cleanup.
+ * The popover at 1440: `c-new-session-pop-w` wide, the narrowest the form's
+ * own rows hold one line at; recessed under the form's raised body in both
+ * themes, as the dialog is; its open and close scrubbed on the clock against
+ * DESIGN.md L768.
+ * A fork of a row with no mode opens the form on the fork, never the hub's
+ * refusal, and forks once a mode is picked.
  *
  *   bun scripts/probe-kit/run.ts web strip-new-session
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time, as a person takes them
 import type { Locator, Page } from "playwright-core";
-import type { Reply } from "../../../scratch-fleet";
-import { type Kit, open, type Spec, settle } from "../../kit";
+import { MACHINE, type Reply, until } from "../../../scratch-fleet";
+import { Clock } from "../../anim";
+import { type Kit, type KitFleet, open, type Spec, settle } from "../../kit";
 
 const PLUS = '[data-slot="strip-new"] .tnew';
 const POPOVER = "[data-ns-popover]";
@@ -300,6 +308,557 @@ async function dialogLeg(kit: Kit, base: string) {
   await page.close();
 }
 
+/** A desk page on `source`'s tab, no mode remembered, with the popover open from "+". */
+async function popoverPage(
+  kit: Kit,
+  base: string,
+  source: string,
+  theme: "light" | "dark"
+): Promise<Page> {
+  const page = await kit.page("desk", { theme });
+  await page.addInitScript(
+    (tree) => {
+      localStorage.setItem("cawco-workspace", tree);
+      localStorage.removeItem("cawco-spawn-prefs");
+      localStorage.removeItem("cawco-spawn-machine");
+    },
+    treeOf([source])
+  );
+  await open(page, `${base}/session/${source}`, PLUS, 120_000);
+  await plusOf(page).waitFor({ state: "visible", timeout: 60_000 });
+  await settle(page, 400);
+  return page;
+}
+
+/**
+ * What doesn't hold at the popover's width `w` (as drawn when null): a row
+ * of controls that wrapped (a flex row's items on more than one line), a
+ * control whose words wrapped, a label cut short. The composer's chips are
+ * the one row that wraps by design (spawn/PRESERVE.md: "The composer chips
+ * are 30px and wrap"): they hold the person's machine and folder, as long as
+ * those run, so they are not counted.
+ */
+const misfits = (page: Page, w: number | null) =>
+  page.evaluate(
+    ({ selector, width }) =>
+      new Promise<{ rows: string[]; words: string[]; cut: string[] }>(
+        (resolve) => {
+          const pop = document.querySelector<HTMLElement>(selector);
+          if (!pop) {
+            resolve({ rows: ["no popover"], words: [], cut: [] });
+            return;
+          }
+          if (width !== null) {
+            pop.style.width = `${width}px`;
+          }
+          const name = (el: Element) =>
+            `${el.tagName.toLowerCase()}${el.getAttribute("data-slot") ? `[${el.getAttribute("data-slot")}]` : ""}.${[...el.classList].slice(0, 2).join(".")} "${(el.textContent ?? "").trim().slice(0, 24)}"`;
+          const shown = (el: Element) => el.getClientRects().length > 0;
+          requestAnimationFrame(() =>
+            requestAnimationFrame(() => {
+              const all = [...pop.querySelectorAll<HTMLElement>("*")].filter(
+                shown
+              );
+              const rows = all
+                .filter((el) => {
+                  const style = getComputedStyle(el);
+                  if (
+                    el.matches('[data-slot="chips"]') ||
+                    !style.display.includes("flex") ||
+                    style.flexWrap !== "wrap" ||
+                    style.flexDirection.startsWith("column")
+                  ) {
+                    return false;
+                  }
+                  // On one line every item's box overlaps the first's
+                  // height band, however the row aligns them.
+                  const boxes = [...el.children]
+                    .filter(shown)
+                    .map((child) => child.getBoundingClientRect());
+                  const [first] = boxes;
+                  return boxes.some(
+                    (box) =>
+                      first !== undefined &&
+                      (box.top >= first.bottom - 1 ||
+                        box.bottom <= first.top + 1)
+                  );
+                })
+                .map(name);
+              const words = all
+                .filter((el) => el.matches("button, [role='radio']"))
+                .filter((el) => {
+                  const range = document.createRange();
+                  range.selectNodeContents(el);
+                  const lines = new Set(
+                    [...range.getClientRects()]
+                      .filter((r) => r.width > 0 && r.height > 0)
+                      .map((r) => Math.round(r.bottom))
+                  );
+                  return (
+                    getComputedStyle(el).whiteSpace === "normal" &&
+                    lines.size > 1 &&
+                    el.getBoundingClientRect().height > 48
+                  );
+                })
+                .map(name);
+              const cut = all
+                .filter(
+                  (el) =>
+                    getComputedStyle(el).textOverflow === "ellipsis" &&
+                    el.scrollWidth > el.clientWidth + 0.5
+                )
+                .map(name);
+              resolve({ rows, words, cut });
+            })
+          );
+        }
+      ),
+    { selector: POPOVER, width: w }
+  );
+
+/** Every misfit, in one line. */
+const said = (at: { rows: string[]; words: string[]; cut: string[] }) =>
+  [...at.rows, ...at.words, ...at.cut].join("; ");
+
+/**
+ * The popover's width: `c-new-session-pop-w` as drawn at 1440, the form
+ * holding there, and the narrowest it holds at (4px under it, a row
+ * wraps); its foot inside the window, the height capped at the room under
+ * "+".
+ */
+async function sizeLeg(kit: Kit, base: string, source: string) {
+  const page = await popoverPage(kit, base, source, "light");
+  await plusOf(page).click();
+  await page.waitForSelector(POPOVER, { state: "visible", timeout: 15_000 });
+  await settle(page, 400);
+  const drawn = await page.evaluate((selector) => {
+    const pop = document.querySelector<HTMLElement>(selector);
+    const box = pop?.getBoundingClientRect();
+    return {
+      token: getComputedStyle(document.documentElement)
+        .getPropertyValue("--c-new-session-pop-w")
+        .trim(),
+      width: box?.width ?? 0,
+      bottom: box?.bottom ?? 0,
+      maxHeight: pop ? getComputedStyle(pop).maxHeight : "",
+      viewport: window.innerHeight,
+    };
+  }, POPOVER);
+  const width = Number.parseFloat(drawn.token);
+  kit.check(
+    '1440 (fine): the popover is c-new-session-pop-w wide, its foot inside the window, its height capped at the room under the "+"',
+    width > 0 &&
+      Math.abs(drawn.width - width) <= 0.5 &&
+      drawn.bottom <= drawn.viewport &&
+      drawn.maxHeight !== "none",
+    JSON.stringify(drawn)
+  );
+  const there = await misfits(page, null);
+  kit.check(
+    `1440 (fine): at ${width}px every row of the form holds one line, no control's words wrap, no label is cut`,
+    said(there) === "",
+    said(there) || "all hold"
+  );
+  const under = await misfits(page, width - 4);
+  kit.check(
+    `1440 (fine): ${width}px is the narrowest: at ${width - 4}px a row gives`,
+    said(under) !== "",
+    said(under) || "nothing gave"
+  );
+  await page.close();
+}
+
+/** A token's colour as the page computes it on a background. */
+const tokenBackground = (page: Page, token: string) =>
+  page.evaluate((name) => {
+    const probe = document.createElement("i");
+    probe.style.backgroundColor = `var(${name})`;
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).backgroundColor;
+    probe.remove();
+    return colour;
+  }, token);
+
+/**
+ * The Frame Recesses Rule in the popover, as in the dialog: the popover (the
+ * frame) is `surface-recess`, the form's body on it `surface-raised`, in
+ * each theme; and the dialog's card and body read the same.
+ */
+async function depthLeg(
+  kit: Kit,
+  base: string,
+  source: string,
+  theme: "light" | "dark"
+) {
+  const page = await popoverPage(kit, base, source, theme);
+  await plusOf(page).click();
+  await page.waitForSelector(POPOVER, { state: "visible", timeout: 15_000 });
+  await settle(page, 400);
+  const backOf = (selector: string) =>
+    page.evaluate((sel) => {
+      const el = document.querySelector(sel);
+      return el ? getComputedStyle(el).backgroundColor : null;
+    }, selector);
+  const read = {
+    frame: await backOf(POPOVER),
+    body: await backOf(`${POPOVER} [data-slot="body"]`),
+    recess: await tokenBackground(page, "--surface-recess"),
+    raised: await tokenBackground(page, "--surface-raised"),
+  };
+  await page.keyboard.press("Escape");
+  await page.waitForSelector(POPOVER, { state: "detached", timeout: 15_000 });
+  await page.locator(RAIL_START).filter({ visible: true }).first().click();
+  await page.waitForSelector(DIALOG, { state: "visible", timeout: 15_000 });
+  await settle(page, 400);
+  const dialog = {
+    card: await backOf(DIALOG),
+    body: await backOf(`${DIALOG} [data-slot="body"]`),
+  };
+  kit.check(
+    `1440 ${theme}: the popover recesses (surface-recess) and the form's body stands raised on it (surface-raised), as the dialog's card and body do`,
+    read.frame === read.recess &&
+      read.body === read.raised &&
+      read.recess !== read.raised &&
+      dialog.card === read.recess &&
+      dialog.body === read.raised,
+    JSON.stringify({ ...read, dialog })
+  );
+  await page.close();
+}
+
+/** A run's length and curve, and the popover's opacity, translate and scale, at each fraction of its clock. */
+interface MotionRead {
+  at: Record<string, { opacity: string; translate: string; scale: string }>;
+  runs: string[];
+}
+
+/** The popover's own runs, caught as `action` starts them and read at 0, ½ and 1. */
+async function scrub(
+  page: Page,
+  clock: Clock,
+  action: () => Promise<unknown>
+): Promise<MotionRead> {
+  const node = await popoverNode(page, action, clock);
+  const read: MotionRead = {
+    runs: clock.runs.map((run) => `${run.name} ${run.end}ms ${run.easing}`),
+    at: {},
+  };
+  for (const fraction of [0, 0.5, 1]) {
+    await clock.seek(fraction);
+    read.at[String(fraction)] = await page.evaluate((sel) => {
+      const pop = document.querySelector(sel);
+      const style = pop ? getComputedStyle(pop) : null;
+      return {
+        opacity: style?.opacity ?? "",
+        translate: style?.translate ?? "",
+        scale: style?.scale ?? "",
+      };
+    }, POPOVER);
+  }
+  await clock.release();
+  return read.runs.length > 0 && node ? read : { runs: [], at: {} };
+}
+
+/**
+ * Catches the runs `action` starts inside the popover and keeps on the clock
+ * those on the popover itself (its node, by the DevTools DOM domain): the
+ * form inside has runs of its own (its sections' entrance, the height tween).
+ */
+async function popoverNode(
+  page: Page,
+  action: () => Promise<unknown>,
+  clock: Clock
+): Promise<number | null> {
+  const runs = await clock.catchRuns(action, POPOVER);
+  const cdp = await page.context().newCDPSession(page);
+  const { root } = (await cdp.send("DOM.getDocument", { depth: 0 })) as {
+    root: { nodeId: number };
+  };
+  const { nodeId } = (await cdp.send("DOM.querySelector", {
+    nodeId: root.nodeId,
+    selector: POPOVER,
+  })) as { nodeId: number };
+  const { node } = (await cdp.send("DOM.describeNode", { nodeId })) as {
+    node: { backendNodeId: number };
+  };
+  await cdp.detach();
+  clock.runs = runs.filter((run) => run.node === node.backendNodeId);
+  return node.backendNodeId;
+}
+
+/**
+ * DESIGN.md L768: the popover opens from its trigger's side over 260ms on
+ * the drawer curve, rising 8px and growing from 0.92 as it fades in, and
+ * leaves the same way over 160ms. Scrubbed on the clock (the DevTools
+ * Animation domain) at 0, ½ and 1 of its own runs.
+ */
+async function motionLeg(kit: Kit, base: string, source: string) {
+  const page = await popoverPage(kit, base, source, "light");
+  const expected = await page.evaluate(() => {
+    const root = getComputedStyle(document.documentElement);
+    const of = (name: string) => root.getPropertyValue(name).trim();
+    return {
+      open: of("--dur-pop"),
+      close: of("--dur-exit"),
+      curve: of("--ease-drawer"),
+      rise: of("--pop-rise"),
+      scale: of("--pop-scale"),
+    };
+  });
+  const clock = await Clock.on(page);
+  const opened = await scrub(page, clock, () => plusOf(page).click());
+  await settle(page, 400);
+  const closed = await scrub(page, clock, () => page.keyboard.press("Escape"));
+  // The built CSS writes its tokens short (".26s", "cubic-bezier(.32, …)"):
+  // read as numbers.
+  const ms = (value: string) =>
+    value.endsWith("ms")
+      ? Number.parseFloat(value)
+      : Number.parseFloat(value) * 1000;
+  const numbers = (value: string) =>
+    (value.match(/-?[\d.]+/g) ?? []).map(Number).join(",");
+  const lengths = (read: MotionRead, want: number) =>
+    read.runs.length === 3 &&
+    read.runs.every(
+      (run) => Math.abs(Number.parseFloat(run.split(" ")[1] ?? "") - want) < 1
+    );
+  const curved = (read: MotionRead) =>
+    read.runs.every(
+      (run) =>
+        numbers(run.slice(run.indexOf("cubic-bezier"))) ===
+        numbers(expected.curve)
+    );
+  const rise = `0px -${expected.rise}`;
+  const small = (value: string | undefined) =>
+    Number(value) === Number(expected.scale);
+  kit.check(
+    `1440 (fine): the popover opens over ${expected.open} on the drawer curve (${expected.curve}), from the "+"'s side ${expected.rise} off and ${expected.scale} small at 0, on its way at ½, whole at 1`,
+    lengths(opened, ms(expected.open)) &&
+      curved(opened) &&
+      opened.at["0"].opacity === "0" &&
+      opened.at["0"].translate === rise &&
+      small(opened.at["0"].scale) &&
+      Number(opened.at["0.5"].opacity) > 0 &&
+      Number(opened.at["0.5"].opacity) < 1 &&
+      opened.at["1"].opacity === "1" &&
+      opened.at["1"].scale === "none" &&
+      opened.at["1"].translate === "none",
+    JSON.stringify({ expected, opened })
+  );
+  kit.check(
+    `1440 (fine): the popover leaves the same way over ${expected.close}: whole at 0, toward the "+" at 1`,
+    lengths(closed, ms(expected.close)) &&
+      curved(closed) &&
+      closed.at["0"].opacity === "1" &&
+      Number(closed.at["0.5"].opacity) < 1 &&
+      closed.at["1"].opacity === "0" &&
+      closed.at["1"].translate === rise &&
+      small(closed.at["1"].scale),
+    JSON.stringify({ expected, closed })
+  );
+  await page.close();
+}
+
+/**
+ * The dialog from a `?spawn=<machine>` link: the URL's cleanup navigation
+ * leaves the focus on the card (Shell's `goto(…, { reset: false })`), not
+ * on <body>.
+ */
+async function spawnLinkLeg(kit: Kit, base: string, machineId: string) {
+  const page = await kit.page("desk", { theme: "light" });
+  await open(
+    page,
+    `${base}/?spawn=${encodeURIComponent(machineId)}`,
+    DIALOG,
+    120_000
+  );
+  await page.waitForFunction(() => !location.search.includes("spawn="), null, {
+    timeout: 15_000,
+  });
+  await settle(page, 400);
+  const held = await page.evaluate((card) => {
+    const dialog = document.querySelector(card);
+    const focus = document.activeElement;
+    return {
+      onCard: focus !== null && focus === dialog,
+      focus: focus ? focus.tagName.toLowerCase() : null,
+      url: location.pathname + location.search,
+    };
+  }, DIALOG);
+  kit.check(
+    "1440 (fine), a ?spawn= link: the dialog holds the focus on its card after the link's cleanup, not <body>",
+    held.onCard,
+    JSON.stringify(held)
+  );
+  await page.close();
+}
+
+/** Sends `text` to `source` and waits for the turn it opens to close. */
+async function turn(fleet: KitFleet, source: string, text: string) {
+  await fleet.send(source, text);
+  await until(
+    `"${text}" answered`,
+    () =>
+      fleet.query<{ session_id: string | null; turn_open_at: number | null }>(
+        "SELECT session_id, turn_open_at FROM instances WHERE id = ?",
+        source
+      )[0],
+    (one) => Boolean(one?.session_id) && one?.turn_open_at === null,
+    120_000
+  );
+}
+
+/**
+ * A fork of a session whose row records no mode (its row's mode cleared,
+ * as an old row's is, once it has stopped): Fork in its row's menu in the
+ * rail opens the New Session form on the fork, as the dialog (a menu's item
+ * leaves nothing to hang from): "Fork session", Start "Fork" waiting for a
+ * mode, never the hub's refusal. With a mode picked, Fork branches the
+ * conversation into a new session in that mode, on its source's machine.
+ */
+async function forkLeg(
+  kit: Kit,
+  base: string,
+  fleet: KitFleet,
+  rows: () => { id: string }[]
+) {
+  // In a project, so its row stands in the rail under it.
+  const project = await fleet.api<{ id: string }>("/api/projects", {
+    name: "Forks",
+    machineId: MACHINE,
+    cwd: fleet.repo,
+    caw: false,
+  });
+  const source = await fleet.spawn("claude", "Fork source", fleet.repo, {
+    projectId: project.id,
+  });
+  await turn(fleet, source, "hello");
+  await turn(fleet, source, "again");
+  // Stopped first: a running session's reports write its mode back.
+  await fleet.stopSession(source);
+  await until(
+    "the fork source stopped",
+    () => fleet.instance(source),
+    (one) => one?.status === "stopped",
+    60_000
+  );
+  fleet.write(
+    "UPDATE instances SET permission_mode = NULL WHERE id = ?",
+    source
+  );
+  // On its own page, its project open in the rail.
+  const page = await popoverPage(kit, base, source, "light");
+  // Its row in the rail, whose menu holds Fork (LiveSessionMenu).
+  const row = page
+    .locator(`a[data-session-row-row][href*="${source}"]`)
+    .filter({ visible: true })
+    .first();
+  const found = await row.waitFor({ state: "visible", timeout: 30_000 }).then(
+    () => "",
+    async () =>
+      JSON.stringify(
+        await page.evaluate(() =>
+          [...document.querySelectorAll("[data-session-row-row]")].map(
+            (one) =>
+              `${one.getAttribute("href")} ${one.getClientRects().length > 0 ? "shown" : "hidden"}`
+          )
+        )
+      )
+  );
+  if (found) {
+    kit.check(
+      "1440 (fine): the fork source's row is in the rail",
+      false,
+      found
+    );
+    await page.close();
+    return;
+  }
+  await row.hover();
+  await row.click({ button: "right" });
+  const before = new Set(rows().map((one) => one.id));
+  await page.getByRole("menuitem", { name: "Fork", exact: true }).click();
+  const shown = await page
+    .waitForSelector(DIALOG, { state: "visible", timeout: 15_000 })
+    .then(
+      () => "",
+      (error: Error) => error.message
+    );
+  await settle(page, 400);
+  const form = await page.evaluate(
+    ({ card, start }) => {
+      const pop = document.querySelector(card);
+      const go = pop?.querySelector<HTMLButtonElement>(start);
+      return {
+        title: pop?.querySelector("h2")?.textContent?.trim() ?? null,
+        start: go?.textContent?.trim() ?? null,
+        disabled: go?.disabled ?? null,
+        chip:
+          pop
+            ?.querySelector('[aria-label^="Permission mode"]')
+            ?.textContent?.trim() ?? null,
+        refusal: document.body.textContent?.includes(
+          "A permission mode must be chosen"
+        ),
+      };
+    },
+    { card: DIALOG, start: START }
+  );
+  kit.check(
+    "1440 (fine): a fork of a row with no mode, from its menu, opens the New Session form on the fork, Start waiting for a mode, never the hub's refusal",
+    shown === "" &&
+      form.title === "Fork session" &&
+      form.start?.startsWith("Fork") === true &&
+      form.disabled === true &&
+      form.chip === "Choose a mode" &&
+      !form.refusal,
+    JSON.stringify({ shown, ...form })
+  );
+  const pop = page.locator(DIALOG);
+  await pop.locator('[aria-label^="Permission mode"]').first().click();
+  const choice = page.locator(`[data-perm="${MODE}"]`).filter({
+    visible: true,
+  });
+  await choice.first().waitFor({ state: "visible", timeout: 10_000 });
+  await choice.first().click();
+  await page.waitForFunction(
+    ({ card, start }) =>
+      document.querySelector<HTMLButtonElement>(`${card} ${start}`)
+        ?.disabled === false,
+    { card: DIALOG, start: START },
+    { timeout: 30_000 }
+  );
+  await pop.locator(START).click();
+  const forked = await until(
+    "the fork's row",
+    () => rows().find((one) => !before.has(one.id))?.id,
+    Boolean,
+    120_000
+  ).catch(() => undefined);
+  const made = forked
+    ? fleet.query<{
+        forked_from: string | null;
+        permission_mode: string | null;
+        machine_id: string;
+      }>(
+        "SELECT forked_from, permission_mode, machine_id FROM instances WHERE id = ?",
+        forked
+      )[0]
+    : undefined;
+  const [from] = fleet.query<{ machine_id: string }>(
+    "SELECT machine_id FROM instances WHERE id = ?",
+    source
+  );
+  kit.check(
+    `1440 (fine): Fork, a mode picked, branches the conversation into a new session in ${MODE}, on its source's machine`,
+    Boolean(made?.forked_from) &&
+      made?.permission_mode === MODE &&
+      made?.machine_id === from?.machine_id,
+    JSON.stringify({ made, from })
+  );
+  await page.close();
+}
+
 const respond = (): Reply => ({ everyMs: 20, words: ["Ready."] });
 
 const spec: Spec = {
@@ -330,6 +889,12 @@ const spec: Spec = {
       await runLeg(kit, base, source, each, rows, row);
     }
     await dialogLeg(kit, base);
+    await spawnLinkLeg(kit, base, row(source)?.machine_id ?? "");
+    await sizeLeg(kit, base, source);
+    await depthLeg(kit, base, source, "light");
+    await depthLeg(kit, base, source, "dark");
+    await motionLeg(kit, base, source);
+    await forkLeg(kit, base, fleet, rows);
   },
 };
 
