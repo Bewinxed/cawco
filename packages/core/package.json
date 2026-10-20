@@ -44,6 +44,7 @@
     "./browser": "./src/browser.ts",
     "./browser-gate": "./src/browser-gate.ts",
     "./stream-relay": "./src/stream-relay.ts",
+    "./pass-domain": "./src/pass-domain.ts",
     "./public-address": "./src/public-address.ts",
     "./reachable-links": "./src/reachable-links.ts",
     "./hub-auth": "./src/hub-auth.ts",

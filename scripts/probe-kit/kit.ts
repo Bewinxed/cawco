@@ -148,6 +148,12 @@ export interface PageOptions {
    * beside a scratch hub on 127.0.0.1).
    */
   hostRules?: string;
+  /**
+   * The page's context accepts a certificate of the run's own (a
+   * Cloudflare-like front's, cloudflare-front.ts `scratchCertificate`), as a
+   * browser trusts the real edge's: its https origins stay secure contexts.
+   */
+  ignoreHTTPSErrors?: boolean;
   /** Scripts installed before the page's own, in order. */
   init?: (() => void)[];
   /**
@@ -1063,6 +1069,7 @@ export class Run {
           // not supported in Firefox"): a touch screen at the size alone.
           isMobile: v.touch && options.engine !== "firefox",
           colorScheme: options.theme ?? "light",
+          ...(options.ignoreHTTPSErrors ? { ignoreHTTPSErrors: true } : {}),
           ...(v.touch && v.width < PHONE_MAX_WIDTH && phoneAgent
             ? { userAgent: phoneAgent }
             : {}),

@@ -7,12 +7,14 @@
    * the page's document itself (the `cawco:hello` names it), so a pick here is
    * a pick in the panel and every other view, and a revision morphs in place.
    * It draws in the dashboard's theme and pads its foot for the docked
-   * composer (`inset.bottom`). Host mode enters with a pass of its own (hub
-   * preview-access.ts); a lapsed pass enters again once.
+   * composer (`inset.bottom`). On a host-mode name the browser's pass lets
+   * it through; turned away, it enters once and loads again
+   * (preview/pass.ts).
    */
   import { decisionsWords, PREVIEW_LOCKED_MESSAGE } from "@cawco/core";
   import { untrack } from "svelte";
-  import { enterPage, pageSource } from "#lib/cawco/preview/page-source.js";
+  import { pageSource } from "#lib/cawco/preview/page-source.js";
+  import { enterPreviews } from "#lib/cawco/preview/pass.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import { EmptyState } from "#lib/components/ui/empty/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
@@ -44,6 +46,12 @@
   let problem = $state<string | null>(null);
   let connected = false;
   let turnedAway = 0;
+  /**
+   * When the frame last stood without the pass it may hold now
+   * (`performance.now()`): its load, or its page's last word that it was
+   * let in. An entry that landed since stands for it (preview/pass.ts).
+   */
+  let since = 0;
   /** Asks again: Retry on the page's failure reads where it is served afresh. */
   let tries = $state(0);
 
@@ -51,13 +59,16 @@
     `/__cawco/page/${artifactId}/${card ? `#${encodeURIComponent(card)}` : ""}`
   );
 
-  /** Its address entered again (a lapsed pass): straight, or by a new pass. */
-  async function enter(at: string, byHost: boolean, wanted: string) {
-    const entered = await enterPage({ project: projectId }, at, byHost, wanted);
-    if ("src" in entered) {
-      ({ src } = entered);
-    } else {
-      ({ problem } = entered);
+  /** Turned away: the browser enters its previews, then the frame loads again. */
+  async function enter(at: string) {
+    const refused = await enterPreviews(at, since);
+    if (refused) {
+      problem = refused;
+      return;
+    }
+    if (frame && src) {
+      since = performance.now();
+      frame.src = src;
     }
   }
 
@@ -80,6 +91,7 @@
         ({ problem } = found);
         return;
       }
+      since = performance.now();
       ({ origin, src } = found);
     });
     return () => {
@@ -136,13 +148,14 @@
       if (type === "cawco:ready") {
         connected = true;
         turnedAway = 0;
+        since = performance.now();
       } else if (type === PREVIEW_LOCKED_MESSAGE && src) {
         turnedAway += 1;
         if (turnedAway > 1) {
           problem = decisionsWords.turnedAway;
           return;
         }
-        enter(origin, true, place);
+        enter(origin);
       }
     };
     window.addEventListener("message", heard);

@@ -17,6 +17,7 @@ import {
 import { readWithin } from "@cawco/core/bounded";
 import { decisionHostFile } from "@cawco/core/decision-host";
 import { detach } from "@cawco/core/detach";
+import { isPublicSuffix } from "@cawco/core/pass-domain";
 import {
   cachePreview,
   causeOf,
@@ -58,15 +59,10 @@ import {
   PREVIEW_PORTS_TEXT,
 } from "./config";
 import type { ArtifactRow } from "./db/artifacts";
+import type { PreviewPassesDb } from "./db/preview-passes";
 import type { PreviewsDb } from "./db/previews";
 import { DECISION_ASSETS } from "./decision-program";
-import {
-  enter,
-  lockedResponse,
-  type PassCookie,
-  passCookie,
-  passSession,
-} from "./preview-access";
+import { enter, lockedResponse, type PassLock, passOf } from "./preview-access";
 import { FolderRefusal, folderPath } from "./project-folder";
 import type { TailnetHttpsService } from "./tailnet-https";
 
@@ -825,20 +821,21 @@ async function serveSession(
 
 /**
  * Host mode's lock on one request to a name of the pattern
- * (preview-access.ts), `instanceId` the session that holds the name, or
- * undefined when none does: the answer that stops the request, or undefined
- * when it goes on to the session.
+ * (preview-access.ts), `instanceId` the origin that holds the name (a
+ * session's, a project's, an embed's), or undefined when none does: the
+ * answer that stops the request, or undefined when it goes on.
  *
+ * A live pass goes through on every held name, whichever origin holds it.
  * A stranger learns nothing of which names are held: without a pass, a name
- * no session holds answers exactly as a held one does, the locked page, and
- * an entry there is refused as one with a spent ticket would be. Only a pass
- * the hub gave on that name, which proves the owner, learns that its
- * session has gone (the closed page). The ping answers on every name, so the
- * dashboard learns the origin is reachable and nobody learns more.
+ * nobody holds answers exactly as a held one does, the locked page, and an
+ * entry there is refused as one with a spent ticket would be. Only a live
+ * pass, which proves the owner, learns that a name is closed (404). The
+ * ping answers on every name, so the dashboard learns the origin is
+ * reachable and nobody learns more.
  */
 const atTheLock = (
   request: Request,
-  lock: PassCookie,
+  lock: PassLock,
   instanceId: string | undefined
 ): Response | undefined => {
   const { pathname } = new URL(request.url);
@@ -849,7 +846,7 @@ const atTheLock = (
     if (!instanceId) {
       return lockedResponse();
     }
-    const entered = enter(request, lock, instanceId);
+    const entered = enter(request, lock);
     if (entered.refused) {
       previewFailed(
         HOP,
@@ -859,16 +856,15 @@ const atTheLock = (
     }
     return entered.response;
   }
-  const holder = passSession(request, lock);
-  if (instanceId) {
-    return holder === instanceId ? undefined : lockedResponse();
-  }
-  if (!holder) {
+  if (!passOf(request, lock)) {
     return lockedResponse();
+  }
+  if (instanceId) {
+    return;
   }
   previewFailed(
     HOP,
-    holder,
+    null,
     `no session's preview at ${request.headers.get("host")}`
   );
   return downResponse("closed", 404);
@@ -895,29 +891,30 @@ const ownerGone = (key: string): PreviewRefusal =>
   );
 
 /**
- * The scheme the names are served on (`http` or `https`: how the proxy in
- * front of them serves them, never how a client reached the hub), then
- * exactly one placeholder, `{session}` or `{port}`, in a host name, with a
- * port after it or not. The characters around the placeholder hold no
- * brace, so a second one never fits.
+ * `https://` (how the proxy in front of the names serves them, never how a
+ * client reached the hub: the pass is a `Secure` cookie, which no browser
+ * keeps from plain http, RFC 6265bis §5.7 step 13), then a host name whose
+ * first label holds exactly one placeholder, `{session}` or `{port}`, with a
+ * port after it or not. The first label: every name then stands under one
+ * domain, the rest of the name, which the pass is set on. The characters
+ * around the placeholder hold no brace, so a second one never fits.
  */
 const PATTERN_SHAPE =
-  /^(https?):\/\/([a-z0-9.-]*)\{(session|port)\}([a-z0-9.-]*(?::\d{1,5})?)$/;
+  /^https:\/\/([a-z0-9-]*)\{(session|port)\}([a-z0-9-]*\.([a-z0-9.-]+?))(:\d{1,5})?$/;
 const PATTERN_REFUSAL =
-  "A host pattern is http:// or https:// and a host name with one of {session} or {port} in it, like https://p-{session}.example.com or https://p-{port}.example.com, and a port after it or not.";
-/** A pattern stored before patterns carried their scheme. */
-const SCHEMELESS = /^(?!https?:\/\/)/;
+  "A host pattern is https:// and a host name whose first label holds one of {session} or {port}, like https://p-{session}.example.com or https://p-{port}.example.com, and a port after it or not.";
 
 /**
- * Host mode's names, parsed once: the scheme they are served on, what
- * stands for a session in them, its id (`{session}`) or the preview port it
- * keeps (`{port}`), and the host text before and after it.
+ * Host mode's names, parsed once: what stands for a session in them, its id
+ * (`{session}`) or the preview port it keeps (`{port}`), the host text
+ * before and after it, and the domain they all stand under.
  */
 interface HostPattern {
   after: string;
   before: string;
+  /** The domain every name stands under: its pass's `Domain` (core `hostModeDomain`). */
+  domain: string;
   key: "session" | "port";
-  scheme: "http" | "https";
   /** A Host header's name for one session: the placeholder's value at group 1. */
   shape: RegExp;
 }
@@ -944,28 +941,39 @@ const labelOf = (key: string): string =>
     ? key
     : `o-${createHash("sha256").update(key).digest("hex").slice(0, 40)}`;
 
-/** `pattern` parsed, or refused in one sentence. */
+/**
+ * `pattern` parsed, or refused in one sentence: one whose names stand under
+ * a public suffix (`ts.net`, `pages.dev`, a bare `localhost`) is refused,
+ * since a browser keeps no cookie set on one (core pass-domain.ts).
+ */
 const parsePattern = (pattern: string): HostPattern => {
   const parts = pattern.match(PATTERN_SHAPE);
   if (!parts) {
     throw new PreviewRefusal(422, PATTERN_REFUSAL);
   }
-  const [, scheme, before, key, after] = parts as [
+  const [, before, key, name, domain, port = ""] = parts as [
     string,
-    HostPattern["scheme"],
     string,
     HostPattern["key"],
     string,
+    string,
+    string?,
   ];
+  if (isPublicSuffix(domain)) {
+    throw new PreviewRefusal(
+      422,
+      `The pattern's names stand under ${domain}, a public suffix, where no browser keeps a cookie, so the hub can't give them a pass: use names under a domain of your own, like https://p-{port}.previews.example.com.`
+    );
+  }
+  const after = `${name}${port}`;
   // The Host header names the port only when it is not the scheme's own.
-  const withoutPort = after.replace(PORT_SUFFIX, "");
   return {
-    scheme,
     before,
     key,
     after,
+    domain,
     shape: new RegExp(
-      `^${literal(before)}(${VALUE_OF[key]})(?:${literal(after)}|${literal(withoutPort)})$`,
+      `^${literal(before)}(${VALUE_OF[key]})(?:${literal(after)}|${literal(name)})$`,
       "i"
     ),
   };
@@ -975,9 +983,9 @@ const parsePattern = (pattern: string): HostPattern => {
 const hostFor = (pattern: HostPattern, value: string | number): string =>
   `${pattern.before}${value}${pattern.after}`;
 
-/** The whole origin `pattern` gives that session: its scheme, then its host. */
+/** The whole origin `pattern` gives that session. */
 const originFor = (pattern: HostPattern, value: string | number): string =>
-  `${pattern.scheme}://${hostFor(pattern, value)}`;
+  `https://${hostFor(pattern, value)}`;
 
 const PORT_SUFFIX = /:\d+$/;
 const REGEX_SPECIAL = /[.*+?^${}()|[\]\\]/g;
@@ -1034,6 +1042,7 @@ export function createPreviewListeners(
   hostname: string,
   deps: PreviewListenerDeps,
   db: PreviewsDb,
+  passes: PreviewPassesDb,
   tailnet: Pick<TailnetHttpsService, "beside" | "origin">
 ) {
   const proxy = previewWebSocket as unknown as WebSocketHandler<ListenerSocket>;
@@ -1056,14 +1065,14 @@ export function createPreviewListeners(
   /**
    * A listener on `port`, each request's session from `route`, and its TLS
    * twins on the tailnet addresses while those serve HTTPS. `lock` (host
-   * mode, preview-access.ts): a request to a session's name needs that
-   * session's pass, WebSocket upgrades too, but the dashboard's ping and the
-   * entry that spends a ticket for one.
+   * mode, preview-access.ts): a request to any name needs the browser's
+   * pass, WebSocket upgrades too, but the dashboard's ping and the entry
+   * that spends a ticket for one.
    */
   const listen = (
     port: number,
     route: (request: Request) => string | undefined,
-    lock?: PassCookie
+    lock?: PassLock
   ): Listener => {
     const fetch = async (
       request: Request,
@@ -1130,22 +1139,14 @@ export function createPreviewListeners(
   };
 
   let settings = db.settings();
-  // A pattern stored before patterns carried their scheme took the client's
-  // scheme each time; it becomes http:// here, saved and said once, so the
-  // stored pattern is always whole. An operator whose names are served over
-  // HTTPS sets https:// in Settings › Previews.
-  if (
-    settings.mode === "host" &&
-    settings.pattern &&
-    SCHEMELESS.test(settings.pattern)
-  ) {
-    const was = settings.pattern;
-    settings = { mode: "host", pattern: `http://${was}` };
-    db.setSettings(settings);
-    console.warn(
-      `[preview] ${HOP}: the host pattern ${was} now names its scheme, ${settings.pattern}; set https:// in Settings › Previews if those names are served over HTTPS.`
-    );
-  }
+  /**
+   * Host mode's pattern once its listener stands; none in port mode, or
+   * while host mode didn't start (its stored pattern refused, as an http://
+   * one kept from before the names took a pass is, or its port held): host
+   * mode then names no origin, and every client loads each session's port
+   * until Settings › Previews saves a pattern the hub takes.
+   */
+  let hostPattern: HostPattern | undefined;
   /**
    * Whether no socket holds `port` on the listeners' address now: a bind
    * without `reusePort`, closed at once. A listener binds with `reusePort`
@@ -1361,11 +1362,9 @@ export function createPreviewListeners(
       byHost = listen(
         PREVIEW_PORTS.first,
         (request) => sessionOfHost(pattern, request.headers.get("host")),
-        passCookie(
-          pattern.scheme,
-          hostFor(pattern, "x").replace(PORT_SUFFIX, "")
-        )
+        { domain: pattern.domain, passes }
       );
+      hostPattern = pattern;
       return null;
     } catch (thrown) {
       const why = `Port ${PREVIEW_PORTS.first} didn't open for host-mode previews (${causeOf(thrown)}): free it, or set CAWCO_PREVIEW_PORTS to a range whose first port is free.`;
@@ -1439,9 +1438,11 @@ export function createPreviewListeners(
     if (port !== undefined && at.port === String(port)) {
       return at.origin;
     }
-    if (settings.mode === "host" && settings.pattern && port !== undefined) {
-      const pattern = parsePattern(settings.pattern);
-      return originFor(pattern, pattern.key === "port" ? port : labelOf(owner));
+    if (hostPattern && port !== undefined) {
+      return originFor(
+        hostPattern,
+        hostPattern.key === "port" ? port : labelOf(owner)
+      );
     }
     return null;
   };
@@ -1466,6 +1467,7 @@ export function createPreviewListeners(
     );
     sessions.clear();
     byHost = undefined;
+    hostPattern = undefined;
     await Promise.all(stopping);
   };
 
@@ -1487,18 +1489,17 @@ export function createPreviewListeners(
 
     /**
      * Session `instanceId`'s preview origin: its port, its listener started
-     * when it has none; in host mode its whole origin too, on the pattern's
-     * scheme, named by its id or by that port.
+     * when it has none; once host mode stands its whole origin too, named
+     * by its id or by that port.
      */
     address(instanceId: string): PreviewAddress {
       const port = portOf(instanceId);
       const secure = tailnet.origin(port);
       const onTailnet = secure ? { tailnet: secure } : {};
-      if (settings.mode === "host") {
-        const pattern = parsePattern(settings.pattern ?? "");
+      if (hostPattern) {
         const origin = originFor(
-          pattern,
-          pattern.key === "port" ? port : labelOf(instanceId)
+          hostPattern,
+          hostPattern.key === "port" ? port : labelOf(instanceId)
         );
         // core `PreviewAddress`: `host` is a bridge for readers before `origin`.
         return { port, origin, host: new URL(origin).host, ...onTailnet };
@@ -1540,11 +1541,10 @@ export function createPreviewListeners(
       const { port } = held.listener;
       const secure = tailnet.origin(port);
       const onTailnet = secure ? { tailnet: secure } : {};
-      if (settings.mode === "host") {
-        const pattern = parsePattern(settings.pattern ?? "");
+      if (hostPattern) {
         const origin = originFor(
-          pattern,
-          pattern.key === "port" ? port : labelOf(key)
+          hostPattern,
+          hostPattern.key === "port" ? port : labelOf(key)
         );
         return { port, origin, host: new URL(origin).host, ...onTailnet };
       }
@@ -1569,6 +1569,7 @@ export function createPreviewListeners(
         ? {
             mode: "host",
             pattern: settings.pattern ?? "",
+            passDomain: hostPattern?.domain ?? "",
             ports: PREVIEW_PORTS_TEXT,
           }
         : { mode: "port", ports: PREVIEW_PORTS_TEXT };
@@ -1576,9 +1577,10 @@ export function createPreviewListeners(
 
     /**
      * The fleet's mode, from the person's Settings or Caw's approved write.
-     * Host mode takes a pattern of a scheme (`http://` or `https://`) and a
-     * host name with one of `{session}` or `{port}` in it, whose generated
-     * name resolves; a refusal says why and changes nothing.
+     * Host mode takes a pattern of `https://` and a host name whose first
+     * label holds one of `{session}` or `{port}`, under a domain a cookie may
+     * be set on, whose generated name resolves; a refusal says why and
+     * changes nothing.
      */
     async set(next: {
       mode: "port" | "host";

@@ -1,6 +1,11 @@
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, isNull } from "drizzle-orm";
 import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
-import { machineKeys, ownerDevices, pairingSettings } from "./schema";
+import {
+  machineKeys,
+  ownerDevices,
+  pairingSettings,
+  previewPasses,
+} from "./schema";
 
 export type OwnerDeviceRow = typeof ownerDevices.$inferSelect;
 
@@ -20,7 +25,10 @@ export interface HubAuthDb {
   /**
    * Turns the requirement on or off. Off forgets every paired device and
    * every machine key, in one transaction: a later turn-on starts again from
-   * the device that turns it on and the machines connected then.
+   * the device that turns it on and the machines connected then. Every
+   * preview pass goes with the mode it was given in: a device's with its
+   * device (`preview_passes` cascades), a trusted hub's browser's, which
+   * names no device, as the requirement turns on.
    */
   readonly setPairingRequired: (required: boolean) => void;
   readonly touchDevice: (id: string, at: Date, address: string | null) => void;
@@ -83,7 +91,9 @@ export const hubAuthDb = (db: BunSQLiteDatabase): HubAuthDb => ({
           set: { required, changedAt: new Date() },
         })
         .run();
-      if (!required) {
+      if (required) {
+        tx.delete(previewPasses).where(isNull(previewPasses.deviceId)).run();
+      } else {
         tx.delete(ownerDevices).run();
         tx.delete(machineKeys).run();
       }

@@ -120,6 +120,7 @@ import {
   mergeProjectPages,
   PROJECT_PAGES_MIGRATION_WHEN,
 } from "./merge-project-pages";
+import { type PreviewPassesDb, previewPassesDb } from "./preview-passes";
 import { type PreviewsDb, previewsDb } from "./previews";
 import { type RelaysDb, relaysDb } from "./relays";
 import { type RoutinesDb, routinesDb } from "./routines";
@@ -1509,6 +1510,8 @@ export interface DbShape {
     instanceId: string,
     limit: number
   ) => PlanChangeRow[];
+  /** Host mode's preview passes, one per browser (preview-access.ts). */
+  readonly previewPasses: PreviewPassesDb;
   /** Each session's preview port, and the fleet's preview mode (preview.ts). */
   readonly previews: PreviewsDb;
   /** The harness conversations a session had before the one it runs now, oldest first (`instance_conversations`). */
@@ -9416,6 +9419,7 @@ const make = async (path: string): Promise<DbShape> => {
     artifacts: artifactsDb(db),
     find: findDb(db),
     previews: previewsDb(db),
+    previewPasses: previewPassesDb(db),
     streamRelay: streamRelayDb(db),
     browsers: browsersDb(db),
     actions: actionsDb(db),

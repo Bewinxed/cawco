@@ -15,10 +15,15 @@
  * opened (hub `shown`). A preview or a component has no address of its own
  * and runs a server to be drawn, so it is drawn by the pane alone.
  */
-import { type ArtifactSummary, projectPagePlace } from "@cawco/core";
+import {
+  type ArtifactSummary,
+  PREVIEW_LOCKED_MESSAGE,
+  projectPagePlace,
+} from "@cawco/core";
 import { theme } from "#lib/theme.svelte.js";
 import { keepThumbnail } from "../artifact-api";
 import { pageSource } from "../preview/page-source";
+import { enterPreviews } from "../preview/pass";
 import { previewThumbnail } from "../preview/wire";
 import { readArtifacts } from "./files.svelte";
 
@@ -64,6 +69,9 @@ async function drawPage(
   const shot = await new Promise<ReturnType<typeof previewThumbnail>>(
     (done) => {
       let settle: ReturnType<typeof setTimeout> | undefined;
+      /** When the frame's load began; turned away once, it enters and loads again (preview/pass.ts). */
+      let since = performance.now();
+      let entered = false;
       const post = (message: object) =>
         frame.contentWindow?.postMessage(message, found.origin);
       const finish = (picture: ReturnType<typeof previewThumbnail>) => {
@@ -80,7 +88,21 @@ async function drawPage(
           return;
         }
         const data = event.data as { type?: unknown } | null;
-        if (data?.type === "cawco:ready") {
+        if (data?.type === PREVIEW_LOCKED_MESSAGE) {
+          if (entered) {
+            finish(null);
+            return;
+          }
+          entered = true;
+          enterPreviews(found.origin, since).then((refused) => {
+            if (refused) {
+              finish(null);
+              return;
+            }
+            since = performance.now();
+            frame.src = found.src;
+          });
+        } else if (data?.type === "cawco:ready") {
           clearTimeout(settle);
           settle = setTimeout(() => post({ type: "cawco:capture" }), SETTLE_MS);
         } else if (data?.type === "cawco:captured") {

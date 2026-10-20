@@ -98,9 +98,8 @@ export interface PreviewFrame {
    * The project whose origin serves what the panel shows: a project's page
    * (Projects spec §5.8), served on its project's origin alone, at
    * `/__cawco/page/<artifact id>/` there ({@link projectPagePlace}). Then
-   * `port`, `origin`, `host` and `tailnet` are that origin's, and a host-mode
-   * ticket is the project's (`POST /api/projects/:id/preview-ticket`).
-   * Absent for anything served on the session's own origin.
+   * `port`, `origin`, `host` and `tailnet` are that origin's. Absent for
+   * anything served on the session's own origin.
    */
   project?: string;
   /** Identifies one successful open, including a rebuild of the same source. */
@@ -151,9 +150,10 @@ export interface PreviewAddress {
 /**
  * The domain host mode's names stand under: the origin's host name less its
  * first label (`p-3459.example.com` → `example.com`); empty for a one-label
- * name.
+ * name. The preview pass's cookie is set on it ({@link PREVIEW_PASS_COOKIE}),
+ * so every name under it carries the one pass.
  */
-const hostModeDomain = (origin: string): string => {
+export const hostModeDomain = (origin: string): string => {
   const name = new URL(origin).hostname.toLowerCase();
   const dot = name.indexOf(".");
   return dot === -1 ? "" : name.slice(dot + 1);
@@ -169,7 +169,7 @@ const under = (hostname: string, domain: string): boolean => {
  * Where a client loads a session's previews from, picked by where it
  * reached the hub or dashboard (`at`). Reached under host mode's domain
  * (the dashboard behind the same DNS or proxy as the pattern's names): the
- * origin the hub named, entered with a ticket (`byHost`). Reached over the
+ * origin the hub named, behind the browser's pass (`byHost`). Reached over the
  * tailnet while the hub serves HTTPS on its name (a tailnet address, the
  * short name, the full one): the session's origin on that name, since the
  * port answers HTTPS alone there; a client that reached the hub's own port
@@ -202,55 +202,69 @@ export const PREVIEW_PING_PATH = "/__cawco/ping";
 
 /**
  * Host mode's way in (hub preview-access.ts). Every request to a host-mode
- * preview name needs the hub's cookie for that name's session, but for
- * {@link PREVIEW_PING_PATH} and this path. A client the hub already trusts
- * (the dashboard through its relay, the app with its credential) asks the
- * hub for a ticket (`POST /api/instances/:id/preview-ticket`, a
- * {@link PreviewTicket}) and opens `<origin>/__cawco/enter?ticket=…&next=<path>`
- * ({@link previewEnterUrl}): the hub checks the ticket, sets the cookie and
- * sends the client on to the path.
+ * preview name needs the browser's pass ({@link PREVIEW_PASS_COOKIE}), but
+ * for {@link PREVIEW_PING_PATH} and this path. A client the hub already
+ * trusts (the dashboard through its relay, the app with its credential) asks
+ * the hub for a ticket (`POST /api/preview-ticket`, a {@link PreviewTicket})
+ * and opens `<origin>/__cawco/enter?ticket=…` ({@link previewEnterUrl}) on
+ * any name the hub serves: the hub spends the ticket and sets the pass, then
+ * sends the client on to `next` when it names one.
  */
 export const PREVIEW_ENTER_PATH = "/__cawco/enter";
 
-/** What a host-mode preview name answers without its cookie: the page says so to its parent as this, so a frame asks for a new ticket. */
+/** What a host-mode preview name answers without a pass: the page says so to its parent as this, so the frame's host enters again. */
 export const PREVIEW_LOCKED_MESSAGE = "cawco:locked";
 
-/** A ticket into one session's host-mode preview origin: single-use, and spent by `expiresAt` (ms epoch). */
+/**
+ * Host mode's pass: one cookie per browser, set on the domain the names
+ * stand under ({@link hostModeDomain}), so every preview, embed and asset
+ * there carries it. `__Secure-`, never `__Host-`: a cookie with a `Domain`
+ * can't carry `__Host-` (RFC 6265bis §5.7 step 21).
+ */
+export const PREVIEW_PASS_COOKIE = "__Secure-cawco-pass";
+
+/** A ticket into host mode's previews for the device or browser that asked: single-use, and spent by `expiresAt` (ms epoch). */
 export interface PreviewTicket {
   expiresAt: number;
   ticket: string;
 }
 
-/** Where a client opens `place` (a path on the preview's `origin`) with `ticket`. */
+/**
+ * Where a client spends `ticket` on a host-mode preview `origin`: sent on to
+ * `place` (a path there) when it names one, else answered with the pass
+ * alone.
+ */
 export const previewEnterUrl = (
   origin: string,
   ticket: string,
-  place: string
+  place?: string
 ): string =>
-  `${origin}${PREVIEW_ENTER_PATH}?ticket=${encodeURIComponent(ticket)}&next=${encodeURIComponent(place)}`;
+  `${origin}${PREVIEW_ENTER_PATH}?ticket=${encodeURIComponent(ticket)}${place === undefined ? "" : `&next=${encodeURIComponent(place)}`}`;
 
 /**
  * The dashboard's own cookies, by name: every one it sets is `cawco-…`,
- * `__Host-`-prefixed where the scheme allows. A preview listener shares the
- * dashboard's host in port mode, and cookies are not isolated by port (RFC
- * 6265 §8.5), so it strips these from what the previewed app is sent and
- * drops any the app tries to set.
+ * `__Host-`- or `__Secure-`-prefixed where the scheme allows. A preview
+ * listener shares the dashboard's host in port mode, and cookies are not
+ * isolated by port (RFC 6265 §8.5), so it strips these from what the
+ * previewed app is sent and drops any the app tries to set; host mode's pass
+ * ({@link PREVIEW_PASS_COOKIE}) is one of them.
  */
-export const DASHBOARD_COOKIE = /^(?:__Host-)?cawco-/;
+export const DASHBOARD_COOKIE = /^(?:__Host-|__Secure-)?cawco-/;
 
 /**
  * How previews are reached, fleet-wide (Settings › Previews, Caw's
  * `admin_previews_write`): `port`, one port per session from the hub's range,
  * which needs no setup; or `host`, an origin per session from `pattern`
- * (its scheme, then a host name where `{session}` stands for the session's
- * id, or `{port}` for the preview port it keeps, so one name per port of the
- * range serves every session), for a
- * fleet behind DNS or a proxy that routes them to the hub's first preview
- * port.
+ * (`https://`, then a host name whose first label holds `{session}`, standing
+ * for the session's id, or `{port}`, for the preview port it keeps, so one
+ * name per port of the range serves every session), for a fleet behind DNS
+ * or a proxy that routes them to the hub's first preview port. `passDomain`:
+ * the domain the names stand under, which the browser's pass is set on
+ * ({@link PREVIEW_PASS_COOKIE}).
  */
 export type PreviewSettings =
   | { mode: "port"; ports: string }
-  | { mode: "host"; pattern: string; ports: string };
+  | { mode: "host"; pattern: string; passDomain: string; ports: string };
 
 /**
  * The socket an artifact's own tab (the dashboard's `/artifact/<id>`) follows

@@ -3325,6 +3325,32 @@ export const ownerDevices = sqliteTable("owner_devices", {
 });
 
 /**
+ * Host mode's preview passes (preview-access.ts): one per browser that
+ * entered, each keyed by the sha256 of its cookie's token, which went to the
+ * browser once and is kept nowhere here (OWASP Session Management: "store a
+ * one-way verifier instead"). A pass names the paired device whose ticket
+ * opened it and goes with that device: unpaired, or every device forgotten
+ * as pairing turns off. One with no device is a trusted hub's browser,
+ * known by its pass alone; those go as pairing turns on.
+ */
+export const previewPasses = sqliteTable(
+  "preview_passes",
+  {
+    id: text("id").primaryKey(),
+    /** sha256 of the cookie's token, hex. */
+    tokenHash: text("token_hash").notNull().unique(),
+    deviceId: text("device_id").references(() => ownerDevices.id, {
+      onDelete: "cascade",
+    }),
+    createdAt: timestamp("created_at").notNull(),
+    lastSeenAt: timestamp("last_seen_at").notNull(),
+    /** Its absolute end, from its entry: never moved by use. */
+    expiresAt: timestamp("expires_at").notNull(),
+  },
+  (table) => [index("preview_passes_device_id_idx").on(table.deviceId)]
+);
+
+/**
  * The key each machine the person admitted proves itself with (hub-auth.ts),
  * sealed: the machine answers a nonce with it at every connection, so the
  * hub needs the key itself, never a hash. Emptied when pairing is turned off.

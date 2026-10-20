@@ -2,6 +2,7 @@ import {
   CAWCO_ENV,
   OWNER_COOKIE,
   OWNER_COOKIE_SECURE,
+  PREVIEW_PASS_COOKIE,
   readEnv,
 } from "@cawco/core";
 import { PAGE_ORIGIN_HEADER } from "@cawco/core/browser-gate";
@@ -12,15 +13,20 @@ import {
 import { publicOrigin } from "../../../../public-origin.js";
 import type { RequestHandler } from "./$types";
 
-/** The browser's paired-device cookie, as one `Cookie` value; none without one. */
-const ownerCookieOf = (cookie: string | null): string | undefined =>
+/**
+ * The browser's paired-device cookie and its preview pass (hub
+ * preview-access.ts: a dashboard under host mode's domain is sent it), as
+ * one `Cookie` value; none without either.
+ */
+const hubCookiesOf = (cookie: string | null): string | undefined =>
   cookie
     ?.split(";")
     .map((part) => part.trim())
     .filter(
       (part) =>
         part.startsWith(`${OWNER_COOKIE}=`) ||
-        part.startsWith(`${OWNER_COOKIE_SECURE}=`)
+        part.startsWith(`${OWNER_COOKIE_SECURE}=`) ||
+        part.startsWith(`${PREVIEW_PASS_COOKIE}=`)
     )
     .join("; ") || undefined;
 
@@ -86,9 +92,10 @@ async function proxyToHub(
   const url = new URL(request.url);
   const targetUrl = `${hubOrigin()}/api/${path}${url.search}`;
   const authorization = request.headers.get("authorization");
-  // The person's paired-device cookie and nothing else of the browser's
-  // (core hub-auth.ts): the hub reads who is calling from it.
-  const cookie = ownerCookieOf(request.headers.get("cookie"));
+  // The person's paired-device cookie (core hub-auth.ts), which the hub
+  // reads who is calling from, and their preview pass, which a sign-out of
+  // previews revokes; nothing else of the browser's.
+  const cookie = hubCookiesOf(request.headers.get("cookie"));
 
   const fileName = request.headers.get("x-file-name");
   // A video element reads a machine's clip in ranges, and Safari plays none

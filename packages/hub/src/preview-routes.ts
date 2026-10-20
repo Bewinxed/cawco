@@ -10,21 +10,26 @@
 import type { ServerWebSocket } from "bun";
 import { Elysia, t } from "elysia";
 import type { ArtifactSocket } from "./artifacts/sync";
+import type { PreviewPassesDb } from "./db/preview-passes";
 import { projectOrigin } from "./db/previews";
+import { hidden } from "./hidden";
 import {
   type PreviewListenerDeps,
   type PreviewListeners,
   PreviewRefusal,
 } from "./preview";
-import { mintTicket } from "./preview-access";
+import { mintTicket, presentedPasses } from "./preview-access";
 
 export const previewRoutes = (deps: {
+  /** The paired device a request comes from (hub-auth.ts); null on a trusted hub, which pairs none. */
+  deviceOf: (request: Request) => string | null;
   /** Whether the hub knows session `id`. */
   hasInstance: (id: string) => boolean;
   /** Whether the hub keeps project `id`. */
   hasProject: (id: string) => boolean;
   listener: PreviewListenerDeps;
   listeners: PreviewListeners;
+  passes: PreviewPassesDb;
   /** Every shown preview again, at its address now: the mode changed. */
   republish: () => void;
 }) => {
@@ -69,21 +74,31 @@ export const previewRoutes = (deps: {
           return refused(error);
         }
       })
-      // A ticket into a session's host-mode preview origin (preview-access.ts),
-      // for the dashboard's pane and the app's web views: only a client this
-      // API already trusts gets one (core browser-gate.ts refuses a page of
-      // any other origin, a preview's above all).
-      .post("/api/instances/:id/preview-ticket", ({ params }) => {
-        if (!deps.hasInstance(params.id)) {
-          return new Response("No such session.", { status: 404 });
-        }
+      // A ticket into host mode's previews (preview-access.ts), bound to
+      // the device that asks: the dashboard spends it once per browser, the
+      // app once per web view's load. Only a client this API already trusts
+      // gets one (core browser-gate.ts refuses a page of any other origin, a
+      // preview's above all).
+      .post("/api/preview-ticket", ({ request }) => {
         if (deps.listeners.settings().mode !== "host") {
           return new Response(
             "Previews are reached by port on this hub, so they take no ticket.",
             { status: 409 }
           );
         }
-        return mintTicket(params.id);
+        return mintTicket(deps.deviceOf(request));
+      })
+      // The person's own sign-out of previews: every pass of the device that
+      // asks, or (a trusted hub's browser, which has no device) the pass its
+      // relay presents. Every frame of theirs is locked at its next request.
+      // No screen calls it yet, so the apps' document leaves it out.
+      .delete("/api/preview-pass", hidden, ({ request }) => {
+        const deviceId = deps.deviceOf(request);
+        let revoked = deviceId ? deps.passes.revoke({ deviceId }) : 0;
+        for (const tokenHash of presentedPasses(request)) {
+          revoked += deps.passes.revoke({ tokenHash });
+        }
+        return { revoked };
       })
       // A project's preview origin, where its pages are served (Projects spec
       // §5.8): one for the project's life, its listener started when it has none.
@@ -96,19 +111,6 @@ export const previewRoutes = (deps: {
         } catch (error) {
           return refused(error);
         }
-      })
-      // A ticket into a project's host-mode preview origin, as a session's.
-      .post("/api/projects/:id/preview-ticket", ({ params }) => {
-        if (!deps.hasProject(params.id)) {
-          return new Response("No such project.", { status: 404 });
-        }
-        if (deps.listeners.settings().mode !== "host") {
-          return new Response(
-            "Previews are reached by port on this hub, so they take no ticket.",
-            { status: 409 }
-          );
-        }
-        return mintTicket(projectOrigin(params.id));
       })
       // The pane's Send picks, as the page's own send would.
       .post(

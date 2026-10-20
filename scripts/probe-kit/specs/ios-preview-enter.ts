@@ -7,25 +7,22 @@
  * A scratch fleet (real hub, agent and sessiond, Claude Code against the
  * mock model) and the built app on an iPhone simulator of its own (a
  * mac-slot.sh slot, deleted at the end), reaching the hub at
- * `http://localhost:<port>` (under the patterns' `localhost` domain) for the
- * host-mode passes and at `http://127.0.0.1:<port>` for the others. A
- * session previews a server this spec runs
+ * `http://cawco.localhost:<port>` (under the pattern's `cawco.localhost`
+ * domain) for the host-mode pass and at `http://127.0.0.1:<port>` for the
+ * others. A session previews a server this spec runs
  * (`artifact_create` of its port), whose page opens a WebSocket to its own
  * origin as an HMR client does. Three passes, each with two launches of the
  * app on the session (`-open-session`), read from its DEBUG lines
  * (PreviewProbe `preview …`, CanvasDebug `canvas page …`, CanvasProbe
  * `canvas …`):
  *
- * - **https**: the pattern `https://p-{port}.localhost:<tls>`. TLS in front
- *   of the hub's first preview port is a terminator this spec runs
+ * - **https**: the pattern `https://p-{port}.cawco.localhost:<tls>`, the
+ *   only scheme host mode takes (the pass is a `Secure` cookie). TLS in
+ *   front of the hub's first preview port is a terminator this spec runs
  *   ({@link tlsFront}: Bun's TLS listener piping bytes to the hub, Host and
  *   all), its certificate (every name of the range) issued by a root made
  *   for the run, which the simulator trusts (`simctl keychain add-root-cert`).
- * - **http**: the pattern `http://p-{port}.localhost:<first port>`. It holds
- *   the app's ATS exception for `localhost` names (project.yml) and the
- *   hub's top-level pass there being `SameSite=Lax` with no `Secure`, which
- *   WebKit refuses over plain http (preview-access.ts `passCookie`).
- * - **host, off its domain**: the http pattern, the app at 127.0.0.1: it
+ * - **host, off its domain**: the same pattern, the app at 127.0.0.1: it
  *   takes the session's port, as port mode does (core `previewRoute`).
  * - **port**: port mode.
  *
@@ -358,7 +355,7 @@ async function run(kit: Kit): Promise<void> {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "enter-"));
   const certs = await certificates(
     dir,
-    ports.map((port) => `p-${port}.localhost`)
+    ports.map((port) => `p-${port}.cawco.localhost`)
   );
   const front = tlsFront(first, certs);
   console.log(`  TLS on 127.0.0.1:${front.port} in front of ${first}`);
@@ -473,32 +470,22 @@ async function run(kit: Kit): Promise<void> {
         .join(" | ");
 
     // Host mode's names are the app's when it reached the hub under the
-    // pattern's domain (`localhost` here); at 127.0.0.1 it takes the port.
-    const underDomain = fleet.base.replace("//127.0.0.1:", "//localhost:");
+    // pattern's domain (`cawco.localhost` here); at 127.0.0.1 it takes the port.
+    const underDomain = fleet.base.replace(
+      "//127.0.0.1:",
+      "//cawco.localhost:"
+    );
+    const pattern = `https://p-{port}.cawco.localhost:${front.port}`;
     const passes = [
       {
         name: "https",
         hub: underDomain,
-        settings: {
-          mode: "host",
-          pattern: `https://p-{port}.localhost:${front.port}`,
-        },
-      },
-      {
-        name: "http",
-        hub: underDomain,
-        settings: {
-          mode: "host",
-          pattern: `http://p-{port}.localhost:${first}`,
-        },
+        settings: { mode: "host", pattern },
       },
       {
         name: "host, off its domain",
         hub: fleet.base,
-        settings: {
-          mode: "host",
-          pattern: `http://p-{port}.localhost:${first}`,
-        },
+        settings: { mode: "host", pattern },
       },
       { name: "port", hub: fleet.base, settings: { mode: "port" } },
     ];

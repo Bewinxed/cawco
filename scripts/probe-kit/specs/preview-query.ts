@@ -20,9 +20,20 @@
  * byte:
  * 1. in port mode, through the session's own port;
  * 2. in host mode, through the session's name on the first port, past its
- *    lock with the pass a ticket gives (preview-access.ts).
+ *    lock with the pass a ticket gives (preview-access.ts): the entry
+ *    answers 302 and sets `__Secure-cawco-pass` on the names' domain,
+ *    `Secure; HttpOnly; SameSite=Lax`.
+ *
+ * Host mode's lock, on the same hops:
+ * 3. the server behind never reads the pass: no request head it read
+ *    carries `__Secure-cawco-pass`, while each one the client sent did;
+ * 4. a name nobody holds answers a live pass 404 with the closed page, and
+ *    a stranger (no pass) 401 with the locked page, as a held name does;
+ * 5. the pass revoked (its row gone), the held name answers it 401 with the
+ *    locked page.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one request at a time, each read off the wire before the next
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -42,6 +53,8 @@ const TOKEN = "preview-query-probe-relay-token-0";
 
 /** Each request line the server read, its target alone. */
 const arrived: string[] = [];
+/** Each request head the server read, whole. */
+const heads: string[] = [];
 
 /** A server that answers every request `ok`, keeping its request line's target as the bytes said it. */
 const recorder = () =>
@@ -58,6 +71,7 @@ const recorder = () =>
           return;
         }
         arrived.push(socket.data.head.split("\r\n")[0]?.split(" ")[1] ?? "");
+        heads.push(socket.data.head);
         socket.data.head = "";
         socket.write(
           "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\ncontent-length: 2\r\n\r\nok"
@@ -68,15 +82,15 @@ const recorder = () =>
 
 /**
  * One GET of `target` on `port`, its request line written as given, under
- * `host` (the port's own address unless named) with `headers`; the
- * response's head, its status line first.
+ * `host` (the port's own address unless named) with `headers`; the whole
+ * response as it came.
  */
-const rawGet = (
+const rawText = (
   port: number,
   target: string,
   host = `127.0.0.1:${port}`,
   headers = ""
-): Promise<string[]> =>
+): Promise<string> =>
   new Promise((done, fail) => {
     let got = "";
     Bun.connect({
@@ -92,7 +106,7 @@ const rawGet = (
           got += chunk.toString("latin1");
         },
         close() {
-          done(got.split("\r\n\r\n")[0]?.split("\r\n") ?? []);
+          done(got);
         },
         error(_socket, error) {
           fail(error);
@@ -101,12 +115,29 @@ const rawGet = (
     }).catch(fail);
   });
 
-/** Host mode's names, `.localhost` so they resolve with no DNS (RFC 6761), on the range's first port. */
-const PATTERN = `http://p-{session}.localhost:${HOST_PORT}`;
-const NAME = `p-${INSTANCE}.localhost:${HOST_PORT}`;
+/** {@link rawText}'s head alone, its status line first. */
+const rawGet = async (...args: Parameters<typeof rawText>): Promise<string[]> =>
+  (await rawText(...args)).split("\r\n\r\n")[0]?.split("\r\n") ?? [];
+
+/**
+ * Host mode's names, under `cawco.localhost` so they resolve with no DNS
+ * (RFC 6761) and stand under a domain a cookie may be set on, on the
+ * range's first port (TLS is a proxy's in front of it, never the hub's).
+ */
+const PATTERN = `https://p-{session}.cawco.localhost:${HOST_PORT}`;
+const NAME = `p-${INSTANCE}.cawco.localhost:${HOST_PORT}`;
+/** A name of the pattern no origin holds. */
+const UNHELD = `p-00000000-0000-4000-8000-00000000dead.cawco.localhost:${HOST_PORT}`;
 
 /** The pass host mode's lock gives for a ticket, as the browser sends it back: `name=value`. */
 const PASS = /^set-cookie:\s*([^;]+)/im;
+/** What the closed page and the locked page carry (core preview-proxy `downResponse`, hub preview-access `lockedResponse`). */
+const CLOSED_PAGE = '<meta name="cawco-preview-down" content="closed">';
+const LOCKED_PAGE = '<meta name="cawco-preview-locked" content="1">';
+/** A request head's Cookie line. */
+const COOKIE_LINE = /^cookie:.*$/im;
+/** The pass's whole `Set-Cookie`, its attributes after its value. */
+const PASS_ATTRIBUTES = /^set-cookie:\s*__Secure-cawco-pass=[^;]+;(.*)$/im;
 
 const run = async (kit: Kit) => {
   // Before the hub's config is read: its secret key in scratch, its preview ports clear of any hub's.
@@ -119,10 +150,12 @@ const run = async (kit: Kit) => {
     await import("../../../packages/hub/src/preview");
   const { mintTicket } =
     await import("../../../packages/hub/src/preview-access");
-  const { PREVIEW_ENTER_PATH } =
+  const { PREVIEW_ENTER_PATH, PREVIEW_PASS_COOKIE } =
     await import("../../../packages/core/src/frames");
   type Deps = Parameters<typeof createPreviewListeners>[1];
   type Db = Parameters<typeof createPreviewListeners>[2];
+  type Passes = Parameters<typeof createPreviewListeners>[3];
+  type PassRow = Parameters<Passes["open"]>[0];
   const server = recorder();
   const { port: agentPort } = await startPreview({
     instanceId: INSTANCE,
@@ -163,8 +196,33 @@ const run = async (kit: Kit) => {
     },
     setSettings: () => undefined,
   } as unknown as Db;
+  // The passes the hub keeps, as its db does (db/preview-passes.ts), by token hash.
+  const passRows = new Map<string, PassRow>();
+  const passes: Passes = {
+    live: (hash, now) => {
+      const row = passRows.get(hash);
+      return row && row.expiresAt > now ? row : undefined;
+    },
+    open: (row, replacing) => {
+      if (replacing) {
+        passRows.delete(replacing);
+      }
+      passRows.set(row.tokenHash, row);
+      return true;
+    },
+    revoke: (by) => {
+      const gone = [...passRows].filter(([hash, row]) =>
+        "deviceId" in by ? row.deviceId === by.deviceId : hash === by.tokenHash
+      );
+      for (const [hash] of gone) {
+        passRows.delete(hash);
+      }
+      return gone.length;
+    },
+    touch: () => undefined,
+  };
   // No tailnet here: no TLS twins, no tailnet origin.
-  const listeners = createPreviewListeners("127.0.0.1", deps, db, {
+  const listeners = createPreviewListeners("127.0.0.1", deps, db, passes, {
     beside: () => ({ close: () => undefined }),
     origin: () => undefined,
   });
@@ -195,24 +253,84 @@ const run = async (kit: Kit) => {
     await listeners.set({ mode: "host", pattern: PATTERN });
     const entered = await rawGet(
       HOST_PORT,
-      `${PREVIEW_ENTER_PATH}?ticket=${encodeURIComponent(mintTicket(INSTANCE).ticket)}&next=%2F`,
+      `${PREVIEW_ENTER_PATH}?ticket=${encodeURIComponent(mintTicket(null).ticket)}&next=%2F`,
       NAME
     );
     const pass = entered.join("\n").match(PASS)?.[1];
+    const attributes = (entered.join("\n").match(PASS_ATTRIBUTES)?.[1] ?? "")
+      .split(";")
+      .map((one) => one.trim())
+      .filter(Boolean)
+      .sort();
+    const wanted = [
+      "Domain=cawco.localhost",
+      "HttpOnly",
+      "Max-Age=2592000",
+      "Path=/",
+      "SameSite=Lax",
+      "Secure",
+    ];
     kit.check(
-      "2: host mode's lock gives a pass for a ticket",
-      entered[0]?.startsWith("HTTP/1.1 302") === true && Boolean(pass),
-      `answered ${JSON.stringify(entered[0] ?? "")}`
+      "2: host mode's lock gives a pass for a ticket: 302, __Secure-cawco-pass on the names' domain, Secure, HttpOnly, SameSite=Lax, 30 days",
+      entered[0]?.startsWith("HTTP/1.1 302") === true &&
+        pass?.startsWith(`${PREVIEW_PASS_COOKIE}=`) === true &&
+        attributes.join("; ") === wanted.join("; "),
+      `answered ${JSON.stringify(entered[0] ?? "")}; attributes ${attributes.join("; ")}`
     );
+    const read = heads.length;
     for (const target of FORMS) {
       await through(
         "2 (host mode)",
         HOST_PORT,
         target,
         NAME,
-        `cookie: ${pass}\r\n`
+        `cookie: app=kept; ${pass}\r\n`
       );
     }
+    // 3. The server behind never reads the pass; the app's own cookie goes on.
+    const behind = heads.slice(read);
+    kit.check(
+      "3: the server behind never reads the pass: every request head it read lacks __Secure-cawco-pass and keeps the app's own cookie",
+      behind.length === FORMS.length &&
+        behind.every(
+          (head) =>
+            !head.includes(PREVIEW_PASS_COOKIE) && head.includes("app=kept")
+        ),
+      `${behind.length} heads; ${behind.map((head) => head.match(COOKIE_LINE)?.[0] ?? "no cookie").join(" | ")}`
+    );
+    // 4. A name nobody holds: closed to a live pass, locked to a stranger.
+    const status = (text: string) => text.split("\r\n")[0] ?? "";
+    const closed = await rawText(HOST_PORT, "/", UNHELD, `cookie: ${pass}\r\n`);
+    const stranger = await rawText(HOST_PORT, "/", UNHELD);
+    const heldStranger = await rawText(HOST_PORT, "/", NAME);
+    kit.check(
+      "4: a name nobody holds answers a live pass 404 with the closed page, and a stranger 401 with the locked page, as the held name answers a stranger",
+      status(closed).startsWith("HTTP/1.1 404") &&
+        closed.includes(CLOSED_PAGE) &&
+        status(stranger).startsWith("HTTP/1.1 401") &&
+        stranger.includes(LOCKED_PAGE) &&
+        status(heldStranger).startsWith("HTTP/1.1 401") &&
+        heldStranger.includes(LOCKED_PAGE),
+      `unheld with a pass: ${status(closed)}; unheld stranger: ${status(stranger)}; held stranger: ${status(heldStranger)}`
+    );
+    // 5. Revoked: the held name locks the pass out.
+    const token = pass?.slice(`${PREVIEW_PASS_COOKIE}=`.length) ?? "";
+    const revoked = passes.revoke({
+      tokenHash: createHash("sha256").update(token).digest("hex"),
+    });
+    const after = await rawText(
+      HOST_PORT,
+      FORMS[0] as string,
+      NAME,
+      `cookie: ${pass}\r\n`
+    );
+    kit.check(
+      "5: the pass revoked, the held name answers it 401 with the locked page",
+      revoked === 1 &&
+        status(after).startsWith("HTTP/1.1 401") &&
+        after.includes(LOCKED_PAGE),
+      `revoked ${revoked}; answered ${status(after)}`
+    );
   } finally {
     await listeners.set({ mode: "port" });
     listeners.release(INSTANCE);

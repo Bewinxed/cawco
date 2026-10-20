@@ -2,32 +2,69 @@
  * A project's decision page is served on its project's own preview origin
  * (Projects spec §5.8), on a scratch fleet: a real hub, agent and sessiond,
  * two Claude Code sessions of one project against the mock model, the built
- * dashboard. Read from the engine: each frame's document, or its load error.
+ * dashboard. Read from the engine: each frame's document, or its load error,
+ * and every request and answer of the browser's context.
  *
  *   bun scripts/probe-kit/run.ts project-origin
  *
  * Its project's id is of the older shape (capitals and `_`), which a
- * `{session}` name holds only as a label of its own.
+ * `{session}` name holds only as a label of its own. The page's two options
+ * each show a Preview embed of a dev server of the writer's.
  *
  * In port mode (each origin on its own port) and in host mode, by a
- * `p-{port}.localhost` pattern and by a `p-{session}.localhost` one (every
- * name on the range's first port, as an outpost's proxy reaches the hub):
+ * `https://p-{port}.localtest.me` pattern and by a
+ * `https://p-{session}.localtest.me` one: every name on the range's first
+ * port behind a Cloudflare-like front answering https, the dashboard behind
+ * one of its own at `https://localtest.me:<port>`, under the names' domain,
+ * as the owner's tunnel serves both ("The entire domain name localtest.me—and
+ * all wildcard entries—point to 127.0.0.1",
+ * weblogs.asp.net/owscott/introducing-testing-domain-localtest-me). Each
+ * tab is a browser of its own, holding no pass when it opens.
  * (a) The page opened in its writer's panel (as Files opens it) draws its
- *     cards, and its option's Preview embed of a dev server draws inside it:
- *     the embed's frame-ancestors name the exact origin the page was served
- *     on.
+ *     cards, and both Preview embeds draw inside it, again after they reload
+ *     themselves: each embed's frame-ancestors name the exact origin the
+ *     page was served on.
  * (b) Its writing session deleted, the page opens in the project's
  *     Decisions tab, draws its cards and its embed, and takes a new pick,
  *     kept on the hub.
  *
- * Host-only (not run here): the same on the outpost route (cloudflared in
- * front of the host-mode port, https names) and the tailnet route (the hub's
- * HTTPS twins on its tailnet name).
+ * The owner's 401s (2026-10-20: "Failed to load resource: the server
+ * responded with a status of 401", seven times on one decision page), in
+ * each host mode, on that tab:
+ * (c) Both embeds remounted three times (the page sets each frame's address
+ *     again, as a Preview mounting anew does) draw each time; no embed's
+ *     answer is ever 401 (the page's own first load is, before the browser
+ *     holds a pass), and exactly one `/__cawco/enter` is asked in all, none
+ *     per remount: nothing is locked or entered once the remounts begin.
+ *     No ticket stands in the page's media or any
+ *     embed's address, and neither dev server is ever sent the pass.
+ * (d) The pass revoked (`DELETE /api/preview-pass`, the person's sign-out of
+ *     previews), every frame's next load answers 401 with the locked page:
+ *     each embed remounted, and the page reloaded, which the pane answers
+ *     with one new entry, the page and both embeds drawn again.
+ *
+ * Host-only: the names are localtest.me's, which only the host's DNS
+ * resolves (a workspace has none), and a frame carries the pass only under a
+ * domain the Public Suffix List knows: Chromium takes each `.localhost` name
+ * for a site of its own, so no `SameSite=Lax` pass reaches a frame there.
+ * Not run here either: the outpost route (cloudflared itself in front of the
+ * host-mode port) and the tailnet route (the hub's HTTPS twins on its
+ * tailnet name).
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
+// biome-ignore-all lint/complexity/noExcessiveCognitiveComplexity: the legs are read in order, one after another.
 import type { Frame, Page } from "playwright-core";
+import { PREVIEW_PASS_COOKIE } from "../../../packages/core/src/frames";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec } from "../kit";
+import {
+  hear,
+  PASS_DOMAIN,
+  passHeld,
+  passPattern,
+  passTunnel,
+  remount,
+} from "../pass-legs";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -35,19 +72,25 @@ const respond = (request: Seen): Reply => ({
 });
 
 const SITE = "The live site";
+const OTHER = "The other site";
+/** Both embeds' headings, as {@link Drawn} sorts them. */
+const BOTH = [OTHER, SITE].join(" | ");
 
 const pageProgram = (
-  site: string
+  site: string,
+  other: string
 ) => `root = Decisions("Pair the code", [leave])
 leave = Decision("leave", "When you approve, how does the code leave?", [swallow, fly], "Both drawn live.")
 swallow = Option("swallow", "Caw swallows the code", "It goes in one gulp.", true, [desk], "Less to watch.")
-fly = Option("fly", "The code flies up to Caw", "It travels up the page.", false, [], "More motion to follow.")
-desk = Preview("${site}", "Desk · Caw swallows the code")`;
+fly = Option("fly", "The code flies up to Caw", "It travels up the page.", false, [phone], "More motion to follow.")
+desk = Preview("${site}", "Desk · Caw swallows the code")
+phone = Preview("${other}", "Phone · The code flies up to Caw")`;
 
-/** What the page and its embed drew: the card, the embed's heading or the address it failed on, and the words of a piece whose artifact is gone. */
+/** What the page and its embeds drew: the card, the live site's heading or every address one failed on, both headings, and the words of a piece whose artifact is gone. */
 interface Drawn {
   card: boolean;
   embed: string;
+  embeds: string;
   gone: string;
 }
 
@@ -73,7 +116,7 @@ const pageFrame = async (tab: Page): Promise<Frame | undefined> =>
 const drawnIn = async (tab: Page): Promise<Drawn> => {
   const page = await pageFrame(tab);
   if (!page) {
-    return { card: false, embed: "", gone: "" };
+    return { card: false, embed: "", embeds: "", gone: "" };
   }
   const gone = await page
     .evaluate(
@@ -94,8 +137,26 @@ const drawnIn = async (tab: Page): Promise<Drawn> => {
   return {
     card: true,
     embed: said.find((one) => one === SITE) ?? said.join(" | "),
+    embeds: said.toSorted().join(" | "),
     gone,
   };
+};
+
+/** Whether every embed of the page stands on the locked page now, and how many embeds it has. */
+const lockedIn = async (
+  page: Frame
+): Promise<{ embeds: number; locked: number }> => {
+  const frames = page.childFrames();
+  const locked = await Promise.all(
+    frames.map((frame) =>
+      frame
+        .evaluate(
+          () => !!document.querySelector('meta[name="cawco-preview-locked"]')
+        )
+        .catch(() => false)
+    )
+  );
+  return { embeds: frames.length, locked: locked.filter(Boolean).length };
 };
 
 /**
@@ -111,12 +172,12 @@ const reloadedIn = async (tab: Page): Promise<Drawn> => {
   return drawnIn(tab);
 };
 
-/** Reads `tab` until the page and its embed drew, or what it had at the end. */
+/** Reads `tab` until the page and both its embeds drew, or what it had at the end. */
 const drawnBy = (tab: Page, label: string): Promise<Drawn> =>
   until(
     label,
     () => drawnIn(tab),
-    (drawn) => drawn.card && drawn.embed === SITE,
+    (drawn) => drawn.card && drawn.embeds === BOTH,
     30_000
   ).catch(() => drawnIn(tab));
 
@@ -153,16 +214,19 @@ const pickIn = async (tab: Page, option: string): Promise<string> => {
  */
 const MODES = ["port", "host", "session"] as const;
 
-const settingsOf = (mode: (typeof MODES)[number], first: number) => {
-  if (mode === "port") {
-    return { mode };
-  }
-  const placeholder = mode === "host" ? "{port}" : "{session}";
-  return {
-    mode: "host",
-    pattern: `http://p-${placeholder}.localhost:${first}`,
-  };
-};
+/** `front`: the port of the https front in front of the range's first port. */
+const settingsOf = (mode: (typeof MODES)[number], front: number) =>
+  mode === "port"
+    ? { mode }
+    : passPattern(mode === "host" ? "{port}" : "{session}", front);
+
+/** The hosts of the page's embeds as they stand now. */
+const embedHosts = async (tab: Page): Promise<Set<string>> =>
+  new Set(
+    ((await pageFrame(tab))?.childFrames() ?? []).map(
+      (frame) => new URL(frame.url()).hostname
+    )
+  );
 
 const run = async (kit: Kit) => {
   const fleet = await kit.fleet(respond);
@@ -196,47 +260,60 @@ const run = async (kit: Kit) => {
     projectId,
   });
   const at = (session: string) => `/api/instances/${session}/artifacts`;
-  // A dev server on the machine's host, shown as a preview of its port.
-  const server = Bun.serve({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch: () =>
-      new Response(
-        `<!doctype html><html><body><h1>${SITE}</h1></body></html>`,
-        {
-          headers: { "content-type": "text/html" },
-        }
-      ),
-  });
-  const site = await fleet.api<{ id: string }>(at(writer), {
-    kind: "preview",
-    does: "try",
-    ask: "Try this page and say whether it works",
-    name: "pairing-site",
-    port: server.port,
-    machine: MACHINE,
-  });
+  /** Every Cookie header the dev servers were sent. */
+  const cookies: string[] = [];
+  // Two dev servers on the machine's host, each shown as a preview of its port.
+  const devServer = (heading: string) =>
+    Bun.serve({
+      hostname: "127.0.0.1",
+      port: 0,
+      fetch: (request) => {
+        cookies.push(request.headers.get("cookie") ?? "");
+        return new Response(
+          `<!doctype html><html><body><h1>${heading}</h1></body></html>`,
+          { headers: { "content-type": "text/html" } }
+        );
+      },
+    });
+  const server = devServer(SITE);
+  const otherServer = devServer(OTHER);
+  const preview = (name: string, port: number) =>
+    fleet.api<{ id: string }>(at(writer), {
+      kind: "preview",
+      does: "try",
+      ask: "Try this page and say whether it works",
+      name,
+      port,
+      machine: MACHINE,
+    });
+  const site = await preview("pairing-site", server.port as number);
+  const other = await preview("pairing-other", otherServer.port as number);
   const page = await fleet.api<{ id: string }>(at(writer), {
     kind: "page",
     does: "pick",
     ask: "Pick how the code leaves",
     name: "pairing-behaviour",
-    program: pageProgram(site.id),
+    program: pageProgram(site.id, other.id),
   });
   const base = await fleet.dashboard();
   const range = await fleet.api<{ ports: string }>("/api/preview-settings");
   const first = Number(range.ports.split("–")[0]);
+  // The owner's tunnel: https in front of the names and of the dashboard.
+  const tunnel = await passTunnel(kit.out, first, base);
 
   for (const mode of MODES) {
     const put = await fetch(`${fleet.base}/api/preview-settings`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(settingsOf(mode, first)),
+      body: JSON.stringify(settingsOf(mode, tunnel.front)),
     });
     // Host mode's names are loaded by a dashboard reached under their domain.
-    const board =
-      mode === "port" ? base : base.replace("127.0.0.1", "localhost");
-    const tab = await kit.page("desk", { theme: "light" });
+    const board = mode === "port" ? base : tunnel.board;
+    const tab = await kit.page("desk", {
+      theme: "light",
+      ignoreHTTPSErrors: true,
+    });
+    const heard = hear(tab);
     await open(tab, `${board}/session/${writer}`, '[data-slot="pane"]');
     // Brought to the front of the writer's panel, as Files opens it.
     await (
@@ -246,13 +323,109 @@ const run = async (kit: Kit) => {
     ).text();
     const panel = await drawnBy(
       tab,
-      `${mode}: the page and its embed in the panel`
+      `${mode}: the page and its embeds in the panel`
     );
+    const embeds = await embedHosts(tab);
     const again = await reloadedIn(tab);
     kit.check(
-      `(a) ${mode}: the page opened in its writer's panel draws its card, and its Preview embed draws inside it, again after it reloads itself`,
-      put.ok && panel.card && panel.embed === SITE && again.embed === SITE,
-      JSON.stringify({ put: put.status, ...panel, reloaded: again.embed })
+      `(a) ${mode}: the page opened in its writer's panel draws its card, and both Preview embeds draw inside it, again after they reload themselves`,
+      put.ok && panel.card && panel.embeds === BOTH && again.embeds === BOTH,
+      JSON.stringify({ put: put.status, ...panel, reloaded: again.embeds })
+    );
+    if (mode === "port") {
+      await tab.close();
+      continue;
+    }
+
+    // (c) The owner's remounts.
+    const frame = await pageFrame(tab);
+    const media = frame
+      ? await frame
+          .evaluate(
+            () => document.getElementById("cawco-media")?.textContent ?? ""
+          )
+          .catch(() => "")
+      : "";
+    const remountsFrom = heard.length;
+    const remounts: string[] = [];
+    for (let time = 1; time <= 3; time += 1) {
+      if (frame) {
+        await remount(frame).catch(() => undefined);
+      }
+      await tab.waitForTimeout(3000);
+      remounts.push((await drawnIn(tab)).embeds);
+    }
+    const addresses = (await pageFrame(tab))
+      ?.childFrames()
+      .map((one) => one.url());
+    const pass = passHeld(heard, embeds, remountsFrom);
+    kit.check(
+      `(c) ${mode}: both embeds remounted three times draw each time; none of the embeds' ${pass.said.embedAnswers} answers is 401, the page's first load is (no pass yet), one /__cawco/enter is asked in all and none per remount; no ticket in the page's media or an embed's address, and no dev server is sent the pass`,
+      remounts.every((one) => one === BOTH) &&
+        embeds.size === 2 &&
+        pass.held &&
+        media.includes(`.${PASS_DOMAIN}:`) &&
+        !media.includes("ticket") &&
+        (addresses ?? []).length === 2 &&
+        !(addresses ?? []).some((one) => one.includes("ticket=")) &&
+        !cookies.some((one) => one.includes(PREVIEW_PASS_COOKIE)),
+      JSON.stringify({
+        remounts,
+        embeds: [...embeds],
+        ...pass.said,
+        addresses,
+        media: media.slice(0, 400),
+        devCookies: [...new Set(cookies)],
+      })
+    );
+
+    // (d) Revoked: every frame locks at its next load.
+    const revoked = await tab.evaluate(async () => {
+      const answer = await fetch("/api/preview-pass", { method: "DELETE" });
+      return `${answer.status} ${await answer.text()}`;
+    });
+    const before = heard.length;
+    const shown = await pageFrame(tab);
+    if (shown) {
+      await remount(shown).catch(() => undefined);
+    }
+    const embedsLocked = shown
+      ? await until(
+          `${mode}: every embed on the locked page`,
+          () => lockedIn(shown),
+          (read) => read.embeds === 2 && read.locked === 2,
+          15_000
+        ).catch(() => lockedIn(shown))
+      : { embeds: 0, locked: 0 };
+    const remounted = heard.slice(before);
+    await shown?.evaluate(() => location.reload()).catch(() => undefined);
+    const back = await drawnBy(
+      tab,
+      `${mode}: the page and its embeds again after its reload`
+    );
+    const reloaded = heard.slice(before + remounted.length);
+    kit.check(
+      `(d) ${mode}: the pass revoked, each embed remounted answers 401 with the locked page, the page reloaded answers 401, and the pane enters once more and draws it and both embeds again`,
+      revoked.startsWith("200") &&
+        embedsLocked.embeds === 2 &&
+        embedsLocked.locked === 2 &&
+        remounted.filter((one) => one.kind === "locked" && embeds.has(one.host))
+          .length === 2 &&
+        reloaded.some(
+          (one) => one.kind === "locked" && !embeds.has(one.host)
+        ) &&
+        reloaded.filter((one) => one.kind === "enter").length === 1 &&
+        back.card &&
+        back.embeds === BOTH,
+      JSON.stringify({
+        revoked,
+        embedsLocked,
+        remounted: remounted.map((one) => `${one.kind} ${one.url}`),
+        reloaded: reloaded
+          .filter((one) => one.kind !== "answer")
+          .map((one) => `${one.kind} ${one.url}`),
+        back,
+      })
     );
     await tab.close();
   }
@@ -293,11 +466,13 @@ const run = async (kit: Kit) => {
     await fetch(`${fleet.base}/api/preview-settings`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify(settingsOf(mode, first)),
+      body: JSON.stringify(settingsOf(mode, tunnel.front)),
     });
-    const board =
-      mode === "port" ? base : base.replace("127.0.0.1", "localhost");
-    const tab = await kit.page("desk", { theme: "light" });
+    const board = mode === "port" ? base : tunnel.board;
+    const tab = await kit.page("desk", {
+      theme: "light",
+      ignoreHTTPSErrors: true,
+    });
     await open(
       tab,
       `${board}/project/${projectId}?view=decisions&page=pairing-behaviour`,
@@ -337,7 +512,13 @@ const run = async (kit: Kit) => {
     await tab.close();
   }
   server.stop(true);
+  otherServer.stop(true);
+  tunnel.stop();
 };
 
-const spec: Spec = { name: "project-origin", run };
+const spec: Spec = {
+  name: "project-origin",
+  run,
+  host: "its host-mode names are localtest.me's, which only the host's DNS resolves, and a frame carries the pass only under a domain the Public Suffix List knows",
+};
 export default spec;

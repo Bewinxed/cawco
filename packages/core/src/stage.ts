@@ -12,7 +12,6 @@
  * A workspace preview's server ({@link ServeSpec}) runs on the same
  * supervision, and its preview's doc keeps its state the same way.
  */
-import { PREVIEW_ENTER_PATH } from "./frames";
 
 /**
  * Where a stage serves a component canvas: `?file=<states file, from the
@@ -60,25 +59,17 @@ export const CANVAS_EMBED_SIZE = "cawco:embed-size";
 /**
  * A component canvas's address (`embed`, as the hub answers it in a
  * decision page's media) drawn as a Preview: `by=embed`, a `story` per name
- * in `stories` (none: every story). Through host mode's way in, the place it
- * sends the frame on to (`next`) carries them.
+ * in `stories` (none: every story).
  */
 export const canvasEmbedUrl = (
   embed: string,
   stories: readonly string[]
 ): string => {
   const url = new URL(embed);
-  const enter = url.pathname === PREVIEW_ENTER_PATH;
-  const place = enter
-    ? new URL(url.searchParams.get("next") ?? "/", url.origin)
-    : url;
-  place.searchParams.set("by", "embed");
-  place.searchParams.delete("story");
+  url.searchParams.set("by", "embed");
+  url.searchParams.delete("story");
   for (const one of stories) {
-    place.searchParams.append("story", one);
-  }
-  if (enter) {
-    url.searchParams.set("next", `${place.pathname}${place.search}`);
+    url.searchParams.append("story", one);
   }
   return url.href;
 };

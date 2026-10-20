@@ -9,14 +9,22 @@
  *   bun scripts/probe-kit/run.ts project-origin-sheet
  *
  * On a scratch fleet, a Claude Code session of a project in a Vite + Svelte
- * folder (as session-sheet's), against the mock model; in port mode and in
- * host mode (a `p-{port}.localhost` pattern, every name on the range's first
- * port, as an outpost's proxy reaches the hub):
+ * folder (as session-sheet's), against the mock model; the page's two
+ * options each embed the canvas; in port mode and in host mode (a
+ * `https://p-{port}.localtest.me` pattern, every name on the range's first
+ * port behind an https front, the dashboard behind one of its own under the
+ * names' domain: pass-legs.ts), each tab a browser holding no pass:
  * (a) the page opened in the session's panel draws the canvas's card
- *     (`[data-probe="title"]`) inside its Preview embed;
- * (b) it still does once the embed reloads itself (as Vite's client does
+ *     (`[data-probe="title"]`) inside both Preview embeds;
+ * (b) it still does once the embeds reload themselves (as Vite's client does
  *     when its socket drops: `location.reload()` once a ping answers), and
- *     after a settle long enough for that to happen on its own.
+ *     after a settle long enough for that to happen on its own;
+ * (c) host mode, the owner's 401s ("Failed to load resource: the server
+ *     responded with a status of 401", seven times on one decision page):
+ *     both canvases remounted three times (the page sets each frame's
+ *     address again) draw the card each time; none of the embeds' answers
+ *     is 401, the page's first load is (the browser holds no pass yet), and
+ *     one `/__cawco/enter` is asked in all, none once the remounts begin.
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one step at a time, as a person takes them
 import { mkdir, writeFile } from "node:fs/promises";
@@ -24,6 +32,7 @@ import { dirname, join } from "node:path";
 import type { Frame, Page } from "playwright-core";
 import { MACHINE, type Reply, type Seen, until } from "../../scratch-fleet";
 import { type Kit, open, type Spec } from "../kit";
+import { hear, passHeld, passPattern, passTunnel, remount } from "../pass-legs";
 
 const respond = (request: Seen): Reply => ({
   everyMs: 5,
@@ -70,8 +79,9 @@ const pageProgram = (
 ) => `root = Decisions("Pair the code", [leave])
 leave = Decision("leave", "When you approve, how does the code leave?", [swallow, fly], "Both drawn live.")
 swallow = Option("swallow", "Caw swallows the code", "It goes in one gulp.", true, [desk], "Less to watch.")
-fly = Option("fly", "The code flies up to Caw", "It travels up the page.", false, [], "More motion to follow.")
-desk = Preview("${sheet}", "Desk · Caw swallows the code")`;
+fly = Option("fly", "The code flies up to Caw", "It travels up the page.", false, [phone], "More motion to follow.")
+desk = Preview("${sheet}", "Desk · Caw swallows the code")
+phone = Preview("${sheet}", "Phone · Caw swallows the code")`;
 
 /** Every frame under `frame`, itself first. */
 const within = (frame: Frame): Frame[] => [
@@ -97,26 +107,38 @@ const pageFrame = async (tab: Page): Promise<Frame | undefined> =>
     )
   ).find(([, card]) => card)?.[0];
 
-/** What the embed drew: the card's title in any frame under the page's, else every address under it. */
+/** Both embeds drew the card: what {@link embedIn} says then. */
+const BOTH = `${CARD} ×2`;
+
+/** What the embeds drew: the card in each of the page's embeds, else every address under the page. */
 const embedIn = async (tab: Page): Promise<string> => {
   const page = await pageFrame(tab);
   if (!page) {
     return "no page";
   }
-  const under = page.childFrames().flatMap(within);
-  const titles = await Promise.all(
-    under.map((frame) =>
-      frame
-        .evaluate(
-          () =>
-            document.querySelector('[data-probe="title"]')?.textContent ?? ""
+  const drawn = await Promise.all(
+    page.childFrames().map(async (embed) => {
+      const titles = await Promise.all(
+        within(embed).map((frame) =>
+          frame
+            .evaluate(
+              () =>
+                document.querySelector('[data-probe="title"]')?.textContent ??
+                ""
+            )
+            .catch(() => "")
         )
-        .catch(() => "")
-    )
+      );
+      return titles.includes(CARD);
+    })
   );
-  return (
-    titles.find((one) => one === CARD) ?? under.map((f) => f.url()).join(" | ")
-  );
+  return drawn.length === 2 && drawn.every(Boolean)
+    ? BOTH
+    : page
+        .childFrames()
+        .flatMap(within)
+        .map((f) => f.url())
+        .join(" | ");
 };
 
 const run = async (kit: Kit) => {
@@ -167,20 +189,22 @@ const run = async (kit: Kit) => {
   const base = await fleet.dashboard();
   const range = await fleet.api<{ ports: string }>("/api/preview-settings");
   const first = Number(range.ports.split("–")[0]);
+  const tunnel = await passTunnel(kit.out, first, base);
 
   for (const mode of ["port", "host"] as const) {
     const put = await fetch(`${fleet.base}/api/preview-settings`, {
       method: "PUT",
       headers: { "content-type": "application/json" },
       body: JSON.stringify(
-        mode === "host"
-          ? { mode, pattern: `http://p-{port}.localhost:${first}` }
-          : { mode }
+        mode === "host" ? passPattern("{port}", tunnel.front) : { mode }
       ),
     });
-    const board =
-      mode === "host" ? base.replace("127.0.0.1", "localhost") : base;
-    const tab = await kit.page("desk", { theme: "light" });
+    const board = mode === "host" ? tunnel.board : base;
+    const tab = await kit.page("desk", {
+      theme: "light",
+      ignoreHTTPSErrors: true,
+    });
+    const heard = hear(tab);
     await open(tab, `${board}/session/${writer}`, '[data-slot="pane"]');
     await (
       await fetch(`${fleet.base}${at}/${page.id}/show`, { method: "POST" })
@@ -188,12 +212,12 @@ const run = async (kit: Kit) => {
     const drawn = await until(
       `${mode}: the canvas's card inside the page`,
       () => embedIn(tab),
-      (said) => said === CARD,
+      (said) => said === BOTH,
       120_000
     ).catch(() => embedIn(tab));
     kit.check(
-      `(a) ${mode}: the page opened in its session's panel draws the component canvas's card inside its Preview embed`,
-      put.ok && drawn === CARD,
+      `(a) ${mode}: the page opened in its session's panel draws the component canvas's card inside both Preview embeds`,
+      put.ok && drawn === BOTH,
       JSON.stringify({ put: put.status, drawn })
     );
     // The embed loads itself again, as Vite's client does once its socket drops.
@@ -204,13 +228,47 @@ const run = async (kit: Kit) => {
     await tab.waitForTimeout(15_000);
     const settled = await embedIn(tab);
     kit.check(
-      `(b) ${mode}: it still draws the card after the embed reloads itself, and 15 s on`,
-      settled === CARD,
+      `(b) ${mode}: it still draws the card in both after the embeds reload themselves, and 15 s on`,
+      settled === BOTH,
       settled
     );
+    if (mode === "host") {
+      const shown = await pageFrame(tab);
+      const embeds = new Set(
+        (shown?.childFrames() ?? []).map(
+          (frame) => new URL(frame.url()).hostname
+        )
+      );
+      const remountsFrom = heard.length;
+      const remounts: string[] = [];
+      for (let time = 1; time <= 3; time += 1) {
+        if (shown) {
+          await remount(shown).catch(() => undefined);
+        }
+        remounts.push(
+          await until(
+            `${mode}: both canvases after remount ${time}`,
+            () => embedIn(tab),
+            (said) => said === BOTH,
+            60_000
+          ).catch(() => embedIn(tab))
+        );
+      }
+      const pass = passHeld(heard, embeds, remountsFrom);
+      kit.check(
+        `(c) ${mode}: both canvases remounted three times draw the card each time; none of the embeds' ${pass.said.embedAnswers} answers is 401, the page's first load is (no pass yet), one /__cawco/enter is asked in all and none per remount`,
+        remounts.every((one) => one === BOTH) && pass.held,
+        JSON.stringify({ remounts, embeds: [...embeds], ...pass.said })
+      );
+    }
     await tab.close();
   }
+  tunnel.stop();
 };
 
-const spec: Spec = { name: "project-origin-sheet", run };
+const spec: Spec = {
+  name: "project-origin-sheet",
+  run,
+  host: "a sheet's stage runs in a stage clone's boundary, which needs namespaces no workspace can make, and its host-mode names are localtest.me's, which only the host's DNS resolves",
+};
 export default spec;

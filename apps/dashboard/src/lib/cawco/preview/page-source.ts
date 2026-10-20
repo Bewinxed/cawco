@@ -4,14 +4,14 @@
  * `originOf`): a project's page on its project's origin, for the project's
  * life and whether or not the session that wrote it stands; any other page
  * on its session's. The Decisions tab's live page (PageFrame) and Files'
- * unseen thumbnail drawer (files/page-thumbs) both load a page this way.
+ * unseen thumbnail drawer (files/page-thumbs) both load a page this way,
+ * at its own address on either route: a host-mode name turns a browser
+ * without a pass away, and its frame enters then (preview/pass.ts).
  */
 import {
   decisionsWords,
   PREVIEW_PING_PATH,
   type PreviewAddress,
-  type PreviewTicket,
-  previewEnterUrl,
   previewRoute,
 } from "@cawco/core";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
@@ -19,7 +19,7 @@ import { hubRefusal } from "#lib/cawco/hub-read.js";
 /** The origin that serves a page: its project's, or (a page outside any project) its session's. */
 export type PageOrigin = { project: string } | { instance: string };
 
-/** The hub's routes for that origin's address and tickets. */
+/** The hub's routes for that origin's address. */
 const routesOf = (origin: PageOrigin): string =>
   "project" in origin
     ? `/api/projects/${encodeURIComponent(origin.project)}`
@@ -28,31 +28,6 @@ const routesOf = (origin: PageOrigin): string =>
 /** The hub's sentence for a refused request, or the fallback words. */
 const said = async (answer: Response | null, otherwise: string) =>
   answer ? (await hubRefusal(answer)).message : otherwise;
-
-/**
- * Its address: straight on a port, or entered with a new pass by host
- * name (hub preview-access.ts). A lapsed pass enters again the same way.
- */
-export async function enterPage(
-  origin: PageOrigin,
-  at: string,
-  byHost: boolean,
-  wanted: string
-): Promise<{ src: string } | { problem: string }> {
-  if (!byHost) {
-    return { src: `${at}${wanted}` };
-  }
-  const answer = await fetch(`${routesOf(origin)}/preview-ticket`, {
-    method: "POST",
-  }).catch(() => null);
-  if (!answer?.ok) {
-    return {
-      problem: await said(answer, "The hub didn't give this page a pass."),
-    };
-  }
-  const { ticket } = (await answer.json()) as PreviewTicket;
-  return { src: previewEnterUrl(at, ticket, wanted) };
-}
 
 /**
  * Where `origin`'s pages are served and the page at `wanted` there:
@@ -90,8 +65,9 @@ export async function pageSource(
   if (!reached) {
     return { problem: decisionsWords.unreached(new URL(route.origin).host) };
   }
-  const entered = await enterPage(origin, route.origin, route.byHost, wanted);
-  return "src" in entered
-    ? { origin: route.origin, byHost: route.byHost, src: entered.src }
-    : entered;
+  return {
+    origin: route.origin,
+    byHost: route.byHost,
+    src: `${route.origin}${wanted}`,
+  };
 }

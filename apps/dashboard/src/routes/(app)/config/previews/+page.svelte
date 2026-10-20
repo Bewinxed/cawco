@@ -136,7 +136,7 @@
     </Field>
     {#if mode === "host"}
       <Field
-        hint={"Start with the scheme the names are served on, https:// or http://: previews open on it whichever way you reach the hub. Then use one of {session} or {port}. {session} stands for the session's id, e.g. https://p-{session}.example.com, and needs a wildcard name. {port} stands for the preview port the session keeps, e.g. https://p-{port}.example.com, so one name per port of the range serves every session. The hub checks one name resolves before it keeps the pattern."}
+        hint={"Start with https://: the names are served over https whichever way you reach the hub. Then put one of {session} or {port} in the first label. {session} stands for the session's id, e.g. https://p-{session}.example.com, and needs a wildcard name. {port} stands for the preview port the session keeps, e.g. https://p-{port}.example.com, so one name per port of the range serves every session. The hub checks one name resolves before it keeps the pattern."}
         id="preview-pattern"
         label="Host pattern"
         problem={refused}
@@ -151,6 +151,17 @@
           bind:value={pattern}
         />
       </Field>
+      {#if settings?.mode === "host" && settings.passDomain}
+        <!-- Where the browser's one pass to every preview is kept, once host mode stands. -->
+        <p
+          data-slot="note"
+          class="type-meta max-w-c-measure text-pretty text-ink-muted wrap-anywhere"
+        >
+          Each browser keeps one pass to every preview, a cookie on <code
+            class="type-code text-ink-strong">{settings.passDomain}</code
+          > and every name under it.
+        </p>
+      {/if}
       <!-- What the names need before Save, where the operator sets them. -->
       <div class="flex flex-col gap-space-2">
         <p class="type-label text-ink-strong">Before you save</p>
@@ -238,10 +249,10 @@
         >
           Without Cloudflare: point the pattern's names ({byPort
             ? "one per port"
-            : "a wildcard"}) at the hub, or at a proxy that sends them to port
-          {firstPort}, then save. Over plain http, a dashboard frame keeps the
-          pass only on localhost names or when the dashboard is on the same
-          site, so serve the names over https.
+            : "a wildcard"}) at the hub, or at a proxy that serves them over
+          https and sends them to port {firstPort}, then save. Open the
+          dashboard over https under the same domain, so its frames carry the
+          pass.
         </p>
       </div>
     {/if}

@@ -745,6 +745,8 @@ const run = async (kit: Kit) => {
       dropPort: () => undefined,
       setSettings: () => undefined,
     } as unknown as Parameters<typeof createPreviewListeners>[2],
+    // Port mode alone here: no listener holds host mode's lock, so no pass is read.
+    {} as Parameters<typeof createPreviewListeners>[3],
     tailnet
   );
   const session = "00000000-0000-4000-8000-00000000a011";

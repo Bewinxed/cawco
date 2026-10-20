@@ -18,7 +18,7 @@
  *       `no-store` with no validators, gzipped: a kept copy would 304 to an
  *       old key.
  * 2. Host mode's by-Host listener (where Cloudflare stands on the owner's
- *    names), entered with a ticket:
+ *    names), past the lock with the pass a ticket gives:
  *    a. the same module answers `no-store`, with no `etag` or
  *       `last-modified`;
  *    b. a conditional request for the module answers 200 `no-store`: on a
@@ -290,15 +290,13 @@ const probe = async (kit: Kit) => {
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       mode: "host",
-      pattern: `http://p-{port}.localhost:${first}`,
+      pattern: `https://p-{port}.cawco.localhost:${first}`,
     }),
   });
   const origin = (await address()).origin ?? "";
   const host = origin ? new URL(origin).host : "";
   const { ticket } = (await (
-    await fetch(`${fleet.base}/api/instances/${session}/preview-ticket`, {
-      method: "POST",
-    })
+    await fetch(`${fleet.base}/api/preview-ticket`, { method: "POST" })
   ).json()) as PreviewTicket;
   const byHost = `http://127.0.0.1:${first}`;
   const entered = await read(previewEnterUrl(byHost, ticket, "/src/main.js"), {

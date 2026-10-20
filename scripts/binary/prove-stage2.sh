@@ -2147,31 +2147,31 @@ ws_preview_port() { run_script "$hubc" /shared/stage2-preview-port.ts http://127
 ws_preview_says() { as_user "$hubc" curl -sS --max-time 10 "http://127.0.0.1:$(cat "$rigdir/ws-preview-port")/" 2>&1 || true; }
 # Host mode, the owner's: one listener on the preview range's first port routes each request by its Host, a name of
 # the fleet's pattern (preview.ts sessionOfHost), behind the lock (preview-access.ts). Set as Settings › Previews and
-# Caw's admin_previews_write set it (PUT /api/preview-settings), `.localhost` names, which need no DNS; $1 host or port.
+# Caw's admin_previews_write set it (PUT /api/preview-settings), `.cawco.localhost` names, which need no DNS, on
+# https as host mode takes them (a proxy in front serves TLS; here curl reaches the listener's plain port); $1 host or port.
 ws_preview_mode() {
   local first body
   first=$(hub_api /api/preview-settings | json 'd => d.ports.split(/\D+/)[0]')
   body="{\"mode\":\"$1\"}"
-  [[ $1 == port ]] || body="{\"mode\":\"host\",\"pattern\":\"http://p-{port}.localhost:$first\"}"
+  [[ $1 == port ]] || body="{\"mode\":\"host\",\"pattern\":\"https://p-{port}.cawco.localhost:$first\"}"
   as_user "$hubc" curl -sS -w '\nHTTP %{http_code}' -X PUT http://127.0.0.1:3456/api/preview-settings -H 'content-type: application/json' -d "$body"
 }
-# The preview's host-mode name (`p-<port>.localhost:<listener port>`), as the hub gives a client its origin.
+# The preview's host-mode name (`p-<port>.cawco.localhost:<listener port>`), as the hub gives a client its origin.
 ws_preview_host() { ws_post "/api/instances/$(cat "$rigdir/ws-delegate")/preview-address" '{}' | sed '$d' | json 'd => d.host'; }
 # One request to the preview's host-mode name ($1), with the pass cookie $2 or none: its body, then `HTTP <status>`.
 ws_preview_by_host() {
   local host=$1 cookie=${2:-}
   as_user "$hubc" curl -sS --max-time 10 -w '\nHTTP %{http_code}' -H "Host: $host" ${cookie:+-H "Cookie: $cookie"} "http://127.0.0.1:${host##*:}/" 2>&1 || true
 }
-# Enters the preview's host-mode name ($1) as the dashboard's pane does: a ticket from the hub's API
-# (POST /api/instances/:id/preview-ticket), spent at /__cawco/enter, whose 302 sets the pass. Prints the pass
-# cookie (`name=value`).
+# Enters the preview's host-mode name ($1) as the app's web view does: a ticket from the hub's API
+# (POST /api/preview-ticket), spent at /__cawco/enter, whose 302 sets the pass. Prints the pass cookie (`name=value`).
 ws_preview_enter() {
   local host=$1 ticket headers
-  ticket=$(ws_post "/api/instances/$(cat "$rigdir/ws-delegate")/preview-ticket" '{}' | sed '$d' | json 'd => d.ticket')
+  ticket=$(ws_post "/api/preview-ticket" '{}' | sed '$d' | json 'd => d.ticket')
   [[ -n $ticket ]] || { echo "no ticket from the hub" >&2; return 1; }
   headers=$(as_user "$hubc" curl -sS --max-time 10 -D - -o /dev/null -H "Host: $host" "http://127.0.0.1:${host##*:}/__cawco/enter?ticket=$ticket&next=/" | tr -d '\r')
   [[ $(head -1 <<< "$headers") == *" 302"* ]] || { echo "the entry answered: $headers" >&2; return 1; }
-  grep -i '^set-cookie: cawco-preview=' <<< "$headers" | sed 's/^[^:]*: *//; s/;.*//'
+  grep -i '^set-cookie: __Secure-cawco-pass=' <<< "$headers" | sed 's/^[^:]*: *//; s/;.*//'
 }
 # Every process that descends from the sandbox init $1, by each one's parent: the tree boundary.ts inTree judges.
 ws_tree() { as_user "$joinerc" ps -e -o pid=,ppid= | awk -v root="$1" '{ parent[$1] = $2 } END { tree[root] = 1; do { grew = 0; for (p in parent) if (!(p in tree) && (parent[p] in tree)) { tree[p] = 1; grew = 1 } } while (grew); for (p in tree) print p }'; }
@@ -2439,11 +2439,11 @@ workspace_across_update() {
   [[ "$answer" == *"HTTP 200" ]]
   on_exit 'ws_preview_mode port > /dev/null'
   ws_preview_host > "$rigdir/ws-preview-host"
-  [[ "$(cat "$rigdir/ws-preview-host")" == p-*.localhost:* ]] || { echo "the preview's host-mode name: '$(cat "$rigdir/ws-preview-host")'"; return 1; }
+  [[ "$(cat "$rigdir/ws-preview-host")" == p-*.cawco.localhost:* ]] || { echo "the preview's host-mode name: '$(cat "$rigdir/ws-preview-host")'"; return 1; }
   answer=$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")")
   [[ "$answer" == *"HTTP 401" && "$answer" == *cawco-preview-locked* ]] || { echo "ASSERTION FAILED: a request without a pass got: $answer"; return 1; }
   ws_preview_enter "$(cat "$rigdir/ws-preview-host")" > "$rigdir/ws-preview-pass"
-  [[ "$(cat "$rigdir/ws-preview-pass")" == cawco-preview=* ]] || { echo "the entry set no pass: '$(cat "$rigdir/ws-preview-pass")'"; return 1; }
+  [[ "$(cat "$rigdir/ws-preview-pass")" == __Secure-cawco-pass=* ]] || { echo "the entry set no pass: '$(cat "$rigdir/ws-preview-pass")'"; return 1; }
   wait_until 60 '[[ "$(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")" == *"served '"$old_ns"'"*"HTTP 200" ]]' || { echo "host mode answered: $(ws_preview_by_host "$(cat "$rigdir/ws-preview-host")" "$(cat "$rigdir/ws-preview-pass")")"; return 1; }
   # The preview goes first, its server with it: a boundary is kept while any of its work listens, the served server's
   # too, and the stage stops a server once its last artifact goes.

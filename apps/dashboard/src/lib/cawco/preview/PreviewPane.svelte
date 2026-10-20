@@ -6,8 +6,6 @@
     PREVIEW_PING_PATH,
     type PreviewDown,
     type PreviewSettings,
-    type PreviewTicket,
-    previewEnterUrl,
     previewRoute,
     projectPagePlace,
     type ShownFailure,
@@ -18,11 +16,7 @@
   import { STAGE_CLONE_MS, STAGE_READY_MS } from "@cawco/core/stage";
   import { type Snippet, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import {
-    failureClause,
-    failureWords,
-    hubRefusal,
-  } from "#lib/cawco/hub-read.js";
+  import { failureClause, failureWords } from "#lib/cawco/hub-read.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
@@ -103,6 +97,7 @@
   import PinList from "./PinList.svelte";
   import PlacePick from "./PlacePick.svelte";
   import { paneFleet } from "./pane-fleet";
+  import { enterPreviews } from "./pass";
   import { pinDrafts } from "./pin-drafts.svelte";
   import SheetInspector from "./SheetInspector.svelte";
   import { isSetupPage } from "./setup-page";
@@ -286,12 +281,6 @@
     }
     return (source && "path" in source ? source.path : undefined) ?? "/";
   });
-  /** Who gives this origin's host-mode ticket: the project whose origin serves the page, else the session. */
-  const ticketFrom = $derived(
-    preview?.project
-      ? `/api/projects/${encodeURIComponent(preview.project)}/preview-ticket`
-      : `/api/instances/${encodeURIComponent(instanceId)}/preview-ticket`
-  );
   /**
    * The place the frame opens, a path on the preview's origin: the start
    * page, or where the reader was in this show; read once per show, so their
@@ -304,21 +293,22 @@
     return untrack(keptAt) ?? startAt;
   });
   /**
-   * Host mode's route: every name is locked to the hub's pass (hub
-   * preview-access.ts), so each frame load enters with a ticket of its own,
-   * asked for here, and the frame's address is the entry, which sets the
-   * pass and goes on to the place. The port's route: the place, straight.
+   * Host mode's route: every name is locked to the browser's pass (hub
+   * preview-access.ts), which the frame's own load carries; a frame turned
+   * away enters and loads again (preview/pass.ts). Either route loads the
+   * place, straight.
    */
   const byHost = $derived(!!route?.byHost);
-  /**
-   * Each frame's entry in host mode, by frame key, and the origin and place
-   * it was asked for: a frame standing over its replacement keeps its own.
-   */
-  let entries = $state<Record<string, { for: string; src: string }>>({});
   /** How many entries in a row the page turned away (`cawco:locked`) without once saying it was ready. */
   let refusedEntries = 0;
+  /**
+   * When the current frame last stood without the pass it may hold now
+   * (`performance.now()`): its mount, or its page's last word that it was
+   * let in. An entry that landed since stands for it (preview/pass.ts).
+   */
+  let frameSince = 0;
   const TURNED_AWAY =
-    "This preview turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then try again.";
+    "This preview turned away its pass twice: this browser didn't keep the preview's cookie. Open the dashboard over https under the previews' domain, then try again.";
   /**
    * Whether this tab reaches the preview's origin (its `/__cawco/ping`,
    * which answers any page with no credentials, and answers 502 with the
@@ -484,8 +474,6 @@
     loaded = false;
     connected = false;
     pageHeld = false;
-    // A ticket is spent by its frame's load: the next load asks again.
-    entries = {};
   }
   $effect(() => {
     if (isCanvas) {
@@ -557,70 +545,27 @@
     loaded = true;
     standing = key;
   }
-  /*
-   * Host mode: the current frame's ticket, asked for once its origin answered
-   * the probe, again for each new frame (a reload, a new show) and whenever
-   * the origin or the place it opens changes. A ticket the hub won't give is
-   * the failure band, with Try again.
+  /**
+   * The page turned the frame away (`cawco:locked`): the browser enters its
+   * previews and the frame loads again, once in a row. An entry the hub
+   * won't give is the failure band, with Try again.
    */
-  $effect(() => {
-    const key = frameKey;
+  async function turnedAway() {
     const origin = paneOrigin;
-    const at = framePlace;
-    if (
-      unloaded ||
-      !(byHost && origin && reached?.origin === origin && reached.ok)
-    ) {
-      return;
-    }
-    const wanted = `${origin}${at}`;
-    if (untrack(() => entries[key]?.for) === wanted) {
-      return;
-    }
-    let live = true;
-    fetch(ticketFrom, {
-      method: "POST",
-    })
-      .then(async (answer) => {
-        if (!answer.ok) {
-          throw await hubRefusal(answer);
-        }
-        return (await answer.json()) as PreviewTicket;
-      })
-      .then(({ ticket }) => {
-        if (!live) {
-          return;
-        }
-        const kept = Object.fromEntries(
-          Object.entries(untrack(() => entries)).filter(([held]) =>
-            untrack(() => frames).includes(held)
-          )
-        );
-        entries = {
-          ...kept,
-          [key]: { for: wanted, src: previewEnterUrl(origin, ticket, at) },
-        };
-      })
-      .catch((error: unknown) => {
-        if (live) {
-          failure = {
-            message: `The hub didn't give this preview a pass: ${error instanceof Error ? error.message : String(error)}`,
-            again: "reload",
-          };
-        }
-      });
-    return () => {
-      live = false;
-    };
-  });
-  /** The page turned the frame's pass away (`cawco:locked`): it lapsed, so the frame enters again, once in a row. */
-  function turnedAway() {
-    if (!byHost) {
+    if (!(byHost && origin)) {
       return;
     }
     refusedEntries += 1;
     if (refusedEntries > 1) {
       failure = { message: TURNED_AWAY, again: "reload" };
+      return;
+    }
+    const refused = await enterPreviews(origin, frameSince);
+    if (refused) {
+      failure = {
+        message: `The hub didn't give this preview a pass: ${refused}`,
+        again: "reload",
+      };
       return;
     }
     reload += 1;
@@ -1684,6 +1629,8 @@
         if (message.type === "cawco:ready") {
           connected = true;
           refusedEntries = 0;
+          // It was let in: a later turn-away is a pass lost since, which a new entry answers.
+          frameSince = performance.now();
           // The frame Try again reloaded answered: what it was tried for is over.
           retrying = false;
           if (failure?.again === "reload") {
@@ -2538,8 +2485,8 @@
       </EmptyState>
     </div>
   {:else}
-    <!-- The frame loads once its origin answered the probe (and, in host mode, its entry is in hand); the cover stands meanwhile. -->
-    {#each reached?.origin === paneOrigin ? frames.filter((held) => !byHost || entries[held]) : [] as key (key)}
+    <!-- The frame loads once its origin answered the probe; the cover stands meanwhile. -->
+    {#each reached?.origin === paneOrigin ? frames : [] as key (key)}
       {@const current = key === frameKey}
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
       <iframe
@@ -2569,12 +2516,13 @@
             announce();
           }
         }}
-        src={byHost ? entries[key]?.src : `${paneOrigin}${framePlace}`}
+        src={`${paneOrigin}${framePlace}`}
         data-scheme={themedFrame ? theme.resolved : undefined}
         title="Preview"
         {@attach (node) => {
           if (key === frameKey) {
             iframe = node;
+            frameSince = performance.now();
           }
         }}
       ></iframe>

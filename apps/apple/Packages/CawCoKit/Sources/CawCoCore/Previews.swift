@@ -278,17 +278,9 @@ public extension HubConnection {
     func previewLoad(_ place: URL, for owner: PreviewOwner, byHost: Bool) async throws -> URL {
         guard byHost else { return place }
         guard let client else { throw TaskRefusal(message: "No hub is connected.") }
-        let ticket: String
-        switch owner {
-        case let .instance(id):
-            let output = try await client.postApiInstancesByIdPreviewTicket(path: .init(id: id))
-            guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
-            ticket = try answer.body.json.ticket
-        case let .project(id):
-            let output = try await client.postApiProjectsByIdPreviewTicket(path: .init(id: id))
-            guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
-            ticket = try answer.body.json.ticket
-        }
+        let output = try await client.postApiPreviewTicket()
+        guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
+        let ticket = try answer.body.json.ticket
         guard var parts = URLComponents(url: place, resolvingAgainstBaseURL: false) else {
             throw TaskRefusal(message: "The preview's address can't be read.")
         }

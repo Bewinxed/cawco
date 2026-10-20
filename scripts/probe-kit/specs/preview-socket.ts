@@ -25,9 +25,9 @@
  *    reconnects and echoes again.
  * 5. An upgrade the server refuses is said in the agent's journal with the
  *    server's reason (`Expected 101 status code`).
- * 6. Host mode (`http://p-{port}.localhost:<proxy>`), entered with a ticket
- *    through the proxy: the socket echoes, and again once the server
- *    restarts.
+ * 6. Host mode (`https://p-{port}.cawco.localhost:<proxy>`, the proxy
+ *    answering https), entered with a ticket through the proxy: the socket
+ *    echoes, and again once the server restarts.
  * 7. A real Vite dev server, its `LAUNCH_EDITOR` a script that leaves a
  *    mark, and a plugin that marks each Vue DevTools RPC frame it hears.
  *    Straight to Vite, `/__open-in-editor?file=/etc/hostname` launches the
@@ -55,6 +55,7 @@ import {
 } from "../../../packages/core/src/frames";
 import { RELAY_HEADER } from "../../../packages/core/src/preview-proxy";
 import { type Reply, type Seen, until } from "../../scratch-fleet";
+import { cloudflareTo, scratchCertificate } from "../cloudflare-front";
 import { type Kit, ROOT, type Spec } from "../kit";
 
 const CREATE = "mcp__cawco__artifact_create";
@@ -135,98 +136,6 @@ const appOn = (port: number, generation: number, refusals: string[]) =>
     websocket: {
       message(ws, said) {
         ws.send(`${ws.data.generation}:${String(said)}`);
-      },
-    },
-  });
-
-const HOP = new Set([
-  "connection",
-  "upgrade",
-  "keep-alive",
-  "sec-websocket-key",
-  "sec-websocket-version",
-  "sec-websocket-extensions",
-  "sec-websocket-accept",
-]);
-/** A WebSocket opened with headers of its own (Bun's client takes them). */
-const SocketWith = WebSocket as unknown as new (
-  url: string,
-  options: { headers: Record<string, string> }
-) => WebSocket;
-
-/** What Cloudflare adds to every request it sends on to an origin (developers.cloudflare.com/fundamentals/reference/http-headers). */
-const CLOUDFLARE = {
-  "x-forwarded-proto": "https",
-  "cf-visitor": '{"scheme":"https"}',
-  "cf-connecting-ip": "203.0.113.7",
-  "x-forwarded-for": "203.0.113.7",
-  "cdn-loop": "cloudflare",
-  "cf-ray": "8f00000000000000-AMS",
-};
-
-/** A proxy in front of `target` (`host:port`) as Cloudflare stands in front of the owner's names: the browser's Host and headers kept, Cloudflare's added. */
-const cloudflareTo = (target: string) =>
-  Bun.serve<{
-    backend: WebSocket;
-    queue: (string | Uint8Array<ArrayBuffer>)[];
-  }>({
-    hostname: "127.0.0.1",
-    port: 0,
-    fetch(request, bun) {
-      const url = new URL(request.url);
-      const headers = new Headers(request.headers);
-      for (const [name, value] of Object.entries(CLOUDFLARE)) {
-        headers.set(name, value);
-      }
-      if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-        const kept: Record<string, string> = {};
-        for (const [name, value] of headers) {
-          if (!HOP.has(name)) {
-            kept[name] = value;
-          }
-        }
-        const backend = new SocketWith(
-          `ws://${target}${url.pathname}${url.search}`,
-          { headers: kept }
-        );
-        if (bun.upgrade(request, { data: { backend, queue: [] } })) {
-          return;
-        }
-        backend.close();
-        return new Response("upgrade failed", { status: 500 });
-      }
-      return fetch(`http://${target}${url.pathname}${url.search}`, {
-        method: request.method,
-        headers,
-        body: request.body,
-        redirect: "manual",
-        decompress: false,
-      } as RequestInit);
-    },
-    websocket: {
-      open(ws) {
-        const { backend } = ws.data;
-        backend.addEventListener("message", (event) => ws.send(event.data));
-        backend.addEventListener("close", () => ws.close());
-        backend.addEventListener("error", () => ws.close());
-        backend.addEventListener("open", () => {
-          for (const held of ws.data.queue) {
-            backend.send(held);
-          }
-          ws.data.queue.length = 0;
-        });
-      },
-      message(ws, said) {
-        const { backend, queue } = ws.data;
-        const message = typeof said === "string" ? said : new Uint8Array(said);
-        if (backend.readyState === WebSocket.OPEN) {
-          backend.send(message);
-        } else if (backend.readyState === WebSocket.CONNECTING) {
-          queue.push(message);
-        }
-      },
-      close(ws) {
-        ws.data.backend.close();
       },
     },
   });
@@ -487,27 +396,30 @@ const probe = async (kit: Kit) => {
     `${line ?? "no line"}; the browser's socket ${refusedSocket}`
   );
 
-  // 6. Host mode behind Cloudflare, entered with a ticket.
+  // 6. Host mode behind Cloudflare over https, entered with a ticket. Its
+  // names stand under `cawco.localhost`, which every browser resolves to
+  // loopback with no DNS (RFC 6761).
   const range = (await (
     await fetch(`${fleet.base}/api/preview-settings`)
   ).json()) as { ports: string };
   const first = Number(range.ports.split("–")[0]);
-  const hostFront = cloudflareTo(`127.0.0.1:${first}`);
+  const hostFront = cloudflareTo(
+    `127.0.0.1:${first}`,
+    await scratchCertificate(kit.out, ["*.cawco.localhost"])
+  );
   const put = await fetch(`${fleet.base}/api/preview-settings`, {
     method: "PUT",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       mode: "host",
-      pattern: `http://p-{port}.localhost:${hostFront.port}`,
+      pattern: `https://p-{port}.cawco.localhost:${hostFront.port}`,
     }),
   });
   const origin = (await address()).origin ?? "none";
   const { ticket } = (await (
-    await fetch(`${fleet.base}/api/instances/${session}/preview-ticket`, {
-      method: "POST",
-    })
+    await fetch(`${fleet.base}/api/preview-ticket`, { method: "POST" })
   ).json()) as PreviewTicket;
-  const named = await kit.page("desk");
+  const named = await kit.page("desk", { ignoreHTTPSErrors: true });
   const entered = await named.goto(previewEnterUrl(origin, ticket, "/"), {
     waitUntil: "domcontentloaded",
   });

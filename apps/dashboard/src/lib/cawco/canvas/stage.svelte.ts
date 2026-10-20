@@ -18,16 +18,12 @@
  * starting, a resize or scroll, a slot resizing, or a motion a holder runs
  * (`watch`), and for a short tail after each.
  */
-import {
-  type PreviewAddress,
-  type PreviewTicket,
-  previewEnterUrl,
-  previewRoute,
-} from "@cawco/core";
+import { type PreviewAddress, previewRoute } from "@cawco/core";
 import { SvelteMap } from "svelte/reactivity";
 import { hubRefusal } from "#lib/cawco/hub-read.js";
 import { theme } from "#lib/theme.svelte.js";
 import { artifactSyncPath } from "../preview/artifact-doc";
+import { enterPreviews } from "../preview/pass";
 
 export type Slot = "composer" | "panel";
 
@@ -81,8 +77,7 @@ const boxOf = (el: Element): Box => {
 const sessionOrigins = new Map<string, { origin: string }>();
 /**
  * Each canvas's iframe address and the origin it was made for: a stage made
- * anew for the same canvas keeps it, so its iframe never reloads, and its
- * host-mode ticket (spent once) is not asked for again.
+ * anew for the same canvas keeps it, so its iframe never reloads.
  */
 const canvasEntries = new Map<string, { origin: string; src: string }>();
 
@@ -242,13 +237,19 @@ export class Stage {
   }
 
   /**
-   * The iframe's address: the canvas's page on its origin (port mode), or
-   * host mode's entry with a ticket of its own (hub preview-access.ts),
-   * which sets the origin's pass and goes on to the page. Null until known.
+   * The iframe's address: the canvas's page on its origin, which on a
+   * host-mode name the browser's pass lets through (preview/pass.ts). Null
+   * until known.
    */
   entry = $state<string | null>(null);
   /** Entries in a row the page turned away (`cawco:locked`) without once saying it was ready. */
   #turnedAway = 0;
+  /**
+   * When the iframe last stood without the pass it may hold now
+   * (`performance.now()`): its load, or its page's last word that it was
+   * let in. An entry that landed since stands for it (preview/pass.ts).
+   */
+  #since = performance.now();
 
   /**
    * Its session's preview origin, never the dashboard's: the hub names it
@@ -284,55 +285,41 @@ export class Stage {
       route &&
       !(this.entry && canvasEntries.get(this.id)?.origin === route.origin)
     ) {
-      await this.#enter(route.origin, route.byHost);
+      const src = `${route.origin}/__cawco/canvas/${this.id}/`;
+      canvasEntries.set(this.id, { origin: route.origin, src });
+      this.unreached = null;
+      this.#since = performance.now();
+      this.entry = src;
     }
     this.changed();
   }
 
-  /** The canvas's page on `origin`: straight (port mode), or with a new ticket (host mode). */
-  async #enter(origin: string, byHost: boolean): Promise<void> {
-    const at = `/__cawco/canvas/${this.id}/`;
-    if (!byHost) {
-      this.#entered(origin, `${origin}${at}`);
-      return;
-    }
-    const answer = await fetch(
-      `/api/instances/${encodeURIComponent(this.instanceId)}/preview-ticket`,
-      { method: "POST" }
-    ).catch(() => null);
-    if (!answer?.ok) {
-      this.unreached = answer
-        ? (await hubRefusal(answer)).message
-        : "The hub didn't give this canvas a pass.";
-      return;
-    }
-    const { ticket } = (await answer.json()) as PreviewTicket;
-    this.#entered(origin, previewEnterUrl(origin, ticket, at));
-  }
-
-  #entered(origin: string, src: string): void {
-    canvasEntries.set(this.id, { origin, src });
-    this.unreached = null;
-    this.entry = src;
-  }
-
-  /** The page turned the canvas's pass away (`cawco:locked`): it lapsed, so the canvas enters again, once in a row. */
+  /** The page turned the canvas away (`cawco:locked`): the browser enters its previews and the page loads again, once in a row. */
   async turnedAway(): Promise<void> {
     this.#turnedAway += 1;
-    if (this.#turnedAway > 1 || !this.origin) {
+    const { origin, entry } = this;
+    if (this.#turnedAway > 1 || !(origin && entry)) {
       this.unreached =
-        "This canvas turned away its pass twice: this browser didn't keep the preview's cookie. Reach previews over https, then open the canvas again.";
+        "This canvas turned away its pass twice: this browser didn't keep the preview's cookie. Open the dashboard over https under the previews' domain, then open the canvas again.";
       this.entry = null;
       this.changed();
       return;
     }
-    await this.#enter(this.origin, true);
+    const refused = await enterPreviews(origin, this.#since);
+    if (refused) {
+      this.unreached = refused;
+      this.entry = null;
+    } else if (this.frame) {
+      this.#since = performance.now();
+      this.frame.src = entry;
+    }
     this.changed();
   }
 
   /** The page said it is ready: a later lapse may enter again. */
   admitted(): void {
     this.#turnedAway = 0;
+    this.#since = performance.now();
   }
 
   /** The host page's address, or "" until it is known. */

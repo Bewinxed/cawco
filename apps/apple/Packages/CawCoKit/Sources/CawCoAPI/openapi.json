@@ -114,22 +114,12 @@
         }
       }
     },
-    "/api/instances/{id}/preview-ticket": {
+    "/api/preview-ticket": {
       "post": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "postApiInstancesByIdPreviewTicket",
+        "operationId": "postApiPreviewTicket",
         "responses": {
           "200": {
-            "description": "postApiInstancesByIdPreviewTicket 200",
+            "description": "postApiPreviewTicket 200",
             "content": {
               "application/json": {
                 "schema": {
@@ -161,33 +151,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PreviewAddress"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/projects/{id}/preview-ticket": {
-      "post": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "postApiProjectsByIdPreviewTicket",
-        "responses": {
-          "200": {
-            "description": "postApiProjectsByIdPreviewTicket 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/PreviewTicket"
                 }
               }
             }
@@ -26401,12 +26364,16 @@
               "pattern": {
                 "type": "string"
               },
+              "passDomain": {
+                "type": "string"
+              },
               "ports": {
                 "type": "string"
               }
             },
             "required": [
               "mode",
+              "passDomain",
               "pattern",
               "ports"
             ]
@@ -26445,12 +26412,16 @@
               "pattern": {
                 "type": "string"
               },
+              "passDomain": {
+                "type": "string"
+              },
               "ports": {
                 "type": "string"
               }
             },
             "required": [
               "mode",
+              "passDomain",
               "pattern",
               "ports"
             ]
@@ -33446,7 +33417,7 @@
         ]
       },
       "PreviewTicket": {
-        "description": "A ticket into one session's host-mode preview origin: single-use, and spent by `expiresAt` (ms epoch).",
+        "description": "A ticket into host mode's previews for the device or browser that asked: single-use, and spent by `expiresAt` (ms epoch).",
         "type": "object",
         "properties": {
           "expiresAt": {
@@ -53374,7 +53345,7 @@
             "type": "number"
           },
           "project": {
-            "description": "The project whose origin serves what the panel shows: a project's page\n(Projects spec §5.8), served on its project's origin alone, at\n`/__cawco/page/<artifact id>/` there ({@link projectPagePlace}). Then\n`port`, `origin`, `host` and `tailnet` are that origin's, and a host-mode\nticket is the project's (`POST /api/projects/:id/preview-ticket`).\nAbsent for anything served on the session's own origin.",
+            "description": "The project whose origin serves what the panel shows: a project's page\n(Projects spec §5.8), served on its project's origin alone, at\n`/__cawco/page/<artifact id>/` there ({@link projectPagePlace}). Then\n`port`, `origin`, `host` and `tailnet` are that origin's. Absent for\nanything served on the session's own origin.",
             "type": "string"
           },
           "revision": {

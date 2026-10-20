@@ -699,7 +699,6 @@ import {
   shownArtifact,
   targetsOf,
 } from "./preview";
-import { mintTicket } from "./preview-access";
 import { previewRoutes } from "./preview-routes";
 import { createCaps } from "./project-caps";
 import {
@@ -12495,9 +12494,10 @@ export const createServer = (
    * session's: its target kept under its own key ({@link embedKey}), its
    * origin's listener started, and its address as the page reached it, the
    * source's start path on it. On the session's own port: the same name, the
-   * embed's port. On a host-mode name: the embed's name, through the entry
-   * that spends a ticket for it, so the person's pass covers it. Nothing
-   * when the hub no longer holds it or every port is taken: the page says so.
+   * embed's port. On a host-mode name: the embed's name, which the browser's
+   * pass covers as it covers the page's (preview-access.ts), so no ticket
+   * is ever served in a page. Nothing when the hub no longer holds it or
+   * every port is taken: the page says so.
    */
   const embedAt = (
     pageId: string,
@@ -12542,10 +12542,7 @@ export const createServer = (
         embed: `${reachedAt.protocol}//${reachedAt.hostname}:${at.port}${path}`,
       };
     }
-    const { ticket } = mintTicket(key);
-    return {
-      embed: `${at.origin}/__cawco/enter?ticket=${encodeURIComponent(ticket)}&next=${encodeURIComponent(path)}`,
-    };
+    return { embed: `${at.origin}${path}` };
   };
 
   /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
@@ -12643,6 +12640,7 @@ export const createServer = (
     BIND_HOST,
     artifactListener,
     db.previews,
+    db.previewPasses,
     tailnetHttps
   );
 
@@ -24387,10 +24385,15 @@ export const createServer = (
       .request(async ({ request }) => await bodyLimitRefusal(request))
       .use(
         previewRoutes({
+          deviceOf: (request) => {
+            const caller = hubAuth.callerOf(request, null);
+            return caller.kind === "owner" ? (caller.device?.id ?? null) : null;
+          },
           hasInstance: (id) => db.getInstancesByIds([id]).length > 0,
           hasProject: (id) => db.project(id) !== undefined,
           listener: artifactListener,
           listeners: previewListeners,
+          passes: db.previewPasses,
           republish: () => {
             for (const [instanceId, target] of previewTargets) {
               const moved = { ...target, revision: crypto.randomUUID() };
