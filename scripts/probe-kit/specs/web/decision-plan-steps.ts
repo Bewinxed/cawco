@@ -40,12 +40,7 @@
  *   bun scripts/probe-kit/run.ts web decision-plan-steps
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
-import {
-  mkdirSync,
-  readFileSync,
-  rmSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
 import type { Page } from "playwright-core";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";

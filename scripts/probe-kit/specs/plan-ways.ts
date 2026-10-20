@@ -2244,10 +2244,17 @@ function checkControls(kit: Kit, name: string, way: Way, review: Review): void {
     weight: number;
     ghost: string;
   }[];
+  // Lanes' steps stand in narrow columns: there the group wraps, Reword
+  // and its moving pair on the first line, each button whole.
+  const lines = new Set(tools.map((one) => one.top)).size;
+  const columns = way.variation === "b";
   kit.check(
-    `${name}: the step's actions are one row of 30px ghost buttons in the label weight (${tools.map((one) => `${one.top}/${one.height}/${one.weight}`).join(" ")})`,
+    `${name}: the step's actions are ${columns ? "whole lines" : "one row"} of 30px ghost buttons in the label weight (${tools.map((one) => `${one.top}/${one.height}/${one.weight}`).join(" ")})`,
     tools.length === 5 &&
-      new Set(tools.map((one) => one.top)).size === 1 &&
+      (columns
+        ? lines <= 3 &&
+          new Set(tools.slice(0, 3).map((one) => one.top)).size === 1
+        : lines === 1) &&
       tools.every(
         (one) =>
           one.height >= 30 &&
