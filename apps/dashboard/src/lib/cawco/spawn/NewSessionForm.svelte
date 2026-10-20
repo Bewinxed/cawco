@@ -25,9 +25,9 @@
     AlertDescription,
     AlertTitle,
   } from "#lib/components/ui/alert/index.js";
-  import { pressVariants } from "#lib/components/ui/button/index.js";
+  import { Button, pressVariants } from "#lib/components/ui/button/index.js";
   import { chipVariants } from "#lib/components/ui/chip/index.js";
-  import { sheetHeadVariants } from "#lib/components/ui/drawer/drawer-header.svelte";
+  import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
   import {
     machineHue,
     machineIcon,
@@ -134,8 +134,15 @@
     restore,
     onclose,
     onexitcontinue,
+    sheet = false,
   }: {
     open: boolean;
+    /**
+     * In the kit's bottom sheet (NewSessionDialog under 640px): the sheet's
+     * header is the kit's, titled `title()`, with its Close, so the form
+     * draws no head of its own; step 2's way back is the form's first row.
+     */
+    sheet?: boolean;
     prefill?: SpawnPrefill;
     /**
      * Continue in new session: the form starts a session seeded with a summary
@@ -148,7 +155,7 @@
     /** The operator deleted the source chip: the dialog stays open as a plain New Session. */
     onexitcontinue?: () => void;
   } = $props();
-  /** The sheet's head and its Close, as every kit sheet draws them. */
+  /** The card's head and its Close, as every kit sheet draws them. */
   const sheetHead = sheetHeadVariants();
   /** A home folder at the start of a path (Linux, macOS). */
   const HOME = /^\/(home|Users)\/[^/]+(?=\/|$)/;
@@ -1748,6 +1755,10 @@
     }
     return forking ? "Fork session" : "New session";
   });
+  /** The form's name as its head says it, for a frame that draws the head (the sheet). */
+  export function title(): string {
+    return headTitle;
+  }
   const readingMorph = morph({ on: ["data-why", "data-two"] });
 
   /**
@@ -1854,74 +1865,85 @@
 
 <svelte:window onkeydown={keydown} />
 <!-- The form's head, body, notices and footer, as children of its frame
-     (NewSessionPopover, NewSessionDialog's sheet). -->
+     (NewSessionPopover, NewSessionDialog's sheet); in the sheet the head is
+     the kit's, titled `title()`, and step 2's Back is the form's first row. -->
 <!-- While a start runs the form takes no input; the footer stays live so
      the pending Start keeps its focus (a focused element in an inert
      subtree drops focus to the body). -->
-<div
-  data-slot="head"
-  class={sheetHead.head({
-    class:
-      "gap-space-3 px-space-1 pt-space-1 pb-space-2 max-phone:touch-none max-phone:px-0 max-phone:pt-0 max-phone:pb-space-3",
-  })}
-  inert={busy}
->
-  <div class="flex min-w-0 items-center gap-space-3">
-    {#if moveStep}
-      <!-- Step 2's way back to the form leads the head, where the form's
+{#if sheet}
+  {#if moveStep}
+    <div data-slot="back" class="flex flex-none pb-space-2" inert={busy}>
+      <Button data-vaul-no-drag onclick={back} size="sm" variant="ghost">
+        <IconChevronLeft />
+        <span>Back</span>
+      </Button>
+    </div>
+  {/if}
+{:else}
+  <div
+    data-slot="head"
+    class={sheetHead.head({
+      class: "gap-space-3 px-space-1 pt-space-1 pb-space-2",
+    })}
+    inert={busy}
+  >
+    <div class="flex min-w-0 items-center gap-space-3">
+      {#if moveStep}
+        <!-- Step 2's way back to the form leads the head, where the form's
            mark stands; Esc goes back too. Close keeps the trailing edge
            (DESIGN.md, Dialog and Drawer: the title, then Close). -->
-      <Tip keys="Esc" label="Back">
-        {#snippet children(tip)}
-          <button
-            {...tip}
-            aria-label="Back"
-            class={pressVariants({
-              press: "scale",
-              class: sheetHead.close(),
-            })}
-            data-vaul-no-drag
-            onclick={back}
-            type="button"
-          >
-            <IconChevronLeft />
-          </button>
-        {/snippet}
-      </Tip>
-    {:else}
-      <span
-        class="inline-flex size-space-6 flex-none items-center justify-center rounded-xs bg-ink-solid text-on-ink max-phone:hidden"
-        ><Bolt class="size-icon-sm" /></span
-      >
-    {/if}
-    <!-- Step 2's title is the move's question, "Move ~/code/chip to
+        <Tip keys="Esc" label="Back">
+          {#snippet children(tip)}
+            <button
+              {...tip}
+              aria-label="Back"
+              class={pressVariants({
+                press: "scale",
+                class: sheetHead.close(),
+              })}
+              data-vaul-no-drag
+              onclick={back}
+              type="button"
+            >
+              <IconChevronLeft />
+            </button>
+          {/snippet}
+        </Tip>
+      {:else}
+        <span
+          class="inline-flex size-space-6 flex-none items-center justify-center rounded-xs bg-ink-solid text-on-ink"
+          ><Bolt class="size-icon-sm" /></span
+        >
+      {/if}
+      <!-- Step 2's title is the move's question, "Move ~/code/chip to
          obelisk?": it wraps whole, so its destination is never the part an
          ellipsis takes (DESIGN.md, Don't: "send the reader away from where
          they asked"; the question names where). The form's own names stay
          on one line. -->
-    <h2
-      data-slot="title"
-      class="type-title tracking-title m-0 min-w-0 text-ink-strong not-data-wraps:truncate data-wraps:text-balance"
-      data-wraps={moveStep || undefined}
-    >
-      <MorphText text={headTitle} wrap={moveStep} />
-    </h2>
-  </div>
-  <Tip keys={moveStep ? undefined : "Esc"} label="Close">
-    {#snippet children(tip)}
-      <button
-        {...tip}
-        aria-label="Close"
-        class={pressVariants({ press: "scale", class: sheetHead.close() })}
-        data-vaul-no-drag
-        onclick={close}
-        type="button"
+      <h2
+        data-slot="title"
+        class="type-title tracking-title m-0 min-w-0 text-ink-strong not-data-wraps:truncate data-wraps:text-balance"
+        data-wraps={moveStep || undefined}
       >
-        <X />
-      </button>
-    {/snippet}
-  </Tip>
-</div>
+        <MorphText text={headTitle} wrap={moveStep} />
+      </h2>
+    </div>
+    <Tip keys={moveStep ? undefined : "Esc"} label="Close">
+      {#snippet children(tip)}
+        <button
+          {...tip}
+          aria-label="Close"
+          class={pressVariants({ press: "scale", class: sheetHead.close() })}
+          data-vaul-no-drag
+          onclick={close}
+          type="button"
+        >
+          <X />
+        </button>
+      {/snippet}
+    </Tip>
+  </div>
+{/if}
 <!-- Step 2 (the owner's revision of C) is the same form with only what a
        move asks left in it: the chips that say where it runs, and what
        moving does. Everything else is kept as it was, out of sight, for
@@ -1976,7 +1998,7 @@
         </div>
         <div
           data-slot="chips"
-          class="flex flex-wrap items-center gap-space-2 px-space-3 pt-space-2 pb-space-3 hit-gap-x-space-2 hit-gap-y-(--space-2) coarse:gap-y-space-4 coarse:hit-gap-y-(--space-4)"
+          class="flex flex-wrap items-center gap-space-2 px-space-3 pt-space-2 pb-space-3 hit-gap-x-space-2 hit-gap-y-space-2 coarse:gap-y-space-4 coarse:hit-gap-y-space-4"
           inert={moveStep}
         >
           <MachinesChip

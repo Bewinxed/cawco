@@ -76,11 +76,14 @@ async function crepe(kit: Kit, page: Page, pass: string): Promise<void> {
       return got;
     };
     const cs = getComputedStyle(editor);
+    // app.css's crepe-host rule: its host field draws the frame, so the
+    // editor draws none (transparent, no padding) over Crepe's own fill
+    // and padding.
     return {
       background: cs.backgroundColor,
-      backgroundWant: probe("background-color", "var(--surface-recess)"),
+      backgroundWant: probe("background-color", "transparent"),
       padding: cs.paddingTop,
-      paddingWant: probe("width", "var(--space-1)"),
+      paddingWant: "0px",
       surface: cs.getPropertyValue("--crepe-color-surface").trim(),
       surfaceWant: cs.getPropertyValue("--surface-raised").trim(),
     };

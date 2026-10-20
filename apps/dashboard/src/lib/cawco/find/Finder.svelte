@@ -690,7 +690,7 @@
   {:else if item.t === "head"}
     <div
       data-slot="head"
-      class="flex-none h-c-find-head-h px-space-3 type-caps leading-(--c-find-head-h) uppercase tracking-caps text-ink-muted truncate"
+      class="flex-none h-c-find-head-h px-space-3 type-caps leading-c-find-head-h uppercase tracking-caps text-ink-muted truncate"
       data-flip
       role="presentation"
     >

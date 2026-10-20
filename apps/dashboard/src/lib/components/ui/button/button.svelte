@@ -336,6 +336,7 @@
     aria-disabled={disabled}
     class={classes}
     data-slot="button"
+    data-variant={variant}
     href={disabled ? undefined : href}
     {onclick}
     role={disabled ? "link" : undefined}
@@ -351,6 +352,7 @@
     aria-disabled={pending || undefined}
     class={classes}
     data-slot="button"
+    data-variant={variant}
     {disabled}
     onclick={press}
     {type}

@@ -60,7 +60,7 @@
 >
   <ToggleGroup.Root
     aria-label={label}
-    class="w-max flex-none"
+    class="flex-none"
     onValueChange={(next) => {
       if (next) {
         onchange(next);

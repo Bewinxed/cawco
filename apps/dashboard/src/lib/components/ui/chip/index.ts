@@ -93,7 +93,7 @@ export const chipVariants = tv({
  * instead of overlapping it.
  */
 export const chipsVariants = tv({
-  base: "hit-gap-x-space-2 hit-gap-y-(--space-2) coarse:hit-gap-y-(--space-4) flex flex-wrap gap-space-2 coarse:gap-y-space-4",
+  base: "hit-gap-x-space-2 hit-gap-y-space-2 coarse:hit-gap-y-space-4 flex flex-wrap gap-space-2 coarse:gap-y-space-4",
 });
 
 export type ChipVariant = VariantProps<typeof chipVariants>["variant"];

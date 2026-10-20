@@ -415,7 +415,7 @@
         <!-- What is on show is a name in a toolbar row of 30px label-type
              controls and the switch's label-type tabs: the label role
              (DESIGN.md, The Role, Not Size Rule). The title role is a
-             sheet's own head (ui/drawer/drawer-header), which stands over its
+             sheet's own head (ui/drawer/sheet-head), which stands over its
              content, not in a bar. -->
         <span
           data-slot="title"

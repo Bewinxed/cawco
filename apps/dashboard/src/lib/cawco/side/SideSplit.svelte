@@ -12,9 +12,7 @@
    * what it holds. A task there is its own page (the project page's
    * `?task=`), never a sheet: the thread's cards link to it, as a thread's
    * file chips link to the page's `?file=`. A session and
-   * a thread (whose plan is its project's lead's) draw it alike. A page can
-   * stand its own surface there instead (`side`, a project's Caw dock): the
-   * split on a desk, the kit's bottom sheet under 900px.
+   * a thread (whose plan is its project's lead's) draw it alike.
    *
    * The split opens when there is something to show and the reader or the
    * agent asked for it: an agent showing a preview opens it on Preview, the
@@ -35,7 +33,7 @@
   import { cawco } from "../client.svelte";
   import { floatingPanel } from "../files/files.svelte";
   import { dur, motionOk } from "../motion/curves.svelte";
-  import PlanPane, { planShows } from "../plan/PlanPane.svelte";
+  import PlanPane, { planShows, planTitle } from "../plan/PlanPane.svelte";
   import PreviewPane from "../preview/PreviewPane.svelte";
   import RegionBoundary from "../RegionBoundary.svelte";
   import SideSheet from "./SideSheet.svelte";
@@ -53,9 +51,6 @@
     taskOpen = false,
     task,
     share = $bindable(0),
-    side,
-    sideOpen = false,
-    onsideclose,
     children,
   }: {
     /** The conversation: its preview, and the key its width is kept under. */
@@ -87,15 +82,6 @@
     task?: Snippet<[Snippet | undefined]>;
     /** The surface's share of the width, in percent: 0 while closed or a sheet. */
     share?: number;
-    /**
-     * A page's own surface in place of the plan, preview and task (a
-     * project's Caw dock): drawn in the split on a desk, in the kit's bottom
-     * sheet under 900px (`true`: in the sheet). Open while `sideOpen`; the
-     * sheet dismissed says so through `onsideclose`.
-     */
-    side?: Snippet<[boolean]>;
-    sideOpen?: boolean;
-    onsideclose?: () => void;
     /** The transcript's side. */
     children: Snippet;
   } = $props();
@@ -122,7 +108,7 @@
   let planAsked = $state(false);
   const planOpen = $derived(planAsked && hasPlan);
   const taskShown = $derived(taskOpen && !!task && phone === false);
-  const open = $derived(side ? sideOpen : previewOpen || planOpen || taskShown);
+  const open = $derived(previewOpen || planOpen || taskShown);
   /** What is open, in the switch's order. */
   const opened = $derived<Shown[]>([
     ...(planOpen ? (["plan"] as const) : []),
@@ -214,9 +200,7 @@
 
 {#snippet surface()}
   {@const switched = opened.length > 1 ? switcher : undefined}
-  {#if side}
-    {@render side(false)}
-  {:else if shown === "task" && taskShown && task}
+  {#if shown === "task" && taskShown && task}
     {@render task(switched)}
   {:else if shown === "plan" && planOf && planOpen}
     <PlanPane
@@ -264,22 +248,6 @@
       </RegionBoundary>
     </SideSheet>
   {/if}
-  {#if side && phone && visible && active}
-    <Drawer.Root
-      onOpenChange={(next) => {
-        if (!next) {
-          onsideclose?.();
-        }
-      }}
-      open={sideOpen}
-    >
-      <Drawer.Content>
-        <RegionBoundary region="side sheet">
-          {@render side(true)}
-        </RegionBoundary>
-      </Drawer.Content>
-    </Drawer.Root>
-  {/if}
   {#if phone && visible && active && planOf && hasPlan}
     <!-- The plan is read beside the conversation it plans, so it holds
          nothing (DESIGN.md, The Open Page Rule): no scrim, no focus trap,
@@ -293,7 +261,7 @@
       }}
       open={planAsked}
     >
-      <Drawer.Content modal={false} trapFocus={false}>
+      <Drawer.Content modal={false} title={planTitle(plan)} trapFocus={false}>
         <RegionBoundary region="plan">
           <PlanPane
             instanceId={planOf}

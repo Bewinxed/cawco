@@ -28,9 +28,9 @@
   import type { ComponentProps, Snippet } from "svelte";
   import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
   import { mirror } from "#lib/cawco/page-marks.js";
-  import { Button } from "#lib/components/ui/button/index.js";
-  import { sheetHeadVariants } from "#lib/components/ui/drawer/drawer-header.svelte";
+  import { sheetHeadVariants } from "#lib/components/ui/drawer/sheet-head.js";
   import { pressable } from "#lib/components/ui/floating-presence.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconClose } from "#lib/icons.js";
   import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { closer } from "./sheet.svelte";
@@ -41,7 +41,6 @@
     ref = $bindable(null),
     class: className,
     side = "right",
-    showCloseButton = true,
     /* Off: a drag in a sheet moves the sheet, so there is no selection to
        keep in it, and the lock bits-ui takes for one writes `user-select` on
        <body> at every pointerdown, restyling the whole page in the frame
@@ -59,15 +58,18 @@
     SheetContentLooks & {
       portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SheetPortal>>;
       side?: Side;
-      showCloseButton?: boolean;
       /**
        * The sheet's name. The kit draws the sheets' one header with it
        * (DESIGN.md, Drawer: the title in the title role and Close at the
-       * trailing edge), so no sheet stands without a name or a Close.
+       * trailing edge), so no sheet stands without a name or a Close. A
+       * name that changes morphs in place (MorphText, DESIGN.md, The Steady
+       * Swap Rule).
        */
-      title?: string;
+      title: string;
       /** The name read out but not drawn, on a sheet whose content names
-          itself on screen; Close still stands at the header's trailing edge. */
+          itself on screen (the rail's brand row): no header row stands, and
+          Close keeps the header's trailing corner over the content's first
+          row, which leaves it room. */
       titleHidden?: boolean;
       children: Snippet;
     } = $props();
@@ -144,41 +146,29 @@
         style:pointer-events={pressable(open)}
         style:--sheet-away={AWAY[side]}
       >
-        {#if title}
-          <div class={cn(head.head(), "px-4 pt-4")} data-slot="sheet-header">
-            <SheetPrimitive.Title
-              class={cn(
-                "min-w-0 text-ink-strong text-title",
-                titleHidden && "sr-only"
-              )}
-              data-slot="sheet-title">{title}</SheetPrimitive.Title
-            >
-            <SheetPrimitive.Close
-              aria-label="Close"
-              class={cn(head.close(), "ms-auto")}
-              data-slot="sheet-close"
-              title="Close"
-            >
-              <IconClose aria-hidden="true" />
-            </SheetPrimitive.Close>
-          </div>
-        {/if}
-        {@render children?.()}
-        {#if showCloseButton && !title}
-          <SheetPrimitive.Close data-slot="sheet-close">
-            {#snippet child({ props: closeProps })}
-              <Button
-                class="absolute top-4 right-4"
-                size="icon-sm"
-                variant="ghost"
-                {...closeProps}
-              >
-                <IconClose />
-                <span class="sr-only">Close</span>
-              </Button>
-            {/snippet}
+        <div
+          class={cn(
+            head.head(),
+            "px-4 pt-4",
+            titleHidden && "absolute end-0 top-0 z-1 p-4"
+          )}
+          data-slot="sheet-header"
+        >
+          <SheetPrimitive.Title
+            class={cn(head.title(), titleHidden && "sr-only")}
+            data-slot="sheet-title"
+            ><MorphText text={title} wrap /></SheetPrimitive.Title
+          >
+          <SheetPrimitive.Close
+            aria-label="Close"
+            class={cn(head.close(), "ms-auto")}
+            data-slot="sheet-close"
+            title="Close"
+          >
+            <IconClose aria-hidden="true" />
           </SheetPrimitive.Close>
-        {/if}
+        </div>
+        {@render children?.()}
       </div>
     {/snippet}
   </SheetPrimitive.Content>

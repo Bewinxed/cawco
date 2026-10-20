@@ -55,17 +55,17 @@
 </script>
 
 <script lang="ts">
-  import type { ComponentProps } from "svelte";
+  import type { ComponentProps, Snippet } from "svelte";
   import { Drawer as DrawerPrimitive } from "vaul-svelte";
   import { mirror } from "#lib/cawco/page-marks.js";
   import { visible } from "#lib/cawco/visible-viewport.svelte.js";
+  import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconClose } from "#lib/icons.js";
   import type { WithoutChildrenOrChild } from "#lib/utils.js";
   import { cn } from "#lib/utils.js";
-  import { sheetHeadVariants } from "./drawer-header.svelte";
   import DrawerOverlay from "./drawer-overlay.svelte";
   import DrawerPortal from "./drawer-portal.svelte";
-  import DrawerTitle from "./drawer-title.svelte";
+  import { sheetHeadVariants } from "./sheet-head.js";
 
   let {
     ref = $bindable(null),
@@ -80,6 +80,7 @@
     look,
     title,
     titleHidden = false,
+    actions,
     children,
     ...restProps
   }: DrawerPrimitive.ContentProps &
@@ -89,12 +90,17 @@
        * (DESIGN.md, Drawer: the grabber, then the title in the title role
        * and Close at the trailing edge, the seam under it), so no sheet
        * stands without a name or a way to put it away. A hosted sheet's
-       * host draws its head and its Close; the name is read out only.
+       * host draws its head and its Close; the name is read out only. A
+       * name that changes morphs in place (MorphText, DESIGN.md, The Steady
+       * Swap Rule).
        */
-      title?: string;
+      title: string;
       /** The name read out but not drawn, on a sheet whose content names
           itself on screen; Close still stands at the header's trailing edge. */
       titleHidden?: boolean;
+      /** The sheet's own controls in its header, after the title and before
+          Close (the workflow inspector's Settings). */
+      actions?: Snippet;
       portalProps?: WithoutChildrenOrChild<ComponentProps<typeof DrawerPortal>>;
       /**
        * The sheet fills a host of its own (the preview standing on the
@@ -216,18 +222,27 @@
         )}
       ></div>
     {/if}
-    {#if title && hosted}
-      <DrawerTitle visible={false}>{title}</DrawerTitle>
-    {:else if title}
+    {#if hosted}
+      <DrawerPrimitive.Title class="sr-only" data-slot="drawer-title"
+        ><MorphText text={title} wrap /></DrawerPrimitive.Title
+      >
+    {:else}
       <div class={head.head()} data-slot="drawer-header">
-        <DrawerTitle visible={!titleHidden}>{title}</DrawerTitle>
-        <DrawerPrimitive.Close
-          aria-label="Close"
-          class={cn(head.close(), "ms-auto")}
-          title="Close"
+        <DrawerPrimitive.Title
+          class={cn(head.title(), titleHidden && "sr-only")}
+          data-slot="drawer-title"
+          ><MorphText text={title} wrap /></DrawerPrimitive.Title
         >
-          <IconClose aria-hidden="true" />
-        </DrawerPrimitive.Close>
+        <div class="ms-auto flex flex-none items-center gap-space-2">
+          {@render actions?.()}
+          <DrawerPrimitive.Close
+            aria-label="Close"
+            class={head.close()}
+            title="Close"
+          >
+            <IconClose aria-hidden="true" />
+          </DrawerPrimitive.Close>
+        </div>
       </div>
     {/if}
     <!-- vaul takes pointer capture on every press in the sheet, which leaves

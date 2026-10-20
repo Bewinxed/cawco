@@ -120,15 +120,6 @@
   }
 }
 
-/* The workflow list's own width (routes/(app)/workflows): at 760px and
-   under its table becomes cards. Off the phone/desk/wide ladder, so it is
-   a named query of its own rather than a breakpoint every page would get. */
-@custom-variant workflow-cards {
-  @media (max-width: 760px) {
-    @slot;
-  }
-}
-
 /* A surface nobody can see (motion/rest.ts): a hidden tab, an element
    scrolled out of view, an inert surface parked behind the one in front. */
 @custom-variant at-rest (&:where(:root[data-at-rest] *, [data-offscreen], [data-offscreen] *, [inert]:not([data-leaving]) *));

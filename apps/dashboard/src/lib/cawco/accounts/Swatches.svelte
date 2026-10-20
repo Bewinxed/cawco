@@ -13,7 +13,7 @@
      (DESIGN.md, The 44 Touch Rule: `--hit-gap-x`, `--hit-gap-y`). -->
 <div
   aria-label={label}
-  class="flex flex-wrap gap-space-3 hit-gap-x-(--space-3) hit-gap-y-(--space-3)"
+  class="flex flex-wrap gap-space-3 hit-gap-x-space-3 hit-gap-y-space-3"
   role="radiogroup"
 >
   {#each accountsWords.swatches as swatch (swatch.hue)}

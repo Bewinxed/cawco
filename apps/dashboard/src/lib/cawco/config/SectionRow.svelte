@@ -172,7 +172,7 @@
          name gives way beside it and the meta line runs on under both. -->
     <span
       data-slot="controls"
-      class="relative z-1 flex flex-none items-center ghost-rest-fill gap-space-2 hit-gap-x-(--space-2) coarse:gap-space-4 coarse:hit-gap-x-(--space-4) max-phone:col-start-3 max-phone:row-start-1"
+      class="relative z-1 flex flex-none items-center ghost-rest-fill gap-space-2 hit-gap-x-space-2 coarse:gap-space-4 coarse:hit-gap-x-space-4 max-phone:col-start-3 max-phone:row-start-1"
     >
       {#if rollout}
         {@render rollout()}

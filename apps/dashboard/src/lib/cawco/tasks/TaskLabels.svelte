@@ -100,7 +100,7 @@
   {:else}
     <button
       data-slot="add"
-      class={chipVariants({ class: "touch-hit" })}
+      class={chipVariants()}
       onclick={() => {
         adding = true;
       }}

@@ -630,10 +630,7 @@
   >
     <!-- The head's Close is the sheet's way out, as on every kit sheet, so
          joined it is the only one: the done view is the head, then the row. -->
-    <Drawer.Content aria-label="Connect a machine">
-      <Drawer.Header>
-        <Drawer.Title>Connect a machine</Drawer.Title>
-      </Drawer.Header>
+    <Drawer.Content title="Connect a machine">
       <div
         class="kit-sheet-scroll flex min-h-0 flex-col gap-space-7 overflow-y-auto overscroll-contain"
       >

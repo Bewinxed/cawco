@@ -760,7 +760,7 @@
               data-device
             >
               <b
-                class="col-(--area) row-(--area) type-label min-w-0 truncate text-ink-strong group-data-device:leading-(--c-btn-h-sm)"
+                class="col-(--area) row-(--area) type-label min-w-0 truncate text-ink-strong group-data-device:leading-c-btn-h-sm"
                 style:--area="name">{name}</b
               >
               <div
@@ -795,7 +795,7 @@
               data-paste
             >
               <b
-                class="col-(--area) row-(--area) type-label min-w-0 truncate text-ink-strong group-data-device:leading-(--c-btn-h-sm)"
+                class="col-(--area) row-(--area) type-label min-w-0 truncate text-ink-strong group-data-device:leading-c-btn-h-sm"
                 style:--area="name">{name}</b
               >
               <span

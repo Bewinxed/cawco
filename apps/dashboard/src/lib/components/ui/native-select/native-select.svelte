@@ -17,15 +17,12 @@
   import { cn, type WithElementRef } from "#lib/utils.js";
 
   type NativeSelectProps = Omit<WithElementRef<HTMLSelectAttributes>, "size"> &
-    NativeSelectLooks & {
-      size?: "sm" | "default";
-    };
+    NativeSelectLooks;
 
   let {
     ref = $bindable(null),
     value = $bindable(),
     class: className,
-    size = "default",
     measure,
     children,
     ...restProps
@@ -51,12 +48,10 @@
     nativeSelectVariants({ measure }),
     className
   )}
-  data-size={size}
   data-slot="native-select-wrapper"
 >
   <select
-    class="h-(--select-h) w-full min-w-0 select-none appearance-none rounded-md border border-transparent bg-transparent pr-space-8 pl-3 text-body text-ink-strong [--select-h:var(--c-input-h)] [--select-reach:max(calc((var(--select-h)-var(--c-touch-floor))/2),calc(var(--hit-gap-y,var(--c-touch-floor))/-2))] selection:bg-action-solid selection:text-on-action placeholder:text-ink-muted disabled:pointer-events-none disabled:cursor-not-allowed size-sm:[--select-h:var(--c-btn-h-sm)] coarse:mt-[calc(var(--select-reach)+0.5px)] coarse:mb-(--select-reach) coarse:h-[calc(var(--select-h)-2*var(--select-reach)-0.5px)]"
-    data-size={size}
+    class="h-(--select-h) w-full min-w-0 select-none appearance-none rounded-md border border-transparent bg-transparent pr-space-8 pl-3 text-body text-ink-strong [--select-h:var(--c-input-h)] [--select-reach:max(calc((var(--select-h)-var(--c-touch-floor))/2),calc(var(--hit-gap-y,var(--c-touch-floor))/-2))] selection:bg-action-solid selection:text-on-action placeholder:text-ink-muted disabled:pointer-events-none disabled:cursor-not-allowed coarse:mt-[calc(var(--select-reach)+0.5px)] coarse:mb-(--select-reach) coarse:h-[calc(var(--select-h)-2*var(--select-reach)-0.5px)]"
     data-slot="native-select"
     bind:this={ref}
     bind:value

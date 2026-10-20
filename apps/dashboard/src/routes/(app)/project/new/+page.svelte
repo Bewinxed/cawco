@@ -195,7 +195,7 @@
     </h1>
     <div
       data-slot="new-page-field"
-      class="relative w-full max-w-(--c-new-project-field-w)"
+      class="relative w-full max-w-c-new-project-field-w"
       style:block-size="calc({footHeight}px + var(--space-4))"
     >
       <Composer
@@ -217,7 +217,7 @@
       />
     </div>
     <!-- As wide as the field, so the chips stand on its composer's column. -->
-    <div class="relative w-full max-w-(--c-new-project-field-w)">
+    <div class="relative w-full max-w-c-new-project-field-w">
       <div
         data-slot="chips"
         class={chipsVariants({
@@ -227,7 +227,7 @@
       >
         {#each STARTERS as text (text)}
           <button
-            class={chipVariants({ class: "touch-hit" })}
+            class={chipVariants()}
             onclick={() => starter(text)}
             type="button"
           >

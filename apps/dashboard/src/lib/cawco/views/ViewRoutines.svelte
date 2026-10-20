@@ -902,7 +902,7 @@
 
 {#snippet routinesBody()}
   {#if empty}
-    <div data-slot="starters" class="w-full max-w-(--c-starters-w) p-space-3">
+    <div data-slot="starters" class="w-full max-w-c-starters-w p-space-3">
       {#if canTalk}
         <EmptyState
           actionWidth="fill"
@@ -928,7 +928,7 @@
                     {@const Glyph = GLYPHS[starter.glyph]}
                     <li class="flex max-w-full">
                       <button
-                        class={chipVariants({ class: "touch-hit" })}
+                        class={chipVariants()}
                         onclick={() => pick(starter.text)}
                         type="button"
                       >

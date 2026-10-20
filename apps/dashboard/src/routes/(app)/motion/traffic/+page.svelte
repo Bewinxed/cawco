@@ -386,7 +386,7 @@
     </p>
     <div
       data-slot="controls"
-      class="flex flex-wrap items-center gap-space-2 hit-gap-x-(--space-2) hit-gap-y-(--space-2) coarse:gap-y-space-4 coarse:hit-gap-y-(--space-4)"
+      class="flex flex-wrap items-center gap-space-2 hit-gap-x-space-2 hit-gap-y-space-2 coarse:gap-y-space-4 coarse:hit-gap-y-space-4"
     >
       <Button onclick={() => reset(14)} size="xs" variant="outline"
         >Load history</Button

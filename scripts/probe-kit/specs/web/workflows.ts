@@ -13,6 +13,8 @@
  * (c) run: the run's page says how it stands in words beside its glyph
  *     (The Glyph, Word, Hue Rule), and its status glyphs wear their status
  *     ink, not the hover card's mark-glyph white.
+ * (d) graph-step, phone: Settings in the inspector sheet's head swaps the
+ *     sheet's title in place, its letters morphing (The Steady Swap Rule).
  *
  *   bun scripts/probe-kit/run.ts web workflows
  */
@@ -26,8 +28,57 @@ const READABLE_PX = 10;
 
 const surfaces = SURFACES.filter((s) => s.name === "workflows").map((s) => ({
   ...s,
-  states: s.states.filter((st) => ["graph", "launch", "run"].includes(st.name)),
+  states: s.states.filter((st) =>
+    ["graph", "graph-step", "launch", "run"].includes(st.name)
+  ),
 }));
+
+/** The open inspector sheet's title as drawn: its words, and whether its letters are morphing. */
+function sheetTitleRead() {
+  const title = document.querySelector(
+    "[data-slot=drawer-content][data-state=open] [data-slot=drawer-title]"
+  );
+  const morph = title?.querySelector(":scope > [data-slot=morph-text]");
+  return {
+    words:
+      morph?.querySelector("[data-slot=said]")?.textContent?.trim() ??
+      title?.textContent?.trim() ??
+      null,
+    morphText: !!morph,
+    morphing: !!morph?.querySelector(':scope > [aria-hidden="true"]'),
+  };
+}
+
+/**
+ * On a phone, Settings in the step inspector sheet's head moves the sheet
+ * to the workflow's settings: the sheet's title swaps in place through
+ * MorphText (DESIGN.md L515, The Steady Swap Rule), its letters morphing
+ * from the step's name to the settings', then the plain words again.
+ */
+async function titleSwap(page: Page) {
+  const before = await page.evaluate(sheetTitleRead);
+  await page
+    .locator(
+      "[data-slot=drawer-content][data-state=open] [data-slot=drawer-header]"
+    )
+    .getByRole("button", { name: "Settings" })
+    .click();
+  const mid = await page
+    .locator(
+      '[data-slot=drawer-title] > [data-slot=morph-text] > [aria-hidden="true"]'
+    )
+    .waitFor({ state: "attached", timeout: 2000 })
+    .then(() => page.evaluate(sheetTitleRead))
+    .catch(() => page.evaluate(sheetTitleRead));
+  await page
+    .locator(
+      '[data-slot=drawer-title] > [data-slot=morph-text] > [aria-hidden="true"]'
+    )
+    .waitFor({ state: "detached", timeout: 5000 })
+    .catch(() => undefined);
+  const after = await page.evaluate(sheetTitleRead);
+  return { before, mid, after };
+}
 
 /** The graph's node boxes, their pairwise overlaps, and its names' sizes on screen. */
 function graphRead() {
@@ -119,6 +170,22 @@ async function launchClose(page: Page) {
   }));
 }
 
+/** (d): the sheet title's swap, held to one check. */
+async function titleSwapCheck(kit: Kit, page: Page, at: string) {
+  const swap = await titleSwap(page);
+  kit.check(
+    `${at}: Settings in the inspector sheet's head swaps its title in place through MorphText, "${swap.before.words}" morphing to "${swap.after.words}"`,
+    swap.before.words === "Step inspector" &&
+      swap.before.morphText &&
+      !swap.before.morphing &&
+      swap.mid.morphing &&
+      swap.mid.words === "Workflow settings" &&
+      swap.after.words === "Workflow settings" &&
+      !swap.after.morphing,
+    JSON.stringify(swap)
+  );
+}
+
 const spec: Spec = {
   name: "workflows",
   async run(kit: Kit) {
@@ -146,6 +213,8 @@ const spec: Spec = {
               read.names.every((px) => px >= READABLE_PX - 0.05),
             JSON.stringify(read.names)
           );
+        } else if (state.name === "graph-step" && pass.width === "phone") {
+          await titleSwapCheck(kit, page, at);
         } else if (state.name === "launch") {
           const read = await page.evaluate(launchRead);
           if (pass.width === "desk") {

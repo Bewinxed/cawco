@@ -201,6 +201,7 @@
     onOpenAutoFocus={keepFocus}
     onpointerenter={rest}
     onpointerleave={leave}
+    ownWidth
     pad="none"
     side="bottom"
     sideOffset={4}

@@ -3,9 +3,8 @@
   import { tv } from "#lib/utils.js";
 
   /** Its callers' looks, each as they drew it: the mono face for what is
-      typed exactly (a path, a command, a key), a text size, the small
-      control height beside an `sm` select or button, a number field, and
-      how wide it may run. `box` is what sizes the field in its row (its
+      typed exactly (a path, a command, a key), a text size, a number
+      field, and how wide it may run. `box` is what sizes the field in its row (its
       area's, when it has one); `field` is the field's own look. */
   export const inputVariants = tv({
     slots: { box: "", field: "" },
@@ -16,9 +15,6 @@
         label: { field: "text-label" },
         title: { field: "text-title" },
       },
-      /** `sm`: the 30px small control, level with an `sm` NativeSelect or
-          Button in the same row. */
-      size: { sm: { field: "h-c-btn-h-sm" } },
       /** A field for a short figure (a share, minutes, thousands of
           tokens): the number field's width, tight pads, and its figure
           centred in tabular widths (DESIGN.md, The Tabular Figure Rule). */
@@ -77,7 +73,6 @@
     class: className,
     face,
     text,
-    size,
     field: kind,
     measure,
     flex,
@@ -86,7 +81,7 @@
     ...restProps
   }: Props = $props();
   const looks = $derived(
-    inputVariants({ face, text, size, field: kind, measure, flex })
+    inputVariants({ face, text, field: kind, measure, flex })
   );
   /** The field's own look, the same for a file picker and a text field. */
   const own = [

@@ -17,10 +17,6 @@ export {
   default as DrawerFooter,
 } from "./drawer-footer.svelte";
 export {
-  default as Header,
-  default as DrawerHeader,
-} from "./drawer-header.svelte";
-export {
   default as NestedRoot,
   default as DrawerNestedRoot,
 } from "./drawer-nested.svelte";
@@ -32,10 +28,6 @@ export {
   default as Portal,
   default as DrawerPortal,
 } from "./drawer-portal.svelte";
-export {
-  default as Title,
-  default as DrawerTitle,
-} from "./drawer-title.svelte";
 export {
   default as Trigger,
   default as DrawerTrigger,

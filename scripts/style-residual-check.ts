@@ -27,6 +27,20 @@
  *
  * Prints, per file with a `<style>`, its declarations by kind, then each
  * violation as `file:line  what`. Exits 1 on any violation.
+ *
+ * It also reads every class the markup and the recipes write (.svelte, .ts
+ * and .js under apps/dashboard/src, the generated lib/tokens aside) for a
+ * theme token written as an arbitrary value: `bg-[var(--surface-raised)]` or
+ * `bg-(--surface-raised)`, where `--surface-raised` stands behind a theme key
+ * in a namespace that utility reads (`--color-surface-raised`), so the
+ * theme's own utility says it (`bg-surface-raised`). The namespaces each
+ * utility reads are Tailwind v4's (https://tailwindcss.com/docs/theme:
+ * "Theme variables are special CSS variables defined using the `@theme`
+ * directive that influence which utility classes exist in your project"),
+ * and the house `@utility name-*` blocks' `--value(--ns-*)`. A var with a
+ * fallback (`var(--x, …)`) is not a theme token as written and passes, and
+ * `duration-*` is exempt: Tailwind v4 makes no duration utility from a theme
+ * key, so a token duration is `duration-(--dur-*)`.
  */
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -284,6 +298,279 @@ function check(path: string): Report {
   return report;
 }
 
+/** The generated theme over tokens.css: its keys say which utilities exist. */
+const THEME = join(SOURCE, "lib", "tokens", "theme.css");
+/** The generated token outputs: they define the tokens, they write no class. */
+const GENERATED = join(SOURCE, "lib", "tokens");
+const SPACING = ["spacing"];
+const SIZING = ["spacing", "container"];
+const COLOR = ["color"];
+/**
+ * Tailwind v4's own utilities by the theme namespaces their value reads
+ * (tailwindcss/src/utilities.ts `themeKeys`), for the namespaces this theme
+ * defines.
+ */
+const CORE_NAMESPACES: Record<string, string[]> = {
+  ...Object.fromEntries(
+    [
+      "p",
+      "px",
+      "py",
+      "pt",
+      "pr",
+      "pb",
+      "pl",
+      "ps",
+      "pe",
+      "pbs",
+      "pbe",
+      "m",
+      "mx",
+      "my",
+      "mt",
+      "mr",
+      "mb",
+      "ml",
+      "ms",
+      "me",
+      "mbs",
+      "mbe",
+      "gap",
+      "gap-x",
+      "gap-y",
+      "h",
+      "min-h",
+      "max-h",
+      "size",
+      "inset",
+      "inset-x",
+      "inset-y",
+      "top",
+      "right",
+      "bottom",
+      "left",
+      "start",
+      "end",
+      "space-x",
+      "space-y",
+      "translate",
+      "translate-x",
+      "translate-y",
+      "scroll-m",
+      "scroll-mx",
+      "scroll-my",
+      "scroll-mt",
+      "scroll-mr",
+      "scroll-mb",
+      "scroll-ml",
+      "scroll-ms",
+      "scroll-me",
+      "scroll-p",
+      "scroll-px",
+      "scroll-py",
+      "scroll-pt",
+      "scroll-pr",
+      "scroll-pb",
+      "scroll-pl",
+      "scroll-ps",
+      "scroll-pe",
+      "indent",
+      "border-spacing",
+      "border-spacing-x",
+      "border-spacing-y",
+    ].map((u) => [u, SPACING])
+  ),
+  ...Object.fromEntries(
+    ["w", "min-w", "max-w", "basis"].map((u) => [u, SIZING])
+  ),
+  ...Object.fromEntries(
+    [
+      "bg",
+      "border",
+      "border-x",
+      "border-y",
+      "border-t",
+      "border-r",
+      "border-b",
+      "border-l",
+      "border-s",
+      "border-e",
+      "outline",
+      "ring",
+      "ring-offset",
+      "inset-ring",
+      "fill",
+      "stroke",
+      "decoration",
+      "accent",
+      "caret",
+      "divide",
+      "from",
+      "via",
+      "to",
+      "placeholder",
+    ].map((u) => [u, COLOR])
+  ),
+  ...Object.fromEntries(
+    [
+      "rounded",
+      "rounded-t",
+      "rounded-r",
+      "rounded-b",
+      "rounded-l",
+      "rounded-s",
+      "rounded-e",
+      "rounded-tl",
+      "rounded-tr",
+      "rounded-br",
+      "rounded-bl",
+      "rounded-ss",
+      "rounded-se",
+      "rounded-es",
+      "rounded-ee",
+    ].map((u) => [u, ["radius"]])
+  ),
+  text: ["color", "text"],
+  shadow: ["shadow", "color"],
+  "inset-shadow": ["inset-shadow", "color"],
+  "drop-shadow": ["drop-shadow", "color"],
+  font: ["font", "font-weight"],
+  leading: ["leading", "spacing"],
+  tracking: ["tracking"],
+  ease: ["ease"],
+  animate: ["animate"],
+  blur: ["blur"],
+  "backdrop-blur": ["blur"],
+  perspective: ["perspective"],
+  aspect: ["aspect"],
+};
+/** A theme key's declaration, `--color-x: var(--x);`. */
+const THEME_KEY = /^\s*(--[\w-]+)\s*:\s*([^;]*);/gm;
+/** A key's value that is one token and nothing else, `var(--x)`. */
+const ONE_TOKEN = /^var\((--[\w-]+)\)$/;
+/** A house functional utility, `@utility name-* { … }`. */
+const HOUSE_UTILITY = /@utility\s+([\w-]+)-\*\s*\{([^}]*)\}/g;
+/** A utility's `--value(…)` call. */
+const VALUE_CALL = /--value\(([^)]*)\)/g;
+/** A theme namespace `--value()` reads, `--spacing-*`. */
+const VALUE_NAMESPACE = /--([\w-]+)-\*/g;
+/** The files the token rule reads. */
+const CLASS_FILE = /\.(svelte|ts|js)$/;
+/** Every namespace a key can sit in, longest first, so `--font-weight-x` is `font-weight`, not `font`. */
+const NAMESPACES = [
+  ...new Set([...Object.values(CORE_NAMESPACES).flat(), "duration"]),
+].sort((a, b) => b.length - a.length);
+
+/** A theme key's namespace and its name in it: `--color-surface-raised` → color, surface-raised. */
+function keyOf(key: string): { name: string; space: string } | null {
+  for (const space of NAMESPACES) {
+    if (key.startsWith(`--${space}-`)) {
+      return { space, name: key.slice(space.length + 3) };
+    }
+  }
+  return null;
+}
+
+/**
+ * The theme keys each written token stands behind: a key `--color-x:
+ * var(--x)` puts `--x` (and the key itself) behind `color` key `x`.
+ */
+function themeTokens(): Map<string, { name: string; space: string }[]> {
+  const behind = new Map<string, { name: string; space: string }[]>();
+  const add = (token: string, entry: { name: string; space: string }) => {
+    behind.set(token, [...(behind.get(token) ?? []), entry]);
+  };
+  const css = readFileSync(THEME, "utf8");
+  for (const line of css.matchAll(THEME_KEY)) {
+    const key = line[1] ?? "";
+    const entry = keyOf(key);
+    if (!entry) {
+      continue;
+    }
+    add(key, entry);
+    const only = (line[2] ?? "").trim().match(ONE_TOKEN);
+    if (only?.[1]) {
+      add(only[1], entry);
+    }
+  }
+  return behind;
+}
+
+/** The house `@utility name-* { … --value(--ns-*) … }` blocks, by the namespaces each reads. */
+function houseNamespaces(): Record<string, string[]> {
+  const found: Record<string, string[]> = {};
+  const sheets = [
+    THEME,
+    ...readdirSync(SOURCE)
+      .filter((entry) => entry.endsWith(".css"))
+      .map((entry) => join(SOURCE, entry)),
+  ];
+  for (const sheet of sheets) {
+    const css = readFileSync(sheet, "utf8");
+    for (const block of css.matchAll(HOUSE_UTILITY)) {
+      const spaces = [...(block[2] ?? "").matchAll(VALUE_CALL)].flatMap(
+        (value) =>
+          [...(value[1] ?? "").matchAll(VALUE_NAMESPACE)].map((m) => m[1] ?? "")
+      );
+      if (spaces.length > 0 && block[1]) {
+        found[block[1]] = [...new Set(spaces)];
+      }
+    }
+  }
+  return found;
+}
+
+/** `utility-[var(--x)]` or `utility-(--x)`, a variant's `:` or a `-` sign before it; no fallback in the var. */
+const TOKEN_ARBITRARY =
+  /(?<![\w-])-?([a-z][a-z0-9]*(?:-[a-z][a-z0-9]*)*)-(?:\[var\((--[\w-]+)\)\]|\((--[\w-]+)\))(?![\w-])/g;
+
+/** Each class in `path` that writes a theme token as an arbitrary value, with the utility that says it. */
+function tokenArbitraries(
+  path: string,
+  behind: Map<string, { name: string; space: string }[]>,
+  reads: Record<string, string[]>
+): string[] {
+  const file = relative(ROOT, path);
+  const source = readFileSync(path, "utf8");
+  const found: string[] = [];
+  for (const match of source.matchAll(TOKEN_ARBITRARY)) {
+    const utility = match[1] ?? "";
+    const token = match[2] ?? match[3] ?? "";
+    if (utility === "duration") {
+      continue;
+    }
+    const spaces = reads[utility];
+    const key = spaces
+      ? (behind.get(token) ?? []).find((entry) => spaces.includes(entry.space))
+      : undefined;
+    if (!key) {
+      continue;
+    }
+    const sign = match[0].startsWith("-") ? "-" : "";
+    found.push(
+      `${file}:${lineOf(source, match.index ?? 0)}  ${match[0]} writes the theme token --${key.space}-${key.name} as an arbitrary value: write ${sign}${utility}-${key.name}`
+    );
+  }
+  return found;
+}
+
+/** The files whose classes the token rule reads: markup and recipes. */
+function classFiles(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const path = join(dir, entry);
+    if (SKIP_DIRS.has(entry) || path === GENERATED) {
+      continue;
+    }
+    if (statSync(path).isDirectory()) {
+      out.push(...classFiles(path));
+    } else if (CLASS_FILE.test(entry)) {
+      out.push(path);
+    }
+  }
+  return out.sort();
+}
+
 function svelteFiles(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir)) {
@@ -353,6 +640,22 @@ for (const path of files) {
   }
   violations += report.violations.length;
 }
+const themeBehind = themeTokens();
+const utilityReads = { ...CORE_NAMESPACES, ...houseNamespaces() };
+const classed = whole
+  ? classFiles(SOURCE)
+  : files.filter((path) => !path.startsWith(GENERATED));
+let arbitraries = 0;
+for (const path of classed) {
+  for (const line of tokenArbitraries(path, themeBehind, utilityReads)) {
+    console.log(`  ${line}`);
+    arbitraries += 1;
+  }
+}
+violations += arbitraries;
+console.log(
+  `${classed.length} file${classed.length === 1 ? "" : "s"} read for theme tokens written as arbitrary values: ${arbitraries}`
+);
 console.log(
   `${whole ? "apps/dashboard/src: " : ""}${styled} file${styled === 1 ? "" : "s"} with a <style> of ${files.length}; declarations by kind: ${KINDS.map((k) => `${k} ${totals[k]}`).join(", ")}; ${violations} violation${violations === 1 ? "" : "s"}`
 );

@@ -177,14 +177,6 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
   }
 }
 
-/* The workflow list's own width (routes/(app)/workflows): at 760px and
-   under its table becomes cards. Off the phone/desk/wide ladder, so it is
-   a named query of its own rather than a breakpoint every page would get. */
-@custom-variant workflow-cards {
-  @media (max-width: 760px) {
-    @slot;
-  }
-}
 
 /* A surface nobody can see (motion/rest.ts): a hidden tab, an element
    scrolled out of view, an inert surface parked behind the one in front. */
@@ -274,7 +266,7 @@ const HOUSE = `/* Hover only where a pointer can rest on it: a fine pointer that
 
 /** Names Tailwind or the house already give a variant, or begin a functional one. */
 const RESERVED =
-  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|workflow-cards|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|unhidden|short-window|tall-window|details-marker|reordering|details-gliding|prose-root|prose-block|prose-heading|prose-block-heading|prose-item|has-needs-stack|theme-flip|node-focus-visible|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
+  /^(hover|can-hover|no-hover|hover-none|coarse|fine|dark|light|pressed|reduced-transparency|at-rest|hit-pressed|hover-hover|beside-ghost|unhovered|has-link-active|mark-pressed|mark-beating|unhidden|short-window|tall-window|details-marker|reordering|details-gliding|prose-root|prose-block|prose-heading|prose-block-heading|prose-item|has-needs-stack|theme-flip|node-focus-visible|focus-within|focus-visible|placeholder-shown|read-only|in-range|out-of-range|user-valid|user-invalid|motion-safe|motion-reduce|contrast-more|contrast-less|forced-colors|inverted-colors|pointer-.*|any-pointer-.*|details-content|(group|peer|has|not|in|data|supports|max|min|nth|nth-last|nth-of-type|nth-last-of-type)-.*)$/;
 
 interface Pair {
   attr: string;

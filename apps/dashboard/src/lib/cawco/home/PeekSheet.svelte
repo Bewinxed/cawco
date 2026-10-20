@@ -45,17 +45,19 @@
 >
   <!-- The peek holds its size from the first frame: it opens on "Reading…" and
        the tail arrives into a sheet already its height, instead of the sheet
-       growing under the reader as the transcript lands. -->
+       growing under the reader as the transcript lands. Its pane's head
+       names the session; the name here is read out. -->
   <Drawer.Content
     data-peek-sheet
     height="cap"
     modal={peekRises()}
     pad="sheet-safe-bottom"
     style="--drawer-max-height: var(--c-peek-sheet-h)"
+    title="Peek"
+    titleHidden
     trapFocus={peekRises()}
     width="peek"
   >
-    <Drawer.Title visible={false}>Peek</Drawer.Title>
     <Drawer.Description visible={false}
       >The tail of one session. Open dives into it; closing keeps your place.</Drawer.Description
     >

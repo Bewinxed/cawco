@@ -563,7 +563,7 @@
             <!-- The strip's time: its line here, the figure face on its own
                  span (`mono-figure`). -->
             <span
-              class="flex-none font-body text-size-label leading-(--icon-md) font-medium num text-ink-strong data-muted:text-ink-muted"
+              class="flex-none font-body text-size-label leading-icon-md font-medium num text-ink-strong data-muted:text-ink-muted"
               data-muted={claude.stale !== null || undefined}
               data-strip-digits
               ><span class="mono-figure"
@@ -576,7 +576,7 @@
                marks and digits: only when the rail cannot fit it at all does
                it end in an ellipsis. -->
           <span
-            class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-(--c-usage-cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+            class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-c-usage-cap-lh font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
             data-next={claude.next?.id}
             data-strip-caption
             ><Words parts={caption(claude, now, nameOf)} /></span
@@ -609,7 +609,7 @@
               >
             {/if}
             <span
-              class="flex-none font-body text-size-label leading-(--icon-md) font-medium num text-ink-strong"
+              class="flex-none font-body text-size-label leading-icon-md font-medium num text-ink-strong"
               data-strip-go-time
               ><span class="mono-figure"
                 ><Figure text={goTime?.figure ?? ""} /></span
@@ -620,7 +620,7 @@
             <!-- mark-line: one clamped line of text; the week ring stands in
                  it on vertical-align: middle, the x-height's middle -->
             <span
-              class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-(--c-usage-cap-lh) font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
+              class="line-clamp-1 line-clamp-std-1 min-w-0 font-body text-size-meta leading-c-usage-cap-lh font-normal num wrap-anywhere text-ink-muted [&_b]:text-ink-row"
               data-strip-go-week
               ><WeekMark ring={openCode} />
               <span class="mono-figure">{goWeek}%</span></span
@@ -1120,10 +1120,7 @@
       >
         {@render face()}
       </Drawer.Trigger>
-      <Drawer.Content onOpenAutoFocus={keepFocus}>
-        <Drawer.Header>
-          <Drawer.Title>Usage limits</Drawer.Title>
-        </Drawer.Header>
+      <Drawer.Content onOpenAutoFocus={keepFocus} title="Usage limits">
         {@render limits(true)}
       </Drawer.Content>
     </Drawer.Root>

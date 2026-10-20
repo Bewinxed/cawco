@@ -554,10 +554,7 @@
 {#if touch.current}
   <Drawer.Root bind:open={cawOpen}>
     <!-- The recipe's foot: 16px plus the safe area (DESIGN.md, Drawer). -->
-    <Drawer.Content>
-      <Drawer.Header>
-        <Drawer.Title>Caw, lead of {project.name}</Drawer.Title>
-      </Drawer.Header>
+    <Drawer.Content title={`Caw, lead of ${project.name}`}>
       <CawPanel
         {lead}
         projectId={project.id}

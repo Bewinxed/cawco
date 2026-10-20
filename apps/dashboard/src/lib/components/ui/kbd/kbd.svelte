@@ -7,7 +7,11 @@
     variants: {
       /**
        * A key named in a hint (the default): in a tooltip it takes the
-       * tooltip's own ink.
+       * tooltip's own ink; in a primary button (ui/button `default`, its
+       * `data-variant`) the button's `on-action` ink on that ink at 20% over
+       * the coral (DESIGN.md, Buttons, Primary), read off its button as the
+       * keycap reads its option, so a button that turns primary turns its
+       * keys with it.
        *
        * An option chip's keycap digit (DESIGN.md, Permission gate: "option
        * chips (30px, 8px radius, keycap digits)"): the code face at the meta
@@ -21,7 +25,7 @@
        * every pointer: a finger's option still wears its key.
        */
       look: {
-        key: "in-data-[slot=tooltip-content]:bg-on-brand/20 in-data-[slot=tooltip-content]:text-on-brand dark:in-data-[slot=tooltip-content]:bg-surface-page/10",
+        key: "in-data-[slot=tooltip-content]:bg-on-brand/20 in-data-[slot=tooltip-content]:text-on-brand group-data-[variant=default]/button:bg-on-action/20 group-data-[variant=default]/button:text-on-action dark:in-data-[slot=tooltip-content]:bg-surface-page/10",
         keycap:
           "inline-grid h-space-5 min-w-space-5 flex-none place-items-center font-mono text-ink-strong leading-none group-aria-checked/option:bg-chip-chosen-bg group-aria-checked/option:text-chip-chosen-ink group-aria-pressed/option:bg-chip-chosen-bg group-aria-pressed/option:text-chip-chosen-ink group-data-chosen/option:bg-chip-chosen-bg group-data-chosen/option:text-chip-chosen-ink motion-safe:[transition:background-color_var(--dur-control)_var(--ease-out),color_var(--dur-control)_var(--ease-out)]",
       },

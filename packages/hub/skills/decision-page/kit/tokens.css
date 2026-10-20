@@ -1266,16 +1266,12 @@
     --c-usage-pct-w: 4ch;
     /* A filed task card's least track in a reply. */
     --c-filed-task-w: 14rem;
-    /* The workflow list's name column floor. */
-    --c-workflow-name-col: 180px;
     /* The workflow list's last-run and started columns. */
     --c-workflow-when-col: 110px;
     /* The workflow list's run count column. */
     --c-workflow-count-col: 60px;
     /* The workflow list's actions column. */
     --c-workflow-actions-col: 70px;
-    /* The workflow list's row floor, the height its loading rows stand at so nothing moves when they swap. */
-    --c-workflow-row-h: 64px;
     /* The composer's attachments row before it scrolls. */
     --c-atts-max-h: 180px;
     /* How far the settle's text clip reaches past a word's box, so ascenders and descenders survive. */

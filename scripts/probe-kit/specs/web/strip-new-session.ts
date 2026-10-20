@@ -115,6 +115,25 @@ const readForm = (page: Page, form: string) =>
           false,
         startDisabled: start?.disabled ?? null,
         startLabel: start?.textContent?.trim() ?? null,
+        /* The sheet's headers: the kit's (its title, through MorphText),
+           and any the form drew of its own. */
+        heads: {
+          kit:
+            card?.querySelectorAll('[data-slot="drawer-header"]').length ?? 0,
+          title:
+            card
+              ?.querySelector('[data-slot="drawer-title"]')
+              ?.textContent?.trim() ?? null,
+          morphs:
+            card?.querySelector(
+              '[data-slot="drawer-title"] > [data-slot="morph-text"]'
+            ) !== null,
+          // The form's own head (its h2 title), not its sections' heads.
+          form:
+            card?.querySelectorAll(
+              '[data-slot="head"] > div > h2[data-slot="title"]'
+            ).length ?? 0,
+        },
         chip:
           card
             ?.querySelector('[aria-label^="Permission mode"]')
@@ -195,6 +214,14 @@ async function runLeg(
         Math.abs(card.left) <= 1 &&
         Math.abs(card.right - viewport[0]) <= 1,
       JSON.stringify({ card, viewport })
+    );
+    kit.check(
+      `${leg.label}: the sheet's one header is the kit's, titled with the form's own name through MorphText (DESIGN.md L515), the form drawing none of its own`,
+      opened.heads.kit === 1 &&
+        opened.heads.title === "New session" &&
+        opened.heads.morphs &&
+        opened.heads.form === 0,
+      JSON.stringify(opened.heads)
     );
   }
   kit.check(
@@ -1185,6 +1212,10 @@ async function reviveLeg(
       refused?.refusal?.includes("mode-ask") === true,
     JSON.stringify({ shown, ...asked, refused, board })
   );
+  // The hub's words are never shown, at any moment of the relaunch: every
+  // change to the page from the pick on is read, and the first that says
+  // them is kept with where it stands.
+  await page.evaluate(watchRefusal);
   await page.locator(`${MODE_PICK} [data-perm="${MODE}"]`).click();
   const went = await until(
     "the message goes",
@@ -1199,16 +1230,32 @@ async function reviveLeg(
     Boolean,
     120_000
   ).catch(() => undefined);
+  // Until the session has read it, the row's turn of words is still to come.
+  await until(
+    "the session reads it",
+    () =>
+      fleet
+        .query<{ state: string }>(
+          "SELECT state FROM sent_messages WHERE instance_id = ? AND body LIKE ? AND state = 'read'",
+          source,
+          `%${revive.words}%`
+        )
+        .at(0),
+    Boolean,
+    120_000
+  ).catch(() => undefined);
   const [after] = fleet.query<{
     status: string;
     permission_mode: string | null;
   }>("SELECT status, permission_mode FROM instances WHERE id = ?", source);
   const shownAfter = await page.evaluate(() => {
-    const text = document.body.textContent ?? "";
-    return (
-      text.includes("A permission mode must be chosen") ||
-      text.includes("Nothing was started")
-    );
+    const watch = (
+      window as unknown as {
+        refusalSeen?: { seen: string | null; stop: () => void };
+      }
+    ).refusalSeen;
+    watch?.stop();
+    return watch?.seen ?? false;
   });
   kit.check(
     `1440 (fine): ${revive.why}, picking ${MODE} relaunches the session in place on it, and the message goes`,
@@ -1219,6 +1266,50 @@ async function reviveLeg(
     JSON.stringify({ after, went, refusalShown: shownAfter })
   );
   await page.close();
+}
+
+/**
+ * In the page: watches every change from now on for the hub's mode
+ * refusal in the page's words (`window.refusalSeen`), keeping the first
+ * sighting as the innermost element saying it, its slots up and its words.
+ */
+function watchRefusal() {
+  const says = (el: Element) => {
+    const text = el.textContent ?? "";
+    return (
+      text.includes("A permission mode must be chosen") ||
+      text.includes("Nothing was started")
+    );
+  };
+  const watch: { seen: string | null; stop: () => void } = {
+    seen: null,
+    stop: () => undefined,
+  };
+  const look = () => {
+    if (watch.seen !== null || !says(document.body)) {
+      return;
+    }
+    const inner = [...document.body.querySelectorAll("*")]
+      .filter(says)
+      .find((el) => ![...el.children].some(says));
+    const slots: string[] = [];
+    for (let at = inner ?? null; at; at = at.parentElement) {
+      const slot = at.getAttribute("data-slot");
+      if (slot) {
+        slots.push(slot);
+      }
+    }
+    watch.seen = `${slots.join(" < ")}: ${inner?.textContent?.trim().slice(0, 240)}`;
+  };
+  const observer = new MutationObserver(look);
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true,
+    characterData: true,
+  });
+  watch.stop = () => observer.disconnect();
+  (window as unknown as { refusalSeen: typeof watch }).refusalSeen = watch;
+  look();
 }
 
 /** The spawns a page sends on its socket, as sent: whether each names a permission mode. */

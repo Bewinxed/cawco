@@ -119,7 +119,14 @@
       morphs?: Morph;
       /** It draws no surface (padding, edge, fill, shadow): what it holds is the surface. */
       bare?: boolean;
-      /** Its site frames its width under the phone line too (the Comments panel, the well less its gutters). */
+      /**
+       * Its site sizes it to a room narrower than the screen, under the
+       * phone line too, where the viewport's width would be wrong: the
+       * Comments panel (the well less its gutters), the sessions flyover
+       * (its anchor row's width). A popover hung from the screen leaves it
+       * off (DESIGN.md, Breakpoints: "popovers widen to the viewport less
+       * 24px").
+       */
       ownWidth?: boolean;
     } = $props();
 

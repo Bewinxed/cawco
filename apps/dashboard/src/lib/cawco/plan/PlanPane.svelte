@@ -22,7 +22,19 @@
     !!plan &&
     (plan.steps.length > 0 || !!plan.spec || (plan.todos?.length ?? 0) > 0);
 
+  /**
+   * A task's to-dos and nothing else (an attempt that has written no steps
+   * or spec): the card is titled by them, not "Plan" over a "To-dos" head.
+   */
+  export const onlyTodos = (plan: SessionPlan | undefined): boolean =>
+    stepsTree(plan).length === 0 && !plan?.spec && todosTree(plan).length > 0;
+
+  /** The plan's card or sheet title. */
+  export const planTitle = (plan: SessionPlan | undefined): string =>
+    onlyTodos(plan) ? planWords.todos : planWords.plan;
+
   import { planWords, type SessionPlan } from "@cawco/core";
+  import { stepsTree, todosTree } from "./PlanTree.svelte";
 </script>
 
 <script lang="ts">
@@ -36,17 +48,16 @@
    * One surface: the parts stand on it under text headings, in one column
    * that scrolls. On a desk the surface is the side card (SideSurface, with
    * no well); on a phone, the bottom sheet SideSplit opens it in (`sheet`),
-   * under the sheet's own title.
+   * under the sheet's own title (`planTitle`), the task's id the body's
+   * first line.
    */
   import type { Snippet } from "svelte";
   import { Button } from "#lib/components/ui/button/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { cawco } from "../client.svelte";
   import MessageBody from "../MessageBody.svelte";
   import { sideExpand } from "../side/expand";
   import SideSurface from "../side/SideSurface.svelte";
-  import PlanTree, { stepsTree, todosTree } from "./PlanTree.svelte";
+  import PlanTree from "./PlanTree.svelte";
 
   let {
     instanceId,
@@ -68,14 +79,8 @@
   const plan = $derived(cawco.planOf(instanceId));
   const steps = $derived(stepsTree(plan));
   const todos = $derived(todosTree(plan));
-  /**
-   * A task's to-dos and nothing else (an attempt that has written no steps
-   * or spec): the card is titled by them, not "Plan" over a "To-dos" head.
-   */
-  const onlyTodos = $derived(
-    steps.length === 0 && !plan?.spec && todos.length > 0
-  );
-  const cardTitle = $derived(onlyTodos ? planWords.todos : planWords.plan);
+  const todosOnly = $derived(onlyTodos(plan));
+  const cardTitle = $derived(planTitle(plan));
   const projectId = $derived(
     cawco.instanceIndex.byId.get(instanceId)?.projectId ?? null
   );
@@ -99,6 +104,9 @@
       ? "linear-gradient(to bottom, var(--mask-opaque) calc(100% - var(--fade-end)), transparent)"
       : undefined}
   >
+    {#if sheet && todosOnly && plan?.taskId}
+      <p class="m-0 type-code text-ink-subtle">{plan.taskId}</p>
+    {/if}
     {#if steps.length > 0}
       {#if stepsHeaded}
         <h3
@@ -120,7 +128,7 @@
     {/if}
 
     {#if showsTodos && plan?.taskId}
-      {#if !onlyTodos}
+      {#if !todosOnly}
         <h3
           class="m-0 type-body font-medium text-ink-strong not-first:mbs-space-3 not-first:pbs-space-4 not-first:border-bs not-first:border-bs-border-hairline"
         >
@@ -148,14 +156,6 @@
 
 <!-- How far it has got is the ring's to say, on the composer: said once. -->
 {#if sheet}
-  <Drawer.Header>
-    <Drawer.Title>
-      {cardTitle}
-      {#if onlyTodos && plan?.taskId}
-        <span class="type-code text-ink-subtle">{plan.taskId}</span>
-      {/if}
-    </Drawer.Title>
-  </Drawer.Header>
   {@render body()}
 {:else}
   <SideSurface
@@ -163,7 +163,7 @@
     label={planWords.plan}
     {onclose}
     recessed={false}
-    subtitle={onlyTodos ? (plan?.taskId ?? undefined) : undefined}
+    subtitle={todosOnly ? (plan?.taskId ?? undefined) : undefined}
     subtitleCode
     {switcher}
     title={switcher ? undefined : cardTitle}

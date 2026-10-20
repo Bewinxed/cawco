@@ -10,10 +10,6 @@ export {
   default as SheetFooter,
 } from "./sheet-footer.svelte";
 export {
-  default as Header,
-  default as SheetHeader,
-} from "./sheet-header.svelte";
-export {
   default as Overlay,
   default as SheetOverlay,
 } from "./sheet-overlay.svelte";
@@ -21,7 +17,6 @@ export {
   default as Portal,
   default as SheetPortal,
 } from "./sheet-portal.svelte";
-export { default as Title, default as SheetTitle } from "./sheet-title.svelte";
 export {
   default as Trigger,
   default as SheetTrigger,

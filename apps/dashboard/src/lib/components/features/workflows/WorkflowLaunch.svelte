@@ -274,15 +274,12 @@
 {#if phone.current}
   <Drawer.Root onOpenChange={dismissed} open={shown}>
     <Drawer.Content
-      aria-label="Run {workflow.name}"
       onCloseAutoFocus={giveFocusBack}
       onOpenAutoFocus={takeFocus}
       tabindex={-1}
+      title={`Run ${workflow.name}`}
       bind:ref={card}
     >
-      <Drawer.Header>
-        <Drawer.Title>Run {workflow.name}</Drawer.Title>
-      </Drawer.Header>
       <Drawer.Description visible={false}
         >Choose the inputs and workspace for this workflow run.</Drawer.Description
       >

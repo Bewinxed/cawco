@@ -3,14 +3,11 @@
    * The New Session form on a phone: the kit drawer's bottom sheet under
    * 640px (DESIGN.md: "the new-session dialog becomes a bottom sheet"). A
    * desk opens the same form as a popover (NewSessionPopover), which hands
-   * this its props under 640px. The form inside is NewSessionForm.
+   * this its props under 640px. The form inside is NewSessionForm; the
+   * sheet's head is the kit's, titled with the form's own name.
    */
   import { untrack } from "svelte";
-  import {
-    Drawer,
-    DrawerContent,
-    DrawerTitle,
-  } from "#lib/components/ui/drawer/index.js";
+  import { Drawer, DrawerContent } from "#lib/components/ui/drawer/index.js";
   import type { ContinueSource, SessionDraft } from "../continue.svelte";
   import NewSessionForm from "./NewSessionForm.svelte";
   import type { SpawnPrefill } from "./new-session.svelte";
@@ -66,7 +63,6 @@
 >
   <DrawerContent
     data-session-card
-    aria-label="New Session"
     data-ns-dialog
     look="new-session"
     onCloseAutoFocus={(event) => {
@@ -85,9 +81,9 @@
       }
     }}
     style={`--drawer-max-height: calc(var(--visible-height, 100dvh) - max(env(safe-area-inset-top), var(--space-7)))${open ? "" : "; animation-duration: var(--dur-exit); animation-timing-function: var(--ease-out)"}`}
+    title={form?.title() ?? "New session"}
     bind:ref={card}
   >
-    <DrawerTitle visible={false}>New session</DrawerTitle>
     <NewSessionForm
       {continueFrom}
       {onclose}
@@ -95,6 +91,7 @@
       {open}
       {prefill}
       {restore}
+      sheet
       bind:this={form}
     />
   </DrawerContent>

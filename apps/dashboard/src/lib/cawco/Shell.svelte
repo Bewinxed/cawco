@@ -1054,10 +1054,9 @@
       }
     >
       <!-- Closed by its search field, the focus stays in the Jump palette
-           it opened, which hangs from the bar's glass. In the sheet the
-           close button sits in the brand row's corner (16px in, 30px wide,
-           and 7px of touch area around it): the brand row stops short of it
-           (--rail-sheet-close-room). -->
+           it opened, which hangs from the bar's glass. Its brand row names
+           it on screen, so the kit's Close keeps the header's trailing
+           corner over that row (16px in) and no header row stands. -->
       <Sheet.Content
         data-rail-sheet
         class="w-c-rail-sheet-w"
@@ -1069,10 +1068,9 @@
           }
         }}
         side="left"
+        title="Navigation"
+        titleHidden
       >
-        <Sheet.Header visible={false}>
-          <Sheet.Title>Navigation</Sheet.Title>
-        </Sheet.Header>
         {#if !railed}
           <RegionBoundary region="sidebar">
             <Sidebar
@@ -1120,7 +1118,7 @@
         data-slot="top"
         data-floating={floating || undefined}
         data-hosting={hosting || undefined}
-        class="group/top peer/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) bg-surface-raised border-b border-b-border-hairline coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-(--c-top-bar-h) max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:border-b-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:border-b-none desk:not-portrait:data-hosting:shelf-hairline max-desk:data-floating:border-b-none max-desk:data-floating:bg-transparent"
+        class="group/top peer/top h-c-top-bar-h shrink-0 flex items-center gap-space-2 py-0 ps-0 pe-(--top-end) bg-surface-raised border-b border-b-border-hairline coarse:portrait:desk:ps-space-7 max-desk:ps-(--top-inset-start) max-desk:pe-(--top-inset-end) max-desk:data-floating:relative max-desk:data-floating:-mbe-c-top-bar-h max-desk:data-floating:z-(--layer-bar) max-desk:data-floating:pointer-events-none desk:not-coarse:data-hosting:border-b-none desk:not-coarse:data-hosting:shelf-hairline desk:not-portrait:data-hosting:border-b-none desk:not-portrait:data-hosting:shelf-hairline max-desk:data-floating:border-b-none max-desk:data-floating:bg-transparent"
         style:--top-end="calc(var(--space-6) + env(safe-area-inset-right, 0px))"
         style:--top-inset-start="env(safe-area-inset-left, 0px)"
         style:--top-inset-end="env(safe-area-inset-right, 0px)"

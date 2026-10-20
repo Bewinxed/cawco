@@ -268,7 +268,7 @@ const FILLS = [0.2, 0.3, 0.15, 0.25];
  * `--c`, set inline on the lane.
  */
 const AT = "absolute left-0 top-0";
-const META = "type-meta leading-(--space-4) whitespace-nowrap";
+const META = "type-meta leading-space-4 whitespace-nowrap";
 const STRIP = `${AT} h-(--fig-chip) rounded-hair`;
 const PART = {
   root: "absolute inset-0",
@@ -293,7 +293,7 @@ const PART = {
   chip: `${AT} size-(--fig-chip) rounded-hair bg-(--c) ring-2 ring-surface-recess`,
   /** A fork is its parent's chip drawn hollow: the same lane, no extra mark. */
   fork: `${AT} size-(--fig-chip) rounded-hair bg-surface-recess inset-ring-2 inset-ring-(--c) ring-2 ring-surface-recess`,
-  tag: `${AT} px-space-1 rounded-xs bg-surface-fill type-caps leading-(--space-4) tabular-nums text-ink-row whitespace-nowrap`,
+  tag: `${AT} px-space-1 rounded-xs bg-surface-fill type-caps leading-space-4 tabular-nums text-ink-row whitespace-nowrap`,
   /** A caption wraps where the stage is narrow; the stage grows to hold it. */
   caption:
     "absolute inset-x-(--fig-pad) bottom-(--fig-cap-foot) type-meta leading-(--fig-cap-line) text-ink-row text-pretty",

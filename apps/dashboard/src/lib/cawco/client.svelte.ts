@@ -1799,7 +1799,9 @@ function noteRecord(target: SessionState, record: SendRecord): void {
   ) {
     // A refusal the hub made is said once, on the send's row, with its way
     // back (transcript/send-recovery.svelte.ts): not over the composer too.
-    if (!record.refusal) {
+    // A mode ask is one (`modeAsk`, which carries no `refusal`): its row asks
+    // for the mode in the dashboard's words, never the hub's.
+    if (!(record.refusal || record.modeAsk)) {
       sendFailureNotices[target.instanceId] = record.reason
         ? `Message not sent: ${record.reason}`
         : "Message not sent.";

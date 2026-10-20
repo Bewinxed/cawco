@@ -632,7 +632,7 @@
 /* Custom properties a component reads, each set from another under a
    state (`coarse:hit-gap-y-(--row-gap)`). */
 @utility hit-gap-y-* {
-  --hit-gap-y: --value([*]);
+  --hit-gap-y: --value(--spacing-*, [*]);
 }
 @utility rail-step-* {
   --rail-step: --value([*]);
@@ -1562,7 +1562,7 @@
 /* A sheet's header's seam (DESIGN.md, Drawer: "a seam under it that comes
    in over the first 11px of the content's scroll"): its hairline comes in as
    what is under it scrolls, so a line scrolled up under the title is cut on
-   a seam, never left loose. Inside a sheet only (ui/drawer/drawer-header's
+   a seam, never left loose. Inside a sheet only (ui/drawer/sheet-head's
    `in-data-[slot=drawer-content]:`): elsewhere the name resolves to no
    timeline, which Chromium paints as the animation's end. */
 @utility sheet-seam {

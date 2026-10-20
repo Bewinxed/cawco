@@ -96,6 +96,7 @@
   } from "@cawco/core";
   import { onMount } from "svelte";
   import { cawco } from "#lib/cawco/client.svelte.js";
+  import Choice from "#lib/cawco/config/Choice.svelte";
   import Field from "#lib/cawco/config/Field.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
   import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
@@ -119,8 +120,6 @@
   import { menuItemVariants } from "#lib/components/ui/menu-item/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "#lib/components/ui/popover/index.js";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
   import {
     IconConnection,
     IconEye,
@@ -678,25 +677,18 @@
     </p>
     {#if service.ways.length > 1}
       <div data-slot="way" class="flex min-w-0 flex-col gap-space-1">
-        <p class="type-meta text-ink-muted" id="connection-way">
-          {words.signsInWith}
-        </p>
-        <ToggleGroup.Root
-          aria-labelledby="connection-way"
-          class="max-w-full self-start"
-          type="single"
-          bind:value={
-            () => addWay?.label ?? "",
-            (next) => {
-              addWay =
-                service.ways.find((each) => each.label === next) ?? addWay;
-            }
-          }
-        >
-          {#each service.ways as way (way.label)}
-            <ToggleGroup.Item value={way.label}>{way.label}</ToggleGroup.Item>
-          {/each}
-        </ToggleGroup.Root>
+        <p class="type-meta text-ink-muted">{words.signsInWith}</p>
+        <Choice
+          label={words.signsInWith}
+          onchange={(next) => {
+            addWay = service.ways.find((each) => each.label === next) ?? addWay;
+          }}
+          options={service.ways.map((way) => ({
+            value: way.label,
+            label: way.label,
+          }))}
+          value={addWay?.label ?? ""}
+        />
         {#if addWay}
           <p
             class="max-w-c-measure type-meta text-pretty text-ink-muted"

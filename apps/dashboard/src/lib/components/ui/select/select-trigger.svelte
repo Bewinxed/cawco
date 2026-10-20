@@ -6,11 +6,10 @@
   export const selectTriggerVariants = tv({
     variants: {
       /** Its height: the input's (DESIGN.md, Inputs and fields: "Select
-          trigger: the input's look"), the 30px small control, or a control
-          standing in a composer shell (DESIGN.md, Composer: 34px). */
+          trigger: the input's look"), or a control standing in a composer
+          shell (DESIGN.md, Composer: 34px). */
       size: {
         default: "h-c-input-h",
-        sm: "h-c-btn-h-sm",
         composer: "h-c-composer-field",
       },
       /** Sharing a row equally with its siblings, however long its words. */
@@ -104,7 +103,7 @@
   >
   {#if mark === "chevron"}
     <IconChevronDown
-      class="size-icon-md text-ink-muted pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-(--ease-out) in-data-[state=open]:rotate-180"
+      class="size-icon-md text-ink-muted pointer-events-none motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out in-data-[state=open]:rotate-180"
       data-mark="chevron"
     />
   {:else}

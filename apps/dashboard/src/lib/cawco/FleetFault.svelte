@@ -17,6 +17,7 @@
    * remedy came to is said under the button, in place.
    */
   import { failureWords as message } from "#lib/cawco/hub-read.js";
+  import { Alert, AlertTitle } from "#lib/components/ui/alert/index.js";
   import { Button } from "#lib/components/ui/button/index.js";
   import {
     IconChevronRight,
@@ -244,276 +245,282 @@
   });
 </script>
 
-<!-- The alert recipe: a compact status-tinted row, status ink on its own
+<!-- The kit's alert: a compact status-tinted row, status ink on its own
      tint, no edge. A hub fault is not a machine's problem and does not wear a
      machine's tint: nothing downstream of it can be fixed until it is. -->
-<div
-  class="flex min-w-0 flex-col rounded-md bg-status-attn-bg p-space-3 type-body text-status-attn-ink data-hub:bg-status-fail-bg data-hub:text-status-fail-ink"
-  data-hub={group.origin === "hub" || undefined}
->
-  <div
-    data-slot="top"
-    class="mark-line flex flex-wrap items-center gap-space-2"
-  >
-    <IconWarningTriangle class="size-icon-md shrink-0" />
-    <span data-slot="title" class="text-size-label font-medium"
-      >{copy.title}</span
-    >
-    <!-- Where, never left implicit: the whole point of the investigation this
+<div class="min-w-0">
+  <Alert variant={group.origin === "hub" ? "destructive" : "warning"}>
+    <IconWarningTriangle />
+    <AlertTitle>
+      <div
+        data-slot="top"
+        class="mark-line flex flex-wrap items-center gap-space-2"
+      >
+        <span data-slot="title" class="text-size-label font-medium"
+          >{copy.title}</span
+        >
+        <!-- Where, never left implicit: the whole point of the investigation this
          came out of was that a badge named no machine. The machine sits beside
          the title, not pushed to the far edge: "what broke" and "where" read
          as one fact and belong together. -->
-    <span data-slot="where" class="inline-flex" data-box>
-      {#if group.origin === "hub"}
-        <span
-          data-slot="tag"
-          class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
-          >at the hub</span
-        >
-      {:else if machine}
-        <span
-          data-slot="tag"
-          class="mark-line inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
-        >
-          <OsMark class="size-icon-md shrink-0" os={machine.os} />
-          <span
-            >{machineLabel(machine.hostname)}
-            {group.harness ? ` · ${group.harness}` : ""}
-            {online ? "" : " · offline"}</span
-          >
-        </span>
-      {:else}
-        <span
-          data-slot="tag"
-          class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
-          >{group.machineId}</span
-        >
-      {/if}
-    </span>
-    {#if compact}
-      <!-- min-height 25px: below 24px the target is under the WCAG 2.5.8 (AA)
-           minimum; measured at 14.6px. -->
-      <button
-        aria-expanded={expanded}
-        class="group/disclose mark-line touch-hit inline-flex min-h-space-7 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 ms-auto hover:opacity-100"
-        data-box
-        onclick={() => {
-          expanded = !expanded;
-        }}
-        type="button"
-      >
-        <IconChevronRight
-          class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
-        />
-        <span>{expanded ? "Hide" : "Details"}</span>
-      </button>
-    {/if}
-  </div>
-
-  <div data-slot="body" inert={!whole} {@attach disclose(() => whole)}>
-    <!-- The body folds as one piece under the title line; its own gap to the
-         line sits inside it, so a shut body leaves nothing behind. -->
-    <div data-slot="inner" class="flex flex-col gap-space-2 pt-space-2">
-      <p
-        class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
-      >
-        <span class="text-size-meta font-normal opacity-80"
-          >{SCOPE_NOUN[group.scope]}
-          {group.faults.length === 1 ? "" : "s"}:</span
-        >
-        {#each shown as fault (fault.scope + fault.key)}
-          <code class="font-mono text-size-meta wrap-anywhere"
-            >{faultLabel(fault)}</code
-          >
-        {/each}
-        {#if extra > 0}
-          <span data-slot="more" class="text-size-meta font-normal opacity-80"
-            >and {extra} more</span
-          >
-        {/if}
-      </p>
-
-      <p data-slot="why" class="max-w-c-measure text-size-body font-normal">
-        {copy.why}
-      </p>
-
-      {#if copy.toolchain && toolchain}
-        <!-- The attribution that was missing: which binary said it, and whether a
-         newer one is sitting on the same machine behind it. -->
-        <div
-          data-slot="tool"
-          class="flex flex-col gap-space-row rounded-sm border border-border-hairline bg-surface-recess p-space-2"
-        >
-          <span class="text-size-meta font-normal text-ink-muted"
-            >claude on this machine</span
-          >
-          {#if toolchain.used}
-            <span class="flex flex-wrap items-baseline gap-space-2">
-              <code
-                class="font-mono text-size-meta font-medium wrap-anywhere text-ink-strong"
-                >{toolchain.used.path}</code
-              >
-              <span class="num text-size-meta font-normal text-ink-muted"
-                >{toolchain.used.version ?? "version unknown"}</span
-              >
+        <span data-slot="where" class="inline-flex" data-box>
+          {#if group.origin === "hub"}
+            <span
+              data-slot="tag"
+              class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
+              >at the hub</span
+            >
+          {:else if machine}
+            <span
+              data-slot="tag"
+              class="mark-line inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
+            >
+              <OsMark class="size-icon-md shrink-0" os={machine.os} />
               <span
-                class="rounded-pill bg-surface-raised px-space-2 py-0 text-size-meta font-normal text-ink-muted"
-                >ran this sync</span
+                >{machineLabel(machine.hostname)}
+                {group.harness ? ` · ${group.harness}` : ""}
+                {online ? "" : " · offline"}</span
               >
             </span>
+          {:else}
+            <span
+              data-slot="tag"
+              class="inline-flex items-center gap-space-1 rounded-pill bg-surface-raised px-space-2 py-px text-size-meta font-normal whitespace-nowrap text-ink-muted"
+              >{group.machineId}</span
+            >
           {/if}
-          {#each toolchain.others as other (other.path)}
-            <span class="flex flex-wrap items-baseline gap-space-2">
-              <code
-                class="font-mono text-size-meta wrap-anywhere text-ink-strong"
-                >{other.path}</code
-              >
-              <span class="num text-size-meta font-normal text-ink-muted"
-                >{other.version ?? "version unknown"}</span
-              >
-            </span>
-          {/each}
-          {#if toolchain.shadowed}
-            <p class="pt-space-1 text-size-meta font-normal text-ink-strong">
-              A newer claude is installed on this machine and is not the one
-              PATH resolves first. Until that changes, updating again will not
-              help.
-            </p>
-          {/if}
-        </div>
-      {/if}
-
-      {#if group.faults[0]?.detail}
-        {#if group.cause === "unknown"}
-          <pre
-            class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{group
-              .faults[0].detail}</pre>
-        {:else}
+        </span>
+        {#if compact}
+          <!-- min-height 25px: below 24px the target is under the WCAG 2.5.8 (AA)
+           minimum; measured at 14.6px. -->
           <button
-            aria-expanded={disclosureOpen}
-            class="group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-space-7 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 hover:opacity-100"
+            aria-expanded={expanded}
+            class="group/disclose mark-line touch-hit inline-flex min-h-space-7 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 ms-auto hover:opacity-100"
+            data-box
             onclick={() => {
-              disclosureOpen = !disclosureOpen;
+              expanded = !expanded;
             }}
             type="button"
           >
             <IconChevronRight
               class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
             />
-            <span>What it said</span>
+            <span>{expanded ? "Hide" : "Details"}</span>
           </button>
-          <div
-            class="flex flex-col gap-space-2"
-            inert={!disclosureOpen}
-            {@attach disclose(() => disclosureOpen, 7)}
-          >
-            {#each shown as fault (fault.scope + fault.key)}
-              {#if fault.detail}
-                <pre
-                  class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"><span
-                    class="block text-ink-muted">{faultLabel(fault)}</span
-                  >{fault.detail}</pre>
-              {/if}
-            {/each}
-          </div>
-        {/if}
-      {/if}
-
-      <p class="max-w-c-measure text-size-body font-normal">
-        {copy.fix}
-      </p>
-
-      <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
-        {#if copy.action === "resync"}
-          <Button
-            disabled={!online}
-            failed={actFailed}
-            icon={IconRefresh}
-            label={actionLabel}
-            onclick={resync}
-            pending={busy}
-            pendingLabel="Syncing…"
-            size="xs"
-            variant="outline"
-          />
-          <span class="text-size-meta font-normal opacity-80"
-            >{online
-              ? actionHint
-              : "It syncs on its own the moment it comes back."}</span
-          >
-        {:else if copy.action === "refresh"}
-          <Button
-            data-num
-            failed={actFailed}
-            figures="tabular"
-            icon={IconRefresh}
-            label={actionLabel}
-            onclick={refresh}
-            pending={busy}
-            pendingLabel="Fetching…"
-            size="xs"
-            variant="outline"
-          />
-          <span class="text-size-meta font-normal opacity-80">{actionHint}</span
-          >
-        {:else if copy.action === "settle" && group.scope === "skills"}
-          {#each shown as fault (fault.key)}
-            {#if group.faults.length > 1}
-              <code class="font-mono text-size-meta wrap-anywhere"
-                >{fault.key}</code
-              >
-            {/if}
-            <Button
-              disabled={!online || settling[fault.key] === "push"}
-              failed={settleFailed[fault.key] === true}
-              label="Adopt this copy"
-              onclick={() => settle(fault.key, "adopt")}
-              pending={settling[fault.key] === "adopt"}
-              pendingLabel="Adopting…"
-              size="xs"
-              variant="outline"
-            />
-            <Button
-              disabled={!online || settling[fault.key] === "adopt"}
-              failed={settleFailed[fault.key] === true}
-              label="Send ours"
-              onclick={() => settle(fault.key, "push")}
-              pending={settling[fault.key] === "push"}
-              pendingLabel="Sending…"
-              size="xs"
-              variant="outline"
-            />
-          {/each}
-          <span class="text-size-meta font-normal opacity-80"
-            >Adopt this machine’s copy into the fleet, or overwrite it with the
-            fleet’s.</span
-          >
-        {:else if copy.action === "settle"}
-          <Button href={faultHref(group.faults[0])} size="xs" variant="outline"
-            >Compare the two copies</Button
-          >
-          <span class="text-size-meta font-normal opacity-80"
-            >Adopt this machine’s copy into the fleet, or overwrite it with the
-            fleet’s.</span
-          >
-        {:else}
-          <Button href={faultHref(group.faults[0])} size="xs" variant="outline"
-            >Open the section</Button
-          >
         {/if}
       </div>
-      {#if result}
+    </AlertTitle>
+
+    <div data-slot="body" inert={!whole} {@attach disclose(() => whole)}>
+      <!-- The body folds as one piece under the title line; its own gap to the
+         line sits inside it, so a shut body leaves nothing behind. -->
+      <div data-slot="inner" class="flex flex-col gap-space-2 pt-space-2">
         <p
-          data-slot="result"
-          class="text-size-meta font-normal wrap-anywhere tone-fail:text-status-fail-ink"
-          data-flip
-          data-tone={result.tone}
-          role={result.tone === "fail" ? "alert" : "status"}
-          in:appear
+          class="flex min-w-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1"
         >
-          {result.text}
+          <span class="text-size-meta font-normal opacity-80"
+            >{SCOPE_NOUN[group.scope]}
+            {group.faults.length === 1 ? "" : "s"}:</span
+          >
+          {#each shown as fault (fault.scope + fault.key)}
+            <code class="font-mono text-size-meta wrap-anywhere"
+              >{faultLabel(fault)}</code
+            >
+          {/each}
+          {#if extra > 0}
+            <span data-slot="more" class="text-size-meta font-normal opacity-80"
+              >and {extra} more</span
+            >
+          {/if}
         </p>
-      {/if}
+
+        <p data-slot="why" class="max-w-c-measure text-size-body font-normal">
+          {copy.why}
+        </p>
+
+        {#if copy.toolchain && toolchain}
+          <!-- The attribution that was missing: which binary said it, and whether a
+         newer one is sitting on the same machine behind it. -->
+          <div
+            data-slot="tool"
+            class="flex flex-col gap-space-row rounded-sm border border-border-hairline bg-surface-recess p-space-2"
+          >
+            <span class="text-size-meta font-normal text-ink-muted"
+              >claude on this machine</span
+            >
+            {#if toolchain.used}
+              <span class="flex flex-wrap items-baseline gap-space-2">
+                <code
+                  class="font-mono text-size-meta font-medium wrap-anywhere text-ink-strong"
+                  >{toolchain.used.path}</code
+                >
+                <span class="num text-size-meta font-normal text-ink-muted"
+                  >{toolchain.used.version ?? "version unknown"}</span
+                >
+                <span
+                  class="rounded-pill bg-surface-raised px-space-2 py-0 text-size-meta font-normal text-ink-muted"
+                  >ran this sync</span
+                >
+              </span>
+            {/if}
+            {#each toolchain.others as other (other.path)}
+              <span class="flex flex-wrap items-baseline gap-space-2">
+                <code
+                  class="font-mono text-size-meta wrap-anywhere text-ink-strong"
+                  >{other.path}</code
+                >
+                <span class="num text-size-meta font-normal text-ink-muted"
+                  >{other.version ?? "version unknown"}</span
+                >
+              </span>
+            {/each}
+            {#if toolchain.shadowed}
+              <p class="pt-space-1 text-size-meta font-normal text-ink-strong">
+                A newer claude is installed on this machine and is not the one
+                PATH resolves first. Until that changes, updating again will not
+                help.
+              </p>
+            {/if}
+          </div>
+        {/if}
+
+        {#if group.faults[0]?.detail}
+          {#if group.cause === "unknown"}
+            <pre
+              class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong">{group
+                .faults[0].detail}</pre>
+          {:else}
+            <button
+              aria-expanded={disclosureOpen}
+              class="group/disclose mark-line touch-hit -ms-space-2 inline-flex min-h-space-7 items-center gap-space-1 self-start rounded-sm px-space-2 text-size-meta font-normal opacity-80 hover:opacity-100"
+              onclick={() => {
+                disclosureOpen = !disclosureOpen;
+              }}
+              type="button"
+            >
+              <IconChevronRight
+                class="size-icon-md shrink-0 motion-safe:transition-[rotate] motion-safe:duration-(--dur-control) motion-safe:ease-out group-aria-expanded/disclose:rotate-90"
+              />
+              <span>What it said</span>
+            </button>
+            <div
+              class="flex flex-col gap-space-2"
+              inert={!disclosureOpen}
+              {@attach disclose(() => disclosureOpen, 7)}
+            >
+              {#each shown as fault (fault.scope + fault.key)}
+                {#if fault.detail}
+                  <pre
+                    class="max-h-c-output-max overflow-auto rounded-sm border border-border-hairline bg-surface-recess p-space-2 font-mono text-size-meta wrap-anywhere whitespace-pre-wrap text-ink-strong"><span
+                      class="block text-ink-muted">{faultLabel(fault)}</span
+                    >{fault.detail}</pre>
+                {/if}
+              {/each}
+            </div>
+          {/if}
+        {/if}
+
+        <p class="max-w-c-measure text-size-body font-normal">
+          {copy.fix}
+        </p>
+
+        <div data-slot="acts" class="flex flex-wrap items-center gap-space-2">
+          {#if copy.action === "resync"}
+            <Button
+              disabled={!online}
+              failed={actFailed}
+              icon={IconRefresh}
+              label={actionLabel}
+              onclick={resync}
+              pending={busy}
+              pendingLabel="Syncing…"
+              size="xs"
+              variant="outline"
+            />
+            <span class="text-size-meta font-normal opacity-80"
+              >{online
+                ? actionHint
+                : "It syncs on its own the moment it comes back."}</span
+            >
+          {:else if copy.action === "refresh"}
+            <Button
+              data-num
+              failed={actFailed}
+              figures="tabular"
+              icon={IconRefresh}
+              label={actionLabel}
+              onclick={refresh}
+              pending={busy}
+              pendingLabel="Fetching…"
+              size="xs"
+              variant="outline"
+            />
+            <span class="text-size-meta font-normal opacity-80"
+              >{actionHint}</span
+            >
+          {:else if copy.action === "settle" && group.scope === "skills"}
+            {#each shown as fault (fault.key)}
+              {#if group.faults.length > 1}
+                <code class="font-mono text-size-meta wrap-anywhere"
+                  >{fault.key}</code
+                >
+              {/if}
+              <Button
+                disabled={!online || settling[fault.key] === "push"}
+                failed={settleFailed[fault.key] === true}
+                label="Adopt this copy"
+                onclick={() => settle(fault.key, "adopt")}
+                pending={settling[fault.key] === "adopt"}
+                pendingLabel="Adopting…"
+                size="xs"
+                variant="outline"
+              />
+              <Button
+                disabled={!online || settling[fault.key] === "adopt"}
+                failed={settleFailed[fault.key] === true}
+                label="Send ours"
+                onclick={() => settle(fault.key, "push")}
+                pending={settling[fault.key] === "push"}
+                pendingLabel="Sending…"
+                size="xs"
+                variant="outline"
+              />
+            {/each}
+            <span class="text-size-meta font-normal opacity-80"
+              >Adopt this machine’s copy into the fleet, or overwrite it with
+              the fleet’s.</span
+            >
+          {:else if copy.action === "settle"}
+            <Button
+              href={faultHref(group.faults[0])}
+              size="xs"
+              variant="outline">Compare the two copies</Button
+            >
+            <span class="text-size-meta font-normal opacity-80"
+              >Adopt this machine’s copy into the fleet, or overwrite it with
+              the fleet’s.</span
+            >
+          {:else}
+            <Button
+              href={faultHref(group.faults[0])}
+              size="xs"
+              variant="outline">Open the section</Button
+            >
+          {/if}
+        </div>
+        {#if result}
+          <p
+            data-slot="result"
+            class="text-size-meta font-normal wrap-anywhere tone-fail:text-status-fail-ink"
+            data-flip
+            data-tone={result.tone}
+            role={result.tone === "fail" ? "alert" : "status"}
+            in:appear
+          >
+            {result.text}
+          </p>
+        {/if}
+      </div>
     </div>
-  </div>
+  </Alert>
 </div>

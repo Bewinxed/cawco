@@ -1988,10 +1988,9 @@ const EDITORS: Record<string, State[]> = {
           .getByRole("textbox", { name: "Filter memory files" })
           .fill("no-such-file"),
       root: "body",
-      // X3: the kit's EmptyState, its title naming the filter; this base
-      // still draws the note line, which goes once X3's branch lands.
+      // The kit's EmptyState, its title naming the filter.
       ready: {
-        shows: "[data-slot=empty] [data-slot=empty-title], p[data-slot=note]",
+        shows: "[data-slot=empty] [data-slot=empty-title]",
         says: /no-such-file/,
       },
     },
@@ -2012,11 +2011,9 @@ const EDITORS: Record<string, State[]> = {
       hub: "unregistered",
       route: () => "/config/memory/CLAUDE.md",
       root: "body",
-      // X3: the shared kit EmptyState (NoMachines), its title saying it;
-      // this base still draws the bare button, which goes once X3's branch
-      // lands.
+      // The shared kit EmptyState (NoMachines), its title saying it.
       ready: {
-        shows: "[data-slot=empty], button[aria-haspopup=dialog]",
+        shows: "[data-slot=empty]",
         says: NO_MACHINES,
         path: at("/config/memory/CLAUDE.md"),
       },

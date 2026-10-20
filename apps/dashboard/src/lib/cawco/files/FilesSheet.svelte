@@ -109,10 +109,8 @@
         back.focus();
       }
     }}
+    title="Files"
   >
-    <Drawer.Header>
-      <Drawer.Title>Files</Drawer.Title>
-    </Drawer.Header>
     <!-- At the lower stop the sheet stands that share of the screen lower:
          what it holds ends where the screen does. -->
     <div

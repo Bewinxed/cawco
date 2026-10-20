@@ -70,7 +70,7 @@
       <div class={chipsVariants()}>
         {#each info.suggests as suggestion (suggestion)}
           <button
-            class={[chipVariants({ variant: "option" }), "touch-hit"]}
+            class={chipVariants()}
             onclick={() => {
               matcher = suggestion;
             }}

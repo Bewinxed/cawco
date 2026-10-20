@@ -453,14 +453,14 @@
         {#if started}
           <span
             data-slot="kind"
-            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-(--c-row-mark) whitespace-nowrap"
+            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-c-row-mark whitespace-nowrap"
             data-box
             style:--kind-py="calc((1lh - 1ex) / 2)">session</span
           >
         {:else if type}
           <span
             data-slot="kind"
-            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-(--c-row-mark) whitespace-nowrap"
+            class="mark-text flex-none text-size-meta font-normal text-ink-strong border border-border-hairline rounded-xs py-(--kind-py) px-space-2 leading-c-row-mark whitespace-nowrap"
             data-box
             style:--kind-py="calc((1lh - 1ex) / 2)">{type}</span
           >

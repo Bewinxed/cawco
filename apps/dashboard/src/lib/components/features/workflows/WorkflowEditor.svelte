@@ -875,19 +875,18 @@
       height="shrink"
       modal={false}
       style="--drawer-max-height: var(--c-sheet-inspector-max-h)"
+      title={inspectorTitle(node, edge)}
     >
-      <Drawer.Header>
-        <Drawer.Title>{inspectorTitle(node, edge)}</Drawer.Title>
+      {#snippet actions()}
         {#if node}
           <Button
-            class="ms-auto"
             onclick={() => select()}
             size="sm"
             type="button"
             variant="ghost">Settings</Button
           >
         {/if}
-      </Drawer.Header>
+      {/snippet}
       <Drawer.Description visible={false}
         >Edit the selected node or workflow settings.</Drawer.Description
       >
