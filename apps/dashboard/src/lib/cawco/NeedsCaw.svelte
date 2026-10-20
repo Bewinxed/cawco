@@ -73,6 +73,7 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { page } from "$app/state";
   import { barGlass } from "./bar-glass.svelte";
+  import { frameObserver } from "./frame-observer";
   import { type CawFile, type CawHead, stageCaw } from "./home/Caw.svelte";
   import CawFace from "./home/CawFace.svelte";
   import { cawNotices } from "./home/caw-notices.svelte";
@@ -98,9 +99,13 @@
   let measured = $state<number | null>(null);
   const head = $derived(measured ?? (page.data.narrow ? 24 : 20));
   const faceSide: Attachment<HTMLElement> = (node) => {
-    const sizes = new ResizeObserver(([entry]) => {
-      measured = Math.round(entry.borderBoxSize[0].inlineSize);
-    });
+    // Read now, and a change in the next frame (frameObserver): his face is
+    // drawn at the side its box lays out at (a border box, unscaled).
+    const read = () => {
+      measured = node.offsetWidth;
+    };
+    read();
+    const sizes = frameObserver(read);
     sizes.observe(node);
     return () => sizes.disconnect();
   };

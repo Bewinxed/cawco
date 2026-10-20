@@ -217,7 +217,14 @@
 
 /* One per attribute state a component styles: [data-tone="fail"] is
    tone-fail:, [aria-expanded="false"] is aria-expanded-false:. */
+@custom-variant act-arrive (&[data-act="arrive"]);
+@custom-variant act-burst (&[data-act="burst"]);
+@custom-variant act-dim (&[data-act="dim"]);
 @custom-variant act-dismiss (&[data-act="dismiss"]);
+@custom-variant act-drain (&[data-act="drain"]);
+@custom-variant act-fly (&[data-act="fly"]);
+@custom-variant act-loading (&[data-act="loading"]);
+@custom-variant act-swallow (&[data-act="swallow"]);
 @custom-variant active-false (&[data-active="false"]);
 @custom-variant active-keyboard (&[data-active="keyboard"]);
 @custom-variant active-pointer (&[data-active="pointer"]);
@@ -293,6 +300,7 @@
 @custom-variant kind-fail (&[data-kind="fail"]);
 @custom-variant kind-gone (&[data-kind="gone"]);
 @custom-variant kind-markdown (&[data-kind="markdown"]);
+@custom-variant kind-pairing (&[data-kind="pairing"]);
 @custom-variant kind-phone (&[data-kind="phone"]);
 @custom-variant kind-stream (&[data-kind="stream"]);
 @custom-variant kind-tablet (&[data-kind="tablet"]);
@@ -498,6 +506,7 @@
 @custom-variant slot-page-head (&[data-slot="page-head"]);
 @custom-variant slot-page-thumb (&[data-slot="page-thumb"]);
 @custom-variant slot-pair (&[data-slot="pair"]);
+@custom-variant slot-pairing (&[data-slot="pairing"]);
 @custom-variant slot-palette-item (&[data-slot="palette-item"]);
 @custom-variant slot-pane (&[data-slot="pane"]);
 @custom-variant slot-path (&[data-slot="path"]);
@@ -688,8 +697,11 @@
 @custom-variant tone-live (&[data-tone="live"]);
 @custom-variant tone-muted (&[data-tone="muted"]);
 @custom-variant tone-new (&[data-tone="new"]);
+@custom-variant tone-nomatch (&[data-tone="nomatch"]);
 @custom-variant tone-ok (&[data-tone="ok"]);
 @custom-variant tone-positive (&[data-tone="positive"]);
+@custom-variant tone-skeleton (&[data-tone="skeleton"]);
+@custom-variant tone-stale (&[data-tone="stale"]);
 @custom-variant variant-danger (&[data-variant="danger"]);
 @custom-variant variant-dashed (&[data-variant="dashed"]);
 @custom-variant variant-folder (&[data-variant="folder"]);

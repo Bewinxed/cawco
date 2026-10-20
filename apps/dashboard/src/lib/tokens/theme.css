@@ -217,6 +217,8 @@
   --color-presence-away: var(--presence-away);
   --color-presence-off: var(--presence-off);
   --color-scrollbar-thumb: var(--scrollbar-thumb);
+  --color-qr-paper: var(--qr-paper);
+  --color-qr-ink: var(--qr-ink);
   --color-skeleton-sheen: var(--skeleton-sheen);
   --color-prose-bullet: var(--prose-bullet);
   --color-identity-ink: var(--identity-ink);
@@ -320,6 +322,10 @@
   --spacing-c-pill-fs: var(--c-pill-fs);
   --spacing-c-badge-h: var(--c-badge-h);
   --spacing-c-stat-h: var(--c-stat-h);
+  --spacing-c-otp-cell-w: var(--c-otp-cell-w);
+  --spacing-c-otp-cell-h: var(--c-otp-cell-h);
+  --spacing-c-pair-w: var(--c-pair-w);
+  --spacing-c-pair-top: var(--c-pair-top);
   --spacing-c-toolbar-zone: var(--c-toolbar-zone);
   --spacing-c-toolbar-ctl: var(--c-toolbar-ctl);
   --spacing-c-find-w: var(--c-find-w);
