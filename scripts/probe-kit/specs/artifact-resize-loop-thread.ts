@@ -8,7 +8,8 @@
  *   ResizeObserver loop, and the head's More stood at some widths and at
  *   neither end.
  * - Beside the thread in a fine pointer's desk window 860 wide, opened from
- *   a link once the board lists it: the first frame painted with the
+ *   its row under the project in the navigation the bar's burger opens
+ *   (artifact-resize-loop `runNarrow`): the first frame painted with the
  *   split standing shows the preview's sheet, none shows it beside the
  *   conversation, and opening posts and logs no loop.
  *

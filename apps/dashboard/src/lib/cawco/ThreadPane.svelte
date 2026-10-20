@@ -353,7 +353,7 @@
   let side = $state<ReturnType<typeof SideSplit>>();
   /** The side surface's share of the width, in percent. */
   let sideShare = $state(0);
-  /** The side surface is the bottom drawer, a task its own page (layoutPolicy.sideDrawer). */
+  /** The side surface is the bottom drawer, a task its own page; null until the pane is measured (layoutPolicy.sideDrawer). */
   const phone = $derived(layoutPolicy.sideDrawer(laidWidth));
 
   /** What Caw plays on the composer: the thread's status, his loop or its still. */

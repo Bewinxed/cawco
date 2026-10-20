@@ -126,7 +126,11 @@ const respond = (request: Seen): Reply => {
 
 /** One frame as painted, from the one the split first stands in. */
 interface Painted {
-  /** The preview's card beside the conversation, at a width. */
+  /**
+   * The preview's card stands in the split's side pane, at a width: mounted
+   * beside the conversation (a second preview of its own), however wide the
+   * pane stands.
+   */
   beside: boolean;
   /**
    * The top of the composer standing over the conversation, as drawn (its
