@@ -175,6 +175,10 @@
   --color-action-hover: var(--action-hover);
   --color-on-action: var(--on-action);
   --color-on-brand: var(--on-brand);
+  --color-action-top: var(--action-top);
+  --color-action-bottom: var(--action-bottom);
+  --color-action-hover-top: var(--action-hover-top);
+  --color-action-hover-bottom: var(--action-hover-bottom);
   --color-selected-bg: var(--selected-bg);
   --color-selected-ink: var(--selected-ink);
   --color-selected-icon: var(--selected-icon);

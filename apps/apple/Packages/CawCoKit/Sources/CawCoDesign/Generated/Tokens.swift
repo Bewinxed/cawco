@@ -212,6 +212,14 @@ public enum Palette {
     public static let actionHover = Palette.named("action-hover")
     public static let onAction = Palette.named("on-action")
     public static let onBrand = Palette.named("on-brand")
+    /// action-surface's top stop: action-solid lifted 0.03 L. A stop is a colour, so a control changing to or from the action (the kit Button's variant, its hover) eases its highlight on the fill's own clock.
+    public static let actionTop = Palette.named("action-top")
+    /// action-surface's bottom stop: action-solid sunk 0.03 L.
+    public static let actionBottom = Palette.named("action-bottom")
+    /// action-surface-hover's top stop: action-hover lifted 0.03 L.
+    public static let actionHoverTop = Palette.named("action-hover-top")
+    /// action-surface-hover's bottom stop: action-hover sunk 0.03 L.
+    public static let actionHoverBottom = Palette.named("action-hover-bottom")
     /// The action is never flat: a top-highlight gradient, lifted ±0.03 L so the top stop keeps 4.5:1 under white.
     public static let actionSurface = Gradient(stops: [Ink(light: P3(0.7434, 0.3271, 0.2310, 1.0000), dark: P3(0.7170, 0.3158, 0.2231, 1.0000)), Ink(light: P3(0.6648, 0.2530, 0.1607, 1.0000), dark: P3(0.6390, 0.2423, 0.1534, 1.0000))])
     public static let actionSurfaceHover = Gradient(stops: [Ink(light: P3(0.6779, 0.2792, 0.1884, 1.0000), dark: P3(0.6515, 0.2696, 0.1731, 1.0000)), Ink(light: P3(0.6003, 0.2048, 0.1171, 1.0000), dark: P3(0.5746, 0.1959, 0.1007, 1.0000))])

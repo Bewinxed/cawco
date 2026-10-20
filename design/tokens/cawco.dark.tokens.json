@@ -1599,6 +1599,54 @@
           "css": "color-mix(in oklab, {color.selected-bg} 45%, {color.surface-raised})"
         }
       }
+    },
+    "action-top": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.57, 0.165, 33]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.action-solid} calc(l + 0.03) c h)"
+        }
+      }
+    },
+    "action-bottom": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.51, 0.165, 33]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.action-solid} calc(l - 0.03) c h)"
+        }
+      }
+    },
+    "action-hover-top": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.525, 0.16, 34]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.action-hover} calc(l + 0.03) c h)"
+        }
+      }
+    },
+    "action-hover-bottom": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.465, 0.16, 34]
+      },
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.action-hover} calc(l - 0.03) c h)"
+        }
+      }
     }
   },
   "effect": {

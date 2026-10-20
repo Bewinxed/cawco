@@ -10,7 +10,7 @@
   import { pressVariants } from "./press.js";
 
   export const buttonVariants = tv({
-    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-border-button-outline bg-surface-raised bg-clip-padding font-medium text-body text-ink-strong leading-none tracking-[-0.01em] [--hit-edge:1px] hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button mark-line touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-border-button-outline bg-linear-to-b bg-surface-raised from-transparent to-transparent bg-clip-padding font-medium text-body text-ink-strong leading-none tracking-[-0.01em] [--hit-edge:1px] hover:bg-surface-hover disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-error-9 [&_svg:not([class*='size-'])]:size-icon-md [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       /* The press, by size (./press.ts, The Press Rule): a compact button
          scales; one stretched full width, as a list row or a card's body,
@@ -23,9 +23,14 @@
       variant: {
         /* Its fill reaches its border box (`bg-clip-border`), as wide and
            tall as an edged variant's edge, so a primary beside an outline
-           draws the same 36 (30, 24, 44). */
+           draws the same 36 (30, 24, 44). Its top highlight (DESIGN.md,
+           Buttons: "the coral `action-surface` gradient over
+           `action-solid`") is the base's one gradient layer, its stops
+           `action-surface`'s own colours: they are registered colours, so
+           a switch to or from this variant, and its hover, cross the
+           highlight with the fill on one clock (`--transition-control`). */
         default:
-          "border-transparent bg-action-solid bg-action-surface bg-clip-border text-on-action hover:bg-action-hover hover:bg-action-surface-hover",
+          "border-transparent bg-action-solid from-action-top to-action-bottom bg-clip-border text-on-action hover:bg-action-hover hover:from-action-hover-top hover:to-action-hover-bottom",
         outline: "aria-expanded:not-aria-current-page:bg-surface-hover",
         secondary:
           "border-border-hairline bg-surface-recess hover:bg-surface-hover",

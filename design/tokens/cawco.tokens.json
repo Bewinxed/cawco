@@ -1330,6 +1330,58 @@
       "$type": "color",
       "$value": "{color.on-action}"
     },
+    "action-top": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.585, 0.17, 33]
+      },
+      "$description": "action-surface's top stop: action-solid lifted 0.03 L. A stop is a colour, so a control changing to or from the action (the kit Button's variant, its hover) eases its highlight on the fill's own clock.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.action-solid} calc(l + 0.03) c h)"
+        }
+      }
+    },
+    "action-bottom": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.525, 0.17, 33]
+      },
+      "$description": "action-surface's bottom stop: action-solid sunk 0.03 L.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.action-solid} calc(l - 0.03) c h)"
+        }
+      }
+    },
+    "action-hover-top": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.54, 0.165, 33]
+      },
+      "$description": "action-surface-hover's top stop: action-hover lifted 0.03 L.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.action-hover} calc(l + 0.03) c h)"
+        }
+      }
+    },
+    "action-hover-bottom": {
+      "$type": "color",
+      "$value": {
+        "colorSpace": "oklch",
+        "components": [0.48, 0.165, 33]
+      },
+      "$description": "action-surface-hover's bottom stop: action-hover sunk 0.03 L.",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "oklch(from {color.action-hover} calc(l - 0.03) c h)"
+        }
+      }
+    },
     "action-surface": {
       "$type": "gradient",
       "$value": [
@@ -7705,9 +7757,10 @@
         },
         "timingFunction": "{motion.ease-out}"
       },
+      "$description": "A control's colours on one clock: its fill, edge, ink and its gradient's stops (Tailwind's registered --tw-gradient-from and --tw-gradient-to, as its own transition-colors lists them), so a highlight drawn as a gradient over the fill (action-surface) changes with the fill.",
       "$extensions": {
         "dev.cawco": {
-          "css": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
+          "css": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}, --tw-gradient-from {motion.dur-control} {motion.ease-out}, --tw-gradient-to {motion.dur-control} {motion.ease-out}"
         }
       }
     },
@@ -7826,7 +7879,7 @@
       "$description": "transition-control, and the press's transform on the toggle's beat.",
       "$extensions": {
         "dev.cawco": {
-          "css": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}, transform {motion.dur-toggle} {motion.ease-out}"
+          "css": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}, --tw-gradient-from {motion.dur-control} {motion.ease-out}, --tw-gradient-to {motion.dur-control} {motion.ease-out}, transform {motion.dur-toggle} {motion.ease-out}"
         }
       }
     },

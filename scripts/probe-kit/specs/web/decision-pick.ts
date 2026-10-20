@@ -2152,24 +2152,103 @@ const coralOf = (page: Page) =>
       });
   });
 
-/** Send as drawn: its fill, edge, ink, its highlight's opacity, and whether it is the node marked before. */
+/**
+ * Send as drawn: its fill, edge, ink, its highlight's stops, whether it
+ * draws the highlight, and whether it is the node marked before.
+ */
 const sendOf = (page: Page) =>
   page.evaluate(() => {
     const send = document.querySelector<HTMLElement>("[data-send]");
     const marked = (window as unknown as { kitSend?: Element }).kitSend;
+    const style = send ? getComputedStyle(send) : null;
+    // The kit Button's one gradient layer: its stops are registered colours
+    // (Tailwind's --tw-gradient-from and --tw-gradient-to), transparent on
+    // the outline (quiet), action-surface's own on the primary.
+    const top = style?.getPropertyValue("--tw-gradient-from").trim() ?? "";
+    const bottom = style?.getPropertyValue("--tw-gradient-to").trim() ?? "";
+    const clear = (colour: string) =>
+      colour === "rgba(0, 0, 0, 0)" || colour === "#0000";
     return {
-      fill: send ? getComputedStyle(send).backgroundColor : "",
-      edge: send ? getComputedStyle(send).borderTopColor : "",
-      ink: send ? getComputedStyle(send).color : "",
-      // The kit primary's top highlight is its gradient (bg-action-surface);
-      // the outline (quiet) draws none.
-      highlight: send
-        ? Number(getComputedStyle(send).backgroundImage !== "none")
-        : -1,
+      fill: style?.backgroundColor ?? "",
+      edge: style?.borderTopColor ?? "",
+      ink: style?.color ?? "",
+      top,
+      bottom,
+      highlight: style ? Number(!(clear(top) && clear(bottom))) : -1,
       same: !!send && send === marked,
-      quiet: !!send && getComputedStyle(send).backgroundImage === "none",
+      quiet: !!style && clear(top) && clear(bottom),
     };
   });
+
+/**
+ * Every run on Send and anything drawn in it (`getAnimations({ subtree:
+ * true })`, its pseudo-elements among them), held: its property, length,
+ * delay, curve and eased progress; and, read at that progress, what its
+ * fill and highlight's stops should be on the way from `from` to `to`
+ * (CSS Color 4: a colour animates in Oklab, premultiplied, as `color-mix(in
+ * oklab, …)` mixes), beside what is drawn.
+ */
+const sendRunsOf = (
+  page: Page,
+  from: { bottom: string; fill: string; top: string },
+  to: { bottom: string; fill: string; top: string }
+) =>
+  page.evaluate(
+    ([a, b]) => {
+      const send = document.querySelector<HTMLElement>("[data-send]");
+      const runs = (send?.getAnimations({ subtree: true }) ?? []).map((run) => {
+        const timing = run.effect?.getComputedTiming();
+        return {
+          name:
+            (run as CSSTransition).transitionProperty ??
+            (run as CSSAnimation).animationName ??
+            run.id,
+          pseudo: (run.effect as KeyframeEffect | null)?.pseudoElement ?? "",
+          duration: Number(timing?.duration ?? 0),
+          delay: timing?.delay ?? 0,
+          easing: timing?.easing ?? "",
+          progress: timing?.progress ?? null,
+        };
+      });
+      const p = runs[0]?.progress ?? Number.NaN;
+      const mix = (start: string, end: string) => {
+        const probe = document.createElement("i");
+        probe.style.color = `color-mix(in oklab, ${start}, ${end} ${p * 100}%)`;
+        document.body.append(probe);
+        const colour = getComputedStyle(probe).color;
+        probe.remove();
+        return colour;
+      };
+      const style = send ? getComputedStyle(send) : null;
+      return {
+        runs,
+        p,
+        drawn: {
+          fill: style?.backgroundColor ?? "",
+          top: style?.getPropertyValue("--tw-gradient-from").trim() ?? "",
+          bottom: style?.getPropertyValue("--tw-gradient-to").trim() ?? "",
+        },
+        expected: {
+          fill: mix(a.fill, b.fill),
+          top: mix(a.top, b.top),
+          bottom: mix(a.bottom, b.bottom),
+        },
+      };
+    },
+    [from, to] as const
+  );
+
+/** Two colours' figures, each within `by` of the other's. */
+const sameColour = (a: string, b: string, by = 0.004) => {
+  const figures = (colour: string) =>
+    [...colour.matchAll(/-?\d*\.?\d+(?:e-?\d+)?/g)].map((m) => Number(m[0]));
+  const [x, y] = [figures(a), figures(b)];
+  return (
+    a.split("(")[0] === b.split("(")[0] &&
+    x.length === y.length &&
+    x.every((n, i) => Math.abs(n - (y[i] ?? Number.NaN)) <= by)
+  );
+};
 
 /**
  * One coral action at a time, the next act (the owner's ruling): across
@@ -2237,6 +2316,8 @@ async function coralLeg(
     await clock.seek(at);
     turn[String(at)] = await sendOf(page);
   }
+  await clock.seek(0.5);
+  const held = await sendRunsOf(page, before, turn["1"] ?? before);
   await clock.release();
   await look("Continue radius (the last)", "send");
   await page.evaluate(() =>
@@ -2290,6 +2371,45 @@ async function coralLeg(
       after.same &&
       !after.quiet,
     JSON.stringify({ before, runs: runs.map(said), turn, after })
+  );
+  // The variant switch as one thing (the kit Button's highlight is its one
+  // gradient layer over the fill): every run on Send and in it, its fill,
+  // edge, ink and both gradient stops, one start (the protocol's), one
+  // length and one curve, at one eased progress; held at ½, the fill and
+  // the highlight's stops stand that same share of the way to their ends.
+  const names = held.runs.map((run) => run.name).sort();
+  const onSend = runs.filter((run) =>
+    ["--tw-gradient-from", "--tw-gradient-to", "background-color"].includes(
+      run.name
+    )
+  );
+  kit.check(
+    `${label}: Send's switch from outline to primary is one clock on the kit Button: every run on it and in it (fill, edge, ink, the highlight's top and bottom stops) starts together over --dur-control on ease-out, and held at ½ the fill and the highlight stand the same eased share (${Math.round(held.p * 1000) / 1000}) of the way between their ends`,
+    ["--tw-gradient-from", "--tw-gradient-to", "background-color"].every(
+      (name) => names.includes(name)
+    ) &&
+      onSend.length === 3 &&
+      sameClock(onSend).length === 0 &&
+      sameClock(runs).length === 0 &&
+      held.runs.every(
+        (run) =>
+          Math.abs(run.duration - control) < 1 &&
+          run.delay === 0 &&
+          run.easing === OUT &&
+          run.progress !== null &&
+          Math.abs(run.progress - held.p) < 1e-6
+      ) &&
+      held.p > 0 &&
+      held.p < 1 &&
+      !!h1 &&
+      held.drawn.fill !== before.fill &&
+      held.drawn.fill !== h1.fill &&
+      held.drawn.top !== before.top &&
+      held.drawn.top !== h1.top &&
+      sameColour(held.drawn.fill, held.expected.fill) &&
+      sameColour(held.drawn.top, held.expected.top) &&
+      sameColour(held.drawn.bottom, held.expected.bottom),
+    JSON.stringify({ runs: onSend.map(said), held, ends: { before, h1 } })
   );
   await page.close();
 }

@@ -281,6 +281,14 @@
     --action-hover: light-dark(oklch(51% 0.165 33), oklch(49.5% 0.16 34));
     --on-action: oklch(100% 0 0);
     --on-brand: var(--on-action);
+    /* action-surface's top stop: action-solid lifted 0.03 L. A stop is a colour, so a control changing to or from the action (the kit Button's variant, its hover) eases its highlight on the fill's own clock. */
+    --action-top: oklch(from var(--action-solid) calc(l + 0.03) c h);
+    /* action-surface's bottom stop: action-solid sunk 0.03 L. */
+    --action-bottom: oklch(from var(--action-solid) calc(l - 0.03) c h);
+    /* action-surface-hover's top stop: action-hover lifted 0.03 L. */
+    --action-hover-top: oklch(from var(--action-hover) calc(l + 0.03) c h);
+    /* action-surface-hover's bottom stop: action-hover sunk 0.03 L. */
+    --action-hover-bottom: oklch(from var(--action-hover) calc(l - 0.03) c h);
     /* The action is never flat: a top-highlight gradient, lifted ±0.03 L so the top stop keeps 4.5:1 under white. */
     --action-surface: linear-gradient(
       oklch(from var(--action-solid) calc(l + 0.03) c h),
@@ -1564,10 +1572,13 @@
     --pop-rise: 8px;
     /* How soft a fold's content is while it folds shut or opens (Caw's panel: the update's notes, the logins signed in everywhere). transitions-dev Accordion expand: the inner panel cross-blurs 2px as its grid row goes 0fr to 1fr. */
     --fold-blur: 2px;
+    /* A control's colours on one clock: its fill, edge, ink and its gradient's stops (Tailwind's registered --tw-gradient-from and --tw-gradient-to, as its own transition-colors lists them), so a highlight drawn as a gradient over the fill (action-surface) changes with the fill. */
     --transition-control:
       background-color var(--dur-control) var(--ease-out),
       border-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
+      color var(--dur-control) var(--ease-out),
+      --tw-gradient-from var(--dur-control) var(--ease-out),
+      --tw-gradient-to var(--dur-control) var(--ease-out);
     /* Something stepping back in: its fade, and its visibility back at once (the composer's prompts, slots and controls when an ask lets go). */
     --transition-fade-show:
       opacity var(--dur-fade) var(--ease-out), visibility 0s;
@@ -1595,6 +1606,8 @@
       background-color var(--dur-control) var(--ease-out),
       border-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out),
+      --tw-gradient-from var(--dur-control) var(--ease-out),
+      --tw-gradient-to var(--dur-control) var(--ease-out),
       transform var(--dur-toggle) var(--ease-out);
     /* transition-control, and a swiped row's translate home on the exit's beat. */
     --transition-control-slide:
