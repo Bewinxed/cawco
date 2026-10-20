@@ -132,7 +132,6 @@
       case "inside":
       case "needs":
       case "none":
-      case "partial":
       case "refused":
         break;
     }
