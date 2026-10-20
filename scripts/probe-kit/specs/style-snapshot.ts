@@ -368,7 +368,10 @@ const TAILNET_NAME = "scratch-fleet.tail0000.ts.net";
  * funneled); anything else fails, as a CLI asked what it won't say.
  */
 async function onTailnet(): Promise<void> {
-  const dir = join(process.env.TMPDIR ?? join(ROOT, ".probe"), "tailnet-stand-in");
+  const dir = join(
+    process.env.TMPDIR ?? join(ROOT, ".probe"),
+    "tailnet-stand-in"
+  );
   await mkdir(dir, { recursive: true });
   const status = JSON.stringify({
     BackendState: "Running",
