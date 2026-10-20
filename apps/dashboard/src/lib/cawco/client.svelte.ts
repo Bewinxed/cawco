@@ -287,6 +287,10 @@ export interface ProjectRow {
   cap?: ProjectCap | null;
   /** Made with Caw: its Caw is on. */
   caw: boolean;
+  /** The harness its Caw runs on. */
+  cawHarness: HarnessKind;
+  /** The model its Caw runs; null: its harness's default. */
+  cawModel: string | null;
   createdAt: string;
   id: string;
   /** Where its attempts land when their task says nothing. */
@@ -6421,7 +6425,7 @@ export const cawOf = (projectId: string): Promise<CawView> =>
   askHub(`${projectPath(projectId)}/caw`);
 
 /** Turns a project's Caw on or off, or moves it to another harness or model (null: the harness's default). */
-export const configureCaw = (
+export const configureCaw = async (
   projectId: string,
   change: {
     harness?: HarnessKind;
@@ -6430,8 +6434,22 @@ export const configureCaw = (
     model?: string | null;
     on?: boolean;
   }
-): Promise<CawView> =>
-  askHub(`${projectPath(projectId)}/caw`, json("PATCH", change));
+): Promise<CawView> => {
+  const view = await askHub<CawView>(
+    `${projectPath(projectId)}/caw`,
+    json("PATCH", change)
+  );
+  // The hub's answer is where he stands: the project's row says so now,
+  // before the `projects.changed` it sent brings the row read again.
+  const row = state.projects.find((project) => project.id === projectId);
+  if (row) {
+    row.caw = view.on;
+    row.cawHarness = view.harness;
+    row.cawModel = view.model;
+    row.leadInstanceId = view.leadInstanceId;
+  }
+  return view;
+};
 
 /**
  * What a routine's notice reads of it (hub routines.ts `RoutineView`): kept

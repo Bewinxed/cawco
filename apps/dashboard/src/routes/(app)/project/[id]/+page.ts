@@ -95,6 +95,11 @@ export const load: PageLoad = async ({ fetch, params, url }) => {
     barStrip: project !== null,
     project,
     machine,
+    /**
+     * A machine is online as the page opens: whether Caw can start, until
+     * the dashboard's own machines are in (CawLead `canTalk`).
+     */
+    machinesOnline: machines.value.some((row) => row.status === "online"),
     tasks,
     stages,
     find: findSeed(words, found, foundArchived),

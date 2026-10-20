@@ -103,7 +103,7 @@
 
   // --- what his line says -------------------------------------------------------
 
-  const off = $derived(lead.view !== null && !lead.view.on);
+  const off = $derived(lead.on === false);
   /**
    * Past the project's cap with nothing more pressing, the cap's line, as
    * his head's line says it; off and at rest, that only your words wake
@@ -123,9 +123,10 @@
 
   /**
    * His view is read again as the panel opens and whenever a thread of his
-   * starts or ends a turn: the hub starts his lead session on the first
-   * words he answers, and his card (his harness and model) is that
-   * session's, so a view read before it began has no session to open.
+   * starts or ends a turn, for what only it carries (what his own turn
+   * answers, what he started that still runs). His session, whose card his
+   * name opens, is the project row's, which the hub keeps as it starts one
+   * (caw.ts `setLead`).
    */
   const turns = $derived(threads.map((each) => each.status).join(","));
   let turnsSeen: string | null = null;
@@ -137,7 +138,7 @@
     }
   });
 
-  const leadId = $derived(lead.view?.leadInstanceId ?? null);
+  const leadId = $derived(lead.leadId);
   const fine = new MediaQuery("(hover: hover) and (pointer: fine)");
   let cardOpen = $state(false);
   let cardPinned = $state(false);
@@ -183,15 +184,15 @@
   /** A model was picked in the card: its pending and refusal are the card's model line. */
   let choosing = $state(false);
   /**
-   * His harness and model, as his lead session's card keeps them: his view
-   * (CawView) is the setting. A model picked on another harness's rail
+   * His harness and model, as his lead session's card keeps them: the
+   * project's row is the setting. A model picked on another harness's rail
    * moves him to the two together.
    */
   const kept = $derived(
-    lead.view
+    lead.harness
       ? {
-          harness: lead.view.harness,
-          model: lead.view.model,
+          harness: lead.harness,
+          model: lead.model,
           harnesses: CAW_HARNESSES,
           onchoose: ({
             harness,
@@ -202,7 +203,7 @@
           }) => {
             choosing = true;
             lead.configure(
-              harness === lead.view?.harness
+              harness === lead.harness
                 ? { model: model || null }
                 : { harness, model: model || null }
             );
@@ -318,6 +319,7 @@
       <ThreadPane
         active
         docked={{
+          caw: { on: lead.on, canStart: lead.problem === null },
           draft: lead.draft,
           onthread: (id) => {
             threadId = id;

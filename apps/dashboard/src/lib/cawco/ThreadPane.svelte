@@ -65,6 +65,7 @@
   import { failureWords, THREAD_SEND_UNREACHED, unreachable } from "./hub-read";
   import { planProgress, planShows } from "./plan/PlanPane.svelte";
   import PlanRing from "./plan/PlanRing.svelte";
+  import { CAW_NO_MACHINE } from "./project/caw-lead.svelte";
   import FolderFiles from "./project/FolderFiles.svelte";
   import {
     listTasks,
@@ -132,6 +133,12 @@
       onthread: (threadId: string) => void;
       draft: ComposerDraft;
       under?: Snippet;
+      /**
+       * Caw as the page holding his panel reads him (CawLead): on or off
+       * (null: not known), and whether he can start, so the panel opens on
+       * what its page already knows.
+       */
+      caw: { on: boolean | null; canStart: boolean };
     };
   } = $props();
 
@@ -314,21 +321,30 @@
    * composer and no preview beside it, and both came a frame or two later.
    */
   const project = $derived(cawco.project(projectId));
+  /** His switch: the page's word on it when docked in his panel, else the project's row. */
+  const cawOn = $derived.by(() => {
+    if (docked) {
+      return docked.caw.on;
+    }
+    return project ? project.caw : null;
+  });
   /** The machines are known: the socket's first snapshot is in. */
   const machinesKnown = $derived(cawco.liveRead);
   /**
    * No machine is online, so Caw cannot start: the one reason the hub gives
    * (caw.ts `problemOf`: his standing session and every checkout he starts in
-   * need one).
+   * need one). Docked, the page holding his panel says.
    */
   const noMachine = $derived(
-    machinesKnown && cawco.onlineMachines.length === 0
+    docked
+      ? !docked.caw.canStart
+      : machinesKnown && cawco.onlineMachines.length === 0
   );
   /**
    * You can write to Caw, on or off: your words start him. Only no machine
    * for him to start on takes the composer away.
    */
-  const writable = $derived(machinesKnown && !noMachine);
+  const writable = $derived(docked ? !noMachine : machinesKnown && !noMachine);
 
   // --- his plan, the thread's --------------------------------------------------
 
@@ -951,7 +967,7 @@
     {:else if hero}
       <div class="hero" data-thread-hero in:crossIn>
         <EmptyState
-          line={project && !project.caw
+          line={cawOn === false
             ? "Caw is off, so he acts only when you write to him."
             : undefined}
           title="What’s next for {projectName}?"
@@ -1077,10 +1093,7 @@
         out:crossOut
       >
         <Alert class="off-line" role="status">
-          <AlertDescription
-            >No machine is online, so Caw can’t start. Bring a machine online,
-            then write here.</AlertDescription
-          >
+          <AlertDescription>{CAW_NO_MACHINE}</AlertDescription>
           <AlertAction>
             <Button
               label="Check machines"
