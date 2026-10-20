@@ -45,18 +45,24 @@
  *    (DESIGN.md, The 44 Touch Rule).
  * 9. The page's own capture, stacked from the window at each scroll
  *    (decision-embeds.ts `capturePage`), paints every embed: no embed's box
- *    in it is one flat colour.
+ *    in it is one flat colour. Its files are what a delegate can hand
+ *    over: each RGB and at most the hub's 1 MiB (FOLDER_FILE_LIMIT), cut at
+ *    gaps between cards (or between a card's blocks) where one file can't
+ *    hold the page, none starting inside a block of words or a picture; read
+ *    back and stacked they are the picture, pixel for pixel.
  * 10. No console error.
  *
  *   bun scripts/probe-kit/run.ts web decision-embed
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one leg at a time
 import { cpSync, existsSync, mkdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
+import { FOLDER_FILE_LIMIT } from "../../../../packages/hub/src/project-folder";
 import {
   blankEmbeds,
   CAWCO_BRIDGE,
+  captureFaults,
   capturePage,
   EMBED_FRAME,
   type Embed,
@@ -475,12 +481,19 @@ const spec: Spec = {
             );
           }
 
-          const paints = await capturePage(
+          const capture = await capturePage(
             page,
             join(
               OUT,
               `${NAME}-${view === "desk" ? "1440" : "390"}-${theme}.png`
             )
+          );
+          const { paints } = capture;
+          const captured = captureFaults(capture);
+          kit.check(
+            `${leg}: the page's capture is files a delegate can hand over, each RGB and at most ${FOLDER_FILE_LIMIT / 1024 / 1024} MiB, its whole picture pixel for pixel (${capture.files.map((one) => `${basename(one.path)} ${(one.bytes / 1024).toFixed(0)} KiB, rows ${one.rows.from}–${one.rows.to}`).join(", ")}; ${capture.picture.width}×${capture.picture.height})`,
+            capture.files.length > 0 && captured.length === 0,
+            captured.join("\n    ")
           );
           const blank = blankEmbeds(paints);
           kit.check(

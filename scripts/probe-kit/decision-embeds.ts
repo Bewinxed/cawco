@@ -11,8 +11,14 @@
  */
 // biome-ignore-all lint/performance/noAwaitInLoops: one embed at a time, as the person scrolls to each
 import { spawn } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import {
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname, join } from "node:path";
 import type { Page } from "playwright-core";
 import { PNG } from "pngjs";
 import { buildStageHost } from "../../packages/agent/src/stage-host/build";
@@ -22,6 +28,7 @@ import {
   programHost,
   scriptJson,
 } from "../../packages/hub/src/decision-program";
+import { FOLDER_FILE_LIMIT } from "../../packages/hub/src/project-folder";
 import { until } from "../scratch-fleet";
 import { type ShotRead, shootEmbedded } from "./canvas-shots";
 import { ROOT, settle, type Theme } from "./kit";
@@ -616,6 +623,332 @@ export const blankEmbeds = (paints: EmbedPaint[]): string[] =>
         `“${one.embed}”: its ${one.rect.w}×${one.rect.h} box at y ${one.rect.y} is ${Math.round(one.flat * 1000) / 10}% one colour in the page's capture`
     );
 
+/** One file a page's capture wrote: its path, its size and the page's rows it holds (CSS px from the page's top). */
+export interface CaptureFile {
+  bytes: number;
+  path: string;
+  rows: { from: number; to: number };
+}
+
+/** What `capturePage` wrote and read: its files, in the page's order, each embed's box read in the whole picture, and that picture (RGBA, the window's device scale). */
+export interface Capture {
+  files: CaptureFile[];
+  paints: EmbedPaint[];
+  picture: PNG;
+  /** What a reviewer reads whole on the page (`wholesOf`), rows in the picture's device px: no file ends inside one. */
+  wholes: { from: number; to: number }[];
+}
+
+/**
+ * What is wrong with a capture's files, in words, none when nothing is:
+ * a file over the hub's limit or not RGB, a file starting inside a block
+ * of words or a picture, sections that don't abut from the page's top to
+ * its foot, or pixels that differ from the picture once the files are read
+ * back and stacked.
+ */
+export function captureFaults(capture: Capture): string[] {
+  const { picture } = capture;
+  const faults: string[] = [];
+  let next = 0;
+  for (const file of capture.files) {
+    const bytes = readFileSync(file.path);
+    const name = basename(file.path);
+    if (bytes.length > FOLDER_FILE_LIMIT) {
+      faults.push(
+        `${name}: ${(bytes.length / MIB).toFixed(2)} MiB, over ${FOLDER_FILE_LIMIT / MIB} MiB`
+      );
+    }
+    // The IHDR's colour type, byte 25 of the file: 2 is RGB.
+    if (bytes[25] !== 2) {
+      faults.push(`${name}: colour type ${bytes[25]}, not RGB (2)`);
+    }
+    const png = PNG.sync.read(bytes);
+    if (png.width !== picture.width) {
+      faults.push(`${name}: ${png.width}px wide, the page ${picture.width}px`);
+      continue;
+    }
+    const row = picture.width * 4;
+    const from = next;
+    const through = capture.wholes.find(
+      (one) => from > one.from && from < one.to
+    );
+    if (through) {
+      faults.push(
+        `${name}: starts at row ${from}, inside a block read whole (rows ${through.from} to ${through.to})`
+      );
+    }
+    if (
+      !png.data.equals(
+        picture.data.subarray(from * row, (from + png.height) * row)
+      )
+    ) {
+      faults.push(
+        `${name}: its pixels differ from the page's rows ${from} to ${from + png.height}`
+      );
+    }
+    next = from + png.height;
+  }
+  if (next !== picture.height) {
+    faults.push(`the files hold ${next} of the page's ${picture.height} rows`);
+  }
+  return faults;
+}
+
+/** A picture's rows `from` to `to` as a PNG: RGB (colour type 2), the capture being opaque, at deflate level 9 (pngjs's own default, said). */
+function encodeRows(png: PNG, from: number, to: number): Buffer {
+  const part = new PNG({ width: png.width, height: to - from });
+  PNG.bitblt(png, part, 0, from, png.width, to - from, 0, 0);
+  return PNG.sync.write(part, {
+    colorType: 2,
+    inputColorType: 6,
+    inputHasAlpha: true,
+    deflateLevel: 9,
+  });
+}
+
+/**
+ * The page's own backdrop, opaque RGB: what the screen draws under the
+ * page, its root's background (else its body's, which CSS hands the root)
+ * over the browser's white. A canvas resolves any CSS colour.
+ */
+function backdropOf(): [number, number, number] {
+  const ink = document.createElement("canvas").getContext("2d");
+  if (!ink) {
+    return [255, 255, 255];
+  }
+  ink.fillStyle = "#fff";
+  ink.fillRect(0, 0, 1, 1);
+  for (const one of [document.documentElement, document.body]) {
+    ink.fillStyle = getComputedStyle(one).backgroundColor;
+    ink.fillRect(0, 0, 1, 1);
+  }
+  const [r = 255, g = 255, b = 255] = ink.getImageData(0, 0, 1, 1).data;
+  return [r, g, b];
+}
+
+/**
+ * A window's shot as the screen shows it: each pixel not fully opaque laid
+ * over the page's backdrop. Chromium's shot keeps the alpha of a rounded
+ * corner's anti-aliasing where a clipped layer stands (a card's corner at
+ * 120 of 255, some corner pixels at 0); the screen draws those over the
+ * page's backdrop, and so does this.
+ */
+function onBackdrop(shot: PNG, backdrop: [number, number, number]): void {
+  const { data } = shot;
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3] ?? 255;
+    if (a === 255) {
+      continue;
+    }
+    for (let c = 0; c < 3; c += 1) {
+      data[i + c] = Math.round(
+        ((data[i + c] ?? 0) * a + backdrop[c] * (255 - a)) / 255
+      );
+    }
+    data[i + 3] = 255;
+  }
+}
+
+/** The runs of a picture's rows no window's shot reached, in device px: a new PNG's pixels are clear until a shot is stacked over them. */
+function unopaque(png: PNG): { from: number; to: number }[] {
+  const row = png.width * 4;
+  const runs: { from: number; to: number }[] = [];
+  for (let y = 0; y < png.height; y += 1) {
+    let clear = false;
+    for (let i = y * row + 3; i < (y + 1) * row; i += 4) {
+      if (png.data[i] !== 255) {
+        clear = true;
+        break;
+      }
+    }
+    const runOn = runs.at(-1);
+    if (clear && runOn?.to === y) {
+      runOn.to = y + 1;
+    } else if (clear) {
+      runs.push({ from: y, to: y + 1 });
+    }
+  }
+  return runs;
+}
+
+/** A row a picture may be cut at, in device px, and whether it falls between cards (one colour across the whole width) or between the blocks inside one. */
+interface Cut {
+  between: boolean;
+  y: number;
+}
+
+/**
+ * The rows of a picture where it may be cut with nothing a reviewer reads
+ * cut through: the middle of each run of rows the same from one to the
+ * next, outside everything read whole (`wholes`, rows in device px: each
+ * picture and each block of words, `wholesOf`). Such a run crosses nothing
+ * drawn but the sides of the boxes it stands in. A run one colour across
+ * the whole width is a gap between the page's hero and its cards
+ * (`between`); any other a gap between the blocks inside one card.
+ */
+function cutsOf(png: PNG, wholes: { from: number; to: number }[]): Cut[] {
+  const row = png.width * 4;
+  const rowOf = (y: number) => png.data.subarray(y * row, (y + 1) * row);
+  const flat = (y: number) => {
+    const at = y * row;
+    for (let i = at + 4; i < at + row; i += 4) {
+      if (
+        png.data[i] !== png.data[at] ||
+        png.data[i + 1] !== png.data[at + 1] ||
+        png.data[i + 2] !== png.data[at + 2]
+      ) {
+        return false;
+      }
+    }
+    return true;
+  };
+  const cuts: Cut[] = [];
+  let run = 0;
+  for (let y = 1; y <= png.height; y += 1) {
+    if (y < png.height && rowOf(y).equals(rowOf(y - 1))) {
+      continue;
+    }
+    // Rows `run` to `y` are one run of the same row; cut between two of them.
+    const middle = Math.floor((run + y) / 2);
+    if (
+      y - run >= 2 &&
+      !wholes.some((one) => middle > one.from && middle < one.to)
+    ) {
+      cuts.push({ between: flat(middle), y: middle });
+    }
+    run = y;
+  }
+  return cuts;
+}
+
+/**
+ * Where a section starting at `ends[fits[0]]`'s stretch may end, best
+ * first, among the ends `fits` its file is guessed to hold: the furthest,
+ * except that a card that fits a file of its own is kept whole, the
+ * section ending at the gap before it. A card too big for one file is cut
+ * where the section fills.
+ */
+function triesOf(ends: Cut[], sizes: number[], fits: number[]): number[] {
+  const furthest = [...fits].reverse();
+  const [far] = furthest;
+  const gap = furthest.find((i) => ends[i]?.between);
+  if (far === undefined || gap === undefined || ends[far]?.between) {
+    return furthest;
+  }
+  // The card past the furthest gap that fits, to the gap after it.
+  let card = 0;
+  for (let i = gap + 1; i < ends.length; i += 1) {
+    card += sizes[i] ?? 0;
+    if (ends[i]?.between) {
+      break;
+    }
+  }
+  return card <= FOLDER_FILE_LIMIT
+    ? furthest.sort(
+        (a, b) => Number(ends[b]?.between) - Number(ends[a]?.between)
+      )
+    : furthest;
+}
+
+/**
+ * The picture's rows in sections each file holds under the hub's limit on
+ * a delegate's output file (FOLDER_FILE_LIMIT), cut only where `cutsOf`
+ * allows, from the top (`triesOf`). Rows with no such gap that alone encode
+ * over the limit fail by the file they would be.
+ */
+function sectionsOf(
+  png: PNG,
+  cuts: Cut[],
+  name: string
+): { bytes: Buffer; from: number; to: number }[] {
+  const ends = [...cuts, { between: true, y: png.height }];
+  // Each stretch between two cuts encoded once: their sum guesses a section's file.
+  const sizes = ends.map(
+    (end, i) => encodeRows(png, ends[i - 1]?.y ?? 0, end.y).length
+  );
+  const sections: { bytes: Buffer; from: number; to: number }[] = [];
+  let first = 0;
+  while (first < ends.length) {
+    const from = ends[first - 1]?.y ?? 0;
+    const fits: number[] = [];
+    let guess = 0;
+    for (let i = first; i < ends.length; i += 1) {
+      guess += sizes[i] ?? 0;
+      if (guess > FOLDER_FILE_LIMIT) {
+        break;
+      }
+      fits.push(i);
+    }
+    const tries = triesOf(ends, sizes, fits);
+    let taken: { bytes: Buffer; last: number } | null = null;
+    for (const last of tries) {
+      const bytes = encodeRows(png, from, ends[last]?.y ?? from);
+      if (bytes.length <= FOLDER_FILE_LIMIT) {
+        taken = { bytes, last };
+        break;
+      }
+    }
+    if (!taken) {
+      const to = ends[first]?.y ?? png.height;
+      throw new Error(
+        `${name}: its rows ${from} to ${to} (device px) have no gap between cards or blocks to cut at, and encode at ${((sizes[first] ?? 0) / MIB).toFixed(2)} MiB, over the ${FOLDER_FILE_LIMIT / MIB} MiB a delegate's output file holds`
+      );
+    }
+    sections.push({
+      bytes: taken.bytes,
+      from,
+      to: ends[taken.last]?.y ?? png.height,
+    });
+    first = taken.last + 1;
+  }
+  return sections;
+}
+
+const MIB = 1024 * 1024;
+const PNG_EXT = /\.png$/;
+/** A section's file name past its page's: its number. */
+const SECTION = /^\d+\.png$/;
+/** The elements a reviewer takes in as one picture: a Preview's figure with its caption, an image, a diagram, a drawing. */
+const PICTURE = "figure, img, svg, canvas, video, iframe";
+
+/**
+ * What a reviewer reads whole on the page, its rows in CSS px from the
+ * page's top: each picture (`pictures`, a selector) and each block of words,
+ * the nearest box around a run of text that is not itself inline (a
+ * paragraph, a heading, an option chip).
+ */
+function wholesOf(pictures: string): { from: number; to: number }[] {
+  const boxes: { from: number; to: number }[] = [];
+  const add = (one: Element) => {
+    const r = one.getBoundingClientRect();
+    if (r.height > 0) {
+      boxes.push({ from: r.top + scrollY, to: r.bottom + scrollY });
+    }
+  };
+  for (const one of document.querySelectorAll(pictures)) {
+    add(one);
+  }
+  const blocks = new Set<Element>();
+  const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+  for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+    let block = node.textContent?.trim() ? node.parentElement : null;
+    while (
+      block &&
+      block !== document.body &&
+      ["inline", "contents"].includes(getComputedStyle(block).display)
+    ) {
+      block = block.parentElement;
+    }
+    if (block && block !== document.body) {
+      blocks.add(block);
+    }
+  }
+  for (const one of blocks) {
+    add(one);
+  }
+  return boxes;
+}
+
 /**
  * The whole page as the person sees it scrolling down it, into `path`: a
  * picture of the window at each scroll, stacked. A full-page screenshot
@@ -624,12 +957,17 @@ export const blankEmbeds = (paints: EmbedPaint[]): string[] =>
  * iframe outside the first viewport as a blank box (Playwright #40583,
  * open): each Preview's embed is its own origin's, so only a scrolled-to
  * window paints it. Each window is shot once its embeds have had frames to
- * paint. Answers each embed's box read in that picture.
+ * paint.
+ *
+ * Written for a reviewer, each file under the hub's limit on a delegate's
+ * output file, at the window's own scale so its words stay legible: RGB at
+ * deflate level 9, one file where the page fits in one, else numbered
+ * sections (`<name>-1.png`, …) cut between its cards, and between the
+ * blocks of a card too big for one file, never through a block of words or
+ * a picture (`cutsOf`). A file that can't fit fails by name. Answers the
+ * files and each embed's box read in the whole picture.
  */
-export async function capturePage(
-  page: Page,
-  path: string
-): Promise<EmbedPaint[]> {
+export async function capturePage(page: Page, path: string): Promise<Capture> {
   const size = await page.evaluate(() => ({
     full: document.documentElement.scrollHeight,
     height: innerHeight,
@@ -638,6 +976,7 @@ export async function capturePage(
   }));
   const at = (n: number) => Math.round(n * size.scale);
   const out = new PNG({ width: at(size.width), height: at(size.full) });
+  const backdrop = await page.evaluate(backdropOf);
   for (let top = 0; top < size.full; top += size.height) {
     const scrolled = Math.min(top, size.full - size.height);
     await page.evaluate((y) => window.scrollTo(0, y), scrolled);
@@ -652,15 +991,59 @@ export async function capturePage(
     const shot = PNG.sync.read(
       await page.screenshot({ animations: "disabled" })
     );
+    onBackdrop(shot, backdrop);
     // The last window stands flush with the page's foot: only the rows past what is already stacked are new.
     const skip = at(top - scrolled);
     const rows = Math.min(shot.height - skip, out.height - at(top));
     PNG.bitblt(shot, out, 0, skip, out.width, rows, 0, at(top));
   }
   await page.evaluate(() => window.scrollTo(0, 0));
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, PNG.sync.write(out));
-  return embedPaints(page, out);
+  // What a reviewer reads whole, never cut through: rows in device px.
+  const wholes = (await page.evaluate(wholesOf, PICTURE)).map((one) => ({
+    from: Math.floor(one.from * size.scale),
+    to: Math.ceil(one.to * size.scale),
+  }));
+  const name = basename(path);
+  const clear = unopaque(out);
+  if (clear.length > 0) {
+    throw new Error(
+      `${name}: no window's shot reached the page's rows ${clear.map((one) => `${one.from} to ${one.to}`).join(", ")} (device px; the page ${size.width}×${size.full} CSS px, its window ${size.height} tall at ${size.scale}x)`
+    );
+  }
+  const dir = dirname(path);
+  const stem = name.replace(PNG_EXT, "");
+  mkdirSync(dir, { recursive: true });
+  // A capture replaces its page's files of an earlier run, whole or in sections.
+  for (const old of readdirSync(dir)) {
+    const part = old.startsWith(`${stem}-`) ? old.slice(stem.length + 1) : "";
+    if (old === name || SECTION.test(part)) {
+      rmSync(join(dir, old));
+    }
+  }
+  const whole = encodeRows(out, 0, out.height);
+  const sections =
+    whole.length <= FOLDER_FILE_LIMIT
+      ? [{ bytes: whole, from: 0, to: out.height }]
+      : sectionsOf(out, cutsOf(out, wholes), name);
+  const files = sections.map((section, i) => {
+    const file =
+      sections.length === 1 ? path : join(dir, `${stem}-${i + 1}.png`);
+    if (section.bytes.length > FOLDER_FILE_LIMIT) {
+      throw new Error(
+        `${basename(file)}: ${(section.bytes.length / MIB).toFixed(2)} MiB, over the ${FOLDER_FILE_LIMIT / MIB} MiB a delegate's output file holds`
+      );
+    }
+    writeFileSync(file, section.bytes);
+    return {
+      path: file,
+      bytes: section.bytes.length,
+      rows: {
+        from: Math.round(section.from / size.scale),
+        to: Math.round(section.to / size.scale),
+      },
+    };
+  });
+  return { files, paints: await embedPaints(page, out), picture: out, wholes };
 }
 
 /** Each embed's box on the page open in `page`, read in `png`, a picture of the whole page at the window's device scale. */
