@@ -21,6 +21,7 @@ import {
   type Frame,
   type FrameLocator,
   firefox,
+  type Locator,
   type Page,
   webkit,
 } from "playwright-core";
@@ -997,56 +998,65 @@ export const frames = (page: Page): Promise<void> =>
       )
   );
 
-/** How many times {@link pressIn} presses before a press its frame never heard is a failure. */
+/** How many times {@link pressIn} presses before a press its `<iframe>` element took is a failure. */
 const PRESSES = 3;
 
 /**
  * Clicks `selector` in `frame`, a preview's frame of another origin, and
- * returns once its frame's window heard the press. Chromium hit-tests a
- * press sent over the DevTools protocol against the compositor's last
- * frame, and a frame not yet in it takes the press as its `<iframe>`
- * element in the parent: "the compositor might not be up-to-date yet
- * resulting in a misclick (the iframe element becomes the event target
+ * returns once a press went past the frame's `<iframe>` element. Chromium
+ * hit-tests a press sent over the DevTools protocol against the
+ * compositor's last frame, and a frame not yet in it takes the press as its
+ * `<iframe>` element in the parent: "the compositor might not be up-to-date
+ * yet resulting in a misclick (the iframe element becomes the event target
  * instead of the content inside the iframe)" (Puppeteer's
  * test/src/oopif.spec.ts, on crbug.com/1334119). Playwright's click hears
  * no event in the frame and calls it done (its injected
  * `setupHitTargetInterceptor`: `return result || "done"`). A person presses
  * only what was drawn: each press waits for two frames of the page inside
- * and two of the page around it, and a press the frame's window never
- * heard reached nothing in the page, so it is made again.
+ * and two of the page around it, and a press the `<iframe>` element itself
+ * took reached nothing in the page, so it is made again. The element is
+ * watched, not the frame's window: the preview overlay's own window
+ * listener stops a Comment or Draw press before any listener added later
+ * (`preview-overlay/page.ts`, `stopImmediatePropagation`).
  */
 export async function pressIn(
   frame: Frame | FrameLocator,
   selector: string
 ): Promise<void> {
   const root = frame.locator(":root");
+  // Both handles evaluate alike; the cast names the one signature.
+  const element = (
+    "owner" in frame ? frame.owner() : await frame.frameElement()
+  ) as Pick<Locator, "evaluate">;
   for (let press = 1; press <= PRESSES; press += 1) {
     // biome-ignore lint/performance/noAwaitInLoops: each press waits on the one before it
+    await element.evaluate((el: Element) => {
+      const kept = el as unknown as { __kitTook: boolean };
+      kept.__kitTook = false;
+      el.addEventListener(
+        "pointerdown",
+        (event: Event) => {
+          kept.__kitTook = event.target === el;
+        },
+        { once: true }
+      );
+    });
     await root.evaluate(
       () =>
-        new Promise<void>((done) => {
-          const kept = window as unknown as { __kitPressed: boolean };
-          kept.__kitPressed = false;
-          addEventListener(
-            "pointerdown",
-            () => {
-              kept.__kitPressed = true;
-            },
-            { capture: true, once: true }
-          );
-          requestAnimationFrame(() => requestAnimationFrame(() => done()));
-        })
+        new Promise<void>((done) =>
+          requestAnimationFrame(() => requestAnimationFrame(() => done()))
+        )
     );
     await frames(root.page());
     await frame.locator(selector).click();
-    const heard = await root.evaluate(
-      () => (window as unknown as { __kitPressed: boolean }).__kitPressed
+    const took = await element.evaluate(
+      (el: Element) => (el as unknown as { __kitTook: boolean }).__kitTook
     );
-    if (heard) {
+    if (!took) {
       return;
     }
   }
   throw new Error(
-    `${selector}: none of ${PRESSES} presses reached its frame's window; the parent's <iframe> took each`
+    `${selector}: the parent's <iframe> took each of ${PRESSES} presses`
   );
 }
