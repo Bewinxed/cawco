@@ -180,10 +180,13 @@ async function checkFit(
 ): Promise<void> {
   const cardOf = new Map(
     await page.$$eval(EMBED_FRAME, (frames) =>
-      frames.map((frame) => [
-        frame.closest("figure")?.querySelector("figcaption")?.textContent ?? "",
-        frame.closest(".dp-card")?.id ?? "",
-      ])
+      frames.map((frame) => {
+        const caption =
+          frame.closest("figure")?.querySelector("figcaption")?.textContent ??
+          "";
+        // An entry outside a card (a fixed pin's drawing) is its own group.
+        return [caption, frame.closest(".dp-card")?.id ?? `entry ${caption}`];
+      })
     )
   );
   const cut = embeds.flatMap((e) =>
@@ -211,7 +214,7 @@ async function checkFit(
   }
   const mixed = [...scales].filter(([, set]) => set.size > 1);
   kit.check(
-    `${leg}: every frame whole and centred, one scale a card (${[...scales].map(([card, set]) => `${card.replace("decision-", "")} ${[...set].join("/")}`).join(", ")})`,
+    `${leg}: every frame whole and centred, one scale a card (${[...scales].map(([card, set]) => `${card.replace("decision-", "").slice(0, 24)} ${[...set].join("/")}`).join(", ")})`,
     cut.length === 0 && mixed.length === 0,
     [...cut, ...mixed.map(([card, set]) => `${card}: ${[...set].join(", ")}`)]
       .slice(0, 12)

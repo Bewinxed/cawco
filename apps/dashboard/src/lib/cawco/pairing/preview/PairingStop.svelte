@@ -34,6 +34,7 @@
     approved = "swallow",
     expired = "park",
     screen = false,
+    sized = false,
   }: {
     stop: PairingStopName;
     wait?: QrWait;
@@ -41,6 +42,11 @@
     expired?: ExpiredTake;
     /** The whole screen, as the browser shows it: the panel's own 100dvh column, its own top inset. */
     screen?: boolean;
+    /**
+     * As tall as the screen is while a code waits, whatever this stop
+     * holds: frames of different endings compare at one size.
+     */
+    sized?: boolean;
   } = $props();
 
   const SECOND = 1000;
@@ -210,6 +216,13 @@
   }
 
   const payload = $derived(verification(FIXTURE.hub, code));
+  /** What `sized` measures by: a code waiting, drawn hidden under the stop's own panel. */
+  const SIZER = {
+    kind: "waiting" as const,
+    userCode: FIXTURE.code,
+    verificationUriComplete: verification(FIXTURE.hub, FIXTURE.code),
+    expiresAt: Date.now() + AT_REST,
+  };
 </script>
 
 <div class="stop" data-screen={screen || undefined}>
@@ -224,19 +237,32 @@
       />
     </div>
   {/if}
-  {#key run}
-    <PairingPanel
-      {approved}
-      {expired}
-      {leaving}
-      {now}
-      onheld={playing ? held : undefined}
-      onstart={start}
-      {payload}
-      {stage}
-      {wait}
-    />
-  {/key}
+  <div class="screen">
+    {#key run}
+      <PairingPanel
+        {approved}
+        {expired}
+        {leaving}
+        {now}
+        onheld={playing ? held : undefined}
+        onstart={start}
+        {payload}
+        {stage}
+        {wait}
+      />
+    {/key}
+    {#if sized}
+      <div class="sizer" aria-hidden="true" inert>
+        <PairingPanel
+          now={SIZER.expiresAt - AT_REST}
+          onstart={() => undefined}
+          payload={SIZER.verificationUriComplete}
+          stage={SIZER}
+          {wait}
+        />
+      </div>
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -251,10 +277,21 @@
   .stop[data-screen] {
     inline-size: 100%;
   }
-  .stop:not([data-screen]) > :global([data-slot="pairing"]) {
+  .stop:not([data-screen]) :global([data-slot="pairing"]) {
     min-block-size: auto;
     padding-block: var(--space-6);
     border-radius: var(--radius-lg);
+  }
+  /* The panel, and under it where `sized`, a waiting panel no one sees that
+     sets the height: the shown one stretches to it. */
+  .screen {
+    display: grid;
+  }
+  .screen > :global(*) {
+    grid-area: 1 / 1;
+  }
+  .sizer {
+    visibility: hidden;
   }
   .controls {
     display: flex;

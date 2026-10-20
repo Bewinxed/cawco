@@ -22,8 +22,8 @@ export default {
   parameters: { viewport: 544 },
 };
 
-/** Asking the hub for a code: a cloud of dots drifts in the card while the code is made, over empty boxes. */
-export const Asking = { args: {} };
+/** Asking the hub for a code: a cloud of dots drifts in the card while the code is made, over empty boxes. Drawn on a narrow screen, so a page draws it whole. */
+export const Asking = { args: {}, parameters: { viewport: 350 } };
 
 /** The code waits: once a breath, a ring leaves the card's edge. */
 export const Waiting = { args: { stop: "waiting", wait: "ping" } };
@@ -46,23 +46,29 @@ export const Approved = { args: { stop: "approved", approved: "swallow" } };
 /** Approved, the other take: the whole card flies up to Caw. */
 export const ApprovedFly = { args: { stop: "approved", approved: "fly" } };
 
-/** Denied: the dots burst and fall, the head shakes, the space closes up. */
-export const Denied = { args: { stop: "denied" } };
+/** Denied: the dots burst and fall, the head shakes, the space closes up. Drawn on a narrow screen, so a page draws it whole. */
+export const Denied = {
+  args: { stop: "denied" },
+  parameters: { viewport: 350 },
+};
 
-/** Expired: it drains away and a fresh code shuffles straight back in, where it rests. Drawn on a narrow screen, so a page draws it whole. */
+/** Expired: it drains away and a fresh code shuffles straight back in, where it rests. On a narrow screen, as tall as a waiting one, so a page draws it whole and beside the other take at one size. */
 export const Expired = {
-  args: { stop: "expired", expired: "refresh" },
+  args: { stop: "expired", expired: "refresh", sized: true },
   parameters: { viewport: 350 },
 };
 
-/** Expired, the other take: it drains away and waits on New code. Drawn on a narrow screen, so a page draws it whole. */
+/** Expired, the other take: it drains away and waits on New code. On a narrow screen, as tall as a waiting one, so a page draws it whole and beside the other take at one size. */
 export const ExpiredParked = {
-  args: { stop: "expired", expired: "park" },
+  args: { stop: "expired", expired: "park", sized: true },
   parameters: { viewport: 350 },
 };
 
-/** The hub refused: no code, Caw, why, Try again, and the hub's own words. */
-export const Failed = { args: { stop: "failed" } };
+/** The hub refused: no code, Caw, why, Try again, and the hub's own words. Drawn on a narrow screen, so a page draws it whole. */
+export const Failed = {
+  args: { stop: "failed" },
+  parameters: { viewport: 350 },
+};
 
 /** Denied on the whole screen, as the browser shows it: Caw and the words stay put while the code folds away. */
 export const DeniedOnScreen = {
@@ -103,41 +109,63 @@ export const SweepFrames = {
   }),
 };
 
-/** Caw swallows the code: 100, 200 and 320ms in, Caw turning done at dur-panel (280ms). */
+/** Caw swallows the code: its own start, middle and end (120, 290 and 450ms in), Caw turning done at dur-panel (280ms). */
 export const SwallowFrames = {
   parameters: { viewport: 920 },
   render: () => ({
     Component: Moments,
     props: {
       act: "swallow",
-      at: [100, 200, 320],
-      caw: ["needs-you", "needs-you", "done"],
+      at: [120, 290, 450],
+      caw: ["needs-you", "done", "done"],
     },
   }),
 };
 
-/** The code flies up to Caw: the same moments, so the two takes are compared at one time. */
+/** The code flies up to Caw: its own start, middle and end (70, 160 and 250ms in), the end while the card is still there to see. */
 export const FlyFrames = {
   parameters: { viewport: 920 },
   render: () => ({
     Component: Moments,
     props: {
       act: "fly",
-      at: [100, 200, 320],
-      caw: ["needs-you", "needs-you", "done"],
+      at: [70, 160, 250],
+      caw: ["needs-you", "needs-you", "needs-you"],
+    },
+  }),
+};
+
+/** Fixed from the owner's pins: the code arriving, its dots shuffling into place (100, 350 and 700ms in). */
+export const ArriveFrames = {
+  parameters: { viewport: 920 },
+  render: () => ({
+    Component: Moments,
+    props: { act: "arrive", at: [100, 350, 700] },
+  }),
+};
+
+/** Fixed from the owner's pins: a dead code falling apart under Caw, who stays put (90, 220 and 360ms in). */
+export const BreakFrames = {
+  parameters: { viewport: 920 },
+  render: () => ({
+    Component: Moments,
+    props: {
+      act: "burst",
+      at: [90, 220, 360],
+      caw: ["needs-you", "needs-you", "needs-you"],
     },
   }),
 };
 
 /** Denied, squeezed shut: the face in the code at its size, and enlarged. */
 export const FaceSqueeze = {
-  parameters: { viewport: 300 },
+  parameters: { viewport: 440 },
   render: () => ({ Component: FaceStop, props: { face: "squeeze" } }),
 };
 
 /** Denied, a wince: the face in the code at its size, and enlarged. */
 export const FaceWince = {
-  parameters: { viewport: 300 },
+  parameters: { viewport: 440 },
   render: () => ({ Component: FaceStop, props: { face: "wince" } }),
 };
 
