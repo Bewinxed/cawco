@@ -28,9 +28,11 @@
  * 11. Nothing scrolls the page sideways.
  * 12. The page's own capture paints every embed (decision-embeds.ts
  *    `capturePage`: the page pictured window by window as the person
- *    scrolls it), and each tile of it is under 1 MiB.
+ *    scrolls it), and is files a delegate can hand over: RGB, each within
+ *    the hub's 1 MiB (a tall page in numbered sections cut between its
+ *    cards), read back pixel for pixel (`captureFaults`).
  *
- * Each leg's picture goes to .probe/decision-pages as tiles, beside a
+ * Each leg's picture goes to .probe/decision-pages as its files, beside a
  * manifest of its cards (question, why, options, recommended), the page's
  * height and its options' places, what each embed drew, and every check
  * with its output.
@@ -42,17 +44,17 @@ import {
   mkdirSync,
   readFileSync,
   rmSync,
-  statSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import type { Page } from "playwright-core";
-import { PNG } from "pngjs";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
+import { FOLDER_FILE_LIMIT } from "../../../../packages/hub/src/project-folder";
 import {
   APP,
   blankEmbeds,
   CAWCO_BRIDGE,
+  captureFaults,
   capturePage,
   EMBED_FRAME,
   type Embed,
@@ -64,12 +66,9 @@ import { type Kit, ROOT, type Spec, THEMES } from "../../kit";
 
 const OUT = join(ROOT, ".probe/decision-pages");
 const SHOTS = join(OUT, "plan-steps-frames");
-const SCRATCH = join(process.env.TMPDIR ?? "/tmp", "decision-plan-steps");
 const NAME = "plan-steps";
 const PROPOSAL = "src/lib/cawco/plan/proposal";
 const PROGRAM = readFileSync(join(APP, PROPOSAL, "page.oui"), "utf8");
-/** Under this, a tile of a page's picture opens in a reviewer's reader. */
-const TILE_BYTES = 1024 * 1024;
 
 /** Each way's canvas, by the artifact id its Preview names, and the states file it draws. */
 const CANVASES: Record<string, readonly string[]> = {
@@ -350,35 +349,6 @@ function cardsOf() {
   );
 }
 
-/** The page's picture in tiles of whole rows, each under {@link TILE_BYTES}, as `<prefix>-<n>.png`; answers each tile's path and size. */
-function writeTiles(
-  whole: string,
-  prefix: string
-): { bytes: number; path: string }[] {
-  const png = PNG.sync.read(readFileSync(whole));
-  const out: { bytes: number; path: string }[] = [];
-  const slice = (from: number, rows: number) => {
-    const tile = new PNG({ width: png.width, height: rows });
-    PNG.bitblt(png, tile, 0, from, png.width, rows, 0, 0);
-    const bytes = PNG.sync.write(tile);
-    if (bytes.length >= TILE_BYTES && rows > 1) {
-      const half = Math.ceil(rows / 2);
-      slice(from, half);
-      slice(from + half, rows - half);
-      return;
-    }
-    const path = `${prefix}-${out.length + 1}.png`;
-    writeFileSync(path, bytes);
-    out.push({ path, bytes: statSync(path).size });
-  };
-  // A window's height a tile, at the picture's scale: what a reader sees at once.
-  const tall = Math.min(png.height, Math.round(png.width * 0.625));
-  for (let from = 0; from < png.height; from += tall) {
-    slice(from, Math.min(tall, png.height - from));
-  }
-  return out;
-}
-
 /** What each embed's own frame shows, by its states file and the stories it names. */
 async function readFrames(page: Page): Promise<Map<string, Facts>> {
   const facts = new Map<string, Facts>();
@@ -482,12 +452,36 @@ function frameChecks(
   );
 }
 
+/** The page's capture into .probe/decision-pages, and its two checks: files a delegate can hand over, every embed painted. */
+async function captured(
+  page: Page,
+  leg: string,
+  at: string,
+  check: (name: string, passed: boolean, output: string) => void
+) {
+  const capture = await capturePage(page, join(OUT, `${NAME}-${at}.png`));
+  const { paints } = capture;
+  const faults = captureFaults(capture);
+  check(
+    `${leg}: the page's capture is files a delegate can hand over, each RGB and at most ${FOLDER_FILE_LIMIT / 1024 / 1024} MiB, its whole picture pixel for pixel (${capture.files.map((f) => `${basename(f.path)} ${(f.bytes / 1024).toFixed(0)} KiB, rows ${f.rows.from}–${f.rows.to}`).join(", ")}; ${capture.picture.width}×${capture.picture.height})`,
+    capture.files.length > 0 && faults.length === 0,
+    faults.join("\n    ") || "every file whole and within the limit"
+  );
+  const blank = blankEmbeds(paints);
+  check(
+    `${leg}: the page's own capture paints every embed (${paints.map((one) => `${Math.round(one.flat * 1000) / 10}%`).join(", ")} their commonest colour)`,
+    paints.length === PREVIEWS.length && blank.length === 0,
+    blank.join("\n    ") ||
+      `${paints.length} of ${PREVIEWS.length} embeds painted`
+  );
+  return capture;
+}
+
 const spec: Spec = {
   name: "decision-plan-steps",
   run: async (kit: Kit) => {
     rmSync(OUT, { recursive: true, force: true });
     mkdirSync(SHOTS, { recursive: true });
-    mkdirSync(SCRATCH, { recursive: true });
     const checks: Checked[] = [];
     const check = (name: string, passed: boolean, output: string) => {
       checks.push({ check: name, passed, output });
@@ -588,25 +582,11 @@ const spec: Spec = {
           );
 
           cards = await page.evaluate(cardsOf);
-          const whole = join(SCRATCH, `${NAME}-${size}-${theme}.png`);
-          const paints = await capturePage(page, whole);
-          const blank = blankEmbeds(paints);
-          const tiles = writeTiles(
-            whole,
-            join(OUT, `${NAME}-${size}-${theme}`)
-          );
-          check(
-            `${leg}: the page's own capture paints every embed, in ${tiles.length} tiles each under 1 MiB (${paints.map((one) => `${Math.round(one.flat * 1000) / 10}%`).join(", ")} their commonest colour; tiles ${tiles.map((one) => `${Math.round(one.bytes / 1024)} KiB`).join(", ")})`,
-            paints.length === PREVIEWS.length &&
-              blank.length === 0 &&
-              tiles.every((one) => one.bytes < TILE_BYTES),
-            blank.join("\n    ") ||
-              `${paints.length} of ${PREVIEWS.length} embeds painted`
-          );
+          const capture = await captured(page, leg, `${size}-${theme}`, check);
           legs[leg] = {
             height: at.height,
             options: at.cells,
-            tiles: tiles.map((one) => one.path.replace(`${ROOT}/`, "")),
+            files: capture.files.map((one) => one.path.replace(`${ROOT}/`, "")),
             embeds: embeds.map((e) => ({
               file: e.file,
               named: e.named,
@@ -621,7 +601,6 @@ const spec: Spec = {
       }
     } finally {
       await stage.stop();
-      rmSync(SCRATCH, { recursive: true, force: true });
     }
     writeFileSync(
       join(OUT, `${NAME}-manifest.json`),
