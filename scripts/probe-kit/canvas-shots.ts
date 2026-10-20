@@ -93,7 +93,7 @@ const keyOf = (selector: string): string | null =>
 interface Painted {
   /** Where it stands on the page, CSS px: what the picture's clip is measured on. */
   page: { x: number; y: number };
-  /** The colour the DOM paints at the point, 0–255 sRGB, or null where it can't be told (an image, a gradient, text on it). */
+  /** The colour the DOM paints at the point, 0–255 sRGB, a pseudo-element's surface included, or null where it can't be told (an image, a gradient, text on it, a colour seen through, a pseudo-element whose box or paint order no read gives). */
   rgb: [number, number, number] | null;
   /** Where it stands in the frame's body, CSS px, for the fault's words. */
   x: number;
@@ -245,8 +245,238 @@ function gridOf(args: { selector: string; grid: number }) {
    */
   const chrome = document.getElementById("cawco-chrome")?.shadowRoot;
   const over = chrome ? boxesOf([...chrome.querySelectorAll("*")]) : [];
-  /** The flat colour under a hit: the nearest box out from it with an opaque background and no image; null where that can't be told. */
-  const paintedAt = (hit: Element): [number, number, number] | null => {
+  /** Whether a contain value makes a box its absolute children's containing block and a stacking context (paint, layout, strict, content). */
+  const contains = (value: string) =>
+    ["paint", "layout", "strict", "content"].some((one) => value.includes(one));
+  /** A length in CSS px, NaN where it isn't one ("auto", a percentage). */
+  const lengthOf = (value: string) =>
+    value.endsWith("px") ? Number.parseFloat(value) : Number.NaN;
+  /** The sum of some lengths in CSS px. */
+  const sumOf = (...values: string[]) =>
+    values.reduce((all, one) => all + lengthOf(one), 0);
+  /** A box's border-box width and height in its own CSS px, from its used size (a positioned or block box's computed width is its used one). */
+  const sizeOf = (style: CSSStyleDeclaration) => {
+    const border = style.boxSizing === "border-box";
+    return {
+      w:
+        lengthOf(style.width) +
+        (border
+          ? 0
+          : sumOf(
+              style.paddingLeft,
+              style.paddingRight,
+              style.borderLeftWidth,
+              style.borderRightWidth
+            )),
+      h:
+        lengthOf(style.height) +
+        (border
+          ? 0
+          : sumOf(
+              style.paddingTop,
+              style.paddingBottom,
+              style.borderTopWidth,
+              style.borderBottomWidth
+            )),
+    };
+  };
+  /** Whether a box starts a stacking context (CSS 2.1 Appendix E, CSS Positioned Layout): what a child's negative z-index paints above. */
+  const stacks = (style: CSSStyleDeclaration) =>
+    (style.position !== "static" && style.zIndex !== "auto") ||
+    Number(style.opacity) < 1 ||
+    style.transform !== "none" ||
+    style.filter !== "none" ||
+    style.isolation === "isolate" ||
+    style.mixBlendMode !== "normal" ||
+    contains(style.contain);
+  /** Drawn through or moved: what leaves a box's own fill unreadable at a point. */
+  const throughOf = (style: CSSStyleDeclaration) =>
+    Number(style.opacity) < 1 ||
+    style.filter !== "none" ||
+    style.backdropFilter !== "none" ||
+    style.mixBlendMode !== "normal" ||
+    style.transform !== "none" ||
+    style.clipPath !== "none" ||
+    style.maskImage !== "none" ||
+    style.backgroundImage !== "none" ||
+    style.boxShadow.includes("inset");
+  const SIDES = ["top", "right", "bottom", "left"] as const;
+  /** A side's border width in CSS px, 0 where it draws none. */
+  const borderOf = (
+    style: CSSStyleDeclaration,
+    side: (typeof SIDES)[number]
+  ) =>
+    style.getPropertyValue(`border-${side}-style`) === "none"
+      ? 0
+      : lengthOf(style.getPropertyValue(`border-${side}-width`)) || 0;
+  /** A box drawn in the page: its corner and size, page px. */
+  interface Drawn {
+    h: number;
+    left: number;
+    top: number;
+    w: number;
+  }
+  /**
+   * An absolute pseudo-element's box in the page, null where it can't be
+   * told: `el` must be its containing block (positioned, transformed,
+   * filtered or contained), and its place is its used insets and margins
+   * from `el`'s padding box, its size its used width and height, in `el`'s
+   * own CSS px, scaled by how wide `el` is drawn (CSS zoom, the canvas's
+   * own scale).
+   */
+  const pseudoBoxOf = (
+    own: CSSStyleDeclaration,
+    edge: DOMRect,
+    style: CSSStyleDeclaration
+  ): Drawn | null => {
+    const held =
+      own.position !== "static" ||
+      own.transform !== "none" ||
+      own.filter !== "none" ||
+      contains(own.contain);
+    const ownSize = sizeOf(own);
+    const scale = ownSize.w > 0 ? edge.width / ownSize.w : Number.NaN;
+    const size = sizeOf(style);
+    const dx = lengthOf(style.left) + lengthOf(style.marginLeft);
+    const dy = lengthOf(style.top) + lengthOf(style.marginTop);
+    if (!(
+      held &&
+      style.position === "absolute" &&
+      [scale, size.w, size.h, dx, dy].every(Number.isFinite)
+    )) {
+      return null;
+    }
+    return {
+      left: edge.left + (lengthOf(own.borderLeftWidth) + dx) * scale,
+      top: edge.top + (lengthOf(own.borderTopWidth) + dy) * scale,
+      w: size.w * scale,
+      h: size.h * scale,
+    };
+  };
+  /** Whether a point (dx, dy) inside a drawn box lies outside one of its rounded corners' curves, where the box paints nothing. */
+  const cutAt = (
+    style: CSSStyleDeclaration,
+    box: Drawn,
+    scale: number,
+    dx: number,
+    dy: number
+  ) =>
+    (
+      [
+        [style.borderTopLeftRadius, dx, dy],
+        [style.borderTopRightRadius, box.w - dx, dy],
+        [style.borderBottomRightRadius, box.w - dx, box.h - dy],
+        [style.borderBottomLeftRadius, dx, box.h - dy],
+      ] as const
+    ).some(([value, across, down]) => {
+      const [x0 = "0px", y0 = x0] = value.split(" ");
+      const radius = (part: string, side: number) =>
+        part.endsWith("%")
+          ? (Number.parseFloat(part) / 100) * side
+          : Number.parseFloat(part) * scale;
+      const rx = radius(x0, box.w);
+      const ry = radius(y0, box.h);
+      return (
+        rx > 0 &&
+        ry > 0 &&
+        across < rx &&
+        down < ry &&
+        ((rx - across) / rx) ** 2 + ((ry - down) / ry) ** 2 >= 1
+      );
+    });
+  /** A pseudo-element's own fill where its box holds the point: its flat colour, "none" where it has none, null where it is seen through or may lie under `own`'s background (a negative z-index with no stacking context of `own`'s, CSS 2.1 Appendix E). */
+  const fillOf = (
+    style: CSSStyleDeclaration,
+    own: CSSStyleDeclaration
+  ): [number, number, number] | "none" | null => {
+    const [r = 0, g = 0, b = 0, a = 0] = rgba(style.backgroundColor);
+    if (a === 0) {
+      return "none";
+    }
+    if (Number.parseInt(style.zIndex, 10) < 0 && !stacks(own)) {
+      return null;
+    }
+    return a === 255 ? [r, g, b] : null;
+  };
+  /** Whether a pseudo-element is drawn and paints anything over its box: a fill, an image, a border or a shadow. */
+  const paintsAny = (style: CSSStyleDeclaration) =>
+    !(["none", "normal"].includes(style.content) || style.display === "none") &&
+    (rgba(style.backgroundColor)[3] !== 0 ||
+      style.backgroundImage !== "none" ||
+      style.boxShadow !== "none" ||
+      SIDES.some((side) => borderOf(style, side) > 0));
+  /** Whether a point (dx, dy) inside a drawn box stands on its border. */
+  const onBorderAt = (
+    style: CSSStyleDeclaration,
+    box: Drawn,
+    scale: number,
+    dx: number,
+    dy: number
+  ) => {
+    const band = (side: (typeof SIDES)[number]) =>
+      borderOf(style, side) * scale;
+    return (
+      dx < band("left") ||
+      dy < band("top") ||
+      box.w - dx <= band("right") ||
+      box.h - dy <= band("bottom")
+    );
+  };
+  /**
+   * What one pseudo-element of `el` paints at (x, y): its flat colour,
+   * "none" where it paints nothing there, null where that can't be told
+   * (its box unknown, a shadow that could reach the point, its border,
+   * seen through or moved, or under a negative z-index `el`'s own
+   * background may cover, CSS 2.1 Appendix E).
+   */
+  const onePseudoAt = (
+    el: Element,
+    pseudo: "::after" | "::before",
+    x: number,
+    y: number
+  ): [number, number, number] | "none" | null => {
+    const style = getComputedStyle(el, pseudo);
+    if (!paintsAny(style)) {
+      return "none";
+    }
+    const own = getComputedStyle(el);
+    const box = pseudoBoxOf(own, el.getBoundingClientRect(), style);
+    if (!box) {
+      return null;
+    }
+    const scale = box.w / sizeOf(style).w;
+    const dx = x - box.left;
+    const dy = y - box.top;
+    const inside = dx >= 0 && dy >= 0 && dx < box.w && dy < box.h;
+    if (!inside || cutAt(style, box, scale, dx, dy)) {
+      // Where its box paints nothing only its shadow could reach.
+      return style.boxShadow === "none" ? "none" : null;
+    }
+    return onBorderAt(style, box, scale, dx, dy) || throughOf(style)
+      ? null
+      : fillOf(style, own);
+  };
+  /**
+   * What a box's ::after or ::before paints at (x, y) in the page, the one
+   * drawn last first: its flat colour, "none" where neither paints there,
+   * null where that can't be told. A surface drawn on a pseudo-element (the
+   * kit's sheets: drawer-content.svelte) stands over its box's own
+   * background.
+   */
+  const pseudoAt = (
+    el: Element,
+    x: number,
+    y: number
+  ): [number, number, number] | "none" | null => {
+    const after = onePseudoAt(el, "::after", x, y);
+    return after === "none" ? onePseudoAt(el, "::before", x, y) : after;
+  };
+  /** The flat colour under a hit at (x, y): the nearest box out from it with an opaque background, its own or a pseudo-element's, and no image; null where that can't be told. */
+  const paintedAt = (
+    hit: Element,
+    x: number,
+    y: number
+  ): [number, number, number] | null => {
     if (mixed(hit)) {
       return null;
     }
@@ -255,6 +485,10 @@ function gridOf(args: { selector: string; grid: number }) {
       at && body.contains(at);
       at = at.parentElement
     ) {
+      const pseudo = pseudoAt(at, x, y);
+      if (pseudo !== "none") {
+        return pseudo;
+      }
       const style = getComputedStyle(at);
       const [r = 0, g = 0, b = 0, a = 0] = rgba(style.backgroundColor);
       if (style.backgroundImage !== "none" || (a > 0 && a < 255)) {
@@ -301,7 +535,9 @@ function gridOf(args: { selector: string; grid: number }) {
       points.push({
         page,
         rgb:
-          onText(hit) || boxAt(unhit, page.x, page.y) ? null : paintedAt(hit),
+          onText(hit) || boxAt(unhit, page.x, page.y)
+            ? null
+            : paintedAt(hit, page.x, page.y),
         x,
         y,
       });
