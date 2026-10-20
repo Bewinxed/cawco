@@ -1,6 +1,6 @@
 // "Every state is handled": typescript-eslint's switch-exhaustiveness-check
 // over the dashboard and every package. A switch over a union or an enum
-// names each member or has a default. The rule reads types ("This rule
+// names each member: a `default:` does not stand in for one. The rule reads types ("This rule
 // requires type information to run", typescript-eslint.io), so each file is
 // read through TypeScript's project service (`projectService`), the nearest
 // tsconfig deciding; a Svelte file's `<script lang="ts">` too, with
@@ -8,7 +8,8 @@
 //
 // Its own config, apart from eslint.config.mjs (the design system's rules,
 // which every lane runs on its files), run from the repository's root by
-// scripts/states-lint.ts (`bun run lint`), which reads the files in batches.
+// scripts/states-lint.ts (`bun run lint`, and `bun run lint:changed` on the
+// changed files and what imports them), which reads the files in batches.
 import { plugin as shadcn } from "@shadcn/lint";
 import tsPlugin from "@typescript-eslint/eslint-plugin";
 import tsParser from "@typescript-eslint/parser";

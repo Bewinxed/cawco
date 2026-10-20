@@ -1,8 +1,15 @@
 /**
- * `bun scripts/states-lint.ts` (part of `bun run lint`): every state is
- * handled. typescript-eslint's switch-exhaustiveness-check over the
+ * `bun scripts/states-lint.ts [--changed]` (part of `bun run lint`): every
+ * state is handled. typescript-eslint's switch-exhaustiveness-check over the
  * dashboard and every package (apps/dashboard/eslint.states.config.mjs): a
- * switch over a union or an enum names each member or has a default.
+ * switch over a union or an enum names each member.
+ *
+ * `--changed` (`bun run lint:changed`): only the files that differ from the
+ * merge-base with origin/main, or untracked, and every file that imports one
+ * of them at any depth (lib/importers.ts), since a member added to a union
+ * leaves unhandled a switch in a file that never changed. Every file when a
+ * change reaches files without an import (a manifest, a tsconfig, a
+ * declaration file, this check's own configuration).
  *
  * The rule reads types, through TypeScript's project service, and a process
  * that reads `.ts` and `.svelte` files together slows with every file it
@@ -14,6 +21,7 @@
  * Exits 1 on any finding.
  */
 import { resolve } from "node:path";
+import { changedFiles, reachedBy } from "./lib/importers";
 
 const ROOT = resolve(import.meta.dir, "..");
 const ESLINT = "apps/dashboard/node_modules/.bin/eslint";
@@ -22,7 +30,15 @@ const CONFIG = "apps/dashboard/eslint.states.config.mjs";
 const CHUNK = 100;
 const PROBLEMS = /✖ (\d+) problems?/;
 
-const files =
+/** What the check itself reads besides the files: a change to one is a change to every verdict. */
+const OWN = [
+  "scripts/states-lint.ts",
+  "scripts/lib/importers.ts",
+  CONFIG,
+  "apps/dashboard/eslint-plugin-house.mjs",
+];
+
+const every =
   // `:(glob)` so `**/` matches no folder too (a file directly under `src/`).
   (
     await Bun.$`git ls-files -co --exclude-standard -- ${":(glob)apps/dashboard/src/**/*.ts"} ${":(glob)apps/dashboard/src/**/*.svelte"} ${":(glob)packages/*/src/**/*.ts"} ${":(glob)packages/*/src/**/*.tsx"}`
@@ -31,15 +47,22 @@ const files =
   )
     .split("\n")
     .filter(Boolean);
-// The dashboard's tsconfig extends the one SvelteKit writes.
+// The dashboard's tsconfig extends the one SvelteKit writes, and a route's
+// `./$types` is among what it writes.
 await Bun.$`bunx svelte-kit sync`
   .cwd(resolve(ROOT, "apps", "dashboard"))
   .quiet();
+const changed = process.argv.includes("--changed");
+const files = changed ? reachedBy(changedFiles(), every, OWN) : every;
+const scope = changed
+  ? `${files.length} of ${every.length} files: the changed ones and what imports them`
+  : `${files.length} files`;
 
 const svelte = files.filter((file) => file.endsWith(".svelte"));
 /** Every `.ts` file in one process; the Svelte files a hundred at a time. */
+const plain = files.filter((file) => !file.endsWith(".svelte"));
 const batches = [
-  files.filter((file) => !file.endsWith(".svelte")),
+  ...(plain.length > 0 ? [plain] : []),
   ...Array.from({ length: Math.ceil(svelte.length / CHUNK) }, (_, i) =>
     svelte.slice(i * CHUNK, (i + 1) * CHUNK)
   ),
@@ -67,7 +90,7 @@ for (const chunk of batches) {
 }
 console.log(
   found === 0
-    ? `switch exhaustiveness: every switch over a union or enum is whole (${files.length} files)`
-    : `switch exhaustiveness: ${found} switch(es) leave a case unhandled (${files.length} files)`
+    ? `switch exhaustiveness: every switch over a union or enum is whole (${scope})`
+    : `switch exhaustiveness: ${found} switch(es) leave a case unhandled (${scope})`
 );
 process.exit(failed ? 1 : 0);

@@ -1,5 +1,5 @@
 /**
- * `bun scripts/fmt.ts [--check] [--changed] [paths…]`: the repository's
+ * `bun scripts/fmt.ts [--check] [paths…]`: the repository's
  * formatter, `bun fmt` from a pinned Bun canary. Biome lints; this formats.
  *
  * - The files are the ones git sees (`git ls-files -co --exclude-standard`,
@@ -7,9 +7,6 @@
  *   `.git/info/exclude` (a cawco workspace's read-only stand-ins such as
  *   opencode.json), is never read or written. `bun fmt`'s own discovery reads
  *   only `.gitignore` and `.prettierignore`.
- * - `--changed`: only the files that differ from the merge-base with
- *   origin/main, and the untracked ones git does not ignore, as
- *   `bun run lint:changed` checks.
  * - `--check`: write nothing; exit 1 when a file is not formatted.
  * - The options are `.prettierrc` (site/.prettierrc under site/), what Biome
  *   formatted with before; `.prettierignore` names what is left as written.
@@ -175,38 +172,22 @@ export async function formatText(path: string, text: string): Promise<string> {
 async function main(): Promise<number> {
   const args = process.argv.slice(2);
   const check = args.includes("--check");
-  const changed = args.includes("--changed");
   // Paths are the caller's (a package script runs in its package); git takes them from the root.
   const paths = args
     .filter((arg) => !arg.startsWith("--"))
     .map((arg) => relative(ROOT, resolve(process.cwd(), arg)) || ".");
   const unknown = args.filter(
-    (arg) => arg.startsWith("--") && arg !== "--check" && arg !== "--changed"
+    (arg) => arg.startsWith("--") && arg !== "--check"
   );
   if (unknown.length > 0) {
     fail(`unknown flag ${unknown.join(", ")}`);
   }
 
-  const seen = new Set(
-    git("ls-files", "-z", "-co", "--exclude-standard", "--", ...paths)
-  );
-  const files = changed
-    ? [
-        ...new Set([
-          ...git(
-            "diff",
-            "-z",
-            "--name-only",
-            "--diff-filter=ACMR",
-            git("merge-base", "HEAD", "origin/main")[0]?.trim() ?? "",
-            "--",
-            ...paths
-          ),
-          // New files not added yet differ from the merge-base too.
-          ...git("ls-files", "-z", "-o", "--exclude-standard", "--", ...paths),
-        ]),
-      ].filter((file) => seen.has(file))
-    : [...seen];
+  const files = [
+    ...new Set(
+      git("ls-files", "-z", "-co", "--exclude-standard", "--", ...paths)
+    ),
+  ];
   // `bun fmt` with no paths formats the whole directory: an empty list is done.
   if (files.length === 0) {
     return 0;
