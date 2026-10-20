@@ -10,6 +10,7 @@
 import type { ServerWebSocket } from "bun";
 import { Elysia, t } from "elysia";
 import type { ArtifactSocket } from "./artifacts/sync";
+import { projectOrigin } from "./db/previews";
 import {
   type PreviewListenerDeps,
   type PreviewListeners,
@@ -20,6 +21,8 @@ import { mintTicket } from "./preview-access";
 export const previewRoutes = (deps: {
   /** Whether the hub knows session `id`. */
   hasInstance: (id: string) => boolean;
+  /** Whether the hub keeps project `id`. */
+  hasProject: (id: string) => boolean;
   listener: PreviewListenerDeps;
   listeners: PreviewListeners;
   /** Every shown preview again, at its address now: the mode changed. */
@@ -81,6 +84,31 @@ export const previewRoutes = (deps: {
           );
         }
         return mintTicket(params.id);
+      })
+      // A project's preview origin, where its pages are served (Projects spec
+      // §5.8): one for the project's life, its listener started when it has none.
+      .post("/api/projects/:id/preview-address", ({ params }) => {
+        if (!deps.hasProject(params.id)) {
+          return new Response("No such project.", { status: 404 });
+        }
+        try {
+          return deps.listeners.address(projectOrigin(params.id));
+        } catch (error) {
+          return refused(error);
+        }
+      })
+      // A ticket into a project's host-mode preview origin, as a session's.
+      .post("/api/projects/:id/preview-ticket", ({ params }) => {
+        if (!deps.hasProject(params.id)) {
+          return new Response("No such project.", { status: 404 });
+        }
+        if (deps.listeners.settings().mode !== "host") {
+          return new Response(
+            "Previews are reached by port on this hub, so they take no ticket.",
+            { status: 409 }
+          );
+        }
+        return mintTicket(projectOrigin(params.id));
       })
       // The pane's Send picks, as the page's own send would.
       .post(

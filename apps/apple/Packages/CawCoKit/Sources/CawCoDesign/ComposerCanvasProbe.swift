@@ -182,7 +182,7 @@ enum CanvasProbe {
             let export = try await host.hub.exportCanvas(canvas.id, name: canvas.name)
             let session = binding.sessionId
             let fresh = CanvasWeb(page: export.page, instanceId: session) { place in
-                try await host.hub.previewLoad(place, in: session, byHost: export.page.byHost)
+                try await host.hub.previewLoad(place, for: .instance(session), byHost: export.page.byHost)
             }
             fresh.web.frame = CGRect(x: 0, y: 0, width: 320, height: 400)
             composer.window?.insertSubview(fresh.web, at: 0)

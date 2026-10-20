@@ -250,9 +250,9 @@ const run = async (kit: Kit) => {
     JSON.stringify(graph.problems)
   );
 
-  // (g) The page itself, on its session's origin, as the panel loads it.
+  // (g) The page itself, on its project's origin, as the panel loads it.
   const { port } = await fleet.api<{ port: number }>(
-    `/api/instances/${writer}/preview-address`,
+    `/api/projects/${projectId}/preview-address`,
     {}
   );
   const tab = await kit.page("desk", { theme: "light" });

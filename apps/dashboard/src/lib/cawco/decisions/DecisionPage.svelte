@@ -261,12 +261,12 @@
           <RecordCard card={each} {hrefOf} {onopentask} {taskOf} />
         {/each}
       </div>
-    {:else if read?.artifactId && read.writer}
+    {:else if read?.artifactId}
       <PageFrame
         artifactId={read.artifactId}
         {card}
         insetBottom={dockRoom}
-        instanceId={read.writer.instanceId}
+        {projectId}
         name={read.name}
         title={read.title}
       />

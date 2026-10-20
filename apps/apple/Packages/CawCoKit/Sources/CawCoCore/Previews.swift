@@ -133,6 +133,19 @@ public enum PreviewKey {
     }
 }
 
+/// Whose preview origin serves something (hub preview.ts `originOf`): a
+/// session's, or a project's, where every page of the project is served for
+/// the project's life, whichever session wrote it and whether it still stands.
+public enum PreviewOwner: Sendable, Equatable {
+    case instance(String)
+    case project(String)
+
+    /// The origin a panel's frame names: its project's for a project's page, else its session's.
+    public static func of(_ frame: PreviewFrame) -> PreviewOwner {
+        frame.project.map(PreviewOwner.project) ?? .instance(frame.instanceId)
+    }
+}
+
 /// Where a session's previews load (`HubConnection.previewRoute`): the
 /// origin, and whether it is host mode's, locked to the hub's pass and
 /// entered with a ticket (`HubConnection.previewLoad`).
@@ -233,32 +246,49 @@ public extension HubConnection {
         return parts.url.map { PreviewRoute(origin: $0, byHost: false) }
     }
 
-    /// Where session `instanceId`'s pages are served, asked of the hub
-    /// (`POST /api/instances/:id/preview-address`, PageFrame.svelte): a
-    /// decision page opened in its tab loads from there.
-    func previewAddress(_ instanceId: String) async throws -> PreviewRoute {
+    /// Where `owner`'s pages are served, asked of the hub (`POST
+    /// /api/projects/:id/preview-address` for a project, `/api/instances/…`
+    /// for a session; page-source.ts): a decision page opened in its tab
+    /// loads from its project's.
+    func previewAddress(_ owner: PreviewOwner) async throws -> PreviewRoute {
         guard let client else { throw TaskRefusal(message: "No hub is connected.") }
-        let output = try await client.postApiInstancesByIdPreviewAddress(path: .init(id: instanceId))
-        guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
-        let address = try answer.body.json
-        guard let route = previewRoute(port: address.port, origin: address.origin) else {
+        let address: Components.Schemas.PreviewAddress
+        switch owner {
+        case let .instance(id):
+            let output = try await client.postApiInstancesByIdPreviewAddress(path: .init(id: id))
+            guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
+            address = try answer.body.json
+        case let .project(id):
+            let output = try await client.postApiProjectsByIdPreviewAddress(path: .init(id: id))
+            guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
+            address = try answer.body.json
+        }
+        guard let route = previewRoute(port: address.port, origin: address.origin, tailnet: address.tailnet) else {
             throw TaskRefusal(message: Words.Decisions.noAddress)
         }
         return route
     }
 
-    /// What a web view loads to show `place`, a page on session `instanceId`'s
-    /// preview origin. Port mode: `place` itself. Host mode: every preview
+    /// What a web view loads to show `place`, a page on `owner`'s preview
+    /// origin. Port mode: `place` itself. Host mode: every preview
     /// name is locked to the hub's pass (hub preview-access.ts), and each web
     /// view keeps its own cookies, so each load asks the hub for a ticket
     /// (single-use, 60 s) and opens the origin's entry, which sets the pass
     /// and sends the view on to `place`.
-    func previewLoad(_ place: URL, in instanceId: String, byHost: Bool) async throws -> URL {
+    func previewLoad(_ place: URL, for owner: PreviewOwner, byHost: Bool) async throws -> URL {
         guard byHost else { return place }
         guard let client else { throw TaskRefusal(message: "No hub is connected.") }
-        let output = try await client.postApiInstancesByIdPreviewTicket(path: .init(id: instanceId))
-        guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
-        let ticket = try answer.body.json.ticket
+        let ticket: String
+        switch owner {
+        case let .instance(id):
+            let output = try await client.postApiInstancesByIdPreviewTicket(path: .init(id: id))
+            guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
+            ticket = try answer.body.json.ticket
+        case let .project(id):
+            let output = try await client.postApiProjectsByIdPreviewTicket(path: .init(id: id))
+            guard case let .ok(answer) = output else { throw await TaskRefusal.reading(output) }
+            ticket = try answer.body.json.ticket
+        }
         guard var parts = URLComponents(url: place, resolvingAgainstBaseURL: false) else {
             throw TaskRefusal(message: "The preview's address can't be read.")
         }
@@ -286,10 +316,15 @@ public extension HubConnection {
         return error.domain == "WebKitErrorDomain" && error.code == 102
     }
 
-    /// The page a preview opens at: the one its `artifact_create` named
-    /// (`path`, on a dev server or folder), else the listener's root.
+    /// The page a preview opens at: a project's page at its own place on its
+    /// project's origin (core `projectPagePlace`, the frame naming the
+    /// project), else the one its `artifact_create` named (`path`, on a dev
+    /// server or folder), else the listener's root.
     func previewStart(_ frame: PreviewFrame) -> URL? {
         guard let origin = previewRoute(frame)?.origin else { return nil }
+        if frame.project != nil {
+            return origin.appending(components: "__cawco", "page", frame.artifact.id, directoryHint: .isDirectory)
+        }
         let path = frame.source?.value1?.path ?? frame.source?.value2?.path
         return path.flatMap { URL(string: $0, relativeTo: origin)?.absoluteURL } ?? origin
     }

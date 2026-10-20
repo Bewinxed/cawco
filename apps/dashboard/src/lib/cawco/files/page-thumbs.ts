@@ -2,7 +2,8 @@
  * Files draws the pictures it lacks: a session's page that no pane has
  * taken a thumbnail of yet (made before Files kept them, or never shown in
  * a dashboard) is loaded unseen at its own address, `/__cawco/page/<id>/`
- * on the session's preview origin (preview/page-source, as the Decisions
+ * on the origin that serves it, its project's or its session's
+ * (preview/page-source, as the Decisions
  * tab loads a page), whatever the session's panel shows. Its overlay is
  * greeted as every host greets it, asked for the same capture the pane asks
  * for (`cawco:capture`), and the hub keeps the picture (`keepThumbnail`);
@@ -14,7 +15,7 @@
  * opened (hub `shown`). A preview or a component has no address of its own
  * and runs a server to be drawn, so it is drawn by the pane alone.
  */
-import type { ArtifactSummary } from "@cawco/core";
+import { type ArtifactSummary, projectPagePlace } from "@cawco/core";
 import { theme } from "#lib/theme.svelte.js";
 import { keepThumbnail } from "../artifact-api";
 import { pageSource } from "../preview/page-source";
@@ -38,7 +39,10 @@ async function drawPage(
   instanceId: string,
   artifact: ArtifactSummary
 ): Promise<boolean> {
-  const found = await pageSource(instanceId, `/__cawco/page/${artifact.id}/`);
+  const found = await pageSource(
+    artifact.project ? { project: artifact.project } : { instance: instanceId },
+    projectPagePlace(artifact.id)
+  );
   if ("problem" in found) {
     return false;
   }

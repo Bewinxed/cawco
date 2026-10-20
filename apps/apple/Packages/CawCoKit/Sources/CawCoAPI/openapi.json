@@ -141,6 +141,60 @@
         }
       }
     },
+    "/api/projects/{id}/preview-address": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdPreviewAddress",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdPreviewAddress 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewAddress"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/projects/{id}/preview-ticket": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiProjectsByIdPreviewTicket",
+        "responses": {
+          "200": {
+            "description": "postApiProjectsByIdPreviewTicket 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PreviewTicket"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/instances/{id}/artifacts/{artifact}/send": {
       "post": {
         "parameters": [
@@ -36013,6 +36067,10 @@
           "name": {
             "type": "string"
           },
+          "project": {
+            "description": "The project whose preview origin serves it: a project's page (Projects\nspec §5.8), loaded at `/__cawco/page/<id>/` there (`projectPagePlace`);\nabsent for anything its session's origin serves.",
+            "type": "string"
+          },
           "promoted": {
             "description": "Its last promote into the project's folder (`artifact_promote`, the doc's `meta.promoted`); null until one.",
             "$ref": "#/components/schemas/ArtifactPromotion"
@@ -52712,6 +52770,10 @@
           "port": {
             "description": "The session's own preview port, listened on in either mode: a client\nthat reached the hub by any address but one under host mode's domain\nloads the preview from it ({@link previewRoute}).",
             "type": "number"
+          },
+          "project": {
+            "description": "The project whose origin serves what the panel shows: a project's page\n(Projects spec §5.8), served on its project's origin alone, at\n`/__cawco/page/<artifact id>/` there ({@link projectPagePlace}). Then\n`port`, `origin`, `host` and `tailnet` are that origin's, and a host-mode\nticket is the project's (`POST /api/projects/:id/preview-ticket`).\nAbsent for anything served on the session's own origin.",
+            "type": "string"
           },
           "revision": {
             "description": "Identifies one successful open, including a rebuild of the same source.",

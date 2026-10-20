@@ -61,6 +61,10 @@ export interface FleetReportFrame {
   report: FleetSyncReport;
 }
 
+/** Where a page stands on the origin that serves it by id: a project's page on its project's origin, any page in the Decisions tab. */
+export const projectPagePlace = (artifactId: string): string =>
+  `/__cawco/page/${artifactId}/`;
+
 export interface PreviewFrame {
   /**
    * The artifact the session's panel shows (Projects spec §5.10), with its
@@ -89,6 +93,15 @@ export interface PreviewFrame {
    * loads the preview from it ({@link previewRoute}).
    */
   port?: number;
+  /**
+   * The project whose origin serves what the panel shows: a project's page
+   * (Projects spec §5.8), served on its project's origin alone, at
+   * `/__cawco/page/<artifact id>/` there ({@link projectPagePlace}). Then
+   * `port`, `origin`, `host` and `tailnet` are that origin's, and a host-mode
+   * ticket is the project's (`POST /api/projects/:id/preview-ticket`).
+   * Absent for anything served on the session's own origin.
+   */
+  project?: string;
   /** Identifies one successful open, including a rebuild of the same source. */
   revision: string;
   source?: PreviewSource;

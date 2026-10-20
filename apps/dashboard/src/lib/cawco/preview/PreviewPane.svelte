@@ -9,6 +9,7 @@
     type PreviewTicket,
     previewEnterUrl,
     previewRoute,
+    projectPagePlace,
     type ShownFailure,
     sheetWords,
   } from "@cawco/core";
@@ -270,9 +271,22 @@
     }
     writeJson(keepKey, { revision: preview.revision, at: place });
   }
-  /** Where a show starts: the page the agent named (`path`), else the root. */
-  const startAt = $derived(
-    (source && "path" in source ? source.path : undefined) ?? "/"
+  /**
+   * Where a show starts: a project's page at its own place on its project's
+   * origin (core `projectPagePlace`, the frame naming the project), else the
+   * page the agent named (`path`), else the root.
+   */
+  const startAt = $derived.by(() => {
+    if (preview?.project) {
+      return projectPagePlace(preview.artifact.id);
+    }
+    return (source && "path" in source ? source.path : undefined) ?? "/";
+  });
+  /** Who gives this origin's host-mode ticket: the project whose origin serves the page, else the session. */
+  const ticketFrom = $derived(
+    preview?.project
+      ? `/api/projects/${encodeURIComponent(preview.project)}/preview-ticket`
+      : `/api/instances/${encodeURIComponent(instanceId)}/preview-ticket`
   );
   /**
    * The place the frame opens, a path on the preview's origin: the start
@@ -560,7 +574,7 @@
       return;
     }
     let live = true;
-    fetch(`/api/instances/${encodeURIComponent(instanceId)}/preview-ticket`, {
+    fetch(ticketFrom, {
       method: "POST",
     })
       .then(async (answer) => {

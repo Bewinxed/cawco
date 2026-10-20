@@ -1141,6 +1141,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         pageLoaded = false
         paintCover(animated: false)
         byHost = route.byHost
+        owner = PreviewOwner.of(frame)
         reentered = false
         enter(hub.previewStart(frame) ?? origin)
     }
@@ -1148,6 +1149,8 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
     /// Host mode's route: the preview's origin is locked to the hub's pass, which
     /// this web view's own store holds only once it has entered.
     private var byHost = false
+    /// Whose origin the current show loads from: the project's for a project's page, else the session's.
+    private var owner: PreviewOwner?
     /// The page the current show opens at.
     private var start: URL?
     /// The entry being asked for, replaced by the next.
@@ -1166,7 +1169,7 @@ final class PreviewController: UIViewController, WKScriptMessageHandler, WKNavig
         entering = Task { [weak self] in
             guard let self else { return }
             do {
-                let url = try await hub.previewLoad(place, in: instanceId, byHost: byHost)
+                let url = try await hub.previewLoad(place, for: owner ?? .instance(instanceId), byHost: byHost)
                 guard !Task.isCancelled else { return }
                 #if DEBUG
                 web.load(URLRequest(url: PreviewProbe.loading(url)))

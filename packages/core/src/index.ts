@@ -1788,6 +1788,12 @@ export interface ArtifactSummary {
   id: string;
   kind: ArtifactKind;
   name: string;
+  /**
+   * The project whose preview origin serves it: a project's page (Projects
+   * spec §5.8), loaded at `/__cawco/page/<id>/` there (`projectPagePlace`);
+   * absent for anything its session's origin serves.
+   */
+  project?: string;
   /** Its last promote into the project's folder (`artifact_promote`, the doc's `meta.promoted`); null until one. */
   promoted: ArtifactPromotion | null;
   /** The person pressed Send on it since the session last revised it or changed its ask. */

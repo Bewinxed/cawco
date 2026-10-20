@@ -1,7 +1,8 @@
 <script lang="ts">
   /**
-   * A decision page in the Decisions tab's pane, live: the page its session
-   * published, on that session's own preview origin at `/__cawco/page/<id>/`
+   * A decision page in the Decisions tab's pane, live: the project's page, on
+   * the project's own preview origin at `/__cawco/page/<id>/`, whichever
+   * session wrote it and whether or not it still stands
    * (hub preview.ts), whichever artifact its panel shows. Its overlay joins
    * the page's document itself (the `cawco:hello` names it), so a pick here is
    * a pick in the panel and every other view, and a revision morphs in place.
@@ -15,15 +16,15 @@
   import { theme } from "#lib/theme.svelte.js";
 
   let {
-    instanceId,
+    projectId,
     artifactId,
     name,
     title,
     card = null,
     insetBottom,
   }: {
-    /** The session that published it: its preview origin serves it. */
-    instanceId: string;
+    /** Its project: the project's preview origin serves it. */
+    projectId: string;
     artifactId: string;
     name: string;
     title: string;
@@ -46,7 +47,7 @@
 
   /** Its address entered again (a lapsed pass): straight, or by a new pass. */
   async function enter(at: string, byHost: boolean, wanted: string) {
-    const entered = await enterPage(instanceId, at, byHost, wanted);
+    const entered = await enterPage({ project: projectId }, at, byHost, wanted);
     if ("src" in entered) {
       ({ src } = entered);
     } else {
@@ -54,16 +55,16 @@
     }
   }
 
-  // Where its session's pages are served, asked once per session and page.
+  // Where its project's pages are served, asked once per project and page.
   $effect(() => {
-    const session = instanceId;
+    const project = projectId;
     const wanted = untrack(() => place);
     let live = true;
     problem = null;
     src = null;
     connected = false;
     turnedAway = 0;
-    pageSource(session, wanted).then((found) => {
+    pageSource({ project }, wanted).then((found) => {
       if (!live) {
         return;
       }

@@ -1331,6 +1331,7 @@ export const createArtifacts = (deps: ArtifactServiceDeps) => {
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
     shownAt: row.shownAt?.toISOString() ?? null,
+    ...(isProjectPage(row) ? { project: row.projectId as string } : {}),
     promoted:
       (docs.doc(row.id).getMap("meta").get("promoted") as
         ArtifactPromotion | undefined) ?? null,

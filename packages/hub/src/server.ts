@@ -526,6 +526,7 @@ import {
 import type { LoginMove } from "./db/accounts";
 import type { ArtifactRow } from "./db/artifacts";
 import type { LimitCompaction } from "./db/at-limit";
+import { projectOrigin } from "./db/previews";
 import type {
   ContinuationAsker,
   PriorConversation,
@@ -10210,13 +10211,42 @@ export const createServer = (
   };
 
   /**
-   * A shown preview's origin for the frames that carry it: its listener
-   * started when it has none. Null only when every port of the range is
-   * taken, which the open that showed it already said.
+   * The project whose origin serves artifact `id` (preview.ts `originOf`):
+   * a project's page, served there whichever session holds it or none;
+   * undefined for anything else, served on its session's origin.
    */
-  const previewAddress = (instanceId: string) => {
+  const pageProject = (id: string): string | undefined => {
+    const row = db.artifacts.get(id);
+    return row?.kind === "page" &&
+      row.projectId !== null &&
+      row.heldFor === null
+      ? row.projectId
+      : undefined;
+  };
+
+  /** The origin session `instanceId`'s panel loads artifact `id` from: its project's for a project's page, else the session's own. */
+  const servedBy = (instanceId: string, id: string): string => {
+    const project = pageProject(id);
+    return project ? projectOrigin(project) : instanceId;
+  };
+
+  /** The key of the origin that serves artifact `id` (preview.ts `originOf`). */
+  const originKeyOf = (id: string): string | undefined => {
+    const project = pageProject(id);
+    return project
+      ? projectOrigin(project)
+      : (db.artifacts.get(id)?.instanceId ?? undefined);
+  };
+
+  /**
+   * A preview origin's address for the frames that carry it (a session's,
+   * or a project's by `projectOrigin`): its listener started when it has
+   * none. Null only when every port of the range is taken, which the open
+   * that showed it already said.
+   */
+  const previewAddress = (key: string) => {
     try {
-      return previewListeners.address(instanceId);
+      return previewListeners.address(key);
     } catch (error) {
       if (error instanceof PreviewRefusal) {
         return null;
@@ -10229,18 +10259,39 @@ export const createServer = (
   const artifactIds = (instanceId: string): string[] =>
     db.artifacts.ofInstance(instanceId).map((row) => row.id);
 
+  /** Session `instanceId`'s open panel as a frame: what it shows, on the origin that serves it. */
+  const shownFrame = (
+    instanceId: string,
+    target: Pick<PreviewTarget, "artifact" | "revision" | "source">
+  ) => {
+    const project = pageProject(target.artifact.id);
+    return previewFrame(
+      instanceId,
+      "open",
+      target,
+      previewAddress(project ? projectOrigin(project) : instanceId),
+      artifactIds(instanceId),
+      artifacts.stageFor(target.artifact.id),
+      project
+    );
+  };
+
   const publishPreview = (
     instanceId: string,
     state: "open" | "closed",
     target: Pick<PreviewTarget, "artifact" | "revision" | "source">
   ) => {
+    const project = pageProject(target.artifact.id);
     const frame = previewFrame(
       instanceId,
       state,
       target,
-      state === "open" ? previewAddress(instanceId) : null,
+      state === "open"
+        ? previewAddress(project ? projectOrigin(project) : instanceId)
+        : null,
       artifactIds(instanceId),
-      artifacts.stageFor(target.artifact.id)
+      artifacts.stageFor(target.artifact.id),
+      project
     );
     streams.sequence(instanceId, frame);
     artifactSessions.refresh(instanceId);
@@ -10526,9 +10577,10 @@ export const createServer = (
       source,
       revision: crypto.randomUUID(),
     };
-    // Its own origin first: with every port of the range taken it is not shown.
+    // Its origin first (a project's page's is its project's): with every
+    // port of the range taken it is not shown.
     try {
-      previewListeners.address(instanceId);
+      previewListeners.address(servedBy(instanceId, artifact.id));
     } catch (error) {
       if (error instanceof PreviewRefusal) {
         return { ok: false, code: 503, error: error.message };
@@ -12217,9 +12269,15 @@ export const createServer = (
    * that spends a ticket for it, so the person's pass covers it. Nothing
    * when the hub no longer holds it or every port is taken: the page says so.
    */
-  const embedAt = (artifactId: string, reachedAt: URL): { embed?: string } => {
+  const embedAt = (
+    pageId: string,
+    artifactId: string,
+    reachedAt: URL
+  ): { embed?: string } => {
     const row = db.artifacts.get(artifactId);
-    if (!(row?.machineId && row.instanceId && "port" in row.source)) {
+    // The origin that serves the page: its embeds are framed by it.
+    const owner = originKeyOf(pageId);
+    if (!(row?.machineId && owner && "port" in row.source)) {
       return {};
     }
     const key = embedKey(artifactId);
@@ -12238,7 +12296,7 @@ export const createServer = (
     }
     let at: ReturnType<typeof previewListeners.embed>;
     try {
-      at = previewListeners.embed(key, row.instanceId);
+      at = previewListeners.embed(key, owner, reachedAt);
     } catch (error) {
       if (error instanceof PreviewRefusal) {
         console.warn(`[preview] ${error.message}`);
@@ -12247,7 +12305,7 @@ export const createServer = (
       throw error;
     }
     const path = row.source.path ?? "/";
-    const ownPort = previewListeners.address(row.instanceId).port;
+    const ownPort = previewListeners.address(owner).port;
     if (reachedAt.port === String(ownPort) || !at.origin) {
       return {
         embed: `${reachedAt.protocol}//${reachedAt.hostname}:${at.port}${path}`,
@@ -12261,6 +12319,7 @@ export const createServer = (
 
   /** What a session's preview origin serves of the hub: its artifacts' documents and pages (preview.ts). */
   const artifactListener: PreviewListenerDeps = {
+    originOf: originKeyOf,
     ownerOf: (artifactId: string) =>
       db.artifacts.get(artifactId)?.instanceId ?? undefined,
     kindOf: (artifactId: string) => db.artifacts.get(artifactId)?.kind,
@@ -12283,7 +12342,7 @@ export const createServer = (
       for (const [id, held] of Object.entries(served.media)) {
         media[id] =
           held && (held.kind === "preview" || held.kind === "component")
-            ? { ...held, ...embedAt(id, reachedAt) }
+            ? { ...held, ...embedAt(artifactId, id, reachedAt) }
             : held;
       }
       return { hash: served.hash, media: scriptJson("cawco-media", media) };
@@ -16436,16 +16495,7 @@ export const createServer = (
                   (one) => one.key === key && one.machineId === row.machineId
                 ) ?? null)
             : null,
-        preview: target
-          ? previewFrame(
-              instanceId,
-              "open",
-              target,
-              previewAddress(instanceId),
-              artifactIds(instanceId),
-              artifacts.stageFor(target.artifact.id)
-            )
-          : null,
+        preview: target ? shownFrame(instanceId, target) : null,
         session: row
           ? {
               id: row.id,
@@ -16476,16 +16526,7 @@ export const createServer = (
   /** Everything an `instances` frame carries besides the rows themselves. */
   const boardExtras = () => ({
     agents: withPresence(db.listAgents()),
-    previews: [...previewTargets].map(([id, target]) =>
-      previewFrame(
-        id,
-        "open",
-        target,
-        previewAddress(id),
-        artifactIds(id),
-        artifacts.stageFor(target.artifact.id)
-      )
-    ),
+    previews: [...previewTargets].map(([id, target]) => shownFrame(id, target)),
     handoffs: Object.fromEntries(handoffs),
     // Carried on every publish, so a dashboard follows a continuation it
     // started over the socket rather than over the request that started it.
@@ -23949,6 +23990,7 @@ export const createServer = (
       .use(
         previewRoutes({
           hasInstance: (id) => db.getInstancesByIds([id]).length > 0,
+          hasProject: (id) => db.project(id) !== undefined,
           listener: artifactListener,
           listeners: previewListeners,
           republish: () => {
@@ -27546,6 +27588,8 @@ export const createServer = (
           db.project(params.id)?.places.map((place) => place.machineId)
         );
         db.deleteProject(params.id);
+        // Its pages' origin goes with it (its port's row went in the delete).
+        previewListeners.release(projectOrigin(params.id));
         projectsChanged();
         // Its hooks leave every place it had.
         for (const machineId of machines) {

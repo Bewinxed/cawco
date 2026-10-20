@@ -92,6 +92,7 @@ import { sql } from "drizzle-orm";
 import {
   type AnySQLiteColumn,
   blob,
+  check,
   customType,
   foreignKey,
   index,
@@ -3780,18 +3781,32 @@ export const shownPreviews = sqliteTable("shown_previews", {
 });
 
 /**
- * The port each session's previews are served on in port mode (preview.ts),
- * and the port its host name says under a `{port}` host pattern: its own
- * origin, kept across restarts so the previewed app keeps its storage.
- * Taken when the session first shows a preview or a canvas, given back when
- * the session ends.
+ * Each preview origin's port (preview.ts), and the port its host name says
+ * under a `{port}` host pattern: kept across restarts so what it serves
+ * keeps its storage. An origin is a session's (its panel's previews and
+ * canvases, taken when it first shows one, given back when it ends) or a
+ * project's (its pages, Projects spec §5.8: one origin for the project's
+ * life, whichever session wrote a page or whether it still stands); exactly
+ * one owns each row, and goes with it.
  */
-export const previewPorts = sqliteTable("preview_ports", {
-  instanceId: text("instance_id")
-    .primaryKey()
-    .references(() => instances.id, { onDelete: "cascade" }),
-  port: integer("port").notNull().unique(),
-});
+export const previewPorts = sqliteTable(
+  "preview_ports",
+  {
+    port: integer("port").primaryKey(),
+    instanceId: text("instance_id")
+      .unique()
+      .references(() => instances.id, { onDelete: "cascade" }),
+    projectId: text("project_id")
+      .unique()
+      .references(() => projects.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    check(
+      "preview_ports_one_owner",
+      sql`(${table.instanceId} is null) <> (${table.projectId} is null)`
+    ),
+  ]
+);
 
 /**
  * The fleet's stream relay (stream-relay.ts) — one row, keyed `'relay'`,
