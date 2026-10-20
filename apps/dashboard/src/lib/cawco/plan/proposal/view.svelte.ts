@@ -90,6 +90,13 @@ export interface FrameView {
 
 const KEY = Symbol("plan-frame");
 
+/** This session, as a receiver's name: a line's first word. */
+const THIS_SESSION = "This session";
+
+/** A receiver's name mid-sentence: "this session" in lower case, a delegate's as it is. */
+export const midSentence = (name: string): string =>
+  name === THIS_SESSION ? "this session" : name;
+
 /**
  * Who conducts a step: the delegate that carries it (its parent hears a
  * line), else this session, which on a task is the task's live attempt.
@@ -99,8 +106,8 @@ export function receiverOf(plan: PlanFixture, step: Step): Receiver {
     (one) => one.status !== "done" && one.status !== "fail"
   );
   return carrier
-    ? { to: carrier.name, also: "This session" }
-    : { to: "This session" };
+    ? { to: carrier.name, also: THIS_SESSION }
+    : { to: THIS_SESSION };
 }
 
 /** The receiver's answer to a change, in its own words. */
@@ -247,8 +254,8 @@ export function frameView(options: {
 function seed(view: FrameView, plan: PlanFixture, scenario: Scenario): void {
   const step = (id: string) => plan.steps.find((one) => one.id === id);
   if (scenario === "opened") {
-    // The to-do that became a task, open to its description.
-    view.opened.add("a4");
+    // The date picker open to its description, its sub-steps and its delegate.
+    view.opened.add("a2");
     return;
   }
   if (scenario === "edited") {

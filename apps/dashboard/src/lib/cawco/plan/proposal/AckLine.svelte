@@ -10,7 +10,7 @@
   import { fade } from "svelte/transition";
   import MorphText from "#lib/components/ui/morph-text/morph-text.svelte";
   import { IconCheck, IconClock } from "#lib/icons.js";
-  import type { Ack } from "./view.svelte";
+  import { type Ack, midSentence } from "./view.svelte";
 
   let { ack }: { ack: Ack } = $props();
 
@@ -24,9 +24,6 @@
       commented: "Comment",
     }[ack.change]
   );
-  /** A receiver's name mid-sentence: "this session" in lower case. */
-  const named = (who: string) =>
-    who === "This session" ? "this session" : who;
   /**
    * One short line (WORDS.md's readout register): who has it, said once.
    * A comment's answer stands on the step's thread under its author's
@@ -34,13 +31,13 @@
    */
   const said = $derived.by(() => {
     if (ack.phase === "sent") {
-      return `${told} sent to ${named(ack.to)}`;
+      return `${told} sent to ${midSentence(ack.to)}`;
     }
     if (ack.phase === "replied" && ack.change === "commented") {
       return "Answered on the thread";
     }
-    const also = ack.also ? ` and ${named(ack.also)}` : "";
-    return `Seen by ${named(ack.to)}${also}`;
+    const also = ack.also ? ` and ${midSentence(ack.also)}` : "";
+    return `Seen by ${midSentence(ack.to)}${also}`;
   });
 </script>
 

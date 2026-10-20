@@ -18,13 +18,17 @@
  *    columns.
  * 7. No line crosses a box: every connector, sampled along its length,
  *    stays off every tile, words, badge and time but its own two ends.
- * 8. Nothing is cut: no box clips its words without an ellipsis; every
- *    row's words have room (64px, some eight characters); and every row
- *    stands at its place when read, no slide held on it.
- * 9. The pins card shows the to-do that became a task opened to its
- *    description, wearing the task's glyph and id, in sight; and a working
- *    delegate's sweep held at the start, middle and end of one run, in
- *    that order.
+ * 8. Nothing is cut: no box clips its words without an ellipsis, and no
+ *    clipping or scrolling box's top or foot runs through a line (words, a
+ *    tile, a progress line); every row's words have room (64px, some eight
+ *    characters); and every row stands at its place when read, no slide
+ *    held on it.
+ * 9. "Fixed from your pins" is a section with no pick, its first line
+ *    "If one still looks wrong, pin it.", one drawing per fix: the date
+ *    picker opened to its description; the to-do that became a task,
+ *    wearing the task's glyph and id, in sight; and a working delegate's
+ *    pulse at three moments, each named (Start, Middle, End), its band at
+ *    10%, 50% and 90% of the fill.
  * 10. No console error, the page's or its canvases'.
  * 11. Nothing scrolls the page sideways.
  * 12. The page's own capture paints every embed (decision-embeds.ts
@@ -83,8 +87,15 @@ const PREVIEWS = [
 );
 /** A task's id as the board writes it ("tsk-14"). */
 const TASK_ID = /^tsk-\d+$/;
-/** The pins card's sweep, held at these shares of its run (CrewFirst.stories.ts). */
-const HELD = { SweepStart: 0.3, SweepMiddle: 0.5, SweepEnd: 0.7 } as const;
+/** The pins section's pulse: each moment's name, and where its band's centre stands along the fill. */
+const MOMENTS = [
+  { label: "Start", centre: 0.1 },
+  { label: "Middle", centre: 0.5 },
+  { label: "End", centre: 0.9 },
+] as const;
+/** The pins section as the page writes it. */
+const PINS_TITLE = "Fixed from your pins";
+const PINS_LEAD = "If one still looks wrong, pin it.";
 
 interface Checked {
   check: string;
@@ -123,31 +134,34 @@ function frameFacts() {
         id:
           badge.querySelector('[data-slot="task-id"]')?.textContent?.trim() ??
           "",
-        inSight: !!s && r.top >= s.top && r.bottom <= s.bottom,
+        // Drawn alone (no scroller), it is in sight whole.
+        inSight: !s || (r.top >= s.top && r.bottom <= s.bottom),
       };
     });
-  // Each held sweep: where its band stands across its box, a share of it.
+  // Each held moment of the pulse: its name, and where its band's centre
+  // stands along the fill, a share of it.
   const sweeps = [
-    ...document.querySelectorAll<HTMLElement>(
-      '.cawco-frame[data-cawco-interaction="rest"]'
-    ),
-  ].flatMap((frame) => {
-    const band = frame.querySelector('[data-slot="sweep"]');
+    ...document.querySelectorAll<HTMLElement>('[data-slot="pulse-moment"]'),
+  ].flatMap((moment) => {
+    const band = moment.querySelector('[data-slot="sweep"]');
     const box = band?.parentElement?.getBoundingClientRect();
     const r = band?.getBoundingClientRect();
     return band && box && r && box.width > 0
       ? [
           {
-            story: frame.dataset.cawcoStory ?? "",
-            at: Math.round(((r.left - box.left) / box.width) * 100) / 100,
+            label: moment.querySelector(".label")?.textContent?.trim() ?? "",
+            centre:
+              Math.round(
+                ((r.left + r.width / 2 - box.left) / box.width) * 100
+              ) / 100,
           },
         ]
       : [];
   });
-  // The to-do that became a task, its description drawn open.
+  // The date picker, its description drawn open.
   const opened = [
     ...document.querySelectorAll<HTMLElement>(
-      '[data-row="a4"] [data-slot="description"]'
+      '[data-row="a2"] [data-slot="description"]'
     ),
   ].some((el) => el.getBoundingClientRect().height > 8);
   // Each row drawn off its place: a slide's translate held, or a run on it.
@@ -257,7 +271,7 @@ function crossingsIn(): string[] {
 }
 
 /** Words in an embed's frame a box clips across with no ellipsis: a line of text in sight past a clipping box's side. In the page. */
-function cutIn(): string[] {
+function sideCutIn(): string[] {
   const shown = (el: Element) => {
     const r = el.getBoundingClientRect();
     return r.width > 0 && r.height > 0;
@@ -298,6 +312,102 @@ function cutIn(): string[] {
         );
         break;
       }
+    }
+  }
+  return cut;
+}
+
+/**
+ * Lines in an embed's frame a clipping or scrolling box's top or foot runs
+ * through: a line of words, a tile or a progress line shown in half. In
+ * the page.
+ */
+function edgeCutIn(): string[] {
+  const shown = (el: Element) => {
+    const r = el.getBoundingClientRect();
+    return (
+      r.width > 0 &&
+      r.height > 0 &&
+      !el.closest(".sr-only") &&
+      el.checkVisibility({ opacityProperty: true, visibilityProperty: true })
+    );
+  };
+  const named = (el: Element) =>
+    `${el.tagName.toLowerCase()}.${[...el.classList][0] ?? ""}`;
+  /** Every line drawn: each line of words, each tile, each progress line. */
+  const linesIn = () => {
+    const lines: { el: Element; what: string; r: DOMRect }[] = [];
+    const range = document.createRange();
+    const walker = document.createTreeWalker(
+      document.body,
+      NodeFilter.SHOW_TEXT
+    );
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const holder = node.parentElement;
+      if (!(holder && (node.textContent ?? "").trim() && shown(holder))) {
+        continue;
+      }
+      range.selectNodeContents(node);
+      const what = `"${(node.textContent ?? "").trim().slice(0, 40)}" in ${named(holder)}`;
+      for (const r of range.getClientRects()) {
+        lines.push({ el: holder, what, r });
+      }
+    }
+    for (const one of document.querySelectorAll<HTMLElement>(
+      '[data-tile], [data-slot="progress-line"]'
+    )) {
+      if (shown(one)) {
+        const what = one.dataset.tile
+          ? `tile ${one.dataset.tile}`
+          : "progress line";
+        lines.push({
+          el: one,
+          what: `the ${what}`,
+          r: one.getBoundingClientRect(),
+        });
+      }
+    }
+    return lines;
+  };
+  const lines = linesIn();
+  // Every box that clips or scrolls what it holds, and where it stands.
+  const clippers = new Map<Element, DOMRect>();
+  for (const el of document.querySelectorAll<HTMLElement>("body *")) {
+    if (getComputedStyle(el).overflowY !== "visible" && shown(el)) {
+      clippers.set(el, el.getBoundingClientRect());
+    }
+  }
+  /** What of a line the clipping boxes inside `outer` leave in sight. */
+  const seenIn = (outer: Element, one: Element, r: DOMRect) => {
+    let { top, bottom } = r;
+    for (
+      let at: Element | null = one;
+      at && at !== outer;
+      at = at.parentElement
+    ) {
+      const clip = clippers.get(at);
+      if (clip) {
+        top = Math.max(top, clip.top);
+        bottom = Math.min(bottom, clip.bottom);
+      }
+    }
+    return { top, bottom };
+  };
+  // A line's box overshoots its element's by a glyph's ascent at most: an
+  // edge further inside it than this runs through it.
+  const through = (edge: number, r: { top: number; bottom: number }) =>
+    r.top + 3 < edge && r.bottom - 3 > edge;
+  const cut: string[] = [];
+  for (const [el, box] of clippers) {
+    const crossed = lines
+      .filter(({ el: one, r }) => r.width > 0 && el !== one && el.contains(one))
+      .map((line) => ({ ...line, seen: seenIn(el, line.el, line.r) }))
+      .find(({ seen }) => through(box.top, seen) || through(box.bottom, seen));
+    if (crossed) {
+      const at = through(box.top, crossed.seen) ? "top" : "foot";
+      cut.push(
+        `${crossed.what} cut by the ${at} of ${named(el)} (${Math.round(box.top)}–${Math.round(box.bottom)}), the line ${Math.round(crossed.seen.top)}–${Math.round(crossed.seen.bottom)} in sight`
+      );
     }
   }
   return cut;
@@ -371,7 +481,10 @@ async function readFrames(page: Page): Promise<Map<string, Facts>> {
       facts.set(key, {
         ...(await frame.evaluate(frameFacts)),
         crossings: await frame.evaluate(crossingsIn),
-        cut: await frame.evaluate(cutIn),
+        cut: [
+          ...(await frame.evaluate(sideCutIn)),
+          ...(await frame.evaluate(edgeCutIn)),
+        ],
       });
     }
   }
@@ -379,7 +492,12 @@ async function readFrames(page: Page): Promise<Map<string, Facts>> {
 }
 
 const way = (file: string) => `${file}.stories.ts:Device`;
-const PINS = "CrewFirst.stories.ts:Opened,SweepStart,SweepMiddle,SweepEnd";
+/** The pins section's drawings, one per fix. */
+const PIN = {
+  opened: "CrewFirst.stories.ts:Opened",
+  badge: "CrewFirst.stories.ts:Badge",
+  pulse: "CrewFirst.stories.ts:Pulse",
+} as const;
 const WAYS = ["OneList", "Lanes", "CrewFirst"] as const;
 
 /** The checks one leg reads off its embeds' frames. */
@@ -441,33 +559,59 @@ function frameChecks(
     moving.length === 0,
     moving.slice(0, 8).join("\n    ") || "none"
   );
-  const pins = facts.get(PINS);
-  const sweeps = pins?.sweeps ?? [];
-  const at = (story: keyof typeof HELD) =>
-    sweeps.find((one) => one.story === story)?.at;
-  const held = Object.entries(HELD).map(([story, share]) => ({
-    story,
-    share,
-    at: at(story as keyof typeof HELD),
-  }));
-  const badge = pins?.badges[0];
+  pinChecks(leg, facts, check);
+}
+
+/** The checks one leg reads off the pins section's drawings. */
+function pinChecks(
+  leg: string,
+  facts: Map<string, Facts>,
+  check: (name: string, passed: boolean, output: string) => void
+): void {
+  const opened = facts.get(PIN.opened)?.opened ?? false;
   check(
-    `${leg}: the pins card opens the to-do that became a task to its description, its badge the task's glyph and id, in sight (${badge ? `${badge.glyph ? "glyph" : "no glyph"} ${badge.id || "no id"}${badge.inSight ? " in sight" : " out of sight"}` : "no badge"}; ${pins?.opened ? "open" : "shut"})`,
-    !!pins?.opened &&
-      !!badge &&
-      badge.glyph &&
-      TASK_ID.test(badge.id) &&
-      badge.inSight,
-    JSON.stringify({ opened: pins?.opened ?? false, badges: pins?.badges })
+    `${leg}: the pins section's first fix draws the date picker opened to its description (${opened ? "open" : "shut"})`,
+    opened,
+    JSON.stringify({ opened })
   );
+  const badges = facts.get(PIN.badge)?.badges ?? [];
+  const [badge] = badges;
   check(
-    `${leg}: the pins card holds the sweep at the start, middle and end of its run (${held.map((one) => `${one.story} ${one.at ?? "none"} of its box`).join(", ")})`,
-    held.every(
-      (one) =>
-        one.at !== undefined && Math.abs(one.at - (one.share * 2 - 1)) <= 0.02
-    ),
+    `${leg}: the pins section's second fix draws the to-do that became a task wearing the task's glyph and id, in sight (${badge ? `${badge.glyph ? "glyph" : "no glyph"} ${badge.id || "no id"}${badge.inSight ? " in sight" : " out of sight"}` : "no badge"})`,
+    !!badge && badge.glyph && TASK_ID.test(badge.id) && badge.inSight,
+    JSON.stringify(badges)
+  );
+  const sweeps = facts.get(PIN.pulse)?.sweeps ?? [];
+  check(
+    `${leg}: the pins section's third fix draws the pulse at three named moments, its band at 10%, 50% and 90% of the fill (${sweeps.map((one) => `${one.label || "unnamed"} ${Math.round(one.centre * 100)}%`).join(", ") || "none"})`,
+    sweeps.length === MOMENTS.length &&
+      MOMENTS.every(
+        (moment, i) =>
+          sweeps[i]?.label === moment.label &&
+          Math.abs((sweeps[i]?.centre ?? -1) - moment.centre) <= 0.02
+      ),
     JSON.stringify(sweeps)
   );
+}
+
+/** The pins section as the page draws it: its heading, its first line, its drawings, and no pick in it. */
+function pinsFacts(title: string) {
+  const section = [...document.querySelectorAll<HTMLElement>("section")].find(
+    (one) => one.querySelector("h2")?.textContent?.trim() === title
+  );
+  const words = [...(section?.querySelectorAll<HTMLElement>("p") ?? [])].map(
+    (one) => one.textContent?.trim() ?? ""
+  );
+  return {
+    found: !!section,
+    first: words[0] ?? "",
+    quotes: [
+      ...(section?.querySelectorAll<HTMLElement>('p[data-role="label"]') ?? []),
+    ].map((one) => one.textContent?.trim() ?? ""),
+    drawings: section?.querySelectorAll("iframe").length ?? 0,
+    picks: section?.querySelectorAll("[data-option], .dp-card").length ?? 0,
+    pinsCard: !!document.querySelector("#decision-pins"),
+  };
 }
 
 /** The page's capture into .probe/decision-pages, and its two checks: files a delegate can hand over, every embed painted. */
@@ -579,6 +723,18 @@ const spec: Spec = {
                 (one) => one.gap >= 0 && one.gap <= 80 && one.inCell
               ),
             JSON.stringify(at.cells)
+          );
+
+          const pins = await page.evaluate(pinsFacts, PINS_TITLE);
+          check(
+            `${leg}: "${PINS_TITLE}" is a section with no pick, its first line "${PINS_LEAD}", ${pins.quotes.length} pins quoted, ${pins.drawings} drawings`,
+            pins.found &&
+              pins.first === PINS_LEAD &&
+              pins.quotes.length === 4 &&
+              pins.drawings === 3 &&
+              pins.picks === 0 &&
+              !pins.pinsCard,
+            JSON.stringify(pins)
           );
 
           const facts = await readFrames(page);

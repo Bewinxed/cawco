@@ -78,18 +78,22 @@ const STATES = [
   "Live",
 ] as const;
 
-/** Crew first's held stills of a working delegate's sweep (the decision page's pins card). */
-const SWEEPS = ["SweepStart", "SweepMiddle", "SweepEnd"] as const;
+/**
+ * Crew first's drawings of one row alone, not the plan (the decision page's
+ * pins section): a working delegate's pulse held at three moments, and the
+ * to-do that became a task.
+ */
+const ALONE = ["Pulse", "Badge"] as const;
 
 /**
  * Every story a way's states file draws: the states, the frame the
  * reader's own screen shows (`Device`, the decision page's drawing), and on
- * Crew first the pins card's: a to-do opened, and the sweep held.
+ * Crew first the pins section's: a to-do opened, the pulse held, the task's badge.
  */
 const storiesOf = (way: { file: string }): string[] => [
   ...STATES,
   "Device",
-  ...(way.file === "CrewFirst" ? ["Opened", ...SWEEPS] : []),
+  ...(way.file === "CrewFirst" ? ["Opened", ...ALONE] : []),
 ];
 
 /** A mark's tile as the spec reads it: its side, corner, border and glyph. */
@@ -1957,9 +1961,9 @@ function checkDesk(
   );
   const names = Object.keys(stories).sort();
   const own = storiesOf(way);
-  // The sweep's held stills draw a delegate's row alone, not the plan.
+  // The pulse's stills and the task's badge draw a row alone, not the plan.
   const plans = Object.entries(stories).filter(
-    ([story]) => !SWEEPS.includes(story as (typeof SWEEPS)[number])
+    ([story]) => !ALONE.includes(story as (typeof ALONE)[number])
   );
   kit.check(
     `${name}: its ${own.length} stories draw its own plan (${names.join(", ")}), every row on an 18px tile`,

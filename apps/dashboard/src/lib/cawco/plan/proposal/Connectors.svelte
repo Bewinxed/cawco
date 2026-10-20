@@ -258,12 +258,16 @@
 </svg>
 
 <style>
+  /* A point at the layer's corner the wires draw out from (layer px, no
+     viewBox, never clipped): no box of its own over the rows, so the only
+     paint it lays over them is each wire's, where that wire runs. */
   .wires {
     position: absolute;
-    inset: 0;
+    /* Physical: the wires are measured from the layer's left edge. */
+    inset: 0 auto auto 0;
     z-index: 0;
-    inline-size: 100%;
-    block-size: 100%;
+    inline-size: 0;
+    block-size: 0;
     overflow: visible;
     pointer-events: none;
   }

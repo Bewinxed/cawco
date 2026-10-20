@@ -15,19 +15,25 @@
   import { IconChevronRight } from "#lib/icons.js";
   // Page-local Solar glyph the proposal adds (not in $lib/icons.ts yet).
   import GlyphTask from "~icons/solar/clipboard-check-bold-duotone";
+  import { cropWhole } from "./crop";
   import { type PlanFixture, progress } from "./fixtures";
   import { holdOn } from "./focus";
 
   let {
     plan,
     focus,
+    crop = false,
     children,
   }: {
     plan: PlanFixture;
     /** The row the sheet stands scrolled to (a step a story opens). */
     focus?: string;
+    /** Cut only between lines (cropWhole): a decision page's drawing. */
+    crop?: boolean;
     children: Snippet;
   } = $props();
+  /** The sheet's height the frame stands at (its CSS block-size). */
+  const SHEET_TALL = 717;
 
   let host = $state<HTMLElement>();
   const got = $derived(progress(plan));
@@ -76,6 +82,7 @@
           class="scroll kit-sheet-scroll kit-edge-fade-block"
           {@attach holdOn(focus)}
           {@attach capEdgeFades}
+          {@attach crop && cropWhole(() => host, SHEET_TALL)}
         >
           {@render children()}
         </div>

@@ -20,9 +20,9 @@ export const Plan = {
   parameters: { viewport: 360 },
 };
 
-/** On your screen · Crew first as the reader's own screen draws it: the phone's sheet under a finger, the desk's card under a mouse (a decision page's drawing). */
+/** On your screen · Crew first as the reader's own screen draws it: the phone's sheet under a finger, the desk's card under a mouse, cut only between lines (a decision page's drawing). */
 export const Device = {
-  args: { frame: "device" },
+  args: { frame: "device", crop: true },
   parameters: { viewport: 360 },
 };
 
@@ -56,26 +56,20 @@ export const Live = {
   parameters: { viewport: 360 },
 };
 
-/** Desk · Crew first, the to-do that became task tsk-14 open to its description: its row wears the task's glyph and id. */
+/** Desk · Crew first, the date picker open to its description, its sub-steps and its delegate, cut only between lines (a decision page's drawing). */
 export const Opened = {
-  args: { frame: "desk", scenario: "opened" },
+  args: { frame: "desk", scenario: "opened", crop: true },
   parameters: { viewport: 360 },
 };
 
-/** A working delegate's progress line drawn large, its sweep held near the start of its run. */
-export const SweepStart = {
-  args: { frame: "delegate", held: 0.3, lineWeight: 10 },
+/** A working delegate's line drawn large at the start, middle and end of one run of its pulse, each named. */
+export const Pulse = {
+  args: { frame: "delegate", lineWeight: 10 },
   parameters: { viewport: 360 },
 };
 
-/** The same line, its sweep held halfway along its run. */
-export const SweepMiddle = {
-  args: { frame: "delegate", held: 0.5, lineWeight: 10 },
-  parameters: { viewport: 360 },
-};
-
-/** The same line, its sweep held near the end of its run. */
-export const SweepEnd = {
-  args: { frame: "delegate", held: 0.7, lineWeight: 10 },
+/** The to-do that became task tsk-14, its row alone: the task's glyph and its id. */
+export const Badge = {
+  args: { frame: "step" },
   parameters: { viewport: 360 },
 };

@@ -14,19 +14,25 @@
   import { IconChevronRight } from "#lib/icons.js";
   // Page-local Solar glyph the proposal adds (not in $lib/icons.ts yet).
   import GlyphTask from "~icons/solar/clipboard-check-bold-duotone";
+  import { cropWhole } from "./crop";
   import { type PlanFixture, progress } from "./fixtures";
   import { holdOn } from "./focus";
 
   let {
     plan,
     focus,
+    crop = false,
     children,
   }: {
     plan: PlanFixture;
     /** The row the card stands scrolled to (a step a story opens). */
     focus?: string;
+    /** Cut only between lines (cropWhole): a decision page's drawing. */
+    crop?: boolean;
     children: Snippet;
   } = $props();
+
+  let desk = $state<HTMLElement>();
 
   setSideExpand({
     available: true,
@@ -37,9 +43,11 @@
   });
 
   const got = $derived(progress(plan));
+  /** The split's height the card stands at (its CSS block-size). */
+  const DESK_TALL = 680;
 </script>
 
-<div class="desk" data-slot="side-card">
+<div bind:this={desk} class="desk" data-slot="side-card">
   <SideSurface label="Plan" onclose={() => undefined} recessed={false}>
     {#snippet titleControl()}
       <span class="head mark-line" data-slot="name-lead">
@@ -71,6 +79,7 @@
       class="body kit-edge-fade-block"
       {@attach holdOn(focus)}
       {@attach capEdgeFades}
+      {@attach crop && cropWhole(() => desk, DESK_TALL)}
     >
       {@render children()}
     </div>

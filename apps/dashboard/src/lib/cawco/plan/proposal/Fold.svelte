@@ -52,8 +52,13 @@
       filter: blur(var(--fold-blur));
       transition-property: opacity, filter;
 
+      /* Open, no filter at all: `none` interpolates from the blur as
+         blur(0) does (w3.org/TR/filter-effects-1/#interpolation-of-filters:
+         "Replace none with the corresponding <filter-value-list> of the
+         other filter"), and the open content is then no filtered layer of
+         its own, drawn as the rows around it are. */
       .fold[data-open] & {
-        filter: blur(0);
+        filter: none;
       }
     }
   }

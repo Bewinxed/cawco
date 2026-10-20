@@ -9,7 +9,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   import { IconArrowDown, IconArrowUp } from "#lib/icons.js";
   import type { PlanFixture, Step } from "./fixtures";
-  import { receiverOf, useView } from "./view.svelte";
+  import { midSentence, receiverOf, useView } from "./view.svelte";
 
   let {
     step,
@@ -163,7 +163,7 @@
             send();
           }
         }}
-        placeholder="Comment for {who.to}"
+        placeholder="Comment for {midSentence(who.to)}"
         rows="1"></textarea>
       <!-- Outline, not the coral primary: disabled, the recipe's 50% keeps
            ink on paper rather than white on a pale coral. -->

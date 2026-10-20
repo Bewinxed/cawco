@@ -20,9 +20,9 @@ export const Plan = {
   parameters: { viewport: 360 },
 };
 
-/** On your screen · Lanes as the reader's own screen draws it: the phone's sheet under a finger, the desk's card under a mouse (a decision page's drawing). */
+/** On your screen · Lanes as the reader's own screen draws it: the phone's sheet under a finger, the desk's card under a mouse, cut only between lines (a decision page's drawing). */
 export const Device = {
-  args: { frame: "device" },
+  args: { frame: "device", crop: true },
   parameters: { viewport: 360 },
 };
 
