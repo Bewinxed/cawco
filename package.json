@@ -66,6 +66,9 @@
     "typescript": "npm:@typescript/typescript6@^6.0.2",
     "ultracite": "7.12.2"
   },
+  "patchedDependencies": {
+    "vaul-svelte@1.0.0-next.7": "patches/vaul-svelte@1.0.0-next.7.patch"
+  },
   "trustedDependencies": [
     "socket-activation"
   ]

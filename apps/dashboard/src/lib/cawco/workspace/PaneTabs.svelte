@@ -1722,8 +1722,6 @@
                     <Button
                       data-slot="tdetails"
                       aria-hidden="true"
-                      class="pointer-hit"
-                      style="--hit-gap-x: var(--space-1)"
                       onclick={(event) => {
                         if (chosen) {
                           clickTab(tab.id, event);
@@ -1747,18 +1745,17 @@
                      draws none. The keyboard's and a screen reader's is the
                      tab's own Delete (`closeByKey`), so this one is not in
                      the tablist's tree. -->
-                <!-- 4px from the title's end to the glyph: the 16px glyph
-                     stands 2px inside its 20px box. A finger closes a tab
-                     from its options (owner: "remove the x make it close on
-                     hold menu then close"). -->
+                <!-- The kit's xs icon button, a row's step from the title's
+                     end; at 24px it is the fine pointer's floor itself (The
+                     24 Pointer Rule). A finger closes a tab from its options
+                     (owner: "remove the x make it close on hold menu then
+                     close"). -->
                 <span
                   class="ms-space-row flex flex-none max-desk:hidden coarse:hidden"
                 >
                   <Button
                     data-slot="tclose"
                     aria-hidden="true"
-                    class="pointer-hit"
-                    style="--hit-gap-x: var(--space-1)"
                     onauxclick={(event) => middleClose(tab.id, event)}
                     onclick={() => {
                       closeDetails();
@@ -1836,7 +1833,7 @@
             aria-describedby={refused ? refusedId : undefined}
             aria-label="New session"
             data-tnew
-            class="group/new pointer-hit"
+            class="group/new"
             data-refused={refused ? "" : undefined}
             onclick={() => {
               if (!starting) {

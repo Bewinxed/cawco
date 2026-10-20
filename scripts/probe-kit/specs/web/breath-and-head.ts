@@ -384,7 +384,9 @@ async function sideHead(kit: Kit, bench: string): Promise<void> {
   const ghost = async () =>
     await page.evaluate((at) => {
       for (const run of document.getAnimations()) {
-        run.finish();
+        if (run instanceof CSSTransition) {
+          run.finish();
+        }
       }
       const el = document.querySelector<HTMLElement>(at);
       const probe = document.createElement("span");

@@ -416,10 +416,9 @@
 >
   {#if nothing}
     <!-- What the skeleton stood in for, in one cross-fade (crossIn). -->
-    <div class="flex min-h-0 flex-1 flex-col" in:crossIn>
+    <div data-files-empty class="flex min-h-0 flex-1 flex-col" in:crossIn>
       <EmptyState
         class="flex-1"
-        data-files-empty
         icon={IconFiles}
         line="Pages, canvases, previews and the files you and the agent share collect here."
         title="Nothing here yet"
