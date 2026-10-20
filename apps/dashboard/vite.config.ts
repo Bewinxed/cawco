@@ -8,11 +8,11 @@ import {
   PAGE_ORIGIN_HEADER,
 } from "@cawco/core/browser-gate";
 import { CSS_TARGET } from "@cawco/core/css-target";
+import { unlayeredRules } from "@cawco/core/page-css";
 import adapter from "@sveltejs/adapter-node";
 import { sveltekit } from "@sveltejs/kit/vite";
 import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 import tailwindcss from "@tailwindcss/vite";
-import postcss, { type AtRule } from "postcss";
 import Icons from "unplugin-icons/vite";
 import {
   defineConfig,
@@ -253,9 +253,9 @@ const runningVersion = (): Plugin => ({
  * every CSS asset stands in a cascade layer (wave-1 integration 43ee3780c
  * moved one library to `@import … layer()` and missed that its component
  * imported the same sheet again, unlayered, which silently outranked the
- * house). One unlayered rule fails the build, naming its asset and selector.
- * `@font-face`, `@property` and `@keyframes` hold no style rules, so they
- * pass; a keyframe's `from`/`to` blocks are not style rules either.
+ * house). One unlayered rule fails the build, naming its asset and selector
+ * (core page-css.ts `unlayeredRules`, the guard the decision host's sheet
+ * is held to as well).
  */
 const VENDOR_COMPONENT_SHEETS = [
   "svelte-sonner",
@@ -275,23 +275,6 @@ const VENDOR_COMPONENT_STYLE = new RegExp(
     `[\\\\/]node_modules[\\\\/](?:${VENDOR_IMPORTED_SHEETS.map(pathPattern).join("|")})[\\\\/][^\\\\/?]+\\.css(?:\\?|$)`,
   ].join("|")
 );
-/** Each style rule in `css` that no `@layer` holds, as its selector. */
-const unlayeredRules = (css: string): string[] => {
-  const found: string[] = [];
-  postcss.parse(css).walkRules((rule) => {
-    for (let at = rule.parent; at && at.type !== "root"; at = at.parent) {
-      if (
-        at.type === "atrule" &&
-        ((at as AtRule).name === "layer" ||
-          (at as AtRule).name.endsWith("keyframes"))
-      ) {
-        return;
-      }
-    }
-    found.push(rule.selector.replace(/\s+/g, " "));
-  });
-  return found;
-};
 export const vendorComponentSheets = (): Plugin => ({
   name: "cawco-vendor-component-sheets",
   transform(code, id) {
@@ -299,20 +282,24 @@ export const vendorComponentSheets = (): Plugin => ({
       ? `@layer vendor {\n${code}\n}\n`
       : null;
   },
-  generateBundle(_options, bundle) {
+  async generateBundle(_options, bundle) {
     const sheets = Object.values(bundle).filter(
       (chunk) => chunk.type === "asset" && chunk.fileName.endsWith(".css")
     );
     if (sheets.length === 0) {
       return;
     }
-    const unlayered = sheets.flatMap((sheet) =>
-      sheet.type === "asset"
-        ? unlayeredRules(String(sheet.source)).map(
-            (selector) => `${sheet.fileName}: ${selector}`
-          )
-        : []
-    );
+    const unlayered = (
+      await Promise.all(
+        sheets.map(async (sheet) =>
+          sheet.type === "asset"
+            ? (await unlayeredRules(String(sheet.source))).map(
+                (selector) => `${sheet.fileName}: ${selector}`
+              )
+            : []
+        )
+      )
+    ).flat();
     if (unlayered.length > 0) {
       this.error(
         `css layers: ${unlayered.length} unlayered style rule(s); a library's sheet joins vendorComponentSheets' list, a house rule moves into its layer:\n${unlayered.join("\n")}`

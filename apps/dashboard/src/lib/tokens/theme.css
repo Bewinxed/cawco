@@ -30,6 +30,7 @@
   --container-decisions-520px: 520px;
   --container-leaf: 620px;
   --container-setup: 640px;
+  --container-media-split: 640px;
   --container-decisions-900px: 900px;
   --container-project-dock: 938px;
 }
@@ -452,6 +453,10 @@
   --spacing-c-decision-graph-min-h: var(--c-decision-graph-min-h);
   --spacing-c-decision-node-w: var(--c-decision-node-w);
   --spacing-c-decision-node-h: var(--c-decision-node-h);
+  --spacing-c-decision-page-w: var(--c-decision-page-w);
+  --spacing-c-decision-meter-w: var(--c-decision-meter-w);
+  --spacing-c-decision-option-min: var(--c-decision-option-min);
+  --spacing-c-media-max-h: var(--c-media-max-h);
   --spacing-c-artifact-card-min: var(--c-artifact-card-min);
   --spacing-c-work-tabs-roomy-w: var(--c-work-tabs-roomy-w);
   --spacing-c-work-tabs-squeeze: var(--c-work-tabs-squeeze);

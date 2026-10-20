@@ -341,6 +341,9 @@ const CONTAINERS = {
   "decisions-520px": "520px",
   leaf: "620px",
   setup: "640px",
+  // A decision card's media side by side once its body holds two at a
+  // readable width each (decisions/host Decision.svelte).
+  "media-split": "640px",
   "decisions-900px": "900px",
   // The project page holds Caw's docked panel beside the page: the panel
   // (c-panel-w and its space-6 end margin), the pane's inline padding

@@ -4,12 +4,14 @@
  * decision-program.ts `programHost`), the same in the panel, a tab of its
  * own and the app's web view. Its code is the dashboard's
  * `lib/cawco/decisions/host/`: the one OpenUI renderer (OpenUiRenderer.svelte)
- * with the decision library's Svelte components on the kit's card recipe,
- * its JS bundled by Bun with Svelte's compiler (bun-plugin-svelte) and the
- * components' styles compiled by Lightning CSS (page-css.ts), as the canvas
- * host is built (canvas-host.ts): the standalone binary carries it prebuilt
- * under `decision/` (`build-binary.ts`), and a source checkout builds it on
- * first request.
+ * with the decision library's Svelte components drawn in the house's
+ * utilities, its JS bundled by Bun with Svelte's compiler (bun-plugin-svelte),
+ * and its sheet (`host.css`, beside them) compiled by Tailwind through PostCSS
+ * (tailwindcss.com/docs/installation/using-postcss) over the dashboard's
+ * design layer, then minified and lowered by Lightning CSS (page-css.ts), as
+ * the canvas host is built (canvas-host.ts): the standalone binary carries it
+ * prebuilt under `decision/` (`build-binary.ts`), and a source checkout builds
+ * it on first request.
  *
  * Paths, on every preview origin: `/__cawco/decision/<file>`, the bundle's
  * entry (`host.js`, `host.css`), its chunks (Pele's diagram types, each
@@ -23,138 +25,88 @@ import { SveltePlugin } from "bun-plugin-svelte";
 import { agentReact } from "./agent-react";
 import { refuseSchemeLowering } from "./bundle-css-guard";
 import { bundled } from "./bundled";
-import { compileSheets, pageFiles } from "./page-css";
+import { compileSheets, pageFiles, unlayeredRules } from "./page-css";
 import { embeddedFile, standalone } from "./runtime";
 
 const HOST_DIR = new URL(
   "../../../apps/dashboard/src/lib/cawco/decisions/host/",
   import.meta.url
 ).pathname;
+/** The host's sheet: the design layer and the `@source`s Tailwind reads. */
+const HOST_CSS = join(HOST_DIR, "host.css");
 const KIT_DIR = new URL("../../hub/skills/decision-page/kit/", import.meta.url)
   .pathname;
 /** Where the page loads the bundle's chunks and files from, on any preview origin. */
 const PUBLIC_PATH = "/__cawco/decision/";
 
-/** bun-plugin-svelte's namespace for a component's styles: `import "bun-svelte:<name>.css"`, which it appends to the component's JS. */
-const SVELTE_STYLES = "bun-svelte";
+/** The core package's own folder: unplugin-icons finds its icon sets (`@iconify-json/*`) from it. */
+const CORE_DIR = new URL("../", import.meta.url).pathname;
 
 /**
- * bun-plugin-svelte, with each component's styles kept out of Bun's CSS
- * bundler: the plugin's loader of a component's styles answers the CSS it
- * compiled, which is put in `styles` under its import's path as the build's
- * metafile names it, and Bun gets an empty module in its place. Pinned to
- * the plugin version it was read in (0.0.6, src/index.ts); one that loads
- * them otherwise fails the build here.
+ * The house's icons as the dashboard names them (`~icons/<set>/<name>`,
+ * unplugin-icons with its Svelte compiler, vite.config.ts), for the kit parts
+ * the host draws (the button's pending check, the alert's glyph). Each icon is
+ * unplugin-icons' own runes component (24.0.0, src/core/compilers/svelte.ts)
+ * compiled to JS here, its `compiler` option's custom form: Bun hands a
+ * plugin's module to no other plugin's loader, so bun-plugin-svelte never
+ * reads the `.svelte` source the Svelte compiler option writes. Loaded on the
+ * first build only.
  */
-function svelteStylesApart(styles: Map<string, string>): Bun.BunPlugin {
-  const plugin = SveltePlugin({ development: false });
-  return {
-    name: `${plugin.name}, styles apart`,
-    setup(build) {
-      let taken = false;
-      const builder: Bun.PluginBuilder = new Proxy(build, {
-        get(target, key, receiver) {
-          if (key === "onLoad") {
-            return (
-              options: Bun.PluginConstraints,
-              load: Parameters<Bun.PluginBuilder["onLoad"]>[1]
-            ) => {
-              if (options.namespace !== SVELTE_STYLES) {
-                target.onLoad(options, load);
-                return builder;
-              }
-              taken = true;
-              target.onLoad(options, async (args) => {
-                const loaded = await load(args);
-                if (
-                  !(loaded && "contents" in loaded) ||
-                  typeof loaded.contents !== "string"
-                ) {
-                  throw new Error(
-                    `bun-plugin-svelte loaded ${args.path} without its CSS as text: read its src/index.ts again`
-                  );
-                }
-                styles.set(`${args.namespace}:${args.path}`, loaded.contents);
-                return { contents: "", loader: "js" };
-              });
-              return builder;
-            };
-          }
-          const value = Reflect.get(target, key, receiver);
-          return typeof value === "function"
-            ? (...args: unknown[]) => {
-                const returned = value.apply(target, args);
-                return returned === target ? builder : returned;
-              }
-            : value;
-        },
-      });
-      plugin.setup(builder);
-      if (!taken) {
-        throw new Error(
-          `bun-plugin-svelte registered no loader in the "${SVELTE_STYLES}" namespace: read its src/index.ts again`
-        );
-      }
+async function iconsPlugin(): Promise<Bun.BunPlugin> {
+  const [{ default: icons }, { compile }] = await Promise.all([
+    import("unplugin-icons"),
+    import("svelte/compiler"),
+  ]);
+  return icons.bun({
+    collectionsNodeResolvePath: CORE_DIR,
+    compiler: {
+      extension: "js",
+      compiler: (svg: string) => {
+        const open = svg.indexOf(">", svg.indexOf("<svg "));
+        const component = `<script>const{...p}=$props()</script>${svg.slice(0, open)} {...p}>${svg.slice(open + 1)}`;
+        return compile(component, { generate: "client", dev: false }).js.code;
+      },
     },
-  };
+  });
 }
 
 /**
- * The paths of `styles`' modules in the order Bun's CSS bundler put them in
- * one sheet: depth first from the entry, each import in source order, a
- * module where it is first reached. Each component imports its styles last,
- * so a component's sheet stands after its children's.
+ * host.css compiled by Tailwind (`@tailwindcss/postcss`, its options `base`,
+ * `optimize` and `transformAssetUrls`): every `@import` inlined and a utility
+ * generated for each class its `@source`s name. Lightning CSS minifies and
+ * lowers it after (`optimize: false`). Loaded on the first build, as
+ * Lightning CSS is: the standalone binary carries the sheet prebuilt.
  */
-function stylesInImportOrder(
-  metafile: Bun.BuildMetafile,
-  styles: ReadonlyMap<string, string>
-): string[] {
-  const entry = Object.values(metafile.outputs).find(
-    (output) => output.entryPoint
-  )?.entryPoint;
-  if (!entry) {
-    throw new Error("The decision host's metafile names no entry point");
-  }
-  const seen = new Set<string>();
-  const order: string[] = [];
-  const visit = (path: string) => {
-    if (seen.has(path)) {
-      return;
-    }
-    seen.add(path);
-    if (styles.has(path)) {
-      order.push(path);
-    }
-    for (const imported of metafile.inputs[path]?.imports ?? []) {
-      visit(imported.entryPoint ?? imported.path);
-    }
-  };
-  visit(entry);
-  const missed = [...styles.keys()].filter((path) => !seen.has(path));
-  if (missed.length > 0) {
-    throw new Error(
-      `The decision host's import graph reaches none of these components' styles: ${missed.join(", ")}`
-    );
-  }
-  return order;
+async function tailwindHostSheet(): Promise<string> {
+  const [{ default: postcss }, { default: tailwindcss }] = await Promise.all([
+    import("postcss"),
+    import("@tailwindcss/postcss"),
+  ]);
+  const { css } = await postcss([
+    tailwindcss({ base: HOST_DIR, optimize: false }),
+  ]).process(await readFile(HOST_CSS, "utf8"), { from: HOST_CSS });
+  return css;
 }
 
 /**
  * Builds the host's files, by name: Bun's bundle of its JS, Svelte
- * compiled for the browser in production mode, and its components' styles
- * as `host.css`, in the order Bun's CSS bundler gave them.
+ * compiled for the browser in production mode, and `host.css`. A host
+ * component draws in utilities only: a `<style>` of its own would reach
+ * Bun's CSS bundler, which `pageFiles` refuses.
  */
 export async function buildDecisionHost(): Promise<Map<string, Blob>> {
-  const styles = new Map<string, string>();
   const result = await bundled("The decision host", {
     entrypoints: [join(HOST_DIR, "host.ts")],
     target: "browser",
     format: "esm",
     splitting: true,
     minify: true,
-    metafile: true,
     conditions: ["browser", "production"],
-    plugins: [svelteStylesApart(styles), agentReact],
+    plugins: [
+      await iconsPlugin(),
+      SveltePlugin({ development: false }),
+      agentReact,
+    ],
     define: { "process.env.NODE_ENV": '"production"' },
     publicPath: PUBLIC_PATH,
     // Faces and stills as files of their own: fetched by unicode-range as a
@@ -167,15 +119,16 @@ export async function buildDecisionHost(): Promise<Map<string, Blob>> {
     },
   });
   await refuseSchemeLowering("The decision host", result.outputs);
-  if (!result.metafile) {
-    throw new Error("The decision host's build gave no metafile");
+  const css = await compileSheets([
+    { name: HOST_CSS, css: await tailwindHostSheet() },
+  ]);
+  const unlayered = await unlayeredRules(css);
+  if (unlayered.length > 0) {
+    throw new Error(
+      `css layers: host.css has ${unlayered.length} unlayered style rule(s); a house rule moves into its layer:\n${unlayered.join("\n")}`
+    );
   }
-  const css = await compileSheets(
-    stylesInImportOrder(result.metafile, styles).map((name) => ({
-      name,
-      css: styles.get(name) ?? "",
-    }))
-  );
+  console.log("css layers: host.css, 0 unlayered rules");
   return pageFiles("The decision host", result.outputs, css);
 }
 
@@ -188,9 +141,11 @@ async function dialFiles(): Promise<Map<string, string>> {
       "vendor/dialkit/styles.css",
     ].map((path) => readFile(join(KIT_DIR, path), "utf8"))
   );
+  // DialKit's own sheet in the libraries' layer, under the house's: the
+  // host's sheet sets its look through its variables (host.css).
   return new Map([
     ["dials.js", `${kit}\n${bridge}`],
-    ["dials.css", sheet ?? ""],
+    ["dials.css", `@layer vendor {\n${sheet ?? ""}\n}\n`],
   ]);
 }
 

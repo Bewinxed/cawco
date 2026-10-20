@@ -1,7 +1,7 @@
 /**
  * Holds the `font` shorthand utilities' place in Tailwind's utility order. A
  * `type-<role>` utility is the `font` shorthand (packages/hub/src/
- * design-tokens.ts), as are app.css's `font-inherit` and `font-mono-meta`,
+ * design-tokens.ts), as are design.css's `font-inherit` and `font-mono-meta`,
  * so every utility that writes a font longhand on the same element (`num`,
  * `font-medium`, `leading-*`, `tracking-*`, `text-size-*` …) must come after
  * it, as a declaration after the shorthand did in a component's rule.
@@ -15,6 +15,8 @@ import { compile } from "@tailwindcss/node";
 import type { TailwindTheme } from "../../../packages/hub/src/design-tokens";
 
 const APP_CSS = "src/app.css";
+/** The house's own `@utility` definitions, which app.css imports. */
+const DESIGN_CSS = "src/design.css";
 /** Tailwind's own family form, which no key or `@utility` names. */
 const TAILWIND_FONT_UTILITIES = ["font-(family-name:--font-mono)"];
 /** The theme namespaces whose keys make font longhand utilities, by prefix. */
@@ -41,7 +43,7 @@ const selector = (candidate: string) =>
 /** Every `font` shorthand utility that the compiled CSS places after a font longhand utility. */
 export async function fontOrderDrift(theme: TailwindTheme): Promise<string[]> {
   const appCss = await Bun.file(APP_CSS).text();
-  const own = [...appCss.matchAll(UTILITY)];
+  const own = [...(await Bun.file(DESIGN_CSS).text()).matchAll(UTILITY)];
   const shorthands = [
     ...theme.utilities.filter((u) => u.startsWith("type-")),
     ...own.filter(([, , body]) => SHORTHAND.test(body)).map(([, name]) => name),

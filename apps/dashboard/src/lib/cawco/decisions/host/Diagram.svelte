@@ -1,18 +1,26 @@
 <!--
   A Mermaid diagram drawn by Pele (pele.run, MIT, pinned in package.json:
-  "Pin an exact version in production") on the house tokens: its colours
-  are CSS variables, so a theme change needs no redraw, and it lays itself
-  out again for the width it has. Links and images in the Mermaid are off,
-  so a page reaches no network. "Open as canvas" makes it a canvas in the
-  panel, offered only for the types @excalidraw/mermaid-to-excalidraw 2.2.2
-  draws as elements (flowchart, sequence, class, state, ER); it draws any
-  other as a picture.
+  "Pin an exact version in production") in its well, drawn as written:
+  `render()` with `autoDirection: false` ("Set `autoDirection: false` to
+  preserve the source direction", pele.run/api; `mount()` passes the
+  container's width as `maxWidth`, and below 640px "a wide `flowchart LR` may
+  render as `flowchart TB`"), at its natural size with `responsive: false`,
+  then scaled by its box alone to fit the well's width and the media cap
+  (`c-media-max-h`), never so far that its smallest words draw under 10px:
+  past that floor it scrolls sideways under the house edge fade. Its colours
+  and roles are the house's (host.css, `[data-slot=diagram]`), so a theme
+  change needs no redraw. Links and images in the Mermaid are off, so a page
+  reaches no network. "Open as canvas" makes it a canvas in the panel,
+  offered only for the types @excalidraw/mermaid-to-excalidraw 2.2.2 draws as
+  elements (flowchart, sequence, class, state, ER); it draws any other as a
+  picture.
 -->
 <script lang="ts">
-  import type { Mounted } from "pele/lazy";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { hubRefusal } from "../../hub-read.js";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { overlayTag } from "./page.svelte.js";
+  import Well from "./Well.svelte";
 
   let {
     props,
@@ -27,10 +35,19 @@
     "state",
     "er",
   ]);
+  /** The least a diagram's words draw at, in px (LIBRARY.md: "with its words still 10px"). */
+  const TYPE_FLOOR = 10;
 
   const text = $derived(String(props.mermaid ?? ""));
   let box = $state<HTMLDivElement>();
+  let stage = $state<HTMLDivElement>();
   let type = $state<string | null>(null);
+  let failed = $state("");
+  /** Its natural size and the least it scales to (its words at the floor). */
+  let drawn = $state<{ width: number; height: number; least: number } | null>(
+    null
+  );
+  let room = $state(0);
   let opening = $state(false);
   let said = $state("");
 
@@ -40,26 +57,88 @@
     if (!element) {
       return;
     }
-    let diagram: Mounted | undefined;
     let gone = false;
-    import("pele/lazy").then(async (pele) => {
+    (async () => {
+      const pele = await import("pele/lazy");
+      // Pele measures labels in the font it is given: the house face, loaded.
+      await document.fonts.ready;
       if (gone) {
         return;
       }
       type = pele.detectType(source);
-      diagram = await pele.mountAsync(element, source, {
-        links: false,
-        images: false,
-        zoom: "auto",
-      });
-      if (gone) {
-        diagram.destroy();
+      try {
+        const drawing = await pele.renderAsync(source, {
+          links: false,
+          images: false,
+          autoDirection: false,
+          responsive: false,
+          fontFamily: getComputedStyle(element).fontFamily,
+          fontSize: Number.parseFloat(getComputedStyle(element).fontSize),
+        });
+        if (gone) {
+          return;
+        }
+        element.innerHTML = drawing.svg;
+        failed = "";
+        const svg = element.querySelector("svg");
+        // Its words at their roles (host.css), in its own units: the
+        // smallest sets how far it may shrink.
+        const sizes = [...element.querySelectorAll("text")].map(
+          (word) => Number.parseFloat(getComputedStyle(word).fontSize) || 0
+        );
+        const smallest = Math.min(...sizes.filter((size) => size > 0));
+        const least = Number.isFinite(smallest)
+          ? Math.min(1, TYPE_FLOOR / smallest)
+          : 1;
+        const { width, height } = drawing;
+        drawn = svg && width > 0 && height > 0 ? { width, height, least } : null;
+      } catch (error) {
+        if (!(error instanceof pele.PeleError)) {
+          throw error;
+        }
+        element.textContent = "";
+        drawn = null;
+        failed = error.message;
       }
-    });
+    })();
     return () => {
       gone = true;
-      diagram?.destroy();
     };
+  });
+
+  // The well's room, as it changes.
+  $effect(() => {
+    const held = stage;
+    if (!held) {
+      return;
+    }
+    const watch = new ResizeObserver(() => {
+      const pad = getComputedStyle(held);
+      room =
+        held.clientWidth -
+        (Number.parseFloat(pad.paddingInlineStart) || 0) -
+        (Number.parseFloat(pad.paddingInlineEnd) || 0);
+    });
+    watch.observe(held);
+    return () => watch.disconnect();
+  });
+
+  /** Too wide for the well even at its floor: it scrolls sideways. */
+  const wide = $derived(
+    drawn !== null && room > 0 && drawn.width * drawn.least > room + 0.5
+  );
+
+  // Its width: as drawn, the well's room, or what the cap's height allows,
+  // whichever is least, and never under its floor; its height follows its
+  // viewBox.
+  $effect(() => {
+    const svg = box?.querySelector("svg");
+    if (!(svg && drawn && room > 0)) {
+      return;
+    }
+    const { width, height, least } = drawn;
+    svg.style.inlineSize = `max(${width * least}px, min(${width}px, ${room}px, calc(var(--c-media-max-h) * ${width / height})))`;
+    svg.style.blockSize = "auto";
   });
 
   async function openAsCanvas() {
@@ -87,100 +166,26 @@
   }
 </script>
 
-<figure class="dp-pane diagram">
-  <div bind:this={box} class="draw"></div>
-  {#if props.caption || (type && CANVAS_TYPES.has(type))}
-    <figcaption class="foot">
-      <span class="caption">{String(props.caption ?? "")}</span>
-      {#if type && CANVAS_TYPES.has(type)}
-        <button
-          class="open"
-          disabled={opening}
-          onclick={openAsCanvas}
-          type="button">Open as canvas</button
-        >
-      {/if}
-    </figcaption>
+{#snippet open()}
+  {#if type && CANVAS_TYPES.has(type)}
+    <Button
+      disabled={opening}
+      onclick={openAsCanvas}
+      size="sm"
+      variant="ghost">Open as canvas</Button
+    >
   {/if}
-  {#if said}<p class="said" role="status">{said}</p>{/if}
-</figure>
+{/snippet}
 
-<style>
-  /* tailwind: this folder is bundled by Bun with no Tailwind build (core decision-host.ts), and Tailwind only generates CSS where it scans the source, so a utility here would draw nothing — https://tailwindcss.com/docs/detecting-classes-in-source-files */
-  .diagram {
-    min-inline-size: 0;
-    --pele-bg: var(--surface-raised);
-    --pele-fg: var(--ink-strong);
-    --pele-muted: var(--ink-muted);
-    --pele-line: var(--ink-muted);
-    --pele-surface: var(--surface-page);
-    --pele-surface-alt: var(--surface-recess);
-    --pele-border: var(--border-control);
-    --pele-accent: var(--brand-solid);
-    --pele-critical: var(--status-fail-ink);
-    --pele-error: var(--status-fail-ink);
-    --pele-font: var(--font-sans);
-    --pele-font-mono: var(--font-mono);
-    --pele-radius: var(--radius-sm);
-    --pele-series-1: var(--chart-1);
-    --pele-series-2: var(--chart-2);
-    --pele-series-3: var(--chart-3);
-    --pele-series-4: var(--chart-4);
-    --pele-series-5: var(--chart-5);
-    --pele-series-6: var(--chart-brand);
-    --pele-series-7: var(--ink-muted);
-    --pele-series-8: var(--border-contrast);
-  }
-  .draw {
-    min-inline-size: 0;
-    overflow-x: auto;
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-  }
-  .foot {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: var(--space-2);
-  }
-  .caption {
-    min-inline-size: 0;
-    overflow-wrap: anywhere;
-  }
-  /* Under a finger its area reaches 44px (DESIGN.md, The 44 Touch Rule), its drawn size unchanged. */
-  .open {
-    position: relative;
-    font: var(--type-meta);
-    min-inline-size: max-content;
-    padding: var(--space-1) var(--space-2);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-page);
-    color: var(--ink-strong);
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
-    }
-    @media (hover: hover) {
-      &:hover {
-        border-color: var(--ink-muted);
-      }
-    }
-    @media (pointer: coarse) {
-      &::after {
-        content: "";
-        position: absolute;
-        inset-block-start: 50%;
-        inset-inline-start: 50%;
-        inline-size: max(100%, 44px);
-        block-size: max(100%, 44px);
-        translate: -50% -50%;
-      }
-    }
-  }
-  .said {
-    font: var(--type-meta);
-    color: var(--status-fail-ink);
-  }
-</style>
+<Well
+  action={type && CANVAS_TYPES.has(type) ? open : undefined}
+  bind:stage
+  caption={props.caption ? String(props.caption) : undefined}
+  {said}
+  {wide}
+>
+  <div bind:this={box} class="type-label flex-none" data-slot="diagram"></div>
+  {#if failed}
+    <p class="type-meta text-center text-ink-muted wrap-anywhere">{failed}</p>
+  {/if}
+</Well>

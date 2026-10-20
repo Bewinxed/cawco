@@ -6,8 +6,14 @@
   for it (hub server.ts `embedAt`), named in the page's media, at the shape
   of a screen. A component canvas draws the stories its `stories` names (every
   one when it names none) as the component alone, at their own size, and
-  says how tall it stands, so its frame is as tall as it. One the hub no
-  longer holds says so in words.
+  says how tall it stands, so its frame is as tall as it; the canvas's own
+  runtime centres each story at its own size, scales one wider than the
+  frame to fit it and scrolls one too wide at its words' floor sideways
+  under the house edge fade (runtime.ts `fitToEmbed`). Each stands in its
+  well. While the origin is asked, the frame's place holds a skeleton at a
+  screen's shape, and once the wait outlasts its grace Caw and its line stand
+  over it (DESIGN.md, The Claim Of Nothing Rule, The Real Wait Rule). One the
+  hub no longer holds says so in words where it would stand.
 -->
 <script lang="ts">
   import { CANVAS_EMBED_SIZE, canvasEmbedUrl } from "@cawco/core/stage";
@@ -15,8 +21,13 @@
     type FrameObserver,
     frameObserver,
   } from "#lib/cawco/frame-observer.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import cawDark from "../../../../../../../packages/hub/skills/decision-page/kit/caw/dark-working.webp";
+  import cawLight from "../../../../../../../packages/hub/skills/decision-page/kit/caw/light-working.webp";
   import type { OpenUIRenderProps } from "../../views/openui/OpenUiRenderer.svelte";
   import { served } from "./page.svelte.js";
+  import { scheme } from "./scheme.svelte.js";
+  import Well from "./Well.svelte";
 
   let {
     props,
@@ -148,12 +159,15 @@
   });
 </script>
 
-<figure class="dp-pane media">
+<Well caption={props.caption ? String(props.caption) : undefined}>
   {#if held?.kind === "page"}
     <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load measures the page, so the frame is as tall as it. -->
     <iframe
       bind:this={frame}
-      class="frame"
+      class={[
+        "block max-h-c-media-max-h w-full rounded-xs border-0",
+        tall === null && "aspect-16/10",
+      ]}
       onload={sized}
       src={`/__cawco/page/${id}/`}
       style:block-size={tall === null ? undefined : `${tall}px`}
@@ -161,50 +175,48 @@
     ></iframe>
   {:else if held?.embed}
     {#if ready}
+      <!-- A screen keeps its 16:10 under the cap; a component canvas that said its height is as tall as its frames, and the page scrolls past it. -->
       <iframe
         bind:this={frame}
-        class={["frame", tall === null ? "screen" : "drawn"]}
+        class={[
+          "block w-full rounded-xs border-0",
+          tall === null && "aspect-16/10 max-h-c-media-max-h",
+        ]}
         src={ready}
         style:block-size={tall === null ? undefined : `${tall}px`}
         title={held.name}
       ></iframe>
+    {:else}
+      <div class="relative grid aspect-16/10 w-full place-items-center">
+        {#if !waited}
+          <Skeleton class="absolute inset-0 w-full" height="picture" />
+        {/if}
+        <div class="relative grid justify-items-center gap-space-2">
+          {#if slow && !waited}
+            <img
+              alt=""
+              height="40"
+              src={scheme.now === "dark" ? cawDark : cawLight}
+              width="40"
+            />
+          {/if}
+          <!-- The live region stands from the start; its words come only once the wait has lasted. -->
+          <p
+            class="type-meta text-center text-ink-muted wrap-anywhere"
+            role="status"
+          >
+            {waitLine}
+          </p>
+        </div>
+      </div>
     {/if}
-    <!-- The live region stands from the start; its words come only once the wait has lasted. -->
-    <p class="gone" role="status">{waitLine}</p>
   {:else}
-    <p class="gone">
+    <p
+      class="type-meta grid aspect-16/10 w-full place-items-center text-center text-ink-muted wrap-anywhere"
+    >
       {held
         ? `The ${held.kind} this card shows can't be opened here now.`
         : "What this card showed is gone."}
     </p>
   {/if}
-  {#if props.caption}<figcaption>{String(props.caption)}</figcaption>{/if}
-</figure>
-
-<style>
-  /* tailwind: this folder is bundled by Bun with no Tailwind build (core decision-host.ts), and Tailwind only generates CSS where it scans the source, so a utility here would draw nothing — https://tailwindcss.com/docs/detecting-classes-in-source-files */
-  .media {
-    min-inline-size: 0;
-  }
-  .frame {
-    display: block;
-    inline-size: 100%;
-    min-block-size: 12rem;
-    max-block-size: 80vb;
-    border: 0;
-    border-radius: var(--radius-md);
-    background: var(--surface-page);
-  }
-  .screen {
-    aspect-ratio: 16 / 10;
-  }
-  /* A component canvas that said its height: as tall as its frames; the page scrolls past it. */
-  .drawn {
-    min-block-size: 0;
-    max-block-size: none;
-  }
-  .gone {
-    color: var(--ink-muted);
-    font: var(--type-meta);
-  }
-</style>
+</Well>

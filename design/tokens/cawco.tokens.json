@@ -5792,6 +5792,43 @@
       },
       "$description": "A decision card's least height (DecisionGraph CARD.height)."
     },
+    "c-decision-page-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 920,
+        "unit": "px"
+      },
+      "$description": "A decision page's one centred column (decisions/host): two option columns side by side, each a 60ch line at the label size, and the gap between."
+    },
+    "c-decision-meter-w": {
+      "$type": "dimension",
+      "$value": {
+        "value": 120,
+        "unit": "px"
+      },
+      "$description": "The length of a decision page's count bar in its sticky foot, beside \"1 of 5 picked\"."
+    },
+    "c-decision-option-min": {
+      "$type": "dimension",
+      "$value": {
+        "value": 190,
+        "unit": "px"
+      },
+      "$description": "The narrowest a decision card's option column stands before the options stand one under another."
+    },
+    "c-media-max-h": {
+      "$type": "dimension",
+      "$value": {
+        "value": 675.2,
+        "unit": "px"
+      },
+      "$description": "The tallest a decision card's media well draws its piece: a canvas, a frame and a diagram each fit to it (a diagram never under its words' 10px floor).",
+      "$extensions": {
+        "dev.cawco": {
+          "css": "80vb"
+        }
+      }
+    },
     "c-artifact-card-min": {
       "$type": "dimension",
       "$value": {

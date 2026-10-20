@@ -1,22 +1,19 @@
 /**
  * A decision page's host entry (core decision-host.ts bundles it; hub
- * decision-program.ts serves the page around it): the kit's tokens and card
- * recipe, then the program drawn by Host.svelte. The tokens go in as written
- * (text imports, which no CSS compiler touches), and the page follows the
- * host's scheme (the overlay sets `color-scheme` from it).
+ * decision-program.ts serves the page around it, linking host.css, the
+ * house's tokens and utilities): the house faces, then the program drawn by
+ * Host.svelte. The page follows the host's scheme (the overlay sets
+ * `color-scheme` and `data-theme` from it).
  */
 
 import { mount } from "svelte";
-import pageCss from "../../../../../../../packages/hub/skills/decision-page/kit/page.css" with { type: "text" };
-import tokensCss from "../../../../../../../packages/hub/skills/decision-page/kit/tokens.css" with { type: "text" };
 import { FACES } from "./faces.js";
 import Host from "./Host.svelte";
 import { bridge, picks, takeServed } from "./page.svelte.js";
 
-const sheet = document.createElement("style");
-// Bun's text loader gives each a string; the dashboard's types call a sheet a module.
-sheet.textContent = FACES + String(tokensCss) + String(pageCss);
-document.head.prepend(sheet);
+const faces = document.createElement("style");
+faces.textContent = FACES;
+document.head.prepend(faces);
 
 takeServed(document);
 bridge()?.on("picks", (next) => {

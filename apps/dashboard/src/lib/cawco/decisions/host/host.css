@@ -1,0 +1,159 @@
+/* The decision host's stylesheet (core decision-host.ts compiles it with
+   Tailwind 4.3.3 through PostCSS, then Lightning CSS, and serves it as
+   /__cawco/decision/host.css): the house design layer the dashboard is built
+   on, its utilities generated only for the host's own markup and the kit
+   parts it draws. Automatic detection is off (`source(none)`, "useful in
+   projects that have multiple Tailwind stylesheets where you want to make
+   sure each one only includes the classes each stylesheet needs",
+   tailwindcss.com/docs/detecting-classes-in-source-files); each source is
+   named below, one line per part the host imports. */
+@layer theme, base, vendor, components, utilities, overrides;
+@import "tailwindcss" source(none);
+@import "../../../../design.css";
+
+@source "./";
+@source "../../views/openui/OpenUiRenderer.svelte";
+@source "../../../components/ui/alert/";
+@source "../../../components/ui/badge/";
+@source "../../../components/ui/button/";
+@source "../../../components/ui/checkbox/checkbox.svelte";
+@source "../../../components/ui/kbd/";
+@source "../../../components/ui/morph-text/";
+@source "../../../components/ui/skeleton/";
+@source "../../../components/ui/spinner/";
+@source "../../../components/ui/textarea/";
+
+@layer base {
+  /* The page is its own document: it follows the reader's scheme until the
+     overlay names the host's (`data-theme` and `color-scheme` on the root),
+     and its scroller moves only where a fold rides it (Decision.svelte,
+     motion/scroll-on), never by the browser's scroll anchoring as a card
+     folds above the reader's view (the transcript's precedent). */
+  :root {
+    overflow-anchor: none;
+    /* What a host's docked composer covers of the page's foot (the
+       project's Decisions tab says it, preview-overlay page.ts): none until
+       it says. */
+    --page-inset-bottom: 0px;
+
+    &:not([data-theme]) {
+      color-scheme: light dark;
+    }
+  }
+
+  /* The frame recesses and content stands raised on it (DESIGN.md, The
+     Frame Recesses Rule). */
+  body {
+    background-color: var(--surface-recess);
+  }
+}
+
+/* ---- DOM a library draws, which takes no class from the host's markup:
+   each mapped onto the house's tokens and roles on its host's own hook. */
+@layer components {
+  /* Pele's diagram (pele.run/theming: its variables, then its classes),
+     drawn straight on its well's ground with no panel of its own (The
+     Frame Recesses Rule): a node raised (The Frame Recesses Rule) with a
+     control's edge and the 8px of an item inside a surface, its name in the
+     label role in strong ink; an edge and its arrowhead 1px in muted ink,
+     its words in meta; a subgraph the recess with a hairline, its title in
+     the label role, muted; a highlight strong ink, never coral (The Coral Is
+     Where You Act Rule); weights never above 500 (The 500 Ceiling Rule). */
+  [data-slot="diagram"] {
+    --pele-bg: var(--surface-well);
+    --pele-fg: var(--ink-strong);
+    --pele-muted: var(--ink-muted);
+    --pele-line: var(--ink-muted);
+    --pele-surface: var(--surface-raised);
+    --pele-surface-alt: var(--surface-recess);
+    --pele-border: var(--border-control);
+    --pele-accent: var(--ink-strong);
+    --pele-critical: var(--status-fail-ink);
+    --pele-error: var(--status-fail-ink);
+    --pele-font: var(--font-sans);
+    --pele-font-mono: var(--font-mono);
+    --pele-title-weight: var(--weight-strong);
+    --pele-heading-weight: var(--weight-strong);
+    --pele-bold-weight: var(--weight-strong);
+    --pele-radius: var(--radius-sm);
+    --pele-series-1: var(--chart-1);
+    --pele-series-2: var(--chart-2);
+    --pele-series-3: var(--chart-3);
+    --pele-series-4: var(--chart-4);
+    --pele-series-5: var(--chart-5);
+    --pele-series-6: var(--chart-brand);
+    --pele-series-7: var(--ink-muted);
+    --pele-series-8: var(--border-contrast);
+
+    & > svg {
+      display: block;
+    }
+    & .pele-node .pele-label {
+      font-weight: var(--weight-strong);
+    }
+    & .pele-edge :is(path, line, polyline) {
+      stroke-width: 1px;
+    }
+    & .pele-edge-label {
+      font-size: var(--text-meta);
+      fill: var(--ink-muted);
+    }
+    & .pele-cluster > :is(rect, path) {
+      stroke: var(--border-hairline);
+    }
+    & .pele-cluster-label {
+      font-size: var(--text-label);
+      font-weight: var(--weight-strong);
+      fill: var(--ink-muted);
+    }
+  }
+
+  /* DialKit's controls in a Dials well (its variables, kit/vendor/dialkit
+     styles.css), no glass and no blur: a row the default control's height
+     (44px under a finger, The 44 Touch Rule), its track the control edge's
+     groove, its fill the pressed step, its handle raised; names in the label
+     role and values in meta, tabular (The Tabular Figure Rule); the house
+     focus ring. */
+  [data-slot="dials"] .dialkit-root {
+    --dial-surface: var(--border-control);
+    --dial-surface-hover: var(--surface-hover);
+    --dial-surface-active: var(--surface-fill);
+    --dial-surface-subtle: var(--surface-recess);
+    --dial-text-root: var(--ink-strong);
+    --dial-text-section: var(--ink-muted);
+    --dial-text-label: var(--ink-muted);
+    --dial-text-focus: var(--ink-strong);
+    --dial-text-primary: var(--ink-strong);
+    --dial-text-secondary: var(--ink-muted);
+    --dial-text-tertiary: var(--ink-subtle);
+    --dial-border: var(--border-control);
+    --dial-border-hover: var(--border-button-outline);
+    --dial-focus-ring: var(--focus-ring);
+    --dial-glass-bg: var(--surface-raised);
+    --dial-dropdown-bg: var(--surface-raised);
+    --dial-backdrop-blur: 0px;
+    --dial-radius: var(--radius-sm);
+    --dial-row-height: var(--c-btn-h);
+    --dial-row-gap: var(--space-2);
+    --dial-shadow: var(--shadow-overlay);
+    --dial-shadow-dropdown: var(--shadow-overlay);
+    --dial-color-track-bg: var(--border-control);
+    font: var(--type-label);
+    color: var(--ink-strong);
+
+    @media (pointer: coarse) {
+      --dial-row-height: var(--c-btn-h-lg);
+    }
+    & [class$="-label"] {
+      font: var(--type-label);
+    }
+    & :is(.dialkit-slider-value, .dialkit-slider-input) {
+      font: var(--type-meta);
+      font-variant-numeric: tabular-nums;
+    }
+    & .dialkit-slider-handle {
+      background: var(--surface-raised);
+      box-shadow: var(--shadow-raised);
+    }
+  }
+}
