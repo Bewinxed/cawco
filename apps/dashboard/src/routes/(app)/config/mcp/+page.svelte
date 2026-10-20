@@ -175,9 +175,20 @@
         >
           {#snippet badge()}
             {#if row.auth?.mode === "oauth" && row.auth.state === "signed-in"}
-              <Badge role="status" variant="done">
+              <!-- It gives way with the name, by an ellipsis in its own
+                   words (DESIGN.md, The Truncate Inside Rule), so it never
+                   runs under the row's controls. -->
+              <Badge
+                class="shrink"
+                role="status"
+                title={words.signedIn}
+                variant="done"
+              >
                 <IconCheck />
-                <span>{words.signedIn}</span>
+                <span
+                  class="min-w-0 overflow-clip text-ellipsis whitespace-nowrap"
+                  >{words.signedIn}</span
+                >
               </Badge>
             {/if}
           {/snippet}

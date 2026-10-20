@@ -1,5 +1,6 @@
 <script lang="ts">
   import { land } from "#lib/cawco/motion/share.svelte.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   /**
    * The name of the thing being edited, typed where its title reads. It is
    * the same object as the row's name in the section list: drilling in, the
@@ -25,22 +26,24 @@
   } = $props();
 </script>
 
-<!-- A label, so its touch area around the 24px title focuses the field. -->
-<label
+<!-- A field (DESIGN.md, Inputs and fields: 36px, the control edge, its
+     touch area the kit's) whose words take the title role, so the name
+     reads as the page's title while it stays plainly editable. -->
+<div
   data-slot="title"
-  class="block w-full min-w-0 touch-hit"
+  class="w-full min-w-0"
   data-share="title:{page.url.pathname}"
   {@attach land(() => `title:${page.url.pathname}`, { uniform: true })}
 >
-  <input
+  <Input
     aria-invalid={invalid ? "true" : undefined}
     aria-label={label}
     autocomplete="off"
-    class="type-title tracking-title w-full min-w-0 rounded-xs border-none border-current bg-transparent px-0 py-space-row text-ink-strong placeholder:text-ink-subtle disabled:text-ink-strong disabled:opacity-100"
     {disabled}
     {onblur}
     {placeholder}
     spellcheck="false"
+    text="title"
     bind:value
   />
-</label>
+</div>

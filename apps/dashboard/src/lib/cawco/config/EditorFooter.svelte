@@ -106,9 +106,14 @@
   {#if question}
     <AskHere asker={question.asker} at="editor" />
   {/if}
-  <div data-slot="inner" class="flex min-w-0 items-center gap-space-2">
+  <!-- On a phone what the save reaches takes its own line over the buttons,
+       from the start edge, so a chip never stands past the card's start. -->
+  <div
+    data-slot="inner"
+    class="flex min-w-0 items-center justify-end gap-space-2 max-phone:flex-wrap"
+  >
     {#if ondelete && deleteLabel}
-      <span class="flex flex-none max-phone:hidden">
+      <span class="me-auto flex flex-none max-phone:hidden">
         <Button
           data-delete
           disabled={down !== null || saving}
@@ -126,7 +131,7 @@
     {/if}
     <span
       data-slot="result"
-      class="flex min-w-0 flex-auto items-center justify-end gap-space-2 type-meta text-ink-muted"
+      class="flex min-w-0 flex-auto items-center justify-end gap-space-2 type-meta text-ink-muted empty:hidden max-phone:basis-full max-phone:justify-start"
     >
       {#if result}
         {@render result()}

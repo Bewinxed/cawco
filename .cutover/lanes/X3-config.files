@@ -120,3 +120,5 @@ apps/dashboard/src/lib/cawco/config/NoMachines.svelte
 apps/dashboard/src/routes/(app)/oauth/mcp/+page.svelte
 scripts/probe-kit/specs/config-undo.ts
 apps/dashboard/src/lib/cawco/config/StickyFoot.svelte
+apps/dashboard/src/app.css
+apps/dashboard/src/routes/(app)/motion/updates/+page.svelte

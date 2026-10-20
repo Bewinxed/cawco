@@ -189,8 +189,9 @@
           bind:value={skillName}
         />
       </Field>
-      <div>
+      <Field id="skill-scope" label={words.scope}>
         <PickerChip
+          field={{ id: "skill-scope" }}
           label={words.scope}
           onpick={(next) => {
             projectId = next;
@@ -204,7 +205,7 @@
           ]}
           value={projectId}
         />
-      </div>
+      </Field>
       {#if choices.length > 0}
         <div
           class="flex flex-col max-h-c-choice-list-max-h overflow-y-auto"

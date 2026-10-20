@@ -167,13 +167,23 @@
       </p>
     {/each}
     {#if devices.length === 0}
-      <!-- The way to start is on the phone itself (DESIGN.md, The Empty
-           Starts Work Rule: where Caw can't start, it says how by hand). -->
+      <!-- Where Caw can't start it, the way by hand (DESIGN.md, The Empty
+           Starts Work Rule): the app pairs as a device, approved in
+           Devices, then registers here once notifications are allowed. -->
       <EmptyState
         icon={IconPhone}
-        line="Open the CawCo app on your phone and allow notifications to register it."
+        line="Open the CawCo app on your phone, approve its code in Devices, and allow notifications to register it."
         title="No phones yet"
-      />
+      >
+        {#snippet action()}
+          <Button
+            href="/config/devices"
+            icon={sectionOf("devices").icon}
+            label="Open Devices"
+            variant="outline"
+          />
+        {/snippet}
+      </EmptyState>
     {:else}
       <ul class="flex flex-col">
         {#each devices as device (device.id)}

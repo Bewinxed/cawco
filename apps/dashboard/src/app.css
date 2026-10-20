@@ -1065,10 +1065,12 @@
     --crepe-shadow-1: var(--shadow-tile);
     --crepe-shadow-2: var(--shadow-overlay);
 
-    /* The card already draws the frame; the editor must not draw a second. */
-    background: var(--surface-recess);
+    /* Its host field draws the frame (the field shell's raised surface and
+       control edge, MemoryEditor); the editor draws none of its own, so it
+       fills the field to its foot. */
+    background: transparent;
     box-shadow: none;
-    padding: var(--space-1);
+    padding: 0;
 
     @media (hover: none) {
       --crepe-color-hover: transparent;

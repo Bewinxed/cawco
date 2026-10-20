@@ -20,11 +20,43 @@
     options: { value: string; label: string; disabled?: boolean }[];
     onchange: (next: string) => void;
   } = $props();
+
+  /**
+   * The chosen segment stands whole in the row, clear of the fades: when the
+   * row scrolls, it is brought in by the least it takes whenever the choice
+   * changes (sideways only; the page never moves for it).
+   */
+  function chosenInView(row: HTMLElement) {
+    // Read so this runs again when the choice changes.
+    if (!value) {
+      return;
+    }
+    const item = row.querySelector<HTMLElement>(
+      '[data-slot="toggle-group-item"][data-state="on"]'
+    );
+    if (!item || row.scrollWidth <= row.clientWidth) {
+      return;
+    }
+    // The house fade's length on this row (edge-fade.css `--fade-len`).
+    const fade =
+      Number.parseFloat(getComputedStyle(row).getPropertyValue("--fade-len")) ||
+      0;
+    const box = item.getBoundingClientRect();
+    const at = box.left - row.getBoundingClientRect().left + row.scrollLeft;
+    const start = at - fade;
+    const end = at + box.width + fade - row.clientWidth;
+    if (start < row.scrollLeft) {
+      row.scrollLeft = start;
+    } else if (end > row.scrollLeft) {
+      row.scrollLeft = end;
+    }
+  }
 </script>
 
 <div
   data-slot="choice"
   class="kit-edge-fade no-scrollbar -m-space-2 flex min-w-0 overflow-x-auto overscroll-x-contain p-space-2"
+  {@attach chosenInView}
 >
   <ToggleGroup.Root
     aria-label={label}

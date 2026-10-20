@@ -527,8 +527,9 @@
       One lifecycle event. The events with a matcher are the ones Claude Code
       lets you narrow further.
     </p>
-    <div>
+    <Field id="hook-event" label="Event">
       <PickerChip
+        field={{ id: "hook-event" }}
         label="Event"
         onpick={(next) => {
           touched.event = true;
@@ -541,7 +542,7 @@
         }))}
         value={draft.event}
       />
-    </div>
+    </Field>
     {#if shown("event")}
       <p class="type-meta text-status-fail-ink" in:appear>{wrong.event}</p>
     {:else if eventInfo}
@@ -844,8 +845,9 @@
     <p data-slot="note" class="type-meta max-w-c-measure text-ink-muted">
       Every machine in the fleet unless you narrow it to one project.
     </p>
-    <div>
+    <Field id="hook-scope" label="Scope">
       <PickerChip
+        field={{ id: "hook-scope" }}
         label="Scope"
         onpick={setProject}
         options={[
@@ -857,7 +859,7 @@
         ]}
         value={draft.projectId ?? ""}
       />
-    </div>
+    </Field>
     {#if shown("scope")}
       <p class="type-meta text-status-fail-ink" in:appear>{wrong.scope}</p>
     {/if}

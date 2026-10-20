@@ -156,11 +156,11 @@
                 cx="10"
                 cy="10"
                 r="10"
-                class="fill-status-done-bg stroke-none"
+                class="fill-selected-bg stroke-none"
               ></circle>
               <path
                 d="M6.2 10.4l2.5 2.5 5.1-5.6"
-                class="stroke-status-done-glyph dash-unit motion-safe:animate-check-draw motion-safe:anim-delay-ghost"
+                class="stroke-selected-icon dash-unit motion-safe:animate-check-draw motion-safe:anim-delay-ghost"
                 pathLength="1"
                 stroke-width="1.8"
               ></path>

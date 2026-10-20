@@ -27,8 +27,14 @@
   import UpdateTable from "#lib/cawco/updates/UpdateTable.svelte";
   import { floatingSurface } from "#lib/components/ui/popover/index.js";
 
-  /** Caw's panel as the notices stand in it: the kit's floating surface at the panel's width. */
-  const panel = floatingSurface({ class: "w-c-panel-w" });
+  /**
+   * Caw's panel as the notices stand in it: the kit's floating surface at the
+   * panel's width, and no wider than the page's column (a phone's).
+   */
+  const panel = floatingSurface({ class: "w-full max-w-c-panel-w" });
+  /** The notice grids: panels at their width where it fits, the column's where not. */
+  const NOTICE_COLS =
+    "repeat(auto-fill, minmax(min(100%, var(--c-panel-w)), 1fr))";
 
   /** Notes as every release writes them (docs/releases/README.md). */
   const NOTES = [
@@ -341,9 +347,13 @@
 
 <svelte:head><title>Update states · CawCo</title></svelte:head>
 
+<!-- One column the viewport's width at most (minmax(0, 1fr)), so the page
+     holds the screen, and the notice grids' panels keep their 380px only
+     where it fits (min(100%, …)): on a phone each takes the column. -->
 <main
-  class="mx-auto grid max-w-decisions-900px gap-space-5 p-space-6"
-  style:--notice-cols="repeat(auto-fill, minmax(var(--c-panel-w), 1fr))"
+  class="mx-auto grid w-full max-w-decisions-900px grid-cols-(--main-cols) gap-space-5 p-space-6 max-phone:px-space-5"
+  style:--main-cols="minmax(0, 1fr)"
+  style:--notice-cols={NOTICE_COLS}
 >
   <h1 class="type-title">Channel cards</h1>
   <section
