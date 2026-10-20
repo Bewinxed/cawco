@@ -17,7 +17,7 @@
  * every other tool still reads a correct value.
  */
 import type Color from "colorjs.io";
-import { type CssEvaluator, call, splitTop } from "./design-css";
+import { type CssEvaluator, call, GRADIENT_DOWN, splitTop } from "./design-css";
 
 /** The `$extensions` key CawCo keeps a token's recipe under (reverse domain, as the spec recommends). */
 export const TOKENS_EXTENSION = "dev.cawco";
@@ -40,6 +40,8 @@ const GENERIC_FAMILY =
   /^(-apple-system|ui-(?:serif|sans-serif|monospace|rounded)|generic\([a-z-]+\)|system-ui|sans-serif|serif|monospace|cursive|fantasy|emoji|math|fangsong)$/;
 const QUOTES = /^["']|["']$/g;
 const ZERO = /^0$/;
+/** A `linear-gradient()` direction given as an angle. */
+const DIRECTION_ANGLE = /^-?\d*\.?\d+(deg|grad|rad|turn)$/;
 
 /** A DTCG colour value (Color Module 2025.10 §4.1). */
 export interface DtcgColour {
@@ -178,7 +180,7 @@ export function toCss(type: string, value: unknown): string | undefined {
     case "shadow":
       return shadowCss(value);
     case "gradient":
-      return `linear-gradient(${(value as { color: unknown }[]).map((stop) => colourCss(stop.color)).join(", ")})`;
+      return `linear-gradient(${[GRADIENT_DOWN, ...(value as { color: unknown }[]).map((stop) => colourCss(stop.color))].join(", ")})`;
     case "typography": {
       const t = value as Record<string, unknown>;
       return `${t.fontWeight} ${lengthCss(t.fontSize)} / ${t.lineHeight} ${familyCss(t.fontFamily)}`;
@@ -347,6 +349,15 @@ function shadowFrom(
   return layers.length === 1 ? layers[0] : layers;
 }
 
+/**
+ * A gradient's stops from its `linear-gradient()`. A DTCG gradient is its
+ * stops alone (https://www.designtokens.org/tr/2025.10/format/#gradient), so
+ * the one direction it reads is the one its evenly spaced stops already
+ * mean, `to bottom`, CSS's own default. Written first, it keeps a gradient
+ * over token references (`var()` stops) a valid reading for a linter that
+ * takes a leading `var()` for a direction. Each stop is a colour or a
+ * reference (`{color.action-top}`).
+ */
 function gradientFrom(
   css: string,
   ev: CssEvaluator,
@@ -357,7 +368,15 @@ function gradientFrom(
   if (fn?.name !== "linear-gradient") {
     throw new Error(`${where}: unsupported gradient "${css}"`);
   }
-  const stops = splitTop(fn.args, ",");
+  const [first = "", ...rest] = splitTop(fn.args, ",");
+  const lead = first.trim();
+  const directed = lead.startsWith("to ") || DIRECTION_ANGLE.test(lead);
+  if (directed && lead !== GRADIENT_DOWN) {
+    throw new Error(
+      `${where}: a DTCG gradient is its stops top to bottom; "${lead}" has no reading (write "${GRADIENT_DOWN}" or none)`
+    );
+  }
+  const stops = directed ? rest : [first, ...rest];
   return stops.map((stop, index) => ({
     color: colourFrom(stop, ev, mode, where),
     position: stops.length === 1 ? 0 : fixed(index / (stops.length - 1)),

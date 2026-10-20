@@ -27,6 +27,18 @@ const VIEWPORT_TERM = /^(-?\d*\.?\d+)(?:vi|vw)$/;
 const REFS = /\{([^}]+)\}/g;
 const MIX_SPACE = /^in\s+([a-z0-9-]+)$/;
 const MINUS_TERM = /\s*-\s*/g;
+/**
+ * The direction a DTCG gradient's evenly spaced stops are read in, CSS's own
+ * default. A gradient's CSS may say it first; any other direction has no
+ * DTCG reading (dtcg-values.ts `gradientFrom`).
+ */
+export const GRADIENT_DOWN = "to bottom";
+
+/** A `linear-gradient()`'s stops, past a leading `to bottom`. */
+export const gradientStops = (args: string): string[] => {
+  const all = splitTop(args, ",");
+  return all[0]?.trim() === GRADIENT_DOWN ? all.slice(1) : all;
+};
 
 /** A token as the evaluator reads it: its base CSS and each context's own. */
 export interface CssToken {
@@ -280,7 +292,7 @@ export class CssEvaluator {
     }
     if (fn?.name === "linear-gradient") {
       // A flat gradient (every stop the same colour) is that colour.
-      const [first, ...rest] = splitTop(fn.args, ",").map((stop) =>
+      const [first, ...rest] = gradientStops(fn.args).map((stop) =>
         this.colour(stop, mode, where)
       );
       if (!(first && rest.every((stop) => stop.equals(first)))) {

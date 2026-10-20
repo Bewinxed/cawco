@@ -53,7 +53,7 @@ import {
 } from "./build-tokens-apple";
 import { fontOrderDrift } from "./role-order";
 import { printLadder } from "./theme-ladder";
-import { isProductToken } from "./token-groups";
+import { isWebToken } from "./token-groups";
 
 const CHECK = process.argv.includes("--check");
 /** The outputs unlike the committed files, in check mode. */
@@ -355,7 +355,7 @@ const built = await buildTokens(
       "   Do not edit: change the token source and rebuild. */",
     ].join("\n"),
     layer: "theme",
-    include: isProductToken,
+    include: isWebToken,
     // The specifier spells the file (scripts/lib-import-check.ts).
     typesFrom: "#lib/tokens/tokens.js",
   }
@@ -366,7 +366,7 @@ const theme = tailwindThemeCss(built.view, {
     "   Do not edit: change the token source and rebuild. The Tailwind theme",
     "   over tokens.css: a utility exists only where a token does. */",
   ].join("\n"),
-  include: isProductToken,
+  include: isWebToken,
   retired: RETIRED,
   // The owner's call: Tailwind's numeric step stays as the one key no token
   // gives, so an off-ladder grid value keeps its utility (`gap-2`); the

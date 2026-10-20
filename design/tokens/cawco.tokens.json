@@ -1336,10 +1336,11 @@
         "colorSpace": "oklch",
         "components": [0.585, 0.17, 33]
       },
-      "$description": "action-surface's top stop: action-solid lifted 0.03 L. A stop is a colour, so a control changing to or from the action (the kit Button's variant, its hover) eases its highlight on the fill's own clock.",
+      "$description": "action-surface's top stop: action-solid lifted 0.03 L, the one place the lift is written. A stop is a colour, so a control changing to or from the action (the kit Button's variant, its hover) eases its highlight on the fill's own clock. Web only: the Apple apps draw action-surface's stops inlined.",
       "$extensions": {
         "dev.cawco": {
-          "css": "oklch(from {color.action-solid} calc(l + 0.03) c h)"
+          "css": "oklch(from {color.action-solid} calc(l + 0.03) c h)",
+          "platforms": ["web"]
         }
       }
     },
@@ -1352,7 +1353,8 @@
       "$description": "action-surface's bottom stop: action-solid sunk 0.03 L.",
       "$extensions": {
         "dev.cawco": {
-          "css": "oklch(from {color.action-solid} calc(l - 0.03) c h)"
+          "css": "oklch(from {color.action-solid} calc(l - 0.03) c h)",
+          "platforms": ["web"]
         }
       }
     },
@@ -1365,7 +1367,8 @@
       "$description": "action-surface-hover's top stop: action-hover lifted 0.03 L.",
       "$extensions": {
         "dev.cawco": {
-          "css": "oklch(from {color.action-hover} calc(l + 0.03) c h)"
+          "css": "oklch(from {color.action-hover} calc(l + 0.03) c h)",
+          "platforms": ["web"]
         }
       }
     },
@@ -1378,7 +1381,8 @@
       "$description": "action-surface-hover's bottom stop: action-hover sunk 0.03 L.",
       "$extensions": {
         "dev.cawco": {
-          "css": "oklch(from {color.action-hover} calc(l - 0.03) c h)"
+          "css": "oklch(from {color.action-hover} calc(l - 0.03) c h)",
+          "platforms": ["web"]
         }
       }
     },
@@ -1386,24 +1390,18 @@
       "$type": "gradient",
       "$value": [
         {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.585, 0.17, 33]
-          },
+          "color": "{color.action-top}",
           "position": 0
         },
         {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.525, 0.17, 33]
-          },
+          "color": "{color.action-bottom}",
           "position": 1
         }
       ],
       "$description": "The action is never flat: a top-highlight gradient, lifted ±0.03 L so the top stop keeps 4.5:1 under white.",
       "$extensions": {
         "dev.cawco": {
-          "css": "linear-gradient(oklch(from {color.action-solid} calc(l + 0.03) c h), oklch(from {color.action-solid} calc(l - 0.03) c h))"
+          "css": "linear-gradient(to bottom, {color.action-top}, {color.action-bottom})"
         }
       }
     },
@@ -1411,23 +1409,17 @@
       "$type": "gradient",
       "$value": [
         {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.54, 0.165, 33]
-          },
+          "color": "{color.action-hover-top}",
           "position": 0
         },
         {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.48, 0.165, 33]
-          },
+          "color": "{color.action-hover-bottom}",
           "position": 1
         }
       ],
       "$extensions": {
         "dev.cawco": {
-          "css": "linear-gradient(oklch(from {color.action-hover} calc(l + 0.03) c h), oklch(from {color.action-hover} calc(l - 0.03) c h))"
+          "css": "linear-gradient(to bottom, {color.action-hover-top}, {color.action-hover-bottom})"
         }
       }
     },

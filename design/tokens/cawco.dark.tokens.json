@@ -1300,54 +1300,6 @@
         }
       }
     },
-    "action-surface": {
-      "$type": "gradient",
-      "$value": [
-        {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.57, 0.165, 33]
-          },
-          "position": 0
-        },
-        {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.51, 0.165, 33]
-          },
-          "position": 1
-        }
-      ],
-      "$extensions": {
-        "dev.cawco": {
-          "css": "linear-gradient(oklch(from {color.action-solid} calc(l + 0.03) c h), oklch(from {color.action-solid} calc(l - 0.03) c h))"
-        }
-      }
-    },
-    "action-surface-hover": {
-      "$type": "gradient",
-      "$value": [
-        {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.525, 0.16, 34]
-          },
-          "position": 0
-        },
-        {
-          "color": {
-            "colorSpace": "oklch",
-            "components": [0.465, 0.16, 34]
-          },
-          "position": 1
-        }
-      ],
-      "$extensions": {
-        "dev.cawco": {
-          "css": "linear-gradient(oklch(from {color.action-hover} calc(l + 0.03) c h), oklch(from {color.action-hover} calc(l - 0.03) c h))"
-        }
-      }
-    },
     "status-live-bg": {
       "$type": "color",
       "$value": {

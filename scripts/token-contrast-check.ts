@@ -94,10 +94,6 @@ const CODE_GROUNDS: [string, string[]][] = [
   ["diff-add-emphasis", ["code-bg", "diff-add-bg", "diff-add-emphasis"]],
   ["diff-del-emphasis", ["code-bg", "diff-del-bg", "diff-del-emphasis"]],
 ];
-const ACTION_TOP = "oklch(from {color.action-solid} calc(l + 0.03) c h)";
-const ACTION_BOTTOM = "oklch(from {color.action-solid} calc(l - 0.03) c h)";
-const HOVER_TOP = "oklch(from {color.action-hover} calc(l + 0.03) c h)";
-const HOVER_BOTTOM = "oklch(from {color.action-hover} calc(l - 0.03) c h)";
 const weekRim = (hue: string) =>
   `color-mix(in oklch, {color.account-${hue}}, {color.account-week-toward} calc({motion.account-week-mix} * 100%))`;
 
@@ -159,11 +155,11 @@ const PAIRS: Pair[] = [
   ...(
     [
       ["action-solid", "action-solid"],
-      ["action-surface top stop", ACTION_TOP],
-      ["action-surface bottom stop", ACTION_BOTTOM],
+      ["action-surface top stop (action-top)", "action-top"],
+      ["action-surface bottom stop (action-bottom)", "action-bottom"],
       ["action-hover", "action-hover"],
-      ["action-hover top stop", HOVER_TOP],
-      ["action-hover bottom stop", HOVER_BOTTOM],
+      ["action-hover top stop (action-hover-top)", "action-hover-top"],
+      ["action-hover bottom stop (action-hover-bottom)", "action-hover-bottom"],
     ] as const
   ).map(([name, bg]) => ({
     label: `on-action on ${name}`,

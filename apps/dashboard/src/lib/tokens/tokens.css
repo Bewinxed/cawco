@@ -281,7 +281,7 @@
     --action-hover: light-dark(oklch(51% 0.165 33), oklch(49.5% 0.16 34));
     --on-action: oklch(100% 0 0);
     --on-brand: var(--on-action);
-    /* action-surface's top stop: action-solid lifted 0.03 L. A stop is a colour, so a control changing to or from the action (the kit Button's variant, its hover) eases its highlight on the fill's own clock. */
+    /* action-surface's top stop: action-solid lifted 0.03 L, the one place the lift is written. A stop is a colour, so a control changing to or from the action (the kit Button's variant, its hover) eases its highlight on the fill's own clock. Web only: the Apple apps draw action-surface's stops inlined. */
     --action-top: oklch(from var(--action-solid) calc(l + 0.03) c h);
     /* action-surface's bottom stop: action-solid sunk 0.03 L. */
     --action-bottom: oklch(from var(--action-solid) calc(l - 0.03) c h);
@@ -291,12 +291,14 @@
     --action-hover-bottom: oklch(from var(--action-hover) calc(l - 0.03) c h);
     /* The action is never flat: a top-highlight gradient, lifted ±0.03 L so the top stop keeps 4.5:1 under white. */
     --action-surface: linear-gradient(
-      oklch(from var(--action-solid) calc(l + 0.03) c h),
-      oklch(from var(--action-solid) calc(l - 0.03) c h)
+      to bottom,
+      var(--action-top),
+      var(--action-bottom)
     );
     --action-surface-hover: linear-gradient(
-      oklch(from var(--action-hover) calc(l + 0.03) c h),
-      oklch(from var(--action-hover) calc(l - 0.03) c h)
+      to bottom,
+      var(--action-hover-top),
+      var(--action-hover-bottom)
     );
     /* Selected nav / chosen row: warm apricot wash, coral ink, no shadow. */
     --selected-bg: light-dark(oklch(90.5% 0.062 48), oklch(34% 0.075 40));

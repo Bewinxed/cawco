@@ -29,13 +29,14 @@ import type { Dictionary, TransformedToken } from "style-dictionary/types";
 import {
   CssEvaluator,
   call,
+  gradientStops,
   splitTop,
 } from "../../../packages/hub/src/design-css";
 import type {
   TokenView,
   ViewToken,
 } from "../../../packages/hub/src/design-tokens";
-import { isProductToken } from "./token-groups";
+import { isAppleToken } from "./token-groups";
 
 const CATALOG = "Resources/Tokens.xcassets";
 const AUTHOR = { author: "xcode", version: 1 };
@@ -138,7 +139,7 @@ function json(value: object): string {
 
 function colourTokens(dictionary: Dictionary): TransformedToken[] {
   return dictionary.allTokens.filter(
-    (t) => t.$type === "color" && isProductToken(t)
+    (t) => t.$type === "color" && isAppleToken(t)
   );
 }
 
@@ -307,7 +308,9 @@ function gradient(raw: string, tokens: Tokens, where: string): string {
   if (fn?.name !== "linear-gradient") {
     throw new Error(`${where}: unsupported gradient "${raw}"`);
   }
-  const stops = splitTop(fn.args, ",");
+  // Past a leading `to bottom`, the direction evenly spaced stops already
+  // mean (design-css.ts `gradientStops`).
+  const stops = gradientStops(fn.args);
   for (const stop of stops) {
     // A direction or a stop position has no reading here yet: say so rather than guess.
     if (
@@ -478,7 +481,7 @@ function namespaces(
   const groups = new Map<string, Declaration[]>();
   for (const token of dictionary.allTokens) {
     const [group] = token.path;
-    if (NOT_APPLE.has(token.$type ?? "") || !isProductToken(token)) {
+    if (NOT_APPLE.has(token.$type ?? "") || !isAppleToken(token)) {
       continue;
     }
     const namespace = NAMESPACES[group];
