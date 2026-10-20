@@ -462,6 +462,11 @@
   --spacing-c-ledger-outcome-w: var(--c-ledger-outcome-w);
   --spacing-c-ledger-outcome-w-narrow: var(--c-ledger-outcome-w-narrow);
   --spacing-c-ledger-took-w: var(--c-ledger-took-w);
+  --spacing-c-ledger-band-h: var(--c-ledger-band-h);
+  --spacing-c-ledger-row-h: var(--c-ledger-row-h);
+  --spacing-c-ledger-count-w: var(--c-ledger-count-w);
+  --spacing-c-ledger-usd-w: var(--c-ledger-usd-w);
+  --spacing-c-matrix-col-w: var(--c-matrix-col-w);
   --spacing-c-side-grip-w: var(--c-side-grip-w);
   --spacing-c-side-surface-min: var(--c-side-surface-min);
   --spacing-c-new-session-w: var(--c-new-session-w);

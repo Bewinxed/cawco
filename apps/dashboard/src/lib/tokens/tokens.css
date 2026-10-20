@@ -1128,6 +1128,16 @@
     --c-ledger-outcome-w-narrow: 8rem;
     /* The Runs ledger's Took column. */
     --c-ledger-took-w: 5rem;
+    /* A ledger's header band: its column heads in caps on surface-band, one line, held at the top while the rows scroll under it (DESIGN.md, Density: "a 32px header band"; ledger-header height). */
+    --c-ledger-band-h: 32px;
+    /* A ledger's row pitch: every row of a ledger, a list or a generated view's table, a name over its meta line or one line of meta (DESIGN.md, Density: "a 44px row pitch"; ledger-row height). */
+    --c-ledger-row-h: 44px;
+    /* A ledger's count column: a count and its noun in meta, "12 attempts" (Usage's project spend: Wakes, Tries). */
+    --c-ledger-count-w: 8rem;
+    /* A ledger's spend column: a month's dollars in tabular meta, "$1,234.56", on the column's end (Usage's project spend: Spent). */
+    --c-ledger-usd-w: 6rem;
+    /* A matrix's wide column, its floor: a tool's name, its count and its Required switch over each machine's cell (Command-line tools), an update's state and its act (Updates). */
+    --c-matrix-col-w: 14rem;
     /* The side divider's hit width when the split is expanded. */
     --c-side-grip-w: 6px;
     /* A side surface's floor (SideSurface SIDE_FLOOR_PX). */

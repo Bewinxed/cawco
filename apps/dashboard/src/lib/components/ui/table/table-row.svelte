@@ -17,19 +17,24 @@
          */
         /** A row with its bottom rule taken away, the body's last one too. */
         unruled: "border-b-none [&:is(tbody>tr):last-child]:border-b-none",
-        /** A row whose cells stack into a spaced, ruled grid on a phone, the body's last one too. */
+        /*
+         * The card rows (a `stacks` table's): under 640px the row is a
+         * grid on its table's `--card-cols`, the columns its caller lays
+         * the card on, its cells on one centre line.
+         */
+        /** A card on a phone, spaced and ruled, the body's last one too. */
         stacks:
-          "max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:border-b max-phone:border-b-border-hairline max-phone:px-space-3 max-phone:py-space-2 max-phone:[&:is(tbody>tr):last-child]:border-b",
-        /** A row that keeps a hairline under it on a phone, but the last. */
+          "max-phone:grid max-phone:grid-cols-(--card-cols) max-phone:items-center max-phone:gap-x-space-3 max-phone:gap-y-space-1 max-phone:border-b max-phone:border-b-border-hairline max-phone:px-space-3 max-phone:py-space-2 max-phone:[&:is(tbody>tr):last-child]:border-b",
+        /** A card on a phone whose cells carry its spacing, ruled but the last. */
         "stacks-ruled":
-          "max-phone:border-b max-phone:border-b-border-hairline max-phone:last:border-b-none max-phone:[&:is(tbody>tr):last-child]:border-b-none",
+          "max-phone:grid max-phone:grid-cols-(--card-cols) max-phone:items-center max-phone:border-b max-phone:border-b-border-hairline max-phone:last:border-b-none max-phone:[&:is(tbody>tr):last-child]:border-b-none",
         /**
-         * A pickable row: unruled at a desk, a picked, ruled grid on a phone.
+         * A pickable row: unruled at a desk, a picked, ruled card on a phone.
          * Its picked fill outranks the base's selected one where both hold,
          * as the ledger's unlayered row rule did.
          */
         "picks-stacks":
-          "border-b-none max-phone:gap-x-space-2 max-phone:gap-y-space-1 max-phone:border-b max-phone:border-b-border-hairline data-[state=selected]:data-picked:max-phone:bg-selected-bg max-phone:px-space-3 max-phone:py-space-2 data-picked:max-phone:bg-selected-bg max-phone:last:border-b-none [&:is(tbody>tr):last-child]:border-b-none",
+          "border-b-none max-phone:grid max-phone:grid-cols-(--card-cols) max-phone:items-center max-phone:gap-x-space-2 max-phone:gap-y-space-1 max-phone:border-b max-phone:border-b-border-hairline data-[state=selected]:data-picked:max-phone:bg-selected-bg max-phone:px-space-3 max-phone:py-space-2 data-picked:max-phone:bg-selected-bg max-phone:last:border-b-none [&:is(tbody>tr):last-child]:border-b-none",
       },
       /** A row whose subject is away (an offline machine). */
       inactive: { true: "opacity-50" },

@@ -718,11 +718,7 @@
         data-zone={routine.timeZone}
       >
         <Table.Row data-view-routines-row class="relative" variant="unruled">
-          <Table.Cell
-            class="h-c-btn-h-lg w-(--col-state)"
-            {rule}
-            variant="list-opens"
-          >
+          <Table.Cell class="w-(--col-state)" {rule} variant="list-opens">
             <span
               data-slot="lead"
               aria-label={lead.said}
@@ -731,7 +727,7 @@
               role="img"><lead.glyph class="size-icon-md" /></span
             >
           </Table.Cell>
-          <Table.Cell class="h-c-btn-h-lg" {rule} variant="list-opens">
+          <Table.Cell {rule} variant="list-opens">
             <Collapsible.Trigger
               data-opener
               class="focus-inset block max-w-full cursor-pointer border-none border-current bg-transparent p-0 text-start text-inherit after:absolute after:inset-0"
@@ -754,7 +750,7 @@
               <!-- On a narrow ledger, Last and Next in the same order. -->
               <span
                 data-slot="folded"
-                class="hidden @max-routines-ledger-34rem/routines-ledger:inline"
+                class="hidden @max-routines-ledger-34rem/table:inline"
               >
                 · {words.lastShort}
                 <RunStatus
@@ -774,8 +770,8 @@
           </Table.Cell>
           <Table.Cell
             data-col-last
-            class="h-c-btn-h-lg @max-routines-ledger-34rem/routines-ledger:hidden"
             data-cell="last"
+            fold="measure"
             {rule}
             variant="list-opens"
           >
@@ -787,8 +783,8 @@
             />
           </Table.Cell>
           <Table.Cell
-            class="h-c-btn-h-lg @max-routines-ledger-34rem/routines-ledger:hidden"
             data-cell="next"
+            fold="measure"
             {rule}
             variant="list-opens"
           >
@@ -800,7 +796,7 @@
               title={next.title ?? undefined}>{next.text}</span
             >
           </Table.Cell>
-          <Table.Cell class="h-c-btn-h-lg text-end" {rule} variant="list-opens">
+          <Table.Cell edge="end" {rule} variant="list-opens">
             <span class="relative z-1 inline-flex"
               ><RowMenu actions={menuOf(routine)} label={routine.name} /></span
             >
@@ -812,7 +808,7 @@
               <fieldset
                 data-slot="row-ask"
                 aria-label={words.removeLabel(routine.name)}
-                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none border-current px-space-3 pt-0 pb-space-2 type-meta text-ink-strong"
+                class="m-0 flex min-w-0 flex-wrap items-center gap-x-space-2 gap-y-space-1 border-none px-space-3 pt-0 pb-space-2 type-meta text-ink-strong"
               >
                 <span>{words.removeAsk(routine.name)}</span>
                 <Button
@@ -905,7 +901,6 @@
     {/if}
     <div
       data-slot="ledger"
-      class="@container/routines-ledger"
       style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
       style:--col-menu="calc(var(--c-btn-h-sm) + var(--space-3) * 2)"
     >
@@ -914,34 +909,35 @@
         aria-label={words.tab}
         ghostRows="[data-view-routines-row]"
         layout="ledger"
+        stickyBand
       >
         <Table.Header>
           <Table.Row variant="band">
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="sticky top-0 z-2 w-(--col-state) bg-surface-band"
+              class="z-2 w-(--col-state)"
               scope="col"
               variant="band"
               ><span class="sr-only">{words.columnState}</span></Table.Head
             >
-            <Table.Head
-              class="sticky top-0 z-2 bg-surface-band"
-              scope="col"
-              variant="band">{words.columnRoutine}</Table.Head
+            <Table.Head class="z-2" scope="col" variant="band"
+              >{words.columnRoutine}</Table.Head
             >
             <Table.Head
               data-col-last
-              class="sticky top-0 z-2 w-c-routine-time-w bg-surface-band @max-routines-ledger-34rem/routines-ledger:hidden"
+              class="z-2 w-c-routine-time-w"
+              fold="measure"
               scope="col"
               variant="band">{words.columnLastRun}</Table.Head
             >
             <Table.Head
-              class="sticky top-0 z-2 w-c-routine-time-w bg-surface-band @max-routines-ledger-34rem/routines-ledger:hidden"
+              class="z-2 w-c-routine-time-w"
+              fold="measure"
               scope="col"
               variant="band">{words.columnNextRun}</Table.Head
             >
             <Table.Head
-              class="sticky top-0 z-2 w-(--col-menu) bg-surface-band"
+              class="z-2 w-(--col-menu)"
               scope="col"
               variant="band"
               ><span class="sr-only">{words.columnActions}</span></Table.Head
@@ -969,24 +965,22 @@
       data-slot="ledger"
       style:--col-state="calc(var(--c-row-lead) + var(--space-3))"
     >
-      <Table.Root aria-label={words.sources} layout="ledger">
+      <Table.Root aria-label={words.sources} layout="ledger" stickyBand>
         <Table.Header>
           <Table.Row variant="band">
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="sticky top-0 z-2 w-(--col-state) bg-surface-band"
+              class="z-2 w-(--col-state)"
               scope="col"
               variant="band"
               ><span class="sr-only">{words.columnService}</span></Table.Head
             >
-            <Table.Head
-              class="sticky top-0 z-2 bg-surface-band"
-              scope="col"
-              variant="band">{words.columnSource}</Table.Head
+            <Table.Head class="z-2" scope="col" variant="band"
+              >{words.columnSource}</Table.Head
             >
             <Table.Head
               data-col-last
-              class="sticky top-0 z-2 w-c-routine-time-w bg-surface-band"
+              class="z-2 w-c-routine-time-w"
               scope="col"
               variant="band">{words.columnLastRead}</Table.Head
             >
@@ -1001,17 +995,14 @@
               class="relative"
               variant="unruled"
             >
-              <Table.Cell
-                class="h-c-btn-h-lg w-(--col-state)"
-                {rule}
-                variant="list"
+              <Table.Cell class="w-(--col-state)" {rule} variant="list"
                 ><span
                   data-slot="lead"
                   class="grid w-c-row-lead place-items-center text-ink-muted"
                   ><ProviderLogo provider={route.service} /></span
                 ></Table.Cell
               >
-              <Table.Cell class="h-c-btn-h-lg" {rule} variant="list">
+              <Table.Cell {rule} variant="list">
                 <span
                   data-slot="name"
                   class="block truncate type-label text-ink-row"
@@ -1025,13 +1016,7 @@
                   >{eventOf(route)}</span
                 >
               </Table.Cell>
-              <Table.Cell
-                data-col-last
-                class="h-c-btn-h-lg"
-                data-cell="last"
-                {rule}
-                variant="list"
-              >
+              <Table.Cell data-col-last data-cell="last" {rule} variant="list">
                 {#if route.lastDeliveryAt === null}
                   <RunStatus status="neutral" text={words.noEvents} />
                 {:else}
@@ -1052,17 +1037,14 @@
               class="relative"
               variant="unruled"
             >
-              <Table.Cell
-                class="h-c-btn-h-lg w-(--col-state)"
-                {rule}
-                variant="list"
+              <Table.Cell class="w-(--col-state)" {rule} variant="list"
                 ><span
                   data-slot="lead"
                   class="grid w-c-row-lead place-items-center text-ink-muted"
                   ><ProviderLogo provider={poll.service.toLowerCase()} /></span
                 ></Table.Cell
               >
-              <Table.Cell class="h-c-btn-h-lg" {rule} variant="list">
+              <Table.Cell {rule} variant="list">
                 <span
                   data-slot="name"
                   class="block truncate type-label text-ink-row"
@@ -1077,13 +1059,7 @@
                     >{" · "}{/if}{everyOf(poll)}</span
                 >
               </Table.Cell>
-              <Table.Cell
-                data-col-last
-                class="h-c-btn-h-lg"
-                data-cell="last"
-                {rule}
-                variant="list"
-              >
+              <Table.Cell data-col-last data-cell="last" {rule} variant="list">
                 {#if poll.polledAt === null}
                   <RunStatus status="neutral" text={words.notReadYet} />
                 {:else if poll.failure === null}

@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
   import { cn, type WithElementRef } from "#lib/utils.js";
+  import { getTableContext } from "./table.svelte";
 
   let {
     ref = $bindable(null),
@@ -8,10 +9,17 @@
     children,
     ...restProps
   }: WithElementRef<HTMLAttributes<HTMLTableSectionElement>> = $props();
+
+  const table = getTableContext();
 </script>
 
+<!-- Where the rows are cards, the body is their block. -->
 <tbody
-  class={cn("[&_tr:last-child]:border-0", className)}
+  class={cn(
+    "[&_tr:last-child]:border-0",
+    table.stacks && "max-phone:block",
+    className
+  )}
   data-slot="table-body"
   bind:this={ref}
   {...restProps}

@@ -63,7 +63,7 @@
         <Table.Row variant="band">
           {#each group.headers as header (header.id)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
-            <Table.Head class="h-c-toolbar-ctl" scope="col" variant="caps"
+            <Table.Head scope="col" variant="band"
               >{header.column.columnDef.header}</Table.Head
             >
             <!-- biome-ignore-end lint/a11y/noHeaderScope: the head above -->
@@ -76,9 +76,7 @@
         <Table.Row data-view-table-row class="relative">
           {#each row.getAllCells() as cell, i (cell.id)}
             <Table.Cell
-              class="h-c-btn-h-lg {i === 0
-                ? 'min-w-c-view-lead-min whitespace-normal'
-                : ''}"
+              class={i === 0 ? "min-w-c-view-lead-min" : undefined}
               variant={i === 0 ? "view-lead" : "view"}
             >
               {#if i === 0}

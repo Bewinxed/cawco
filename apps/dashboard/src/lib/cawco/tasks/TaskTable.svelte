@@ -79,14 +79,6 @@
   });
   const labelled = $derived(tasks.some((task) => task.labels.length > 0));
   const planned = $derived(tasks.some((task) => task.todos.total > 0));
-  /** The cells that draw themselves their own way; every other takes the plain cell. */
-  const SPECIAL_CELLS = new Set([
-    "pick",
-    "title",
-    "labels",
-    "created",
-    "updated",
-  ]);
   /** Each column's width, its head's and its cells' alike; the title takes the rest. */
   const COL_W: Record<string, string> = {
     pick: "calc(var(--icon-md) + 2 * var(--space-3))",
@@ -215,20 +207,16 @@
   }
 </script>
 
+<!-- Under 640px each row is a card: the tick down its start, the title
+     across the card, then id, stage, to-dos and age. -->
 <div
   data-slot="ledger"
-  class="group/ledger @container overflow-hidden rounded-lg bg-surface-raised shadow-tile"
+  class="group/ledger overflow-hidden rounded-lg bg-surface-raised shadow-tile"
   data-pickable={onpick ? "" : undefined}
-  style:--row-cols="auto auto 1fr auto"
-  style:--row-cols-pick="auto auto auto 1fr auto"
+  style:--card-cols={onpick ? "auto auto auto 1fr auto" : "auto auto 1fr auto"}
 >
-  <Table.Root
-    data-tasks
-    class="max-phone:block"
-    ghostRows="tbody tr"
-    layout="ledger"
-  >
-    <Table.Header class="max-phone:hidden">
+  <Table.Root data-tasks ghostRows="tbody tr" layout="ledger" stacks>
+    <Table.Header>
       {#each table.getHeaderGroups() as group (group.id)}
         <Table.Row variant="band">
           {#each group.headers as header (header.id)}
@@ -237,16 +225,13 @@
             {@const sort = ariaSort(sorted)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
+              edge={column.id === "created" || column.id === "updated"
+                ? "end"
+                : undefined}
               aria-sort={sort}
-              class={[
-                column.id === "created" &&
-                  "w-(--col-w) text-end @max-decisions-900px:hidden",
-                column.id === "updated" && "w-(--col-w) text-end",
-                column.id !== "created" &&
-                  column.id !== "updated" &&
-                  "w-(--col-w)",
-              ]}
+              class="w-(--col-w)"
               data-task-table-col={column.id}
+              fold={column.id === "created" ? "desk" : undefined}
               scope="col"
               variant="band"
               style="--col-w: {COL_W[column.id] ?? ''}"
@@ -295,34 +280,38 @@
         </Table.Row>
       {/each}
     </Table.Header>
-    <Table.Body class="max-phone:block">
+    <Table.Body>
       {#each table.getRowModel().rows as row (row.id)}
         {@const task = row.original}
         {@const on = picked?.(task.id) ?? false}
         <Table.Row
           data-task-table-row
-          class="group/row relative max-phone:grid max-phone:grid-cols-(--row-cols) group-data-pickable/ledger:max-phone:grid-cols-(--row-cols-pick) max-phone:items-center"
+          class="group/row relative"
           data-picked={on || undefined}
           data-task={task.id}
           variant="picks-stacks"
         >
           {#each row.getAllCells() as cell (cell.id)}
             <Table.Cell
-              class={cell.column.id === "created"
-                ? "w-(--col-w) h-c-btn-h-lg text-end @max-decisions-900px:hidden max-phone:@max-decisions-900px:hidden max-phone:w-auto max-phone:h-auto"
-                : [
-                    cell.column.id === "pick" &&
-                      "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-start-1 max-phone:row-span-2 max-phone:col-start-1",
-                    cell.column.id === "title" &&
-                      "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1",
-                    cell.column.id === "labels" &&
-                      "w-(--col-w) h-c-btn-h-lg max-phone:hidden max-phone:w-auto max-phone:h-auto",
-                    cell.column.id === "updated" &&
-                      "w-(--col-w) h-c-btn-h-lg text-end max-phone:block max-phone:w-auto max-phone:h-auto max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5",
-                    !SPECIAL_CELLS.has(cell.column.id) &&
-                      "w-(--col-w) h-c-btn-h-lg max-phone:block max-phone:w-auto max-phone:h-auto",
-                  ]}
+              edge={cell.column.id === "created" ||
+              cell.column.id === "updated"
+                ? "end"
+                : undefined}
+              class={[
+                "w-(--col-w)",
+                cell.column.id === "pick" &&
+                  "max-phone:row-start-1 max-phone:row-span-2 max-phone:col-start-1",
+                cell.column.id === "title" &&
+                  "max-phone:row-start-1 max-phone:col-span-full group-data-pickable/ledger:max-phone:col-start-2 group-data-pickable/ledger:max-phone:-col-end-1",
+                cell.column.id === "updated" &&
+                  "max-phone:col-start-4 group-data-pickable/ledger:max-phone:col-start-5",
+              ]}
               data-task-table-col={cell.column.id}
+              fold={cell.column.id === "created"
+                ? "desk"
+                : cell.column.id === "labels"
+                  ? "phone"
+                  : undefined}
               style="--col-w: {COL_W[cell.column.id] ?? ''}"
               variant="ledger-picks-stacks"
             >
