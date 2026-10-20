@@ -58,6 +58,7 @@ import {
   rewriteSheet,
 } from "./pseudo";
 import { onPageScheme, pageScheme } from "./scheme";
+import { frameWidths, splitWidth, WIDTH_CONTAINER } from "./width";
 
 /** What the adapter is handed for one story (Storybook's `decorateStory` inputs). */
 export interface MountSpec {
@@ -393,8 +394,22 @@ export function boot(options: BootOptions): void {
     ...document.styleSheets,
     ...document.adoptedStyleSheets,
   ];
+  /** A sheet the canvas writes for itself (its page style, DialKit's, the width probe): it answers the window. */
+  const canvasOwned = (sheet: CSSStyleSheet) => {
+    const node = sheet.ownerNode;
+    return (
+      node instanceof HTMLElement &&
+      ["cawcoCanvas", "cawcoDialkit", "cawcoProbe"].some(
+        (key) => key in node.dataset
+      )
+    );
+  };
   const rewriteAll = () => {
     for (const sheet of sheetsNow()) {
+      // Width first: the state rewrite then reaches the rules inside the containers it makes.
+      if (!canvasOwned(sheet)) {
+        frameWidths(sheet, rewrite.refused);
+      }
       rewriteSheet(sheet, rewrite);
       forceMotion(sheet, view.motion);
     }
@@ -465,9 +480,65 @@ export function boot(options: BootOptions): void {
   );
   rewriteAll();
 
-  /* --- Reduced motion for script that asks matchMedia ------------------- */
+  /* --- Script that asks matchMedia: reduced motion, and the frame's width */
 
   const media = window.matchMedia.bind(window);
+  /** The width of the frame whose story mounts now: undefined between mounts, null for a frame without one. */
+  let mounting: number | null | undefined;
+  /** The one width every frame drawn has, null where they differ or one has none. */
+  const sharedWidth = (): number | null => {
+    const widths = new Set<number | null>();
+    for (const section of sections) {
+      for (const frame of section.frames.values()) {
+        widths.add(widthOf(frame.story, frame.column.width));
+      }
+    }
+    const [only] = widths;
+    return widths.size === 1 && only !== undefined ? only : null;
+  };
+  /**
+   * Where the engine answers a width condition at a given width: a hidden
+   * container (`cawco-probe`) set to that width, a rule per condition
+   * marking its child, so every syntax a container query takes (ranges,
+   * `and`, `or`) answers as the frame's CSS does.
+   */
+  const probeStyle = document.createElement("style");
+  probeStyle.dataset.cawcoProbe = "";
+  document.head.append(probeStyle);
+  const probeBox = document.createElement("div");
+  probeBox.dataset.cawcoProbe = "";
+  probeBox.setAttribute("aria-hidden", "true");
+  probeBox.style.cssText =
+    "position: absolute; inset-block-start: 0; inset-inline-start: -100000px; block-size: 0; overflow: hidden; visibility: hidden; pointer-events: none; container: cawco-probe / inline-size;";
+  const probeMark = document.createElement("i");
+  probeBox.append(probeMark);
+  document.body.append(probeBox);
+  const conditions = new Map<string, number | null>();
+  /** Whether `condition` holds in a container `width` px wide; null where the engine takes no such condition. */
+  const holdsAt = (condition: string, width: number): boolean | null => {
+    let at = conditions.get(condition);
+    if (at === undefined) {
+      const { sheet } = probeStyle;
+      at = sheet?.cssRules.length ?? null;
+      try {
+        sheet?.insertRule(
+          `@container cawco-probe ${condition} { [data-cawco-probe] > i[data-q="${at}"] { --cawco-q: 1; } }`,
+          at ?? 0
+        );
+      } catch {
+        at = null;
+      }
+      conditions.set(condition, at);
+    }
+    if (at === null) {
+      return null;
+    }
+    probeBox.style.inlineSize = `${width}px`;
+    probeMark.dataset.q = String(at);
+    return (
+      getComputedStyle(probeMark).getPropertyValue("--cawco-q").trim() === "1"
+    );
+  };
   window.matchMedia = (query: string) => {
     if (view.motion === "reduce" && REDUCED_QUERY.test(query)) {
       const reduce = query.includes("reduce");
@@ -477,7 +548,31 @@ export function boot(options: BootOptions): void {
         media: query,
       } as MediaQueryList;
     }
-    return media(query);
+    const split = splitWidth(query);
+    if (split.kind !== "frame") {
+      return media(query);
+    }
+    // A frame's story asks at its frame's width; asked between mounts, at the one width every frame has; else the canvas's, as a frame without one answers its CSS.
+    const asked = mounting;
+    const widthNow = () =>
+      (asked === undefined ? sharedWidth() : asked) ?? canvas.clientWidth;
+    // What the window still answers (a media type, a hover), and where its changes are heard.
+    const rest = media(split.media || query);
+    return {
+      get matches() {
+        const held = holdsAt(split.container, widthNow());
+        return held === null
+          ? media(query).matches
+          : held && (!split.media || rest.matches);
+      },
+      media: query,
+      onchange: null,
+      addEventListener: rest.addEventListener.bind(rest),
+      removeEventListener: rest.removeEventListener.bind(rest),
+      addListener: rest.addListener.bind(rest),
+      removeListener: rest.removeListener.bind(rest),
+      dispatchEvent: rest.dispatchEvent.bind(rest),
+    } as MediaQueryList;
   };
 
   /* --- Sections ----------------------------------------------------------- */
@@ -841,6 +936,10 @@ export function boot(options: BootOptions): void {
     into: { error?: PageError }
   ): Mounted | undefined {
     into.error = undefined;
+    const was = mounting;
+    // What the story's script asks of matchMedia while it mounts, its frame answers.
+    const width = Number.parseFloat(body.style.width);
+    mounting = Number.isFinite(width) ? width : null;
     try {
       return adapter.mountStory(body, specFor(section, name, args), (error) => {
         into.error = pageError(error, root, base);
@@ -849,7 +948,20 @@ export function boot(options: BootOptions): void {
     } catch (error) {
       into.error = pageError(error, root, base);
       console.error(`[cawco] story ${name} did not mount:`, error);
+    } finally {
+      mounting = was;
     }
+  }
+
+  /**
+   * A frame body at a story's width: its width, and the width container its
+   * story's width conditions answer to (width.ts). A body without one shrinks
+   * to its story, so it can be no container: it answers the canvas.
+   */
+  function sizeBody(body: HTMLElement, width: number | null): void {
+    body.style.width = width === null ? "" : `${width}px`;
+    body.style.container =
+      width === null ? "" : `${WIDTH_CONTAINER} / inline-size`;
   }
 
   /**
@@ -905,8 +1017,7 @@ export function boot(options: BootOptions): void {
     body.classList.toggle("dark", scheme === "dark");
     body.style.backgroundColor = ground.background;
     body.style.color = ground.color;
-    const width = widthOf(story, column.width);
-    body.style.width = width === null ? "" : `${width}px`;
+    sizeBody(body, widthOf(story, column.width));
     if (embed) {
       fitToEmbed(frame);
     }
@@ -1262,6 +1373,7 @@ export function boot(options: BootOptions): void {
   ): Promise<Probe> {
     const body = document.createElement("div");
     body.className = "cawco-frame-body";
+    sizeBody(body, widthOf(story, "own"));
     rig.append(body);
     const fake: { error?: PageError } = {};
     const mounted = mountInto(
@@ -1423,6 +1535,8 @@ export function boot(options: BootOptions): void {
     for (const { to } of movesOf(section)) {
       const body = document.createElement("div");
       body.className = "cawco-frame-body";
+      const story = storiesOf(section).find((one) => one.name === to);
+      sizeBody(body, story ? widthOf(story, "own") : null);
       rig.append(body);
       try {
         // biome-ignore lint/performance/noAwaitInLoops: one move in the rig at a time

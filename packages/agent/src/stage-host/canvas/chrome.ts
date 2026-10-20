@@ -198,6 +198,9 @@ html.cawco-canvas-page, html.cawco-canvas-page body { margin: 0; block-size: 100
    is ever drawn under any of it, whatever the head grows to. */
 .cawco-canvas { position: fixed; inset-block: var(--band) calc(var(--foot) + var(--cawco-floor)); inset-inline: 0 var(--cawco-end); overflow: hidden;
   touch-action: none; background: var(--surface-well); }
+/* The width a frame without one answers its story's width conditions at (canvas width.ts): the canvas's own, as the window
+   was. A frame with a width answers its own body's. */
+.cawco-canvas { container: cawco-width / inline-size; }
 .cawco-world { position: absolute; inset-block-start: 0; inset-inline-start: 0; transform-origin: 0 0; display: flex; flex-direction: column;
   gap: var(--space-8); padding-block-end: 160px; will-change: transform; --cawco-gutter: 0px; padding-inline-start: var(--cawco-gutter); }
 .cawco-section { display: flex; flex-direction: column; gap: var(--space-3); min-block-size: 120px; }
