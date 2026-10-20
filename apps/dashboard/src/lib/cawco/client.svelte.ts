@@ -1310,12 +1310,15 @@ declare global {
   var __cawcoDisposing: boolean;
   /** The wake listeners are document-wide; bind them once across HMR reloads. */
   var __cawcoWakeBound: boolean;
+  /** This document asked for the hub (`ensureConnected`): only then does a wake reconnect. */
+  var __cawcoHubAsked: boolean;
 }
 globalThis.__cawcoSocket ??= null;
 globalThis.__cawcoReconnectTimeout ??= null;
 globalThis.__cawcoReconnectAttempts ??= 0;
 globalThis.__cawcoDisposing ??= false;
 globalThis.__cawcoWakeBound ??= false;
+globalThis.__cawcoHubAsked ??= false;
 
 if (import.meta.hot) {
   import.meta.hot.dispose(() => {
@@ -5290,6 +5293,7 @@ let keptSendsResumed = false;
 
 /** What routes call on mount: the socket is app-scoped, not page-scoped. */
 export function ensureConnected(): void {
+  globalThis.__cawcoHubAsked = true;
   if (!keptSendsResumed) {
     keptSendsResumed = true;
     resumeKeptSends().catch((error: unknown) =>
@@ -5317,12 +5321,15 @@ export function ensureConnected(): void {
  * The three moments worth more than the backoff schedule: the machine says its
  * network is back, the tab comes to the foreground after a sleep, and the
  * window regains focus. Each means the outage may be over right now, and the
- * timer was set when none of that was known. Registered once per document.
+ * timer was set when none of that was known. Registered once per document,
+ * and only for a document that asked for the hub (`ensureConnected`): one
+ * that only imports this module (a component canvas on a stage, which talks
+ * to no hub) never dials one when it takes the focus.
  */
 if (typeof window !== "undefined" && !globalThis.__cawcoWakeBound) {
   globalThis.__cawcoWakeBound = true;
   const wake = () => {
-    if (document.visibilityState === "hidden") {
+    if (!globalThis.__cawcoHubAsked || document.visibilityState === "hidden") {
       return;
     }
     reconnectNow();
