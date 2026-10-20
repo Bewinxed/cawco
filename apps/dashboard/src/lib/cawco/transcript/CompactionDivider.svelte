@@ -181,7 +181,7 @@
   data-live={live || undefined}
   data-settled={(watched && row.state === "done") || undefined}
   data-settling={settlingNow || undefined}
-  {@attach watched && morph()}
+  {@attach watched && morph({ on: ["data-failed", "data-live"] })}
 >
   <!-- Each arm is the container its wave is measured against. `--run` is how
        much of the path the arm shows, along the curve: the wave is 1.087px

@@ -118,7 +118,8 @@
   style:--fill-h-coarse={"calc(var(--block-fill) - var(--c-btn-h-lg) - var(--space-2))"}
   style:--fill-h-fine={"calc(var(--block-fill) - var(--c-btn-h-sm) - var(--space-2))"}
   {@attach dropOnBlock(drag, () => ({ block: id, columns, page }))}
-  {@attach resizing && morph({ width: true })}
+  {@attach resizing &&
+    morph({ width: true, on: ["data-wide", "data-narrow", "data-span"] })}
 >
   <!-- In the air: the block's box stays as its slot, the block not drawn
        twice (its head and body hidden). -->

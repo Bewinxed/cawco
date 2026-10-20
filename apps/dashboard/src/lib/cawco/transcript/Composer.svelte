@@ -3002,7 +3002,7 @@
       class="grow shrink basis-0 min-h-0 w-c-composer-w flex flex-col justify-end pointer-events-none transition-fade-show group-data-perched/dock:pb-(--perch-rise) group-data-asking/dock:opacity-0 group-data-asking/dock:invisible group-data-asking/dock:transition-fade-hide group-data-drawing/dock:opacity-0 group-data-drawing/dock:invisible group-data-drawing/dock:transition-fade-hide max-desk:self-stretch max-desk:mx-space-3 max-desk:w-auto max-desk:mb-(--prompts-step)"
       inert={askRaised}
       bind:this={offers}
-      {@attach reflow()}
+      {@attach reflow({ on: ["data-open", "data-railed"] })}
       style:--prompts-step="calc(var(--space-4) - var(--space-2))"
     >
       <!-- Each conversation's offer, built, standing on the stack's foot;

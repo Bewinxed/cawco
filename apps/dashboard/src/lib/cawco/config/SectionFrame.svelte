@@ -103,7 +103,7 @@
     data-slot="body"
     class="flex max-w-c-config-max-w min-h-(--card-h) shrink-0 grow basis-auto flex-col gap-space-6 rounded-lg bg-surface-raised px-space-7 py-space-6"
     style:--card-h={card === null ? undefined : `${card}px`}
-    {@attach morph()}
+    {@attach morph({ on: ["data-fill"] })}
     {@attach settled ? rememberCard(page.url.pathname) : undefined}
   >
     <header

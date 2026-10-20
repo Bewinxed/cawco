@@ -24,7 +24,7 @@
   import type { ContinueSource, SessionDraft } from "../continue.svelte";
   import { morph } from "../motion/morph.svelte";
   import NewSessionForm from "./NewSessionForm.svelte";
-  import type { SpawnPrefill } from "./new-session.svelte";
+  import { FORM_SIZES, type SpawnPrefill } from "./new-session.svelte";
 
   let {
     open,
@@ -91,7 +91,7 @@
    * content, so it takes the same `morph()` here. The sheet on a phone is the
    * kit drawer's and is left to it.
    */
-  const resize = morph();
+  const resize = morph({ on: FORM_SIZES });
   $effect(() => {
     if (card && !mobile.current) {
       return resize(card);

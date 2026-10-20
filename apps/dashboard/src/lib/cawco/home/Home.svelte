@@ -130,7 +130,7 @@
   ]}
   data-home-variant={variant}
   data-flip={variant === "rail" && !relaying ? "box" : undefined}
-  {@attach reflow()}
+  {@attach reflow({ on: ["data-bare"] })}
 >
   <!-- Bare, nothing in it: in the rail, live and read with nothing needing
        the reader; on the page, the empty fleet, whose block stands where New

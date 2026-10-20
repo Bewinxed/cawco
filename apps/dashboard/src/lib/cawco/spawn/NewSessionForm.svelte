@@ -1742,7 +1742,7 @@
     }
     return forking ? "Fork session" : "New session";
   });
-  const readingMorph = morph();
+  const readingMorph = morph({ on: ["data-why", "data-two"] });
 
   /**
    * Continue in new session: the hub summarises the source with the chosen

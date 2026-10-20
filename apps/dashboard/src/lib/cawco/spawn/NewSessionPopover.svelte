@@ -14,7 +14,7 @@
   import { Popover, PopoverContent } from "#lib/components/ui/popover/index.js";
   import NewSessionDialog from "./NewSessionDialog.svelte";
   import NewSessionForm from "./NewSessionForm.svelte";
-  import type { SpawnPrefill } from "./new-session.svelte";
+  import { FORM_SIZES, type SpawnPrefill } from "./new-session.svelte";
 
   let {
     open,
@@ -56,6 +56,7 @@
       gap="none"
       height="room"
       look="new-session"
+      morphs={{ on: FORM_SIZES }}
       onCloseAutoFocus={(event) => {
         event.preventDefault();
         // Back to the trigger, unless the press that closed it put the
