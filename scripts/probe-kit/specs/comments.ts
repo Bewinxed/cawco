@@ -3962,6 +3962,65 @@ const pinnedCardChecks = async (
   await closeCard(screen, 400);
 };
 
+/**
+ * A row under the pointer, then held down: press takes the step past hover
+ * (`surface-pressed`), never the hover's own fill. A row under the
+ * keyboard's focus: the house's one focus indicator (app.css), a 2px
+ * `--focus-ring` outline inset on the row, no box-shadow ring, and no other
+ * element drawing focus beside it.
+ */
+const rowStateChecks = async (
+  on: On,
+  screen: Page,
+  list: Locator,
+  name: string
+) => {
+  const row = list.locator('[data-pin-row="2"]');
+  const fill = () => row.evaluate((el) => getComputedStyle(el).backgroundColor);
+  await row.hover();
+  await settle(screen, 300);
+  const hover = await fill();
+  await screen.mouse.down();
+  await settle(screen, 300);
+  const press = await fill();
+  // Let go away from the row, so the press never becomes a click.
+  await screen.mouse.move(0, 0);
+  await screen.mouse.up();
+  on.kit.check(
+    `k (${name}): a row held down takes a step past its hover`,
+    hover !== press,
+    JSON.stringify({ hover, press })
+  );
+  await list.locator('[role="tab"][aria-selected="true"]').focus();
+  await screen.keyboard.press("Tab");
+  await settle(screen, 300);
+  const ring = await screen.evaluate(() => {
+    const el = document.activeElement as HTMLElement | null;
+    const s = el ? getComputedStyle(el) : null;
+    return {
+      on: el?.dataset.slot ?? el?.localName ?? null,
+      outline: s
+        ? `${s.outlineWidth} ${s.outlineStyle} ${s.outlineColor}`
+        : null,
+      offset: s?.outlineOffset ?? null,
+      shadow: s?.boxShadow ?? null,
+      ring: getComputedStyle(document.documentElement)
+        .getPropertyValue("--focus-ring")
+        .trim(),
+      drawn: document.querySelectorAll(":focus-visible").length,
+    };
+  });
+  on.kit.check(
+    `k (${name}): a focused row draws the one focus indicator: a 2px outline inset on the row, no box-shadow ring, nothing else focused`,
+    ring.on === "pin-row" &&
+      ring.outline?.startsWith("2px solid") === true &&
+      ring.offset === "-2px" &&
+      (ring.shadow === "none" || ring.shadow === "") &&
+      ring.drawn === 1,
+    JSON.stringify(ring)
+  );
+};
+
 const panelLeg = async (on: On, screen: Page, frame: Frame, name: string) => {
   const check: PanelCheck = (what, ok, detail) =>
     on.kit.check(`k (${name}): ${what}`, ok, JSON.stringify(detail));
@@ -3979,6 +4038,9 @@ const panelLeg = async (on: On, screen: Page, frame: Frame, name: string) => {
     .catch(() => undefined);
   await settle(screen, 600);
   const stacked = await panelRestChecks(screen, check);
+  if (name === "1440 default split") {
+    await rowStateChecks(on, screen, list, `${name}, light`);
+  }
   await pinnedCardChecks(screen, frame, list, check);
   await goneCardChecks(screen, list, stacked, check);
   await resolvedCardChecks(screen, list, stacked, check);
@@ -4028,7 +4090,14 @@ const writePanelPins = (frame: Frame) =>
         id: `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`,
         number,
         kind: "comment",
-        anchor: { selector, text: "" },
+        // The words it stood on at pin time: a gone pin's head names them.
+        anchor: {
+          selector,
+          text:
+            selector === "#nowhere-on-this-page"
+              ? "A card the page dropped"
+              : "",
+        },
         at: now,
         by: "person",
         elements: [],
@@ -4155,6 +4224,36 @@ const panelChecks = async (on: On) => {
   }
 
   const base = await on.fleet.dashboard();
+  // The same row states in the dark.
+  const dark = await on.kit.page("desk", { theme: "dark" });
+  await open(dark, `${base}/session/${on.session}`, COMPOSER);
+  if (
+    await until(
+      "the panel page in the dark",
+      () => panelFrameOn(dark),
+      Boolean,
+      60_000
+    ).catch(() => null)
+  ) {
+    await settle(dark, 600);
+    const toggle = dark.locator(`${PANE_SEL} button[data-slot="comments"]`);
+    if ((await toggle.getAttribute("aria-expanded")) !== "true") {
+      await toggle.click();
+    }
+    const darkList = dark.locator('[data-pin-list-pop] [data-slot="pin-list"]');
+    await darkList
+      .locator('[data-pin-row="2"]')
+      .waitFor({ timeout: 15_000 })
+      .catch(() => undefined);
+    await rowStateChecks(on, dark, darkList, "1440 default split, dark");
+  } else {
+    on.kit.check(
+      "k (1440 dark): the panel page in the pane",
+      false,
+      "not shown"
+    );
+  }
+  await dark.close();
   for (const [view, name, size] of [
     ["tablet", "820 touch", { width: 820, height: 1180 }],
     ["phone", "390", null],

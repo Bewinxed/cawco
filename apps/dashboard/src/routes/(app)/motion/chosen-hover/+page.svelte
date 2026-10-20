@@ -26,6 +26,7 @@
   import PermissionSection from "#lib/cawco/spawn/PermissionSection.svelte";
   import ProjectChip from "#lib/cawco/spawn/ProjectChip.svelte";
   import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
+  import { floatingSurface } from "#lib/components/ui/popover/index.js";
   import { Toggle } from "#lib/components/ui/toggle/index.js";
   import { IconEye, IconLaptop, IconPen, IconServer } from "#lib/icons.js";
   import { goto } from "$app/navigation";
@@ -95,6 +96,8 @@
     ]),
   ];
   const noop = () => undefined;
+  /** The panel's surface, as the pane's popover wears it. */
+  const pinsPanel = floatingSurface({ class: "w-c-pin-list-min min-w-0" });
 
   let markdown = $state("");
 
@@ -213,12 +216,12 @@
   <section class="w-c-bench-field-w min-w-0" data-probe="slash">
     <MarkdownEditor bind:value={markdown} label="Notes" />
   </section>
-  <!-- At the Comments panel's floor (c-pin-list-min): the pane's clamp is the popover's, which the bench draws without. -->
-  <section class="w-c-pin-list-min min-w-0" data-probe="pins">
+  <!-- The Comments panel as the pane floats it: the kit's floating surface at the panel's floor (c-pin-list-min). -->
+  <section class={pinsPanel} data-probe="pins">
     <PinList
       focused="pin-1"
       hold="ready"
-      live={new Set()}
+      live={new Set(["pin-2"])}
       onclose={noop}
       onopen={noop}
       onretry={noop}

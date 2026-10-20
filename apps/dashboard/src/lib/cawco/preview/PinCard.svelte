@@ -446,24 +446,27 @@
     <!-- Its element is gone: said once, and pinned anew with the next tap on the page. -->
     <div
       data-slot="gone"
-      class="flex shrink-0 flex-wrap items-center justify-between gap-x-space-2 gap-y-space-1"
+      class="flex shrink-0 flex-wrap items-baseline gap-x-space-2 gap-y-space-1 type-meta"
     >
-      <p class="m-0 min-w-0 text-ink-muted type-meta" role="status">
-        {placing ? "Tap the page where it goes" : words.pinElementGone}
+      <!-- One sentence and its action in one row; wrapped, the action's words stand under the sentence's. -->
+      <p class="m-0 min-w-0 text-ink-muted" role="status">
+        {placing ? "Tap the page where it goes." : `${words.pinElementGone}.`}
       </p>
       {#if placing}
         <Button
           label="Cancel"
           onclick={() => onplace(false)}
+          pad="none"
           size="sm"
-          variant="ghost"
+          variant="link"
         />
       {:else}
         <Button
           label="Pin it somewhere else"
           onclick={() => onplace(true)}
+          pad="none"
           size="sm"
-          variant="ghost"
+          variant="link"
         />
       {/if}
     </div>

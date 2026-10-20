@@ -155,6 +155,9 @@ const PIN_CARD_PLACED =
 const GONE_SAYS = /^Its element is gone from the page/;
 const PLACING_SAYS = /^Tap the page where it goes/;
 const TAB_RESOLVED = /^Resolved/;
+/** The panel's empty lines, each tab's. */
+const NO_OPEN = /^No open comments/;
+const NO_RESOLVED = /^No resolved comments/;
 /** The pane's Comment mode, as its compact mode menu names it. */
 const COMMENT_MODE = /^Comment/;
 /** The pane's artifact doc socket on the hub. */
@@ -831,7 +834,8 @@ const LONG_COMMENT =
  * the tape relays to the pane's (hub-tape.ts, the artifact socket): 1 a
  * six-word comment the agent answered, 2 the 48-word one, 3 on an element the
  * page doesn't have (its overlay moves it aside: gone), 4 to 9 resolved, long
- * enough that Resolved scrolls. The pane's rows stand once it has them.
+ * enough that Resolved scrolls, 10 resolved and gone (its row under
+ * Resolved). The pane's rows stand once it has them.
  */
 const seedPins = async (page: Page) => {
   await page.frameLocator(PREVIEW_FRAME).locator("h1").waitFor();
@@ -867,10 +871,14 @@ const seedPins = async (page: Page) => {
       id: `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`,
       number,
       kind: "comment",
-      // Anchored as a tap on the heading writes it: by its selector and its words.
+      // Anchored as a tap writes it: by its selector and the words it stood
+      // on then (a gone pin keeps the words of the element the page dropped).
       anchor: {
         selector,
-        text: selector === "h1" ? "Three ways a long chip wraps" : "",
+        text:
+          selector === "h1"
+            ? "Three ways a long chip wraps"
+            : "Truncate the chip",
       },
       at,
       by: "person",
@@ -903,6 +911,17 @@ const seedPins = async (page: Page) => {
           ["person", "This card's label should sit on one line"],
         ])
       );
+      // 10: gone too, and resolved: its row under Resolved.
+      // A resolved pin stands on no page, so its loss is the one the overlay wrote when it went.
+      pins.set("00000000-0000-4000-8000-000000000010", {
+        ...pin(
+          10,
+          "#a-card-the-page-dropped",
+          [["person", "Resolved before the card left the page"]],
+          true
+        ),
+        movedAt: at,
+      });
       for (let n = 4; n <= 9; n += 1) {
         pins.set(
           `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`,
@@ -913,13 +932,19 @@ const seedPins = async (page: Page) => {
   }, LONG_COMMENT);
 };
 
-/** The Comments panel open, its pins seeded and drawn, on its Open tab. */
-const commentsOpen = async (page: Page) => {
-  await seedPins(page);
+/** The Comments panel open (its open state is kept across the walk's loads, so pressed only when it is shut). */
+const panelUp = async (page: Page) => {
   const list = page.locator(PIN_LIST).filter({ visible: true });
   if ((await list.count()) === 0) {
     await headControl("comments", "Comments")(page);
   }
+  await page.locator(PIN_LIST).first().waitFor();
+};
+
+/** The Comments panel open, its pins seeded and drawn, on its Open tab. */
+const commentsOpen = async (page: Page) => {
+  await seedPins(page);
+  await panelUp(page);
   await page.locator(`${PIN_LIST} ${PIN_ROW}[data-moved]`).first().waitFor();
 };
 
@@ -2719,6 +2744,34 @@ export const SURFACES: Surface[] = [
         root: "body",
         ready: (s) => ({ shows: on(s.art, PREVIEW_READY) }),
       },
+      // No pins yet: each tab says so, with how to make one. First of the
+      // panel's states: the pins a later state seeds stay in the page's doc
+      // across its loads.
+      {
+        name: "comments-empty",
+        route: (s) => `/session/${s.art}`,
+        act: panelUp,
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-empty]`),
+          says: NO_OPEN,
+        }),
+      },
+      {
+        name: "comments-empty-resolved",
+        route: (s) => `/session/${s.art}`,
+        act: async (page) => {
+          await panelUp(page);
+          await pinsTab("Resolved")(page);
+        },
+        root: "body",
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-empty]`),
+          says: NO_RESOLVED,
+        }),
+      },
       // A pin on the preview, its card open (the desk's pane stands beside the transcript).
       {
         name: "pin",
@@ -2881,6 +2934,101 @@ export const SURFACES: Surface[] = [
           shows: on(s.art, `${PIN_ROW}[data-pin-row="2"]:active`),
         }),
       },
+      // A gone pin's row under Resolved, its disc recessed.
+      {
+        name: "comments-gone-resolved",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(pinsTab("Resolved")),
+        root: "body",
+        inView: `${PIN_LIST} ${PIN_ROW}[data-pin-row="10"]`,
+        widths: ["desk", "tablet", "phone"],
+        ready: (s) => ({
+          shows: on(
+            s.art,
+            `${PIN_LIST} ${PIN_ROW}[data-pin-row="10"][data-moved]`
+          ),
+        }),
+      },
+      // A gone pin's row under the pointer, and pressed.
+      {
+        name: "comments-gone-hover",
+        route: (s) => `/session/${s.art}`,
+        act: inComments((page) =>
+          page.locator(`${PIN_LIST} ${PIN_ROW}[data-pin-row="3"]`).hover()
+        ),
+        root: "body",
+        widths: ["desk"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_ROW}[data-pin-row="3"][data-moved]:hover`),
+        }),
+      },
+      {
+        name: "comments-gone-press",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(async (page) => {
+          await page
+            .locator(`${PIN_LIST} ${PIN_ROW}[data-pin-row="3"]`)
+            .hover();
+          await page.mouse.down();
+        }),
+        root: "body",
+        widths: ["desk"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_ROW}[data-pin-row="3"][data-moved]:active`),
+        }),
+      },
+      // Beside, at the widest the 1440 desk gives it (0.3 of the expanded
+      // well, under c-pin-list-max), a long Resolved list scrolled.
+      {
+        name: "comments-beside-scrolled",
+        route: (s) => `/session/${s.art}`,
+        act: async (page) => {
+          await expandPane(page);
+          await inComments(pinsTab("Resolved"), (page2) =>
+            page2.locator(`${PIN_LIST} [data-slot=rows]`).evaluate((el) => {
+              el.scrollTop = el.scrollHeight;
+            })
+          )(page);
+        },
+        root: "body",
+        widths: ["desk"],
+        ready: (s) => ({
+          shows: on(s.art, `${PIN_LIST} ${PIN_ROW}[data-pin-row="9"]`),
+        }),
+      },
+      // Placing tapped through: the next tap on the page pins the gone pin
+      // anew, and its card says no loss.
+      {
+        name: "comments-placed",
+        route: (s) => `/session/${s.art}`,
+        act: inComments(
+          openRow(3),
+          (page) =>
+            page
+              .locator(pinCard(3))
+              .getByRole("button", { name: "Pin it somewhere else" })
+              .click(),
+          async (page) => {
+            const frame = page.frameLocator(PREVIEW_FRAME);
+            await frame
+              .locator("cawco-overlay .layer.comment")
+              .waitFor({ state: "attached" });
+            const box = await frame.locator("h1").boundingBox();
+            if (!box) {
+              throw new Error("the preview's heading has no box");
+            }
+            await page.mouse.click(
+              box.x + box.width * 0.7,
+              box.y + box.height / 2
+            );
+          }
+        ),
+        root: "body",
+        widths: ["desk", "phone"],
+        ready: (s) => ({
+          shows: on(s.art, `${pinCard(3)}:not(:has([data-slot=gone]))`),
+        }),
+      },
       // The page asking for a place, with the Comments panel open: the picker
       // takes the well and the panel stands aside (The Open Page Rule).
       {
@@ -2903,7 +3051,7 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.art}`,
         act: docSocket("hold"),
         root: "body",
-        widths: ["desk", "phone"],
+        widths: ["desk", "tablet", "phone"],
         ready: (s) => ({
           shows: on(s.art, `${PIN_LIST} [data-slot=pin-list-reading]`),
         }),
@@ -2914,7 +3062,7 @@ export const SURFACES: Surface[] = [
         route: (s) => `/session/${s.art}`,
         act: docSocket("refuse"),
         root: "body",
-        widths: ["desk", "phone"],
+        widths: ["desk", "tablet", "phone"],
         ready: (s) => ({
           shows: on(s.art, `${PIN_LIST} [data-pin-list-failed]`),
         }),
@@ -3096,6 +3244,21 @@ export const SURFACES: Surface[] = [
     route: () => path,
     states: [{ name: "rest", root: "body", ready: { shows: draws } }],
   })),
+  {
+    // The Comments panel on the chosen-hover bench, read whole: its section
+    // at its own height (the bench's page runs past the viewport).
+    name: "bench-pins",
+    serve: "dev",
+    route: () => "/motion/chosen-hover",
+    states: [
+      {
+        name: "rest",
+        root: "[data-bench] section[data-probe=pins]",
+        inView: "[data-bench] section[data-probe=pins]",
+        ready: { shows: `[data-probe=pins] ${PIN_ROW}` },
+      },
+    ],
+  },
 ];
 
 /** The surfaces `--surfaces=a,b` names (every one when none is named); an unknown name throws. */
