@@ -14,3 +14,9 @@ export const Desk = {
   args: {},
   parameters: { viewport: 480 },
 };
+
+/** Desk: More open, Wide panel in it. */
+export const MenuOpen = {
+  args: { menu: true, landed: false },
+  parameters: { viewport: 404 },
+};

@@ -12,7 +12,8 @@
    *
    * `landed` off: his reply before its tasks land (their arrival is a move).
    * `long` draws each scene stretched: five tasks, 40-word lines, more
-   * suggestions, the long reason and the long error.
+   * suggestions, the long reason and the long error. `peek`, `menu` and
+   * `lit` are Panel's: only its top, More open, a grip under the pointer.
    */
   import CawFace from "#lib/cawco/home/CawFace.svelte";
   import StarterCards from "#lib/cawco/project/StarterCards.svelte";
@@ -61,6 +62,9 @@
     suggest = "rows",
     long = false,
     landed = true,
+    peek = false,
+    menu = false,
+    lit = false,
   }: {
     form: "desk" | "phone";
     scene: "thread" | "cant-read" | "cant-start" | "not-woken" | "empty";
@@ -68,13 +72,16 @@
     fact?: { text: string; tone: BadgeVariant } | null;
     resize?: "edges" | "corner" | "menu" | null;
     tasks?: "cards" | "rows";
-    layout?: "stack" | "edge" | "beside";
+    layout?: "stack" | "edge";
     open?: boolean;
     note?: "under" | "caw";
     suggest?: "rows" | "chips";
     long?: boolean;
     /** The filed tasks have landed under his reply. */
     landed?: boolean;
+    peek?: boolean;
+    menu?: boolean;
+    lit?: boolean;
   } = $props();
 
   /** The thread on show in each scene; null for a new one. */
@@ -111,6 +118,9 @@
   {fact}
   {form}
   {head}
+  {lit}
+  {menu}
+  {peek}
   {pose}
   {resize}
   {thread}
@@ -155,7 +165,16 @@
       {/snippet}
     </Said>
   {:else}
-    <EmptyState title="What’s next for {PROJECT}?">
+    <!-- Its action row as wide as the column, as the thread pane's hero
+         sets it (ThreadPane `.hero :global(.kit-empty-action)`): the empty
+         state lines its parts up on their start edge, so unstretched the
+         row is only as wide as what's in it, and the rows' container
+         (StarterCards, `container-type: inline-size`) counts as nothing
+         there, which left every row 0 wide, its words one letter a line. -->
+    <EmptyState
+      class="[&>.kit-empty-action]:self-stretch"
+      title="What’s next for {PROJECT}?"
+    >
       {#snippet mark()}
         <!-- mark-line: Caw stands over the empty thread's title -->
         <span class="mbe-(--space-3) grid justify-items-start" data-box

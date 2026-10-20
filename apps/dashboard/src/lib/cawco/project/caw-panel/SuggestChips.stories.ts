@@ -26,3 +26,9 @@ export const PhoneMany = {
   args: { form: "phone", long: true },
   parameters: { viewport: "phone" },
 };
+
+/** Phone, a 360-wide screen: four suggestions. */
+export const PhoneNarrow = {
+  args: { form: "phone" },
+  parameters: { viewport: 360 },
+};

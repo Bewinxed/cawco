@@ -243,11 +243,35 @@ const sweepPage = (file: string): Sweep => {
         out.spills.push(`${where}: ${name(el)} runs past the frame's width`);
       }
     }
+    // A floating surface (the kit's popover recipe, a menu drawn open)
+    // stands over what lies under it: words it covers aren't drawn, so
+    // they cross nothing.
+    const layerOf = (el: Element) => el.closest(".kit-pop");
+    const covered = (el: Element, box: DOMRect, by: Element | null) => {
+      if (!by || by.contains(el)) {
+        return false;
+      }
+      const l = by.getBoundingClientRect();
+      return (
+        box.left >= l.left - 1 &&
+        box.right <= l.right + 1 &&
+        box.top >= l.top - 1 &&
+        box.bottom <= l.bottom + 1
+      );
+    };
     for (let i = 0; i < words.length; i += 1) {
       for (let j = i + 1; j < words.length; j += 1) {
         const p = words[i];
         const q = words[j];
         if (p.el.contains(q.el) || q.el.contains(p.el)) {
+          continue;
+        }
+        const pLayer = layerOf(p.el);
+        const qLayer = layerOf(q.el);
+        if (
+          pLayer !== qLayer &&
+          (covered(q.el, q.box, pLayer) || covered(p.el, p.box, qLayer))
+        ) {
           continue;
         }
         const w =
@@ -532,7 +556,12 @@ const spec: Spec = {
         )
         .first()
         .click();
-      await page.getByRole("menuitemcheckbox", { name: "Wide panel" }).click();
+      // The menu More opened, last in the page (the kit's portal); the
+      // MenuOpen story's own stands open in its frame earlier on.
+      await page
+        .getByRole("menuitemcheckbox", { name: "Wide panel" })
+        .last()
+        .click();
       const wide = await sizeOf();
       kit.check(
         "4: ResizeMenu.stories.ts: Wide panel in More makes the panel 560 wide, its height kept",

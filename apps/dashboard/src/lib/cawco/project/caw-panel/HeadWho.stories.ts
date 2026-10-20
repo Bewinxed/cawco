@@ -39,3 +39,19 @@ export const PhoneLong = {
   },
   parameters: { viewport: "phone" },
 };
+
+/** Desk, the panel's top: something waits on you, said beside his name. */
+export const DeskHead = {
+  args: {
+    form: "desk",
+    peek: true,
+    fact: { text: "Waiting on your numbers", tone: "attn" },
+  },
+  parameters: { viewport: 404 },
+};
+
+/** Phone, the panel's top: nothing waits on you. */
+export const PhoneHead = {
+  args: { form: "phone", peek: true },
+  parameters: { viewport: "phone" },
+};

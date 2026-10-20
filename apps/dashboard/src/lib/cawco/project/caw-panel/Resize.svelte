@@ -10,18 +10,25 @@
    * - `edges`: the rail's own grip (Shell `.grip`: a 6px strip across the
    *   edge, drawn in `border-control` only under the pointer) on the leading
    *   edge and the foot, their corner taking both.
-   * - `corner`: an L of 20px legs in a 1.5px `border-control` line, 4px
-   *   outside the free corner and concentric with its radius (the canvas's
-   *   corner grip, DESIGN.md, Artifact panel), always drawn, on the page.
+   * - `corner`: an L of 20px legs in a 1.5px line, 4px outside the free
+   *   corner and concentric with its radius (the canvas's corner grip,
+   *   DESIGN.md, Artifact panel), always drawn, on the page. Its ink is
+   *   `border-contrast`, the edge that holds 3:1 on the page's ground: in
+   *   the canvas's `border-control` it all but vanished there, inside the
+   *   panel's shadow.
+   *
+   * `lit`: the leading edge's grip drawn as it is under the pointer (edges).
    */
   let {
     mode,
     rest,
     onsize,
+    lit = false,
   }: {
     mode: "edges" | "corner";
     rest: { w: number; h: number };
     onsize: (next: { w: number; h: number } | null) => void;
+    lit?: boolean;
   } = $props();
 
   let drag: {
@@ -91,7 +98,10 @@
 {#if mode === "edges"}
   <div
     aria-hidden="true"
-    class="absolute inset-y-0 -inset-s-[3px] z-10 inline-1.5 cursor-col-resize touch-none transition-colors hover:bg-(--border-control)"
+    class={[
+      "absolute inset-y-0 -inset-s-[3px] z-10 inline-1.5 cursor-col-resize touch-none transition-colors hover:bg-(--border-control)",
+      lit && "bg-(--border-control)",
+    ]}
     data-panel-grip="edge"
     {...handlers("x")}
   ></div>
@@ -115,7 +125,7 @@
     {...handlers("xy")}
   >
     <span
-      class="absolute inset-s-[5.5px] inset-be-[5.5px] block size-5 rounded-es-[calc(var(--radius-lg)+4px)] border-(--border-control) border-be-[1.5px] border-s-[1.5px]"
+      class="absolute inset-s-[5.5px] inset-be-[5.5px] block size-5 rounded-es-[calc(var(--radius-lg)+4px)] border-(--border-contrast) border-be-[1.5px] border-s-[1.5px]"
     ></span>
   </div>
 {/if}

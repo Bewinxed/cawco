@@ -14,3 +14,9 @@ export const Desk = {
   args: {},
   parameters: { viewport: 480 },
 };
+
+/** Desk: the L at the panel's free corner, at rest. */
+export const Grip = {
+  args: { landed: false },
+  parameters: { viewport: 404 },
+};

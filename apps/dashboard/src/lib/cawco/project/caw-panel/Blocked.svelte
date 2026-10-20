@@ -13,8 +13,6 @@
    *   under them (Oura's "Can't load chat", Charma's error page).
    * - `edge`: Caw centred over the block, the words and buttons on one start
    *   edge under him, the block at the panel's middle.
-   * - `beside`: Caw on the block's start edge, the words beside him on one
-   *   edge, as a character beside his line (Rive's error page).
    *
    * Show details unfolds under the buttons (motion/fold `unfold`), the
    * hub's words in the figure face in a well, with Copy (Microsoft Loop's
@@ -36,7 +34,7 @@
     rows = [],
     open = false,
   }: {
-    layout: "stack" | "edge" | "beside";
+    layout: "stack" | "edge";
     title: string;
     line: string;
     /** The way out, the primary. */
@@ -59,14 +57,11 @@
   const titleId = $props.id();
 </script>
 
-<!-- mark-line: Caw stands over the words, or at the head of the block beside them -->
+<!-- mark-line: Caw stands centred over the words -->
 <section
   aria-labelledby={titleId}
   class={[
-    "mx-auto grid inline-full min-inline-0 max-inline-[60ch] gap-y-(--space-2)",
-    layout === "beside"
-      ? "grid-cols-[auto_minmax(0,1fr)] gap-x-(--space-4)"
-      : "grid-cols-[minmax(0,1fr)]",
+    "mx-auto grid inline-full min-inline-0 max-inline-[60ch] grid-cols-[minmax(0,1fr)] gap-y-(--space-2)",
     centred
       ? "justify-items-center text-center"
       : "justify-items-start text-start",
@@ -74,12 +69,7 @@
   data-blocked={layout}
 >
   <span
-    class={[
-      "grid",
-      layout === "beside"
-        ? "row-span-5 self-start"
-        : "mbe-(--space-3) justify-self-center",
-    ]}
+    class="mbe-(--space-3) grid justify-self-center"
     data-box
     data-blocked-caw><CawFace size={80} status="needs-you" /></span
   >

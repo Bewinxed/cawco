@@ -113,7 +113,7 @@ export const FILED: Filed[] = [
     id: "hb-5",
     title: "Swap the hero photo for the harbour at dusk",
     description: "The dusk shot from the brand folder",
-    why: null,
+    why: "Friday's launch email leads with it",
     waits: false,
   },
 ];

@@ -17,6 +17,8 @@
    *   Popovers), so New thread and More trail and there is no Close. Phone:
    *   Close is last (DESIGN.md, Drawer's head), New thread moves into
    *   More so the thread's name keeps its room at 390.
+   * - `menu`: More stands open, drawn in the panel (no portal), taking no
+   *   focus and locking no scroll, for a frame that shows what it holds.
    */
   import CawFace from "#lib/cawco/home/CawFace.svelte";
   import { Badge, type BadgeVariant } from "#lib/components/ui/badge/index.js";
@@ -40,6 +42,7 @@
     fact = null,
     pose = "ready",
     wide = null,
+    menu = false,
   }: {
     form: "desk" | "phone";
     kind?: "who" | "name";
@@ -50,7 +53,25 @@
     pose?: CawStatus;
     /** The resize option that puts Wide panel in More: whether it is wide now. */
     wide?: { on: boolean; toggle: () => void } | null;
+    /** More stands open in the frame. */
+    menu?: boolean;
   } = $props();
+
+  /** More, held open in the frame: in the panel, no focus taken, no scroll locked, a press outside keeping it. */
+  const held = $derived(
+    menu
+      ? {
+          portalProps: { disabled: true },
+          strategy: "absolute" as const,
+          preventScroll: false,
+          trapFocus: false,
+          onOpenAutoFocus: (event: Event) => event.preventDefault(),
+          onCloseAutoFocus: (event: Event) => event.preventDefault(),
+          onInteractOutside: (event: Event) => event.preventDefault(),
+          onEscapeKeydown: (event: Event) => event.preventDefault(),
+        }
+      : {}
+  );
 
   const phone = $derived(form === "phone");
   const name = $derived(thread ?? "New thread");
@@ -133,7 +154,7 @@
         variant="ghost"
       />
     {/if}
-    <DropdownMenu.Root>
+    <DropdownMenu.Root open={menu}>
       <DropdownMenu.Trigger>
         {#snippet child({ props })}
           <Button
@@ -145,7 +166,7 @@
           />
         {/snippet}
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="end" class="min-inline-44">
+      <DropdownMenu.Content align="end" class="min-inline-44" {...held}>
         {#if phone}
           <DropdownMenu.Item
             ><IconPlus aria-hidden="true" /><span>New thread</span

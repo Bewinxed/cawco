@@ -21,6 +21,15 @@
    *   the page.
    * - `centre`: the thread's room holds one block at its middle (a blocking
    *   state takes the panel's centre).
+   * - `peek`: only the panel's top, for a choice about its head: the panel
+   *   (desk) or the screen (phone) cut short with no message box, its
+   *   foot fading to the page's ground so the crop reads as going on. The cut is a crop of the
+   *   frame, not a design length.
+   * - `menu`: the head's More menu stands open, drawn in the frame.
+   * - `lit`: a resize grip drawn as it is under the pointer.
+   *
+   * The phone's screen draws its own edge, so the panel's square trailing
+   * side reads as standing on it.
    */
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
@@ -46,6 +55,9 @@
     composer = "Message Caw",
     resize = null,
     centre = false,
+    peek = false,
+    menu = false,
+    lit = false,
     children,
   }: {
     form: "desk" | "phone";
@@ -57,10 +69,14 @@
     composer?: string | null;
     resize?: "edges" | "corner" | "menu" | null;
     centre?: boolean;
+    peek?: boolean;
+    menu?: boolean;
+    lit?: boolean;
     children?: Snippet;
   } = $props();
 
   const phone = $derived(form === "phone");
+  const boxed = $derived(peek ? null : composer);
   const draft = new ComposerDraft();
   /** Caw's glass on the phone's bar: what the panel hangs from. */
   let glass = $state<HTMLElement | null>(null);
@@ -81,7 +97,7 @@
 </script>
 
 {#snippet body()}
-  <Head {fact} {form} kind={head} {pose} {thread} {wide} />
+  <Head {fact} {form} kind={head} {menu} {pose} {thread} {wide} />
   <div
     class="kit-edge-fade-block relative min-block-0 flex-1 overflow-y-auto overscroll-contain bg-(--surface-recess) [scrollbar-gutter:stable]"
     data-panel-room
@@ -104,7 +120,7 @@
       {@render children?.()}
     </div>
   </div>
-  {#if composer !== null}
+  {#if boxed !== null}
     <!-- The real message box as the panel's last row: its dock in the flow
          at the row's width, its shell opaque (nothing passes under it).
          Composer's own rules are unlayered (Svelte scoped), so a utility
@@ -128,7 +144,7 @@
         mentionsFrom={null}
         onstop={() => undefined}
         onsubmit={() => undefined}
-        placeholder={composer}
+        placeholder={boxed}
         recallOf="caw-panel-page"
       />
     </div>
@@ -138,8 +154,14 @@
 <!-- The app's tooltip provider, as its layout stands it over every page. -->
 <Tooltip.Provider>
   {#if phone}
+    <!-- The screen, its own edge drawn over everything in it (a hairline
+         on its rounded outline), so the panel's square trailing side stands
+         on a drawn edge rather than the frame's. -->
     <div
-      class="@container relative block-[844px] inline-full overflow-hidden bg-(--surface-page)"
+      class={[
+        "@container relative inline-full overflow-hidden rounded-lg bg-(--surface-page) after:pointer-events-none after:absolute after:inset-0 after:z-50 after:rounded-lg after:border after:border-(--border-hairline)",
+        peek ? "block-[320px]" : "block-[844px]",
+      ]}
       data-panel-form="phone"
     >
       <!-- The phone's bar, its hairline floor, and Caw's glass tucked into
@@ -181,7 +203,10 @@
             as={PopoverPrimitive.Content}
             anchor={glass}
             avoidCollisions={false}
-            class="flex block-(--c-caw-panel-h) w-[calc(100cqi-var(--c-bar-phone-edge))] flex-col gap-0 overflow-hidden rounded-ee-none p-0 after:border-e-0"
+            class={[
+              "flex w-[calc(100cqi-var(--c-bar-phone-edge))] flex-col gap-0 overflow-hidden rounded-ee-none p-0 after:border-e-0",
+              peek ? "block-[260px]" : "block-(--c-caw-panel-h)",
+            ]}
             customAnchor={glass}
             data-panel
             forceMount
@@ -197,14 +222,26 @@
           </HangCard>
         </Popover.Root>
       {/if}
+      <!-- The cut: the frame's foot fades to the page's ground, so the
+           crop reads as going on. -->
+      {#if peek}
+        <span
+          aria-hidden="true"
+          class="pointer-events-none absolute inset-x-0 inset-be-0 z-60 block-2/5 bg-linear-to-b from-transparent to-(--surface-page)"
+          data-panel-cut
+        ></span>
+      {/if}
     </div>
   {:else}
     <div
-      class="flex inline-full justify-end bg-(--surface-page) p-(--space-3)"
+      class="relative flex inline-full justify-end bg-(--surface-page) p-(--space-3)"
       data-panel-form="desk"
     >
       <div
-        class="relative flex block-(--c-caw-panel-h) inline-(--c-panel-w) max-inline-full shrink-0 flex-col rounded-lg bg-(--surface-raised) shadow-(--shadow-overlay)"
+        class={[
+          "relative flex inline-(--c-panel-w) max-inline-full shrink-0 flex-col rounded-lg bg-(--surface-raised) shadow-(--shadow-overlay)",
+          peek ? "block-[220px]" : "block-(--c-caw-panel-h)",
+        ]}
         data-panel
         style:--c-panel-w={size ? `${size.w}px` : undefined}
         style:--c-caw-panel-h={size ? `${size.h}px` : undefined}
@@ -216,6 +253,7 @@
         </div>
         {#if resize === "edges" || resize === "corner"}
           <Resize
+            {lit}
             mode={resize}
             onsize={(next) => {
               size = next;
@@ -224,6 +262,15 @@
           />
         {/if}
       </div>
+      <!-- The cut: the frame's foot fades to the page's ground, so the
+           crop reads as going on. -->
+      {#if peek}
+        <span
+          aria-hidden="true"
+          class="pointer-events-none absolute inset-x-0 inset-be-0 z-60 block-2/5 bg-linear-to-b from-transparent to-(--surface-page)"
+          data-panel-cut
+        ></span>
+      {/if}
     </div>
   {/if}
 </Tooltip.Provider>

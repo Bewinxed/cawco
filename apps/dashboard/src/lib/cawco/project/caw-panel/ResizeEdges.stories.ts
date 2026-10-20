@@ -14,3 +14,9 @@ export const Desk = {
   args: {},
   parameters: { viewport: 480 },
 };
+
+/** Desk: the pointer on the leading edge, its grip drawn. */
+export const Pointing = {
+  args: { lit: true, landed: false },
+  parameters: { viewport: 404 },
+};

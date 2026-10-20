@@ -37,3 +37,9 @@ export const PhoneLong = {
   args: { form: "phone", long: true },
   parameters: { viewport: "phone" },
 };
+
+/** Phone, a 360-wide screen: three tasks. */
+export const PhoneNarrow = {
+  args: { form: "phone" },
+  parameters: { viewport: 360 },
+};
