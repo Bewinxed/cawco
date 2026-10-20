@@ -9,8 +9,8 @@
    *   COMPOSER  the real message box, his seat on its ledge, his ask grown into it
    *
    * The message box stands as the thread pane's dock does (ThreadPane,
-   * docked): over the room's foot, the room keeping the box's height, his
-   * seat's rise and a step clear under its last line, so at rest nothing
+   * docked): over the room's foot, the room keeping clear under its last
+   * line all that stands over its foot (his seat's top down) and a step, so at rest nothing
    * stands under the box, and his ask has the room above it to grow into.
    *
    * - `desk`: the panel's card at --c-panel-w by --c-caw-panel-h on the
@@ -48,6 +48,7 @@
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import type { Waiting as WaitingRow } from "./fixtures";
   import Head from "./Head.svelte";
+  import TodayHead from "./TodayHead.svelte";
   import Waiting from "./Waiting.svelte";
 
   let {
@@ -62,6 +63,8 @@
     pose = "ready",
     centre = false,
     latest = false,
+    today = false,
+    whole = false,
     children,
   }: {
     form: "desk" | "phone";
@@ -79,6 +82,10 @@
     pose?: CawStatus;
     centre?: boolean;
     latest?: boolean;
+    /** The floating thread's head as it ships (TodayHead), in place of the panel's. */
+    today?: boolean;
+    /** The thread fits the room whole: a frame that compares it shows all of it. */
+    whole?: boolean;
     children?: Snippet;
   } = $props();
 
@@ -86,28 +93,46 @@
   const draft = new ComposerDraft();
   /** Caw's still box on the composer: 56px at a desk, 48px on a phone (ThreadPane `seatSize`). */
   const seat = $derived(phone ? 48 : 56);
-  /** How far his seat, or the cards over the box, rise over it. */
-  let rise = $state(0);
-  /** The message box's own height: the room keeps it clear at its foot. */
-  let boxHeight = $state(0);
+  /**
+   * What the room keeps clear under its last line: from the top of what
+   * stands over its foot (his seat on the box, the box itself, the cards
+   * over it) to the room's foot, and a step. Read from where they are
+   * drawn, in the layout's px (the canvas may zoom the frame).
+   */
+  let reach = $state(0);
   let boxRow = $state<HTMLElement | null>(null);
   $effect(() => {
-    const box = boxRow?.querySelector<HTMLElement>("[data-slot=composer]");
-    if (!box) {
+    const row = boxRow;
+    const box = row?.querySelector<HTMLElement>("[data-slot=composer]");
+    if (!(row && box)) {
       return;
     }
-    boxHeight = box.offsetHeight;
-    const sized = frameObserver(() => {
-      boxHeight = box.offsetHeight;
-    });
+    const read = () => {
+      const foot = row.getBoundingClientRect();
+      const zoom = foot.height / (row.offsetHeight || foot.height || 1);
+      const tops = [
+        box,
+        ...row.querySelectorAll<HTMLElement>(
+          "[data-slot=perch], [data-slot=stack], [data-slot=ask]"
+        ),
+      ]
+        .map((one) => one.getBoundingClientRect())
+        .filter((one) => one.height > 0)
+        .map((one) => one.top);
+      reach = (foot.bottom - Math.min(...tops)) / zoom;
+    };
+    read();
+    const sized = frameObserver(read);
     sized.observe(box);
+    for (const one of row.querySelectorAll(
+      "[data-slot=perch], [data-slot=ask]"
+    )) {
+      sized.observe(one);
+    }
     return () => sized.disconnect();
   });
-  /** What the room keeps clear under its last line: the box, what rises over it, and a step. */
   const clear = $derived(
-    composer
-      ? `calc(${boxHeight + rise}px + var(--space-4) * 2)`
-      : "var(--space-4)"
+    composer ? `calc(${reach}px + var(--space-4))` : "var(--space-4)"
   );
   /** The thread's room: what scrolls between the head and the message box. */
   let room = $state<HTMLElement | null>(null);
@@ -143,13 +168,18 @@
 {/snippet}
 
 {#snippet body()}
-  <Head {form} hidden={title === "offscreen" && firstSeen} {name} {off} />
+  {#if today}
+    <TodayHead />
+  {:else}
+    <Head {form} hidden={title === "offscreen" && firstSeen} {name} {off} />
+  {/if}
   <Waiting {form} rows={waiting} />
   <div class="relative flex min-h-0 flex-1 flex-col">
     <div
       bind:this={room}
       class="kit-edge-fade-block relative min-h-0 flex-1 overflow-y-auto overscroll-contain bg-surface-recess"
       data-panel-room
+      data-panel-whole={whole || undefined}
     >
       <div
         class={[
@@ -183,9 +213,6 @@
           commands={[]}
           {draft}
           mentionsFrom={null}
-          onfoot={(foot) => {
-            rise = foot.stack + foot.perch;
-          }}
           onstop={() => undefined}
           onsubmit={() => undefined}
           {perch}

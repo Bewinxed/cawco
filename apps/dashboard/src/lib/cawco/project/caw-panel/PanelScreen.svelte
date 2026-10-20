@@ -5,7 +5,9 @@
    * recommended. Each states file mounts this with the args it changes.
    *
    * - `idle`: the thread a few messages on, opened at its latest.
-   * - `waiting`: the same, with two asks waiting in other projects.
+   * - `waiting`: card 1's: a short conversation that stands whole, with two
+   *   asks waiting in other projects (`today`: the floating thread's head as
+   *   it ships, and the asks not in it).
    * - `working`: his words at the tail, the tool row under them, Stop.
    * - `needs-you`: his question grown into the composer.
    * - `no-machine`, `budget`: the block at the body's centre; `composer`
@@ -38,8 +40,10 @@
     LONG_NAMED,
     NAMED,
     NO_MACHINE,
+    NO_MACHINE_SHUT,
     QUESTION,
     SHIP,
+    SHIP_LATE,
     SHIP_ON,
     SUGGESTIONS,
     THREADS,
@@ -71,6 +75,7 @@
     open = false,
     long = false,
     latest = true,
+    today = false,
   }: {
     form: "desk" | "phone";
     scene: Scene;
@@ -80,12 +85,14 @@
     open?: boolean;
     long?: boolean;
     latest?: boolean;
+    /** Card 1's other side: the floating thread's head as it ships, and no asks in the panel. */
+    today?: boolean;
   } = $props();
 
   const block = $derived.by(() => {
     switch (scene) {
       case "no-machine":
-        return NO_MACHINE;
+        return composer === "goes" ? NO_MACHINE_SHUT : NO_MACHINE;
       case "budget":
         return BUDGET;
       case "cant-read":
@@ -136,6 +143,8 @@
         return "ready";
     }
   });
+  /** Card 1's scene: the conversation, with what waits in other projects. */
+  const waits = $derived(scene === "waiting");
   const ask = $derived<ComposerAsk | null>(
     scene === "needs-you"
       ? {
@@ -154,12 +163,14 @@
   centre={block !== null}
   composer={writable}
   {form}
-  latest={latest && block === null && scene !== "empty"}
+  latest={latest && block === null && scene !== "empty" && !waits}
   {name}
   off={scene === "off"}
   {pose}
   {title}
-  waiting={scene === "waiting" ? WAITING : []}
+  {today}
+  waiting={waits && !today ? WAITING : []}
+  whole={waits}
 >
   {#if block}
     <Blocked {block} {open} />
@@ -199,6 +210,10 @@
         <StarterCards onpick={() => undefined} rows starters={SUGGESTIONS} />
       {/snippet}
     </EmptyState>
+  {:else if waits}
+    <!-- Card 1 compares one panel with today's three on one conversation,
+         short enough to stand whole in either. -->
+    <Said messages={SHIP_LATE} />
   {:else}
     <Said messages={latest ? SHIP_ON : SHIP}>
       {#snippet under(one)}

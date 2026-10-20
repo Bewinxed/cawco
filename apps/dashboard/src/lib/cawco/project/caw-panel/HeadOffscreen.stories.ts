@@ -27,3 +27,9 @@ export const PhoneStart = {
   args: { form: "phone", latest: false },
   parameters: { viewport: "phone" },
 };
+
+/** Phone, a few messages on. */
+export const PhoneLater = {
+  args: { form: "phone" },
+  parameters: { viewport: "phone" },
+};

@@ -3,9 +3,9 @@
    * The tasks Caw filed, under the reply that filed them (advisor report
    * §2, "A filed task says what it is and why"): a head line, then a card
    * each (the TaskCard recipe: radius-sm, the tile shadow), one column in
-   * the panel, two from 30rem of room. Each card: its title (label), Caw's
-   * one-line reason (meta), its id and stage (meta). The card opens the
-   * task; nothing leads to the board.
+   * the panel, two from 30rem of room. Each card: its title (label) and
+   * Caw's one-line reason (meta); its stage only where it isn't the head
+   * line's. The card opens the task; nothing leads to the board.
    *
    * Landing live, the head line then each card is uncovered top to bottom
    * on one clock (DESIGN.md, The Nothing Jumps Rule): a fade from nothing
@@ -72,11 +72,11 @@
               class="line-clamp-2 min-inline-0 text-ink-muted text-meta wrap-anywhere text-pretty"
               >{task.why}</span
             >
-            <span class="min-inline-0 text-ink-muted text-meta tabular-nums"
-              >{task.stage === stage
-                ? task.id
-                : `${task.id} · ${task.stage}`}</span
-            >
+            {#if task.stage !== stage}
+              <span class="min-inline-0 text-ink-muted text-meta"
+                >{task.stage}</span
+              >
+            {/if}
           </a>
         </li>
       {/each}

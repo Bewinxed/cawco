@@ -1,12 +1,15 @@
 <script lang="ts">
   /**
-   * Today's three surfaces called Caw's panel, each the shipped component
-   * untouched, fed fixtures with no hub (advisor report §0):
+   * Today's three surfaces called Caw's panel, fed fixtures with no hub
+   * (advisor report §0), on card 1's asks and conversation:
    *
    * - `bar-head`: the bar head's card (NeedsCaw → home/CawPanel), the
    *   fleet's Needs you, hung as the caw-notices bench hangs it.
-   * - `thread`: the floating thread (CawFloat → project/CawThread, which
-   *   draws ThreadPane docked) on a project with no thread read yet.
+   * - `thread`: the floating thread (CawFloat → project/CawThread) on card
+   *   1's conversation: its head as it ships (TodayHead) over the same room
+   *   and message box one panel draws, with none of the asks in it. The
+   *   shipped ThreadPane reads its messages from the hub, so it can't draw
+   *   a conversation here.
    * - `switch`: the ⋯ card (project/CawPanel): his sentence and the switch.
    *
    * Each stands on the desk's page ground at the width it ships at.
@@ -19,11 +22,11 @@
     NeedsItem,
   } from "#lib/cawco/home/home-state.svelte.js";
   import SwitchCard from "#lib/cawco/project/CawPanel.svelte";
-  import CawThread from "#lib/cawco/project/CawThread.svelte";
   import { CawLead } from "#lib/cawco/project/caw-lead.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import { PROJECT } from "./fixtures";
+  import PanelScreen from "./PanelScreen.svelte";
 
   let { surface }: { surface: "bar-head" | "thread" | "switch" } = $props();
 
@@ -155,29 +158,29 @@
   };
 </script>
 
-<Tooltip.Provider>
-  <div
-    class="flex w-full justify-end bg-surface-page px-space-1 py-space-3"
-    data-today={surface}
-  >
-    {#if surface === "bar-head"}
-      <div
-        class="w-c-panel-w max-w-full rounded-lg border border-border-control bg-surface-raised p-space-2 shadow-overlay"
-      >
-        <CawPanel {feed} onchoose={() => undefined} quiet="All caught up" />
-      </div>
-    {:else if surface === "thread"}
-      <div
-        class="flex h-c-caw-panel-h w-c-panel-w max-w-full flex-col overflow-hidden rounded-lg border border-border-control bg-surface-raised shadow-overlay"
-      >
-        <CawThread {lead} projectId={PROJECT_ID} projectName={PROJECT} />
-      </div>
-    {:else}
-      <div
-        class="rounded-lg border border-border-control bg-surface-raised shadow-overlay"
-      >
-        <SwitchCard {lead} projectId={PROJECT_ID} projectName={PROJECT} />
-      </div>
-    {/if}
-  </div>
-</Tooltip.Provider>
+{#if surface === "thread"}
+  <!-- The floating thread on card 1's conversation, under its head as it
+       ships: the same frame one panel's is drawn in. -->
+  <PanelScreen form="desk" scene="waiting" today />
+{:else}
+  <Tooltip.Provider>
+    <div
+      class="flex w-full justify-end bg-surface-page px-space-1 py-space-3"
+      data-today={surface}
+    >
+      {#if surface === "bar-head"}
+        <div
+          class="w-c-panel-w max-w-full rounded-lg border border-border-control bg-surface-raised p-space-2 shadow-overlay"
+        >
+          <CawPanel {feed} onchoose={() => undefined} quiet="All caught up" />
+        </div>
+      {:else}
+        <div
+          class="rounded-lg border border-border-control bg-surface-raised shadow-overlay"
+        >
+          <SwitchCard {lead} projectId={PROJECT_ID} projectName={PROJECT} />
+        </div>
+      {/if}
+    </div>
+  </Tooltip.Provider>
+{/if}

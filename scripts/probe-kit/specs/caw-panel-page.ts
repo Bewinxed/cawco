@@ -14,8 +14,8 @@
  *    visually hidden one (sr-only) aside.
  * 1a. In every frame with a message box, the box stands over the room's
  *    foot as the thread pane's dock does, and at rest (the room at its end)
- *    the thread's last line ends above the box's shell: nothing stands
- *    under it. A miss counts as a spill.
+ *    the thread's last line ends above the box's shell and his seat on it:
+ *    nothing stands under either. A miss counts as a spill.
  * 1b. Every phone frame's panel is the sheet under the real bar glass
  *    (joined): its top on the bar's floor line, its trailing side the
  *    screen's edge, its leading side 12px in, the glass at the screen's
@@ -24,6 +24,8 @@
  *    a message standing in the room's view (a thread's title today is its
  *    first message's first line, hub caw.ts `titleFrom`). A miss counts as
  *    a spill.
+ * 1f. A frame comparing the thread (card 1, `data-panel-whole`) holds it
+ *    whole: its room doesn't scroll. A miss counts as a spill.
  * 1e. Every frame holding a blocking block draws it at the room's middle,
  *    Caw at its start edge and its words on the text column after him.
  * 3. Nothing overlaps: no two runs of words in a frame cross, an ancestor
@@ -136,16 +138,33 @@ const sweepPage = (file: string): Sweep => {
     const shell = row?.querySelector<HTMLElement>('[data-slot="shell"]');
     const room = body.querySelector<HTMLElement>("[data-panel-room]");
     const column = room?.firstElementChild;
-    if (shell && room && column) {
+    if (row && shell && room && column) {
       out.rows += 1;
       const atEnd = room.scrollTop + room.clientHeight >= room.scrollHeight - 1;
       const last = column.lastElementChild?.getBoundingClientRect().bottom;
-      const { top } = shell.getBoundingClientRect();
+      // What stands over the room's foot reaches up to the box's shell or
+      // his seat on it, whichever stands higher.
+      const top = Math.min(
+        ...[shell, ...row.querySelectorAll<HTMLElement>('[data-slot="perch"]')]
+          .map((one) => one.getBoundingClientRect())
+          .filter((one) => one.height > 0 && one.width > 0)
+          .map((one) => one.top)
+      );
       if (atEnd && last !== undefined && last > top + 1) {
         out.spills.push(
-          `${where}: the thread's last line ends ${Math.round(last - top)}px under the message box`
+          `${where}: the thread's last line ends ${Math.round(last - top)}px under the message box or his seat on it`
         );
       }
+    }
+    // 1f. A frame that compares the thread (card 1) holds it whole: its
+    // room doesn't scroll, so no line stands cut at its top.
+    if (
+      room?.dataset.panelWhole !== undefined &&
+      room.scrollHeight > room.clientHeight + 1
+    ) {
+      out.spills.push(
+        `${where}: the thread doesn't stand whole (${room.scrollHeight - room.clientHeight}px past the room)`
+      );
     }
     // A phone frame: the panel is the sheet under the bar's glass, its top
     // on the bar's floor line, its trailing side the screen's edge, its

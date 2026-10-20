@@ -33,3 +33,9 @@ export const PhoneLong = {
   args: { form: "phone", long: true },
   parameters: { viewport: "phone" },
 };
+
+/** Phone, a few messages on. */
+export const PhoneLater = {
+  args: { form: "phone" },
+  parameters: { viewport: "phone" },
+};

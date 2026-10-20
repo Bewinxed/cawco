@@ -72,6 +72,9 @@ export const SHIP_ON: Said[] = [
   },
 ];
 
+/** The thread from its third message on: short enough to stand whole in a frame (card 1's). */
+export const SHIP_LATE: Said[] = SHIP_ON.slice(2);
+
 /** A turn under way: his words so far at the thread's tail. */
 export const WORKING: Said[] = [
   ...SHIP_ON.slice(0, 4),
@@ -166,6 +169,7 @@ export interface Waiting {
   title: string;
 }
 
+/** The same two asks the bar head's card lists today (Today.svelte `NEEDS`). */
 export const WAITING: Waiting[] = [
   {
     id: "w-perm",
@@ -174,9 +178,9 @@ export const WAITING: Waiting[] = [
     act: "answer",
   },
   {
-    id: "w-review",
-    title: "Post: one board instead of a wall of cards",
-    source: "Cawco · tsk-1 · Review · 5d",
+    id: "w-question",
+    title: "Which channel should the coaching build go to?",
+    source: "anbar · 12m",
     act: "open",
   },
 ];
@@ -236,6 +240,19 @@ export interface Block {
   title: string;
 }
 
+/** No machine, with the message box gone: nothing can be written meanwhile, so the block says so. */
+export const NO_MACHINE_SHUT: Block = {
+  title: "No machine is online.",
+  line: "You can write to him once one is back.",
+  act: "Check machines",
+  second: null,
+  raw: null,
+  rows: [
+    { name: "obelisk", said: "offline since 14:02" },
+    { name: "harbour-mac", said: "asleep, refused the wake" },
+  ],
+};
+
 export const NO_MACHINE: Block = {
   title: "No machine is online.",
   line: "He starts on the first one back and reads what you write.",
@@ -262,19 +279,19 @@ export const BUDGET: Block = {
 
 export const CANT_READ: Block = {
   title: "This thread couldn't be read.",
-  line: "The hub couldn't open its history. Your messages are kept.",
+  line: "Your messages are kept.",
   act: "Read again",
   second: "New thread",
-  raw: "hub: ENOENT: no such file or directory, open '/var/lib/cawco/projects/harbour-site/threads/th-whats-left.jsonl'",
+  raw: "ENOENT: no such file or directory, open '/var/lib/cawco/projects/harbour-site/threads/th-whats-left.jsonl'",
   rows: [],
 };
 
 export const CANT_READ_LONG: Block = {
   ...CANT_READ,
-  raw: "hub: EACCES: permission denied, open '/var/lib/cawco/projects/harbour-site/threads/th-whats-left.jsonl' (the hub runs as cawco:cawco and the file is owned by root:root after last night's restore copied it in with mode 0600)",
+  raw: "EACCES: permission denied, open '/var/lib/cawco/projects/harbour-site/threads/th-whats-left.jsonl' (the service runs as cawco:cawco and the file is owned by root:root after last night's restore copied it in with mode 0600)",
 };
 
 /** Why a message didn't wake Caw, at its place. */
 export const NOT_WOKEN = "Not read: no machine was online.";
 export const NOT_WOKEN_RAW =
-  "hub: no machine can run caw-harbour-site (obelisk: offline since 14:02; harbour-mac: wake refused)";
+  "no machine can run caw-harbour-site (obelisk: offline since 14:02; harbour-mac: wake refused)";
