@@ -85,7 +85,13 @@ import {
 } from "../../../packages/core/src/stream-relay";
 import { until } from "../../scratch-fleet";
 import type { Kit, KitFleet, Spec } from "../kit";
-import { freeStandIn, startProbeCoturn, turn } from "./browser-relay";
+import {
+  freeStandIn,
+  type MadeHere,
+  madeOn,
+  startProbeCoturn,
+  turn,
+} from "./browser-relay";
 import { stunStandIn } from "./relay-journey";
 
 /** This spec's coturn: never the relay's own `cawco-relay`. */
@@ -487,6 +493,24 @@ const run = async (kit: Kit): Promise<void> => {
     );
     return;
   }
+  // What this run makes on the runtime, removed however it ends (a stop
+  // signal included): its coturn, leg 9's neko and network, the scratch
+  // agent's browsers, and the media network when this run makes it.
+  const made = madeOn(runtime.docker);
+  try {
+    await runOn(kit, runtime, made, realHome);
+  } finally {
+    await made.end();
+  }
+};
+
+/** Every leg on `runtime`, each thing it makes there recorded in `made`. */
+const runOn = async (
+  kit: Kit,
+  runtime: Runtime,
+  made: MadeHere,
+  realHome: string
+): Promise<void> => {
   const { machineAddresses } =
     await import("../../../packages/agent/src/browser/media-forwarding");
   const v4 = (await machineAddresses()).filter((one) => !one.includes(":"));
@@ -502,9 +526,14 @@ const run = async (kit: Kit): Promise<void> => {
   }
   const media =
     await import("../../../packages/agent/src/browser/media-network");
+  await made.network(media.MEDIA_NETWORK);
+  await made.network(OTHER_NETWORK);
+  made.container(COTURN);
+  made.container(OTHER_NEKO);
   const network = await media.ensureMediaNetwork(runtime.docker);
   const here: Here = {
     address,
+    made,
     network: network.name,
     realHome,
     relayMedia: media.relayMediaAddress(network),
@@ -528,6 +557,7 @@ const run = async (kit: Kit): Promise<void> => {
       realHome,
       runtime,
       lan: address,
+      made,
       relay: {
         address: otherAddress,
         machineId: OTHER_RELAY_MACHINE,
@@ -544,6 +574,7 @@ const run = async (kit: Kit): Promise<void> => {
 /** This machine as the run found it: its LAN address, its runtime and media network, coturn's seat there. */
 interface Here {
   address: string;
+  made: MadeHere;
   network: string;
   realHome: string;
   relayMedia: string;
@@ -616,6 +647,7 @@ const ownCoturnRun = async (kit: Kit, here: Here): Promise<void> => {
       realHome,
       runtime,
       lan: address,
+      made: here.made,
       relay: {
         address,
         coturn: coturn.container,
@@ -638,6 +670,8 @@ type Container = ReturnType<Runtime["docker"]["getContainer"]>;
 interface At {
   /** This machine's LAN address. */
   lan: string;
+  /** What the run makes on the runtime, removed however it ends. */
+  made: MadeHere;
   realHome: string;
   relay: RelayAt;
   runtime: Runtime;
@@ -678,6 +712,11 @@ const legsWith = async (kit: Kit, at: At, stun: string): Promise<void> => {
   await agentOn(`unix://${at.runtime.endpoint}`);
   await fleet.accountSignedIn();
   process.env.XDG_DATA_HOME = fleet.env.XDG_DATA_HOME as string;
+  // The scratch agent's browsers (its owner, read where it keeps it) go
+  // before the media network they stand on.
+  const { browserOwner } =
+    await import("../../../packages/agent/src/browser/state");
+  at.made.owner(await browserOwner());
   const ws = fleet.base.replace(HTTP_SCHEME, "ws");
   const page = await kit.page("desk");
   await page.goto(`${fleet.base}/health`);

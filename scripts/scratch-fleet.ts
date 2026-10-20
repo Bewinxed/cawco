@@ -1137,7 +1137,17 @@ async function removeKept(scratch: string, name: string): Promise<string[]> {
 
 /** The fleets of this process whose folders still stand. */
 const LIVE = new Set<FleetDirs>();
-const END_SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
+export const END_SIGNALS = { SIGHUP: 1, SIGINT: 2, SIGTERM: 15 } as const;
+/** The fleets' own ending on a stop signal, while it runs. */
+let ending: Promise<unknown> | undefined;
+
+/**
+ * Resolves once the fleets' ending on a stop signal is done (at once when
+ * none runs): a probe that listens for the signal too, to remove what it
+ * made itself, ends the process after this, so its fleets' browsers and
+ * folders are gone first.
+ */
+export const signalEnding = (): Promise<unknown> => ending ?? Promise.resolve();
 const removeLive = () => {
   for (const one of [...LIVE]) {
     one.removeNow();
@@ -1152,14 +1162,14 @@ for (const [name, number] of Object.entries(END_SIGNALS)) {
   const signal = name as keyof typeof END_SIGNALS;
   const onSignal = () => {
     // The browsers first, while the records that name them stand.
-    Promise.allSettled([...LIVE].map((one) => one.removeBrowsers())).finally(
-      () => {
-        removeLive();
-        if (process.listenerCount(signal) === 1) {
-          process.exit(128 + number);
-        }
+    ending = Promise.allSettled(
+      [...LIVE].map((one) => one.removeBrowsers())
+    ).finally(() => {
+      removeLive();
+      if (process.listenerCount(signal) === 1) {
+        process.exit(128 + number);
       }
-    );
+    });
   };
   process.on(signal, onSignal);
 }
