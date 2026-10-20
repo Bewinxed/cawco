@@ -350,9 +350,9 @@ const mediaIn = (frame: Frame) =>
     );
     return {
       image: img?.naturalWidth ?? 0,
-      diagrams: [...document.querySelectorAll(".draw svg.pele")].map(
-        (svg) => svg.getAttribute("class") ?? ""
-      ),
+      diagrams: [
+        ...document.querySelectorAll("[data-slot=diagram] svg.pele"),
+      ].map((svg) => svg.getAttribute("class") ?? ""),
       canvas: !!canvas?.contentDocument?.querySelector(".excalidraw canvas"),
       preview: preview?.contentDocument?.body?.textContent?.trim() ?? "",
       dials: document.querySelectorAll(".dialkit-root .dialkit-panel").length,
@@ -360,9 +360,9 @@ const mediaIn = (frame: Frame) =>
         .filter((face) => face.status === "loaded")
         .map((face) => face.family),
       row: (() => {
-        const row = document.querySelector("#decision-plan .stack");
-        const words = row?.querySelector(".text");
-        const badge = row?.querySelector(".badge");
+        const row = document.querySelector("#decision-plan [data-slot=stack]");
+        const words = row?.querySelector("[data-slot=text]");
+        const badge = row?.querySelector("[data-slot=badge]");
         const rowStyle = row ? getComputedStyle(row) : null;
         const probe = document.createElement("span");
         probe.style.columnGap = "var(--space-3)";
@@ -380,13 +380,15 @@ const mediaIn = (frame: Frame) =>
           badge: badge ? getComputedStyle(badge).backgroundColor : "",
         };
       })(),
-      opens: [...document.querySelectorAll("figure.diagram")].map(
-        (figure) => !!figure.querySelector("button.open")
-      ),
+      opens: [
+        ...document.querySelectorAll(
+          "[data-slot=media]:has([data-slot=diagram])"
+        ),
+      ].map((figure) => !!figure.querySelector("[data-open-canvas]")),
       theme: document.documentElement.dataset.theme ?? "",
       site:
         document.querySelector<HTMLIFrameElement>(
-          "#decision-plan iframe.screen"
+          "#decision-plan iframe[data-shape=screen]"
         )?.src ?? "",
     };
   });
@@ -417,10 +419,10 @@ const diagramInk = (frame: Frame) =>
     const ink = getComputedStyle(probe).color;
     probe.remove();
     const node = document.querySelector(
-      ".draw svg.pele .pele-node :is(rect, path, polygon)"
+      "[data-slot=diagram] svg.pele .pele-node :is(rect, path, polygon)"
     );
     const label = document.querySelector(
-      ".draw svg.pele .pele-label, .draw svg.pele text"
+      "[data-slot=diagram] svg.pele .pele-label, [data-slot=diagram] svg.pele text"
     );
     return {
       surface,
@@ -1761,10 +1763,10 @@ const openAsCanvas = async (on: On) => {
   await settle(desk, 300);
   // The page's foot holds the DialKit panel, floating: the button goes to the view's top, clear of it.
   await back
-    .locator("#decision-stack figure.diagram button.open")
+    .locator("#decision-stack [data-open-canvas]")
     .first()
     .evaluate((button) => button.scrollIntoView({ block: "start" }));
-  await pressIn(back, "#decision-stack figure.diagram button.open >> nth=0");
+  await pressIn(back, "#decision-stack [data-open-canvas] >> nth=0");
   const opened = await until(
     "the diagram's canvas",
     () =>
@@ -1881,7 +1883,8 @@ const waitChecks = async (on: On) => {
   const quickFrame = await frameWith(quick, 4);
   await until(
     "the embed framed",
-    () => quickFrame.locator("#decision-plan iframe.screen").count(),
+    () =>
+      quickFrame.locator("#decision-plan iframe[data-shape=screen]").count(),
     (count) => count > 0,
     30_000
   ).catch(() => 0);
@@ -1911,7 +1914,7 @@ const waitChecks = async (on: On) => {
   const heldFrame = await frameWith(held, 4);
   await until(
     "the embed framed after its held ping",
-    () => heldFrame.locator("#decision-plan iframe.screen").count(),
+    () => heldFrame.locator("#decision-plan iframe[data-shape=screen]").count(),
     (count) => count > 0,
     30_000
   ).catch(() => 0);
@@ -1940,7 +1943,8 @@ const openToDraw = async (on: On) => {
   // The show draws the page at a new revision: the pane swaps its frame, and
   // a card unfolded in the frame on its way out is folded in the one that
   // stays. Found again and opened until its Open to draw stands in view.
-  const OPEN = "#decision-host figure button.open";
+  const OPEN =
+    "#decision-host [data-slot=media] :is([data-open-canvas], [data-open-draw])";
   const frame = (await until(
     "the host card open, its Open to draw in view",
     async () => {
@@ -2058,7 +2062,7 @@ const burstLeg = async (on: On) => {
     const src = async () => {
       try {
         return await frame
-          .locator("#decision-where iframe.screen")
+          .locator("#decision-where iframe[data-shape=screen]")
           .first()
           .getAttribute("src", { timeout: 1000 });
       } catch {

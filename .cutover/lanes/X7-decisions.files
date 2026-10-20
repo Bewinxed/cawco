@@ -79,3 +79,4 @@ apps/dashboard/src/lib/cawco/decisions/host/Well.svelte
 apps/dashboard/src/lib/cawco/decisions/host/scheme.svelte.ts
 apps/dashboard/eslint.config.mjs
 scripts/style-residual-check.ts
+scripts/probe-kit/decision-embeds.ts

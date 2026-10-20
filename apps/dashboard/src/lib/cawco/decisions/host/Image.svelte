@@ -35,6 +35,7 @@
     />
   {:else}
     <p
+      data-slot="media-gone"
       class="type-meta grid aspect-16/10 w-full place-items-center text-center text-ink-muted wrap-anywhere"
     >
       The picture {file} is not on this page.

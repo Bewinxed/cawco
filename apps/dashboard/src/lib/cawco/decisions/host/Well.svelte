@@ -38,7 +38,7 @@
   <div
     bind:this={stage}
     class={[
-      "relative flex min-w-0 items-center-safe justify-center-safe",
+      "relative flex min-w-0 flex-1 items-center-safe justify-center-safe",
       wide && "kit-edge-fade overflow-x-auto overscroll-x-contain",
     ]}
     data-slot="media-stage"
@@ -50,10 +50,10 @@
       class="flex flex-wrap items-center justify-between gap-space-2"
       data-slot="media-foot"
     >
-      <span class="type-meta min-w-0 text-ink-muted wrap-anywhere"
-        >{caption ?? ""}</span
-      >
-      {@render action?.()}
+      <span
+        class="type-meta min-w-0 text-ink-muted wrap-anywhere"
+        data-slot="media-caption">{caption ?? ""}</span
+      >{@render action?.()}
     </figcaption>
   {/if}
   {#if said}

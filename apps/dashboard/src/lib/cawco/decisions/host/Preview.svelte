@@ -165,9 +165,10 @@
     <iframe
       bind:this={frame}
       class={[
-        "block max-h-c-media-max-h w-full rounded-xs border-0",
+        "block max-h-c-media-max-h w-full rounded-xs border-0 bg-surface-page",
         tall === null && "aspect-16/10",
       ]}
+      data-slot="embed"
       onload={sized}
       src={`/__cawco/page/${id}/`}
       style:block-size={tall === null ? undefined : `${tall}px`}
@@ -179,9 +180,11 @@
       <iframe
         bind:this={frame}
         class={[
-          "block w-full rounded-xs border-0",
+          "block w-full rounded-xs border-0 bg-surface-page",
           tall === null && "aspect-16/10 max-h-c-media-max-h",
         ]}
+        data-shape={tall === null ? "screen" : "drawn"}
+        data-slot="embed"
         src={ready}
         style:block-size={tall === null ? undefined : `${tall}px`}
         title={held.name}
@@ -217,6 +220,7 @@
     {/if}
   {:else}
     <p
+      data-slot="media-gone"
       class="type-meta grid aspect-16/10 w-full place-items-center text-center text-ink-muted wrap-anywhere"
     >
       {held

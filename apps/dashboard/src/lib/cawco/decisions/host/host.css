@@ -17,8 +17,10 @@
 @source "../../../components/ui/badge/";
 @source "../../../components/ui/button/";
 @source "../../../components/ui/checkbox/checkbox.svelte";
+@source "../../../components/ui/chip/";
 @source "../../../components/ui/kbd/";
 @source "../../../components/ui/morph-text/";
+@source "../../../components/ui/option-group/";
 @source "../../../components/ui/skeleton/";
 @source "../../../components/ui/spinner/";
 @source "../../../components/ui/textarea/";

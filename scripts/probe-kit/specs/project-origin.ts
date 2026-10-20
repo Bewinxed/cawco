@@ -76,7 +76,11 @@ const drawnIn = async (tab: Page): Promise<Drawn> => {
     return { card: false, embed: "", gone: "" };
   }
   const gone = await page
-    .evaluate(() => document.querySelector(".gone")?.textContent?.trim() ?? "")
+    .evaluate(
+      () =>
+        document.querySelector("[data-slot=media-gone]")?.textContent?.trim() ??
+        ""
+    )
     .catch(() => "");
   const embeds = page.childFrames();
   const said = await Promise.all(

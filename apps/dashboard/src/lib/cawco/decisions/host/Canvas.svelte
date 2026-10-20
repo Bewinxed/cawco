@@ -136,8 +136,12 @@
 </script>
 
 {#snippet open()}
-  <Button disabled={opening} onclick={openToDraw} size="sm" variant="ghost"
-    >Open to draw</Button
+  <Button
+    data-open-draw
+    disabled={opening}
+    onclick={openToDraw}
+    size="sm"
+    variant="ghost">Open to draw</Button
   >
 {/snippet}
 
@@ -167,6 +171,7 @@
     ></iframe>
   {:else}
     <p
+      data-slot="media-gone"
       class="type-meta grid aspect-16/10 w-full place-items-center text-center text-ink-muted wrap-anywhere"
     >
       {held

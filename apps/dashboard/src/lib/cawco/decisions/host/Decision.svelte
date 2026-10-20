@@ -355,7 +355,8 @@
   /**
    * Where the page's scroll lands once `node` (`from`'s body) has folded
    * shut: the next open card in view, under `from`'s decided line when it
-   * comes right after it, else at the top; with none left, Send in view.
+   * comes right after it, else at the top; with none left, where it stands
+   * (Send is in the sticky foot, always in view).
    * Read with the body held at the fold's end, let go before anything is
    * drawn.
    */
@@ -385,11 +386,10 @@
     let to = stood;
     if (next) {
       to = top(cards.indexOf(next) === cards.indexOf(from) + 1 ? from : next);
-    } else {
-      // Send in view: the page's foot stands sticky at the window's foot, so
-      // the page's end is what has to come into view.
-      to = scroller.scrollHeight - scroller.clientHeight;
     }
+    // With none left the page stays where the reader has it: Send stands in
+    // the sticky foot, always in view, and only the page's own shrink moves
+    // the scroll (the clamp below).
     const most = scroller.scrollHeight - scroller.clientHeight;
     [node.style.height, node.style.marginBottom, node.style.overflow] = was;
     scroller.scrollTop = stood;
@@ -472,9 +472,10 @@
       if (!(target && flight)) {
         return [];
       }
-      target.style.visibility = "hidden";
+      // Hidden by opacity, not visibility: focus lands on it as it lands.
+      target.style.opacity = "0";
       const show = () => {
-        target.style.visibility = "";
+        target.style.opacity = "";
       };
       return [flight.finished.then(show, show)];
     });
@@ -631,6 +632,12 @@
     page?.work(id);
     // A pointer's Change: the head's chips stand on while they fly home.
     returning = acted === "pointer";
+    // A Continue's flight caught mid-way hid each chosen chip in the options
+    // as its source (motion/share); the card opening gives them back, so
+    // focus can land on the pick (the flight home hides them by opacity).
+    for (const chip of chips) {
+      chipOf(chip.id)?.style.removeProperty("visibility");
+    }
     open = true;
     await tick();
     chipOf(chosen[0] ?? "")?.focus({ preventScroll: true });
@@ -720,7 +727,7 @@
 <article
   bind:this={card}
   {@attach morph({ still: () => instant })}
-  class="group/card relative flex min-w-0 scroll-mt-space-4 flex-col gap-space-5 rounded-panel bg-surface-raised p-space-5 shadow-tile coarse:p-space-4 data-decided:py-space-3"
+  class="group/card relative flex min-w-0 data-instant:**:transition-none scroll-mt-space-4 flex-col gap-space-5 rounded-panel bg-surface-raised p-space-5 shadow-tile coarse:p-space-4 data-decided:py-space-3"
   data-cawco-choice={id}
   data-cawco-multiple={multiple ? "" : undefined}
   data-decided={decided ? "" : undefined}
@@ -741,7 +748,7 @@
     {#if decided || returning}
       <!-- The decided line: the chosen options' chips, then Change, centred on the question's first line. Opening, the chips fly home and Change fades where it stood; with reduced motion the chips fade too. -->
       <div
-        class="mark-cell type-title"
+        class="mark-cell grid-rows-1 type-title"
         data-leaves
         data-leaving={decided ? undefined : ""}
       >

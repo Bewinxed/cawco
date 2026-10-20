@@ -298,11 +298,15 @@ const PREVIEWS: Record<
   },
   "The sheet": { files: [SHEET], stories: [], shows: ["Drawer"] },
 };
+/** The test page's nine-node top-down chain (the owner's "i have to scroll down to read it"). */
+const CHAIN = Array.from({ length: 9 }, (_, i) => `S${i}[Step ${i + 1}]`).join(
+  " --> "
+);
 /** The second card's three media, by caption. */
 const TRIO = ["The side card", "The note", "January's lines"];
 
 const PROGRAM = [
-  `root = Decisions("The spend ledger", [ledger, side, head, bar])`,
+  `root = Decisions("The spend ledger", [ledger, side, head, bar, chain])`,
   `ledger = Decision("ledger", "Where does the pinned note stand?", [under, alone], "The ledger is long; the note is what a person acts on.", [book])`,
   `under = Option("under", "Under the ledger", "The note after every line.", false, [order], "A person scrolls past sixty lines to reach it.")`,
   `alone = Option("alone", "On its own", "The note in a card of its own.", true, [note], "The ledger loses its summary line.")`,
@@ -325,6 +329,11 @@ const PROGRAM = [
   `below = Option("below", "Under the ⋯", "End-aligned under it.", true, [], "It covers the first line.")`,
   `aside = Option("aside", "Beside the bar", "Off to its end.", false, [], "It runs off a phone's edge.")`,
   `menuPhone = Preview("${MENU_ID}", "The bar's menu on a phone", ["Phone"])`,
+  `chain = Decision("chain", "How does a release go out?", [steps, batch], "Each step is a person's own check.", [chainFlow, stageFlow])`,
+  `steps = Option("steps", "Step by step", "Nine checks, one after another.", true, [], "Slower on a busy week.")`,
+  `batch = Option("batch", "In one batch", "One check for the lot.", false, [], "A fault hides among the rest.")`,
+  `chainFlow = Diagram("flowchart TD\\n${CHAIN}", "Nine steps down")`,
+  `stageFlow = Diagram("flowchart LR\\nsubgraph Build\\nWrite[Write] -->|then| Check[Check]\\nend\\nCheck --> Ship[Ship]", "With a stage")`,
 ].join("\n");
 
 /** The fixture copied to scratch and installed once: the project the stage draws. */
@@ -339,6 +348,210 @@ function fixtureRoot(): string {
     );
   }
   return SCRATCH;
+}
+
+/**
+ * The page's frame, its first open card, its options' first row, a media
+ * well and the sticky foot, from the engine, each beside the token it
+ * should be (resolved on a probe element in the page itself).
+ */
+function readLayout() {
+  const probe = document.createElement("i");
+  document.body.append(probe);
+  const token = (property: string, value: string) => {
+    probe.style.setProperty(property, value);
+    const read = getComputedStyle(probe).getPropertyValue(property);
+    probe.style.removeProperty(property);
+    return read;
+  };
+  const tokens = {
+    recess: token("background-color", "var(--surface-recess)"),
+    raised: token("background-color", "var(--surface-raised)"),
+    well: token("background-color", "var(--surface-well)"),
+    wellEdge: token("border-top-color", "var(--border-well)"),
+    tile: token("box-shadow", "var(--shadow-tile)"),
+  };
+  probe.remove();
+  const at = (el: Element | null | undefined) => {
+    const r = el?.getBoundingClientRect();
+    return r
+      ? {
+          x: Math.round(r.left * 10) / 10,
+          y: Math.round(r.top * 10) / 10,
+          w: Math.round(r.width * 10) / 10,
+          h: Math.round(r.height * 10) / 10,
+        }
+      : null;
+  };
+  const main = document.querySelector<HTMLElement>("[data-slot=decision-page]");
+  const card = document.querySelector<HTMLElement>(
+    "[data-slot=decision]:not([data-decided])"
+  );
+  const cells = [...(card?.querySelectorAll("[data-slot=option-cell]") ?? [])];
+  const first = cells[0]?.getBoundingClientRect().top ?? 0;
+  const row = cells.filter(
+    (cell) => Math.abs(cell.getBoundingClientRect().top - first) < 1
+  );
+  const tops = (selector: string) =>
+    row.map(
+      (cell) =>
+        Math.round(
+          (cell.querySelector(selector)?.getBoundingClientRect().top ?? -1) * 10
+        ) / 10
+    );
+  const well = document.querySelector<HTMLElement>("[data-slot=media]");
+  const stage = well?.querySelector("[data-slot=media-stage]");
+  const piece = stage?.firstElementChild;
+  const foot = document.querySelector<HTMLElement>("[data-slot=page-foot]");
+  const send = document.querySelector<HTMLElement>("[data-send]");
+  const sendAt = send?.getBoundingClientRect();
+  const hit = sendAt
+    ? document.elementFromPoint(
+        sendAt.left + sendAt.width / 2,
+        sendAt.top + sendAt.height / 2
+      )
+    : null;
+  const ms = main ? getComputedStyle(main) : null;
+  const cs = card ? getComputedStyle(card) : null;
+  const ws = well ? getComputedStyle(well) : null;
+  const centre = (box: ReturnType<typeof at>) =>
+    box ? box.x + box.w / 2 : Number.NaN;
+  return {
+    tokens,
+    window: { w: innerWidth, h: innerHeight },
+    page: {
+      box: at(main),
+      inset: ms ? [ms.paddingLeft, ms.paddingRight] : [],
+      gap: ms?.rowGap ?? "",
+      ground: getComputedStyle(document.body).backgroundColor,
+    },
+    card: {
+      radius: cs?.borderTopLeftRadius ?? "",
+      border: cs?.borderTopWidth ?? "",
+      pad: cs ? [cs.paddingTop, cs.paddingLeft] : [],
+      fill: cs?.backgroundColor ?? "",
+      // Tailwind's shadow utility stands its ring and inset layers, empty,
+      // before the token's own: the drawn layers are the token's.
+      shadow: (cs?.boxShadow ?? "").replaceAll(
+        "rgba(0, 0, 0, 0) 0px 0px 0px 0px, ",
+        ""
+      ),
+    },
+    row: {
+      cells: row.length,
+      chips: tops("[data-option]"),
+      lines: tops('[id$="-line"]'),
+      chipH: row.map(
+        (cell) =>
+          Math.round(
+            (cell.querySelector("[data-option]")?.getBoundingClientRect()
+              .height ?? 0) * 10
+          ) / 10
+      ),
+    },
+    well: {
+      radius: ws?.borderTopLeftRadius ?? "",
+      edge: ws?.borderTopColor ?? "",
+      pad: ws?.paddingTop ?? "",
+      fill: ws?.backgroundColor ?? "",
+      off:
+        Math.round(Math.abs(centre(at(stage)) - centre(at(piece))) * 10) / 10,
+    },
+    foot: {
+      position: foot ? getComputedStyle(foot).position : "",
+      bottom: at(foot) ? (at(foot)?.y ?? 0) + (at(foot)?.h ?? 0) : 0,
+      page: document.documentElement.scrollHeight,
+      send: !!(hit && send?.contains(hit)),
+    },
+  };
+}
+
+/**
+ * The release card's two diagrams from the engine: each one's box in its
+ * well's stage, its smallest words as drawn, whether its well scrolls, and
+ * each element kind's paint beside the token it should be (DESIGN.md: a node
+ * raised with a control's edge and the 8px of an item in a surface, its name
+ * in the label role in strong ink; an edge 1px in muted ink, its words in
+ * meta; a subgraph the recess with a hairline, its title in the label role,
+ * muted).
+ */
+function readDiagrams() {
+  const probe = document.createElement("i");
+  document.body.append(probe);
+  const token = (property: string, value: string) => {
+    probe.style.setProperty(property, value);
+    const read = getComputedStyle(probe).getPropertyValue(property);
+    probe.style.removeProperty(property);
+    return read;
+  };
+  const want = {
+    raised: token("fill", "var(--surface-raised)"),
+    recess: token("fill", "var(--surface-recess)"),
+    control: token("stroke", "var(--border-control)"),
+    hairline: token("stroke", "var(--border-hairline)"),
+    strong: token("fill", "var(--ink-strong)"),
+    muted: token("fill", "var(--ink-muted)"),
+    mutedLine: token("stroke", "var(--ink-muted)"),
+    face: token("font-family", "var(--font-sans)"),
+  };
+  probe.remove();
+  const card = document.getElementById("decision-chain");
+  const wells = [...(card?.querySelectorAll("[data-slot=media]") ?? [])];
+  const one = (well: Element) => {
+    const stage = well.querySelector<HTMLElement>("[data-slot=media-stage]");
+    const svg = well.querySelector<SVGSVGElement>("[data-slot=diagram] svg");
+    const s = stage?.getBoundingClientRect();
+    const d = svg?.getBoundingClientRect();
+    const scale =
+      svg && d ? d.width / (svg.viewBox.baseVal.width || d.width) : 0;
+    const sizes = [...(svg?.querySelectorAll("text") ?? [])].map(
+      (word) => Number.parseFloat(getComputedStyle(word).fontSize) * scale
+    );
+    const paint = (selector: string) => {
+      const el = svg?.querySelector(selector);
+      if (!el) {
+        return null;
+      }
+      const style = getComputedStyle(el);
+      return {
+        fill: style.fill,
+        stroke: style.stroke,
+        width: style.strokeWidth,
+        rx: style.getPropertyValue("rx"),
+        size: style.fontSize,
+        weight: style.fontWeight,
+        face: style.fontFamily,
+      };
+    };
+    return {
+      caption:
+        well.querySelector("[data-slot=media-caption]")?.textContent?.trim() ??
+        "",
+      smallest: Math.round(Math.min(...sizes) * 100) / 100,
+      off:
+        s && d
+          ? [
+              Math.round(
+                Math.abs(s.left + s.width / 2 - (d.left + d.width / 2)) * 10
+              ) / 10,
+              Math.round(
+                Math.abs(s.top + s.height / 2 - (d.top + d.height / 2)) * 10
+              ) / 10,
+            ]
+          : [99, 99],
+      scrolls: [
+        (stage?.scrollWidth ?? 0) - (stage?.clientWidth ?? 0),
+        (well as HTMLElement).scrollHeight - (well as HTMLElement).clientHeight,
+      ],
+      node: paint(".pele-node :is(rect, path, polygon)"),
+      label: paint(".pele-node .pele-label, .pele-node text"),
+      edge: paint(".pele-edge path"),
+      edgeWords: paint(".pele-edge-label text, text.pele-edge-label"),
+      cluster: paint(".pele-cluster > :is(rect, path)"),
+      clusterTitle: paint(".pele-cluster-label text, text.pele-cluster-label"),
+    };
+  };
+  return { want, wells: wells.map(one) };
 }
 
 /** The page's own controls and its media's columns, from the engine. */
@@ -357,7 +570,10 @@ function readPage() {
       items: [...show.children].map((one) => {
         const r = one.getBoundingClientRect();
         return {
-          caption: one.querySelector("figcaption")?.textContent?.trim() ?? "",
+          caption:
+            one
+              .querySelector("[data-slot=media-caption]")
+              ?.textContent?.trim() ?? "",
           x: Math.round(r.left),
           w: Math.round(r.width),
         };
@@ -369,9 +585,16 @@ function readPage() {
         .querySelector("[data-slot=decision-page] [data-slot=alert]")
         ?.textContent?.trim() ?? "",
     send: { h: tall(send), disabled: send?.disabled ?? true },
-    note: Math.min(
-      ...[...document.querySelectorAll("[data-slot=note] textarea")].map(tall)
-    ),
+    // "Add a note", the note's control a finger meets first: its 44px area (touch-hit's ::after).
+    noteAdd: (() => {
+      const add = document.querySelector("[data-slot=note] button");
+      return add
+        ? Math.round(
+            Number.parseFloat(getComputedStyle(add, "::after").height) ||
+              add.getBoundingClientRect().height
+          )
+        : 0;
+    })(),
     options: options.map((one) => {
       const style = getComputedStyle(one);
       const cap = one.querySelector("[data-slot=kbd]")?.getBoundingClientRect();
@@ -655,8 +878,10 @@ const spec: Spec = {
                 caption:
                   (await handle.evaluate(
                     (frame) =>
-                      frame.closest("figure")?.querySelector("figcaption")
-                        ?.textContent ?? ""
+                      frame
+                        .closest("figure")
+                        ?.querySelector("[data-slot=media-caption]")
+                        ?.textContent?.trim() ?? ""
                   )) || "",
                 embed: ground.rgb,
                 host,
@@ -741,6 +966,93 @@ const spec: Spec = {
               .join("\n    ")
           );
 
+          const drawn = await page.evaluate(readDiagrams);
+          const chain = drawn.wells.find(
+            (w) => w.caption === "Nine steps down"
+          );
+          const staged = drawn.wells.find((w) => w.caption === "With a stage");
+          const { want } = drawn;
+          kit.check(
+            `${leg}: the nine-node top-down chain is drawn as written and fits its well, its smallest words ${chain?.smallest}px (10px and up), no scroll either way, centred in its well (${JSON.stringify(chain && { smallest: chain.smallest, off: chain.off, scrolls: chain.scrolls })})`,
+            !!chain &&
+              chain.smallest >= 9.95 &&
+              chain.scrolls[0] <= 0 &&
+              chain.scrolls[1] <= 0 &&
+              chain.off.every((o) => o <= 0.5)
+          );
+          kit.check(
+            `${leg}: a diagram draws in the house's look: a node raised with the control's edge at 8px, its name in the label role in strong ink; an edge 1px in muted ink, its words in meta; a subgraph the recess with a hairline, its title in the label role, muted (${JSON.stringify(staged && { off: staged.off, node: staged.node, label: staged.label, edge: staged.edge, edgeWords: staged.edgeWords, cluster: staged.cluster, clusterTitle: staged.clusterTitle, want })})`,
+            !!staged?.node &&
+              staged.node.fill === want.raised &&
+              staged.node.stroke === want.control &&
+              staged.node.rx === "8px" &&
+              !!staged.label &&
+              staged.label.fill === want.strong &&
+              staged.label.size === "13px" &&
+              staged.label.weight === "500" &&
+              staged.label.face === want.face &&
+              !!staged.edge &&
+              staged.edge.stroke === want.mutedLine &&
+              staged.edge.width === "1px" &&
+              !!staged.edgeWords &&
+              staged.edgeWords.size === "12px" &&
+              staged.edgeWords.fill === want.muted &&
+              !!staged.cluster &&
+              staged.cluster.fill === want.recess &&
+              staged.cluster.stroke === want.hairline &&
+              !!staged.clusterTitle &&
+              staged.clusterTitle.size === "13px" &&
+              staged.clusterTitle.weight === "500" &&
+              staged.clusterTitle.fill === want.muted &&
+              staged.off.every((o) => o <= 0.5)
+          );
+          const laid = await page.evaluate(readLayout);
+          const inset = view === "desk" ? "21px" : "14px";
+          const spread = (values: number[]) =>
+            values.length ? Math.max(...values) - Math.min(...values) : 99;
+          kit.check(
+            `${leg}: the page is one centred column ${view === "desk" ? "920px at most" : "the window wide"}, ${inset} in, its groups 18px apart, on the recessed ground (${JSON.stringify(laid.page)})`,
+            !!laid.page.box &&
+              (view === "desk"
+                ? laid.page.box.w === 920 &&
+                  laid.page.box.x === (laid.window.w - 920) / 2
+                : laid.page.box.w === laid.window.w) &&
+              laid.page.inset.every((one) => one === inset) &&
+              laid.page.gap === "18px" &&
+              laid.page.ground === laid.tokens.recess
+          );
+          kit.check(
+            `${leg}: a card is raised at the panel radius with the tile shadow and no border, ${view === "desk" ? "18px" : "14px"} in (${JSON.stringify(laid.card)})`,
+            laid.card.radius === "16px" &&
+              laid.card.border === "0px" &&
+              laid.card.fill === laid.tokens.raised &&
+              laid.card.shadow === laid.tokens.tile &&
+              laid.card.pad.every(
+                (one) => one === (view === "desk" ? "18px" : "14px")
+              )
+          );
+          kit.check(
+            `${leg}: the options side by side start their chips and their lines on one line, each chip 30px (${JSON.stringify(laid.row)})`,
+            laid.row.cells >= (view === "desk" ? 2 : 1) &&
+              spread(laid.row.chips) <= 0.5 &&
+              spread(laid.row.lines) <= 0.5 &&
+              laid.row.chipH.every((h) => Math.abs(h - 30) <= 0.5)
+          );
+          kit.check(
+            `${leg}: a media well is the content well (radius 7, the well's edge, 11px in, the well's ground), its piece centred in it within half a pixel (${JSON.stringify(laid.well)})`,
+            laid.well.radius === "7px" &&
+              laid.well.edge === laid.tokens.wellEdge &&
+              laid.well.pad === "11px" &&
+              laid.well.fill === laid.tokens.well &&
+              laid.well.off <= 0.5
+          );
+          kit.check(
+            `${leg}: the foot is sticky at the window's foot on a page ${laid.foot.page}px tall, Send unobscured where it stands (${JSON.stringify(laid.foot)})`,
+            laid.foot.position === "sticky" &&
+              laid.foot.page > laid.window.h &&
+              Math.abs(laid.foot.bottom - laid.window.h) <= 0.5 &&
+              laid.foot.send
+          );
           const said = await page.evaluate(readPage);
           const [trio] = said.trio;
           const column =
@@ -783,9 +1095,29 @@ const spec: Spec = {
               .join("\n    ")
           );
           if (view === "phone") {
+            // The note as a finger opens it: "Add a note" pressed, the field it
+            // opens read, then Done folds it back as it was.
+            await page
+              .locator("#decision-ledger [data-slot=note] button")
+              .first()
+              .click();
+            await settle(page, 600);
+            const field = await page.evaluate(() =>
+              Math.round(
+                document
+                  .querySelector("#decision-ledger [data-slot=note] textarea")
+                  ?.getBoundingClientRect().height ?? 0
+              )
+            );
+            await page
+              .locator("#decision-ledger [data-slot=note] button", {
+                hasText: "Done",
+              })
+              .click();
+            await settle(page, 600);
             kit.check(
-              `${leg}: under a finger the note ${said.note}px and Send picks ${said.send.h}px tall, 44px and up`,
-              said.note >= 44 && said.send.h >= 44
+              `${leg}: under a finger "Add a note" reaches ${said.noteAdd}px, the note it opens stands ${field}px tall and Send picks ${said.send.h}px, 44px and up`,
+              said.noteAdd >= 44 && field >= 44 && said.send.h >= 44
             );
           }
 

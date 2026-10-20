@@ -169,8 +169,12 @@
 
 {#snippet open()}
   {#if type && CANVAS_TYPES.has(type)}
-    <Button disabled={opening} onclick={openAsCanvas} size="sm" variant="ghost"
-      >Open as canvas</Button
+    <Button
+      data-open-canvas
+      disabled={opening}
+      onclick={openAsCanvas}
+      size="sm"
+      variant="ghost">Open as canvas</Button
     >
   {/if}
 {/snippet}

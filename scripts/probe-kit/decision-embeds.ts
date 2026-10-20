@@ -50,7 +50,7 @@ declare global {
 export const APP = join(ROOT, "apps/dashboard");
 export const STAGE_START_MS = 240_000;
 /** An embed on a decision page: a Preview's live frame (dashboard decisions host Preview.svelte). */
-export const EMBED_FRAME = "figure.media iframe.frame";
+export const EMBED_FRAME = "[data-slot=media] iframe[data-slot=embed]";
 const PAGE_PATH = /^\/page\/([a-z-]+)\/(light|dark)\/$/;
 const TITLE = /Decisions\("([^"]*)"/;
 const STATES_EXT = /\.stories\.ts$/;
@@ -625,7 +625,10 @@ export async function readEmbeds(
       named: src.searchParams.getAll("story"),
       caption: await handle.evaluate(
         (el) =>
-          el.closest("figure")?.querySelector("figcaption")?.textContent ?? ""
+          el
+            .closest("figure")
+            ?.querySelector("[data-slot=media-caption]")
+            ?.textContent?.trim() ?? ""
       ),
       box: { w: Math.round(box.width), h: Math.round(box.height) },
     });
@@ -1118,7 +1121,10 @@ export async function embedPaints(page: Page, png: PNG): Promise<EmbedPaint[]> {
       const r = frame.getBoundingClientRect();
       return {
         embed:
-          frame.closest("figure")?.querySelector("figcaption")?.textContent ??
+          frame
+            .closest("figure")
+            ?.querySelector("[data-slot=media-caption]")
+            ?.textContent?.trim() ??
           frame.getAttribute("src") ??
           "",
         rect: {
