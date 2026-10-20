@@ -4,7 +4,7 @@
  * Nothing here runs when a snapshot is taken; the tape answers for it.
  *
  * One machine (the scratch fleet's), its signed-in Claude account, and:
- *  - "Fix tray chip overflow": a finished turn, a tool group (TodoWrite,
+ *  - "Fix tray chip overflow": a finished turn, a tool group (CawCo's todo_write,
  *    Bash, Read, Write, Grep), a subagent it ran (Task), and a reply with
  *    every markdown block the transcript draws (heading, list, code, table,
  *    quote, link);
@@ -307,26 +307,22 @@ See [the tray spec](https://example.test/tray) for the measurements.`;
 /** Each message's plan, by its marker. */
 const plans = (repo: string): Record<string, Step[]> => ({
   chips: [
+    // A session's plan is CawCo's list (core delegate-types.ts
+    // `NATIVE_TOOLS.todos`: the harness's own is denied every session).
     {
       tool: {
-        name: "TodoWrite",
+        name: "ToolSearch",
+        input: { query: `select:${TODO_WRITE}`, max_results: 1 },
+      },
+    },
+    {
+      tool: {
+        name: TODO_WRITE,
         input: {
-          todos: [
-            {
-              content: "Read the tray's chip row",
-              status: "completed",
-              activeForm: "Reading the tray's chip row",
-            },
-            {
-              content: "Let the label shrink",
-              status: "in_progress",
-              activeForm: "Letting the label shrink",
-            },
-            {
-              content: "Keep the badge whole",
-              status: "pending",
-              activeForm: "Keeping the badge whole",
-            },
+          steps: [
+            { content: "Read the tray's chip row", status: "completed" },
+            { content: "Let the label shrink", status: "in_progress" },
+            { content: "Keep the badge whole", status: "pending" },
           ],
         },
       },
@@ -400,19 +396,32 @@ const plans = (repo: string): Record<string, Step[]> => ({
   // to-dos off for it: hub plans.ts), one task each, the first done and the
   // second under way.
   plan: [
-    ...PLAN_STEPS.map((subject): Step => ({
-      tool: {
-        name: "TaskCreate",
-        input: { subject, description: subject, activeForm: subject },
-      },
-    })),
+    // CawCo's list, its steps written as the plan moves (the plan's ring
+    // and panel read it); where it is offered as it is, `settle` drops the
+    // ToolSearch.
     {
-      tool: { name: "TaskUpdate", input: { taskId: "1", status: "completed" } },
+      tool: {
+        name: "ToolSearch",
+        input: { query: `select:${TODO_WRITE}`, max_results: 1 },
+      },
     },
     {
       tool: {
-        name: "TaskUpdate",
-        input: { taskId: "2", status: "in_progress" },
+        name: TODO_WRITE,
+        input: {
+          steps: PLAN_STEPS.map((content) => ({ content, status: "pending" })),
+        },
+      },
+    },
+    {
+      tool: {
+        name: TODO_WRITE,
+        input: {
+          steps: PLAN_STEPS.map((content, i) => ({
+            content,
+            status: ["completed", "in_progress", "pending"][i],
+          })),
+        },
       },
     },
     { words: "The plan is set: the label first, then the badge." },
@@ -700,6 +709,8 @@ const plans = (repo: string): Record<string, Step[]> => ({
 });
 
 const ARTIFACT_CREATE = "mcp__cawco__artifact_create";
+/** CawCo's list, a session's plan (hub task-tools.ts `todo_write`). */
+const TODO_WRITE = "mcp__cawco__todo_write";
 /** CawCo's own tools a plan calls: `delegate` and `finish_item` load upfront, the workflow ones are deferred. */
 const DELEGATE = "mcp__cawco__delegate";
 const FINISH_ITEM = "mcp__cawco__finish_item";
@@ -837,6 +848,31 @@ const ARTIFACT_PAGE = `<!doctype html>
   </body>
 </html>`;
 
+/** The media page's name (its route's `page=`), a picture beside its program (1px coral PNG), and its diagram. */
+export const MEDIA_PAGE = "chip-media";
+/** A page with a short name, the media writer's newest (`menu-narrow`). */
+const SHORT_PAGE = "ui";
+const CHIP_PNG =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+const CHIP_FLOW = "flowchart LR\nLabel --> Badge\nBadge --> Row";
+
+/**
+ * The media page's program (OpenUI Lang over the decision library, each
+ * component's props in its schema's order): one decision whose media are a
+ * row of words and a badge, a column of the picture and the diagram, the
+ * canvas and the page live.
+ */
+const mediaProgram = (canvas: string, page: string, picture: string): string =>
+  `${[
+    'root = Decisions("Chip media", [section1])',
+    'section1 = Section("The chip", [card1])',
+    `card1 = Decision("chip-media", "How should the chip's label give way?", [card1o1, card1o2], "Two lines keep every word.", [looks, shots, Canvas(${JSON.stringify(canvas)}, "The sketch"), Preview(${JSON.stringify(page)}, "The page live")])`,
+    'card1o1 = Option("wrap", "Wrap to two lines", "The label stays whole", true, [], "Gives up one line")',
+    `card1o2 = Option("cut", "Cut the label", "One line, an ellipsis", false, [], "Gives up the label's end")`,
+    'looks = Row([Text("The chip at 390px", "label"), Badge("measured", "done")], "spaceBetween", "center")',
+    `shots = Column([Image(${JSON.stringify(picture)}, "The chip row at 390px", "As it stands"), Diagram(${JSON.stringify(CHIP_FLOW)}, "What gives way first")])`,
+  ].join("\n")}\n`;
+
 /** Each marker's plan as its first request found the tools (`settle`). */
 const settled = new Map<string, Step[]>();
 /** A plan step whose tool the session was not offered: the scene stops on it once its turns rest (`seedScene`). */
@@ -948,6 +984,8 @@ export interface Scene {
   /** The task whose one attempt failed. */
   failed: string;
   graph: string;
+  /** The decision project's session that made the media page and, newest, the short-named page. */
+  media: string;
   permission: string;
   project: string;
   /** The task in review: two attempts, the newest's result. */
@@ -1854,6 +1892,62 @@ export async function seedScene(
     machineId: MACHINE,
     cwd: launchPlace,
   });
+  // A fourth page, still open for picks, its one card drawing every media
+  // the decision library has that the three leave out (decisions-library.ts:
+  // Text, Badge, Row, Column, Image, Diagram, Canvas, Preview), each by its
+  // own decision host part: the picture beside the program, a canvas and a
+  // page the writer made. The canvas is made empty: a Mermaid one is drawn
+  // by a dashboard showing it (the hub answers 503 while none does), and
+  // the card frames whatever the canvas holds.
+  const mediaWriter = decisions.writers.landing as string;
+  await mkdir(join(launchPlace, "shots"), { recursive: true });
+  await writeFile(
+    join(launchPlace, "shots", "chip.png"),
+    Buffer.from(CHIP_PNG, "base64")
+  );
+  const sketch = await fleet.api<{ id: string }>(
+    `/api/instances/${mediaWriter}/artifacts`,
+    {
+      kind: "canvas",
+      name: "chip-sketch",
+      does: "draw",
+      ask: "Sketch where the chip's label gives way",
+    }
+  );
+  const live = await fleet.api<{ id: string }>(
+    `/api/instances/${mediaWriter}/artifacts`,
+    {
+      kind: "page",
+      name: "chip-live",
+      does: "judge",
+      ask: "Judge the chip row as it wraps",
+      html: ARTIFACT_PAGE,
+    }
+  );
+  await fleet.api(`/api/instances/${mediaWriter}/artifacts`, {
+    kind: "page",
+    name: MEDIA_PAGE,
+    does: "pick",
+    ask: "Pick how the chip's label gives way",
+    // Its picture by its absolute path on the machine: a program's relative
+    // file needs `dir`, which a page takes instead of its program.
+    program: mediaProgram(
+      sketch.id,
+      live.id,
+      join(launchPlace, "shots", "chip.png")
+    ),
+  });
+  // Last, so it is the writer's newest and its pane shows it: a page whose
+  // name is short (`ui`), which keeps little of the head (SideSurface: the
+  // name keeps its own width), so in a pane at its floor the controls take
+  // the room its ask's line needs and the artifact menu says the line first.
+  await fleet.api(`/api/instances/${mediaWriter}/artifacts`, {
+    kind: "page",
+    name: SHORT_PAGE,
+    does: "pick",
+    ask: "Pick a wrap for the kit's chips",
+    html: ARTIFACT_PAGE,
+  });
 
   // The first account's limit reached, last of its work: a session refused
   // there (hub at-limit.ts), held with nowhere else to go until the second
@@ -1913,6 +2007,30 @@ export async function seedScene(
         organizationUuid: "00000000-0000-4000-8000-000000000002",
       },
     })
+  );
+  // Its 5-hour window measured in dollars, as a login used before keeps it:
+  // its percent moved over a turn it ran (usage_limit_history beside
+  // turn_usage, hub forecast.ts `usdPerPercent`). A move onto an account
+  // whose window isn't measured is admitted only alone (hub admission.ts,
+  // main f800afbe1), and the parked ask, moved there first, never lands
+  // (its question stays open), so the held session never would.
+  for (const [percent, ago] of [
+    [2, 40],
+    [8, 10],
+  ] as const) {
+    fleet.write(
+      "INSERT INTO usage_limit_history (account_id, kind, scope_label, percent, severity, resets_at, fetched_at) VALUES (?, 'session', NULL, ?, 'normal', ?, ?)",
+      SECOND_ACCOUNT,
+      percent,
+      new Date(now + 3 * 60 * MINUTE).toISOString(),
+      now - ago * MINUTE
+    );
+  }
+  fleet.write(
+    "INSERT INTO turn_usage (instance_id, result_id, model, account_id, input_tokens, cache_read_tokens, cache_write_tokens, cache_write_1h_tokens, output_tokens, cost_usd, keep_alive, at) VALUES (?, 'probe-second-history', 'claude-opus-5-5', ?, 4000, 120000, 8000, NULL, 3000, 1.2, 0, ?)",
+    limited,
+    SECOND_ACCOUNT,
+    now - 25 * MINUTE
   );
   fleet.write(
     "INSERT OR IGNORE INTO accounts (id, provider, kind, label, hue, \"order\", never_backup, created_at) VALUES (?, 'anthropic', 'console', 'Second', 'amber', 1, 0, ?)",
@@ -2289,6 +2407,7 @@ export async function seedScene(
     graph: graph.id,
     decision,
     decisions: decisions.projectId,
+    media: mediaWriter,
     run: runId,
     runner,
     split,

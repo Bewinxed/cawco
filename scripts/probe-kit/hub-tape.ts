@@ -629,6 +629,11 @@ export interface Miss {
 }
 
 /** The hub `tape` recorded, answering again: its address, and what it could not answer. */
+/** A session's and a project's preview address (hub preview-routes.ts), and a page's path on a preview origin. */
+const INSTANCE_ADDRESS = /^\/api\/instances\/[^/]+\/preview-address$/;
+const PROJECT_ADDRESS = /^\/api\/projects\/[^/]+\/preview-address$/;
+const PAGE_PATH = "/__cawco/page/";
+
 export function player(tape: TapeHub) {
   const http = new Map<string, TapeHttp>();
   for (const one of tape.http) {
@@ -667,6 +672,32 @@ export function player(tape: TapeHub) {
       }
     }
   }
+  /**
+   * A project's preview address (`POST /api/projects/:id/preview-address`,
+   * hub preview-routes.ts), which a tape recorded before projects had an
+   * origin of their own (main 8dfa2778e) never asked: the hub's answer for
+   * the origin that served the recording's pages (`/__cawco/page/…`, a
+   * session's then), as its `preview-address` was recorded. The page's
+   * frame then loads what the tape holds of it.
+   */
+  const pagePorts = new Set(
+    tape.preview
+      .filter((one) => one.path.startsWith(PAGE_PATH))
+      .map((one) => String(one.port))
+  );
+  const pageAddress = tape.http.find(
+    (one) =>
+      one.method === "POST" &&
+      INSTANCE_ADDRESS.test(one.path) &&
+      one.status === 200 &&
+      pagePorts.has(
+        String((JSON.parse(one.bytes) as { port?: unknown }).port ?? "")
+      )
+  );
+  /** The tape's answer to a request; a project's preview address, as {@link pageAddress}. */
+  const recorded = (method: string, path: string, body: string) =>
+    http.get(HTTP_KEY(method, path, body)) ??
+    (method === "POST" && PROJECT_ADDRESS.test(path) ? pageAddress : undefined);
   const misses = new Set<string>();
   /**
    * Each artifact's open doc sockets, on either origin, by the page context
@@ -830,7 +861,7 @@ export function player(tape: TapeHub) {
         request.method === "GET" || request.method === "HEAD"
           ? ""
           : canonical(await request.text());
-      const found = http.get(HTTP_KEY(request.method, path, body));
+      const found = recorded(request.method, path, body);
       if (!found) {
         misses.add(
           `${request.method} ${path}${body ? ` ${body.slice(0, 200)}` : ""}`
