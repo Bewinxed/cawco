@@ -66,6 +66,7 @@
   import Sidebar from "./Sidebar.svelte";
   import { runShellShortcut, shellShortcutsAre } from "./shell-shortcut";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
+  import NewSessionPopover from "./spawn/NewSessionPopover.svelte";
   import { newSession, spawning } from "./spawn/new-session.svelte";
   import { store, stored } from "./storage";
   import { isThreadTab } from "./thread-tabs";
@@ -382,8 +383,11 @@
       const url = new URL(page.url.href);
       url.searchParams.delete("spawn");
       url.searchParams.delete("cwd");
+      // The dialog has the focus by now: a navigation hands it to <body>
+      // unless told to leave it alone (SvelteKit 3's `reset: false`, which
+      // leaves the scroll where it is too).
       // biome-ignore lint/complexity/noVoid: the dialog is already open; the URL cleanup is a courtesy
-      void goto(url, { replace: true });
+      void goto(url, { replace: true, reset: false });
     });
   });
   /**
@@ -1374,13 +1378,16 @@
   {/if}
   <!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
   <AddMachineDialog />
-  <!-- One New Session dialog for every opener (the rail's rows, the phone's
-       Start session, a `?spawn=` link) and every session menu's Continue
-       (spawn/new-session, continue.svelte.ts). -->
+  <!-- One New Session form for every opener (the rail's rows, the phone's
+       Start session, a `?spawn=` link, the session strip's "+", a project's
+       Spin off) and every session menu's Continue (spawn/new-session,
+       continue.svelte.ts): a popover at the trigger pressed, the dialog
+       where there is none. -->
   <NewSessionDialog
     continueFrom={continuing.source ?? undefined}
     onclose={() => {
       spawning.open = false;
+      spawning.anchor = null;
       continuing.source = null;
       continuing.restore = null;
     }}
@@ -1389,8 +1396,19 @@
       continuing.source = null;
       continuing.restore = null;
     }}
-    open={spawning.open || continuing.source !== null}
+    open={(spawning.open && spawning.anchor === null) ||
+      continuing.source !== null}
     prefill={continuing.source ? undefined : spawning.prefill}
     restore={continuing.restore ?? undefined}
   />
+  {#if spawning.anchor}
+    <NewSessionPopover
+      anchor={spawning.anchor}
+      onclose={() => {
+        spawning.open = false;
+      }}
+      open={spawning.open && continuing.source === null}
+      prefill={spawning.prefill}
+    />
+  {/if}
 </Overlays>

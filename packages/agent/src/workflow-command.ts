@@ -15,7 +15,7 @@ import {
 import { SAFE_GIT_SHELL } from "@cawco/core/safe-git";
 import { hostEnvironment } from "@cawco/core/session-env";
 import { signalGroup, spawnedPid } from "@cawco/core/signal";
-import { ensureBoundary } from "./boundary";
+import { agentCommandStarted, ensureBoundary } from "./boundary";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
@@ -415,6 +415,13 @@ export async function runWorkflowCommand(
     if (spawnedPid(child) !== undefined) {
       live.add(running);
     }
+    // Never a session's: a session's sweep of its workspace leaves what it
+    // runs there running (boundary.ts `agentCommandStarted`).
+    const executor = spawnedPid(child);
+    const letGo =
+      isWorkspaceRef(workspace) && executor !== undefined
+        ? agentCommandStarted(workspace.id, executor)
+        : undefined;
     const clock = commandClock(
       typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS,
       named?.queueMaxMs ?? QUEUE_WAIT_MAX_MS,
@@ -455,6 +462,7 @@ export async function runWorkflowCommand(
     child.on("error", (error) => {
       clock.stop();
       live.delete(running);
+      letGo?.();
       reject(error);
     });
     // A stopped command's KILL still comes after its leader closes: what is
@@ -462,6 +470,7 @@ export async function runWorkflowCommand(
     child.on("close", (code) => {
       clock.stop();
       live.delete(running);
+      letGo?.();
       if (stopped === "overflowed") {
         return;
       }

@@ -62,7 +62,6 @@
     type TabsTravel,
   } from "#lib/components/ui/fluid-tabs/index.js";
   import { HangCard } from "#lib/components/ui/hang-card/index.js";
-  import { Spinner } from "#lib/components/ui/spinner/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
@@ -79,21 +78,14 @@
     FAILED_LABEL,
     UNKNOWN_LABEL,
   } from "../activity";
-  import {
-    answeredOr,
-    cawco,
-    isFailed,
-    isStale,
-    spawnSession,
-  } from "../client.svelte";
+  import { cawco, isFailed, isStale } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import CawFace from "../home/CawFace.svelte";
-  import { failureWords, type HubRead } from "../hub-read";
+  import type { HubRead } from "../hub-read";
   import { conversationHref } from "../links";
   import { integrate, type Sample, sampleAt } from "../motion/spring";
   import { sessionName } from "../session-name";
   import { newSession } from "../spawn/new-session.svelte";
-  import { spawnPrefs } from "../spawnPrefs.svelte";
   import { isThreadTab } from "../thread-tabs";
   import { runIdOf } from "../workflow-runs";
   import { workingSet } from "../working-set.svelte";
@@ -728,62 +720,34 @@
   }
 
   /* ── A new session, from the strip's end ──────────────────────────
-     The "+" after the last tab starts a session in the place of the tab in
-     front (its machine, folder and harness), on the spawn the project
-     head's Start empty sends (ProjectHead `startSession`): the new-session
-     form's last settings, its model and effort where the harness is the
-     same. The new tab opens just after the one it came from (workspace
-     `place`). With nothing in front, or a tab with no place of its own (a
-     thread, a workflow run), it opens the New Session form instead.
+     The "+" after the last tab opens the New Session form at the "+" (the
+     popover, the bottom sheet under 640px: spawn/NewSessionPopover), in the
+     place of the tab in front: its machine, its folder and its project. A
+     tab with no place of its own (a thread, a workflow run) gives its
+     machine at most. Harness, model and mode are the form's own: the last
+     start's, else none, and Start waits for a mode. The session it starts
+     arrives as any started session does.
 
      It stands outside the tablist, after the track, so the tablist holds
      tabs alone and the keyboard reaches it after them. It wears the tabs'
      close X's look: the X's glyph grammar, its resting ink, the strong ink
-     only under the pointer. While the hub takes the spawn it spins in its
-     place. A spawn the hub refuses stays on the "+" (DESIGN.md, The Stay In
-     Context Rule): its glyph turns the failed status ink, its tooltip opens
-     with the hub's reason, and the reason is its description; the next
-     press clears it. */
-  let starting = $state(false);
-  /** Why the hub refused the last start from here, until the next press. */
-  let refused = $state<string | null>(null);
-  let newTip = $state(false);
-  const refusedId = $props.id();
-  async function startHere() {
-    refused = null;
+     only under the pointer. */
+  function startHere(plus: HTMLElement) {
     const here = leaf.active;
     const ctx =
       here && !(runIdOf(here) || isThreadTab(here)) ? contextOf(here) : null;
-    if (!(here && ctx?.machine && ctx.cwd)) {
-      newSession(ctx?.machine ? { machineId: ctx.machine } : undefined);
-      return;
-    }
-    const { harness } = ctx;
-    const same = spawnPrefs.harness === harness;
-    const projectId = cawco.instanceIndex.byId.get(here)?.projectId;
-    starting = true;
-    let instanceId: string;
-    try {
-      instanceId = answeredOr(
-        ctx.machine,
-        await spawnSession({
-          machineId: ctx.machine,
-          cwd: ctx.cwd,
-          harness,
-          ...(same ? { model: spawnPrefs.model } : {}),
-          ...(same && spawnPrefs.effort ? { effort: spawnPrefs.effort } : {}),
-          ...(projectId ? { projectId } : {}),
-        }),
-        "whether the session started is not known"
-      );
-    } catch (error) {
-      refused = failureWords(error);
-      newTip = true;
-      return;
-    } finally {
-      starting = false;
-    }
-    workspace.open(instanceId, ctx, leaf.id);
+    const projectId =
+      here && ctx?.cwd
+        ? cawco.instanceIndex.byId.get(here)?.projectId
+        : undefined;
+    newSession(
+      {
+        ...(ctx?.machine ? { machineId: ctx.machine } : {}),
+        ...(ctx?.machine && ctx.cwd ? { cwd: ctx.cwd } : {}),
+        ...(projectId ? { projectId } : {}),
+      },
+      plus
+    );
   }
   onMount(() => () => {
     clearTimeout(timer);
@@ -1813,66 +1777,37 @@
       </div>
     {/each}
   </TabsList>
-  <!-- A new session in the front tab's place: after the tabs, outside the
-       tablist (`startHere`). -->
+  <!-- The New Session form in the front tab's place: after the tabs,
+       outside the tablist (`startHere`). -->
   <!-- The "+": a tab's inner pad after the last tab's edge (the track keeps
-       its flared foot's room at its end), centred on the tabs' row. A start
-       the hub refused leaves it in the failed status ink until the next
-       press. -->
+       its flared foot's room at its end), centred on the tabs' row. -->
   <div
     data-slot="strip-new"
     class="ms-(--new-ms) flex h-(--strip-item) flex-none items-center self-end"
     style:--new-ms="calc(var(--strip-px) - var(--strip-flare))"
   >
-    <Tooltip.Root bind:open={newTip}>
+    <Tooltip.Root>
       <Tooltip.Trigger>
         {#snippet child({ props })}
           <Button
             {...props}
-            aria-busy={starting || undefined}
-            aria-describedby={refused ? refusedId : undefined}
+            aria-haspopup="dialog"
             aria-label="New session"
             data-tnew
-            class="group/new"
-            data-refused={refused ? "" : undefined}
-            onclick={() => {
-              if (!starting) {
-                startHere();
-              }
-            }}
+            onclick={(event) => startHere(event.currentTarget)}
             size="icon-xs"
             tone="quiet"
             variant="ghost"
           >
-            {#if starting}
-              <Spinner aria-label="Starting a session" />
-            {:else}
-              <IconAddLine
-                class="group-data-refused/new:text-status-fail-glyph"
-              />
-            {/if}
+            <IconAddLine />
           </Button>
         {/snippet}
       </Tooltip.Trigger>
       <!-- 8px clear of the viewport's edges, as every tooltip (Tip). -->
       <Tooltip.Content collisionPadding={8} side="bottom">
-        <span class="whitespace-pre-line"
-          >{#if refused}
-            <strong data-slot="block" class="block font-medium"
-              >Couldn't start a session</strong
-            >
-            {refused}
-          {:else}
-            New session
-          {/if}</span
-        >
+        New session
       </Tooltip.Content>
     </Tooltip.Root>
-    {#if refused}
-      <span class="sr-only" id={refusedId}
-        >Couldn't start a session: {refused}</span
-      >
-    {/if}
   </div>
 </Tabs>
 

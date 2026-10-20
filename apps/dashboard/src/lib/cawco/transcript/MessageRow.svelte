@@ -27,7 +27,7 @@
     commandRecord,
     editAndResend,
     failedSendPayload,
-    forkFrom,
+    forkPointOf,
     restoreDraft,
     retryFailed,
     retryOf,
@@ -36,7 +36,7 @@
   } from "../client.svelte";
   import { conversationHref } from "../links";
   import MessageBody from "../MessageBody.svelte";
-  import { newSession } from "../spawn/new-session.svelte";
+  import { newSession, startFork } from "../spawn/new-session.svelte";
   import Turn from "../turn/Turn.svelte";
   import { useVoice } from "../turn/voice";
   import Well from "../turn/Well.svelte";
@@ -232,19 +232,30 @@
     }
   }
 
-  async function branch(): Promise<void> {
+  async function branch(event: MouseEvent): Promise<void> {
     if (!canFork || forkPending) {
       return;
     }
+    // The form hangs from Fork from here when the fork has no mode to run in.
+    const trigger =
+      event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
     actionsShown = false;
     forkPending = true;
     editError = "";
     try {
       const machineId =
         cawco.instanceIndex.byId.get(message.instanceId)?.machineId ?? "";
+      const branched = await startFork(
+        await forkPointOf(message.instanceId, message.id),
+        trigger
+      );
+      // No mode to run in: the New Session form took it.
+      if (!branched) {
+        return;
+      }
       const forked = answeredOr(
         machineId,
-        await forkFrom(message.instanceId, message.id),
+        branched,
         "whether the branch started is not known"
       );
       await goto(conversationHref(forked, cawco.instanceIndex));

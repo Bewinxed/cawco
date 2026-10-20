@@ -23,14 +23,10 @@
   } from "#lib/icons.js";
   import { goto } from "$app/navigation";
   import type { Asker, AskHereRequest } from "./ask-here.svelte";
-  import {
-    answeredOr,
-    cawco,
-    deleteTranscript,
-    forkSession,
-  } from "./client.svelte";
+  import { answeredOr, cawco, deleteTranscript } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import { conversationHref, instanceForSession, sessionTitle } from "./links";
+  import { startFork } from "./spawn/new-session.svelte";
   import {
     canOpenBeside,
     focusAfterMenu,
@@ -112,12 +108,16 @@
 
   /** The page leaves for the fork once the hub has made it; a refusal, or no answer, stays in the item. */
   async function fork() {
-    const forked = await forkSession({
+    const forked = await startFork({
       machineId,
       cwd: info.cwd ?? "",
       sessionId: info.sessionId,
       harness: info.harness,
     });
+    // No mode to run in: the New Session form took it.
+    if (!forked) {
+      return;
+    }
     const instanceId = answeredOr(
       machineId,
       forked,

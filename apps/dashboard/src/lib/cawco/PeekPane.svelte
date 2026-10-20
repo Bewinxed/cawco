@@ -56,7 +56,6 @@
   import {
     answeredOr,
     cawco,
-    forkSession,
     isFailed,
     isResumable,
     isStale,
@@ -82,6 +81,7 @@
   import SessionMark from "./SessionMark.svelte";
   import { sessionAct, stopOnRow } from "./session-acts.svelte";
   import { cawOf, sessionStatus } from "./session-status";
+  import { startFork } from "./spawn/new-session.svelte";
   import { toast } from "./toasts";
   import MessageRow from "./transcript/MessageRow.svelte";
   import type { Message } from "./types";
@@ -186,12 +186,16 @@
     // The item stays "Forking…" until the hub has made the fork, then the
     // page leaves for it; a refusal stays in the item, in the hub's words,
     // and so does no answer, in the machine's.
-    const forked = await forkSession({
+    const forked = await startFork({
       machineId: machine.machineId,
       cwd,
       sessionId: forkable,
       harness: forkHarness,
     });
+    // No mode to run in: the New Session form took it.
+    if (!forked) {
+      return;
+    }
     const instanceId = answeredOr(
       machine.machineId,
       forked,

@@ -47,7 +47,6 @@
     deleteTranscript,
     didntAnswer,
     discardSession,
-    forkSession,
     type InstanceRow,
     keepSession,
     machineControl,
@@ -66,6 +65,7 @@
   import { heldByMove } from "./move.svelte";
   import { stopOnRow } from "./session-acts.svelte";
   import { sessionName } from "./session-name";
+  import { startFork } from "./spawn/new-session.svelte";
   import { TRY_AGAIN } from "./unanswered";
   import {
     canOpenBeside,
@@ -134,12 +134,16 @@
     if (!(forkable && machine)) {
       return;
     }
-    const forked = await forkSession({
+    const forked = await startFork({
       machineId: machine.machineId,
       cwd: session?.cwd || instance.cwd,
       sessionId: forkable,
       harness: instance.harness,
     });
+    // No mode to run in: the New Session form took it.
+    if (!forked) {
+      return;
+    }
     await goto(
       conversationHref(
         answeredOr(

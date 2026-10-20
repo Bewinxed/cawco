@@ -17,7 +17,10 @@
  * - macOS: one `sandbox-exec` runner per workspace, under a Seatbelt profile
  *   written from the same policy: the home dir read-denied but for what the
  *   policy reads back, writes only where it writes. Seatbelt keeps its
- *   signals inside its own sandbox and refuses `launchctl`. macOS has no
+ *   signals inside its own sandbox and refuses `launchctl`, and every
+ *   process a runner starts answers, wherever it moves, to its workspace's
+ *   and its generation's names, by which it is found and ended
+ *   (boundary-policy.ts `MEMBERSHIP_PREFIX`, {@link answering}). macOS has no
  *   private pid or port space to give it, and Chromium cannot start inside
  *   srt there until srt can allow it its `mach-register` names (srt #210,
  *   PR #598). `swift`, `xcodebuild` and `log` run through shims that keep them
@@ -144,9 +147,12 @@ import {
 import {
   commandLine as commandLineOf,
   commandLines,
+  type ProcessLineage,
   processArgs,
   processLineage,
   processStart,
+  seatbeltLetsLookUp,
+  seatbeltLetsWrite,
 } from "@cawco/core/process-identity";
 import {
   embeddedFile,
@@ -176,6 +182,8 @@ import {
 } from "@cawco/core/workspace-policy";
 import { rgPath } from "@vscode/ripgrep-universal";
 import {
+  MEMBERSHIP_PREFIX,
+  membershipName,
   readOnlyDeniesBwrap,
   seatbeltProfile,
   srtSettings,
@@ -219,6 +227,7 @@ import {
   socketPlace,
   toolDoorOf,
 } from "./tool-door";
+import { workspaceRecords } from "./workspace-records";
 
 /** A running boundary, as a harness uses it. */
 export interface Boundary {
@@ -2031,6 +2040,7 @@ const refuseGone = async (ref: WorkspaceRef, why: string): Promise<never> => {
   await Promise.all(
     alive.map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
   );
+  await endMembers(ref.id);
   if (alive.length > 0) {
     console.info(
       `[workspace] ${ref.id}: ${why}, so its boundary ${alive.map((proc) => proc.pid).join(", ")} is closed`
@@ -2207,16 +2217,16 @@ const replaceOlder = async (
  * Stops what this machine can no longer vouch for before a boundary starts,
  * never joining it: the boundary `held` names, which is no longer running as
  * it was started, and any other boundary process of the workspace that no
- * record names, on every keeper. An older boundary still running beside it
- * is left alone ({@link handOver}).
+ * record names, on every keeper, each with everything it started. An older
+ * boundary still running beside it is left alone, with everything in it
+ * ({@link handOver}).
  */
 const stopUnvouched = async (
   id: string,
   held: Held | undefined
 ): Promise<void> => {
-  const kept = new Set(
-    (await readRetiring(id)).map((old) => boundaryProcId(id, old.gen))
-  );
+  const older = await readRetiring(id);
+  const kept = new Set(older.map((old) => boundaryProcId(id, old.gen)));
   const recorded =
     held && (await keepers.holding(boundaryProcId(id, held.gen)));
   if (held) {
@@ -2243,9 +2253,10 @@ const stopUnvouched = async (
       `[workspace] ${id}: before a boundary starts, what it cannot vouch for is killed: ${ended.join(", ")}`
     );
   }
-  if (process.platform === "darwin" && kept.size === 0) {
-    await killMarked(id);
-  }
+  await endMembers(
+    id,
+    older.map((old) => old.gen)
+  );
 };
 
 /**
@@ -2517,12 +2528,6 @@ const runtimePlaces = (id: string, allowRead: readonly string[]): string[] => {
   return allowRead.filter((path) => path.startsWith(`${runtime}/`));
 };
 
-/**
- * The variable a macOS runner hands every process it starts, naming its
- * generation, beside the workspace's own marker.
- */
-const BOUNDARY_MARKER = "CAWCO_BOUNDARY";
-
 /** The host's bwrap: the first on the system PATH, where `missingHostTools` looks for it. */
 const hostBwrap = (): string =>
   SYSTEM_PATH.split(":")
@@ -2653,6 +2658,9 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         ...runtimes.sockets,
       ],
       reachedHostSockets: [TEST_MANAGER_SOCKET, REMOTE_AUTOMATION_SOCKET],
+      // How every process this generation starts is found, wherever it
+      // moves and whatever it runs ({@link MEMBERSHIP_PREFIX}).
+      members: [membershipName(id), membershipName(id, gen)],
     });
     const file = join(generationDir(id, gen), "boundary.sb");
     return {
@@ -2690,12 +2698,7 @@ const planFor = async (ref: WorkspaceRef, gen: string): Promise<Plan> => {
         // home dir) fails bash's getcwd ("shell-init: error retrieving current
         // directory") on every command.
         cwd: policy.clone,
-        // The markers are how an archive finds every process the workspace
-        // started, and how an older runner tells its own from this one's
-        // ({@link busyOld}).
         env: {
-          CAWCO_WORKSPACE: id,
-          [BOUNDARY_MARKER]: gen,
           TMPDIR: workspaceTmpDir(id),
           ...(isPlace(id) ? { [PLACE_ENV]: "1" } : {}),
         },
@@ -3004,10 +3007,7 @@ interface Seen {
 
 /** Every process on the machine, read once for every workspace {@link busyOld} looks at. */
 const snapshot = async (): Promise<Seen[]> => {
-  const [rows, lines] = await Promise.all([
-    processLineage(),
-    commandLines({ environment: process.platform !== "linux" }),
-  ]);
+  const [rows, lines] = await Promise.all([processLineage(), commandLines()]);
   const commands = new Map(lines.map((line) => [line.pid, line.command]));
   return rows.map((row) => ({
     pid: row.pid,
@@ -3053,6 +3053,194 @@ const inTree = (seen: Seen[], inner: number | undefined): Seen[] => {
 };
 
 /**
+ * macOS: of `seen`, every process that runs in a boundary on this machine,
+ * whichever: each one's Seatbelt profile refuses {@link MEMBERSHIP_PREFIX},
+ * as every boundary's does, and as no unsandboxed process's or permissive
+ * sandbox's does. The kernel is read once a process here, and only these are
+ * asked a boundary's own name after ({@link answering}). None off macOS,
+ * where a sandbox's processes are its init's tree ({@link inTree}).
+ */
+const inBoundaries = (seen: readonly Pick<Seen, "pid">[]): number[] =>
+  process.platform === "darwin"
+    ? seen
+        .map((one) => one.pid)
+        .filter(
+          (pid) =>
+            pid !== process.pid &&
+            seatbeltLetsLookUp(pid, MEMBERSHIP_PREFIX) === false
+        )
+    : [];
+
+/**
+ * macOS: of `bounded` ({@link inBoundaries}), the processes of the boundary
+ * that answers to `name` ({@link membershipName}): a workspace's, every
+ * generation of it, or one generation's. THE READING of a macOS boundary's
+ * processes: whatever each runs, wherever it moved (`setsid`, a double fork,
+ * adopted by launchd), whatever environment it has or the kernel withholds,
+ * its profile is the one its runner started under.
+ */
+const answering = (bounded: readonly number[], name: string): number[] =>
+  bounded.filter((pid) => seatbeltLetsLookUp(pid, name) === true);
+
+/** How many times {@link killReading} reads and kills before it stops: enough for a process forked between a reading and its kill. */
+const KILL_PASSES = 5;
+
+/**
+ * SIGKILLs every process `read` reads, reading again after each round until
+ * a reading finds none it has not killed already, so a process forked
+ * between a reading and its parent's kill goes too. Answers the pids it
+ * killed.
+ */
+const killReading = async (
+  read: () => Promise<number[]>
+): Promise<number[]> => {
+  const killed = new Set<number>();
+  for (let pass = 0; pass < KILL_PASSES; pass += 1) {
+    // biome-ignore lint/performance/noAwaitInLoops: each round reads the process table the round before left
+    const fresh = (await read()).filter((pid) => !killed.has(pid));
+    if (fresh.length === 0) {
+      break;
+    }
+    for (const pid of fresh) {
+      signalPid(listedPid(pid), "SIGKILL");
+      killed.add(pid);
+    }
+  }
+  return [...killed];
+};
+
+/** A keychain service every boundary's profile refuses (boundary-policy.ts `KEYCHAIN_MACH_SERVICES`). */
+const REFUSED_SERVICE = "com.apple.SecurityServer";
+
+/**
+ * macOS: whether process `pid` runs under a profile one of this install's
+ * boundaries started with BEFORE PROFILES CARRIED MEMBERSHIP NAMES
+ * ({@link MEMBERSHIP_PREFIX}), which no name of this build's reaches: a
+ * boundary's own profile (it refuses {@link REFUSED_SERVICE}, lets its
+ * processes write the workspaces' cache `cache`, which every boundary of
+ * this install's HOME writes and nothing else is let, and refuses `home`
+ * itself) that lets the bare prefix be looked up, which every profile since
+ * refuses. Measured on the Mac (2026-10-20): of 552 sandboxed processes, 11
+ * read so, each a boundary runner (`/bin/bash --norc --noprofile -c
+ * fifo=$1 …`), and no other app's process or another HOME's boundary did.
+ */
+const preTag = (pid: number, cache: string, home: string): boolean =>
+  seatbeltLetsLookUp(pid, REFUSED_SERVICE) === false &&
+  seatbeltLetsWrite(pid, cache) === true &&
+  seatbeltLetsWrite(pid, home) === false &&
+  seatbeltLetsLookUp(pid, MEMBERSHIP_PREFIX) === true;
+
+/**
+ * macOS: ENDS WHAT A BOUNDARY STARTED BEFORE MEMBERSHIP NAMES LEFT RUNNING
+ * ONCE ITS WORKSPACE IS GONE ({@link preTag}): the processes no name of this
+ * build's reaches, which an update found running (boundary runners a retired
+ * keeper left to launchd, and what their commands left). Each boundary's
+ * profile lets its processes write its own clone or place folder alone, so a
+ * pre-tag process whose profile writes no folder of a workspace this machine
+ * holds is one whose workspace is gone, and is killed ({@link killReading});
+ * one whose workspace is still here is left as it is, its boundary's own
+ * handover, close or archive its end, and is looked at again until its
+ * workspace goes. Nothing is ended unless every workspace's records read
+ * whole. Answers how many pre-tag processes are left, each of a workspace
+ * still here; undefined when the records did not read whole.
+ */
+const endPreTagLeftovers = async (): Promise<number | undefined> => {
+  const cache = await realpath(workspaceCacheDir()).catch(() => undefined);
+  if (!cache) {
+    // No boundary of this install has started on this machine.
+    return 0;
+  }
+  const home = await realpath(homedir());
+  const records = await workspaceRecords();
+  if (records.unread.length > 0) {
+    return;
+  }
+  const folders = (
+    await Promise.all(
+      records.refs.map((ref) => realpath(ref.path).catch(() => undefined))
+    )
+  ).filter((folder): folder is string => folder !== undefined);
+  const found = async () =>
+    (await processLineage())
+      .map((row) => row.pid)
+      .filter((pid) => pid !== process.pid && preTag(pid, cache, home));
+  const ended = await killReading(async () =>
+    (await found()).filter(
+      (pid) =>
+        !folders.some((folder) => seatbeltLetsWrite(pid, folder) === true)
+    )
+  );
+  const left = await found();
+  if (ended.length > 0) {
+    console.info(
+      `[workspace] what boundaries started before this build's membership names left running once their workspace was gone is ended: pid ${ended.join(", ")}${left.length > 0 ? `; pid ${left.join(", ")} of a workspace still here run on` : ""}`
+    );
+  }
+  return left.length;
+};
+
+/** The pre-tag look's timer ({@link lookAtPreTag}), while one is left. */
+let preTagTimer: ReturnType<typeof setInterval> | undefined;
+
+/**
+ * macOS: ends pre-tag leftovers ({@link endPreTagLeftovers}) as the agent
+ * starts, and each {@link QUIET_SWEEP_MS} after while any pre-tag process is
+ * left; once none is, never again.
+ */
+const lookAtPreTag = (): void => {
+  if (process.platform !== "darwin" || preTagTimer) {
+    return;
+  }
+  let looking = false;
+  const look = () => {
+    if (looking) {
+      return;
+    }
+    looking = true;
+    endPreTagLeftovers()
+      .then((left) => {
+        if (left === undefined) {
+          console.warn(
+            "[workspace] a workspace's records are damaged, so no boundary started before this build's membership names is ended on this look"
+          );
+        } else if (left === 0 && preTagTimer) {
+          clearInterval(preTagTimer);
+        }
+      })
+      .catch((error: unknown) => {
+        console.warn(
+          `[workspace] boundaries started before this build's membership names could not be looked at: ${error instanceof Error ? error.message : String(error)}`
+        );
+      })
+      .finally(() => {
+        looking = false;
+      });
+  };
+  preTagTimer = setInterval(look, QUIET_SWEEP_MS);
+  preTagTimer.unref();
+  look();
+};
+
+/**
+ * macOS: SIGKILLs every process that answers to `name` and to none of the
+ * names `keep` lists ({@link answering}, {@link killReading}). Nothing off
+ * macOS: there a sandbox's processes end with its outer bwrap
+ * ({@link stopBoundary}). Answers the pids it killed.
+ */
+const killAnswering = (
+  name: string,
+  keep: readonly string[] = []
+): Promise<number[]> =>
+  process.platform === "darwin"
+    ? killReading(async () =>
+        answering(inBoundaries(await processLineage()), name).filter(
+          (pid) =>
+            !keep.some((other) => seatbeltLetsLookUp(pid, other) === true)
+        )
+      )
+    : Promise.resolve([]);
+
+/**
  * Whether `command` runs the executor `exec`: as `<exec> …`, or as the
  * interpreter its shebang names, `/bin/bash <exec> …`. Naming the path is not
  * enough: the workspace's judge is handed it as an argument ({@link judgeFor})
@@ -3086,17 +3274,14 @@ const executors = (
  * that descends from its sandbox's init and was not there when its runner
  * was ready ({@link inTree}), a server a command left behind with
  * `setsid -f` or a double fork among them, in the sandbox's pid namespace or
- * one nested in it. On macOS it is anything carrying the
- * workspace's marker but not the current runner's ({@link BOUNDARY_MARKER}),
- * which a `setsid` or double-forked process keeps: both keep the environment
- * they were started with. A process an older runner started cannot be told
- * from one a runner before it started, so the older runners close together.
+ * one nested in it. On macOS it is anything but its runner that answers to
+ * that generation's name ({@link answering}), a `setsid` or double-forked
+ * process among them, whatever it runs.
  */
 const busyOld = async (
   seen: Seen[],
   id: string,
-  old: Retiring,
-  current: Held | undefined
+  old: Retiring
 ): Promise<boolean> => {
   if ((await commandsIn(seen, id, old.gen)).length > 0) {
     return true;
@@ -3106,14 +3291,8 @@ const busyOld = async (
     const idle = new Set(place?.idle);
     return inTree(seen, place?.inner).some((one) => !idle.has(one.pid));
   }
-  const own = current && `${BOUNDARY_MARKER}=${current.gen}`;
-  return seen.some(
-    (one) =>
-      one.pid !== old.pid &&
-      one.pid !== current?.pid &&
-      one.pid !== process.pid &&
-      one.command.includes(`CAWCO_WORKSPACE=${id}`) &&
-      !(own && one.command.includes(own))
+  return answering(inBoundaries(seen), membershipName(id, old.gen)).some(
+    (pid) => pid !== old.pid
   );
 };
 
@@ -3121,8 +3300,9 @@ const busyOld = async (
  * Where each executor marks the command it runs in generation `gen` of
  * workspace `id`: a file named for its pid, made before it looks at the gate
  * and removed as it exits, or as it goes through to a newer generation
- * ({@link execScript}). In the generation's own dir, which nothing inside
- * the boundary writes.
+ * ({@link execScript}), holding its request's dir once it has one, written
+ * before it hands the request to the runner ({@link agentWork}). In the
+ * generation's own dir, which nothing inside the boundary writes.
  */
 const commandsOf = (id: string, gen: string): string =>
   join(generationDir(id, gen), "commands");
@@ -3225,14 +3405,14 @@ const workPorts = async (seen: Seen[], place: Place): Promise<number[]> => {
  * every process in it its runner did not start with ({@link busyOld}), what
  * a command left behind with `&`, `nohup`, `setsid` or a double fork among
  * them, whatever its session or process group: on Linux each descends from
- * the sandbox's init, on macOS each carries the workspace's marker.
+ * the sandbox's init, on macOS each answers to its generation's name.
  */
 const workLeft = async (
   id: string,
   held: Held
 ): Promise<string | undefined> => {
   const seen = await snapshot();
-  if (!(await busyOld(seen, id, held, undefined))) {
+  if (!(await busyOld(seen, id, held))) {
     return;
   }
   const commands = await commandsIn(seen, id, held.gen);
@@ -3268,18 +3448,135 @@ interface Worker {
   readonly pid: number;
   readonly ppid: number;
   readonly started: string;
+  readonly startSeconds: number;
 }
 
-/** {@link workers} of workspace `id` alone, by pid, off one reading of the process table. */
+/**
+ * The executors of the agent's own commands running in each workspace now,
+ * by pid (workflow-command.ts `runWorkflowCommand`: a landing's push and
+ * gate steps, the hub's checks and git reads, a workflow's command): none is
+ * a session's ({@link agentWork}).
+ */
+const agentExecutors = new Map<string, Set<number>>();
+
+/**
+ * Counts executor `pid`, which the agent started, as one of its own commands
+ * in workspace `id` ({@link agentExecutors}); answers what lets it go once
+ * the command has ended.
+ */
+export const agentCommandStarted = (id: string, pid: number): (() => void) => {
+  const theirs = agentExecutors.get(id) ?? new Set<number>();
+  theirs.add(pid);
+  agentExecutors.set(id, theirs);
+  return () => {
+    theirs.delete(pid);
+    if (theirs.size === 0 && agentExecutors.get(id) === theirs) {
+      agentExecutors.delete(id);
+    }
+  };
+};
+
+/**
+ * macOS: what inside workspace `id`'s boundaries no session sweep takes, off
+ * one reading of the process table (`rows`, `lines`) and the agent's own
+ * executors as they stand after it (`agent`), so that every executor of the
+ * agent's the table holds is among them. Read by lineage, which the kernel
+ * shows for every process, Apple's binaries among them, where it withholds
+ * their environment:
+ *
+ * - its runners (`generations`) and their plumbing: each runner's child (a
+ *   request's subshell, which waits on its command and writes its status:
+ *   killed, the command's executor would wait for that status for ever), and
+ *   each child of one of those in its own process group (the `cat`s copying
+ *   the command's output, and its launch before it leads a group of its own,
+ *   {@link LAUNCH}). Each ends with its command;
+ * - THE AGENT'S OWN COMMANDS, the hub's landing among them, which a sweep
+ *   never cuts: each by its request's dir, which its executor writes into its
+ *   mark ({@link commandsOf}), where nothing inside writes, before it hands
+ *   the request to the runner, and which the command's launch, a request
+ *   subshell's child, names as its last argument: that launch, every process
+ *   below it by parent, and every process of its group launchd adopted. What
+ *   one of them moved out of its tree with `setsid` or a double fork is not
+ *   among them; it was born while its command ran, and no sweep ends it before
+ *   that command has ended ({@link endWorkspaceWork}).
+ */
+const agentWork = async (
+  id: string,
+  generations: readonly Pick<Held, "gen" | "pid">[],
+  rows: ReadonlyMap<number, ProcessLineage>,
+  lines: readonly { command: string; pid: number }[],
+  agent: readonly number[]
+): Promise<Set<number>> => {
+  const runners = new Set(generations.map((generation) => generation.pid));
+  const spared = new Set(runners);
+  const subshells = new Set<number>();
+  for (const row of rows.values()) {
+    if (runners.has(row.ppid)) {
+      subshells.add(row.pid);
+      spared.add(row.pid);
+    }
+  }
+  for (const row of rows.values()) {
+    const parent = rows.get(row.ppid);
+    if (parent && subshells.has(parent.pid) && row.pgid === parent.pgid) {
+      spared.add(row.pid);
+    }
+  }
+  const requests = (
+    await Promise.all(
+      agent.flatMap((executor) =>
+        generations.map((generation) =>
+          readFile(
+            join(commandsOf(id, generation.gen), String(executor)),
+            "utf8"
+          ).then(
+            (text) => text.trim(),
+            () => ""
+          )
+        )
+      )
+    )
+  ).filter(Boolean);
+  const leaders = new Set(
+    lines
+      .filter(
+        (line) =>
+          subshells.has(rows.get(line.pid)?.ppid ?? 0) &&
+          requests.some((request) => line.command.endsWith(` ${request}`))
+      )
+      .map((line) => line.pid)
+  );
+  const tree = new Set(leaders);
+  for (let grew = true; grew;) {
+    grew = false;
+    for (const row of rows.values()) {
+      if (
+        !tree.has(row.pid) &&
+        (tree.has(row.ppid) || (leaders.has(row.pgid) && row.ppid === 1))
+      ) {
+        tree.add(row.pid);
+        grew = true;
+      }
+    }
+  }
+  for (const pid of tree) {
+    spared.add(pid);
+  }
+  return spared;
+};
+
+/** {@link workers} of workspace `id` alone, by pid, off one reading of the process table (`seen`, `rows`, `lines`); on macOS `bounded` is its processes in a boundary ({@link inBoundaries}). */
 const workOf = async (
   id: string,
   seen: Seen[],
-  lines: readonly { command: string; pid: number }[]
+  rows: ReadonlyMap<number, ProcessLineage>,
+  lines: readonly { command: string; pid: number }[],
+  bounded: readonly number[]
 ): Promise<number[]> => {
   const held = await readHeld(id).catch(() => undefined);
   const generations = [...(held ? [held] : []), ...(await readRetiring(id))];
-  const work = executors(lines, id);
   if (process.platform === "linux") {
+    const work = executors(lines, id);
     const places = await Promise.all(
       generations.map((generation) => readPlace(id, generation.gen))
     );
@@ -3293,32 +3590,37 @@ const workOf = async (
     }
     return work;
   }
-  const runners = new Set(generations.map((generation) => generation.pid));
-  for (const { pid, command } of lines) {
-    if (command.includes(`CAWCO_WORKSPACE=${id}`) && !runners.has(pid)) {
-      work.push(pid);
-    }
-  }
-  return work;
+  const agent = [...(agentExecutors.get(id) ?? [])];
+  const spared = await agentWork(id, generations, rows, lines, agent);
+  return [
+    ...executors(lines, id).filter((pid) => !agent.includes(pid)),
+    ...answering(bounded, membershipName(id)).filter((pid) => !spared.has(pid)),
+  ];
 };
 
 /**
  * Every process of the work of each delegation workspace on this machine,
- * the boundary's own reading of it ({@link busyOld}): on Linux everything
- * that descends from a generation's sandbox init and was not there when its
- * runner was ready ({@link inTree}), on macOS everything carrying the
- * workspace's marker but its runners; and on both every executor on its way
- * into one ({@link executors}), which runs on the host as its session's
- * shell's child. A place (a person's own folder) is left out: its sessions
- * are the person's own.
+ * or of the workspaces `only` names, the boundary's own reading of it
+ * ({@link busyOld}): on Linux everything that descends from a generation's
+ * sandbox init and was not there when its runner was ready ({@link inTree}),
+ * and every executor on its way into one ({@link executors}), which runs on
+ * the host as its session's shell's child; on macOS everything that answers
+ * to the workspace's name and every executor on its way in, but its runners,
+ * their plumbing and the agent's own commands ({@link agentWork}). A place
+ * (a person's own folder) is left out: its sessions are the person's own.
  */
-const workers = async (): Promise<Map<number, Worker>> => {
+const workers = async (
+  only?: readonly string[]
+): Promise<{
+  rows: ReadonlyMap<number, ProcessLineage>;
+  work: Map<number, Worker>;
+}> => {
   const ids = (
-    await readdir(workspacesDir()).catch(() => [] as string[])
+    only ?? (await readdir(workspacesDir()).catch(() => [] as string[]))
   ).filter((id) => !isPlace(id));
   const [lineage, lines] = await Promise.all([
     processLineage(),
-    commandLines({ environment: process.platform !== "linux" }),
+    commandLines(),
   ]);
   const rows = new Map(lineage.map((row) => [row.pid, row]));
   const seen: Seen[] = lineage.map((row) => ({
@@ -3326,8 +3628,11 @@ const workers = async (): Promise<Map<number, Worker>> => {
     ppid: row.ppid,
     command: "",
   }));
+  const bounded = inBoundaries(seen);
   const work = new Set(
-    (await Promise.all(ids.map((id) => workOf(id, seen, lines)))).flat()
+    (
+      await Promise.all(ids.map((id) => workOf(id, seen, rows, lines, bounded)))
+    ).flat()
   );
   const found = new Map<number, Worker>();
   for (const pid of work) {
@@ -3336,23 +3641,24 @@ const workers = async (): Promise<Map<number, Worker>> => {
       found.set(pid, row);
     }
   }
-  return found;
+  return { rows, work: found };
 };
 
 /**
- * What session `instanceId` left running in the work of every delegation
- * workspace on this machine ({@link workers}): each process whose
+ * Linux: what session `instanceId` left running in the work of every
+ * delegation workspace on this machine ({@link workers}): each process whose
  * environment names the session (`CAWCO_INSTANCE_ID`, which every harness
  * sets in its session's shell and the executor hands every command, core
  * `CAWCO_ENV.instanceId`), the process group each of those is in, which its
  * command's launch leads ({@link LAUNCH}: the command's own shell, whose
  * environment is the runner's), and everything below any of them. A
  * `setsid` or double-forked process keeps the environment it was started
- * with, so it is found however far it moved. What runs there for another
- * session, or for the hub (a landing's push), is not this session's.
+ * with, and Linux lets this user read every one of its processes', so it is
+ * found however far it moved. What runs there for another session, or for
+ * the hub (a landing's push), is not this session's.
  */
 const sessionWork = async (instanceId: string): Promise<Worker[]> => {
-  const work = await workers();
+  const { work } = await workers();
   const mark = `${CAWCO_ENV.instanceId}=${instanceId}`;
   const named = await Promise.all(
     [...work.keys()].map(async (pid) => ({
@@ -3381,6 +3687,97 @@ const sessionWork = async (instanceId: string): Promise<Worker[]> => {
   return [...work.values()].filter((one) => taken.has(one.pid));
 };
 
+/**
+ * macOS: what session `instanceId` left running in its workspace
+ * `workspace`: all of that workspace's work ({@link workers}: every process
+ * that answers to its name and every executor on its way in, but its
+ * runners, their plumbing and the agent's own commands, by lineage,
+ * {@link agentWork}), but a process whose environment names another
+ * session. The kernel
+ * withholds the environment of every Apple platform binary (`/bin/sleep`,
+ * `/bin/bash`, git, xcodebuild: "env 0" read on the Mac), so the session's
+ * own `CAWCO_INSTANCE_ID` cannot be what finds its work there, as it is on
+ * Linux; the workspace is the session's, and what in it says it is another
+ * session's is that one's. Split by birth (`now`, `later`) against the
+ * earliest of the agent's own commands running there (`agents`, their
+ * executors): what was born before it is none of theirs.
+ */
+const workspaceWork = async (
+  instanceId: string,
+  workspace: string
+): Promise<{ agents: number[]; later: Worker[]; now: Worker[] }> => {
+  const { rows, work } = await workers([workspace]);
+  // Read after the process table: every executor of the agent's it holds is here.
+  const agents = [...(agentExecutors.get(workspace) ?? [])].filter((pid) =>
+    rows.has(pid)
+  );
+  const since = Math.min(
+    ...agents.map(
+      (pid) => rows.get(pid)?.startSeconds ?? Number.POSITIVE_INFINITY
+    )
+  );
+  const named = `${CAWCO_ENV.instanceId}=`;
+  const own = `${named}${instanceId}`;
+  const others = await Promise.all(
+    [...work.keys()].map(async (pid) =>
+      ((await processArgs(pid))?.env ?? []).some(
+        (variable) => variable.startsWith(named) && variable !== own
+      )
+        ? pid
+        : undefined
+    )
+  );
+  const theirs = new Set(others);
+  const mine = [...work.values()].filter((one) => !theirs.has(one.pid));
+  return {
+    agents,
+    now: mine.filter((one) => one.startSeconds < since),
+    later: mine.filter((one) => one.startSeconds >= since),
+  };
+};
+
+/** How often {@link endWorkspaceWork} looks whether the agent's commands it waits for have ended. */
+const AGENT_LOOK_MS = 200;
+
+/**
+ * macOS: {@link endSessionWork} in workspace `workspace`. What was born
+ * before the earliest of the agent's own commands running there is ended at
+ * once, a leftover holding the heavy-run slot a landing gate's step waits
+ * for among it, so the gate runs. What was born since may be one of those
+ * commands' own, moved out of its tree ({@link agentWork}): it is ended once
+ * the commands running then have, a landing's push and gate step run to
+ * their end, and so on while the agent's commands come. Meanwhile the
+ * session's lane holds its next turn (session.ts queues a session's controls
+ * in order), so nothing it starts after is swept.
+ */
+const endWorkspaceWork = async (
+  instanceId: string,
+  workspace: string
+): Promise<{ ended: number[]; left: number[] }> => {
+  const ended = new Set<number>();
+  const left = new Set<number>();
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: one round per set of the agent's commands it waits out
+    const round = await endWork(
+      async () => (await workspaceWork(instanceId, workspace)).now
+    );
+    for (const pid of round.ended) {
+      ended.add(pid);
+    }
+    for (const pid of round.left) {
+      left.add(pid);
+    }
+    const { agents, later } = await workspaceWork(instanceId, workspace);
+    if (later.length === 0) {
+      return { ended: [...ended], left: [...left] };
+    }
+    while (agents.some((pid) => agentExecutors.get(workspace)?.has(pid))) {
+      // biome-ignore lint/performance/noAwaitInLoops: waits for the agent's commands running then to end
+      await Bun.sleep(AGENT_LOOK_MS);
+    }
+  }
+};
+
 /** Of `ones`, those still running as the same process. */
 const stillRunning = async (ones: readonly Worker[]): Promise<Worker[]> => {
   const now = new Map(
@@ -3393,24 +3790,43 @@ const stillRunning = async (ones: readonly Worker[]): Promise<Worker[]> => {
  * ENDS EVERYTHING SESSION `instanceId` LEFT RUNNING IN A WORKSPACE, AND
  * NOTHING ELSE: its commands in the foreground and the background, what
  * they left behind with `&`, `nohup`, `setsid` or a double fork, and the
- * executors still on their way in ({@link sessionWork}). The boundary runs
- * on, and the session keeps its transcript, clone and files, so a later
- * message resumes it there. What an interrupt and a stop of a session do
- * (session.ts), on every harness: Claude Code ends a command it cuts off by
- * killing its own shell, which reaches the executor and never the command
- * inside the boundary, and a background command outlived the interrupt that
- * was to stop it (two delegates on the Mac, 2026-10-20, holding its one
- * heavy-run slot: a slot is a `flock`, let go as its holder ends).
+ * executors still on their way in: on Linux each found by the session's
+ * name in its environment ({@link sessionWork}), on macOS all the work of
+ * its workspace `workspace` that names no other session, the agent's own
+ * commands there left running, the hub's landing among them
+ * ({@link endWorkspaceWork}); a place (a person's own folder) is never
+ * swept. The boundary runs on, and the session keeps its transcript, clone
+ * and files, so a later message resumes it there. What an interrupt and a
+ * stop of a session do (session.ts), on every harness: Claude Code ends a
+ * command it cuts off by killing its own shell, which reaches the executor
+ * and never the command inside the boundary, and a background command
+ * outlived the interrupt that was to stop it (two delegates on the Mac,
+ * 2026-10-20, holding its one heavy-run slot: a slot is a `flock`, let go as
+ * its holder ends).
  *
  * Each is told to end (SIGTERM), so a keeper's trap frees what it holds,
  * and given {@link WORK_GRACE_MS}; then everything of the session's still
  * there, what it started meanwhile included, is killed. Answers what was
  * ended and what was still running {@link KILL_WAIT_MS} after the kill.
  */
-export const endSessionWork = async (
-  instanceId: string
+export const endSessionWork = (
+  instanceId: string,
+  workspace: string | undefined
 ): Promise<{ ended: number[]; left: number[] }> => {
-  const first = await sessionWork(instanceId);
+  if (process.platform !== "darwin") {
+    return endWork(() => sessionWork(instanceId));
+  }
+  if (!workspace || isPlace(workspace)) {
+    return Promise.resolve({ ended: [], left: [] });
+  }
+  return endWorkspaceWork(instanceId, workspace);
+};
+
+/** {@link endSessionWork}'s ending of the work `read` reads, read again for its kill. */
+const endWork = async (
+  read: () => Promise<Worker[]>
+): Promise<{ ended: number[]; left: number[] }> => {
+  const first = await read();
   if (first.length === 0) {
     return { ended: [], left: [] };
   }
@@ -3424,7 +3840,7 @@ export const endSessionWork = async (
     await Bun.sleep(50);
     ending = await stillRunning(ending);
   }
-  const last = await sessionWork(instanceId);
+  const last = await read();
   for (const one of last) {
     signalPid(listedPid(one.pid), "SIGKILL");
   }
@@ -3607,15 +4023,15 @@ const nsPids = async (pid: number): Promise<number[]> =>
 
 /**
  * What the work of workspace `id`'s generation `boundary` runs now, as
- * {@link busyOld} counts it: every process by its pid on this machine, and
- * those the rest descend from (the work's roots), as its commands saw them.
- * Linux: each pid in the sandbox's own pid namespace; macOS: the processes
- * carrying that generation's marker, its runner aside.
+ * {@link busyOld} counts it: the processes the rest descend from (the work's
+ * roots), as its commands saw them. Linux: each pid in the sandbox's own pid
+ * namespace; macOS: the processes that answer to that generation's name,
+ * its runner aside ({@link answering}).
  */
 const workIn = async (
   id: string,
   boundary: Pick<Held, "gen" | "pid">
-): Promise<{ all: number[]; roots: WorkProcess[] }> => {
+): Promise<WorkProcess[]> => {
   const seen = await snapshot();
   let work: Seen[] = [];
   let level = 0;
@@ -3627,30 +4043,22 @@ const workIn = async (
       level = (await nsPids(place.inner)).length - 1;
     }
   } else {
-    const marker = `${BOUNDARY_MARKER}=${boundary.gen}`;
+    const members = new Set(
+      answering(inBoundaries(seen), membershipName(id, boundary.gen))
+    );
     work = seen.filter(
-      (one) =>
-        one.pid !== boundary.pid &&
-        one.pid !== process.pid &&
-        one.command.includes(`CAWCO_WORKSPACE=${id}`) &&
-        one.command.includes(marker)
+      (one) => one.pid !== boundary.pid && members.has(one.pid)
     );
   }
   const pids = new Set(work.map((one) => one.pid));
-  // macOS reads each command with its environment, which is never said.
-  const plain =
-    process.platform === "linux"
-      ? undefined
-      : new Map((await commandLines()).map((line) => [line.pid, line.command]));
-  const roots = await Promise.all(
+  return await Promise.all(
     work
       .filter((one) => !pids.has(one.ppid))
       .map(async (one) => ({
         pid: level > 0 ? ((await nsPids(one.pid))[level] ?? one.pid) : one.pid,
-        command: (plain?.get(one.pid) ?? one.command).slice(0, COMMAND_SAID),
+        command: one.command.slice(0, COMMAND_SAID),
       }))
   );
-  return { all: [...pids], roots };
 };
 
 /** At most this many reasons for a narrowing are said, then how many more. */
@@ -3791,16 +4199,10 @@ const replaceNarrowed = async (
     const stopped: WorkProcess[] = [];
     for (const boundary of stopping) {
       // biome-ignore lint/performance/noAwaitInLoops: one boundary at a time, each gone before the next
-      const work = await workIn(ref.id, boundary);
-      stopped.push(...work.roots);
+      stopped.push(...(await workIn(ref.id, boundary)));
       const place = await readPlace(ref.id, boundary.gen);
       await stopBoundary(ref.id, boundary);
-      if (process.platform === "darwin") {
-        // What a macOS runner started outlives it ({@link stopBoundary}).
-        for (const pid of work.all) {
-          signalPid(listedPid(pid), "SIGKILL");
-        }
-      } else if (!(await sandboxesGone(place ? [place.inner] : []))) {
+      if (!(await sandboxesGone(place ? [place.inner] : []))) {
         throw new Error(
           `its sandbox ${place?.inner} was still there ${STOP_TIMEOUT_MS / 1000}s after it was stopped`
         );
@@ -3980,7 +4382,7 @@ const inUseNow = async (): Promise<string[]> => {
       continue;
     }
     seen ??= await snapshot();
-    if (await busyOld(seen, id, held, undefined)) {
+    if (await busyOld(seen, id, held)) {
       used.push(id);
     }
   }
@@ -4095,7 +4497,6 @@ const handOver = async (
  * whether any is left.
  */
 const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
-  const current = await readHeld(id).catch(() => undefined);
   const now = process.platform === "linux" ? await sandboxes(id) : [];
   let left = false;
   for (const old of await readRetiring(id)) {
@@ -4104,7 +4505,7 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
     let closed = alive
       ? "has nothing left running in it and is closed"
       : "is gone";
-    if (alive && (await busyOld(seen, id, old, current))) {
+    if (alive && (await busyOld(seen, id, old))) {
       // A command still running there keeps it, whatever its work listens
       // on and whoever listens there since ({@link commandsIn}).
       const ports =
@@ -4119,7 +4520,7 @@ const closeIdle = async (seen: Seen[], id: string): Promise<boolean> => {
       const line = await tellStopped(
         id,
         `a newer boundary of this workspace listens on every port its older one's work listened on (${ports.join(", ")}), so the older one was closed`,
-        (await workIn(id, old)).roots
+        await workIn(id, old)
       );
       closed = `is closed with what runs in it: a newer generation listens on every port its work listened on (${ports.join(", ")})${line ? `; said to the delegate: ${line}` : ""}`;
     }
@@ -4253,7 +4654,7 @@ const restartIfIdle = async (
     const seen = await snapshot();
     if (
       executors(seen, ref.id).length > 0 ||
-      (await busyOld(seen, ref.id, held, undefined))
+      (await busyOld(seen, ref.id, held))
     ) {
       return held;
     }
@@ -4751,6 +5152,7 @@ const closeNow = async (id: string, why: string): Promise<void> => {
     await Promise.all(
       left.map((proc) => proc.client.signal(proc.procId, "SIGKILL"))
     );
+    await endMembers(id);
     await rm(join(stateDir(id), "boundary.json"), { force: true });
     await closeToolDoor(id);
     await closeGitDoor(id);
@@ -5030,8 +5432,9 @@ let quietTimer: ReturnType<typeof setInterval> | undefined;
 /**
  * Starts looking for quiet boundaries every {@link QUIET_SWEEP_MS}
  * ({@link sweepQuiet}), with what the daemon knows holds a workspace, and
- * then at every live workspace's judge ({@link judgesAnswer}). Once per
- * agent.
+ * then at every live workspace's judge ({@link judgesAnswer}); and on macOS
+ * ends what boundaries started before this build's membership names left
+ * once their workspace went ({@link lookAtPreTag}). Once per agent.
  */
 export const watchQuietBoundaries = (given: BoundaryHolders): void => {
   holders = given;
@@ -5039,6 +5442,7 @@ export const watchQuietBoundaries = (given: BoundaryHolders): void => {
   if (quietTimer) {
     return;
   }
+  lookAtPreTag();
   let looking = false;
   quietTimer = setInterval(() => {
     if (looking) {
@@ -5331,6 +5735,9 @@ if [ -n "$session" ] && [ -s "$notice" ] && mv "$notice" "$notice.$$" 2>/dev/nul
   rm -f "$notice.$$"
 fi
 req=$(mktemp -d ${shellQuote(held.scratch)}/.run.XXXXXX) || exit 126
+# The mark names the request before the runner hears of it: the agent tells
+# its own commands' processes inside by it.
+{ printf '%s\\n' "$req" > "$mark"; } 2>/dev/null
 printf '%s' "$1" > "$req/cmd"
 pwd -P > "$req/cwd"
 {
@@ -5892,13 +6299,21 @@ export const workspaceNetworks = async (
   return [];
 };
 
-/** Every process a macOS workspace started, found by the marker its runner handed them all. */
-const killMarked = async (id: string): Promise<void> => {
-  for (const { pid, command } of await commandLines({ environment: true })) {
-    if (command.includes(`CAWCO_WORKSPACE=${id}`) && pid !== process.pid) {
-      signalPid(listedPid(pid), "SIGKILL");
-    }
-  }
+/**
+ * macOS: SIGKILLs every process any boundary of workspace `id` started, of
+ * every generation, recorded or not, but those of the generations `keep`
+ * names, by the name each answers to ({@link killAnswering}): what a runner
+ * started outlives it there. Nothing on Linux, where each sandbox's
+ * processes end with it ({@link stopBoundary}).
+ */
+const endMembers = async (
+  id: string,
+  keep: readonly string[] = []
+): Promise<void> => {
+  await killAnswering(
+    membershipName(id),
+    keep.map((gen) => membershipName(id, gen))
+  );
 };
 
 /**
@@ -5908,8 +6323,9 @@ const killMarked = async (id: string): Promise<void> => {
  * srt's proxy, socat bridges and mount points and exits (killing the host
  * instead would leave those behind, REPORT.md §5e). An anchor from before
  * srt goes with the `unshare` sessiond holds (`--kill-child`). macOS: the
- * runner; what it started goes with the workspace ({@link closeBoundary}).
- * On whichever keeper holds it: the current one, or a retiring one.
+ * runner, then everything that answers to its generation's name, which
+ * outlives the runner there ({@link killAnswering}). On whichever keeper
+ * holds it: the current one, or a retiring one.
  */
 const stopBoundary = async (
   id: string,
@@ -5932,6 +6348,7 @@ const stopBoundary = async (
   if (left) {
     await left.client.signal(procId, "SIGKILL");
   }
+  await killAnswering(membershipName(id, held.gen));
 };
 
 /**
@@ -6089,8 +6506,8 @@ const signalHeld = async (
 /**
  * Kills the workspace's boundaries, the current one and every older one
  * still beside it, with every process in them ({@link stopBoundary}), and any
- * other boundary process of the workspace; on macOS everything carrying the
- * workspace's marker. Stops serving its doors, and closes its pages in its
+ * other boundary process of the workspace; on macOS everything that answers
+ * to the workspace's name ({@link endMembers}). Stops serving its doors, and closes its pages in its
  * project's browser with its sessions' connections there. What still uses it from
  * outside the boundary ends too: a session's CLI in its clone, an executor
  * on its way in ({@link endUsers}). Its record goes (`boundary.json`, each
@@ -6197,9 +6614,7 @@ const stopNow = async (ref: WorkspaceRef): Promise<number[]> => {
     await rm(retiringFileOf(ref.id, boundary), { force: true });
   }
   await signalHeld((procId) => isBoundaryOf(procId, ref.id));
-  if (process.platform === "darwin") {
-    await killMarked(ref.id);
-  }
+  await endMembers(ref.id);
   // Everything in it ends before its judge goes: a judge gone under a CLI
   // still in the clone breaks live-workspace-judge-answers.
   const users = await endUsers(ref);

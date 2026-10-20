@@ -33,13 +33,21 @@
 
   export type FloatingSurfaceLooks = VariantProps<typeof floatingSurface>;
 
-  /** Its callers' looks, each as they drew it: its width, a capped height
-      (the kit's, or the room its site measures, `--pop-max-h`), what it does
-      with more than it holds (scrolls, or clips what scrolls inside it), its
-      padding and the gap between what it holds, and a card's frame. */
+  /** Its callers' looks, each as they drew it: its width (the kit's, or the
+      room its site gives, `--pop-w`), a capped height (the kit's, or the
+      room its site measures, `--pop-max-h`), what it does with more than it
+      holds (scrolls, or clips what scrolls inside it), its padding and the
+      gap between what it holds, a card's frame, and the New Session form's
+      look: the form's theme, recessed under its raised body as the dialog's
+      card is (spawn/NewSessionPopover). */
   export const popoverContentVariants = tv({
     variants: {
-      width: { narrow: "w-64", wide: "w-80", widest: "w-96" },
+      width: {
+        narrow: "w-64",
+        wide: "w-80",
+        widest: "w-96",
+        room: "w-(--pop-w)",
+      },
       height: { capped: "max-h-80", room: "max-h-(--pop-max-h)" },
       overflow: {
         scroll: "overflow-y-auto overscroll-contain",
@@ -57,6 +65,7 @@
         "panel-high": "rounded-lg shadow-xl",
         raised: "shadow-raised",
       },
+      look: { "new-session": "ns-theme bg-surface-recess" },
     },
   });
 
@@ -92,6 +101,7 @@
     pad,
     gap,
     frame,
+    look,
     motion,
     forceMount = false,
     child: callerChild,
@@ -137,7 +147,15 @@
       "z-(--layer-float) flex w-72 origin-(--bits-popover-content-transform-origin) flex-col gap-4 text-label outline-hidden",
       bare &&
         "border-current border-none bg-none bg-transparent p-0 shadow-none",
-      popoverContentVariants({ width, height, overflow, pad, gap, frame }),
+      popoverContentVariants({
+        width,
+        height,
+        overflow,
+        pad,
+        gap,
+        frame,
+        look,
+      }),
       className
     )}
     collisionPadding={inset}

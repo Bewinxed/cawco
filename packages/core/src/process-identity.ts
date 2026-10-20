@@ -16,7 +16,7 @@
  * sat wedged on one for 35 minutes.
  */
 
-import { dlopen, FFIType } from "bun:ffi";
+import { dlopen, FFIType, read as readMemory } from "bun:ffi";
 import { readFileSync } from "node:fs";
 import { readdir, readFile, readlink } from "node:fs/promises";
 import { hostEnvironment } from "./session-env";
@@ -43,8 +43,6 @@ const KINFO = {
   /** `p_comm`: `MAXCOMLEN + 1` bytes, NUL-ended; `ps` shows up to 16 characters of it. */
   comm: 243,
   commSize: 17,
-  /** `kp_eproc.e_pcred.p_ruid`: the real user `ps -E` checks before it shows an environment. */
-  ruid: 392,
   /** `kp_eproc.e_ppid`, `e_pgid`, `e_tpgid` and `e_flag`. */
   ppid: 560,
   pgid: 564,
@@ -121,12 +119,158 @@ const openLibSystem = () =>
       args: [FFIType.ptr],
       returns: FFIType.i32,
     },
+    dlsym: { args: [FFIType.u64, FFIType.ptr], returns: FFIType.ptr },
   });
 let libSystem: ReturnType<typeof openLibSystem> | undefined;
 const lib = (): ReturnType<typeof openLibSystem> => {
   libSystem ??= openLibSystem();
   return libSystem;
 };
+
+/**
+ * `sandbox_check(pid_t, const char *operation, enum sandbox_filter_type,
+ * ...)`, Seatbelt's own question about any process's profile, exported by
+ * libsystem_sandbox and declared outside the public SDK by those who call it
+ * (WebKit's SandboxSPI.h: "int sandbox_check(pid_t, const char *operation,
+ * enum sandbox_filter_type, ...);"). Variadic: Apple's arm64 ABI passes each
+ * variadic argument "to the appropriate number of 8-byte stack slots"
+ * (developer.apple.com, Writing ARM64 code for Apple platforms), so the
+ * name goes ninth, after five unused registers (x3–x7); x86-64 passes it in
+ * the fourth register. Measured on the Mac (arm64, 2026-10-20): every
+ * answer as each profile wrote it.
+ */
+const openStackSlotCheck = () =>
+  dlopen("/usr/lib/libSystem.B.dylib", {
+    sandbox_check: {
+      args: [
+        FFIType.i32,
+        FFIType.ptr,
+        FFIType.i32,
+        FFIType.u64,
+        FFIType.u64,
+        FFIType.u64,
+        FFIType.u64,
+        FFIType.u64,
+        FFIType.ptr,
+      ],
+      returns: FFIType.i32,
+    },
+  });
+const openRegisterCheck = () =>
+  dlopen("/usr/lib/libSystem.B.dylib", {
+    sandbox_check: {
+      args: [FFIType.i32, FFIType.ptr, FFIType.i32, FFIType.ptr],
+      returns: FFIType.i32,
+    },
+  });
+let stackSlotCheck: ReturnType<typeof openStackSlotCheck> | undefined;
+let registerCheck: ReturnType<typeof openRegisterCheck> | undefined;
+
+/** `sandbox_check(pid, operation, type, name)`, the name passed as this machine's ABI passes a variadic argument. */
+const sandboxCheck = (
+  pid: number,
+  operation: Uint8Array,
+  type: number,
+  name: Uint8Array
+): number => {
+  if (process.arch === "arm64") {
+    stackSlotCheck ??= openStackSlotCheck();
+    return stackSlotCheck.symbols.sandbox_check(
+      pid,
+      operation,
+      type,
+      0,
+      0,
+      0,
+      0,
+      0,
+      name
+    );
+  }
+  registerCheck ??= openRegisterCheck();
+  return registerCheck.symbols.sandbox_check(pid, operation, type, name);
+};
+
+/** `dlsym`'s `RTLD_DEFAULT` (<dlfcn.h>: `((void *) -2)`): every image loaded. */
+const RTLD_DEFAULT = BigInt.asUintN(64, -2n);
+/**
+ * The operations asked of, each NUL-ended, with the filter its rules name
+ * (WebKit SandboxSPI.h's `enum sandbox_filter_type`: `SANDBOX_FILTER_PATH`
+ * second, `SANDBOX_FILTER_GLOBAL_NAME = 2`).
+ */
+const OPERATIONS = {
+  lookUp: { operation: Buffer.from("mach-lookup\0"), filter: 2 },
+  write: { operation: Buffer.from("file-write-data\0"), filter: 1 },
+} as const;
+/** `sandbox_check`'s answers: the operation allowed, or denied. */
+const SANDBOX_ALLOWS = 0;
+const SANDBOX_DENIES = 1;
+
+/**
+ * `SANDBOX_CHECK_NO_REPORT`, OR'd into the filter type so a denied check is
+ * never logged as a violation: an exported constant, not a macro
+ * (SandboxSPI.h: "extern const enum sandbox_filter_type
+ * SANDBOX_CHECK_NO_REPORT;"), read where libsystem_sandbox keeps it
+ * (0x40000000 on the Mac).
+ */
+let noReport: number | undefined;
+
+/**
+ * macOS: whether process `pid`'s Seatbelt profile lets it `what` (`lookUp`:
+ * `mach-lookup` of the Mach service `name`; `write`: `file-write-data` at
+ * the path `name`), as the kernel judges it now, whatever the process's
+ * environment, parent, session or binary: the profile is the one its sandbox
+ * was made with, which every process it forks and execs inherits and none
+ * can leave or replace ("sandbox_apply: Operation not permitted" inside one,
+ * measured). An unsandboxed process is let do anything. Undefined when there
+ * is no such process. Asking needs no privilege: the Mac answered for every
+ * process, another user's included. A path is judged as it is now: one that
+ * is not there reads as denied (measured: a profile's own writable dir
+ * answered 0, a path under it that did not exist 1), so only a path that is
+ * there is asked of.
+ */
+const seatbeltLets = (
+  pid: number,
+  what: keyof typeof OPERATIONS,
+  name: string
+): boolean | undefined => {
+  if (noReport === undefined) {
+    const at = lib().symbols.dlsym(
+      RTLD_DEFAULT,
+      Buffer.from("SANDBOX_CHECK_NO_REPORT\0")
+    );
+    if (!at) {
+      throw new Error(
+        "libsystem_sandbox exports no SANDBOX_CHECK_NO_REPORT, so no process's Seatbelt profile can be asked"
+      );
+    }
+    noReport = readMemory.u32(at, 0);
+  }
+  const { operation, filter } = OPERATIONS[what];
+  const answer = sandboxCheck(
+    pid,
+    operation,
+    // Its one bit lies apart from every filter type's, so the sum is their OR.
+    filter + noReport,
+    Buffer.from(`${name}\0`)
+  );
+  if (answer === SANDBOX_ALLOWS) {
+    return true;
+  }
+  return answer === SANDBOX_DENIES ? false : undefined;
+};
+
+/** macOS: whether process `pid`'s Seatbelt profile lets it look up the Mach service `name` ({@link seatbeltLets}). */
+export const seatbeltLetsLookUp = (
+  pid: number,
+  name: string
+): boolean | undefined => seatbeltLets(pid, "lookUp", name);
+
+/** macOS: whether process `pid`'s Seatbelt profile lets it write at `path`, which must be there ({@link seatbeltLets}). */
+export const seatbeltLetsWrite = (
+  pid: number,
+  path: string
+): boolean | undefined => seatbeltLets(pid, "write", path);
 
 const decoder = new TextDecoder();
 
@@ -139,7 +283,6 @@ interface Kinfo {
   pgid: number;
   pid: number;
   ppid: number;
-  ruid: number;
   startSeconds: number;
   stat: number;
   tpgid: number;
@@ -159,7 +302,6 @@ const kinfoAt = (bytes: Uint8Array, at: number): Kinfo => {
     pid: view.getInt32(KINFO.pid, true),
     nice: view.getInt8(KINFO.nice),
     comm: decoder.decode(end < 0 ? comm : comm.subarray(0, end)),
-    ruid: view.getUint32(KINFO.ruid, true),
     ppid: view.getInt32(KINFO.ppid, true),
     pgid: view.getInt32(KINFO.pgid, true),
     tpgid: view.getInt32(KINFO.tpgid, true),
@@ -602,39 +744,27 @@ const linuxVis = (text: string): string => text.replace(CONTROL, "?");
 
 /**
  * A command line as `ps -o command=` (`args=`) prints it: each argument
- * escaped as `ps` escapes it, joined by single spaces, the environment after
- * them when asked for (`ps -E`). A process whose arguments cannot be read
- * shows its name: in parentheses on macOS, in brackets on Linux (a kernel
- * thread).
+ * escaped as `ps` escapes it, joined by single spaces. A process whose
+ * arguments cannot be read shows its name: in parentheses on macOS, in
+ * brackets on Linux (a kernel thread).
  */
 const shownCommand = (
   args: { argv: string[]; env: string[] } | undefined,
-  comm: string,
-  environment: boolean
+  comm: string
 ): string => {
   if (!args || args.argv.length === 0) {
     return process.platform === "linux" ? `[${comm}]` : `(${comm})`;
   }
   const vis = process.platform === "linux" ? linuxVis : darwinVis;
-  return [...args.argv, ...(environment ? args.env : [])].map(vis).join(" ");
+  return args.argv.map(vis).join(" ");
 };
 
 /**
  * macOS: a process's command line as `ps` prints it (adv_cmds ps/print.c
- * `getproclline`): a zombie's is a single blank; the environment is added
- * only for a process whose real user is this one, or for root.
+ * `getproclline`): a zombie's is a single blank.
  */
-const darwinCommand = (info: Kinfo, environment: boolean): string => {
-  if (info.stat === SZOMB) {
-    return " ";
-  }
-  const uid = process.getuid?.() ?? -1;
-  return shownCommand(
-    darwinArgs(info.pid),
-    info.comm,
-    environment && (uid === 0 || info.ruid === uid)
-  );
-};
+const darwinCommand = (info: Kinfo): string =>
+  info.stat === SZOMB ? " " : shownCommand(darwinArgs(info.pid), info.comm);
 
 /** procps's `VmLck` line in `/proc/<pid>/status`: locked memory, in kB. */
 const VM_LOCKED = /^VmLck:\s+(\d+)/m;
@@ -739,6 +869,8 @@ export interface ProcessLineage {
   ppid: number;
   /** Its start, as `ps -o lstart=` prints it on both systems. */
   started: string;
+  /** Its start, in epoch seconds. */
+  startSeconds: number;
 }
 
 /**
@@ -756,14 +888,17 @@ export async function processLineage(): Promise<ProcessLineage[]> {
       (await linuxPids()).map(
         async (pid): Promise<ProcessLineage | undefined> => {
           const fields = (await linuxStat(pid))?.fields;
-          return fields?.[19]
-            ? {
-                pid,
-                ppid: Number(fields[1]),
-                pgid: Number(fields[2]),
-                started: lstart(linuxStartSeconds(boot, fields[19])),
-              }
-            : undefined;
+          if (!fields?.[19]) {
+            return;
+          }
+          const startSeconds = linuxStartSeconds(boot, fields[19]);
+          return {
+            pid,
+            ppid: Number(fields[1]),
+            pgid: Number(fields[2]),
+            started: lstart(startSeconds),
+            startSeconds,
+          };
         }
       )
     );
@@ -774,6 +909,7 @@ export async function processLineage(): Promise<ProcessLineage[]> {
     ppid: info.ppid,
     pgid: info.pgid,
     started: lstart(info.startSeconds),
+    startSeconds: info.startSeconds,
   }));
 }
 
@@ -852,45 +988,36 @@ export function processArgs(
 }
 
 /**
- * A process's command line as `ps -ww -o command= -p <pid>` prints it, with
- * its environment after it as `ps -E` adds it when asked; undefined when
- * there is no such process.
+ * A process's command line as `ps -ww -o command= -p <pid>` prints it;
+ * undefined when there is no such process.
  */
-export async function commandLine(
-  pid: number,
-  { environment = false }: { environment?: boolean } = {}
-): Promise<string | undefined> {
+export async function commandLine(pid: number): Promise<string | undefined> {
   if (process.platform === "linux") {
     const stat = await linuxStat(pid);
     if (!stat) {
       return;
     }
-    const shown = shownCommand(await linuxArgs(pid), stat.comm, environment);
+    const shown = shownCommand(await linuxArgs(pid), stat.comm);
     // procps marks a zombie's name: `[name] <defunct>`.
     return stat.fields[0] === "Z" ? `${shown} <defunct>` : shown;
   }
   const info = darwinKinfo(pid);
-  return info ? darwinCommand(info, environment) : undefined;
+  return info ? darwinCommand(info) : undefined;
 }
 
-/**
- * Every process's command line, as `ps -axww -o pid=,command=` lists them,
- * each with its environment after it when asked for (`ps -axwwE`).
- */
-export async function commandLines({
-  environment = false,
-}: {
-  environment?: boolean;
-} = {}): Promise<{ command: string; pid: number }[]> {
+/** Every process's command line, as `ps -axww -o pid=,command=` lists them. */
+export async function commandLines(): Promise<
+  { command: string; pid: number }[]
+> {
   if (process.platform !== "linux") {
     return darwinKinfos().map((info) => ({
       pid: info.pid,
-      command: darwinCommand(info, environment),
+      command: darwinCommand(info),
     }));
   }
   const lines = await Promise.all(
     (await linuxPids()).map(async (pid) => {
-      const command = await commandLine(pid, { environment });
+      const command = await commandLine(pid);
       return command === undefined ? undefined : { pid, command };
     })
   );

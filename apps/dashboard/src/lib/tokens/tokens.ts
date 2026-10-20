@@ -311,6 +311,7 @@ export type TokenSize =
   | "size.c-toolbar-zone"
   | "size.c-toolbar-ctl"
   | "size.c-find-w"
+  | "size.c-new-session-pop-w"
   | "size.c-panel-w"
   | "size.c-signin-pop-w"
   | "size.c-caw-panel-h"

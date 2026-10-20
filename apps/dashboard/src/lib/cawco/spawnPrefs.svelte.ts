@@ -1,12 +1,6 @@
 // biome-ignore lint/style/useFilenamingConvention: renaming would break the "./spawnPrefs.svelte" import path used by routes/project/[id]/+page.svelte, a file this batch does not own
-import type {
-  EffortLevel,
-  HarnessKind,
-  HarnessReport,
-  PermissionMode,
-} from "@cawco/core";
+import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
 import { MODEL_DEFAULT } from "./models.svelte";
-import { modeRefusal, unpickedMode } from "./permission-modes";
 import { readJson, writeJson } from "./storage";
 
 /**
@@ -20,9 +14,6 @@ import { readJson, writeJson } from "./storage";
  * store because these are session preferences.
  */
 const KEY = "cawco-spawn-prefs";
-/** Why a start with no form of its own does not go: no mode was ever chosen in New Session. */
-const NO_MODE_CHOSEN =
-  "No permission mode has been chosen yet: start a session from New Session with one chosen, and starts like this one use it. Nothing was started.";
 const MACHINE_KEY = "cawco-spawn-machine";
 
 interface SpawnPrefs {
@@ -86,38 +77,6 @@ export const spawnPrefs = {
     return store.effort;
   },
 };
-
-/**
- * The permission mode a spawn that has no form starts on: the remembered one,
- * when `machine`'s harness takes it. With no form there is no Full Send
- * warning to read, so a remembered Full Send starts these on Bypass ({@link
- * unpickedMode}). A harness that reports no modes at all (pi) is given none.
- * Throws the reason, and nothing starts, while none is remembered, the
- * machine has not reported the harness or does not take the mode ({@link
- * modeRefusal}): no mode is sent that its person did not choose. No model: a
- * spawn that names none runs on its harness's own default.
- *
- * Full Send is remembered only as a form's own choice: the form reaches it
- * through its confirmation, or opens on it under its warning.
- */
-export function spawnDefaults(
-  machine: string,
-  harness: HarnessKind,
-  report: HarnessReport | undefined
-): { permissionMode?: PermissionMode } {
-  if (report?.capabilities.permissionModes.length === 0) {
-    return {};
-  }
-  if (store.permissionMode === null) {
-    throw new Error(NO_MODE_CHOSEN);
-  }
-  const remembered = unpickedMode(store.permissionMode);
-  const refused = modeRefusal(machine, harness, remembered, report);
-  if (refused) {
-    throw new Error(`${refused} Nothing was started.`);
-  }
-  return { permissionMode: remembered };
-}
 
 /** Called when a spawn actually goes out, so a form the user abandoned teaches nothing. */
 export function rememberSpawn(prefs: SpawnPrefs): void {

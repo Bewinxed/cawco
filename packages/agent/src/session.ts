@@ -4452,15 +4452,23 @@ export class SessionSupervisor {
   /**
    * Ends everything session `instanceId` left running in a workspace
    * (boundary.ts {@link endSessionWork}): an interrupt or a stop of it
-   * leaves nothing of its running, on every harness. Said in the log; a
-   * reading that fails is said, and the interrupt or stop goes on.
+   * leaves nothing of its running, on every harness. Its workspace is the
+   * one its last start or attach here ran it in, else the one whose clone
+   * holds its directory (`cwd` as its stop names it, or as it was started
+   * here). Said in the log; a reading that fails is said, and the interrupt
+   * or stop goes on.
    */
   async #endWork(
     instanceId: string,
-    why: "interrupted" | "stopped"
+    why: "interrupted" | "stopped",
+    cwd?: string
   ): Promise<void> {
     try {
-      const { ended, left } = await endSessionWork(instanceId);
+      const dir = cwd ?? this.#resumable.get(instanceId)?.cwd;
+      const workspace =
+        this.#placed.get(instanceId)?.workspace ??
+        (dir ? (await cloneHolding(dir))?.id : undefined);
+      const { ended, left } = await endSessionWork(instanceId, workspace);
       if (ended.length > 0) {
         console.info(
           `[agent] ${instanceId}: ${why}, so what it left running in its workspace ended: pid ${ended.join(", ")}${left.length > 0 ? `; pid ${left.join(", ")} still ran after SIGKILL` : ""}`
@@ -4598,7 +4606,7 @@ export class SessionSupervisor {
       }
       // Its process is gone, and sessiond swept what it started on the host;
       // what its commands left inside its workspace's boundary goes too.
-      await this.#endWork(instanceId, "stopped");
+      await this.#endWork(instanceId, "stopped", cwd);
       this.#resumable.delete(instanceId);
       this.#handed.delete(instanceId);
       forgetTaken(instanceId);

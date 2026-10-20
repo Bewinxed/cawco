@@ -302,6 +302,42 @@ const KEYCHAIN_MACH_SERVICES = [
   "com.apple.security.authhost",
 ];
 
+/**
+ * THE NAMES A macOS BOUNDARY'S PROCESSES ARE KNOWN BY. macOS keeps no tree
+ * of a sandbox's processes and no namespace around them, and withholds the
+ * environment of every Apple platform binary (xnu kern_sysctl.c
+ * `sysctl_procargsx` reads it only when the "target process is not
+ * cs_restricted", SIP is off or the caller holds
+ * `com.apple.private.read-environment-variables`), so a `setsid`,
+ * double-forked `/bin/sleep` that launchd adopted carried no marker anyone
+ * could read. What every process of a boundary does carry, through fork,
+ * exec, `setsid`, a double fork and adoption by launchd, whatever its binary
+ * and environment, is the Seatbelt profile its runner started under: the
+ * kernel holds it with the process, and none inside can leave or replace it
+ * ("sandbox-exec: sandbox_apply: Operation not permitted", measured inside
+ * one). Each profile therefore lets its processes look up two Mach service
+ * names nobody registers, its workspace's and its generation's, and refuses
+ * every other name under {@link MEMBERSHIP_PREFIX}; the agent asks the
+ * kernel which profile allows which (core process-identity.ts
+ * `seatbeltLetsLookUp`, Seatbelt's `sandbox_check`). A process answers to a
+ * boundary's name when its profile allows that name and refuses the bare
+ * prefix: an unsandboxed process and a permissive foreign sandbox allow the
+ * prefix, any other foreign sandbox refuses the name. Measured on the Mac
+ * (2026-10-20): each sandbox's escaped `/bin/sleep`, its parent launchd and
+ * its environment unreadable, answered to its own name alone; a second
+ * sandbox with a byte-identical profile answered to the same name; of 380
+ * other sandboxed processes of the user, the only ones that answered were
+ * those two sandboxes' own runners and the `sleep` each was polling with.
+ * It reads all 803 processes of the Mac in 3.6 ms.
+ */
+export const MEMBERSHIP_PREFIX = "dev.cawco.boundary.";
+
+/** The name workspace `id`'s boundaries answer to, or, given `gen`, that generation's alone ({@link MEMBERSHIP_PREFIX}). */
+export const membershipName = (id: string, gen?: string): string =>
+  gen === undefined
+    ? `${MEMBERSHIP_PREFIX}${id}`
+    : `${MEMBERSHIP_PREFIX}${id}/${gen}`;
+
 /** What a macOS profile names besides the policy. */
 export interface SeatbeltPlace {
   /**
@@ -317,6 +353,8 @@ export interface SeatbeltPlace {
    * workspace writes.
    */
   readonly hostSockets: readonly string[];
+  /** The names its processes answer to ({@link membershipName}): its workspace's and its generation's. */
+  readonly members: readonly string[];
   /**
    * The host sockets a command still connects to, each a Seatbelt regex over
    * the socket's whole path, inside a dir of {@link hostSockets}: each booted
@@ -338,7 +376,9 @@ export interface SeatbeltPlace {
  *
  * Besides the policy: signals stay inside the sandbox, `launchctl` does not
  * run (so nothing reaches launchd), the scratch dir itself cannot be removed,
- * no keychain service is looked up ({@link KEYCHAIN_MACH_SERVICES}), and no
+ * no keychain service is looked up ({@link KEYCHAIN_MACH_SERVICES}), its
+ * processes answer to its workspace's and generation's names alone
+ * ({@link MEMBERSHIP_PREFIX}), and no
  * unix socket under {@link SeatbeltPlace.hostSockets} or a read-denied path
  * (the home dir, every credential store) is reached but the tool, git and
  * GitHub doors' and those under the workspace's own writable roots: tools put their
@@ -395,6 +435,16 @@ export const seatbeltProfile = (
   return [
     "(version 1)",
     "(allow default)",
+    // A command signals its own boundary's processes alone. Measured on the
+    // Mac (2026-10-20), from inside a sandbox started as a keeper starts one
+    // and through a live workspace's executor: kill(pid, 0) over every pid
+    // was let through for its own processes and for zombies only (xnu
+    // kern_sig.c `kill` answers 0 for a zombie before any permission check,
+    // and nothing reaches one); SIGCONT was refused to its keeper, the
+    // keeper's other child, an unrelated process of the user and an
+    // ancestor. The kernel adds no exemption of its own: xnu mac_process.c
+    // `mac_proc_check_signal` hands every signal to the policy,
+    // `MAC_CHECK(proc_check_signal, …)`.
     "(deny signal)",
     "(allow signal (target same-sandbox))",
     ...reads.map(
@@ -424,6 +474,10 @@ export const seatbeltProfile = (
     ...KEYCHAIN_MACH_SERVICES.map(
       (service) => `  (global-name ${sbString(service)})`
     ),
+    ")",
+    `(deny mach-lookup (global-name-prefix ${sbString(MEMBERSHIP_PREFIX)}))`,
+    "(allow mach-lookup",
+    ...place.members.map((name) => `  (global-name ${sbString(name)})`),
     ")",
     ...socketDenies.map(
       (path) =>

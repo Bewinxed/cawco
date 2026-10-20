@@ -43,6 +43,7 @@ import type {
   LandsMode,
   LawBroken,
   LfsOfferState,
+  MachineHarnessReport,
   McpServerStatus,
   MoveJob,
   NamedSpawn,
@@ -171,7 +172,6 @@ import { placedOn } from "./projects";
 import { type ReloadHold, reloadWhenIdle } from "./reload.svelte";
 import { forgetSend, keepSend, keptSends, refuseSend } from "./send-store";
 import { checkServedBuild } from "./served-build.svelte";
-import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
   CommandRecord,
   SettleStage,
@@ -5378,21 +5378,15 @@ function whenTrue(ready: () => boolean, ms: number): Promise<Bounded<void>> {
 }
 
 /**
- * A spawn as it leaves this dashboard: a model only when one was picked (none
- * runs on the harness's own default, never an empty string), and a permission
- * mode named exactly when its harness has modes. What the path says stands
- * (the form's choice, the session's own settings); a mode it leaves out is
- * the remembered one, when the machine takes it ({@link spawnDefaults}, which
- * throws why not, and nothing starts). The hub settles the same rule
- * (`settleMode`). Which modes a machine takes is its report's, so a start
- * waits for the report (the first fleet read, a machine whose report is on
- * its way) up to {@link CONTROL_TIMEOUT_MS}; one still missing then is the
- * machine's own word.
+ * What `machineId` reports of `harness`, its permission modes among it. Which
+ * modes a machine takes is its report's, so a start waits for the report (the
+ * first fleet read, a machine whose report is on its way) up to {@link
+ * CONTROL_TIMEOUT_MS}; one still missing then is the machine's own word.
  */
-async function explicit(
+async function reportOf(
   machineId: string,
-  payload: NamedSpawn
-): Promise<NamedSpawn> {
+  harness: HarnessKind
+): Promise<MachineHarnessReport | undefined> {
   await whenTrue(
     () =>
       state.fleetRead &&
@@ -5400,18 +5394,34 @@ async function explicit(
         undefined,
     CONTROL_TIMEOUT_MS
   );
-  const { harness } = payload;
-  const report = state.machines
+  return state.machines
     .find((row) => row.machineId === machineId)
     ?.harnesses?.find((entry) => entry.harness === harness);
+}
+
+/**
+ * A spawn as it leaves this dashboard: a model only when one was picked (none
+ * runs on the harness's own default, never an empty string), and a permission
+ * mode only when its harness has modes. What the path says stands: the New
+ * Session form's choice, or the session's own on a revive, relaunch, rewind
+ * or fork. A path that names none sends none, and the hub settles it
+ * (`settleMode`): a session it has a row for runs on its own mode, else the
+ * one last chosen for its harness on its machine, and anything else is
+ * refused with why. Every new session's mode is chosen in the form (a start
+ * with no form of its own opens it, a fork with none to carry too).
+ */
+async function explicit(
+  machineId: string,
+  payload: NamedSpawn
+): Promise<NamedSpawn> {
+  const report = await reportOf(machineId, payload.harness);
   const { permissionMode, model, ...rest } = payload;
   // A harness with no permission modes (pi) is sent none, whatever the
-  // path carried (a stored row's, a remembered preference).
+  // path carried (a stored row's).
   const mode =
     report?.capabilities.permissionModes.length === 0
       ? undefined
-      : (permissionMode ??
-        spawnDefaults(machineName(machineId), harness, report).permissionMode);
+      : permissionMode;
   return {
     ...rest,
     ...(model ? { model } : {}),
@@ -5524,21 +5534,36 @@ export async function spawnSession({
       throw new Error(`unhandled read: ${JSON.stringify(unhandled)}`);
     }
   }
-  const created = started.value;
+  sendFirst(started.value.instanceId, machineId, prompt, extras);
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
+  void refresh();
+  return { kind: "answered", value: started.value.instanceId };
+}
+
+/** A new session's first message, when it has words or files: sent once the hub has taken the start. */
+function sendFirst(
+  instanceId: string,
+  machineId: string,
+  prompt: string | undefined,
+  extras: SendExtras
+): void {
   const first = prompt?.trim() ?? "";
   if (first || extras.images?.length || extras.attachments?.length) {
     // Followed before its first message goes, on the socket that carries it:
     // that send's record is among the first frames the session's stream
     // carries, and a tab that joined after it would never hear it.
-    subscribeSession(streamState, streamHost, created.instanceId);
-    submitCommand(created.instanceId, machineId, "send", {
-      text: first,
-      extras,
-    });
+    subscribeSession(streamState, streamHost, instanceId);
+    submitCommand(instanceId, machineId, "send", { text: first, extras });
   }
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
-  void refresh();
-  return { kind: "answered", value: created.instanceId };
+}
+
+/** Where a fork branches from: the conversation, its machine, folder and harness, and the answer it branches at. */
+export interface ForkSource {
+  at?: string;
+  cwd: string;
+  harness: HarnessKind;
+  machineId: string;
+  sessionId: string;
 }
 
 /**
@@ -5546,6 +5571,13 @@ export async function spawnSession({
  * a new SDK session, kept apart from mainline work until it is kept or
  * discarded. The hub reads the conversation it branches into the new view's
  * transcript. A fork the hub refuses throws the hub's reason ({@link start}).
+ *
+ * It runs on what its source runs on: the hub's row for the conversation
+ * says what that is. A mode, model or effort given (the New Session form's
+ * picks) stands over the source's. With no mode to run in (the source's row
+ * records none) on a harness that has modes, nothing is sent and the answer
+ * is `unchosen`: the New Session form opens on the fork, and Start waits for
+ * a mode (spawn/new-session `startFork`).
  */
 export async function forkSession({
   machineId,
@@ -5553,19 +5585,38 @@ export async function forkSession({
   sessionId,
   harness,
   at,
-}: {
-  machineId: string;
-  cwd: string;
-  sessionId: string;
-  harness: HarnessKind;
-  at?: string;
-}): Promise<Bounded<string>> {
-  // The branch runs on what its source runs on, never on the machine's
-  // defaults: the hub's row for the conversation says what that is.
+  permissionMode,
+  model,
+  effort,
+  prompt,
+  extras = {},
+}: ForkSource & {
+  permissionMode?: PermissionMode;
+  model?: string;
+  effort?: EffortLevel;
+  prompt?: string;
+  extras?: SendExtras;
+}): Promise<Bounded<string> | { kind: "unchosen" }> {
   const source = instanceForSession(instanceIndex, sessionId, {
     machineId,
     cwd,
   });
+  // A branch is a new session nobody picked a mode for, so a Full Send
+  // source branches on Bypass (`unpickedMode`): Full Send is only ever a
+  // confirmed choice, the form's.
+  const mode =
+    permissionMode ??
+    (source?.permissionMode
+      ? unpickedMode(source.permissionMode as PermissionMode)
+      : undefined);
+  if (!mode) {
+    const report = await reportOf(machineId, harness);
+    if (report?.capabilities.permissionModes.length !== 0) {
+      return { kind: "unchosen" };
+    }
+  }
+  const named = model || source?.model;
+  const level = effort ?? source?.chosenEffort;
   const started = await start({
     machineId,
     cwd,
@@ -5576,21 +5627,15 @@ export async function forkSession({
       ...(at ? { atMessage: at } : {}),
     },
     scratch: {},
-    ...(source?.model ? { model: source.model } : {}),
-    // A branch is a new session nobody picked a mode for, so a Full Send
-    // source branches on Bypass (`unpickedMode`): Full Send is only ever a
-    // confirmed choice.
-    ...(source?.permissionMode
-      ? {
-          permissionMode: unpickedMode(source.permissionMode as PermissionMode),
-        }
-      : {}),
-    ...(source?.chosenEffort ? { effort: source.chosenEffort } : {}),
+    ...(named ? { model: named } : {}),
+    ...(mode ? { permissionMode: mode } : {}),
+    ...(level ? { effort: level } : {}),
   });
   switch (started.kind) {
     case "unanswered":
       return started;
     case "answered":
+      sendFirst(started.value.instanceId, machineId, prompt, extras);
       // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
       void refresh();
       return { kind: "answered", value: started.value.instanceId };
@@ -8490,10 +8535,11 @@ export function rewindableTurns(target: SessionState): Set<string> {
   return turns;
 }
 
-export async function forkFrom(
+/** Where a fork from message `id` of `instanceId` branches: at the answer behind it (spawn/new-session `startFork` starts it). */
+export async function forkPointOf(
   instanceId: string,
   id: string
-): Promise<Bounded<string>> {
+): Promise<ForkSource> {
   const target = session(instanceId);
   const sessionKey = resumeKeyFor(instanceId);
   if (!(target.machineId && sessionKey)) {
@@ -8507,13 +8553,13 @@ export async function forkFrom(
       "There is no answered turn behind this message to branch from."
     );
   }
-  return forkSession({
+  return {
     machineId: target.machineId,
     cwd: target.cwd,
     sessionId: sessionKey,
     harness: harnessOfSession(instanceId),
     at: point,
-  });
+  };
 }
 
 /**

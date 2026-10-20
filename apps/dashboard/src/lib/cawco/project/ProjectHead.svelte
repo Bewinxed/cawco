@@ -48,23 +48,16 @@
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
-  import {
-    answeredOr,
-    cawco,
-    editProject,
-    spawnSession,
-  } from "#lib/cawco/client.svelte.js";
+  import { cawco, editProject } from "#lib/cawco/client.svelte.js";
   import ForgetProjectTray from "#lib/cawco/ForgetProjectTray.svelte";
   import { forgetHost, forgetProject } from "#lib/cawco/forget.svelte.js";
   import { failureWords as message } from "#lib/cawco/hub-read.js";
-  import { conversationHref } from "#lib/cawco/links.js";
   import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
-  import { handOver } from "#lib/cawco/motion/share.svelte.js";
   import OsMark from "#lib/cawco/OsMark.svelte";
   import UpstreamMenu from "#lib/cawco/project/UpstreamMenu.svelte";
   import { checkoutOf } from "#lib/cawco/projects.js";
   import RowFault from "#lib/cawco/RowFault.svelte";
-  import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
+  import { newSession, spawning } from "#lib/cawco/spawn/new-session.svelte.js";
   import { toast } from "#lib/cawco/toasts.js";
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -199,13 +192,6 @@
   }
 
   /**
-   * A spin-off on its way (its button pending), and why the last one was
-   * refused: said under the head's line, where the button stands.
-   */
-  let spinning = $state(false);
-  let spinFault = $state<string | null>(null);
-
-  /**
    * The name is edited where it stands: a press on it turns it into a field
    * of the same type, size and place, holding the name. Enter, or leaving
    * it, sends it; the field stays, read-only, until the project is named by
@@ -271,50 +257,25 @@
     editedId = project.id;
   });
 
-  /** Spin off: a scratch session on the project's checkout, opened. */
-  async function spinOff() {
-    if (!primary || spinning) {
+  /**
+   * Spin off: the New Session form at `trigger` (the button, or `⋯` on a
+   * phone, where the menu holds it), as a spin-off on the project's
+   * checkout. Harness, model and mode are the form's own, and Start waits
+   * for a mode.
+   */
+  function spinOff(trigger: HTMLElement | null) {
+    if (!(primary && trigger)) {
       return;
     }
-    spinning = true;
-    spinFault = null;
-    const remembered = spawnPrefs.permissionMode;
-    const mod = spawnPrefs.model;
-    // This start has no pickers of its own — it runs on what the new-session
-    // form was last set to, effort included. Its mode is the remembered one
-    // when the machine takes it, Full Send starting on Bypass (spawnPrefs
-    // `spawnDefaults`, which refuses one the machine doesn't take).
-    const level = spawnPrefs.effort;
-    let instanceId: string;
-    try {
-      instanceId = answeredOr(
-        primary.machineId,
-        await spawnSession({
-          machineId: primary.machineId,
-          cwd: primary.path,
-          projectId: project.id,
-          harness: spawnPrefs.harness,
-          model: mod,
-          effort: level ?? undefined,
-          scratch: {},
-        }),
-        "whether the session started is not known"
-      );
-    } catch (error) {
-      spinFault = message(error);
-      return;
-    } finally {
-      spinning = false;
-    }
-    rememberSpawn({
-      harness: spawnPrefs.harness,
-      model: mod,
-      permissionMode: remembered,
-      effort: level,
-    });
-    handOver("session:new", `session:${instanceId}`);
-    // biome-ignore lint/complexity/noVoid: fire-and-forget navigation after the spawn already succeeded
-    void goto(conversationHref(instanceId, cawco.instanceIndex));
+    newSession(
+      {
+        machineId: primary.machineId,
+        cwd: primary.path,
+        projectId: project.id,
+        spinOff: true,
+      },
+      trigger
+    );
   }
 </script>
 
@@ -440,8 +401,6 @@
           {/if}
         {/if}
       </p>
-      <!-- A spin-off the hub refused, under the line, by the button pressed. -->
-      <RowFault again={spinOff} reason={spinFault} />
     </div>
   </div>
   <div
@@ -467,14 +426,11 @@
     >
     {#if primary}
       <Button
+        aria-haspopup="dialog"
         layout="wide"
         press="pressable"
-        data-share="session:new"
-        data-share-ttl="8000"
         label="Spin off"
-        onclick={spinOff}
-        pending={spinning}
-        pendingLabel="Spinning off…"
+        onclick={(event) => spinOff(event.currentTarget)}
         variant="outline"
       />
     {/if}
@@ -494,20 +450,21 @@
           </Button>
         {/snippet}
       </DropdownMenu.Trigger>
-      <!-- A forget asked here keeps the focus its tray took: the menu
+      <!-- A forget asked here keeps the focus its tray took, and the New
+           Session form a Spin off opened keeps the focus it took: the menu
            doesn't hand it back to `⋯` as it closes. -->
       <DropdownMenu.Content
         align="end"
         width="regular"
         onCloseAutoFocus={(event) => {
-          if (forgetHost.at === forgetAt) {
+          if (forgetHost.at === forgetAt || spawning.open) {
             event.preventDefault();
           }
         }}
       >
         {#if narrow.current}
           {#if primary}
-            <DropdownMenu.Item disabled={spinning} onSelect={spinOff}>
+            <DropdownMenu.Item onSelect={() => spinOff(more)}>
               <IconFork />
               <span>Spin off</span>
             </DropdownMenu.Item>

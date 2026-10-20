@@ -94,6 +94,13 @@ const scan = async (): Promise<Scan> => {
 export const workspaceRefs = async (): Promise<WorkspaceRef[]> =>
   (await scan()).refs;
 
+/**
+ * Every workspace this machine holds, by its records: those that name its
+ * clone (`refs`), and those whose records are damaged (`unread`), reported. A
+ * reading that must know every workspace is whole only with none unread.
+ */
+export const workspaceRecords = (): Promise<Scan> => scan();
+
 /** `path` at its real path, links followed; as given when it does not exist. */
 const realOf = (path: string): Promise<string> =>
   realpath(path).catch(() => path);

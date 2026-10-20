@@ -323,6 +323,7 @@
   --spacing-c-toolbar-zone: var(--c-toolbar-zone);
   --spacing-c-toolbar-ctl: var(--c-toolbar-ctl);
   --spacing-c-find-w: var(--c-find-w);
+  --spacing-c-new-session-pop-w: var(--c-new-session-pop-w);
   --spacing-c-panel-w: var(--c-panel-w);
   --spacing-c-signin-pop-w: var(--c-signin-pop-w);
   --spacing-c-caw-panel-h: var(--c-caw-panel-h);
