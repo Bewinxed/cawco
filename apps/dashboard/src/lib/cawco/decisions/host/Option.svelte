@@ -8,7 +8,9 @@
   embed's own and never picks. The pick is named by its label alone (its
   keycap is hidden from the name); its line, cost and Recommended tag are
   its description. Recommended stands first, over the label, so the line
-  under the label reads as its reason.
+  under the label reads as its reason. Its card's options are one tab stop
+  (WAI-ARIA APG, roving tabindex): the one its card names takes Tab, and
+  the arrows move between them (Decision.svelte).
 -->
 <script lang="ts">
   import { getContext } from "svelte";
@@ -34,6 +36,9 @@
   const decision = getContext<(() => string) | undefined>("decision-id");
   /** Its parts' ids, from its decision's id and its own: a pin or ink anchored to one holds across revisions. */
   const uid = $derived(`option-${decision?.() ?? ""}--${id}`);
+  /** The option of its card that Tab reaches; with no card, every option. */
+  const stop = getContext<(() => string) | undefined>("decision-stop");
+  const tabbable = $derived(stop ? stop() === id : true);
   const described = $derived(
     [
       props.line ? `${uid}-line` : "",
@@ -53,6 +58,7 @@
     class="dp-opt"
     data-option={id}
     disabled={!bridge()}
+    tabindex={tabbable ? 0 : -1}
     type="button"
   >
     {#if props.recommended === true}<span class="dp-tag" id="{uid}-tag"

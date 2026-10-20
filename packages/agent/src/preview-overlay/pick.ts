@@ -2,8 +2,10 @@
  * The pick: a press on an option (`data-option`) inside a choice
  * (`data-cawco-choice`) is heard at the window, in capture, before anything
  * on the page hears it, and written at once: a one-pick choice takes the
- * option, or lets it go when it was the pick; a several-pick choice
- * (`data-cawco-multiple`) toggles it among its picks. The overlay runs it
+ * option, and a press on the option it holds keeps it (a radio's pick is
+ * never let go: WAI-ARIA APG, Radio Group, "checks the focused radio button
+ * if it is not already checked"), so nothing is written; a several-pick
+ * choice (`data-cawco-multiple`) toggles it among its picks. The overlay runs it
  * against the page's doc (page.ts); the probe kit runs this same module
  * against its stand-in bridge (probe-kit decision-embeds.ts).
  */
@@ -48,10 +50,8 @@ export function listenForPicks(at: Window, wiring: PickWiring): void {
               : [...current, value]
           )
           .catch(wiring.refused);
-      } else {
-        wiring
-          .choose(choice, current.includes(value) ? null : value)
-          .catch(wiring.refused);
+      } else if (!current.includes(value)) {
+        wiring.choose(choice, value).catch(wiring.refused);
       }
     },
     true

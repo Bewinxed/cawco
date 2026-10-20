@@ -131,6 +131,9 @@ a {
   gap: var(--space-4);
   min-width: 0;
   scroll-margin-top: var(--space-4);
+  /* What leaves its head as it opens stands where it was drawn, placed
+     against the card (Decision.svelte `standAside`). */
+  position: relative;
 }
 .dp-card > header {
   display: flex;
@@ -201,9 +204,8 @@ a {
   gap: var(--space-4);
   min-inline-size: 0;
 }
-/* Change (a folded card) and Done (an open one with a pick): a quiet text
-   button; under a finger its area reaches 44px (DESIGN.md, The 44 Touch
-   Rule), its drawn size unchanged. */
+/* Change (a folded card): a quiet text button; under a finger its area
+   reaches 44px (DESIGN.md, The 44 Touch Rule), its drawn size unchanged. */
 .dp-change {
   position: relative;
   font: inherit;
@@ -214,7 +216,28 @@ a {
   border-radius: var(--radius-sm);
   padding: 0 var(--space-1);
   cursor: pointer;
-  transition: color var(--dur-control) var(--ease-out);
+  transition:
+    color var(--dur-control) var(--ease-out),
+    opacity var(--dur-settle) var(--ease-crossfade);
+}
+/* Change comes and goes on the turn's clock (Decision.svelte, a pointer's
+   Continue or Change: `data-moving`): it fades up where it lays out as the
+   card folds, and fades where it stood (`data-leaving`) as the card opens;
+   with less motion over --dur-fade. A pick that arrives stands at once. */
+.dp-card[data-moving] .dp-change {
+  @starting-style {
+    opacity: 0;
+  }
+}
+.dp-change[data-leaving] {
+  opacity: 0;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dp-change {
+    transition:
+      color var(--dur-control) var(--ease-out),
+      opacity var(--dur-fade) var(--ease-out);
+  }
 }
 .dp-change:hover {
   color: var(--ink-strong);
@@ -232,6 +255,98 @@ a {
     inline-size: max(100%, 44px);
     block-size: max(100%, 44px);
     translate: -50% -50%;
+  }
+}
+/* Continue, at the foot of a card that holds a pick: the act that completes
+   the card, so the kit's primary button (DESIGN.md, Buttons: the coral
+   `action-surface` over `action-solid`, `on-action` words, 36px, 10px
+   radius, 14px padding, 8px gap; 44px under a finger, the lg button). Its
+   key stands on a keycap inside it after its word, on the tint the kit's
+   Kbd takes on a filled surface (`on-brand` at 20%, kbd.svelte). It presses
+   to 0.97 (The Press Rule) and comes in on the card's height tween; with
+   less motion it fades in where it stands (The Reduced Motion Rule). */
+.dp-foot {
+  display: flex;
+  justify-content: flex-end;
+}
+.dp-continue {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-block-size: var(--c-btn-h);
+  padding: 0 var(--space-4);
+  border: 0;
+  border-radius: var(--radius-md);
+  background-color: var(--action-solid);
+  background-image: var(--action-surface);
+  color: var(--on-action);
+  font: var(--type-button);
+  cursor: pointer;
+  transition: background-color var(--dur-control) var(--ease-out);
+}
+/* The Mark Line Rule: its word trimmed to its x-height beside the keycap. */
+.dp-continue > :not(.dp-kc) {
+  text-box: trim-both ex alphabetic;
+  padding-block: calc((1lh - 1ex) / 2);
+}
+.dp-continue .dp-kc {
+  display: inline-grid;
+  place-items: center;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: var(--radius-xs);
+  background: color-mix(in oklab, var(--on-brand) 20%, transparent);
+  color: var(--on-action);
+  font-family: var(--font-mono);
+  font-size: var(--text-meta);
+  font-weight: var(--weight-body);
+  line-height: 1;
+}
+@media (hover: hover) and (pointer: fine) {
+  .dp-continue:hover {
+    background-color: var(--action-hover);
+    background-image: var(--action-surface-hover);
+  }
+}
+.dp-continue:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+@media (pointer: coarse) {
+  .dp-continue {
+    min-block-size: var(--c-btn-h-lg);
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .dp-continue {
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      transform var(--dur-control) var(--ease-out);
+  }
+  .dp-continue:active {
+    transform: scale(var(--press-scale));
+  }
+}
+/* Continue's foot arrives on the card's height tween's clock (motion/morph:
+   --dur-morph on the drawer curve) and fades up with it, so no sliver of it
+   shows in the card's padding before the edge reaches it. */
+@media (prefers-reduced-motion: no-preference) {
+  .dp-card:not([data-instant]) .dp-foot {
+    transition: opacity var(--dur-morph) var(--ease-drawer);
+
+    @starting-style {
+      opacity: 0;
+    }
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dp-card:not([data-instant]) .dp-foot {
+    transition: opacity var(--dur-fade) var(--ease-out);
+
+    @starting-style {
+      opacity: 0;
+    }
   }
 }
 .dp-why {
@@ -417,7 +532,8 @@ a {
    it (DESIGN.md L690: "A choice made from the keyboard … is instant, as
    every keyboard action is"); the host's Decision.svelte sets
    `data-instant` for that frame. */
-.dp-card[data-instant] :is(.dp-opt, .dp-kc, .dp-tag, .dp-change, .dp-state) {
+.dp-card[data-instant]
+  :is(.dp-opt, .dp-kc, .dp-tag, .dp-change, .dp-state, .dp-continue) {
   transition: none;
 }
 @media (prefers-reduced-motion: reduce) {
@@ -499,4 +615,15 @@ a {
   .dp-send {
     min-block-size: var(--c-btn-h-lg);
   }
+}
+/* The page's one polite live region: heard, never drawn (clipped rather
+   than display: none, which would take it out of the accessibility tree). */
+.dp-said {
+  position: absolute;
+  inline-size: 1px;
+  block-size: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
