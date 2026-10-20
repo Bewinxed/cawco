@@ -11,9 +11,13 @@
  *    with words in it, shot where the owner sees it (canvas-shots.ts).
  * 3. No console error, the page's or its canvases'.
  * 4. Nothing scrolls the page sideways.
+ * 5. The page's own capture paints every embed: the whole page pictured
+ *    window by window as the person scrolls it (decision-embeds.ts
+ *    `capturePage`), no embed's box one colour in it.
  *
- * Each leg's whole page is pictured in .probe/decision-pages, beside a
- * manifest of its card (question, options, recommended), what each embed
+ * The page draws as CawCo shows it, through the overlay's bridge
+ * (`CAWCO_BRIDGE`). Each leg's picture goes to .probe/decision-pages, beside
+ * a manifest of its card (question, options, recommended), what each embed
  * drew, and every check with its output.
  *
  *   bun scripts/probe-kit/run.ts web decision-plan-steps
@@ -24,6 +28,9 @@ import { join } from "node:path";
 import { checkProgram } from "../../../../packages/hub/src/decision-program";
 import {
   APP,
+  blankEmbeds,
+  CAWCO_BRIDGE,
+  capturePage,
   EMBED_FRAME,
   embedDrawFaults,
   readEmbeds,
@@ -38,10 +45,10 @@ const PROPOSAL = "src/lib/cawco/plan/proposal";
 const PROGRAM = readFileSync(join(APP, PROPOSAL, "page.oui"), "utf8");
 
 /** Each way's canvas, by the artifact id its Preview names, and the states file it draws. */
-const CANVASES: Record<string, string> = {
-  "0d0429d6-606f-48fa-89cf-dfbb05968c65": `${PROPOSAL}/OneList.stories.ts`,
-  "02d5597b-58da-4157-be36-8806f1278d1d": `${PROPOSAL}/Lanes.stories.ts`,
-  "b8f93d08-75a2-4323-8ca8-11f50c8f662c": `${PROPOSAL}/CrewFirst.stories.ts`,
+const CANVASES: Record<string, readonly string[]> = {
+  "0d0429d6-606f-48fa-89cf-dfbb05968c65": [`${PROPOSAL}/OneList.stories.ts`],
+  "02d5597b-58da-4157-be36-8806f1278d1d": [`${PROPOSAL}/Lanes.stories.ts`],
+  "b8f93d08-75a2-4323-8ca8-11f50c8f662c": [`${PROPOSAL}/CrewFirst.stories.ts`],
 };
 
 /** A Preview as the program writes it: `Preview("id", "caption", ["A", "B"])`. */
@@ -95,7 +102,7 @@ const spec: Spec = {
         for (const theme of THEMES) {
           const size = view === "desk" ? "1440" : "390";
           const leg = `${view === "desk" ? "1440×900" : "390×844"} ${theme}`;
-          const page = await kit.page(view, { theme });
+          const page = await kit.page(view, { theme, init: [CAWCO_BRIDGE] });
           const errors: string[] = [];
           page.on("console", (message) => {
             if (message.type() === "error") {
@@ -170,11 +177,17 @@ const spec: Spec = {
             tall: e.tall,
             frames: e.frames,
           }));
-          await page.screenshot({
-            path: join(OUT, `${NAME}-${size}-${theme}.png`),
-            fullPage: true,
-            animations: "disabled",
-          });
+          const paints = await capturePage(
+            page,
+            join(OUT, `${NAME}-${size}-${theme}.png`)
+          );
+          const blank = blankEmbeds(paints);
+          check(
+            `${leg}: the page's own capture paints every embed (${paints.map((one) => `“${one.embed}” ${Math.round(one.flat * 1000) / 10}% its commonest colour`).join(", ")})`,
+            paints.length === named.size && blank.length === 0,
+            blank.join("\n    ") ||
+              `${paints.length} of ${named.size} embeds painted`
+          );
           await page.close();
         }
       }
